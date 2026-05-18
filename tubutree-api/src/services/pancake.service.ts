@@ -12,14 +12,14 @@ import axios from 'axios';
 
 // Tạo HTTP client riêng cho Pancake API
 const pancakeApi = axios.create({
-  baseURL: 'https://pages.fm/api/v1',
+  baseURL: 'https://pos.pages.fm/api/v1',
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Tự động gắn API key vào mỗi request
+// Tự động gắn API key vào mỗi request (dùng query parameter theo Pancake API docs)
 pancakeApi.interceptors.request.use((config) => {
   if (process.env.PANCAKE_API_KEY) {
-    config.headers['Authorization'] = `Bearer ${process.env.PANCAKE_API_KEY}`;
+    config.params = { ...config.params, api_key: process.env.PANCAKE_API_KEY };
   }
   return config;
 });

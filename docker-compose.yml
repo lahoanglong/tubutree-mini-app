@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: password123
       POSTGRES_DB: tubutree_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -18,7 +18,7 @@ services:
     image: redis:7-alpine
     container_name: tubutree_redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
