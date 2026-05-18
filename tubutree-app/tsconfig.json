@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "target": "es6",
+    "module": "esnext",
+    "noImplicitAny": false,
+    "preserveConstEnums": true,
+    "jsx": "react-jsx",
+    "lib": ["dom", "es5", "es6", "es7", "es2017"],
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "sourceMap": true,
+    "baseUrl": "src",
+    "types": ["vite/client"]
+  },
+  "exclude": ["node_modules"],
+  "include": ["src"]
+}

@@ -1,0 +1,408 @@
+/* ========================================
+   Tubu Tree — App Styles
+   ======================================== */
+
+// === Variables ===
+$primary: #2E7D32;
+$primary-light: #4CAF50;
+$primary-dark: #1B5E20;
+$bg: #f4f5f6;
+$card-bg: #ffffff;
+$text: #333333;
+$text-light: #888888;
+$border: #e8e8e8;
+$danger: #F44336;
+$warning: #FF9800;
+$radius: 12px;
+
+// === Global ===
+.page-container {
+  background: $bg;
+  min-height: 100vh;
+  padding-bottom: 60px;
+}
+
+// === Product Card ===
+.product-card {
+  background: $card-bg;
+  border-radius: $radius;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+
+  &:active {
+    transform: scale(0.97);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+  &__image {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    background: #eee;
+  }
+
+  &__info {
+    padding: 10px 12px 14px;
+  }
+
+  &__name {
+    font-size: 14px;
+    font-weight: 500;
+    color: $text;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+
+  &__price {
+    font-size: 15px;
+    font-weight: 700;
+    color: $danger;
+  }
+}
+
+// === Product Grid ===
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 0 12px;
+}
+
+// === Section Header ===
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 12px 10px;
+
+  &__title {
+    font-size: 17px;
+    font-weight: 700;
+    color: $text;
+  }
+
+  &__more {
+    font-size: 13px;
+    color: $primary;
+    font-weight: 500;
+  }
+}
+
+// === Category Tabs ===
+.category-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 12px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+
+  &__item {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    border-radius: 20px;
+    background: $card-bg;
+    font-size: 13px;
+    font-weight: 500;
+    color: $text-light;
+    border: 1px solid $border;
+    transition: all 0.2s;
+    cursor: pointer;
+
+    &--active {
+      background: $primary;
+      color: white;
+      border-color: $primary;
+    }
+  }
+}
+
+// === Banner Slider ===
+.banner-slider {
+  padding: 12px;
+
+  &__slide {
+    border-radius: $radius;
+    overflow: hidden;
+
+    img {
+      width: 100%;
+      aspect-ratio: 2.5;
+      object-fit: cover;
+    }
+  }
+}
+
+// === Cart Item ===
+.cart-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px 12px;
+  background: $card-bg;
+  border-bottom: 1px solid $border;
+
+  &__image {
+    width: 80px;
+    height: 80px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: #eee;
+  }
+
+  &__info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  &__name {
+    font-size: 14px;
+    font-weight: 500;
+    color: $text;
+    line-height: 1.3;
+  }
+
+  &__price {
+    font-size: 15px;
+    font-weight: 700;
+    color: $danger;
+  }
+
+  &__qty {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    button {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 1px solid $border;
+      background: $card-bg;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: $text;
+
+      &:active { background: $bg; }
+    }
+
+    span {
+      font-size: 15px;
+      font-weight: 600;
+      min-width: 20px;
+      text-align: center;
+    }
+  }
+}
+
+// === Empty State ===
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+
+  &__icon {
+    font-size: 56px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+  }
+
+  &__title {
+    font-size: 16px;
+    font-weight: 600;
+    color: $text;
+    margin-bottom: 8px;
+  }
+
+  &__desc {
+    font-size: 14px;
+    color: $text-light;
+    margin-bottom: 20px;
+  }
+}
+
+// === Order Card ===
+.order-card {
+  background: $card-bg;
+  border-radius: $radius;
+  padding: 14px;
+  margin: 0 12px 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  &__id {
+    font-size: 14px;
+    font-weight: 600;
+    color: $text;
+  }
+
+  &__status {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+    color: white;
+  }
+
+  &__date {
+    font-size: 13px;
+    color: $text-light;
+  }
+
+  &__payment {
+    font-size: 13px;
+    color: $text-light;
+    margin-top: 4px;
+  }
+}
+
+// === Profile ===
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 16px;
+  background: linear-gradient(135deg, $primary, $primary-light);
+  color: white;
+
+  &__avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.5);
+    object-fit: cover;
+  }
+
+  &__name {
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  &__phone {
+    font-size: 13px;
+    opacity: 0.85;
+  }
+}
+
+.profile-menu {
+  &__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px 16px;
+    background: $card-bg;
+    border-bottom: 1px solid $border;
+    cursor: pointer;
+
+    &:active { background: $bg; }
+  }
+
+  &__label {
+    font-size: 15px;
+    color: $text;
+  }
+
+  &__badge {
+    background: $danger;
+    color: white;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+}
+
+// === Search Bar ===
+.search-bar {
+  padding: 8px 12px;
+
+  input {
+    width: 100%;
+    padding: 10px 16px;
+    border-radius: 24px;
+    border: none;
+    background: $card-bg;
+    font-size: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    outline: none;
+
+    &::placeholder {
+      color: #bbb;
+    }
+  }
+}
+
+// === Sticky Bottom Bar ===
+.sticky-bottom {
+  position: fixed;
+  bottom: 52px;
+  left: 0;
+  right: 0;
+  padding: 10px 16px;
+  background: $card-bg;
+  border-top: 1px solid $border;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 100;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+
+  &__total {
+    font-size: 13px;
+    color: $text-light;
+
+    span {
+      display: block;
+      font-size: 18px;
+      font-weight: 700;
+      color: $danger;
+    }
+  }
+
+  &__btn {
+    padding: 12px 28px;
+    background: $primary;
+    color: white;
+    border: none;
+    border-radius: 24px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:active { background: $primary-dark; }
+    &:disabled { background: #ccc; cursor: not-allowed; }
+  }
+}
+
+// === Loading Skeleton ===
+.skeleton {
+  background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}

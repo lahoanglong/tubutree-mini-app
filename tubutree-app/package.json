@@ -1,0 +1,32 @@
+{
+  "name": "tubutree-app",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Tubu Tree - Zalo Mini App",
+  "scripts": {
+    "start": "zmp start",
+    "dev": "zmp start",
+    "build": "zmp build",
+    "deploy": "zmp deploy"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "axios": "^1.6.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.8.2",
+    "recoil": "^0.7.7",
+    "swiper": "^9.1.0",
+    "zmp-sdk": "^2.39.9",
+    "zmp-ui": "^1.11.5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.28",
+    "@types/react-dom": "^18.0.11",
+    "sass": "^1.58.3",
+    "typescript": "^5.2.2",
+    "vite": "^5.4.21",
+    "vite-tsconfig-paths": "^4.0.5",
+    "zmp-vite-plugin": "^1.1.6"
+  }
+}
