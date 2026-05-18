@@ -1,12 +1,22 @@
-// Product Detail Page
-import React, { useEffect, useState } from "react";
+// Product Detail Page — Cải thiện UI
+import React, { useEffect, useState, useCallback } from "react";
 import { Box, Text, Button, Spinner, useSnackbar } from "zmp-ui";
 import { useParams, useNavigate } from "react-router-dom";
 import { productApi, cartApi } from "services/api";
 import { useSetRecoilState } from "recoil";
 import { cartItemsState } from "state/cart";
-import { formatPrice, getProductImage } from "utils/format";
+import { formatPrice } from "utils/format";
 import type { Product, ProductVariation } from "types";
+
+// Placeholder SVG
+const PLACEHOLDER_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400'%3E%3Crect fill='%23f0f0f0' width='400' height='400'/%3E%3Ctext x='50%25' y='45%25' text-anchor='middle' fill='%23ccc' font-size='60'%3E🌳%3C/text%3E%3Ctext x='50%25' y='58%25' text-anchor='middle' fill='%23bbb' font-size='16' font-family='sans-serif'%3ETubu Tree%3C/text%3E%3C/svg%3E";
+
+function safeImage(product: Product): string {
+  if (product.image) return product.image;
+  const v = product.variations?.[0];
+  if (v?.images?.[0]) return v.images[0];
+  return PLACEHOLDER_IMG;
+}
 
 const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -19,20 +29,30 @@ const ProductDetailPage: React.FC = () => {
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (id) loadProduct(id);
   }, [id]);
 
   const loadProduct = async (productId: string) => {
+    setLoading(true);
+    setError(false);
     try {
-      const data = await productApi.getDetail(productId);
-      setProduct(data);
-      if (data.variations?.length) {
-        setSelectedVariation(data.variations[0]);
+      const res = await productApi.getDetail(productId);
+      // Pancake API might wrap in { data: ... }
+      const data = (res as any)?.data || res;
+      if (data && data.name) {
+        setProduct(data);
+        if (data.variations?.length) {
+          setSelectedVariation(data.variations[0]);
+        }
+      } else {
+        setError(true);
       }
     } catch (err) {
       console.error("Lỗi tải sản phẩm:", err);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -42,8 +62,7 @@ const ProductDetailPage: React.FC = () => {
     if (!product || !selectedVariation) return;
     setAdding(true);
     try {
-      const item = await cartApi.add(product.id, qty, selectedVariation.id);
-      // Refresh cart
+      await cartApi.add(product.id, qty, selectedVariation.id);
       const allItems = await cartApi.getAll();
       setCart(allItems);
       openSnackbar({ text: "Đã thêm vào giỏ hàng! 🛒", type: "success" });
@@ -54,52 +73,75 @@ const ProductDetailPage: React.FC = () => {
     }
   };
 
+  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    (e.target as HTMLImageElement).src = PLACEHOLDER_IMG;
+  }, []);
+
   if (loading) {
     return (
-      <Box flex flexDirection="column" alignItems="center" justifyContent="center" style={{ padding: 60 }}>
+      <Box flex flexDirection="column" alignItems="center" justifyContent="center" style={{ minHeight: "60vh" }}>
         <Spinner visible />
+        <Text style={{ marginTop: 12, color: "#888" }}>Đang tải sản phẩm...</Text>
       </Box>
     );
   }
 
-  if (!product) {
+  if (error || !product) {
     return (
-      <div className="empty-state">
+      <div className="empty-state" style={{ minHeight: "60vh" }}>
         <div className="empty-state__icon">😢</div>
         <div className="empty-state__title">Không tìm thấy sản phẩm</div>
+        <div className="empty-state__desc">Sản phẩm có thể đã bị xóa hoặc không tồn tại</div>
+        <button className="sticky-bottom__btn" onClick={() => navigate("/")}>← Về trang chủ</button>
       </div>
     );
   }
 
-  const price = selectedVariation?.retail_price || 0;
+  const price = selectedVariation?.retail_price || product.variations?.[0]?.retail_price || 0;
 
   return (
-    <Box>
-      {/* Product Image */}
-      <img
-        src={getProductImage(product)}
-        alt={product.name}
-        style={{ width: "100%", aspectRatio: "1", objectFit: "cover", background: "#eee" }}
-      />
+    <Box style={{ paddingBottom: 70 }}>
+      {/* Back button + Product Image */}
+      <div style={{ position: "relative" }}>
+        <button
+          onClick={() => navigate(-1)}
+          style={{
+            position: "absolute", top: 12, left: 12, zIndex: 10,
+            width: 36, height: 36, borderRadius: 18, background: "rgba(0,0,0,0.4)",
+            border: "none", color: "#fff", fontSize: 18, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          ←
+        </button>
+        <img
+          src={safeImage(product)}
+          alt={product.name}
+          onError={handleImageError}
+          style={{ width: "100%", aspectRatio: "1", objectFit: "cover", background: "#f0f0f0", display: "block" }}
+        />
+      </div>
 
       {/* Product Info */}
       <Box p={4} style={{ background: "#fff" }}>
-        <Text size="xLarge" bold>{product.name}</Text>
-        <Text size="xLarge" bold style={{ color: "#F44336", marginTop: 8 }}>
-          {formatPrice(price)}
-        </Text>
+        <Text size="xLarge" bold style={{ lineHeight: 1.4 }}>{product.name}</Text>
+        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 22, fontWeight: 700, color: "#F44336" }}>
+            {formatPrice(price)}
+          </span>
+        </div>
 
         {product.note_product && (
-          <Text size="small" style={{ color: "#888", marginTop: 8, lineHeight: 1.5 }}>
+          <Text size="small" style={{ color: "#888", marginTop: 12, lineHeight: 1.6 }}>
             {product.note_product}
           </Text>
         )}
       </Box>
 
       {/* Variations */}
-      {product.variations.length > 1 && (
+      {product.variations && product.variations.length > 1 && (
         <Box p={4} mt={2} style={{ background: "#fff" }}>
-          <Text size="normal" bold style={{ marginBottom: 10 }}>Phân loại</Text>
+          <Text size="normal" bold style={{ marginBottom: 12 }}>📦 Phân loại</Text>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {product.variations.map(v => (
               <div
@@ -107,15 +149,19 @@ const ProductDetailPage: React.FC = () => {
                 onClick={() => setSelectedVariation(v)}
                 style={{
                   padding: "8px 16px",
-                  borderRadius: 8,
+                  borderRadius: 20,
                   border: `2px solid ${selectedVariation?.id === v.id ? '#2E7D32' : '#e8e8e8'}`,
                   background: selectedVariation?.id === v.id ? '#E8F5E9' : '#fff',
                   fontSize: 13,
-                  fontWeight: 500,
+                  fontWeight: selectedVariation?.id === v.id ? 600 : 400,
                   cursor: "pointer",
+                  transition: "all 0.2s",
                 }}
               >
                 {v.name || v.sku}
+                <span style={{ color: "#F44336", marginLeft: 4, fontWeight: 600 }}>
+                  {formatPrice(v.retail_price)}
+                </span>
               </div>
             ))}
           </div>
@@ -124,7 +170,7 @@ const ProductDetailPage: React.FC = () => {
 
       {/* Quantity */}
       <Box p={4} mt={2} style={{ background: "#fff" }}>
-        <Text size="normal" bold style={{ marginBottom: 10 }}>Số lượng</Text>
+        <Text size="normal" bold style={{ marginBottom: 12 }}>🔢 Số lượng</Text>
         <div className="cart-item__qty">
           <button onClick={() => setQty(Math.max(1, qty - 1))}>−</button>
           <span>{qty}</span>
@@ -135,7 +181,7 @@ const ProductDetailPage: React.FC = () => {
       {/* Sticky Bottom */}
       <div className="sticky-bottom">
         <div className="sticky-bottom__total">
-          Tổng
+          Tổng cộng
           <span>{formatPrice(price * qty)}</span>
         </div>
         <button

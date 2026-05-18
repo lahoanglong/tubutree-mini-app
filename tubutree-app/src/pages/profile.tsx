@@ -22,7 +22,7 @@ const ProfilePage: React.FC = () => {
       <div className="profile-header">
         <img
           className="profile-header__avatar"
-          src={user?.avatar || "https://via.placeholder.com/56?text=👤"}
+          src={user?.avatar || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Crect fill='%23a5d6a7' width='56' height='56' rx='28'/%3E%3Ctext x='50%25' y='55%25' text-anchor='middle' fill='%23fff' font-size='26'%3E👤%3C/text%3E%3C/svg%3E"}
           alt="Avatar"
         />
         <div>

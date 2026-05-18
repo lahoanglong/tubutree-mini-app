@@ -1,12 +1,23 @@
-// Home Page — Trang chủ
-import React, { useEffect, useState } from "react";
+// Home Page — Trang chủ (với UI cải thiện)
+import React, { useEffect, useState, useCallback } from "react";
 import { Box, Text, Spinner } from "zmp-ui";
 import { useNavigate } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";
 import "swiper/css";
 import { productApi, bannerApi } from "services/api";
-import { formatPrice, getMinPrice, getProductImage } from "utils/format";
+import { formatPrice, getMinPrice } from "utils/format";
 import type { Product, Banner, Category } from "types";
+
+// Ảnh placeholder SVG inline (tránh lỗi broken image)
+const PLACEHOLDER_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 300'%3E%3Crect fill='%23f0f0f0' width='300' height='300'/%3E%3Ctext x='50%25' y='45%25' text-anchor='middle' fill='%23ccc' font-size='40'%3E🌳%3C/text%3E%3Ctext x='50%25' y='58%25' text-anchor='middle' fill='%23bbb' font-size='14' font-family='sans-serif'%3ETubu Tree%3C/text%3E%3C/svg%3E";
+
+// Lấy ảnh sản phẩm an toàn
+function safeProductImage(product: Product): string {
+  if (product.image) return product.image;
+  const firstVar = product.variations?.[0];
+  if (firstVar?.images?.[0]) return firstVar.images[0];
+  return PLACEHOLDER_IMG;
+}
 
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
@@ -15,6 +26,7 @@ const HomePage: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [activeCategory, setActiveCategory] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searchText, setSearchText] = useState("");
 
   useEffect(() => {
     loadData();
@@ -37,9 +49,31 @@ const HomePage: React.FC = () => {
     }
   };
 
-  const filteredProducts = activeCategory
-    ? products.filter(p => p.categories?.some(c => c.id === activeCategory))
-    : products;
+  // Filter: search + category (match by product tag or name)
+  const filteredProducts = products.filter(p => {
+    // Search filter
+    if (searchText) {
+      const q = searchText.toLowerCase();
+      if (!p.name.toLowerCase().includes(q)) return false;
+    }
+    // Category filter: match by tag name or category text
+    if (activeCategory) {
+      const cat = categories.find(c => c.id === activeCategory);
+      if (!cat) return false;
+      const catText = cat.text.toLowerCase();
+      // Check if product name or tags contain category text
+      const nameMatch = p.name.toLowerCase().includes(catText);
+      const tagMatch = p.tags?.some(t => t.toLowerCase().includes(catText));
+      const catMatch = p.categories?.some(c => c.id === activeCategory);
+      return nameMatch || tagMatch || catMatch;
+    }
+    return true;
+  });
+
+  // Xử lý lỗi ảnh
+  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    (e.target as HTMLImageElement).src = PLACEHOLDER_IMG;
+  }, []);
 
   if (loading) {
     return (
@@ -52,9 +86,22 @@ const HomePage: React.FC = () => {
 
   return (
     <Box>
+      {/* Header Logo */}
+      <div className="app-header">
+        <span className="app-header__logo">🌳</span>
+        <span className="app-header__title">Tubu Tree</span>
+      </div>
+
       {/* Search Bar */}
       <div className="search-bar">
-        <input placeholder="🔍 Tìm sản phẩm..." readOnly onClick={() => {}} />
+        <input
+          placeholder="Tìm sản phẩm..."
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+        />
+        {searchText && (
+          <span className="search-bar__clear" onClick={() => setSearchText("")}>✕</span>
+        )}
       </div>
 
       {/* Banner Slider */}
@@ -63,7 +110,7 @@ const HomePage: React.FC = () => {
           <Swiper spaceBetween={10} slidesPerView={1.05} centeredSlides>
             {banners.map(b => (
               <SwiperSlide key={b.id} className="banner-slider__slide">
-                <img src={b.image_url} alt="Banner" />
+                <img src={b.image_url} alt="Banner" onError={handleImageError} />
               </SwiperSlide>
             ))}
           </Swiper>
@@ -72,31 +119,26 @@ const HomePage: React.FC = () => {
 
       {/* Categories */}
       {categories.length > 0 && (
-        <>
-          <div className="section-header">
-            <span className="section-header__title">Danh mục</span>
+        <div className="category-tabs">
+          <div
+            className={`category-tabs__item ${!activeCategory ? 'category-tabs__item--active' : ''}`}
+            onClick={() => setActiveCategory(null)}
+          >
+            Tất cả
           </div>
-          <div className="category-tabs">
+          {categories.map(cat => (
             <div
-              className={`category-tabs__item ${!activeCategory ? 'category-tabs__item--active' : ''}`}
-              onClick={() => setActiveCategory(null)}
+              key={cat.id}
+              className={`category-tabs__item ${activeCategory === cat.id ? 'category-tabs__item--active' : ''}`}
+              onClick={() => setActiveCategory(cat.id)}
             >
-              Tất cả
+              {cat.text}
             </div>
-            {categories.map(cat => (
-              <div
-                key={cat.id}
-                className={`category-tabs__item ${activeCategory === cat.id ? 'category-tabs__item--active' : ''}`}
-                onClick={() => setActiveCategory(cat.id)}
-              >
-                {cat.text}
-              </div>
-            ))}
-          </div>
-        </>
+          ))}
+        </div>
       )}
 
-      {/* Products Grid */}
+      {/* Products Header */}
       <div className="section-header">
         <span className="section-header__title">
           {activeCategory ? categories.find(c => c.id === activeCategory)?.text : "Sản phẩm"}
@@ -104,11 +146,14 @@ const HomePage: React.FC = () => {
         <span className="section-header__more">{filteredProducts.length} sản phẩm</span>
       </div>
 
+      {/* Products Grid */}
       {filteredProducts.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state__icon">📦</div>
-          <div className="empty-state__title">Không có sản phẩm</div>
-          <div className="empty-state__desc">Danh mục này chưa có sản phẩm nào</div>
+          <div className="empty-state__title">Không tìm thấy sản phẩm</div>
+          <div className="empty-state__desc">
+            {searchText ? `Không có kết quả cho "${searchText}"` : "Danh mục này chưa có sản phẩm nào"}
+          </div>
         </div>
       ) : (
         <div className="product-grid">
@@ -118,12 +163,15 @@ const HomePage: React.FC = () => {
               className="product-card"
               onClick={() => navigate(`/product/${product.id}`)}
             >
-              <img
-                className="product-card__image"
-                src={getProductImage(product)}
-                alt={product.name}
-                loading="lazy"
-              />
+              <div className="product-card__image-wrap">
+                <img
+                  className="product-card__image"
+                  src={safeProductImage(product)}
+                  alt={product.name}
+                  loading="lazy"
+                  onError={handleImageError}
+                />
+              </div>
               <div className="product-card__info">
                 <div className="product-card__name">{product.name}</div>
                 <div className="product-card__price">
@@ -134,6 +182,9 @@ const HomePage: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* Bottom spacing */}
+      <div style={{ height: 20 }} />
     </Box>
   );
 };
