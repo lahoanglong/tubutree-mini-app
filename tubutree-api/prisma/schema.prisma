@@ -1,0 +1,163 @@
+// ========================================
+// CẤU TRÚC DATABASE - Tubu Tree
+// ========================================
+// Mỗi "model" tương ứng với 1 bảng trong database PostgreSQL.
+// Prisma sẽ tự tạo bảng dựa trên các model này.
+// Chạy lệnh: npm run db:push để đồng bộ database.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========== NGƯỜI DÙNG ==========
+// Mỗi user đăng nhập bằng Zalo, có 1 zalo_uid duy nhất
+model User {
+  id            Int             @id @default(autoincrement())
+  zalo_uid      String          @unique   // ID từ Zalo (duy nhất)
+  name          String?                   // Tên hiển thị
+  phone         String?                   // Số điện thoại
+  avatar        String?                   // Link ảnh đại diện
+  created_at    DateTime        @default(now())
+  updated_at    DateTime        @updatedAt
+
+  // Quan hệ: 1 user có nhiều...
+  addresses     Address[]
+  cart_items    CartItem[]
+  orders        OrderRef[]
+  reviews       Review[]
+  wishlists     Wishlist[]
+  notifications Notification[]
+  searchHistory SearchHistory[]
+}
+
+// ========== ĐỊA CHỈ GIAO HÀNG ==========
+// 1 user có thể có nhiều địa chỉ, 1 trong số đó là mặc định
+model Address {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  user       User     @relation(fields: [user_id], references: [id])
+  name       String   // Tên người nhận
+  phone      String   // SĐT người nhận
+  province   String   // Tỉnh/Thành phố
+  district   String   // Quận/Huyện
+  ward       String   // Phường/Xã
+  detail     String   // Số nhà, đường, ngõ...
+  is_default Boolean  @default(false) // Địa chỉ mặc định?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+// ========== GIỎ HÀNG ==========
+// Lưu sản phẩm user đã thêm vào giỏ (chưa đặt hàng)
+model CartItem {
+  id             Int      @id @default(autoincrement())
+  user_id        Int
+  user           User     @relation(fields: [user_id], references: [id])
+  pos_product_id String   // Mã sản phẩm trên POS
+  variant_id     String?  // Biến thể (size, màu...) - có thể null
+  qty            Int      @default(1) // Số lượng
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@unique([user_id, pos_product_id, variant_id]) // Mỗi sản phẩm+biến thể chỉ có 1 dòng
+}
+
+// ========== ĐƠN HÀNG ==========
+// Chỉ lưu tham chiếu (reference) - dữ liệu chi tiết nằm trên Pancake POS
+model OrderRef {
+  id             Int       @id @default(autoincrement())
+  user_id        Int
+  user           User      @relation(fields: [user_id], references: [id])
+  pos_order_id   String    @unique  // Mã đơn trên POS
+  payment_method String              // COD, VietQR, ZaloPay...
+  payment_status String    @default("PENDING") // PENDING, WAITING_PAYMENT, COMPLETED, CANCELLED
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+  reviews        Review[]
+}
+
+// ========== ĐÁNH GIÁ SẢN PHẨM ==========
+model Review {
+  id             Int       @id @default(autoincrement())
+  user_id        Int
+  user           User      @relation(fields: [user_id], references: [id])
+  pos_product_id String    // Sản phẩm được đánh giá
+  order_ref_id   Int?      // Đơn hàng liên quan (tùy chọn)
+  order_ref      OrderRef? @relation(fields: [order_ref_id], references: [id])
+  rating         Int       @default(5) // Số sao (1-5)
+  comment        String?               // Nội dung đánh giá
+  images         String?               // JSON: danh sách URL ảnh
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+}
+
+// ========== YÊU THÍCH ==========
+model Wishlist {
+  id             Int      @id @default(autoincrement())
+  user_id        Int
+  user           User     @relation(fields: [user_id], references: [id])
+  pos_product_id String   // Sản phẩm yêu thích
+  created_at     DateTime @default(now())
+
+  @@unique([user_id, pos_product_id]) // Mỗi user chỉ thích 1 sản phẩm 1 lần
+}
+
+// ========== THÔNG BÁO ==========
+model Notification {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  user       User     @relation(fields: [user_id], references: [id])
+  title      String   // Tiêu đề
+  body       String   // Nội dung
+  type       String   @default("SYSTEM") // SYSTEM, ORDER, PROMOTION...
+  is_read    Boolean  @default(false)    // Đã đọc chưa?
+  created_at DateTime @default(now())
+}
+
+// ========== BANNER QUẢNG CÁO ==========
+model Banner {
+  id         Int       @id @default(autoincrement())
+  image_url  String    // Link hình ảnh
+  link       String?   // URL khi click vào
+  sort_order Int       @default(0)    // Thứ tự hiển thị
+  is_active  Boolean   @default(true) // Đang hiển thị?
+  start_date DateTime? // Hiển thị từ ngày...
+  end_date   DateTime? // Đến ngày...
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+}
+
+// ========== FLASH SALE ==========
+model FlashSale {
+  id             Int       @id @default(autoincrement())
+  pos_product_id String    // Sản phẩm giảm giá
+  sale_price     Decimal   // Giá sale
+  starts_at      DateTime  // Bắt đầu
+  ends_at        DateTime  // Kết thúc
+  stock          Int       @default(0) // Số lượng sale
+  sold           Int       @default(0) // Đã bán
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+}
+
+// ========== LỊCH SỬ TÌM KIẾM ==========
+model SearchHistory {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  user        User     @relation(fields: [user_id], references: [id])
+  keyword     String   // Từ khóa đã tìm
+  searched_at DateTime @default(now())
+}
+
+// ========== CÀI ĐẶT HỆ THỐNG ==========
+// Lưu key-value cho cấu hình linh hoạt (ví dụ: shipping_fee, min_order_amount...)
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique // Tên cài đặt
+  value String         // Giá trị
+}
