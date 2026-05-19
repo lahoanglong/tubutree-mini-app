@@ -29,3 +29,9 @@ npm-debug.log*
 # Docker volumes
 postgres_data/
 redis_data/
+
+# Mini App build output
+tubutree-app/www/
+
+# Local uploads (KYC, proof)
+tubutree-api/uploads/
