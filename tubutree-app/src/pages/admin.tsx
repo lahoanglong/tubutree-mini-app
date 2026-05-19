@@ -344,19 +344,49 @@ const VouchersAdminTab: React.FC = () => {
   useEffect(() => { load(); }, []);
 
   const handleCreate = async () => {
+    // Validate trước khi gửi — tránh BE 400 confusing
+    if (!form.code.trim()) {
+      openSnackbar({ text: "Thiếu code", type: "error" }); return;
+    }
+    if (!form.description.trim()) {
+      openSnackbar({ text: "Thiếu mô tả", type: "error" }); return;
+    }
+    const value = Number(form.value);
+    if (!value || value <= 0) {
+      openSnackbar({ text: "Value phải > 0", type: "error" }); return;
+    }
+    if (form.type === "PERCENT" && value > 100) {
+      openSnackbar({ text: "PERCENT phải <= 100", type: "error" }); return;
+    }
+    const validFrom = new Date(form.valid_from);
+    const validTo = new Date(form.valid_to);
+    if (isNaN(validFrom.getTime()) || isNaN(validTo.getTime())) {
+      openSnackbar({ text: "Ngày không hợp lệ (YYYY-MM-DD)", type: "error" }); return;
+    }
+    if (validTo <= validFrom) {
+      openSnackbar({ text: "Ngày kết thúc phải sau ngày bắt đầu", type: "error" }); return;
+    }
+
+    // Explicit coercion — không dùng "as any" hack
+    const payload: any = {
+      code: form.code.toUpperCase().trim(),
+      description: form.description.trim(),
+      type: form.type,
+      value,
+      min_order_vnd: form.min_order_vnd ? Number(form.min_order_vnd) : 0,
+      per_user_uses: Math.max(1, Number(form.per_user_uses) || 1),
+      valid_from: validFrom.toISOString(),
+      valid_to: validTo.toISOString(),
+    };
+    if (form.type === "PERCENT" && form.max_discount_vnd) {
+      payload.max_discount_vnd = Number(form.max_discount_vnd);
+    }
+    if (form.total_uses) {
+      payload.total_uses = Number(form.total_uses);
+    }
+
     try {
-      await voucherApi.adminCreate({
-        code: form.code.toUpperCase(),
-        description: form.description,
-        type: form.type,
-        value: Number(form.value),
-        min_order_vnd: form.min_order_vnd ? form.min_order_vnd : "0" as any,
-        max_discount_vnd: form.max_discount_vnd ? (form.max_discount_vnd as any) : null,
-        per_user_uses: Number(form.per_user_uses),
-        total_uses: form.total_uses ? Number(form.total_uses) : null,
-        valid_from: new Date(form.valid_from).toISOString(),
-        valid_to: new Date(form.valid_to).toISOString(),
-      });
+      await voucherApi.adminCreate(payload);
       openSnackbar({ text: "Đã tạo voucher", type: "success" });
       setModal(false); load();
     } catch (e: any) {

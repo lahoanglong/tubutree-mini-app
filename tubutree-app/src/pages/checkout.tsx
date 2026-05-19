@@ -1,5 +1,5 @@
 // Checkout Page — Xác nhận đơn hàng (voucher + points + breakdown)
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Box, Text, Button, Input, Spinner, useSnackbar } from "zmp-ui";
 import { useNavigate } from "react-router-dom";
 import { useRecoilValue, useSetRecoilState } from "recoil";
@@ -99,22 +99,33 @@ const CheckoutPage: React.FC = () => {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [pointsToRedeem, subtotal]);
 
+  // Token counter — tránh stale response từ request cũ override state mới
+  const voucherApplyToken = useRef(0);
+
   const checkVoucher = async () => {
     if (!voucherCode.trim()) return;
+    const myToken = ++voucherApplyToken.current;
     setVoucherChecking(true);
     try {
       const r = await voucherApi.apply(voucherCode.trim().toUpperCase(), subtotal);
+      // Bỏ qua nếu user đã clear hoặc gửi request mới hơn
+      if (voucherApplyToken.current !== myToken) return;
       setVoucherApplied(r);
       if (!r.valid) openSnackbar({ text: r.error || "Mã không hợp lệ", type: "error" });
       else openSnackbar({ text: `Giảm ${formatVnd(r.discount_vnd || "0")}`, type: "success" });
     } catch (e: any) {
+      if (voucherApplyToken.current !== myToken) return;
       openSnackbar({ text: e.response?.data?.error || e.message, type: "error" });
     } finally {
-      setVoucherChecking(false);
+      if (voucherApplyToken.current === myToken) setVoucherChecking(false);
     }
   };
 
-  const clearVoucher = () => { setVoucherCode(""); setVoucherApplied(null); };
+  const clearVoucher = () => {
+    ++voucherApplyToken.current; // invalidate mọi pending request
+    setVoucherCode("");
+    setVoucherApplied(null);
+  };
 
   const voucherDiscount = voucherApplied?.valid ? Number(voucherApplied.discount_vnd) : 0;
   const totalDiscount = Math.min(voucherDiscount + pointsDiscount, subtotal);

@@ -108,11 +108,26 @@ const ProductDetailPage: React.FC = () => {
     const base = "https://zalo.me/s/565779011239360460";
     const link = `${base}/?ref=${code}&product=${encodeURIComponent(prod.id)}`;
     const text = `${prod.name} - Mua tại Tubu Tree:\n${link}`;
-    if (navigator.share) {
-      navigator.share({ title: prod.name, text, url: link }).catch(() => {});
+
+    const fallbackCopy = () => {
+      navigator.clipboard.writeText(link).then(
+        () => openSnackbar({ text: "Đã copy link giới thiệu", type: "success" }),
+        () => openSnackbar({ text: link, type: "info" }),
+      );
+    };
+
+    if (typeof navigator.share === "function") {
+      try {
+        // Một số webview throw sync nếu scheme không support → bọc try/catch
+        const p = navigator.share({ title: prod.name, text, url: link });
+        if (p && typeof p.then === "function") {
+          p.catch(fallbackCopy);
+        }
+      } catch {
+        fallbackCopy();
+      }
     } else {
-      navigator.clipboard.writeText(link);
-      openSnackbar({ text: "Đã copy link giới thiệu", type: "success" });
+      fallbackCopy();
     }
   };
 

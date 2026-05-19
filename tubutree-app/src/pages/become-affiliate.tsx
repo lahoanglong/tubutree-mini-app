@@ -39,12 +39,16 @@ const BecomeAffiliatePage: React.FC = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  const isEditable = !existing || existing.status === "PENDING";
-  const isApprovedOnlyBank = existing?.status === "APPROVED";
+  // Phân loại flow theo status hiện tại
+  // - null hoặc REJECTED → submit đơn mới, file CCCD BẮT BUỘC
+  // - PENDING → update info, file optional (giữ ảnh cũ nếu không upload mới)
+  // - APPROVED → chỉ update bank info, file ignored
+  const isNewSubmit = !existing || existing.status === "REJECTED";
+  const isEditable = !existing || existing.status === "PENDING" || existing.status === "REJECTED";
 
   const handleSubmit = async () => {
-    if (!isApprovedOnlyBank && !existing && !cccdFront) {
-      openSnackbar({ text: "Vui lòng upload ảnh CCCD mặt trước", type: "error" });
+    if (isNewSubmit && !cccdFront) {
+      openSnackbar({ text: "Vui lòng upload ảnh CCCD mặt trước (đơn mới)", type: "error" });
       return;
     }
     if (!/^\d{9,12}$/.test(form.cccd_number)) {
@@ -58,7 +62,7 @@ const BecomeAffiliatePage: React.FC = () => {
 
     setSubmitting(true);
     try {
-      if (!existing) {
+      if (isNewSubmit) {
         await affiliateApi.submit({ ...form, cccd_front: cccdFront! });
         openSnackbar({ text: "Đã gửi đơn — chờ admin duyệt", type: "success" });
       } else {
