@@ -72,7 +72,16 @@ Write-Host "-> Them Postgres addon..." -ForegroundColor Cyan
 Write-Host "-> Them Redis addon..." -ForegroundColor Cyan
 & railway add --database redis
 
-# Set env vars
+# Pick service context — sau khi add Postgres/Redis, context có thể trỏ về DB
+# thay vì service code. Yêu cầu user pick API service.
+Write-Host "-> Chon service '$PROJECT_NAME' (KHONG phai Postgres/Redis)..." -ForegroundColor Cyan
+& railway service
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Warning: railway service link failed. Tiep tuc nhung domain co the sai service." -ForegroundColor Yellow
+}
+
+# Set env vars — KHONG include empty value (Railway reject)
+# ADMIN_ZALO_UIDS để placeholder, cập nhật qua dashboard sau khi user đầu login
 Write-Host "-> Set env variables..." -ForegroundColor Cyan
 & railway variables `
   --set "NODE_ENV=production" `
@@ -90,15 +99,15 @@ Write-Host "-> Set env variables..." -ForegroundColor Cyan
   --set "VIETQR_TEMPLATE=compact" `
   --set "UPLOAD_DIR=/app/uploads" `
   --set "MAX_UPLOAD_SIZE_MB=5" `
-  --set "ADMIN_ZALO_UIDS="
+  --set "ADMIN_ZALO_UIDS=placeholder_update_after_first_login"
 
-# Deploy
-Write-Host "-> Deploy code..." -ForegroundColor Cyan
-& railway up --detach
-
-# Generate domain
+# Generate domain cho API service (current context)
 Write-Host "-> Generate public domain..." -ForegroundColor Cyan
 & railway domain
+
+# Deploy code (sau khi env đã set + domain ready)
+Write-Host "-> Deploy code..." -ForegroundColor Cyan
+& railway up --detach
 
 Write-Host ""
 Write-Host "=== Setup done ===" -ForegroundColor Green
