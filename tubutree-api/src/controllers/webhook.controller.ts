@@ -95,7 +95,20 @@ async function handleCancelled(data: any) {
     try { await reverseForOrder(order.id); }
     catch (e: any) { console.error('[Webhook] Reverse points lỗi:', e.message); }
     try { await reverseCommissionForOrder(order.id); }
-    catch (e: any) { console.error('[Webhook] Reverse commission lỗi:', e.message); }
+    catch (e: any) {
+      // Commission đã PAYOUT → ghi audit để admin xem
+      console.error('[Webhook] Reverse commission lỗi:', e.message);
+      await prisma.adminAuditLog.create({
+        data: {
+          admin_zalo_uid: 'SYSTEM',
+          action: 'COMMISSION_REVERSE_FAILED_ON_WEBHOOK_CANCEL',
+          target_type: 'USER',
+          target_id: order.user_id,
+          reason: `Webhook cancel order ${order.id} nhưng reverse commission fail: ${e.message}`,
+          metadata: { pos_order_id: orderId, order_ref_id: order.id, error: e.message } as any,
+        },
+      }).catch(() => {});
+    }
     await createNotification(order.user_id, 'Đơn hàng đã hủy', `Đơn hàng #${orderId} đã bị hủy. Lý do: ${data.reason || 'Không rõ'}`, 'ORDER');
   }
 }

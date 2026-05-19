@@ -27,9 +27,12 @@ export function computeVoucherDiscount(v: { type: string; percent_value: number 
 
 /**
  * Consume 1 voucher cho 1 order. Gọi trong order-create transaction.
- * - Re-validate (re-check vì state có thể đổi giữa preview và consume)
- * - Tăng used_count + tạo VoucherUsage
- * - Trả về { discount_vnd, voucher_id }
+ *
+ * Race-safe:
+ *   1. SELECT FOR UPDATE row voucher (lock đến cuối tx)
+ *   2. Re-validate (windows, status, total_uses)
+ *   3. Count voucher_usage cho user (an toàn vì voucher đã lock)
+ *   4. Tạo VoucherUsage + increment used_count
  *
  * Throw nếu không hợp lệ — caller phải rollback.
  */
@@ -40,18 +43,36 @@ export async function consumeVoucher(
   orderTotal: bigint,
   orderId: number,
 ): Promise<{ discount_vnd: bigint; voucher_id: number }> {
-  const v = await tx.voucher.findUnique({ where: { code } });
-  if (!v) throw new Error('VOUCHER_NOT_FOUND');
+  // SELECT FOR UPDATE — Prisma không hỗ trợ trực tiếp, dùng $queryRaw
+  const rows = await tx.$queryRaw<any[]>`SELECT * FROM "Voucher" WHERE "code" = ${code} FOR UPDATE`;
+  if (!rows.length) throw new Error('VOUCHER_NOT_FOUND');
+  const v = rows[0];
+
+  // Postgres trả number/bigint mixed; normalize
+  const usedCount: number = Number(v.used_count);
+  const totalUses: number | null = v.total_uses != null ? Number(v.total_uses) : null;
+  const perUserUses: number = Number(v.per_user_uses);
+  const minOrderVnd: bigint = BigInt(v.min_order_vnd);
+  const maxDiscountVnd: bigint | null = v.max_discount_vnd != null ? BigInt(v.max_discount_vnd) : null;
+  const percentValue: number | null = v.percent_value != null ? Number(v.percent_value) : null;
+  const fixedAmountVnd: bigint | null = v.fixed_amount_vnd != null ? BigInt(v.fixed_amount_vnd) : null;
+
   if (!v.is_active) throw new Error('VOUCHER_INACTIVE');
   const now = new Date();
-  if (now < v.valid_from || now > v.valid_to) throw new Error('VOUCHER_OUT_OF_WINDOW');
-  if (v.total_uses != null && v.used_count >= v.total_uses) throw new Error('VOUCHER_EXHAUSTED');
-  if (orderTotal < v.min_order_vnd) throw new Error('VOUCHER_BELOW_MIN_ORDER');
+  if (now < new Date(v.valid_from) || now > new Date(v.valid_to)) throw new Error('VOUCHER_OUT_OF_WINDOW');
+  if (totalUses != null && usedCount >= totalUses) throw new Error('VOUCHER_EXHAUSTED');
+  if (orderTotal < minOrderVnd) throw new Error('VOUCHER_BELOW_MIN_ORDER');
 
   const userCount = await tx.voucherUsage.count({ where: { voucher_id: v.id, user_id: userId } });
-  if (userCount >= v.per_user_uses) throw new Error('VOUCHER_PER_USER_LIMIT');
+  if (userCount >= perUserUses) throw new Error('VOUCHER_PER_USER_LIMIT');
 
-  const discount = computeVoucherDiscount(v, orderTotal);
+  const discount = computeVoucherDiscount({
+    type: v.type,
+    percent_value: percentValue,
+    fixed_amount_vnd: fixedAmountVnd,
+    value: Number(v.value),
+    max_discount_vnd: maxDiscountVnd,
+  }, orderTotal);
   if (discount <= 0n) throw new Error('VOUCHER_NO_DISCOUNT');
 
   await tx.voucherUsage.create({

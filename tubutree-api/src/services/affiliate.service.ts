@@ -124,7 +124,12 @@ export async function awardCommissionForOrder(orderId: number, orderTotalVnd: nu
   });
 }
 
-/** Reverse commission khi đơn cancel. */
+/**
+ * Reverse commission khi đơn cancel.
+ *
+ * SAFETY: nếu wallet hiện tại không đủ amount để trừ (vì đã rút tiền)
+ * → throw COMMISSION_ALREADY_PAID_OUT. Caller phải refuse cancel hoặc alert admin.
+ */
 export async function reverseCommissionForOrder(orderId: number) {
   return prisma.$transaction(async (tx) => {
     const earns = await tx.commissionLedger.findMany({
@@ -136,6 +141,16 @@ export async function reverseCommissionForOrder(orderId: number) {
         where: { order_id: orderId, type: 'REVERSE', user_id: e.user_id },
       });
       if (rev) continue;
+
+      // Check ví đủ tiền để trừ — nếu commission đã PAYOUT thì throw
+      const walletAgg = await tx.walletLedger.aggregate({
+        where: { user_id: e.user_id },
+        _sum: { amount: true },
+      });
+      const balance = walletAgg._sum.amount || 0n;
+      if (balance < e.amount) {
+        throw new Error(`COMMISSION_ALREADY_PAID_OUT: user ${e.user_id}, balance ${balance.toString()}, need ${e.amount.toString()}`);
+      }
 
       const negAmount = -e.amount;
       await tx.commissionLedger.create({
