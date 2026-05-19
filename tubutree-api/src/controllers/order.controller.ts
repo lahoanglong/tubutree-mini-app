@@ -95,7 +95,9 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     //   2. COD driver thu đúng số tiền finalTotal
     // Nếu Pancake không support → cần encode discount thành line item "Khuyến mãi -X VND"
     // hoặc bypass Pancake hoàn toàn khi totalDiscount > 0.
-    // Mở rộng payload: gửi cả discount và total_discount_amount để tương thích nhiều biến thể API.
+    // Pancake schema (verified từ GET /shops/:id/orders):
+    //   - top-level: warehouse_id, total_discount, total_price, customer, items, note, ...
+    //   - items[]: product_id, variation_id (KHÔNG phải variant_id!), quantity
     const pancakeOrderData: any = {
       warehouse_id: getDefaultWarehouseId(),
       customer: {
@@ -105,13 +107,12 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       },
       items: priced.items.map(i => ({
         product_id: i.pos_product_id,
-        variant_id: i.variation_id,
+        variation_id: i.variation_id,
         quantity: i.qty,
       })),
-      notes: notes || (totalDiscount > 0n ? `Áp dụng giảm giá ${totalDiscount.toString()} VND` : ''),
+      note: notes || (totalDiscount > 0n ? `Áp dụng giảm giá ${totalDiscount.toString()} VND` : ''),
       payment_method: paymentMethod,
-      discount: Number(totalDiscount),
-      total_discount_amount: Number(totalDiscount),
+      total_discount: Number(totalDiscount),
       total_price: Number(finalTotal),
     };
 

@@ -44,11 +44,10 @@ async function main() {
   const orderPayload = {
     warehouse_id: getDefaultWarehouseId(),
     customer: { name: TEST_NAME, phone: TEST_PHONE, address: TEST_ADDRESS },
-    items: [{ product_id: product.id, variant_id: variation.id, quantity: 1 }],
-    notes: '[AUTO TEST] Kiểm tra Pancake có honor discount không. Huỷ sau khi verify.',
+    items: [{ product_id: product.id, variation_id: variation.id, quantity: 1 }],
+    note: '[AUTO TEST] Kiểm tra Pancake có honor discount không. Huỷ sau khi verify.',
     payment_method: 'COD',
-    discount,
-    total_discount_amount: discount,
+    total_discount: discount,
     total_price: finalTotal,
   };
 
