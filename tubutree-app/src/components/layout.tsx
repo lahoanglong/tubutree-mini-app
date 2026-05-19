@@ -16,6 +16,15 @@ import ProfilePage from "pages/profile";
 import AddressesPage from "pages/addresses";
 import WishlistPage from "pages/wishlist";
 import NotificationsPage from "pages/notifications";
+import MyCapabilitiesPage from "pages/my-capabilities";
+import BecomeAffiliatePage from "pages/become-affiliate";
+import BecomeAgentPage from "pages/become-agent";
+import AdminPage from "pages/admin";
+import PointsPage from "pages/points";
+import AffiliateHubPage from "pages/affiliate-hub";
+import AgentHubPage from "pages/agent-hub";
+import WalletPayoutPage from "pages/wallet-payout";
+import VouchersPage from "pages/vouchers";
 
 const Layout: React.FC = () => {
   const cartCount = useRecoilValue(cartCountState);
@@ -33,6 +42,15 @@ const Layout: React.FC = () => {
         <Route path="/addresses" element={<AddressesPage />} />
         <Route path="/wishlist" element={<WishlistPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/my-capabilities" element={<MyCapabilitiesPage />} />
+        <Route path="/become-affiliate" element={<BecomeAffiliatePage />} />
+        <Route path="/become-agent" element={<BecomeAgentPage />} />
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/points" element={<PointsPage />} />
+        <Route path="/affiliate-hub" element={<AffiliateHubPage />} />
+        <Route path="/agent-hub" element={<AgentHubPage />} />
+        <Route path="/wallet" element={<WalletPayoutPage />} />
+        <Route path="/vouchers" element={<VouchersPage />} />
       </AnimationRoutes>
 
       <BottomNavigation fixed>

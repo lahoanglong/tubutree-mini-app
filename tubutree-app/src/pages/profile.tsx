@@ -14,6 +14,17 @@ const ProfilePage: React.FC = () => {
     { icon: "📍", label: "Địa chỉ giao hàng", path: "/addresses" },
     { icon: "❤️", label: "Sản phẩm yêu thích", path: "/wishlist" },
     { icon: "🔔", label: "Thông báo", path: "/notifications" },
+    { icon: "⭐", label: "Điểm thưởng", path: "/points" },
+    { icon: "🎟️", label: "Mã giảm giá", path: "/vouchers" },
+    { icon: "🤝", label: "CTV / Đại lý", path: "/my-capabilities" },
+    ...(user?.affiliate_enabled ? [
+      { icon: "💰", label: "Ví hoa hồng + Rút tiền", path: "/wallet" },
+      { icon: "🔗", label: "Mã & link giới thiệu", path: "/affiliate-hub" },
+    ] : []),
+    ...(user?.agent_enabled ? [
+      { icon: "🏪", label: "Trang Đại lý", path: "/agent-hub" },
+    ] : []),
+    ...(user?.is_admin ? [{ icon: "⚙️", label: "Quản trị (Admin)", path: "/admin" }] : []),
   ];
 
   return (
