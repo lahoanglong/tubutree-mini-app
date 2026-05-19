@@ -1,12 +1,12 @@
 // Product Detail Page — Cải thiện UI
 import React, { useEffect, useState, useCallback } from "react";
-import { Box, Text, Button, Spinner, useSnackbar } from "zmp-ui";
+import { Box, Text, Spinner, useSnackbar } from "zmp-ui";
 import { useParams, useNavigate } from "react-router-dom";
-import { productApi, cartApi } from "services/api";
+import { productApi, cartApi, meApi, agentPricingApi, affiliateHubApi } from "services/api";
 import { useSetRecoilState } from "recoil";
 import { cartItemsState } from "state/cart";
 import { formatPrice } from "utils/format";
-import type { Product, ProductVariation } from "types";
+import type { Product, ProductVariation, MyCapabilities } from "types";
 
 // Placeholder SVG
 const PLACEHOLDER_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400'%3E%3Crect fill='%23f0f0f0' width='400' height='400'/%3E%3Ctext x='50%25' y='45%25' text-anchor='middle' fill='%23ccc' font-size='60'%3E🌳%3C/text%3E%3Ctext x='50%25' y='58%25' text-anchor='middle' fill='%23bbb' font-size='16' font-family='sans-serif'%3ETubu Tree%3C/text%3E%3C/svg%3E";
@@ -31,9 +31,36 @@ const ProductDetailPage: React.FC = () => {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState(false);
 
+  // Role-based extras
+  const [caps, setCaps] = useState<MyCapabilities | null>(null);
+  const [wholesalePrice, setWholesalePrice] = useState<number | null>(null);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+
   useEffect(() => {
     if (id) loadProduct(id);
+    // Load capabilities song song — silent fail nếu chưa login
+    meApi.getCapabilities().then(setCaps).catch(() => {});
   }, [id]);
+
+  // Khi xác định được caps + price → compute giá sỉ + load referral code
+  useEffect(() => {
+    if (!caps || !selectedVariation) return;
+    const retail = Number(selectedVariation.retail_price || 0);
+
+    if (caps.user.agent_enabled && retail > 0) {
+      agentPricingApi.previewWholesale(retail)
+        .then(r => setWholesalePrice(r.wholesale ? Number(r.wholesale) : null))
+        .catch(() => {});
+    } else {
+      setWholesalePrice(null);
+    }
+
+    if (caps.user.affiliate_enabled && !referralCode) {
+      affiliateHubApi.getProfile()
+        .then(p => setReferralCode(p.referral_code))
+        .catch(() => {});
+    }
+  }, [caps, selectedVariation, referralCode]);
 
   const loadProduct = async (productId: string) => {
     setLoading(true);
@@ -76,6 +103,18 @@ const ProductDetailPage: React.FC = () => {
   const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     (e.target as HTMLImageElement).src = PLACEHOLDER_IMG;
   }, []);
+
+  const handleShare = (prod: Product, code: string) => {
+    const base = "https://zalo.me/s/565779011239360460";
+    const link = `${base}/?ref=${code}&product=${encodeURIComponent(prod.id)}`;
+    const text = `${prod.name} - Mua tại Tubu Tree:\n${link}`;
+    if (navigator.share) {
+      navigator.share({ title: prod.name, text, url: link }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(link);
+      openSnackbar({ text: "Đã copy link giới thiệu", type: "success" });
+    }
+  };
 
   if (loading) {
     return (
@@ -125,11 +164,52 @@ const ProductDetailPage: React.FC = () => {
       {/* Product Info */}
       <Box p={4} style={{ background: "#fff" }}>
         <Text size="xLarge" bold style={{ lineHeight: 1.4 }}>{product.name}</Text>
-        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 22, fontWeight: 700, color: "#F44336" }}>
             {formatPrice(price)}
           </span>
+          {wholesalePrice != null && (
+            <span style={{ fontSize: 14, color: "#888", textDecoration: "line-through" }}>
+              {formatPrice(price)}
+            </span>
+          )}
         </div>
+
+        {/* Wholesale price card cho Agent */}
+        {wholesalePrice != null && caps?.user.agent_enabled && (
+          <div style={{
+            marginTop: 12, background: "#f0fdf4", border: "1px solid #bbf7d0",
+            borderRadius: 10, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center",
+          }}>
+            <div>
+              <Text size="xSmall" style={{ color: "#15803d" }}>🏪 Giá sỉ cho Đại lý</Text>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#15803d" }}>{formatPrice(wholesalePrice)}</div>
+              <Text size="xSmall" style={{ color: "#166534" }}>
+                Tiết kiệm {formatPrice(price - wholesalePrice)} / sản phẩm
+              </Text>
+            </div>
+            <button
+              onClick={() => navigate("/agent-hub")}
+              style={{ border: "none", background: "#15803d", color: "#fff", padding: "6px 12px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}
+            >Xem hạng</button>
+          </div>
+        )}
+
+        {/* Share button cho CTV */}
+        {referralCode && caps?.user.affiliate_enabled && (
+          <div style={{ marginTop: 12 }}>
+            <button
+              onClick={() => handleShare(product, referralCode)}
+              style={{
+                width: "100%", padding: "10px 14px", borderRadius: 10,
+                border: "1px dashed #2E7D32", background: "#E8F5E9",
+                color: "#2E7D32", fontSize: 14, fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              🔗 Chia sẻ link kiếm hoa hồng
+            </button>
+          </div>
+        )}
 
         {product.note_product && (
           <Text size="small" style={{ color: "#888", marginTop: 12, lineHeight: 1.6 }}>
