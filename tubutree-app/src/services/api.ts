@@ -30,9 +30,15 @@ const api = axios.create({
 let authToken: string | null = null;
 
 export function setAuthToken(token: string | null) {
+  const wasUnauthed = !authToken;
   authToken = token;
   if (token) {
     localStorage.setItem('tubutree_token', token);
+    // Fire-and-forget: nếu user vừa login + có pending ref code → attribute ngay.
+    // Tránh dependency cycle bằng dynamic import.
+    if (wasUnauthed) {
+      import('../utils/referral').then(m => m.attributePendingRef()).catch(() => {});
+    }
   } else {
     localStorage.removeItem('tubutree_token');
   }

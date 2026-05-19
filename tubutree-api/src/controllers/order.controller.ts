@@ -89,6 +89,13 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     }
 
     // ===== GỌI PANCAKE =====
+    // CHÚ Ý: Pancake API có thể KHÔNG honor `discount` / `total_price` fields trực tiếp.
+    // Lần đầu chạy production, ADMIN PHẢI test 1 đơn với voucher để verify:
+    //   1. Invoice Pancake hiển thị đúng giá đã giảm (không phải giá gốc)
+    //   2. COD driver thu đúng số tiền finalTotal
+    // Nếu Pancake không support → cần encode discount thành line item "Khuyến mãi -X VND"
+    // hoặc bypass Pancake hoàn toàn khi totalDiscount > 0.
+    // Mở rộng payload: gửi cả discount và total_discount_amount để tương thích nhiều biến thể API.
     const pancakeOrderData: any = {
       customer: {
         name: address.name,
@@ -100,11 +107,16 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
         variant_id: i.variation_id,
         quantity: i.qty,
       })),
-      notes: notes || '',
+      notes: notes || (totalDiscount > 0n ? `Áp dụng giảm giá ${totalDiscount.toString()} VND` : ''),
       payment_method: paymentMethod,
       discount: Number(totalDiscount),
+      total_discount_amount: Number(totalDiscount),
       total_price: Number(finalTotal),
     };
+
+    if (totalDiscount > 0n) {
+      console.info(`[order] Đơn có giảm giá ${totalDiscount} VND. Verify Pancake invoice phản ánh đúng.`);
+    }
 
     const pancakeOrder = await createPancakeOrder(pancakeOrderData);
     const pancakeOrderId = pancakeOrder?.id?.toString();

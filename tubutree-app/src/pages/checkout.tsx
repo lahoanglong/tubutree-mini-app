@@ -75,16 +75,28 @@ const CheckoutPage: React.FC = () => {
     }
   };
 
-  // Recompute points discount when subtotal/points change
+  // Recompute points discount with 250ms debounce — tránh fire API mỗi keystroke
   useEffect(() => {
-    setPointsError(null);
-    setPointsDiscount(0);
     const n = Number(pointsToRedeem);
-    if (!n || !subtotal) return;
-    pointsApi.previewRedeem(n, subtotal).then(r => {
-      if (r.valid) setPointsDiscount(Number(r.discount_vnd));
-      else setPointsError(r.error);
-    }).catch(() => {});
+    if (!n || !subtotal) {
+      setPointsError(null);
+      setPointsDiscount(0);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      pointsApi.previewRedeem(n, subtotal).then(r => {
+        if (cancelled) return;
+        if (r.valid) {
+          setPointsDiscount(Number(r.discount_vnd));
+          setPointsError(null);
+        } else {
+          setPointsDiscount(0);
+          setPointsError(r.error);
+        }
+      }).catch(() => { if (!cancelled) setPointsError(null); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [pointsToRedeem, subtotal]);
 
   const checkVoucher = async () => {
@@ -298,7 +310,7 @@ const CheckoutPage: React.FC = () => {
         <button
           className="sticky-bottom__btn"
           onClick={handleOrder}
-          disabled={submitting || !selectedAddress || subtotal <= 0}
+          disabled={submitting || !selectedAddress || subtotal <= 0 || !!pointsError}
         >
           {submitting ? "Đang đặt..." : "✅ Xác nhận đặt hàng"}
         </button>

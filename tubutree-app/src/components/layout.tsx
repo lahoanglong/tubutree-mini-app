@@ -25,6 +25,7 @@ import AffiliateHubPage from "pages/affiliate-hub";
 import AgentHubPage from "pages/agent-hub";
 import WalletPayoutPage from "pages/wallet-payout";
 import VouchersPage from "pages/vouchers";
+import RequireCapability from "./require-capability";
 
 const Layout: React.FC = () => {
   const cartCount = useRecoilValue(cartCountState);
@@ -42,15 +43,15 @@ const Layout: React.FC = () => {
         <Route path="/addresses" element={<AddressesPage />} />
         <Route path="/wishlist" element={<WishlistPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
-        <Route path="/my-capabilities" element={<MyCapabilitiesPage />} />
-        <Route path="/become-affiliate" element={<BecomeAffiliatePage />} />
-        <Route path="/become-agent" element={<BecomeAgentPage />} />
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="/points" element={<PointsPage />} />
-        <Route path="/affiliate-hub" element={<AffiliateHubPage />} />
-        <Route path="/agent-hub" element={<AgentHubPage />} />
-        <Route path="/wallet" element={<WalletPayoutPage />} />
-        <Route path="/vouchers" element={<VouchersPage />} />
+        <Route path="/my-capabilities" element={<RequireCapability require="auth"><MyCapabilitiesPage /></RequireCapability>} />
+        <Route path="/become-affiliate" element={<RequireCapability require="auth"><BecomeAffiliatePage /></RequireCapability>} />
+        <Route path="/become-agent" element={<RequireCapability require="auth"><BecomeAgentPage /></RequireCapability>} />
+        <Route path="/admin" element={<RequireCapability require="admin"><AdminPage /></RequireCapability>} />
+        <Route path="/points" element={<RequireCapability require="auth"><PointsPage /></RequireCapability>} />
+        <Route path="/affiliate-hub" element={<RequireCapability require="affiliate"><AffiliateHubPage /></RequireCapability>} />
+        <Route path="/agent-hub" element={<RequireCapability require="agent"><AgentHubPage /></RequireCapability>} />
+        <Route path="/wallet" element={<RequireCapability require="affiliate"><WalletPayoutPage /></RequireCapability>} />
+        <Route path="/vouchers" element={<RequireCapability require="auth"><VouchersPage /></RequireCapability>} />
       </AnimationRoutes>
 
       <BottomNavigation fixed>

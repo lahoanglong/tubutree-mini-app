@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import { Box, Text, Button } from "zmp-ui";
 import { useNavigate } from "react-router-dom";
 import { meApi } from "services/api";
-import { attributePendingRef } from "utils/referral";
 import type { MyCapabilities } from "types";
 
 const STATUS_LABEL: Record<string, { text: string; color: string; bg: string }> = {
@@ -54,8 +53,6 @@ const MyCapabilitiesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Best-effort: gán referrer nếu user đã mở app qua link ref
-    attributePendingRef().catch(() => {});
     meApi.getCapabilities().then(setData).finally(() => setLoading(false));
   }, []);
 
