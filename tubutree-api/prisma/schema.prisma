@@ -25,14 +25,32 @@ model User {
   created_at    DateTime        @default(now())
   updated_at    DateTime        @updatedAt
 
+  // Capabilities — flag dẫn xuất từ application APPROVED + is_active
+  affiliate_enabled Boolean @default(false)
+  agent_enabled     Boolean @default(false)
+  is_admin          Boolean @default(false)
+
+  // Ban toàn diện
+  is_banned       Boolean   @default(false)
+  banned_at       DateTime?
+  banned_by_uid   String?
+  ban_reason      String?
+
   // Quan hệ: 1 user có nhiều...
-  addresses     Address[]
-  cart_items    CartItem[]
-  orders        OrderRef[]
-  reviews       Review[]
-  wishlists     Wishlist[]
-  notifications Notification[]
-  searchHistory SearchHistory[]
+  addresses        Address[]
+  cart_items       CartItem[]
+  orders           OrderRef[]
+  reviews          Review[]
+  wishlists        Wishlist[]
+  notifications    Notification[]
+  searchHistory    SearchHistory[]
+  affiliate_apps   AffiliateApplication[]
+  agent_apps       AgentApplication[]
+  points_ledger    PointsLedger[]
+  affiliate_profile AffiliateProfile?
+  wallet_ledger    WalletLedger[]
+  agent_profile    AgentProfile?
+  payout_requests  PayoutRequest[]
 }
 
 // ========== ĐỊA CHỈ GIAO HÀNG ==========
@@ -76,6 +94,15 @@ model OrderRef {
   pos_order_id   String    @unique  // Mã đơn trên POS
   payment_method String              // COD, VietQR, ZaloPay...
   payment_status String    @default("PENDING") // PENDING, WAITING_PAYMENT, COMPLETED, CANCELLED
+
+  // Tổng tiền + giảm giá (snapshot)
+  subtotal_vnd          BigInt    @default(0)   // tổng trước giảm
+  voucher_code          String?
+  voucher_discount_vnd  BigInt    @default(0)
+  points_redeemed       Int       @default(0)
+  points_discount_vnd   BigInt    @default(0)
+  total_vnd             BigInt    @default(0)   // sau giảm
+
   created_at     DateTime  @default(now())
   updated_at     DateTime  @updatedAt
   reviews        Review[]
@@ -160,4 +187,242 @@ model Setting {
   id    Int    @id @default(autoincrement())
   key   String @unique // Tên cài đặt
   value String         // Giá trị
+}
+
+// ========== ĐƠN ĐĂNG KÝ CỘNG TÁC VIÊN (AFFILIATE) ==========
+// Mỗi user có thể nộp nhiều đơn theo thời gian (re-apply sau reject).
+// Chỉ 1 đơn is_active=true mỗi user.
+model AffiliateApplication {
+  id                Int       @id @default(autoincrement())
+  user_id           Int
+  user              User      @relation(fields: [user_id], references: [id])
+  status            String    @default("PENDING")  // PENDING | APPROVED | REJECTED | SUSPENDED
+  is_active         Boolean   @default(false)
+
+  // KYC
+  cccd_number       String
+  cccd_front_url    String                          // /uploads/kyc/{user_id}/aff-cccd-front-{uuid}.jpg
+
+  // Payout
+  bank_name         String
+  bank_account_no   String
+  bank_account_name String
+  email             String?
+
+  // Audit
+  submitted_at      DateTime  @default(now())
+  reviewed_at       DateTime?
+  reviewed_by_uid   String?
+  reject_reason     String?
+  suspended_reason  String?
+
+  @@index([user_id, status])
+  @@index([status, submitted_at])
+}
+
+// ========== ĐƠN ĐĂNG KÝ ĐẠI LÝ (AGENT) ==========
+model AgentApplication {
+  id                       Int       @id @default(autoincrement())
+  user_id                  Int
+  user                     User      @relation(fields: [user_id], references: [id])
+  status                   String    @default("PENDING")
+  is_active                Boolean   @default(false)
+  agent_type               String    @default("INDIVIDUAL") // INDIVIDUAL | BUSINESS
+
+  // KYC bắt buộc
+  cccd_number              String
+  cccd_front_url           String
+  cccd_back_url            String
+  selfie_url               String
+  warehouse_address        String
+  expected_monthly_revenue Decimal
+
+  // Payout
+  bank_name                String
+  bank_account_no          String
+  bank_account_name        String
+  email                    String?
+
+  // Optional — chỉ điền nếu có công ty
+  company_name             String?
+  tax_code                 String?
+  business_license_url     String?
+  representative_name      String?
+
+  // Audit
+  submitted_at             DateTime  @default(now())
+  reviewed_at              DateTime?
+  reviewed_by_uid          String?
+  reject_reason            String?
+  suspended_reason         String?
+
+  @@index([user_id, status])
+  @@index([status, submitted_at])
+}
+
+// ========== TÍCH ĐIỂM (Loyalty Points) ==========
+// Ledger - mọi thay đổi điểm = 1 entry. Balance = SUM(amount).
+model PointsLedger {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  user       User     @relation(fields: [user_id], references: [id])
+  type       String   // EARN | REDEEM | REVERSE_EARN | REVERSE_REDEEM | ADJUST
+  amount     Int      // dương=cộng, âm=trừ
+  order_id   Int?     // OrderRef.id (optional, không FK để tránh circular nếu order xoá)
+  note       String?
+  created_at DateTime @default(now())
+
+  @@index([user_id, created_at])
+  @@index([order_id])
+}
+
+// ========== HỒ SƠ CỘNG TÁC VIÊN (AFFILIATE PROFILE) ==========
+// Tạo tự động khi admin approve AffiliateApplication lần đầu.
+model AffiliateProfile {
+  user_id          Int      @id
+  user             User     @relation(fields: [user_id], references: [id])
+  referral_code    String   @unique
+  commission_rate_pct Float? // null = dùng default (Setting commission.default_rate_pct)
+  total_referrals  Int      @default(0)
+  total_orders     Int      @default(0)
+  total_commission BigInt   @default(0)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+}
+
+// ========== GIỚI THIỆU (REFERRAL) ==========
+// 1 khách → 1 referrer (last-touch ghi đè). Hết hạn sau N ngày.
+model Referral {
+  id                Int      @id @default(autoincrement())
+  referrer_user_id  Int
+  referred_user_id  Int      @unique
+  created_at        DateTime @default(now())
+  expires_at        DateTime
+  @@index([referrer_user_id])
+}
+
+// ========== LEDGER HOA HỒNG (COMMISSION) ==========
+model CommissionLedger {
+  id                Int      @id @default(autoincrement())
+  user_id           Int
+  type              String   // EARN | REVERSE | PAYOUT
+  amount            BigInt   // VND
+  order_id          Int?
+  referred_user_id  Int?
+  note              String?
+  created_at        DateTime @default(now())
+  @@index([user_id, created_at])
+  @@index([order_id])
+}
+
+// ========== VÍ ĐA NĂNG (WALLET) ==========
+// Dùng cho commission, payout, hoàn tiền — đơn vị VND.
+model WalletLedger {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  user        User     @relation(fields: [user_id], references: [id])
+  type        String   // COMMISSION_IN | COMMISSION_REVERSE | PAYOUT_OUT | PAYOUT_REVERSE | TOPUP | ADJUST
+  amount      BigInt   // VND
+  ref_id      Int?
+  note        String?
+  created_at  DateTime @default(now())
+  @@index([user_id, created_at])
+}
+
+// ========== TIER ĐẠI LÝ (WHOLESALE TIER) ==========
+model AgentTier {
+  id            Int     @id @default(autoincrement())
+  code          String  @unique  // BRONZE | SILVER | GOLD | ...
+  name          String
+  discount_pct  Float            // 10 = giảm 10% so với giá lẻ
+  min_order_vnd BigInt           // tối thiểu giá trị 1 đơn
+  sort_order    Int     @default(0)
+  is_active     Boolean @default(true)
+
+  profiles      AgentProfile[]
+}
+
+// ========== HỒ SƠ ĐẠI LÝ ==========
+model AgentProfile {
+  user_id    Int       @id
+  user       User      @relation(fields: [user_id], references: [id])
+  tier_id    Int
+  tier       AgentTier @relation(fields: [tier_id], references: [id])
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+}
+
+// ========== LỆNH RÚT TIỀN (PAYOUT) ==========
+model PayoutRequest {
+  id                Int      @id @default(autoincrement())
+  user_id           Int
+  user              User     @relation(fields: [user_id], references: [id])
+  amount_vnd        BigInt
+  status            String   @default("PENDING") // PENDING | APPROVED | COMPLETED | REJECTED
+  bank_name         String
+  bank_account_no   String
+  bank_account_name String
+  proof_url         String?
+  note              String?
+  reject_reason     String?
+  requested_at      DateTime @default(now())
+  reviewed_at       DateTime?
+  reviewed_by_uid   String?
+  completed_at      DateTime?
+
+  @@index([user_id, status])
+  @@index([status, requested_at])
+}
+
+// ========== VOUCHER / COUPON ==========
+// type=PERCENT dùng percent_value (0-100). type=FIXED dùng fixed_amount_vnd.
+// Cột `value` Float cũ vẫn giữ làm legacy mirror (sẽ remove sau migration).
+model Voucher {
+  id               Int      @id @default(autoincrement())
+  code             String   @unique
+  description      String
+  type             String                // PERCENT | FIXED
+  percent_value    Float?                // 0..100, dùng khi type=PERCENT
+  fixed_amount_vnd BigInt?               // VND, dùng khi type=FIXED
+  value            Float    @default(0)  // legacy mirror — đồng bộ từ percent_value/fixed
+  max_discount_vnd BigInt?
+  min_order_vnd    BigInt   @default(0)
+  total_uses       Int?                  // null = unlimited
+  per_user_uses    Int      @default(1)
+  used_count       Int      @default(0)
+  valid_from       DateTime
+  valid_to         DateTime
+  is_active        Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+  usages           VoucherUsage[]
+}
+
+model VoucherUsage {
+  id           Int      @id @default(autoincrement())
+  voucher_id   Int
+  voucher      Voucher  @relation(fields: [voucher_id], references: [id])
+  user_id      Int
+  order_id     Int?
+  discount_vnd BigInt
+  used_at      DateTime @default(now())
+
+  @@index([voucher_id, user_id])
+  @@index([user_id, used_at])
+}
+
+// ========== AUDIT LOG ADMIN ==========
+// Ghi mọi action admin để truy vết / compliance.
+model AdminAuditLog {
+  id              Int       @id @default(autoincrement())
+  admin_zalo_uid  String
+  action          String    // BAN_USER, UNBAN_USER, APPROVE_AFFILIATE, REJECT_AFFILIATE, SUSPEND_AGENT, ...
+  target_type     String    // USER | AFFILIATE_APP | AGENT_APP
+  target_id       Int
+  reason          String?
+  metadata        Json?
+  created_at      DateTime  @default(now())
+
+  @@index([target_type, target_id])
+  @@index([admin_zalo_uid, created_at])
 }
