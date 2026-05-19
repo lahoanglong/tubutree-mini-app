@@ -4,8 +4,9 @@
  * Luồng đăng nhập:
  * 1. Mini App gửi accessToken của Zalo lên
  * 2. Server gọi Zalo API để xác minh và lấy thông tin user
- * 3. Tạo hoặc cập nhật user trong database
- * 4. Trả về JWT token để dùng cho các request sau
+ * 3. Tạo hoặc cập nhật user trong database; sync is_admin từ env whitelist
+ * 4. Chặn nếu is_banned
+ * 5. Trả về JWT token + capabilities
  */
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
@@ -13,7 +14,15 @@ import prisma from '../lib/prisma';
 import { verifyZaloTokenAndGetUserInfo } from '../services/zalo.service';
 import { handleError } from '../lib/helpers';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 16) {
+  throw new Error('JWT_SECRET phải được set (>= 16 ký tự) trong .env. Không cho phép fallback.');
+}
+
+function isAdminUid(zaloUid: string): boolean {
+  const wl = (process.env.ADMIN_ZALO_UIDS || '').split(',').map(s => s.trim()).filter(Boolean);
+  return wl.includes(zaloUid);
+}
 
 export const loginWithZalo = async (req: Request, res: Response) => {
   try {
@@ -23,46 +32,51 @@ export const loginWithZalo = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Cần gửi accessToken của Zalo' });
     }
 
-    // Bước 1: Xác minh token với Zalo
     const zaloUser = await verifyZaloTokenAndGetUserInfo(accessToken);
 
     if (!zaloUser || !zaloUser.id) {
       return res.status(401).json({ error: 'Token Zalo không hợp lệ' });
     }
 
-    // Bước 2: Tìm hoặc tạo user trong database
-    let user = await prisma.user.findUnique({
-      where: { zalo_uid: zaloUser.id.toString() },
-    });
+    const zaloUid = zaloUser.id.toString();
+    const shouldBeAdmin = isAdminUid(zaloUid);
+
+    let user = await prisma.user.findUnique({ where: { zalo_uid: zaloUid } });
 
     if (!user) {
-      // User mới → tạo tài khoản
       user = await prisma.user.create({
         data: {
-          zalo_uid: zaloUser.id.toString(),
+          zalo_uid: zaloUid,
           name: zaloUser.name,
           avatar: zaloUser.picture?.data?.url || null,
+          is_admin: shouldBeAdmin,
         },
       });
     } else {
-      // User cũ → cập nhật tên/ảnh nếu thay đổi
       user = await prisma.user.update({
         where: { id: user.id },
         data: {
           name: zaloUser.name,
           avatar: zaloUser.picture?.data?.url || user.avatar,
+          is_admin: shouldBeAdmin,
         },
       });
     }
 
-    // Bước 3: Tạo JWT token (hết hạn sau 30 ngày)
+    // Chặn user bị banned ngay từ login
+    if (user.is_banned) {
+      return res.status(403).json({
+        error: 'ACCOUNT_BANNED',
+        reason: user.ban_reason || 'Tài khoản đã bị tạm khoá.',
+      });
+    }
+
     const token = jwt.sign(
       { userId: user.id, zaloUid: user.zalo_uid },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
 
-    // Bước 4: Trả về token + thông tin user
     res.json({
       token,
       user: {
@@ -70,6 +84,9 @@ export const loginWithZalo = async (req: Request, res: Response) => {
         name: user.name,
         avatar: user.avatar,
         phone: user.phone,
+        affiliate_enabled: user.affiliate_enabled,
+        agent_enabled: user.agent_enabled,
+        is_admin: user.is_admin,
       },
     });
   } catch (error: any) {
