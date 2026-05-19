@@ -1,8 +1,13 @@
 # Multi-stage build cho Tubu Tree API
-# Build: TypeScript compile + Prisma generate
-# Runtime: chỉ chạy dist + node_modules production
+# - Base: node:20-bookworm-slim (Debian) thay vì alpine vì Prisma 5 cần
+#   glibc + openssl-3, alpine dùng musl + openssl-1.1.x → schema engine fail
+# - Build: TypeScript compile + Prisma generate
+# - Runtime: chỉ chạy dist + production node_modules
 
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim AS builder
+
+# Prisma cần openssl runtime + dev tooling
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -17,7 +22,9 @@ COPY src ./src
 RUN npx prisma generate && npx tsc
 
 # ---------- Runtime ----------
-FROM node:20-alpine AS runtime
+FROM node:20-bookworm-slim AS runtime
+
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 ENV NODE_ENV=production
