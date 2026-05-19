@@ -1,11 +1,11 @@
-// Layout — Bottom Navigation + Routes
-import React from "react";
-import { AnimationRoutes, BottomNavigation, Page } from "zmp-ui";
+// Layout — Bottom Navigation + Routes (code-split: eager core, lazy account/admin)
+import React, { Suspense, lazy } from "react";
+import { AnimationRoutes, BottomNavigation, Page, Spinner } from "zmp-ui";
 import { Route } from "react-router-dom";
 import { useRecoilValue } from "recoil";
 import { cartCountState } from "state/cart";
 
-// Pages
+// === EAGER — core shopping (mọi user truy cập, không lazy)
 import HomePage from "pages/home";
 import ProductDetailPage from "pages/product-detail";
 import CartPage from "pages/cart";
@@ -16,16 +16,24 @@ import ProfilePage from "pages/profile";
 import AddressesPage from "pages/addresses";
 import WishlistPage from "pages/wishlist";
 import NotificationsPage from "pages/notifications";
-import MyCapabilitiesPage from "pages/my-capabilities";
-import BecomeAffiliatePage from "pages/become-affiliate";
-import BecomeAgentPage from "pages/become-agent";
-import AdminPage from "pages/admin";
-import PointsPage from "pages/points";
-import AffiliateHubPage from "pages/affiliate-hub";
-import AgentHubPage from "pages/agent-hub";
-import WalletPayoutPage from "pages/wallet-payout";
-import VouchersPage from "pages/vouchers";
 import RequireCapability from "./require-capability";
+
+// === LAZY — account/admin (chỉ load khi user navigate vào)
+const MyCapabilitiesPage = lazy(() => import("pages/my-capabilities"));
+const BecomeAffiliatePage = lazy(() => import("pages/become-affiliate"));
+const BecomeAgentPage = lazy(() => import("pages/become-agent"));
+const PointsPage = lazy(() => import("pages/points"));
+const VouchersPage = lazy(() => import("pages/vouchers"));
+const AffiliateHubPage = lazy(() => import("pages/affiliate-hub"));
+const AgentHubPage = lazy(() => import("pages/agent-hub"));
+const WalletPayoutPage = lazy(() => import("pages/wallet-payout"));
+const AdminPage = lazy(() => import("pages/admin"));
+
+const PageFallback: React.FC = () => (
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+    <Spinner visible />
+  </div>
+);
 
 const Layout: React.FC = () => {
   const cartCount = useRecoilValue(cartCountState);
@@ -43,15 +51,15 @@ const Layout: React.FC = () => {
         <Route path="/addresses" element={<AddressesPage />} />
         <Route path="/wishlist" element={<WishlistPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
-        <Route path="/my-capabilities" element={<RequireCapability require="auth"><MyCapabilitiesPage /></RequireCapability>} />
-        <Route path="/become-affiliate" element={<RequireCapability require="auth"><BecomeAffiliatePage /></RequireCapability>} />
-        <Route path="/become-agent" element={<RequireCapability require="auth"><BecomeAgentPage /></RequireCapability>} />
-        <Route path="/admin" element={<RequireCapability require="admin"><AdminPage /></RequireCapability>} />
-        <Route path="/points" element={<RequireCapability require="auth"><PointsPage /></RequireCapability>} />
-        <Route path="/affiliate-hub" element={<RequireCapability require="affiliate"><AffiliateHubPage /></RequireCapability>} />
-        <Route path="/agent-hub" element={<RequireCapability require="agent"><AgentHubPage /></RequireCapability>} />
-        <Route path="/wallet" element={<RequireCapability require="affiliate"><WalletPayoutPage /></RequireCapability>} />
-        <Route path="/vouchers" element={<RequireCapability require="auth"><VouchersPage /></RequireCapability>} />
+        <Route path="/my-capabilities" element={<RequireCapability require="auth"><Suspense fallback={<PageFallback />}><MyCapabilitiesPage /></Suspense></RequireCapability>} />
+        <Route path="/become-affiliate" element={<RequireCapability require="auth"><Suspense fallback={<PageFallback />}><BecomeAffiliatePage /></Suspense></RequireCapability>} />
+        <Route path="/become-agent" element={<RequireCapability require="auth"><Suspense fallback={<PageFallback />}><BecomeAgentPage /></Suspense></RequireCapability>} />
+        <Route path="/admin" element={<RequireCapability require="admin"><Suspense fallback={<PageFallback />}><AdminPage /></Suspense></RequireCapability>} />
+        <Route path="/points" element={<RequireCapability require="auth"><Suspense fallback={<PageFallback />}><PointsPage /></Suspense></RequireCapability>} />
+        <Route path="/affiliate-hub" element={<RequireCapability require="affiliate"><Suspense fallback={<PageFallback />}><AffiliateHubPage /></Suspense></RequireCapability>} />
+        <Route path="/agent-hub" element={<RequireCapability require="agent"><Suspense fallback={<PageFallback />}><AgentHubPage /></Suspense></RequireCapability>} />
+        <Route path="/wallet" element={<RequireCapability require="affiliate"><Suspense fallback={<PageFallback />}><WalletPayoutPage /></Suspense></RequireCapability>} />
+        <Route path="/vouchers" element={<RequireCapability require="auth"><Suspense fallback={<PageFallback />}><VouchersPage /></Suspense></RequireCapability>} />
       </AnimationRoutes>
 
       <BottomNavigation fixed>
