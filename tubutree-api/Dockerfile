@@ -30,9 +30,9 @@ RUN npm ci --omit=dev && npx prisma generate
 # Built code
 COPY --from=builder /app/dist ./dist
 
-# Volume cho uploads (KYC photos persistent)
+# Folder cho uploads (KYC photos). Railway KHÔNG support docker VOLUME directive —
+# dùng Railway Volume mount vào /app/uploads qua dashboard Settings → Volumes.
 RUN mkdir -p /app/uploads/kyc
-VOLUME /app/uploads
 
 EXPOSE 3001
 
