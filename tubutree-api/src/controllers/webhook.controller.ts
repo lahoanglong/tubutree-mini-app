@@ -15,6 +15,8 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { createNotification } from './notification.controller';
+import { awardForOrder, reverseForOrder } from '../services/points.service';
+import { awardCommissionForOrder, reverseCommissionForOrder } from '../services/affiliate.service';
 
 export const handlePancakeWebhook = async (req: Request, res: Response) => {
   try {
@@ -60,7 +62,7 @@ async function notifyUser(data: any, title: string, statusText: string) {
   }
 }
 
-// Đã giao thành công → cập nhật trạng thái + thông báo
+// Đã giao thành công → cập nhật trạng thái + thông báo + tích điểm
 async function handleDelivered(data: any) {
   const orderId = data.order_id?.toString();
   if (!orderId) return;
@@ -68,11 +70,21 @@ async function handleDelivered(data: any) {
   const order = await prisma.orderRef.findUnique({ where: { pos_order_id: orderId } });
   if (order) {
     await prisma.orderRef.update({ where: { id: order.id }, data: { payment_status: 'COMPLETED' } });
+
+    // Tích điểm + commission
+    const total = Number(data.total_price ?? data.cod ?? 0);
+    if (total > 0) {
+      try { await awardForOrder(order.id, total); }
+      catch (e: any) { console.error('[Webhook] Award points lỗi:', e.message); }
+      try { await awardCommissionForOrder(order.id, total); }
+      catch (e: any) { console.error('[Webhook] Award commission lỗi:', e.message); }
+    }
+
     await createNotification(order.user_id, 'Đã giao thành công', `Đơn hàng #${orderId} đã giao. Hãy đánh giá nhé!`, 'ORDER');
   }
 }
 
-// Đã hủy → cập nhật trạng thái + thông báo
+// Đã hủy → cập nhật trạng thái + thông báo + reverse điểm (nếu đã cộng)
 async function handleCancelled(data: any) {
   const orderId = data.order_id?.toString();
   if (!orderId) return;
@@ -80,6 +92,10 @@ async function handleCancelled(data: any) {
   const order = await prisma.orderRef.findUnique({ where: { pos_order_id: orderId } });
   if (order) {
     await prisma.orderRef.update({ where: { id: order.id }, data: { payment_status: 'CANCELLED' } });
+    try { await reverseForOrder(order.id); }
+    catch (e: any) { console.error('[Webhook] Reverse points lỗi:', e.message); }
+    try { await reverseCommissionForOrder(order.id); }
+    catch (e: any) { console.error('[Webhook] Reverse commission lỗi:', e.message); }
     await createNotification(order.user_id, 'Đơn hàng đã hủy', `Đơn hàng #${orderId} đã bị hủy. Lý do: ${data.reason || 'Không rõ'}`, 'ORDER');
   }
 }
