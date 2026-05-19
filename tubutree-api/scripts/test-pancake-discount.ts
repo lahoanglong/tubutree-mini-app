@@ -11,7 +11,7 @@
  * trên Pancake Dashboard để không lẫn vào dữ liệu thật.
  */
 import 'dotenv/config';
-import { createPancakeOrder, getPancakeOrder } from '../src/services/pancake.service';
+import { createPancakeOrder, getPancakeOrder, getDefaultWarehouseId } from '../src/services/pancake.service';
 
 const TEST_PHONE = '0900000000';
 const TEST_NAME = 'TEST - DISCOUNT VERIFY';
@@ -42,6 +42,7 @@ async function main() {
 
   console.log(`Step 2: Tạo đơn với retail=${retailPrice}, discount=${discount}, final=${finalTotal}`);
   const orderPayload = {
+    warehouse_id: getDefaultWarehouseId(),
     customer: { name: TEST_NAME, phone: TEST_PHONE, address: TEST_ADDRESS },
     items: [{ product_id: product.id, variant_id: variation.id, quantity: 1 }],
     notes: '[AUTO TEST] Kiểm tra Pancake có honor discount không. Huỷ sau khi verify.',

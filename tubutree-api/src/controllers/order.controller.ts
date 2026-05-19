@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import prisma from '../lib/prisma';
-import { createPancakeOrder, getPancakeOrder, cancelPancakeOrder } from '../services/pancake.service';
+import { createPancakeOrder, getPancakeOrder, cancelPancakeOrder, getDefaultWarehouseId } from '../services/pancake.service';
 import { createNotification } from './notification.controller';
 import { redeemPoints, previewRedeem, reverseForOrder } from '../services/points.service';
 import { consumeVoucher } from './voucher.controller';
@@ -97,6 +97,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     // hoặc bypass Pancake hoàn toàn khi totalDiscount > 0.
     // Mở rộng payload: gửi cả discount và total_discount_amount để tương thích nhiều biến thể API.
     const pancakeOrderData: any = {
+      warehouse_id: getDefaultWarehouseId(),
       customer: {
         name: address.name,
         phone: address.phone,

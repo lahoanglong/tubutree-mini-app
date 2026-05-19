@@ -31,6 +31,18 @@ function getShopId(): string {
   return shopId;
 }
 
+export function getDefaultWarehouseId(): string {
+  const id = process.env.PANCAKE_WAREHOUSE_ID;
+  if (!id) throw new Error('Chưa cấu hình PANCAKE_WAREHOUSE_ID. Fetch qua GET /shops/:id/warehouses để lấy id.');
+  return id;
+}
+
+// Liệt kê warehouse — dùng để chọn default lần đầu
+export const getPancakeWarehouses = async () => {
+  const res = await pancakeApi.get(`/shops/${getShopId()}/warehouses`);
+  return res.data;
+};
+
 // ========== SẢN PHẨM ==========
 
 // Lấy danh sách sản phẩm (có phân trang)
