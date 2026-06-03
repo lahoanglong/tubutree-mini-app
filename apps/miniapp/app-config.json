@@ -1,0 +1,16 @@
+{
+  "app": {
+    "title": "Tubu Tree",
+    "headerColor": "#2E7D4F",
+    "textColor": "white",
+    "leftButton": "back",
+    "statusBarType": "transparent",
+    "actionBarHidden": false,
+    "hideAndroidBottomNavigationBar": false,
+    "hideIOSSafeAreaBottom": false
+  },
+  "listSyncCSS": [],
+  "listCSS": [],
+  "listSyncJS": [],
+  "listJS": []
+}

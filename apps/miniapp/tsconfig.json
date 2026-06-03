@@ -1,0 +1,10 @@
+{
+  "extends": "@tubutree/typescript-config/react.json",
+  "compilerOptions": {
+    "baseUrl": "src",
+    "types": ["vite/client"],
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": ["src", "vite.config.mts"]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "tubutree",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "db:generate": "pnpm --filter @tubutree/api prisma:generate",
+    "db:migrate": "pnpm --filter @tubutree/api prisma:migrate",
+    "db:seed": "pnpm --filter @tubutree/api prisma:seed",
+    "dev:infra": "docker compose -f docker-compose.dev.yml up -d",
+    "dev:infra:down": "docker compose -f docker-compose.dev.yml down"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "turbo": "^2.3.3",
+    "typescript": "^5.6.3"
+  }
+}

@@ -1,0 +1,56 @@
+import { Body, Controller, Get, Post, HttpCode, HttpStatus } from '@nestjs/common';
+import type { JwtPayload, LoginResponse } from '@tubutree/shared-types';
+import { Public } from '../../common/decorators/public.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { PrismaService } from '../../prisma/prisma.service';
+import { AuthService } from './auth.service';
+import { ZaloMiniAppLoginDto } from './dto/zalo-login.dto';
+import { RefreshTokenDto } from './dto/refresh.dto';
+
+@Controller('auth')
+export class AuthController {
+  constructor(
+    private readonly auth: AuthService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  @Public()
+  @Post('zalo-mini-app')
+  @HttpCode(HttpStatus.OK)
+  loginZaloMiniApp(@Body() dto: ZaloMiniAppLoginDto): Promise<LoginResponse> {
+    return this.auth.loginWithZaloMiniApp(dto.code, dto.accessToken);
+  }
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  refresh(@Body() dto: RefreshTokenDto): Promise<LoginResponse> {
+    return this.auth.refresh(dto.refreshToken);
+  }
+
+  @Public()
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logout(@Body() dto: RefreshTokenDto): Promise<void> {
+    await this.auth.logout(dto.refreshToken);
+  }
+
+  /** GET /api/auth/me — yêu cầu JWT (guard mặc định). */
+  @Get('me')
+  async me(@CurrentUser() user: JwtPayload) {
+    const dbUser = await this.prisma.user.findUniqueOrThrow({ where: { id: user.sub } });
+    return {
+      id: dbUser.id,
+      zaloId: dbUser.zaloId,
+      phone: dbUser.phone,
+      email: dbUser.email,
+      fullName: dbUser.fullName,
+      avatarUrl: dbUser.avatarUrl,
+      role: dbUser.role,
+      tierId: dbUser.tierId,
+      referralCode: dbUser.referralCode,
+      pointsBalance: dbUser.pointsBalance,
+      walletBalance: dbUser.walletBalance,
+    };
+  }
+}

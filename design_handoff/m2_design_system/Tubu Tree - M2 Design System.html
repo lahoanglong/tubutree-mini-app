@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tubu Tree — M2 Design System v0.5</title>
+<link rel="stylesheet" href="../m1/tokens.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--neutral-100); color: var(--neutral-900); font-family: var(--font-ui); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 36px 120px; }
+
+  .cover { background: linear-gradient(155deg, #B86A10, #E08C1C 60%, #EBA94A); color: #fff; border-radius: 0 0 32px 32px; padding: 54px 48px 44px; }
+  .cover .kick { font-size: 13px; font-weight: 700; letter-spacing: 1.6px; color: rgba(255,255,255,0.8); text-transform: uppercase; }
+  .cover h1 { font-family: var(--font-display); font-size: 46px; font-weight: 800; letter-spacing: -1px; margin: 12px 0 10px; }
+  .cover p { font-size: 16px; line-height: 1.6; max-width: 640px; margin: 0; color: rgba(255,255,255,0.92); }
+  .cover .chips { display: flex; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+  .cover .chips span { background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.28); padding: 7px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+
+  section { margin-top: 60px; }
+  .shead { display: flex; align-items: baseline; gap: 14px; border-bottom: 2px solid var(--neutral-200); padding-bottom: 12px; margin-bottom: 8px; }
+  .shead .n { font-family: var(--font-mono); font-size: 13px; color: var(--orange-600); font-weight: 700; }
+  .shead h2 { font-family: var(--font-display); font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -0.3px; }
+  .lead { font-size: 14.5px; line-height: 1.6; color: var(--neutral-600); max-width: 720px; margin: 4px 0 28px; }
+
+  .card { background: #fff; border: 1px solid var(--neutral-200); border-radius: 16px; padding: 24px; box-shadow: var(--sh-xs); }
+  .grid { display: grid; gap: 20px; }
+  .lbl { font-size: 12px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; color: var(--neutral-400); margin-bottom: 14px; }
+  .sublbl { font-size: 13px; font-weight: 600; color: var(--neutral-600); margin: 0 0 10px; }
+
+  pre { background: #1A1A17; color: #F2F2EF; border-radius: 12px; padding: 20px 22px; overflow-x: auto; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7; margin: 0; }
+  pre .k { color: #EBA94A; } pre .v { color: #95D222; } pre .c { color: #7A756B; }
+
+  @keyframes tt-spin { to { transform: rotate(360deg); } }
+  @keyframes tt-sway { 0%,100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+  @keyframes tt-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.4); opacity: 0.6; } }
+  image-slot { --is-bg: var(--green-50); }
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="kick">Tubu Tree · Milestone 2</div>
+  <h1>Design System v0.5</h1>
+  <p>Token đầy đủ + thư viện component nền tảng cho Zalo Mini App. Mọi atom đều render thật, đủ trạng thái. Primary cam #E08C1C, secondary xanh #509018, font Bricolage Grotesque + Plus Jakarta Sans.</p>
+  <div class="chips"><span>Tokens</span><span>Buttons</span><span>Inputs &amp; OTP</span><span>Badges</span><span>Filter chips</span><span>ProductCard ×3 mode</span><span>PriceTag</span><span>Order timeline</span><span>Empty states</span></div>
+</div>
+
+<div class="wrap" id="doc"></div>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="20" fill="#E08C1C"/><rect x="26" y="26" width="20" height="20" rx="5" fill="#fff"/><rect x="54" y="26" width="20" height="20" rx="5" fill="#FBE4C4"/><rect x="26" y="54" width="20" height="20" rx="5" fill="#FBE4C4"/><rect x="54" y="54" width="20" height="20" rx="10" fill="#509018"/></svg>
+</template>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../image-slot.js"></script>
+<script type="text/babel" src="../m1/atoms.jsx"></script>
+<script type="text/babel" src="ds-atoms.jsx"></script>
+<script type="text/babel" src="ds-molecules.jsx"></script>
+<script type="text/babel" src="ds-empty.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+
+/* ---------- doc scaffolding ---------- */
+const Section = ({ n, title, lead, children }) => (
+  <section>
+    <div className="shead"><span className="n">{n}</span><h2>{title}</h2></div>
+    {lead && <p className="lead">{lead}</p>}
+    {children}
+  </section>
+);
+const Card = ({ children, style }) => <div className="card" style={style}>{children}</div>;
+const Row = ({ children, gap = 14, style }) => <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap, ...style }}>{children}</div>;
+
+/* ===== TOKENS ===== */
+function ColorRamp({ name, items }) {
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div className="sublbl">{name}</div>
+      <div style={{ display: 'flex', borderRadius: 10, overflow: 'hidden', boxShadow: 'var(--sh-xs)' }}>
+        {items.map(([step, hex]) => {
+          const dark = parseInt(hex.slice(1,3),16)*0.299 + parseInt(hex.slice(3,5),16)*0.587 + parseInt(hex.slice(5,7),16)*0.114 < 150;
+          return (
+            <div key={step} style={{ flex: 1, height: 70, background: hex, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: 7 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: dark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.5)' }}>{step}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 600, color: dark ? '#fff' : 'var(--neutral-900)' }}>{hex}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+function Tokens() {
+  const tw = `<span class="c">// tailwind.config.js — Tubu Tree (đã điền sẵn)</span>
+theme: { extend: {
+  <span class="k">colors</span>: {
+    orange: { <span class="v">50:'#FDF3E3', 100:'#FBE4C4', 600:'#E08C1C', 700:'#B86A10'</span> }, <span class="c">// PRIMARY</span>
+    green:  { <span class="v">50:'#EEF7D9', 400:'#95D222', 600:'#509018', 700:'#3C6D12'</span> }, <span class="c">// SECONDARY</span>
+    yellow: { <span class="v">300:'#F4B408'</span>, bright: <span class="v">'#F0E004'</span> },          <span class="c">// game</span>
+    bg: <span class="v">'#FAFAF8'</span>, surface: <span class="v">'#FFFFFF'</span>, border: <span class="v">'#E5E5E0'</span>,
+    ink: { <span class="v">900:'#1A1A17', 600:'#5F5F58', 400:'#A8A8A0'</span> },
+    state: { success:<span class="v">'#509018'</span>, warning:<span class="v">'#E58B00'</span>, danger:<span class="v">'#C73E3E'</span>, info:<span class="v">'#3D7BB8'</span> },
+  },
+  <span class="k">borderRadius</span>: { sm:<span class="v">'6px'</span>, DEFAULT:<span class="v">'10px'</span>, lg:<span class="v">'16px'</span>, xl:<span class="v">'24px'</span> },
+  <span class="k">spacing</span>: { <span class="c">/* 8pt: 4 8 12 16 20 24 32 40 48 64 */</span> },
+  <span class="k">fontFamily</span>: { display:<span class="v">['Bricolage Grotesque']</span>, sans:<span class="v">['Plus Jakarta Sans']</span>, body:<span class="v">['Inter']</span>, mono:<span class="v">['JetBrains Mono']</span> },
+  <span class="k">boxShadow</span>: { card:<span class="v">'0 2px 6px rgba(92,52,10,.06)'</span> },
+}}`;
+  const spaces = [['1',4],['2',8],['3',12],['4',16],['5',20],['6',24],['8',32],['10',40],['12',48],['16',64]];
+  const radii = [['sm',6],['md',10],['lg',16],['xl',24],['full',32]];
+  const shadows = [['xs','var(--sh-xs)'],['sm','var(--sh-sm)'],['md','var(--sh-md)'],['lg','var(--sh-lg)']];
+  const types = [
+    ['display-lg','Sống xanh An Lành','Bricolage · 32/700'],
+    ['h1','Gợi ý cho bạn','Bricolage · 24/700'],
+    ['h2','Thương hiệu của vườn','Jakarta · 20/600'],
+    ['h3','Dầu gội Sâm Visante','Jakarta · 18/600'],
+    ['body-lg','Thiên nhiên Việt cho cả nhà mình','Jakarta · 16/400'],
+    ['body-md','Chiết xuất sâm Ngọc Linh, dịu nhẹ cho da','Jakarta · 14/400'],
+    ['label','AN TOÀN CHO BÉ','Jakarta · 12/500'],
+  ];
+  return (
+    <Section n="01" title="Design Tokens" lead="Token đã chốt (eyedrop từ logo). Đây là source of truth — code chỉ tham chiếu var(), không hard-code hex.">
+      <div className="grid" style={{ gridTemplateColumns: '1.15fr 1fr', alignItems: 'start' }}>
+        <Card>
+          <div className="lbl">Màu</div>
+          <ColorRamp name="Primary — Cam (logo)" items={[['50','#FDF3E3'],['100','#FBE4C4'],['200','#F4C98A'],['400','#EBA94A'],['600','#E08C1C'],['700','#B86A10'],['900','#5C3505']]} />
+          <ColorRamp name="Secondary — Xanh lá" items={[['50','#EEF7D9'],['100','#DCEFBE'],['200','#BBD98A'],['400','#95D222'],['600','#509018'],['700','#3C6D12'],['900','#1F3A09']]} />
+          <ColorRamp name="Vàng game · Neutral" items={[['y300','#F4B408'],['bright','#F0E004'],['bg','#FAFAF8'],['border','#E5E5E0'],['ink600','#5F5F58'],['ink900','#1A1A17']]} />
+          <ColorRamp name="Semantic" items={[['success','#509018'],['warning','#E58B00'],['danger','#C73E3E'],['info','#3D7BB8']]} />
+        </Card>
+        <Card><div className="lbl">Tailwind config</div><pre dangerouslySetInnerHTML={{ __html: tw }} /></Card>
+      </div>
+
+      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', marginTop: 20 }}>
+        <Card>
+          <div className="lbl">Spacing · 8pt grid</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {spaces.map(([k,v]) => (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--neutral-500)', width: 28 }}>{k}</span>
+                <span style={{ height: 14, width: v, background: 'var(--orange-400)', borderRadius: 3 }} />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--neutral-400)' }}>{v}px</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <Card>
+            <div className="lbl">Radius</div>
+            <Row gap={16}>
+              {radii.map(([k,v]) => (
+                <div key={k} style={{ textAlign: 'center' }}>
+                  <div style={{ width: 56, height: 56, background: 'var(--orange-100)', border: '1.5px solid var(--orange-400)', borderRadius: v }} />
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--neutral-500)', marginTop: 6 }}>{k} · {v}</div>
+                </div>
+              ))}
+            </Row>
+          </Card>
+          <Card>
+            <div className="lbl">Shadow (warm-tinted)</div>
+            <Row gap={18}>
+              {shadows.map(([k,v]) => (
+                <div key={k} style={{ textAlign: 'center' }}>
+                  <div style={{ width: 60, height: 48, background: '#fff', borderRadius: 12, boxShadow: v }} />
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--neutral-500)', marginTop: 10 }}>{k}</div>
+                </div>
+              ))}
+            </Row>
+          </Card>
+        </div>
+      </div>
+
+      <Card style={{ marginTop: 20 }}>
+        <div className="lbl">Typography</div>
+        {types.map(([cls,txt,spec]) => (
+          <div key={cls} style={{ display: 'flex', alignItems: 'baseline', gap: 22, padding: '11px 0', borderBottom: '1px solid var(--neutral-100)' }}>
+            <span style={{ width: 150, flex: '0 0 150px', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--neutral-400)' }}>{spec}</span>
+            <span className={'t-'+cls} style={{ flex: 1 }}>{txt}</span>
+          </div>
+        ))}
+      </Card>
+    </Section>
+  );
+}
+
+/* ===== BUTTONS ===== */
+function Buttons() {
+  const variants = [['primary','Primary'],['secondary','Secondary'],['tertiary','Tertiary']];
+  const states = ['default','hover','active','disabled','loading'];
+  return (
+    <Section n="02" title="Button" lead="3 variant × 3 size × 5 state. Hàng trên: live (rê chuột / nhấn thật). Lưới dưới: ma trận trạng thái ở size md.">
+      <Card>
+        <div className="lbl">Live · 3 variant × 3 size</div>
+        {variants.map(([v,nm]) => (
+          <div key={v} style={{ marginBottom: 18 }}>
+            <div className="sublbl">{nm}</div>
+            <Row gap={12}>
+              <LiveButton variant={v} size="lg" icon={v==='primary'?'cart':undefined}>Thêm vào giỏ</LiveButton>
+              <LiveButton variant={v} size="md">Xem chi tiết</LiveButton>
+              <LiveButton variant={v} size="sm">Theo dõi</LiveButton>
+            </Row>
+          </div>
+        ))}
+        <div className="lbl" style={{ marginTop: 24 }}>State matrix · size md</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto repeat(5, 1fr)', gap: 12, alignItems: 'center' }}>
+          <span></span>
+          {states.map(s => <span key={s} style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--neutral-500)', textAlign: 'center' }}>{s}</span>)}
+          {variants.map(([v,nm]) => (
+            <React.Fragment key={v}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--neutral-600)' }}>{nm}</span>
+              {states.map(s => <div key={s} style={{ display: 'grid', placeItems: 'center' }}><Button variant={v} size="md" state={s}>Mua ngay</Button></div>)}
+            </React.Fragment>
+          ))}
+        </div>
+      </Card>
+    </Section>
+  );
+}
+
+/* ===== INPUTS ===== */
+function Inputs() {
+  return (
+    <Section n="03" title="Input · OTP · Search" lead="Label luôn hiện (không chỉ placeholder) — đúng a11y. Có error + success state, focus ring cam.">
+      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', alignItems: 'start' }}>
+        <Card>
+          <div className="lbl">Text field</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <TextField label="Họ và tên" placeholder="Nguyễn Mỹ Linh" icon="user" required />
+            <TextField label="Số điện thoại" value="0987 654 321" state="success" help="Số hợp lệ" icon="bell" />
+            <TextField label="Email" value="linh@" state="error" help="Email chưa đúng định dạng" />
+          </div>
+        </Card>
+        <Card>
+          <div className="lbl">OTP · 6 ô</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+            <div><div className="sublbl">Đang nhập</div><OTPInput state="default" /></div>
+            <div><div className="sublbl">Lỗi</div><OTPInput state="error" /></div>
+            <div><div className="sublbl">Thành công</div><OTPInput state="success" /></div>
+          </div>
+        </Card>
+        <Card>
+          <div className="lbl">Search</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div><div className="sublbl">Trống</div><SearchField /></div>
+            <div><div className="sublbl">Có nội dung</div><SearchField value="dầu gội sâm" /></div>
+          </div>
+        </Card>
+      </div>
+    </Section>
+  );
+}
+
+/* ===== BADGES + CHIPS ===== */
+function Badges() {
+  const brandIds = Object.keys(BRANDS);
+  return (
+    <Section n="04" title="Badge · Filter chip" lead="Brand chip dùng màu accent riêng từng thương hiệu. Status badge & số giỏ. Filter chip có default + selected.">
+      <div className="grid" style={{ gridTemplateColumns: '1.4fr 1fr', alignItems: 'start' }}>
+        <Card>
+          <div className="lbl">Brand chip · 10 thương hiệu</div>
+          <Row gap={10}>{brandIds.map(id => <BrandChip key={id} id={id} />)}</Row>
+          <div className="lbl" style={{ marginTop: 24 }}>Status badge</div>
+          <Row gap={10}>
+            <StatusBadge kind="new" /><StatusBadge kind="sale" /><StatusBadge kind="out" /><StatusBadge kind="safe" /><StatusBadge kind="vegan" />
+          </Row>
+          <div className="lbl" style={{ marginTop: 24 }}>Số giỏ hàng</div>
+          <Row gap={16}><CartBadge n={1} /><CartBadge n={3} /><CartBadge n={12} /></Row>
+        </Card>
+        <Card>
+          <div className="lbl">Filter chip</div>
+          <div className="sublbl">Bấm để chọn / bỏ chọn</div>
+          <Row gap={10}>
+            <FilterChip label="Tất cả" selected />
+            <FilterChip label="Cho mẹ & bé" icon="shield" />
+            <FilterChip label="Nhà bếp xanh" icon="leaf" />
+            <FilterChip label="Đang giảm giá" />
+            <FilterChip label="Mới về" count={24} />
+            <FilterChip label="Thuần chay" icon="leaf" />
+          </Row>
+        </Card>
+      </div>
+    </Section>
+  );
+}
+
+/* ===== MOLECULES ===== */
+const DEMO = [
+  { slot: 'm1', brand: 'visante', name: 'Dầu gội Sâm Visante phục hồi hư tổn 280ml', sku: 'VIS-DG-280', rating: 4.8, sold: '2,1k', price: 280000, orig: 350000, tag: 'sale', stock: 142 },
+  { slot: 'm2', brand: 'fuwa3e', name: 'Nước rửa chén Fuwa3e enzyme sinh học 500ml', sku: 'FUW-RC-500', rating: 4.7, sold: '3,4k', price: 79000, orig: 99000, tag: 'sale', stock: 88 },
+  { slot: 'm3', brand: 'cobote', name: 'Dầu dừa Cobote ép lạnh nguyên chất 250ml', sku: 'COB-DD-250', rating: 4.9, sold: 640, price: 120000, tag: 'new', stock: 30 },
+];
+function Molecules() {
+  return (
+    <Section n="05" title="ProductCard · PriceTag · Order timeline" lead="ProductCard một data, ba mode khác nhau theo persona: B2C (Mẹ Linh) · CTV (hoa hồng + chia sẻ) · Đại lý (SKU + giá nhập, gọn).">
+      <Card>
+        <div className="lbl">ProductCard · 3 mode</div>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: 28 }}>
+          <div><div className="sublbl">B2C mode</div><div style={{ display: 'flex', gap: 12 }}><ProductCard p={DEMO[0]} mode="b2c" /></div></div>
+          <div><div className="sublbl">CTV mode · hoa hồng + chia sẻ</div><div style={{ display: 'flex', gap: 12 }}><ProductCard p={DEMO[0]} mode="ctv" /></div></div>
+          <div><div className="sublbl">Đại lý mode · compact</div><div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{DEMO.map(p => <ProductCard key={p.slot} p={p} mode="dealer" />)}</div></div>
+        </div>
+      </Card>
+
+      <div className="grid" style={{ gridTemplateColumns: '1fr 1.4fr', marginTop: 20, alignItems: 'start' }}>
+        <Card>
+          <div className="lbl">PriceTag</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div><div className="sublbl">Có giảm giá</div><PriceTag v={280000} orig={350000} size={22} /></div>
+            <div><div className="sublbl">Không giảm</div><PriceTag v={120000} size={22} /></div>
+            <div><div className="sublbl">Khoảng giá (variation)</div><PriceTag range={[79000, 165000]} size={22} /></div>
+          </div>
+        </Card>
+        <Card>
+          <div className="lbl">OrderStatusTimeline · 5 bước</div>
+          <div className="sublbl">Ngang (tóm tắt trong list)</div>
+          <div style={{ padding: '8px 4px 20px' }}><OrderStatusTimeline current={3} /></div>
+          <div className="sublbl" style={{ marginTop: 8 }}>Dọc (màn chi tiết đơn)</div>
+          <div style={{ paddingTop: 10, maxWidth: 280 }}><OrderStatusTimeline current={3} vertical /></div>
+        </Card>
+      </div>
+    </Section>
+  );
+}
+
+/* ===== EMPTY STATES ===== */
+function Empties() {
+  return (
+    <Section n="06" title="Empty states" lead="Giọng ấm áp — không bao giờ 'No items'. Mỗi màn có illustration riêng + đúng 1 CTA chính.">
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+        <Card style={{ display: 'grid', placeItems: 'center' }}><EmptyCart /></Card>
+        <Card style={{ display: 'grid', placeItems: 'center' }}><EmptyGarden /></Card>
+        <Card style={{ display: 'grid', placeItems: 'center' }}><EmptyWishlist /></Card>
+      </div>
+    </Section>
+  );
+}
+
+function Doc() {
+  return (
+    <>
+      <Tokens /><Buttons /><Inputs /><Badges /><Molecules /><Empties />
+      <div style={{ marginTop: 60, padding: 28, background: 'var(--orange-50)', borderRadius: 18, border: '1px solid var(--orange-100)' }}>
+        <h2 style={{ fontFamily: 'var(--font-display)', margin: '0 0 8px', fontSize: 21, color: 'var(--orange-900)' }}>Xong M2 — chờ feedback</h2>
+        <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.7, color: 'var(--neutral-700)', maxWidth: 760 }}>
+          Đây là v0.5: token + atoms + molecules + empty states. Cho tôi biết chỗ cần chỉnh (màu/spacing/giọng copy/illustration). Khi bạn duyệt, tôi sang <b>M3 — 25 màn P1</b> (Home, PDP, Cart, Checkout 3 bước, Order success/list/detail, Loyalty, Vườn Xanh, Wallet, Affiliate, Dealer, Cashback, Profile…).
+        </p>
+      </div>
+    </>
+  );
+}
+ReactDOM.createRoot(document.getElementById('doc')).render(<Doc />);
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+# Lưu ý: thư mục mini_app/ (app cũ, Express + ZMP-UI) cố tình KHÔNG nằm trong
+# workspace — giữ làm tham chiếu, không build chung.

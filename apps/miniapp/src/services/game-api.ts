@@ -1,0 +1,46 @@
+import { api } from './api';
+
+export interface GameProfile {
+  totalSeeds: number;
+  streakDays: number;
+  treeStage: number;
+  ecoImpact: { progress: number; target: number; treeType: string; treesPlanted: number } | null;
+}
+export interface CheckInResult {
+  seedsEarned: number;
+  pointsEarned: number;
+  streakDays: number;
+  totalSeeds: number;
+  bonusNote: string;
+}
+export interface QuizItem {
+  id: string;
+  question: string;
+  options: string[];
+  rewardPts: number;
+}
+export interface SpinResult {
+  prize: { id: string; name: string; rewardType: string; value: number };
+}
+export interface LeaderRow {
+  rank: number;
+  nickname: string;
+  streak: number;
+  treesPlanted: number;
+}
+
+export const getGameProfile = () => api.get<GameProfile>('/game/profile').then((r) => r.data);
+export const checkIn = () => api.post<CheckInResult>('/game/check-in').then((r) => r.data);
+export const spin = () => api.post<SpinResult>('/game/spin').then((r) => r.data);
+export const getTodayQuiz = () => api.get<QuizItem[]>('/game/quiz/today').then((r) => r.data);
+export const answerQuiz = (id: string, choice: number) =>
+  api.post<{ isCorrect: boolean; correct: number; pointsEarned: number }>(
+    `/game/quiz/${id}/answer`,
+    { choice },
+  ).then((r) => r.data);
+export const waterTree = (drops: number) =>
+  api.post<{ progress: number; target: number; harvested: boolean; treesPlanted: number }>(
+    '/game/tree/water',
+    { drops },
+  ).then((r) => r.data);
+export const getLeaderboard = () => api.get<LeaderRow[]>('/game/leaderboard').then((r) => r.data);

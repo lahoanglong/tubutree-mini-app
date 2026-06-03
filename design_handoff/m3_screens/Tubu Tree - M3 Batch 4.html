@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tubu Tree — M3 Batch 4 · Dealer Mode</title>
+<link rel="stylesheet" href="../m1/tokens.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #E2E8F0; color: #0F172A; font-family: var(--font-ui); }
+  .cover { background: linear-gradient(155deg, #0F172A, #334155 60%, #475569); color: #fff; padding: 52px 48px 42px; border-radius: 0 0 32px 32px; }
+  .cover .kick { font-size: 13px; font-weight: 700; letter-spacing: 1.6px; color: rgba(255,255,255,0.7); text-transform: uppercase; }
+  .cover h1 { font-family: var(--font-display); font-size: 44px; font-weight: 800; letter-spacing: -1px; margin: 12px 0 10px; }
+  .cover p { font-size: 15.5px; line-height: 1.6; max-width: 660px; margin: 0; color: rgba(255,255,255,0.88); }
+  .cover .chips { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+  .cover .chips span { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.22); padding: 6px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+  .wrap { max-width: 1800px; margin: 0 auto; padding: 0 40px 120px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 44px 36px; margin-top: 52px; justify-content: center; }
+  .cell { display: flex; flex-direction: column; align-items: center; }
+  .cell .tag { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .cell .num { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #fff; background: #334155; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; }
+  .cell h3 { font-family: var(--font-display); font-size: 17px; font-weight: 700; margin: 0; }
+  .cell .sub { font-size: 12.5px; color: #64748B; }
+  .frame-scale { transform: scale(0.82); transform-origin: top center; margin-bottom: -158px; }
+  image-slot { --is-bg: #F1F5F9; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="kick">Tubu Tree · Milestone 3 · Batch 4</div>
+  <h1>Dealer Mode — B2B</h1>
+  <p>Mode hoàn toàn khác cho Đại lý (Persona C — Anh Hùng 42t): theme navy-slate đậm, bảng giá dày, đặt hàng nhanh dạng bảng 1 dòng với thành tiền rõ ràng, đặt xong hiện QR thanh toán ngay, kèm lịch sử & chi tiết đơn đầy đủ. Nút "Chuyển sang mua lẻ" trên mọi header.</p>
+  <div class="chips"><span>Theme navy #334155</span><span>Bảng đặt hàng 1 dòng</span><span>Thanh toán QR (VietQR)</span><span>Lịch sử đơn</span><span>Chi tiết đơn B2B</span></div>
+</div>
+<div class="wrap"><div class="grid" id="grid"></div></div>
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="20" fill="#334155"/><rect x="20" y="38" width="60" height="6" rx="3" fill="rgba(255,255,255,.6)"/><rect x="20" y="50" width="60" height="6" rx="3" fill="rgba(255,255,255,.4)"/><rect x="20" y="62" width="60" height="6" rx="3" fill="rgba(255,255,255,.25)"/></svg>
+</template>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../image-slot.js"></script>
+<script type="text/babel" src="../frames/ios-frame.jsx"></script>
+<script type="text/babel" src="../m1/atoms.jsx"></script>
+<script type="text/babel" src="b1-shared.jsx"></script>
+<script type="text/babel" src="b4-screens.jsx"></script>
+<script type="text/babel" src="b4-flow.jsx"></script>
+<script type="text/babel" data-presets="react">
+const SCREENS = [
+  ['17', 'Dealer Home', 'Stats · Quick actions · Đơn gần đây', 'home', {}],
+  ['18', 'Bảng giá B2B', 'Dense table · search/filter · tier selector', 'price', {}],
+  ['19', 'Đặt hàng nhanh', 'SKU search · bảng dày 1 dòng · Paste Excel', 'quick', {}],
+  ['20', 'Thanh toán QR', 'Đặt xong → QR VietQR + thông tin CK', 'orderSuccess', {}],
+  ['21', 'Lịch sử đơn', 'Tabs lọc · danh sách đơn B2B', 'history', {}],
+  ['22', 'Chi tiết đơn', 'Bảng SKU · thành tiền · trạng thái', 'orderDetail', { order: D_ORDERS[1] }],
+  ['23', 'Công nợ', 'Hạn mức tín dụng · sổ công nợ · NET 30', 'credit', {}],
+];
+function Board() {
+  return <>{SCREENS.map(([num, title, sub, initial, params]) => (
+    <div className="cell" key={num}>
+      <div className="tag"><span className="num">{num}</span><div><h3>{title}</h3><div className="sub">{sub}</div></div></div>
+      <div className="frame-scale"><IOSDevice><B4Flow initial={initial} initialParams={params} /></IOSDevice></div>
+    </div>
+  ))}</>;
+}
+ReactDOM.createRoot(document.getElementById('grid')).render(<Board />);
+</script>
+</body>
+</html>

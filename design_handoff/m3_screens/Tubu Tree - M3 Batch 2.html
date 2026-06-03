@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tubu Tree — M3 Batch 2 · Loyalty & Game</title>
+<link rel="stylesheet" href="../m1/tokens.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--neutral-100); color: var(--neutral-900); font-family: var(--font-ui); }
+  .cover { background: linear-gradient(155deg, #235F3D, #509018 58%, #95D222); color: #fff; padding: 52px 48px 42px; border-radius: 0 0 32px 32px; }
+  .cover .kick { font-size: 13px; font-weight: 700; letter-spacing: 1.6px; color: rgba(255,255,255,0.85); text-transform: uppercase; }
+  .cover h1 { font-family: var(--font-display); font-size: 44px; font-weight: 800; letter-spacing: -1px; margin: 12px 0 10px; }
+  .cover p { font-size: 15.5px; line-height: 1.6; max-width: 660px; margin: 0; color: rgba(255,255,255,0.92); }
+  .cover .hint { margin-top: 20px; display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.28); padding: 9px 15px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+  .wrap { max-width: 1300px; margin: 0 auto; padding: 0 40px 120px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 44px 36px; margin-top: 52px; justify-content: center; }
+  .cell { display: flex; flex-direction: column; align-items: center; }
+  .cell .tag { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .cell .num { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #fff; background: var(--green-600); width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; }
+  .cell h3 { font-family: var(--font-display); font-size: 17px; font-weight: 700; margin: 0; }
+  .cell .sub { font-size: 12.5px; color: var(--neutral-500); }
+  .frame-scale { transform: scale(0.82); transform-origin: top center; margin-bottom: -158px; }
+  image-slot { --is-bg: var(--green-50); }
+  /* game motion */
+  @keyframes tt-sway { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+  @keyframes tt-glow { 0%,100% { opacity: .12; transform: scale(1); } 50% { opacity: .28; transform: scale(1.12); } }
+  @keyframes tt-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+  @keyframes tt-pop { 0% { transform: translateX(-50%) scale(0.6); opacity: 0; } 60% { transform: translateX(-50%) scale(1.08); opacity: 1; } 100% { transform: translateX(-50%) scale(1); opacity: 1; } }
+  @keyframes tt-shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+  @keyframes tt-ring { 0% { transform: translate(-50%,-50%) scale(0.7); opacity: .7; } 70% { opacity: 0; } 100% { transform: translate(-50%,-50%) scale(1.5); opacity: 0; } }
+  .tt-ring { animation: tt-ring 2.4s ease-out infinite; }
+  .tt-leaf { transform-origin: 50% 90%; animation: tt-sway 3.4s ease-in-out infinite; }
+  .tt-glow { animation: tt-glow 2.4s ease-in-out infinite; transform-origin: center; }
+  .tt-bob { animation: tt-bob 1.6s ease-in-out infinite; }
+  .tt-pop { animation: tt-pop .5s cubic-bezier(0.34,1.56,0.64,1); }
+  @media (prefers-reduced-motion: reduce) { .tt-leaf, .tt-glow, .tt-bob, .tt-pop, .tt-ring { animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="kick">Tubu Tree · Milestone 3 · Batch 2</div>
+  <h1>Loyalty &amp; Game</h1>
+  <p>Phần khác biệt nhất của Tubu: hạng thành viên hình cây lớn dần, và game Vườn Xanh — mỗi cây gắn một thương hiệu thật, tưới bằng Giọt Nước, thu hoạch ra quà thật và Tubu trồng cây thật cùng PanNature. Mọi khung chạy thật — chạm cây để tưới, đủ nước thì thu hoạch.</p>
+  <div class="hint">Chạm cây trong Vườn Xanh → tưới → thu hoạch</div>
+</div>
+
+<div class="wrap"><div class="grid" id="grid"></div></div>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="20" fill="#509018"/><path d="M50 78V52" stroke="#fff" stroke-width="5" stroke-linecap="round"/><ellipse cx="50" cy="44" rx="20" ry="16" fill="#95D222"/><circle cx="42" cy="44" r="4" fill="#F4B408"/><circle cx="58" cy="46" r="4" fill="#F4B408"/></svg>
+</template>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../image-slot.js"></script>
+<script type="text/babel" src="../frames/ios-frame.jsx"></script>
+<script type="text/babel" src="../m1/atoms.jsx"></script>
+<script type="text/babel" src="b1-shared.jsx"></script>
+<script type="text/babel" src="b2-art.jsx"></script>
+<script type="text/babel" src="b2-screens.jsx"></script>
+<script type="text/babel" src="b2-flow.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const SCREENS = [
+  ['10', 'Loyalty Dashboard', 'Cây lớn dần theo hạng', 'loyalty', {}],
+  ['11', 'Vườn Xanh', 'Vườn isometric · Giọt Nước', 'garden', {}],
+  ['12', 'Tưới cây', 'Animation + streak', 'water', { idx: 1 }],
+  ['13', 'Thu hoạch', 'Celebration + quà thật', 'harvest', { idx: 2 }],
+];
+function Board() {
+  return (
+    <>
+      {SCREENS.map(([num, title, sub, initial, params]) => (
+        <div className="cell" key={num}>
+          <div className="tag"><span className="num">{num}</span><div><h3>{title}</h3><div className="sub">{sub}</div></div></div>
+          <div className="frame-scale"><IOSDevice><B2Flow initial={initial} initialParams={params} /></IOSDevice></div>
+        </div>
+      ))}
+    </>
+  );
+}
+ReactDOM.createRoot(document.getElementById('grid')).render(<Board />);
+</script>
+</body>
+</html>

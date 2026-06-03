@@ -1,0 +1,55 @@
+/* Tubu Tree — Design tokens (M1 Brand Foundation). Nguồn: design_handoff/README.md */
+:root {
+  /* Primary — Lá tươi */
+  --green-50: #f1f8f2;
+  --green-100: #ddede0;
+  --green-200: #b5d6bd;
+  --green-400: #5fa376;
+  --green-600: #2e7d4f; /* CTA chính */
+  --green-700: #235f3d;
+  --green-900: #0f2d1c;
+
+  /* Secondary — Đất sét */
+  --clay-50: #fbf4ed;
+  --clay-200: #edd4bd;
+  --clay-500: #c97b4a;
+  --clay-700: #8c4f2a;
+
+  /* Accent — Nắng */
+  --sun-300: #fdd96e;
+  --sun-500: #f4b400;
+
+  /* Neutral */
+  --neutral-0: #ffffff;
+  --neutral-50: #fafaf8;
+  --neutral-100: #f2f2ef;
+  --neutral-200: #e5e5e0;
+  --neutral-400: #a8a8a0;
+  --neutral-600: #5f5f58;
+  --neutral-900: #1a1a17;
+
+  /* Semantic */
+  --success: #2e7d4f;
+  --warning: #e58b00;
+  --danger: #c73e3e;
+  --info: #3d7bb8;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Shadow */
+  --shadow-sm: 0 2px 6px rgba(15, 45, 28, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 45, 28, 0.08);
+  --shadow-lg: 0 12px 32px rgba(15, 45, 28, 0.12);
+}
+
+body {
+  margin: 0;
+  font-family: 'Be Vietnam Pro', 'Inter', system-ui, sans-serif;
+  background: var(--neutral-50);
+  color: var(--neutral-900);
+}

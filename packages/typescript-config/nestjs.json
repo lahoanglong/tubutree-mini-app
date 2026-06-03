@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Tubu NestJS",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "isolatedModules": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "outDir": "dist"
+  }
+}

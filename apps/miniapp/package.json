@@ -1,0 +1,37 @@
+{
+  "name": "@tubutree/miniapp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "zmp start",
+    "build": "tsc --noEmit && vite build",
+    "start": "zmp start",
+    "deploy": "zmp deploy",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.62.7",
+    "@tubutree/shared-types": "workspace:*",
+    "axios": "^1.7.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "zmp-sdk": "^2.51.4",
+    "zmp-ui": "^1.11.14",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@tubutree/eslint-config": "workspace:*",
+    "@tubutree/typescript-config": "workspace:*",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.15.0",
+    "sass": "^1.83.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "zmp-vite-plugin": "^1.1.6"
+  }
+}

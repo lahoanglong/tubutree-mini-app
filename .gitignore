@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+out/
+www/
+build/
+*.tsbuildinfo
+
+# Turbo
+.turbo/
+
+# Env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Prisma
+apps/api/prisma/*.db
+
+# Uploads (dev local FS)
+apps/api/uploads/
+
+# Coverage
+coverage/

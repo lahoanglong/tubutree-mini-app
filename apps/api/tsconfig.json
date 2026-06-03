@@ -1,0 +1,11 @@
+{
+  "extends": "@tubutree/typescript-config/nestjs.json",
+  "compilerOptions": {
+    "baseUrl": "./",
+    "outDir": "./dist",
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src/**/*.ts", "prisma/**/*.ts"],
+  "exclude": ["node_modules", "dist", "test"]
+}

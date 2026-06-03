@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Tubu React (Vite)",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "useDefineForClassFields": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  }
+}

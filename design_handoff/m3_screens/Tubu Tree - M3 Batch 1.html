@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tubu Tree — M3 Batch 1 · Core B2C</title>
+<link rel="stylesheet" href="../m1/tokens.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--neutral-100); color: var(--neutral-900); font-family: var(--font-ui); }
+  .cover { background: linear-gradient(155deg, #235F3D, #509018 60%, #7CB91E); color: #fff; padding: 52px 48px 42px; border-radius: 0 0 32px 32px; }
+  .cover .kick { font-size: 13px; font-weight: 700; letter-spacing: 1.6px; color: rgba(255,255,255,0.85); text-transform: uppercase; }
+  .cover h1 { font-family: var(--font-display); font-size: 44px; font-weight: 800; letter-spacing: -1px; margin: 12px 0 10px; }
+  .cover p { font-size: 15.5px; line-height: 1.6; max-width: 660px; margin: 0; color: rgba(255,255,255,0.92); }
+  .cover .hint { margin-top: 20px; display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.28); padding: 9px 15px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+  .wrap { max-width: 1480px; margin: 0 auto; padding: 0 40px 120px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 44px 36px; margin-top: 52px; justify-content: center; }
+  .cell { display: flex; flex-direction: column; align-items: center; }
+  .cell .tag { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .cell .num { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #fff; background: var(--green-600); width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; }
+  .cell h3 { font-family: var(--font-display); font-size: 17px; font-weight: 700; margin: 0; }
+  .cell .sub { font-size: 12.5px; color: var(--neutral-500); }
+  .frame-scale { transform: scale(0.82); transform-origin: top center; margin-bottom: -158px; }
+  image-slot { --is-bg: var(--green-50); }
+  @keyframes tt-spin { to { transform: rotate(360deg); } }
+  @keyframes tt-sway { 0%,100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+  @keyframes tt-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.4); opacity: 0.6; } }
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="kick">Tubu Tree · Milestone 3 · Batch 1</div>
+  <h1>Core B2C — 9 màn</h1>
+  <p>Luồng mua hàng hoàn chỉnh, chạy thật trong khung iPhone: Home → Chi tiết → Giỏ → Thanh toán 3 bước → Đặt thành công → Đơn của tôi → Chi tiết đơn. Lấy cảm hứng pattern thương mại điện tử quen thuộc nhưng tinh giản cho dòng cao cấp & sống xanh — không countdown đỏ, nhấn niềm tin (vùng nguyên liệu, chứng nhận an toàn), một màn một CTA.</p>
+  <div class="hint">Mỗi khung là bản chạy thật — chạm để đi tiếp trong luồng</div>
+</div>
+
+<div class="wrap"><div class="grid" id="grid"></div></div>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="20" fill="#509018"/><rect x="30" y="20" width="40" height="60" rx="8" fill="#fff"/><circle cx="50" cy="68" r="5" fill="#509018"/><rect x="37" y="30" width="26" height="18" rx="4" fill="#EEF7D9"/></svg>
+</template>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../image-slot.js"></script>
+<script type="text/babel" src="../frames/ios-frame.jsx"></script>
+<script type="text/babel" src="../m1/atoms.jsx"></script>
+<script type="text/babel" src="../m1/home/rich.jsx"></script>
+<script type="text/babel" src="../m2/ds-molecules.jsx"></script>
+<script type="text/babel" src="../m2/ds-empty.jsx"></script>
+<script type="text/babel" src="b1-shared.jsx"></script>
+<script type="text/babel" src="b1-screens-a.jsx"></script>
+<script type="text/babel" src="b1-screens-b.jsx"></script>
+<script type="text/babel" src="b1-screens-c.jsx"></script>
+<script type="text/babel" src="b1-flow.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const SCREENS = [
+  ['01', 'Home', 'Segment · brand · ưu đãi · gợi ý', 'home'],
+  ['02', 'Chi tiết sản phẩm', 'Gallery · phân loại · thành phần', 'pdp'],
+  ['03', 'Giỏ hàng', 'Voucher · tóm tắt đơn', 'cart'],
+  ['04', 'Thanh toán · Địa chỉ', 'Bước 1/3', 'addr'],
+  ['05', 'Thanh toán · Vận chuyển', 'Bước 2/3 · hoá đơn VAT', 'ship'],
+  ['06', 'Thanh toán · Phương thức', 'Bước 3/3 · ZaloPay/COD/CK/Thẻ', 'pay'],
+  ['07', 'Đặt hàng thành công', 'Mã đơn · +Giọt Nước', 'success'],
+  ['08', 'Đơn của tôi', 'Lọc theo trạng thái', 'orders'],
+  ['09', 'Chi tiết đơn hàng', 'Timeline 5 bước', 'orderDetail'],
+];
+function Board() {
+  return (
+    <>
+      {SCREENS.map(([num, title, sub, initial], i) => (
+        <div className="cell" key={num}>
+          <div className="tag"><span className="num">{num}</span><div><h3>{title}</h3><div className="sub">{sub}</div></div></div>
+          <div className="frame-scale"><IOSDevice><FlowApp ns={'s' + i} initial={initial} /></IOSDevice></div>
+        </div>
+      ))}
+    </>
+  );
+}
+ReactDOM.createRoot(document.getElementById('grid')).render(<Board />);
+</script>
+</body>
+</html>

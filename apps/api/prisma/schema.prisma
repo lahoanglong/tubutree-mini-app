@@ -1,0 +1,747 @@
+// Tubu Tree — Prisma schema v0 (Phase 0)
+// Nguồn: TUBU_TREE_BUILD_SPEC_v1.1.md Section 4 (Data Model) + Section 15 (SystemConfig).
+// Quy ước: tên bảng số nhiều tiếng Anh, cờ pancakeId để map về Pancake POS.
+// Tiền tệ (VND) dùng Int (đủ cho giá trị VND thực tế); % dùng Decimal.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// 4.1 User & quyền
+// ============================================================
+
+enum UserRole {
+  CUSTOMER
+  AFFILIATE
+  DEALER
+  STAFF
+  ADMIN
+}
+
+model User {
+  id                String   @id @default(cuid())
+  zaloId            String?  @unique // openId từ Zalo
+  zaloAccessToken   String? // mã hóa
+  zaloRefreshToken  String? // mã hóa
+  phone             String?  @unique
+  email             String?
+  fullName          String?
+  avatarUrl         String?
+  role              UserRole @default(CUSTOMER)
+  tierId            String?
+  tier              MembershipTier? @relation(fields: [tierId], references: [id])
+  referralCode      String   @unique
+  referredById      String?
+  pointsBalance     Int      @default(0)
+  walletBalance     Int      @default(0)
+  cashbackPending   Int      @default(0)
+  isBlocked         Boolean  @default(false)
+  pancakeCustomerId String?  @unique
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Quan hệ ngược
+  addresses           Address[]
+  cart                Cart?
+  orders              Order[]
+  pointsTransactions  PointsTransaction[]
+  affiliateLinks      AffiliateLink[]
+  commissions         Commission[]
+  payouts             Payout[]
+  cashbackClicks      CashbackClick[]
+  cashbackTxns        CashbackTransaction[]
+  dealerApplications  DealerApplication[]
+  gameProfile         GameProfile?
+  reviews             Review[]
+  refreshTokens       RefreshToken[]
+
+  @@index([referredById])
+  @@map("users")
+}
+
+// Refresh token lưu hash (rotation). Phục vụ Zalo auth flow Phase 0.
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model MembershipTier {
+  id            String   @id
+  name          String
+  minPoints     Int
+  minSpending   Int?
+  discountPct   Decimal  @default(0)
+  pointMultiplier Decimal @default(1)
+  perks         Json
+  badgeImageUrl String?
+  sortOrder     Int      @default(0)
+  users         User[]
+
+  @@map("membership_tiers")
+}
+
+model Address {
+  id           String  @id @default(cuid())
+  userId       String
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipient    String
+  phone        String
+  province     String
+  district     String
+  ward         String
+  street       String
+  isDefault    Boolean @default(false)
+  provinceCode String
+  districtCode String
+  wardCode     String
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+// ============================================================
+// 4.2 Catalog (mirror từ Pancake)
+// ============================================================
+
+model Product {
+  id             String   @id @default(cuid())
+  pancakeId      String   @unique
+  brand          String
+  slug           String   @unique
+  name           String
+  description    String   @db.Text
+  shortDesc      String?
+  images         String[]
+  thumbnail      String?
+  categoryIds    String[]
+  tags           String[]
+  isActive       Boolean  @default(true)
+  isFeatured     Boolean  @default(false)
+  isCombo        Boolean  @default(false)
+  basePrice      Int
+  salePrice      Int?
+  metaTitle      String?
+  metaDesc       String?
+  forSegment     String[]
+  ingredients    Json?
+  certifications String[]
+  variations     Variation[]
+  reviews        Review[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([brand])
+  @@index([isActive, isFeatured])
+  @@map("products")
+}
+
+model Variation {
+  id           String  @id @default(cuid())
+  pancakeId    String  @unique
+  productId    String
+  product      Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku          String  @unique
+  name         String
+  attributes   Json
+  retailPrice  Int
+  salePrice    Int?
+  dealerPrices Json? // {tier_silver: 200000, tier_gold: 190000}
+  affiliateRate Decimal? // % hoa hồng CTV (import Excel) — spec 15.2 affiliate.product_rate_source
+  stock        Int     @default(0)
+  isActive     Boolean @default(true)
+  weight       Int?
+
+  cartItems    CartItem[]
+
+  @@index([productId])
+  @@map("variations")
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  parentId  String?
+  parent    Category?  @relation("CatParent", fields: [parentId], references: [id])
+  children  Category[] @relation("CatParent")
+  name      String
+  slug      String     @unique
+  image     String?
+  sortOrder Int        @default(0)
+
+  @@map("categories")
+}
+
+// ============================================================
+// 4.3 Giỏ hàng & đơn
+// ============================================================
+
+model Cart {
+  id         String     @id @default(cuid())
+  userId     String     @unique
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items      CartItem[]
+  couponCode String?
+  updatedAt  DateTime   @updatedAt
+
+  @@map("carts")
+}
+
+model CartItem {
+  id          String    @id @default(cuid())
+  cartId      String
+  cart        Cart      @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variationId String
+  variation   Variation @relation(fields: [variationId], references: [id])
+  quantity    Int
+
+  @@unique([cartId, variationId])
+  @@map("cart_items")
+}
+
+enum OrderType {
+  RETAIL
+  DEALER
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  PACKED
+  SHIPPING
+  DELIVERED
+  RETURNED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  COD
+  ZALOPAY
+  VNPAY
+  BANK_TRANSFER
+  WALLET
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum InvoiceStatus {
+  NOT_REQUESTED
+  REQUESTED
+  ISSUED
+  FAILED
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  code            String        @unique
+  idempotencyKey  String?       @unique // chống double-submit place-order (§12.1)
+  pancakeOrderId  String?       @unique
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  type            OrderType
+  status          OrderStatus
+  subtotal        Int
+  discount        Int           @default(0)
+  shippingFee     Int           @default(0)
+  total           Int
+  pointsEarned    Int           @default(0)
+  pointsUsed      Int           @default(0)
+  paymentMethod   PaymentMethod
+  paymentStatus   PaymentStatus
+  paymentTxnId    String?
+  shippingAddress Json
+  shippingPartner String?
+  shippingCode    String?
+  shippingStatus  String?
+  shippingHistory Json?
+  invoiceRequest  Json?
+  invoiceUrl      String?
+  invoiceStatus   InvoiceStatus? @default(NOT_REQUESTED)
+  referrerUserId  String?
+  commission      Int           @default(0)
+  couponCode      String?
+  note            String?
+  items           OrderItem[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId, status])
+  @@index([referrerUserId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id            String @id @default(cuid())
+  orderId       String
+  order         Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variationId   String
+  productName   String
+  variationName String
+  unitPrice     Int
+  quantity      Int
+  total         Int
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// ============================================================
+// 4.4 Loyalty & Voucher
+// ============================================================
+
+model PointsTransaction {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  delta     Int
+  reason    String
+  refType   String?
+  refId     String?
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("points_transactions")
+}
+
+enum CouponType {
+  PERCENT
+  AMOUNT
+  FREESHIP
+}
+
+enum CouponScope {
+  PUBLIC
+  TIER
+  USER_GROUP
+  BIRTHDAY
+  INVITE
+}
+
+model Coupon {
+  id           String       @id @default(cuid())
+  code         String       @unique
+  type         CouponType
+  value        Int
+  minOrder     Int?
+  maxDiscount  Int?
+  startAt      DateTime
+  endAt        DateTime
+  usageLimit   Int?
+  perUserLimit Int          @default(1)
+  applyTo      Json?
+  isStackable  Boolean      @default(false)
+  scope        CouponScope
+  scopeMeta    Json?
+  redemptions  CouponRedemption[]
+
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id         String   @id @default(cuid())
+  couponId   String
+  coupon     Coupon   @relation(fields: [couponId], references: [id])
+  userId     String
+  orderId    String?
+  redeemedAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("coupon_redemptions")
+}
+
+// ============================================================
+// 4.5 Affiliate (CTV nội bộ)
+// ============================================================
+
+model AffiliateLink {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  shortCode   String   @unique
+  targetType  String
+  targetId    String?
+  clicks      Int      @default(0)
+  conversions Int      @default(0)
+  revenue     Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@map("affiliate_links")
+}
+
+model AffiliateClick {
+  id               String   @id @default(cuid())
+  shortCode        String
+  visitorId        String
+  ipHash           String
+  userAgent        String?
+  referrer         String?
+  clickedAt        DateTime @default(now())
+  convertedOrderId String?
+
+  @@index([shortCode])
+  @@map("affiliate_clicks")
+}
+
+enum CommissionStatus {
+  PENDING
+  LOCKED
+  APPROVED
+  PAID
+  REJECTED
+}
+
+model Commission {
+  id              String           @id @default(cuid())
+  affiliateUserId String
+  user            User             @relation(fields: [affiliateUserId], references: [id])
+  orderId         String
+  orderTotal      Int
+  rate            Decimal
+  amount          Int
+  status          CommissionStatus @default(PENDING)
+  lockedAt        DateTime? // thời điểm đơn DELIVERED, bắt đầu đếm hold
+  approvedAt      DateTime?
+  paidAt          DateTime?
+  payoutBatchId   String?
+  createdAt       DateTime         @default(now())
+
+  @@index([affiliateUserId, status])
+  @@map("commissions")
+}
+
+enum PayoutStatus {
+  REQUESTED
+  APPROVED
+  PAID
+  REJECTED
+}
+
+model Payout {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id])
+  amount      Int
+  method      String
+  bankInfo    Json?
+  status      PayoutStatus @default(REQUESTED)
+  requestedAt DateTime     @default(now())
+  paidAt      DateTime?
+
+  @@index([userId])
+  @@map("payouts")
+}
+
+// ============================================================
+// 4.6 Cashback (sàn ngoài qua Accesstrade)
+// ============================================================
+
+model CashbackMerchant {
+  id               String                @id @default(cuid())
+  slug             String                @unique
+  name             String
+  logoUrl          String
+  category         String
+  baseRate         Decimal
+  fullRate         Decimal
+  isActive         Boolean               @default(true)
+  deeplinkTemplate String
+  terms            String?
+  clicks           CashbackClick[]
+
+  @@map("cashback_merchants")
+}
+
+model CashbackClick {
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id])
+  merchantId     String
+  merchant       CashbackMerchant @relation(fields: [merchantId], references: [id])
+  utmTraceId     String           @unique
+  destinationUrl String
+  productUrl     String?
+  clickedAt      DateTime         @default(now())
+  ip             String?
+
+  @@index([userId])
+  @@map("cashback_clicks")
+}
+
+enum CashbackStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  PAID
+}
+
+model CashbackTransaction {
+  id              String         @id @default(cuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id])
+  clickId         String?
+  merchantOrderId String
+  orderAmount     Int
+  commission      Int
+  userReward      Int
+  status          CashbackStatus @default(PENDING)
+  postbackPayload Json
+  confirmedAt     DateTime?
+  paidAt          DateTime?
+
+  @@index([userId, status])
+  @@map("cashback_transactions")
+}
+
+// ============================================================
+// 4.7 Đại lý B2B
+// ============================================================
+
+enum DealerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+model DealerApplication {
+  id                    String       @id @default(cuid())
+  userId                String
+  user                  User         @relation(fields: [userId], references: [id])
+  businessName          String
+  taxCode               String?
+  ownerName             String
+  phone                 String
+  address               String
+  cccdFrontUrl          String
+  cccdBackUrl           String
+  storeFrontUrl         String?
+  monthlyVolumeEstimate Int?
+  notes                 String?
+  status                DealerStatus @default(PENDING)
+  reviewedBy            String?
+  reviewedAt            DateTime?
+  rejectionReason       String?
+  createdAt             DateTime     @default(now())
+
+  @@index([userId])
+  @@map("dealer_applications")
+}
+
+model DealerTier {
+  id             String  @id
+  name           String
+  minOrderVolume Int
+  discountRules  Json
+  creditLimit    Int     @default(0)
+  paymentTerms   String?
+
+  @@map("dealer_tiers")
+}
+
+model DealerCreditLedger {
+  id        String   @id @default(cuid())
+  userId    String
+  delta     Int
+  refType   String
+  refId     String?
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("dealer_credit_ledgers")
+}
+
+// ============================================================
+// 4.8 Gamification — Vườn Xanh
+// ============================================================
+
+model GameProfile {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streakDays    Int       @default(0)
+  longestStreak Int       @default(0)
+  lastCheckInAt DateTime?
+  treeStage     Int       @default(1)
+  totalSeeds    Int       @default(0)
+  ecoImpact     Json?
+  badges        String[]  @default([])
+
+  @@map("game_profiles")
+}
+
+model GameSpin {
+  id          String   @id @default(cuid())
+  userId      String
+  prizeId     String
+  prizeName   String
+  prizeValue  Int?
+  rewardType  String
+  rewardRefId String?
+  spunAt      DateTime @default(now())
+
+  @@index([userId])
+  @@map("game_spins")
+}
+
+model GameQuiz {
+  id        String  @id
+  question  String
+  options   Json
+  correct   Int
+  rewardPts Int
+  brand     String?
+
+  @@map("game_quizzes")
+}
+
+model GameQuizAttempt {
+  id          String   @id @default(cuid())
+  userId      String
+  quizId      String
+  isCorrect   Boolean
+  attemptedAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("game_quiz_attempts")
+}
+
+model Mission {
+  id           String  @id
+  code         String  @unique
+  title        String
+  description  String
+  rewardPoints Int
+  rewardCoupon String?
+  isRepeatable Boolean @default(false)
+
+  @@map("missions")
+}
+
+model MissionProgress {
+  id          String    @id @default(cuid())
+  userId      String
+  missionId   String
+  progress    Int       @default(0)
+  goal        Int
+  completedAt DateTime?
+
+  @@index([userId])
+  @@map("mission_progress")
+}
+
+// ============================================================
+// 4.9 Đánh giá
+// ============================================================
+
+model Review {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id])
+  orderId      String
+  rating       Int
+  comment      String?
+  images       String[]
+  pointsEarned Int      @default(0)
+  isVerified   Boolean  @default(true)
+  isVisible    Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([productId])
+  @@map("reviews")
+}
+
+// ============================================================
+// 4.10 Notification
+// ============================================================
+
+model NotificationTemplate {
+  id             String  @id
+  code           String  @unique
+  channel        String
+  zaloTemplateId String?
+  bodyTemplate   String
+
+  @@map("notification_templates")
+}
+
+model NotificationLog {
+  id           String   @id @default(cuid())
+  userId       String
+  templateCode String
+  channel      String
+  payload      Json
+  status       String
+  error        String?
+  sentAt       DateTime @default(now())
+
+  @@index([userId])
+  @@map("notification_logs")
+}
+
+// ============================================================
+// 4.11 Webhook & Sync
+// ============================================================
+
+model PancakeWebhookEvent {
+  id          String    @id @default(cuid())
+  eventType   String
+  rawPayload  Json
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  status      String
+  attempts    Int       @default(0)
+  error       String?
+
+  @@map("pancake_webhook_events")
+}
+
+// ============================================================
+// 15. SystemConfig — Single source of truth cho tham số nghiệp vụ
+// ============================================================
+
+model SystemConfig {
+  key         String   @id
+  value       Json
+  description String?
+  category    String
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+
+  @@index([category])
+  @@map("system_configs")
+}
+
+model SystemConfigHistory {
+  id        String   @id @default(cuid())
+  key       String
+  oldValue  Json
+  newValue  Json
+  changedBy String
+  changedAt DateTime @default(now())
+
+  @@index([key])
+  @@map("system_config_history")
+}

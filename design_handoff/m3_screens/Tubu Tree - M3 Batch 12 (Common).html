@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tubu Tree — M3 Batch 12 · Trang chung &amp; Hỗ trợ</title>
+<link rel="stylesheet" href="../m1/tokens.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--neutral-100); color: var(--neutral-900); font-family: var(--font-ui); }
+  .cover { background: linear-gradient(150deg, #143F1F, #2F7A3C 55%, #509018); color: #fff; padding: 52px 48px 42px; border-radius: 0 0 32px 32px; }
+  .cover .kick { font-size: 13px; font-weight: 700; letter-spacing: 1.6px; color: rgba(255,255,255,0.85); text-transform: uppercase; }
+  .cover h1 { font-family: var(--font-display); font-size: 44px; font-weight: 800; letter-spacing: -1px; margin: 12px 0 10px; }
+  .cover p { font-size: 15.5px; line-height: 1.6; max-width: 780px; margin: 0; color: rgba(255,255,255,0.92); }
+  .wrap { max-width: 1820px; margin: 0 auto; padding: 0 40px 120px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 44px 36px; margin-top: 52px; justify-content: center; }
+  .cell { display: flex; flex-direction: column; align-items: center; }
+  .cell .tag { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; align-self: flex-start; }
+  .cell .num { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #fff; background: var(--green-600); width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; }
+  .cell h3 { font-family: var(--font-display); font-size: 17px; font-weight: 700; margin: 0; }
+  .cell .sub { font-size: 12.5px; color: var(--neutral-500); }
+  .frame-scale { transform: scale(0.82); transform-origin: top center; margin-bottom: -158px; }
+  image-slot { --is-bg: var(--neutral-100); }
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="kick">Tubu Tree · Milestone 3 · Batch 12</div>
+  <h1>Trang chung &amp; Hỗ trợ</h1>
+  <p>Các trang phụ trợ khép lại mini app MVP (screen 27, 74–77): yêu cầu đổi/trả hàng có chọn lý do &amp; ảnh minh chứng, trang giới thiệu Tubu với câu chuyện &amp; giá trị thương hiệu, câu hỏi thường gặp dạng accordion lọc theo nhóm, điều khoản sử dụng, và luồng xóa tài khoản với cảnh báo dữ liệu mất. Bấm để duyệt từng màn.</p>
+</div>
+<div class="wrap"><div class="grid" id="grid"></div></div>
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="20" fill="#2F7A3C"/><circle cx="50" cy="36" r="9" fill="none" stroke="#fff" stroke-width="6"/><path d="M50 50v8M50 54h7" stroke="#95D222" stroke-width="6" stroke-linecap="round"/><path d="M34 72h32" stroke="#fff" stroke-width="6" stroke-linecap="round"/></svg>
+</template>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../image-slot.js"></script>
+<script type="text/babel" src="../frames/ios-frame.jsx"></script>
+<script type="text/babel" src="../m1/atoms.jsx"></script>
+<script type="text/babel" src="b1-shared.jsx"></script>
+<script type="text/babel" src="b12-screens.jsx"></script>
+<script type="text/babel" src="b12-flow.jsx"></script>
+<script type="text/babel" data-presets="react">
+const SCREENS = [
+  ['27', 'Đổi / trả hàng', 'Lý do · số lượng · ảnh minh chứng', 'return', {}],
+  ['74', 'Giới thiệu Tubu', 'Câu chuyện · giá trị · thương hiệu', 'about', {}],
+  ['75', 'Câu hỏi thường gặp', 'Accordion · lọc theo nhóm', 'faq', {}],
+  ['76', 'Điều khoản', 'Điều khoản sử dụng · chính sách', 'terms', {}],
+  ['77', 'Xóa tài khoản', 'Cảnh báo dữ liệu · xác nhận', 'delete', {}],
+];
+function Board() {
+  return <>{SCREENS.map(([num, title, sub, initial, params], k) => (
+    <div className="cell" key={num}>
+      <div className="tag"><span className="num">{num}</span><div><h3>{title}</h3><div className="sub">{sub}</div></div></div>
+      <div className="frame-scale"><IOSDevice><B12Flow ns={'b12_'+k} initial={initial} initialParams={params} /></IOSDevice></div>
+    </div>
+  ))}</>;
+}
+ReactDOM.createRoot(document.getElementById('grid')).render(<Board />);
+</script>
+</body>
+</html>

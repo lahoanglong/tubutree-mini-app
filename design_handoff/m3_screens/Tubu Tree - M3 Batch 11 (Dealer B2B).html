@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tubu Tree — M3 Batch 11 · Đại lý · Đăng ký &amp; Quản lý</title>
+<link rel="stylesheet" href="../m1/tokens.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--neutral-100); color: var(--neutral-900); font-family: var(--font-ui); }
+  .cover { background: linear-gradient(150deg, #0F172A, #1E293B 55%, #334155); color: #fff; padding: 52px 48px 42px; border-radius: 0 0 32px 32px; }
+  .cover .kick { font-size: 13px; font-weight: 700; letter-spacing: 1.6px; color: rgba(255,255,255,0.7); text-transform: uppercase; }
+  .cover h1 { font-family: var(--font-display); font-size: 44px; font-weight: 800; letter-spacing: -1px; margin: 12px 0 10px; }
+  .cover p { font-size: 15.5px; line-height: 1.6; max-width: 780px; margin: 0; color: rgba(255,255,255,0.82); }
+  .wrap { max-width: 1560px; margin: 0 auto; padding: 0 40px 120px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 44px 36px; margin-top: 52px; justify-content: center; }
+  .cell { display: flex; flex-direction: column; align-items: center; }
+  .cell .tag { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; align-self: flex-start; }
+  .cell .num { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #fff; background: #334155; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; }
+  .cell h3 { font-family: var(--font-display); font-size: 17px; font-weight: 700; margin: 0; }
+  .cell .sub { font-size: 12.5px; color: var(--neutral-500); }
+  .frame-scale { transform: scale(0.82); transform-origin: top center; margin-bottom: -158px; }
+  @keyframes tt-dot { 0%,80%,100% { opacity: 0.35; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+  .tt-dot { animation: tt-dot 1.1s ease-in-out infinite; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="kick">Tubu Tree · Milestone 3 · Batch 11</div>
+  <h1>Đại lý · Đăng ký &amp; Quản lý</h1>
+  <p>Onboarding &amp; công cụ B2B cho Persona C, nối tiếp Dealer Home / Bảng giá / Đặt nhanh / Công nợ ở Batch 4 (screen 59, 60, 64, 71). Theme navy-slate riêng của chế độ đại lý: đăng ký 3 bước (doanh nghiệp → giấy tờ → xác nhận), màn chờ duyệt hồ sơ, mẫu đơn lưu sẵn để đặt lại 1 chạm, và báo cáo quý với tiến độ mục tiêu &amp; thưởng. Bấm "Tiếp tục" để chạy thử luồng đăng ký.</p>
+</div>
+<div class="wrap"><div class="grid" id="grid"></div></div>
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="20" fill="#1E293B"/><rect x="30" y="26" width="40" height="48" rx="4" fill="none" stroke="#fff" stroke-width="5"/><path d="M38 40h24M38 50h24M38 60h14" stroke="#7DD3FC" stroke-width="5" stroke-linecap="round"/></svg>
+</template>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../image-slot.js"></script>
+<script type="text/babel" src="../frames/ios-frame.jsx"></script>
+<script type="text/babel" src="../m1/atoms.jsx"></script>
+<script type="text/babel" src="b1-shared.jsx"></script>
+<script type="text/babel" src="b11-screens.jsx"></script>
+<script type="text/babel" src="b11-flow.jsx"></script>
+<script type="text/babel" data-presets="react">
+const SCREENS = [
+  ['59', 'Đăng ký đại lý', '3 bước · doanh nghiệp → giấy tờ → xác nhận', 'apply', { step: 0 }],
+  ['60', 'Trạng thái hồ sơ', 'Timeline duyệt · chờ phê duyệt', 'status', {}],
+  ['64', 'Mẫu đơn đã lưu', 'Đặt lại 1 chạm · sửa / xoá', 'templates', {}],
+  ['71', 'Báo cáo quý', 'Doanh số · mục tiêu · thưởng', 'quarterly', {}],
+];
+function Board() {
+  return <>{SCREENS.map(([num, title, sub, initial, params], k) => (
+    <div className="cell" key={num}>
+      <div className="tag"><span className="num">{num}</span><div><h3>{title}</h3><div className="sub">{sub}</div></div></div>
+      <div className="frame-scale"><IOSDevice><B11Flow ns={'b11_'+k} initial={initial} initialParams={params} /></IOSDevice></div>
+    </div>
+  ))}</>;
+}
+ReactDOM.createRoot(document.getElementById('grid')).render(<Board />);
+</script>
+</body>
+</html>
