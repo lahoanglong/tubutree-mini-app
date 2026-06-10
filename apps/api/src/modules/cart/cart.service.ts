@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 import { AddItemDto } from './dto/cart.dto';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class CartService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly coupons: CouponsService,
+    private readonly config: SystemConfigService,
   ) {}
 
   private async ensureCart(userId: string): Promise<string> {
@@ -58,12 +60,16 @@ export class CartService {
       }
     }
 
+    // Ngưỡng freeship (config-driven §15.2) để FE hiển thị progress khích lệ.
+    const freeshipThreshold = await this.config.get<number>('shipping.free_threshold', 200000);
+
     return {
       items: lines,
       couponCode,
       subtotal,
       discount,
       freeship,
+      freeshipThreshold,
       itemCount: lines.reduce((s, l) => s + l.quantity, 0),
     };
   }

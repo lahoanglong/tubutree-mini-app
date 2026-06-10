@@ -63,6 +63,8 @@ export interface CartSummary {
   subtotal: number;
   discount: number;
   freeship: boolean;
+  /** Ngưỡng freeship từ SystemConfig — cho progress bar khích lệ. */
+  freeshipThreshold: number;
   itemCount: number;
 }
 
@@ -111,6 +113,7 @@ export const removeCartItem = (id: string) =>
   api.delete<CartSummary>(`/cart/items/${id}`).then((r) => r.data);
 export const applyCoupon = (code: string) =>
   api.post<CartSummary>('/cart/coupon', { code }).then((r) => r.data);
+export const removeCoupon = () => api.delete<CartSummary>('/cart/coupon').then((r) => r.data);
 
 // Addresses
 export const getAddresses = () => api.get<AddressDTO[]>('/me/addresses').then((r) => r.data);
