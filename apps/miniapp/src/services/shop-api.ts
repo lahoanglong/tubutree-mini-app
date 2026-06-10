@@ -123,12 +123,21 @@ export const createAddress = (data: Omit<AddressDTO, 'id' | 'isDefault'>) =>
 // Checkout
 export const checkoutQuote = (addressId: string, pointsToUse?: number) =>
   api.post<CheckoutQuote>('/checkout/quote', { addressId, pointsToUse }).then((r) => r.data);
-export const placeOrder = (body: {
-  addressId: string;
-  paymentMethod: string;
-  pointsToUse?: number;
-  note?: string;
-}) => api.post<OrderDTO>('/checkout/place-order', body).then((r) => r.data);
+/** Đặt hàng kèm Idempotency-Key (AD-004) — retry sau timeout không tạo đơn đôi. */
+export const placeOrder = (
+  body: {
+    addressId: string;
+    paymentMethod: string;
+    pointsToUse?: number;
+    note?: string;
+  },
+  idempotencyKey: string,
+) =>
+  api
+    .post<OrderDTO>('/checkout/place-order', body, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    })
+    .then((r) => r.data);
 
 // Orders
 export const fetchOrders = (status?: string) =>
