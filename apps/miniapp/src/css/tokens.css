@@ -1,25 +1,39 @@
-/* Tubu Tree — Design tokens (M1 Brand Foundation). Nguồn: design_handoff/README.md */
-:root {
-  /* Primary — Lá tươi */
-  --green-50: #f1f8f2;
-  --green-100: #ddede0;
-  --green-200: #b5d6bd;
-  --green-400: #5fa376;
-  --green-600: #2e7d4f; /* CTA chính */
-  --green-700: #235f3d;
-  --green-900: #0f2d1c;
+/*
+ * Tubu Tree — Design tokens.
+ * Nguồn: M2 Design System (design_handoff) — palette eyedrop từ logo thật:
+ * Primary cam #E08C1C (chữ "Tubu Tree"), Secondary xanh lá #509018 (tagline).
+ * Spec §7.1 cảnh báo token cũ (green #2E7D4F) đã lỗi thời — KHÔNG dùng lại.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap');
 
-  /* Secondary — Đất sét */
+:root {
+  /* Primary — Cam logo */
+  --primary-50: #fdf3e3;
+  --primary-100: #fbe4c4;
+  --primary-200: #f5cf92;
+  --primary-400: #ebaa4f;
+  --primary-600: #e08c1c; /* CTA chính ⭐ */
+  --primary-700: #b86a10; /* hover/pressed */
+  --primary-900: #6e3f08;
+
+  /* Secondary — Lá logo */
+  --leaf-50: #eef7d9;
+  --leaf-100: #dff0bc;
+  --leaf-200: #c9e592;
+  --leaf-400: #95d222;
+  --leaf-600: #509018; /* secondary, success ⭐ */
+  --leaf-700: #3c6d12;
+  --leaf-900: #234008;
+
+  /* Accent — Đất sét (giữ cho voucher/hạng) + Nắng (rating) */
   --clay-50: #fbf4ed;
   --clay-200: #edd4bd;
   --clay-500: #c97b4a;
   --clay-700: #8c4f2a;
-
-  /* Accent — Nắng */
   --sun-300: #fdd96e;
-  --sun-500: #f4b400;
+  --sun-500: #f4b408;
 
-  /* Neutral */
+  /* Neutral (warm white — không trắng tinh) */
   --neutral-0: #ffffff;
   --neutral-50: #fafaf8;
   --neutral-100: #f2f2ef;
@@ -29,10 +43,22 @@
   --neutral-900: #1a1a17;
 
   /* Semantic */
-  --success: #2e7d4f;
+  --success: #509018;
   --warning: #e58b00;
   --danger: #c73e3e;
   --info: #3d7bb8;
+
+  /*
+   * Alias cũ (--green-*) cho các trang chưa migrate (game/profile).
+   * Trỏ về scale lá mới để toàn app cùng tông — xóa khi migrate xong.
+   */
+  --green-50: var(--leaf-50);
+  --green-100: var(--leaf-100);
+  --green-200: var(--leaf-200);
+  --green-400: var(--leaf-400);
+  --green-600: var(--leaf-600);
+  --green-700: var(--leaf-700);
+  --green-900: var(--leaf-900);
 
   /* Radius */
   --radius-sm: 6px;
@@ -41,15 +67,161 @@
   --radius-xl: 24px;
   --radius-full: 9999px;
 
-  /* Shadow */
-  --shadow-sm: 0 2px 6px rgba(15, 45, 28, 0.06);
-  --shadow-md: 0 4px 12px rgba(15, 45, 28, 0.08);
-  --shadow-lg: 0 12px 32px rgba(15, 45, 28, 0.12);
+  /* Shadow — tint nâu đậm từ logo, không pure black */
+  --shadow-xs: 0 1px 2px rgba(92, 52, 10, 0.04);
+  --shadow-sm: 0 2px 6px rgba(92, 52, 10, 0.06);
+  --shadow-md: 0 4px 12px rgba(92, 52, 10, 0.08);
+  --shadow-lg: 0 12px 32px rgba(92, 52, 10, 0.12);
+  --shadow-focus: 0 0 0 3px rgba(224, 140, 28, 0.25);
+
+  /* Motion — "lá rơi": ease-out, ngắn */
+  --dur-fast: 150ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* Safe area (Zalo bottom bar) */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 body {
   margin: 0;
-  font-family: 'Be Vietnam Pro', 'Inter', system-ui, sans-serif;
+  font-family: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
   background: var(--neutral-50);
   color: var(--neutral-900);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Pressable: phản hồi chạm cho mọi element bấm được ── */
+.tubu-press {
+  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tubu-press:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+/* ── Skeleton shimmer ── */
+.tubu-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--neutral-100);
+  border-radius: var(--radius-md);
+}
+.tubu-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  animation: tubu-shimmer 1.4s infinite;
+}
+@keyframes tubu-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ── Pop-in (badge, modal content) ── */
+@keyframes tubu-pop {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.tubu-pop {
+  animation: tubu-pop var(--dur-base) var(--ease-out) both;
+}
+
+/* ── Slide-up (section vào màn) ── */
+@keyframes tubu-rise {
+  0% {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.tubu-rise {
+  animation: tubu-rise var(--dur-slow) var(--ease-out) both;
+}
+
+/* ── Checkmark draw (order success) ── */
+@keyframes tubu-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.tubu-check-path {
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: tubu-draw 600ms var(--ease-out) 200ms forwards;
+}
+
+/* ── Lá rơi (success screen) ── */
+@keyframes tubu-leaf-fall {
+  0% {
+    transform: translateY(-20px) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(220px) rotate(300deg);
+    opacity: 0;
+  }
+}
+.tubu-leaf {
+  position: absolute;
+  top: 0;
+  animation: tubu-leaf-fall 2.6s var(--ease-out) both;
+  pointer-events: none;
+}
+
+/* ── Pulse nhẹ cho bước timeline hiện tại ── */
+@keyframes tubu-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(224, 140, 28, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(224, 140, 28, 0);
+  }
+}
+.tubu-pulse {
+  animation: tubu-pulse 1.8s ease-in-out infinite;
+}
+
+/* ── Cart badge bounce ── */
+@keyframes tubu-bounce {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.35);
+  }
+}
+.tubu-bounce {
+  animation: tubu-bounce 350ms var(--ease-out);
+}
+
+/* Tôn trọng cài đặt giảm chuyển động của hệ điều hành */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

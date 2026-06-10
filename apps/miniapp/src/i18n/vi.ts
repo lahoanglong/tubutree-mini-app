@@ -1,0 +1,178 @@
+/**
+ * Toàn bộ UI copy của mini app — Voice & Tone theo Build Spec §7.5:
+ * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
+ * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
+ */
+export const vi = {
+  common: {
+    retry: 'Thử lại',
+    close: 'Đóng',
+    cancel: 'Hủy',
+    save: 'Lưu',
+    confirm: 'Xác nhận',
+    loading: 'Đang chuẩn bị cho bạn...',
+    freeShip: 'Miễn phí',
+    undo: 'Hoàn tác',
+    seeProducts: 'Xem sản phẩm',
+    backHome: 'Về trang chủ',
+  },
+
+  errors: {
+    network: 'Mất kết nối. Tubu sẽ thử lại khi có mạng',
+    timeout: 'Hơi chậm tí, bạn đợi nhé',
+    server: 'Có chút trục trặc, thử lại nhé',
+    generic: 'Có chút trục trặc, thử lại nhé',
+    loadFailed: 'Chưa tải được nội dung',
+  },
+
+  auth: {
+    loginCta: 'Tiếp tục với Zalo',
+    loginHint: 'Đăng nhập để tích điểm Xanh & đặt hàng',
+    greetingFallback: 'bạn',
+  },
+
+  home: {
+    tagline: 'Sống xanh An Lành',
+    greeting: (name: string) => `Chào ${name} 🌿`,
+    pointsChip: (n: number) => `${n} điểm Xanh`,
+    searchPlaceholder: 'Bạn đang tìm gì hôm nay?',
+    featured: 'Tubu chọn cho bạn',
+    newArrivals: 'Mới về vườn',
+    brandsTitle: 'Thương hiệu Việt',
+    allBrands: 'Tất cả',
+  },
+
+  product: {
+    addToCart: 'Thêm vào giỏ',
+    outOfStock: 'Tạm hết — sẽ về sớm',
+    lowStock: (n: number) => `Còn ${n} sản phẩm`,
+    added: 'Đã thêm vào giỏ 🌿',
+    variations: 'Phân loại',
+    description: 'Mô tả sản phẩm',
+    descriptionMore: 'Xem thêm',
+    descriptionLess: 'Thu gọn',
+    quantity: 'Số lượng',
+    share: 'Chia sẻ',
+    certified: 'Chứng nhận',
+    viewCart: 'Xem giỏ hàng',
+  },
+
+  cart: {
+    title: 'Giỏ hàng',
+    emptyHeading: 'Giỏ còn trống đấy',
+    emptyBody: 'Khám phá sản phẩm Tubu chọn riêng cho bạn',
+    emptyCta: 'Khám phá ngay',
+    subtotal: 'Tạm tính',
+    discount: 'Giảm giá',
+    checkout: (n: number) => `Thanh toán (${n})`,
+    removed: 'Đã bỏ khỏi giỏ',
+    couponPlaceholder: 'Nhập mã ưu đãi',
+    couponApply: 'Áp dụng',
+    couponApplied: (code: string) => `Đã áp mã ${code}`,
+    couponRemove: 'Bỏ mã',
+    freeshipReached: 'Bạn được miễn phí ship 🌿',
+    freeshipProgress: (amount: string) => `Mua thêm ${amount} để được miễn phí ship`,
+    stockLimited: (n: number) => `Chỉ còn ${n} sản phẩm`,
+  },
+
+  checkout: {
+    title: 'Thanh toán',
+    address: 'Địa chỉ giao hàng',
+    addressEmpty: 'Bạn chưa thêm địa chỉ',
+    addAddress: 'Thêm địa chỉ mới',
+    addressDefault: 'Mặc định',
+    recipient: 'Người nhận',
+    phone: 'Số điện thoại',
+    province: 'Tỉnh/Thành',
+    district: 'Quận/Huyện',
+    ward: 'Phường/Xã',
+    street: 'Số nhà, tên đường',
+    requiredField: 'Bạn điền giúp Tubu mục này nhé',
+    phoneInvalid: 'Số điện thoại chưa đúng định dạng',
+    payment: 'Phương thức thanh toán',
+    paymentCod: 'Thanh toán khi nhận hàng (COD)',
+    paymentZalopay: 'ZaloPay',
+    paymentBank: 'Chuyển khoản ngân hàng',
+    paymentWallet: (balance: string) => `Ví Tubu (${balance})`,
+    points: 'Điểm Xanh',
+    pointsUse: (n: number, value: string) => `Dùng ${n} điểm — giảm ${value}`,
+    pointsAvailable: (n: number) => `Bạn đang có ${n} điểm`,
+    pointsNone: 'Tích điểm từ đơn đầu tiên nhé',
+    note: 'Ghi chú cho Tubu',
+    notePlaceholder: 'Ví dụ: giao giờ hành chính...',
+    summary: 'Tóm tắt đơn hàng',
+    shippingFee: 'Phí vận chuyển',
+    total: 'Tổng cộng',
+    pointsEarn: (n: number) => `+${n} điểm Xanh khi giao thành công`,
+    placeOrder: 'Đặt hàng',
+    placeOrderWith: (total: string) => `Đặt hàng · ${total}`,
+    placing: 'Đang gửi đơn...',
+  },
+
+  success: {
+    heading: 'Cảm ơn bạn đã chọn Tubu 🌿',
+    orderCode: 'Mã đơn hàng',
+    pointsComing: (n: number) => `${n} điểm Xanh sẽ về tay khi đơn giao thành công`,
+    trackOrder: 'Theo dõi đơn',
+    keepShopping: 'Tiếp tục mua sắm',
+  },
+
+  orders: {
+    title: 'Đơn hàng của tôi',
+    emptyHeading: 'Bạn chưa có đơn nào',
+    emptyBody: 'Mua đơn đầu — nhận 30k voucher',
+    emptyCta: 'Bắt đầu mua',
+    tabAll: 'Tất cả',
+    itemCount: (n: number) => `${n} sản phẩm`,
+    cancelOrder: 'Hủy đơn',
+    cancelConfirmTitle: 'Bạn muốn hủy đơn này?',
+    cancelConfirmBody: 'Đơn đã hủy không thể khôi phục lại',
+    cancelKeep: 'Giữ đơn',
+    cancelYes: 'Hủy đơn',
+    cancelled: 'Đã hủy đơn cho bạn',
+    products: 'Sản phẩm',
+    paymentLabel: 'Thanh toán',
+    timeline: 'Hành trình đơn hàng',
+    repurchase: 'Mua lại đơn này',
+    support: 'Cần hỗ trợ? Nhắn Tubu qua Zalo OA',
+  },
+
+  orderStatus: {
+    PENDING_PAYMENT: 'Chờ thanh toán',
+    CONFIRMED: 'Đã xác nhận',
+    PACKED: 'Đang đóng gói',
+    SHIPPING: 'Đang giao',
+    DELIVERED: 'Giao thành công',
+    RETURNED: 'Đã hoàn',
+    CANCELLED: 'Đã hủy',
+  } as Record<string, string>,
+
+  paymentMethod: {
+    COD: 'Khi nhận hàng (COD)',
+    ZALOPAY: 'ZaloPay',
+    VNPAY: 'VNPay',
+    BANK_TRANSFER: 'Chuyển khoản',
+    WALLET: 'Ví Tubu',
+  } as Record<string, string>,
+
+  browse: {
+    title: 'Khám phá',
+    searchPlaceholder: 'Tìm sản phẩm...',
+    noResultHeading: (q: string) => `Không tìm thấy "${q}"`,
+    noResultBody: 'Thử từ khóa khác hoặc xem theo thương hiệu',
+    emptyHeading: 'Chưa có sản phẩm',
+    emptyBody: 'Tubu đang chuẩn bị thêm sản phẩm mới',
+  },
+
+  profile: {
+    title: 'Tài khoản',
+    guestName: 'Khách Tubu',
+    referral: (code: string) => `Mã giới thiệu: ${code}`,
+    points: 'Điểm Xanh',
+    wallet: 'Ví Tubu',
+    myOrders: 'Đơn hàng của tôi',
+    logout: 'Đăng xuất',
+  },
+} as const;
+
+export type ViStrings = typeof vi;
