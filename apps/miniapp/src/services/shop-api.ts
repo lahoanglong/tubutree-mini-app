@@ -146,3 +146,5 @@ export const fetchOrder = (code: string) =>
   api.get<OrderDTO>(`/orders/${code}`).then((r) => r.data);
 export const cancelOrder = (code: string) =>
   api.post<OrderDTO>(`/orders/${code}/cancel`).then((r) => r.data);
+export const repurchaseOrder = (code: string) =>
+  api.post<CartSummary>(`/orders/${code}/repurchase`).then((r) => r.data);

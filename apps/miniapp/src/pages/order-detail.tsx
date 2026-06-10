@@ -1,14 +1,23 @@
-import { Box, Page, Text, Button, Header, Spinner, useParams, useSnackbar } from 'zmp-ui';
+import { useState } from 'react';
+import { Box, Page, Text, Button, Header, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchOrder, cancelOrder } from '../services/shop-api';
-import { formatVnd, ORDER_STATUS_LABEL } from '../utils/format';
+import { fetchOrder, cancelOrder, repurchaseOrder } from '../services/shop-api';
+import { getErrorMessage } from '../services/api';
+import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
+import { ErrorState } from '../components/ui/empty-state';
+import { formatVnd } from '../utils/format';
+import { STATUS_COLOR, TIMELINE_STEPS, timelineIndex } from '../utils/order-status';
+import { vi } from '../i18n/vi';
+import { haptic } from '../utils/haptic';
 
 export default function OrderDetailPage() {
   const { code } = useParams<{ code: string }>();
+  const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
-  const { data: order, isLoading } = useQuery({
+  const order = useQuery({
     queryKey: ['order', code],
     queryFn: () => fetchOrder(code!),
     enabled: !!code,
@@ -19,88 +28,287 @@ export default function OrderDetailPage() {
     onSuccess: (o) => {
       queryClient.setQueryData(['order', code], o);
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
-      openSnackbar({ text: 'Đã hủy đơn', type: 'success' });
+      setConfirmCancel(false);
+      haptic('medium');
+      openSnackbar({ text: vi.orders.cancelled, type: 'success' });
     },
-    onError: (e: unknown) =>
-      openSnackbar({ text: e instanceof Error ? e.message : 'Không thể hủy', type: 'error' }),
+    onError: (e: unknown) => {
+      setConfirmCancel(false);
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    },
   });
 
-  if (isLoading || !order) {
+  const repurchase = useMutation({
+    mutationFn: () => repurchaseOrder(code!),
+    onSuccess: (c) => {
+      queryClient.setQueryData(['cart'], c);
+      haptic('medium');
+      navigate('/cart');
+    },
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  if (order.isLoading) {
     return (
-      <Page>
-        <Header title="Chi tiết đơn" />
-        <Box flex justifyContent="center" p={6}>
-          <Spinner />
+      <Page style={{ background: 'var(--neutral-50)' }}>
+        <Header title={code ?? ' '} />
+        <Box p={4} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Skeleton height={64} radius="var(--radius-lg)" />
+          <LineItemSkeleton />
+          <Skeleton height={120} radius="var(--radius-lg)" />
         </Box>
       </Page>
     );
   }
 
-  const canCancel = order.status === 'PENDING_PAYMENT' || order.status === 'CONFIRMED';
+  if (order.isError || !order.data) {
+    return (
+      <Page style={{ background: 'var(--neutral-50)' }}>
+        <Header title={code ?? ' '} />
+        <ErrorState message={getErrorMessage(order.error)} onRetry={() => void order.refetch()} />
+      </Page>
+    );
+  }
+
+  const o = order.data;
+  const color = STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!;
+  const canCancel = o.status === 'PENDING_PAYMENT' || o.status === 'CONFIRMED';
+  const isDone = o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.status === 'RETURNED';
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 90 }}>
-      <Header title={order.code} />
+    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
+      <Header title={o.code} />
 
-      <Box p={4} style={{ background: 'var(--green-600)', color: 'white' }}>
-        <Text size="small" style={{ color: 'var(--green-100)' }}>
-          Trạng thái
+      {/* ── Status hero ── */}
+      <Box p={4} style={{ background: color.bg }}>
+        <Text size="xSmall" style={{ color: color.fg, opacity: 0.8 }}>
+          {new Date(o.createdAt).toLocaleString('vi-VN')}
         </Text>
-        <Text.Title size="small" style={{ color: 'white' }}>
-          {ORDER_STATUS_LABEL[order.status] ?? order.status}
+        <Text.Title size="small" style={{ color: color.fg }}>
+          {vi.orderStatus[o.status] ?? o.status}
         </Text.Title>
       </Box>
 
+      {/* ── Timeline (DI #9) ── */}
+      {timelineIndex(o.status) >= 0 && (
+        <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+          <Text bold size="small" style={{ marginBottom: 12 }}>
+            {vi.orders.timeline}
+          </Text>
+          <Timeline current={timelineIndex(o.status)} />
+        </Box>
+      )}
+
+      {/* ── Sản phẩm ── */}
       <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
         <Text bold size="small" style={{ marginBottom: 8 }}>
-          Sản phẩm
+          {vi.orders.products}
         </Text>
-        {order.items.map((it) => (
-          <Box key={it.id} flex justifyContent="space-between" style={{ padding: '4px 0' }}>
-            <Text size="small">
-              {it.productName} · {it.variationName} ×{it.quantity}
+        {o.items.map((it) => (
+          <Box key={it.id} flex justifyContent="space-between" style={{ padding: '6px 0', gap: 12 }}>
+            <Text size="small" style={{ flex: 1 }}>
+              {it.productName} · {it.variationName}{' '}
+              <Text size="xSmall" style={{ color: 'var(--neutral-400)', display: 'inline' }}>
+                ×{it.quantity}
+              </Text>
             </Text>
-            <Text size="small">{formatVnd(it.total)}</Text>
+            <Text size="small" style={{ flex: '0 0 auto' }}>
+              {formatVnd(it.total)}
+            </Text>
           </Box>
         ))}
       </Box>
 
+      {/* ── Tóm tắt tiền ── */}
       <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
-        <Row label="Tạm tính" value={formatVnd(order.subtotal)} />
-        {order.discount > 0 && <Row label="Giảm giá" value={`-${formatVnd(order.discount)}`} />}
-        <Row label="Phí ship" value={order.shippingFee === 0 ? 'Miễn phí' : formatVnd(order.shippingFee)} />
-        <Row label="Tổng cộng" value={formatVnd(order.total)} bold />
-        <Row label="Thanh toán" value={order.paymentMethod} />
+        <Row label={vi.cart.subtotal} value={formatVnd(o.subtotal)} />
+        {o.discount > 0 && <Row label={vi.cart.discount} value={`-${formatVnd(o.discount)}`} accent />}
+        <Row
+          label={vi.checkout.shippingFee}
+          value={o.shippingFee === 0 ? vi.common.freeShip : formatVnd(o.shippingFee)}
+          accent={o.shippingFee === 0}
+        />
+        <Row label={vi.checkout.total} value={formatVnd(o.total)} bold />
+        <Row label={vi.orders.paymentLabel} value={vi.paymentMethod[o.paymentMethod] ?? o.paymentMethod} />
+        {o.pointsEarned > 0 && o.status !== 'CANCELLED' && (
+          <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 4 }}>
+            🌱 {vi.checkout.pointsEarn(o.pointsEarned)}
+          </Text>
+        )}
       </Box>
 
-      {canCancel && (
-        <Box
-          style={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: 'var(--neutral-0)',
-            boxShadow: 'var(--shadow-lg)',
-            padding: 12,
-          }}
-        >
-          <Button fullWidth variant="secondary" loading={cancel.isPending} onClick={() => cancel.mutate()}>
-            Hủy đơn
+      {/* ── Địa chỉ nhận ── */}
+      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Text bold size="small" style={{ marginBottom: 4 }}>
+          {vi.checkout.address}
+        </Text>
+        <Text size="small">
+          {o.shippingAddress.recipient} · {o.shippingAddress.phone}
+        </Text>
+        <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+          {o.shippingAddress.street}, {o.shippingAddress.ward}, {o.shippingAddress.district},{' '}
+          {o.shippingAddress.province}
+        </Text>
+      </Box>
+
+      <Box p={4}>
+        <Text size="xSmall" style={{ color: 'var(--neutral-400)', textAlign: 'center' }}>
+          {vi.orders.support}
+        </Text>
+      </Box>
+
+      {/* ── Action bar ── */}
+      <Box
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: 'var(--neutral-0)',
+          boxShadow: 'var(--shadow-lg)',
+          padding: '10px 16px calc(10px + var(--safe-bottom))',
+          display: 'flex',
+          gap: 10,
+        }}
+      >
+        {canCancel && (
+          <Button
+            variant="secondary"
+            onClick={() => {
+              haptic('light');
+              setConfirmCancel(true);
+            }}
+            style={{ minHeight: 48, color: 'var(--danger)', borderColor: 'var(--neutral-200)', flex: 1 }}
+          >
+            {vi.orders.cancelOrder}
           </Button>
+        )}
+        {isDone && (
+          <Button
+            loading={repurchase.isPending}
+            onClick={() => repurchase.mutate()}
+            style={{ background: 'var(--primary-600)', minHeight: 48, fontWeight: 600, flex: 1 }}
+          >
+            {vi.orders.repurchase}
+          </Button>
+        )}
+        {!canCancel && !isDone && (
+          <Button
+            fullWidth
+            variant="tertiary"
+            onClick={() => navigate('/orders')}
+            style={{ color: 'var(--primary-700)', minHeight: 48 }}
+          >
+            {vi.common.backHome}
+          </Button>
+        )}
+      </Box>
+
+      {/* ── Confirm hủy (DI #10): giữ đơn là primary ── */}
+      <Sheet visible={confirmCancel} onClose={() => setConfirmCancel(false)} autoHeight>
+        <Box p={5} style={{ textAlign: 'center' }}>
+          <Text.Title size="small">{vi.orders.cancelConfirmTitle}</Text.Title>
+          <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
+            {vi.orders.cancelConfirmBody}
+          </Text>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
+            <Button
+              fullWidth
+              onClick={() => setConfirmCancel(false)}
+              style={{ background: 'var(--primary-600)', minHeight: 48, fontWeight: 600 }}
+            >
+              {vi.orders.cancelKeep}
+            </Button>
+            <Button
+              fullWidth
+              variant="tertiary"
+              loading={cancel.isPending}
+              onClick={() => cancel.mutate()}
+              style={{ color: 'var(--danger)', minHeight: 44 }}
+            >
+              {vi.orders.cancelYes}
+            </Button>
+          </Box>
         </Box>
-      )}
+      </Sheet>
     </Page>
   );
 }
 
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+/** Timeline dọc 5 bước — bước hiện tại pulse, bước qua tick lá. */
+function Timeline({ current }: { current: number }) {
   return (
-    <Box flex justifyContent="space-between" style={{ padding: '3px 0' }}>
+    <Box style={{ display: 'flex', flexDirection: 'column' }}>
+      {TIMELINE_STEPS.map((step, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <Box key={step} flex style={{ gap: 12, minHeight: i === TIMELINE_STEPS.length - 1 ? 24 : 44 }}>
+            <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <span
+                className={active ? 'tubu-pulse' : undefined}
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  flex: '0 0 auto',
+                  background: done || active ? 'var(--primary-600)' : 'var(--neutral-100)',
+                  border: `2px solid ${done || active ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
+                  boxSizing: 'border-box',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {done && (
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden>
+                    <path d="M2.5 6.5l2.5 2.5 4.5-5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </span>
+              {i < TIMELINE_STEPS.length - 1 && (
+                <span
+                  style={{
+                    width: 2,
+                    flex: 1,
+                    background: done ? 'var(--primary-600)' : 'var(--neutral-200)',
+                    marginTop: 2,
+                    marginBottom: 2,
+                  }}
+                />
+              )}
+            </Box>
+            <Text
+              size="small"
+              bold={active}
+              style={{
+                color: active ? 'var(--primary-700)' : done ? 'var(--neutral-900)' : 'var(--neutral-400)',
+                paddingTop: 0,
+              }}
+            >
+              {vi.orderStatus[step]}
+            </Text>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+function Row({ label, value, bold, accent }: { label: string; value: string; bold?: boolean; accent?: boolean }) {
+  return (
+    <Box flex justifyContent="space-between" style={{ padding: '4px 0' }}>
       <Text size="small" style={{ color: 'var(--neutral-600)' }}>
         {label}
       </Text>
-      <Text size="small" bold={bold} style={bold ? { color: 'var(--clay-700)' } : undefined}>
+      <Text
+        size="small"
+        bold={bold}
+        style={{
+          color: accent ? 'var(--leaf-700)' : bold ? 'var(--primary-700)' : undefined,
+          fontSize: bold ? 16 : undefined,
+        }}
+      >
         {value}
       </Text>
     </Box>
