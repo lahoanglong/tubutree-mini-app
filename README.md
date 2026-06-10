@@ -37,7 +37,16 @@ pnpm --filter @tubutree/web dev   # chạy web    → http://localhost:3000
 pnpm --filter @tubutree/miniapp dev  # chạy mini app (cần zmp-cli login)
 ```
 
-## Tiến độ tổng quan (2026-06-03)
+## Tiến độ tổng quan (cập nhật 2026-06-10)
+
+> **Đêm 2026-06-10 — Tier S polish (miniapp):** Foundation (token palette đúng logo cam
+> #E08C1C, i18n vi.ts, error normalization, Skeleton/EmptyState/haptic) + 5 feature core
+> (Home, PDP, Cart, Checkout, Orders) nâng từ skeleton lên production-grade: optimistic
+> updates, idempotency key, inline validation, timeline đơn hàng, empty/error states có
+> illustration, code-split (initial 438KB / gzip 138KB). Chi tiết: `EXECUTION_PLAN.md`,
+> `ARCHITECTURE_DECISIONS.md`, `DESIGN_IMPROVEMENTS.md`, `LOG/design_decisions/`.
+
+### Bảng phase (2026-06-03)
 
 | Phase | Backend | Frontend | Verified |
 |-------|---------|----------|----------|

@@ -1,4 +1,4 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type { LoginResponse } from '@tubutree/shared-types';
 import { vi } from '../i18n/vi';
 
