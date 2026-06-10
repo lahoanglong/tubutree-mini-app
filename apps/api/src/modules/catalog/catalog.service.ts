@@ -45,11 +45,13 @@ export class CatalogService {
   async related(slug: string) {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
-    return this.prisma.product.findMany({
+    const items = await this.prisma.product.findMany({
       where: { isActive: true, brand: product.brand, id: { not: product.id } },
       take: 8,
       include: { variations: { where: { isActive: true } } },
     });
+    // Trả cùng shape card với /products để FE dùng chung ProductCard.
+    return items.map((p) => this.toCard(p));
   }
 
   async brands() {

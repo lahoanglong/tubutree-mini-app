@@ -98,6 +98,8 @@ export const fetchProduct = (slug: string) =>
   api.get<ProductDetail>(`/products/${slug}`).then((r) => r.data);
 export const fetchBrands = () =>
   api.get<{ brand: string; count: number }[]>('/brands').then((r) => r.data);
+export const fetchRelated = (slug: string) =>
+  api.get<ProductCard[]>(`/products/${slug}/related`).then((r) => r.data);
 
 // Cart
 export const getCart = () => api.get<CartSummary>('/cart').then((r) => r.data);
