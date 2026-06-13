@@ -254,7 +254,8 @@ function Dashboard() {
                   style={{ color: 'var(--primary-700)' }}
                   onClick={() => {
                     if (navigator.clipboard) {
-                      void navigator.clipboard.writeText(`?ref=${referral}&l=${l.shortCode}`);
+                      const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
+                      void navigator.clipboard.writeText(`${base}/?ref=${referral}&l=${l.shortCode}`);
                       openSnackbar({ text: 'Đã sao chép link', type: 'success' });
                     }
                   }}

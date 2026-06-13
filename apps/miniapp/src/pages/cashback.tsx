@@ -138,7 +138,8 @@ export default function CashbackPage() {
                       +{formatVnd(t.userReward)}
                     </Text>
                     <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                      Đơn {formatVnd(t.orderAmount)} · #{t.merchantOrderId.slice(0, 10)}
+                      Đơn {formatVnd(t.orderAmount)}
+                      {t.merchantOrderId ? ` · #${t.merchantOrderId.slice(0, 10)}` : ''}
                     </Text>
                   </Box>
                   <Text

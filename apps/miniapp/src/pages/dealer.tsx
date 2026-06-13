@@ -518,7 +518,7 @@ function DealerCredit() {
             onChange={(e) => setAmount(e.target.value)}
           />
           <Button
-            disabled={Number(amount) <= 0 || pay.isPending}
+            disabled={Number(amount) <= 0 || Number(amount) > balance || pay.isPending}
             loading={pay.isPending}
             onClick={() => pay.mutate()}
             style={{ background: '#1f2a44', flex: '0 0 auto' }}
@@ -526,6 +526,11 @@ function DealerCredit() {
             Báo đã CK
           </Button>
         </Box>
+        {Number(amount) > balance && (
+          <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 6 }}>
+            ⚠ Số tiền vượt dư nợ hiện tại ({formatVnd(balance)}).
+          </Text>
+        )}
       </Box>
 
       <Text bold style={{ margin: '16px 0 8px' }}>
