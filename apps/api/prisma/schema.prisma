@@ -134,6 +134,8 @@ model Product {
   isActive       Boolean  @default(true)
   isFeatured     Boolean  @default(false)
   isCombo        Boolean  @default(false)
+  ratingAvg      Float    @default(0) // denormalized từ reviews (cập nhật khi tạo review)
+  reviewCount    Int      @default(0)
   basePrice      Int
   salePrice      Int?
   metaTitle      String?

@@ -100,6 +100,8 @@ export class CatalogService {
     basePrice: number;
     salePrice: number | null;
     isFeatured: boolean;
+    ratingAvg: number;
+    reviewCount: number;
     variations: { stock: number }[];
   }) {
     return {
@@ -111,6 +113,8 @@ export class CatalogService {
       basePrice: p.basePrice,
       salePrice: p.salePrice,
       isFeatured: p.isFeatured,
+      ratingAvg: p.ratingAvg,
+      reviewCount: p.reviewCount,
       inStock: p.variations.some((v) => v.stock > 0),
     };
   }

@@ -48,7 +48,26 @@ export class ReviewsService {
       await tx.user.update({ where: { id: userId }, data: { pointsBalance: { increment: pointsEarned } } });
       return r;
     });
+
+    // Cập nhật rating denormalized cho Product (hiển thị sao trên card/PDP).
+    await this.recomputeRating(product.id);
     return review;
+  }
+
+  /** Tính lại ratingAvg + reviewCount cho 1 sản phẩm từ review hiển thị. */
+  private async recomputeRating(productId: string): Promise<void> {
+    const agg = await this.prisma.review.aggregate({
+      where: { productId, isVisible: true },
+      _avg: { rating: true },
+      _count: true,
+    });
+    await this.prisma.product.update({
+      where: { id: productId },
+      data: {
+        ratingAvg: Math.round((agg._avg.rating ?? 0) * 10) / 10,
+        reviewCount: agg._count,
+      },
+    });
   }
 
   async listByProduct(slug: string) {
@@ -84,6 +103,7 @@ export class ReviewsService {
       throw new ForbiddenException('Không có quyền xóa đánh giá này.');
     }
     await this.prisma.review.delete({ where: { id } });
+    await this.recomputeRating(review.productId);
     return { ok: true };
   }
 }

@@ -16,6 +16,8 @@ export interface ProductCard {
   basePrice: number;
   salePrice: number | null;
   isFeatured: boolean;
+  ratingAvg?: number;
+  reviewCount?: number;
   inStock: boolean;
 }
 
