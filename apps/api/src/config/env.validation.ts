@@ -38,6 +38,8 @@ export const envSchema = z.object({
   ACCESSTRADE_BASE_URL: z.string().default('https://api.accesstrade.vn/v1'),
   ACCESSTRADE_TOKEN: z.string().default(''),
   ACCESSTRADE_PUBLISHER_ID: z.string().default(''),
+  // Token bí mật chia sẻ để verify webhook postback (chống tự duyệt cashback giả).
+  ACCESSTRADE_WEBHOOK_SECRET: z.string().default(''),
 });
 
 export type Env = z.infer<typeof envSchema>;

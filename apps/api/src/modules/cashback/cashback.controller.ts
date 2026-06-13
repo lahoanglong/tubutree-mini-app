@@ -1,8 +1,11 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { timingSafeEqual } from 'node:crypto';
 import { IsInt, IsOptional, IsString } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CashbackService } from './cashback.service';
+import type { Env } from '../../config/env.validation';
 
 class ClickDto {
   @IsString() merchantId!: string;
@@ -19,7 +22,14 @@ class PostbackDto {
 
 @Controller()
 export class CashbackController {
-  constructor(private readonly cashback: CashbackService) {}
+  private readonly webhookSecret: string;
+
+  constructor(
+    private readonly cashback: CashbackService,
+    config: ConfigService<Env, true>,
+  ) {
+    this.webhookSecret = config.get('ACCESSTRADE_WEBHOOK_SECRET', { infer: true });
+  }
 
   @Public()
   @Get('cashback/merchants')
@@ -39,7 +49,20 @@ export class CashbackController {
 
   @Public()
   @Post('webhooks/accesstrade')
-  postback(@Body() dto: PostbackDto) {
+  postback(@Body() dto: PostbackDto, @Headers('x-accesstrade-token') token?: string) {
+    // Verify shared-secret để chống tự forge postback (tự duyệt cashback giả).
+    // Gate theo config: chưa cấu hình secret (dev) → bỏ qua, có cấu hình → bắt buộc khớp.
+    if (this.webhookSecret && !this.tokenMatches(token)) {
+      throw new UnauthorizedException('Token webhook Accesstrade không hợp lệ.');
+    }
     return this.cashback.handlePostback(dto);
+  }
+
+  /** So token chống timing-attack (độ dài khác → false ngay, không ném). */
+  private tokenMatches(token?: string): boolean {
+    if (!token) return false;
+    const a = Buffer.from(token, 'utf8');
+    const b = Buffer.from(this.webhookSecret, 'utf8');
+    return a.length === b.length && timingSafeEqual(a, b);
   }
 }
