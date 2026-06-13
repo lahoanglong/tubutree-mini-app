@@ -34,6 +34,15 @@ export class AdminService {
       if (!tierId) throw new BadRequestException('Cần chọn bậc đại lý khi duyệt.');
       const tier = await this.prisma.dealerTier.findUnique({ where: { id: tierId } });
       if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
+      // Merge vào metadata sẵn có — KHÔNG ghi đè (giữ segments/onboardedAt từ onboarding quiz).
+      const user = await this.prisma.user.findUnique({
+        where: { id: app.userId },
+        select: { metadata: true },
+      });
+      const mergedMeta = {
+        ...((user?.metadata as Record<string, unknown> | null) ?? {}),
+        dealerTierId: tierId,
+      };
       await this.prisma.$transaction([
         this.prisma.dealerApplication.update({
           where: { id },
@@ -41,7 +50,7 @@ export class AdminService {
         }),
         this.prisma.user.update({
           where: { id: app.userId },
-          data: { role: 'DEALER', metadata: { dealerTierId: tierId } },
+          data: { role: 'DEALER', metadata: mergedMeta },
         }),
       ]);
     } else {
