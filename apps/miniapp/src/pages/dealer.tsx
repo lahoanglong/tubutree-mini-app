@@ -16,6 +16,7 @@ import { getErrorMessage } from '../services/api';
 import { formatVnd, ORDER_STATUS_LABEL } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
+import { ImageUpload } from '../components/image-upload';
 import { Skeleton } from '../components/ui/skeleton';
 
 export default function DealerPage() {
@@ -111,21 +112,16 @@ function DealerApply({ rejected }: { rejected: boolean }) {
           <Input label="Người đại diện *" value={form.ownerName} onChange={set('ownerName')} />
           <Input label="Số điện thoại *" value={form.phone} onChange={set('phone')} />
           <Input label="Địa chỉ kinh doanh *" value={form.address} onChange={set('address')} />
-          <Input
-            label="Link ảnh CCCD mặt trước *"
-            placeholder="Dán URL ảnh"
+          <ImageUpload
+            label="Ảnh CCCD mặt trước *"
             value={form.cccdFrontUrl}
-            onChange={set('cccdFrontUrl')}
+            onChange={(url) => setForm((f) => ({ ...f, cccdFrontUrl: url }))}
           />
-          <Input
-            label="Link ảnh CCCD mặt sau *"
-            placeholder="Dán URL ảnh"
+          <ImageUpload
+            label="Ảnh CCCD mặt sau *"
             value={form.cccdBackUrl}
-            onChange={set('cccdBackUrl')}
+            onChange={(url) => setForm((f) => ({ ...f, cccdBackUrl: url }))}
           />
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-            * Tải ảnh trực tiếp sẽ sớm được hỗ trợ. Tạm thời dán link ảnh (Google Drive/Zalo).
-          </Text>
         </Box>
 
         <Button

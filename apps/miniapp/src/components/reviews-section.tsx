@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchReviews, createReview } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { MultiImageUpload } from './image-upload';
 import { haptic } from '../utils/haptic';
 
 /** Dải sao tĩnh (hiển thị) — size tùy chỉnh. */
@@ -118,9 +119,15 @@ function WriteReview({ slug, onDone }: { slug: string; onDone: () => void }) {
   const qc = useQueryClient();
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
+  const [images, setImages] = useState<string[]>([]);
 
   const submit = useMutation({
-    mutationFn: () => createReview(slug, { rating, comment: comment.trim() || undefined }),
+    mutationFn: () =>
+      createReview(slug, {
+        rating,
+        comment: comment.trim() || undefined,
+        images: images.length > 0 ? images : undefined,
+      }),
     onSuccess: () => {
       haptic('medium');
       openSnackbar({ text: 'Cảm ơn đánh giá của bạn! Đã cộng Điểm Xanh 🌿', type: 'success' });
@@ -157,6 +164,7 @@ function WriteReview({ slug, onDone }: { slug: string; onDone: () => void }) {
         onChange={(e) => setComment(e.target.value)}
         rows={4}
       />
+      <MultiImageUpload value={images} onChange={setImages} max={5} />
       <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
         Có ảnh được +10 Điểm Xanh · chỉ chữ +5 Điểm Xanh. Chỉ đánh giá được sản phẩm đã mua & nhận.
       </Text>
