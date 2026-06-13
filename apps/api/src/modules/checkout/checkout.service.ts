@@ -114,10 +114,12 @@ export class CheckoutService {
         });
 
         if (computed.pointsUsed > 0) {
-          await tx.user.update({
-            where: { id: userId },
+          // Trừ điểm ATOMIC (gte) — chống TOCTOU khi đặt nhiều đơn đồng thời tiêu cùng điểm.
+          const dec = await tx.user.updateMany({
+            where: { id: userId, pointsBalance: { gte: computed.pointsUsed } },
             data: { pointsBalance: { decrement: computed.pointsUsed } },
           });
+          if (dec.count === 0) throw new BadRequestException('Số điểm Xanh không đủ.');
           await tx.pointsTransaction.create({
             data: {
               userId,
@@ -129,10 +131,12 @@ export class CheckoutService {
           });
         }
         if (paid) {
-          await tx.user.update({
-            where: { id: userId },
+          // Trừ ví ATOMIC (gte) — chống overdraft khi 2 đơn WALLET chạy đồng thời.
+          const dec = await tx.user.updateMany({
+            where: { id: userId, walletBalance: { gte: computed.total } },
             data: { walletBalance: { decrement: computed.total } },
           });
+          if (dec.count === 0) throw new BadRequestException('Số dư Ví Tubu không đủ.');
         }
         return created;
       });
