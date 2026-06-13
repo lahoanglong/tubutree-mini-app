@@ -672,6 +672,7 @@ model Review {
   isVisible    Boolean  @default(true)
   createdAt    DateTime @default(now())
 
+  @@unique([userId, productId])
   @@index([productId])
   @@map("reviews")
 }

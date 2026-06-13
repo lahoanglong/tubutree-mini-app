@@ -31,6 +31,6 @@ const MAP: Record<string, OrderStatus> = {
 
 export function mapPancakeStatus(raw: unknown): OrderStatus | null {
   if (raw === null || raw === undefined) return null;
-  const key = String(raw).toLowerCase();
+  const key = String(raw).trim().toLowerCase();
   return MAP[key] ?? null;
 }

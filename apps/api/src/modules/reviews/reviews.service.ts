@@ -27,27 +27,40 @@ export class ReviewsService {
       throw new BadRequestException('Chỉ đánh giá sản phẩm đã mua và nhận hàng.');
     }
 
+    // Mỗi user chỉ đánh giá 1 lần / sản phẩm — tránh farm điểm review.
+    const existing = await this.prisma.review.findFirst({ where: { userId, productId: product.id } });
+    if (existing) throw new BadRequestException('Bạn đã đánh giá sản phẩm này rồi.');
+
     const hasImages = (dto.images?.length ?? 0) > 0;
     const pointsEarned = hasImages ? 10 : 5;
 
-    const review = await this.prisma.$transaction(async (tx) => {
-      const r = await tx.review.create({
-        data: {
-          userId,
-          productId: product.id,
-          orderId: delivered.id,
-          rating: dto.rating,
-          comment: dto.comment,
-          images: dto.images ?? [],
-          pointsEarned,
-        },
+    let review;
+    try {
+      review = await this.prisma.$transaction(async (tx) => {
+        const r = await tx.review.create({
+          data: {
+            userId,
+            productId: product.id,
+            orderId: delivered.id,
+            rating: dto.rating,
+            comment: dto.comment,
+            images: dto.images ?? [],
+            pointsEarned,
+          },
+        });
+        await tx.pointsTransaction.create({
+          data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id },
+        });
+        await tx.user.update({ where: { id: userId }, data: { pointsBalance: { increment: pointsEarned } } });
+        return r;
       });
-      await tx.pointsTransaction.create({
-        data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id },
-      });
-      await tx.user.update({ where: { id: userId }, data: { pointsBalance: { increment: pointsEarned } } });
-      return r;
-    });
+    } catch (err) {
+      // Race: 2 request đánh giá đồng thời — unique(userId,productId) chặn cái thứ hai.
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
+        throw new BadRequestException('Bạn đã đánh giá sản phẩm này rồi.');
+      }
+      throw err;
+    }
 
     // Cập nhật rating denormalized cho Product (hiển thị sao trên card/PDP).
     await this.recomputeRating(product.id);
