@@ -33,6 +33,7 @@ export default function GamePage() {
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
   const currentQuiz = quiz?.find((q) => !answeredIds.has(q.id));
+  const [harvested, setHarvested] = useState(false);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['game'] });
@@ -60,10 +61,11 @@ export default function GamePage() {
   const waterM = useMutation({
     mutationFn: () => waterTree(20),
     onSuccess: (r) => {
-      openSnackbar({
-        text: r.harvested ? '🎉 Thu hoạch! Tubu trồng 1 cây thật 🌳' : `Đã tưới · ${r.progress}/${r.target}💧`,
-        type: 'success',
-      });
+      if (r.harvested) {
+        setHarvested(true); // mở modal celebration
+      } else {
+        openSnackbar({ text: `Đã tưới · ${r.progress}/${r.target}💧`, type: 'success' });
+      }
       refresh();
     },
     onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
@@ -121,24 +123,61 @@ export default function GamePage() {
           textAlign: 'center',
         }}
       >
-        <Text style={{ fontSize: 72 }}>{pct >= 100 ? '🌳' : pct > 50 ? '🌿' : '🌱'}</Text>
+        <Text style={{ fontSize: 72 }} className="tubu-sway">{pct >= 100 ? '🌳' : pct > 50 ? '🌿' : '🌱'}</Text>
         <Text style={{ color: 'white' }} bold>
-          {eco?.treeType ?? 'Cây Dứa Fuwa3e'}
+          {eco?.treeType ?? 'Vườn của bạn'}
         </Text>
         <Box style={{ background: 'rgba(255,255,255,0.3)', borderRadius: 99, height: 8, margin: '10px 24px' }}>
-          <Box style={{ width: `${pct}%`, height: 8, background: 'white', borderRadius: 99 }} />
+          <Box style={{ width: `${pct}%`, height: 8, background: 'white', borderRadius: 99, transition: 'width var(--dur-slow) var(--ease-out)' }} />
         </Box>
         <Text size="xSmall" style={{ color: 'white' }}>
-          {eco?.progress ?? 0}/{eco?.target ?? 600}💧 · 💧 {profile?.totalSeeds ?? 0} · 🔥 {profile?.streakDays ?? 0} ngày · 🌳 thật: {eco?.treesPlanted ?? 0}
+          {eco?.progress ?? 0}/{eco?.target ?? 0}💧 · 💧 {profile?.totalSeeds ?? 0} · 🔥 {profile?.streakDays ?? 0} ngày · 🌳 thật: {eco?.treesPlanted ?? 0}
         </Text>
       </Box>
 
-      <Box p={3} style={{ display: 'flex', gap: 8 }}>
-        <Button fullWidth loading={checkInM.isPending} onClick={() => checkInM.mutate()} style={{ background: 'var(--green-600)' }}>
-          Điểm danh
-        </Button>
+      {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
+      <Box p={3} style={{ background: 'var(--neutral-0)' }}>
+        <Box flex alignItems="center" justifyContent="space-between" mb={2}>
+          <Text size="small" bold>
+            🔥 Điểm danh chuỗi {profile?.streakDays ?? 0} ngày
+          </Text>
+          <Button size="small" loading={checkInM.isPending} onClick={() => checkInM.mutate()} style={{ background: 'var(--leaf-600)' }}>
+            Điểm danh
+          </Button>
+        </Box>
+        <Box flex style={{ gap: 6 }}>
+          {Array.from({ length: 7 }, (_, i) => {
+            const day = i + 1;
+            const done = (profile?.streakDays ?? 0) % 7 === 0 && (profile?.streakDays ?? 0) > 0 ? true : day <= ((profile?.streakDays ?? 0) % 7);
+            const bonus = day === 3 || day === 7;
+            return (
+              <Box key={i} style={{ flex: 1, textAlign: 'center' }}>
+                <Box
+                  style={{
+                    height: 32,
+                    borderRadius: 'var(--radius-md)',
+                    background: done ? 'var(--leaf-600)' : 'var(--neutral-100)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: done ? '#fff' : 'var(--neutral-400)',
+                    fontSize: 13,
+                  }}
+                >
+                  {done ? '💧' : bonus ? '🎁' : day}
+                </Box>
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                  N{day}
+                </Text>
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
+
+      <Box p={3}>
         <Button fullWidth loading={waterM.isPending} variant="secondary" onClick={() => waterM.mutate()}>
-          Tưới 20💧
+          🚿 Tưới cây (20💧)
         </Button>
       </Box>
 
@@ -206,17 +245,84 @@ export default function GamePage() {
       </Card>
 
       <Card title="🏆 Bảng xếp hạng tuần">
-        {board?.map((r) => (
-          <Box key={r.rank} flex justifyContent="space-between" style={{ padding: '4px 0' }}>
-            <Text size="small">
-              #{r.rank} {r.nickname}
-            </Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-              🔥{r.streak} · 🌳{r.treesPlanted}
-            </Text>
-          </Box>
-        ))}
+        {board && board.length > 0 ? (
+          <>
+            {/* Podium top 3 */}
+            <Box flex alignItems="flex-end" justifyContent="center" style={{ gap: 8, marginBottom: 12 }}>
+              {[board[1], board[0], board[2]].map((r, idx) => {
+                if (!r) return <Box key={idx} style={{ flex: 1 }} />;
+                const isFirst = r.rank === 1;
+                const h = isFirst ? 64 : r.rank === 2 ? 48 : 38;
+                const medal = r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : '🥉';
+                return (
+                  <Box key={r.rank} style={{ flex: 1, textAlign: 'center' }}>
+                    <Text style={{ fontSize: isFirst ? 28 : 22 }}>{medal}</Text>
+                    <Text size="xSmall" bold style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {r.nickname}
+                    </Text>
+                    <Box
+                      style={{
+                        height: h,
+                        borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
+                        background: isFirst ? 'var(--primary-600)' : 'var(--leaf-400)',
+                        marginTop: 4,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        fontSize: 11,
+                        fontWeight: 700,
+                      }}
+                    >
+                      🌳{r.treesPlanted}
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Box>
+            {/* Hạng 4+ */}
+            {board.slice(3).map((r) => (
+              <Box key={r.rank} flex justifyContent="space-between" style={{ padding: '4px 0', borderTop: '1px solid var(--neutral-100)' }}>
+                <Text size="small">
+                  #{r.rank} {r.nickname}
+                </Text>
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                  🔥{r.streak} · 🌳{r.treesPlanted}
+                </Text>
+              </Box>
+            ))}
+          </>
+        ) : (
+          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+            Chưa có dữ liệu xếp hạng.
+          </Text>
+        )}
       </Card>
+
+      {/* Harvest celebration */}
+      {harvested && (
+        <Box
+          onClick={() => setHarvested(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }}
+        >
+          <Box
+            onClick={(e) => e.stopPropagation()}
+            p={5}
+            style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-xl)', textAlign: 'center', maxWidth: 320, width: '100%' }}
+          >
+            <Text style={{ fontSize: 64 }}>🌳</Text>
+            <Text bold size="large" style={{ marginTop: 8 }}>
+              Thu hoạch thành công!
+            </Text>
+            <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
+              Cây ảo của bạn đã lớn — Tubu sẽ góp <b>1 cây thật</b> vào rừng "Rừng Xanh Lên" cùng PanNature 🌿
+            </Text>
+            <Button fullWidth onClick={() => setHarvested(false)} style={{ marginTop: 20, background: 'var(--leaf-600)' }}>
+              Tuyệt vời!
+            </Button>
+          </Box>
+        </Box>
+      )}
     </Page>
   );
 }

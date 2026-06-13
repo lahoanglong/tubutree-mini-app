@@ -215,6 +215,22 @@ body {
   animation: tubu-bounce 350ms var(--ease-out);
 }
 
+/* Cây Vườn Xanh đung đưa nhẹ (Garden) */
+@keyframes tubu-sway {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+.tubu-sway {
+  display: inline-block;
+  transform-origin: 50% 90%;
+  animation: tubu-sway 3.5s ease-in-out infinite;
+}
+
 /* Tôn trọng cài đặt giảm chuyển động của hệ điều hành */
 @media (prefers-reduced-motion: reduce) {
   *,
