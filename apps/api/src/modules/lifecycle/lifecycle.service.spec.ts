@@ -61,3 +61,27 @@ describe('LifecycleService.sendReorderReminders (§6.14.7)', () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 });
+
+describe('LifecycleService.notifyWishlistPriceDrop (§6.14.10)', () => {
+  function setupWishlist(users: string[]) {
+    const findMany = jest.fn().mockResolvedValue(users.map((userId) => ({ userId })));
+    const prisma = { wishlist: { findMany } } as unknown as PrismaService;
+    const notify = jest.fn().mockResolvedValue(undefined);
+    const notifications = { notify } as unknown as NotificationsService;
+    return { svc: new LifecycleService(prisma, config, notifications), notify };
+  }
+
+  it('báo cho tất cả user đã wishlist sản phẩm', async () => {
+    const { svc, notify } = setupWishlist(['u1', 'u2']);
+    await svc.notifyWishlistPriceDrop('p1', 'Tinh dầu tràm');
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect(notify).toHaveBeenCalledWith('u1', 'PRICE_DROP_ALERT', { product: 'Tinh dầu tràm' });
+    expect(notify).toHaveBeenCalledWith('u2', 'PRICE_DROP_ALERT', { product: 'Tinh dầu tràm' });
+  });
+
+  it('không ai wishlist → không báo', async () => {
+    const { svc, notify } = setupWishlist([]);
+    await svc.notifyWishlistPriceDrop('p1', 'X');
+    expect(notify).not.toHaveBeenCalled();
+  });
+});

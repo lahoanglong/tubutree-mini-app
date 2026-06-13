@@ -7,9 +7,10 @@ import { PancakeProcessor } from './pancake.processor';
 import { PancakeWebhookController } from './pancake-webhook.controller';
 import { PancakeController } from './pancake.controller';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
+import { LifecycleModule } from '../../lifecycle/lifecycle.module';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: QUEUE_PANCAKE_EVENTS })],
+  imports: [BullModule.registerQueue({ name: QUEUE_PANCAKE_EVENTS }), LifecycleModule],
   controllers: [PancakeWebhookController, PancakeController],
   providers: [PancakeClient, PancakeSyncService, PancakeOrderService, PancakeProcessor],
   exports: [PancakeClient, PancakeSyncService, PancakeOrderService],

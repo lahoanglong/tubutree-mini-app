@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
+import { LifecycleService } from '../../lifecycle/lifecycle.service';
 import type { PancakeProductDTO } from './pancake.types';
 
 /**
@@ -18,6 +19,7 @@ export class PancakeSyncService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly client: PancakeClient,
+    private readonly lifecycle: LifecycleService,
   ) {}
 
   @Cron('0 */15 * * * *') // mỗi 15 phút
@@ -84,7 +86,18 @@ export class PancakeSyncService {
           },
         });
 
+    let priceDropped = false;
     for (const v of p.variations ?? []) {
+      // So giá cũ ↔ mới để phát hiện GIẢM GIÁ (§6.14.10 Price Drop Alert).
+      const prev = await this.prisma.variation.findUnique({
+        where: { pancakeId: v.id },
+        select: { retailPrice: true, salePrice: true },
+      });
+      const newEff = v.sale_price ?? v.retail_price ?? 0;
+      if (prev) {
+        const oldEff = prev.salePrice ?? prev.retailPrice;
+        if (newEff > 0 && newEff < oldEff) priceDropped = true;
+      }
       await this.prisma.variation.upsert({
         where: { pancakeId: v.id },
         update: {
@@ -107,6 +120,11 @@ export class PancakeSyncService {
           weight: v.weight ?? null,
         },
       });
+    }
+
+    // Giá giảm → báo cho user đã wishlist (không chặn sync nếu notify lỗi).
+    if (priceDropped) {
+      await this.lifecycle.notifyWishlistPriceDrop(product.id, product.name).catch(() => undefined);
     }
   }
 

@@ -68,4 +68,22 @@ export class LifecycleService {
     }
     if (sent) this.logger.log(`Reorder reminders sent: ${sent}`);
   }
+
+  /**
+   * Price Drop Alert (§6.14.10): sản phẩm giảm giá → báo cho user đã ❤️ wishlist.
+   * Gọi từ Pancake sync khi phát hiện giá biến thể giảm. Lỗi gửi từng user không
+   * chặn cả lô (notify đã nuốt lỗi).
+   */
+  async notifyWishlistPriceDrop(productId: string, productName: string): Promise<void> {
+    const items = await this.prisma.wishlist.findMany({
+      where: { productId },
+      select: { userId: true },
+    });
+    for (const w of items) {
+      await this.notifications
+        .notify(w.userId, 'PRICE_DROP_ALERT', { product: productName })
+        .catch(() => undefined);
+    }
+    if (items.length) this.logger.log(`Price-drop alert: ${productName} → ${items.length} user.`);
+  }
 }
