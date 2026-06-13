@@ -78,11 +78,15 @@ export class AuthService {
     if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
     }
-    // Rotation: thu hồi token cũ.
-    await this.prisma.refreshToken.update({
-      where: { id: stored.id },
+    // Rotation ATOMIC: chỉ thu hồi được nếu CHƯA revoke. count=0 nghĩa là token đã
+    // bị dùng (double-submit / reuse) → từ chối, tránh 1 token cũ sinh 2 session.
+    const revoked = await this.prisma.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    if (revoked.count === 0) {
+      throw new UnauthorizedException('Refresh token đã được sử dụng.');
+    }
     return this.issueTokens(stored.user);
   }
 
