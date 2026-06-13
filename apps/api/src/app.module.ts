@@ -20,6 +20,7 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { GameModule } from './modules/game/game.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { WishlistModule } from './modules/wishlist/wishlist.module';
+import { VouchersModule } from './modules/vouchers/vouchers.module';
 import { AffiliateModule } from './modules/affiliate/affiliate.module';
 import { CashbackModule } from './modules/cashback/cashback.module';
 import { WalletModule } from './modules/wallet/wallet.module';
@@ -53,6 +54,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     GameModule,
     ReviewsModule,
     WishlistModule,
+    VouchersModule,
     AffiliateModule,
     CashbackModule,
     WalletModule,

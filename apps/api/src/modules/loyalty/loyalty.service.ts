@@ -182,8 +182,12 @@ export class LoyaltyService {
       if (c.scope === 'TIER') {
         const meta = c.scopeMeta as { tierId?: string } | null;
         if (meta?.tierId && meta.tierId !== user.tierId) continue;
+      } else if (c.scope === 'USER_GROUP') {
+        // Voucher cá nhân (welcome/birthday/winback) — chỉ hiện cho đúng user.
+        const meta = c.scopeMeta as { userId?: string } | null;
+        if (meta?.userId !== userId) continue;
       } else if (c.scope !== 'PUBLIC') {
-        continue; // BIRTHDAY/INVITE/USER_GROUP xử lý riêng
+        continue; // INVITE xử lý riêng
       }
       const used = await this.prisma.couponRedemption.count({ where: { couponId: c.id, userId } });
       if (used >= c.perUserLimit) continue;

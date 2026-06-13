@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsDateString, IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateMeDto {
   @IsOptional()
@@ -9,4 +9,9 @@ export class UpdateMeDto {
   @IsOptional()
   @IsEmail()
   email?: string;
+
+  /** Ngày sinh (ISO) — dùng cho voucher sinh nhật. */
+  @IsOptional()
+  @IsDateString()
+  dob?: string;
 }
