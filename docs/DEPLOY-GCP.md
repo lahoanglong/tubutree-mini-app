@@ -10,7 +10,7 @@ rẻ và tự chủ hơn, lại có **IP/domain ổn định** cho webhook Panca
 
 ## 0. Chuẩn bị
 - Tài khoản GCP + 1 project.
-- Domain đã có (vd `tubutree.vn`) + quyền sửa DNS.
+- Domain đã có (vd `tubutree.com`) + quyền sửa DNS.
 - Các key đã thu thập (xem `.env.production.example`). Tối thiểu để chạy: Postgres password + JWT secrets. Pancake/ZaloPay… thêm sau cũng được.
 
 ## 1. Tạo VM Compute Engine
@@ -31,10 +31,10 @@ gcloud compute instances create tubu-prod \
 ## 2. IP tĩnh + DNS
 1. VPC network → **IP addresses** → reserve static external IP, gán cho VM.
 2. Tại nhà cung cấp domain, tạo **A records** trỏ về IP đó:
-   - `@`        → `<IP>`  (web: `tubutree.vn`)
+   - `@`        → `<IP>`  (web: `tubutree.com`)
    - `www`      → `<IP>`
-   - `api`      → `<IP>`  (API: `api.tubutree.vn`)
-3. Chờ DNS propagate (vài phút–vài giờ). Kiểm tra: `dig +short api.tubutree.vn`.
+   - `api`      → `<IP>`  (API: `api.tubutree.com`)
+3. Chờ DNS propagate (vài phút–vài giờ). Kiểm tra: `dig +short api.tubutree.com`.
 
 ## 3. Cài Docker trên VM
 SSH vào VM (nút SSH trên Console), rồi:
@@ -45,7 +45,7 @@ sudo usermod -aG docker $USER && exit   # thoát ra vào lại để áp group
 
 ## 4. Lấy code + cấu hình env
 ```bash
-git clone <repo-url> tubutree && cd tubutree
+git clone https://github.com/lahoanglong/tubutree-mini-app.git tubutree && cd tubutree
 cp .env.production.example .env
 nano .env        # điền WEB_DOMAIN, POSTGRES_PASSWORD, JWT secrets, các key
 ```
@@ -56,7 +56,7 @@ Sinh secret nhanh: `openssl rand -base64 48` (JWT), `openssl rand -base64 24` (P
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 - API tự chạy `prisma migrate deploy` khi khởi động (tạo bảng).
-- Caddy tự xin cert Let's Encrypt cho `tubutree.vn`, `www`, `api.tubutree.vn`.
+- Caddy tự xin cert Let's Encrypt cho `tubutree.com`, `www`, `api.tubutree.com`.
 
 **Seed dữ liệu nền (chỉ lần đầu)** — config/hạng/bậc:
 ```bash
@@ -65,19 +65,19 @@ docker compose -f docker-compose.prod.yml exec api pnpm prisma:seed
 
 ## 6. Kiểm tra
 ```bash
-curl https://api.tubutree.vn/api/health      # {"status":"ok","db":"up"}
+curl https://api.tubutree.com/api/health      # {"status":"ok","db":"up"}
 ```
-Mở `https://tubutree.vn` (web) và `https://api.tubutree.vn/api/docs` (Swagger).
+Mở `https://tubutree.com` (web) và `https://api.tubutree.com/api/docs` (Swagger).
 
 ## 7. Nối Pancake webhook
 Trong Pancake → Webhook:
-- **Địa chỉ**: `https://api.tubutree.vn/api/webhooks/pancake`
+- **Địa chỉ**: `https://api.tubutree.com/api/webhooks/pancake`
 - **Dữ liệu**: Đơn hàng
 - **Request Headers**: `x-webhook-token` = đúng giá trị `PANCAKE_WEBHOOK_SECRET` trong `.env`
 - Bật toggle ON.
 
-(ZaloPay callback nếu dùng: `https://api.tubutree.vn/api/webhooks/zalopay`;
-Accesstrade: `https://api.tubutree.vn/api/webhooks/accesstrade` + header `x-accesstrade-token`.)
+(ZaloPay callback nếu dùng: `https://api.tubutree.com/api/webhooks/zalopay`;
+Accesstrade: `https://api.tubutree.com/api/webhooks/accesstrade` + header `x-accesstrade-token`.)
 
 ## 8. Cập nhật / redeploy
 ```bash
