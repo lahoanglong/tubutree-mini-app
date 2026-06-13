@@ -7,6 +7,7 @@ import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { formatVnd } from '../utils/format';
 import { STATUS_COLOR, TIMELINE_STEPS, timelineIndex } from '../utils/order-status';
+import { openOAChat, openExternal, hasOA } from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 
@@ -137,6 +138,64 @@ export default function OrderDetailPage() {
         )}
       </Box>
 
+      {/* ── Vận chuyển (mã vận đơn + copy + tracking) §6.4 ── */}
+      {o.shippingCode && (
+        <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+          <Text bold size="small" style={{ marginBottom: 6 }}>
+            Vận chuyển
+          </Text>
+          <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8 }}>
+            <Box>
+              {o.shippingPartner && (
+                <Text size="small">{o.shippingPartner}</Text>
+              )}
+              <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+                Mã vận đơn: <b>{o.shippingCode}</b>
+              </Text>
+              {o.shippingStatus && (
+                <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                  {o.shippingStatus}
+                </Text>
+              )}
+            </Box>
+            <Button
+              size="small"
+              variant="secondary"
+              onClick={() => {
+                haptic('light');
+                if (navigator.clipboard) void navigator.clipboard.writeText(o.shippingCode!);
+                openSnackbar({ text: 'Đã sao chép mã vận đơn', type: 'success' });
+              }}
+            >
+              Sao chép
+            </Button>
+          </Box>
+        </Box>
+      )}
+
+      {/* ── Hoá đơn VAT (nếu có) ── */}
+      {o.invoiceStatus && o.invoiceStatus !== 'NOT_REQUESTED' && (
+        <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+          <Text bold size="small" style={{ marginBottom: 4 }}>
+            Hoá đơn VAT
+          </Text>
+          <Box flex alignItems="center" justifyContent="space-between">
+            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+              {o.invoiceStatus === 'ISSUED'
+                ? 'Đã phát hành'
+                : o.invoiceStatus === 'REQUESTED'
+                  ? 'Đang xử lý'
+                  : 'Phát hành lỗi — vui lòng liên hệ hỗ trợ'}
+            </Text>
+            {o.invoiceUrl && (
+              <Button size="small" variant="secondary" onClick={() => void openExternal(o.invoiceUrl!)}>
+                Tải PDF
+              </Button>
+            )}
+          </Box>
+        </Box>
+      )}
+
       {/* ── Địa chỉ nhận ── */}
       <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
         <Text bold size="small" style={{ marginBottom: 4 }}>
@@ -151,10 +210,20 @@ export default function OrderDetailPage() {
         </Text>
       </Box>
 
-      <Box p={4}>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', textAlign: 'center' }}>
-          {vi.orders.support}
-        </Text>
+      <Box p={4} style={{ textAlign: 'center' }}>
+        {hasOA ? (
+          <Button
+            variant="tertiary"
+            onClick={() => void openOAChat(`Hỗ trợ đơn ${o.code}`)}
+            style={{ color: 'var(--primary-700)' }}
+          >
+            💬 Yêu cầu hỗ trợ qua Zalo OA
+          </Button>
+        ) : (
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+            {vi.orders.support}
+          </Text>
+        )}
       </Box>
 
       {/* ── Action bar ── */}

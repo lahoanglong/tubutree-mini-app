@@ -124,12 +124,19 @@ export const createAddress = (data: Omit<AddressDTO, 'id' | 'isDefault'>) =>
 export const checkoutQuote = (addressId: string, pointsToUse?: number) =>
   api.post<CheckoutQuote>('/checkout/quote', { addressId, pointsToUse }).then((r) => r.data);
 /** Đặt hàng kèm Idempotency-Key (AD-004) — retry sau timeout không tạo đơn đôi. */
+export interface InvoiceRequest {
+  taxCode: string;
+  companyName: string;
+  address: string;
+  email: string;
+}
 export const placeOrder = (
   body: {
     addressId: string;
     paymentMethod: string;
     pointsToUse?: number;
     note?: string;
+    invoiceRequest?: InvoiceRequest;
   },
   idempotencyKey: string,
 ) =>

@@ -1,30 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Box, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProducts, type ProductCard as ProductCardType } from '../services/shop-api';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 
-function msToMidnight(): number {
-  const now = new Date();
-  const mid = new Date(now);
-  mid.setHours(24, 0, 0, 0);
-  return mid.getTime() - now.getTime();
-}
-
-function pad(n: number): string {
-  return String(n).padStart(2, '0');
-}
-
-/** Flash Sale hôm nay — sản phẩm đang giảm giá thật + đếm ngược tới nửa đêm. */
+/**
+ * Ưu đãi hôm nay — sản phẩm đang giảm giá thật.
+ * Theo nguyên tắc brand "tử tế hơn khẩn cấp" (Design Brief §3.2): KHÔNG countdown giây/FOMO,
+ * chỉ nhãn nhẹ "Đến hết hôm nay".
+ */
 export function FlashSale() {
   const navigate = useNavigate();
-  const [remaining, setRemaining] = useState(msToMidnight());
-
-  useEffect(() => {
-    const t = setInterval(() => setRemaining(msToMidnight()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   const q = useQuery({
     queryKey: ['products', 'flash-sale'],
@@ -41,36 +28,18 @@ export function FlashSale() {
 
   if (q.isLoading || onSale.length === 0) return null;
 
-  const h = Math.floor(remaining / 3_600_000);
-  const m = Math.floor((remaining % 3_600_000) / 60_000);
-  const s = Math.floor((remaining % 60_000) / 1000);
-
   return (
     <Box mt={4}>
       <Box px={4} flex alignItems="center" justifyContent="space-between" mb={2}>
-        <Box flex alignItems="center" style={{ gap: 8 }}>
-          <Text.Title size="small" style={{ color: 'var(--clay-700)' }}>
-            ⚡ Flash Sale hôm nay
-          </Text.Title>
-          <Box flex style={{ gap: 3 }}>
-            {[pad(h), pad(m), pad(s)].map((v, i) => (
-              <span
-                key={i}
-                style={{
-                  background: 'var(--clay-700)',
-                  color: '#fff',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  borderRadius: 4,
-                  padding: '2px 5px',
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {v}
-              </span>
-            ))}
-          </Box>
-        </Box>
+        <Text.Title size="small" style={{ color: 'var(--clay-700)' }}>
+          🌿 Ưu đãi hôm nay
+        </Text.Title>
+        <Text
+          size="xSmall"
+          style={{ color: 'var(--clay-700)', background: 'var(--clay-50)', padding: '2px 10px', borderRadius: 'var(--radius-full)' }}
+        >
+          Đến hết hôm nay
+        </Text>
       </Box>
 
       <Box

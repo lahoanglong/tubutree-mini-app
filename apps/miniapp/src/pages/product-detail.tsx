@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Page, Text, Button, Header, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -63,12 +63,16 @@ export default function ProductDetailPage() {
 
   // Mặc định chọn phân loại đầu tiên CÒN HÀNG (không phải đầu danh sách).
   const variations = product.data?.variations ?? [];
-  const selected =
-    variations.find((v) => v.id === selectedId) ??
-    variations.find((v) => v.stock > 0) ??
-    variations[0];
+  // Memo theo (selectedId + danh sách variation) — tránh tạo ref mới mỗi render gây effect chạy dư.
+  const selected = useMemo(
+    () =>
+      variations.find((v) => v.id === selectedId) ??
+      variations.find((v) => v.stock > 0) ??
+      variations[0],
+    [selectedId, variations],
+  );
 
-  // Đổi phân loại → kẹp lại số lượng theo tồn kho mới.
+  // Đổi phân loại → kẹp lại số lượng theo tồn kho mới (chỉ phụ thuộc id/stock, không phải ref).
   useEffect(() => {
     if (selected && quantity > Math.max(1, selected.stock)) {
       setQuantity(Math.max(1, selected.stock));
@@ -128,7 +132,7 @@ export default function ProductDetailPage() {
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
       <Header title={p.brand} />
 
-      <Gallery images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} alt={p.name} />
+      <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} alt={p.name} />
 
       {/* ── Info chính ── */}
       <Box p={4} style={{ background: 'var(--neutral-0)' }}>

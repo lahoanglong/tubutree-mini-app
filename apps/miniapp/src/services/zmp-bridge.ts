@@ -4,6 +4,7 @@ import {
   login as zmpLogin,
   openShareSheet,
   openWebview,
+  openChat,
 } from 'zmp-sdk/apis';
 
 /**
@@ -35,6 +36,16 @@ export async function getZaloUserInfo() {
 /** Mở URL ngoài (deeplink sàn cashback) trong webview Zalo. */
 export async function openExternal(url: string) {
   await openWebview({ url });
+}
+
+/** OA Tubu đã cấu hình chưa (để hiện nút "Nhắn hỗ trợ"). */
+export const OA_ID = (import.meta.env.VITE_ZALO_OA_ID as string | undefined) ?? '';
+export const hasOA = Boolean(OA_ID);
+
+/** Mở chat Zalo OA hỗ trợ (spec §6.4). Gate theo VITE_ZALO_OA_ID. */
+export async function openOAChat(message?: string) {
+  if (!OA_ID) return;
+  await openChat({ type: 'oa', id: OA_ID, message });
 }
 
 /** Mở share sheet chia sẻ link sản phẩm (dùng cho Affiliate Phase 3). */

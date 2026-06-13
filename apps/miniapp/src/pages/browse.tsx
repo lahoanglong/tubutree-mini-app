@@ -23,18 +23,27 @@ export default function BrowsePage() {
 
   const [q, setQ] = useState('');
   const [brand, setBrand] = useState<string | undefined>(initialBrand);
+  const [sort, setSort] = useState<string | undefined>(undefined);
   const debouncedQ = useDebounced(q, 300);
 
   const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands });
   const products = useQuery({
-    queryKey: ['products', 'browse', debouncedQ, brand],
+    queryKey: ['products', 'browse', debouncedQ, brand, sort],
     queryFn: () =>
       fetchProducts({
         limit: PAGE_LIMIT,
         ...(debouncedQ ? { q: debouncedQ } : {}),
         ...(brand ? { brand } : {}),
+        ...(sort ? { sort } : {}),
       }),
   });
+
+  const SORTS = [
+    { key: undefined, label: 'Gợi ý' },
+    { key: 'newest', label: 'Mới nhất' },
+    { key: 'price_asc', label: 'Giá thấp → cao' },
+    { key: 'price_desc', label: 'Giá cao → thấp' },
+  ] as const;
 
   // Deeplink từ Home (?brand=) thay đổi khi trang còn mounted → sync vào state.
   useEffect(() => {
@@ -71,6 +80,21 @@ export default function BrowsePage() {
             dotColor={brandAccent(b.brand)}
             active={brand === b.brand}
             onClick={() => pick(b.brand)}
+          />
+        ))}
+      </Box>
+
+      {/* Sắp xếp (backend orderBy: newest/price_asc/price_desc/featured) */}
+      <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10 }}>
+        {SORTS.map((s) => (
+          <Chip
+            key={s.label}
+            label={s.label}
+            active={sort === s.key}
+            onClick={() => {
+              haptic('light');
+              setSort(s.key);
+            }}
           />
         ))}
       </Box>

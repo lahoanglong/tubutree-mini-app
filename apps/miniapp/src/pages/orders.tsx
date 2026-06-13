@@ -11,9 +11,11 @@ import { STATUS_COLOR } from '../utils/order-status';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 
+// Tab theo nhóm trạng thái spec §6.4. CONFIRMED ("Chờ xác nhận") quan trọng nhất với đơn COD —
+// trước đây bị thiếu khiến đơn COD chỉ hiện ở "Tất cả".
 const TABS = [
   { key: undefined, label: vi.orders.tabAll },
-  { key: 'PENDING_PAYMENT', label: vi.orderStatus.PENDING_PAYMENT! },
+  { key: 'CONFIRMED', label: vi.orderStatus.CONFIRMED! },
   { key: 'SHIPPING', label: vi.orderStatus.SHIPPING! },
   { key: 'DELIVERED', label: vi.orderStatus.DELIVERED! },
   { key: 'CANCELLED', label: vi.orderStatus.CANCELLED! },

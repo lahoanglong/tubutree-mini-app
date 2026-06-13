@@ -18,18 +18,23 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const { user, status } = useAuthStore();
+  const authed = status === 'authenticated';
 
   const [addressId, setAddressId] = useState<string | null>(null);
   const [payment, setPayment] = useState('COD');
   const [usePoints, setUsePoints] = useState(false);
   const [note, setNote] = useState('');
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
+  // Hoá đơn VAT (spec §6.3)
+  const [wantInvoice, setWantInvoice] = useState(false);
+  const [invoice, setInvoice] = useState({ taxCode: '', companyName: '', address: '', email: '' });
   // Key giữ nguyên suốt phiên checkout — retry sau timeout không tạo đơn đôi (AD-004).
   const idempotencyKey = useRef(newIdempotencyKey());
 
-  const cart = useQuery({ queryKey: ['cart'], queryFn: getCart });
-  const addresses = useQuery({ queryKey: ['addresses'], queryFn: getAddresses });
+  // Guard auth: tránh gọi /cart, /me/addresses khi chưa silent-login xong (deeplink → 401).
+  const cart = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: authed });
+  const addresses = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: authed });
 
   useEffect(() => {
     if (addresses.data && addresses.data.length > 0 && !addressId) {
@@ -42,8 +47,13 @@ export default function CheckoutPage() {
   const quote = useQuery({
     queryKey: ['quote', addressId, pointsToUse],
     queryFn: () => checkoutQuote(addressId!, pointsToUse),
-    enabled: !!addressId,
+    enabled: !!addressId && authed,
   });
+
+  const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const invoiceValid =
+    !wantInvoice ||
+    (invoice.taxCode.trim() && invoice.companyName.trim() && invoice.address.trim() && EMAIL.test(invoice.email.trim()));
 
   // Đang chọn Ví Tubu mà tổng đơn vượt số dư → tự trả về COD, tránh đặt fail.
   useEffect(() => {
@@ -55,7 +65,20 @@ export default function CheckoutPage() {
   const order = useMutation({
     mutationFn: () =>
       placeOrder(
-        { addressId: addressId!, paymentMethod: payment, pointsToUse, note: note.trim() || undefined },
+        {
+          addressId: addressId!,
+          paymentMethod: payment,
+          pointsToUse,
+          note: note.trim() || undefined,
+          invoiceRequest: wantInvoice
+            ? {
+                taxCode: invoice.taxCode.trim(),
+                companyName: invoice.companyName.trim(),
+                address: invoice.address.trim(),
+                email: invoice.email.trim(),
+              }
+            : undefined,
+        },
         idempotencyKey.current,
       ),
     onSuccess: (o) => {
@@ -78,6 +101,20 @@ export default function CheckoutPage() {
           onContinue={() => navigate('/', { replace: true })}
         />
       </Page>
+    );
+  }
+
+  if (!authed) {
+    return (
+      <Shell>
+        <Box flex flexDirection="column" alignItems="center" p={8} style={{ gap: 12 }}>
+          <Text style={{ fontSize: 44 }}>🌿</Text>
+          <Text style={{ color: 'var(--neutral-600)' }}>Đăng nhập để tiếp tục thanh toán</Text>
+          <Button onClick={() => void useAuthStore.getState().login()} style={{ background: 'var(--leaf-600)' }}>
+            Đăng nhập với Zalo
+          </Button>
+        </Box>
+      </Shell>
     );
   }
 
@@ -113,7 +150,7 @@ export default function CheckoutPage() {
 
   const walletBalance = user?.walletBalance ?? 0;
   const total = quote.data?.total ?? 0;
-  const canPlace = !!addressId && quote.isSuccess && !order.isPending;
+  const canPlace = !!addressId && quote.isSuccess && !order.isPending && !!invoiceValid;
 
   const paymentMethods = [
     { value: 'COD', label: vi.checkout.paymentCod, disabled: false },
@@ -204,6 +241,57 @@ export default function CheckoutPage() {
           {vi.checkout.note}
         </Text>
         <Input placeholder={vi.checkout.notePlaceholder} value={note} onChange={(e) => setNote(e.target.value)} />
+      </Box>
+
+      {/* ── Hoá đơn VAT (spec §6.3) ── */}
+      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Box
+          role="checkbox"
+          aria-checked={wantInvoice}
+          className="tubu-press"
+          onClick={() => {
+            haptic('light');
+            setWantInvoice((v) => !v);
+          }}
+          flex
+          alignItems="center"
+          justifyContent="space-between"
+          style={{ minHeight: 44 }}
+        >
+          <Text bold size="small">
+            Yêu cầu xuất hoá đơn VAT
+          </Text>
+          <ToggleVisual on={wantInvoice} />
+        </Box>
+        {wantInvoice && (
+          <Box flex flexDirection="column" style={{ gap: 10, marginTop: 10 }}>
+            <Input
+              label="Mã số thuế"
+              value={invoice.taxCode}
+              onChange={(e) => setInvoice((f) => ({ ...f, taxCode: e.target.value }))}
+            />
+            <Input
+              label="Tên công ty"
+              value={invoice.companyName}
+              onChange={(e) => setInvoice((f) => ({ ...f, companyName: e.target.value }))}
+            />
+            <Input
+              label="Địa chỉ xuất hoá đơn"
+              value={invoice.address}
+              onChange={(e) => setInvoice((f) => ({ ...f, address: e.target.value }))}
+            />
+            <Input
+              label="Email nhận hoá đơn"
+              value={invoice.email}
+              onChange={(e) => setInvoice((f) => ({ ...f, email: e.target.value }))}
+            />
+            {!invoiceValid && (
+              <Text size="xSmall" style={{ color: 'var(--danger)' }}>
+                ⚠ Vui lòng điền đủ MST, tên công ty, địa chỉ và email hợp lệ.
+              </Text>
+            )}
+          </Box>
+        )}
       </Box>
 
       {/* ── Tóm tắt ── */}
