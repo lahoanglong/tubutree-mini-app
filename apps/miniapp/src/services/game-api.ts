@@ -28,6 +28,15 @@ export interface LeaderRow {
   streak: number;
   treesPlanted: number;
 }
+export interface MissionItem {
+  code: string;
+  title: string;
+  description?: string;
+  rewardPoints: number;
+  progress: number;
+  goal: number;
+  completed: boolean;
+}
 
 export const getGameProfile = () => api.get<GameProfile>('/game/profile').then((r) => r.data);
 export const checkIn = () => api.post<CheckInResult>('/game/check-in').then((r) => r.data);
@@ -44,3 +53,4 @@ export const waterTree = (drops: number) =>
     { drops },
   ).then((r) => r.data);
 export const getLeaderboard = () => api.get<LeaderRow[]>('/game/leaderboard').then((r) => r.data);
+export const getMissions = () => api.get<MissionItem[]>('/game/missions').then((r) => r.data);

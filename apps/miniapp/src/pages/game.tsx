@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Box, Page, Text, Button, Header, Spinner, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -8,6 +9,8 @@ import {
   answerQuiz,
   waterTree,
   getLeaderboard,
+  getMissions,
+  type MissionItem,
 } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
 import { WheelOfFortune } from '../components/wheel';
@@ -25,6 +28,11 @@ export default function GamePage() {
   });
   const { data: quiz } = useQuery({ queryKey: ['game', 'quiz'], queryFn: getTodayQuiz, enabled: authed });
   const { data: board } = useQuery({ queryKey: ['game', 'board'], queryFn: getLeaderboard });
+  const { data: missions } = useQuery({ queryKey: ['game', 'missions'], queryFn: getMissions, enabled: authed });
+
+  // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
+  const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
+  const currentQuiz = quiz?.find((q) => !answeredIds.has(q.id));
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['game'] });
@@ -62,9 +70,11 @@ export default function GamePage() {
   });
   const answerM = useMutation({
     mutationFn: ({ id, choice }: { id: string; choice: number }) => answerQuiz(id, choice),
-    onSuccess: (r) => {
+    onSuccess: (r, vars) => {
+      setAnsweredIds((prev) => new Set(prev).add(vars.id)); // sang câu kế tiếp
       openSnackbar({ text: r.isCorrect ? `Đúng! +${r.pointsEarned}đ` : 'Chưa đúng 😅', type: r.isCorrect ? 'success' : 'warning' });
-      refresh();
+      void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
     },
     onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
   });
@@ -137,15 +147,60 @@ export default function GamePage() {
       </Card>
 
       <Card title="🧠 Quiz Sống Xanh hôm nay">
-        {quiz && quiz.length > 0 ? (
-          <QuizBlock
-            q={quiz[0]!}
-            onAnswer={(choice) => answerM.mutate({ id: quiz[0]!.id, choice })}
-            pending={answerM.isPending}
-          />
+        {currentQuiz ? (
+          <>
+            {quiz && quiz.length > 1 && (
+              <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginBottom: 6 }}>
+                Câu {answeredIds.size + 1}/{quiz.length}
+              </Text>
+            )}
+            <QuizBlock
+              q={currentQuiz}
+              onAnswer={(choice) => answerM.mutate({ id: currentQuiz.id, choice })}
+              pending={answerM.isPending}
+            />
+          </>
         ) : (
           <Text size="small" style={{ color: 'var(--neutral-400)' }}>
             Bạn đã hoàn thành quiz hôm nay 🎉
+          </Text>
+        )}
+      </Card>
+
+      <Card title="🎯 Nhiệm vụ">
+        {missions && missions.length > 0 ? (
+          missions.map((m: MissionItem) => (
+            <Box key={m.code} style={{ padding: '8px 0', borderBottom: '1px solid var(--neutral-100)' }}>
+              <Box flex alignItems="center" justifyContent="space-between">
+                <Text size="small" bold={!m.completed} style={{ color: m.completed ? 'var(--neutral-400)' : 'var(--neutral-900)' }}>
+                  {m.completed ? '✓ ' : ''}{m.title}
+                </Text>
+                <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                  +{m.rewardPoints}đ
+                </Text>
+              </Box>
+              {m.description && (
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                  {m.description}
+                </Text>
+              )}
+              <Box style={{ height: 6, background: 'var(--neutral-100)', borderRadius: 99, marginTop: 4, overflow: 'hidden' }}>
+                <Box
+                  style={{
+                    width: `${Math.min(100, Math.round((m.progress / Math.max(1, m.goal)) * 100))}%`,
+                    height: '100%',
+                    background: m.completed ? 'var(--leaf-600)' : 'var(--primary-600)',
+                  }}
+                />
+              </Box>
+              <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+                {m.progress}/{m.goal}
+              </Text>
+            </Box>
+          ))
+        ) : (
+          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+            Chưa có nhiệm vụ.
           </Text>
         )}
       </Card>
