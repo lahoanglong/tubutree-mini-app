@@ -22,6 +22,7 @@ const NotificationsPage = lazy(() => import('../pages/notifications'));
 const AffiliatePage = lazy(() => import('../pages/affiliate'));
 const CashbackPage = lazy(() => import('../pages/cashback'));
 const DealerPage = lazy(() => import('../pages/dealer'));
+const AboutPage = lazy(() => import('../pages/about'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -65,6 +66,7 @@ export default function MyApp() {
                 <Route path="/affiliate" element={<AffiliatePage />} />
                 <Route path="/cashback" element={<CashbackPage />} />
                 <Route path="/dealer" element={<DealerPage />} />
+                <Route path="/about" element={<AboutPage />} />
               </AnimationRoutes>
             </Suspense>
             <BottomNav />
