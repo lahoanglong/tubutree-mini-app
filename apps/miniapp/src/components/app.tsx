@@ -19,6 +19,7 @@ const LoyaltyPage = lazy(() => import('../pages/loyalty'));
 const WalletPage = lazy(() => import('../pages/wallet'));
 const AddressesPage = lazy(() => import('../pages/addresses'));
 const NotificationsPage = lazy(() => import('../pages/notifications'));
+const AffiliatePage = lazy(() => import('../pages/affiliate'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -59,6 +60,7 @@ export default function MyApp() {
                 <Route path="/wallet" element={<WalletPage />} />
                 <Route path="/addresses" element={<AddressesPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/affiliate" element={<AffiliatePage />} />
               </AnimationRoutes>
             </Suspense>
             <BottomNav />

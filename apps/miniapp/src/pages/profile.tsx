@@ -16,7 +16,14 @@ interface MenuItem {
  * Route đã build xong (điều hướng thật). Mục chưa có trong set → báo "đang hoàn thiện"
  * thay vì điều hướng tới trang trắng. Mở khóa dần theo từng vòng phát triển.
  */
-const READY = new Set(['/orders', '/loyalty', '/wallet', '/addresses', '/notifications']);
+const READY = new Set([
+  '/orders',
+  '/loyalty',
+  '/wallet',
+  '/addresses',
+  '/notifications',
+  '/affiliate',
+]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [
   {
