@@ -181,6 +181,24 @@ export default function GamePage() {
         </Button>
       </Box>
 
+      {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
+      <Card title="🌍 Tác động xanh của bạn">
+        <Box flex style={{ gap: 10 }}>
+          <EcoStat icon="🌳" value={String(eco?.treesPlanted ?? 0)} label="Cây thật đã trồng" />
+          <EcoStat icon="💨" value={`~${(eco?.treesPlanted ?? 0) * 21}kg`} label="CO₂ hấp thụ/năm (ước tính)" />
+          <EcoStat icon="💧" value={String(profile?.totalSeeds ?? 0)} label="Giọt nước đã góp" />
+        </Box>
+        {(eco?.treesPlanted ?? 0) > 0 ? (
+          <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 8 }}>
+            Cảm ơn bạn! Tubu đã góp {eco?.treesPlanted} cây thật vào "Rừng Xanh Lên" cùng PanNature 🌿
+          </Text>
+        ) : (
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
+            Chăm cây ảo đến khi thu hoạch để Tubu góp 1 cây thật cho rừng Việt Nam.
+          </Text>
+        )}
+      </Card>
+
       <Card title="🎡 Vòng quay may mắn">
         <WheelOfFortune cost={10} onSpin={handleSpin} />
       </Card>
@@ -334,6 +352,23 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
         {title}
       </Text>
       {children}
+    </Box>
+  );
+}
+
+function EcoStat({ icon, value, label }: { icon: string; value: string; label: string }) {
+  return (
+    <Box
+      p={2}
+      style={{ flex: 1, background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', textAlign: 'center' }}
+    >
+      <Text style={{ fontSize: 20 }}>{icon}</Text>
+      <Text bold size="small" style={{ color: 'var(--leaf-700)' }}>
+        {value}
+      </Text>
+      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+        {label}
+      </Text>
     </Box>
   );
 }
