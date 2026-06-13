@@ -32,21 +32,33 @@ export class PancakeSyncService {
       this.logger.warn('Pancake chưa cấu hình — skip sync.');
       return 0;
     }
+    // Mốc cursor lấy ở ĐẦU sync: sản phẩm đổi trong lúc sync sẽ được bắt ở lần kế
+    // (upsert idempotent nên overlap nhẹ là an toàn — thà trùng còn hơn bỏ sót).
+    const startedAt = new Date().toISOString();
     let page = 1;
     let count = 0;
+    let failed = 0;
     for (;;) {
       const res = await this.client.fetchProducts(page, updatedSince);
       const products = res.data ?? res.products ?? [];
       if (products.length === 0) break;
       for (const p of products) {
-        await this.upsertProduct(p);
-        count++;
+        // Cô lập lỗi từng sản phẩm — 1 SP hỏng (vd slug trùng) không làm hỏng cả batch.
+        try {
+          await this.upsertProduct(p);
+          count++;
+        } catch (err) {
+          failed++;
+          this.logger.error(
+            `Upsert sản phẩm Pancake ${p.product_id} lỗi: ${err instanceof Error ? err.message : err}`,
+          );
+        }
       }
       page++;
       if (products.length < 20) break; // hết trang (giả định page size ~20)
     }
-    this.lastRunAt = new Date().toISOString();
-    this.logger.log(`Đã đồng bộ ${count} sản phẩm từ Pancake.`);
+    this.lastRunAt = startedAt;
+    this.logger.log(`Đã đồng bộ ${count} sản phẩm từ Pancake${failed ? ` (${failed} lỗi, bỏ qua)` : ''}.`);
     return count;
   }
 
@@ -106,6 +118,6 @@ export class PancakeSyncService {
       .replace(/[đ]/g, 'd') // đ → d
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
-    return `${base}-${suffix.slice(-6)}`;
+    return `${base}-${suffix.slice(-6).toLowerCase()}`;
   }
 }
