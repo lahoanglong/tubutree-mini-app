@@ -22,6 +22,7 @@ ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_ZALO_APP_ID
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_ZALO_APP_ID=$NEXT_PUBLIC_ZALO_APP_ID
+ENV NEXT_STANDALONE=1
 RUN pnpm --filter @tubutree/web build
 
 # ──────────────────────────────────────────────────────────────
