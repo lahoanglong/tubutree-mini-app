@@ -6,6 +6,14 @@ export interface AffiliateMe {
   walletBalance: number;
 }
 
+export interface AffiliateTier {
+  name: string;
+  emoji: string;
+  bonusPct: number;
+  nextName: string | null;
+  nextThreshold: number | null;
+  toNext: number;
+}
 export interface AffiliateDashboard {
   todayCommission: number;
   monthCommission: number;
@@ -13,6 +21,8 @@ export interface AffiliateDashboard {
   withdrawableCommission: number;
   totalClicks: number;
   totalConversions: number;
+  monthRevenue: number;
+  tier: AffiliateTier;
 }
 
 export interface AffiliateLink {

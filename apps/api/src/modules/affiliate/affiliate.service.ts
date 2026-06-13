@@ -65,7 +65,7 @@ export class AffiliateService {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const [today, month, pending, approved, links] = await Promise.all([
+    const [today, month, pending, approved, links, monthRevenueAgg] = await Promise.all([
       this.sumCommission(userId, startOfDay),
       this.sumCommission(userId, startOfMonth),
       this.prisma.commission.aggregate({
@@ -80,8 +80,14 @@ export class AffiliateService {
         where: { userId },
         _sum: { clicks: true, conversions: true },
       }),
+      // Doanh số tháng = tổng giá trị đơn giới thiệu (để tính bậc bonus §6.8.2).
+      this.prisma.commission.aggregate({
+        where: { affiliateUserId: userId, createdAt: { gte: startOfMonth } },
+        _sum: { orderTotal: true },
+      }),
     ]);
 
+    const monthRevenue = monthRevenueAgg._sum.orderTotal ?? 0;
     return {
       todayCommission: today,
       monthCommission: month,
@@ -89,6 +95,31 @@ export class AffiliateService {
       withdrawableCommission: approved._sum.amount ?? 0,
       totalClicks: links._sum.clicks ?? 0,
       totalConversions: links._sum.conversions ?? 0,
+      monthRevenue,
+      tier: this.monthlyTier(monthRevenue),
+    };
+  }
+
+  /** Bậc bonus doanh số tháng (Build Spec §6.8.2). */
+  private monthlyTier(revenue: number) {
+    const TIERS = [
+      { name: 'Tân binh', emoji: '🌱', bonusPct: 0, min: 0 },
+      { name: 'Đồng', emoji: '🌿', bonusPct: 1, min: 3_000_000 },
+      { name: 'Bạc', emoji: '🌳', bonusPct: 2.5, min: 10_000_000 },
+      { name: 'Vàng', emoji: '🌲', bonusPct: 4, min: 30_000_000 },
+      { name: 'Kim Cương', emoji: '💎', bonusPct: 6, min: 80_000_000 },
+    ];
+    let idx = 0;
+    for (let i = 0; i < TIERS.length; i++) if (revenue >= TIERS[i]!.min) idx = i;
+    const cur = TIERS[idx]!;
+    const next = TIERS[idx + 1];
+    return {
+      name: cur.name,
+      emoji: cur.emoji,
+      bonusPct: cur.bonusPct,
+      nextName: next?.name ?? null,
+      nextThreshold: next?.min ?? null,
+      toNext: next ? Math.max(0, next.min - revenue) : 0,
     };
   }
 

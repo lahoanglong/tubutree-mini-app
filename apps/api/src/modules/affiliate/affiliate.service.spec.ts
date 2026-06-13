@@ -52,3 +52,54 @@ describe('AffiliateService.createCommissionForOrder', () => {
     expect(create).not.toHaveBeenCalled();
   });
 });
+
+describe('AffiliateService.monthlyTier (Build Spec §6.8.2)', () => {
+  // monthlyTier là private + thuần — gọi qua cast để kiểm tra ranh giới bậc.
+  const tier = (revenue: number) =>
+    (new AffiliateService({} as unknown as PrismaService, config) as unknown as {
+      monthlyTier(r: number): {
+        name: string;
+        bonusPct: number;
+        nextName: string | null;
+        nextThreshold: number | null;
+        toNext: number;
+      };
+    }).monthlyTier(revenue);
+
+  it('doanh số 0 → Tân binh, bonus 0%, next là Đồng tại 3tr', () => {
+    const t = tier(0);
+    expect(t.name).toBe('Tân binh');
+    expect(t.bonusPct).toBe(0);
+    expect(t.nextName).toBe('Đồng');
+    expect(t.nextThreshold).toBe(3_000_000);
+    expect(t.toNext).toBe(3_000_000);
+  });
+
+  it('đúng tại ngưỡng (inclusive): 3tr → Đồng, 10tr → Bạc, 80tr → Kim Cương', () => {
+    expect(tier(3_000_000).name).toBe('Đồng');
+    expect(tier(10_000_000).name).toBe('Bạc');
+    expect(tier(30_000_000).name).toBe('Vàng');
+    expect(tier(80_000_000).name).toBe('Kim Cương');
+  });
+
+  it('ngay dưới ngưỡng vẫn ở bậc thấp hơn', () => {
+    expect(tier(2_999_999).name).toBe('Tân binh');
+    expect(tier(9_999_999).name).toBe('Đồng');
+  });
+
+  it('toNext = phần còn thiếu để lên bậc kế', () => {
+    const t = tier(5_000_000); // Đồng, cần lên Bạc (10tr)
+    expect(t.name).toBe('Đồng');
+    expect(t.bonusPct).toBe(1);
+    expect(t.toNext).toBe(5_000_000);
+  });
+
+  it('bậc cao nhất (Kim Cương) không còn next', () => {
+    const t = tier(120_000_000);
+    expect(t.name).toBe('Kim Cương');
+    expect(t.bonusPct).toBe(6);
+    expect(t.nextName).toBeNull();
+    expect(t.nextThreshold).toBeNull();
+    expect(t.toNext).toBe(0);
+  });
+});

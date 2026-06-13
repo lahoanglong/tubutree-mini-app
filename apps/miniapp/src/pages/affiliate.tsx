@@ -181,6 +181,42 @@ function Dashboard() {
         </Box>
       </Box>
 
+      {/* Bậc doanh số tháng (§6.8.2) */}
+      {d?.tier && (
+        <Box mx={4} mb={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xs)' }}>
+          <Box flex alignItems="center" justifyContent="space-between">
+            <Box flex alignItems="center" style={{ gap: 8 }}>
+              <Text style={{ fontSize: 28 }}>{d.tier.emoji}</Text>
+              <Box>
+                <Text bold>CTV {d.tier.name}</Text>
+                <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                  Bonus +{d.tier.bonusPct}% hoa hồng tháng này
+                </Text>
+              </Box>
+            </Box>
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+              DS: {formatVnd(d.monthRevenue)}
+            </Text>
+          </Box>
+          {d.tier.nextName && d.tier.nextThreshold && (
+            <Box mt={3}>
+              <Box style={{ height: 8, background: 'var(--neutral-100)', borderRadius: 99, overflow: 'hidden' }}>
+                <Box
+                  style={{
+                    width: `${Math.min(100, Math.round((d.monthRevenue / d.tier.nextThreshold) * 100))}%`,
+                    height: '100%',
+                    background: 'var(--primary-600)',
+                  }}
+                />
+              </Box>
+              <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
+                Còn <b>{formatVnd(d.tier.toNext)}</b> doanh số để lên bậc {d.tier.nextName}
+              </Text>
+            </Box>
+          )}
+        </Box>
+      )}
+
       {/* Rút tiền */}
       <Box mx={4} mb={3} flex style={{ gap: 10 }}>
         <KpiCard label="Chờ duyệt" value={formatVnd(d?.pendingCommission ?? 0)} />
@@ -213,6 +249,33 @@ function Dashboard() {
             Chia sẻ
           </Button>
         </Box>
+
+        {/* Caption gợi ý (§6.8.4) — chạm để copy */}
+        <Text size="xSmall" bold style={{ marginTop: 12, marginBottom: 6 }}>
+          Caption gợi ý (chạm để sao chép)
+        </Text>
+        {[
+          `Mình đang dùng sản phẩm sống xanh của Tubu Tree, ưng lắm! Mua qua mã ${referral} nhé 🌿`,
+          `Sống xanh an lành cùng Tubu Tree 🌱 Nhập mã ${referral} khi mua để ủng hộ mình nha!`,
+          `Đồ thiên nhiên, lành cho da & nhẹ với đất. Săn deal Tubu Tree với mã ${referral} 💚`,
+        ].map((cap, i) => (
+          <Box
+            key={i}
+            className="tubu-press"
+            onClick={() => {
+              if (navigator.clipboard) {
+                void navigator.clipboard.writeText(cap);
+                openSnackbar({ text: 'Đã sao chép caption', type: 'success' });
+              }
+            }}
+            p={2}
+            style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-sm)', marginBottom: 6 }}
+          >
+            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+              {cap}
+            </Text>
+          </Box>
+        ))}
       </Section>
 
       {/* Link chia sẻ */}
