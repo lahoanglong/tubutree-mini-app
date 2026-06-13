@@ -184,15 +184,26 @@ export class AffiliateService {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     const referrerId = order.referrerUserId;
     if (!referrerId || referrerId === order.userId) return;
+
+    // §6.14.5: chỉ kích hoạt khi đơn (đầu) của người được mời ≥ ngưỡng (mặc định 200k).
+    const minOrder = await this.config.get<number>('referral.min_order_amount', 200000);
+    if (order.total < minOrder) return;
+
     const refereeId = order.userId;
+    // §6.14.5: CẢ hai nhận voucher 50k. Voucher áp cho đơn ≥ minOrder.
     const referrerAmount = await this.config.get<number>('referral.referrer_reward_amount', 50000);
-    const refereeAmount = await this.config.get<number>('referral.referee_reward_amount', 30000);
-    await this.grantReferralVoucher(referrerId, `REFER-${referrerId}-${refereeId}`, referrerAmount);
-    await this.grantReferralVoucher(refereeId, `REFERRED-${refereeId}`, refereeAmount);
+    const refereeAmount = await this.config.get<number>('referral.referee_reward_amount', 50000);
+    await this.grantReferralVoucher(referrerId, `REFER-${referrerId}-${refereeId}`, referrerAmount, minOrder);
+    await this.grantReferralVoucher(refereeId, `REFERRED-${refereeId}`, refereeAmount, minOrder);
   }
 
   /** Cấp voucher cá nhân AMOUNT (USER_GROUP). Idempotent: code deterministic + catch P2002. */
-  private async grantReferralVoucher(userId: string, rawCode: string, amount: number): Promise<void> {
+  private async grantReferralVoucher(
+    userId: string,
+    rawCode: string,
+    amount: number,
+    minOrder: number,
+  ): Promise<void> {
     if (amount <= 0) return;
     const code = rawCode.toUpperCase();
     const existing = await this.prisma.coupon.findUnique({ where: { code } });
@@ -205,6 +216,7 @@ export class AffiliateService {
           code,
           type: 'AMOUNT',
           value: amount,
+          minOrder,
           startAt: now,
           endAt,
           usageLimit: 1,
