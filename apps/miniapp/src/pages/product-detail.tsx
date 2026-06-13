@@ -12,6 +12,8 @@ import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { shareLink } from '../services/zmp-bridge';
 import ProductCard from '../components/product-card';
+import { ReviewsSection, Stars } from '../components/reviews-section';
+import { fetchReviews } from '../services/shop-api';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { QuantitySelector } from '../components/ui/quantity-selector';
@@ -48,6 +50,12 @@ export default function ProductDetailPage() {
     queryKey: ['cart'],
     queryFn: getCart,
     enabled: status === 'authenticated',
+  });
+  // Cùng queryKey với ReviewsSection → React Query dedupe, chỉ 1 request.
+  const reviews = useQuery({
+    queryKey: ['reviews', slug],
+    queryFn: () => fetchReviews(slug!),
+    enabled: !!slug,
   });
 
   // Mặc định chọn phân loại đầu tiên CÒN HÀNG (không phải đầu danh sách).
@@ -159,6 +167,15 @@ export default function ProductDetailPage() {
           {p.name}
         </Text.Title>
 
+        {reviews.data && reviews.data.count > 0 && (
+          <Box flex alignItems="center" style={{ gap: 6, marginTop: 6 }}>
+            <Stars value={reviews.data.average} size={14} />
+            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+              {reviews.data.average.toFixed(1)} · {reviews.data.count} đánh giá
+            </Text>
+          </Box>
+        )}
+
         <Box flex alignItems="baseline" style={{ gap: 8, marginTop: 8 }}>
           <Text bold style={{ color: 'var(--primary-700)', fontSize: 24 }}>
             {formatVnd(price)}
@@ -242,6 +259,9 @@ export default function ProductDetailPage() {
 
       {/* ── Mô tả ── */}
       {p.description && <CollapsibleDescription text={p.description} />}
+
+      {/* ── Đánh giá ── */}
+      {slug && <ReviewsSection slug={slug} />}
 
       {/* ── Cùng thương hiệu ── */}
       {(related.data?.length ?? 0) > 0 && (

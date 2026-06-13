@@ -139,6 +139,28 @@ export const placeOrder = (
     })
     .then((r) => r.data);
 
+// Reviews
+export interface ReviewItem {
+  id: string;
+  rating: number;
+  comment: string | null;
+  images: string[];
+  createdAt: string;
+  author: string;
+  avatar: string | null;
+}
+export interface ReviewSummary {
+  average: number;
+  count: number;
+  items: ReviewItem[];
+}
+export const fetchReviews = (slug: string) =>
+  api.get<ReviewSummary>(`/products/${slug}/reviews`).then((r) => r.data);
+export const createReview = (
+  slug: string,
+  data: { rating: number; comment?: string; images?: string[] },
+) => api.post<ReviewItem>(`/products/${slug}/reviews`, data).then((r) => r.data);
+
 // Orders
 export const fetchOrders = (status?: string) =>
   api.get<PageResponse<OrderDTO>>('/orders', { params: status ? { status } : {} }).then((r) => r.data);
