@@ -186,3 +186,13 @@ export const repurchaseOrder = (code: string) =>
   api.post<CartSummary>(`/orders/${code}/repurchase`).then((r) => r.data);
 export const requestReturn = (code: string, reason: string, images?: string[]) =>
   api.post(`/orders/${code}/return-request`, { reason, images }).then((r) => r.data);
+export interface ReturnRequestDTO {
+  id: string;
+  orderId: string;
+  reason: string;
+  status: 'REQUESTED' | 'APPROVED' | 'REJECTED';
+  adminNote: string | null;
+  createdAt: string;
+}
+export const fetchMyReturns = () =>
+  api.get<ReturnRequestDTO[]>('/orders/me/returns').then((r) => r.data);

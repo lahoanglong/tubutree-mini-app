@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Header, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchOrder, cancelOrder, repurchaseOrder, requestReturn } from '../services/shop-api';
+import { fetchOrder, cancelOrder, repurchaseOrder, requestReturn, fetchMyReturns } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -24,6 +24,11 @@ export default function OrderDetailPage() {
     queryKey: ['order', code],
     queryFn: () => fetchOrder(code!),
     enabled: !!code,
+  });
+  const myReturns = useQuery({
+    queryKey: ['my-returns'],
+    queryFn: fetchMyReturns,
+    enabled: !!order.data && order.data.status === 'DELIVERED',
   });
 
   const cancel = useMutation({
@@ -57,6 +62,7 @@ export default function OrderDetailPage() {
       setReturnOpen(false);
       setReturnReason('');
       haptic('medium');
+      void queryClient.invalidateQueries({ queryKey: ['my-returns'] });
       openSnackbar({ text: 'Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24h.', type: 'success' });
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -224,17 +230,38 @@ export default function OrderDetailPage() {
       </Box>
 
       {/* Đổi/trả — chỉ đơn đã giao, lỗi NSX (§6.4) */}
-      {o.status === 'DELIVERED' && (
-        <Box px={4} mt={2} style={{ textAlign: 'center' }}>
-          <Button
-            variant="tertiary"
-            onClick={() => setReturnOpen(true)}
-            style={{ color: 'var(--neutral-600)' }}
-          >
-            ↩️ Yêu cầu đổi/trả (lỗi nhà sản xuất)
-          </Button>
-        </Box>
-      )}
+      {o.status === 'DELIVERED' &&
+        (() => {
+          const ret = myReturns.data?.find((r) => r.orderId === o.id);
+          if (ret) {
+            const label =
+              ret.status === 'APPROVED'
+                ? '✅ Đổi/trả đã duyệt — tiền hoàn vào Ví Tubu'
+                : ret.status === 'REJECTED'
+                  ? `❌ Đổi/trả bị từ chối${ret.adminNote ? `: ${ret.adminNote}` : ''}`
+                  : '⏳ Yêu cầu đổi/trả đang xử lý (trong 24h)';
+            const color =
+              ret.status === 'APPROVED'
+                ? 'var(--leaf-700)'
+                : ret.status === 'REJECTED'
+                  ? 'var(--danger)'
+                  : 'var(--neutral-600)';
+            return (
+              <Box mx={4} mt={2} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-md)' }}>
+                <Text size="xSmall" style={{ color }}>
+                  {label}
+                </Text>
+              </Box>
+            );
+          }
+          return (
+            <Box px={4} mt={2} style={{ textAlign: 'center' }}>
+              <Button variant="tertiary" onClick={() => setReturnOpen(true)} style={{ color: 'var(--neutral-600)' }}>
+                ↩️ Yêu cầu đổi/trả (lỗi nhà sản xuất)
+              </Button>
+            </Box>
+          );
+        })()}
 
       <Box p={4} style={{ textAlign: 'center' }}>
         {hasOA ? (
