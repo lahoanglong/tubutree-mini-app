@@ -10,7 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import { Public } from '../../../common/decorators/public.decorator';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type { Env } from '../../../config/env.validation';
@@ -43,10 +43,12 @@ export class PancakeWebhookController {
   @HttpCode(HttpStatus.OK)
   async handle(
     @Body() body: PancakeWebhookBody,
-    @Headers('x-pancake-signature') signature?: string,
+    @Headers('x-webhook-token') token?: string,
   ) {
-    if (this.secret) {
-      this.verifySignature(JSON.stringify(body), signature);
+    // Pancake POS chỉ gửi Request Header tĩnh (không ký HMAC) → verify token chia sẻ.
+    // Gate theo config: chưa đặt secret (dev) → bỏ qua; có secret → bắt buộc khớp.
+    if (this.secret && !this.verifyToken(token)) {
+      throw new UnauthorizedException('Token webhook không hợp lệ.');
     }
     const event = await this.prisma.pancakeWebhookEvent.create({
       data: { eventType: body.event, rawPayload: body as object, status: 'RECEIVED' },
@@ -55,13 +57,11 @@ export class PancakeWebhookController {
     return { received: true };
   }
 
-  private verifySignature(payload: string, signature?: string): void {
-    if (!signature) throw new UnauthorizedException('Thiếu chữ ký webhook.');
-    const expected = createHmac('sha256', this.secret).update(payload).digest('hex');
-    const a = Buffer.from(expected);
-    const b = Buffer.from(signature);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) {
-      throw new UnauthorizedException('Chữ ký webhook không hợp lệ.');
-    }
+  /** So token tĩnh chống timing-attack (độ dài khác → false ngay, không ném). */
+  private verifyToken(token?: string): boolean {
+    if (!token) return false;
+    const a = Buffer.from(token, 'utf8');
+    const b = Buffer.from(this.secret, 'utf8');
+    return a.length === b.length && timingSafeEqual(a, b);
   }
 }
