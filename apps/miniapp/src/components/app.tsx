@@ -2,10 +2,27 @@ import { lazy, Suspense, useEffect } from 'react';
 import { App, ZMPRouter, AnimationRoutes, SnackbarProvider, Box, Spinner } from 'zmp-ui';
 import { Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { getStorage } from 'zmp-sdk/apis';
 import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
 import { OnboardingGate } from './onboarding';
 import { useAuthStore } from '../store/auth';
+
+const FONT_PX: Record<string, string> = { small: '15px', normal: '16px', large: '18px' };
+/** Áp cỡ chữ đã lưu (Cài đặt) ngay khi mở app để giữ a11y qua các phiên. */
+function applySavedFontScale(): void {
+  void getStorage({ keys: ['tubu_prefs'] }).then((res) => {
+    const raw = (res as Record<string, unknown>)['tubu_prefs'];
+    if (typeof raw === 'string') {
+      try {
+        const scale = (JSON.parse(raw) as { fontScale?: string }).fontScale;
+        if (scale && FONT_PX[scale]) document.documentElement.style.fontSize = FONT_PX[scale];
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+}
 
 // Code-split: Home eager (first paint), các trang khác lazy để giữ initial bundle nhỏ (§13.4).
 const BrowsePage = lazy(() => import('../pages/browse'));
@@ -26,6 +43,7 @@ const DealerPage = lazy(() => import('../pages/dealer'));
 const AboutPage = lazy(() => import('../pages/about'));
 const WishlistPage = lazy(() => import('../pages/wishlist'));
 const EditProfilePage = lazy(() => import('../pages/edit-profile'));
+const SettingsPage = lazy(() => import('../pages/settings'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -44,6 +62,7 @@ export default function MyApp() {
 
   useEffect(() => {
     void restore(); // silent login từ refresh token đã lưu
+    applySavedFontScale();
   }, [restore]);
 
   return (
@@ -72,6 +91,7 @@ export default function MyApp() {
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/wishlist" element={<WishlistPage />} />
                 <Route path="/edit-profile" element={<EditProfilePage />} />
+                <Route path="/settings" element={<SettingsPage />} />
               </AnimationRoutes>
             </Suspense>
             <BottomNav />

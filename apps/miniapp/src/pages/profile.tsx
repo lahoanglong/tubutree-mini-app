@@ -27,6 +27,8 @@ const READY = new Set([
   '/dealer',
   '/about',
   '/wishlist',
+  '/settings',
+  '/edit-profile',
 ]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [
@@ -57,6 +59,7 @@ const MENU: { group: string; items: MenuItem[] }[] = [
     items: [
       { icon: '🔔', label: 'Thông báo', to: '/notifications' },
       { icon: '🏪', label: 'Đăng ký đại lý', to: '/dealer' },
+      { icon: '⚙️', label: 'Cài đặt', to: '/settings' },
       { icon: 'ℹ️', label: 'Về Tubu Tree & Hỗ trợ', to: '/about' },
     ],
   },
