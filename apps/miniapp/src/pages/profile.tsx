@@ -29,6 +29,7 @@ const READY = new Set([
   '/wishlist',
   '/settings',
   '/edit-profile',
+  '/subscriptions',
 ]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [
@@ -36,6 +37,7 @@ const MENU: { group: string; items: MenuItem[] }[] = [
     group: 'Mua sắm',
     items: [
       { icon: '📦', label: 'Đơn hàng của tôi', to: '/orders' },
+      { icon: '🔁', label: 'Đặt định kỳ', to: '/subscriptions' },
       { icon: '❤️', label: 'Sản phẩm yêu thích', to: '/wishlist' },
       { icon: '📍', label: 'Sổ địa chỉ', to: '/addresses' },
     ],

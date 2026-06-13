@@ -14,6 +14,7 @@ import { shareLink } from '../services/zmp-bridge';
 import ProductCard from '../components/product-card';
 import { ReviewsSection, Stars } from '../components/reviews-section';
 import { WishlistHeart } from '../components/wishlist-heart';
+import { SubscribeSheet } from '../components/subscribe-sheet';
 import { fetchReviews } from '../services/shop-api';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -36,6 +37,7 @@ export default function ProductDetailPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
+  const [showSubscribe, setShowSubscribe] = useState(false);
 
   const product = useQuery({
     queryKey: ['product', slug],
@@ -221,6 +223,34 @@ export default function ProductDetailPage() {
             ))}
           </Box>
         )}
+
+        {selected && inStock && (
+          <Box
+            role="button"
+            className="tubu-press"
+            onClick={() => {
+              haptic('light');
+              if (status !== 'authenticated') return void login();
+              setShowSubscribe(true);
+            }}
+            flex
+            alignItems="center"
+            style={{
+              gap: 8,
+              marginTop: 12,
+              padding: '10px 12px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px dashed var(--leaf-600)',
+              background: 'var(--leaf-50)',
+            }}
+          >
+            <Text style={{ fontSize: 18 }}>🔁</Text>
+            <Text size="small" bold style={{ color: 'var(--leaf-700)', flex: 1 }}>
+              Đặt định kỳ — tiết kiệm 12%
+            </Text>
+            <Text style={{ color: 'var(--leaf-700)' }}>›</Text>
+          </Box>
+        )}
       </Box>
 
       {/* ── Phân loại ── */}
@@ -265,6 +295,15 @@ export default function ProductDetailPage() {
 
       {/* ── Đánh giá ── */}
       {slug && <ReviewsSection slug={slug} />}
+
+      {selected && (
+        <SubscribeSheet
+          visible={showSubscribe}
+          onClose={() => setShowSubscribe(false)}
+          variationId={selected.id}
+          quantity={quantity}
+        />
+      )}
 
       {/* ── Cùng thương hiệu ── */}
       {(related.data?.length ?? 0) > 0 && (

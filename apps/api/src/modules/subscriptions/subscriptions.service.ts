@@ -52,10 +52,31 @@ export class SubscriptionsService {
     });
   }
 
-  list(userId: string) {
-    return this.prisma.subscription.findMany({
+  async list(userId: string) {
+    const subs = await this.prisma.subscription.findMany({
       where: { userId, status: { not: 'CANCELLED' } },
       orderBy: { createdAt: 'desc' },
+    });
+    if (subs.length === 0) return [];
+    const variations = await this.prisma.variation.findMany({
+      where: { id: { in: subs.map((s) => s.variationId) } },
+      include: { product: { select: { name: true, thumbnail: true, slug: true } } },
+    });
+    const vmap = new Map(variations.map((v) => [v.id, v]));
+    return subs.map((s) => {
+      const v = vmap.get(s.variationId);
+      return {
+        id: s.id,
+        quantity: s.quantity,
+        intervalWeeks: s.intervalWeeks,
+        status: s.status,
+        nextRunAt: s.nextRunAt,
+        productName: v?.product.name ?? 'Sản phẩm',
+        variationName: v?.name ?? '',
+        thumbnail: v?.product.thumbnail ?? null,
+        slug: v?.product.slug ?? null,
+        unitPrice: v ? (v.salePrice ?? v.retailPrice) : 0,
+      };
     });
   }
 
