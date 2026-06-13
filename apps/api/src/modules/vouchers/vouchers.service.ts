@@ -129,4 +129,42 @@ export class VouchersService {
     }
     if (granted) this.logger.log(`Win-back vouchers granted: ${granted}`);
   }
+
+  /** Milestone (§6.6): chi tiêu đạt mốc trong 30 ngày → voucher tri ân. Chạy 5h sáng.
+   * Mặc định 1tr→30k, 3tr→100k, 5tr→200k. Idempotent theo (mốc, tháng) qua grant. */
+  @Cron('0 5 * * *')
+  async milestoneVouchers(): Promise<void> {
+    const milestones = await this.config.get<{ spend: number; reward: number }[]>('voucher.milestones', [
+      { spend: 1_000_000, reward: 30_000 },
+      { spend: 3_000_000, reward: 100_000 },
+      { spend: 5_000_000, reward: 200_000 },
+    ]);
+    const since = new Date(Date.now() - 30 * 864e5);
+    const rows = await this.prisma.$queryRaw<{ userId: string; spent: bigint }[]>`
+      SELECT "userId", SUM("total") AS spent
+      FROM orders
+      WHERE status::text = 'DELIVERED' AND "createdAt" >= ${since}
+      GROUP BY "userId"
+      LIMIT 1000`;
+    const period = new Date().toISOString().slice(0, 7); // yyyy-mm
+    let granted = 0;
+    for (const r of rows) {
+      const spent = Number(r.spent);
+      // Cấp voucher cho mốc CAO NHẤT đạt được (tránh chồng nhiều voucher 1 đợt).
+      const hit = [...milestones].sort((a, b) => b.spend - a.spend).find((m) => spent >= m.spend);
+      if (!hit) continue;
+      if (
+        await this.grant({
+          userId: r.userId,
+          reason: `MILESTONE${hit.spend}-${period}`,
+          type: 'AMOUNT',
+          value: hit.reward,
+          validDays: 30,
+          templateCode: 'MILESTONE_VOUCHER',
+        })
+      )
+        granted++;
+    }
+    if (granted) this.logger.log(`Milestone vouchers granted: ${granted}`);
+  }
 }

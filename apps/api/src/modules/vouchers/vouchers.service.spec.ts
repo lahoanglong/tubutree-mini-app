@@ -88,3 +88,34 @@ describe('VouchersService.grant', () => {
     expect((notify.notify as jest.Mock)).not.toHaveBeenCalled();
   });
 });
+
+describe('VouchersService.milestoneVouchers (§6.6)', () => {
+  function setup(rows: { userId: string; spent: bigint }[]) {
+    const create = jest.fn().mockResolvedValue({});
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue(rows),
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    return { svc: new VouchersService(prisma, makeConfig(), notify), create };
+  }
+
+  it('cấp voucher mốc CAO NHẤT đạt được (3tr → 100k)', async () => {
+    const { svc, create } = setup([{ userId: 'u1', spent: BigInt(3_500_000) }]);
+    await svc.milestoneVouchers();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0].data.value).toBe(100000); // mốc 3tr
+  });
+
+  it('chi tiêu dưới mốc thấp nhất (1tr) → không cấp', async () => {
+    const { svc, create } = setup([{ userId: 'u1', spent: BigInt(500_000) }]);
+    await svc.milestoneVouchers();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('đạt mốc cao nhất (5tr → 200k)', async () => {
+    const { svc, create } = setup([{ userId: 'u1', spent: BigInt(6_000_000) }]);
+    await svc.milestoneVouchers();
+    expect(create.mock.calls[0][0].data.value).toBe(200000);
+  });
+});
