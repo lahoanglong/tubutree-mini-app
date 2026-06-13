@@ -60,6 +60,7 @@ services:
       args:
         # NEXT_PUBLIC_* nhúng lúc build → phải truyền qua build args.
         NEXT_PUBLIC_API_BASE_URL: https://api.${WEB_DOMAIN}/api
+        NEXT_PUBLIC_APP_URL: https://app.${WEB_DOMAIN}
         NEXT_PUBLIC_ZALO_APP_ID: ${ZALO_APP_ID:-}
     restart: unless-stopped
     environment:

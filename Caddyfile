@@ -1,13 +1,14 @@
 # Caddy — reverse proxy + auto HTTPS (Let's Encrypt) cho Tubu Tree.
-# {$WEB_DOMAIN} lấy từ env (vd tubutree.vn). Caddy tự xin + gia hạn cert.
+# WEB_DOMAIN = root domain (vd tubutree.com)
+# Web chạy tại app.<domain>, API tại api.<domain>
 
-# Web (Next.js) — domain chính + www
-{$WEB_DOMAIN}, www.{$WEB_DOMAIN} {
+# Web (Next.js)
+app.{$WEB_DOMAIN} {
 	encode gzip zstd
 	reverse_proxy web:3000
 }
 
-# API (NestJS, global prefix /api) — subdomain api.<domain>
+# API (NestJS, global prefix /api)
 # Webhook Pancake: https://api.{$WEB_DOMAIN}/api/webhooks/pancake
 api.{$WEB_DOMAIN} {
 	encode gzip zstd
