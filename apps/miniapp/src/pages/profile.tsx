@@ -24,6 +24,7 @@ const READY = new Set([
   '/notifications',
   '/affiliate',
   '/cashback',
+  '/dealer',
 ]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [
