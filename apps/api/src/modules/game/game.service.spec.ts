@@ -19,7 +19,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       update: jest.fn().mockResolvedValue({}),
       findMany: jest.fn().mockResolvedValue([]),
     },
-    user: { findUniqueOrThrow: jest.fn(), update: jest.fn() },
+    user: { findUniqueOrThrow: jest.fn(), update: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     pointsTransaction: { create: jest.fn() },
     gameSpin: { create: jest.fn().mockResolvedValue({}) },
     gameQuiz: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
@@ -130,18 +130,28 @@ describe('GameService.spin', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled(); // chưa trừ điểm
   });
 
-  it('quay trúng giải POINTS → trừ cost + cộng thưởng + ghi lịch sử', async () => {
+  it('quay trúng giải POINTS → trừ cost ATOMIC + cộng thưởng + ghi lịch sử', async () => {
     const prisma = makePrisma();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
     jest.spyOn(Math, 'random').mockReturnValue(0.1); // r = 0.1*100 = 10 → giải 'a' (weight 70)
     const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }));
     const r = await svc.spin('u1');
     expect(r.prize.id).toBe('a');
-    // 2 lần creditPoints: trừ cost (-10) và thưởng (+5) → 2 $transaction
-    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    // cost trừ atomic qua updateMany (where gte cost), thưởng POINTS qua creditPoints ($transaction)
+    expect((prisma.user.updateMany as jest.Mock).mock.calls[0][0].where).toEqual({ id: 'u1', pointsBalance: { gte: 10 } });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1); // chỉ thưởng dùng $transaction
     const spinData = (prisma.gameSpin.create as jest.Mock).mock.calls[0][0].data;
     expect(spinData.prizeId).toBe('a');
     (Math.random as jest.Mock).mockRestore();
+  });
+
+  it('race âm điểm: updateMany count=0 (điểm đã bị trừ) → ném lỗi, không quay', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
+    (prisma.user.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }));
+    await expect(svc.spin('u1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.gameSpin.create).not.toHaveBeenCalled();
   });
 });
 

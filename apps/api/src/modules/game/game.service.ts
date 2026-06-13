@@ -95,7 +95,15 @@ export class GameService {
     const prizes = await this.config.get<SpinPrize[]>('game.spin_prizes', []);
     if (prizes.length === 0) throw new BadRequestException('Vòng quay chưa cấu hình.');
 
-    await this.creditPoints(userId, -cost, 'GAME_SPIN_COST');
+    // Trừ điểm ATOMIC (gte) — chống quay đồng thời làm âm điểm (TOCTOU).
+    const dec = await this.prisma.user.updateMany({
+      where: { id: userId, pointsBalance: { gte: cost } },
+      data: { pointsBalance: { decrement: cost } },
+    });
+    if (dec.count === 0) throw new BadRequestException(`Cần ${cost} điểm Xanh để quay.`);
+    await this.prisma.pointsTransaction.create({
+      data: { userId, delta: -cost, reason: 'GAME_SPIN_COST', refType: 'GAME' },
+    });
     const prize = this.pickWeighted(prizes);
 
     let rewardRefId: string | null = null;

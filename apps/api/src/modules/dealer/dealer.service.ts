@@ -98,43 +98,60 @@ export class DealerService {
     });
 
     const onCredit = dto.paymentMethod === 'CREDIT';
+    // Fast-fail thân thiện (không tốn generateCode khi rõ ràng vượt). Check
+    // QUYẾT ĐỊNH nằm trong transaction Serializable bên dưới để chống TOCTOU.
     if (onCredit && tier) {
-      const creditAgg = await this.prisma.dealerCreditLedger.aggregate({
-        where: { userId },
-        _sum: { delta: true },
-      });
-      const currentDebt = creditAgg._sum.delta ?? 0;
-      if (currentDebt + subtotal > tier.creditLimit) {
+      const pre = await this.prisma.dealerCreditLedger.aggregate({ where: { userId }, _sum: { delta: true } });
+      if ((pre._sum.delta ?? 0) + subtotal > tier.creditLimit) {
         throw new BadRequestException('Vượt hạn mức công nợ.');
       }
     }
 
     const code = await this.generateCode();
-    const order = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.order.create({
-        data: {
-          code,
-          userId,
-          type: 'DEALER',
-          status: onCredit ? 'CONFIRMED' : 'PENDING_PAYMENT',
-          subtotal,
-          discount: 0,
-          shippingFee: 0,
-          total: subtotal,
-          paymentMethod: onCredit ? 'BANK_TRANSFER' : 'BANK_TRANSFER',
-          paymentStatus: 'UNPAID',
-          shippingAddress: { note: 'Giao theo hợp đồng đại lý' },
-          note: dto.note,
-          items: { create: items },
+    let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
+    try {
+      order = await this.prisma.$transaction(
+        async (tx) => {
+          // Kiểm tra hạn mức công nợ TRONG transaction Serializable: 2 đơn CREDIT
+          // đồng thời không thể cùng vượt trần (một trong hai sẽ serialization-fail).
+          if (onCredit && tier) {
+            const agg = await tx.dealerCreditLedger.aggregate({ where: { userId }, _sum: { delta: true } });
+            const debt = agg._sum.delta ?? 0;
+            if (debt + subtotal > tier.creditLimit) throw new BadRequestException('Vượt hạn mức công nợ.');
+          }
+          const created = await tx.order.create({
+            data: {
+              code,
+              userId,
+              type: 'DEALER',
+              status: onCredit ? 'CONFIRMED' : 'PENDING_PAYMENT',
+              subtotal,
+              discount: 0,
+              shippingFee: 0,
+              total: subtotal,
+              paymentMethod: 'BANK_TRANSFER',
+              paymentStatus: 'UNPAID',
+              shippingAddress: { note: 'Giao theo hợp đồng đại lý' },
+              note: dto.note,
+              items: { create: items },
+            },
+          });
+          if (onCredit) {
+            await tx.dealerCreditLedger.create({
+              data: { userId, delta: subtotal, refType: 'ORDER', refId: created.id, note: `Đơn ${code}` },
+            });
+          }
+          return created;
         },
-      });
-      if (onCredit) {
-        await tx.dealerCreditLedger.create({
-          data: { userId, delta: subtotal, refType: 'ORDER', refId: created.id, note: `Đơn ${code}` },
-        });
+        onCredit ? { isolationLevel: 'Serializable' } : undefined,
+      );
+    } catch (err) {
+      // P2034: serialization failure — 2 đơn CREDIT chạm nhau. Báo thử lại thay vì 500.
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+        throw new BadRequestException('Hệ thống đang bận xử lý đơn công nợ, vui lòng thử lại.');
       }
-      return created;
-    });
+      throw err;
+    }
     return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
   }
 
