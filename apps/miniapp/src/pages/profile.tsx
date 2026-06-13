@@ -23,6 +23,7 @@ const READY = new Set([
   '/addresses',
   '/notifications',
   '/affiliate',
+  '/cashback',
 ]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [

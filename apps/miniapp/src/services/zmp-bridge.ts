@@ -1,4 +1,10 @@
-import { getAccessToken, getUserInfo, login as zmpLogin, openShareSheet } from 'zmp-sdk/apis';
+import {
+  getAccessToken,
+  getUserInfo,
+  login as zmpLogin,
+  openShareSheet,
+  openWebview,
+} from 'zmp-sdk/apis';
 
 /**
  * Bọc các API gốc của zmp-sdk: login, share, (pay - Phase 1).
@@ -24,6 +30,11 @@ export async function getZaloAccessToken(): Promise<ZaloLoginResult> {
 export async function getZaloUserInfo() {
   const { userInfo } = await getUserInfo({ autoRequestPermission: true });
   return userInfo;
+}
+
+/** Mở URL ngoài (deeplink sàn cashback) trong webview Zalo. */
+export async function openExternal(url: string) {
+  await openWebview({ url });
 }
 
 /** Mở share sheet chia sẻ link sản phẩm (dùng cho Affiliate Phase 3). */
