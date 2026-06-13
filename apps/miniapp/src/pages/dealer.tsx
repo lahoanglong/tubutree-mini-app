@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Box, Page, Text, Header, Button, Input, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Header, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getDealerMe,
@@ -239,6 +239,35 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
   const [search, setSearch] = useState('');
   const debounced = useDebounced(search, 250);
   const [qty, setQty] = useState<Record<string, number>>({});
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [pasteResult, setPasteResult] = useState<{ matched: number; unmatched: string[] } | null>(null);
+
+  /** Đặt nhanh: dán "SKU<sep>SốLượng" mỗi dòng (sep = tab/phẩy/khoảng trắng) → khớp bảng giá. */
+  const applyPaste = () => {
+    const list = priceQ.data ?? [];
+    const bySku = new Map(list.map((r) => [r.sku.toUpperCase(), r.variationId]));
+    const next: Record<string, number> = { ...qty };
+    let matched = 0;
+    const unmatched: string[] = [];
+    for (const raw of pasteText.split('\n')) {
+      const line = raw.trim();
+      if (!line) continue;
+      const parts = line.split(/[\t,;]+|\s{2,}|\s+(?=\d+$)/).map((p) => p.trim()).filter(Boolean);
+      const sku = (parts[0] ?? '').toUpperCase();
+      const q = parseInt(parts[parts.length - 1] ?? '', 10);
+      const vid = bySku.get(sku);
+      if (vid && q > 0) {
+        next[vid] = (next[vid] ?? 0) + q;
+        matched++;
+      } else if (sku) {
+        unmatched.push(sku);
+      }
+    }
+    setQty(next);
+    setPasteResult({ matched, unmatched });
+    haptic('medium');
+  };
 
   const rows = useMemo(() => {
     const list = priceQ.data ?? [];
@@ -282,12 +311,64 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
 
   return (
     <Box mx={4} style={{ paddingBottom: cart.length > 0 ? 150 : 24 }}>
-      <Input
-        placeholder="Tìm theo tên / SKU / thương hiệu"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        clearable
-      />
+      <Box flex style={{ gap: 8 }}>
+        <Box style={{ flex: 1 }}>
+          <Input
+            placeholder="Tìm theo tên / SKU / thương hiệu"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            clearable
+          />
+        </Box>
+        <Button
+          size="small"
+          variant="secondary"
+          onClick={() => {
+            setPasteResult(null);
+            setPasteOpen(true);
+          }}
+          style={{ flex: '0 0 auto' }}
+        >
+          📋 Dán đơn
+        </Button>
+      </Box>
+
+      <Sheet visible={pasteOpen} onClose={() => setPasteOpen(false)} autoHeight>
+        <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
+          <Text bold size="large">
+            Đặt nhanh — dán từ Excel/Sheet
+          </Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+            Mỗi dòng: <b>SKU</b> và <b>số lượng</b> (cách nhau bằng tab/phẩy/khoảng trắng). VD:
+            <br />
+            POLANG-SP-500 10
+          </Text>
+          <Input.TextArea
+            placeholder={'POLANG-SP-500\t10\nFUWA-DW-1L, 24'}
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            rows={5}
+          />
+          {pasteResult && (
+            <Text size="xSmall" style={{ marginTop: 8, color: pasteResult.unmatched.length ? 'var(--clay-700)' : 'var(--leaf-700)' }}>
+              ✓ Khớp {pasteResult.matched} dòng
+              {pasteResult.unmatched.length > 0 ? ` · Không khớp: ${pasteResult.unmatched.join(', ')}` : ''}
+            </Text>
+          )}
+          <Box flex style={{ gap: 8, marginTop: 12 }}>
+            <Button variant="secondary" onClick={() => setPasteOpen(false)} style={{ flex: 1 }}>
+              Đóng
+            </Button>
+            <Button
+              disabled={!pasteText.trim()}
+              onClick={applyPaste}
+              style={{ flex: 1, background: '#1f2a44' }}
+            >
+              Thêm vào đơn
+            </Button>
+          </Box>
+        </Box>
+      </Sheet>
 
       <Box mt={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
         {priceQ.isLoading ? (
