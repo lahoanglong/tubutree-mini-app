@@ -23,6 +23,11 @@ export class CatalogController {
     return this.catalog.related(slug);
   }
 
+  @Get('products/:slug/bought-together')
+  boughtTogether(@Param('slug') slug: string) {
+    return this.catalog.boughtTogether(slug);
+  }
+
   @Get('brands')
   brands() {
     return this.catalog.brands();

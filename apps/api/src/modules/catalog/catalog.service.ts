@@ -55,6 +55,37 @@ export class CatalogService {
     return items.map((p) => this.toCard(p));
   }
 
+  /** "Thường mua kèm" (§6.12): co-occurrence trên đơn 90 ngày gần nhất. */
+  async boughtTogether(slug: string) {
+    const product = await this.prisma.product.findUnique({ where: { slug } });
+    if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
+    const since = new Date(Date.now() - 90 * 864e5);
+    const rows = await this.prisma.$queryRaw<{ productId: string }[]>`
+      WITH target_orders AS (
+        SELECT DISTINCT oi."orderId"
+        FROM order_items oi
+        JOIN variations v ON v.id = oi."variationId"
+        JOIN orders o ON o.id = oi."orderId"
+        WHERE v."productId" = ${product.id} AND o."createdAt" >= ${since}
+      )
+      SELECT v2."productId" AS "productId", COUNT(*) AS cnt
+      FROM order_items oi2
+      JOIN variations v2 ON v2.id = oi2."variationId"
+      WHERE oi2."orderId" IN (SELECT "orderId" FROM target_orders)
+        AND v2."productId" <> ${product.id}
+      GROUP BY v2."productId"
+      ORDER BY cnt DESC
+      LIMIT 6`;
+    if (rows.length === 0) return [];
+    const ids = rows.map((r) => r.productId);
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: ids }, isActive: true },
+      include: { variations: { where: { isActive: true } } },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    return ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)).map((p) => this.toCard(p));
+  }
+
   async brands() {
     const rows = await this.prisma.product.groupBy({
       by: ['brand'],

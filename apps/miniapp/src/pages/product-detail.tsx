@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchProduct,
   fetchRelated,
+  fetchBoughtTogether,
   getCart,
   addToCart,
   type VariationDetail,
@@ -47,6 +48,11 @@ export default function ProductDetailPage() {
   const related = useQuery({
     queryKey: ['related', slug],
     queryFn: () => fetchRelated(slug!),
+    enabled: !!slug && product.isSuccess,
+  });
+  const boughtTogether = useQuery({
+    queryKey: ['bought-together', slug],
+    queryFn: () => fetchBoughtTogether(slug!),
     enabled: !!slug && product.isSuccess,
   });
   const cart = useQuery({
@@ -346,6 +352,26 @@ export default function ProductDetailPage() {
           variationId={selected.id}
           quantity={quantity}
         />
+      )}
+
+      {/* ── Thường mua kèm (§6.12 co-occurrence) ── */}
+      {(boughtTogether.data?.length ?? 0) > 0 && (
+        <>
+          <Box pt={4} pb={2} px={4}>
+            <Text.Title size="small">🛒 Thường mua kèm</Text.Title>
+          </Box>
+          <Box
+            px={4}
+            pb={4}
+            style={{ display: 'flex', gap: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+          >
+            {boughtTogether.data?.map((bp) => (
+              <Box key={bp.id} style={{ flex: '0 0 150px' }}>
+                <ProductCard product={bp} />
+              </Box>
+            ))}
+          </Box>
+        </>
       )}
 
       {/* ── Cùng thương hiệu ── */}
