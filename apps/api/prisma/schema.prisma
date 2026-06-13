@@ -616,6 +616,21 @@ enum PlantedStatus {
   PLANTED
 }
 
+// Nhắc mua lại theo chu kỳ (§6.14.7 Lifecycle Reminder).
+// Cron tính từ đơn DELIVERED cuối của (user × variation); remindedAt chống spam.
+model ReorderReminder {
+  id          String    @id @default(cuid())
+  userId      String
+  variationId String
+  productName String
+  lastOrderAt DateTime
+  remindedAt  DateTime? // null/cũ hơn lastOrderAt = chưa nhắc cho chu kỳ này
+
+  @@unique([userId, variationId])
+  @@index([userId])
+  @@map("reorder_reminders")
+}
+
 model GameSpin {
   id          String   @id @default(cuid())
   userId      String

@@ -22,6 +22,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
 import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { VouchersModule } from './modules/vouchers/vouchers.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { LifecycleModule } from './modules/lifecycle/lifecycle.module';
 import { AffiliateModule } from './modules/affiliate/affiliate.module';
 import { CashbackModule } from './modules/cashback/cashback.module';
 import { WalletModule } from './modules/wallet/wallet.module';
@@ -57,6 +58,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     WishlistModule,
     VouchersModule,
     SubscriptionsModule,
+    LifecycleModule,
     AffiliateModule,
     CashbackModule,
     WalletModule,
