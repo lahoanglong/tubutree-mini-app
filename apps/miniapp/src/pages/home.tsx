@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/auth';
 import ProductCard from '../components/product-card';
 import { ProductGridSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
+import { FlashSale } from '../components/flash-sale';
 import { brandAccent } from '../utils/brands';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
@@ -158,6 +159,9 @@ export default function HomePage() {
           </Box>
         ))}
       </Box>
+
+      {/* ── Flash Sale hôm nay ── */}
+      <FlashSale />
 
       {/* ── Tubu chọn cho bạn ── */}
       <HomeSection
