@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsObject, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsEmail, IsInt, IsObject, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { PaymentMethod } from '@tubutree/shared-types';
 import { IsIn } from 'class-validator';
 
@@ -7,7 +7,7 @@ export class InvoiceRequestDto {
   @IsString() taxCode!: string;
   @IsString() companyName!: string;
   @IsString() address!: string;
-  @IsString() email!: string;
+  @IsEmail() email!: string; // e-invoice gửi qua email → phải hợp lệ
 }
 
 export class QuoteDto {

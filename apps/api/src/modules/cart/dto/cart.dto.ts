@@ -1,12 +1,12 @@
-import { IsInt, IsString, Min } from 'class-validator';
+import { IsInt, IsString, Max, Min } from 'class-validator';
 
 export class AddItemDto {
   @IsString() variationId!: string;
-  @IsInt() @Min(1) quantity!: number;
+  @IsInt() @Min(1) @Max(999) quantity!: number;
 }
 
 export class UpdateItemDto {
-  @IsInt() @Min(0) quantity!: number; // 0 = xóa
+  @IsInt() @Min(0) @Max(999) quantity!: number; // 0 = xóa
 }
 
 export class ApplyCouponDto {
