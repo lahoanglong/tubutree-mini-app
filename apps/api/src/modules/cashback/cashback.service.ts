@@ -76,10 +76,35 @@ export class CashbackService {
       where: { merchantOrderId: payload.order_id },
     });
     if (existing) {
-      await this.prisma.cashbackTransaction.update({
-        where: { id: existing.id },
-        data: { status, confirmedAt: status === 'CONFIRMED' ? new Date() : existing.confirmedAt },
-      });
+      // Điều chỉnh cashbackPending theo CHUYỂN TRẠNG THÁI (trước đây chỉ cộng ở nhánh
+      // create → postback PENDING rồi APPROVED sẽ không bao giờ cộng pending; và
+      // CONFIRMED→REJECTED không trừ lại). Không đụng nếu đã PAID (đã về Ví).
+      const wasConfirmed = existing.status === 'CONFIRMED';
+      const nowConfirmed = status === 'CONFIRMED';
+      const ops: ReturnType<typeof this.prisma.cashbackTransaction.update>[] = [
+        this.prisma.cashbackTransaction.update({
+          where: { id: existing.id },
+          data: { status, confirmedAt: nowConfirmed ? (existing.confirmedAt ?? new Date()) : existing.confirmedAt },
+        }),
+      ];
+      if (existing.status !== 'PAID') {
+        if (nowConfirmed && !wasConfirmed) {
+          ops.push(
+            this.prisma.user.update({
+              where: { id: existing.userId },
+              data: { cashbackPending: { increment: existing.userReward } },
+            }) as never,
+          );
+        } else if (wasConfirmed && !nowConfirmed) {
+          ops.push(
+            this.prisma.user.update({
+              where: { id: existing.userId },
+              data: { cashbackPending: { decrement: existing.userReward } },
+            }) as never,
+          );
+        }
+      }
+      await this.prisma.$transaction(ops);
     } else {
       await this.prisma.cashbackTransaction.create({
         data: {
@@ -113,19 +138,22 @@ export class CashbackService {
       where: { status: 'CONFIRMED', confirmedAt: { lte: threshold } },
     });
     for (const tx of due) {
-      await this.prisma.$transaction([
-        this.prisma.cashbackTransaction.update({
-          where: { id: tx.id },
+      await this.prisma.$transaction(async (t) => {
+        // Gate atomic: chỉ settle nếu vẫn CONFIRMED → multi-instance cron không
+        // double-credit ví (instance thua cuộc thấy count=0 → bỏ qua).
+        const marked = await t.cashbackTransaction.updateMany({
+          where: { id: tx.id, status: 'CONFIRMED' },
           data: { status: 'PAID', paidAt: new Date() },
-        }),
-        this.prisma.user.update({
+        });
+        if (marked.count === 0) return;
+        await t.user.update({
           where: { id: tx.userId },
           data: {
             cashbackPending: { decrement: tx.userReward },
             walletBalance: { increment: tx.userReward },
           },
-        }),
-      ]);
+        });
+      });
     }
     if (due.length > 0) this.logger.log(`Settle ${due.length} cashback → Ví Tubu.`);
   }
