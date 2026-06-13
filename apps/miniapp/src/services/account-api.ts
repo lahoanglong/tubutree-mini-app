@@ -53,6 +53,19 @@ export const withdraw = (amount: number, bankInfo: BankInfo) =>
     .post<{ ok: boolean; payoutId: string; status: string }>('/wallet/withdraw', { amount, bankInfo })
     .then((r) => r.data);
 
+// Notifications
+export interface NotificationDTO {
+  id: string;
+  templateCode: string;
+  payload: { body?: string; data?: Record<string, string> };
+  status: 'SENT' | 'FAILED' | 'READ';
+  sentAt: string;
+}
+export const getNotifications = () =>
+  api.get<NotificationDTO[]>('/me/notifications').then((r) => r.data);
+export const markNotificationRead = (id: string) =>
+  api.post<{ ok: boolean }>(`/me/notifications/${id}/read`).then((r) => r.data);
+
 // Addresses (bổ sung update/delete cho address book)
 export const updateAddress = (id: string, data: Partial<Omit<AddressDTO, 'id'>>) =>
   api.patch<AddressDTO>(`/me/addresses/${id}`, data).then((r) => r.data);

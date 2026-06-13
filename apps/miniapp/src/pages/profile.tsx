@@ -1,7 +1,7 @@
 import { Box, Page, Text, Button, Header, Avatar, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store/auth';
-import { getLoyalty } from '../services/account-api';
+import { getLoyalty, getNotifications } from '../services/account-api';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 
@@ -16,7 +16,7 @@ interface MenuItem {
  * Route đã build xong (điều hướng thật). Mục chưa có trong set → báo "đang hoàn thiện"
  * thay vì điều hướng tới trang trắng. Mở khóa dần theo từng vòng phát triển.
  */
-const READY = new Set(['/orders', '/loyalty', '/wallet', '/addresses']);
+const READY = new Set(['/orders', '/loyalty', '/wallet', '/addresses', '/notifications']);
 
 const MENU: { group: string; items: MenuItem[] }[] = [
   {
@@ -60,6 +60,12 @@ export default function ProfilePage() {
     queryFn: getLoyalty,
     enabled: status === 'authenticated',
   });
+  const notifQ = useQuery({
+    queryKey: ['notifications'],
+    queryFn: getNotifications,
+    enabled: status === 'authenticated',
+  });
+  const unreadCount = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
 
   if (status !== 'authenticated' || !user) {
     return (
@@ -184,6 +190,25 @@ export default function ProfilePage() {
                     </Text>
                   )}
                 </Box>
+                {item.to === '/notifications' && unreadCount > 0 && (
+                  <span
+                    style={{
+                      minWidth: 18,
+                      height: 18,
+                      padding: '0 5px',
+                      borderRadius: 'var(--radius-full)',
+                      background: 'var(--primary-600)',
+                      color: '#fff',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {unreadCount}
+                  </span>
+                )}
                 <Text style={{ color: 'var(--neutral-400)' }}>›</Text>
               </Box>
             ))}
