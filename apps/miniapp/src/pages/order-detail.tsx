@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Header, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchOrder, cancelOrder, repurchaseOrder } from '../services/shop-api';
+import { fetchOrder, cancelOrder, repurchaseOrder, requestReturn } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -17,6 +17,8 @@ export default function OrderDetailPage() {
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
 
   const order = useQuery({
     queryKey: ['order', code],
@@ -45,6 +47,17 @@ export default function OrderDetailPage() {
       queryClient.setQueryData(['cart'], c);
       haptic('medium');
       navigate('/cart');
+    },
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const returnReq = useMutation({
+    mutationFn: () => requestReturn(code!, returnReason.trim()),
+    onSuccess: () => {
+      setReturnOpen(false);
+      setReturnReason('');
+      haptic('medium');
+      openSnackbar({ text: 'Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24h.', type: 'success' });
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -210,6 +223,19 @@ export default function OrderDetailPage() {
         </Text>
       </Box>
 
+      {/* Đổi/trả — chỉ đơn đã giao, lỗi NSX (§6.4) */}
+      {o.status === 'DELIVERED' && (
+        <Box px={4} mt={2} style={{ textAlign: 'center' }}>
+          <Button
+            variant="tertiary"
+            onClick={() => setReturnOpen(true)}
+            style={{ color: 'var(--neutral-600)' }}
+          >
+            ↩️ Yêu cầu đổi/trả (lỗi nhà sản xuất)
+          </Button>
+        </Box>
+      )}
+
       <Box p={4} style={{ textAlign: 'center' }}>
         {hasOA ? (
           <Button
@@ -298,6 +324,42 @@ export default function OrderDetailPage() {
               {vi.orders.cancelYes}
             </Button>
           </Box>
+        </Box>
+      </Sheet>
+
+      <Sheet visible={returnOpen} onClose={() => setReturnOpen(false)} autoHeight>
+        <Box p={5}>
+          <Text.Title size="small">Yêu cầu đổi/trả</Text.Title>
+          <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
+            Chỉ áp dụng khi lỗi nhà sản xuất (hỏng bao bì, sai hạn dùng, sai mã, không đúng mô tả).
+            Trong 7 ngày từ khi nhận hàng. Tubu phản hồi trong 24h.
+          </Text>
+          <textarea
+            value={returnReason}
+            onChange={(e) => setReturnReason(e.target.value)}
+            placeholder="Mô tả lỗi sản phẩm (tối thiểu 5 ký tự)…"
+            rows={4}
+            style={{
+              width: '100%',
+              marginTop: 12,
+              padding: 10,
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--neutral-200)',
+              fontSize: 14,
+              fontFamily: 'inherit',
+              resize: 'vertical',
+              boxSizing: 'border-box',
+            }}
+          />
+          <Button
+            fullWidth
+            loading={returnReq.isPending}
+            disabled={returnReason.trim().length < 5}
+            onClick={() => returnReq.mutate()}
+            style={{ background: 'var(--primary-600)', minHeight: 48, marginTop: 14, fontWeight: 600 }}
+          >
+            Gửi yêu cầu
+          </Button>
         </Box>
       </Sheet>
     </Page>

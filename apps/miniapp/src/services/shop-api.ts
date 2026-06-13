@@ -182,3 +182,5 @@ export const cancelOrder = (code: string) =>
   api.post<OrderDTO>(`/orders/${code}/cancel`).then((r) => r.data);
 export const repurchaseOrder = (code: string) =>
   api.post<CartSummary>(`/orders/${code}/repurchase`).then((r) => r.data);
+export const requestReturn = (code: string, reason: string, images?: string[]) =>
+  api.post(`/orders/${code}/return-request`, { reason, images }).then((r) => r.data);
