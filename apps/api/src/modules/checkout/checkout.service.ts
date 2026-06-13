@@ -76,64 +76,75 @@ export class CheckoutService {
     const code = await this.generateCode();
     const referrerUserId = await this.resolveReferrer(dto.referralCode, userId);
 
-    const order = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.order.create({
-        data: {
-          code,
-          idempotencyKey: idempotencyKey ?? null,
-          userId,
-          type: 'RETAIL',
-          status,
-          subtotal: cart.subtotal,
-          discount: computed.discount + computed.pointsDiscount,
-          shippingFee: computed.shippingFee,
-          total: computed.total,
-          pointsEarned: computed.pointsEarned,
-          pointsUsed: computed.pointsUsed,
-          paymentMethod: dto.paymentMethod,
-          paymentStatus: paid ? 'PAID' : 'UNPAID',
-          shippingAddress: this.addressSnapshot(address),
-          referrerUserId,
-          couponCode: cart.couponCode,
-          invoiceRequest: dto.invoiceRequest ? (dto.invoiceRequest as object) : undefined,
-          invoiceStatus: dto.invoiceRequest ? 'REQUESTED' : 'NOT_REQUESTED',
-          note: dto.note,
-          items: {
-            create: cart.items.map((l) => ({
-              variationId: l.variationId,
-              productName: l.productName,
-              variationName: l.variationName,
-              unitPrice: l.unitPrice,
-              quantity: l.quantity,
-              total: l.total,
-            })),
-          },
-        },
-      });
-
-      if (computed.pointsUsed > 0) {
-        await tx.user.update({
-          where: { id: userId },
-          data: { pointsBalance: { decrement: computed.pointsUsed } },
-        });
-        await tx.pointsTransaction.create({
+    let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
+    try {
+      order = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.order.create({
           data: {
+            code,
+            idempotencyKey: idempotencyKey ?? null,
             userId,
-            delta: -computed.pointsUsed,
-            reason: `ORDER_REDEEM:${code}`,
-            refType: 'ORDER',
-            refId: created.id,
+            type: 'RETAIL',
+            status,
+            subtotal: cart.subtotal,
+            discount: computed.discount + computed.pointsDiscount,
+            shippingFee: computed.shippingFee,
+            total: computed.total,
+            pointsEarned: computed.pointsEarned,
+            pointsUsed: computed.pointsUsed,
+            paymentMethod: dto.paymentMethod,
+            paymentStatus: paid ? 'PAID' : 'UNPAID',
+            shippingAddress: this.addressSnapshot(address),
+            referrerUserId,
+            couponCode: cart.couponCode,
+            invoiceRequest: dto.invoiceRequest ? (dto.invoiceRequest as object) : undefined,
+            invoiceStatus: dto.invoiceRequest ? 'REQUESTED' : 'NOT_REQUESTED',
+            note: dto.note,
+            items: {
+              create: cart.items.map((l) => ({
+                variationId: l.variationId,
+                productName: l.productName,
+                variationName: l.variationName,
+                unitPrice: l.unitPrice,
+                quantity: l.quantity,
+                total: l.total,
+              })),
+            },
           },
         });
+
+        if (computed.pointsUsed > 0) {
+          await tx.user.update({
+            where: { id: userId },
+            data: { pointsBalance: { decrement: computed.pointsUsed } },
+          });
+          await tx.pointsTransaction.create({
+            data: {
+              userId,
+              delta: -computed.pointsUsed,
+              reason: `ORDER_REDEEM:${code}`,
+              refType: 'ORDER',
+              refId: created.id,
+            },
+          });
+        }
+        if (paid) {
+          await tx.user.update({
+            where: { id: userId },
+            data: { walletBalance: { decrement: computed.total } },
+          });
+        }
+        return created;
+      });
+    } catch (err) {
+      // Race idempotency: 2 request cùng Idempotency-Key chạy đồng thời — request thua
+      // cuộc ăn unique-violation (P2002). Trả lại đơn mà request thắng đã tạo.
+      if (idempotencyKey && this.isUniqueViolation(err)) {
+        const existing = await this.prisma.order.findUnique({ where: { idempotencyKey } });
+        if (existing) return this.findOrderResponse(existing.id);
       }
-      if (paid) {
-        await tx.user.update({
-          where: { id: userId },
-          data: { walletBalance: { decrement: computed.total } },
-        });
-      }
-      return created;
-    });
+      throw err;
+    }
 
     // Ghi nhận coupon + dọn giỏ + đẩy Pancake (ngoài transaction chính).
     if (cart.couponCode) await this.coupons.redeem(cart.couponCode, userId, order.id);
@@ -148,12 +159,22 @@ export class CheckoutService {
         this.logger.error(`Tạo commission lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`),
       );
     }
-    await this.notifications.notify(userId, 'ORDER_CONFIRMED', { order_code: code });
+    // Thông báo là side-effect — lỗi gửi không được làm hỏng đơn đã đặt (nhất quán với Pancake/affiliate).
+    try {
+      await this.notifications.notify(userId, 'ORDER_CONFIRMED', { order_code: code });
+    } catch (err) {
+      this.logger.error(`Gửi thông báo lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
+    }
 
     return this.findOrderResponse(order.id);
   }
 
   // ── Helpers ────────────────────────────────────────
+  /** Lỗi vi phạm ràng buộc unique của Prisma (P2002). */
+  private isUniqueViolation(err: unknown): boolean {
+    return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
+  }
+
   private async compute(userId: string, addressId: string, pointsToUse?: number) {
     const cart = await this.cart.getCart(userId);
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });

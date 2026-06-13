@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import type { Env } from '../../../config/env.validation';
@@ -86,7 +86,7 @@ export class ZalopayService {
   async handleCallback(rawData: string, reqMac: string) {
     if (!this.isConfigured()) return { return_code: 2, return_message: 'not configured' };
     const mac = createHmac('sha256', this.key2).update(rawData).digest('hex');
-    if (mac !== reqMac) {
+    if (!this.safeEqual(mac, reqMac)) {
       this.logger.warn('ZaloPay callback MAC mismatch.');
       return { return_code: -1, return_message: 'mac not equal' };
     }
@@ -102,6 +102,14 @@ export class ZalopayService {
       await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
     }
     return { return_code: 1, return_message: 'success' };
+  }
+
+  /** So sánh MAC chống timing-attack (độ dài khác → false ngay, không ném). */
+  private safeEqual(a: string, b: string): boolean {
+    const ab = Buffer.from(a, 'utf8');
+    const bb = Buffer.from(b, 'utf8');
+    if (ab.length !== bb.length) return false;
+    return timingSafeEqual(ab, bb);
   }
 
   private yymmdd(): string {
