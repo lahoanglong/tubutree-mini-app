@@ -4,6 +4,7 @@ import { PaginationQuery } from '../../../common/pagination';
 export class ProductQuery extends PaginationQuery {
   @IsOptional() @IsString() brand?: string;
   @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() segment?: string; // forSegment (vd mom_baby)
   @IsOptional() @IsString() q?: string;
 
   @IsOptional()

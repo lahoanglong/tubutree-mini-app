@@ -25,6 +25,11 @@ export default function HomePage() {
     queryKey: ['products', 'home-newest'],
     queryFn: () => fetchProducts({ limit: SECTION_LIMIT, sort: 'newest' }),
   });
+  // Persona chính (mẹ & bé) — gợi ý ưu tiên theo segment (spec §6.2).
+  const momBaby = useQuery({
+    queryKey: ['products', 'home-mombaby'],
+    queryFn: () => fetchProducts({ limit: SECTION_LIMIT, segment: 'mom_baby' }),
+  });
   const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands });
 
   const goBrand = (brand?: string) => {
@@ -201,6 +206,9 @@ export default function HomePage() {
         query={featured}
         onRetry={() => void featured.refetch()}
       />
+
+      {/* ── Cho mẹ và bé (persona chính) ── */}
+      <HomeSection title="Cho mẹ và bé 🍼" query={momBaby} onRetry={() => void momBaby.refetch()} />
 
       {/* ── Mới về vườn ── */}
       <HomeSection title={vi.home.newArrivals} query={newest} onRetry={() => void newest.refetch()} />
