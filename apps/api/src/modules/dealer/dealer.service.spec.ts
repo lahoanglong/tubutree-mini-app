@@ -33,8 +33,8 @@ describe('DealerService.pricelist', () => {
       [variation('v1', 200000)],
     );
     const rows = await new DealerService(prisma, makeConfig()).pricelist('d1');
-    expect(rows[0].dealerPrice).toBe(150000); // 200k * (1-0.25)
-    expect(rows[0].discountPct).toBe(25);
+    expect(rows[0]!.dealerPrice).toBe(150000); // 200k * (1-0.25)
+    expect(rows[0]!.discountPct).toBe(25);
   });
 
   it('kẹp chiết khấu theo trần max_discount_pct', async () => {
@@ -44,8 +44,8 @@ describe('DealerService.pricelist', () => {
       [variation('v1', 200000)],
     );
     const rows = await new DealerService(prisma, makeConfig({ 'dealer.max_discount_pct': 0.45 })).pricelist('d1');
-    expect(rows[0].dealerPrice).toBe(110000); // 200k * (1-0.45)
-    expect(rows[0].discountPct).toBe(45);
+    expect(rows[0]!.dealerPrice).toBe(110000); // 200k * (1-0.45)
+    expect(rows[0]!.discountPct).toBe(45);
   });
 
   it('chặn user không phải DEALER', async () => {

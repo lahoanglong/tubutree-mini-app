@@ -33,7 +33,7 @@ describe('WishlistService.list', () => {
     const result = await svc.list('user1');
 
     expect(result.map((p) => p.id)).toEqual(['p1', 'p2']); // theo thứ tự wishlist, không theo product.findMany
-    expect(result[0].inStock).toBe(true);
+    expect(result[0]!.inStock).toBe(true);
   });
 
   it('trả [] khi chưa thích gì (không query product)', async () => {
@@ -54,6 +54,6 @@ describe('WishlistService.list', () => {
     } as unknown as PrismaService;
     const svc = new WishlistService(prisma);
     const result = await svc.list('user1');
-    expect(result[0].inStock).toBe(false);
+    expect(result[0]!.inStock).toBe(false);
   });
 });
