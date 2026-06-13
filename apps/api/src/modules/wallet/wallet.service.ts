@@ -40,7 +40,13 @@ export class WalletService {
     if (user.walletBalance < amount) throw new BadRequestException('Số dư ví không đủ.');
 
     const payout = await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: userId }, data: { walletBalance: { decrement: amount } } });
+      // Trừ tiền ATOMIC: chỉ trừ nếu số dư còn đủ (where gte) — chống TOCTOU/overdraft
+      // khi 2 lệnh rút chạy đồng thời (check ở trên có thể đã cũ).
+      const dec = await tx.user.updateMany({
+        where: { id: userId, walletBalance: { gte: amount } },
+        data: { walletBalance: { decrement: amount } },
+      });
+      if (dec.count === 0) throw new BadRequestException('Số dư ví không đủ.');
       return tx.payout.create({
         data: { userId, amount, method: 'BANK', bankInfo, status: 'REQUESTED' },
       });
