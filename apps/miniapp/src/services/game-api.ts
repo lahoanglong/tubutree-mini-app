@@ -53,7 +53,22 @@ export const waterTree = (drops: number) =>
     target: number;
     harvested: boolean;
     treesPlanted: number;
-    reward?: { coupon?: string };
+    reward?: { coupon?: string; certificate?: string };
   }>('/game/tree/water', { drops }).then((r) => r.data);
 export const getLeaderboard = () => api.get<LeaderRow[]>('/game/leaderboard').then((r) => r.data);
 export const getMissions = () => api.get<MissionItem[]>('/game/missions').then((r) => r.data);
+
+export interface PlantedTreeItem {
+  certificateCode: string;
+  treeType: string;
+  status: 'PLEDGED' | 'PLANTED';
+  region: string | null;
+  pledgedAt: string;
+  plantedAt: string | null;
+}
+export interface Forest {
+  count: number;
+  plantedCount: number;
+  trees: PlantedTreeItem[];
+}
+export const getForest = () => api.get<Forest>('/game/forest').then((r) => r.data);

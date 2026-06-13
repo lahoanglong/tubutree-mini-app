@@ -50,6 +50,11 @@ export class GameController {
     return this.game.getMissions(userId);
   }
 
+  @Get('forest')
+  forest(@CurrentUser('sub') userId: string) {
+    return this.game.getForest(userId);
+  }
+
   @Public()
   @Get('leaderboard')
   leaderboard() {

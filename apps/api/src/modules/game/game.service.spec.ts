@@ -25,6 +25,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     gameQuiz: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     gameQuizAttempt: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), create: jest.fn().mockResolvedValue({}) },
     coupon: { create: jest.fn().mockResolvedValue({}) },
+    plantedTree: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
     mission: { findMany: jest.fn().mockResolvedValue([]) },
     missionProgress: { findMany: jest.fn().mockResolvedValue([]) },
     $transaction: jest.fn().mockResolvedValue([]),
@@ -233,6 +234,10 @@ describe('GameService.waterTree', () => {
     expect(r.treesPlanted).toBe(3);
     expect(r.reward.coupon).toBeTruthy();
     expect(prisma.coupon.create).toHaveBeenCalledTimes(1);
+    // Cam kết 1 cây thật + chứng nhận
+    expect(prisma.plantedTree.create).toHaveBeenCalledTimes(1);
+    expect(r.reward.certificate).toMatch(/^TUBU-/);
+    expect((prisma.plantedTree.create as jest.Mock).mock.calls[0][0].data.certificateCode).toMatch(/^TUBU-/);
   });
 
   it('một lần tưới đủ nhiều cây (target nhỏ) → harvest nhiều lần, dư carry-over', async () => {
@@ -245,6 +250,28 @@ describe('GameService.waterTree', () => {
     expect(r.treesPlanted).toBe(2);
     expect(r.progress).toBe(10);
     expect(prisma.coupon.create).toHaveBeenCalledTimes(2);
+    expect(prisma.plantedTree.create).toHaveBeenCalledTimes(2); // 2 cây thật cam kết
+  });
+});
+
+describe('GameService.getForest (Khu rừng của tôi §6.7.7)', () => {
+  it('trả danh sách cây + đếm tổng/đã trồng', async () => {
+    const prisma = makePrisma();
+    (prisma.plantedTree.findMany as jest.Mock).mockResolvedValue([
+      { certificateCode: 'TUBU-AAA', treeType: 't', status: 'PLANTED', region: 'Sơn La', pledgedAt: new Date(), plantedAt: new Date() },
+      { certificateCode: 'TUBU-BBB', treeType: 't', status: 'PLEDGED', region: null, pledgedAt: new Date(), plantedAt: null },
+    ]);
+    const r = await new GameService(prisma, makeConfig()).getForest('u1');
+    expect(r.count).toBe(2);
+    expect(r.plantedCount).toBe(1);
+    expect(r.trees[0]!.certificateCode).toBe('TUBU-AAA');
+  });
+
+  it('rừng trống → count 0', async () => {
+    const prisma = makePrisma();
+    const r = await new GameService(prisma, makeConfig()).getForest('u1');
+    expect(r.count).toBe(0);
+    expect(r.plantedCount).toBe(0);
   });
 });
 

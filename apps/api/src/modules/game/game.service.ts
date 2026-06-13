@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 
@@ -180,14 +181,20 @@ export class GameService {
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
     let harvestCount = 0;
     let couponCode: string | undefined;
+    let certificateCode: string | undefined;
     while (eco.progress >= eco.target) {
       eco.progress -= eco.target;
       eco.treesPlanted += 1;
       harvestCount += 1;
       couponCode = await this.grantCoupon(userId, harvestAmount);
+      // Cam kết 1 cây thật + chứng nhận (§6.7.7). PanNature push thật để sau (gate).
+      certificateCode = await this.plantTree(userId, eco.treeType);
     }
     const harvested = harvestCount > 0;
-    const reward: { coupon?: string } = couponCode ? { coupon: couponCode } : {};
+    const reward: { coupon?: string; certificate?: string } = {
+      ...(couponCode ? { coupon: couponCode } : {}),
+      ...(certificateCode ? { certificate: certificateCode } : {}),
+    };
 
     // Giai đoạn cây theo tiến độ hiện tại (sau carry-over). progress=0 → mầm mới (stage 1).
     const stage = Math.min(4, Math.max(1, Math.ceil((eco.progress / eco.target) * 4)));
@@ -200,6 +207,34 @@ export class GameService {
       },
     });
     return { progress: eco.progress, target: eco.target, harvested, treesPlanted: eco.treesPlanted, reward };
+  }
+
+  /** Tạo bản ghi cây thật đã cam kết + mã chứng nhận. Trả mã. */
+  private async plantTree(userId: string, treeType: string): Promise<string> {
+    const certificateCode = `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
+    await this.prisma.plantedTree.create({ data: { userId, treeType, certificateCode } });
+    return certificateCode;
+  }
+
+  /** "Khu rừng của tôi" — danh sách cây thật đã cam kết + chứng nhận (§6.7.7). */
+  async getForest(userId: string) {
+    const trees = await this.prisma.plantedTree.findMany({
+      where: { userId },
+      orderBy: { pledgedAt: 'desc' },
+      take: 200,
+    });
+    return {
+      count: trees.length,
+      plantedCount: trees.filter((t) => t.status === 'PLANTED').length,
+      trees: trees.map((t) => ({
+        certificateCode: t.certificateCode,
+        treeType: t.treeType,
+        status: t.status,
+        region: t.region,
+        pledgedAt: t.pledgedAt,
+        plantedAt: t.plantedAt,
+      })),
+    };
   }
 
   // ── Missions & leaderboard ─────────────────────────

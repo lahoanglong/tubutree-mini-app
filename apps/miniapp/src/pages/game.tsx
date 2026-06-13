@@ -10,6 +10,7 @@ import {
   waterTree,
   getLeaderboard,
   getMissions,
+  getForest,
   type MissionItem,
 } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
@@ -29,12 +30,14 @@ export default function GamePage() {
   const { data: quiz } = useQuery({ queryKey: ['game', 'quiz'], queryFn: getTodayQuiz, enabled: authed });
   const { data: board } = useQuery({ queryKey: ['game', 'board'], queryFn: getLeaderboard });
   const { data: missions } = useQuery({ queryKey: ['game', 'missions'], queryFn: getMissions, enabled: authed });
+  const { data: forest } = useQuery({ queryKey: ['game', 'forest'], queryFn: getForest, enabled: authed });
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
   const currentQuiz = quiz?.find((q) => !answeredIds.has(q.id));
   const [harvested, setHarvested] = useState(false);
   const [harvestCoupon, setHarvestCoupon] = useState<string | null>(null);
+  const [harvestCert, setHarvestCert] = useState<string | null>(null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['game'] });
@@ -64,11 +67,13 @@ export default function GamePage() {
     onSuccess: (r) => {
       if (r.harvested) {
         setHarvestCoupon(r.reward?.coupon ?? null);
+        setHarvestCert(r.reward?.certificate ?? null);
         setHarvested(true); // mở modal celebration
       } else {
         openSnackbar({ text: `Đã tưới · ${r.progress}/${r.target}💧`, type: 'success' });
       }
       refresh();
+      void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
     },
     onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
   });
@@ -190,10 +195,39 @@ export default function GamePage() {
           <EcoStat icon="💨" value={`~${(eco?.treesPlanted ?? 0) * 21}kg`} label="CO₂ hấp thụ/năm (ước tính)" />
           <EcoStat icon="💧" value={String(profile?.totalSeeds ?? 0)} label="Giọt nước đã góp" />
         </Box>
-        {(eco?.treesPlanted ?? 0) > 0 ? (
-          <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 8 }}>
-            Cảm ơn bạn! Tubu đã góp {eco?.treesPlanted} cây thật vào "Rừng Xanh Lên" cùng PanNature 🌿
-          </Text>
+        {(forest?.count ?? 0) > 0 ? (
+          <>
+            <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 8 }}>
+              Cảm ơn bạn! Tubu đã cam kết góp {forest?.count} cây thật vào "Rừng Xanh Lên" cùng PanNature 🌿
+            </Text>
+            {/* Khu rừng của tôi — chứng nhận từng cây (§6.7.7) */}
+            <Box mt={3} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <Text size="xSmall" bold>🌲 Khu rừng của tôi — chứng nhận</Text>
+              {forest!.trees.slice(0, 5).map((t) => (
+                <Box
+                  key={t.certificateCode}
+                  flex
+                  alignItems="center"
+                  justifyContent="space-between"
+                  p={2}
+                  style={{ background: 'var(--leaf-50, #eef7ee)', borderRadius: 'var(--radius-sm)' }}
+                >
+                  <Box>
+                    <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', letterSpacing: 0.5 }}>
+                      {t.certificateCode}
+                    </Text>
+                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{t.treeType}</Text>
+                  </Box>
+                  <Text size="xSmall" style={{ color: t.status === 'PLANTED' ? 'var(--leaf-700)' : 'var(--neutral-500)' }}>
+                    {t.status === 'PLANTED' ? '✅ Đã trồng' : '🌱 Đã cam kết'}
+                  </Text>
+                </Box>
+              ))}
+              {forest!.count > 5 && (
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>…và {forest!.count - 5} cây khác</Text>
+              )}
+            </Box>
+          </>
         ) : (
           <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
             Chăm cây ảo đến khi thu hoạch để Tubu góp 1 cây thật cho rừng Việt Nam.
@@ -355,6 +389,16 @@ export default function GamePage() {
                 </Text>
                 <Text bold style={{ color: 'var(--leaf-700)', letterSpacing: 1 }}>
                   {harvestCoupon}
+                </Text>
+              </Box>
+            )}
+            {harvestCert && (
+              <Box mt={2} p={3} style={{ background: 'var(--leaf-50, #eef7ee)', borderRadius: 'var(--radius-md)' }}>
+                <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+                  Mã chứng nhận cây thật
+                </Text>
+                <Text bold style={{ color: 'var(--leaf-700)', letterSpacing: 1 }}>
+                  {harvestCert}
                 </Text>
               </Box>
             )}

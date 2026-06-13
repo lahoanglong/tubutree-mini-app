@@ -62,6 +62,7 @@ model User {
   gameProfile         GameProfile?
   reviews             Review[]
   refreshTokens       RefreshToken[]
+  plantedTrees        PlantedTree[]
 
   @@index([referredById])
   @@map("users")
@@ -591,6 +592,28 @@ model GameProfile {
   badges        String[]  @default([])
 
   @@map("game_profiles")
+}
+
+// Cây thật cam kết trồng khi user thu hoạch cây ảo (§6.7.7 "Tác động xanh").
+// status: PLEDGED (đã cam kết) → PLANTED (PanNature xác nhận trồng thật).
+model PlantedTree {
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  certificateCode String       @unique // mã chứng nhận hiển thị cho user
+  treeType        String       @default("Cây Dứa Fuwa3e")
+  region          String? // vùng trồng (khi PanNature xác nhận)
+  status          PlantedStatus @default(PLEDGED)
+  pledgedAt       DateTime     @default(now())
+  plantedAt       DateTime? // thời điểm PanNature xác nhận trồng thật
+
+  @@index([userId])
+  @@map("planted_trees")
+}
+
+enum PlantedStatus {
+  PLEDGED
+  PLANTED
 }
 
 model GameSpin {
