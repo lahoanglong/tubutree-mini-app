@@ -165,6 +165,7 @@ type SeedProduct = {
   forSegment: string[];
   certifications: string[];
   isFeatured?: boolean;
+  ingredients?: { name: string; percentage?: string; benefit: string }[];
   variations: { sku: string; name: string; attributes: Record<string, string>; retailPrice: number; salePrice?: number; stock: number; weight: number }[];
 };
 
@@ -174,6 +175,11 @@ const PRODUCTS: SeedProduct[] = [
     id: 'p-polang-shampoo', brand: 'Pơ Lang', slug: 'dau-goi-buoi-po-lang', name: 'Dầu gội bưởi Pơ Lang',
     shortDesc: 'Dầu gội thảo dược tinh dầu bưởi, giảm rụng tóc.', basePrice: 165000, categoryIds: ['cat-skincare'],
     forSegment: ['sensitive_skin'], certifications: ['Vegan'], isFeatured: true,
+    ingredients: [
+      { name: 'Tinh dầu bưởi', percentage: '2%', benefit: 'Kích thích mọc tóc, giảm gãy rụng' },
+      { name: 'Bồ kết', benefit: 'Làm sạch dịu nhẹ, sạch gàu tự nhiên' },
+      { name: 'Hương nhu', benefit: 'Thư giãn da đầu, mượt tóc' },
+    ],
     variations: [
       { sku: 'POLANG-SP-300', name: '300ml', attributes: { size: '300ml' }, retailPrice: 165000, stock: 120, weight: 350 },
       { sku: 'POLANG-SP-500', name: '500ml', attributes: { size: '500ml' }, retailPrice: 245000, salePrice: 219000, stock: 80, weight: 560 },
@@ -183,6 +189,11 @@ const PRODUCTS: SeedProduct[] = [
     id: 'p-fuwa-dishwash', brand: 'Fuwa3e', slug: 'nuoc-rua-chen-fuwa3e', name: 'Nước rửa chén sinh học Fuwa3e',
     shortDesc: 'Lên men enzyme dứa, an toàn cho da tay.', basePrice: 120000, categoryIds: ['cat-cleaning'],
     forSegment: [], certifications: ['Eco'], isFeatured: true,
+    ingredients: [
+      { name: 'Enzyme dứa lên men', percentage: '15%', benefit: 'Phân giải dầu mỡ, không hại da tay' },
+      { name: 'Tinh dầu sả', benefit: 'Khử mùi tanh, kháng khuẩn tự nhiên' },
+      { name: 'Nước cất', benefit: 'Dung môi an toàn, phân huỷ sinh học' },
+    ],
     variations: [
       { sku: 'FUWA-DW-1L', name: '1L', attributes: { size: '1L' }, retailPrice: 120000, stock: 200, weight: 1050 },
       { sku: 'FUWA-DW-5L', name: 'Can 5L', attributes: { size: '5L' }, retailPrice: 480000, salePrice: 430000, stock: 40, weight: 5200 },
@@ -192,6 +203,11 @@ const PRODUCTS: SeedProduct[] = [
     id: 'p-visante-serum', brand: 'Visante', slug: 'serum-duong-am-visante', name: 'Serum dưỡng ẩm Visante',
     shortDesc: 'Cấp ẩm chuyên sâu chiết xuất rau má.', basePrice: 320000, salePrice: 289000, categoryIds: ['cat-skincare'],
     forSegment: ['sensitive_skin', 'mom_baby'], certifications: ['USDA Organic', 'Vegan'], isFeatured: true,
+    ingredients: [
+      { name: 'Chiết xuất rau má', percentage: '5%', benefit: 'Phục hồi, làm dịu da nhạy cảm' },
+      { name: 'Hyaluronic Acid', percentage: '2%', benefit: 'Cấp ẩm sâu, căng mịn' },
+      { name: 'Chiết xuất lô hội', benefit: 'Làm dịu, chống kích ứng' },
+    ],
     variations: [
       { sku: 'VIS-SR-30', name: '30ml', attributes: { size: '30ml' }, retailPrice: 320000, salePrice: 289000, stock: 60, weight: 90 },
     ],
@@ -298,6 +314,7 @@ async function main() {
         name: p.name, shortDesc: p.shortDesc, basePrice: p.basePrice, salePrice: p.salePrice ?? null,
         brand: p.brand, categoryIds: p.categoryIds, forSegment: p.forSegment,
         certifications: p.certifications, isFeatured: p.isFeatured ?? false,
+        ingredients: p.ingredients ?? undefined,
       },
       create: {
         id: p.id,
@@ -307,6 +324,7 @@ async function main() {
         categoryIds: p.categoryIds, tags: [p.brand.toLowerCase()],
         basePrice: p.basePrice, salePrice: p.salePrice ?? null,
         forSegment: p.forSegment, certifications: p.certifications, isFeatured: p.isFeatured ?? false,
+        ingredients: p.ingredients ?? undefined,
       },
     });
     for (const v of p.variations) {

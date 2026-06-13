@@ -294,6 +294,45 @@ export default function ProductDetailPage() {
         />
       </Box>
 
+      {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}
+      {p.ingredients && p.ingredients.length > 0 && (
+        <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+          <Text bold size="small" style={{ marginBottom: 10 }}>
+            Thành phần
+          </Text>
+          <Box flex flexDirection="column" style={{ gap: 10 }}>
+            {p.ingredients.map((ing, i) => (
+              <Box key={i} flex style={{ gap: 10 }}>
+                <span
+                  aria-hidden
+                  style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--leaf-600)', marginTop: 6, flex: '0 0 auto' }}
+                />
+                <Box style={{ flex: 1 }}>
+                  <Box flex alignItems="center" style={{ gap: 6 }}>
+                    <Text size="small" bold>
+                      {ing.name}
+                    </Text>
+                    {ing.percentage && (
+                      <Text
+                        size="xSmall"
+                        style={{ background: 'var(--leaf-50)', color: 'var(--leaf-700)', padding: '1px 6px', borderRadius: 'var(--radius-full)' }}
+                      >
+                        {ing.percentage}
+                      </Text>
+                    )}
+                  </Box>
+                  {ing.benefit && (
+                    <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+                      {ing.benefit}
+                    </Text>
+                  )}
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
+
       {/* ── Mô tả ── */}
       {p.description && <CollapsibleDescription text={p.description} />}
 

@@ -41,6 +41,7 @@ export interface ProductDetail {
   basePrice: number;
   salePrice: number | null;
   certifications: string[];
+  ingredients?: { name: string; percentage?: string; benefit?: string }[] | null;
   variations: VariationDetail[];
 }
 
