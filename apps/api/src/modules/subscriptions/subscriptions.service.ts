@@ -94,20 +94,25 @@ export class SubscriptionsService {
   /** Cron 3h sáng: xử lý các subscription đến hạn → tạo đơn COD + dời chu kỳ. */
   @Cron('0 3 * * *')
   async processDue(): Promise<void> {
+    const now = new Date();
     const due = await this.prisma.subscription.findMany({
-      where: { status: 'ACTIVE', nextRunAt: { lte: new Date() } },
+      where: { status: 'ACTIVE', nextRunAt: { lte: now } },
       take: 200,
     });
     let created = 0;
     for (const sub of due) {
+      // CLAIM atomic: advance nextRunAt TRƯỚC khi tạo đơn. Chỉ instance đầu tiên
+      // (count=1) được xử lý → multi-instance cron không tạo đơn TRÙNG cho khách.
+      const claimed = await this.prisma.subscription.updateMany({
+        where: { id: sub.id, status: 'ACTIVE', nextRunAt: { lte: now } },
+        data: { nextRunAt: this.addWeeks(now, sub.intervalWeeks) },
+      });
+      if (claimed.count === 0) continue; // instance khác đã claim
       try {
         await this.createOrderFor(sub);
-        await this.prisma.subscription.update({
-          where: { id: sub.id },
-          data: { nextRunAt: this.addWeeks(new Date(), sub.intervalWeeks) },
-        });
         created++;
       } catch (err) {
+        // nextRunAt đã advance → bỏ qua chu kỳ này (không double-charge), chờ chu kỳ kế.
         this.logger.error(`Subscription ${sub.id} lỗi: ${err instanceof Error ? err.message : err}`);
       }
     }
