@@ -14,7 +14,7 @@ export class WalletService {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const [commApproved, commPending] = await Promise.all([
       this.prisma.commission.aggregate({
-        where: { affiliateUserId: userId, status: 'APPROVED' },
+        where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
         _sum: { amount: true },
       }),
       this.prisma.commission.aggregate({

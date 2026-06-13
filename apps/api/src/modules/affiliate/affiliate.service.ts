@@ -73,7 +73,7 @@ export class AffiliateService {
         _sum: { amount: true },
       }),
       this.prisma.commission.aggregate({
-        where: { affiliateUserId: userId, status: 'APPROVED' },
+        where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
         _sum: { amount: true },
       }),
       this.prisma.affiliateLink.aggregate({
@@ -187,27 +187,43 @@ export class AffiliateService {
     const minWithdraw = await this.config.get<number>('affiliate.min_withdraw_bank', 50000);
     const multiplier = await this.config.get<number>('affiliate.tubu_wallet_multiplier', 1.5);
 
+    // "Khả dụng" = APPROVED và CHƯA thuộc batch payout nào (payoutBatchId null).
     const approved = await this.prisma.commission.aggregate({
-      where: { affiliateUserId: userId, status: 'APPROVED' },
+      where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
       _sum: { amount: true },
     });
     const available = approved._sum.amount ?? 0;
+    if (available <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
     if (amount > available) throw new BadRequestException('Số dư hoa hồng khả dụng không đủ.');
 
+    // Rút = cash-out TOÀN BỘ hoa hồng khả dụng (commission là bản ghi rời rạc, không
+    // tách lẻ theo số tiền tùy ý). credited tính theo tổng THỰC trong transaction →
+    // không mất tiền; gate theo updateMany.count → không double-spend khi chạy đồng thời.
     if (method === 'WALLET_BALANCE') {
-      // Chuyển vào Ví Tubu ×1.5 (không cần min).
-      const credited = Math.floor(amount * multiplier);
-      await this.prisma.$transaction([
-        this.prisma.user.update({
-          where: { id: userId },
-          data: { walletBalance: { increment: credited } },
-        }),
-        this.markCommissionsPaid(userId, amount),
-        this.prisma.payout.create({
+      const result = await this.prisma.$transaction(async (tx) => {
+        const rows = await tx.commission.findMany({
+          where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
+          select: { id: true, amount: true },
+        });
+        const total = rows.reduce((s, c) => s + c.amount, 0);
+        const marked = await tx.commission.updateMany({
+          where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
+          data: { status: 'PAID', paidAt: new Date() },
+        });
+        if (marked.count === 0 || total <= 0) throw new BadRequestException('Hoa hồng đã được xử lý.');
+        const credited = Math.floor(total * multiplier);
+        await tx.user.update({ where: { id: userId }, data: { walletBalance: { increment: credited } } });
+        await tx.payout.create({
           data: { userId, amount: credited, method, status: 'PAID', paidAt: new Date() },
-        }),
-      ]);
-      return { ok: true, method, credited, note: `Đã cộng ${credited}đ vào Ví Tubu (×${multiplier}).` };
+        });
+        return { credited };
+      });
+      return {
+        ok: true,
+        method,
+        credited: result.credited,
+        note: `Đã cộng ${result.credited}đ vào Ví Tubu (×${multiplier}).`,
+      };
     }
 
     // Rút về STK ngân hàng.
@@ -215,14 +231,21 @@ export class AffiliateService {
       throw new BadRequestException(`Số tiền rút tối thiểu ${minWithdraw.toLocaleString('vi-VN')}đ.`);
     }
     const payout = await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.commission.findMany({
+        where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
+        select: { id: true, amount: true },
+      });
+      const total = rows.reduce((s, c) => s + c.amount, 0);
+      if (total <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
       const p = await tx.payout.create({
-        data: { userId, amount, method: 'BANK', bankInfo: bankInfo ?? {}, status: 'REQUESTED' },
+        data: { userId, amount: total, method: 'BANK', bankInfo: bankInfo ?? {}, status: 'REQUESTED' },
       });
-      // đánh dấu commission sẽ trả trong batch này
-      await tx.commission.updateMany({
-        where: { affiliateUserId: userId, status: 'APPROVED' },
-        data: { payoutBatchId: p.id },
+      // Gán batch + set PAID để loại khỏi "khả dụng" → chống rút trùng (gate theo count).
+      const marked = await tx.commission.updateMany({
+        where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
+        data: { payoutBatchId: p.id, status: 'PAID', paidAt: new Date() },
       });
+      if (marked.count === 0) throw new BadRequestException('Hoa hồng đã được xử lý.');
       return p;
     });
     return { ok: true, payoutId: payout.id, status: 'REQUESTED' };
@@ -249,10 +272,4 @@ export class AffiliateService {
     return agg._sum.amount ?? 0;
   }
 
-  private markCommissionsPaid(userId: string, _amount: number) {
-    return this.prisma.commission.updateMany({
-      where: { affiliateUserId: userId, status: 'APPROVED' },
-      data: { status: 'PAID', paidAt: new Date() },
-    });
-  }
 }

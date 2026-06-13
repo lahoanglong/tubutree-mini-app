@@ -103,3 +103,81 @@ describe('AffiliateService.monthlyTier (Build Spec §6.8.2)', () => {
     expect(t.toNext).toBe(0);
   });
 });
+
+describe('AffiliateService.requestPayout (money safety)', () => {
+  function makePrisma(opts: { available?: number; rows?: { id: string; amount: number }[]; markCount?: number }) {
+    const rows = opts.rows ?? [{ id: 'c1', amount: 100_000 }];
+    const userUpdate = jest.fn().mockResolvedValue({});
+    const payoutCreate = jest.fn().mockResolvedValue({ id: 'payout-1' });
+    const updateMany = jest.fn().mockResolvedValue({ count: opts.markCount ?? rows.length });
+    const prisma = {
+      commission: {
+        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: opts.available ?? 100_000 } }),
+        findMany: jest.fn().mockResolvedValue(rows),
+        updateMany,
+      },
+      user: { update: userUpdate },
+      payout: { create: payoutCreate },
+    } as unknown as PrismaService;
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
+      .fn()
+      .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
+    return { prisma, userUpdate, payoutCreate, updateMany };
+  }
+
+  it('số dư khả dụng = 0 → BadRequest', async () => {
+    const { prisma } = makePrisma({ available: 0 });
+    await expect(new AffiliateService(prisma, config).requestPayout('u1', 0, 'WALLET_BALANCE')).rejects.toThrow(
+      'khả dụng',
+    );
+  });
+
+  it('amount vượt khả dụng → BadRequest', async () => {
+    const { prisma } = makePrisma({ available: 100_000 });
+    await expect(
+      new AffiliateService(prisma, config).requestPayout('u1', 200_000, 'WALLET_BALANCE'),
+    ).rejects.toThrow('không đủ');
+  });
+
+  it('WALLET_BALANCE → credit ×1.5 theo TỔNG THỰC (không mất tiền) + mark PAID', async () => {
+    const { prisma, userUpdate, payoutCreate } = makePrisma({
+      available: 100_000,
+      rows: [
+        { id: 'c1', amount: 60_000 },
+        { id: 'c2', amount: 40_000 },
+      ],
+    });
+    const r = await new AffiliateService(prisma, config).requestPayout('u1', 50_000, 'WALLET_BALANCE');
+    // dù request 50k, credit theo tổng thực 100k ×1.5 = 150k (không mất 50k còn lại)
+    expect(r.credited).toBe(150_000);
+    expect(userUpdate.mock.calls[0][0].data.walletBalance).toEqual({ increment: 150_000 });
+    expect(payoutCreate.mock.calls[0][0].data.status).toBe('PAID');
+  });
+
+  it('WALLET_BALANCE double-spend: updateMany count=0 → BadRequest, KHÔNG credit ví', async () => {
+    const { prisma, userUpdate } = makePrisma({ available: 100_000, markCount: 0 });
+    await expect(
+      new AffiliateService(prisma, config).requestPayout('u1', 100_000, 'WALLET_BALANCE'),
+    ).rejects.toThrow('đã được xử lý');
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it('BANK dưới mức tối thiểu → BadRequest', async () => {
+    const { prisma } = makePrisma({ available: 100_000 });
+    await expect(new AffiliateService(prisma, config).requestPayout('u1', 10_000, 'BANK', {})).rejects.toThrow(
+      'tối thiểu',
+    );
+  });
+
+  it('BANK hợp lệ → payout.amount = TỔNG THỰC + mark PAID + gán batch', async () => {
+    const { prisma, payoutCreate, updateMany } = makePrisma({
+      available: 100_000,
+      rows: [{ id: 'c1', amount: 100_000 }],
+    });
+    const r = await new AffiliateService(prisma, config).requestPayout('u1', 80_000, 'BANK', { bank: 'VCB' });
+    expect(r.status).toBe('REQUESTED');
+    expect(payoutCreate.mock.calls[0][0].data.amount).toBe(100_000); // tổng thực, không phải 80k
+    expect(updateMany.mock.calls[0][0].data.payoutBatchId).toBe('payout-1');
+    expect(updateMany.mock.calls[0][0].data.status).toBe('PAID');
+  });
+});
