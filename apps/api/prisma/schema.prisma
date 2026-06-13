@@ -590,6 +590,7 @@ model GameProfile {
   totalSeeds    Int       @default(0)
   ecoImpact     Json?
   badges        String[]  @default([])
+  lastWateredAt DateTime? // §6.7.3: tính héo (3 ngày)/chết (7 ngày)
 
   @@map("game_profiles")
 }

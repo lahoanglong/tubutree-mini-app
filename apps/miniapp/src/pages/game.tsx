@@ -182,6 +182,22 @@ export default function GamePage() {
         </Box>
       </Box>
 
+      {/* Cảnh báo héo/chết (§6.7.3) */}
+      {profile?.treeHealth === 'WILTED' && (
+        <Box mx={3} mt={2} p={3} style={{ background: 'var(--sun-50, #fdf6e3)', borderRadius: 'var(--radius-md)' }}>
+          <Text size="xSmall" style={{ color: 'var(--clay-700, #92400e)' }}>
+            🥀 Cây đang héo vì lâu chưa tưới — tưới ngay để hồi phục nhé!
+          </Text>
+        </Box>
+      )}
+      {profile?.treeHealth === 'DEAD' && (
+        <Box mx={3} mt={2} p={3} style={{ background: 'var(--danger-50, #fee2e2)', borderRadius: 'var(--radius-md)' }}>
+          <Text size="xSmall" style={{ color: 'var(--danger, #b91c1c)' }}>
+            🍂 Cây đã héo úa do quá 7 ngày không tưới. Tưới lại sẽ trồng cây mới từ đầu.
+          </Text>
+        </Box>
+      )}
+
       <Box p={3}>
         <Button fullWidth loading={waterM.isPending} variant="secondary" onClick={() => waterM.mutate()}>
           🚿 Tưới cây (20💧)

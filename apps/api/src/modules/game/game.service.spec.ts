@@ -42,6 +42,7 @@ function profile(extra: Record<string, unknown> = {}) {
     longestStreak: 0,
     lastCheckInAt: null,
     treeStage: 1,
+    lastWateredAt: null,
     ecoImpact: { progress: 0, target: 600, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 0 },
     ...extra,
   };
@@ -272,6 +273,52 @@ describe('GameService.getForest (Khu rừng của tôi §6.7.7)', () => {
     const r = await new GameService(prisma, makeConfig()).getForest('u1');
     expect(r.count).toBe(0);
     expect(r.plantedCount).toBe(0);
+  });
+});
+
+describe('GameService.treeHealth (§6.7.3 héo/chết)', () => {
+  const DAYMS = 24 * 3600 * 1000;
+  async function health(extra: Record<string, unknown>) {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile(extra));
+    const r = (await new GameService(prisma, makeConfig()).getProfile('u1')) as { treeHealth: string };
+    return r.treeHealth;
+  }
+
+  it('chưa có tiến trình → HEALTHY dù lâu không tưới', async () => {
+    expect(await health({ lastWateredAt: new Date(Date.now() - 10 * DAYMS), ecoImpact: { progress: 0, target: 600 } })).toBe('HEALTHY');
+  });
+  it('tưới gần đây → HEALTHY', async () => {
+    expect(await health({ lastWateredAt: new Date(Date.now() - 1 * DAYMS), ecoImpact: { progress: 100, target: 600 } })).toBe('HEALTHY');
+  });
+  it('4 ngày không tưới (có tiến trình) → WILTED', async () => {
+    expect(await health({ lastWateredAt: new Date(Date.now() - 4 * DAYMS), ecoImpact: { progress: 100, target: 600 } })).toBe('WILTED');
+  });
+  it('8 ngày không tưới → DEAD', async () => {
+    expect(await health({ lastWateredAt: new Date(Date.now() - 8 * DAYMS), ecoImpact: { progress: 100, target: 600 } })).toBe('DEAD');
+  });
+});
+
+describe('GameService.waterTree — cây chết mất tiến trình (§6.7.3)', () => {
+  it('tưới cây CHẾT (8 ngày) → reset tiến trình rồi +drops, revivedFromDead', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, lastWateredAt: new Date(Date.now() - 8 * 86400000), ecoImpact: { progress: 500, target: 600, treeType: 't', treesPlanted: 1 } }),
+    );
+    const r = (await new GameService(prisma, makeConfig()).waterTree('u1', 20)) as { progress: number; revivedFromDead: boolean; harvested: boolean };
+    expect(r.revivedFromDead).toBe(true);
+    expect(r.progress).toBe(20); // 500 bị reset về 0 rồi +20
+    expect(r.harvested).toBe(false);
+  });
+
+  it('tưới cây còn sống → giữ tiến trình', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, lastWateredAt: new Date(Date.now() - 1 * 86400000), ecoImpact: { progress: 500, target: 600, treeType: 't', treesPlanted: 0 } }),
+    );
+    const r = (await new GameService(prisma, makeConfig()).waterTree('u1', 20)) as { progress: number; revivedFromDead: boolean };
+    expect(r.revivedFromDead).toBe(false);
+    expect(r.progress).toBe(520);
   });
 });
 

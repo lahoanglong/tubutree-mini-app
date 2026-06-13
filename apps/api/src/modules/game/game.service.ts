@@ -40,7 +40,23 @@ export class GameService {
   }
 
   async getProfile(userId: string) {
-    return this.ensureProfile(userId);
+    const profile = await this.ensureProfile(userId);
+    const wiltDays = await this.config.get<number>('game.wilt_days', 3);
+    const deathDays = await this.config.get<number>('game.death_days', 7);
+    return { ...profile, treeHealth: this.treeHealth(profile, wiltDays, deathDays) };
+  }
+
+  /** §6.7.3: trạng thái cây theo số ngày không tưới (chỉ tính khi đã có tiến trình). */
+  private treeHealth(
+    profile: { lastWateredAt: Date | null; ecoImpact: unknown },
+    wiltDays: number,
+    deathDays: number,
+  ): 'HEALTHY' | 'WILTED' | 'DEAD' {
+    if (!profile.lastWateredAt || this.eco(profile.ecoImpact).progress <= 0) return 'HEALTHY';
+    const days = (Date.now() - new Date(profile.lastWateredAt).getTime()) / 864e5;
+    if (days >= deathDays) return 'DEAD';
+    if (days >= wiltDays) return 'WILTED';
+    return 'HEALTHY';
   }
 
   // ── Daily check-in ─────────────────────────────────
@@ -174,6 +190,18 @@ export class GameService {
     if (profile.totalSeeds < drops) throw new BadRequestException('Không đủ giọt nước.');
 
     const eco = this.eco(profile.ecoImpact);
+
+    // §6.7.3: cây CHẾT (≥ death_days không tưới) → mất tiến trình, trồng lại từ đầu.
+    const deathDays = await this.config.get<number>('game.death_days', 7);
+    let revivedFromDead = false;
+    if (
+      profile.lastWateredAt &&
+      eco.progress > 0 &&
+      (Date.now() - new Date(profile.lastWateredAt).getTime()) / 864e5 >= deathDays
+    ) {
+      eco.progress = 0;
+      revivedFromDead = true;
+    }
     eco.progress += drops;
 
     // Thu hoạch khi đủ target; phần dư được CARRY-OVER sang cây mới (không mất nước).
@@ -204,9 +232,17 @@ export class GameService {
         totalSeeds: profile.totalSeeds - drops,
         treeStage: stage,
         ecoImpact: eco as object,
+        lastWateredAt: new Date(),
       },
     });
-    return { progress: eco.progress, target: eco.target, harvested, treesPlanted: eco.treesPlanted, reward };
+    return {
+      progress: eco.progress,
+      target: eco.target,
+      harvested,
+      treesPlanted: eco.treesPlanted,
+      revivedFromDead,
+      reward,
+    };
   }
 
   /** Tạo bản ghi cây thật đã cam kết + mã chứng nhận. Trả mã. */

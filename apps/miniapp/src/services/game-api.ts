@@ -4,6 +4,7 @@ export interface GameProfile {
   totalSeeds: number;
   streakDays: number;
   treeStage: number;
+  treeHealth?: 'HEALTHY' | 'WILTED' | 'DEAD';
   ecoImpact: { progress: number; target: number; treeType: string; treesPlanted: number } | null;
 }
 export interface CheckInResult {
