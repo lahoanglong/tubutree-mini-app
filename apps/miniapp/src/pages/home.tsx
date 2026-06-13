@@ -160,6 +160,38 @@ export default function HomePage() {
         ))}
       </Box>
 
+      {/* ── Hành trình nguyên liệu ── */}
+      <Box px={4} pt={3}>
+        <Box
+          role="button"
+          className="tubu-press"
+          onClick={() => {
+            haptic('light');
+            navigate('/brand-story');
+          }}
+          flex
+          alignItems="center"
+          style={{
+            gap: 12,
+            padding: 14,
+            borderRadius: 'var(--radius-lg)',
+            background: 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))',
+            color: '#fff',
+          }}
+        >
+          <Text style={{ fontSize: 32 }}>🗺️</Text>
+          <Box style={{ flex: 1 }}>
+            <Text bold style={{ color: '#fff' }}>
+              Hành trình nguyên liệu
+            </Text>
+            <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              Khám phá 6 vùng đất làm nên sản phẩm Tubu
+            </Text>
+          </Box>
+          <Text style={{ color: '#fff' }}>›</Text>
+        </Box>
+      </Box>
+
       {/* ── Flash Sale hôm nay ── */}
       <FlashSale />
 
