@@ -21,6 +21,7 @@ function setup(order: unknown) {
   const affiliate = {
     lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
     reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+    grantReferralReward: jest.fn().mockResolvedValue(undefined),
   } as unknown as AffiliateService;
   const proc = new PancakeProcessor(prisma, notifications, loyalty, affiliate) as unknown as {
     onStatusUpdated(d: Record<string, unknown>): Promise<void>;
@@ -58,6 +59,7 @@ describe('PancakeProcessor.onStatusUpdated', () => {
     expect((prisma.order.update as jest.Mock).mock.calls[0][0].data.status).toBe('DELIVERED');
     expect(loyalty.creditOrderPoints).toHaveBeenCalledWith('o1');
     expect(affiliate.lockCommissionsForOrder).toHaveBeenCalledWith('o1');
+    expect(affiliate.grantReferralReward).toHaveBeenCalledWith('o1');
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' });
   });
 

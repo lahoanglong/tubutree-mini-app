@@ -175,6 +175,51 @@ export class AffiliateService {
     });
   }
 
+  /**
+   * Refer-reward MỘT LẦN (tách khỏi hoa hồng %): đơn DELIVERED có người giới thiệu →
+   * thưởng voucher cho cả người mời và người được mời. Idempotent qua coupon.code @unique:
+   * mỗi cặp (mời, được-mời) thưởng 1 lần; mỗi người-được-mời nhận welcome-giới-thiệu 1 lần.
+   */
+  async grantReferralReward(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    const referrerId = order.referrerUserId;
+    if (!referrerId || referrerId === order.userId) return;
+    const refereeId = order.userId;
+    const referrerAmount = await this.config.get<number>('referral.referrer_reward_amount', 50000);
+    const refereeAmount = await this.config.get<number>('referral.referee_reward_amount', 30000);
+    await this.grantReferralVoucher(referrerId, `REFER-${referrerId}-${refereeId}`, referrerAmount);
+    await this.grantReferralVoucher(refereeId, `REFERRED-${refereeId}`, refereeAmount);
+  }
+
+  /** Cấp voucher cá nhân AMOUNT (USER_GROUP). Idempotent: code deterministic + catch P2002. */
+  private async grantReferralVoucher(userId: string, rawCode: string, amount: number): Promise<void> {
+    if (amount <= 0) return;
+    const code = rawCode.toUpperCase();
+    const existing = await this.prisma.coupon.findUnique({ where: { code } });
+    if (existing) return;
+    const now = new Date();
+    const endAt = new Date(now.getTime() + 30 * 864e5);
+    try {
+      await this.prisma.coupon.create({
+        data: {
+          code,
+          type: 'AMOUNT',
+          value: amount,
+          startAt: now,
+          endAt,
+          usageLimit: 1,
+          perUserLimit: 1,
+          scope: 'USER_GROUP',
+          scopeMeta: { userId },
+        },
+      });
+    } catch (err) {
+      // Race: instance khác vừa cấp cùng code → coi như đã thưởng.
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') return;
+      throw err;
+    }
+  }
+
   /** Đơn hoàn/hủy trong cửa sổ → reject commission. */
   async reverseCommissionsForOrder(orderId: string): Promise<void> {
     await this.prisma.commission.updateMany({

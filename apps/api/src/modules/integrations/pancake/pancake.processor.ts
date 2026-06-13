@@ -111,6 +111,7 @@ export class PancakeProcessor extends WorkerHost {
     if (status === 'DELIVERED') {
       await this.loyalty.creditOrderPoints(order.id);
       await this.affiliate.lockCommissionsForOrder(order.id);
+      await this.affiliate.grantReferralReward(order.id); // refer-reward 1 lần (§ giới thiệu)
     } else if (status === 'CANCELLED' || status === 'RETURNED') {
       await this.loyalty.reverseOrderPoints(order.id);
       await this.affiliate.reverseCommissionsForOrder(order.id);
