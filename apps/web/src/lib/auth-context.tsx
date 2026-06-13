@@ -12,6 +12,7 @@ export interface WebUser {
   id: string;
   fullName: string | null;
   avatarUrl: string | null;
+  role: string;
   pointsBalance: number;
   walletBalance: number;
   referralCode: string;
