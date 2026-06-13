@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getProduct, formatVnd } from '@/lib/api';
+import AddToCart from '@/components/add-to-cart';
 
 export const revalidate = 300;
 
@@ -59,25 +60,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
           )}
 
-          {product.variations.length > 0 && (
-            <div className="mt-4">
-              <div className="text-sm font-semibold">Phân loại</div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {product.variations.map((v) => (
-                  <span key={v.id} className="rounded-md border border-neutral-200 px-3 py-1.5 text-sm">
-                    {v.name} · {formatVnd(v.salePrice ?? v.retailPrice)}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <a
-            href="https://zalo.me"
-            className="mt-6 inline-block rounded-md bg-green-600 px-6 py-3 font-medium text-white"
-          >
-            Mua trên Zalo Mini App
-          </a>
+          {product.variations.length > 0 && <AddToCart variations={product.variations} />}
         </div>
       </div>
 
