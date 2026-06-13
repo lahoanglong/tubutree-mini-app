@@ -10,6 +10,7 @@ import {
   getLeaderboard,
 } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
+import { WheelOfFortune } from '../components/wheel';
 
 export default function GamePage() {
   const { status, login } = useAuthStore();
@@ -38,14 +39,16 @@ export default function GamePage() {
     },
     onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
   });
-  const spinM = useMutation({
-    mutationFn: spin,
-    onSuccess: (r) => {
-      openSnackbar({ text: `🎉 Trúng: ${r.prize.name}`, type: 'success' });
+  const handleSpin = async () => {
+    try {
+      const r = await spin();
       refresh();
-    },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
-  });
+      return r;
+    } catch (e) {
+      openSnackbar({ text: msg(e), type: 'error' });
+      throw e;
+    }
+  };
   const waterM = useMutation({
     mutationFn: () => waterTree(20),
     onSuccess: (r) => {
@@ -130,9 +133,7 @@ export default function GamePage() {
       </Box>
 
       <Card title="🎡 Vòng quay may mắn">
-        <Button loading={spinM.isPending} onClick={() => spinM.mutate()} style={{ background: 'var(--clay-500)' }}>
-          Quay (10 điểm Xanh)
-        </Button>
+        <WheelOfFortune cost={10} onSpin={handleSpin} />
       </Card>
 
       <Card title="🧠 Quiz Sống Xanh hôm nay">
