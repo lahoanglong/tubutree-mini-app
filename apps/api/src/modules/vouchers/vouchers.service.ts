@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -31,32 +30,37 @@ export class VouchersService {
     validDays: number;
     templateCode: string;
   }): Promise<boolean> {
-    // Đã cấp coupon cùng reason cho user này chưa?
-    const existed = await this.prisma.coupon.findFirst({
-      where: {
-        scope: 'USER_GROUP',
-        code: { startsWith: `${opts.reason}-${opts.userId.slice(0, 6)}` },
-      },
-    });
+    // Code DETERMINISTIC theo (reason, full userId) → dựa vào coupon.code @unique
+    // làm chốt idempotency thật (chống 2 cron instance cấp trùng). Dùng full userId
+    // (không slice 6) để tránh false-skip khi 2 cuid trùng tiền tố.
+    const code = `${opts.reason}-${opts.userId}`.toUpperCase();
+    const existed = await this.prisma.coupon.findUnique({ where: { code } });
     if (existed) return false;
 
-    const code = `${opts.reason}-${opts.userId.slice(0, 6)}-${randomUUID().slice(0, 4)}`.toUpperCase();
     const now = new Date();
     const endAt = new Date(now.getTime() + opts.validDays * 864e5);
-    await this.prisma.coupon.create({
-      data: {
-        code,
-        type: opts.type,
-        value: opts.value,
-        minOrder: opts.minOrder ?? null,
-        startAt: now,
-        endAt,
-        usageLimit: 1,
-        perUserLimit: 1,
-        scope: 'USER_GROUP',
-        scopeMeta: { userId: opts.userId, reason: opts.reason },
-      },
-    });
+    try {
+      await this.prisma.coupon.create({
+        data: {
+          code,
+          type: opts.type,
+          value: opts.value,
+          minOrder: opts.minOrder ?? null,
+          startAt: now,
+          endAt,
+          usageLimit: 1,
+          perUserLimit: 1,
+          scope: 'USER_GROUP',
+          scopeMeta: { userId: opts.userId, reason: opts.reason },
+        },
+      });
+    } catch (err) {
+      // Race multi-instance: instance khác vừa tạo cùng code (P2002) → coi như đã cấp.
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
+        return false;
+      }
+      throw err;
+    }
     await this.notifications
       .notify(opts.userId, opts.templateCode, {
         code,

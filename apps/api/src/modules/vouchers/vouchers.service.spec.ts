@@ -31,9 +31,9 @@ describe('VouchersService.grant', () => {
     templateCode: 'WELCOME_VOUCHER',
   };
 
-  it('không cấp lại khi đã có coupon cùng reason cho user', async () => {
+  it('không cấp lại khi đã có coupon cùng reason cho user (findUnique theo code)', async () => {
     const prisma = {
-      coupon: { findFirst: jest.fn().mockResolvedValue({ id: 'existing' }), create: jest.fn() },
+      coupon: { findUnique: jest.fn().mockResolvedValue({ id: 'existing' }), create: jest.fn() },
     } as unknown as PrismaService;
     const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
     const svc = new VouchersService(prisma, makeConfig(), notify);
@@ -45,9 +45,9 @@ describe('VouchersService.grant', () => {
     expect((notify.notify as jest.Mock)).not.toHaveBeenCalled();
   });
 
-  it('cấp coupon cá nhân (USER_GROUP, usageLimit 1) + notify khi chưa có', async () => {
+  it('cấp coupon cá nhân (USER_GROUP, usageLimit 1) + code deterministic + notify', async () => {
     const prisma = {
-      coupon: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     } as unknown as PrismaService;
     const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
     const svc = new VouchersService(prisma, makeConfig(), notify);
@@ -62,11 +62,29 @@ describe('VouchersService.grant', () => {
     expect(data.perUserLimit).toBe(1);
     expect(data.type).toBe('AMOUNT');
     expect(data.value).toBe(30000);
+    // code deterministic theo reason + full userId (chốt idempotency qua @unique)
+    expect(data.code).toBe(`WELCOME-${baseOpts.userId}`.toUpperCase());
     expect(data.scopeMeta).toMatchObject({ userId: baseOpts.userId, reason: 'WELCOME' });
     expect((notify.notify as jest.Mock)).toHaveBeenCalledWith(
       baseOpts.userId,
       'WELCOME_VOUCHER',
       expect.objectContaining({ value: '30000' }),
     );
+  });
+
+  it('race multi-instance: create ném P2002 → coi như đã cấp (false), không notify', async () => {
+    const prisma = {
+      coupon: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' })),
+      },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const svc = new VouchersService(prisma, makeConfig(), notify);
+
+    const result = await (svc as unknown as { grant(o: GrantOpts): Promise<boolean> }).grant(baseOpts);
+
+    expect(result).toBe(false);
+    expect((notify.notify as jest.Mock)).not.toHaveBeenCalled();
   });
 });
