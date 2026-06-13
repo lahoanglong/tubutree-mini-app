@@ -757,3 +757,21 @@ model Wishlist {
   @@index([userId])
   @@map("wishlists")
 }
+
+model Subscription {
+  id            String   @id @default(cuid())
+  userId        String
+  variationId   String
+  quantity      Int      @default(1)
+  intervalWeeks Int      // 4 / 6 / 8 / 10
+  addressId     String
+  status        String   @default("ACTIVE") // ACTIVE | PAUSED | CANCELLED
+  nextRunAt     DateTime
+  lastOrderId   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status, nextRunAt])
+  @@index([userId])
+  @@map("subscriptions")
+}
