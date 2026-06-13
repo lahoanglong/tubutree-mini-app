@@ -13,6 +13,7 @@ import { useAuthStore } from '../store/auth';
 import { shareLink } from '../services/zmp-bridge';
 import ProductCard from '../components/product-card';
 import { ReviewsSection, Stars } from '../components/reviews-section';
+import { WishlistHeart } from '../components/wishlist-heart';
 import { fetchReviews } from '../services/shop-api';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -137,13 +138,15 @@ export default function ProductDetailPage() {
           <Text size="xSmall" bold style={{ color: 'var(--neutral-600)' }}>
             {p.brand}
           </Text>
+          <Box style={{ marginLeft: 'auto' }}>
+            <WishlistHeart productId={p.id} size={22} />
+          </Box>
           <Box
             role="button"
             aria-label={vi.product.share}
             className="tubu-press"
             onClick={handleShare}
             style={{
-              marginLeft: 'auto',
               width: 44,
               height: 44,
               display: 'flex',

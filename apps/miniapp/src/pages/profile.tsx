@@ -26,6 +26,7 @@ const READY = new Set([
   '/cashback',
   '/dealer',
   '/about',
+  '/wishlist',
 ]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [

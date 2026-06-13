@@ -5,6 +5,7 @@ import { formatVnd } from '../utils/format';
 import { brandAccent } from '../utils/brands';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { WishlistHeart } from './wishlist-heart';
 
 /** Fallback khi sản phẩm chưa có ảnh — lá brand thay vì ô trống. */
 function LeafPlaceholder() {
@@ -75,6 +76,8 @@ export default function ProductCard({ product }: { product: ProductCardType }) {
             -{salePct}%
           </Text>
         )}
+
+        <WishlistHeart productId={product.id} floating size={18} />
 
         {!product.inStock && (
           <Box

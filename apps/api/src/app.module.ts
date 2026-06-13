@@ -19,6 +19,7 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { GameModule } from './modules/game/game.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
+import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { AffiliateModule } from './modules/affiliate/affiliate.module';
 import { CashbackModule } from './modules/cashback/cashback.module';
 import { WalletModule } from './modules/wallet/wallet.module';
@@ -51,6 +52,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     OrdersModule,
     GameModule,
     ReviewsModule,
+    WishlistModule,
     AffiliateModule,
     CashbackModule,
     WalletModule,
