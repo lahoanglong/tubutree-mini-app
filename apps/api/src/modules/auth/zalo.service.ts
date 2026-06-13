@@ -21,8 +21,39 @@ export interface ZaloUserInfo {
 export class ZaloService {
   private readonly logger = new Logger(ZaloService.name);
   private readonly graphBase = 'https://graph.zalo.me/v2.0';
+  private readonly oauthBase = 'https://oauth.zaloapp.com/v4';
 
   constructor(private readonly config: ConfigService<Env, true>) {}
+
+  /**
+   * Đổi authorization code (Zalo Web Login OAuth v4, có PKCE) lấy access token.
+   * Gate theo ZALO_APP_ID/SECRET — báo lỗi rõ khi chưa cấu hình (dev).
+   */
+  async exchangeOAuthCode(code: string, codeVerifier?: string): Promise<string> {
+    const appId = this.config.get('ZALO_APP_ID', { infer: true });
+    const secret = this.config.get('ZALO_APP_SECRET', { infer: true });
+    if (!appId || !secret) {
+      throw new UnauthorizedException('Đăng nhập Zalo (web) chưa được cấu hình.');
+    }
+    try {
+      const params = new URLSearchParams({ app_id: appId, code, grant_type: 'authorization_code' });
+      if (codeVerifier) params.set('code_verifier', codeVerifier);
+      const res = await axios.post(`${this.oauthBase}/access_token`, params.toString(), {
+        headers: { secret_key: secret, 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 8000,
+      });
+      const data = res.data as { access_token?: string; error?: number; error_description?: string };
+      if (!data.access_token) {
+        throw new UnauthorizedException(`Zalo OAuth thất bại: ${data.error_description ?? 'unknown'}`);
+      }
+      return data.access_token;
+    } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
+      const ax = err as AxiosError;
+      this.logger.error(`Zalo exchangeOAuthCode error: ${ax.message}`);
+      throw new UnauthorizedException('Không đổi được mã đăng nhập Zalo.');
+    }
+  }
 
   /**
    * Lấy thông tin user từ access token của mini app.

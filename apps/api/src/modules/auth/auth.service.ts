@@ -44,6 +44,30 @@ export class AuthService {
     return this.issueTokens(user);
   }
 
+  /** Luồng đăng nhập web (Zalo Web Login OAuth): đổi code → access token → upsert user → JWT. */
+  async loginWithZaloOAuth(code: string, codeVerifier?: string): Promise<LoginResponse> {
+    const accessToken = await this.zalo.exchangeOAuthCode(code, codeVerifier);
+    const info = await this.zalo.getUserInfo(accessToken);
+
+    let user = await this.prisma.user.findUnique({ where: { zaloId: info.zaloId } });
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          zaloId: info.zaloId,
+          fullName: info.name,
+          avatarUrl: info.avatar,
+          referralCode: await this.generateReferralCode(),
+        },
+      });
+    } else if (info.name && user.fullName !== info.name) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { fullName: info.name, avatarUrl: info.avatar ?? user.avatarUrl },
+      });
+    }
+    return this.issueTokens(user);
+  }
+
   /** Xoay refresh token: validate hash chưa revoke/expire → cấp cặp token mới. */
   async refresh(refreshToken: string): Promise<LoginResponse> {
     const tokenHash = this.hashToken(refreshToken);

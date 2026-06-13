@@ -5,6 +5,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { ZaloMiniAppLoginDto } from './dto/zalo-login.dto';
+import { ZaloOAuthDto } from './dto/zalo-oauth.dto';
 import { RefreshTokenDto } from './dto/refresh.dto';
 
 @Controller('auth')
@@ -19,6 +20,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   loginZaloMiniApp(@Body() dto: ZaloMiniAppLoginDto): Promise<LoginResponse> {
     return this.auth.loginWithZaloMiniApp(dto.code, dto.accessToken);
+  }
+
+  @Public()
+  @Post('zalo-oauth')
+  @HttpCode(HttpStatus.OK)
+  loginZaloOAuth(@Body() dto: ZaloOAuthDto): Promise<LoginResponse> {
+    return this.auth.loginWithZaloOAuth(dto.code, dto.codeVerifier);
   }
 
   @Public()
