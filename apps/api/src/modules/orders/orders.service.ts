@@ -5,6 +5,7 @@ import { paginated, skipTake } from '../../common/pagination';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CartService } from '../cart/cart.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 
 @Injectable()
 export class OrdersService {
@@ -13,6 +14,7 @@ export class OrdersService {
     private readonly loyalty: LoyaltyService,
     private readonly cart: CartService,
     private readonly notifications: NotificationsService,
+    private readonly config: SystemConfigService,
   ) {}
 
   async list(userId: string, status: OrderStatus | undefined, page: number, limit: number) {
@@ -82,6 +84,39 @@ export class OrdersService {
       data: { invoiceStatus: 'REQUESTED' },
     });
     return { ok: true, message: 'Đã gửi yêu cầu phát hành hóa đơn.' };
+  }
+
+  /** Yêu cầu đổi/trả (§6.4): chỉ đơn DELIVERED, trong window (config returns.window_days=7),
+   * chỉ-lỗi-NSX (user nêu lý do + ảnh). Admin duyệt sau (AdminService.reviewReturn). */
+  async requestReturn(userId: string, code: string, dto: { reason: string; images?: string[] }) {
+    const order = await this.detail(userId, code);
+    if (order.status !== 'DELIVERED') {
+      throw new BadRequestException('Chỉ yêu cầu đổi/trả với đơn đã giao.');
+    }
+    const windowDays = await this.config.get<number>('returns.window_days', 7);
+    const deliveredAt = order.updatedAt ?? order.createdAt;
+    if (Date.now() - new Date(deliveredAt).getTime() > windowDays * 864e5) {
+      throw new BadRequestException(`Quá hạn đổi/trả (${windowDays} ngày từ khi nhận hàng).`);
+    }
+    const existing = await this.prisma.returnRequest.findFirst({
+      where: { orderId: order.id, status: 'REQUESTED' },
+    });
+    if (existing) throw new BadRequestException('Đơn đang có yêu cầu đổi/trả chờ xử lý.');
+
+    const req = await this.prisma.returnRequest.create({
+      data: { orderId: order.id, userId, reason: dto.reason, images: dto.images ?? [] },
+    });
+    await this.notifications.notify(userId, 'RETURN_REQUESTED', { order_code: code }).catch(() => undefined);
+    return req;
+  }
+
+  /** Danh sách yêu cầu đổi/trả của user (hiện trạng thái ở chi tiết đơn). */
+  listMyReturns(userId: string) {
+    return this.prisma.returnRequest.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
   }
 
   /** Force refetch trạng thái từ Pancake (Phase 1: trả trạng thái hiện tại; bổ sung poll khi có key). */

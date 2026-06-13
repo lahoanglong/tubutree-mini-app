@@ -3,10 +3,12 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { CartService } from '../cart/cart.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
 
 const loyalty = { reverseOrderPoints: jest.fn().mockResolvedValue(undefined) } as unknown as LoyaltyService;
 const cart = {} as unknown as CartService;
 const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 
 function makeService(order: Record<string, unknown>, spies: { update?: jest.Mock; userUpdate?: jest.Mock } = {}) {
   const update = spies.update ?? jest.fn().mockResolvedValue({});
@@ -15,7 +17,7 @@ function makeService(order: Record<string, unknown>, spies: { update?: jest.Mock
     order: { findUnique: jest.fn().mockResolvedValue(order), update },
     user: { update: userUpdate },
   } as unknown as PrismaService;
-  return { svc: new OrdersService(prisma, loyalty, cart, notifications), update, userUpdate };
+  return { svc: new OrdersService(prisma, loyalty, cart, notifications, config), update, userUpdate };
 }
 
 const baseOrder = {

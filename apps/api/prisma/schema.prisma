@@ -616,6 +616,32 @@ enum PlantedStatus {
   PLANTED
 }
 
+// Yêu cầu đổi/trả (§6.4): chỉ lỗi NSX, window 7 ngày, admin duyệt → hoàn Ví +
+// reverse điểm + reverse commission CTV.
+model ReturnRequest {
+  id           String       @id @default(cuid())
+  orderId      String
+  userId       String
+  reason       String
+  images       String[]     @default([])
+  status       ReturnStatus @default(REQUESTED)
+  refundMethod String       @default("WALLET") // WALLET | BANK
+  adminNote    String?
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  createdAt    DateTime     @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@map("return_requests")
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+}
+
 // Nhắc mua lại theo chu kỳ (§6.14.7 Lifecycle Reminder).
 // Cron tính từ đơn DELIVERED cuối của (user × variation); remindedAt chống spam.
 model ReorderReminder {

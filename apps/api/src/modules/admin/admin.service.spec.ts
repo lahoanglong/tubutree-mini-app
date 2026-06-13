@@ -2,8 +2,17 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import type { LoyaltyService } from '../loyalty/loyalty.service';
+import type { AffiliateService } from '../affiliate/affiliate.service';
+import type { NotificationsService } from '../notifications/notifications.service';
 
 const config = {} as unknown as SystemConfigService;
+const loyalty = { reverseOrderPoints: jest.fn().mockResolvedValue(undefined) } as unknown as LoyaltyService;
+const affiliate = {
+  reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+} as unknown as AffiliateService;
+const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+const mkAdmin = (prisma: PrismaService) => new AdminService(prisma, config, loyalty, affiliate, notifications);
 
 function makePrisma(over: Record<string, unknown> = {}) {
   const base = {
@@ -13,6 +22,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
     },
     dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1' }) },
     user: { findUnique: jest.fn(), update: jest.fn() },
+    returnRequest: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
+    order: { findUniqueOrThrow: jest.fn() },
     $transaction: jest.fn().mockResolvedValue([]),
   };
   return { ...base, ...over } as unknown as PrismaService;
@@ -21,7 +32,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
 describe('AdminService.reviewDealerApplication', () => {
   it('đơn không tồn tại → NotFound', async () => {
     const prisma = makePrisma({ dealerApplication: { findUnique: jest.fn().mockResolvedValue(null) } });
-    await expect(new AdminService(prisma, config).reviewDealerApplication('a1', 'x', true, 't1')).rejects.toBeInstanceOf(
+    await expect(mkAdmin(prisma).reviewDealerApplication('a1', 'x', true, 't1')).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
@@ -30,7 +41,7 @@ describe('AdminService.reviewDealerApplication', () => {
     const prisma = makePrisma({
       dealerApplication: { findUnique: jest.fn().mockResolvedValue({ id: 'd1', status: 'APPROVED' }) },
     });
-    await expect(new AdminService(prisma, config).reviewDealerApplication('a1', 'd1', true, 't1')).rejects.toBeInstanceOf(
+    await expect(mkAdmin(prisma).reviewDealerApplication('a1', 'd1', true, 't1')).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });
@@ -39,7 +50,7 @@ describe('AdminService.reviewDealerApplication', () => {
     const prisma = makePrisma({
       dealerApplication: { findUnique: jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' }) },
     });
-    await expect(new AdminService(prisma, config).reviewDealerApplication('a1', 'd1', true)).rejects.toThrow(
+    await expect(mkAdmin(prisma).reviewDealerApplication('a1', 'd1', true)).rejects.toThrow(
       'bậc đại lý',
     );
   });
@@ -50,7 +61,7 @@ describe('AdminService.reviewDealerApplication', () => {
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
     });
     await expect(
-      new AdminService(prisma, config).reviewDealerApplication('a1', 'd1', true, 'bad'),
+      mkAdmin(prisma).reviewDealerApplication('a1', 'd1', true, 'bad'),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -71,7 +82,7 @@ describe('AdminService.reviewDealerApplication', () => {
         update: userUpdate,
       },
     });
-    await new AdminService(prisma, config).reviewDealerApplication('admin1', 'd1', true, 't1');
+    await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', true, 't1');
     // tìm lời gọi user.update trong transaction
     const meta = (txnArgs[0] as { data: { metadata: Record<string, unknown>; role: string } }).data;
     expect(meta.role).toBe('DEALER');
@@ -93,7 +104,7 @@ describe('AdminService.reviewDealerApplication', () => {
         }),
       },
     });
-    await new AdminService(prisma, config).reviewDealerApplication('admin1', 'd1', true, 't1');
+    await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', true, 't1');
     expect((txnArgs[0] as { data: { metadata: unknown } }).data.metadata).toEqual({ dealerTierId: 't1' });
   });
 
@@ -107,9 +118,63 @@ describe('AdminService.reviewDealerApplication', () => {
       },
       user: { findUnique: jest.fn(), update: userUpdate },
     });
-    await new AdminService(prisma, config).reviewDealerApplication('admin1', 'd1', false, undefined, 'thiếu giấy tờ');
+    await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', false, undefined, 'thiếu giấy tờ');
     expect(update.mock.calls[0][0].data.status).toBe('REJECTED');
     expect(update.mock.calls[0][0].data.rejectionReason).toBe('thiếu giấy tờ');
     expect(userUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('AdminService.reviewReturn (§6.4 đổi/trả)', () => {
+  beforeEach(() => {
+    (loyalty.reverseOrderPoints as jest.Mock).mockClear();
+    (affiliate.reverseCommissionsForOrder as jest.Mock).mockClear();
+  });
+
+  it('yêu cầu không tồn tại → NotFound', async () => {
+    const prisma = makePrisma({ returnRequest: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() } });
+    await expect(mkAdmin(prisma).reviewReturn('a1', 'x', true)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('yêu cầu đã xử lý (không REQUESTED) → BadRequest', async () => {
+    const prisma = makePrisma({
+      returnRequest: { findUnique: jest.fn().mockResolvedValue({ id: 'r1', status: 'APPROVED' }), update: jest.fn() },
+    });
+    await expect(mkAdmin(prisma).reviewReturn('a1', 'r1', true)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('DUYỆT → hoàn Ví + reverse điểm + reverse commission + đơn RETURNED', async () => {
+    const txn = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({
+      returnRequest: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'r1', status: 'REQUESTED', orderId: 'o1' }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      order: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', code: 'TUBU1', userId: 'u1', total: 250000 }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      $transaction: txn,
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    // transaction gồm: order→RETURNED, user.walletBalance += total, returnRequest→APPROVED
+    expect(txn).toHaveBeenCalledTimes(1);
+    expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
+    expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
+  });
+
+  it('TỪ CHỐI → REJECTED + note, KHÔNG hoàn tiền/reverse', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      returnRequest: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'r1', status: 'REQUESTED', orderId: 'o1' }),
+        update,
+      },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', false, 'không phải lỗi NSX');
+    expect(update.mock.calls[0][0].data.status).toBe('REJECTED');
+    expect(update.mock.calls[0][0].data.adminNote).toBe('không phải lỗi NSX');
+    expect(loyalty.reverseOrderPoints).not.toHaveBeenCalled();
+    expect(affiliate.reverseCommissionsForOrder).not.toHaveBeenCalled();
   });
 });

@@ -18,6 +18,10 @@ class ReviewDto {
   @IsOptional() @IsString() tierId?: string;
   @IsOptional() @IsString() reason?: string;
 }
+class ReviewReturnDto {
+  @IsBoolean() approve!: boolean;
+  @IsOptional() @IsString() note?: string;
+}
 class SetConfigDto {
   @IsString() key!: string;
   // value tự do (object/số/chuỗi/boolean) — @Allow để ValidationPipe không loại bỏ.
@@ -50,6 +54,16 @@ export class AdminController {
   @Post('dealer-applications/:id/review')
   review(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ReviewDto) {
     return this.admin.reviewDealerApplication(adminId, id, dto.approve, dto.tierId, dto.reason);
+  }
+
+  @Get('return-requests')
+  returns(@Query('status') status?: string) {
+    return this.admin.listReturnRequests(status);
+  }
+
+  @Post('return-requests/:id/review')
+  reviewReturn(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ReviewReturnDto) {
+    return this.admin.reviewReturn(adminId, id, dto.approve, dto.note);
   }
 
   @Get('users')

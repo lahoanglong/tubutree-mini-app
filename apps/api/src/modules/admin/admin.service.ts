@@ -1,6 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { AffiliateService } from '../affiliate/affiliate.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
 
 @Injectable()
@@ -8,7 +11,49 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    private readonly loyalty: LoyaltyService,
+    private readonly affiliate: AffiliateService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  // ── Đổi/trả (§6.4) ──
+  listReturnRequests(status?: string) {
+    return this.prisma.returnRequest.findMany({
+      where: status ? { status: status as never } : {},
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  /** Duyệt đổi/trả. APPROVED → hoàn Ví + reverse điểm + reverse commission CTV. */
+  async reviewReturn(adminId: string, id: string, approve: boolean, note?: string) {
+    const req = await this.prisma.returnRequest.findUnique({ where: { id } });
+    if (!req) throw new NotFoundException('Không tìm thấy yêu cầu đổi/trả.');
+    if (req.status !== 'REQUESTED') throw new BadRequestException('Yêu cầu đã được xử lý.');
+
+    if (!approve) {
+      return this.prisma.returnRequest.update({
+        where: { id },
+        data: { status: 'REJECTED', adminNote: note, reviewedBy: adminId, reviewedAt: new Date() },
+      });
+    }
+
+    const order = await this.prisma.order.findUniqueOrThrow({ where: { id: req.orderId } });
+    // Hoàn tiền vào Ví Tubu (instant) + đánh dấu đơn RETURNED.
+    await this.prisma.$transaction([
+      this.prisma.order.update({ where: { id: order.id }, data: { status: 'RETURNED' } }),
+      this.prisma.user.update({ where: { id: order.userId }, data: { walletBalance: { increment: order.total } } }),
+      this.prisma.returnRequest.update({
+        where: { id },
+        data: { status: 'APPROVED', adminNote: note, reviewedBy: adminId, reviewedAt: new Date() },
+      }),
+    ]);
+    // Reverse điểm Xanh đã tích + commission CTV (idempotent).
+    await this.loyalty.reverseOrderPoints(order.id);
+    await this.affiliate.reverseCommissionsForOrder(order.id);
+    await this.notifications.notify(order.userId, 'RETURN_APPROVED', { order_code: order.code }).catch(() => undefined);
+    return this.prisma.returnRequest.findUnique({ where: { id } });
+  }
 
   // ── Dealer applications ──
   listDealerApplications(status?: string) {
