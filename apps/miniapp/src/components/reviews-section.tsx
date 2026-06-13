@@ -26,9 +26,15 @@ export function Stars({ value, size = 14 }: { value: number; size?: number }) {
 export function ReviewsSection({ slug }: { slug: string }) {
   const { status, login } = useAuthStore();
   const [writing, setWriting] = useState(false);
+  const [filter, setFilter] = useState<number | 'all' | 'photo'>('all');
+  const [visible, setVisible] = useState(5);
   const reviewsQ = useQuery({ queryKey: ['reviews', slug], queryFn: () => fetchReviews(slug) });
 
   const data = reviewsQ.data;
+  const dist = data?.distribution ?? {};
+  const filtered = (data?.items ?? []).filter((r) =>
+    filter === 'all' ? true : filter === 'photo' ? r.images.length > 0 : r.rating === filter,
+  );
 
   return (
     <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
@@ -52,27 +58,88 @@ export function ReviewsSection({ slug }: { slug: string }) {
 
       {data && data.count > 0 ? (
         <>
-          <Box flex alignItems="center" style={{ gap: 8, marginTop: 8 }}>
-            <Text bold style={{ fontSize: 28, color: 'var(--neutral-900)' }}>
-              {data.average.toFixed(1)}
-            </Text>
-            <Box>
-              <Stars value={data.average} size={16} />
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                {data.count} lượt đánh giá
+          {/* Trung bình + breakdown sao 5→1 */}
+          <Box flex style={{ gap: 16, marginTop: 12, alignItems: 'center' }}>
+            <Box style={{ textAlign: 'center', flex: '0 0 auto' }}>
+              <Text bold style={{ fontSize: 32, color: 'var(--neutral-900)', lineHeight: '36px' }}>
+                {data.average.toFixed(1)}
               </Text>
+              <Stars value={data.average} size={13} />
+              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                {data.count} đánh giá
+              </Text>
+            </Box>
+            <Box style={{ flex: 1 }}>
+              {[5, 4, 3, 2, 1].map((star) => {
+                const n = dist[String(star)] ?? 0;
+                const pct = data.count > 0 ? Math.round((n / data.count) * 100) : 0;
+                return (
+                  <Box key={star} flex alignItems="center" style={{ gap: 6, marginBottom: 3 }}>
+                    <Text size="xSmall" style={{ color: 'var(--neutral-400)', width: 10 }}>
+                      {star}
+                    </Text>
+                    <span style={{ color: 'var(--sun-500)', fontSize: 10 }}>★</span>
+                    <Box style={{ flex: 1, height: 6, background: 'var(--neutral-100)', borderRadius: 99, overflow: 'hidden' }}>
+                      <Box style={{ width: `${pct}%`, height: '100%', background: 'var(--sun-500)' }} />
+                    </Box>
+                    <Text size="xSmall" style={{ color: 'var(--neutral-400)', width: 18, textAlign: 'right' }}>
+                      {n}
+                    </Text>
+                  </Box>
+                );
+              })}
             </Box>
           </Box>
 
+          {/* Filter chips */}
+          <Box flex style={{ gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+            {([
+              { k: 'all' as const, label: 'Tất cả' },
+              { k: 5 as const, label: '5★' },
+              { k: 4 as const, label: '4★' },
+              { k: 3 as const, label: '3★' },
+              { k: 'photo' as const, label: 'Có ảnh' },
+            ]).map((f) => (
+              <Text
+                key={String(f.k)}
+                size="xSmall"
+                onClick={() => {
+                  haptic('light');
+                  setFilter(f.k);
+                  setVisible(5);
+                }}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 'var(--radius-full)',
+                  border: `1px solid ${filter === f.k ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
+                  color: filter === f.k ? 'var(--primary-700)' : 'var(--neutral-600)',
+                  background: filter === f.k ? 'var(--primary-50)' : 'transparent',
+                }}
+              >
+                {f.label}
+              </Text>
+            ))}
+          </Box>
+
           <Box flex flexDirection="column" style={{ gap: 12, marginTop: 12 }}>
-            {data.items.slice(0, 5).map((r) => (
+            {filtered.slice(0, visible).map((r) => (
               <Box key={r.id} style={{ borderTop: '1px solid var(--neutral-100)', paddingTop: 12 }}>
                 <Box flex alignItems="center" style={{ gap: 8 }}>
                   <Avatar size={28} src={r.avatar ?? undefined} />
                   <Box style={{ flex: 1 }}>
-                    <Text size="xSmall" bold>
-                      {r.author}
-                    </Text>
+                    <Box flex alignItems="center" style={{ gap: 6 }}>
+                      <Text size="xSmall" bold>
+                        {r.author}
+                      </Text>
+                      {r.verifiedPurchase && (
+                        <Text
+                          size="xSmall"
+                          style={{ color: 'var(--leaf-700)', background: 'var(--leaf-50)', padding: '0 6px', borderRadius: 'var(--radius-full)' }}
+                        >
+                          ✓ Đã mua
+                        </Text>
+                      )}
+                    </Box>
                     <Stars value={r.rating} size={11} />
                   </Box>
                   <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
@@ -99,6 +166,21 @@ export function ReviewsSection({ slug }: { slug: string }) {
                 )}
               </Box>
             ))}
+            {filtered.length === 0 && (
+              <Text size="small" style={{ color: 'var(--neutral-400)', paddingTop: 8 }}>
+                Không có đánh giá khớp bộ lọc.
+              </Text>
+            )}
+            {filtered.length > visible && (
+              <Text
+                size="small"
+                bold
+                onClick={() => setVisible((v) => v + 5)}
+                style={{ color: 'var(--primary-700)', textAlign: 'center', paddingTop: 4 }}
+              >
+                Xem thêm ({filtered.length - visible})
+              </Text>
+            )}
           </Box>
         </>
       ) : (
@@ -165,8 +247,13 @@ function WriteReview({ slug, onDone }: { slug: string; onDone: () => void }) {
         rows={4}
       />
       <MultiImageUpload value={images} onChange={setImages} max={5} />
-      <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
-        Có ảnh được +10 Điểm Xanh · chỉ chữ +5 Điểm Xanh. Chỉ đánh giá được sản phẩm đã mua & nhận.
+      <Text
+        size="xSmall"
+        style={{ color: images.length > 0 ? 'var(--leaf-700)' : 'var(--neutral-400)', marginTop: 8, fontWeight: images.length > 0 ? 600 : 400 }}
+      >
+        {images.length > 0
+          ? '🌿 Bạn sẽ nhận +10 Điểm Xanh cho đánh giá có ảnh!'
+          : 'Thêm ảnh để nhận +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.'}
       </Text>
       <Button
         fullWidth

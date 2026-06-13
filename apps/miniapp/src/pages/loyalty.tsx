@@ -37,11 +37,13 @@ export default function LoyaltyPage() {
   const tierName = data?.tier?.name ?? 'Mầm Xanh';
   const perks = Array.isArray(data?.tier?.perks) ? (data.tier.perks as string[]) : [];
 
-  // Progress lên hạng kế: dựa trên điểm hiện tại / điểm yêu cầu hạng kế.
+  // Progress lên hạng kế: tính TỪ SÀN ĐIỂM hạng hiện tại → ngưỡng hạng kế (không phải từ 0).
   const next = data?.nextTier;
-  const progress = next && next.minPoints > 0
-    ? Math.min(100, Math.round(((data!.pointsBalance) / next.minPoints) * 100))
-    : 100;
+  const curMin = data?.tiers.find((t) => t.id === data.tier?.id)?.minPoints ?? 0;
+  const progress =
+    next && next.minPoints > curMin
+      ? Math.min(100, Math.max(0, Math.round(((data!.pointsBalance - curMin) / (next.minPoints - curMin)) * 100)))
+      : 100;
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>

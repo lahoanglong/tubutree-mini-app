@@ -81,9 +81,13 @@ export class ReviewsService {
     });
     const avg =
       reviews.length > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
+    // Phân bổ sao 5→1 (breakdown) cho UI biểu đồ.
+    const distribution: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    for (const r of reviews) distribution[r.rating] = (distribution[r.rating] ?? 0) + 1;
     return {
       average: Math.round(avg * 10) / 10,
       count: reviews.length,
+      distribution,
       items: reviews.map((r) => ({
         id: r.id,
         rating: r.rating,
@@ -92,6 +96,8 @@ export class ReviewsService {
         createdAt: r.createdAt,
         author: r.user.fullName ?? 'Khách Tubu',
         avatar: r.user.avatarUrl,
+        // Mọi review đều ràng buộc đơn DELIVERED (§6.13) → luôn là khách đã mua.
+        verifiedPurchase: true,
       })),
     };
   }

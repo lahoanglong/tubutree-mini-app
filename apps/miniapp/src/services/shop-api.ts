@@ -158,10 +158,12 @@ export interface ReviewItem {
   createdAt: string;
   author: string;
   avatar: string | null;
+  verifiedPurchase?: boolean;
 }
 export interface ReviewSummary {
   average: number;
   count: number;
+  distribution?: Record<string, number>;
   items: ReviewItem[];
 }
 export const fetchReviews = (slug: string) =>
