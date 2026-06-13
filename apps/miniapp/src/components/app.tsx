@@ -4,6 +4,7 @@ import { Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
+import { OnboardingGate } from './onboarding';
 import { useAuthStore } from '../store/auth';
 
 // Code-split: Home eager (first paint), các trang khác lazy để giữ initial bundle nhỏ (§13.4).
@@ -72,6 +73,7 @@ export default function MyApp() {
               </AnimationRoutes>
             </Suspense>
             <BottomNav />
+            <OnboardingGate />
           </ZMPRouter>
         </SnackbarProvider>
       </App>

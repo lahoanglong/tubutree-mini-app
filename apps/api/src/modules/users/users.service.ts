@@ -64,6 +64,18 @@ export class UsersService {
     if (addr.userId !== userId) throw new ForbiddenException('Địa chỉ không thuộc về bạn.');
   }
 
+  /** Lưu kết quả onboarding quiz (segments) vào metadata + đánh dấu đã onboard. */
+  async completeOnboarding(userId: string, segments: string[]) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const metadata = { ...(user.metadata as Record<string, unknown> | null), segments, onboardedAt: new Date().toISOString() };
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { metadata },
+      include: { tier: true },
+    });
+    return this.serialize(updated);
+  }
+
   private serialize(user: {
     id: string;
     zaloId: string | null;
@@ -77,8 +89,10 @@ export class UsersService {
     pointsBalance: number;
     walletBalance: number;
     cashbackPending: number;
+    metadata?: unknown;
     tier?: { id: string; name: string } | null;
   }) {
+    const meta = (user.metadata ?? null) as { segments?: string[]; onboardedAt?: string } | null;
     return {
       id: user.id,
       zaloId: user.zaloId,
@@ -93,6 +107,8 @@ export class UsersService {
       pointsBalance: user.pointsBalance,
       walletBalance: user.walletBalance,
       cashbackPending: user.cashbackPending,
+      onboarded: Boolean(meta?.onboardedAt),
+      segments: meta?.segments ?? [],
     };
   }
 }

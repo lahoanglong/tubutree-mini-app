@@ -40,6 +40,17 @@ export interface BankInfo {
   accountName: string;
 }
 
+// Me / onboarding
+export interface MeProfile {
+  id: string;
+  fullName: string | null;
+  onboarded: boolean;
+  segments: string[];
+}
+export const getMe = () => api.get<MeProfile>('/me').then((r) => r.data);
+export const completeOnboarding = (segments: string[]) =>
+  api.post<MeProfile>('/me/onboarding', { segments }).then((r) => r.data);
+
 // Loyalty
 export const getLoyalty = () => api.get<LoyaltyOverview>('/me/loyalty').then((r) => r.data);
 export const getPointsTransactions = () =>
