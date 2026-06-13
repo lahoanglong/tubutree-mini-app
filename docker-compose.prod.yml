@@ -1,0 +1,93 @@
+# ──────────────────────────────────────────────────────────────
+# Tubu Tree — Production stack (1 VM, GCP Compute Engine).
+# Postgres + Redis + API (NestJS) + Web (Next.js) + Caddy (auto-HTTPS).
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Biến lấy từ file .env cùng thư mục (xem .env.production.example).
+# ──────────────────────────────────────────────────────────────
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tubu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?đặt POSTGRES_PASSWORD trong .env}
+      POSTGRES_DB: ${POSTGRES_DB:-tubutree}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-tubu} -d ${POSTGRES_DB:-tubutree}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [tubu]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [tubu]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      # Trỏ về service nội bộ — GHI ĐÈ giá trị trong .env.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tubu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tubutree}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [tubu]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # NEXT_PUBLIC_* nhúng lúc build → phải truyền qua build args.
+        NEXT_PUBLIC_API_BASE_URL: https://api.${WEB_DOMAIN}/api
+        NEXT_PUBLIC_ZALO_APP_ID: ${ZALO_APP_ID:-}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    depends_on: [api]
+    networks: [tubu]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN:?đặt WEB_DOMAIN trong .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api, web]
+    networks: [tubu]
+
+volumes:
+  pg_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  tubu:

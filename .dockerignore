@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+.git
+**/*.log
+mini_app
+**/.env
+**/.env.*
+!**/.env.example
+apps/api/prisma/migrations/**/migration.toml
