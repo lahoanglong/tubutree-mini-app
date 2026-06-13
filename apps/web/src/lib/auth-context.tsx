@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   apiFetch,
   setAccessToken,
@@ -53,6 +54,7 @@ async function sha256Base64Url(input: string): Promise<string> {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const qc = useQueryClient();
   const [user, setUser] = useState<WebUser | null>(null);
   const [status, setStatus] = useState<AuthState['status']>('idle');
 
@@ -114,7 +116,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRefreshToken(null);
     setUser(null);
     setStatus('idle');
-  }, []);
+    qc.clear(); // xóa cache giỏ/đơn để không hiện dữ liệu user cũ
+  }, [qc]);
 
   return (
     <AuthContext.Provider value={{ user, status, startZaloLogin, handleCallback, logout }}>
