@@ -48,9 +48,12 @@ export const answerQuiz = (id: string, choice: number) =>
     { choice },
   ).then((r) => r.data);
 export const waterTree = (drops: number) =>
-  api.post<{ progress: number; target: number; harvested: boolean; treesPlanted: number }>(
-    '/game/tree/water',
-    { drops },
-  ).then((r) => r.data);
+  api.post<{
+    progress: number;
+    target: number;
+    harvested: boolean;
+    treesPlanted: number;
+    reward?: { coupon?: string };
+  }>('/game/tree/water', { drops }).then((r) => r.data);
 export const getLeaderboard = () => api.get<LeaderRow[]>('/game/leaderboard').then((r) => r.data);
 export const getMissions = () => api.get<MissionItem[]>('/game/missions').then((r) => r.data);

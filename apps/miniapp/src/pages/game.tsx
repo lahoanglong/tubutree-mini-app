@@ -34,6 +34,7 @@ export default function GamePage() {
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
   const currentQuiz = quiz?.find((q) => !answeredIds.has(q.id));
   const [harvested, setHarvested] = useState(false);
+  const [harvestCoupon, setHarvestCoupon] = useState<string | null>(null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['game'] });
@@ -62,6 +63,7 @@ export default function GamePage() {
     mutationFn: () => waterTree(20),
     onSuccess: (r) => {
       if (r.harvested) {
+        setHarvestCoupon(r.reward?.coupon ?? null);
         setHarvested(true); // mở modal celebration
       } else {
         openSnackbar({ text: `Đã tưới · ${r.progress}/${r.target}💧`, type: 'success' });
@@ -335,6 +337,27 @@ export default function GamePage() {
             <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
               Cây ảo của bạn đã lớn — Tubu sẽ góp <b>1 cây thật</b> vào rừng "Rừng Xanh Lên" cùng PanNature 🌿
             </Text>
+            {harvestCoupon && (
+              <Box
+                className="tubu-press"
+                mt={3}
+                p={3}
+                onClick={() => {
+                  if (navigator.clipboard) {
+                    void navigator.clipboard.writeText(harvestCoupon);
+                    openSnackbar({ text: 'Đã sao chép mã giảm giá', type: 'success' });
+                  }
+                }}
+                style={{ background: 'var(--leaf-50, #eef7ee)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--leaf-600)' }}
+              >
+                <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+                  Quà thu hoạch — mã giảm giá (chạm để sao chép)
+                </Text>
+                <Text bold style={{ color: 'var(--leaf-700)', letterSpacing: 1 }}>
+                  {harvestCoupon}
+                </Text>
+              </Box>
+            )}
             <Button fullWidth onClick={() => setHarvested(false)} style={{ marginTop: 20, background: 'var(--leaf-600)' }}>
               Tuyệt vời!
             </Button>

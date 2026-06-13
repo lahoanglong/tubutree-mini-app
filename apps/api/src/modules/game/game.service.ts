@@ -62,8 +62,9 @@ export class GameService {
     let bonusNote = '';
     if (streakDays % 7 === 0) {
       const bonus = await this.config.get<{ seeds: number }>('game.streak_7_bonus', { seeds: 20 });
-      seeds += bonus.seeds ?? 20;
-      bonusNote = `+${bonus.seeds} 💧 chuỗi 7 ngày!`;
+      const bonusSeeds = bonus.seeds ?? 20;
+      seeds += bonusSeeds;
+      bonusNote = `+${bonusSeeds} 💧 chuỗi 7 ngày!`;
     } else if (streakDays % 3 === 0) {
       seeds += 5;
       bonusNote = '+5 💧 chuỗi 3 ngày!';
@@ -165,17 +166,23 @@ export class GameService {
 
     const eco = this.eco(profile.ecoImpact);
     eco.progress += drops;
-    const harvested = eco.progress >= eco.target;
-    let reward: { coupon?: string } = {};
 
-    if (harvested) {
-      eco.progress = 0;
+    // Thu hoạch khi đủ target; phần dư được CARRY-OVER sang cây mới (không mất nước).
+    // Dùng vòng lặp phòng trường hợp target cấu hình nhỏ → một lần tưới đủ nhiều cây.
+    const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
+    let harvestCount = 0;
+    let couponCode: string | undefined;
+    while (eco.progress >= eco.target) {
+      eco.progress -= eco.target;
       eco.treesPlanted += 1;
-      const couponCode = await this.grantCoupon(userId, 30000);
-      reward = { coupon: couponCode };
+      harvestCount += 1;
+      couponCode = await this.grantCoupon(userId, harvestAmount);
     }
+    const harvested = harvestCount > 0;
+    const reward: { coupon?: string } = couponCode ? { coupon: couponCode } : {};
 
-    const stage = harvested ? 1 : Math.min(4, Math.ceil((eco.progress / eco.target) * 4) || 1);
+    // Giai đoạn cây theo tiến độ hiện tại (sau carry-over). progress=0 → mầm mới (stage 1).
+    const stage = Math.min(4, Math.max(1, Math.ceil((eco.progress / eco.target) * 4)));
     await this.prisma.gameProfile.update({
       where: { userId },
       data: {
