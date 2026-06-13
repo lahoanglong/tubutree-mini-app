@@ -44,10 +44,14 @@ export interface BankInfo {
 export interface MeProfile {
   id: string;
   fullName: string | null;
+  email: string | null;
+  dob: string | null;
   onboarded: boolean;
   segments: string[];
 }
 export const getMe = () => api.get<MeProfile>('/me').then((r) => r.data);
+export const updateMe = (data: { fullName?: string; email?: string; dob?: string }) =>
+  api.patch<MeProfile>('/me', data).then((r) => r.data);
 export const completeOnboarding = (segments: string[]) =>
   api.post<MeProfile>('/me/onboarding', { segments }).then((r) => r.data);
 

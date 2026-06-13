@@ -25,6 +25,7 @@ const CashbackPage = lazy(() => import('../pages/cashback'));
 const DealerPage = lazy(() => import('../pages/dealer'));
 const AboutPage = lazy(() => import('../pages/about'));
 const WishlistPage = lazy(() => import('../pages/wishlist'));
+const EditProfilePage = lazy(() => import('../pages/edit-profile'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -70,6 +71,7 @@ export default function MyApp() {
                 <Route path="/dealer" element={<DealerPage />} />
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/wishlist" element={<WishlistPage />} />
+                <Route path="/edit-profile" element={<EditProfilePage />} />
               </AnimationRoutes>
             </Suspense>
             <BottomNav />

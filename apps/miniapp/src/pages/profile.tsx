@@ -118,9 +118,18 @@ export default function ProfilePage() {
         <Box flex alignItems="center" style={{ gap: 12 }}>
           <Avatar size={56} src={user.avatarUrl ?? undefined} />
           <Box style={{ flex: 1 }}>
-            <Text bold style={{ color: '#fff' }}>
-              {user.fullName ?? 'Khách Tubu'}
-            </Text>
+            <Box flex alignItems="center" justifyContent="space-between">
+              <Text bold style={{ color: '#fff' }}>
+                {user.fullName ?? 'Khách Tubu'}
+              </Text>
+              <Text
+                size="xSmall"
+                onClick={() => navigate('/edit-profile')}
+                style={{ color: 'rgba(255,255,255,0.9)' }}
+              >
+                Sửa ›
+              </Text>
+            </Box>
             <Text
               size="xSmall"
               style={{

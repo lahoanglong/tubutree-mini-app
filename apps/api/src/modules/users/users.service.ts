@@ -82,6 +82,7 @@ export class UsersService {
     phone: string | null;
     email: string | null;
     fullName: string | null;
+    dob?: Date | null;
     avatarUrl: string | null;
     role: string;
     tierId: string | null;
@@ -99,6 +100,7 @@ export class UsersService {
       phone: user.phone,
       email: user.email,
       fullName: user.fullName,
+      dob: user.dob ? user.dob.toISOString().slice(0, 10) : null,
       avatarUrl: user.avatarUrl,
       role: user.role,
       tierId: user.tierId,
