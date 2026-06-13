@@ -16,9 +16,14 @@ export class UsersService {
   }
 
   async updateMe(userId: string, dto: UpdateMeDto) {
+    // dob đến dạng "YYYY-MM-DD" → ép về Date (Prisma DateTime không nhận date-only string).
+    const { dob, ...rest } = dto;
+    const data: { fullName?: string; email?: string; dob?: Date } = { ...rest };
+    if (dob !== undefined) data.dob = new Date(dob);
+
     const user = await this.prisma.user.update({
       where: { id: userId },
-      data: dto,
+      data,
       include: { tier: true },
     });
     return this.serialize(user);
