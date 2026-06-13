@@ -87,3 +87,26 @@ describe('ReviewsService.create', () => {
     );
   });
 });
+
+describe('ReviewsService.setVisibility (§6.13 admin ẩn review)', () => {
+  it('ẩn review → update isVisible=false + recompute rating (không xóa)', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      review: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'r1', productId: 'p1' }),
+        update,
+        delete: jest.fn(),
+        aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4 }, _count: 1 }),
+      },
+    });
+    const r = await new ReviewsService(prisma).setVisibility('r1', false);
+    expect(r).toEqual({ ok: true, isVisible: false });
+    expect(update).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { isVisible: false } });
+    expect((prisma as unknown as { review: { delete: jest.Mock } }).review.delete).not.toHaveBeenCalled();
+  });
+
+  it('review không tồn tại → NotFound', async () => {
+    const prisma = makePrisma({ review: { findUnique: jest.fn().mockResolvedValue(null) } });
+    await expect(new ReviewsService(prisma).setVisibility('x', false)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});

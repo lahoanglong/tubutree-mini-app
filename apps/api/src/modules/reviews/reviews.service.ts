@@ -125,4 +125,13 @@ export class ReviewsService {
     await this.recomputeRating(review.productId);
     return { ok: true };
   }
+
+  /** Admin ẩn/hiện review vi phạm (§6.13: ẩn KHÔNG xóa) — rating tính lại loại review ẩn. */
+  async setVisibility(id: string, isVisible: boolean) {
+    const review = await this.prisma.review.findUnique({ where: { id } });
+    if (!review) throw new NotFoundException('Không tìm thấy đánh giá.');
+    await this.prisma.review.update({ where: { id }, data: { isVisible } });
+    await this.recomputeRating(review.productId);
+    return { ok: true, isVisible };
+  }
 }

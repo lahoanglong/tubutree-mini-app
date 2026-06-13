@@ -1,9 +1,15 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { IsBoolean } from 'class-validator';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { Public } from '../../common/decorators/public.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/review.dto';
+
+class VisibilityDto {
+  @IsBoolean() isVisible!: boolean;
+}
 
 @Controller()
 export class ReviewsController {
@@ -27,5 +33,12 @@ export class ReviewsController {
   @Delete('reviews/:id')
   remove(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.reviews.remove(user.sub, user.role, id);
+  }
+
+  // Admin ẩn/hiện review vi phạm (§6.13).
+  @Roles('ADMIN')
+  @Post('reviews/:id/visibility')
+  setVisibility(@Param('id') id: string, @Body() dto: VisibilityDto) {
+    return this.reviews.setVisibility(id, dto.isVisible);
   }
 }

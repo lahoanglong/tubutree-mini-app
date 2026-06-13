@@ -244,6 +244,17 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-delivered', code: 'ORDER_DELIVERED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã giao thành công. Điểm Xanh đã được cộng!' },
   { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị hủy.' },
   { id: 'nt-invoice', code: 'INVOICE_ISSUED', channel: 'INAPP', bodyTemplate: 'Hóa đơn VAT cho đơn {{order_code}} đã được phát hành.' },
+  { id: 'nt-packed', code: 'ORDER_PACKED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được đóng gói, chuẩn bị giao.' },
+  { id: 'nt-returned', code: 'ORDER_RETURNED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được hoàn trả.' },
+  { id: 'nt-return-req', code: 'RETURN_REQUESTED', channel: 'INAPP', bodyTemplate: 'Đã nhận yêu cầu đổi/trả đơn {{order_code}}. Tubu sẽ phản hồi trong 24h.' },
+  { id: 'nt-return-ok', code: 'RETURN_APPROVED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu 🌿' },
+  { id: 'nt-reorder', code: 'REORDER_REMINDER', channel: 'INAPP', bodyTemplate: '{{product}} của bạn dự kiến sắp hết. Đặt lại ngay để không gián đoạn nhé! 🛒' },
+  { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá! Xem ngay 💚' },
+  { id: 'nt-sub-order', code: 'SUBSCRIPTION_ORDER', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ {{order_code}} đã được tạo tự động. Cảm ơn bạn đã đồng hành 🌿' },
+  { id: 'nt-sub-pause', code: 'SUBSCRIPTION_PAUSED', channel: 'INAPP', bodyTemplate: 'Lịch đặt định kỳ tạm dừng (sản phẩm hết hàng hoặc địa chỉ không hợp lệ). Vui lòng kiểm tra lại.' },
+  { id: 'nt-welcome', code: 'WELCOME_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chào mừng bạn đến Tubu Tree! Tặng voucher {{code}} giảm {{value}}đ, dùng trước {{expires}} 🎁' },
+  { id: 'nt-birthday', code: 'BIRTHDAY_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chúc mừng sinh nhật! 🎂 Tặng bạn voucher {{code}} giảm {{value}}đ, dùng trước {{expires}}.' },
+  { id: 'nt-winback', code: 'WINBACK_VOUCHER', channel: 'INAPP', bodyTemplate: 'Tubu nhớ bạn! Quay lại với voucher {{code}} giảm {{value}}đ, dùng trước {{expires}} 💚' },
 ];
 
 const QUIZZES = [
