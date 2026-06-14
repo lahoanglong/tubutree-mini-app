@@ -13,6 +13,14 @@ import { haptic } from '../utils/haptic';
 
 const SECTION_LIMIT = 6;
 
+/** Phân khúc mua sắm — khớp design PA2; key = forSegment (API lọc has(segment)). */
+const SEGMENTS: { key: string; label: string; emoji: string }[] = [
+  { key: 'mom_baby', label: 'Cho mẹ & bé', emoji: '🍼' },
+  { key: 'home_clean', label: 'Nhà bếp xanh', emoji: '🧼' },
+  { key: 'skincare', label: 'Chăm sóc cá nhân', emoji: '🧴' },
+  { key: 'eco', label: 'Sống xanh', emoji: '♻️' },
+];
+
 export default function HomePage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
@@ -104,6 +112,43 @@ export default function HomePage() {
             {vi.home.searchPlaceholder}
           </Text>
         </Box>
+      </Box>
+
+      {/* ── Segment pills (theo phân khúc — design PA2) ── */}
+      <Box
+        px={4}
+        pt={3}
+        style={{ display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+      >
+        {SEGMENTS.map((s) => (
+          <Box
+            key={s.key}
+            role="button"
+            aria-label={s.label}
+            className="tubu-press"
+            onClick={() => {
+              haptic('light');
+              navigate(`/browse?segment=${s.key}`);
+            }}
+            style={{
+              flex: '0 0 auto',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'var(--leaf-50)',
+              border: '1px solid var(--leaf-100)',
+              borderRadius: 'var(--radius-full)',
+              padding: '8px 14px',
+              minHeight: 38,
+              boxSizing: 'border-box',
+            }}
+          >
+            <span aria-hidden style={{ fontSize: 16 }}>{s.emoji}</span>
+            <Text size="xSmall" style={{ fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--leaf-700)' }}>
+              {s.label}
+            </Text>
+          </Box>
+        ))}
       </Box>
 
       {/* ── Brand strip ── */}

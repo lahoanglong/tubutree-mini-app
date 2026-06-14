@@ -12,6 +12,12 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 
 const PAGE_LIMIT = 30;
+const SEGMENT_LABELS: Record<string, string> = {
+  mom_baby: '🍼 Cho mẹ & bé',
+  home_clean: '🧼 Nhà bếp xanh',
+  skincare: '🧴 Chăm sóc cá nhân',
+  eco: '♻️ Sống xanh',
+};
 const RECENT_KEY = 'tubu_recent_searches';
 const RECENT_MAX = 8;
 
@@ -43,9 +49,14 @@ export default function BrowsePage() {
     () => new URLSearchParams(location.search).get('brand') ?? undefined,
     [location.search],
   );
+  const initialSegment = useMemo(
+    () => new URLSearchParams(location.search).get('segment') ?? undefined,
+    [location.search],
+  );
 
   const [q, setQ] = useState('');
   const [brand, setBrand] = useState<string | undefined>(initialBrand);
+  const [segment, setSegment] = useState<string | undefined>(initialSegment);
   const [sort, setSort] = useState<string | undefined>(undefined);
   const [recent, setRecent] = useState<string[]>(() => readRecent());
   const debouncedQ = useDebounced(q, 300);
@@ -57,12 +68,13 @@ export default function BrowsePage() {
 
   const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands });
   const products = useQuery({
-    queryKey: ['products', 'browse', debouncedQ, brand, sort],
+    queryKey: ['products', 'browse', debouncedQ, brand, segment, sort],
     queryFn: () =>
       fetchProducts({
         limit: PAGE_LIMIT,
         ...(debouncedQ ? { q: debouncedQ } : {}),
         ...(brand ? { brand } : {}),
+        ...(segment ? { segment } : {}),
         ...(sort ? { sort } : {}),
       }),
   });
@@ -74,10 +86,13 @@ export default function BrowsePage() {
     { key: 'price_desc', label: 'Giá cao → thấp' },
   ] as const;
 
-  // Deeplink từ Home (?brand=) thay đổi khi trang còn mounted → sync vào state.
+  // Deeplink từ Home (?brand= / ?segment=) thay đổi khi trang còn mounted → sync vào state.
   useEffect(() => {
     if (initialBrand) setBrand(initialBrand);
   }, [initialBrand]);
+  useEffect(() => {
+    setSegment(initialSegment);
+  }, [initialSegment]);
 
   const pick = (b?: string) => {
     haptic('light');
@@ -150,6 +165,32 @@ export default function BrowsePage() {
               </Box>
             </Box>
           )}
+        </Box>
+      )}
+
+      {segment && (
+        <Box px={3} pb={2}>
+          <Box
+            role="button"
+            className="tubu-press"
+            onClick={() => {
+              setSegment(undefined);
+              navigate('/browse', { replace: true });
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'var(--leaf-600)',
+              color: '#fff',
+              borderRadius: 'var(--radius-full)',
+              padding: '6px 12px',
+              fontSize: 12.5,
+              fontWeight: 600,
+            }}
+          >
+            {SEGMENT_LABELS[segment] ?? segment} ✕
+          </Box>
         </Box>
       )}
 

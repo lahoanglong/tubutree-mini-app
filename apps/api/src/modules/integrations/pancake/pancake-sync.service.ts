@@ -97,14 +97,25 @@ export class PancakeSyncService implements OnModuleInit {
       basePrice: p.variations?.[0]?.retail_price ?? existing?.basePrice ?? 0,
     };
 
+    // forSegment: suy từ tên để segment pills (Cho mẹ&bé / Nhà bếp xanh / Chăm sóc cá nhân / Sống xanh)
+    // có hàng. Chỉ set khi tạo mới hoặc khi product cũ CHƯA có segment (không đè tag thủ công).
+    const inferred = this.inferSegments(p.name);
+
     const product = existing
-      ? await this.prisma.product.update({ where: { id: existing.id }, data: baseData })
+      ? await this.prisma.product.update({
+          where: { id: existing.id },
+          data: {
+            ...baseData,
+            ...((existing.forSegment?.length ?? 0) === 0 ? { forSegment: inferred } : {}),
+          },
+        })
       : await this.prisma.product.create({
           data: {
             ...baseData,
             pancakeId,
             brand: 'Tubu Tree',
             slug: this.slugify(p.name, pancakeId),
+            forSegment: inferred,
           },
         });
 
@@ -159,5 +170,21 @@ export class PancakeSyncService implements OnModuleInit {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
     return `${base}-${suffix.slice(-6).toLowerCase()}`;
+  }
+
+  /** Suy phân khúc từ tên sản phẩm (bỏ dấu) — eco là catch-all để "Sống xanh" luôn có hàng. */
+  private inferSegments(name: string): string[] {
+    const n = name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/đ/g, 'd');
+    const segs = new Set<string>(['eco']); // mọi sản phẩm Tubu đều "sống xanh"
+    if (/\b(be|em be|tre em|baby|ta |bim|tre nho)\b|cho be|tre/.test(n)) segs.add('mom_baby');
+    if (/rua chen|lau san|nuoc rua|nuoc giat|giat|tay rua|lau kinh|ve sinh|rua tay|xa phong|nuoc lau/.test(n))
+      segs.add('home_clean');
+    if (/dau goi|sua tam|serum|kem |duong|mat na|rua mat|tinh dau|nuoc hoa hong|son |dau xa|cham soc/.test(n))
+      segs.add('skincare');
+    return [...segs];
   }
 }
