@@ -7,6 +7,7 @@ import { getErrorMessage } from '../services/api';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
+import { useAuthStore } from '../store/auth';
 
 const VN_PHONE = /^(0|\+84)\d{9}$/;
 type FormFields = 'recipient' | 'phone' | 'province' | 'district' | 'ward' | 'street';
@@ -206,6 +207,7 @@ function AddressForm({
   onSaved: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
+  const user = useAuthStore((s) => s.user);
   const [form, setForm] = useState<FormState>(
     initial
       ? {
@@ -216,7 +218,8 @@ function AddressForm({
           ward: initial.ward,
           street: initial.street,
         }
-      : EMPTY_FORM,
+      : // Địa chỉ mới: điền sẵn tên + SĐT lấy từ tài khoản Zalo (spec §6.1) để bớt thao tác.
+        { ...EMPTY_FORM, recipient: user?.fullName ?? '', phone: user?.phone ?? '' },
   );
   const [errors, setErrors] = useState<Partial<Record<FormFields, string>>>({});
   const [touched, setTouched] = useState<Partial<Record<FormFields, boolean>>>({});

@@ -90,11 +90,45 @@ export class ZaloService {
   }
 
   /**
-   * Giải mã số điện thoại từ token getPhoneNumber() (spec 6.1 bước 5).
-   * Phase 0 để stub — hoàn thiện khi tích hợp checkout (Phase 1).
+   * Giải mã số điện thoại từ token apis.getPhoneNumber() (spec §6.1 bước 5).
+   * Zalo Graph /me/info: header access_token (user) + code (phone token) + secret_key (app).
+   * Trả về số đã chuẩn hoá về dạng nội địa 0xxxxxxxxx, hoặc null nếu không lấy được.
    */
-  async resolvePhoneNumber(_phoneToken: string, _accessToken: string): Promise<string | null> {
-    this.logger.warn('resolvePhoneNumber chưa implement (Phase 1).');
-    return null;
+  async resolvePhoneNumber(phoneToken: string, accessToken: string): Promise<string | null> {
+    const secret = this.config.get('ZALO_APP_SECRET', { infer: true });
+    if (!secret) {
+      this.logger.warn('resolvePhoneNumber: thiếu ZALO_APP_SECRET — bỏ qua.');
+      return null;
+    }
+    try {
+      const res = await axios.get(`${this.graphBase}/me/info`, {
+        headers: { access_token: accessToken, code: phoneToken, secret_key: secret },
+        timeout: 8000,
+      });
+      const data = res.data as {
+        data?: { number?: string };
+        error?: number;
+        message?: string;
+      };
+      if (data.error && data.error !== 0) {
+        this.logger.warn(`resolvePhoneNumber Zalo error ${data.error}: ${data.message ?? ''}`);
+        return null;
+      }
+      return this.normalizePhone(data.data?.number);
+    } catch (err) {
+      const ax = err as AxiosError;
+      this.logger.error(`Zalo resolvePhoneNumber error: ${ax.message}`);
+      return null; // không chặn đăng nhập nếu giải mã SĐT lỗi
+    }
+  }
+
+  /** Chuẩn hoá số Zalo (thường trả 84xxxxxxxxx) về dạng nội địa 0xxxxxxxxx. */
+  private normalizePhone(raw?: string): string | null {
+    if (!raw) return null;
+    const digits = raw.replace(/[^0-9]/g, '');
+    if (!digits) return null;
+    if (digits.startsWith('84')) return `0${digits.slice(2)}`;
+    if (digits.startsWith('0')) return digits;
+    return `0${digits}`;
   }
 }

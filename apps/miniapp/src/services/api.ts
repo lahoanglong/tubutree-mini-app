@@ -70,10 +70,15 @@ export function getErrorMessage(error: unknown): string {
 }
 
 // ── Auth endpoints ────────────────────────────────────
-export async function loginZaloMiniApp(code: string, zaloAccessToken: string): Promise<LoginResponse> {
+export async function loginZaloMiniApp(
+  code: string,
+  zaloAccessToken: string,
+  phoneToken?: string,
+): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>('/auth/zalo-mini-app', {
     code,
     accessToken: zaloAccessToken,
+    phoneToken,
   });
   return data;
 }

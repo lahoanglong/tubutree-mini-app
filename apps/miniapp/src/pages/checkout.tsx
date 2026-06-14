@@ -104,20 +104,6 @@ export default function CheckoutPage() {
     );
   }
 
-  if (!authed) {
-    return (
-      <Shell>
-        <Box flex flexDirection="column" alignItems="center" p={8} style={{ gap: 12 }}>
-          <Text style={{ fontSize: 44 }}>🌿</Text>
-          <Text style={{ color: 'var(--neutral-600)' }}>Đăng nhập để tiếp tục thanh toán</Text>
-          <Button onClick={() => void useAuthStore.getState().login()} style={{ background: 'var(--leaf-600)' }}>
-            Đăng nhập với Zalo
-          </Button>
-        </Box>
-      </Shell>
-    );
-  }
-
   if (cart.isLoading || addresses.isLoading) return <CheckoutSkeleton />;
 
   if (cart.isError || addresses.isError) {

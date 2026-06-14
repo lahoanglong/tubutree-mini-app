@@ -15,7 +15,7 @@ const SECTION_LIMIT = 6;
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const { user, status, login } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
 
   const featured = useQuery({
     queryKey: ['products', 'home-featured'],
@@ -76,22 +76,6 @@ export default function HomePage() {
             </Box>
           )}
         </Box>
-
-        {status !== 'authenticated' && status !== 'loading' && (
-          <Button
-            size="small"
-            onClick={() => void login()}
-            style={{
-              background: 'white',
-              color: 'var(--primary-700)',
-              marginTop: 14,
-              minHeight: 44,
-              fontWeight: 600,
-            }}
-          >
-            {vi.auth.loginCta}
-          </Button>
-        )}
 
         {/* Search entry — đưa thẳng sang Khám phá */}
         <Box

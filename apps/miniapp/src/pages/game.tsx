@@ -17,7 +17,7 @@ import { useAuthStore } from '../store/auth';
 import { WheelOfFortune } from '../components/wheel';
 
 export default function GamePage() {
-  const { status, login } = useAuthStore();
+  const status = useAuthStore((s) => s.status);
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const authed = status === 'authenticated';
@@ -88,22 +88,7 @@ export default function GamePage() {
     onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
   });
 
-  if (!authed) {
-    return (
-      <Page className="page">
-        <Header title="Vườn Xanh" showBackIcon={false} />
-        <Box flex flexDirection="column" alignItems="center" p={8} style={{ gap: 12 }}>
-          <Text style={{ fontSize: 56 }}>🌱</Text>
-          <Text style={{ color: 'var(--neutral-600)' }}>Đăng nhập để chăm vườn & nhận thưởng</Text>
-          <Button onClick={() => void login()} style={{ background: 'var(--green-600)' }}>
-            Đăng nhập với Zalo
-          </Button>
-        </Box>
-      </Page>
-    );
-  }
-
-  if (isLoading) {
+  if (isLoading || !authed) {
     return (
       <Page>
         <Header title="Vườn Xanh" showBackIcon={false} />

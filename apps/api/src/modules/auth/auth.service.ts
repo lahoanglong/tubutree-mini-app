@@ -17,31 +17,79 @@ export class AuthService {
     private readonly zalo: ZaloService,
   ) {}
 
-  /** Luồng đăng nhập Mini App: verify token Zalo → upsert user → trả JWT. */
-  async loginWithZaloMiniApp(code: string, accessToken: string): Promise<LoginResponse> {
+  /** Luồng đăng nhập Mini App: verify token Zalo → upsert user (+ SĐT) → trả JWT. */
+  async loginWithZaloMiniApp(
+    code: string,
+    accessToken: string,
+    phoneToken?: string,
+  ): Promise<LoginResponse> {
     // code hiện chưa cần đổi token server-side cho mini app (token đã do SDK cấp);
     // giữ tham số để mở rộng OAuth web sau này.
     void code;
     const info = await this.zalo.getUserInfo(accessToken);
 
+    // Giải mã SĐT (nếu FE gửi kèm token getPhoneNumber). Không chặn login nếu lỗi.
+    const phone = phoneToken
+      ? await this.zalo.resolvePhoneNumber(phoneToken, accessToken)
+      : null;
+
     let user = await this.prisma.user.findUnique({ where: { zaloId: info.zaloId } });
+
+    // Merge theo SĐT (spec §6.1): user web đăng ký bằng phone, chưa có zaloId →
+    // gắn zaloId vào tài khoản đó để dùng chung điểm/đơn thay vì tạo tài khoản trùng.
+    if (!user && phone) {
+      const byPhone = await this.prisma.user.findUnique({ where: { phone } });
+      if (byPhone && !byPhone.zaloId) {
+        return this.issueTokens(
+          await this.prisma.user.update({
+            where: { id: byPhone.id },
+            data: {
+              zaloId: info.zaloId,
+              fullName: byPhone.fullName ?? info.name,
+              avatarUrl: byPhone.avatarUrl ?? info.avatar,
+            },
+          }),
+        );
+      }
+    }
+
     if (!user) {
-      user = await this.prisma.user.create({
-        data: {
-          zaloId: info.zaloId,
-          fullName: info.name,
-          avatarUrl: info.avatar,
-          referralCode: await this.generateReferralCode(),
-        },
-      });
-    } else if (info.name && user.fullName !== info.name) {
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: { fullName: info.name, avatarUrl: info.avatar ?? user.avatarUrl },
-      });
+      return this.issueTokens(
+        await this.prisma.user.create({
+          data: {
+            zaloId: info.zaloId,
+            fullName: info.name,
+            avatarUrl: info.avatar,
+            phone: await this.phoneIfFree(phone),
+            referralCode: await this.generateReferralCode(),
+          },
+        }),
+      );
+    }
+
+    // User Zalo đã tồn tại → đồng bộ tên/avatar + lưu SĐT lần đầu (nếu có).
+    const data: { fullName?: string; avatarUrl?: string | null; phone?: string } = {};
+    if (info.name && user.fullName !== info.name) {
+      data.fullName = info.name;
+      data.avatarUrl = info.avatar ?? user.avatarUrl;
+    }
+    if (phone && !user.phone) {
+      const free = await this.phoneIfFree(phone, user.id);
+      if (free) data.phone = free;
+    }
+    if (Object.keys(data).length > 0) {
+      user = await this.prisma.user.update({ where: { id: user.id }, data });
     }
 
     return this.issueTokens(user);
+  }
+
+  /** Trả phone nếu chưa bị tài khoản khác chiếm (phone là @unique) — tránh P2002. */
+  private async phoneIfFree(phone: string | null, selfId?: string): Promise<string | undefined> {
+    if (!phone) return undefined;
+    const owner = await this.prisma.user.findUnique({ where: { phone }, select: { id: true } });
+    if (owner && owner.id !== selfId) return undefined;
+    return phone;
   }
 
   /** Luồng đăng nhập web (Zalo Web Login OAuth): đổi code → access token → upsert user → JWT. */

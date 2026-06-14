@@ -1,4 +1,4 @@
-import { Box, Page, Text, Button, Header, Avatar, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Header, Avatar, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store/auth';
 import { getLoyalty, getNotifications } from '../services/account-api';
@@ -70,7 +70,7 @@ const MENU: { group: string; items: MenuItem[] }[] = [
 export default function ProfilePage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
-  const { user, status, login, logout } = useAuthStore();
+  const { user, status, logout } = useAuthStore();
   const loyaltyQ = useQuery({
     queryKey: ['loyalty'],
     queryFn: getLoyalty,
@@ -83,16 +83,13 @@ export default function ProfilePage() {
   });
   const unreadCount = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
 
+  // AuthGate đảm bảo đã đăng nhập; phòng trường hợp user chưa kịp set → màn chờ nhẹ.
   if (status !== 'authenticated' || !user) {
     return (
       <Page className="page" style={{ background: 'var(--neutral-50)' }}>
         <Header title="Tài khoản" showBackIcon={false} />
-        <Box flex flexDirection="column" alignItems="center" p={8} style={{ gap: 12 }}>
-          <Text style={{ fontSize: 48 }}>🌿</Text>
-          <Text style={{ color: 'var(--neutral-600)' }}>Đăng nhập để tích điểm & mua sắm</Text>
-          <Button onClick={() => void login()} style={{ background: 'var(--leaf-600)' }}>
-            Đăng nhập với Zalo
-          </Button>
+        <Box flex justifyContent="center" alignItems="center" style={{ minHeight: '60vh' }}>
+          <Spinner />
         </Box>
       </Page>
     );

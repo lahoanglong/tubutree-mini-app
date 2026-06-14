@@ -23,7 +23,7 @@ const TABS = [
 
 export default function OrdersPage() {
   const navigate = useNavigate();
-  const { status: authStatus, login } = useAuthStore();
+  const authStatus = useAuthStore((s) => s.status);
   const [tab, setTab] = useState<string | undefined>(undefined);
 
   const orders = useQuery({
@@ -71,15 +71,7 @@ export default function OrdersPage() {
         })}
       </Box>
 
-      {authStatus !== 'authenticated' && authStatus !== 'loading' ? (
-        <EmptyState
-          art="box"
-          heading={vi.orders.emptyHeading}
-          body={vi.auth.loginHint}
-          ctaLabel={vi.auth.loginCta}
-          onCta={() => void login()}
-        />
-      ) : orders.isLoading || authStatus === 'loading' ? (
+      {orders.isLoading || authStatus === 'loading' ? (
         <Box p={3} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <LineItemSkeleton />
           <LineItemSkeleton />

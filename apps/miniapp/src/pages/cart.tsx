@@ -124,20 +124,6 @@ export default function CartPage() {
     );
   }
 
-  if (status !== 'authenticated') {
-    return (
-      <Shell>
-        <EmptyState
-          art="basket"
-          heading={vi.cart.emptyHeading}
-          body={vi.auth.loginHint}
-          ctaLabel={vi.auth.loginCta}
-          onCta={() => void useAuthStore.getState().login()}
-        />
-      </Shell>
-    );
-  }
-
   if (cart.isError) {
     return (
       <Shell>

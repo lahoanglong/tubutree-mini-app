@@ -19,7 +19,7 @@ export class AuthController {
   @Post('zalo-mini-app')
   @HttpCode(HttpStatus.OK)
   loginZaloMiniApp(@Body() dto: ZaloMiniAppLoginDto): Promise<LoginResponse> {
-    return this.auth.loginWithZaloMiniApp(dto.code, dto.accessToken);
+    return this.auth.loginWithZaloMiniApp(dto.code, dto.accessToken, dto.phoneToken);
   }
 
   @Public()

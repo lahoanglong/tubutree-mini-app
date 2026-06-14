@@ -76,6 +76,54 @@ describe('AuthService.refresh (rotation atomic)', () => {
   });
 });
 
+describe('AuthService.loginWithZaloMiniApp (phone)', () => {
+  function makeLoginSvc(userMocks: Record<string, jest.Mock>, zaloMocks: Record<string, jest.Mock>) {
+    const prisma = {
+      refreshToken: { create: jest.fn().mockResolvedValue({}) },
+      user: userMocks,
+    } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
+    const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
+    const zalo = zaloMocks as unknown as ZaloService;
+    return new AuthService(prisma, jwt, config, zalo);
+  }
+
+  it('user mới + có phoneToken → tạo user kèm SĐT đã chuẩn hoá', async () => {
+    const create = jest.fn().mockResolvedValue({ ...USER, phone: '0901234567' });
+    const svc = makeLoginSvc(
+      { findUnique: jest.fn().mockResolvedValue(null), create },
+      {
+        getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z1', name: 'A' }),
+        resolvePhoneNumber: jest.fn().mockResolvedValue('0901234567'),
+      },
+    );
+    const r = await svc.loginWithZaloMiniApp('code', 'at', 'ptoken');
+    expect(r.accessToken).toBe('access-jwt');
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ phone: '0901234567', zaloId: 'z1' }) }),
+    );
+  });
+
+  it('merge: user web có phone chưa có zaloId → gắn zaloId thay vì tạo mới', async () => {
+    const update = jest.fn().mockResolvedValue({ ...USER, phone: '0901234567' });
+    const findUnique = jest
+      .fn()
+      .mockResolvedValueOnce(null) // by zaloId
+      .mockResolvedValueOnce({ id: 'web1', phone: '0901234567', zaloId: null, fullName: 'Web' }); // by phone
+    const svc = makeLoginSvc(
+      { findUnique, update, create: jest.fn() },
+      {
+        getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z1', name: 'A' }),
+        resolvePhoneNumber: jest.fn().mockResolvedValue('0901234567'),
+      },
+    );
+    await svc.loginWithZaloMiniApp('code', 'at', 'ptoken');
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'web1' }, data: expect.objectContaining({ zaloId: 'z1' }) }),
+    );
+  });
+});
+
 describe('AuthService.logout', () => {
   it('revoke refresh token theo hash (chưa revoke)', async () => {
     const { svc, updateMany } = makeService();

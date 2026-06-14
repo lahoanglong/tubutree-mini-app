@@ -1,5 +1,6 @@
 import {
   getAccessToken,
+  getPhoneNumber,
   getUserInfo,
   login as zmpLogin,
   openShareSheet,
@@ -18,13 +19,25 @@ export interface ZaloLoginResult {
   accessToken: string;
   /** code đăng nhập (dự phòng cho luồng OAuth server-side). */
   code: string;
+  /** token getPhoneNumber() — backend giải mã lấy SĐT (có thể undefined nếu user từ chối). */
+  phoneToken?: string;
 }
 
-/** Đảm bảo đã login Zalo rồi lấy access token. */
+/**
+ * Đăng nhập Zalo 1 lần: login → access token → xin SĐT (scope.userPhonenumber).
+ * Xin SĐT là 1 sheet native của Zalo; nếu user từ chối/SDK lỗi thì bỏ qua (không chặn login).
+ */
 export async function getZaloAccessToken(): Promise<ZaloLoginResult> {
   await zmpLogin({});
   const accessToken = await getAccessToken({});
-  return { accessToken, code: accessToken };
+  let phoneToken: string | undefined;
+  try {
+    const res = await getPhoneNumber({});
+    phoneToken = (res as { token?: string }).token;
+  } catch {
+    phoneToken = undefined; // user từ chối cấp SĐT — vẫn cho vào app
+  }
+  return { accessToken, code: accessToken, phoneToken };
 }
 
 /** Lấy thông tin hiển thị cơ bản (tên, avatar) — cần quyền scope.userInfo. */

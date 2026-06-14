@@ -29,13 +29,14 @@ async function clearRefresh(): Promise<void> {
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  status: 'idle',
+  // 'loading' ngay từ đầu: app luôn restore() khi mở → tránh nháy màn đăng nhập trước khi restore xong.
+  status: 'loading',
 
   login: async () => {
     set({ status: 'loading', error: undefined });
     try {
-      const { code, accessToken } = await getZaloAccessToken();
-      const res = await loginZaloMiniApp(code, accessToken);
+      const { code, accessToken, phoneToken } = await getZaloAccessToken();
+      const res = await loginZaloMiniApp(code, accessToken, phoneToken);
       setAccessToken(res.accessToken);
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });
