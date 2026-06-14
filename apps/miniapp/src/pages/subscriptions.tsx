@@ -72,20 +72,40 @@ export default function SubscriptionsPage() {
               <Box flex alignItems="center" justifyContent="space-between" mt={3}>
                 <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
                   {s.status === 'ACTIVE'
-                    ? `Lần kế: ${new Date(s.nextRunAt).toLocaleDateString('vi-VN')}`
+                    ? s.nextRunAt
+                      ? `Lần kế: ${new Date(s.nextRunAt).toLocaleDateString('vi-VN')}`
+                      : 'Đang lên lịch'
                     : 'Đang tạm dừng'}
                 </Text>
-                <Box flex style={{ gap: 14 }}>
+                <Box flex style={{ gap: 14, opacity: statusMut.isPending ? 0.5 : 1 }}>
                   {s.status === 'ACTIVE' ? (
-                    <Text size="small" bold style={{ color: 'var(--clay-700)' }} onClick={() => statusMut.mutate({ id: s.id, status: 'PAUSED' })}>
+                    <Text
+                      size="small"
+                      bold
+                      className="tubu-press"
+                      style={{ color: 'var(--clay-700)' }}
+                      onClick={() => !statusMut.isPending && statusMut.mutate({ id: s.id, status: 'PAUSED' })}
+                    >
                       Tạm dừng
                     </Text>
                   ) : (
-                    <Text size="small" bold style={{ color: 'var(--leaf-700)' }} onClick={() => statusMut.mutate({ id: s.id, status: 'ACTIVE' })}>
+                    <Text
+                      size="small"
+                      bold
+                      className="tubu-press"
+                      style={{ color: 'var(--leaf-700)' }}
+                      onClick={() => !statusMut.isPending && statusMut.mutate({ id: s.id, status: 'ACTIVE' })}
+                    >
                       Tiếp tục
                     </Text>
                   )}
-                  <Text size="small" bold style={{ color: 'var(--danger)' }} onClick={() => statusMut.mutate({ id: s.id, status: 'CANCELLED' })}>
+                  <Text
+                    size="small"
+                    bold
+                    className="tubu-press"
+                    style={{ color: 'var(--danger)' }}
+                    onClick={() => !statusMut.isPending && statusMut.mutate({ id: s.id, status: 'CANCELLED' })}
+                  >
                     Hủy
                   </Text>
                 </Box>
