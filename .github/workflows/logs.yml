@@ -1,0 +1,21 @@
+name: Dump API logs (VM)
+
+# Lấy log API gần đây để chẩn đoán. Chạy: gh workflow run logs.yml
+on:
+  workflow_dispatch: {}
+
+jobs:
+  logs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH dump logs
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            cd ~/tubutree
+            echo "===== API LOGS (last 15m, lọc auth/zalo/error) ====="
+            docker compose -f docker-compose.prod.yml logs api --since 15m 2>&1 | grep -iE "zalo|auth|login|graph|verify|unauthor|error|exception|phone|/api/" | tail -80 || echo "(không có log khớp)"
