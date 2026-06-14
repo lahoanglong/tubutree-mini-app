@@ -13,11 +13,20 @@ export const api = axios.create({ baseURL: BASE_URL, timeout: TIMEOUT_MS });
 
 /** Gửi log chẩn đoán về server (debug login Zalo). Fire-and-forget, không chặn. */
 export function reportDiag(tag: string, msg: unknown): void {
+  let text: string;
+  if (msg instanceof Error) text = `${msg.name}: ${msg.message}`;
+  else if (typeof msg === 'object' && msg !== null) {
+    try {
+      text = JSON.stringify(msg);
+    } catch {
+      text = String(msg);
+    }
+  } else text = String(msg);
   try {
     void fetch(`${BASE_URL}/diag`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tag, msg: msg instanceof Error ? `${msg.name}: ${msg.message}` : String(msg) }),
+      body: JSON.stringify({ tag, msg: text }),
     }).catch(() => undefined);
   } catch {
     /* ignore */

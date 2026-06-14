@@ -28,22 +28,31 @@ export interface ZaloLoginResult {
  * Đăng nhập Zalo NGẦM (silent) — chỉ login + access token, KHÔNG xin SĐT.
  * Dùng khi mở app để vào thẳng trang chủ như các mini app khác (Sendo/Homefarm).
  */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Lấy access token Zalo, CÓ RETRY — lỗi đã biết của Zalo SDK: getAccessToken() hay
+ * fail/empty ở lần gọi đầu (ngay sau login), thành công ở lần sau. Thử tối đa 4 lần,
+ * mỗi lần re-login + chờ tăng dần. Trả token hoặc throw lỗi cuối.
+ */
 export async function getZaloAccessToken(): Promise<ZaloLoginResult> {
-  try {
-    await zmpLogin({});
-  } catch (e) {
-    reportDiag('zmpLogin-fail', e);
-    throw e;
+  let lastErr: unknown = null;
+  for (let i = 0; i < 4; i++) {
+    try {
+      await zmpLogin({});
+      const accessToken = await getAccessToken({});
+      if (accessToken && accessToken.length > 0) {
+        if (i > 0) reportDiag('zalo-ok-retry', `attempt=${i + 1} len=${accessToken.length}`);
+        return { accessToken, code: accessToken };
+      }
+      lastErr = new Error('empty access token');
+    } catch (e) {
+      lastErr = e;
+    }
+    await sleep(500 * (i + 1)); // 0.5s, 1s, 1.5s
   }
-  let accessToken: string;
-  try {
-    accessToken = await getAccessToken({});
-  } catch (e) {
-    reportDiag('getAccessToken-fail', e);
-    throw e;
-  }
-  reportDiag('zalo-ok', `tokenLen=${accessToken ? accessToken.length : 0}`);
-  return { accessToken, code: accessToken };
+  reportDiag('getAccessToken-fail', lastErr);
+  throw lastErr instanceof Error ? lastErr : new Error('getAccessToken failed');
 }
 
 /**
