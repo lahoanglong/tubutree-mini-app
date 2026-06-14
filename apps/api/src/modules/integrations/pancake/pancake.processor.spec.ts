@@ -113,9 +113,25 @@ describe('PancakeProcessor.process', () => {
     (prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({
       id: 'e1',
       status: 'RECEIVED',
+      eventType: 'order.status_updated',
       rawPayload: { event: 'order.status_updated', data: { id: 'p1', status: 'delivered' } },
     });
     await proc.process({ data: { eventId: 'e1' } });
+    expect((prisma.pancakeWebhookEvent.update as jest.Mock).mock.calls[0][0].data.status).toBe('PROCESSED');
+  });
+
+  it('payload Pancake THẬT (type=orders, object đơn top-level, không có data) → xử lý đúng', async () => {
+    const { proc, prisma, loyalty } = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'SHIPPING' });
+    (prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({
+      id: 'e2',
+      status: 'RECEIVED',
+      eventType: 'orders',
+      // Pancake POS: nguyên object đơn ở top-level, KHÔNG bọc {event,data}
+      rawPayload: { type: 'orders', id: 'p1', status_name: 'delivered', note: 'Order code: TUBU1' },
+    });
+    await proc.process({ data: { eventId: 'e2' } });
+    expect((prisma.order.update as jest.Mock).mock.calls[0][0].data.status).toBe('DELIVERED');
+    expect(loyalty.creditOrderPoints).toHaveBeenCalledWith('o1');
     expect((prisma.pancakeWebhookEvent.update as jest.Mock).mock.calls[0][0].data.status).toBe('PROCESSED');
   });
 
@@ -124,6 +140,7 @@ describe('PancakeProcessor.process', () => {
     (prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({
       id: 'e1',
       status: 'RECEIVED',
+      eventType: 'order.status_updated',
       rawPayload: { event: 'order.status_updated', data: { id: 'p1', status: 'delivered' } },
     });
     (loyalty.creditOrderPoints as jest.Mock).mockRejectedValue(new Error('boom'));

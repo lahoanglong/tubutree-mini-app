@@ -17,8 +17,11 @@ import type { Env } from '../../../config/env.validation';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 
 interface PancakeWebhookBody {
-  event: string;
-  data: Record<string, unknown>;
+  /** Luồng cũ {event,data}. Pancake POS thực tế gửi nguyên object đơn (type='orders'). */
+  event?: string;
+  type?: string;
+  data?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 /**
@@ -50,8 +53,10 @@ export class PancakeWebhookController {
     if (this.secret && !this.verifyToken(token)) {
       throw new UnauthorizedException('Token webhook không hợp lệ.');
     }
+    // Pancake POS không gửi field 'event' — suy ra loại từ 'type' (vd 'orders'), mặc định 'order'.
+    const eventType = body.event ?? body.type ?? 'order';
     const event = await this.prisma.pancakeWebhookEvent.create({
-      data: { eventType: body.event, rawPayload: body as object, status: 'RECEIVED' },
+      data: { eventType, rawPayload: body as object, status: 'RECEIVED' },
     });
     await this.queue.add('process', { eventId: event.id }, { jobId: event.id });
     return { received: true };

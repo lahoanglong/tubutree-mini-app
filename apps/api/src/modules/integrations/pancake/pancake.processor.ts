@@ -9,8 +9,9 @@ import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { mapPancakeStatus } from './pancake-status.map';
 
 interface EventData {
-  event: string;
-  data: Record<string, unknown>;
+  event?: string;
+  data?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 /**
@@ -38,7 +39,9 @@ export class PancakeProcessor extends WorkerHost {
 
     try {
       const payload = event.rawPayload as unknown as EventData;
-      await this.handle(payload.event, payload.data ?? {});
+      // Pancake POS gửi nguyên object đơn ở top-level; luồng cũ dùng {event,data}.
+      const data = (payload.data as Record<string, unknown>) ?? (payload as Record<string, unknown>);
+      await this.handle(event.eventType, data);
       await this.prisma.pancakeWebhookEvent.update({
         where: { id: event.id },
         data: { status: 'PROCESSED', processedAt: new Date(), attempts: { increment: 1 } },
@@ -58,9 +61,15 @@ export class PancakeProcessor extends WorkerHost {
 
   private async handle(eventType: string, data: Record<string, unknown>): Promise<void> {
     switch (eventType) {
+      case 'orders': // Pancake POS: webhook đơn hàng (payload là nguyên object đơn)
+      case 'order':
       case 'order.status_updated':
       case 'order.updated':
         await this.onStatusUpdated(data);
+        // Đơn Pancake kèm thông tin vận chuyển → cập nhật luôn nếu có.
+        if (data['tracking_link'] || data['shipping_status'] || data['tracking_number']) {
+          await this.onShippingUpdated(data);
+        }
         break;
       case 'order.shipping_updated':
         await this.onShippingUpdated(data);
