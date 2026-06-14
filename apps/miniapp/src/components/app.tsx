@@ -6,7 +6,6 @@ import { getStorage } from 'zmp-sdk/apis';
 import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
 import { OnboardingGate } from './onboarding';
-import { AuthGate } from './auth-gate';
 import { useAuthStore } from '../store/auth';
 
 const FONT_PX: Record<string, string> = { small: '15px', normal: '16px', large: '18px' };
@@ -72,7 +71,6 @@ export default function MyApp() {
     <QueryClientProvider client={queryClient}>
       <App>
         <SnackbarProvider>
-          <AuthGate>
           <ZMPRouter>
             <Suspense fallback={<RouteFallback />}>
               <AnimationRoutes>
@@ -103,7 +101,6 @@ export default function MyApp() {
             <BottomNav />
             <OnboardingGate />
           </ZMPRouter>
-          </AuthGate>
         </SnackbarProvider>
       </App>
     </QueryClientProvider>

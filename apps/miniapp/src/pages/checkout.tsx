@@ -342,7 +342,14 @@ export default function CheckoutPage() {
           fullWidth
           loading={order.isPending}
           disabled={!canPlace}
-          onClick={() => order.mutate()}
+          onClick={() => {
+            // Xin SĐT đúng lúc đặt hàng (như Homefarm) nếu tài khoản chưa có — không chặn nếu user từ chối.
+            void useAuthStore
+              .getState()
+              .ensurePhone()
+              .catch(() => undefined)
+              .finally(() => order.mutate());
+          }}
           style={{ background: 'var(--primary-600)', minHeight: 48, fontWeight: 600 }}
         >
           {order.isPending

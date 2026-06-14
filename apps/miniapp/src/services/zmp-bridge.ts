@@ -24,20 +24,26 @@ export interface ZaloLoginResult {
 }
 
 /**
- * Đăng nhập Zalo 1 lần: login → access token → xin SĐT (scope.userPhonenumber).
- * Xin SĐT là 1 sheet native của Zalo; nếu user từ chối/SDK lỗi thì bỏ qua (không chặn login).
+ * Đăng nhập Zalo NGẦM (silent) — chỉ login + access token, KHÔNG xin SĐT.
+ * Dùng khi mở app để vào thẳng trang chủ như các mini app khác (Sendo/Homefarm).
  */
 export async function getZaloAccessToken(): Promise<ZaloLoginResult> {
   await zmpLogin({});
   const accessToken = await getAccessToken({});
-  let phoneToken: string | undefined;
+  return { accessToken, code: accessToken };
+}
+
+/**
+ * Xin SĐT đúng lúc cần (checkout) — sheet native scope.userPhonenumber.
+ * Trả token để backend giải mã; null nếu user từ chối/SDK lỗi (không chặn luồng).
+ */
+export async function requestZaloPhoneToken(): Promise<string | null> {
   try {
     const res = await getPhoneNumber({});
-    phoneToken = (res as { token?: string }).token;
+    return (res as { token?: string }).token ?? null;
   } catch {
-    phoneToken = undefined; // user từ chối cấp SĐT — vẫn cho vào app
+    return null;
   }
-  return { accessToken, code: accessToken, phoneToken };
 }
 
 /** Lấy thông tin hiển thị cơ bản (tên, avatar) — cần quyền scope.userInfo. */
