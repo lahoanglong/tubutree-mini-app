@@ -9,6 +9,12 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: true });
 
   app.use(helmet());
+  // Log mọi request (chẩn đoán: xác nhận request từ Zalo Mini App có tới API không).
+  const httpLog = new Logger('HTTP');
+  app.use((req: { method: string; originalUrl?: string; url?: string }, _res: unknown, next: () => void) => {
+    httpLog.log(`${req.method} ${req.originalUrl ?? req.url}`);
+    next();
+  });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({
