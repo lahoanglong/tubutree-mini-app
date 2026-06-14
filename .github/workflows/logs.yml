@@ -17,5 +17,9 @@ jobs:
           command_timeout: 3m
           script: |
             cd ~/tubutree
-            echo "===== API LOGS (last 15m, lọc auth/zalo/error) ====="
-            docker compose -f docker-compose.prod.yml logs api --since 15m 2>&1 | grep -iE "zalo|auth|login|graph|verify|unauthor|error|exception|phone|/api/" | tail -80 || echo "(không có log khớp)"
+            DC="docker compose -f docker-compose.prod.yml"
+            echo "===== CADDY: request /api/auth hoặc /api/products gần đây (10m) ====="
+            $DC logs caddy --since 10m 2>&1 | grep -iE "api.tubutree.com|/auth|/products|/cart|/me" | tail -40 || echo "(Caddy không thấy request /api — có thể domain bị Zalo chặn)"
+            echo ""
+            echo "===== API: lỗi gần đây (10m) ====="
+            $DC logs api --since 10m 2>&1 | grep -iE "zalo|auth|graph|verify|unauthor|error|exception" | tail -40 || echo "(không có lỗi)"
