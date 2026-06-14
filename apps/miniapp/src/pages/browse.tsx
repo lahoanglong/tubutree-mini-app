@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Page, Input, Header, useLocation, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Input, Header, useLocation, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProducts, fetchBrands } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
@@ -12,6 +12,29 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 
 const PAGE_LIMIT = 30;
+const RECENT_KEY = 'tubu_recent_searches';
+const RECENT_MAX = 8;
+
+function readRecent(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY);
+    const arr = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+function pushRecent(term: string): string[] {
+  const t = term.trim();
+  if (t.length < 2) return readRecent();
+  const next = [t, ...readRecent().filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, RECENT_MAX);
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore quota */
+  }
+  return next;
+}
 
 export default function BrowsePage() {
   const location = useLocation();
@@ -24,7 +47,13 @@ export default function BrowsePage() {
   const [q, setQ] = useState('');
   const [brand, setBrand] = useState<string | undefined>(initialBrand);
   const [sort, setSort] = useState<string | undefined>(undefined);
+  const [recent, setRecent] = useState<string[]>(() => readRecent());
   const debouncedQ = useDebounced(q, 300);
+
+  // Lưu từ khoá vào "tìm gần đây" khi user gõ một truy vấn có nghĩa (≥2 ký tự).
+  useEffect(() => {
+    if (debouncedQ.trim().length >= 2) setRecent(pushRecent(debouncedQ));
+  }, [debouncedQ]);
 
   const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands });
   const products = useQuery({
@@ -70,6 +99,59 @@ export default function BrowsePage() {
           clearable
         />
       </Box>
+
+      {/* Tìm gần đây + Xu hướng — chỉ hiện khi chưa gõ gì (màn tìm kiếm §6.12). */}
+      {!q.trim() && (
+        <Box px={3} pb={1}>
+          {recent.length > 0 && (
+            <Box mb={2}>
+              <Box flex alignItems="center" justifyContent="space-between" mb={1}>
+                <Text size="xSmall" bold style={{ color: 'var(--neutral-600)' }}>
+                  Tìm gần đây
+                </Text>
+                <Text
+                  size="xSmall"
+                  className="tubu-press"
+                  onClick={() => {
+                    try {
+                      localStorage.removeItem(RECENT_KEY);
+                    } catch {
+                      /* ignore */
+                    }
+                    setRecent([]);
+                  }}
+                  style={{ color: 'var(--neutral-400)' }}
+                >
+                  Xoá
+                </Text>
+              </Box>
+              <Box style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {recent.map((t) => (
+                  <Chip key={t} label={`🕘 ${t}`} active={false} onClick={() => setQ(t)} />
+                ))}
+              </Box>
+            </Box>
+          )}
+          {(brands.data?.length ?? 0) > 0 && (
+            <Box>
+              <Text size="xSmall" bold style={{ color: 'var(--neutral-600)', display: 'block', marginBottom: 6 }}>
+                Xu hướng
+              </Text>
+              <Box style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {brands.data?.slice(0, 6).map((b) => (
+                  <Chip
+                    key={b.brand}
+                    label={`🔥 ${b.brand}`}
+                    dotColor={brandAccent(b.brand)}
+                    active={false}
+                    onClick={() => setQ(b.brand)}
+                  />
+                ))}
+              </Box>
+            </Box>
+          )}
+        </Box>
+      )}
 
       <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10 }}>
         <Chip label={vi.home.allBrands} active={!brand} onClick={() => pick(undefined)} />

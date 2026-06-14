@@ -5,6 +5,7 @@ import { fetchOrder, cancelOrder, repurchaseOrder, requestReturn, fetchMyReturns
 import { getErrorMessage } from '../services/api';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
+import { MultiImageUpload } from '../components/image-upload';
 import { formatVnd } from '../utils/format';
 import { STATUS_COLOR, TIMELINE_STEPS, timelineIndex } from '../utils/order-status';
 import { openOAChat, openExternal, hasOA } from '../services/zmp-bridge';
@@ -19,6 +20,7 @@ export default function OrderDetailPage() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
+  const [returnImages, setReturnImages] = useState<string[]>([]);
 
   const order = useQuery({
     queryKey: ['order', code],
@@ -57,10 +59,11 @@ export default function OrderDetailPage() {
   });
 
   const returnReq = useMutation({
-    mutationFn: () => requestReturn(code!, returnReason.trim()),
+    mutationFn: () => requestReturn(code!, returnReason.trim(), returnImages),
     onSuccess: () => {
       setReturnOpen(false);
       setReturnReason('');
+      setReturnImages([]);
       haptic('medium');
       void queryClient.invalidateQueries({ queryKey: ['my-returns'] });
       openSnackbar({ text: 'Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24h.', type: 'success' });
@@ -378,6 +381,10 @@ export default function OrderDetailPage() {
               boxSizing: 'border-box',
             }}
           />
+          <Text size="xSmall" bold style={{ marginTop: 12, display: 'block', color: 'var(--neutral-600)' }}>
+            Ảnh minh chứng (khuyến khích, tối đa 3)
+          </Text>
+          <MultiImageUpload value={returnImages} onChange={setReturnImages} max={3} />
           <Button
             fullWidth
             loading={returnReq.isPending}

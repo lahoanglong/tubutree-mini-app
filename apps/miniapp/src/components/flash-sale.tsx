@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProducts, type ProductCard as ProductCardType } from '../services/shop-api';
@@ -6,12 +6,34 @@ import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 
 /**
- * Ưu đãi hôm nay — sản phẩm đang giảm giá thật.
- * Theo nguyên tắc brand "tử tế hơn khẩn cấp" (Design Brief §3.2): KHÔNG countdown giây/FOMO,
- * chỉ nhãn nhẹ "Đến hết hôm nay".
+ * Đếm ngược ÊM đến hết ngày (giờ:phút) — thoả màn design #76 "đếm ngược realtime"
+ * NHƯNG giữ tông calm theo Design Brief §3.2 (không nhấp nháy giây/FOMO).
+ * Cập nhật mỗi 30s, hiển thị "Xh Ym".
+ */
+function useTimeToEndOfDay(): string {
+  const compute = () => {
+    const now = new Date();
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+    const ms = Math.max(0, end.getTime() - now.getTime());
+    const h = Math.floor(ms / 3_600_000);
+    const m = Math.floor((ms % 3_600_000) / 60_000);
+    return `${h}h ${m.toString().padStart(2, '0')}m`;
+  };
+  const [label, setLabel] = useState(compute);
+  useEffect(() => {
+    const id = setInterval(() => setLabel(compute()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  return label;
+}
+
+/**
+ * Ưu đãi hôm nay — sản phẩm đang giảm giá thật. Countdown êm đến hết ngày.
  */
 export function FlashSale() {
   const navigate = useNavigate();
+  const timeLeft = useTimeToEndOfDay();
 
   const q = useQuery({
     queryKey: ['products', 'flash-sale'],
@@ -31,14 +53,21 @@ export function FlashSale() {
   return (
     <Box mt={4}>
       <Box px={4} flex alignItems="center" justifyContent="space-between" mb={2}>
-        <Text.Title size="small" style={{ color: 'var(--clay-700)' }}>
+        <Text.Title className="t-h2" size="small" style={{ color: 'var(--clay-700)' }}>
           🌿 Ưu đãi hôm nay
         </Text.Title>
         <Text
           size="xSmall"
-          style={{ color: 'var(--clay-700)', background: 'var(--clay-50)', padding: '2px 10px', borderRadius: 'var(--radius-full)' }}
+          bold
+          aria-label={`Kết thúc sau ${timeLeft}`}
+          style={{
+            color: 'var(--clay-700)',
+            background: 'var(--clay-50)',
+            padding: '2px 10px',
+            borderRadius: 'var(--radius-full)',
+          }}
         >
-          Đến hết hôm nay
+          ⏳ Còn {timeLeft}
         </Text>
       </Box>
 

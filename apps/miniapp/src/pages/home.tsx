@@ -1,4 +1,4 @@
-import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProducts, fetchBrands } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
@@ -50,7 +50,7 @@ export default function HomePage() {
       >
         <Box flex justifyContent="space-between" alignItems="center">
           <Box>
-            <Text.Title style={{ color: 'white' }}>
+            <Text.Title className="t-h1" style={{ color: 'white' }}>
               {user ? vi.home.greeting(user.fullName ?? vi.auth.greetingFallback) : 'Tubu Tree'}
             </Text.Title>
             <Text size="small" style={{ color: 'var(--primary-100)' }}>
@@ -108,7 +108,7 @@ export default function HomePage() {
 
       {/* ── Brand strip ── */}
       <Box pt={4} pb={1} px={4}>
-        <Text.Title size="small">{vi.home.brandsTitle}</Text.Title>
+        <Text.Title className="t-h2" size="small">{vi.home.brandsTitle}</Text.Title>
       </Box>
       <Box
         px={4}
@@ -221,7 +221,7 @@ function HomeSection({
   return (
     <>
       <Box pt={4} pb={2} px={4}>
-        <Text.Title size="small">{title}</Text.Title>
+        <Text.Title className="t-h2" size="small">{title}</Text.Title>
       </Box>
       <Box px={4}>
         {query.isLoading ? (

@@ -49,7 +49,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     >
       <Box flex flexDirection="column" alignItems="center" style={{ gap: 14, flex: 1, justifyContent: 'center' }}>
         <LeafLogo />
-        <Text bold style={{ color: '#fff', fontSize: 30, letterSpacing: -0.5 }}>
+        <Text className="t-display" style={{ color: '#fff', fontSize: 32 }}>
           Tubu Tree
         </Text>
         <Text style={{ color: 'rgba(255,255,255,0.92)', fontSize: 16, fontWeight: 600 }}>
