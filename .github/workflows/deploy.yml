@@ -1,0 +1,33 @@
+name: Deploy API to VM
+
+# Push lên main đụng tới API/packages/compose → tự SSH vào VM build lại.
+# Cần 3 secret (Settings → Secrets and variables → Actions):
+#   VM_HOST     = IP tĩnh VM (vd 34.142.194.160)
+#   VM_USER     = user SSH trên VM (vd lahoanglong_hcmus)
+#   VM_SSH_KEY  = private key (toàn bộ nội dung file id_ed25519) có public key đã thêm vào ~/.ssh/authorized_keys của VM
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'packages/**'
+      - 'docker-compose.prod.yml'
+      - 'Caddyfile'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd ~/tubutree
+            git pull --ff-only
+            docker compose -f docker-compose.prod.yml up -d --build api web
+            docker image prune -f
