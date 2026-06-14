@@ -26,9 +26,17 @@ export default function CheckoutPage() {
   const [usePoints, setUsePoints] = useState(false);
   const [note, setNote] = useState('');
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
-  // Hoá đơn VAT (spec §6.3)
+  // Hoá đơn VAT (spec §6.3) — nhớ thông tin cho lần sau (localStorage).
   const [wantInvoice, setWantInvoice] = useState(false);
-  const [invoice, setInvoice] = useState({ taxCode: '', companyName: '', address: '', email: '' });
+  const [invoice, setInvoice] = useState(() => {
+    try {
+      const raw = localStorage.getItem('tubu_invoice');
+      if (raw) return JSON.parse(raw) as { taxCode: string; companyName: string; address: string; email: string };
+    } catch {
+      /* ignore */
+    }
+    return { taxCode: '', companyName: '', address: '', email: '' };
+  });
   // Key giữ nguyên suốt phiên checkout — retry sau timeout không tạo đơn đôi (AD-004).
   const idempotencyKey = useRef(newIdempotencyKey());
 
@@ -83,6 +91,14 @@ export default function CheckoutPage() {
       ),
     onSuccess: (o) => {
       haptic('heavy');
+      // Nhớ thông tin hoá đơn cho lần đặt sau (đỡ nhập lại).
+      if (wantInvoice) {
+        try {
+          localStorage.setItem('tubu_invoice', JSON.stringify(invoice));
+        } catch {
+          /* ignore */
+        }
+      }
       void queryClient.invalidateQueries({ queryKey: ['cart'] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
       idempotencyKey.current = newIdempotencyKey(); // đơn sau là đơn mới
