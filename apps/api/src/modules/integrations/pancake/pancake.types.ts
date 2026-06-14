@@ -8,12 +8,16 @@ export interface PancakeVariationDTO {
   sale_price?: number;
   remain_quantity?: number;
   weight?: number;
+  images?: string[];
 }
 
 export interface PancakeProductDTO {
-  product_id: string;
+  /** Pancake POS dùng `id` cho sản phẩm (KHÔNG phải product_id — đó là field của variation). */
+  id: string;
+  product_id?: string; // giữ optional cho tương thích
   name: string;
   description?: string;
+  image?: string | null;
   images?: string[];
   variations?: PancakeVariationDTO[];
 }

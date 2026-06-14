@@ -35,10 +35,13 @@ function makePrisma(over: Record<string, unknown> = {}) {
   return { ...base, ...over } as unknown as PrismaService;
 }
 
+// Pancake POS trả product với field `id` (KHÔNG phải product_id) — phản ánh API thật.
 const prod = (id: string, name = 'Tinh dầu') => ({
-  product_id: id,
+  id,
   name,
-  variations: [{ id: `v-${id}`, sku: 's', retail_price: 1000, remain_quantity: 5, fields: { size: '10ml' } }],
+  variations: [
+    { id: `v-${id}`, sku: 's', retail_price: 1000, remain_quantity: 5, fields: { size: '10ml' }, images: [`https://img/${id}.jpg`] },
+  ],
 });
 
 describe('PancakeSyncService.syncProducts', () => {

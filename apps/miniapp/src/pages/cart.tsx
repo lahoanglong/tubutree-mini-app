@@ -132,7 +132,22 @@ export default function CartPage() {
     );
   }
 
-  const summary = cart.data!;
+  // Chưa đăng nhập xong / query bị disable (status idle) → cart.data undefined.
+  // Hiện giỏ trống thay vì crash trắng màn (trước đây cart.data! gây lỗi).
+  const summary = cart.data;
+  if (!summary) {
+    return (
+      <Shell>
+        <EmptyState
+          art="basket"
+          heading={vi.cart.emptyHeading}
+          body={vi.cart.emptyBody}
+          ctaLabel={vi.cart.emptyCta}
+          onCta={() => navigate('/browse')}
+        />
+      </Shell>
+    );
+  }
   const empty = summary.items.length === 0;
 
   return (

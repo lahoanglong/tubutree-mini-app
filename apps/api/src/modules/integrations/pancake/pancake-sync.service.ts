@@ -65,13 +65,26 @@ export class PancakeSyncService {
   }
 
   private async upsertProduct(p: PancakeProductDTO): Promise<void> {
-    const existing = await this.prisma.product.findUnique({ where: { pancakeId: p.product_id } });
+    // Pancake POS dùng `id` cho sản phẩm (product_id là của variation) — lấy id thật.
+    const pancakeId = p.id ?? p.product_id;
+    if (!pancakeId || !p.name) {
+      this.logger.warn(`Bỏ qua sản phẩm Pancake thiếu id/name: ${JSON.stringify(p).slice(0, 120)}`);
+      return;
+    }
+    const existing = await this.prisma.product.findUnique({ where: { pancakeId } });
+
+    // Ảnh: ưu tiên ảnh sản phẩm, rồi ảnh variation đầu tiên (Pancake hay để ảnh ở variation).
+    const imgs = [
+      ...(p.images ?? []),
+      ...(p.image ? [p.image] : []),
+      ...(p.variations?.flatMap((v) => v.images ?? []) ?? []),
+    ].filter((u): u is string => typeof u === 'string' && u.length > 0);
 
     const baseData = {
       name: p.name,
       description: p.description ?? existing?.description ?? '',
-      images: p.images ?? existing?.images ?? [],
-      thumbnail: p.images?.[0] ?? existing?.thumbnail ?? null,
+      images: imgs.length ? imgs : (existing?.images ?? []),
+      thumbnail: imgs[0] ?? existing?.thumbnail ?? null,
       basePrice: p.variations?.[0]?.retail_price ?? existing?.basePrice ?? 0,
     };
 
@@ -80,9 +93,9 @@ export class PancakeSyncService {
       : await this.prisma.product.create({
           data: {
             ...baseData,
-            pancakeId: p.product_id,
+            pancakeId,
             brand: 'Tubu Tree',
-            slug: this.slugify(p.name, p.product_id),
+            slug: this.slugify(p.name, pancakeId),
           },
         });
 
