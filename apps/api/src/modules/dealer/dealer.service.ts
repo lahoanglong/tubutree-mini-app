@@ -188,10 +188,14 @@ export class DealerService {
    */
   async quarterlyReport(userId: string) {
     await this.dealerContext(userId); // chặn nếu chưa phải đại lý
-    const now = new Date();
-    const q = Math.floor(now.getMonth() / 3); // 0..3
-    const start = new Date(now.getFullYear(), q * 3, 1);
-    const end = new Date(now.getFullYear(), q * 3 + 3, 1);
+    // Mốc quý theo GIỜ VN (UTC+7), không phụ thuộc timezone máy chủ (container UTC).
+    const VN = 7 * 60 * 60 * 1000;
+    const vnNow = new Date(Date.now() + VN); // giờ tường VN, đọc bằng các field UTC*
+    const q = Math.floor(vnNow.getUTCMonth() / 3); // 0..3
+    const year = vnNow.getUTCFullYear();
+    // Đầu/cuối quý theo giờ VN → quy về mốc UTC chuẩn để so với createdAt (UTC).
+    const start = new Date(Date.UTC(year, q * 3, 1) - VN);
+    const end = new Date(Date.UTC(year, q * 3 + 3, 1) - VN);
 
     const agg = await this.prisma.order.aggregate({
       where: {
@@ -217,7 +221,7 @@ export class DealerService {
     const bonusAmount = Math.round((revenue * bonusPct) / 100);
 
     return {
-      quarter: `Q${q + 1}/${now.getFullYear()}`,
+      quarter: `Q${q + 1}/${year}`,
       periodStart: start.toISOString(),
       periodEnd: end.toISOString(),
       revenue,

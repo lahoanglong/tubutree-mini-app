@@ -5,7 +5,6 @@ import {
   loginGuest,
   loginZaloMiniApp,
   refreshTokens,
-  reportDiag,
   setAccessToken,
   setUnauthorizedHandler,
 } from '../services/api';
@@ -62,8 +61,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });
       return;
-    } catch (err) {
-      reportDiag('login-zalo-fail', err);
+    } catch {
+      /* Zalo chưa khả dụng → fallback guest bên dưới */
     }
     // Fallback khách (Zalo chưa khả dụng) — app vẫn dùng được đầy đủ.
     try {
@@ -99,8 +98,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });
       return;
-    } catch (err) {
-      reportDiag('restore-login-fail', err);
+    } catch {
+      /* Zalo chưa khả dụng → fallback guest bên dưới */
     }
     // Zalo login chưa khả dụng (vd app chưa kích hoạt -1401) → đăng nhập KHÁCH theo
     // deviceId để app vẫn chạy đầy đủ (giỏ/vườn/tài khoản/mua hàng).
@@ -109,8 +108,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       setAccessToken(res.accessToken);
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });
-    } catch (err) {
-      reportDiag('restore-guest-fail', err);
+    } catch {
       set({ status: 'idle' });
     }
   },

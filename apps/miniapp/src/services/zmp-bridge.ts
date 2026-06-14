@@ -7,7 +7,6 @@ import {
   openWebview,
   openChat,
 } from 'zmp-sdk/apis';
-import { reportDiag } from './api';
 
 /**
  * Bọc các API gốc của zmp-sdk: login, share, (pay - Phase 1).
@@ -37,21 +36,20 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export async function getZaloAccessToken(): Promise<ZaloLoginResult> {
   let lastErr: unknown = null;
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 3; i++) {
     try {
       await zmpLogin({});
       const accessToken = await getAccessToken({});
-      if (accessToken && accessToken.length > 0) {
-        if (i > 0) reportDiag('zalo-ok-retry', `attempt=${i + 1} len=${accessToken.length}`);
-        return { accessToken, code: accessToken };
-      }
+      if (accessToken && accessToken.length > 0) return { accessToken, code: accessToken };
       lastErr = new Error('empty access token');
     } catch (e) {
       lastErr = e;
+      // -1401 = "app chưa kích hoạt" — lỗi VĨNH VIỄN, retry vô ích → bail ngay để fallback guest nhanh.
+      const code = typeof e === 'object' && e !== null ? (e as { code?: number }).code : undefined;
+      if (code === -1401) break;
     }
-    await sleep(500 * (i + 1)); // 0.5s, 1s, 1.5s
+    if (i < 2) await sleep(400 * (i + 1)); // chỉ chờ GIỮA các lần (0.4s, 0.8s), không chờ sau lần cuối
   }
-  reportDiag('getAccessToken-fail', lastErr);
   throw lastErr instanceof Error ? lastErr : new Error('getAccessToken failed');
 }
 
