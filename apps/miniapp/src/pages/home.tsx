@@ -65,24 +65,51 @@ export default function HomePage() {
               {vi.home.tagline}
             </Text>
           </Box>
-          {user && (
+          <Box flex alignItems="center" style={{ gap: 10 }}>
+            {user && (
+              <Box
+                aria-label={vi.home.pointsChip(user.pointsBalance)}
+                style={{
+                  background: 'rgba(255,255,255,0.18)',
+                  borderRadius: 'var(--radius-full)',
+                  padding: '6px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--leaf-400)' }} />
+                <Text size="xSmall" bold style={{ color: 'white' }}>
+                  {vi.home.pointsChip(user.pointsBalance)}
+                </Text>
+              </Box>
+            )}
             <Box
-              aria-label={vi.home.pointsChip(user.pointsBalance)}
-              style={{
-                background: 'rgba(255,255,255,0.18)',
-                borderRadius: 'var(--radius-full)',
-                padding: '6px 12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
+              role="button"
+              aria-label="Thông báo"
+              className="tubu-press"
+              onClick={() => navigate('/notifications')}
+              style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center' }}
             >
-              <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--leaf-400)' }} />
-              <Text size="xSmall" bold style={{ color: 'white' }}>
-                {vi.home.pointsChip(user.pointsBalance)}
-              </Text>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z" stroke="#fff" strokeWidth="1.7" strokeLinejoin="round" />
+                <path d="M10 19a2 2 0 0 0 4 0" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
             </Box>
-          )}
+            <Box
+              role="button"
+              aria-label="Giỏ hàng"
+              className="tubu-press"
+              onClick={() => navigate('/cart')}
+              style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center' }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M3 4h2l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h7.8a1.5 1.5 0 0 0 1.5-1.2L21 7H6" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx="9.5" cy="20" r="1.4" fill="#fff" />
+                <circle cx="17.5" cy="20" r="1.4" fill="#fff" />
+              </svg>
+            </Box>
+          </Box>
         </Box>
 
         {/* Search entry — đưa thẳng sang Khám phá */}

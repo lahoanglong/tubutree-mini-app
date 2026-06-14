@@ -70,7 +70,7 @@ const MENU: { group: string; items: MenuItem[] }[] = [
 export default function ProfilePage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
-  const { user, status, logout } = useAuthStore();
+  const { user, status, logout, login } = useAuthStore();
   const loyaltyQ = useQuery({
     queryKey: ['loyalty'],
     queryFn: getLoyalty,
@@ -83,13 +83,24 @@ export default function ProfilePage() {
   });
   const unreadCount = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
 
-  // AuthGate đảm bảo đã đăng nhập; phòng trường hợp user chưa kịp set → màn chờ nhẹ.
+  // Đang đăng nhập ngầm → spinner. Nếu login fail (idle/error) → nút thử lại,
+  // KHÔNG để spinner quay vô hạn ("tài khoản load mãi").
   if (status !== 'authenticated' || !user) {
     return (
       <Page className="page" style={{ background: 'var(--neutral-50)' }}>
         <Header title="Tài khoản" showBackIcon={false} />
-        <Box flex justifyContent="center" alignItems="center" style={{ minHeight: '60vh' }}>
-          <Spinner />
+        <Box flex flexDirection="column" justifyContent="center" alignItems="center" style={{ minHeight: '60vh', gap: 14, padding: '0 32px', textAlign: 'center' }}>
+          {status === 'loading' ? (
+            <Spinner />
+          ) : (
+            <>
+              <Text style={{ fontSize: 48 }}>🌿</Text>
+              <Text style={{ color: 'var(--neutral-600)' }}>Chưa kết nối được tài khoản Zalo.</Text>
+              <Button onClick={() => void login()} style={{ background: 'var(--leaf-600)', minWidth: 180 }}>
+                Thử lại
+              </Button>
+            </>
+          )}
         </Box>
       </Page>
     );
