@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
@@ -7,12 +7,13 @@ import type { PancakeProductDTO } from './pancake.types';
 
 /**
  * Đồng bộ catalog Pancake → Tubu (Build Spec §8.2).
+ * - Sync ngay khi API khởi động (để catalog có sẵn, không chờ tới mốc cron).
  * - Cron mỗi 15 phút lấy sản phẩm đã đổi (updated_since).
  * - KHÔNG overwrite các trường Tubu tự quản: brand, slug, forSegment, ingredients,
  *   certifications, SEO meta, isFeatured (chỉ set khi tạo mới).
  */
 @Injectable()
-export class PancakeSyncService {
+export class PancakeSyncService implements OnModuleInit {
   private readonly logger = new Logger(PancakeSyncService.name);
   private lastRunAt: string | null = null;
 
@@ -21,6 +22,14 @@ export class PancakeSyncService {
     private readonly client: PancakeClient,
     private readonly lifecycle: LifecycleService,
   ) {}
+
+  /** Sync lần đầu khi boot — không chặn khởi động, lỗi chỉ log. */
+  onModuleInit(): void {
+    if (!this.client.isConfigured()) return;
+    void this.syncProducts().catch((e) =>
+      this.logger.error(`Sync lúc khởi động lỗi: ${e instanceof Error ? e.message : e}`),
+    );
+  }
 
   @Cron('0 */15 * * * *') // mỗi 15 phút
   async scheduledSync(): Promise<void> {
