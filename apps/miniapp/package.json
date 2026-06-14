@@ -7,7 +7,7 @@
     "dev": "zmp start",
     "build": "tsc --noEmit && vite build",
     "start": "zmp start",
-    "deploy": "zmp deploy",
+    "deploy": "zmp deploy -M production",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit"
   },
