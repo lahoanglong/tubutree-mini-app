@@ -23,7 +23,7 @@ jobs:
             B="https://api.tubutree.com/api"
             H_AUTH="Authorization: Bearer $T"
             H_JSON="Content-Type: application/json"
-            VAR=$(curl -s "$B/products/serum-duong-am-visante" | grep -oE '"id":"[a-z0-9]+","sku"' | head -1 | grep -oE 'cmq[a-z0-9]+' | head -1)
+            VAR=$(curl -s "$B/products/serum-duong-am-visante" | grep -oE 'cm[a-z0-9]{20,}' | head -1)
             echo "variation: $VAR"
             step() { printf "%-26s %s\n" "$1" "$2"; }
             C=$(curl -s -o /tmp/b -w "%{http_code}" -X POST "$B/cart/items" -H "$H_AUTH" -H "$H_JSON" -d "{\"variationId\":\"$VAR\",\"quantity\":2}"); step "POST /cart/items" "$C"; head -c 150 /tmp/b; echo
