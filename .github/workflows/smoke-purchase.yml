@@ -1,0 +1,37 @@
+name: Smoke purchase flow (VM)
+
+# Test luồng MUA HÀNG end-to-end với token thật: thêm giỏ → xem giỏ → tạo địa chỉ
+# → quote → đặt COD. Chạy: gh workflow run smoke-purchase.yml
+on:
+  workflow_dispatch: {}
+
+jobs:
+  purchase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH purchase smoke
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            cd ~/tubutree
+            DC="docker compose -f docker-compose.prod.yml"
+            T=$($DC exec -T api sh -c "cd /app/apps/api && DEV_ROLE=CUSTOMER pnpm exec tsx scripts/dev-token.ts" | tail -1 | tr -d '\r\n')
+            B="https://api.tubutree.com/api"
+            H_AUTH="Authorization: Bearer $T"
+            H_JSON="Content-Type: application/json"
+            VAR=$(curl -s "$B/products/serum-duong-am-visante" | grep -oE '"id":"[a-z0-9]+","sku"' | head -1 | grep -oE 'cmq[a-z0-9]+' | head -1)
+            echo "variation: $VAR"
+            step() { printf "%-26s %s\n" "$1" "$2"; }
+            C=$(curl -s -o /tmp/b -w "%{http_code}" -X POST "$B/cart/items" -H "$H_AUTH" -H "$H_JSON" -d "{\"variationId\":\"$VAR\",\"quantity\":2}"); step "POST /cart/items" "$C"; head -c 150 /tmp/b; echo
+            C=$(curl -s -o /tmp/b -w "%{http_code}" "$B/cart" -H "$H_AUTH"); step "GET /cart" "$C"; grep -oE '"itemCount":[0-9]+|"subtotal":[0-9]+' /tmp/b
+            ADDR=$(curl -s -X POST "$B/me/addresses" -H "$H_AUTH" -H "$H_JSON" -d '{"recipient":"Smoke Test","phone":"0900000001","province":"TP HCM","district":"Q1","ward":"Bến Nghé","street":"1 Lê Lợi","provinceCode":"79","districtCode":"760","wardCode":"26734"}')
+            AID=$(echo "$ADDR" | grep -oE '"id":"[a-z0-9-]+"' | head -1 | grep -oE '[a-z0-9-]{20,}')
+            step "POST /me/addresses" "id=$AID"
+            C=$(curl -s -o /tmp/b -w "%{http_code}" -X POST "$B/checkout/quote" -H "$H_AUTH" -H "$H_JSON" -d "{\"addressId\":\"$AID\"}"); step "POST /checkout/quote" "$C"; grep -oE '"total":[0-9]+|"shippingFee":[0-9]+|"pointsEarned":[0-9]+' /tmp/b
+            IDEM=$(date +%s)-smoke
+            C=$(curl -s -o /tmp/b -w "%{http_code}" -X POST "$B/checkout/place-order" -H "$H_AUTH" -H "$H_JSON" -H "Idempotency-Key: $IDEM" -d "{\"addressId\":\"$AID\",\"paymentMethod\":\"COD\"}"); step "POST place-order" "$C"; grep -oE '"code":"[A-Z0-9]+"|"status":"[A-Z_]+"' /tmp/b | head -2
+            echo "=== DONE (đơn COD test đã tạo trên dev user) ==="
