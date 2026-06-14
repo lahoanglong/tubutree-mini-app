@@ -1,4 +1,3 @@
-import { BadRequestException } from '@nestjs/common';
 import { CheckoutService } from './checkout.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { CartService } from '../cart/cart.service';

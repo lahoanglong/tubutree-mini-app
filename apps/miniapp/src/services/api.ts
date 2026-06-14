@@ -105,6 +105,11 @@ export async function loginZaloMiniApp(
   return data;
 }
 
+export async function loginGuest(deviceId: string): Promise<LoginResponse> {
+  const { data } = await api.post<LoginResponse>('/auth/guest', { deviceId });
+  return data;
+}
+
 export async function refreshTokens(refreshToken: string): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>('/auth/refresh', { refreshToken });
   return data;

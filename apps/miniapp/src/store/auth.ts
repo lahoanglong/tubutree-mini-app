@@ -1,10 +1,28 @@
 import { create } from 'zustand';
 import { setStorage, getStorage, removeStorage } from 'zmp-sdk/apis';
 import type { AuthUser } from '@tubutree/shared-types';
-import { loginZaloMiniApp, refreshTokens, reportDiag, setAccessToken, setUnauthorizedHandler } from '../services/api';
+import {
+  loginGuest,
+  loginZaloMiniApp,
+  refreshTokens,
+  reportDiag,
+  setAccessToken,
+  setUnauthorizedHandler,
+} from '../services/api';
 import { getZaloAccessToken, requestZaloPhoneToken } from '../services/zmp-bridge';
 
 const REFRESH_KEY = 'tubu_refresh_token';
+const DEVICE_KEY = 'tubu_device_id';
+
+/** ID thiết bị ổn định cho đăng nhập khách (tạo 1 lần, lưu ZMP storage). */
+async function getDeviceId(): Promise<string> {
+  const res = await getStorage({ keys: [DEVICE_KEY] });
+  const existing = (res as Record<string, unknown>)[DEVICE_KEY];
+  if (typeof existing === 'string' && existing.length > 0) return existing;
+  const id = `d_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  await setStorage({ data: { [DEVICE_KEY]: id } });
+  return id;
+}
 
 interface AuthState {
   user: AuthUser | null;
@@ -43,6 +61,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       setAccessToken(res.accessToken);
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });
+      return;
+    } catch (err) {
+      reportDiag('login-zalo-fail', err);
+    }
+    // Fallback khách (Zalo chưa khả dụng) — app vẫn dùng được đầy đủ.
+    try {
+      const res = await loginGuest(await getDeviceId());
+      setAccessToken(res.accessToken);
+      await persistRefresh(res.refreshToken);
+      set({ user: res.user, status: 'authenticated' });
     } catch (err) {
       set({ status: 'error', error: err instanceof Error ? err.message : 'Đăng nhập thất bại' });
     }
@@ -70,9 +98,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       setAccessToken(res.accessToken);
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });
+      return;
     } catch (err) {
       reportDiag('restore-login-fail', err);
-      // Không chặn app — vẫn cho duyệt trang chủ; hành động cần auth sẽ thử lại sau.
+    }
+    // Zalo login chưa khả dụng (vd app chưa kích hoạt -1401) → đăng nhập KHÁCH theo
+    // deviceId để app vẫn chạy đầy đủ (giỏ/vườn/tài khoản/mua hàng).
+    try {
+      const res = await loginGuest(await getDeviceId());
+      setAccessToken(res.accessToken);
+      await persistRefresh(res.refreshToken);
+      set({ user: res.user, status: 'authenticated' });
+    } catch (err) {
+      reportDiag('restore-guest-fail', err);
       set({ status: 'idle' });
     }
   },

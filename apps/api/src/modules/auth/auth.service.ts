@@ -17,6 +17,26 @@ export class AuthService {
     private readonly zalo: ZaloService,
   ) {}
 
+  /**
+   * Đăng nhập KHÁCH (guest) theo deviceId — dùng khi Zalo login chưa khả dụng
+   * (app chưa kích hoạt -1401). Tạo/lấy user ổn định theo thiết bị để app chạy đầy đủ.
+   * Khi Zalo login khả dụng, có thể nâng cấp guest → tài khoản Zalo qua phone-merge.
+   */
+  async loginAsGuest(deviceId: string): Promise<LoginResponse> {
+    const guestKey = `guest_${deviceId}`;
+    let user = await this.prisma.user.findUnique({ where: { zaloId: guestKey } });
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          zaloId: guestKey,
+          fullName: 'Khách',
+          referralCode: await this.generateReferralCode(),
+        },
+      });
+    }
+    return this.issueTokens(user);
+  }
+
   /** Luồng đăng nhập Mini App: verify token Zalo → upsert user (+ SĐT) → trả JWT. */
   async loginWithZaloMiniApp(
     code: string,

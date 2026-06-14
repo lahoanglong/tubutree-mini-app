@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, HttpCode, HttpStatus } from '@nestjs/common';
+import { IsString, IsNotEmpty } from 'class-validator';
 import type { JwtPayload, LoginResponse } from '@tubutree/shared-types';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -7,6 +8,10 @@ import { AuthService } from './auth.service';
 import { ZaloMiniAppLoginDto } from './dto/zalo-login.dto';
 import { ZaloOAuthDto } from './dto/zalo-oauth.dto';
 import { RefreshTokenDto } from './dto/refresh.dto';
+
+class GuestLoginDto {
+  @IsString() @IsNotEmpty() deviceId!: string;
+}
 
 @Controller('auth')
 export class AuthController {
@@ -20,6 +25,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   loginZaloMiniApp(@Body() dto: ZaloMiniAppLoginDto): Promise<LoginResponse> {
     return this.auth.loginWithZaloMiniApp(dto.code, dto.accessToken, dto.phoneToken);
+  }
+
+  /** Đăng nhập khách theo deviceId (fallback khi Zalo login chưa khả dụng). */
+  @Public()
+  @Post('guest')
+  @HttpCode(HttpStatus.OK)
+  loginGuest(@Body() dto: GuestLoginDto): Promise<LoginResponse> {
+    return this.auth.loginAsGuest(dto.deviceId);
   }
 
   @Public()
