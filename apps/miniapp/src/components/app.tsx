@@ -46,6 +46,7 @@ const EditProfilePage = lazy(() => import('../pages/edit-profile'));
 const SettingsPage = lazy(() => import('../pages/settings'));
 const BrandStoryPage = lazy(() => import('../pages/brand-story'));
 const SubscriptionsPage = lazy(() => import('../pages/subscriptions'));
+const NotFoundPage = lazy(() => import('../pages/not-found'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -96,6 +97,7 @@ export default function MyApp() {
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/brand-story" element={<BrandStoryPage />} />
                 <Route path="/subscriptions" element={<SubscriptionsPage />} />
+                <Route path="*" element={<NotFoundPage />} />
               </AnimationRoutes>
             </Suspense>
             <BottomNav />

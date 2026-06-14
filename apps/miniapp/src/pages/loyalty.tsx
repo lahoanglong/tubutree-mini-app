@@ -1,4 +1,5 @@
-import { Box, Page, Text, Header, useNavigate } from 'zmp-ui';
+import { useEffect, useState } from 'react';
+import { Box, Page, Text, Button, Header, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   getLoyalty,
@@ -44,6 +45,25 @@ export default function LoyaltyPage() {
     next && next.minPoints > curMin
       ? Math.min(100, Math.max(0, Math.round(((data!.pointsBalance - curMin) / (next.minPoints - curMin)) * 100)))
       : 100;
+
+  // Phát hiện LÊN HẠNG (§6.6 #78): so minPoints hạng hiện tại với lần xem trước (localStorage).
+  const [celebrate, setCelebrate] = useState<string | null>(null);
+  useEffect(() => {
+    if (!data?.tier) return;
+    const KEY = 'tubu_last_tier_min';
+    let stored = NaN;
+    try {
+      stored = Number(localStorage.getItem(KEY));
+    } catch {
+      /* ignore */
+    }
+    if (!Number.isNaN(stored) && curMin > stored) setCelebrate(data.tier.name);
+    try {
+      localStorage.setItem(KEY, String(curMin));
+    } catch {
+      /* ignore */
+    }
+  }, [data?.tier, curMin]);
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
@@ -253,6 +273,61 @@ export default function LoyaltyPage() {
           </Box>
         </>
       ) : null}
+
+      {/* Modal chúc mừng lên hạng (§6.6 #78) */}
+      {celebrate && (
+        <Box
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 3000,
+            background: 'rgba(26,26,23,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 28,
+          }}
+          onClick={() => setCelebrate(null)}
+        >
+          <Box
+            className="tubu-pop"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--neutral-0)',
+              borderRadius: 'var(--radius-xl)',
+              padding: '28px 24px',
+              textAlign: 'center',
+              maxWidth: 320,
+              width: '100%',
+            }}
+          >
+            <Text style={{ fontSize: 64 }}>{(TIER_STYLE[celebrate] ?? DEFAULT_STYLE).emoji}🎉</Text>
+            <Text className="t-h2" style={{ marginTop: 8, color: style.color }}>
+              Chúc mừng lên hạng {celebrate}!
+            </Text>
+            <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
+              Bạn vừa mở khoá quyền lợi mới của hạng {celebrate}. Cảm ơn bạn đã đồng hành sống xanh
+              cùng Tubu 🌿
+            </Text>
+            {perks.length > 0 && (
+              <Box style={{ textAlign: 'left', marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {perks.slice(0, 4).map((p, i) => (
+                  <Text key={i} size="small" style={{ color: 'var(--neutral-900)' }}>
+                    ✓ {p}
+                  </Text>
+                ))}
+              </Box>
+            )}
+            <Button
+              fullWidth
+              onClick={() => setCelebrate(null)}
+              style={{ marginTop: 18, background: 'var(--leaf-600)' }}
+            >
+              Tuyệt vời!
+            </Button>
+          </Box>
+        </Box>
+      )}
     </Page>
   );
 }
