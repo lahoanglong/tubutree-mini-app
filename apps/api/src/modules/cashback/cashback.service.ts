@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -106,24 +107,39 @@ export class CashbackService {
       }
       await this.prisma.$transaction(ops);
     } else {
-      await this.prisma.cashbackTransaction.create({
-        data: {
-          userId: click.userId,
-          clickId: click.id,
-          merchantOrderId: payload.order_id,
-          orderAmount: payload.amount,
-          commission: payload.commission,
-          userReward,
-          status,
-          postbackPayload: payload as object,
-          confirmedAt: status === 'CONFIRMED' ? new Date() : null,
-        },
-      });
-      if (status === 'CONFIRMED') {
-        await this.prisma.user.update({
-          where: { id: click.userId },
-          data: { cashbackPending: { increment: userReward } },
-        });
+      // Atomic create + cộng pending. merchantOrderId @unique → 2 postback song song thì
+      // cái thứ 2 ném P2002 → bỏ qua để KHÔNG double-credit cashback.
+      try {
+        const ops: Prisma.PrismaPromise<unknown>[] = [
+          this.prisma.cashbackTransaction.create({
+            data: {
+              userId: click.userId,
+              clickId: click.id,
+              merchantOrderId: payload.order_id,
+              orderAmount: payload.amount,
+              commission: payload.commission,
+              userReward,
+              status,
+              postbackPayload: payload as object,
+              confirmedAt: status === 'CONFIRMED' ? new Date() : null,
+            },
+          }),
+        ];
+        if (status === 'CONFIRMED') {
+          ops.push(
+            this.prisma.user.update({
+              where: { id: click.userId },
+              data: { cashbackPending: { increment: userReward } },
+            }),
+          );
+        }
+        await this.prisma.$transaction(ops);
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          this.logger.warn(`Postback trùng order_id ${payload.order_id} (race) — bỏ qua.`);
+          return { ok: true };
+        }
+        throw err;
       }
     }
     return { ok: true };

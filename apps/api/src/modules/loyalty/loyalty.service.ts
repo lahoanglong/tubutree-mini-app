@@ -55,6 +55,19 @@ export class LoyaltyService {
   /** Hoàn ngược khi hủy/trả: trừ điểm đã tích, hoàn lại điểm đã tiêu. */
   async reverseOrderPoints(orderId: string): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+
+    // Idempotent: nếu đã reverse rồi (có giao dịch ORDER_REVERSED/ORDER_REFUND_POINTS của đơn này)
+    // → bỏ qua, tránh trừ/hoàn điểm 2 lần khi webhook retry hoặc user-cancel + webhook-cancel.
+    const reversed = await this.prisma.pointsTransaction.findFirst({
+      where: {
+        userId: order.userId,
+        refId: order.id,
+        reason: { in: [`ORDER_REVERSED:${order.code}`, `ORDER_REFUND_POINTS:${order.code}`] },
+      },
+      select: { id: true },
+    });
+    if (reversed) return;
+
     const ops = [];
 
     if (order.pointsEarned > 0) {

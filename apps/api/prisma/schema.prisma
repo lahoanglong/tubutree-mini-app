@@ -503,7 +503,7 @@ model CashbackTransaction {
   userId          String
   user            User           @relation(fields: [userId], references: [id])
   clickId         String?
-  merchantOrderId String
+  merchantOrderId String         @unique
   orderAmount     Int
   commission      Int
   userReward      Int

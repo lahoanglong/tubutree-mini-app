@@ -93,6 +93,34 @@ describe('LoyaltyService.creditOrderPoints', () => {
   });
 });
 
+describe('LoyaltyService.reverseOrderPoints (idempotent)', () => {
+  function prismaFor(order: unknown, alreadyReversed: unknown = null) {
+    const txn = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      pointsTransaction: { findFirst: jest.fn().mockResolvedValue(alreadyReversed), create: jest.fn() },
+      user: { update: jest.fn() },
+      $transaction: txn,
+    } as unknown as PrismaService;
+    return { prisma, txn };
+  }
+
+  it('đã reverse rồi → idempotent, KHÔNG trừ điểm lại', async () => {
+    const { prisma, txn } = prismaFor(
+      { id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 0 },
+      { id: 'tx-rev' },
+    );
+    await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
+    expect(txn).not.toHaveBeenCalled();
+  });
+
+  it('lần đầu → reverse điểm (transaction)', async () => {
+    const { prisma, txn } = prismaFor({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 10 });
+    await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
+    expect(txn).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)', () => {
   const TIERS = [
     { id: 'mam', sortOrder: 0, minPoints: 0, minSpending: null },

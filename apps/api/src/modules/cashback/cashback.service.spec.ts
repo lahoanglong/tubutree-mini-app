@@ -34,6 +34,7 @@ describe('CashbackService.handlePostback', () => {
       cashbackClick: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', userId: 'u1' }) },
       cashbackTransaction: { findFirst: jest.fn().mockResolvedValue(null), create },
       user: { update: userUpdate },
+      $transaction: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
     await new CashbackService(prisma, config).handlePostback(payload());
     const data = create.mock.calls[0][0].data;
@@ -51,6 +52,7 @@ describe('CashbackService.handlePostback', () => {
       cashbackClick: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', userId: 'u1' }) },
       cashbackTransaction: { findFirst: jest.fn().mockResolvedValue(null), create },
       user: { update: userUpdate },
+      $transaction: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
     await new CashbackService(prisma, config).handlePostback(payload({ status: 'pending' }));
     expect(create.mock.calls[0][0].data.status).toBe('PENDING');
