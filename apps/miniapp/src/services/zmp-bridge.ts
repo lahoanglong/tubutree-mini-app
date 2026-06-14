@@ -7,6 +7,7 @@ import {
   openWebview,
   openChat,
 } from 'zmp-sdk/apis';
+import { reportDiag } from './api';
 
 /**
  * Bọc các API gốc của zmp-sdk: login, share, (pay - Phase 1).
@@ -28,8 +29,20 @@ export interface ZaloLoginResult {
  * Dùng khi mở app để vào thẳng trang chủ như các mini app khác (Sendo/Homefarm).
  */
 export async function getZaloAccessToken(): Promise<ZaloLoginResult> {
-  await zmpLogin({});
-  const accessToken = await getAccessToken({});
+  try {
+    await zmpLogin({});
+  } catch (e) {
+    reportDiag('zmpLogin-fail', e);
+    throw e;
+  }
+  let accessToken: string;
+  try {
+    accessToken = await getAccessToken({});
+  } catch (e) {
+    reportDiag('getAccessToken-fail', e);
+    throw e;
+  }
+  reportDiag('zalo-ok', `tokenLen=${accessToken ? accessToken.length : 0}`);
   return { accessToken, code: accessToken };
 }
 

@@ -11,6 +11,19 @@ const TIMEOUT_MS = 15_000;
  */
 export const api = axios.create({ baseURL: BASE_URL, timeout: TIMEOUT_MS });
 
+/** Gửi log chẩn đoán về server (debug login Zalo). Fire-and-forget, không chặn. */
+export function reportDiag(tag: string, msg: unknown): void {
+  try {
+    void fetch(`${BASE_URL}/diag`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag, msg: msg instanceof Error ? `${msg.name}: ${msg.message}` : String(msg) }),
+    }).catch(() => undefined);
+  } catch {
+    /* ignore */
+  }
+}
+
 let accessToken: string | null = null;
 let onUnauthorized: (() => Promise<string | null>) | null = null;
 /** Refresh đang chạy — các 401 song song chờ chung 1 promise, tránh refresh bão. */

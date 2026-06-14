@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { setStorage, getStorage, removeStorage } from 'zmp-sdk/apis';
 import type { AuthUser } from '@tubutree/shared-types';
-import { loginZaloMiniApp, refreshTokens, setAccessToken, setUnauthorizedHandler } from '../services/api';
+import { loginZaloMiniApp, refreshTokens, reportDiag, setAccessToken, setUnauthorizedHandler } from '../services/api';
 import { getZaloAccessToken, requestZaloPhoneToken } from '../services/zmp-bridge';
 
 const REFRESH_KEY = 'tubu_refresh_token';
@@ -70,7 +70,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       setAccessToken(res.accessToken);
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });
-    } catch {
+    } catch (err) {
+      reportDiag('restore-login-fail', err);
       // Không chặn app — vẫn cho duyệt trang chủ; hành động cần auth sẽ thử lại sau.
       set({ status: 'idle' });
     }
