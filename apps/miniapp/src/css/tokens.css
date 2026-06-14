@@ -91,6 +91,8 @@
 
   /* Safe area (Zalo bottom bar) */
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* Chiều cao status bar/notch — đệm đỉnh để nội dung không bị khuất dưới header Zalo. */
+  --safe-top: env(safe-area-inset-top, 0px);
 }
 
 body {

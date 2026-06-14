@@ -2,10 +2,10 @@
   "app": {
     "title": "Tubu Tree",
     "appId": "2070857098114207963",
-    "headerColor": "#2E7D4F",
+    "headerColor": "#509018",
     "textColor": "white",
     "leftButton": "back",
-    "statusBarType": "transparent",
+    "statusBarType": "normal",
     "actionBarHidden": false,
     "hideAndroidBottomNavigationBar": false,
     "hideIOSSafeAreaBottom": false
