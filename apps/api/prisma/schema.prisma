@@ -59,6 +59,7 @@ model User {
   cashbackClicks      CashbackClick[]
   cashbackTxns        CashbackTransaction[]
   dealerApplications  DealerApplication[]
+  dealerTemplates     DealerOrderTemplate[]
   gameProfile         GameProfile?
   reviews             Review[]
   refreshTokens       RefreshToken[]
@@ -573,6 +574,19 @@ model DealerCreditLedger {
 
   @@index([userId])
   @@map("dealer_credit_ledgers")
+}
+
+/// Mẫu đơn đại lý lưu sẵn (#64) — đặt lại 1 chạm. items: [{variationId, quantity}].
+model DealerOrderTemplate {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  items     Json
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("dealer_order_templates")
 }
 
 // ============================================================

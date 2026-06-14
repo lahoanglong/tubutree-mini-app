@@ -182,6 +182,82 @@ export class DealerService {
     return this.creditLedger(userId);
   }
 
+  /**
+   * Báo cáo quý đại lý (#71): doanh số quý hiện tại (đơn DEALER không huỷ) + bậc thưởng đạt được.
+   * Bậc thưởng lấy từ config dealer.quarterly_bonus_tiers (mặc định 50tr→2%, 100tr→3%, 200tr→4%).
+   */
+  async quarterlyReport(userId: string) {
+    await this.dealerContext(userId); // chặn nếu chưa phải đại lý
+    const now = new Date();
+    const q = Math.floor(now.getMonth() / 3); // 0..3
+    const start = new Date(now.getFullYear(), q * 3, 1);
+    const end = new Date(now.getFullYear(), q * 3 + 3, 1);
+
+    const agg = await this.prisma.order.aggregate({
+      where: {
+        userId,
+        type: 'DEALER',
+        status: { notIn: ['CANCELLED', 'RETURNED'] },
+        createdAt: { gte: start, lt: end },
+      },
+      _sum: { total: true },
+      _count: true,
+    });
+    const revenue = agg._sum.total ?? 0;
+
+    const tiers = await this.config.get<{ min: number; pct: number }[]>('dealer.quarterly_bonus_tiers', [
+      { min: 50_000_000, pct: 2 },
+      { min: 100_000_000, pct: 3 },
+      { min: 200_000_000, pct: 4 },
+    ]);
+    const sorted = [...tiers].sort((a, b) => a.min - b.min);
+    const reached = [...sorted].reverse().find((t) => revenue >= t.min) ?? null;
+    const next = sorted.find((t) => revenue < t.min) ?? null;
+    const bonusPct = reached?.pct ?? 0;
+    const bonusAmount = Math.round((revenue * bonusPct) / 100);
+
+    return {
+      quarter: `Q${q + 1}/${now.getFullYear()}`,
+      periodStart: start.toISOString(),
+      periodEnd: end.toISOString(),
+      revenue,
+      orderCount: agg._count,
+      bonusPct,
+      bonusAmount,
+      nextTier: next ? { min: next.min, pct: next.pct, toNext: next.min - revenue } : null,
+      tiers: sorted,
+    };
+  }
+
+  // ── Mẫu đơn lưu sẵn (#64) ──
+  async listTemplates(userId: string) {
+    await this.dealerContext(userId);
+    return this.prisma.dealerOrderTemplate.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  }
+
+  async saveTemplate(userId: string, name: string, items: { variationId: string; quantity: number }[]) {
+    await this.dealerContext(userId);
+    const clean = (items ?? [])
+      .filter((i) => i?.variationId && Number(i.quantity) > 0)
+      .map((i) => ({ variationId: String(i.variationId), quantity: Math.floor(Number(i.quantity)) }));
+    if (clean.length === 0) throw new BadRequestException('Mẫu đơn trống.');
+    return this.prisma.dealerOrderTemplate.create({
+      data: { userId, name: name.trim() || 'Mẫu đơn', items: clean },
+    });
+  }
+
+  async deleteTemplate(userId: string, id: string) {
+    await this.dealerContext(userId);
+    // deleteMany theo (id,userId) → chỉ xoá mẫu của chính mình, không lộ mẫu người khác.
+    const res = await this.prisma.dealerOrderTemplate.deleteMany({ where: { id, userId } });
+    if (res.count === 0) throw new BadRequestException('Không tìm thấy mẫu đơn.');
+    return { ok: true };
+  }
+
   // ── Helpers ──
   private async dealerContext(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });

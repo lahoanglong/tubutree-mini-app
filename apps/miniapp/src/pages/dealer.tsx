@@ -9,6 +9,10 @@ import {
   getDealerOrders,
   getCreditLedger,
   payCredit,
+  getQuarterlyReport,
+  getTemplates,
+  saveTemplate,
+  deleteTemplate,
   type DealerApplyInput,
   type PricelistRow,
 } from '../services/dealer-api';
@@ -156,7 +160,7 @@ function DealerPending() {
 }
 
 /* ─────────────── Dealer Hub ─────────────── */
-type Tab = 'price' | 'orders' | 'credit';
+type Tab = 'price' | 'orders' | 'credit' | 'report';
 
 function DealerHub() {
   const [tab, setTab] = useState<Tab>('price');
@@ -201,11 +205,13 @@ function DealerHub() {
         <TabChip label="Bảng giá" active={tab === 'price'} onClick={() => setTab('price')} />
         <TabChip label="Đơn hàng" active={tab === 'orders'} onClick={() => setTab('orders')} />
         <TabChip label="Công nợ" active={tab === 'credit'} onClick={() => setTab('credit')} />
+        <TabChip label="Báo cáo" active={tab === 'report'} onClick={() => setTab('report')} />
       </Box>
 
       {tab === 'price' && <PriceAndOrder creditLimit={me?.tier?.creditLimit ?? 0} debt={me?.currentDebt ?? 0} />}
       {tab === 'orders' && <DealerOrders />}
       {tab === 'credit' && <DealerCredit />}
+      {tab === 'report' && <DealerReport />}
     </Page>
   );
 }
@@ -242,6 +248,35 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [pasteResult, setPasteResult] = useState<{ matched: number; unmatched: string[] } | null>(null);
+
+  // Mẫu đơn lưu sẵn (#64)
+  const templatesQ = useQuery({ queryKey: ['dealer-templates'], queryFn: getTemplates });
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [tplName, setTplName] = useState('');
+  const loadTemplate = (items: { variationId: string; quantity: number }[]) => {
+    haptic('light');
+    setQty(Object.fromEntries(items.map((i) => [i.variationId, i.quantity])));
+  };
+  const saveTpl = useMutation({
+    mutationFn: () =>
+      saveTemplate(
+        tplName,
+        Object.entries(qty).filter(([, n]) => n > 0).map(([variationId, quantity]) => ({ variationId, quantity })),
+      ),
+    onSuccess: () => {
+      haptic('medium');
+      setSaveOpen(false);
+      setTplName('');
+      openSnackbar({ text: 'Đã lưu mẫu đơn.', type: 'success' });
+      void qc.invalidateQueries({ queryKey: ['dealer-templates'] });
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+  const delTpl = useMutation({
+    mutationFn: (id: string) => deleteTemplate(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['dealer-templates'] }),
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
 
   /** Đặt nhanh: dán "SKU<sep>SốLượng" mỗi dòng (sep = tab/phẩy/khoảng trắng) → khớp bảng giá. */
   const applyPaste = () => {
@@ -333,6 +368,57 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
         </Button>
       </Box>
 
+      {/* Mẫu đơn lưu sẵn (#64) — chạm để đặt lại 1 chạm; ✕ để xoá */}
+      {(templatesQ.data?.length ?? 0) > 0 && (
+        <Box pt={3} style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
+          {templatesQ.data?.map((t) => (
+            <Box
+              key={t.id}
+              className="tubu-press"
+              style={{
+                flex: '0 0 auto',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: 'var(--neutral-0)',
+                border: '1px solid #1f2a44',
+                borderRadius: 'var(--radius-full)',
+                padding: '6px 10px 6px 14px',
+              }}
+            >
+              <Text size="xSmall" bold style={{ color: '#1f2a44' }} onClick={() => loadTemplate(t.items)}>
+                📋 {t.name} ({t.items.length})
+              </Text>
+              <Text
+                size="xSmall"
+                onClick={() => delTpl.mutate(t.id)}
+                style={{ color: 'var(--danger)', fontWeight: 700 }}
+              >
+                ✕
+              </Text>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      <Sheet visible={saveOpen} onClose={() => setSaveOpen(false)} autoHeight>
+        <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
+          <Text bold size="large" style={{ marginBottom: 10 }}>
+            Lưu mẫu đơn
+          </Text>
+          <Input placeholder="Tên mẫu (vd Đơn tháng)" value={tplName} onChange={(e) => setTplName(e.target.value)} />
+          <Button
+            fullWidth
+            loading={saveTpl.isPending}
+            disabled={!tplName.trim()}
+            onClick={() => saveTpl.mutate()}
+            style={{ marginTop: 14, background: '#1f2a44' }}
+          >
+            Lưu mẫu
+          </Button>
+        </Box>
+      </Sheet>
+
       <Sheet visible={pasteOpen} onClose={() => setPasteOpen(false)} autoHeight>
         <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
           <Text bold size="large">
@@ -410,8 +496,14 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
           }}
         >
           <Box flex justifyContent="space-between" alignItems="center" mb={2}>
-            <Text size="small" style={{ color: 'var(--neutral-600)' }}>
-              {cart.length} mặt hàng
+            <Text
+              size="xSmall"
+              bold
+              className="tubu-press"
+              onClick={() => setSaveOpen(true)}
+              style={{ color: '#1f2a44' }}
+            >
+              💾 Lưu mẫu
             </Text>
             <Text bold size="large" style={{ color: '#1f2a44' }}>
               {formatVnd(total)}
@@ -646,6 +738,79 @@ function DealerCredit() {
           Chưa có giao dịch công nợ.
         </Text>
       )}
+    </Box>
+  );
+}
+
+/** Báo cáo quý đại lý (#71) — doanh số quý + thưởng theo bậc. */
+function DealerReport() {
+  const q = useQuery({ queryKey: ['dealer-report'], queryFn: getQuarterlyReport });
+  if (q.isLoading) {
+    return (
+      <Box mx={4} flex flexDirection="column" style={{ gap: 10 }}>
+        <Skeleton style={{ height: 120, borderRadius: 12 }} />
+        <Skeleton style={{ height: 80, borderRadius: 12 }} />
+      </Box>
+    );
+  }
+  if (q.isError || !q.data) {
+    return (
+      <Box mx={4} p={6} style={{ textAlign: 'center' }}>
+        <Text style={{ color: 'var(--danger)' }}>{getErrorMessage(q.error)}</Text>
+      </Box>
+    );
+  }
+  const d = q.data;
+  const progress = d.nextTier
+    ? Math.min(100, Math.round((d.revenue / d.nextTier.min) * 100))
+    : 100;
+  return (
+    <Box mx={4} flex flexDirection="column" style={{ paddingBottom: 24, gap: 12 }}>
+      {/* Card doanh số quý */}
+      <Box p={4} style={{ background: 'linear-gradient(135deg, #1f2a44, #2e3b5e)', borderRadius: 'var(--radius-lg)', color: '#fff' }}>
+        <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.7)' }}>
+          Doanh số {d.quarter}
+        </Text>
+        <Text bold style={{ color: '#fff', fontSize: 26, marginTop: 2 }}>
+          {formatVnd(d.revenue)}
+        </Text>
+        <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
+          {d.orderCount} đơn · Thưởng hiện tại {d.bonusPct}% = <b style={{ color: 'var(--leaf-400)' }}>{formatVnd(d.bonusAmount)}</b>
+        </Text>
+        {d.nextTier && (
+          <Box style={{ marginTop: 12 }}>
+            <Box style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 99, height: 8 }}>
+              <Box style={{ width: `${progress}%`, height: 8, background: 'var(--leaf-400)', borderRadius: 99 }} />
+            </Box>
+            <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.85)', marginTop: 6 }}>
+              Còn {formatVnd(d.nextTier.toNext)} để đạt thưởng {d.nextTier.pct}%
+            </Text>
+          </Box>
+        )}
+      </Box>
+
+      {/* Bậc thưởng */}
+      <Box p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
+        <Text size="small" bold style={{ marginBottom: 8 }}>
+          Bậc thưởng doanh số quý
+        </Text>
+        {d.tiers.map((t) => {
+          const reached = d.revenue >= t.min;
+          return (
+            <Box key={t.min} flex justifyContent="space-between" py={2} style={{ borderBottom: '1px solid var(--neutral-100)' }}>
+              <Text size="small" style={{ color: reached ? 'var(--leaf-700)' : 'var(--neutral-600)' }}>
+                {reached ? '✓ ' : ''}Từ {formatVnd(t.min)}
+              </Text>
+              <Text size="small" bold style={{ color: reached ? 'var(--leaf-700)' : 'var(--neutral-600)' }}>
+                thưởng {t.pct}%
+              </Text>
+            </Box>
+          );
+        })}
+        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
+          Thưởng tính trên tổng đơn đại lý (không tính đơn huỷ/trả) trong quý. Chốt cuối quý.
+        </Text>
+      </Box>
     </Box>
   );
 }

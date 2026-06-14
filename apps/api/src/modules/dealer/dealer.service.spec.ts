@@ -53,3 +53,33 @@ describe('DealerService.pricelist', () => {
     await expect(new DealerService(prisma, makeConfig()).pricelist('u1')).rejects.toThrow();
   });
 });
+
+describe('DealerService.quarterlyReport (thưởng doanh số quý)', () => {
+  function prismaForReport(revenue: number) {
+    return {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
+      dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
+      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: revenue }, _count: 3 }) },
+    } as unknown as PrismaService;
+  }
+
+  it('110tr → đạt bậc 100tr = 3%', async () => {
+    const r = await new DealerService(prismaForReport(110_000_000), makeConfig()).quarterlyReport('d1');
+    expect(r.bonusPct).toBe(3);
+    expect(r.bonusAmount).toBe(3_300_000);
+    expect(r.nextTier?.pct).toBe(4); // bậc kế là 200tr→4%
+  });
+
+  it('30tr → chưa đạt bậc nào = 0%, nextTier 50tr→2%', async () => {
+    const r = await new DealerService(prismaForReport(30_000_000), makeConfig()).quarterlyReport('d1');
+    expect(r.bonusPct).toBe(0);
+    expect(r.bonusAmount).toBe(0);
+    expect(r.nextTier?.min).toBe(50_000_000);
+  });
+
+  it('250tr → bậc cao nhất 200tr = 4%, không còn nextTier', async () => {
+    const r = await new DealerService(prismaForReport(250_000_000), makeConfig()).quarterlyReport('d1');
+    expect(r.bonusPct).toBe(4);
+    expect(r.nextTier).toBeNull();
+  });
+});

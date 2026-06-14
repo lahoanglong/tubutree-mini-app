@@ -57,3 +57,31 @@ export const getCreditLedger = () =>
   api.get<{ balance: number; entries: CreditEntry[] }>('/dealer/credit-ledger').then((r) => r.data);
 export const payCredit = (amount: number, note?: string) =>
   api.post<{ ok: boolean }>('/dealer/credit-payment', { amount, note }).then((r) => r.data);
+
+// ── Báo cáo quý (#71) ──
+export interface QuarterlyReport {
+  quarter: string;
+  periodStart: string;
+  periodEnd: string;
+  revenue: number;
+  orderCount: number;
+  bonusPct: number;
+  bonusAmount: number;
+  nextTier: { min: number; pct: number; toNext: number } | null;
+  tiers: { min: number; pct: number }[];
+}
+export const getQuarterlyReport = () =>
+  api.get<QuarterlyReport>('/dealer/quarterly-report').then((r) => r.data);
+
+// ── Mẫu đơn lưu sẵn (#64) ──
+export interface DealerTemplate {
+  id: string;
+  name: string;
+  items: { variationId: string; quantity: number }[];
+  createdAt: string;
+}
+export const getTemplates = () => api.get<DealerTemplate[]>('/dealer/templates').then((r) => r.data);
+export const saveTemplate = (name: string, items: { variationId: string; quantity: number }[]) =>
+  api.post<DealerTemplate>('/dealer/templates', { name, items }).then((r) => r.data);
+export const deleteTemplate = (id: string) =>
+  api.delete<{ ok: boolean }>(`/dealer/templates/${id}`).then((r) => r.data);

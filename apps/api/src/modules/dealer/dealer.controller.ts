@@ -1,5 +1,14 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { DealerService } from './dealer.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
@@ -7,6 +16,16 @@ import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
 class CreditPaymentDto {
   @IsInt() @Min(1) amount!: number;
   @IsOptional() @IsString() note?: string;
+}
+
+class TemplateItemDto {
+  @IsString() variationId!: string;
+  @IsInt() @Min(1) quantity!: number;
+}
+class SaveTemplateDto {
+  @IsString() name!: string;
+  @IsArray() @ArrayNotEmpty() @ValidateNested({ each: true }) @Type(() => TemplateItemDto)
+  items!: TemplateItemDto[];
 }
 
 @Controller('dealer')
@@ -46,5 +65,25 @@ export class DealerController {
   @Post('credit-payment')
   payment(@CurrentUser('sub') userId: string, @Body() dto: CreditPaymentDto) {
     return this.dealer.creditPayment(userId, dto.amount, dto.note);
+  }
+
+  @Get('quarterly-report')
+  quarterlyReport(@CurrentUser('sub') userId: string) {
+    return this.dealer.quarterlyReport(userId);
+  }
+
+  @Get('templates')
+  templates(@CurrentUser('sub') userId: string) {
+    return this.dealer.listTemplates(userId);
+  }
+
+  @Post('templates')
+  saveTemplate(@CurrentUser('sub') userId: string, @Body() dto: SaveTemplateDto) {
+    return this.dealer.saveTemplate(userId, dto.name, dto.items);
+  }
+
+  @Delete('templates/:id')
+  deleteTemplate(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+    return this.dealer.deleteTemplate(userId, id);
   }
 }
