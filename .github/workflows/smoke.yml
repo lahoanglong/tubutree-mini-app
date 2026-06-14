@@ -1,0 +1,39 @@
+name: Smoke test API (VM)
+
+# Chạy thủ công: gh workflow run smoke.yml. Tạo token CUSTOMER thật trên VM rồi
+# GET mọi endpoint app dùng → in HTTP status để bắt lỗi 500 với dữ liệu thật.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH smoke
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            cd ~/tubutree
+            DC="docker compose -f docker-compose.prod.yml"
+            TOKEN=$($DC exec -T api sh -c "cd /app/apps/api && DEV_ROLE=CUSTOMER pnpm exec tsx scripts/dev-token.ts" | tail -1 | tr -d '\r\n')
+            ADMIN=$($DC exec -T api sh -c "cd /app/apps/api && DEV_ROLE=ADMIN pnpm exec tsx scripts/dev-token.ts" | tail -1 | tr -d '\r\n')
+            echo "token len: ${#TOKEN}"
+            BASE="https://api.tubutree.com/api"
+            check() {
+              code=$(curl -s -o /tmp/body -w "%{http_code}" -H "Authorization: Bearer $2" "$BASE$1")
+              flag="OK"; case "$code" in 5*) flag="!!! SERVER ERROR";; 000) flag="!!! NO RESP";; esac
+              printf "%-32s %s %s\n" "$1" "$code" "$flag"
+              if [ "$flag" != "OK" ]; then head -c 200 /tmp/body; echo; fi
+            }
+            echo "===== CUSTOMER ====="
+            for ep in /me /me/addresses /me/coupons /me/loyalty /me/notifications /me/points/transactions /me/subscriptions /me/wallet /me/wishlist /me/wishlist/ids /cart /orders /orders/me/returns /game/profile /game/forest /game/leaderboard /game/missions /game/quiz/today /cashback/merchants /cashback/transactions /affiliate/me /affiliate/dashboard /dealer/me /brands; do
+              check "$ep" "$TOKEN"
+            done
+            echo "===== PUBLIC ====="
+            for ep in /health "/products?limit=2" "/products/serum-duong-am-visante" "/products/serum-duong-am-visante/reviews"; do
+              check "$ep" ""
+            done
