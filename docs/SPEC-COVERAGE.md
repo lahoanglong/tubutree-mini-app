@@ -1,6 +1,6 @@
 # Tubu Tree — Spec Coverage (Build Spec v1.1)
 
-Đối chiếu §6.1–6.14 spec với code. Cập nhật: loop review đêm 2026-06-13.
+Đối chiếu §6.1–6.14 spec với code. Cập nhật: 2026-06-15 (Vườn Xanh 2.0 đủ 4 phase).
 Trạng thái: **✅ xong** · **🟡 một phần / back-office** · **⏳ Phase 2 (hoãn có chủ đích)** · **❓ cần bạn quyết**.
 
 ## Core (§6.1–6.13)
@@ -13,7 +13,7 @@ Trạng thái: **✅ xong** · **🟡 một phần / back-office** · **⏳ Phas
 | 6.4 Đơn & tracking | ✅ | list/detail/cancel/repurchase/track + **đổi/trả (return-request)** full-stack |
 | 6.5 Hóa đơn điện tử | ✅ | issue-invoice + webhook invoice.issued (cần key Pancake để phát hành thật) |
 | 6.6 Loyalty | ✅ 🟡 | điểm/tier/multiplier, voucher welcome/birthday/winback/**milestone**. ❓ nightly tier-recalc + grace 30 ngày: cần chốt cách tính điểm-hạng (lifetime vs balance) |
-| 6.7 Gamification | ✅ 🟡 | check-in/streak, spin (Điểm Xanh), quiz, tưới cây→thu hoạch, **cây héo/chết §6.7.3**, **cây thật + chứng nhận**, missions, leaderboard. ⏳ Phase-2: ghé vườn bạn bè (social), lô đất, free-spin economy |
+| 6.7 Gamification | ✅ | **Vườn Xanh 2.0 đủ 4 phase (2026-06-15):** check-in/streak + **vé giữ lửa** + **giọt sương**, **quiz thiên nhiên→💧** (chủ đề/độ khó/reveal "Bạn có biết"), spin, tưới cây→thu hoạch (**cây héo/chết §6.7.3**, cây thật+chứng nhận), **push nhắc** (điểm danh/cây khát), **mốc cộng đồng cây thật** (CommunityGoal/Contribution + fulfil batch), **sổ tay loài** (10 loài VN, rarity), **mùa/sự kiện + BXH mùa**. ⏳ tuỳ chọn sau: tặng nước bạn bè (social), lô đất. |
 | 6.8 Affiliate/CTV | ✅ | register, link, dashboard + **bậc doanh số tháng**, commission lifecycle, payout (chống mất tiền/double-spend) |
 | 6.9 Cashback | ✅ | merchants, click→deeplink, postback **có verify token**, settle cron→Ví (cần key Accesstrade thật) |
 | 6.10 Đại lý B2B | ✅ 🟡 | **User-facing đủ**: đăng ký+KYC, bảng giá theo bậc (cap 45%), đơn CREDIT/PREPAID, credit-ledger, Quick Order. 🟡 back-office hoãn: thưởng quý, admin upload Excel giá, DealerPriceHistory |
@@ -40,7 +40,7 @@ Trạng thái: **✅ xong** · **🟡 một phần / back-office** · **⏳ Phas
 
 ## Tổng kết
 - **Toàn bộ §6.1–6.14 đã audit. Phase-1 user-facing hoàn thiện** — miniapp dùng được full chức năng (với COD/Ví; ZaloPay/ZNS/Pancake/Accesstrade/eSMS bật khi có key).
-- **200 unit test pass**, 28 suite. 3-app build sạch (local + Docker). API boot + health OK.
-- **Cần bạn quyết/cấp:** (1) cách tính điểm-hạng cho tier-recalc cron §6.6; (2) API keys go-live (Pancake/ZaloPay/OA-ZNS/Accesstrade/Cloudinary) — xem `.env.production.example`.
+- **236 unit test pass**, 34 suite (gồm Vườn Xanh 2.0: economy/quiz/reminder/community/collection/season). 3-app build sạch (local + Docker). API boot + health OK.
+- **Cần bạn quyết/cấp:** (1) cách tính điểm-hạng cho tier-recalc cron §6.6; (2) API keys go-live còn thiếu (ZaloPay/OA-ZNS/Accesstrade/Cloudinary) — xem `.env.production.example`. **Pancake đã có key trong `.env`.**
 - **Back-office/Phase-2 hoãn có chủ đích:** thưởng quý đại lý, admin Excel giá, AI tư vấn, group buy, review video, community feed.
 - Deploy: xem `docs/DEPLOY-GCP.md` (đã push GitHub, đợi bạn dựng VM).
