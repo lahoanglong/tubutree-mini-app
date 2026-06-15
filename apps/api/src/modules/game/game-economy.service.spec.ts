@@ -46,12 +46,19 @@ describe('GameEconomyService.checkIn', () => {
     const r = await svc.checkIn('u1');
     expect(r.streakDays).toBe(5);
     expect(r.streakFrozeUsed).toBe(true);
-    const upd = (p.gameProfile.update as jest.Mock).mock.calls[0][0].data;
+    const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
     expect(upd.streakFreezes).toBe(0);
   });
 
   it('lỡ 1 ngày + hết vé → reset streak = 1', async () => {
     const p = prisma(prof({ streakDays: 4, streakFreezes: 0, lastCheckInAt: new Date(Date.now() - 2 * DAY) }));
+    const r = await new GameEconomyService(p, cfg()).checkIn('u1');
+    expect(r.streakDays).toBe(1);
+    expect(r.streakFrozeUsed).toBe(false);
+  });
+
+  it('lỡ NHIỀU ngày + có vé → KHÔNG dùng vé, reset = 1', async () => {
+    const p = prisma(prof({ streakDays: 4, streakFreezes: 1, lastCheckInAt: new Date(Date.now() - 5 * DAY) }));
     const r = await new GameEconomyService(p, cfg()).checkIn('u1');
     expect(r.streakDays).toBe(1);
     expect(r.streakFrozeUsed).toBe(false);
