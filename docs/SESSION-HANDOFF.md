@@ -1,4 +1,4 @@
-# Tubu Tree — Session Handoff (cập nhật 2026-06-15)
+# Tubu Tree — Session Handoff (cập nhật 2026-06-15, deploy verify đêm cùng ngày)
 
 > Tài liệu bàn giao để tiếp tục làm trên máy khác. Mọi trạng thái quan trọng nằm ở đây + trong git history.
 > Repo: https://github.com/lahoanglong/tubutree-mini-app · 1 nhánh duy nhất: `main`.
@@ -17,8 +17,9 @@ pnpm dev                       # chạy api + web + miniapp (turbo)
 
 ## 1. Trạng thái tổng thể
 - **Backend §6.1–6.14 (Build Spec v1.1): xong, user-facing đầy đủ.** Chi tiết: `docs/SPEC-COVERAGE.md`.
-- **236+ unit test pass** (34 suite), 3 app build sạch (local + Docker). Prod stack đã smoke-test OK (xem mục 4).
+- **236+ unit test pass** (34 suite), 3 app build sạch (local + Docker).
 - **Vườn Xanh 2.0: HOÀN TẤT 4 phase + social.** (xem mục 2)
+- **Prod đang chạy LIVE trên GCP VM** (`api.tubutree.com` + `app.tubutree.com`, IP `34.142.194.160`) — CD wired qua GitHub Actions (xem mục 4).
 - Code đã push hết lên `main`, working tree sạch.
 
 ## 2. Vườn Xanh 2.0 — đã làm gì (module `apps/api/src/modules/game/`)
@@ -40,25 +41,26 @@ Spec/plan: `docs/superpowers/specs/2026-06-15-vuon-xanh-game-retention-design.md
 
 ## 3. Còn lại (chưa làm) — ưu tiên khi quay lại
 **Cần bạn cấp/quyết (gated):**
-- 🔑 API keys go-live còn thiếu: **ZaloPay** (`ZALOPAY_APP_ID/KEY1/KEY2`), **Zalo OA + ZNS** (`ZALO_OA_ACCESS_TOKEN`, template ID — lead time duyệt 7–14 ngày), **Accesstrade** (`ACCESSTRADE_TOKEN/PUBLISHER_ID`). Pancake + Cloudinary **đã có**.
-- 🖥️ Deploy production lên VM GCP (xem mục 4) — cần VM + domain + DNS.
+- 🔑 API keys go-live còn thiếu: **ZaloPay** (`ZALOPAY_APP_ID/KEY1/KEY2`), **Zalo OA + ZNS** (`ZALO_OA_ACCESS_TOKEN`, template ID — lead time duyệt 7–14 ngày), **Accesstrade** (`ACCESSTRADE_TOKEN/PUBLISHER_ID`). Pancake + Cloudinary **đã có** và đang chạy live.
 - 🌳 Tích hợp **PanNature** trồng cây thật khi đủ mốc cộng đồng (webhook/batch — ai phụ trách?).
 - 📊 Cách tính điểm-hạng cho cron tier-recalc §6.6 (lifetime vs balance).
 
 **Hoãn có chủ đích (back-office / out-of-scope):** thưởng quý đại lý, admin upload Excel giá, AI tư vấn 24/7 (cần Claude key), group buy, review video (UGC), community feed.
 
-## 4. Deploy (đã verify build + smoke-test container, chưa lên VM thật)
-Đã chứng minh prod stack chạy được: API image build sạch, `prisma migrate deploy` tự áp khi start, `/api/health` = `{"status":"ok","db":"up"}`, mọi route game mapped.
+## 4. Deploy — LIVE trên GCP VM
+**Đang chạy production**, đã verify lại lúc 2026-06-15 (chi tiết cấu hình ban đầu: `docs/DEPLOY-GCP.md`):
+- VM IP `34.142.194.160` — DNS `api.tubutree.com` + `app.tubutree.com` cùng trỏ về (root `tubutree.com` đang sau Cloudflare, để landing riêng).
+- Caddy auto-HTTPS Let's Encrypt cho cả 2 sub.
+- Live check: `GET https://api.tubutree.com/api/health` = `{"status":"ok","db":"up"}`, `app.tubutree.com` = 200, Swagger `/api/docs` mở được, mọi route `/api/game/*` mounted (public 200, protected 401), webhook `/api/webhooks/pancake` mounted (POST → 401 không có token).
 
-**Lên VM thật** (chi tiết: `docs/DEPLOY-GCP.md`):
-```bash
-# trên VM Ubuntu đã cài Docker:
-git clone ... tubutree && cd tubutree
-cp .env.production.example .env && nano .env   # WEB_DOMAIN, POSTGRES_PASSWORD, JWT secrets, các key
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml exec api pnpm prisma:seed   # lần đầu
-```
-Caddy auto-HTTPS. Redeploy: `git pull && docker compose ... up -d --build` (migration tự áp).
+**CI/CD đã wired** (`.github/workflows/`):
+- `deploy.yml` — push `main` đụng `apps/api/**`, `packages/**`, `docker-compose.prod.yml`, `Caddyfile` → tự SSH vào VM `git pull && docker compose up -d --build api web` rồi prune image. Cần 3 secret: `VM_HOST`, `VM_USER`, `VM_SSH_KEY` (đã cấu hình).
+- `smoke.yml` — chạy thủ công (`gh workflow run smoke.yml`): tạo token CUSTOMER+ADMIN thật trên VM, GET hết endpoint app dùng, in HTTP status để bắt 5xx.
+- `logs.yml` — `gh workflow run logs.yml`: dump log API 20 phút gần nhất, lọc DIAG/error/zalo.
+
+**Redeploy thường:** chỉ cần `git push main` (CD tự lo). Migration mới tự áp khi API restart.
+
+**Vận hành SSH trực tiếp** (khi CD đỏ hoặc cần can thiệp tay): `cd ~/tubutree && docker compose -f docker-compose.prod.yml <logs|restart|exec> ...` — chi tiết `docs/DEPLOY-GCP.md` §9.
 
 ## 5. Config & keys
 - Dev: `apps/api/.env` (Pancake đã có: SHOP_ID 20021276 + API_KEY + WEBHOOK_SECRET).
