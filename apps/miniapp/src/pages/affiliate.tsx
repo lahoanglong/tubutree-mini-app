@@ -380,14 +380,17 @@ function Dashboard() {
       <Box style={{ height: 24 }} />
 
       <Sheet visible={withdrawing} onClose={() => setWithdrawing(false)} autoHeight>
-        <WithdrawForm
-          max={d?.withdrawableCommission ?? 0}
-          onDone={() => {
-            setWithdrawing(false);
-            void qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] });
-            void qc.invalidateQueries({ queryKey: ['affiliate-commissions'] });
-          }}
-        />
+        {/* Mount khi mở để form lấy ĐÚNG max hiện tại (tránh kẹt amount="0" nếu data về sau lần mount đầu). */}
+        {withdrawing && (
+          <WithdrawForm
+            max={d?.withdrawableCommission ?? 0}
+            onDone={() => {
+              setWithdrawing(false);
+              void qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] });
+              void qc.invalidateQueries({ queryKey: ['affiliate-commissions'] });
+            }}
+          />
+        )}
       </Sheet>
     </Page>
   );

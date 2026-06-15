@@ -45,7 +45,10 @@ export default function CheckoutPage() {
   const addresses = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: authed });
 
   useEffect(() => {
-    if (addresses.data && addresses.data.length > 0 && !addressId) {
+    if (!addresses.data || addresses.data.length === 0) return;
+    // Chọn mặc định khi chưa chọn, HOẶC khi địa chỉ đang chọn đã bị xoá (tránh quote kẹt lỗi).
+    const stillExists = addresses.data.some((a) => a.id === addressId);
+    if (!addressId || !stillExists) {
       const first = addresses.data.find((a) => a.isDefault)?.id ?? addresses.data[0]?.id;
       if (first) setAddressId(first);
     }

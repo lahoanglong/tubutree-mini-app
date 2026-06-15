@@ -51,13 +51,14 @@ export default function LoyaltyPage() {
   useEffect(() => {
     if (!data?.tier) return;
     const KEY = 'tubu_last_tier_min';
-    let stored = NaN;
+    let raw: string | null = null;
     try {
-      stored = Number(localStorage.getItem(KEY));
+      raw = localStorage.getItem(KEY);
     } catch {
       /* ignore */
     }
-    if (!Number.isNaN(stored) && curMin > stored) setCelebrate(data.tier.name);
+    // Chỉ chúc mừng khi ĐÃ có mốc trước (lần đầu chỉ ghi nhận, tránh popup giả cho user hạng cao mở app lần đầu).
+    if (raw != null && curMin > Number(raw)) setCelebrate(data.tier.name);
     try {
       localStorage.setItem(KEY, String(curMin));
     } catch {

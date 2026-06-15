@@ -2,18 +2,21 @@ import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { getWishlist } from '../services/wishlist-api';
 import { getErrorMessage } from '../services/api';
+import { useAuthStore } from '../store/auth';
 import ProductCard from '../components/product-card';
 import { ProductGridSkeleton } from '../components/ui/skeleton';
 
 export default function WishlistPage() {
   const navigate = useNavigate();
-  const wishQ = useQuery({ queryKey: ['wishlist'], queryFn: getWishlist });
+  const status = useAuthStore((s) => s.status);
+  // Gate auth: tránh gọi /me/wishlist khi chưa login → 401 → màn lỗi (đáng lẽ là empty).
+  const wishQ = useQuery({ queryKey: ['wishlist'], queryFn: getWishlist, enabled: status === 'authenticated' });
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
 
       <Box p={4}>
-        {wishQ.isLoading ? (
+        {status === 'loading' || wishQ.isLoading ? (
           <ProductGridSkeleton count={4} />
         ) : wishQ.isError ? (
           <Box style={{ textAlign: 'center', padding: '24px 0' }}>

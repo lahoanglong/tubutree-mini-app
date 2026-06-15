@@ -36,7 +36,10 @@ api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
     const original = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
-    if (error.response?.status === 401 && original && !original._retried && onUnauthorized) {
+    // KHÔNG refresh cho chính endpoint /auth/* — nếu /auth/refresh trả 401, gọi lại
+    // refresh sẽ await chính promise đang chờ nó → deadlock tới khi timeout 15s.
+    const isAuthCall = original?.url?.includes('/auth/');
+    if (error.response?.status === 401 && original && !original._retried && onUnauthorized && !isAuthCall) {
       original._retried = true;
       refreshInFlight ??= onUnauthorized().finally(() => {
         refreshInFlight = null;

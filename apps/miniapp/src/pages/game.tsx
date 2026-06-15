@@ -99,7 +99,7 @@ export default function GamePage() {
   }
 
   const eco = profile?.ecoImpact;
-  const pct = eco ? Math.min(100, Math.round((eco.progress / eco.target) * 100)) : 0;
+  const pct = eco && eco.target > 0 ? Math.min(100, Math.round((eco.progress / eco.target) * 100)) : 0;
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 80 }}>

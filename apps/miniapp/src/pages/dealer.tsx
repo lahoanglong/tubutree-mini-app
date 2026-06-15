@@ -686,7 +686,7 @@ function DealerCredit() {
             onChange={(e) => setAmount(e.target.value)}
           />
           <Button
-            disabled={Number(amount) <= 0 || Number(amount) > balance || pay.isPending}
+            disabled={!Number.isFinite(Number(amount)) || Number(amount) <= 0 || Number(amount) > balance || pay.isPending}
             loading={pay.isPending}
             onClick={() => pay.mutate()}
             style={{ background: '#1f2a44', flex: '0 0 auto' }}
