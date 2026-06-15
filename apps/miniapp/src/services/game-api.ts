@@ -144,3 +144,12 @@ export interface SeasonLeaderRow {
 export const getSeason = () => api.get<Season | null>('/game/season').then((r) => r.data);
 export const getSeasonLeaderboard = () =>
   api.get<SeasonLeaderRow[]>('/game/season/leaderboard').then((r) => r.data);
+
+export interface Friend {
+  id: string;
+  nickname: string;
+  giftedToday: boolean;
+}
+export const getFriends = () => api.get<Friend[]>('/game/friends').then((r) => r.data);
+export const giftWater = (recipientId: string) =>
+  api.post<{ amount: number; recipientId: string }>(`/game/gift/${recipientId}`).then((r) => r.data);

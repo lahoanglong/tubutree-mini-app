@@ -66,6 +66,8 @@ model User {
   plantedTrees        PlantedTree[]
   communityContributions CommunityContribution[]
   species             UserSpecies[]
+  giftsSent           WaterGift[] @relation("GiftsSent")
+  giftsReceived       WaterGift[] @relation("GiftsReceived")
 
   @@index([referredById])
   @@map("users")
@@ -728,6 +730,23 @@ model Season {
 
   @@index([startAt, endAt])
   @@map("seasons")
+}
+
+// Vườn Xanh 2.0 (social) — tặng nước cho bạn bè trong mạng giới thiệu.
+// unique [sender, recipient, dayKey] chống tặng 2 lần/ngày/người.
+model WaterGift {
+  id          String   @id @default(cuid())
+  senderId    String
+  sender      User     @relation("GiftsSent", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient   User     @relation("GiftsReceived", fields: [recipientId], references: [id], onDelete: Cascade)
+  amount      Int
+  dayKey      String
+  createdAt   DateTime @default(now())
+
+  @@unique([senderId, recipientId, dayKey])
+  @@index([recipientId])
+  @@map("water_gifts")
 }
 
 // Yêu cầu đổi/trả (§6.4): chỉ lỗi NSX, window 7 ngày, admin duyệt → hoàn Ví +

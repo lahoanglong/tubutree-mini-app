@@ -17,6 +17,8 @@ import {
   getCollection,
   getSeason,
   getSeasonLeaderboard,
+  getFriends,
+  giftWater,
   type MissionItem,
   type AnswerResult,
   type HarvestSpecies,
@@ -53,6 +55,7 @@ export default function GamePage() {
   const { data: codex } = useQuery({ queryKey: ['game', 'collection'], queryFn: getCollection, enabled: authed });
   const { data: season } = useQuery({ queryKey: ['game', 'season'], queryFn: getSeason });
   const { data: seasonBoard } = useQuery({ queryKey: ['game', 'seasonBoard'], queryFn: getSeasonLeaderboard });
+  const { data: friends } = useQuery({ queryKey: ['game', 'friends'], queryFn: getFriends, enabled: authed });
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
@@ -94,6 +97,14 @@ export default function GamePage() {
     mutationFn: buyStreakFreeze,
     onSuccess: (r) => {
       openSnackbar({ text: `Đã mua vé giữ lửa 🧊 (còn ${r.streakFreezes} vé)`, type: 'success' });
+      refresh();
+    },
+    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+  });
+  const giftM = useMutation({
+    mutationFn: (recipientId: string) => giftWater(recipientId),
+    onSuccess: (r) => {
+      openSnackbar({ text: `Đã tặng ${r.amount}💧 cho bạn 🎁`, type: 'success' });
       refresh();
     },
     onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
@@ -356,6 +367,29 @@ export default function GamePage() {
           </Box>
           <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
             Thu hoạch cây để sưu tập đủ loài cây Việt Nam — loài hiếm khó gặp hơn!
+          </Text>
+        </Card>
+      )}
+
+      {/* Tặng nước bạn bè (social) */}
+      {friends && friends.length > 0 && (
+        <Card title="🎁 Tặng nước cho bạn bè">
+          {friends.map((f) => (
+            <Box key={f.id} flex alignItems="center" justifyContent="space-between" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
+              <Text size="small">🌿 {f.nickname}</Text>
+              <Button
+                size="small"
+                variant="secondary"
+                disabled={f.giftedToday || (giftM.isPending && giftM.variables === f.id)}
+                loading={giftM.isPending && giftM.variables === f.id}
+                onClick={() => giftM.mutate(f.id)}
+              >
+                {f.giftedToday ? 'Đã tặng hôm nay' : 'Tặng 💧'}
+              </Button>
+            </Box>
+          ))}
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
+            Tặng nước cho bạn bè (người bạn mời hoặc người mời bạn) — mỗi người 1 lần/ngày 🌿
           </Text>
         </Card>
       )}

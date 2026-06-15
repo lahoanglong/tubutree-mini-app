@@ -8,6 +8,7 @@ import { GameQuizService } from './game-quiz.service';
 import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
 import { GameSeasonService } from './game-season.service';
+import { GameGiftService } from './game-gift.service';
 
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
@@ -21,6 +22,7 @@ export class GameController {
     private readonly community: GameCommunityService,
     private readonly collection: GameCollectionService,
     private readonly season: GameSeasonService,
+    private readonly gift: GameGiftService,
   ) {}
 
   @Get('profile')
@@ -68,6 +70,14 @@ export class GameController {
   @Public()
   @Get('season/leaderboard')
   seasonLeaderboard() { return this.season.getSeasonLeaderboard(); }
+
+  @Get('friends')
+  friends(@CurrentUser('sub') userId: string) { return this.gift.getFriends(userId); }
+
+  @Post('gift/:recipientId')
+  giftWater(@CurrentUser('sub') userId: string, @Param('recipientId') recipientId: string) {
+    return this.gift.giftWater(userId, recipientId);
+  }
 
   @Public()
   @Get('leaderboard')
