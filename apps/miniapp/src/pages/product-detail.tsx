@@ -135,7 +135,7 @@ export default function ProductDetailPage() {
   };
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
+    <Page className="page page-bleed" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
 
       <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} alt={p.name} />
 

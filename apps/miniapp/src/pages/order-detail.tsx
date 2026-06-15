@@ -97,7 +97,7 @@ export default function OrderDetailPage() {
   const isDone = o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.status === 'RETURNED';
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
+    <Page className="page page-bleed" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
 
       {/* ── Status hero ── */}
       <Box p={4} style={{ background: color.bg }}>

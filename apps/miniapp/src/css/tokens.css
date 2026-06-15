@@ -111,6 +111,14 @@ body {
 .page {
   padding-top: var(--safe-top);
 }
+/* Trang con có nút back nổi (top-left): đệm thêm để nút không đè nội dung đầu. */
+body.with-back-btn .page {
+  padding-top: calc(var(--safe-top) + 48px);
+}
+/* Trang hero full-bleed (gallery/hero màu): nút back nằm TRÊN hero — không cần đệm. */
+body.with-back-btn .page.page-bleed {
+  padding-top: var(--safe-top);
+}
 
 /* ── Type scale (M2) — class tiện ích cho heading/label theo đúng font + cỡ chữ ── */
 .t-display {

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'zmp-ui';
 import { ChevronLeft } from 'lucide-react';
 
@@ -6,13 +7,23 @@ import { ChevronLeft } from 'lucide-react';
  * viền lên), trang con không còn nút back native → component này thay thế.
  * Đặt top-LEFT để tránh capsule (⋯ ✕) của Zalo luôn nằm top-right.
  * Ẩn ở các tab gốc (đã có BottomNav).
+ *
+ * Khi hiện, gắn class `with-back-btn` lên <body> để CSS đệm thêm đỉnh cho .page
+ * (nội dung không bị nút back đè) — trừ trang hero full-bleed (.page-bleed).
  */
 const ROOTS = ['/', '/browse', '/game', '/wallet', '/profile'];
 
 export default function BackButton() {
   const navigate = useNavigate();
   const location = useLocation();
-  if (ROOTS.includes(location.pathname)) return null;
+  const show = !ROOTS.includes(location.pathname);
+
+  useEffect(() => {
+    document.body.classList.toggle('with-back-btn', show);
+    return () => document.body.classList.remove('with-back-btn');
+  }, [show]);
+
+  if (!show) return null;
 
   return (
     <button
