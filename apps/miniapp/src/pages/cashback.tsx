@@ -200,6 +200,7 @@ export default function CashbackPage() {
             <Button
               fullWidth
               loading={clickMut.isPending}
+              disabled={clickMut.isPending}
               onClick={() => clickMut.mutate(selected.id)}
               style={{ marginTop: 16, background: 'var(--clay-500)' }}
             >

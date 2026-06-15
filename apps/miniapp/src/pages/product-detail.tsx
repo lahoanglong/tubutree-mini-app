@@ -115,8 +115,11 @@ export default function ProductDetailPage() {
   const lowStock = inStock && (selected?.stock ?? 0) <= LOW_STOCK_THRESHOLD;
   const cartCount = cart.data?.itemCount ?? 0;
 
-  const handleAdd = () => {
-    if (status !== 'authenticated') return void login();
+  const handleAdd = async () => {
+    if (status !== 'authenticated') {
+      await login();
+      if (useAuthStore.getState().status !== 'authenticated') return;
+    }
     if (selected && inStock && !addMutation.isPending) {
       addMutation.mutate({ variation: selected, qty: quantity });
     }
@@ -229,9 +232,12 @@ export default function ProductDetailPage() {
           <Box
             role="button"
             className="tubu-press"
-            onClick={() => {
+            onClick={async () => {
               haptic('light');
-              if (status !== 'authenticated') return void login();
+              if (status !== 'authenticated') {
+                await login();
+                if (useAuthStore.getState().status !== 'authenticated') return;
+              }
               setShowSubscribe(true);
             }}
             flex

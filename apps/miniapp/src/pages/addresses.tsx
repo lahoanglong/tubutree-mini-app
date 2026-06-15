@@ -47,6 +47,7 @@ export default function AddressesPage() {
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses });
 
   const [editing, setEditing] = useState<AddressDTO | 'new' | null>(null);
+  const [confirmDel, setConfirmDel] = useState<AddressDTO | null>(null);
 
   const setDefaultMut = useMutation({
     mutationFn: (id: string) => updateAddress(id, { isDefault: true }),
@@ -60,6 +61,7 @@ export default function AddressesPage() {
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteAddress(id),
     onSuccess: () => {
+      setConfirmDel(null);
       openSnackbar({ text: 'Đã xóa địa chỉ.', type: 'success' });
       void qc.invalidateQueries({ queryKey: ['addresses'] });
     },
@@ -133,7 +135,7 @@ export default function AddressesPage() {
                 <ActionLink
                   label="Xóa"
                   danger
-                  onClick={() => deleteMut.mutate(a.id)}
+                  onClick={() => setConfirmDel(a)}
                   disabled={deleteMut.isPending}
                 />
               </Box>
@@ -164,6 +166,34 @@ export default function AddressesPage() {
               setEditing(null);
             }}
           />
+        )}
+      </Sheet>
+
+      {/* Xác nhận xóa (tránh mất nhầm địa chỉ — thao tác không hoàn tác). */}
+      <Sheet visible={confirmDel != null} onClose={() => setConfirmDel(null)} autoHeight>
+        {confirmDel != null && (
+          <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
+            <Text bold size="large">
+              Xóa địa chỉ này?
+            </Text>
+            <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
+              {confirmDel.street}, {confirmDel.ward}, {confirmDel.district}, {confirmDel.province}
+            </Text>
+            <Box flex style={{ gap: 10, marginTop: 16 }}>
+              <Button variant="secondary" fullWidth onClick={() => setConfirmDel(null)}>
+                Hủy
+              </Button>
+              <Button
+                fullWidth
+                loading={deleteMut.isPending}
+                disabled={deleteMut.isPending}
+                onClick={() => deleteMut.mutate(confirmDel.id)}
+                style={{ background: 'var(--danger)' }}
+              >
+                Xóa
+              </Button>
+            </Box>
+          </Box>
         )}
       </Sheet>
     </Page>

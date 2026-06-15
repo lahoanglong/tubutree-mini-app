@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { setStorage, getStorage, removeStorage } from 'zmp-sdk/apis';
-import type { AuthUser } from '@tubutree/shared-types';
+import type { AuthUser, LoginResponse } from '@tubutree/shared-types';
 import {
   loginGuest,
   loginZaloMiniApp,
@@ -47,6 +47,24 @@ async function clearRefresh(): Promise<void> {
   await removeStorage({ keys: [REFRESH_KEY] });
 }
 
+/**
+ * Refresh phiên — DÙNG CHUNG cho restore() và handler 401, dedup qua 1 promise.
+ * BE xoay refresh token (single-use): nếu 2 nơi refresh CÙNG token song song,
+ * 1 cái thắng, cái kia bị 401 "token đã dùng" → logout nhầm. Serialize để tránh.
+ * Trả null nếu chưa có refresh token; throw nếu refresh thất bại.
+ */
+let refreshInFlight: Promise<LoginResponse | null> | null = null;
+function refreshSession(): Promise<LoginResponse | null> {
+  refreshInFlight ??= (async () => {
+    const token = await readRefresh();
+    if (!token) return null;
+    return refreshTokens(token);
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   // 'loading' ngay từ đầu: app luôn restore() khi mở → tránh nháy màn đăng nhập trước khi restore xong.
@@ -78,17 +96,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // Mở app: ưu tiên refresh token đã lưu; nếu chưa có → silent Zalo login (không xin SĐT).
   restore: async () => {
     set({ status: 'loading' });
-    const refreshToken = await readRefresh();
-    if (refreshToken) {
-      try {
-        const res = await refreshTokens(refreshToken);
+    try {
+      const res = await refreshSession();
+      if (res) {
         setAccessToken(res.accessToken);
         await persistRefresh(res.refreshToken);
         set({ user: res.user, status: 'authenticated' });
         return;
-      } catch {
-        await clearRefresh();
       }
+    } catch {
+      await clearRefresh();
     }
     // Chưa có phiên hợp lệ → đăng nhập ngầm bằng Zalo (im lặng, không sheet SĐT).
     try {
@@ -140,10 +157,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
 // Khi API gặp 401 → tự refresh bằng token đã lưu, trả access token mới cho interceptor.
 setUnauthorizedHandler(async () => {
-  const refreshToken = await readRefresh();
-  if (!refreshToken) return null;
   try {
-    const res = await refreshTokens(refreshToken);
+    const res = await refreshSession();
+    if (!res) return null;
     setAccessToken(res.accessToken);
     await persistRefresh(res.refreshToken);
     useAuthStore.setState({ user: res.user, status: 'authenticated' });
