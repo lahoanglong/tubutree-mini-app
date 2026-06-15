@@ -6,6 +6,7 @@
  * Catalog (~50 sản phẩm) sẽ seed từ Pancake ở Phase 1, không nằm ở đây.
  */
 import { PrismaClient, Prisma } from '@prisma/client';
+import { seedGameQuiz } from './seed-game-quiz';
 
 const prisma = new PrismaClient();
 
@@ -57,8 +58,10 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'game.quiz_daily_count', value: 5, category: 'game', description: 'Số quiz/ngày' },
   { key: 'game.quiz_correct_points', value: 3, category: 'game', description: 'Điểm/câu đúng' },
   { key: 'game.daily_login_seeds', value: 10, category: 'game', description: '💧 khi mở app/check-in' },
-  { key: 'game.tank_capacity', value: 200, category: 'game', description: 'Sức chứa bình nước (💧)' },
+  { key: 'game.tank_capacity', value: 500, category: 'game', description: 'Sức chứa bình nước (💧)' },
   { key: 'game.tree_default_target', value: 600, category: 'game', description: '💧 cần để thu hoạch cây mặc định' },
+  { key: 'game.dew_seeds', value: 15, category: 'game', description: '💧 giọt sương sáng/ngày' },
+  { key: 'game.streak_freeze_cost', value: 80, category: 'game', description: '💧 mua 1 vé giữ lửa (streak-freeze)' },
   {
     key: 'game.spin_prizes',
     value: [
@@ -385,6 +388,9 @@ async function main() {
     await prisma.cashbackMerchant.upsert({ where: { id: m.id }, update: m, create: m });
   }
   console.log(`   → ${CASHBACK_MERCHANTS.length} merchants.`);
+
+  console.log('🌱 Seeding Nature Quiz questions...');
+  await seedGameQuiz(prisma);
 
   console.log('✅ Seed done.');
 }

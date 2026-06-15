@@ -59,49 +59,6 @@ export class GameService {
     return 'HEALTHY';
   }
 
-  // ── Daily check-in ─────────────────────────────────
-  async checkIn(userId: string) {
-    const profile = await this.ensureProfile(userId);
-    const today = this.dayKey(new Date());
-    if (profile.lastCheckInAt && this.dayKey(profile.lastCheckInAt) === today) {
-      throw new BadRequestException('Hôm nay bạn đã điểm danh rồi 🌿');
-    }
-
-    const wasYesterday =
-      profile.lastCheckInAt && this.dayKey(this.addDays(new Date(), -1)) === this.dayKey(profile.lastCheckInAt);
-    const streakDays = wasYesterday ? profile.streakDays + 1 : 1;
-
-    const loginSeeds = await this.config.get<number>('game.daily_login_seeds', 10);
-    const checkinPoints = await this.config.get<number>('game.daily_checkin_points', 2);
-    const tankCap = await this.config.get<number>('game.tank_capacity', 200);
-
-    let seeds = loginSeeds;
-    let bonusNote = '';
-    if (streakDays % 7 === 0) {
-      const bonus = await this.config.get<{ seeds: number }>('game.streak_7_bonus', { seeds: 20 });
-      const bonusSeeds = bonus.seeds ?? 20;
-      seeds += bonusSeeds;
-      bonusNote = `+${bonusSeeds} 💧 chuỗi 7 ngày!`;
-    } else if (streakDays % 3 === 0) {
-      seeds += 5;
-      bonusNote = '+5 💧 chuỗi 3 ngày!';
-    }
-
-    const newSeeds = Math.min(tankCap, profile.totalSeeds + seeds);
-    await this.prisma.gameProfile.update({
-      where: { userId },
-      data: {
-        totalSeeds: newSeeds,
-        streakDays,
-        longestStreak: Math.max(profile.longestStreak, streakDays),
-        lastCheckInAt: new Date(),
-      },
-    });
-    await this.creditPoints(userId, checkinPoints, 'GAME_CHECKIN');
-
-    return { seedsEarned: seeds, pointsEarned: checkinPoints, streakDays, totalSeeds: newSeeds, bonusNote };
-  }
-
   // ── Spin wheel ─────────────────────────────────────
   async spin(userId: string) {
     const cost = await this.config.get<number>('game.spin_buy_cost_points', 10);
@@ -148,39 +105,6 @@ export class GameService {
       },
     });
     return { prize: { id: prize.id, name: prize.name, rewardType: prize.rewardType, value: prize.value } };
-  }
-
-  // ── Quiz ───────────────────────────────────────────
-  async getTodayQuiz(userId: string) {
-    const count = await this.config.get<number>('game.quiz_daily_count', 5);
-    const since = this.startOfDay(new Date());
-    const attemptedToday = await this.prisma.gameQuizAttempt.findMany({
-      where: { userId, attemptedAt: { gte: since } },
-      select: { quizId: true },
-    });
-    const doneIds = attemptedToday.map((a) => a.quizId);
-    const quizzes = await this.prisma.gameQuiz.findMany({
-      where: { id: { notIn: doneIds } },
-      take: count,
-    });
-    // Ẩn đáp án đúng
-    return quizzes.map((q) => ({ id: q.id, question: q.question, options: q.options, rewardPts: q.rewardPts }));
-  }
-
-  async answerQuiz(userId: string, quizId: string, choice: number) {
-    const quiz = await this.prisma.gameQuiz.findUnique({ where: { id: quizId } });
-    if (!quiz) throw new BadRequestException('Câu hỏi không tồn tại.');
-    const since = this.startOfDay(new Date());
-    const already = await this.prisma.gameQuizAttempt.findFirst({
-      where: { userId, quizId, attemptedAt: { gte: since } },
-    });
-    if (already) throw new BadRequestException('Bạn đã trả lời câu này hôm nay.');
-
-    const isCorrect = quiz.correct === choice;
-    await this.prisma.gameQuizAttempt.create({ data: { userId, quizId, isCorrect } });
-    const points = await this.config.get<number>('game.quiz_correct_points', 3);
-    if (isCorrect) await this.creditPoints(userId, points, `GAME_QUIZ:${quizId}`);
-    return { isCorrect, correct: quiz.correct, pointsEarned: isCorrect ? points : 0 };
   }
 
   // ── Tree water + harvest ───────────────────────────
@@ -369,8 +293,5 @@ export class GameService {
     const utc7 = new Date(d.getTime() + 7 * 3600 * 1000);
     utc7.setUTCHours(0, 0, 0, 0);
     return new Date(utc7.getTime() - 7 * 3600 * 1000);
-  }
-  private addDays(d: Date, n: number): Date {
-    return new Date(d.getTime() + n * 24 * 3600 * 1000);
   }
 }
