@@ -30,7 +30,12 @@ export default function BackButton() {
       type="button"
       aria-label="Quay lại"
       className="tubu-press"
-      onClick={() => navigate(-1)}
+      onClick={() => {
+        // Mở thẳng trang con (share-link/thông báo) → history rỗng, navigate(-1) kẹt.
+        const idx = (window.history.state?.idx as number | undefined) ?? 0;
+        if (idx > 0) navigate(-1);
+        else navigate('/');
+      }}
       style={{
         position: 'fixed',
         top: 'calc(var(--safe-top) + 8px)',

@@ -127,7 +127,7 @@ export default function HomePage() {
           {user && (
             <Text size="xSmall" style={{ color: 'var(--primary-100)', marginTop: 6 }}>
               {vi.home.greeting(user.fullName ?? vi.auth.greetingFallback)}
-              {user.pointsBalance ? ` · ${vi.home.pointsChip(user.pointsBalance)}` : ''}
+              {user.pointsBalance != null ? ` · ${vi.home.pointsChip(user.pointsBalance)}` : ''}
             </Text>
           )}
           <Box
