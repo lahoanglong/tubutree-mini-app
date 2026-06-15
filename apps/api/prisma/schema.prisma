@@ -276,6 +276,7 @@ model Order {
   shippingPartner String?
   shippingCode    String?
   shippingStatus  String?
+  trackingLink    String?
   shippingHistory Json?
   invoiceRequest  Json?
   invoiceUrl      String?

@@ -93,6 +93,7 @@ export default function OrderDetailPage() {
 
   const o = order.data;
   const color = STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!;
+  const journey = o.shippingHistory ?? [];
   const canCancel = o.status === 'PENDING_PAYMENT' || o.status === 'CONFIRMED';
   const isDone = o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.status === 'RETURNED';
 
@@ -157,38 +158,99 @@ export default function OrderDetailPage() {
         )}
       </Box>
 
-      {/* ── Vận chuyển (mã vận đơn + copy + tracking) §6.4 ── */}
-      {o.shippingCode && (
+      {/* ── Vận chuyển (hãng VC + mã vận đơn + tra cứu + hành trình) §6.4 ── */}
+      {(o.shippingCode || journey.length > 0) && (
         <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
           <Text bold size="small" style={{ marginBottom: 6 }}>
             Vận chuyển
           </Text>
           <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8 }}>
-            <Box>
-              {o.shippingPartner && (
-                <Text size="small">{o.shippingPartner}</Text>
+            <Box style={{ flex: 1 }}>
+              {o.shippingPartner && <Text size="small">{o.shippingPartner}</Text>}
+              {o.shippingCode && (
+                <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+                  Mã vận đơn: <b>{o.shippingCode}</b>
+                </Text>
               )}
-              <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                Mã vận đơn: <b>{o.shippingCode}</b>
-              </Text>
               {o.shippingStatus && (
                 <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
                   {o.shippingStatus}
                 </Text>
               )}
             </Box>
+            {o.shippingCode && (
+              <Button
+                size="small"
+                variant="secondary"
+                onClick={() => {
+                  haptic('light');
+                  if (navigator.clipboard) void navigator.clipboard.writeText(o.shippingCode!);
+                  openSnackbar({ text: 'Đã sao chép mã vận đơn', type: 'success' });
+                }}
+              >
+                Sao chép
+              </Button>
+            )}
+          </Box>
+
+          {o.trackingLink && (
             <Button
               size="small"
               variant="secondary"
+              fullWidth
+              style={{ marginTop: 10 }}
               onClick={() => {
                 haptic('light');
-                if (navigator.clipboard) void navigator.clipboard.writeText(o.shippingCode!);
-                openSnackbar({ text: 'Đã sao chép mã vận đơn', type: 'success' });
+                void openExternal(o.trackingLink!).catch(() =>
+                  openSnackbar({ text: 'Không mở được liên kết tra cứu.', type: 'error' }),
+                );
               }}
             >
-              Sao chép
+              Tra cứu hành trình
             </Button>
-          </Box>
+          )}
+
+          {journey.length > 0 && (
+            <Box mt={3}>
+              {journey
+                .slice()
+                .reverse()
+                .map((ev, i) => (
+                  <Box key={i} flex style={{ gap: 10 }}>
+                    <Box flex flexDirection="column" alignItems="center" style={{ flex: '0 0 auto' }}>
+                      <span
+                        style={{
+                          width: 9,
+                          height: 9,
+                          borderRadius: '50%',
+                          background: i === 0 ? 'var(--leaf-600)' : 'var(--neutral-300)',
+                          marginTop: 4,
+                        }}
+                      />
+                      {i < journey.length - 1 && (
+                        <span style={{ width: 2, flex: 1, background: 'var(--neutral-200)', marginTop: 2 }} />
+                      )}
+                    </Box>
+                    <Box style={{ flex: 1, paddingBottom: 12 }}>
+                      <Text
+                        size="xSmall"
+                        style={{
+                          color: i === 0 ? 'var(--neutral-900)' : 'var(--neutral-600)',
+                          fontWeight: i === 0 ? 600 : 400,
+                        }}
+                      >
+                        {ev.status ?? '—'}
+                      </Text>
+                      {ev.at && (
+                        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                          {new Date(ev.at).toLocaleString('vi-VN')}
+                        </Text>
+                      )}
+                    </Box>
+                  </Box>
+                ))}
+            </Box>
+          )}
         </Box>
       )}
 

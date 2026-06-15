@@ -8,25 +8,17 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
 import { useAuthStore } from '../store/auth';
+import { GeoPicker, EMPTY_GEO, type GeoValue } from '../components/geo-picker';
 
 const VN_PHONE = /^(0|\+84)\d{9}$/;
-type FormFields = 'recipient' | 'phone' | 'province' | 'district' | 'ward' | 'street';
+// Tỉnh/phường chọn qua GeoPicker (mã Pancake thật); chỉ 3 field text còn lại.
+type FormFields = 'recipient' | 'phone' | 'street';
 type FormState = Record<FormFields, string>;
 
-const EMPTY_FORM: FormState = {
-  recipient: '',
-  phone: '',
-  province: '',
-  district: '',
-  ward: '',
-  street: '',
-};
+const EMPTY_FORM: FormState = { recipient: '', phone: '', street: '' };
 const FIELD_LABEL: Record<FormFields, string> = {
   recipient: vi.checkout.recipient,
   phone: vi.checkout.phone,
-  province: vi.checkout.province,
-  district: vi.checkout.district,
-  ward: vi.checkout.ward,
   street: vi.checkout.street,
 };
 
@@ -39,6 +31,13 @@ function validate(form: FormState): Partial<Record<FormFields, string>> {
     errors.phone = vi.checkout.phoneInvalid;
   }
   return errors;
+}
+
+function validateGeo(g: GeoValue): { province?: string; ward?: string } {
+  const e: { province?: string; ward?: string } = {};
+  if (!g.provinceCode) e.province = vi.checkout.requiredField;
+  if (!g.wardCode) e.ward = vi.checkout.requiredField;
+  return e;
 }
 
 export default function AddressesPage() {
@@ -239,26 +238,39 @@ function AddressForm({
   const user = useAuthStore((s) => s.user);
   const [form, setForm] = useState<FormState>(
     initial
-      ? {
-          recipient: initial.recipient,
-          phone: initial.phone,
-          province: initial.province,
-          district: initial.district,
-          ward: initial.ward,
-          street: initial.street,
-        }
+      ? { recipient: initial.recipient, phone: initial.phone, street: initial.street }
       : // Địa chỉ mới: điền sẵn tên + SĐT lấy từ tài khoản Zalo (spec §6.1) để bớt thao tác.
         { ...EMPTY_FORM, recipient: user?.fullName ?? '', phone: user?.phone ?? '' },
   );
+  // Prefill địa giới chỉ khi mã hợp lệ (địa chỉ cũ '00' → buộc chọn lại để có mã Pancake thật).
+  const [geo, setGeo] = useState<GeoValue>(
+    initial && initial.provinceCode && initial.provinceCode !== '00'
+      ? {
+          province: initial.province,
+          provinceCode: initial.provinceCode,
+          ward: initial.ward,
+          wardCode: initial.wardCode && initial.wardCode !== '00' ? initial.wardCode : '',
+        }
+      : EMPTY_GEO,
+  );
   const [errors, setErrors] = useState<Partial<Record<FormFields, string>>>({});
   const [touched, setTouched] = useState<Partial<Record<FormFields, boolean>>>({});
+  const [geoErr, setGeoErr] = useState<{ province?: string; ward?: string }>({});
 
   const save = useMutation({
     mutationFn: () => {
-      const payload = { ...form, phone: form.phone.replace(/\s/g, '') };
-      return initial
-        ? updateAddress(initial.id, payload)
-        : createAddress({ ...payload, provinceCode: '00', districtCode: '00', wardCode: '00' });
+      const payload = {
+        recipient: form.recipient.trim(),
+        phone: form.phone.replace(/\s/g, ''),
+        street: form.street.trim(),
+        province: geo.province,
+        ward: geo.ward,
+        district: '', // hệ 2 cấp (Pancake)
+        provinceCode: geo.provinceCode,
+        wardCode: geo.wardCode,
+        districtCode: '',
+      };
+      return initial ? updateAddress(initial.id, payload) : createAddress(payload);
     },
     onSuccess: () => {
       haptic('medium');
@@ -279,10 +291,29 @@ function AddressForm({
   };
   const submit = () => {
     const allErrors = validate(form);
+    const gErr = validateGeo(geo);
     setErrors(allErrors);
-    setTouched({ recipient: true, phone: true, province: true, district: true, ward: true, street: true });
-    if (Object.keys(allErrors).length === 0) save.mutate();
+    setGeoErr(gErr);
+    setTouched({ recipient: true, phone: true, street: true });
+    if (Object.keys(allErrors).length === 0 && Object.keys(gErr).length === 0) save.mutate();
   };
+
+  const renderField = (k: FormFields) => (
+    <Box>
+      <Input
+        label={FIELD_LABEL[k]}
+        value={form[k]}
+        onChange={setField(k)}
+        onBlur={blurField(k)}
+        status={touched[k] && errors[k] ? 'error' : undefined}
+      />
+      {touched[k] && errors[k] && (
+        <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 2 }}>
+          ⚠ {errors[k]}
+        </Text>
+      )}
+    </Box>
+  );
 
   return (
     <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
@@ -290,22 +321,18 @@ function AddressForm({
         {initial ? 'Sửa địa chỉ' : 'Thêm địa chỉ'}
       </Text>
       <Box flex flexDirection="column" style={{ gap: 10 }}>
-        {(Object.keys(EMPTY_FORM) as FormFields[]).map((k) => (
-          <Box key={k}>
-            <Input
-              label={FIELD_LABEL[k]}
-              value={form[k]}
-              onChange={setField(k)}
-              onBlur={blurField(k)}
-              status={touched[k] && errors[k] ? 'error' : undefined}
-            />
-            {touched[k] && errors[k] && (
-              <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 2 }}>
-                ⚠ {errors[k]}
-              </Text>
-            )}
-          </Box>
-        ))}
+        {renderField('recipient')}
+        {renderField('phone')}
+        <GeoPicker
+          value={geo}
+          onChange={(g) => {
+            setGeo(g);
+            setGeoErr(validateGeo(g));
+          }}
+          errorProvince={geoErr.province}
+          errorWard={geoErr.ward}
+        />
+        {renderField('street')}
       </Box>
       <Box flex style={{ gap: 8, marginTop: 16 }}>
         <Button variant="secondary" onClick={onClose} style={{ minHeight: 44 }}>

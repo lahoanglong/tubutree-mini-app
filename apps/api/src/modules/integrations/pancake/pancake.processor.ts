@@ -66,8 +66,8 @@ export class PancakeProcessor extends WorkerHost {
       case 'order.status_updated':
       case 'order.updated':
         await this.onStatusUpdated(data);
-        // Đơn Pancake kèm thông tin vận chuyển → cập nhật luôn nếu có.
-        if (data['tracking_link'] || data['shipping_status'] || data['tracking_number']) {
+        // Đơn Pancake kèm thông tin vận chuyển → cập nhật luôn nếu có (field thật ở `partner`).
+        if (data['partner'] || data['tracking_link'] || data['shipping_status'] || data['tracking_number']) {
           await this.onShippingUpdated(data);
         }
         break;
@@ -133,13 +133,35 @@ export class PancakeProcessor extends WorkerHost {
   private async onShippingUpdated(data: Record<string, unknown>): Promise<void> {
     const order = await this.findOrder(data);
     if (!order) return;
+    // Field vận chuyển THẬT của Pancake nằm trong `partner`; giữ fallback field phẳng.
+    const partner = (data['partner'] as Record<string, unknown> | undefined) ?? {};
+    const carrier = partner['partner_name'] ?? data['partner_name'];
+    const waybill = partner['extend_code'] ?? data['tracking_number'];
+    const shipStatus = partner['partner_status'] ?? data['shipping_status'];
+    const trackingLink = data['tracking_link'] ?? partner['printed_form'];
+
+    const str = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
+    const carrierS = str(carrier);
+    const waybillS = str(waybill);
+    const shipStatusS = str(shipStatus);
+    const linkS = str(trackingLink);
+
     const history = Array.isArray(order.shippingHistory) ? order.shippingHistory : [];
+    // Chỉ thêm mốc hành trình khi có thay đổi thực (tránh ghi trùng mỗi webhook).
+    const last = history[history.length - 1] as { status?: string | null } | undefined;
+    const changed = shipStatusS && shipStatusS !== (last?.status ?? null);
+    const nextHistory = changed
+      ? [...history, { at: new Date().toISOString(), status: shipStatusS, carrier: carrierS, code: waybillS }]
+      : history;
+
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
-        shippingStatus: data['shipping_status'] ? String(data['shipping_status']) : order.shippingStatus,
-        shippingCode: data['tracking_number'] ? String(data['tracking_number']) : order.shippingCode,
-        shippingHistory: [...history, { at: new Date().toISOString(), data }] as object,
+        shippingPartner: carrierS ?? order.shippingPartner,
+        shippingCode: waybillS ?? order.shippingCode,
+        shippingStatus: shipStatusS ?? order.shippingStatus,
+        trackingLink: linkS ?? order.trackingLink,
+        shippingHistory: nextHistory as object,
       },
     });
   }

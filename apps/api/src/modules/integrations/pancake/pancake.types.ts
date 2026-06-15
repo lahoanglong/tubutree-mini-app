@@ -60,3 +60,27 @@ export interface PancakeCreateOrderResponse {
   order_id?: string;
   success?: boolean;
 }
+
+/** Địa giới Pancake (geo). Hệ MỚI 2 cấp: Tỉnh → Phường/Xã (district bỏ). */
+export interface PancakeProvinceDTO {
+  id: string;
+  name: string;
+  name_en?: string;
+  country_code?: number;
+  /** ID hệ mới "84_VN*" — dùng khi đặt đơn (customer.province_id) và để query communes. */
+  new_id?: string;
+  region_type?: string;
+}
+export interface PancakeCommuneDTO {
+  /** Khi query bằng province_id hệ mới ("84_VN*"), `id` đã là hệ mới — dùng cho ward_id khi đặt đơn. */
+  id: string;
+  name: string;
+  name_en?: string;
+  province_id?: string;
+  district_id?: string | null;
+  postcode?: string | null;
+  new_id?: string | null;
+}
+export interface PancakeGeoResponse<T> {
+  data?: T[];
+}

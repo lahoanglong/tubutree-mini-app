@@ -5,28 +5,20 @@ import { createAddress, type AddressDTO } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';
 import { vi } from '../../i18n/vi';
 import { haptic } from '../../utils/haptic';
+import { GeoPicker, EMPTY_GEO, type GeoValue } from '../geo-picker';
 
 /** SĐT Việt Nam: 0xxxxxxxxx hoặc +84xxxxxxxxx (9 số sau đầu số). */
 const VN_PHONE = /^(0|\+84)\d{9}$/;
 
-type FormFields = 'recipient' | 'phone' | 'province' | 'district' | 'ward' | 'street';
+// Tỉnh/phường chọn qua GeoPicker (mã Pancake thật); chỉ 3 field text còn lại.
+type FormFields = 'recipient' | 'phone' | 'street';
 type FormState = Record<FormFields, string>;
 
-const EMPTY_FORM: FormState = {
-  recipient: '',
-  phone: '',
-  province: '',
-  district: '',
-  ward: '',
-  street: '',
-};
+const EMPTY_FORM: FormState = { recipient: '', phone: '', street: '' };
 
 const FIELD_LABEL: Record<FormFields, string> = {
   recipient: vi.checkout.recipient,
   phone: vi.checkout.phone,
-  province: vi.checkout.province,
-  district: vi.checkout.district,
-  ward: vi.checkout.ward,
   street: vi.checkout.street,
 };
 
@@ -39,6 +31,13 @@ function validate(form: FormState): Partial<Record<FormFields, string>> {
     errors.phone = vi.checkout.phoneInvalid;
   }
   return errors;
+}
+
+function validateGeo(g: GeoValue): { province?: string; ward?: string } {
+  const e: { province?: string; ward?: string } = {};
+  if (!g.provinceCode) e.province = vi.checkout.requiredField;
+  if (!g.wardCode) e.ward = vi.checkout.requiredField;
+  return e;
 }
 
 interface AddressSectionProps {
@@ -182,18 +181,23 @@ function AddressForm({
 }) {
   const { openSnackbar } = useSnackbar();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [geo, setGeo] = useState<GeoValue>(EMPTY_GEO);
   const [errors, setErrors] = useState<Partial<Record<FormFields, string>>>({});
   const [touched, setTouched] = useState<Partial<Record<FormFields, boolean>>>({});
+  const [geoErr, setGeoErr] = useState<{ province?: string; ward?: string }>({});
 
   const create = useMutation({
     mutationFn: () =>
       createAddress({
-        ...form,
+        recipient: form.recipient.trim(),
         phone: form.phone.replace(/\s/g, ''),
-        // Mã hành chính map sau khi tích hợp danh mục Pancake — placeholder hợp lệ.
-        provinceCode: '00',
-        districtCode: '00',
-        wardCode: '00',
+        street: form.street.trim(),
+        province: geo.province,
+        ward: geo.ward,
+        district: '', // hệ 2 cấp (Pancake) — không còn quận/huyện
+        provinceCode: geo.provinceCode,
+        wardCode: geo.wardCode,
+        districtCode: '',
       }),
     onSuccess: (a) => {
       haptic('medium');
@@ -216,30 +220,44 @@ function AddressForm({
 
   const submit = () => {
     const allErrors = validate(form);
+    const gErr = validateGeo(geo);
     setErrors(allErrors);
-    setTouched({ recipient: true, phone: true, province: true, district: true, ward: true, street: true });
-    if (Object.keys(allErrors).length === 0) create.mutate();
+    setGeoErr(gErr);
+    setTouched({ recipient: true, phone: true, street: true });
+    if (Object.keys(allErrors).length === 0 && Object.keys(gErr).length === 0) create.mutate();
   };
+
+  const renderField = (k: FormFields) => (
+    <Box>
+      <Input
+        label={FIELD_LABEL[k]}
+        value={form[k]}
+        onChange={setField(k)}
+        onBlur={blurField(k)}
+        status={touched[k] && errors[k] ? 'error' : undefined}
+      />
+      {touched[k] && errors[k] && (
+        <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 2 }}>
+          ⚠ {errors[k]}
+        </Text>
+      )}
+    </Box>
+  );
 
   return (
     <Box style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {(Object.keys(EMPTY_FORM) as FormFields[]).map((k) => (
-        <Box key={k}>
-          <Input
-            label={FIELD_LABEL[k]}
-            type={k === 'phone' ? 'text' : 'text'}
-            value={form[k]}
-            onChange={setField(k)}
-            onBlur={blurField(k)}
-            status={touched[k] && errors[k] ? 'error' : undefined}
-          />
-          {touched[k] && errors[k] && (
-            <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 2 }}>
-              ⚠ {errors[k]}
-            </Text>
-          )}
-        </Box>
-      ))}
+      {renderField('recipient')}
+      {renderField('phone')}
+      <GeoPicker
+        value={geo}
+        onChange={(g) => {
+          setGeo(g);
+          setGeoErr(validateGeo(g));
+        }}
+        errorProvince={geoErr.province}
+        errorWard={geoErr.ward}
+      />
+      {renderField('street')}
       <Box flex style={{ gap: 8, marginTop: 4 }}>
         <Button variant="secondary" onClick={onCancel} style={{ minHeight: 44 }}>
           {vi.common.cancel}

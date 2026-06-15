@@ -6,6 +6,9 @@ import type {
   PancakeCreateOrderBody,
   PancakeCreateOrderResponse,
   PancakeProductsResponse,
+  PancakeProvinceDTO,
+  PancakeCommuneDTO,
+  PancakeGeoResponse,
 } from './pancake.types';
 
 /**
@@ -45,6 +48,27 @@ export class PancakeClient {
       { params: { api_key: this.apiKey, page, updated_since: updatedSince } },
     );
     return data;
+  }
+
+  /** Danh sách tỉnh/thành (geo Pancake). Dùng `new_id` ("84_VN*") cho đơn + query communes. */
+  async fetchProvinces(): Promise<PancakeProvinceDTO[]> {
+    this.assertConfigured();
+    const { data } = await this.http.get<PancakeGeoResponse<PancakeProvinceDTO>>('/geo/provinces', {
+      params: { api_key: this.apiKey },
+    });
+    return data.data ?? [];
+  }
+
+  /**
+   * Phường/xã theo tỉnh. TRUYỀN province `new_id` ("84_VN*") để nhận id hệ MỚI 2 cấp
+   * (district_id=null) — đúng định dạng ward_id khi đặt đơn.
+   */
+  async fetchCommunes(provinceNewId: string): Promise<PancakeCommuneDTO[]> {
+    this.assertConfigured();
+    const { data } = await this.http.get<PancakeGeoResponse<PancakeCommuneDTO>>('/geo/communes', {
+      params: { api_key: this.apiKey, province_id: provinceNewId },
+    });
+    return data.data ?? [];
   }
 
   async createOrder(body: PancakeCreateOrderBody): Promise<PancakeCreateOrderResponse> {

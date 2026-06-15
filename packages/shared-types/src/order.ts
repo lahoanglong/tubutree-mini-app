@@ -35,6 +35,15 @@ export interface InvoiceRequest {
   email: string;
 }
 
+/** Một mốc hành trình vận chuyển (chuẩn hoá từ webhook Pancake). */
+export interface ShippingEvent {
+  at: string;
+  status?: string | null;
+  carrier?: string | null;
+  code?: string | null;
+  note?: string | null;
+}
+
 export interface OrderDTO {
   id: string;
   code: string;
@@ -52,6 +61,8 @@ export interface OrderDTO {
   shippingPartner?: string | null;
   shippingCode?: string | null;
   shippingStatus?: string | null;
+  trackingLink?: string | null;
+  shippingHistory?: ShippingEvent[] | null;
   invoiceStatus?: InvoiceStatus | null;
   invoiceUrl?: string | null;
   note?: string | null;
