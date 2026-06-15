@@ -6,6 +6,7 @@
  * Catalog (~50 sản phẩm) sẽ seed từ Pancake ở Phase 1, không nằm ở đây.
  */
 import { PrismaClient, Prisma } from '@prisma/client';
+import { seedGameQuiz } from './seed-game-quiz';
 
 const prisma = new PrismaClient();
 
@@ -385,6 +386,9 @@ async function main() {
     await prisma.cashbackMerchant.upsert({ where: { id: m.id }, update: m, create: m });
   }
   console.log(`   → ${CASHBACK_MERCHANTS.length} merchants.`);
+
+  console.log('🌱 Seeding Nature Quiz questions...');
+  await seedGameQuiz(prisma);
 
   console.log('✅ Seed done.');
 }
