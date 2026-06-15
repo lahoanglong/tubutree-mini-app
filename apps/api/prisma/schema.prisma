@@ -606,6 +606,8 @@ model GameProfile {
   ecoImpact     Json?
   badges        String[]  @default([])
   lastWateredAt DateTime? // §6.7.3: tính héo (3 ngày)/chết (7 ngày)
+  streakFreezes Int       @default(0)
+  lastDewAt     DateTime?
 
   @@map("game_profiles")
 }
@@ -688,12 +690,16 @@ model GameSpin {
 }
 
 model GameQuiz {
-  id        String  @id
-  question  String
-  options   Json
-  correct   Int
-  rewardPts Int
-  brand     String?
+  id          String  @id
+  question    String
+  options     Json
+  correct     Int
+  rewardPts   Int
+  brand       String?
+  category    String  @default("nature")
+  difficulty  Int     @default(1)
+  explanation String?
+  waterReward Int     @default(8)
 
   @@map("game_quizzes")
 }
