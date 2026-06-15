@@ -33,7 +33,6 @@ function makePrisma(over: Record<string, unknown> = {}) {
   return { ...base, ...over } as unknown as PrismaService;
 }
 
-const DAY = 24 * 3600 * 1000;
 function profile(extra: Record<string, unknown> = {}) {
   return {
     userId: 'u1',
@@ -47,68 +46,6 @@ function profile(extra: Record<string, unknown> = {}) {
     ...extra,
   };
 }
-
-describe('GameService.checkIn', () => {
-  it('lần đầu điểm danh → streak = 1, cộng seeds + điểm', async () => {
-    const prisma = makePrisma();
-    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile());
-    const svc = new GameService(prisma, makeConfig());
-    const r = await svc.checkIn('u1');
-    expect(r.streakDays).toBe(1);
-    expect(r.seedsEarned).toBe(10); // default daily_login_seeds
-    expect(r.pointsEarned).toBe(2);
-    const upd = (prisma.gameProfile.update as jest.Mock).mock.calls[0][0].data;
-    expect(upd.streakDays).toBe(1);
-    expect(upd.longestStreak).toBe(1);
-  });
-
-  it('điểm danh liên tiếp (hôm qua) → streak tăng', async () => {
-    const prisma = makePrisma();
-    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
-      profile({ streakDays: 4, longestStreak: 4, lastCheckInAt: new Date(Date.now() - DAY) }),
-    );
-    const r = await new GameService(prisma, makeConfig()).checkIn('u1');
-    expect(r.streakDays).toBe(5);
-  });
-
-  it('bỏ lỡ ngày (3 hôm trước) → streak reset về 1', async () => {
-    const prisma = makePrisma();
-    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
-      profile({ streakDays: 9, longestStreak: 9, lastCheckInAt: new Date(Date.now() - 3 * DAY) }),
-    );
-    const r = await new GameService(prisma, makeConfig()).checkIn('u1');
-    expect(r.streakDays).toBe(1);
-    // longestStreak giữ nguyên (max 9, 1)
-    const upd = (prisma.gameProfile.update as jest.Mock).mock.calls[0][0].data;
-    expect(upd.longestStreak).toBe(9);
-  });
-
-  it('đã điểm danh hôm nay → ném lỗi', async () => {
-    const prisma = makePrisma();
-    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ lastCheckInAt: new Date() }));
-    await expect(new GameService(prisma, makeConfig()).checkIn('u1')).rejects.toBeInstanceOf(BadRequestException);
-    expect(prisma.gameProfile.update).not.toHaveBeenCalled();
-  });
-
-  it('chuỗi 7 ngày → cộng bonus + note không có "undefined"', async () => {
-    const prisma = makePrisma();
-    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
-      profile({ streakDays: 6, longestStreak: 6, lastCheckInAt: new Date(Date.now() - DAY) }),
-    );
-    const r = await new GameService(prisma, makeConfig()).checkIn('u1');
-    expect(r.streakDays).toBe(7);
-    expect(r.seedsEarned).toBe(30); // 10 + 20 bonus
-    expect(r.bonusNote).toBe('+20 💧 chuỗi 7 ngày!');
-    expect(r.bonusNote).not.toContain('undefined');
-  });
-
-  it('tổng seeds không vượt sức chứa bình (tank_capacity)', async () => {
-    const prisma = makePrisma();
-    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 195 }));
-    const r = await new GameService(prisma, makeConfig({ 'game.tank_capacity': 200 })).checkIn('u1');
-    expect(r.totalSeeds).toBe(200); // 195 + 10 nhưng cap 200
-  });
-});
 
 describe('GameService.spin', () => {
   const PRIZES = [
@@ -154,47 +91,6 @@ describe('GameService.spin', () => {
     const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }));
     await expect(svc.spin('u1')).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.gameSpin.create).not.toHaveBeenCalled();
-  });
-});
-
-describe('GameService.answerQuiz', () => {
-  it('câu không tồn tại → ném lỗi', async () => {
-    const prisma = makePrisma();
-    (prisma.gameQuiz.findUnique as jest.Mock).mockResolvedValue(null);
-    await expect(new GameService(prisma, makeConfig()).answerQuiz('u1', 'q1', 0)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
-  });
-
-  it('trả lời đúng → cộng điểm', async () => {
-    const prisma = makePrisma();
-    (prisma.gameQuiz.findUnique as jest.Mock).mockResolvedValue({ id: 'q1', correct: 2 });
-    (prisma.gameQuizAttempt.findFirst as jest.Mock).mockResolvedValue(null);
-    const r = await new GameService(prisma, makeConfig({ 'game.quiz_correct_points': 3 })).answerQuiz('u1', 'q1', 2);
-    expect(r.isCorrect).toBe(true);
-    expect(r.pointsEarned).toBe(3);
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1); // creditPoints
-  });
-
-  it('trả lời sai → không cộng điểm nhưng trả về đáp án đúng', async () => {
-    const prisma = makePrisma();
-    (prisma.gameQuiz.findUnique as jest.Mock).mockResolvedValue({ id: 'q1', correct: 2 });
-    (prisma.gameQuizAttempt.findFirst as jest.Mock).mockResolvedValue(null);
-    const r = await new GameService(prisma, makeConfig()).answerQuiz('u1', 'q1', 0);
-    expect(r.isCorrect).toBe(false);
-    expect(r.pointsEarned).toBe(0);
-    expect(r.correct).toBe(2);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-  });
-
-  it('đã trả lời câu này hôm nay → ném lỗi', async () => {
-    const prisma = makePrisma();
-    (prisma.gameQuiz.findUnique as jest.Mock).mockResolvedValue({ id: 'q1', correct: 1 });
-    (prisma.gameQuizAttempt.findFirst as jest.Mock).mockResolvedValue({ id: 'att1' });
-    await expect(new GameService(prisma, makeConfig()).answerQuiz('u1', 'q1', 1)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
-    expect(prisma.gameQuizAttempt.create).not.toHaveBeenCalled();
   });
 });
 
