@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { App, ZMPRouter, AnimationRoutes, SnackbarProvider, Box, Spinner } from 'zmp-ui';
 import { Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 import { getStorage } from 'zmp-sdk/apis';
 import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
@@ -50,7 +51,18 @@ const SubscriptionsPage = lazy(() => import('../pages/subscriptions'));
 const NotFoundPage = lazy(() => import('../pages/not-found'));
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+  defaultOptions: {
+    queries: {
+      // Không retry lỗi 4xx (nghiệp vụ/401) — 401 đã được interceptor tự refresh+retry;
+      // retry thêm chỉ làm tăng churn. Chỉ retry 1 lần cho lỗi mạng/5xx.
+      retry: (failureCount, error) => {
+        const status = isAxiosError(error) ? error.response?.status : undefined;
+        if (status && status >= 400 && status < 500) return false;
+        return failureCount < 1;
+      },
+      refetchOnWindowFocus: false,
+    },
+  },
 });
 
 function RouteFallback() {

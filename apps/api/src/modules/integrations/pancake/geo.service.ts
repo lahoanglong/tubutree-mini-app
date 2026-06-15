@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PancakeClient } from './pancake.client';
 
 /** DTO địa giới rút gọn cho FE. `code` = mã gửi Pancake khi đặt đơn. */
@@ -15,6 +15,7 @@ export interface GeoOption {
 @Injectable()
 export class GeoService {
   private static readonly TTL_MS = 24 * 60 * 60 * 1000;
+  private readonly logger = new Logger(GeoService.name);
   private provincesCache: { at: number; data: GeoOption[] } | null = null;
   private provincesInflight: Promise<GeoOption[]> | null = null;
   private readonly communesCache = new Map<string, { at: number; data: GeoOption[] }>();
@@ -30,9 +31,14 @@ export class GeoService {
     if (this.provincesInflight) return this.provincesInflight;
     this.provincesInflight = (async () => {
       const list = await this.pancake.fetchProvinces();
-      const data = list
-        // Dùng new_id (hệ 2 cấp) làm code; bỏ tỉnh thiếu new_id.
-        .filter((p) => p.new_id)
+      // Dùng new_id (hệ 2 cấp) làm code; bỏ tỉnh thiếu new_id.
+      const withNewId = list.filter((p) => p.new_id);
+      if (withNewId.length < list.length) {
+        this.logger.warn(
+          `Bỏ ${list.length - withNewId.length}/${list.length} tỉnh thiếu new_id (Pancake geo) — sẽ không hiện trong picker.`,
+        );
+      }
+      const data = withNewId
         .map((p) => ({ code: p.new_id as string, name: p.name }))
         .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
       this.provincesCache = { at: Date.now(), data };

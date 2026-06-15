@@ -31,8 +31,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Lấy access token Zalo, CÓ RETRY — lỗi đã biết của Zalo SDK: getAccessToken() hay
- * fail/empty ở lần gọi đầu (ngay sau login), thành công ở lần sau. Thử tối đa 4 lần,
- * mỗi lần re-login + chờ tăng dần. Trả token hoặc throw lỗi cuối.
+ * fail/empty ở lần gọi đầu (ngay sau login), thành công ở lần sau. Thử tối đa 3 lần,
+ * mỗi lần re-login + chờ tăng dần (0.4s, 0.8s). Trả token hoặc throw lỗi cuối.
  */
 export async function getZaloAccessToken(): Promise<ZaloLoginResult> {
   let lastErr: unknown = null;

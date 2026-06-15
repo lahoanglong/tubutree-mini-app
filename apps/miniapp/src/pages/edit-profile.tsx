@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Box, Page, Text, Button, Input, useSnackbar, useNavigate } from 'zmp-ui';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getMe, updateMe } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -12,6 +12,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function EditProfilePage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
+  const qc = useQueryClient();
   const meQ = useQuery({ queryKey: ['me'], queryFn: getMe });
 
   const [fullName, setFullName] = useState('');
@@ -41,6 +42,8 @@ export default function EditProfilePage() {
       // Đồng bộ tên hiển thị vào auth store (header/profile).
       const cur = useAuthStore.getState().user;
       if (cur) useAuthStore.setState({ user: { ...cur, fullName: fullName.trim() || cur.fullName } });
+      // Làm mới cache ['me'] để email/dob mới đồng bộ ở nơi khác.
+      void qc.invalidateQueries({ queryKey: ['me'] });
       openSnackbar({ text: 'Đã cập nhật hồ sơ 🌿', type: 'success' });
       navigate(-1);
     },
