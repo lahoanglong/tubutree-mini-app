@@ -67,13 +67,19 @@ export const spin = () => api.post<SpinResult>('/game/spin').then((r) => r.data)
 export const getTodayQuiz = () => api.get<QuizItem[]>('/game/quiz/today').then((r) => r.data);
 export const answerQuiz = (id: string, choice: number) =>
   api.post<AnswerResult>(`/game/quiz/${id}/answer`, { choice }).then((r) => r.data);
+export interface HarvestSpecies {
+  name: string;
+  emoji: string;
+  rarity: 'COMMON' | 'RARE' | 'LEGENDARY';
+  ecoFact: string | null;
+}
 export const waterTree = (drops: number) =>
   api.post<{
     progress: number;
     target: number;
     harvested: boolean;
     treesPlanted: number;
-    reward?: { coupon?: string; certificate?: string };
+    reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies };
   }>('/game/tree/water', { drops }).then((r) => r.data);
 export const getLeaderboard = () => api.get<LeaderRow[]>('/game/leaderboard').then((r) => r.data);
 export const getMissions = () => api.get<MissionItem[]>('/game/missions').then((r) => r.data);
@@ -107,3 +113,16 @@ export interface CommunityState {
   pct: number;
 }
 export const getCommunity = () => api.get<CommunityState>('/game/community').then((r) => r.data);
+
+export interface CodexEntry {
+  id: string;
+  name: string;
+  rarity: 'COMMON' | 'RARE' | 'LEGENDARY';
+  emoji: string;
+  region: string | null;
+  owned: boolean;
+  count: number;
+  story: string | null;
+  ecoFact: string | null;
+}
+export const getCollection = () => api.get<CodexEntry[]>('/game/collection').then((r) => r.data);

@@ -5,6 +5,7 @@ import { GameEconomyService } from './game-economy.service';
 import { GameQuizService } from './game-quiz.service';
 import { GameReminderService } from './game-reminder.service';
 import { GameCommunityService } from './game-community.service';
+import { GameCollectionService } from './game-collection.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
@@ -16,6 +17,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     GameQuizService,
     GameReminderService,
     GameCommunityService,
+    GameCollectionService,
   ],
   exports: [GameService],
 })

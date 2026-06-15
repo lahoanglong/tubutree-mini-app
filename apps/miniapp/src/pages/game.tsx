@@ -14,8 +14,11 @@ import {
   getMissions,
   getForest,
   getCommunity,
+  getCollection,
   type MissionItem,
   type AnswerResult,
+  type HarvestSpecies,
+  type CodexEntry,
 } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
 import { WheelOfFortune } from '../components/wheel';
@@ -45,6 +48,7 @@ export default function GamePage() {
   const { data: missions } = useQuery({ queryKey: ['game', 'missions'], queryFn: getMissions, enabled: authed });
   const { data: forest } = useQuery({ queryKey: ['game', 'forest'], queryFn: getForest, enabled: authed });
   const { data: community } = useQuery({ queryKey: ['game', 'community'], queryFn: getCommunity, enabled: authed });
+  const { data: codex } = useQuery({ queryKey: ['game', 'collection'], queryFn: getCollection, enabled: authed });
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
@@ -54,6 +58,7 @@ export default function GamePage() {
   const [harvested, setHarvested] = useState(false);
   const [harvestCoupon, setHarvestCoupon] = useState<string | null>(null);
   const [harvestCert, setHarvestCert] = useState<string | null>(null);
+  const [harvestSpecies, setHarvestSpecies] = useState<HarvestSpecies | null>(null);
 
   const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
 
@@ -105,6 +110,7 @@ export default function GamePage() {
       if (r.harvested) {
         setHarvestCoupon(r.reward?.coupon ?? null);
         setHarvestCert(r.reward?.certificate ?? null);
+        setHarvestSpecies(r.reward?.species ?? null);
         setHarvested(true); // mở modal celebration
       } else {
         openSnackbar({ text: `Đã tưới · ${r.progress}/${r.target}💧`, type: 'success' });
@@ -288,6 +294,40 @@ export default function GamePage() {
           </Box>
           <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6 }}>
             Mỗi lần thu hoạch cây ảo, toàn bộ 💧 đã tưới sẽ góp vào hồ chung. Đủ mốc, Tubu trồng cây thật cùng PanNature 🌿
+          </Text>
+        </Card>
+      )}
+
+      {/* Sổ tay loài cây (Phase 3) — sưu tập khi thu hoạch */}
+      {codex && codex.length > 0 && (
+        <Card title={`📒 Sổ tay loài cây (${codex.filter((c) => c.owned).length}/${codex.length})`}>
+          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+            {codex.map((c: CodexEntry) => (
+              <Box
+                key={c.id}
+                p={2}
+                style={{
+                  textAlign: 'center',
+                  background: c.owned ? 'var(--leaf-50, #eef7ee)' : 'var(--neutral-100)',
+                  borderRadius: 'var(--radius-md)',
+                  border: c.owned ? `1px solid ${rarityColor(c.rarity)}` : '1px solid transparent',
+                  opacity: c.owned ? 1 : 0.55,
+                }}
+              >
+                <Text style={{ fontSize: 26, filter: c.owned ? 'none' : 'grayscale(1)' }}>
+                  {c.owned ? c.emoji : '❔'}
+                </Text>
+                <Text size="xSmall" bold style={{ color: c.owned ? 'var(--neutral-900)' : 'var(--neutral-400)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {c.owned ? c.name : '???'}
+                </Text>
+                {c.owned && c.count > 1 && (
+                  <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>×{c.count}</Text>
+                )}
+              </Box>
+            ))}
+          </Box>
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
+            Thu hoạch cây để sưu tập đủ loài cây Việt Nam — loài hiếm khó gặp hơn!
           </Text>
         </Card>
       )}
@@ -533,6 +573,21 @@ export default function GamePage() {
                 </Text>
               </Box>
             )}
+            {harvestSpecies && (
+              <Box mt={3} p={3} style={{ background: 'var(--leaf-50, #eef7ee)', borderRadius: 'var(--radius-md)', border: `1px solid ${rarityColor(harvestSpecies.rarity)}` }}>
+                <Text size="xSmall" style={{ color: rarityColor(harvestSpecies.rarity), fontWeight: 700 }}>
+                  {rarityLabel(harvestSpecies.rarity)} · Sưu tập mới!
+                </Text>
+                <Text bold style={{ marginTop: 2 }}>
+                  {harvestSpecies.emoji} {harvestSpecies.name}
+                </Text>
+                {harvestSpecies.ecoFact && (
+                  <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
+                    💡 {harvestSpecies.ecoFact}
+                  </Text>
+                )}
+              </Box>
+            )}
             <Button fullWidth onClick={() => setHarvested(false)} style={{ marginTop: 20, background: 'var(--leaf-600)' }}>
               Tuyệt vời!
             </Button>
@@ -635,6 +690,14 @@ function categoryLabel(cat: string): string {
 
 function difficultyLabel(d: number): string {
   return d >= 3 ? 'Khó' : d === 2 ? 'Vừa' : 'Dễ';
+}
+
+function rarityColor(r: 'COMMON' | 'RARE' | 'LEGENDARY'): string {
+  return r === 'LEGENDARY' ? '#b8860b' : r === 'RARE' ? 'var(--leaf-600)' : 'var(--neutral-400)';
+}
+
+function rarityLabel(r: 'COMMON' | 'RARE' | 'LEGENDARY'): string {
+  return r === 'LEGENDARY' ? '🌟 Huyền thoại' : r === 'RARE' ? '💎 Hiếm' : '🍃 Thường';
 }
 
 function msg(e: unknown): string {

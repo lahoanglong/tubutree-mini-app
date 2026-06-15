@@ -65,6 +65,7 @@ model User {
   refreshTokens       RefreshToken[]
   plantedTrees        PlantedTree[]
   communityContributions CommunityContribution[]
+  species             UserSpecies[]
 
   @@index([referredById])
   @@map("users")
@@ -673,6 +674,44 @@ enum CommunityGoalStatus {
   ACTIVE
   FULFILLING
   DONE
+}
+
+// Vườn Xanh 2.0 Phase 3 — sổ tay loài cây Việt Nam (chiều sâu + giáo dục sinh thái).
+// Mỗi lần thu hoạch, user "sưu tập" 1 loài (weighted theo rarity). Mỗi loài kèm
+// chuyện sinh thái + ecoFact để học. SpeciesCodex (FE) hiển thị lưới đã/chưa mở.
+model PlantSpecies {
+  id             String         @id
+  name           String
+  scientificName String?
+  region         String?
+  rarity         SpeciesRarity  @default(COMMON)
+  story          String? // chuyện về loài (sinh thái/văn hoá)
+  ecoFact        String? // 1 sự thật sinh thái ngắn
+  emoji          String         @default("🌳") // minh hoạ (chưa có imageUrl thật)
+  imageUrl       String?
+  collectedBy    UserSpecies[]
+
+  @@map("plant_species")
+}
+
+model UserSpecies {
+  id               String       @id @default(cuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  speciesId        String
+  species          PlantSpecies @relation(fields: [speciesId], references: [id], onDelete: Cascade)
+  count            Int          @default(1)
+  firstCollectedAt DateTime     @default(now())
+
+  @@unique([userId, speciesId])
+  @@index([userId])
+  @@map("user_species")
+}
+
+enum SpeciesRarity {
+  COMMON
+  RARE
+  LEGENDARY
 }
 
 // Yêu cầu đổi/trả (§6.4): chỉ lỗi NSX, window 7 ngày, admin duyệt → hoàn Ví +

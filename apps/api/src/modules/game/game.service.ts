@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { GameCommunityService } from './game-community.service';
+import { GameCollectionService } from './game-collection.service';
 
 interface SpinPrize {
   id: string;
@@ -27,6 +28,8 @@ export class GameService {
     private readonly config: SystemConfigService,
     // Optional: hồ cộng đồng Phase 2. Tests dựng GameService 2 tham số → bỏ qua góp hồ.
     @Optional() private readonly community?: GameCommunityService,
+    // Optional: sổ tay loài Phase 3. Thu hoạch → sưu tập 1 loài.
+    @Optional() private readonly collection?: GameCollectionService,
   ) {}
 
   // ── Profile ────────────────────────────────────────
@@ -146,9 +149,22 @@ export class GameService {
       certificateCode = await this.plantTree(userId, eco.treeType);
     }
     const harvested = harvestCount > 0;
-    const reward: { coupon?: string; certificate?: string } = {
+
+    // Phase 3: thu hoạch → sưu tập 1 loài (weighted theo rarity). Lấy loài cuối để hiện.
+    let species: { name: string; emoji: string; rarity: string; ecoFact: string | null } | undefined;
+    if (harvested && this.collection) {
+      const got = await this.collection.collectOnHarvest(userId).catch(() => null);
+      if (got) species = { name: got.name, emoji: got.emoji, rarity: got.rarity, ecoFact: got.ecoFact };
+    }
+
+    const reward: {
+      coupon?: string;
+      certificate?: string;
+      species?: { name: string; emoji: string; rarity: string; ecoFact: string | null };
+    } = {
       ...(couponCode ? { coupon: couponCode } : {}),
       ...(certificateCode ? { certificate: certificateCode } : {}),
+      ...(species ? { species } : {}),
     };
 
     // Giai đoạn cây theo tiến độ hiện tại (sau carry-over). progress=0 → mầm mới (stage 1).

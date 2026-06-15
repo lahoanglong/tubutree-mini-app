@@ -410,8 +410,37 @@ async function main() {
     },
   });
 
+  // Vườn Xanh 2.0 Phase 3 — sổ tay loài cây Việt Nam.
+  console.log('🌿 Seeding Plant Species...');
+  for (const sp of PLANT_SPECIES) {
+    await prisma.plantSpecies.upsert({ where: { id: sp.id }, update: sp, create: sp });
+  }
+
   console.log('✅ Seed done.');
 }
+
+const PLANT_SPECIES = [
+  { id: 'sp-tram', name: 'Cây Tràm', scientificName: 'Melaleuca cajuputi', region: 'Đồng bằng sông Cửu Long', rarity: 'COMMON', emoji: '🌿',
+    story: 'Tràm phủ xanh vùng đất phèn miền Tây, cho mật ong tràm và tinh dầu kháng khuẩn.', ecoFact: 'Rừng tràm U Minh là "lá phổi" lọc nước và giữ đa dạng sinh học bậc nhất Nam Bộ.' },
+  { id: 'sp-duoc', name: 'Cây Đước', scientificName: 'Rhizophora apiculata', region: 'Cần Giờ, Cà Mau', rarity: 'COMMON', emoji: '🌱',
+    story: 'Đước với bộ rễ chống đỡ đặc trưng là loài chủ lực của rừng ngập mặn Việt Nam.', ecoFact: 'Rễ đước chắn sóng, giữ phù sa và lưu trữ carbon gấp ~4 lần rừng trên cạn.' },
+  { id: 'sp-ban', name: 'Cây Bàng', scientificName: 'Terminalia catappa', region: 'Ven biển cả nước', rarity: 'COMMON', emoji: '🌳',
+    story: 'Bàng cho bóng mát sân trường, lá đỏ rực khi sang đông.', ecoFact: 'Tán bàng rộng giúp hạ nhiệt đô thị và là nơi trú ngụ của nhiều loài chim.' },
+  { id: 'sp-phuong', name: 'Phượng Vĩ', scientificName: 'Delonix regia', region: 'Hải Phòng & đô thị', rarity: 'RARE', emoji: '🌺',
+    story: 'Phượng vĩ nở đỏ báo hiệu mùa hè và mùa chia tay tuổi học trò.', ecoFact: 'Hoa phượng là nguồn mật quan trọng cho ong và côn trùng thụ phấn đầu hè.' },
+  { id: 'sp-lim', name: 'Cây Lim Xanh', scientificName: 'Erythrophleum fordii', region: 'Rừng Bắc & Trung Bộ', rarity: 'RARE', emoji: '🌳',
+    story: 'Lim là một trong "tứ thiết" gỗ quý, sống hàng trăm năm.', ecoFact: 'Cây gỗ lớn như lim giữ đất chống xói mòn và tích trữ carbon dài hạn.' },
+  { id: 'sp-sao', name: 'Cây Sao Đen', scientificName: 'Hopea odorata', region: 'Đông Nam Bộ', rarity: 'RARE', emoji: '🌲',
+    story: 'Sao đen cao vút thường được trồng làm hàng cây di sản trên phố.', ecoFact: 'Tán sao đen tạo hành lang xanh, giảm bụi mịn và tiếng ồn đô thị.' },
+  { id: 'sp-po-mu', name: 'Cây Pơ Mu', scientificName: 'Fokienia hodginsii', region: 'Núi cao Tây Bắc', rarity: 'LEGENDARY', emoji: '🌲',
+    story: 'Pơ mu là cây gỗ quý vùng núi cao, gắn với văn hoá người Mông, Dao.', ecoFact: 'Pơ mu thuộc nhóm nguy cấp — bảo tồn giúp giữ rừng đầu nguồn và nguồn nước.' },
+  { id: 'sp-bach-xanh', name: 'Bách Xanh', scientificName: 'Calocedrus macrolepis', region: 'Cao nguyên Đà Lạt', rarity: 'LEGENDARY', emoji: '🌲',
+    story: 'Bách xanh cổ thụ ở Hòn Bà, Bidoup có cây hàng nghìn năm tuổi.', ecoFact: 'Là loài quý hiếm, bách xanh chỉ tin tưởng ở rừng nguyên sinh ít bị tác động.' },
+  { id: 'sp-thong', name: 'Thông Ba Lá', scientificName: 'Pinus kesiya', region: 'Lâm Đồng', rarity: 'COMMON', emoji: '🌲',
+    story: 'Rừng thông Đà Lạt tạo nên khí hậu mát lành và cảnh quan thơ mộng.', ecoFact: 'Thông giữ đất dốc, lá kim phân huỷ chậm nuôi tầng mùn cho rừng.' },
+  { id: 'sp-gao', name: 'Cây Gạo', scientificName: 'Bombax ceiba', region: 'Đồng bằng Bắc Bộ', rarity: 'RARE', emoji: '🌺',
+    story: '"Tháng ba hoa gạo" đỏ rực bến nước, đình làng Bắc Bộ.', ecoFact: 'Hoa gạo nhiều mật, là "nhà hàng" cho chào mào, sáo và nhiều loài chim mùa xuân.' },
+] as const;
 
 main()
   .catch((e) => {

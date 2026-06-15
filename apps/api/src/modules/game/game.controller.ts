@@ -6,6 +6,7 @@ import { GameService } from './game.service';
 import { GameEconomyService } from './game-economy.service';
 import { GameQuizService } from './game-quiz.service';
 import { GameCommunityService } from './game-community.service';
+import { GameCollectionService } from './game-collection.service';
 
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
@@ -17,6 +18,7 @@ export class GameController {
     private readonly economy: GameEconomyService,
     private readonly quiz: GameQuizService,
     private readonly community: GameCommunityService,
+    private readonly collection: GameCollectionService,
   ) {}
 
   @Get('profile')
@@ -53,6 +55,9 @@ export class GameController {
 
   @Get('community')
   communityState(@CurrentUser('sub') userId: string) { return this.community.getCommunityState(userId); }
+
+  @Get('collection')
+  collectionCodex(@CurrentUser('sub') userId: string) { return this.collection.getCodex(userId); }
 
   @Public()
   @Get('leaderboard')
