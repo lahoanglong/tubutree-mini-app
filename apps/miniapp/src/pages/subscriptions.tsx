@@ -1,4 +1,4 @@
-import { Box, Page, Text, Header, Button, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getSubscriptions,
@@ -28,7 +28,6 @@ export default function SubscriptionsPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Đặt định kỳ" />
 
       <Box p={4}>
         <Text size="small" style={{ color: 'var(--neutral-600)' }}>

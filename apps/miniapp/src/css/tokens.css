@@ -103,6 +103,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * Immersive (actionBarHidden:true): action bar Zalo đã ẩn → nội dung tràn lên đỉnh.
+ * Đệm safe-top cho MỌI trang để không bị khuất dưới status bar/capsule Zalo.
+ * Trang có top bar/hero riêng (vd home) chỉ thêm phần đệm phụ, không tự cộng safe-top.
+ */
+.page {
+  padding-top: var(--safe-top);
+}
+
 /* ── Type scale (M2) — class tiện ích cho heading/label theo đúng font + cỡ chữ ── */
 .t-display {
   font-family: var(--font-display);

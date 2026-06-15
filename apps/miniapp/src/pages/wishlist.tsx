@@ -1,4 +1,4 @@
-import { Box, Page, Text, Header, Button, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { getWishlist } from '../services/wishlist-api';
 import { getErrorMessage } from '../services/api';
@@ -11,7 +11,6 @@ export default function WishlistPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Sản phẩm yêu thích" />
 
       <Box p={4}>
         {wishQ.isLoading ? (

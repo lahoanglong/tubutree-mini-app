@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Header, Button, Sheet, Avatar, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Sheet, Avatar, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   getMerchants,
@@ -44,7 +44,6 @@ export default function CashbackPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Hoàn tiền" />
 
       {/* Số dư hoàn tiền đang chờ */}
       <Box p={4}>

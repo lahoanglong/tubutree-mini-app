@@ -1,5 +1,9 @@
-import { Box, Page, Text, Header, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
+  ShoppingBag, Gift, Leaf, Zap, Bell, type LucideIcon,
+} from 'lucide-react';
 import {
   getNotifications,
   markNotificationRead,
@@ -10,18 +14,18 @@ import { LineItemSkeleton } from '../components/ui/skeleton';
 import { haptic } from '../utils/haptic';
 
 /** Icon + nhãn nhóm theo templateCode (§4.10). */
-function meta(code: string): { icon: string; title: string } {
-  if (code.startsWith('ORDER_CONFIRMED')) return { icon: '✅', title: 'Đơn đã xác nhận' };
-  if (code.startsWith('ORDER_SHIPPING')) return { icon: '🚚', title: 'Đang giao hàng' };
-  if (code.startsWith('ORDER_DELIVERED')) return { icon: '📦', title: 'Đã giao thành công' };
-  if (code.startsWith('ORDER')) return { icon: '🧾', title: 'Cập nhật đơn hàng' };
-  if (code.startsWith('INVOICE')) return { icon: '📄', title: 'Hóa đơn điện tử' };
-  if (code.startsWith('COMMISSION')) return { icon: '💰', title: 'Hoa hồng CTV' };
-  if (code.startsWith('CASHBACK')) return { icon: '🛍️', title: 'Hoàn tiền' };
-  if (code.startsWith('BIRTHDAY') || code.startsWith('VOUCHER')) return { icon: '🎁', title: 'Ưu đãi cho bạn' };
-  if (code.startsWith('POINTS')) return { icon: '🌿', title: 'Điểm Xanh' };
-  if (code.startsWith('FLASH')) return { icon: '⚡', title: 'Flash Sale' };
-  return { icon: '🔔', title: 'Thông báo' };
+function meta(code: string): { Icon: LucideIcon; title: string } {
+  if (code.startsWith('ORDER_CONFIRMED')) return { Icon: CheckCircle2, title: 'Đơn đã xác nhận' };
+  if (code.startsWith('ORDER_SHIPPING')) return { Icon: Truck, title: 'Đang giao hàng' };
+  if (code.startsWith('ORDER_DELIVERED')) return { Icon: PackageCheck, title: 'Đã giao thành công' };
+  if (code.startsWith('ORDER')) return { Icon: Receipt, title: 'Cập nhật đơn hàng' };
+  if (code.startsWith('INVOICE')) return { Icon: FileText, title: 'Hóa đơn điện tử' };
+  if (code.startsWith('COMMISSION')) return { Icon: Coins, title: 'Hoa hồng CTV' };
+  if (code.startsWith('CASHBACK')) return { Icon: ShoppingBag, title: 'Hoàn tiền' };
+  if (code.startsWith('BIRTHDAY') || code.startsWith('VOUCHER')) return { Icon: Gift, title: 'Ưu đãi cho bạn' };
+  if (code.startsWith('POINTS')) return { Icon: Leaf, title: 'Điểm Xanh' };
+  if (code.startsWith('FLASH')) return { Icon: Zap, title: 'Flash Sale' };
+  return { Icon: Bell, title: 'Thông báo' };
 }
 
 function relativeTime(iso: string): string {
@@ -55,7 +59,6 @@ export default function NotificationsPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Thông báo" />
 
       {notifQ.isLoading ? (
         <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
@@ -85,7 +88,9 @@ export default function NotificationsPage() {
                   boxShadow: 'var(--shadow-xs)',
                 }}
               >
-                <Text style={{ fontSize: 24, lineHeight: '28px' }}>{m.icon}</Text>
+                <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                  <m.Icon size={20} color="var(--leaf-700)" strokeWidth={1.9} />
+                </Box>
                 <Box style={{ flex: 1 }}>
                   <Box flex alignItems="center" style={{ gap: 6 }}>
                     <Text size="small" bold>

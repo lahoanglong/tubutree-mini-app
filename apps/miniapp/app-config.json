@@ -6,7 +6,7 @@
     "textColor": "white",
     "leftButton": "back",
     "statusBarType": "normal",
-    "actionBarHidden": false,
+    "actionBarHidden": true,
     "hideAndroidBottomNavigationBar": false,
     "hideIOSSafeAreaBottom": false
   },

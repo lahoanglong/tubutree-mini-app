@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Header, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchOrder, cancelOrder, repurchaseOrder, requestReturn, fetchMyReturns } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
@@ -74,7 +74,6 @@ export default function OrderDetailPage() {
   if (order.isLoading) {
     return (
       <Page style={{ background: 'var(--neutral-50)' }}>
-        <Header title={code ?? ' '} />
         <Box p={4} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Skeleton height={64} radius="var(--radius-lg)" />
           <LineItemSkeleton />
@@ -87,7 +86,6 @@ export default function OrderDetailPage() {
   if (order.isError || !order.data) {
     return (
       <Page style={{ background: 'var(--neutral-50)' }}>
-        <Header title={code ?? ' '} />
         <ErrorState message={getErrorMessage(order.error)} onRetry={() => void order.refetch()} />
       </Page>
     );
@@ -100,7 +98,6 @@ export default function OrderDetailPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
-      <Header title={o.code} />
 
       {/* ── Status hero ── */}
       <Box p={4} style={{ background: color.bg }}>

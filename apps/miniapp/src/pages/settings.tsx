@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Page, Text, Header, Button, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
 import { setStorage, getStorage } from 'zmp-sdk/apis';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
@@ -54,7 +54,6 @@ export default function SettingsPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Cài đặt" />
 
       <Section title="Thông báo">
         <Toggle label="Cập nhật đơn hàng" on={prefs.notifyOrders} onToggle={() => update({ notifyOrders: !prefs.notifyOrders })} />

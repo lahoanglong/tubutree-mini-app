@@ -1,12 +1,16 @@
-import { Box, Page, Text, Button, Header, Avatar, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Avatar, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
+import {
+  Package, Repeat, Heart, MapPin, Leaf, Wallet, Users, BadgePercent,
+  Bell, Store, Settings, Info, ChevronRight, Copy, type LucideIcon,
+} from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { getLoyalty, getNotifications } from '../services/account-api';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 
 interface MenuItem {
-  icon: string;
+  Icon: LucideIcon;
   label: string;
   to: string;
   hint?: string;
@@ -36,33 +40,33 @@ const MENU: { group: string; items: MenuItem[] }[] = [
   {
     group: 'Mua sắm',
     items: [
-      { icon: '📦', label: 'Đơn hàng của tôi', to: '/orders' },
-      { icon: '🔁', label: 'Đặt định kỳ', to: '/subscriptions' },
-      { icon: '❤️', label: 'Sản phẩm yêu thích', to: '/wishlist' },
-      { icon: '📍', label: 'Sổ địa chỉ', to: '/addresses' },
+      { Icon: Package, label: 'Đơn hàng của tôi', to: '/orders' },
+      { Icon: Repeat, label: 'Đặt định kỳ', to: '/subscriptions' },
+      { Icon: Heart, label: 'Sản phẩm yêu thích', to: '/wishlist' },
+      { Icon: MapPin, label: 'Sổ địa chỉ', to: '/addresses' },
     ],
   },
   {
     group: 'Tài sản',
     items: [
-      { icon: '🌿', label: 'Hạng thành viên & Điểm Xanh', to: '/loyalty' },
-      { icon: '👛', label: 'Ví Tubu', to: '/wallet' },
+      { Icon: Leaf, label: 'Hạng thành viên & Điểm Xanh', to: '/loyalty' },
+      { Icon: Wallet, label: 'Ví Tubu', to: '/wallet' },
     ],
   },
   {
     group: 'Kiếm thưởng',
     items: [
-      { icon: '🤝', label: 'Cộng tác viên', to: '/affiliate', hint: 'Chia sẻ — nhận hoa hồng' },
-      { icon: '🛍️', label: 'Hoàn tiền sàn ngoài', to: '/cashback' },
+      { Icon: Users, label: 'Cộng tác viên', to: '/affiliate', hint: 'Chia sẻ — nhận hoa hồng' },
+      { Icon: BadgePercent, label: 'Hoàn tiền sàn ngoài', to: '/cashback' },
     ],
   },
   {
     group: 'Khác',
     items: [
-      { icon: '🔔', label: 'Thông báo', to: '/notifications' },
-      { icon: '🏪', label: 'Đăng ký đại lý', to: '/dealer' },
-      { icon: '⚙️', label: 'Cài đặt', to: '/settings' },
-      { icon: 'ℹ️', label: 'Về Tubu Tree & Hỗ trợ', to: '/about' },
+      { Icon: Bell, label: 'Thông báo', to: '/notifications' },
+      { Icon: Store, label: 'Đăng ký đại lý', to: '/dealer' },
+      { Icon: Settings, label: 'Cài đặt', to: '/settings' },
+      { Icon: Info, label: 'Về Tubu Tree & Hỗ trợ', to: '/about' },
     ],
   },
 ];
@@ -88,7 +92,6 @@ export default function ProfilePage() {
   if (status !== 'authenticated' || !user) {
     return (
       <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Header title="Tài khoản" showBackIcon={false} />
         <Box flex flexDirection="column" justifyContent="center" alignItems="center" style={{ minHeight: '60vh', gap: 14, padding: '0 32px', textAlign: 'center' }}>
           {status === 'loading' ? (
             <Spinner />
@@ -118,7 +121,6 @@ export default function ProfilePage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Tài khoản" showBackIcon={false} />
 
       {/* Header card */}
       <Box
@@ -143,19 +145,22 @@ export default function ProfilePage() {
                 Sửa ›
               </Text>
             </Box>
-            <Text
-              size="xSmall"
+            <Box
               style={{
-                display: 'inline-block',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
                 marginTop: 4,
                 background: 'rgba(255,255,255,0.2)',
-                padding: '2px 10px',
+                padding: '3px 10px',
                 borderRadius: 'var(--radius-full)',
-                color: '#fff',
               }}
             >
-              🌿 {tierName}
-            </Text>
+              <Leaf size={13} color="#fff" strokeWidth={2} />
+              <Text size="xSmall" style={{ color: '#fff' }}>
+                {tierName}
+              </Text>
+            </Box>
           </Box>
         </Box>
 
@@ -172,9 +177,12 @@ export default function ProfilePage() {
             <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>
               Mã giới thiệu: <b>{user.referralCode}</b>
             </Text>
-            <Text size="xSmall" style={{ color: '#fff' }}>
-              Sao chép ⧉
-            </Text>
+            <Box flex alignItems="center" style={{ gap: 4 }}>
+              <Copy size={13} color="#fff" strokeWidth={2} />
+              <Text size="xSmall" style={{ color: '#fff' }}>
+                Sao chép
+              </Text>
+            </Box>
           </Box>
         )}
       </Box>
@@ -214,7 +222,9 @@ export default function ProfilePage() {
                   else openSnackbar({ text: 'Tính năng đang được hoàn thiện 🌱', type: 'info' });
                 }}
               >
-                <Text style={{ fontSize: 20 }}>{item.icon}</Text>
+                <Box style={{ width: 34, height: 34, borderRadius: 'var(--radius-md)', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                  <item.Icon size={18} color="var(--leaf-700)" strokeWidth={1.9} />
+                </Box>
                 <Box style={{ flex: 1 }}>
                   <Text size="small">{item.label}</Text>
                   {item.hint && (
@@ -242,7 +252,7 @@ export default function ProfilePage() {
                     {unreadCount}
                   </span>
                 )}
-                <Text style={{ color: 'var(--neutral-400)' }}>›</Text>
+                <ChevronRight size={18} color="var(--neutral-400)" strokeWidth={2} />
               </Box>
             ))}
           </Box>

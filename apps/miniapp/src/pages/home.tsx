@@ -1,5 +1,6 @@
 import { Box, Page, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
+import { Bell, ShoppingCart, Search, ChevronRight, Baby, SprayCan, Droplets, Recycle, Map, type LucideIcon } from 'lucide-react';
 import { fetchProducts, fetchBrands } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -10,15 +11,16 @@ import { FlashSale } from '../components/flash-sale';
 import { brandAccent } from '../utils/brands';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import logo from '../assets/tubu-logo.png';
 
 const SECTION_LIMIT = 6;
 
 /** Phân khúc mua sắm — khớp design PA2; key = forSegment (API lọc has(segment)). */
-const SEGMENTS: { key: string; label: string; emoji: string }[] = [
-  { key: 'mom_baby', label: 'Cho mẹ & bé', emoji: '🍼' },
-  { key: 'home_clean', label: 'Nhà bếp xanh', emoji: '🧼' },
-  { key: 'skincare', label: 'Chăm sóc cá nhân', emoji: '🧴' },
-  { key: 'eco', label: 'Sống xanh', emoji: '♻️' },
+const SEGMENTS: { key: string; label: string; Icon: LucideIcon }[] = [
+  { key: 'mom_baby', label: 'Cho mẹ & bé', Icon: Baby },
+  { key: 'home_clean', label: 'Nhà bếp xanh', Icon: SprayCan },
+  { key: 'skincare', label: 'Chăm sóc cá nhân', Icon: Droplets },
+  { key: 'eco', label: 'Sống xanh', Icon: Recycle },
 ];
 
 export default function HomePage() {
@@ -47,97 +49,106 @@ export default function HomePage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 72 }}>
-      {/* ── Hero ── */}
+      {/* ── Top bar: logo + actions (immersive — actionBar Zalo đã ẩn) ── */}
       <Box
-        p={4}
-        style={{
-          background: 'linear-gradient(150deg, var(--primary-600), var(--primary-700))',
-          borderRadius: '0 0 var(--radius-xl) var(--radius-xl)',
-          paddingBottom: 24,
-        }}
+        px={4}
+        flex
+        justifyContent="space-between"
+        alignItems="center"
+        style={{ paddingTop: 14, paddingBottom: 10 }}
       >
-        <Box flex justifyContent="space-between" alignItems="center">
-          <Box>
-            <Text.Title className="t-h1" style={{ color: 'white' }}>
-              {user ? vi.home.greeting(user.fullName ?? vi.auth.greetingFallback) : 'Tubu Tree'}
-            </Text.Title>
-            <Text size="small" style={{ color: 'var(--primary-100)' }}>
-              {vi.home.tagline}
-            </Text>
+        <img src={logo} alt="Tubu Tree" style={{ height: 30, objectFit: 'contain' }} />
+        <Box flex alignItems="center" style={{ gap: 8 }}>
+          <Box
+            role="button"
+            aria-label="Thông báo"
+            className="tubu-press"
+            onClick={() => navigate('/notifications')}
+            style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}
+          >
+            <Bell size={20} color="var(--leaf-700)" strokeWidth={1.8} />
           </Box>
-          <Box flex alignItems="center" style={{ gap: 10 }}>
-            {user && (
-              <Box
-                aria-label={vi.home.pointsChip(user.pointsBalance)}
-                style={{
-                  background: 'rgba(255,255,255,0.18)',
-                  borderRadius: 'var(--radius-full)',
-                  padding: '6px 12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--leaf-400)' }} />
-                <Text size="xSmall" bold style={{ color: 'white' }}>
-                  {vi.home.pointsChip(user.pointsBalance)}
-                </Text>
-              </Box>
-            )}
-            <Box
-              role="button"
-              aria-label="Thông báo"
-              className="tubu-press"
-              onClick={() => navigate('/notifications')}
-              style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center' }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z" stroke="#fff" strokeWidth="1.7" strokeLinejoin="round" />
-                <path d="M10 19a2 2 0 0 0 4 0" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />
-              </svg>
-            </Box>
-            <Box
-              role="button"
-              aria-label="Giỏ hàng"
-              className="tubu-press"
-              onClick={() => navigate('/cart')}
-              style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center' }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M3 4h2l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h7.8a1.5 1.5 0 0 0 1.5-1.2L21 7H6" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-                <circle cx="9.5" cy="20" r="1.4" fill="#fff" />
-                <circle cx="17.5" cy="20" r="1.4" fill="#fff" />
-              </svg>
-            </Box>
+          <Box
+            role="button"
+            aria-label="Giỏ hàng"
+            className="tubu-press"
+            onClick={() => navigate('/cart')}
+            style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}
+          >
+            <ShoppingCart size={20} color="var(--leaf-700)" strokeWidth={1.8} />
           </Box>
         </Box>
+      </Box>
 
-        {/* Search entry — đưa thẳng sang Khám phá */}
+      {/* ── Search ── */}
+      <Box px={4} pb={3}>
         <Box
           role="button"
           aria-label={vi.home.searchPlaceholder}
           className="tubu-press"
           onClick={() => goBrand()}
           style={{
-            background: 'white',
+            background: 'var(--neutral-0)',
+            border: '1px solid var(--neutral-200)',
             borderRadius: 'var(--radius-full)',
             padding: '11px 16px',
-            marginTop: 14,
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            boxShadow: 'var(--shadow-sm)',
-            minHeight: 44,
+            boxShadow: 'var(--shadow-xs)',
+            minHeight: 46,
             boxSizing: 'border-box',
           }}
         >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <circle cx="11" cy="11" r="7" stroke="var(--neutral-400)" strokeWidth="2" />
-            <path d="M16.5 16.5L21 21" stroke="var(--neutral-400)" strokeWidth="2" strokeLinecap="round" />
-          </svg>
+          <Search size={18} color="var(--neutral-400)" strokeWidth={2} />
           <Text size="small" style={{ color: 'var(--neutral-400)' }}>
             {vi.home.searchPlaceholder}
           </Text>
+        </Box>
+      </Box>
+
+      {/* ── Hero card (green, bo tròn — design PA2) ── */}
+      <Box px={4} pb={1}>
+        <Box
+          style={{
+            background: 'linear-gradient(150deg, var(--primary-600), var(--primary-700))',
+            borderRadius: 'var(--radius-xl)',
+            padding: '20px 18px',
+            color: '#fff',
+            overflow: 'hidden',
+          }}
+        >
+          <Text size="xSmall" bold style={{ color: '#d7eec2', letterSpacing: 1 }}>
+            SỐNG XANH AN LÀNH
+          </Text>
+          <Text.Title className="t-h1" style={{ color: '#fff', marginTop: 6, maxWidth: '80%' }}>
+            Thiên nhiên Việt cho cả nhà
+          </Text.Title>
+          {user && (
+            <Text size="xSmall" style={{ color: 'var(--primary-100)', marginTop: 6 }}>
+              {vi.home.greeting(user.fullName ?? vi.auth.greetingFallback)}
+              {user.pointsBalance ? ` · ${vi.home.pointsChip(user.pointsBalance)}` : ''}
+            </Text>
+          )}
+          <Box
+            role="button"
+            className="tubu-press"
+            onClick={() => goBrand()}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              marginTop: 14,
+              background: '#fff',
+              color: 'var(--primary-700)',
+              borderRadius: 'var(--radius-full)',
+              padding: '9px 16px',
+              fontWeight: 700,
+              fontSize: 13.5,
+            }}
+          >
+            Khám phá vườn <ChevronRight size={16} strokeWidth={2.4} />
+          </Box>
         </Box>
       </Box>
 
@@ -170,7 +181,7 @@ export default function HomePage() {
               boxSizing: 'border-box',
             }}
           >
-            <span aria-hidden style={{ fontSize: 16 }}>{s.emoji}</span>
+            <s.Icon size={16} color="var(--leaf-700)" strokeWidth={1.9} />
             <Text size="xSmall" style={{ fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--leaf-700)' }}>
               {s.label}
             </Text>
@@ -240,7 +251,9 @@ export default function HomePage() {
             color: '#fff',
           }}
         >
-          <Text style={{ fontSize: 32 }}>🗺️</Text>
+          <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+            <Map size={22} color="#fff" strokeWidth={1.9} />
+          </Box>
           <Box style={{ flex: 1 }}>
             <Text bold style={{ color: '#fff' }}>
               Hành trình nguyên liệu
@@ -249,7 +262,7 @@ export default function HomePage() {
               Khám phá 6 vùng đất làm nên sản phẩm Tubu
             </Text>
           </Box>
-          <Text style={{ color: '#fff' }}>›</Text>
+          <ChevronRight size={20} color="#fff" strokeWidth={2} />
         </Box>
       </Box>
 
@@ -264,7 +277,7 @@ export default function HomePage() {
       />
 
       {/* ── Cho mẹ và bé (persona chính) ── */}
-      <HomeSection title="Cho mẹ và bé 🍼" query={momBaby} onRetry={() => void momBaby.refetch()} />
+      <HomeSection title="Cho mẹ và bé" query={momBaby} onRetry={() => void momBaby.refetch()} />
 
       {/* ── Mới về vườn ── */}
       <HomeSection title={vi.home.newArrivals} query={newest} onRetry={() => void newest.refetch()} />

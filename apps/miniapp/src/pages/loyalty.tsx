@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Page, Text, Button, Header, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   getLoyalty,
@@ -67,7 +67,6 @@ export default function LoyaltyPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Hạng thành viên" />
 
       {loyaltyQ.isLoading ? (
         <Box p={4} style={{ gap: 12 }} flex flexDirection="column">

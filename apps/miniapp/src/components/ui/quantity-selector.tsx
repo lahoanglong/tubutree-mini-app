@@ -1,4 +1,5 @@
 import { Box, Text } from 'zmp-ui';
+import { Plus, Minus } from 'lucide-react';
 
 /**
  * Bộ chọn số lượng − [n] + . Touch target theo size:
@@ -39,7 +40,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }:
         style={btn(value <= min)}
         onClick={() => value > min && onChange(value - 1)}
       >
-        −
+        <Minus size={size === 'md' ? 18 : 15} strokeWidth={2.2} />
       </Box>
       <Text bold size={size === 'md' ? 'normal' : 'small'} style={{ minWidth: 22, textAlign: 'center' }}>
         {value}
@@ -52,7 +53,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }:
         style={btn(value >= max)}
         onClick={() => value < max && onChange(value + 1)}
       >
-        +
+        <Plus size={size === 'md' ? 18 : 15} strokeWidth={2.2} />
       </Box>
     </Box>
   );

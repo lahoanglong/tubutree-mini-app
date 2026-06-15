@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Page, Text, Button, Header, Input, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { OrderDTO } from '@tubutree/shared-types';
 import { getAddresses, getCart, checkoutQuote, placeOrder } from '../services/shop-api';
@@ -167,7 +167,6 @@ export default function CheckoutPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 110 }}>
-      <Header title={vi.checkout.title} />
 
       <AddressSection
         addresses={addresses.data ?? []}
@@ -382,7 +381,6 @@ export default function CheckoutPage() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title={vi.checkout.title} />
       {children}
     </Page>
   );

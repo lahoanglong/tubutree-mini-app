@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Heart } from 'lucide-react';
 import { getWishlistIds, addWishlist, removeWishlist } from '../services/wishlist-api';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
@@ -82,15 +83,12 @@ export function WishlistHeart({
           : { width: 44, height: 44, background: 'transparent' }),
       }}
     >
-      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
-        <path
-          d="M12 21s-7.5-4.6-10-9.3C.6 8.4 2.3 5 5.6 5c2 0 3.3 1.1 4.4 2.6C11 6.1 12.4 5 14.4 5 17.7 5 19.4 8.4 18 11.7 15.5 16.4 12 21 12 21z"
-          fill={liked ? 'var(--danger)' : 'none'}
-          stroke={liked ? 'var(--danger)' : 'var(--neutral-600)'}
-          strokeWidth="1.8"
-          strokeLinejoin="round"
-        />
-      </svg>
+      <Heart
+        size={size}
+        strokeWidth={1.9}
+        color={liked ? 'var(--danger)' : 'var(--neutral-600)'}
+        fill={liked ? 'var(--danger)' : 'none'}
+      />
     </button>
   );
 }

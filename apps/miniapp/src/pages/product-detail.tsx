@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Page, Text, Button, Header, useNavigate, useParams, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Repeat, ChevronRight, ShoppingCart, Share2 } from 'lucide-react';
 import {
   fetchProduct,
   fetchRelated,
@@ -101,7 +102,6 @@ export default function ProductDetailPage() {
   if (product.isError || !product.data) {
     return (
       <Page style={{ background: 'var(--neutral-50)' }}>
-        <Header title="Tubu Tree" />
         <ErrorState message={getErrorMessage(product.error)} onRetry={() => void product.refetch()} />
       </Page>
     );
@@ -136,7 +136,6 @@ export default function ProductDetailPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
-      <Header title={p.brand} />
 
       <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} alt={p.name} />
 
@@ -166,15 +165,7 @@ export default function ProductDetailPage() {
               justifyContent: 'center',
             }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path
-                d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v12M7.5 7.5L12 3l4.5 4.5"
-                stroke="var(--primary-700)"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <Share2 size={20} color="var(--primary-700)" strokeWidth={2} />
           </Box>
         </Box>
 
@@ -254,11 +245,11 @@ export default function ProductDetailPage() {
               background: 'var(--leaf-50)',
             }}
           >
-            <Text style={{ fontSize: 18 }}>🔁</Text>
+            <Repeat size={18} color="var(--leaf-700)" strokeWidth={1.9} />
             <Text size="small" bold style={{ color: 'var(--leaf-700)', flex: 1 }}>
               Đặt định kỳ — tiết kiệm 12%
             </Text>
-            <Text style={{ color: 'var(--leaf-700)' }}>›</Text>
+            <ChevronRight size={18} color="var(--leaf-700)" strokeWidth={2} />
           </Box>
         )}
       </Box>
@@ -357,8 +348,9 @@ export default function ProductDetailPage() {
       {/* ── Thường mua kèm (§6.12 co-occurrence) ── */}
       {(boughtTogether.data?.length ?? 0) > 0 && (
         <>
-          <Box pt={4} pb={2} px={4}>
-            <Text.Title size="small">🛒 Thường mua kèm</Text.Title>
+          <Box pt={4} pb={2} px={4} flex alignItems="center" style={{ gap: 6 }}>
+            <ShoppingCart size={18} color="var(--neutral-800)" strokeWidth={1.9} />
+            <Text.Title size="small">Thường mua kèm</Text.Title>
           </Box>
           <Box
             px={4}
@@ -648,26 +640,13 @@ function CollapsibleDescription({ text }: { text: string }) {
 }
 
 function CartIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M3 4h2l2.4 12.2a2 2 0 0 0 2 1.8h7.5a2 2 0 0 0 2-1.6L21 8H6"
-        stroke="var(--primary-700)"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="10" cy="21" r="1.4" fill="var(--primary-700)" />
-      <circle cx="17.5" cy="21" r="1.4" fill="var(--primary-700)" />
-    </svg>
-  );
+  return <ShoppingCart size={22} color="var(--primary-700)" strokeWidth={1.9} />;
 }
 
 /** Skeleton match layout PDP. */
 function PdpSkeleton() {
   return (
     <Page style={{ background: 'var(--neutral-50)' }}>
-      <Header title=" " />
       <Skeleton height="auto" radius="0" style={{ aspectRatio: '1 / 1' }} />
       <Box p={4} style={{ background: 'var(--neutral-0)', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Skeleton width={70} height={12} />

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Header, Spinner, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Spinner, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getGameProfile,
@@ -91,7 +91,6 @@ export default function GamePage() {
   if (isLoading || !authed) {
     return (
       <Page>
-        <Header title="Vườn Xanh" showBackIcon={false} />
         <Box flex justifyContent="center" p={6}>
           <Spinner />
         </Box>
@@ -104,7 +103,6 @@ export default function GamePage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 80 }}>
-      <Header title="Vườn Xanh Tubu" showBackIcon={false} />
 
       {/* Garden */}
       <Box

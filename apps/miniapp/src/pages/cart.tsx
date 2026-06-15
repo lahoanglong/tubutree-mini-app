@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Page, Text, Button, Header, Input, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Trash2 } from 'lucide-react';
 import {
   getCart,
   updateCartItem,
@@ -152,7 +153,6 @@ export default function CartPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 190 }}>
-      <Header title={vi.cart.title} showBackIcon={false} />
 
       {empty ? (
         <EmptyState
@@ -221,7 +221,6 @@ export default function CartPage() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title={vi.cart.title} showBackIcon={false} />
       {children}
     </Page>
   );
@@ -316,14 +315,7 @@ function CartLineRow({
               justifyContent: 'center',
             }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path
-                d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0l1 13a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9l1-13M10 11v6M14 11v6"
-                stroke="var(--neutral-400)"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-              />
-            </svg>
+            <Trash2 size={18} color="var(--neutral-400)" strokeWidth={1.8} />
           </Box>
         </Box>
       </Box>

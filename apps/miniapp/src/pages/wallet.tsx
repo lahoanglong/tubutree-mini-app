@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Box, Page, Text, Header, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Clock, CheckCircle2, ShoppingBag, Lightbulb, type LucideIcon } from 'lucide-react';
 import { getWallet, withdraw, type BankInfo } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
@@ -40,7 +41,6 @@ export default function WalletPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Ví Tubu" />
 
       {walletQ.isLoading ? (
         <Box p={4} style={{ gap: 12 }} flex flexDirection="column">
@@ -89,16 +89,17 @@ export default function WalletPage() {
 
           {/* Nguồn tiền chờ */}
           <Box mx={4} mb={3} flex style={{ gap: 10 }}>
-            <SourceCard label="Hoa hồng chờ duyệt" value={w.commissionPending} icon="⏳" />
-            <SourceCard label="Hoa hồng có thể rút" value={w.commissionApproved} icon="✅" />
+            <SourceCard label="Hoa hồng chờ duyệt" value={w.commissionPending} Icon={Clock} />
+            <SourceCard label="Hoa hồng có thể rút" value={w.commissionApproved} Icon={CheckCircle2} />
           </Box>
           <Box mx={4} mb={3}>
-            <SourceCard label="Hoàn tiền sàn ngoài đang chờ" value={w.cashbackPending} icon="🛍️" wide />
+            <SourceCard label="Hoàn tiền sàn ngoài đang chờ" value={w.cashbackPending} Icon={ShoppingBag} wide />
           </Box>
 
-          <Box mx={4} p={4} style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-lg)' }}>
+          <Box mx={4} p={4} flex style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-lg)', gap: 8 }}>
+            <Lightbulb size={18} color="var(--clay-700)" strokeWidth={1.9} style={{ flex: '0 0 auto', marginTop: 1 }} />
             <Text size="xSmall" style={{ color: 'var(--clay-700)' }}>
-              💡 Mẹo: chuyển hoa hồng/hoàn tiền vào Ví Tubu được nhân <b>×1.5</b> giá trị để mua sắm —
+              Mẹo: chuyển hoa hồng/hoàn tiền vào Ví Tubu được nhân <b>×1.5</b> giá trị để mua sắm —
               thay vì rút về ngân hàng.
             </Text>
           </Box>
@@ -154,12 +155,12 @@ export default function WalletPage() {
 function SourceCard({
   label,
   value,
-  icon,
+  Icon,
   wide,
 }: {
   label: string;
   value: number;
-  icon: string;
+  Icon: LucideIcon;
   wide?: boolean;
 }) {
   return (
@@ -172,7 +173,9 @@ function SourceCard({
         boxShadow: 'var(--shadow-xs)',
       }}
     >
-      <Text style={{ fontSize: 20 }}>{icon}</Text>
+      <Box style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
+        <Icon size={17} color="var(--leaf-700)" strokeWidth={1.9} />
+      </Box>
       <Text bold size={wide ? 'normal' : 'small'} style={{ color: 'var(--neutral-900)', marginTop: 4 }}>
         {formatVnd(value)}
       </Text>

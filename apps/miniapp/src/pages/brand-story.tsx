@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Header, Sheet, Button, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Sheet, Button, useNavigate } from 'zmp-ui';
 import { haptic } from '../utils/haptic';
 
 interface Region {
@@ -89,7 +89,6 @@ export default function BrandStoryPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Hành trình nguyên liệu" />
 
       <Box p={4} pb={2}>
         <Text style={{ color: 'var(--neutral-600)' }}>

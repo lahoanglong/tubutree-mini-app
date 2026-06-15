@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Header, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { fetchOrders } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
@@ -36,7 +36,6 @@ export default function OrdersPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 72 }}>
-      <Header title={vi.orders.title} showBackIcon={false} />
 
       <Box px={3} pb={2} style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
         {TABS.map((t) => {

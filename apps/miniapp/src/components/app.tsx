@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getStorage } from 'zmp-sdk/apis';
 import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
+import BackButton from './back-button';
 import { OnboardingGate } from './onboarding';
 import { useAuthStore } from '../store/auth';
 
@@ -101,6 +102,7 @@ export default function MyApp() {
               </AnimationRoutes>
             </Suspense>
             <BottomNav />
+            <BackButton />
             <OnboardingGate />
           </ZMPRouter>
         </SnackbarProvider>

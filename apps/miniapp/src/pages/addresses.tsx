@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Header, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAddresses, createAddress, type AddressDTO } from '../services/shop-api';
 import { updateAddress, deleteAddress } from '../services/account-api';
@@ -68,7 +68,6 @@ export default function AddressesPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Sổ địa chỉ" />
 
       {addrQ.isLoading ? (
         <Box p={4} style={{ gap: 10 }} flex flexDirection="column">

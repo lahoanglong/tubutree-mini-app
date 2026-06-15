@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Page, Text, Header, Button, Input, useSnackbar, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { getMe, updateMe } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
@@ -49,7 +49,6 @@ export default function EditProfilePage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Chỉnh sửa hồ sơ" />
 
       {meQ.isLoading ? (
         <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>

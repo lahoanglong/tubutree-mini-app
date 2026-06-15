@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Page, Text, Input, Header, useLocation, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Input, useLocation, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProducts, fetchBrands } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
@@ -105,7 +105,6 @@ export default function BrowsePage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 72 }}>
-      <Header title={vi.browse.title} showBackIcon={false} />
       <Box p={3}>
         <Input.Search
           placeholder={vi.browse.searchPlaceholder}

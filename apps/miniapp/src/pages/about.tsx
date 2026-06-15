@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Header, Button, Sheet, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Sheet, useSnackbar } from 'zmp-ui';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
 
@@ -65,7 +65,6 @@ export default function AboutPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Về Tubu Tree & Hỗ trợ" />
 
       {/* Brand story */}
       <Box p={4}>

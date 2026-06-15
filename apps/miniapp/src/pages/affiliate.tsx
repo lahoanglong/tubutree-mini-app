@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Header, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getAffiliateMe,
@@ -32,7 +32,6 @@ export default function AffiliatePage() {
   if (meQ.isLoading) {
     return (
       <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Header title="Cộng tác viên" />
         <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
           <Skeleton style={{ height: 120, borderRadius: 16 }} />
           <Skeleton style={{ height: 80, borderRadius: 16 }} />
@@ -44,7 +43,6 @@ export default function AffiliatePage() {
   if (meQ.isError) {
     return (
       <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Header title="Cộng tác viên" />
         <Box p={6} style={{ textAlign: 'center' }}>
           <Text style={{ color: 'var(--danger)' }}>{getErrorMessage(meQ.error)}</Text>
         </Box>
@@ -77,7 +75,6 @@ function RegisterGate() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Cộng tác viên" />
       <Box p={4}>
         <Box
           p={5}
@@ -154,7 +151,6 @@ function Dashboard() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Header title="Cộng tác viên" />
 
       {/* Hoa hồng tháng nổi bật */}
       <Box p={4}>

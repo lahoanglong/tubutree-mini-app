@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Box, Page, Text, Header, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getDealerMe,
@@ -29,7 +29,6 @@ export default function DealerPage() {
   if (meQ.isLoading) {
     return (
       <Page className="page" style={{ background: 'var(--dealer-bg, #f4f6f9)' }}>
-        <Header title="Đại lý" />
         <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
           <Skeleton style={{ height: 100, borderRadius: 12 }} />
           <Skeleton style={{ height: 60, borderRadius: 12 }} />
@@ -40,7 +39,6 @@ export default function DealerPage() {
   if (meQ.isError) {
     return (
       <Page className="page">
-        <Header title="Đại lý" />
         <Box p={6} style={{ textAlign: 'center' }}>
           <Text style={{ color: 'var(--danger)' }}>{getErrorMessage(meQ.error)}</Text>
         </Box>
@@ -90,7 +88,6 @@ function DealerApply({ rejected }: { rejected: boolean }) {
 
   return (
     <Page className="page" style={{ background: '#f4f6f9' }}>
-      <Header title="Đăng ký đại lý" />
       <Box p={4}>
         <Box p={4} style={{ background: '#1f2a44', borderRadius: 'var(--radius-xl)', color: '#fff' }}>
           <Text style={{ fontSize: 36 }}>🏪</Text>
@@ -145,7 +142,6 @@ function DealerApply({ rejected }: { rejected: boolean }) {
 function DealerPending() {
   return (
     <Page className="page" style={{ background: '#f4f6f9' }}>
-      <Header title="Đại lý" />
       <Box style={{ textAlign: 'center', padding: '64px 24px' }}>
         <Text style={{ fontSize: 56 }}>⏳</Text>
         <Text bold size="large" style={{ marginTop: 12 }}>
@@ -169,7 +165,6 @@ function DealerHub() {
 
   return (
     <Page className="page" style={{ background: '#f4f6f9' }}>
-      <Header title="Đại lý Tubu" />
 
       {/* Thẻ tổng quan */}
       <Box p={4}>
