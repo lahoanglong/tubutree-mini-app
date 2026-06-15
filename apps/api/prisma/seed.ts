@@ -416,6 +416,22 @@ async function main() {
     await prisma.plantSpecies.upsert({ where: { id: sp.id }, update: sp, create: sp });
   }
 
+  // Vườn Xanh 2.0 Phase 4 — mùa đang diễn ra.
+  console.log('🍃 Seeding Season...');
+  await prisma.season.upsert({
+    where: { id: 'se-2026-he-cangio' },
+    update: {},
+    create: {
+      id: 'se-2026-he-cangio',
+      name: 'Mùa Hè Xanh — Phủ xanh Cần Giờ',
+      theme: 'Rừng ngập mặn miền Nam',
+      region: 'Cần Giờ, TP.HCM',
+      featuredSpeciesIds: ['sp-duoc', 'sp-tram', 'sp-sao'],
+      startAt: new Date('2026-06-01T00:00:00+07:00'),
+      endAt: new Date('2026-08-31T23:59:59+07:00'),
+    },
+  });
+
   console.log('✅ Seed done.');
 }
 

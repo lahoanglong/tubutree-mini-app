@@ -126,3 +126,21 @@ export interface CodexEntry {
   ecoFact: string | null;
 }
 export const getCollection = () => api.get<CodexEntry[]>('/game/collection').then((r) => r.data);
+
+export interface Season {
+  id: string;
+  name: string;
+  theme: string | null;
+  region: string | null;
+  startAt: string;
+  endAt: string;
+  featuredSpecies: { id: string; name: string; emoji: string; rarity: 'COMMON' | 'RARE' | 'LEGENDARY' }[];
+}
+export interface SeasonLeaderRow {
+  rank: number;
+  nickname: string;
+  drops: number;
+}
+export const getSeason = () => api.get<Season | null>('/game/season').then((r) => r.data);
+export const getSeasonLeaderboard = () =>
+  api.get<SeasonLeaderRow[]>('/game/season/leaderboard').then((r) => r.data);

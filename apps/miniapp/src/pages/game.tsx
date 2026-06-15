@@ -15,6 +15,8 @@ import {
   getForest,
   getCommunity,
   getCollection,
+  getSeason,
+  getSeasonLeaderboard,
   type MissionItem,
   type AnswerResult,
   type HarvestSpecies,
@@ -49,6 +51,8 @@ export default function GamePage() {
   const { data: forest } = useQuery({ queryKey: ['game', 'forest'], queryFn: getForest, enabled: authed });
   const { data: community } = useQuery({ queryKey: ['game', 'community'], queryFn: getCommunity, enabled: authed });
   const { data: codex } = useQuery({ queryKey: ['game', 'collection'], queryFn: getCollection, enabled: authed });
+  const { data: season } = useQuery({ queryKey: ['game', 'season'], queryFn: getSeason });
+  const { data: seasonBoard } = useQuery({ queryKey: ['game', 'seasonBoard'], queryFn: getSeasonLeaderboard });
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
@@ -171,6 +175,30 @@ export default function GamePage() {
           {eco?.progress ?? 0}/{eco?.target ?? 0}💧 · 💧 {profile?.totalSeeds ?? 0} · 🔥 {profile?.streakDays ?? 0} ngày · 🌳 thật: {eco?.treesPlanted ?? 0}
         </Text>
       </Box>
+
+      {/* Banner mùa/sự kiện (Phase 4) */}
+      {season && (
+        <Box mx={3} mt={2} p={3} style={{ background: 'linear-gradient(120deg, var(--leaf-50, #eef7ee), var(--sun-50, #fdf6e3))', borderRadius: 'var(--radius-lg)', border: '1px solid var(--leaf-400)' }}>
+          <Box flex alignItems="center" justifyContent="space-between">
+            <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
+              🍃 {season.name}
+            </Text>
+            <Text style={{ fontSize: 18 }}>
+              {season.featuredSpecies.map((s) => s.emoji).join(' ')}
+            </Text>
+          </Box>
+          {(season.theme || season.region) && (
+            <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+              {[season.theme, season.region].filter(Boolean).join(' · ')}
+            </Text>
+          )}
+          {season.featuredSpecies.length > 0 && (
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+              Loài nổi bật mùa này: {season.featuredSpecies.map((s) => s.name).join(', ')}
+            </Text>
+          )}
+        </Box>
+      )}
 
       {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
       <Box p={3} style={{ background: 'var(--neutral-0)' }}>
@@ -468,6 +496,21 @@ export default function GamePage() {
           </Text>
         )}
       </Card>
+
+      {seasonBoard && seasonBoard.length > 0 && (
+        <Card title="💧 Top góp nước mùa này">
+          {seasonBoard.map((r) => (
+            <Box key={r.rank} flex justifyContent="space-between" style={{ padding: '4px 0', borderTop: r.rank > 1 ? '1px solid var(--neutral-100)' : 'none' }}>
+              <Text size="small">
+                {r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : `#${r.rank}`} {r.nickname}
+              </Text>
+              <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
+                {r.drops.toLocaleString('vi-VN')}💧
+              </Text>
+            </Box>
+          ))}
+        </Card>
+      )}
 
       <Card title="🏆 Bảng xếp hạng tuần">
         {board && board.length > 0 ? (

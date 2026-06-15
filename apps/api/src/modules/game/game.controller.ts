@@ -7,6 +7,7 @@ import { GameEconomyService } from './game-economy.service';
 import { GameQuizService } from './game-quiz.service';
 import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
+import { GameSeasonService } from './game-season.service';
 
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
@@ -19,6 +20,7 @@ export class GameController {
     private readonly quiz: GameQuizService,
     private readonly community: GameCommunityService,
     private readonly collection: GameCollectionService,
+    private readonly season: GameSeasonService,
   ) {}
 
   @Get('profile')
@@ -58,6 +60,14 @@ export class GameController {
 
   @Get('collection')
   collectionCodex(@CurrentUser('sub') userId: string) { return this.collection.getCodex(userId); }
+
+  @Public()
+  @Get('season')
+  activeSeason() { return this.season.getActiveSeason(); }
+
+  @Public()
+  @Get('season/leaderboard')
+  seasonLeaderboard() { return this.season.getSeasonLeaderboard(); }
 
   @Public()
   @Get('leaderboard')

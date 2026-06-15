@@ -714,6 +714,22 @@ enum SpeciesRarity {
   LEGENDARY
 }
 
+// Vườn Xanh 2.0 Phase 4 — mùa/sự kiện. Mỗi mùa có chủ đề + vùng + loài nổi bật;
+// khung thời gian startAt..endAt. BXH mùa = top người góp nước cho mốc cộng đồng
+// đang mở (tính theo CommunityContribution).
+model Season {
+  id                 String   @id
+  name               String
+  theme              String?
+  region             String?
+  featuredSpeciesIds String[] @default([])
+  startAt            DateTime
+  endAt              DateTime
+
+  @@index([startAt, endAt])
+  @@map("seasons")
+}
+
 // Yêu cầu đổi/trả (§6.4): chỉ lỗi NSX, window 7 ngày, admin duyệt → hoàn Ví +
 // reverse điểm + reverse commission CTV.
 model ReturnRequest {
