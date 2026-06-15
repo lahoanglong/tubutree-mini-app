@@ -394,6 +394,22 @@ async function main() {
   console.log('🌱 Seeding Nature Quiz questions...');
   await seedGameQuiz(prisma);
 
+  // Vườn Xanh 2.0 Phase 2 — mốc cộng đồng cây thật đang mở.
+  console.log('🌳 Seeding Community Goal...');
+  await prisma.communityGoal.upsert({
+    where: { id: 'cg-cangio-2026' },
+    update: {},
+    create: {
+      id: 'cg-cangio-2026',
+      title: 'Cùng Tubu phủ xanh Cần Giờ',
+      region: 'Rừng ngập mặn Cần Giờ, TP.HCM',
+      targetDrops: 100000,
+      currentDrops: 0,
+      treesToPlant: 200,
+      status: 'ACTIVE',
+    },
+  });
+
   console.log('✅ Seed done.');
 }
 

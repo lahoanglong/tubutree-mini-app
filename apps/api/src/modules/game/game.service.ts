@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { GameCommunityService } from './game-community.service';
 
 interface SpinPrize {
   id: string;
@@ -24,6 +25,8 @@ export class GameService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    // Optional: hồ cộng đồng Phase 2. Tests dựng GameService 2 tham số → bỏ qua góp hồ.
+    @Optional() private readonly community?: GameCommunityService,
   ) {}
 
   // ── Profile ────────────────────────────────────────
@@ -159,6 +162,12 @@ export class GameService {
         lastWateredAt: new Date(),
       },
     });
+
+    // Phase 2: thu hoạch → 💧 đã nuôi cây góp vào hồ cộng đồng (Ant Forest gom batch).
+    // Lỗi góp hồ không được chặn thu hoạch của user.
+    if (harvested && this.community) {
+      await this.community.contribute(userId, harvestCount * eco.target).catch(() => undefined);
+    }
     return {
       progress: eco.progress,
       target: eco.target,

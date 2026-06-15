@@ -13,6 +13,7 @@ import {
   getLeaderboard,
   getMissions,
   getForest,
+  getCommunity,
   type MissionItem,
   type AnswerResult,
 } from '../services/game-api';
@@ -43,6 +44,7 @@ export default function GamePage() {
   const { data: board } = useQuery({ queryKey: ['game', 'board'], queryFn: getLeaderboard });
   const { data: missions } = useQuery({ queryKey: ['game', 'missions'], queryFn: getMissions, enabled: authed });
   const { data: forest } = useQuery({ queryKey: ['game', 'forest'], queryFn: getForest, enabled: authed });
+  const { data: community } = useQuery({ queryKey: ['game', 'community'], queryFn: getCommunity, enabled: authed });
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
@@ -255,6 +257,40 @@ export default function GamePage() {
           🚿 Tưới cây (20💧)
         </Button>
       </Box>
+
+      {/* Mốc cộng đồng cây thật (Phase 2) — hồ giọt nước toàn cộng đồng */}
+      {community?.goal && (
+        <Card title="🌍 Mục tiêu cộng đồng">
+          <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
+            {community.goal.title}
+          </Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+            📍 {community.goal.region} · mục tiêu {community.goal.treesToPlant} cây thật
+          </Text>
+          <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 12, margin: '10px 0 6px', overflow: 'hidden' }}>
+            <Box
+              style={{
+                width: `${community.pct}%`,
+                height: 12,
+                background: 'linear-gradient(90deg, var(--leaf-400), var(--leaf-600))',
+                borderRadius: 99,
+                transition: 'width var(--dur-slow) var(--ease-out)',
+              }}
+            />
+          </Box>
+          <Box flex justifyContent="space-between">
+            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+              {community.goal.currentDrops.toLocaleString('vi-VN')}/{community.goal.targetDrops.toLocaleString('vi-VN')}💧 ({community.pct}%)
+            </Text>
+            <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
+              Bạn đã góp {community.myDrops.toLocaleString('vi-VN')}💧
+            </Text>
+          </Box>
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6 }}>
+            Mỗi lần thu hoạch cây ảo, toàn bộ 💧 đã tưới sẽ góp vào hồ chung. Đủ mốc, Tubu trồng cây thật cùng PanNature 🌿
+          </Text>
+        </Card>
+      )}
 
       {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
       <Card title="🌍 Tác động xanh của bạn">

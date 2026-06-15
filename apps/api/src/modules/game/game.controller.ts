@@ -5,6 +5,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { GameService } from './game.service';
 import { GameEconomyService } from './game-economy.service';
 import { GameQuizService } from './game-quiz.service';
+import { GameCommunityService } from './game-community.service';
 
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
@@ -15,6 +16,7 @@ export class GameController {
     private readonly game: GameService,
     private readonly economy: GameEconomyService,
     private readonly quiz: GameQuizService,
+    private readonly community: GameCommunityService,
   ) {}
 
   @Get('profile')
@@ -48,6 +50,9 @@ export class GameController {
 
   @Get('forest')
   forest(@CurrentUser('sub') userId: string) { return this.game.getForest(userId); }
+
+  @Get('community')
+  communityState(@CurrentUser('sub') userId: string) { return this.community.getCommunityState(userId); }
 
   @Public()
   @Get('leaderboard')

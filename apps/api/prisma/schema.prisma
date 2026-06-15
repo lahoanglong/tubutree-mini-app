@@ -64,6 +64,7 @@ model User {
   reviews             Review[]
   refreshTokens       RefreshToken[]
   plantedTrees        PlantedTree[]
+  communityContributions CommunityContribution[]
 
   @@index([referredById])
   @@map("users")
@@ -632,6 +633,46 @@ model PlantedTree {
 enum PlantedStatus {
   PLEDGED
   PLANTED
+}
+
+// Vườn Xanh 2.0 Phase 2 — mốc cộng đồng cây thật (mô hình Ant Forest gom batch).
+// Hồ giọt nước toàn user; đủ targetDrops → Tubu cam kết trồng treesToPlant cây thật
+// ở vùng có tên (PanNature gate). Fulfil có status-guard chống trồng batch 2 lần.
+model CommunityGoal {
+  id           String                  @id @default(cuid())
+  title        String
+  region       String // vùng trồng có tên (VD: "Rừng phòng hộ Cần Giờ")
+  targetDrops  Int
+  currentDrops Int                     @default(0)
+  treesToPlant Int
+  status       CommunityGoalStatus     @default(ACTIVE)
+  startAt      DateTime                @default(now())
+  endAt        DateTime?
+  fulfilledAt  DateTime?
+  contributions CommunityContribution[]
+
+  @@index([status])
+  @@map("community_goals")
+}
+
+model CommunityContribution {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalId    String
+  goal      CommunityGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  drops     Int           @default(0)
+  updatedAt DateTime      @updatedAt
+
+  @@unique([userId, goalId])
+  @@index([goalId])
+  @@map("community_contributions")
+}
+
+enum CommunityGoalStatus {
+  ACTIVE
+  FULFILLING
+  DONE
 }
 
 // Yêu cầu đổi/trả (§6.4): chỉ lỗi NSX, window 7 ngày, admin duyệt → hoàn Ví +

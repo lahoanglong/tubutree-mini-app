@@ -92,3 +92,18 @@ export interface Forest {
   trees: PlantedTreeItem[];
 }
 export const getForest = () => api.get<Forest>('/game/forest').then((r) => r.data);
+
+export interface CommunityState {
+  goal: {
+    id: string;
+    title: string;
+    region: string;
+    targetDrops: number;
+    currentDrops: number;
+    treesToPlant: number;
+    status: 'ACTIVE' | 'FULFILLING' | 'DONE';
+  } | null;
+  myDrops: number;
+  pct: number;
+}
+export const getCommunity = () => api.get<CommunityState>('/game/community').then((r) => r.data);
