@@ -6,7 +6,7 @@ import { getErrorMessage } from '../services/api';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { MultiImageUpload } from '../components/image-upload';
-import { formatVnd } from '../utils/format';
+import { formatVnd, addressLine } from '../utils/format';
 import { STATUS_COLOR, TIMELINE_STEPS, timelineIndex } from '../utils/order-status';
 import { openOAChat, openExternal, hasOA } from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
@@ -93,7 +93,8 @@ export default function OrderDetailPage() {
 
   const o = order.data;
   const color = STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!;
-  const journey = o.shippingHistory ?? [];
+  // Bỏ entry shape cũ ({at,data} trước khi chuẩn hoá) — chỉ hiện mốc có trạng thái/mã.
+  const journey = (o.shippingHistory ?? []).filter((e) => e && (e.status || e.code));
   const canCancel = o.status === 'PENDING_PAYMENT' || o.status === 'CONFIRMED';
   const isDone = o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.status === 'RETURNED';
 
@@ -286,8 +287,7 @@ export default function OrderDetailPage() {
           {o.shippingAddress.recipient} · {o.shippingAddress.phone}
         </Text>
         <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-          {o.shippingAddress.street}, {o.shippingAddress.ward}, {o.shippingAddress.district},{' '}
-          {o.shippingAddress.province}
+          {addressLine(o.shippingAddress)}
         </Text>
       </Box>
 

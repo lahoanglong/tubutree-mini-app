@@ -8,6 +8,7 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
 import { useAuthStore } from '../store/auth';
+import { addressLine } from '../utils/format';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '../components/geo-picker';
 
 const VN_PHONE = /^(0|\+84)\d{9}$/;
@@ -119,7 +120,7 @@ export default function AddressesPage() {
                 )}
               </Box>
               <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
-                {a.street}, {a.ward}, {a.district}, {a.province}
+                {addressLine(a)}
               </Text>
 
               <Box flex style={{ gap: 16, marginTop: 10 }}>
@@ -176,7 +177,7 @@ export default function AddressesPage() {
               Xóa địa chỉ này?
             </Text>
             <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
-              {confirmDel.street}, {confirmDel.ward}, {confirmDel.district}, {confirmDel.province}
+              {addressLine(confirmDel)}
             </Text>
             <Box flex style={{ gap: 10, marginTop: 16 }}>
               <Button variant="secondary" fullWidth onClick={() => setConfirmDel(null)}>

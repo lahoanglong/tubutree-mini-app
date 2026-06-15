@@ -5,6 +5,7 @@ import { createAddress, type AddressDTO } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';
 import { vi } from '../../i18n/vi';
 import { haptic } from '../../utils/haptic';
+import { addressLine } from '../../utils/format';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '../geo-picker';
 
 /** SĐT Việt Nam: 0xxxxxxxxx hoặc +84xxxxxxxxx (9 số sau đầu số). */
@@ -166,7 +167,7 @@ function AddressCard({
         )}
       </Box>
       <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
-        {address.street}, {address.ward}, {address.district}, {address.province}
+        {addressLine(address)}
       </Text>
     </Box>
   );

@@ -147,9 +147,11 @@ export class PancakeProcessor extends WorkerHost {
     const linkS = str(trackingLink);
 
     const history = Array.isArray(order.shippingHistory) ? order.shippingHistory : [];
-    // Chỉ thêm mốc hành trình khi có thay đổi thực (tránh ghi trùng mỗi webhook).
-    const last = history[history.length - 1] as { status?: string | null } | undefined;
-    const changed = shipStatusS && shipStatusS !== (last?.status ?? null);
+    // Ghi mốc khi TRẠNG THÁI hoặc MÃ VẬN ĐƠN đổi (gán waybill cũng là 1 mốc) — tránh ghi trùng.
+    const last = history[history.length - 1] as { status?: string | null; code?: string | null } | undefined;
+    const changed =
+      (!!shipStatusS && shipStatusS !== (last?.status ?? null)) ||
+      (!!waybillS && waybillS !== (last?.code ?? null));
     const nextHistory = changed
       ? [...history, { at: new Date().toISOString(), status: shipStatusS, carrier: carrierS, code: waybillS }]
       : history;

@@ -55,10 +55,11 @@ export class PancakeOrderService {
       customer: {
         name: addr.recipient,
         phone_number: addr.phone,
-        address: `${addr.street}, ${addr.ward}, ${addr.district}, ${addr.province}`,
-        ward_id: addr.wardCode,
-        district_id: addr.districtCode,
-        province_id: addr.provinceCode,
+        // Hệ 2 cấp: district có thể rỗng → bỏ phần rỗng (tránh ", ,") và KHÔNG gửi id rỗng.
+        address: [addr.street, addr.ward, addr.district, addr.province].filter(Boolean).join(', '),
+        ward_id: addr.wardCode || undefined,
+        district_id: addr.districtCode || undefined,
+        province_id: addr.provinceCode || undefined,
         fb_id: order.user.zaloId ?? undefined,
       },
       items: order.items.map((i) => ({
