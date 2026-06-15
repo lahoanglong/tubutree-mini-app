@@ -5,6 +5,8 @@ export interface GameProfile {
   streakDays: number;
   treeStage: number;
   treeHealth?: 'HEALTHY' | 'WILTED' | 'DEAD';
+  streakFreezes: number;
+  lastDewAt: string | null;
   ecoImpact: { progress: number; target: number; treeType: string; treesPlanted: number } | null;
 }
 export interface CheckInResult {
@@ -12,13 +14,30 @@ export interface CheckInResult {
   pointsEarned: number;
   streakDays: number;
   totalSeeds: number;
+  streakFrozeUsed: boolean;
   bonusNote: string;
 }
 export interface QuizItem {
   id: string;
   question: string;
   options: string[];
-  rewardPts: number;
+  category: string;
+  difficulty: number;
+  waterReward: number;
+}
+export interface AnswerResult {
+  isCorrect: boolean;
+  correct: number;
+  waterEarned: number;
+  explanation: string | null;
+}
+export interface DewResult {
+  seedsEarned: number;
+  totalSeeds: number;
+}
+export interface StreakFreezeResult {
+  streakFreezes: number;
+  totalSeeds: number;
 }
 export interface SpinResult {
   prize: { id: string; name: string; rewardType: string; value: number };
@@ -41,13 +60,13 @@ export interface MissionItem {
 
 export const getGameProfile = () => api.get<GameProfile>('/game/profile').then((r) => r.data);
 export const checkIn = () => api.post<CheckInResult>('/game/check-in').then((r) => r.data);
+export const collectDew = () => api.post<DewResult>('/game/dew/collect').then((r) => r.data);
+export const buyStreakFreeze = () =>
+  api.post<StreakFreezeResult>('/game/streak-freeze/buy').then((r) => r.data);
 export const spin = () => api.post<SpinResult>('/game/spin').then((r) => r.data);
 export const getTodayQuiz = () => api.get<QuizItem[]>('/game/quiz/today').then((r) => r.data);
 export const answerQuiz = (id: string, choice: number) =>
-  api.post<{ isCorrect: boolean; correct: number; pointsEarned: number }>(
-    `/game/quiz/${id}/answer`,
-    { choice },
-  ).then((r) => r.data);
+  api.post<AnswerResult>(`/game/quiz/${id}/answer`, { choice }).then((r) => r.data);
 export const waterTree = (drops: number) =>
   api.post<{
     progress: number;

@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getGameProfile,
   checkIn,
+  collectDew,
+  buyStreakFreeze,
   spin,
   getTodayQuiz,
   answerQuiz,
@@ -12,9 +14,19 @@ import {
   getMissions,
   getForest,
   type MissionItem,
+  type AnswerResult,
 } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
 import { WheelOfFortune } from '../components/wheel';
+
+const FREEZE_COST = 80; // khớp default game.streak_freeze_cost (BE là nguồn chân lý)
+
+// Cùng ngày theo giờ VN (UTC+7) — khớp dayKey backend, để khoá nút đã dùng trong ngày.
+function isSameVNDay(iso: string | null): boolean {
+  if (!iso) return false;
+  const key = (d: Date) => new Date(d.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+  return key(new Date(iso)) === key(new Date());
+}
 
 export default function GamePage() {
   const status = useAuthStore((s) => s.status);
@@ -35,9 +47,13 @@ export default function GamePage() {
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
   const currentQuiz = quiz?.find((q) => !answeredIds.has(q.id));
+  // Reveal "Bạn có biết…" sau khi trả lời, trước khi sang câu kế.
+  const [reveal, setReveal] = useState<(AnswerResult & { quizId: string; choice: number }) | null>(null);
   const [harvested, setHarvested] = useState(false);
   const [harvestCoupon, setHarvestCoupon] = useState<string | null>(null);
   const [harvestCert, setHarvestCert] = useState<string | null>(null);
+
+  const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['game'] });
@@ -47,7 +63,26 @@ export default function GamePage() {
   const checkInM = useMutation({
     mutationFn: checkIn,
     onSuccess: (r) => {
-      openSnackbar({ text: `+${r.seedsEarned}💧 +${r.pointsEarned}đ ${r.bonusNote}`, type: 'success' });
+      const parts = [`+${r.seedsEarned}💧`];
+      if (r.streakFrozeUsed) parts.push('🧊 đã dùng vé giữ lửa');
+      if (r.bonusNote) parts.push(r.bonusNote);
+      openSnackbar({ text: parts.join(' · '), type: 'success' });
+      refresh();
+    },
+    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+  });
+  const dewM = useMutation({
+    mutationFn: collectDew,
+    onSuccess: (r) => {
+      openSnackbar({ text: `Hứng được +${r.seedsEarned}💧 từ giọt sương sáng 💦`, type: 'success' });
+      refresh();
+    },
+    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+  });
+  const freezeM = useMutation({
+    mutationFn: buyStreakFreeze,
+    onSuccess: (r) => {
+      openSnackbar({ text: `Đã mua vé giữ lửa 🧊 (còn ${r.streakFreezes} vé)`, type: 'success' });
       refresh();
     },
     onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
@@ -80,13 +115,17 @@ export default function GamePage() {
   const answerM = useMutation({
     mutationFn: ({ id, choice }: { id: string; choice: number }) => answerQuiz(id, choice),
     onSuccess: (r, vars) => {
-      setAnsweredIds((prev) => new Set(prev).add(vars.id)); // sang câu kế tiếp
-      openSnackbar({ text: r.isCorrect ? `Đúng! +${r.pointsEarned}đ` : 'Chưa đúng 😅', type: r.isCorrect ? 'success' : 'warning' });
+      // Hiện reveal "Bạn có biết…"; chỉ sang câu kế khi user bấm "Câu tiếp theo".
+      setReveal({ ...r, quizId: vars.id, choice: vars.choice });
       void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
       void queryClient.invalidateQueries({ queryKey: ['me'] });
     },
     onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
   });
+  const nextQuiz = () => {
+    if (reveal) setAnsweredIds((prev) => new Set(prev).add(reveal.quizId));
+    setReveal(null);
+  };
 
   if (isLoading || !authed) {
     return (
@@ -163,6 +202,36 @@ export default function GamePage() {
             );
           })}
         </Box>
+
+        {/* Vé giữ lửa (streak-freeze) + giọt sương sáng (dew) */}
+        <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8, marginTop: 12 }}>
+          <Box flex alignItems="center" style={{ gap: 6 }}>
+            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+              🧊 Vé giữ lửa: <b>{profile?.streakFreezes ?? 0}</b>
+            </Text>
+            <Button
+              size="small"
+              variant="tertiary"
+              loading={freezeM.isPending}
+              onClick={() => freezeM.mutate()}
+              style={{ color: 'var(--leaf-700)' }}
+            >
+              Mua ({FREEZE_COST}💧)
+            </Button>
+          </Box>
+          <Button
+            size="small"
+            variant="secondary"
+            disabled={dewCollectedToday}
+            loading={dewM.isPending}
+            onClick={() => dewM.mutate()}
+          >
+            {dewCollectedToday ? '💦 Đã hứng sương' : '💦 Hứng giọt sương'}
+          </Button>
+        </Box>
+        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+          Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng 💧 mỗi ngày.
+        </Text>
       </Box>
 
       {/* Cảnh báo héo/chết (§6.7.3) */}
@@ -241,16 +310,43 @@ export default function GamePage() {
       <Card title="🧠 Quiz Sống Xanh hôm nay">
         {currentQuiz ? (
           <>
-            {quiz && quiz.length > 1 && (
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginBottom: 6 }}>
-                Câu {answeredIds.size + 1}/{quiz.length}
+            <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 6 }}>
+              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                {categoryLabel(currentQuiz.category)} · {difficultyLabel(currentQuiz.difficulty)}
+                {quiz && quiz.length > 1 ? ` · Câu ${answeredIds.size + 1}/${quiz.length}` : ''}
               </Text>
-            )}
+              <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
+                +{currentQuiz.waterReward}💧
+              </Text>
+            </Box>
             <QuizBlock
               q={currentQuiz}
+              reveal={reveal && reveal.quizId === currentQuiz.id ? reveal : null}
               onAnswer={(choice) => answerM.mutate({ id: currentQuiz.id, choice })}
               pending={answerM.isPending}
             />
+            {reveal && reveal.quizId === currentQuiz.id && (
+              <Box
+                mt={3}
+                p={3}
+                style={{
+                  background: reveal.isCorrect ? 'var(--leaf-50, #eef7ee)' : 'var(--sun-50, #fdf6e3)',
+                  borderRadius: 'var(--radius-md)',
+                }}
+              >
+                <Text size="small" bold style={{ color: reveal.isCorrect ? 'var(--leaf-700)' : 'var(--clay-700, #92400e)' }}>
+                  {reveal.isCorrect ? `Chính xác! +${reveal.waterEarned}💧` : 'Chưa đúng — cùng học nhé 🌿'}
+                </Text>
+                {reveal.explanation && (
+                  <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
+                    💡 Bạn có biết: {reveal.explanation}
+                  </Text>
+                )}
+                <Button fullWidth size="small" onClick={nextQuiz} style={{ marginTop: 10, background: 'var(--leaf-600)' }}>
+                  {answeredIds.size + 1 >= (quiz?.length ?? 1) ? 'Hoàn thành' : 'Câu tiếp theo'}
+                </Button>
+              </Box>
+            )}
           </>
         ) : (
           <Text size="small" style={{ color: 'var(--neutral-400)' }}>
@@ -441,10 +537,12 @@ function EcoStat({ icon, value, label }: { icon: string; value: string; label: s
 
 function QuizBlock({
   q,
+  reveal,
   onAnswer,
   pending,
 }: {
   q: { question: string; options: string[] };
+  reveal: (AnswerResult & { choice: number }) | null;
   onAnswer: (choice: number) => void;
   pending: boolean;
 }) {
@@ -454,14 +552,53 @@ function QuizBlock({
         {q.question}
       </Text>
       <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        {q.options.map((opt, i) => (
-          <Button key={i} size="small" variant="secondary" disabled={pending} onClick={() => onAnswer(i)}>
-            {opt}
-          </Button>
-        ))}
+        {q.options.map((opt, i) => {
+          // Sau khi reveal: tô xanh đáp án đúng, tô đỏ lựa chọn sai của user.
+          let bg: string | undefined;
+          let color: string | undefined;
+          if (reveal) {
+            if (i === reveal.correct) {
+              bg = 'var(--leaf-600)';
+              color = '#fff';
+            } else if (i === reveal.choice) {
+              bg = 'var(--danger-50, #fee2e2)';
+              color = 'var(--danger, #b91c1c)';
+            }
+          }
+          return (
+            <Button
+              key={i}
+              size="small"
+              variant="secondary"
+              disabled={pending || !!reveal}
+              onClick={() => onAnswer(i)}
+              style={bg ? { background: bg, color } : undefined}
+            >
+              {opt}
+            </Button>
+          );
+        })}
       </Box>
     </Box>
   );
+}
+
+function categoryLabel(cat: string): string {
+  const map: Record<string, string> = {
+    cay: '🌳 Cây cối',
+    nuoc: '💧 Nước',
+    dat: '🌍 Đất',
+    khong_khi: '🌬️ Không khí',
+    dong_vat: '🐾 Động vật',
+    tai_che: '♻️ Tái chế',
+    nang_luong: '⚡ Năng lượng',
+    nature: '🌿 Thiên nhiên',
+  };
+  return map[cat] ?? '🌿 Thiên nhiên';
+}
+
+function difficultyLabel(d: number): string {
+  return d >= 3 ? 'Khó' : d === 2 ? 'Vừa' : 'Dễ';
 }
 
 function msg(e: unknown): string {
