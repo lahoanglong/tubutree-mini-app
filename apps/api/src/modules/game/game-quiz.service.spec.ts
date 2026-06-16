@@ -22,8 +22,8 @@ describe('GameQuizService', () => {
   it('getTodayQuiz ẩn correct + explanation, kèm category/waterReward', async () => {
     const list = await new GameQuizService(prisma(), cfg()).getTodayQuiz('u1');
     expect(list[0]).toEqual({ id: 'q1', question: QUIZ.question, options: QUIZ.options, category: 'water', difficulty: 2, waterReward: 12 });
-    expect((list[0] as any).correct).toBeUndefined();
-    expect((list[0] as any).explanation).toBeUndefined();
+    expect((list[0] as unknown as Record<string, unknown>).correct).toBeUndefined();
+    expect((list[0] as unknown as Record<string, unknown>).explanation).toBeUndefined();
   });
 
   it('answer đúng → cộng 💧 = waterReward, trả explanation', async () => {

@@ -47,7 +47,13 @@ export class OrdersService {
         'Đơn đã vào quy trình giao, vui lòng liên hệ Zalo OA để được hỗ trợ.',
       );
     }
-    await this.prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
+    // Chuyển trạng thái ATOMIC (guard theo status) — chống hủy đồng thời (double-tap/retry) gây
+    // HOÀN VÍ 2 LẦN: chỉ request THẮNG (count=1) mới hoàn điểm/ví. Nhất quán pattern atomic ở checkout.
+    const res = await this.prisma.order.updateMany({
+      where: { id: order.id, status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] } },
+      data: { status: 'CANCELLED' },
+    });
+    if (res.count === 0) return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
     await this.loyalty.reverseOrderPoints(order.id);
     // hoàn ví nếu đã thanh toán bằng ví
     if (order.paymentMethod === 'WALLET' && order.paymentStatus === 'PAID') {

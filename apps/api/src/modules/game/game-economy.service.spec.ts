@@ -32,7 +32,7 @@ describe('GameEconomyService.checkIn', () => {
     expect(r.seedsEarned).toBe(10);
     expect(r.pointsEarned).toBe(0);
     // không gọi bảng điểm
-    expect((p as any).pointsTransaction).toBeUndefined();
+    expect((p as unknown as Record<string, unknown>).pointsTransaction).toBeUndefined();
   });
 
   it('chặn điểm danh 2 lần/ngày', async () => {
