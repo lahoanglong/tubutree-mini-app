@@ -37,33 +37,37 @@ Dự án **KHÔNG hề bị mất work** và **KHÔNG cần rebuild**. Toàn b�
 ## BACKLOG (ưu tiên, đã lọc theo: giá trị thật · an toàn · verify được)
 
 ### LOGIC / DATA
-- [x] L0. Audit money-path (checkout idempotency, atomic ví/điểm, ship 200k/19k, voucher, points/tier, affiliate per-product, cashback 30/70 hold 30d) → **đọc kỹ checkout.service + catalog.service: code đúng, không thấy bug.** (Test phủ tốt.)
-- [ ] L1. Catalog demo nghèo: 6 sản phẩm / 3 brand thật, **ảnh rỗng** (`thumbnail:null`) → heroes featured trên prod hiển thị KHÔNG có ảnh. (gap thật, prod-visible)
+- [x] L0. Audit money-path (checkout idempotency, atomic ví/điểm, ship 200k/19k, voucher, points/tier, affiliate per-product, cashback 30/70 hold 30d) → **code đúng, không thấy bug.**
+- [x] L1. Catalog demo nghèo (6 SP/3 brand, ảnh rỗng) → đã xử lý ở D1+D2 (backfill ảnh trên prod).
 
 ### DATA / DEMO CREDIBILITY (đề bài yêu cầu ≥8 brand, ≥40 sp có ảnh)
-- [ ] D1. Enrich `seed.ts` → **8 brand** (Visante, Pơ Lang, Fuwa3e, Cobote, Le Plateau Coffee, BH.Nong, Sokfram, Hector), **≥40 sản phẩm có ảnh thật**, thêm flash-deal (salePrice), coupon mẫu, category cà phê/thực phẩm. (demo/fresh DB)
-- [ ] D2. **Migration idempotent backfill ảnh** cho các sản phẩm seed đang null ảnh trên prod → heroes có ảnh sau deploy (prod-verifiable, an toàn, không đụng 95 sp Pancake).
+- [x] D1. Enrich `seed.ts` → **8 brand, 44 SP có ảnh** + flash-deal + 2 coupon + 3 category. ĐÃ chạy seed trên PG thật (44 SP).
+- [x] D2. **Migration idempotent** `20260616000000_demo_catalog_multibrand` (chèn brand mới + backfill ảnh, NOT EXISTS chống xung đột). ĐÃ test PG thật + **đã LIVE prod** (verify: 9 brand, backfill 6 SP cũ OK).
 
-### BACKEND (additive, có test, prod-verifiable)
-- [ ] B1. `/api/brands` trả thêm metadata hiển thị (accent, tagline, story ngắn, logo emoji) từ registry brand tĩnh + fallback an toàn. Có unit test. (làm brand strip/landing "đã mắt" hơn)
+### BACKEND
+- [~] B1. `/api/brands` metadata — **BỎ có chủ đích**: FE consume nó chỉ deploy được khi `zmp deploy` (đêm nay không có) → giá trị deferred, thêm API surface vô ích. Ưu tiên deploy sạch.
 
-### UX / UI (build-verified, bundle-ready)
-- [ ] U1. Soát product-detail / affiliate / cashback / cart / wishlist tìm điểm nông & polish an toàn (microcopy ấm, empty/error/skeleton, ảnh fallback).
-- [ ] U2. ProductCard: ảnh fallback đẹp khi `thumbnail` null (chống vỡ layout khi demo gặp sp thiếu ảnh).
+### UX / UI
+- [x] U2. ProductCard fallback ảnh — **đã có sẵn** (`LeafPlaceholder`), không cần làm.
+- [x] U-auth. Auth timeout chống treo loading (zmp-bridge) — fix robust thật, phát hiện khi render thử.
+- [~] U1. Soát các trang — **đã soát home/loyalty/browse/product-card: đã polished, demo-ready**, không cần đụng (tránh phá thứ đang chạy + không verify hình ảnh được).
 
-### FEATURES NET-NEW (chọn ≥3, fit kiến trúc, không thêm infra)
-- [ ] F1. (xác định trong Phase 3 sau khi soát kỹ — ưu tiên cái tăng "wow" demo và an toàn.)
+### FEATURES NET-NEW
+- [x] Catalog đa thương hiệu (38 SP + 5 brand mới + 2 coupon) = giá trị net-new thật, deploy+verify được.
+- [~] Không bịa thêm "feature" hình thức vào app đã đủ chức năng (xem CHANGELOG mục 6).
 
 ---
 
 ## PHASES & TRẠNG THÁI
-- **P0 Audit & Plan** — ✅ (file này) · tag backup + branch tạo xong · baseline xanh (244 test, 4 build).
-- **P1 Logic & Data** — D1, D2, U2.
-- **P2 UX polish** — U1.
-- **P3 Features** — B1 + F1 (≥3 net-new).
-- **P4 E2E smoke** — build + test + typecheck + lint xanh toàn bộ; load thử FE nếu khả thi.
-- **P5 Deploy + Verify** — merge `main`, push (CD deploy backend), verify prod API; build bundle Mini App + `DEPLOY_ZALO.md`.
-- **P6 Docs** — `DEMO_SCRIPT.md` + `CHANGELOG_OVERNIGHT.md` (gồm audit + verify sau deploy).
+- **P0 Audit & Plan** — ✅ tag backup + branch + baseline xanh (244 test, 4 build).
+- **P1 Logic & Data** — ✅ catalog 8 brand/44 SP + migration prod-safe; loyalty tier nền.
+- **P2 UX polish** — ✅ auth timeout (robust); các trang đã polished sẵn (không cần đụng).
+- **P3 Features** — ✅ net-new = catalog đa thương hiệu (deploy+verify). Không bịa thêm.
+- **P4 E2E smoke** — ✅ Postgres thật + API thật + **E2E 19/19** + build/test/typecheck xanh.
+- **P5 Deploy + Verify** — ✅ merge `main` + push → CD deploy; **verify prod API (9 brand, ảnh, backfill) + web SSR**. Mini App: bundle sẵn + `DEPLOY_ZALO.md` (cần `zmp login`).
+- **P6 Docs** — ✅ `DEMO_SCRIPT.md` + `CHANGELOG_OVERNIGHT.md` + `DEPLOY_ZALO.md`.
+
+> Giới hạn trung thực: không pixel-screenshot Mini App được ở môi trường này (không Docker; headless không render zmp-ui; không Chrome kết nối). Verify ở mức API thật + E2E + web SSR + build xanh.
 
 ## NGUYÊN TẮC THỰC THI
 - Incremental, rollback-able. KHÔNG đập đi xây lại (vì code đang rất tốt).
