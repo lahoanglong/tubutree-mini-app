@@ -30,23 +30,38 @@ export interface ZaloLoginResult {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Bọc 1 lời gọi SDK với timeout — chống TREO vô hạn: ngoài môi trường Zalo (hoặc khi cầu nối
+ * native không phản hồi), login()/getAccessToken() có thể không bao giờ resolve → app kẹt ở
+ * màn loading. Hết hạn → reject để rơi xuống fallback khách. Zalo thật trả < 1s nên 3s rất dư.
+ */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timeout`)), ms)),
+  ]);
+}
+
+/**
  * Lấy access token Zalo, CÓ RETRY — lỗi đã biết của Zalo SDK: getAccessToken() hay
  * fail/empty ở lần gọi đầu (ngay sau login), thành công ở lần sau. Thử tối đa 3 lần,
- * mỗi lần re-login + chờ tăng dần (0.4s, 0.8s). Trả token hoặc throw lỗi cuối.
+ * mỗi lần re-login + chờ tăng dần (0.4s, 0.8s). Mỗi call có timeout 3s chống treo.
+ * Trả token hoặc throw lỗi cuối (→ caller fallback đăng nhập khách).
  */
 export async function getZaloAccessToken(): Promise<ZaloLoginResult> {
   let lastErr: unknown = null;
   for (let i = 0; i < 3; i++) {
     try {
-      await zmpLogin({});
-      const accessToken = await getAccessToken({});
+      await withTimeout(zmpLogin({}), 3000, 'zmpLogin');
+      const accessToken = await withTimeout(getAccessToken({}), 3000, 'getAccessToken');
       if (accessToken && accessToken.length > 0) return { accessToken, code: accessToken };
       lastErr = new Error('empty access token');
     } catch (e) {
       lastErr = e;
       // -1401 = "app chưa kích hoạt" — lỗi VĨNH VIỄN, retry vô ích → bail ngay để fallback guest nhanh.
       const code = typeof e === 'object' && e !== null ? (e as { code?: number }).code : undefined;
-      if (code === -1401) break;
+      // Timeout = không có cầu nối Zalo (chạy ngoài Zalo) → cũng bail ngay, retry vô ích.
+      const isTimeout = e instanceof Error && e.message.endsWith('timeout');
+      if (code === -1401 || isTimeout) break;
     }
     if (i < 2) await sleep(400 * (i + 1)); // chỉ chờ GIỮA các lần (0.4s, 0.8s), không chờ sau lần cuối
   }

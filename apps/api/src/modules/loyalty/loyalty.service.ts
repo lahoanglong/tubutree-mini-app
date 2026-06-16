@@ -145,17 +145,20 @@ export class LoyaltyService {
       include: { tier: true },
     });
     const tiers = await this.prisma.membershipTier.findMany({ orderBy: { sortOrder: 'asc' } });
-    const currentSort = user.tier?.sortOrder ?? -1;
+    // Mọi user mặc định ở hạng thấp nhất (Mầm Xanh, minPoints 0) — tierId chỉ được gán khi có
+    // đơn DELIVERED đầu tiên, nên user mới chưa có tier. Hiển thị hạng nền để trang loyalty đúng.
+    const current = user.tier ?? tiers[0] ?? null;
+    const currentSort = current?.sortOrder ?? -1;
     const next = tiers.find((t) => t.sortOrder > currentSort);
 
     return {
       pointsBalance: user.pointsBalance,
-      tier: user.tier
+      tier: current
         ? {
-            id: user.tier.id,
-            name: user.tier.name,
-            multiplier: Number(user.tier.pointMultiplier),
-            perks: user.tier.perks,
+            id: current.id,
+            name: current.name,
+            multiplier: Number(current.pointMultiplier),
+            perks: current.perks,
           }
         : null,
       nextTier: next

@@ -154,6 +154,9 @@ const CATEGORIES = [
   { id: 'cat-cleaning', name: 'Tẩy rửa sinh học', slug: 'tay-rua-sinh-hoc', sortOrder: 2 },
   { id: 'cat-baby', name: 'Cho bé', slug: 'cho-be', sortOrder: 3 },
   { id: 'cat-mom', name: 'Cho mẹ bầu', slug: 'cho-me-bau', sortOrder: 4 },
+  { id: 'cat-personal', name: 'Chăm sóc cá nhân', slug: 'cham-soc-ca-nhan', sortOrder: 5 },
+  { id: 'cat-coffee', name: 'Cà phê & Đồ uống', slug: 'ca-phe-do-uong', sortOrder: 6 },
+  { id: 'cat-food', name: 'Nông sản & Thực phẩm', slug: 'nong-san-thuc-pham', sortOrder: 7 },
 ];
 
 type SeedProduct = {
@@ -172,12 +175,72 @@ type SeedProduct = {
   variations: { sku: string; name: string; attributes: Record<string, string>; retailPrice: number; salePrice?: number; stock: number; weight: number }[];
 };
 
-// Catalog mẫu (đại diện ~brands tubutree.com). Khi có Pancake key thật, sync sẽ ghi đè giá/tồn theo pancakeId.
+/** Ảnh demo ổn định theo slug (ảnh thật, luôn tải được). Khi có Pancake/Cloudinary thật → sync ghi đè. */
+function demoImage(slug: string): string {
+  return `https://picsum.photos/seed/tubu-${slug}/800/800`;
+}
+
+// Catalog mẫu đa thương hiệu (8 brand đại diện hệ sinh thái tubutree.com): Visante, Pơ Lang,
+// Fuwa3e, Cobote, Le Plateau Coffee, BH.Nong, Sokfram, Hector. Ảnh demo theo slug (picsum) —
+// khi có Pancake key thật, sync sẽ ghi đè giá/tồn/ảnh theo pancakeId. ≥40 SP để demo "đa thương hiệu".
 const PRODUCTS: SeedProduct[] = [
+  // ── Visante — mỹ phẩm thiên nhiên ─────────────────────────────
+  {
+    id: 'p-visante-serum', brand: 'Visante', slug: 'serum-duong-am-visante', name: 'Serum dưỡng ẩm Visante',
+    shortDesc: 'Cấp ẩm chuyên sâu chiết xuất rau má.', basePrice: 320000, salePrice: 289000, categoryIds: ['cat-skincare'],
+    forSegment: ['sensitive_skin', 'skincare'], certifications: ['USDA Organic', 'Vegan'], isFeatured: true,
+    ingredients: [
+      { name: 'Chiết xuất rau má', percentage: '5%', benefit: 'Phục hồi, làm dịu da nhạy cảm' },
+      { name: 'Hyaluronic Acid', percentage: '2%', benefit: 'Cấp ẩm sâu, căng mịn' },
+      { name: 'Chiết xuất lô hội', benefit: 'Làm dịu, chống kích ứng' },
+    ],
+    variations: [
+      { sku: 'VIS-SR-30', name: '30ml', attributes: { size: '30ml' }, retailPrice: 320000, salePrice: 289000, stock: 60, weight: 90 },
+      { sku: 'VIS-SR-50', name: '50ml', attributes: { size: '50ml' }, retailPrice: 460000, stock: 30, weight: 130 },
+    ],
+  },
+  {
+    id: 'p-visante-cream', brand: 'Visante', slug: 'kem-duong-ba-bau-visante', name: 'Kem dưỡng cho mẹ bầu Visante',
+    shortDesc: 'Ngừa rạn da, lành tính cho thai kỳ.', basePrice: 290000, categoryIds: ['cat-mom'],
+    forSegment: ['mom_baby'], certifications: ['USDA Organic'],
+    ingredients: [
+      { name: 'Bơ hạt mỡ (Shea)', percentage: '8%', benefit: 'Tăng đàn hồi, ngừa rạn da' },
+      { name: 'Dầu jojoba', benefit: 'Dưỡng ẩm sâu, thẩm thấu nhanh' },
+    ],
+    variations: [
+      { sku: 'VIS-CR-100', name: '100ml', attributes: { size: '100ml' }, retailPrice: 290000, stock: 45, weight: 160 },
+    ],
+  },
+  {
+    id: 'p-visante-cleanser', brand: 'Visante', slug: 'nuoc-tay-trang-rau-ma-visante', name: 'Nước tẩy trang rau má Visante',
+    shortDesc: 'Làm sạch dịu nhẹ, không lưu cồn.', basePrice: 180000, salePrice: 155000, categoryIds: ['cat-skincare'],
+    forSegment: ['sensitive_skin', 'skincare'], certifications: ['Vegan'], isFeatured: true,
+    variations: [{ sku: 'VIS-CL-300', name: '300ml', attributes: { size: '300ml' }, retailPrice: 180000, salePrice: 155000, stock: 110, weight: 330 }],
+  },
+  {
+    id: 'p-visante-sunscreen', brand: 'Visante', slug: 'kem-chong-nang-khoang-visante', name: 'Kem chống nắng khoáng Visante SPF50',
+    shortDesc: 'Chống nắng vật lý, không gây bí da.', basePrice: 345000, categoryIds: ['cat-skincare'],
+    forSegment: ['skincare'], certifications: ['Reef-safe'],
+    variations: [{ sku: 'VIS-SUN-50', name: '50ml', attributes: { size: '50ml', spf: 'SPF50+' }, retailPrice: 345000, stock: 70, weight: 95 }],
+  },
+  {
+    id: 'p-visante-mask', brand: 'Visante', slug: 'mat-na-rau-ma-visante', name: 'Mặt nạ rau má phục hồi Visante',
+    shortDesc: 'Làm dịu da sau nắng, cấp ẩm tức thì.', basePrice: 25000, categoryIds: ['cat-skincare'],
+    forSegment: ['skincare'], certifications: ['Vegan'],
+    variations: [{ sku: 'VIS-MASK-1', name: '1 miếng', attributes: { type: 'sheet' }, retailPrice: 25000, stock: 400, weight: 30 }],
+  },
+  {
+    id: 'p-visante-lipbalm', brand: 'Visante', slug: 'son-duong-gac-visante', name: 'Son dưỡng gấc Visante',
+    shortDesc: 'Dưỡng môi mềm mịn từ tinh dầu gấc.', basePrice: 95000, salePrice: 79000, categoryIds: ['cat-skincare'],
+    forSegment: ['skincare'], certifications: ['Vegan'],
+    variations: [{ sku: 'VIS-LIP-4', name: '4g', attributes: { size: '4g' }, retailPrice: 95000, salePrice: 79000, stock: 180, weight: 20 }],
+  },
+
+  // ── Pơ Lang — dược liệu Tây Nguyên ───────────────────────────
   {
     id: 'p-polang-shampoo', brand: 'Pơ Lang', slug: 'dau-goi-buoi-po-lang', name: 'Dầu gội bưởi Pơ Lang',
-    shortDesc: 'Dầu gội thảo dược tinh dầu bưởi, giảm rụng tóc.', basePrice: 165000, categoryIds: ['cat-skincare'],
-    forSegment: ['sensitive_skin'], certifications: ['Vegan'], isFeatured: true,
+    shortDesc: 'Dầu gội thảo dược tinh dầu bưởi, giảm rụng tóc.', basePrice: 165000, categoryIds: ['cat-skincare', 'cat-personal'],
+    forSegment: ['sensitive_skin', 'skincare'], certifications: ['Vegan'], isFeatured: true,
     ingredients: [
       { name: 'Tinh dầu bưởi', percentage: '2%', benefit: 'Kích thích mọc tóc, giảm gãy rụng' },
       { name: 'Bồ kết', benefit: 'Làm sạch dịu nhẹ, sạch gàu tự nhiên' },
@@ -189,9 +252,35 @@ const PRODUCTS: SeedProduct[] = [
     ],
   },
   {
+    id: 'p-polang-bodywash', brand: 'Pơ Lang', slug: 'sua-tam-sa-po-lang', name: 'Sữa tắm sả chanh Pơ Lang',
+    shortDesc: 'Hương sả chanh thư giãn, dưỡng ẩm.', basePrice: 175000, categoryIds: ['cat-skincare', 'cat-personal'],
+    forSegment: ['skincare'], certifications: ['Vegan'],
+    variations: [{ sku: 'POLANG-BW-500', name: '500ml', attributes: { size: '500ml', scent: 'sả chanh' }, retailPrice: 175000, stock: 90, weight: 560 }],
+  },
+  {
+    id: 'p-polang-ginger', brand: 'Pơ Lang', slug: 'dau-gung-po-lang', name: 'Dầu gừng massage Pơ Lang',
+    shortDesc: 'Làm ấm, thư giãn cơ sau ngày dài.', basePrice: 135000, salePrice: 115000, categoryIds: ['cat-personal'],
+    forSegment: ['eco'], certifications: ['Handmade'], isFeatured: true,
+    variations: [{ sku: 'POLANG-GG-100', name: '100ml', attributes: { size: '100ml' }, retailPrice: 135000, salePrice: 115000, stock: 140, weight: 150 }],
+  },
+  {
+    id: 'p-polang-lemongrass', brand: 'Pơ Lang', slug: 'tinh-dau-sa-chanh-po-lang', name: 'Tinh dầu sả chanh Pơ Lang',
+    shortDesc: 'Đuổi muỗi, khử mùi, thư giãn không gian.', basePrice: 110000, categoryIds: ['cat-personal'],
+    forSegment: ['eco', 'home_clean'], certifications: ['Nguyên chất 100%'],
+    variations: [{ sku: 'POLANG-LG-10', name: '10ml', attributes: { size: '10ml' }, retailPrice: 110000, stock: 220, weight: 40 }],
+  },
+  {
+    id: 'p-polang-facemist', brand: 'Pơ Lang', slug: 'xit-khoang-hoa-hong-po-lang', name: 'Xịt khoáng hoa hồng Pơ Lang',
+    shortDesc: 'Cấp ẩm tức thì, làm dịu da căng thẳng.', basePrice: 145000, categoryIds: ['cat-skincare'],
+    forSegment: ['skincare'], certifications: ['Vegan'],
+    variations: [{ sku: 'POLANG-FM-150', name: '150ml', attributes: { size: '150ml' }, retailPrice: 145000, stock: 95, weight: 200 }],
+  },
+
+  // ── Fuwa3e — tẩy rửa sinh học ────────────────────────────────
+  {
     id: 'p-fuwa-dishwash', brand: 'Fuwa3e', slug: 'nuoc-rua-chen-fuwa3e', name: 'Nước rửa chén sinh học Fuwa3e',
     shortDesc: 'Lên men enzyme dứa, an toàn cho da tay.', basePrice: 120000, categoryIds: ['cat-cleaning'],
-    forSegment: [], certifications: ['Eco'], isFeatured: true,
+    forSegment: ['home_clean'], certifications: ['Eco'], isFeatured: true,
     ingredients: [
       { name: 'Enzyme dứa lên men', percentage: '15%', benefit: 'Phân giải dầu mỡ, không hại da tay' },
       { name: 'Tinh dầu sả', benefit: 'Khử mùi tanh, kháng khuẩn tự nhiên' },
@@ -203,41 +292,213 @@ const PRODUCTS: SeedProduct[] = [
     ],
   },
   {
-    id: 'p-visante-serum', brand: 'Visante', slug: 'serum-duong-am-visante', name: 'Serum dưỡng ẩm Visante',
-    shortDesc: 'Cấp ẩm chuyên sâu chiết xuất rau má.', basePrice: 320000, salePrice: 289000, categoryIds: ['cat-skincare'],
-    forSegment: ['sensitive_skin', 'mom_baby'], certifications: ['USDA Organic', 'Vegan'], isFeatured: true,
-    ingredients: [
-      { name: 'Chiết xuất rau má', percentage: '5%', benefit: 'Phục hồi, làm dịu da nhạy cảm' },
-      { name: 'Hyaluronic Acid', percentage: '2%', benefit: 'Cấp ẩm sâu, căng mịn' },
-      { name: 'Chiết xuất lô hội', benefit: 'Làm dịu, chống kích ứng' },
-    ],
-    variations: [
-      { sku: 'VIS-SR-30', name: '30ml', attributes: { size: '30ml' }, retailPrice: 320000, salePrice: 289000, stock: 60, weight: 90 },
-    ],
-  },
-  {
     id: 'p-fuwa-laundry', brand: 'Fuwa3e', slug: 'nuoc-giat-fuwa3e', name: 'Nước giặt sinh học Fuwa3e',
     shortDesc: 'Sạch sâu, dịu nhẹ cho đồ em bé.', basePrice: 210000, categoryIds: ['cat-cleaning', 'cat-baby'],
-    forSegment: ['mom_baby'], certifications: ['Eco'],
+    forSegment: ['mom_baby', 'home_clean'], certifications: ['Eco'], isFeatured: true,
+    variations: [{ sku: 'FUWA-LD-2L', name: '2L', attributes: { size: '2L' }, retailPrice: 210000, stock: 150, weight: 2100 }],
+  },
+  {
+    id: 'p-fuwa-floor', brand: 'Fuwa3e', slug: 'nuoc-lau-san-fuwa3e', name: 'Nước lau sàn enzyme Fuwa3e',
+    shortDesc: 'Sàn sạch bóng, hương thảo mộc dịu.', basePrice: 165000, salePrice: 139000, categoryIds: ['cat-cleaning'],
+    forSegment: ['home_clean'], certifications: ['Eco'],
+    variations: [{ sku: 'FUWA-FL-2L', name: '2L', attributes: { size: '2L' }, retailPrice: 165000, salePrice: 139000, stock: 120, weight: 2100 }],
+  },
+  {
+    id: 'p-fuwa-handwash', brand: 'Fuwa3e', slug: 'nuoc-rua-tay-fuwa3e', name: 'Nước rửa tay sinh học Fuwa3e',
+    shortDesc: 'Sạch khuẩn dịu nhẹ, dưỡng ẩm da tay.', basePrice: 89000, categoryIds: ['cat-cleaning'],
+    forSegment: ['home_clean', 'mom_baby'], certifications: ['Eco'],
+    variations: [{ sku: 'FUWA-HW-500', name: '500ml', attributes: { size: '500ml' }, retailPrice: 89000, stock: 260, weight: 540 }],
+  },
+  {
+    id: 'p-fuwa-bottle', brand: 'Fuwa3e', slug: 'nuoc-rua-binh-sua-fuwa3e', name: 'Nước rửa bình sữa Fuwa3e',
+    shortDesc: 'An toàn cho bé, sạch cặn sữa, không mùi.', basePrice: 135000, categoryIds: ['cat-cleaning', 'cat-baby'],
+    forSegment: ['mom_baby'], certifications: ['Eco', 'Food-grade'],
+    variations: [{ sku: 'FUWA-BT-500', name: '500ml', attributes: { size: '500ml' }, retailPrice: 135000, stock: 130, weight: 540 }],
+  },
+
+  // ── Cobote — chăm sóc cho bé ─────────────────────────────────
+  {
+    id: 'p-cobote-tram', brand: 'Cobote', slug: 'dau-tram-be-cobote', name: 'Dầu tràm cho bé Cobote',
+    shortDesc: 'Giữ ấm, phòng ho cảm cho bé sơ sinh.', basePrice: 89000, categoryIds: ['cat-baby'],
+    forSegment: ['mom_baby'], certifications: ['Nguyên chất 100%'], isFeatured: true,
+    ingredients: [{ name: 'Tinh dầu tràm Huế', percentage: '100%', benefit: 'Giữ ấm, kháng khuẩn đường hô hấp' }],
+    variations: [{ sku: 'COBOTE-TR-50', name: '50ml', attributes: { size: '50ml' }, retailPrice: 89000, stock: 300, weight: 80 }],
+  },
+  {
+    id: 'p-cobote-wash', brand: 'Cobote', slug: 'nuoc-tam-goi-be-cobote', name: 'Nước tắm gội thảo dược cho bé Cobote',
+    shortDesc: 'Tắm gội 2 trong 1, không cay mắt bé.', basePrice: 155000, salePrice: 132000, categoryIds: ['cat-baby'],
+    forSegment: ['mom_baby'], certifications: ['Vegan'],
+    variations: [{ sku: 'COBOTE-WS-250', name: '250ml', attributes: { size: '250ml' }, retailPrice: 155000, salePrice: 132000, stock: 110, weight: 290 }],
+  },
+  {
+    id: 'p-cobote-powder', brand: 'Cobote', slug: 'phan-rom-thao-duoc-cobote', name: 'Phấn rôm thảo dược Cobote',
+    shortDesc: 'Hút ẩm, ngừa hăm, không bột talc.', basePrice: 79000, categoryIds: ['cat-baby'],
+    forSegment: ['mom_baby'], certifications: ['Talc-free'],
+    variations: [{ sku: 'COBOTE-PW-100', name: '100g', attributes: { size: '100g' }, retailPrice: 79000, stock: 160, weight: 130 }],
+  },
+  {
+    id: 'p-cobote-diapercream', brand: 'Cobote', slug: 'kem-chong-ham-cobote', name: 'Kem chống hăm Cobote',
+    shortDesc: 'Làm dịu, phục hồi vùng da hăm của bé.', basePrice: 119000, categoryIds: ['cat-baby'],
+    forSegment: ['mom_baby'], certifications: ['Vegan'],
+    variations: [{ sku: 'COBOTE-DC-50', name: '50g', attributes: { size: '50g' }, retailPrice: 119000, stock: 140, weight: 70 }],
+  },
+
+  // ── Le Plateau Coffee — cà phê đặc sản ───────────────────────
+  {
+    id: 'p-leplateau-arabica', brand: 'Le Plateau Coffee', slug: 'arabica-cau-dat-le-plateau', name: 'Cà phê Arabica Cầu Đất Le Plateau',
+    shortDesc: 'Hạt rang specialty, hậu vị trái cây, chua thanh.', basePrice: 185000, categoryIds: ['cat-coffee', 'cat-food'],
+    forSegment: ['eco'], certifications: ['Specialty', 'Rainforest Alliance'], isFeatured: true,
+    ingredients: [{ name: 'Arabica Cầu Đất 1.650m', percentage: '100%', benefit: 'Hương hoa, hậu vị cam quýt' }],
     variations: [
-      { sku: 'FUWA-LD-2L', name: '2L', attributes: { size: '2L' }, retailPrice: 210000, stock: 150, weight: 2100 },
+      { sku: 'LP-ARA-250', name: '250g · nguyên hạt', attributes: { weight: '250g', grind: 'nguyên hạt' }, retailPrice: 185000, stock: 90, weight: 270 },
+      { sku: 'LP-ARA-250-F', name: '250g · xay pha phin', attributes: { weight: '250g', grind: 'pha phin' }, retailPrice: 185000, stock: 70, weight: 270 },
     ],
   },
   {
-    id: 'p-polang-bodywash', brand: 'Pơ Lang', slug: 'sua-tam-sa-po-lang', name: 'Sữa tắm sả chanh Pơ Lang',
-    shortDesc: 'Hương sả chanh thư giãn, dưỡng ẩm.', basePrice: 175000, categoryIds: ['cat-skincare'],
-    forSegment: [], certifications: ['Vegan'],
-    variations: [
-      { sku: 'POLANG-BW-500', name: '500ml', attributes: { size: '500ml', scent: 'sả chanh' }, retailPrice: 175000, stock: 90, weight: 560 },
-    ],
+    id: 'p-leplateau-robusta', brand: 'Le Plateau Coffee', slug: 'robusta-honey-le-plateau', name: 'Cà phê Robusta Honey Le Plateau',
+    shortDesc: 'Sơ chế honey, đậm vị, ít đắng gắt.', basePrice: 145000, salePrice: 125000, categoryIds: ['cat-coffee', 'cat-food'],
+    forSegment: ['eco'], certifications: ['Honey process'], isFeatured: true,
+    variations: [{ sku: 'LP-ROB-250', name: '250g', attributes: { weight: '250g' }, retailPrice: 145000, salePrice: 125000, stock: 120, weight: 270 }],
   },
   {
-    id: 'p-visante-cream', brand: 'Visante', slug: 'kem-duong-ba-bau-visante', name: 'Kem dưỡng cho mẹ bầu Visante',
-    shortDesc: 'Ngừa rạn da, lành tính cho thai kỳ.', basePrice: 290000, categoryIds: ['cat-mom'],
-    forSegment: ['mom_baby'], certifications: ['USDA Organic'],
-    variations: [
-      { sku: 'VIS-CR-100', name: '100ml', attributes: { size: '100ml' }, retailPrice: 290000, stock: 45, weight: 160 },
-    ],
+    id: 'p-leplateau-drip', brand: 'Le Plateau Coffee', slug: 'ca-phe-phin-giay-le-plateau', name: 'Cà phê phin giấy Le Plateau (hộp 10)',
+    shortDesc: 'Pha nhanh tại bàn, tiện mang đi.', basePrice: 95000, categoryIds: ['cat-coffee'],
+    forSegment: ['eco'], certifications: [],
+    variations: [{ sku: 'LP-DRIP-10', name: 'Hộp 10 gói', attributes: { count: '10' }, retailPrice: 95000, stock: 200, weight: 130 }],
+  },
+  {
+    id: 'p-leplateau-coldbrew', brand: 'Le Plateau Coffee', slug: 'cold-brew-tui-loc-le-plateau', name: 'Cold Brew túi lọc Le Plateau',
+    shortDesc: 'Ủ lạnh 12h, ngọt dịu, ít axit.', basePrice: 120000, categoryIds: ['cat-coffee'],
+    forSegment: ['eco'], certifications: [],
+    variations: [{ sku: 'LP-CB-5', name: 'Hộp 5 túi', attributes: { count: '5' }, retailPrice: 120000, stock: 85, weight: 180 }],
+  },
+
+  // ── BH.Nong — nông sản & thực phẩm sạch ──────────────────────
+  {
+    id: 'p-bhnong-honey', brand: 'BH.Nong', slug: 'mat-ong-rung-bhnong', name: 'Mật ong rừng nguyên chất BH.Nong',
+    shortDesc: 'Mật ong rừng tự nhiên, không pha đường.', basePrice: 260000, categoryIds: ['cat-food'],
+    forSegment: ['eco'], certifications: ['Nguyên chất 100%'], isFeatured: true,
+    variations: [{ sku: 'BHN-HN-500', name: 'Chai 500ml', attributes: { size: '500ml' }, retailPrice: 260000, stock: 80, weight: 720 }],
+  },
+  {
+    id: 'p-bhnong-cashew', brand: 'BH.Nong', slug: 'hat-dieu-rang-moc-bhnong', name: 'Hạt điều rang mộc BH.Nong',
+    shortDesc: 'Điều Bình Phước rang mộc, giòn bùi.', basePrice: 180000, salePrice: 159000, categoryIds: ['cat-food'],
+    forSegment: ['eco'], certifications: ['OCOP'],
+    variations: [{ sku: 'BHN-CW-500', name: '500g', attributes: { weight: '500g' }, retailPrice: 180000, salePrice: 159000, stock: 150, weight: 540 }],
+  },
+  {
+    id: 'p-bhnong-pepper', brand: 'BH.Nong', slug: 'tieu-den-bhnong', name: 'Tiêu đen Chư Sê BH.Nong',
+    shortDesc: 'Tiêu Tây Nguyên thơm nồng, hạt chắc.', basePrice: 95000, categoryIds: ['cat-food'],
+    forSegment: ['eco'], certifications: ['OCOP'],
+    variations: [{ sku: 'BHN-PP-200', name: '200g', attributes: { weight: '200g' }, retailPrice: 95000, stock: 200, weight: 230 }],
+  },
+  {
+    id: 'p-bhnong-tea', brand: 'BH.Nong', slug: 'tra-thao-moc-bhnong', name: 'Trà thảo mộc thanh nhiệt BH.Nong',
+    shortDesc: 'Atiso, cúc, cam thảo — thanh mát mỗi ngày.', basePrice: 85000, categoryIds: ['cat-food'],
+    forSegment: ['eco'], certifications: ['Vegan'],
+    variations: [{ sku: 'BHN-TEA-20', name: 'Hộp 20 túi', attributes: { count: '20' }, retailPrice: 85000, stock: 180, weight: 80 }],
+  },
+
+  // ── Sokfram — thực phẩm organic ──────────────────────────────
+  {
+    id: 'p-sokfram-rice', brand: 'Sokfram', slug: 'gao-lut-huyet-rong-sokfram', name: 'Gạo lứt huyết rồng Sokfram',
+    shortDesc: 'Gạo lứt đỏ giàu chất xơ, dẻo thơm.', basePrice: 75000, categoryIds: ['cat-food'],
+    forSegment: ['eco'], certifications: ['Organic'], isFeatured: true,
+    variations: [{ sku: 'SOK-RC-1KG', name: '1kg', attributes: { weight: '1kg' }, retailPrice: 75000, stock: 220, weight: 1050 }],
+  },
+  {
+    id: 'p-sokfram-coconut', brand: 'Sokfram', slug: 'dau-dua-ep-lanh-sokfram', name: 'Dầu dừa ép lạnh Sokfram',
+    shortDesc: 'Ép lạnh nguyên chất, dùng ăn & dưỡng.', basePrice: 130000, salePrice: 110000, categoryIds: ['cat-food', 'cat-skincare'],
+    forSegment: ['eco', 'skincare'], certifications: ['Organic', 'Ép lạnh'],
+    variations: [{ sku: 'SOK-CO-500', name: '500ml', attributes: { size: '500ml' }, retailPrice: 130000, salePrice: 110000, stock: 140, weight: 560 }],
+  },
+  {
+    id: 'p-sokfram-centella', brand: 'Sokfram', slug: 'bot-rau-ma-sokfram', name: 'Bột rau má nguyên chất Sokfram',
+    shortDesc: 'Sấy lạnh giữ dưỡng chất, pha uống tiện lợi.', basePrice: 99000, categoryIds: ['cat-food'],
+    forSegment: ['eco'], certifications: ['Organic'],
+    variations: [{ sku: 'SOK-CT-150', name: '150g', attributes: { weight: '150g' }, retailPrice: 99000, stock: 160, weight: 180 }],
+  },
+  {
+    id: 'p-sokfram-granola', brand: 'Sokfram', slug: 'granola-hat-sokfram', name: 'Granola ngũ cốc hạt Sokfram',
+    shortDesc: 'Ăn sáng healthy, ngọt nhẹ từ mật ong.', basePrice: 140000, categoryIds: ['cat-food'],
+    forSegment: ['eco'], certifications: ['Không đường tinh luyện'],
+    variations: [{ sku: 'SOK-GR-400', name: '400g', attributes: { weight: '400g' }, retailPrice: 140000, stock: 120, weight: 440 }],
+  },
+
+  // ── Hector — chăm sóc cá nhân cho nam ────────────────────────
+  {
+    id: 'p-hector-clay', brand: 'Hector', slug: 'sap-vuot-toc-hector', name: 'Sáp vuốt tóc Hector Matte',
+    shortDesc: 'Giữ nếp tự nhiên cả ngày, không bóng nhờn.', basePrice: 160000, categoryIds: ['cat-personal'],
+    forSegment: ['skincare'], certifications: [], isFeatured: true,
+    variations: [{ sku: 'HEC-CL-80', name: '80g', attributes: { size: '80g' }, retailPrice: 160000, stock: 130, weight: 110 }],
+  },
+  {
+    id: 'p-hector-facewash', brand: 'Hector', slug: 'sua-rua-mat-than-tre-hector', name: 'Sữa rửa mặt than tre Hector',
+    shortDesc: 'Sạch nhờn, sạch bụi mịn cho da nam.', basePrice: 145000, salePrice: 119000, categoryIds: ['cat-personal', 'cat-skincare'],
+    forSegment: ['skincare'], certifications: ['Vegan'],
+    variations: [{ sku: 'HEC-FW-120', name: '120ml', attributes: { size: '120ml' }, retailPrice: 145000, salePrice: 119000, stock: 150, weight: 150 }],
+  },
+  {
+    id: 'p-hector-shampoo', brand: 'Hector', slug: 'dau-goi-bac-ha-hector', name: 'Dầu gội bạc hà mát lạnh Hector',
+    shortDesc: 'Sảng khoái, sạch gàu, mát da đầu.', basePrice: 135000, categoryIds: ['cat-personal'],
+    forSegment: ['skincare'], certifications: ['Vegan'],
+    variations: [{ sku: 'HEC-SH-300', name: '300ml', attributes: { size: '300ml' }, retailPrice: 135000, stock: 140, weight: 330 }],
+  },
+  {
+    id: 'p-hector-deo', brand: 'Hector', slug: 'lan-khu-mui-hector', name: 'Lăn khử mùi thiên nhiên Hector',
+    shortDesc: 'Khử mùi 24h, không cồn, không nhôm.', basePrice: 99000, categoryIds: ['cat-personal'],
+    forSegment: ['skincare'], certifications: ['Aluminum-free'],
+    variations: [{ sku: 'HEC-DEO-50', name: '50ml', attributes: { size: '50ml' }, retailPrice: 99000, stock: 200, weight: 70 }],
+  },
+
+  // ── Bổ sung đợt 2 (làm dày catalog đa thương hiệu) ───────────
+  {
+    id: 'p-visante-vitc', brand: 'Visante', slug: 'tinh-chat-vitamin-c-visante', name: 'Tinh chất Vitamin C Visante',
+    shortDesc: 'Làm sáng, mờ thâm từ Vitamin C tự nhiên.', basePrice: 380000, salePrice: 329000, categoryIds: ['cat-skincare'],
+    forSegment: ['skincare'], certifications: ['Vegan'], isFeatured: true,
+    variations: [{ sku: 'VIS-VITC-20', name: '20ml', attributes: { size: '20ml' }, retailPrice: 380000, salePrice: 329000, stock: 55, weight: 70 }],
+  },
+  {
+    id: 'p-visante-eye', brand: 'Visante', slug: 'kem-mat-rau-ma-visante', name: 'Kem mắt rau má Visante',
+    shortDesc: 'Giảm bọng, mờ quầng thâm vùng mắt.', basePrice: 295000, categoryIds: ['cat-skincare'],
+    forSegment: ['skincare'], certifications: ['Vegan'],
+    variations: [{ sku: 'VIS-EYE-15', name: '15ml', attributes: { size: '15ml' }, retailPrice: 295000, stock: 60, weight: 50 }],
+  },
+  {
+    id: 'p-polang-hairoil', brand: 'Pơ Lang', slug: 'dau-duong-toc-bo-ket-po-lang', name: 'Dầu dưỡng tóc bồ kết Pơ Lang',
+    shortDesc: 'Phục hồi tóc khô xơ, vào nếp mượt.', basePrice: 125000, categoryIds: ['cat-personal'],
+    forSegment: ['skincare'], certifications: ['Handmade'],
+    variations: [{ sku: 'POLANG-HO-50', name: '50ml', attributes: { size: '50ml' }, retailPrice: 125000, stock: 110, weight: 80 }],
+  },
+  {
+    id: 'p-fuwa-glass', brand: 'Fuwa3e', slug: 'nuoc-lau-kinh-fuwa3e', name: 'Nước lau kính enzyme Fuwa3e',
+    shortDesc: 'Sáng bóng không vệt, không amoniac.', basePrice: 79000, categoryIds: ['cat-cleaning'],
+    forSegment: ['home_clean'], certifications: ['Eco'],
+    variations: [{ sku: 'FUWA-GL-500', name: '500ml', attributes: { size: '500ml' }, retailPrice: 79000, stock: 170, weight: 540 }],
+  },
+  {
+    id: 'p-cobote-massage', brand: 'Cobote', slug: 'dau-massage-be-cobote', name: 'Dầu massage cho bé Cobote',
+    shortDesc: 'Dưỡng da bé mềm mại, hỗ trợ giấc ngủ.', basePrice: 109000, categoryIds: ['cat-baby'],
+    forSegment: ['mom_baby'], certifications: ['Vegan'],
+    variations: [{ sku: 'COBOTE-MS-100', name: '100ml', attributes: { size: '100ml' }, retailPrice: 109000, stock: 120, weight: 130 }],
+  },
+  {
+    id: 'p-leplateau-instant', brand: 'Le Plateau Coffee', slug: 'ca-phe-sua-hoa-tan-le-plateau', name: 'Cà phê sữa hoà tan Le Plateau (hộp 12)',
+    shortDesc: 'Cà phê sữa 3in1 từ hạt thật, tiện lợi.', basePrice: 89000, salePrice: 75000, categoryIds: ['cat-coffee'],
+    forSegment: ['eco'], certifications: [],
+    variations: [{ sku: 'LP-INS-12', name: 'Hộp 12 gói', attributes: { count: '12' }, retailPrice: 89000, salePrice: 75000, stock: 190, weight: 320 }],
+  },
+  {
+    id: 'p-bhnong-cagaileo', brand: 'BH.Nong', slug: 'cao-ca-gai-leo-bhnong', name: 'Cao cà gai leo BH.Nong',
+    shortDesc: 'Hỗ trợ mát gan, giải độc tự nhiên.', basePrice: 220000, categoryIds: ['cat-food'],
+    forSegment: ['eco'], certifications: ['OCOP'],
+    variations: [{ sku: 'BHN-CGL-100', name: 'Hũ 100g', attributes: { size: '100g' }, retailPrice: 220000, stock: 70, weight: 160 }],
+  },
+  {
+    id: 'p-sokfram-chia', brand: 'Sokfram', slug: 'hat-chia-uc-sokfram', name: 'Hạt chia Úc Sokfram',
+    shortDesc: 'Giàu Omega-3 & chất xơ, pha uống tiện.', basePrice: 115000, categoryIds: ['cat-food'],
+    forSegment: ['eco'], certifications: ['Organic'],
+    variations: [{ sku: 'SOK-CH-500', name: '500g', attributes: { weight: '500g' }, retailPrice: 115000, stock: 150, weight: 540 }],
   },
 ];
 
@@ -326,6 +587,7 @@ async function main() {
   console.log('🌱 Seeding Products (sample catalog)...');
   let variationCount = 0;
   for (const p of PRODUCTS) {
+    const thumb = demoImage(p.slug);
     await prisma.product.upsert({
       where: { id: p.id },
       update: {
@@ -333,12 +595,14 @@ async function main() {
         brand: p.brand, categoryIds: p.categoryIds, forSegment: p.forSegment,
         certifications: p.certifications, isFeatured: p.isFeatured ?? false,
         ingredients: p.ingredients ?? undefined,
+        // Backfill ảnh demo (sản phẩm seed cũ trước đây images rỗng) — sync Pancake sẽ ghi đè sau.
+        images: [thumb], thumbnail: thumb,
       },
       create: {
         id: p.id,
         pancakeId: `seed-${p.id}`, // placeholder; sync thật sẽ map theo pancakeId riêng
         brand: p.brand, slug: p.slug, name: p.name, shortDesc: p.shortDesc,
-        description: p.shortDesc, images: [], thumbnail: null,
+        description: p.shortDesc, images: [thumb], thumbnail: thumb,
         categoryIds: p.categoryIds, tags: [p.brand.toLowerCase()],
         basePrice: p.basePrice, salePrice: p.salePrice ?? null,
         forSegment: p.forSegment, certifications: p.certifications, isFeatured: p.isFeatured ?? false,
@@ -366,16 +630,15 @@ async function main() {
   }
   console.log(`   → ${NOTIFICATION_TEMPLATES.length} templates.`);
 
-  console.log('🌱 Seeding sample Coupon (WELCOME30)...');
-  await prisma.coupon.upsert({
-    where: { code: 'WELCOME30' },
-    update: {},
-    create: {
-      code: 'WELCOME30', type: 'AMOUNT', value: 30000, minOrder: 199000,
-      startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'),
-      perUserLimit: 1, scope: 'PUBLIC',
-    },
-  });
+  console.log('🌱 Seeding sample Coupons...');
+  const COUPONS: Prisma.CouponCreateInput[] = [
+    { code: 'WELCOME30', type: 'AMOUNT', value: 30000, minOrder: 199000, startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), perUserLimit: 1, scope: 'PUBLIC' },
+    { code: 'FREESHIP', type: 'FREESHIP', value: 0, minOrder: 99000, startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), perUserLimit: 3, scope: 'PUBLIC' },
+    { code: 'XANH10', type: 'PERCENT', value: 10, minOrder: 250000, maxDiscount: 50000, startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), perUserLimit: 2, scope: 'PUBLIC' },
+  ];
+  for (const c of COUPONS) {
+    await prisma.coupon.upsert({ where: { code: c.code }, update: {}, create: c });
+  }
 
   console.log('🌱 Seeding Quizzes & Missions...');
   for (const q of QUIZZES) {
