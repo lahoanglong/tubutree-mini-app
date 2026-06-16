@@ -1,0 +1,15 @@
+{
+  "name": "tubu-local-test",
+  "private": true,
+  "type": "module",
+  "description": "Bộ test local KHÔNG cần Docker: Postgres nhúng (UTF8) + E2E hành trình B2C + verify prod.",
+  "scripts": {
+    "pg": "node start-pg.mjs",
+    "e2e": "node e2e.mjs",
+    "verify-prod": "node verify-prod.mjs"
+  },
+  "dependencies": {
+    "embedded-postgres": "^18.4.0-beta.17",
+    "pg": "^8.13.1"
+  }
+}
