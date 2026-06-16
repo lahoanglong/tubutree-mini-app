@@ -24,6 +24,11 @@ Branch: `overnight/2026-06-15` → đã merge `main` (`5302752`). Backup tag: `p
 ### [P1] Loyalty — `apps/api/src/modules/loyalty/loyalty.service.ts`
 - `getOverview`: user chưa có `tierId` (mọi user trước đơn DELIVERED đầu tiên) **mặc định hạng nền Mầm Xanh** thay vì `tier=null`; tính đúng "còn X điểm lên hạng kế". Phát hiện qua E2E thật.
 
+### [FIX] Hủy đơn — `apps/api/src/modules/orders/orders.service.ts` (review pass)
+- **Bug thật (mất tiền)**: `cancel()` kiểm tra status rồi mới update + hoàn ví — KHÔNG atomic. Hai lệnh hủy đồng thời (double-tap/retry) cùng đọc `CONFIRMED` → **hoàn `walletBalance` 2 lần**. (`reverseOrderPoints` đã idempotent nên điểm an toàn; chỉ hoàn ví bị lặp.)
+- **Fix**: chuyển trạng thái bằng `updateMany` có guard `status in (PENDING_PAYMENT, CONFIRMED)`; chỉ request thắng (`count=1`) mới hoàn điểm/ví — đúng pattern atomic đã dùng ở `checkout` & `wallet.withdraw`. +1 test race. **244→245 test pass.**
+- Phát hiện qua review toàn bộ money-path (checkout/pricing/coupons/cart/cashback/wallet/affiliate-payout đều ĐÚNG; chỉ `cancel` thiếu guard). Cũng dọn 3 lỗi lint `no-explicit-any` trong test → **lint 0 error**.
+
 ### [P2] Auth chống treo — `apps/miniapp/src/services/zmp-bridge.ts`
 - `zmpLogin`/`getAccessToken` bọc **timeout 3s** + bail nhanh khi timeout → ngoài Zalo (hoặc cầu nối native không phản hồi) app **không còn kẹt màn loading**, rơi xuống đăng nhập khách. (Deploy theo lần `zmp deploy` Mini App kế tiếp.)
 
