@@ -97,6 +97,18 @@ describe('OrdersService.cancel', () => {
     );
   });
 
+  it('hoàn Ví khi đơn thanh toán bằng ZALOPAY + PAID (kênh prepaid, nhất quán reviewReturn)', async () => {
+    const { svc, userUpdate } = makeService({
+      ...baseOrder,
+      paymentMethod: 'ZALOPAY',
+      paymentStatus: 'PAID',
+    });
+    await svc.cancel('u1', 'TUBU1');
+    expect(userUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { walletBalance: { increment: 300000 } } }),
+    );
+  });
+
   it('KHÔNG hoàn Ví khi thanh toán COD', async () => {
     const { svc, userUpdate } = makeService({ ...baseOrder, paymentMethod: 'COD', paymentStatus: 'UNPAID' });
     await svc.cancel('u1', 'TUBU1');
@@ -121,7 +133,7 @@ describe('OrdersService.cancel — atomic flip+refund (B1)', () => {
     await svc.cancel('u1', 'TUBU1');
     // $transaction được gọi với 1 callback (function), không phải array of ops
     expect($transaction).toHaveBeenCalledTimes(1);
-    expect(typeof $transaction.mock.calls[0][0]).toBe('function');
+    expect(typeof $transaction.mock.calls[0]?.[0]).toBe('function');
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'o1', status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] } },

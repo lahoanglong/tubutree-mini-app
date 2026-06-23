@@ -141,7 +141,7 @@ function makeReturnPrisma(opts: {
   returnReq?: ReturnReq;
   order?: Order;
   returnUpdateManyCount?: number; // count trả về cho returnRequest.updateMany trong tx
-}) {
+} = {}) {
   const returnReq: ReturnReq =
     opts.returnReq === undefined ? { id: 'r1', orderId: 'o1', status: 'REQUESTED' } : opts.returnReq;
   const order: Order = opts.order ?? {

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isCouponEligible } from './coupon-scope';
 
 export interface CouponResult {
   code: string;
@@ -121,13 +122,9 @@ export class CouponsService {
   }
 
   /**
-   * Đảm bảo user được phép dùng coupon theo scope.
-   * - PUBLIC: cho phép.
-   * - USER_GROUP: chỉ user trong scopeMeta.userId.
-   * - TIER: bắt buộc meta.tierId tồn tại VÀ khớp user.tierId (chặn case
-   *   meta.tierId=undefined+user.tierId=null → undefined===undefined → bypass).
-   * - BIRTHDAY / INVITE / khác: default DENY tới khi có logic chính thức,
-   *   tránh user khác redeem voucher cá nhân do scope chưa được implement check.
+   * Đảm bảo user được phép dùng coupon theo scope (chặn validate/redeem nếu không).
+   * Quy tắc eligible nằm ở isCouponEligible (coupon-scope.ts) — dùng CHUNG với
+   * LoyaltyService.getAvailableCoupons để list & apply không lệch nhau.
    * Nhận `db` (PrismaClient hoặc TransactionClient) để query user trong cùng tx
    * khi được gọi từ redeem(tx) — đọc tier nhất quán với phần còn lại của tx.
    */
@@ -136,29 +133,20 @@ export class CouponsService {
     userId: string,
     db: Prisma.TransactionClient | PrismaService,
   ): Promise<void> {
-    if (coupon.scope === 'PUBLIC' || coupon.scope == null) return;
-    if (coupon.scope === 'USER_GROUP') {
-      const meta = (coupon.scopeMeta ?? {}) as { userId?: string };
-      if (!meta.userId || meta.userId !== userId) {
-        throw new BadRequestException('Mã không áp dụng cho tài khoản này.');
-      }
-      return;
-    }
+    // Chỉ TIER cần tierId — lazy-load trong cùng db/tx để đọc hạng nhất quán với
+    // phần còn lại của tx (PUBLIC/USER_GROUP không tốn query thừa).
+    let tierId: string | null | undefined;
     if (coupon.scope === 'TIER') {
-      const meta = (coupon.scopeMeta ?? {}) as { tierId?: string };
-      const user = await db.user.findUnique({
-        where: { id: userId },
-        select: { tierId: true },
-      });
-      // meta.tierId BẮT BUỘC tồn tại — nếu admin quên set, KHÔNG để user chưa hạng
-      // (tierId=null) lọt qua vì undefined===null là false nhưng undefined===undefined là true.
-      if (!user || !meta.tierId || meta.tierId !== user.tierId) {
-        throw new BadRequestException('Mã chỉ áp dụng cho hạng thành viên khác.');
-      }
-      return;
+      const user = await db.user.findUnique({ where: { id: userId }, select: { tierId: true } });
+      tierId = user?.tierId;
     }
-    // BIRTHDAY/INVITE và scope chưa biết: từ chối để tránh leak voucher cá nhân
-    // do logic check chưa được implement (xem schema CouponScope enum).
-    throw new BadRequestException('Mã không áp dụng cho tài khoản này.');
+    // Quyết định eligible dùng CHUNG isCouponEligible với LoyaltyService.getAvailableCoupons
+    // (list) → list & apply không lệch. Message giữ riêng theo scope cho rõ với user.
+    if (isCouponEligible(coupon, { id: userId, tierId })) return;
+    throw new BadRequestException(
+      coupon.scope === 'TIER'
+        ? 'Mã chỉ áp dụng cho hạng thành viên khác.'
+        : 'Mã không áp dụng cho tài khoản này.',
+    );
   }
 }

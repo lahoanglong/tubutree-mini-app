@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { isCouponEligible } from '../coupons/coupon-scope';
 
 /**
  * Loyalty core (Build Spec §6.6). Phase 1 dùng cho vòng đời đơn:
@@ -19,7 +20,15 @@ export class LoyaltyService {
     private readonly config: SystemConfigService,
   ) {}
 
-  /** Cộng điểm tích cho đơn đã giao (idempotent theo reason). */
+  /**
+   * Cộng điểm tích cho đơn đã giao (idempotent theo reason).
+   *
+   * RACE: 2 webhook DELIVERED song song/retry trước đây cùng findFirst NGOÀI tx → cùng thấy
+   * chưa cộng → cùng create + increment → DOUBLE credit. Fix: pre-check để giảm ops vô ích,
+   * nhưng GUARD CỨNG là partial unique index (reason, refId) where reason LIKE 'ORDER_DELIVERED:%'
+   * (migration 20260623010000_loyalty_credit_unique). Caller thua race ăn P2002 → bail idempotent.
+   * Đối xứng với reverseOrderPoints.
+   */
   async creditOrderPoints(orderId: string): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     if (order.pointsEarned <= 0) return;
@@ -28,28 +37,37 @@ export class LoyaltyService {
     const existed = await this.prisma.pointsTransaction.findFirst({
       where: { userId: order.userId, reason },
     });
-    if (existed) return; // đã cộng rồi
+    if (existed) return; // đã cộng rồi (pre-check; unique index là guard cứng cho race)
 
     const expireMonths = await this.config.get<number>('loyalty.point_expire_months', 12);
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + expireMonths);
 
-    await this.prisma.$transaction([
-      this.prisma.pointsTransaction.create({
-        data: {
-          userId: order.userId,
-          delta: order.pointsEarned,
-          reason,
-          refType: 'ORDER',
-          refId: order.id,
-          expiresAt,
-        },
-      }),
-      this.prisma.user.update({
-        where: { id: order.userId },
-        data: { pointsBalance: { increment: order.pointsEarned } },
-      }),
-    ]);
+    try {
+      await this.prisma.$transaction([
+        this.prisma.pointsTransaction.create({
+          data: {
+            userId: order.userId,
+            delta: order.pointsEarned,
+            reason,
+            refType: 'ORDER',
+            refId: order.id,
+            expiresAt,
+          },
+        }),
+        this.prisma.user.update({
+          where: { id: order.userId },
+          data: { pointsBalance: { increment: order.pointsEarned } },
+        }),
+      ]);
+    } catch (err) {
+      // Partial unique (reason, refId) chặn double-credit — caller thua race ăn P2002 → no-op.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        this.logger.debug(`creditOrderPoints idempotent skip order=${order.code}`);
+        return;
+      }
+      throw err;
+    }
     await this.recalcTier(order.userId);
   }
 
@@ -224,18 +242,9 @@ export class LoyaltyService {
 
     // Pre-filter theo scope trước, rồi 1 groupBy duy nhất đếm used count cho mọi coupon.
     // Trước đây loop từng coupon gọi count() → 1 + N query khi user có nhiều voucher khả dụng.
-    const filtered = coupons.filter((c) => {
-      if (c.scope === 'TIER') {
-        const meta = c.scopeMeta as { tierId?: string } | null;
-        return !meta?.tierId || meta.tierId === user.tierId;
-      }
-      if (c.scope === 'USER_GROUP') {
-        // Voucher cá nhân (welcome/birthday/winback) — chỉ hiện cho đúng user.
-        const meta = c.scopeMeta as { userId?: string } | null;
-        return meta?.userId === userId;
-      }
-      return c.scope === 'PUBLIC'; // INVITE xử lý riêng
-    });
+    // Điều kiện scope dùng CHUNG isCouponEligible với CouponsService.assertScopeOwnership
+    // (validate/redeem) để list & apply KHÔNG lệch (coupon hiện mà redeem fail).
+    const filtered = coupons.filter((c) => isCouponEligible(c, user));
 
     const ids = filtered.map((c) => c.id);
     const grouped = ids.length

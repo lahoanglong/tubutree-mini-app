@@ -61,7 +61,12 @@ export class OrdersService {
       // có thể đã stale nếu webhook ZaloPay/Pancake chuyển REFUNDED giữa detail() và tx.
       // Dùng updateMany guard `paymentStatus: 'PAID'` để hoàn ví chỉ khi DB còn PAID — count=1
       // bảo đảm increment thực sự chạy trên đơn còn nợ tiền user.
-      if (order.paymentMethod === 'WALLET') {
+      // Hoàn về Ví Tubu cho kênh prepaid (WALLET + ZALOPAY) đã PAID — nhất quán với
+      // admin.reviewReturn (wasPaid gồm WALLET/ZALOPAY/COD). Trước đây chỉ WALLET → đơn
+      // ZaloPay đã trả tiền thật mà user hủy thì KHÔNG được hoàn. COD lúc hủy luôn UNPAID
+      // (chỉ PAID khi đã giao, mà đơn DELIVERED không hủy được) nên guard paymentStatus:'PAID'
+      // tự loại COD; count=1 bảo đảm increment chỉ chạy đúng 1 lần ở nhánh thắng race.
+      if (order.paymentMethod === 'WALLET' || order.paymentMethod === 'ZALOPAY') {
         const refunded = await tx.order.updateMany({
           where: { id: order.id, paymentStatus: 'PAID' },
           data: { paymentStatus: 'REFUNDED' },

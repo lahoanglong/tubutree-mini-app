@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { LoyaltyService } from './loyalty.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -20,19 +21,22 @@ const coupon = (code: string, scope: string, scopeMeta: unknown) => ({
 });
 
 describe('LoyaltyService.getAvailableCoupons', () => {
-  it('lọc đúng scope: PUBLIC + USER_GROUP(của mình) + TIER(khớp); ẩn của user khác / tier khác / INVITE', async () => {
+  it('lọc đúng scope: PUBLIC + USER_GROUP(của mình) + TIER(khớp); ẩn của user khác / tier khác / INVITE / TIER thiếu meta', async () => {
     const coupons = [
       coupon('PUB', 'PUBLIC', null),
       coupon('MINE', 'USER_GROUP', { userId: 'me' }),
       coupon('OTHER', 'USER_GROUP', { userId: 'someone-else' }),
       coupon('TIER_OK', 'TIER', { tierId: 't1' }),
       coupon('TIER_NO', 'TIER', { tierId: 't2' }),
+      // TIER thiếu tierId (admin quên set): assertScopeOwnership từ chối ở redeem nên KHÔNG
+      // được hiện trong list — nếu hiện sẽ thành list/apply lệch (coupon hiện mà redeem fail).
+      coupon('TIER_NOMETA', 'TIER', {}),
       coupon('INVITE', 'INVITE', null),
     ];
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: 't1' }) },
       coupon: { findMany: jest.fn().mockResolvedValue(coupons) },
-      couponRedemption: { count: jest.fn().mockResolvedValue(0) },
+      couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) },
     } as unknown as PrismaService;
 
     const svc = new LoyaltyService(prisma, makeConfig());
@@ -46,7 +50,10 @@ describe('LoyaltyService.getAvailableCoupons', () => {
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: null }) },
       coupon: { findMany: jest.fn().mockResolvedValue([coupon('PUB', 'PUBLIC', null)]) },
-      couponRedemption: { count: jest.fn().mockResolvedValue(1) }, // đã dùng 1 = perUserLimit
+      // groupBy trả về số redemption của user cho từng coupon (đã dùng 1 = perUserLimit).
+      couponRedemption: {
+        groupBy: jest.fn().mockResolvedValue([{ couponId: 'PUB', _count: { _all: 1 } }]),
+      },
     } as unknown as PrismaService;
 
     const svc = new LoyaltyService(prisma, makeConfig());
@@ -90,6 +97,30 @@ describe('LoyaltyService.creditOrderPoints', () => {
     const { prisma, txn } = prismaFor({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 });
     await new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1');
     expect(txn).toHaveBeenCalledTimes(1);
+  });
+
+  it('race: webhook DELIVERED thứ 2 ăn P2002 từ unique index → idempotent (KHÔNG throw, KHÔNG recalc)', async () => {
+    // pre-check findFirst=null (cả 2 caller chưa thấy bản ghi), nhưng $transaction reject P2002
+    // do partial unique index (reason, refId) — caller thua phải bail im lặng, không cộng lần 2.
+    const p2002 = new Prisma.PrismaClientKnownRequestError('dup', {
+      code: 'P2002',
+      clientVersion: 'test',
+    });
+    const userFind = jest.fn();
+    const prisma = {
+      order: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 }),
+      },
+      pointsTransaction: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
+      user: { findUniqueOrThrow: userFind, update: jest.fn() },
+      $transaction: jest.fn().mockRejectedValue(p2002),
+    } as unknown as PrismaService;
+
+    await expect(
+      new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1'),
+    ).resolves.toBeUndefined();
+    // recalcTier (gọi user.findUniqueOrThrow) KHÔNG chạy vì đã bail ở catch P2002.
+    expect(userFind).not.toHaveBeenCalled();
   });
 });
 

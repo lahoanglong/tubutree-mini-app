@@ -56,11 +56,14 @@ TARGETS=(
 )
 FAIL_TESTS=()
 for t in "${TARGETS[@]}"; do
-  if pnpm --filter @tubutree/api test -- "$t" --silent 2>&1 | tee /tmp/tubutree-test-$t.log | grep -qE "(FAIL|✗)"; then
+  # Dựa vào EXIT CODE của runner (0=pass), KHÔNG grep output: dưới `pipefail`, exit
+  # non-zero của pnpm khi test fail làm pipeline `... | tee | grep` luôn non-zero →
+  # `if` rơi vào else → báo "pass" nhầm. Ghi log riêng rồi xét $? trực tiếp.
+  if pnpm --filter @tubutree/api test -- "$t" --silent >/tmp/tubutree-test-$t.log 2>&1; then
+    ok "$t pass"
+  else
     fail "$t có test fail"
     FAIL_TESTS+=("$t")
-  else
-    ok "$t pass"
   fi
 done
 if [ ${#FAIL_TESTS[@]} -gt 0 ]; then
