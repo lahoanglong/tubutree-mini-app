@@ -1,0 +1,128 @@
+name: VM Ops (maintenance)
+
+# Workflow bảo trì VM prod — dispatch TAY (không tự chạy theo push).
+# Dùng đúng 3 secret như deploy.yml: VM_HOST / VM_USER / VM_SSH_KEY.
+# Mỗi lần chọn 1 action. KHÔNG bao giờ in giá trị secret ra log (chỉ SET/EMPTY).
+#
+#   gh workflow run ops.yml -f action=audit
+#   gh workflow run ops.yml -f action=backup
+#   gh workflow run ops.yml -f action=gin
+#   gh workflow run ops.yml -f action=set-env
+#   gh workflow run ops.yml -f action=crontab
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Tác vụ bảo trì'
+        required: true
+        type: choice
+        options: [audit, backup, gin, set-env, crontab]
+
+jobs:
+  ops:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run ${{ github.event.inputs.action }} on VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          command_timeout: 15m
+          envs: ACTION
+          script: |
+            set -uo pipefail
+            ACTION="${{ github.event.inputs.action }}"
+            cd ~/tubutree
+            COMPOSE="docker compose -f docker-compose.prod.yml"
+            PGUSER=$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | cut -d= -f2- || true); PGUSER="${PGUSER:-tubu}"
+            PGDB=$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | cut -d= -f2- || true); PGDB="${PGDB:-tubutree}"
+            psql_q() { $COMPOSE exec -T postgres psql -U "$PGUSER" -d "$PGDB" -v ON_ERROR_STOP=1 "$@"; }
+            # In SET/EMPTY cho 1 key trong .env, KHÔNG lộ value.
+            envstate() {
+              local k="$1"; local v
+              v=$(grep -E "^${k}=" .env 2>/dev/null | head -1 | cut -d= -f2- || true)
+              if [ -z "$v" ]; then echo "  $k = EMPTY"; else echo "  $k = SET (${#v} chars)"; fi
+            }
+
+            case "$ACTION" in
+              audit)
+                echo "=== GIT ==="
+                echo "HEAD: $(git rev-parse --short HEAD)  ($(git log -1 --format=%s))"
+                echo "last-deployed-sha: $(cat .last-deployed-sha 2>/dev/null || echo n/a)"
+                git fetch origin -q && echo "origin/main: $(git rev-parse --short origin/main)"
+                echo "=== DOCKER ==="
+                $COMPOSE ps
+                echo "=== ENV (required-in-prod) ==="
+                envstate CORS_ORIGINS
+                envstate ACCESSTRADE_WEBHOOK_SECRET
+                envstate PANCAKE_WEBHOOK_SECRET
+                envstate JWT_ACCESS_SECRET
+                envstate JWT_REFRESH_SECRET
+                envstate POSTGRES_PASSWORD
+                echo "=== DB: applied migrations ==="
+                psql_q -c "SELECT migration_name, finished_at IS NOT NULL AS done FROM _prisma_migrations ORDER BY migration_name;" || echo "(không đọc được _prisma_migrations)"
+                echo "=== DB: GIN indexes trên products ==="
+                psql_q -c "SELECT indexname, indexdef ~ 'gin' AS is_gin FROM pg_indexes WHERE tablename='products' AND indexname LIKE '%_gin';" || true
+                echo "=== DB: products count ==="
+                psql_q -tc "SELECT count(*) FROM products;" || true
+                echo "=== backup dir ==="
+                ls -la /var/backups/tubutree 2>/dev/null | tail -5 || echo "(chưa có thư mục backup)"
+                echo "=== crontab ==="
+                crontab -l 2>/dev/null | grep -i backup || echo "(chưa có cron backup)"
+                ;;
+
+              backup)
+                echo "=== Manual backup (script tools/backup) ==="
+                bash tools/backup/backup-db.sh
+                echo "=== Danh sách backup ==="
+                ls -lh /var/backups/tubutree/
+                ;;
+
+              gin)
+                echo "=== Tạo GIN index CONCURRENTLY (không khóa writes) ==="
+                bash tools/db/create-gin-indexes-concurrently.sh
+                echo "=== Kiểm tra index hợp lệ (indisvalid) ==="
+                psql_q -c "SELECT c.relname, i.indisvalid FROM pg_class c JOIN pg_index i ON i.indexrelid=c.oid WHERE c.relname LIKE 'products_%_gin';"
+                ;;
+
+              set-env)
+                echo "=== Đảm bảo CORS_ORIGINS + ACCESSTRADE_WEBHOOK_SECRET có trong .env ==="
+                touch .env; cp .env ".env.bak.$(date +%Y%m%d_%H%M%S)"
+                # CORS_ORIGINS: thêm nếu thiếu/rỗng (web prod cần app.tubutree.com).
+                if ! grep -qE '^CORS_ORIGINS=.+' .env; then
+                  sed -i '/^CORS_ORIGINS=/d' .env
+                  echo 'CORS_ORIGINS=https://tubutree.com,https://app.tubutree.com' >> .env
+                  echo "  CORS_ORIGINS: đã set"
+                else
+                  echo "  CORS_ORIGINS: đã có, giữ nguyên"
+                fi
+                # ACCESSTRADE_WEBHOOK_SECRET: Accesstrade chưa live → sinh random TRÊN VM (không qua log/git)
+                # chỉ để code fail-closed boot được; khi Accesstrade live thì set value khớp 2 phía.
+                if ! grep -qE '^ACCESSTRADE_WEBHOOK_SECRET=.+' .env; then
+                  sed -i '/^ACCESSTRADE_WEBHOOK_SECRET=/d' .env
+                  echo "ACCESSTRADE_WEBHOOK_SECRET=$(openssl rand -hex 32)" >> .env
+                  echo "  ACCESSTRADE_WEBHOOK_SECRET: đã sinh placeholder ngẫu nhiên"
+                else
+                  echo "  ACCESSTRADE_WEBHOOK_SECRET: đã có, giữ nguyên"
+                fi
+                echo "=== Trạng thái sau khi set (chỉ SET/EMPTY) ==="
+                envstate CORS_ORIGINS
+                envstate ACCESSTRADE_WEBHOOK_SECRET
+                envstate PANCAKE_WEBHOOK_SECRET
+                echo "(API sẽ nạp env mới ở lần deploy/restart kế tiếp)"
+                ;;
+
+              crontab)
+                echo "=== Cài cron backup hằng ngày 02:00 ==="
+                SCRIPT="$HOME/tubutree/tools/backup/backup-db.sh"
+                LINE="0 2 * * * $SCRIPT >> /var/log/tubutree-backup.log 2>&1"
+                ( crontab -l 2>/dev/null | grep -v 'tools/backup/backup-db.sh'; echo "$LINE" ) | crontab -
+                echo "=== crontab hiện tại ==="
+                crontab -l | grep backup
+                sudo touch /var/log/tubutree-backup.log 2>/dev/null || true
+                ;;
+
+              *) echo "Action không hợp lệ: $ACTION"; exit 1 ;;
+            esac
+            echo "✔ ops:$ACTION xong"
