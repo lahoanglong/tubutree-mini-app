@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Headers, Post, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SkipThrottle } from '@nestjs/throttler';
 import { timingSafeEqual } from 'node:crypto';
 import { IsInt, IsOptional, IsString } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -48,11 +49,17 @@ export class CashbackController {
   }
 
   @Public()
+  @SkipThrottle()
   @Post('webhooks/accesstrade')
   postback(@Body() dto: PostbackDto, @Headers('x-accesstrade-token') token?: string) {
     // Verify shared-secret để chống tự forge postback (tự duyệt cashback giả).
-    // Gate theo config: chưa cấu hình secret (dev) → bỏ qua, có cấu hình → bắt buộc khớp.
-    if (this.webhookSecret && !this.tokenMatches(token)) {
+    // Fail-closed ở production: chưa cấu hình secret = từ chối ngay (không log secret).
+    if (!this.webhookSecret) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new UnauthorizedException('Webhook chưa cấu hình bí mật ở production.');
+      }
+      // Dev/test: bỏ qua cho dễ thử nghiệm.
+    } else if (!this.tokenMatches(token)) {
       throw new UnauthorizedException('Token webhook Accesstrade không hợp lệ.');
     }
     return this.cashback.handlePostback(dto);

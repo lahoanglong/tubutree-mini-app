@@ -5,21 +5,64 @@ name: Deploy API to VM
 #   VM_HOST     = IP tĩnh VM (vd 34.142.194.160)
 #   VM_USER     = user SSH trên VM (vd lahoanglong_hcmus)
 #   VM_SSH_KEY  = private key (toàn bộ nội dung file id_ed25519) có public key đã thêm vào ~/.ssh/authorized_keys của VM
+#
+# Gate bằng workflow_run: chỉ deploy SAU KHI workflow "CI" trên main pass.
+# Lý do chọn workflow_run thay vì `needs: ci`: ci.yml và deploy.yml là 2 workflow
+# riêng (path filter của deploy khác CI), không thể `needs:` cross-workflow.
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
     branches: [main]
-    paths:
-      - 'apps/api/**'
-      - 'packages/**'
-      - 'docker-compose.prod.yml'
-      - 'Caddyfile'
-      - '.github/workflows/deploy.yml'
+    types: [completed]
   workflow_dispatch: {}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Chỉ chạy khi CI xanh (bỏ qua khi CI fail/cancelled). workflow_dispatch luôn cho chạy.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
+      - name: Backup DB trước migrate
+        # Dump postgres ra /var/backups/tubutree trước khi build/deploy mới.
+        # Nếu deploy hỏng → restore bằng: gunzip < <file>.sql.gz | docker compose exec -T postgres psql -U <user> <db>
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            # pipefail BẮT BUỘC: pg_dump | gzip — nếu chỉ `set -e`, exit của pipeline = gzip,
+            # pg_dump fail vẫn tạo .gz rỗng ~20 byte → backup "thành công" nhưng vô dụng.
+            set -euo pipefail
+            cd ~/tubutree
+            sudo mkdir -p /var/backups/tubutree
+            sudo chown $(id -u):$(id -g) /var/backups/tubutree
+            TS=$(date +%Y%m%d_%H%M%S)
+            # Lấy user/db từ .env nếu có, fallback giá trị mặc định.
+            POSTGRES_USER=$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | cut -d= -f2- || true)
+            POSTGRES_DB=$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | cut -d= -f2- || true)
+            docker compose -f docker-compose.prod.yml exec -T postgres \
+              pg_dump -U "${POSTGRES_USER:-tubu}" "${POSTGRES_DB:-tubutree}" \
+              | gzip > "/var/backups/tubutree/pre-deploy-${TS}.sql.gz"
+            # Giữ tối đa 14 backup gần nhất cho khỏi đầy đĩa.
+            ls -1t /var/backups/tubutree/pre-deploy-*.sql.gz | tail -n +15 | xargs -r rm -f
+
+      - name: Tag previous git SHA để rollback
+        # Compose build local image (không push registry) → không có image tag `previous`.
+        # Thay vào đó lưu SHA hiện tại trước khi pull để rollback bằng:
+        #   ssh VM → cd ~/tubutree && git checkout $(cat .last-deployed-sha) \
+        #            && docker compose -f docker-compose.prod.yml up -d --build api web
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/tubutree
+            # Ghi SHA đang chạy (trước khi pull) làm điểm rollback.
+            git rev-parse HEAD > .last-deployed-sha || true
+
       - name: SSH deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -27,6 +70,9 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
+            # set -e: nếu `cd` hoặc `git pull` fail → DỪNG, KHÔNG build với tree CŨ
+            # (trước đây không set -e → fail-silently rebuild bản cũ, deploy "thành công" mà không có code mới).
+            set -euo pipefail
             cd ~/tubutree
             git pull --ff-only
             docker compose -f docker-compose.prod.yml up -d --build api web

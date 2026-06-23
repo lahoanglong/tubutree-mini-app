@@ -29,6 +29,7 @@
     "@nestjs/platform-express": "^10.4.15",
     "@nestjs/schedule": "^4.1.2",
     "@nestjs/swagger": "^8.1.0",
+    "@nestjs/throttler": "^6.0.0",
     "@prisma/client": "^5.22.0",
     "@tubutree/shared-types": "workspace:*",
     "axios": "^1.7.9",

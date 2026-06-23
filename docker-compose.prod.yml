@@ -51,6 +51,13 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+    # Healthcheck gọi /api/health → caddy chỉ proxy khi app thực sự sẵn sàng (tránh 502 lúc khởi động).
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://localhost:3001/api/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks: [tubu]
 
   web:
@@ -66,7 +73,16 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-    depends_on: [api]
+    depends_on:
+      api:
+        condition: service_healthy
+    # Next.js standalone không có endpoint health riêng → ping root '/'.
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://localhost:3000/\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks: [tubu]
 
   caddy:
@@ -81,7 +97,12 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    depends_on: [api, web]
+    # Chờ api & web healthy thật sự (đã pass /api/health, '/') trước khi mở 80/443 → tránh 502 lúc cold start.
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
     networks: [tubu]
 
 volumes:

@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, HttpCode, HttpStatus } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { IsString, IsNotEmpty } from 'class-validator';
 import type { JwtPayload, LoginResponse } from '@tubutree/shared-types';
 import { Public } from '../../common/decorators/public.decorator';
@@ -21,6 +22,7 @@ export class AuthController {
   ) {}
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post('zalo-mini-app')
   @HttpCode(HttpStatus.OK)
   loginZaloMiniApp(@Body() dto: ZaloMiniAppLoginDto): Promise<LoginResponse> {
@@ -29,6 +31,7 @@ export class AuthController {
 
   /** Đăng nhập khách theo deviceId (fallback khi Zalo login chưa khả dụng). */
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post('guest')
   @HttpCode(HttpStatus.OK)
   loginGuest(@Body() dto: GuestLoginDto): Promise<LoginResponse> {
@@ -43,6 +46,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   refresh(@Body() dto: RefreshTokenDto): Promise<LoginResponse> {

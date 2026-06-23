@@ -40,6 +40,36 @@ export const envSchema = z.object({
   ACCESSTRADE_PUBLISHER_ID: z.string().default(''),
   // Token bí mật chia sẻ để verify webhook postback (chống tự duyệt cashback giả).
   ACCESSTRADE_WEBHOOK_SECRET: z.string().default(''),
+
+  // CORS allowlist (CSV các origin). Ở prod nên cấu hình rõ ràng.
+  CORS_ORIGINS: z.string().default(''),
+}).superRefine((env, ctx) => {
+  // Fail-closed ở production: bắt buộc khai báo webhook secret để không bị forge.
+  if (env.NODE_ENV === 'production') {
+    if (!env.PANCAKE_WEBHOOK_SECRET) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['PANCAKE_WEBHOOK_SECRET'],
+        message: 'PANCAKE_WEBHOOK_SECRET không được rỗng ở production.',
+      });
+    }
+    if (!env.ACCESSTRADE_WEBHOOK_SECRET) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ACCESSTRADE_WEBHOOK_SECRET'],
+        message: 'ACCESSTRADE_WEBHOOK_SECRET không được rỗng ở production.',
+      });
+    }
+    // Tránh fallback CORS hard-code ở main.ts (chỉ allow tubutree.com + app.tubutree.com
+    // — admin/staging subdomain sẽ bị chặn). Bắt buộc khai báo rõ origin allowlist.
+    if (!env.CORS_ORIGINS || env.CORS_ORIGINS.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['CORS_ORIGINS'],
+        message: 'CORS_ORIGINS không được rỗng ở production (CSV danh sách origin được phép).',
+      });
+    }
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;

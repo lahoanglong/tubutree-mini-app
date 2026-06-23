@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SkipThrottle } from '@nestjs/throttler';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { timingSafeEqual } from 'node:crypto';
@@ -29,6 +30,7 @@ interface PancakeWebhookBody {
  *   https://api.tubutree.com/api/webhooks/pancake
  * Quy trình: verify HMAC → lưu raw (RECEIVED) → enqueue → trả 200 ngay (xử lý async).
  */
+@SkipThrottle()
 @Controller('webhooks/pancake')
 export class PancakeWebhookController {
   private readonly secret: string;
@@ -49,8 +51,13 @@ export class PancakeWebhookController {
     @Headers('x-webhook-token') token?: string,
   ) {
     // Pancake POS chỉ gửi Request Header tĩnh (không ký HMAC) → verify token chia sẻ.
-    // Gate theo config: chưa đặt secret (dev) → bỏ qua; có secret → bắt buộc khớp.
-    if (this.secret && !this.verifyToken(token)) {
+    // Fail-closed ở production: chưa cấu hình secret = từ chối ngay (không log secret).
+    if (!this.secret) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new UnauthorizedException('Webhook chưa cấu hình bí mật ở production.');
+      }
+      // Dev/test: bỏ qua cho dễ thử nghiệm.
+    } else if (!this.verifyToken(token)) {
       throw new UnauthorizedException('Token webhook không hợp lệ.');
     }
     // Pancake POS không gửi field 'event' — suy ra loại từ 'type' (vd 'orders'), mặc định 'order'.
