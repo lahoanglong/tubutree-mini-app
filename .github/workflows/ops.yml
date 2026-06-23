@@ -74,6 +74,9 @@ jobs:
 
               backup)
                 echo "=== Manual backup (script tools/backup) ==="
+                # /var/backups thuộc root → tạo + chown cho user SSH trước (như deploy.yml).
+                sudo mkdir -p /var/backups/tubutree
+                sudo chown "$(id -u):$(id -g)" /var/backups/tubutree
                 bash tools/backup/backup-db.sh
                 echo "=== Danh sách backup ==="
                 ls -lh /var/backups/tubutree/
