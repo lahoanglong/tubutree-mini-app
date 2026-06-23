@@ -49,19 +49,43 @@ export class OrdersService {
     }
     // Chuyển trạng thái ATOMIC (guard theo status) — chống hủy đồng thời (double-tap/retry) gây
     // HOÀN VÍ 2 LẦN: chỉ request THẮNG (count=1) mới hoàn điểm/ví. Nhất quán pattern atomic ở checkout.
-    const res = await this.prisma.order.updateMany({
-      where: { id: order.id, status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] } },
-      data: { status: 'CANCELLED' },
-    });
-    if (res.count === 0) return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
-    await this.loyalty.reverseOrderPoints(order.id);
-    // hoàn ví nếu đã thanh toán bằng ví
-    if (order.paymentMethod === 'WALLET' && order.paymentStatus === 'PAID') {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { walletBalance: { increment: order.total } },
+    // Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash giữa chừng: nếu process chết
+    // sau khi đơn đã CANCELLED nhưng trước khi increment ví → retry bị guard chặn → khách mất tiền.
+    const won = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.order.updateMany({
+        where: { id: order.id, status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] } },
+        data: { status: 'CANCELLED' },
       });
-    }
+      if (res.count === 0) return false;
+      // Refetch paymentStatus TRONG tx — snapshot `order.paymentStatus` (đọc ngoài tx ở detail())
+      // có thể đã stale nếu webhook ZaloPay/Pancake chuyển REFUNDED giữa detail() và tx.
+      // Dùng updateMany guard `paymentStatus: 'PAID'` để hoàn ví chỉ khi DB còn PAID — count=1
+      // bảo đảm increment thực sự chạy trên đơn còn nợ tiền user.
+      if (order.paymentMethod === 'WALLET') {
+        const refunded = await tx.order.updateMany({
+          where: { id: order.id, paymentStatus: 'PAID' },
+          data: { paymentStatus: 'REFUNDED' },
+        });
+        if (refunded.count === 1) {
+          await tx.user.update({
+            where: { id: userId },
+            data: { walletBalance: { increment: order.total } },
+          });
+        }
+      }
+      // Hoàn stock atomic — chỉ chạy ở nhánh THẮNG race (count=1) để tránh restock 2 lần
+      // khi 2 request cancel song song. Dùng order.items đã include sẵn ở detail() phía trên.
+      for (const item of order.items) {
+        await tx.variation.update({
+          where: { id: item.variationId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+      return true;
+    });
+    if (!won) return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
+    // reverseOrderPoints idempotent (guard ORDER_REVERSED + $transaction nội bộ) nên để ngoài tx được.
+    await this.loyalty.reverseOrderPoints(order.id);
     await this.notifications.notify(userId, 'ORDER_CANCELLED', { order_code: code });
     return this.detail(userId, code);
   }

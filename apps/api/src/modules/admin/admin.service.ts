@@ -25,33 +25,80 @@ export class AdminService {
     });
   }
 
-  /** Duyệt đổi/trả. APPROVED → hoàn Ví + reverse điểm + reverse commission CTV. */
+  /** Duyệt đổi/trả. APPROVED → hoàn đúng kênh thanh toán + reverse điểm + reverse commission CTV + restock. */
   async reviewReturn(adminId: string, id: string, approve: boolean, note?: string) {
     const req = await this.prisma.returnRequest.findUnique({ where: { id } });
     if (!req) throw new NotFoundException('Không tìm thấy yêu cầu đổi/trả.');
-    if (req.status !== 'REQUESTED') throw new BadRequestException('Yêu cầu đã được xử lý.');
+    // Atomic guard chuyển vào TRONG transaction (updateMany ở dưới) — chống 2 admin duyệt
+    // cùng request gây hoàn ví 2 lần / restock 2 lần. Giữ NotFound check ở ngoài cho rõ message.
 
     if (!approve) {
-      return this.prisma.returnRequest.update({
-        where: { id },
+      // REJECT idempotent: nếu request đã xử lý, updateMany count=0 → throw để admin biết.
+      const rejected = await this.prisma.returnRequest.updateMany({
+        where: { id, status: 'REQUESTED' },
         data: { status: 'REJECTED', adminNote: note, reviewedBy: adminId, reviewedAt: new Date() },
       });
+      if (rejected.count === 0) throw new BadRequestException('Yêu cầu đã được xử lý.');
+      return this.prisma.returnRequest.findUnique({ where: { id } });
     }
 
-    const order = await this.prisma.order.findUniqueOrThrow({ where: { id: req.orderId } });
-    // Hoàn tiền vào Ví Tubu (instant) + đánh dấu đơn RETURNED.
-    await this.prisma.$transaction([
-      this.prisma.order.update({ where: { id: order.id }, data: { status: 'RETURNED' } }),
-      this.prisma.user.update({ where: { id: order.userId }, data: { walletBalance: { increment: order.total } } }),
-      this.prisma.returnRequest.update({
-        where: { id },
+    // Load order TRONG transaction để paymentStatus/status nhất quán với guard updateMany.
+    // Snapshot ngoài tx sẽ stale nếu webhook Pancake/refund chạy chen giữa → từng gây
+    // hoàn ví dựa trên paymentStatus cũ (PAID) trong khi DB đã REFUNDED → DOUBLE refund.
+    const orderForReturn = await this.prisma.order.findUniqueOrThrow({
+      where: { id: req.orderId },
+      select: { id: true, userId: true, code: true },
+    });
+    await this.prisma.$transaction(async (tx) => {
+      const approved = await tx.returnRequest.updateMany({
+        where: { id, status: 'REQUESTED' },
         data: { status: 'APPROVED', adminNote: note, reviewedBy: adminId, reviewedAt: new Date() },
-      }),
-    ]);
-    // Reverse điểm Xanh đã tích + commission CTV (idempotent).
-    await this.loyalty.reverseOrderPoints(order.id);
-    await this.affiliate.reverseCommissionsForOrder(order.id);
-    await this.notifications.notify(order.userId, 'RETURN_APPROVED', { order_code: order.code }).catch(() => undefined);
+      });
+      if (approved.count === 0) throw new BadRequestException('Yêu cầu đã được xử lý.');
+
+      // Đọc order + items TRONG tx ngay TRƯỚC khi flip status — paymentStatus/status
+      // ở đây mới là sự thật cho quyết định hoàn ví.
+      const order = await tx.order.findUniqueOrThrow({
+        where: { id: orderForReturn.id },
+        include: { items: true },
+      });
+      // Hoàn đúng KÊNH thanh toán + restock trong CÙNG transaction.
+      // - WALLET/ZALOPAY + PAID: hoàn về Ví Tubu (instant) vì khách đã trả tiền thật.
+      // - COD UNPAID: KHÔNG hoàn ví (khách chưa trả gì cả → ví không tăng).
+      // - COD đã giao mà PAID (ship đã thu hộ): hoàn ví (instant) như kênh prepaid.
+      const wasPaid =
+        order.paymentStatus === 'PAID' &&
+        (order.paymentMethod === 'WALLET' || order.paymentMethod === 'ZALOPAY' || order.paymentMethod === 'COD');
+
+      // Guard status='DELIVERED' để KHÔNG đè CANCELLED/RETURNED (đơn đã hủy đã hoàn
+      // ví ở orders.cancel — nếu đè thêm RETURNED rồi hoàn ví nữa = DOUBLE refund).
+      const flipped = await tx.order.updateMany({
+        where: { id: order.id, status: 'DELIVERED' },
+        data: { status: 'RETURNED' },
+      });
+      if (flipped.count === 0) {
+        throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
+      }
+      if (wasPaid) {
+        await tx.user.update({
+          where: { id: order.userId },
+          data: { walletBalance: { increment: order.total } },
+        });
+      }
+      // Hoàn stock — chỉ ở nhánh THẮNG để tránh restock 2 lần.
+      for (const item of order.items) {
+        await tx.variation.update({
+          where: { id: item.variationId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+    });
+    // Reverse điểm Xanh + commission CTV + notify (idempotent — để ngoài tx an toàn).
+    await this.loyalty.reverseOrderPoints(orderForReturn.id);
+    await this.affiliate.reverseCommissionsForOrder(orderForReturn.id);
+    await this.notifications
+      .notify(orderForReturn.userId, 'RETURN_APPROVED', { order_code: orderForReturn.code })
+      .catch(() => undefined);
     return this.prisma.returnRequest.findUnique({ where: { id } });
   }
 

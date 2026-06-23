@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 
@@ -52,59 +53,86 @@ export class LoyaltyService {
     await this.recalcTier(order.userId);
   }
 
-  /** Hoàn ngược khi hủy/trả: trừ điểm đã tích, hoàn lại điểm đã tiêu. */
+  /**
+   * Hoàn ngược khi hủy/trả: trừ điểm đã tích, hoàn lại điểm đã tiêu.
+   *
+   * RACE: 2 caller song song (orders.cancel + webhook RETURNED) trước đây cùng
+   * findFirst NGOÀI tx → cùng thấy chưa reverse → cùng cộng/trừ → DOUBLE.
+   * Fix: di chuyển ALL check + write VÀO 1 transaction; relies on
+   * unique partial index (reason, refId) để insert thứ 2 P2002 → bail idempotent.
+   * Migration 20260623000000_loyalty_reverse_unique tạo unique index.
+   */
   async reverseOrderPoints(orderId: string): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
-
-    // Idempotent: nếu đã reverse rồi (có giao dịch ORDER_REVERSED/ORDER_REFUND_POINTS của đơn này)
-    // → bỏ qua, tránh trừ/hoàn điểm 2 lần khi webhook retry hoặc user-cancel + webhook-cancel.
-    const reversed = await this.prisma.pointsTransaction.findFirst({
-      where: {
-        userId: order.userId,
-        refId: order.id,
-        reason: { in: [`ORDER_REVERSED:${order.code}`, `ORDER_REFUND_POINTS:${order.code}`] },
-      },
-      select: { id: true },
-    });
-    if (reversed) return;
-
-    const ops = [];
-
-    if (order.pointsEarned > 0) {
-      ops.push(
-        this.prisma.pointsTransaction.create({
-          data: {
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // Re-check trong tx để giảm xác suất chạy ops vô ích; unique index là guard cứng.
+        const reversed = await tx.pointsTransaction.findFirst({
+          where: {
             userId: order.userId,
-            delta: -order.pointsEarned,
-            reason: `ORDER_REVERSED:${order.code}`,
-            refType: 'ORDER',
             refId: order.id,
+            reason: { in: [`ORDER_REVERSED:${order.code}`, `ORDER_REFUND_POINTS:${order.code}`] },
           },
-        }),
-        this.prisma.user.update({
-          where: { id: order.userId },
-          data: { pointsBalance: { decrement: order.pointsEarned } },
-        }),
-      );
+          select: { id: true },
+        });
+        if (reversed) return;
+
+        // pointsEarned CHỈ được cộng khi đơn DELIVERED (xem creditOrderPoints).
+        // Nếu user hủy đơn CONFIRMED (chưa giao), điểm chưa cộng → KHÔNG trừ.
+        const wasCredited = order.pointsEarned > 0
+          ? Boolean(
+              await tx.pointsTransaction.findFirst({
+                where: { userId: order.userId, reason: `ORDER_DELIVERED:${order.code}` },
+                select: { id: true },
+              }),
+            )
+          : false;
+
+        if (wasCredited) {
+          // create() trước user.update — nếu duplicate caller chạy đồng thời, P2002
+          // bay ra TRƯỚC khi balance bị decrement lần 2 (xem catch ngoài tx).
+          await tx.pointsTransaction.create({
+            data: {
+              userId: order.userId,
+              delta: -order.pointsEarned,
+              reason: `ORDER_REVERSED:${order.code}`,
+              refType: 'ORDER',
+              refId: order.id,
+            },
+          });
+          await tx.user.update({
+            where: { id: order.userId },
+            data: { pointsBalance: { decrement: order.pointsEarned } },
+          });
+        }
+        if (order.pointsUsed > 0) {
+          await tx.pointsTransaction.create({
+            data: {
+              userId: order.userId,
+              delta: order.pointsUsed,
+              reason: `ORDER_REFUND_POINTS:${order.code}`,
+              refType: 'ORDER',
+              refId: order.id,
+            },
+          });
+          await tx.user.update({
+            where: { id: order.userId },
+            data: { pointsBalance: { increment: order.pointsUsed } },
+          });
+        }
+      });
+    } catch (err) {
+      // Unique partial index (reason, refId) trên points_transactions chặn double-reverse —
+      // 2 caller song song: 1 thắng commit, 1 bị P2002 → coi như idempotent no-op.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        this.logger.debug(`reverseOrderPoints idempotent skip order=${order.code}`);
+        return;
+      }
+      throw err;
     }
-    if (order.pointsUsed > 0) {
-      ops.push(
-        this.prisma.pointsTransaction.create({
-          data: {
-            userId: order.userId,
-            delta: order.pointsUsed,
-            reason: `ORDER_REFUND_POINTS:${order.code}`,
-            refType: 'ORDER',
-            refId: order.id,
-          },
-        }),
-        this.prisma.user.update({
-          where: { id: order.userId },
-          data: { pointsBalance: { increment: order.pointsUsed } },
-        }),
-      );
-    }
-    if (ops.length) await this.prisma.$transaction(ops);
   }
 
   /** Tính lại hạng theo điểm tích lũy HOẶC chi tiêu 12 tháng (chọn hạng cao nhất đạt). */
@@ -193,19 +221,35 @@ export class LoyaltyService {
     const coupons = await this.prisma.coupon.findMany({
       where: { startAt: { lte: now }, endAt: { gte: now } },
     });
-    const result = [];
-    for (const c of coupons) {
+
+    // Pre-filter theo scope trước, rồi 1 groupBy duy nhất đếm used count cho mọi coupon.
+    // Trước đây loop từng coupon gọi count() → 1 + N query khi user có nhiều voucher khả dụng.
+    const filtered = coupons.filter((c) => {
       if (c.scope === 'TIER') {
         const meta = c.scopeMeta as { tierId?: string } | null;
-        if (meta?.tierId && meta.tierId !== user.tierId) continue;
-      } else if (c.scope === 'USER_GROUP') {
+        return !meta?.tierId || meta.tierId === user.tierId;
+      }
+      if (c.scope === 'USER_GROUP') {
         // Voucher cá nhân (welcome/birthday/winback) — chỉ hiện cho đúng user.
         const meta = c.scopeMeta as { userId?: string } | null;
-        if (meta?.userId !== userId) continue;
-      } else if (c.scope !== 'PUBLIC') {
-        continue; // INVITE xử lý riêng
+        return meta?.userId === userId;
       }
-      const used = await this.prisma.couponRedemption.count({ where: { couponId: c.id, userId } });
+      return c.scope === 'PUBLIC'; // INVITE xử lý riêng
+    });
+
+    const ids = filtered.map((c) => c.id);
+    const grouped = ids.length
+      ? await this.prisma.couponRedemption.groupBy({
+          by: ['couponId'],
+          where: { userId, couponId: { in: ids } },
+          _count: { _all: true },
+        })
+      : [];
+    const usedMap = new Map(grouped.map((g) => [g.couponId, g._count._all]));
+
+    const result = [];
+    for (const c of filtered) {
+      const used = usedMap.get(c.id) ?? 0;
       if (used >= c.perUserLimit) continue;
       result.push({
         code: c.code,

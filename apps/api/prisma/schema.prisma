@@ -356,6 +356,7 @@ model Coupon {
   startAt      DateTime
   endAt        DateTime
   usageLimit   Int?
+  usedCount    Int          @default(0) // B4: bộ đếm atomic dùng cho updateMany guard
   perUserLimit Int          @default(1)
   applyTo      Json?
   isStackable  Boolean      @default(false)
@@ -374,6 +375,8 @@ model CouponRedemption {
   orderId    String?
   redeemedAt DateTime @default(now())
 
+  // B4: idempotency cho retry — 1 đơn chỉ được ghi 1 redemption cho 1 coupon.
+  @@unique([couponId, orderId])
   @@index([userId])
   @@map("coupon_redemptions")
 }

@@ -79,6 +79,18 @@ export class CheckoutService {
     let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
     try {
       order = await this.prisma.$transaction(async (tx) => {
+        // Trừ stock ATOMIC từng line (gte) — chống oversell khi flash-sale/hàng giới hạn:
+        // 2 đơn cùng grab variation cuối → chỉ 1 thắng updateMany; thua thì throw rollback.
+        // Đặt TRƯỚC order.create để fail-fast, không tốn resource ghi Order/Item rồi rollback.
+        for (const line of cart.items) {
+          const stockHit = await tx.variation.updateMany({
+            where: { id: line.variationId, stock: { gte: line.quantity } },
+            data: { stock: { decrement: line.quantity } },
+          });
+          if (stockHit.count === 0) {
+            throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
+          }
+        }
         const created = await tx.order.create({
           data: {
             code,
@@ -138,6 +150,12 @@ export class CheckoutService {
           });
           if (dec.count === 0) throw new BadRequestException('Số dư Ví Tubu không đủ.');
         }
+        // B4: redeem coupon ATOMIC trong cùng tx — chống race usageLimit/perUserLimit khi 2 đơn
+        // đồng thời cùng dùng 1 mã (đặc biệt voucher giới thiệu usageLimit=1). Nếu hết lượt
+        // sẽ throw → rollback toàn bộ order/stock/ví/điểm, đảm bảo không bị "đặt nửa".
+        if (cart.couponCode) {
+          await this.coupons.redeem(cart.couponCode, userId, created.id, tx);
+        }
         return created;
       });
     } catch (err) {
@@ -150,8 +168,7 @@ export class CheckoutService {
       throw err;
     }
 
-    // Ghi nhận coupon + dọn giỏ + đẩy Pancake (ngoài transaction chính).
-    if (cart.couponCode) await this.coupons.redeem(cart.couponCode, userId, order.id);
+    // Dọn giỏ + đẩy Pancake (ngoài transaction chính). Coupon redeem đã chạy trong tx ở trên.
     await this.cart.clear(userId);
     try {
       await this.pancakeOrder.pushOrder(order.id);
