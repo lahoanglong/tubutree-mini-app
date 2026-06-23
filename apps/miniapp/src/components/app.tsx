@@ -61,6 +61,12 @@ const queryClient = new QueryClient({
         return failureCount < 1;
       },
       refetchOnWindowFocus: false,
+      // Default staleTime ngắn (10s) — money/auth/orders/wallet/notifications cần tươi
+      // ngay sau action (vd thanh toán WALLET trừ tiền; nếu staleTime 60s mà thiếu
+      // invalidate ở 1 nơi nào đó → user thấy số dư cũ).
+      // Catalog/brands/categories chậm-đổi (~15p sync Pancake) nên override staleTime: 60_000
+      // tại từng useQuery để giữ lợi ích cache (xem browse.tsx/home.tsx).
+      staleTime: 10_000,
     },
   },
 });

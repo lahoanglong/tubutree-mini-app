@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { DEFAULT_TREE_TYPE } from './game.constants';
 
 const DAY = 864e5;
 
@@ -27,7 +28,7 @@ export class GameEconomyService {
     const existing = await this.prisma.gameProfile.findUnique({ where: { userId } });
     if (existing) return existing;
     return this.prisma.gameProfile.create({
-      data: { userId, ecoImpact: { progress: 0, target, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 0 } as object },
+      data: { userId, ecoImpact: { progress: 0, target, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 } as object },
     });
   }
 

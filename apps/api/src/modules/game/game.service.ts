@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
+import { DEFAULT_TREE_TYPE } from './game.constants';
 
 interface SpinPrize {
   id: string;
@@ -40,7 +41,7 @@ export class GameService {
     return this.prisma.gameProfile.create({
       data: {
         userId,
-        ecoImpact: { progress: 0, target, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 0 } as object,
+        ecoImpact: { progress: 0, target, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 } as object,
       },
     });
   }
@@ -298,7 +299,7 @@ export class GameService {
     return {
       progress: e.progress ?? 0,
       target: e.target ?? 600,
-      treeType: e.treeType ?? 'Cây Dứa Fuwa3e',
+      treeType: e.treeType ?? DEFAULT_TREE_TYPE,
       treesPlanted: e.treesPlanted ?? 0,
     };
   }

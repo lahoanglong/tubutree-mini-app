@@ -26,6 +26,9 @@ export default function CheckoutPage() {
   const [usePoints, setUsePoints] = useState(false);
   const [note, setNote] = useState('');
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
+  // Khoá tap nhanh 2 lần: ensurePhone() mở native sheet, nếu không khoá thì
+  // 2 sheet số điện thoại + 2 mutate song song (BE chống đơn đôi nhưng UX hỏng).
+  const [submitting, setSubmitting] = useState(false);
   // Hoá đơn VAT (spec §6.3) — nhớ thông tin cho lần sau (localStorage).
   const [wantInvoice, setWantInvoice] = useState(false);
   const [invoice, setInvoice] = useState(() => {
@@ -104,6 +107,12 @@ export default function CheckoutPage() {
       }
       void queryClient.invalidateQueries({ queryKey: ['cart'] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      // Thanh toán WALLET trừ walletBalance và sử dụng điểm cộng/trừ pointsBalance ở BE;
+      // staleTime=60s global → wallet/profile sẽ stale 60s nếu không invalidate → user thấy số cũ.
+      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
+      // Refresh auth store (user.walletBalance / pointsBalance dùng ở header/checkout) để UI đồng bộ.
+      void useAuthStore.getState().restore().catch(() => undefined);
       idempotencyKey.current = newIdempotencyKey(); // đơn sau là đơn mới
       setPlaced(o);
     },
@@ -155,7 +164,7 @@ export default function CheckoutPage() {
 
   const walletBalance = user?.walletBalance ?? 0;
   const total = quote.data?.total ?? 0;
-  const canPlace = !!addressId && quote.isSuccess && !order.isPending && !!invoiceValid;
+  const canPlace = !!addressId && quote.isSuccess && !order.isPending && !!invoiceValid && !submitting;
 
   const paymentMethods = [
     { value: 'COD', label: vi.checkout.paymentCod, disabled: false },
@@ -358,15 +367,18 @@ export default function CheckoutPage() {
       >
         <Button
           fullWidth
-          loading={order.isPending}
-          disabled={!canPlace}
-          onClick={() => {
-            // Xin SĐT đúng lúc đặt hàng (như Homefarm) nếu tài khoản chưa có — không chặn nếu user từ chối.
-            void useAuthStore
-              .getState()
-              .ensurePhone()
-              .catch(() => undefined)
-              .finally(() => order.mutate());
+          loading={order.isPending || submitting}
+          disabled={!canPlace || submitting}
+          onClick={async () => {
+            if (submitting) return;
+            setSubmitting(true);
+            try {
+              // Xin SĐT đúng lúc đặt hàng (như Homefarm) nếu tài khoản chưa có — không chặn nếu user từ chối.
+              await useAuthStore.getState().ensurePhone().catch(() => undefined);
+              order.mutate(undefined, { onSettled: () => setSubmitting(false) });
+            } catch {
+              setSubmitting(false);
+            }
           }}
           style={{ background: 'var(--primary-600)', minHeight: 48, fontWeight: 600 }}
         >

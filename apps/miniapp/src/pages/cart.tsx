@@ -20,6 +20,7 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { useDebounced } from '../utils/use-debounced';
 
 const UNDO_WINDOW_MS = 3500;
 const CART_KEY = ['cart'] as const;
@@ -238,6 +239,22 @@ function CartLineRow({
   onOpen: () => void;
 }) {
   const overStock = line.quantity > line.stock;
+  // Bấm +/- nhanh 5 lần trước đây gọi 5 PATCH song song → debounce qty cuối cùng
+  // (UI cập nhật tức thời qua local state, request chỉ bay sau ~380ms ổn định).
+  const [localQty, setLocalQty] = useState(line.quantity);
+  const debouncedQty = useDebounced(localQty, 380);
+  // CHỈ đồng bộ về line.quantity khi KHÔNG có thay đổi đang chờ flush — tránh case
+  // refetch cart (do mutate line khác) trả về quantity CŨ và snap UI ngược lại khi
+  // user đang tap. Sau khi debouncedQty đã đuổi kịp localQty thì server-truth là an toàn.
+  useEffect(() => {
+    if (debouncedQty === localQty) setLocalQty(line.quantity);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [line.quantity]);
+  useEffect(() => {
+    if (debouncedQty !== line.quantity) onQty(debouncedQty);
+    // onQty/line.quantity ổn định trong scope mutate; chỉ trigger khi debouncedQty đổi.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQty]);
   return (
     <Box
       p={3}
@@ -297,9 +314,9 @@ function CartLineRow({
         <Box flex alignItems="center" style={{ marginTop: 8 }}>
           <QuantitySelector
             size="sm"
-            value={line.quantity}
+            value={localQty}
             max={Math.max(1, line.stock)}
-            onChange={onQty}
+            onChange={setLocalQty}
           />
           <Box
             role="button"

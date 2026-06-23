@@ -40,7 +40,8 @@ export default function HomePage() {
     queryKey: ['products', 'home-mombaby'],
     queryFn: () => fetchProducts({ limit: SECTION_LIMIT, segment: 'mom_baby' }),
   });
-  const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands });
+  // Brand/category chậm đổi (sync Pancake ~15p/lần) → cache 60s, override default 10s.
+  const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands, staleTime: 60_000 });
 
   const goBrand = (brand?: string) => {
     haptic('light');

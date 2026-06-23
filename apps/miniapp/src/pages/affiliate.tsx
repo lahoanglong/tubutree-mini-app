@@ -17,6 +17,7 @@ import { shareLink } from '../services/zmp-bridge';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
+import { ErrorState } from '../components/ui/empty-state';
 
 const COMMISSION_META: Record<CommissionStatus, { label: string; color: string; bg: string }> = {
   PENDING: { label: 'Chờ (đơn chưa giao)', color: 'var(--clay-700)', bg: 'var(--clay-50)' },
@@ -154,27 +155,32 @@ function Dashboard() {
 
       {/* Hoa hồng tháng nổi bật */}
       <Box p={4}>
-        <Box
-          p={5}
-          style={{
-            background: 'linear-gradient(135deg, var(--primary-600), var(--primary-700))',
-            borderRadius: 'var(--radius-xl)',
-            color: '#fff',
-            boxShadow: 'var(--shadow-md)',
-          }}
-        >
-          <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
-            Hoa hồng tháng này
-          </Text>
-          <Text bold style={{ fontSize: 32, lineHeight: '40px', color: '#fff', marginTop: 4 }}>
-            {formatVnd(d?.monthCommission ?? 0)}
-          </Text>
-          <Box flex style={{ gap: 16, marginTop: 12 }}>
-            <MiniStat label="Hôm nay" value={formatVnd(d?.todayCommission ?? 0)} />
-            <MiniStat label="Click" value={String(d?.totalClicks ?? 0)} />
-            <MiniStat label="Chuyển đổi" value={String(d?.totalConversions ?? 0)} />
+        {dashQ.isError ? (
+          // KHÔNG fallback 0đ khi lỗi tải — hiển thị nhầm "0đ" gây hiểu lầm CTV chưa có hoa hồng.
+          <ErrorState message={getErrorMessage(dashQ.error)} onRetry={() => void dashQ.refetch()} />
+        ) : (
+          <Box
+            p={5}
+            style={{
+              background: 'linear-gradient(135deg, var(--primary-600), var(--primary-700))',
+              borderRadius: 'var(--radius-xl)',
+              color: '#fff',
+              boxShadow: 'var(--shadow-md)',
+            }}
+          >
+            <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              Hoa hồng tháng này
+            </Text>
+            <Text bold style={{ fontSize: 32, lineHeight: '40px', color: '#fff', marginTop: 4 }}>
+              {formatVnd(d?.monthCommission ?? 0)}
+            </Text>
+            <Box flex style={{ gap: 16, marginTop: 12 }}>
+              <MiniStat label="Hôm nay" value={formatVnd(d?.todayCommission ?? 0)} />
+              <MiniStat label="Click" value={String(d?.totalClicks ?? 0)} />
+              <MiniStat label="Chuyển đổi" value={String(d?.totalConversions ?? 0)} />
+            </Box>
           </Box>
-        </Box>
+        )}
       </Box>
 
       {/* Bậc doanh số tháng (§6.8.2) */}
@@ -213,16 +219,26 @@ function Dashboard() {
         </Box>
       )}
 
-      {/* Rút tiền */}
+      {/* Rút tiền — luôn hiển thị nút Rút (CTV vẫn có thể rút khi dashboard lỗi transient).
+          Khi dashQ lỗi: hiển thị "—" thay vì giá trị giả, để WithdrawForm tự query số dư riêng. */}
       <Box mx={4} mb={3} flex style={{ gap: 10 }}>
-        <KpiCard label="Chờ duyệt" value={formatVnd(d?.pendingCommission ?? 0)} />
-        <KpiCard label="Có thể rút" value={formatVnd(d?.withdrawableCommission ?? 0)} highlight />
+        <KpiCard
+          label="Chờ duyệt"
+          value={dashQ.isError ? '—' : formatVnd(d?.pendingCommission ?? 0)}
+        />
+        <KpiCard
+          label="Có thể rút"
+          value={dashQ.isError ? '—' : formatVnd(d?.withdrawableCommission ?? 0)}
+          highlight
+        />
       </Box>
       <Box mx={4} mb={3}>
         <Button
           fullWidth
           variant="secondary"
-          disabled={(d?.withdrawableCommission ?? 0) <= 0}
+          // Khi dashQ lỗi: cho phép mở WithdrawForm để BE tự validate số dư (CTV không bị kẹt
+          // do dashboard lỗi tạm thời mà không rút được commission đã APPROVED).
+          disabled={!dashQ.isError && (d?.withdrawableCommission ?? 0) <= 0}
           onClick={() => setWithdrawing(true)}
         >
           Rút hoa hồng
@@ -288,7 +304,10 @@ function Dashboard() {
           </Text>
         }
       >
-        {linksQ.data && linksQ.data.length > 0 ? (
+        {linksQ.isError ? (
+          // Phân biệt rõ "chưa có link" vs "lỗi tải" — tránh user tưởng rằng họ chưa tạo link.
+          <ErrorState message={getErrorMessage(linksQ.error)} onRetry={() => void linksQ.refetch()} />
+        ) : linksQ.data && linksQ.data.length > 0 ? (
           <Box flex flexDirection="column" style={{ gap: 8 }}>
             {linksQ.data.map((l) => (
               <Box
@@ -333,7 +352,10 @@ function Dashboard() {
 
       {/* Lịch sử hoa hồng */}
       <Section title="Lịch sử hoa hồng">
-        {commQ.data && commQ.data.length > 0 ? (
+        {commQ.isError ? (
+          // Tránh hiển thị "Chưa có hoa hồng" khi thực tế là API lỗi — CTV sẽ mất niềm tin.
+          <ErrorState message={getErrorMessage(commQ.error)} onRetry={() => void commQ.refetch()} />
+        ) : commQ.data && commQ.data.length > 0 ? (
           <Box flex flexDirection="column" style={{ gap: 2 }}>
             {commQ.data.slice(0, 30).map((c: Commission) => {
               const m = COMMISSION_META[c.status];

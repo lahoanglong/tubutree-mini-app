@@ -6,6 +6,20 @@ import { ProductQuery } from './dto/product-query.dto';
 
 @Injectable()
 export class CatalogService {
+  // Brands/categories đổi 15 phút/lần qua sync Pancake nhưng đang query DB mỗi request
+  // (brands() groupBy toàn bảng products). Cache 60s là đủ tươi mà giảm tải đáng kể.
+  //
+  // !!! HẠN CHẾ — KHÔNG AN TOÀN KHI SCALE:
+  // - Cache PER-INSTANCE (field RAM) → khi tăng số replica API ≥ 2, mỗi replica có cache
+  //   riêng + skew tới 60s giữa các replica → khách thấy dữ liệu khác nhau giữa request.
+  // - Sync Pancake job + admin sửa Category KHÔNG gọi invalidate → brand/category mới
+  //   trễ tới 60s. Tăng TTL ở đây mà không có invalidate sẽ làm vấn đề rõ hơn.
+  // Khi scale → chuyển sang Redis (đã có trong compose), hoặc emit event từ sync job
+  // để gọi invalidate trên TẤT CẢ instance.
+  private brandsCache: { value: unknown; expiresAt: number } | null = null;
+  private categoriesCache: { value: unknown; expiresAt: number } | null = null;
+  private readonly TTL_MS = 60_000;
+
   constructor(private readonly prisma: PrismaService) {}
 
   async list(query: ProductQuery) {
@@ -87,16 +101,26 @@ export class CatalogService {
   }
 
   async brands() {
+    if (this.brandsCache && this.brandsCache.expiresAt > Date.now()) {
+      return this.brandsCache.value;
+    }
     const rows = await this.prisma.product.groupBy({
       by: ['brand'],
       where: { isActive: true },
       _count: { _all: true },
     });
-    return rows.map((r) => ({ brand: r.brand, count: r._count._all }));
+    const value = rows.map((r) => ({ brand: r.brand, count: r._count._all }));
+    this.brandsCache = { value, expiresAt: Date.now() + this.TTL_MS };
+    return value;
   }
 
-  categories() {
-    return this.prisma.category.findMany({ orderBy: { sortOrder: 'asc' } });
+  async categories() {
+    if (this.categoriesCache && this.categoriesCache.expiresAt > Date.now()) {
+      return this.categoriesCache.value;
+    }
+    const value = await this.prisma.category.findMany({ orderBy: { sortOrder: 'asc' } });
+    this.categoriesCache = { value, expiresAt: Date.now() + this.TTL_MS };
+    return value;
   }
 
   async suggest(q: string) {

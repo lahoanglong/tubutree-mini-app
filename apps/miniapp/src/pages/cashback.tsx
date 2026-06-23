@@ -15,6 +15,7 @@ import { openExternal } from '../services/zmp-bridge';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
+import { ErrorState } from '../components/ui/empty-state';
 
 const TXN_META: Record<CashbackStatus, { label: string; color: string; bg: string }> = {
   PENDING: { label: 'Chờ duyệt', color: 'var(--clay-700)', bg: 'var(--clay-50)' },
@@ -47,25 +48,30 @@ export default function CashbackPage() {
 
       {/* Số dư hoàn tiền đang chờ */}
       <Box p={4}>
-        <Box
-          p={5}
-          style={{
-            background: 'linear-gradient(135deg, var(--clay-500), var(--clay-700))',
-            borderRadius: 'var(--radius-xl)',
-            color: '#fff',
-            boxShadow: 'var(--shadow-md)',
-          }}
-        >
-          <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
-            Hoàn tiền đang chờ
-          </Text>
-          <Text bold style={{ fontSize: 30, lineHeight: '38px', color: '#fff', marginTop: 4 }}>
-            {formatVnd(walletQ.data?.cashbackPending ?? 0)}
-          </Text>
-          <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.85)', marginTop: 6 }}>
-            Mua qua Tubu — nhận hoàn tiền vào Ví sau khi sàn xác nhận đơn.
-          </Text>
-        </Box>
+        {walletQ.isError ? (
+          // KHÔNG fallback 0đ khi lỗi tải ví — tránh user nghĩ rằng tiền hoàn đã biến mất.
+          <ErrorState message={getErrorMessage(walletQ.error)} onRetry={() => void walletQ.refetch()} />
+        ) : (
+          <Box
+            p={5}
+            style={{
+              background: 'linear-gradient(135deg, var(--clay-500), var(--clay-700))',
+              borderRadius: 'var(--radius-xl)',
+              color: '#fff',
+              boxShadow: 'var(--shadow-md)',
+            }}
+          >
+            <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              Hoàn tiền đang chờ
+            </Text>
+            <Text bold style={{ fontSize: 30, lineHeight: '38px', color: '#fff', marginTop: 4 }}>
+              {formatVnd(walletQ.data?.cashbackPending ?? 0)}
+            </Text>
+            <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.85)', marginTop: 6 }}>
+              Mua qua Tubu — nhận hoàn tiền vào Ví sau khi sàn xác nhận đơn.
+            </Text>
+          </Box>
+        )}
       </Box>
 
       {/* Lưới đối tác */}
@@ -79,6 +85,9 @@ export default function CashbackPage() {
               <Skeleton key={i} style={{ height: 92, borderRadius: 12 }} />
             ))}
           </Box>
+        ) : merchantsQ.isError ? (
+          // Phân biệt "lỗi tải sàn" vs "chưa có sàn" — không cho user tưởng feature trống.
+          <ErrorState message={getErrorMessage(merchantsQ.error)} onRetry={() => void merchantsQ.refetch()} />
         ) : merchantsQ.data && merchantsQ.data.length > 0 ? (
           <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             {merchantsQ.data.map((m) => (
@@ -119,7 +128,10 @@ export default function CashbackPage() {
         <Text bold style={{ marginBottom: 10 }}>
           Giao dịch hoàn tiền
         </Text>
-        {txnQ.data && txnQ.data.length > 0 ? (
+        {txnQ.isError ? (
+          // Tránh "Chưa có giao dịch hoàn tiền" khi thực ra là API lỗi — gây hiểu lầm mất tiền.
+          <ErrorState message={getErrorMessage(txnQ.error)} onRetry={() => void txnQ.refetch()} />
+        ) : txnQ.data && txnQ.data.length > 0 ? (
           <Box flex flexDirection="column" style={{ gap: 2 }}>
             {txnQ.data.map((t: CashbackTxn) => {
               const m = TXN_META[t.status];
