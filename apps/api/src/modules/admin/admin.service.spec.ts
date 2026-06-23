@@ -125,56 +125,185 @@ describe('AdminService.reviewDealerApplication', () => {
   });
 });
 
-describe('AdminService.reviewReturn (§6.4 đổi/trả)', () => {
+// Helper riêng cho reviewReturn — callback $transaction + updateMany (B3 atomic) + variation.update (B5 restock).
+type Order = {
+  id: string;
+  code: string;
+  userId: string;
+  total: number;
+  paymentMethod: 'COD' | 'WALLET' | 'ZALOPAY';
+  paymentStatus: 'PAID' | 'UNPAID';
+  items: Array<{ variationId: string; quantity: number }>;
+};
+type ReturnReq = { id: string; orderId: string; status: 'REQUESTED' | 'APPROVED' | 'REJECTED' } | null;
+
+function makeReturnPrisma(opts: {
+  returnReq?: ReturnReq;
+  order?: Order;
+  returnUpdateManyCount?: number; // count trả về cho returnRequest.updateMany trong tx
+}) {
+  const returnReq: ReturnReq =
+    opts.returnReq === undefined ? { id: 'r1', orderId: 'o1', status: 'REQUESTED' } : opts.returnReq;
+  const order: Order = opts.order ?? {
+    id: 'o1',
+    code: 'TUBU1',
+    userId: 'u1',
+    total: 250000,
+    paymentMethod: 'COD',
+    paymentStatus: 'UNPAID',
+    items: [{ variationId: 'v1', quantity: 1 }],
+  };
+  const returnUpdateMany = jest.fn().mockResolvedValue({ count: opts.returnUpdateManyCount ?? 1 });
+  // reviewReturn giờ dùng order.updateMany (guard status=DELIVERED) + tx.order.findUniqueOrThrow.
+  // orderUpdate giữ tên cũ để các test cũ vẫn dùng được như spy duy nhất cho order.update*.
+  const orderUpdate = jest.fn().mockResolvedValue({ count: 1 });
+  const userUpdate = jest.fn().mockResolvedValue({});
+  const variationUpdate = jest.fn().mockResolvedValue({});
+  const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
+    cb({
+      returnRequest: { updateMany: returnUpdateMany },
+      order: {
+        // findUniqueOrThrow đọc order trong tx (nhất quán với guard ngay sau đó).
+        findUniqueOrThrow: jest.fn().mockResolvedValue(order),
+        // updateMany guard status='DELIVERED' — mặc định flip 1 row.
+        updateMany: orderUpdate,
+      },
+      user: { update: userUpdate },
+      variation: { update: variationUpdate },
+    }),
+  );
+  const prisma = {
+    returnRequest: { findUnique: jest.fn().mockResolvedValue(returnReq), updateMany: returnUpdateMany },
+    order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+    $transaction,
+  } as unknown as PrismaService;
+  return { prisma, returnUpdateMany, orderUpdate, userUpdate, variationUpdate, $transaction };
+}
+
+describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', () => {
   beforeEach(() => {
     (loyalty.reverseOrderPoints as jest.Mock).mockClear();
     (affiliate.reverseCommissionsForOrder as jest.Mock).mockClear();
   });
 
   it('yêu cầu không tồn tại → NotFound', async () => {
-    const prisma = makePrisma({ returnRequest: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() } });
+    const { prisma } = makeReturnPrisma({ returnReq: null });
     await expect(mkAdmin(prisma).reviewReturn('a1', 'x', true)).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('yêu cầu đã xử lý (không REQUESTED) → BadRequest', async () => {
-    const prisma = makePrisma({
-      returnRequest: { findUnique: jest.fn().mockResolvedValue({ id: 'r1', status: 'APPROVED' }), update: jest.fn() },
-    });
-    await expect(mkAdmin(prisma).reviewReturn('a1', 'r1', true)).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it('DUYỆT → hoàn Ví + reverse điểm + reverse commission + đơn RETURNED', async () => {
-    const txn = jest.fn().mockResolvedValue([]);
-    const prisma = makePrisma({
-      returnRequest: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'r1', status: 'REQUESTED', orderId: 'o1' }),
-        update: jest.fn().mockResolvedValue({}),
-      },
+  it('APPROVE với COD UNPAID → đơn RETURNED, KHÔNG hoàn walletBalance, restock đủ', async () => {
+    const { prisma, returnUpdateMany, orderUpdate, userUpdate, variationUpdate } = makeReturnPrisma({
       order: {
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', code: 'TUBU1', userId: 'u1', total: 250000 }),
-        update: jest.fn().mockResolvedValue({}),
+        id: 'o1',
+        code: 'TUBU1',
+        userId: 'u1',
+        total: 300000,
+        paymentMethod: 'COD',
+        paymentStatus: 'UNPAID',
+        items: [
+          { variationId: 'v1', quantity: 2 },
+          { variationId: 'v2', quantity: 3 },
+        ],
       },
-      $transaction: txn,
     });
-    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
-    // transaction gồm: order→RETURNED, user.walletBalance += total, returnRequest→APPROVED
-    expect(txn).toHaveBeenCalledTimes(1);
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true, 'ok');
+    expect(returnUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'r1', status: 'REQUESTED' },
+        data: expect.objectContaining({ status: 'APPROVED' }),
+      }),
+    );
+    // order.updateMany với guard status='DELIVERED' — chặn đè CANCELLED/RETURNED khác.
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: 'o1', status: 'DELIVERED' },
+      data: { status: 'RETURNED' },
+    });
+    // COD UNPAID — khách chưa trả → KHÔNG hoàn ví.
+    expect(userUpdate).not.toHaveBeenCalled();
+    // Restock cả 2 item.
+    expect(variationUpdate).toHaveBeenCalledTimes(2);
+    expect(variationUpdate).toHaveBeenNthCalledWith(1, {
+      where: { id: 'v1' },
+      data: { stock: { increment: 2 } },
+    });
+    expect(variationUpdate).toHaveBeenNthCalledWith(2, {
+      where: { id: 'v2' },
+      data: { stock: { increment: 3 } },
+    });
     expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
   });
 
-  it('TỪ CHỐI → REJECTED + note, KHÔNG hoàn tiền/reverse', async () => {
-    const update = jest.fn().mockResolvedValue({});
-    const prisma = makePrisma({
-      returnRequest: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'r1', status: 'REQUESTED', orderId: 'o1' }),
-        update,
+  it('APPROVE với WALLET PAID → hoàn walletBalance + restock', async () => {
+    const { prisma, userUpdate, variationUpdate } = makeReturnPrisma({
+      order: {
+        id: 'o1',
+        code: 'TUBU1',
+        userId: 'u1',
+        total: 500000,
+        paymentMethod: 'WALLET',
+        paymentStatus: 'PAID',
+        items: [{ variationId: 'v1', quantity: 1 }],
       },
     });
-    await mkAdmin(prisma).reviewReturn('admin1', 'r1', false, 'không phải lỗi NSX');
-    expect(update.mock.calls[0][0].data.status).toBe('REJECTED');
-    expect(update.mock.calls[0][0].data.adminNote).toBe('không phải lỗi NSX');
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(userUpdate).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { walletBalance: { increment: 500000 } },
+    });
+    expect(variationUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('APPROVE với ZALOPAY PAID → hoàn walletBalance', async () => {
+    const { prisma, userUpdate } = makeReturnPrisma({
+      order: {
+        id: 'o1',
+        code: 'TUBU1',
+        userId: 'u1',
+        total: 200000,
+        paymentMethod: 'ZALOPAY',
+        paymentStatus: 'PAID',
+        items: [{ variationId: 'v1', quantity: 1 }],
+      },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(userUpdate).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { walletBalance: { increment: 200000 } },
+    });
+  });
+
+  it('race 2 admin approve cùng request → bên thua (updateMany count=0) throw, không hoàn ví/restock', async () => {
+    const { prisma, userUpdate, variationUpdate } = makeReturnPrisma({ returnUpdateManyCount: 0 });
+    await expect(mkAdmin(prisma).reviewReturn('admin2', 'r1', true)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(variationUpdate).not.toHaveBeenCalled();
+    // Reverse loyalty/affiliate cũng KHÔNG được gọi vì throw trước khi tới đoạn ngoài tx.
     expect(loyalty.reverseOrderPoints).not.toHaveBeenCalled();
     expect(affiliate.reverseCommissionsForOrder).not.toHaveBeenCalled();
+  });
+
+  it('REJECT → update REJECTED + note, KHÔNG hoàn ví, KHÔNG restock, KHÔNG reverse', async () => {
+    const { prisma, returnUpdateMany, userUpdate, variationUpdate } = makeReturnPrisma();
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', false, 'không phải lỗi NSX');
+    expect(returnUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'r1', status: 'REQUESTED' },
+        data: expect.objectContaining({ status: 'REJECTED', adminNote: 'không phải lỗi NSX' }),
+      }),
+    );
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(variationUpdate).not.toHaveBeenCalled();
+    expect(loyalty.reverseOrderPoints).not.toHaveBeenCalled();
+    expect(affiliate.reverseCommissionsForOrder).not.toHaveBeenCalled();
+  });
+
+  it('REJECT race (updateMany count=0) → BadRequest', async () => {
+    const { prisma } = makeReturnPrisma({ returnUpdateManyCount: 0 });
+    await expect(mkAdmin(prisma).reviewReturn('admin2', 'r1', false)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 });

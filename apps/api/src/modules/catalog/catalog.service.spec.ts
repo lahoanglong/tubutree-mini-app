@@ -46,3 +46,37 @@ describe('CatalogService.boughtTogether (§6.12 thường mua kèm)', () => {
     expect(r).toEqual([]);
   });
 });
+
+describe('CatalogService.brands cache 60s', () => {
+  it('gọi 2 lần liên tiếp chỉ hit DB 1 lần (TTL chưa hết)', async () => {
+    const groupBy = jest.fn().mockResolvedValue([{ brand: 'TuBu', _count: { _all: 3 } }]);
+    const prisma = { product: { groupBy } } as unknown as PrismaService;
+    const svc = new CatalogService(prisma);
+
+    const a = await svc.brands();
+    const b = await svc.brands();
+
+    expect(groupBy).toHaveBeenCalledTimes(1);
+    expect(a).toEqual([{ brand: 'TuBu', count: 3 }]);
+    expect(b).toEqual(a);
+  });
+
+  it('expire sau 60s → hit DB lần 2 (chứng minh TTL thực sự chạy)', async () => {
+    // Trước đây test chỉ chứng minh cache hit, không chứng minh expiry — nếu ai đó
+    // hardcode "return cache" mà không check expiresAt, test cũ vẫn pass.
+    jest.useFakeTimers();
+    try {
+      const groupBy = jest.fn().mockResolvedValue([{ brand: 'TuBu', _count: { _all: 3 } }]);
+      const prisma = { product: { groupBy } } as unknown as PrismaService;
+      const svc = new CatalogService(prisma);
+
+      await svc.brands();
+      jest.advanceTimersByTime(61_000);
+      await svc.brands();
+
+      expect(groupBy).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});

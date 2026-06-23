@@ -49,4 +49,26 @@ describe('CartService guard tồn kho', () => {
     const svc = new CartService(prisma, coupons, config);
     await expect(svc.updateItem('u1', 'it1', 1)).rejects.toThrow('Không tìm thấy');
   });
+
+  // FE QuantitySelector cho phép giảm tới 0 → onQty(0) → BE chuyển thành DELETE.
+  // Trước đây path này không có test, dễ hỏng âm thầm nếu ai đó đổi if-quantity===0.
+  it('updateItem: quantity=0 → xoá CartItem (path delete)', async () => {
+    const del = jest.fn().mockResolvedValue({});
+    const upd = jest.fn();
+    const prisma = {
+      cart: {
+        upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'c1', items: [], couponCode: null }),
+      },
+      cartItem: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'it1', cartId: 'c1', variation: { stock: 5 } }),
+        delete: del,
+        update: upd,
+      },
+    } as unknown as PrismaService;
+    const svc = new CartService(prisma, coupons, config);
+    await svc.updateItem('u1', 'it1', 0);
+    expect(del).toHaveBeenCalledWith({ where: { id: 'it1' } });
+    expect(upd).not.toHaveBeenCalled();
+  });
 });

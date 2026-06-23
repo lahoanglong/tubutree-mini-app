@@ -17,10 +17,21 @@ const CART = {
   subtotal: 100, discount: 0, freeship: false, couponCode: null,
 };
 
-function build(opts: { walletBalance?: number; total?: number; pointsUsed?: number; decCount?: number } = {}) {
+function build(
+  opts: {
+    walletBalance?: number;
+    total?: number;
+    pointsUsed?: number;
+    decCount?: number;
+    stockCount?: number; // count trả về của variation.updateMany (decrement stock)
+    variationUpdateMany?: jest.Mock; // override khi muốn mock chuỗi (race)
+  } = {},
+) {
   const total = opts.total ?? 100;
   const updateMany = jest.fn().mockResolvedValue({ count: opts.decCount ?? 1 });
   const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
+  const variationUpdateMany =
+    opts.variationUpdateMany ?? jest.fn().mockResolvedValue({ count: opts.stockCount ?? 1 });
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(null), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }), create: orderCreate },
     user: {
@@ -28,6 +39,7 @@ function build(opts: { walletBalance?: number; total?: number; pointsUsed?: numb
       findUnique: jest.fn().mockResolvedValue(null),
       updateMany,
     },
+    variation: { updateMany: variationUpdateMany },
     address: { findUnique: jest.fn().mockResolvedValue(ADDRESS) },
     pointsTransaction: { create: jest.fn() },
   } as unknown as PrismaService;
@@ -48,7 +60,7 @@ function build(opts: { walletBalance?: number; total?: number; pointsUsed?: numb
   const affiliate = { createCommissionForOrder: jest.fn() } as unknown as AffiliateService;
 
   const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, affiliate);
-  return { svc, prisma, updateMany, orderCreate, total };
+  return { svc, prisma, updateMany, orderCreate, variationUpdateMany, total };
 }
 
 describe('CheckoutService.placeOrder — money safety', () => {
@@ -92,5 +104,57 @@ describe('CheckoutService.placeOrder — money safety', () => {
     (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'existing' });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'key-123');
     expect(orderCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('CheckoutService.placeOrder — stock atomic (B5)', () => {
+  it('stock đủ → trừ đúng số lượng atomic (where gte) + tạo đơn', async () => {
+    const { svc, variationUpdateMany, orderCreate } = build({ stockCount: 1 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(variationUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'v1', stock: { gte: 1 } },
+        data: { stock: { decrement: 1 } },
+      }),
+    );
+    expect(orderCreate).toHaveBeenCalled();
+  });
+
+  it('stock không đủ → BadRequestException, KHÔNG tạo order (rollback)', async () => {
+    const { svc, orderCreate } = build({ stockCount: 0 });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
+    ).rejects.toThrow('không đủ tồn kho');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('B4: placeOrder với couponCode → coupons.redeem được gọi với tx (tham số 4)', async () => {
+    // Đẩy couponCode vào CART rồi khôi phục để không ảnh hưởng test khác.
+    (CART as { couponCode: string | null }).couponCode = 'SALE10';
+    try {
+      const { svc, prisma } = build({ stockCount: 1 });
+      // Lấy reference tới coupons mock từ instance (đã inject trong build).
+      const coupons = (svc as unknown as { coupons: { redeem: jest.Mock } }).coupons;
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+      expect(coupons.redeem).toHaveBeenCalledWith('SALE10', 'u1', 'o1', prisma);
+    } finally {
+      (CART as { couponCode: string | null }).couponCode = null;
+    }
+  });
+
+  it('race 2 placeOrder đồng thời chỉ 1 thắng (lần 1 count=1, lần 2 count=0)', async () => {
+    const variationUpdateMany = jest
+      .fn()
+      .mockResolvedValueOnce({ count: 1 }) // request A thắng
+      .mockResolvedValueOnce({ count: 0 }); // request B thua → throw
+    const { svc } = build({ variationUpdateMany });
+    // Lần 1 OK
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
+    ).resolves.toBeDefined();
+    // Lần 2 fail vì stock đã hết
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
+    ).rejects.toThrow('không đủ tồn kho');
   });
 });

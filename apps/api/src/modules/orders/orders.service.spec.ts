@@ -12,16 +12,33 @@ const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as 
 
 function makeService(
   order: Record<string, unknown>,
-  spies: { updateMany?: jest.Mock; userUpdate?: jest.Mock } = {},
+  spies: { updateMany?: jest.Mock; userUpdate?: jest.Mock; variationUpdate?: jest.Mock } = {},
 ) {
   // updateMany trả count=1 (thắng race) mặc định; test race truyền count=0.
   const updateMany = spies.updateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = spies.userUpdate ?? jest.fn().mockResolvedValue({});
+  const variationUpdate = spies.variationUpdate ?? jest.fn().mockResolvedValue({});
+  // $transaction giờ là CALLBACK form (flip-status + hoàn ví + restock ATOMIC). Forward tx ops vào cùng mock.
+  const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
+    cb({
+      order: { updateMany },
+      user: { update: userUpdate },
+      variation: { update: variationUpdate },
+    }),
+  );
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(order), updateMany },
     user: { update: userUpdate },
+    variation: { update: variationUpdate },
+    $transaction,
   } as unknown as PrismaService;
-  return { svc: new OrdersService(prisma, loyalty, cart, notifications, config), updateMany, userUpdate };
+  return {
+    svc: new OrdersService(prisma, loyalty, cart, notifications, config),
+    updateMany,
+    userUpdate,
+    variationUpdate,
+    $transaction,
+  };
 }
 
 const baseOrder = {
@@ -89,5 +106,84 @@ describe('OrdersService.cancel', () => {
   it('chặn xem/hủy đơn của người khác', async () => {
     const { svc } = makeService({ ...baseOrder, userId: 'someone-else' });
     await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow();
+  });
+});
+
+describe('OrdersService.cancel — atomic flip+refund (B1)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('WALLET+PAID: status flip + walletBalance increment THỰC HIỆN trong cùng $transaction callback', async () => {
+    const { svc, $transaction, updateMany, userUpdate } = makeService({
+      ...baseOrder,
+      paymentMethod: 'WALLET',
+      paymentStatus: 'PAID',
+    });
+    await svc.cancel('u1', 'TUBU1');
+    // $transaction được gọi với 1 callback (function), không phải array of ops
+    expect($transaction).toHaveBeenCalledTimes(1);
+    expect(typeof $transaction.mock.calls[0][0]).toBe('function');
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'o1', status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] } },
+        data: { status: 'CANCELLED' },
+      }),
+    );
+    expect(userUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { walletBalance: { increment: 300000 } } }),
+    );
+  });
+
+  it('COD+UNPAID: chỉ flip status, KHÔNG đụng tới user.update walletBalance', async () => {
+    const { svc, $transaction, userUpdate } = makeService({
+      ...baseOrder,
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
+    });
+    await svc.cancel('u1', 'TUBU1');
+    expect($transaction).toHaveBeenCalledTimes(1);
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it('race count=0: KHÔNG gọi reverseOrderPoints, KHÔNG hoàn ví', async () => {
+    const userUpdate = jest.fn().mockResolvedValue({});
+    const { svc } = makeService(
+      { ...baseOrder, paymentMethod: 'WALLET', paymentStatus: 'PAID' },
+      { updateMany: jest.fn().mockResolvedValue({ count: 0 }), userUpdate },
+    );
+    await svc.cancel('u1', 'TUBU1');
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect((loyalty.reverseOrderPoints as jest.Mock)).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrdersService.cancel — B5 restock', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('cancel THẮNG → tx.variation.update increment cho mỗi item', async () => {
+    const items = [
+      { variationId: 'v1', quantity: 2 },
+      { variationId: 'v2', quantity: 5 },
+    ];
+    const { svc, variationUpdate } = makeService({ ...baseOrder, items });
+    await svc.cancel('u1', 'TUBU1');
+    expect(variationUpdate).toHaveBeenCalledTimes(2);
+    expect(variationUpdate).toHaveBeenNthCalledWith(1, {
+      where: { id: 'v1' },
+      data: { stock: { increment: 2 } },
+    });
+    expect(variationUpdate).toHaveBeenNthCalledWith(2, {
+      where: { id: 'v2' },
+      data: { stock: { increment: 5 } },
+    });
+  });
+
+  it('cancel THUA race (count=0) → KHÔNG restock', async () => {
+    const items = [{ variationId: 'v1', quantity: 2 }];
+    const { svc, variationUpdate } = makeService(
+      { ...baseOrder, items },
+      { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    );
+    await svc.cancel('u1', 'TUBU1');
+    expect(variationUpdate).not.toHaveBeenCalled();
   });
 });

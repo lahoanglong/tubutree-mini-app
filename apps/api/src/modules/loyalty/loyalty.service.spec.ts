@@ -94,30 +94,127 @@ describe('LoyaltyService.creditOrderPoints', () => {
 });
 
 describe('LoyaltyService.reverseOrderPoints (idempotent)', () => {
-  function prismaFor(order: unknown, alreadyReversed: unknown = null) {
-    const txn = jest.fn().mockResolvedValue([]);
+  // reverseOrderPoints giờ chạy ALL check + write trong 1 callback $transaction.
+  // findFirst/create/update đều trên tx — mock $transaction để invoke callback với tx mock.
+  function prismaFor(
+    order: unknown,
+    alreadyReversed: unknown = null,
+    deliveredTx: unknown = { id: 'tx-credited' },
+  ) {
+    const txFindFirst = jest
+      .fn()
+      .mockResolvedValueOnce(alreadyReversed)
+      .mockResolvedValueOnce(deliveredTx);
+    const txCreate = jest.fn();
+    const txUpdate = jest.fn();
+    const tx = {
+      pointsTransaction: { findFirst: txFindFirst, create: txCreate },
+      user: { update: txUpdate },
+    };
+    const txn = jest.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx));
     const prisma = {
       order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
-      pointsTransaction: { findFirst: jest.fn().mockResolvedValue(alreadyReversed), create: jest.fn() },
-      user: { update: jest.fn() },
       $transaction: txn,
     } as unknown as PrismaService;
-    return { prisma, txn };
+    return { prisma, txn, txFindFirst, txCreate, txUpdate };
   }
 
   it('đã reverse rồi → idempotent, KHÔNG trừ điểm lại', async () => {
-    const { prisma, txn } = prismaFor(
+    const { prisma, txn, txCreate } = prismaFor(
       { id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 0 },
       { id: 'tx-rev' },
     );
     await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
-    expect(txn).not.toHaveBeenCalled();
+    // $transaction vẫn được gọi (re-check trong tx), nhưng callback bail sớm → KHÔNG create.
+    expect(txn).toHaveBeenCalledTimes(1);
+    expect(txCreate).not.toHaveBeenCalled();
   });
 
-  it('lần đầu → reverse điểm (transaction)', async () => {
-    const { prisma, txn } = prismaFor({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 10 });
+  it('lần đầu (đã DELIVERED trước đó) → reverse điểm (transaction)', async () => {
+    const { prisma, txn, txCreate } = prismaFor({
+      id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 10,
+    });
     await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
     expect(txn).toHaveBeenCalledTimes(1);
+    // 2 create: ORDER_REVERSED + ORDER_REFUND_POINTS
+    expect(txCreate).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('LoyaltyService.reverseOrderPoints chỉ trừ pointsEarned khi đã DELIVERED (B2)', () => {
+  function makePrisma(
+    order: unknown,
+    opts: { reversed?: unknown; delivered?: unknown } = {},
+  ) {
+    const txFindFirst = jest
+      .fn()
+      .mockResolvedValueOnce(opts.reversed ?? null)
+      .mockResolvedValueOnce(opts.delivered ?? null);
+    const create = jest.fn();
+    const update = jest.fn();
+    const tx = {
+      pointsTransaction: { findFirst: txFindFirst, create },
+      user: { update },
+    };
+    const txn = jest.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx));
+    const prisma = {
+      order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      $transaction: txn,
+    } as unknown as PrismaService;
+    return { prisma, txn, create, update };
+  }
+
+  it('đơn chưa DELIVERED + pointsUsed=0 → no-op (KHÔNG trừ pointsEarned)', async () => {
+    const { prisma, txn, create } = makePrisma(
+      { id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 0 },
+      { reversed: null, delivered: null },
+    );
+    await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
+    // Tx được gọi (callback chạy) nhưng KHÔNG có ops nào → create không được call.
+    expect(txn).toHaveBeenCalledTimes(1);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('đơn chưa DELIVERED nhưng pointsUsed>0 → CHỈ refund pointsUsed', async () => {
+    const { prisma, txn, create, update } = makePrisma(
+      { id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 10 },
+      { reversed: null, delivered: null },
+    );
+    await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
+    expect(txn).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0].data.reason).toBe('ORDER_REFUND_POINTS:C1');
+    expect(create.mock.calls[0][0].data.delta).toBe(10);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][0].data).toEqual({ pointsBalance: { increment: 10 } });
+  });
+
+  it('đơn đã DELIVERED + pointsEarned>0 + pointsUsed>0 → reverse đầy đủ 4 ops', async () => {
+    const { prisma, txn, create, update } = makePrisma(
+      { id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 10 },
+      { reversed: null, delivered: { id: 'tx-credited' } },
+    );
+    await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
+    expect(txn).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[0][0].data.reason).toBe('ORDER_REVERSED:C1');
+    expect(create.mock.calls[0][0].data.delta).toBe(-50);
+    expect(create.mock.calls[1][0].data.reason).toBe('ORDER_REFUND_POINTS:C1');
+    expect(create.mock.calls[1][0].data.delta).toBe(10);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update.mock.calls[0][0].data).toEqual({ pointsBalance: { decrement: 50 } });
+    expect(update.mock.calls[1][0].data).toEqual({ pointsBalance: { increment: 10 } });
+  });
+
+  it('đã ORDER_REVERSED rồi → no-op (guard re-check trong tx phát hiện và bail)', async () => {
+    const { prisma, txn, create } = makePrisma(
+      { id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 10 },
+      { reversed: { id: 'rev-1' }, delivered: { id: 'tx-credited' } },
+    );
+    await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
+    // $transaction vẫn được gọi (callback chạy + re-check) nhưng bail trước create.
+    expect(txn).toHaveBeenCalledTimes(1);
+    expect(create).not.toHaveBeenCalled();
   });
 });
 
