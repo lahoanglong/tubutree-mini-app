@@ -38,6 +38,18 @@ jobs:
             PGUSER=$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | cut -d= -f2- || true); PGUSER="${PGUSER:-tubu}"
             PGDB=$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | cut -d= -f2- || true); PGDB="${PGDB:-tubutree}"
             psql_q() { $COMPOSE exec -T postgres psql -U "$PGUSER" -d "$PGDB" -v ON_ERROR_STOP=1 "$@"; }
+
+            # Các action cần file tools/*+migrations mới → git pull working tree trước.
+            # AN TOÀN: chỉ cập nhật file trên đĩa, KHÔNG rebuild/restart container (image cũ
+            # vẫn chạy, migration chỉ áp khi `docker compose up --build` ở bước deploy riêng).
+            case "$ACTION" in
+              backup|gin|crontab)
+                echo "=== git pull (lấy tools/migrations mới; KHÔNG đụng container đang chạy) ==="
+                git fetch origin -q
+                git pull --ff-only origin main || { echo "git pull FAIL — dừng."; exit 1; }
+                echo "HEAD giờ: $(git rev-parse --short HEAD)"
+                ;;
+            esac
             # In SET/EMPTY cho 1 key trong .env, KHÔNG lộ value.
             envstate() {
               local k="$1"; local v
