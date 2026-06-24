@@ -9,7 +9,8 @@
 -- Idempotent: IF NOT EXISTS để re-run an toàn. Backfill: nếu prod đã có duplicate thì index
 -- tạo sẽ FAIL — dedupe trước (giữ row sớm nhất theo createdAt).
 -- LƯU Ý: dedupe chỉ xoá ROW trùng, KHÔNG hoàn lại pointsBalance đã cộng dư. Nếu DELETE bên dưới
--- xoá > 0 dòng trên prod → cần đối soát thủ công pointsBalance của user bị ảnh hưởng.
+-- xoá > 0 dòng trên prod → chạy đối soát: `pnpm --filter @tubutree/api reconcile:points` (dry-run xem
+-- trước, thêm `-- --apply` để đặt lại pointsBalance = SUM(delta)). Xem scripts/reconcile-points.ts.
 
 DO $$
 BEGIN
