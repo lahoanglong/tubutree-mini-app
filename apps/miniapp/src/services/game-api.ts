@@ -151,6 +151,38 @@ export const getSeason = () => api.get<Season | null>('/game/season').then((r) =
 export const getSeasonLeaderboard = () =>
   api.get<SeasonLeaderRow[]>('/game/season/leaderboard').then((r) => r.data);
 
+export interface GardenPlot {
+  id: string | null;
+  slot: number;
+  isHome: boolean;
+  treeType: string;
+  speciesId: string | null;
+  progress: number;
+  target: number;
+  treeStage: number;
+  treesPlanted: number;
+  treeHealth: 'HEALTHY' | 'WILTED' | 'DEAD';
+}
+export interface Garden {
+  plots: GardenPlot[];
+  maxPlots: number;
+  nextUnlock: { slot: number; seedCost: number; xuCost: number } | null;
+}
+export const getGarden = () => api.get<Garden>('/game/garden').then((r) => r.data);
+export const unlockPlot = (currency: 'SEEDS' | 'XU') =>
+  api.post<GardenPlot>('/game/garden/unlock', { currency }).then((r) => r.data);
+export const waterPlot = (plotId: string, drops: number) =>
+  api
+    .post<{
+      progress: number;
+      target: number;
+      harvested: boolean;
+      treesPlanted: number;
+      revivedFromDead: boolean;
+      reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies };
+    }>(`/game/garden/plot/${plotId}/water`, { drops })
+    .then((r) => r.data);
+
 export interface Friend {
   id: string;
   nickname: string;

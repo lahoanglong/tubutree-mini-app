@@ -8,6 +8,7 @@ import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
 import { GameSeasonService } from './game-season.service';
 import { GameGiftService } from './game-gift.service';
+import { GameGardenService } from './game-garden.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WalletModule } from '../wallet/wallet.module';
 
@@ -23,6 +24,7 @@ import { WalletModule } from '../wallet/wallet.module';
     GameCollectionService,
     GameSeasonService,
     GameGiftService,
+    GameGardenService,
   ],
   exports: [GameService],
 })

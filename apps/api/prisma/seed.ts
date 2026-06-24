@@ -71,6 +71,10 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'game.tree_default_target', value: 600, category: 'game', description: '💧 cần để thu hoạch cây mặc định' },
   { key: 'game.dew_seeds', value: 15, category: 'game', description: '💧 giọt sương sáng/ngày' },
   { key: 'game.streak_freeze_cost', value: 80, category: 'game', description: '💧 mua 1 vé giữ lửa (streak-freeze)' },
+  { key: 'game.max_plots', value: 5, category: 'game', description: 'Số lô đất tối đa/user (gồm lô nhà)' },
+  { key: 'game.plot_unlock_seed_base', value: 100, category: 'game', description: '💧 mở lô đất (giá = base × số thứ tự lô)' },
+  { key: 'game.plot_unlock_xu_base', value: 200, category: 'game', description: 'Xu mở lô đất (giá = base × số thứ tự lô)' },
+  { key: 'game.plot_target', value: 600, category: 'game', description: '💧 cần để thu hoạch 1 cây ở lô phụ' },
   {
     key: 'game.spin_prizes',
     value: [

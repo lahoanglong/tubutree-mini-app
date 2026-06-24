@@ -70,6 +70,7 @@ model User {
   species             UserSpecies[]
   giftsSent           WaterGift[] @relation("GiftsSent")
   giftsReceived       WaterGift[] @relation("GiftsReceived")
+  gardenPlots         GardenPlot[]
 
   @@index([referredById])
   @@map("users")
@@ -769,6 +770,27 @@ model WaterGift {
   @@unique([senderId, recipientId, dayKey])
   @@index([recipientId])
   @@map("water_gifts")
+}
+
+// Vườn Xanh 2.0 — Lô đất / mở rộng vườn (§6.7). Lô nhà (slot 0) là cây trong GameProfile.
+// User mở thêm lô phụ (slot 1..) bằng 💧/TubuXu; mỗi lô là 1 cây độc lập tưới & thu hoạch.
+model GardenPlot {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slot          Int // 1-based, slot 0 = lô nhà (không lưu ở đây)
+  treeType      String    @default("Cây Dứa Fuwa3e")
+  speciesId     String? // loài đang trồng (tuỳ chọn, liên kết PlantSpecies)
+  progress      Int       @default(0)
+  target        Int       @default(600)
+  treeStage     Int       @default(1)
+  treesPlanted  Int       @default(0)
+  lastWateredAt DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([userId, slot])
+  @@index([userId])
+  @@map("garden_plots")
 }
 
 // Yêu cầu đổi/trả (§6.4): chỉ lỗi NSX, window 7 ngày, admin duyệt → hoàn Ví +

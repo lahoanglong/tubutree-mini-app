@@ -21,6 +21,9 @@ import {
   getSeasonLeaderboard,
   getFriends,
   giftWater,
+  getGarden,
+  unlockPlot,
+  waterPlot,
   type MissionItem,
   type AnswerResult,
   type HarvestSpecies,
@@ -59,6 +62,7 @@ export default function GamePage() {
   const { data: season } = useQuery({ queryKey: ['game', 'season'], queryFn: getSeason });
   const { data: seasonBoard } = useQuery({ queryKey: ['game', 'seasonBoard'], queryFn: getSeasonLeaderboard });
   const { data: friends } = useQuery({ queryKey: ['game', 'friends'], queryFn: getFriends, enabled: authed });
+  const { data: garden } = useQuery({ queryKey: ['game', 'garden'], queryFn: getGarden, enabled: authed });
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
@@ -157,6 +161,33 @@ export default function GamePage() {
       void queryClient.invalidateQueries({ queryKey: ['coins'] });
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
     },
+    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+  });
+  const onPlotHarvest = (r: { harvested: boolean; progress: number; target: number; reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies } }) => {
+    if (r.harvested) {
+      setHarvestCoupon(r.reward?.coupon ?? null);
+      setHarvestCert(r.reward?.certificate ?? null);
+      setHarvestSpecies(r.reward?.species ?? null);
+      setHarvested(true);
+    } else {
+      openSnackbar({ text: `Đã tưới lô · ${r.progress}/${r.target}💧`, type: 'success' });
+    }
+    refresh();
+    void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
+  };
+  const unlockM = useMutation({
+    mutationFn: (currency: 'SEEDS' | 'XU') => unlockPlot(currency),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã mở lô đất mới 🪴', type: 'success' });
+      refresh();
+      void queryClient.invalidateQueries({ queryKey: ['coins'] });
+      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+    },
+    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+  });
+  const waterPlotM = useMutation({
+    mutationFn: (plotId: string) => waterPlot(plotId, 20),
+    onSuccess: onPlotHarvest,
     onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
   });
   const answerM = useMutation({
@@ -337,6 +368,75 @@ export default function GamePage() {
           Mua bằng TubuXu — đổi từ Ví trong mục Ví của tôi.
         </Text>
       </Box>
+
+      {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
+      {garden && (
+        <Card title={`🪴 Lô đất của bạn (${garden.plots.length}/${garden.maxPlots})`}>
+          {garden.plots.filter((p) => !p.isHome).length === 0 && (
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+              Mở thêm lô đất để trồng nhiều cây cùng lúc — mỗi lô thu hoạch cho coupon, cây thật & loài sưu tập riêng.
+            </Text>
+          )}
+          {garden.plots
+            .filter((p) => !p.isHome)
+            .map((p) => {
+              const ppct = p.target > 0 ? Math.min(100, Math.round((p.progress / p.target) * 100)) : 0;
+              const stageEmoji = ppct >= 100 ? '🌳' : ppct > 50 ? '🌿' : '🌱';
+              return (
+                <Box key={p.id} p={2} mt={1} style={{ background: 'var(--leaf-50, #eef7ee)', borderRadius: 'var(--radius-md)' }}>
+                  <Box flex alignItems="center" justifyContent="space-between">
+                    <Box flex alignItems="center" style={{ gap: 8 }}>
+                      <Text style={{ fontSize: 26, filter: p.treeHealth === 'DEAD' ? 'grayscale(1)' : 'none' }}>{stageEmoji}</Text>
+                      <Box>
+                        <Text size="small" bold>Lô {p.slot} · {p.treeType}</Text>
+                        <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                          {p.progress}/{p.target}💧 · 🌳 {p.treesPlanted}
+                          {p.treeHealth === 'WILTED' ? ' · 🥀 héo' : p.treeHealth === 'DEAD' ? ' · 🍂 chết' : ''}
+                        </Text>
+                      </Box>
+                    </Box>
+                    <Button
+                      size="small"
+                      variant="secondary"
+                      loading={waterPlotM.isPending && waterPlotM.variables === p.id}
+                      onClick={() => p.id && waterPlotM.mutate(p.id)}
+                    >
+                      🚿 Tưới
+                    </Button>
+                  </Box>
+                  <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 6, marginTop: 6, overflow: 'hidden' }}>
+                    <Box style={{ width: `${ppct}%`, height: 6, background: 'var(--leaf-600)', borderRadius: 99, transition: 'width var(--dur-slow) var(--ease-out)' }} />
+                  </Box>
+                </Box>
+              );
+            })}
+          {garden.nextUnlock ? (
+            <Box flex style={{ gap: 8, marginTop: 10 }}>
+              <Button
+                style={{ flex: 1 }}
+                size="small"
+                loading={unlockM.isPending && unlockM.variables === 'SEEDS'}
+                onClick={() => unlockM.mutate('SEEDS')}
+              >
+                🔓 Mở lô ({garden.nextUnlock.seedCost}💧)
+              </Button>
+              <Button
+                style={{ flex: 1 }}
+                size="small"
+                variant="secondary"
+                loading={unlockM.isPending && unlockM.variables === 'XU'}
+                onClick={() => unlockM.mutate('XU')}
+              >
+                🔓 Mở lô ({garden.nextUnlock.xuCost} xu)
+              </Button>
+            </Box>
+          ) : (
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
+              Bạn đã mở tối đa số lô đất 🌳
+            </Text>
+          )}
+        </Card>
+      )}
 
       {/* Mốc cộng đồng cây thật (Phase 2) — hồ giọt nước toàn cộng đồng */}
       {community?.goal && (

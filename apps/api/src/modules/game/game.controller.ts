@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
-import { IsInt, Min } from 'class-validator';
+import { IsIn, IsInt, Min } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { GameService } from './game.service';
@@ -9,10 +9,12 @@ import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
 import { GameSeasonService } from './game-season.service';
 import { GameGiftService } from './game-gift.service';
+import { GameGardenService } from './game-garden.service';
 
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
 class BuySeedsDto { @IsInt() @Min(1) seeds!: number; }
+class UnlockPlotDto { @IsIn(['SEEDS', 'XU']) currency!: 'SEEDS' | 'XU'; }
 
 @Controller('game')
 export class GameController {
@@ -24,6 +26,7 @@ export class GameController {
     private readonly collection: GameCollectionService,
     private readonly season: GameSeasonService,
     private readonly gift: GameGiftService,
+    private readonly garden: GameGardenService,
   ) {}
 
   @Get('profile')
@@ -77,6 +80,19 @@ export class GameController {
   @Public()
   @Get('season/leaderboard')
   seasonLeaderboard() { return this.season.getSeasonLeaderboard(); }
+
+  @Get('garden')
+  getGarden(@CurrentUser('sub') userId: string) { return this.garden.getGarden(userId); }
+
+  @Post('garden/unlock')
+  unlockPlot(@CurrentUser('sub') userId: string, @Body() dto: UnlockPlotDto) {
+    return this.garden.unlockPlot(userId, dto.currency);
+  }
+
+  @Post('garden/plot/:id/water')
+  waterPlot(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() dto: WaterDto) {
+    return this.garden.waterPlot(userId, id, dto.drops);
+  }
 
   @Get('friends')
   friends(@CurrentUser('sub') userId: string) { return this.gift.getFriends(userId); }
