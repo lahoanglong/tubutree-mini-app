@@ -5,6 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
 import { CoinsService } from '../wallet/coins.service';
+import { CommunityFeedService } from '../feed/community-feed.service';
 import { DEFAULT_TREE_TYPE } from './game.constants';
 
 interface SpinPrize {
@@ -34,6 +35,8 @@ export class GameService {
     @Optional() private readonly collection?: GameCollectionService,
     // Optional: ví TubuXu — mua nước/cây bằng xu. Tests dựng GameService không cần coins thì bỏ qua.
     @Optional() private readonly coins?: CoinsService,
+    // Optional: bảng tin cộng đồng §6.14.12 — auto-post thành tích khi thu hoạch.
+    @Optional() private readonly feed?: CommunityFeedService,
   ) {}
 
   // ── Profile ────────────────────────────────────────
@@ -187,6 +190,16 @@ export class GameService {
     // Lỗi góp hồ không được chặn thu hoạch của user.
     if (harvested && this.community) {
       await this.community.contribute(userId, harvestCount * eco.target).catch(() => undefined);
+    }
+
+    // §6.14.12: auto-post thành tích lên bảng tin. Lỗi post không chặn thu hoạch.
+    if (harvested && this.feed) {
+      const body = species
+        ? `Vừa thu hoạch cây và sưu tập loài ${species.emoji} ${species.name}! 🌳`
+        : `Vừa thu hoạch 1 cây trong Vườn Xanh 🌳`;
+      await this.feed
+        .createAchievementPost(userId, species ? 'SPECIES' : 'HARVEST', body, { treesPlanted: eco.treesPlanted })
+        .catch(() => undefined);
     }
     return {
       progress: eco.progress,

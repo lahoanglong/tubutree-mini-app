@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Spinner, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Spinner, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getGameProfile,
@@ -46,6 +46,7 @@ export default function GamePage() {
   const status = useAuthStore((s) => s.status);
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const authed = status === 'authenticated';
 
   const { data: profile, isLoading } = useQuery({
@@ -240,6 +241,24 @@ export default function GamePage() {
         <Text size="xSmall" style={{ color: 'white' }}>
           {eco?.progress ?? 0}/{eco?.target ?? 0}💧 · 💧 {profile?.totalSeeds ?? 0} · 🔥 {profile?.streakDays ?? 0} ngày · 🌳 thật: {eco?.treesPlanted ?? 0}
         </Text>
+      </Box>
+
+      {/* Bảng tin cộng đồng (§6.14.12) */}
+      <Box
+        className="tubu-press"
+        mx={3}
+        mt={2}
+        p={3}
+        onClick={() => navigate('/feed')}
+        style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+      >
+        <Box>
+          <Text size="small" bold>🌿 Bảng tin cộng đồng</Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+            Khoe thành tích xanh & cổ vũ nhau trồng cây
+          </Text>
+        </Box>
+        <Text style={{ color: 'var(--leaf-700)' }}>›</Text>
       </Box>
 
       {/* Banner mùa/sự kiện (Phase 4) */}

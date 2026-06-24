@@ -13,7 +13,7 @@ Trạng thái: **✅ xong** · **🟡 một phần / back-office** · **⏳ Phas
 | 6.4 Đơn & tracking | ✅ | list/detail/cancel/repurchase/track + **đổi/trả (return-request)** full-stack |
 | 6.5 Hóa đơn điện tử | ✅ | issue-invoice + webhook invoice.issued (cần key Pancake để phát hành thật) |
 | 6.6 Loyalty | ✅ 🟡 | điểm/tier/multiplier, voucher welcome/birthday/winback/**milestone**. **TubuXu** (tiền tệ tiêu-trong-app): Ví→xu ×1.2, rút min 100k/phí 3k (**idempotency-key chống rút 2 lần**), mua hàng/nước/cây bằng xu (2026-06-24). Đơn trả bằng XU **không sinh điểm Xanh** (config `loyalty.earn_points_on_xu`, default off) — chống khuếch đại; hủy/đổi-trả đơn XU **hoàn lại xu**. ❓ nightly tier-recalc + grace 30 ngày: cần chốt cách tính điểm-hạng (lifetime vs balance) |
-| 6.7 Gamification | ✅ | **Vườn Xanh 2.0 đủ 4 phase (2026-06-15):** check-in/streak + **vé giữ lửa** + **giọt sương**, **quiz thiên nhiên→💧** (chủ đề/độ khó/reveal "Bạn có biết"), spin, tưới cây→thu hoạch (**cây héo/chết §6.7.3**, cây thật+chứng nhận), **push nhắc** (điểm danh/cây khát), **mốc cộng đồng cây thật** (CommunityGoal/Contribution + fulfil batch), **sổ tay loài** (10 loài VN, rarity), **mùa/sự kiện + BXH mùa**. ⏳ tuỳ chọn sau: tặng nước bạn bè (social), lô đất. |
+| 6.7 Gamification | ✅ | **Vườn Xanh 2.0 đủ 4 phase (2026-06-15):** check-in/streak + **vé giữ lửa** + **giọt sương**, **quiz thiên nhiên→💧** (chủ đề/độ khó/reveal "Bạn có biết"), spin, tưới cây→thu hoạch (**cây héo/chết §6.7.3**, cây thật+chứng nhận), **push nhắc** (điểm danh/cây khát), **mốc cộng đồng cây thật** (CommunityGoal/Contribution + fulfil batch), **sổ tay loài** (10 loài VN, rarity), **mùa/sự kiện + BXH mùa**, **tặng nước bạn bè** (social), **lô đất / mở rộng vườn** (GardenPlot — mở lô bằng 💧/xu, tưới & thu hoạch độc lập, 2026-06-24). |
 | 6.8 Affiliate/CTV | ✅ | register, link, dashboard + **bậc doanh số tháng**, commission lifecycle, payout (chống mất tiền/double-spend) |
 | 6.9 Cashback | ✅ | merchants, click→deeplink, postback **có verify token** (guard số âm, bỏ qua sau PAID), settle cron→Ví + **thông báo CASHBACK_PAID**, **referee CONFIRMED đầu → thưởng TubuXu 2 chiều** (cần key Accesstrade thật). 🟡 reconciliation cron kéo /transactions từ AT: gated theo key |
 | 6.10 Đại lý B2B | ✅ 🟡 | **User-facing đủ**: đăng ký+KYC, bảng giá theo bậc (cap 45%), đơn CREDIT/PREPAID, credit-ledger, Quick Order. 🟡 back-office hoãn: thưởng quý, admin upload Excel giá, DealerPriceHistory |
@@ -36,7 +36,7 @@ Trạng thái: **✅ xong** · **🟡 một phần / back-office** · **⏳ Phas
 | 6.14.8 Mua chung (Group Buy) | 2 | ⏳ |
 | 6.14.9 Review video (UGC) | 2 | ⏳ |
 | 6.14.11 Beta Tester | 2 | ⏳ |
-| 6.14.12 Community Feed | 2 | ⏳ |
+| 6.14.12 Community Feed | 2 | ✅ (bảng tin: bài viết + thả tim 💚 + bình luận; auto-post khi thu hoạch; tên ẩn) |
 
 ## Tổng kết
 - **Toàn bộ §6.1–6.14 đã audit. Phase-1 user-facing hoàn thiện** — miniapp dùng được full chức năng (với COD/Ví/TubuXu; ZaloPay/ZNS/Pancake/Accesstrade/eSMS bật khi có key).

@@ -152,6 +152,41 @@ describe('GameService.waterTree', () => {
   });
 });
 
+describe('GameService.waterTree — auto-post Community Feed (§6.14.12)', () => {
+  it('thu hoạch + feed injected → createAchievementPost (HARVEST)', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, ecoImpact: { progress: 590, target: 600, treeType: 't', treesPlanted: 0 } }),
+    );
+    const feed = { createAchievementPost: jest.fn().mockResolvedValue({}) };
+    const svc = new GameService(prisma, makeConfig(), undefined, undefined, undefined, feed as never);
+    await svc.waterTree('u1', 20);
+    expect(feed.createAchievementPost).toHaveBeenCalledWith('u1', 'HARVEST', expect.any(String), expect.any(Object));
+  });
+
+  it('chưa thu hoạch → KHÔNG post', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 0 } }),
+    );
+    const feed = { createAchievementPost: jest.fn() };
+    const svc = new GameService(prisma, makeConfig(), undefined, undefined, undefined, feed as never);
+    await svc.waterTree('u1', 20);
+    expect(feed.createAchievementPost).not.toHaveBeenCalled();
+  });
+
+  it('lỗi auto-post KHÔNG chặn thu hoạch', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, ecoImpact: { progress: 590, target: 600, treeType: 't', treesPlanted: 0 } }),
+    );
+    const feed = { createAchievementPost: jest.fn().mockRejectedValue(new Error('feed down')) };
+    const svc = new GameService(prisma, makeConfig(), undefined, undefined, undefined, feed as never);
+    const r = await svc.waterTree('u1', 20);
+    expect(r.harvested).toBe(true);
+  });
+});
+
 describe('GameService.getForest (Khu rừng của tôi §6.7.7)', () => {
   it('trả danh sách cây + đếm tổng/đã trồng', async () => {
     const prisma = makePrisma();

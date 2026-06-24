@@ -11,9 +11,10 @@ import { GameGiftService } from './game-gift.service';
 import { GameGardenService } from './game-garden.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WalletModule } from '../wallet/wallet.module';
+import { FeedModule } from '../feed/feed.module';
 
 @Module({
-  imports: [NotificationsModule, WalletModule],
+  imports: [NotificationsModule, WalletModule, FeedModule],
   controllers: [GameController],
   providers: [
     GameService,

@@ -71,6 +71,9 @@ model User {
   giftsSent           WaterGift[] @relation("GiftsSent")
   giftsReceived       WaterGift[] @relation("GiftsReceived")
   gardenPlots         GardenPlot[]
+  feedPosts           FeedPost[]
+  feedReactions       FeedReaction[]
+  feedComments        FeedComment[]
 
   @@index([referredById])
   @@map("users")
@@ -791,6 +794,57 @@ model GardenPlot {
   @@unique([userId, slot])
   @@index([userId])
   @@map("garden_plots")
+}
+
+// Community Feed (§6.14.12) — bảng tin cộng đồng Vườn Xanh.
+// kind: MANUAL (user tự đăng) / HARVEST / MILESTONE / SPECIES (auto-post thành tích).
+model FeedPost {
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      FeedPostKind   @default(MANUAL)
+  body      String
+  meta      Json?
+  createdAt DateTime       @default(now())
+  reactions FeedReaction[]
+  comments  FeedComment[]
+
+  @@index([createdAt])
+  @@map("feed_posts")
+}
+
+enum FeedPostKind {
+  MANUAL
+  HARVEST
+  MILESTONE
+  SPECIES
+}
+
+// Thả tim 💚 — mỗi user 1 tim/bài (unique chống đếm trùng).
+model FeedReaction {
+  id        String   @id @default(cuid())
+  postId    String
+  post      FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@map("feed_reactions")
+}
+
+model FeedComment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([postId])
+  @@map("feed_comments")
 }
 
 // Yêu cầu đổi/trả (§6.4): chỉ lỗi NSX, window 7 ngày, admin duyệt → hoàn Ví +
