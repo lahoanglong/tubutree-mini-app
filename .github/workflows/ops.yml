@@ -24,12 +24,16 @@ jobs:
     steps:
       - name: Run ${{ github.event.inputs.action }} on VM
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          # Secret AI keys — forward qua SSH (GitHub tự mask trong log; script chỉ in SET/EMPTY).
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 15m
-          envs: ACTION
+          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY
           script: |
             set -uo pipefail
             ACTION="${{ github.event.inputs.action }}"
@@ -56,6 +60,9 @@ jobs:
               v=$(grep -E "^${k}=" .env 2>/dev/null | head -1 | cut -d= -f2- || true)
               if [ -z "$v" ]; then echo "  $k = EMPTY"; else echo "  $k = SET (${#v} chars)"; fi
             }
+            # Ghi/đè 1 key=value vào .env (xoá dòng cũ rồi append). Dùng DELETE (không substitute)
+            # nên value chứa / : & ... đều an toàn, không cần escape.
+            upsert_env() { local k="$1"; local v="$2"; sed -i "/^${k}=/d" .env; printf '%s=%s\n' "$k" "$v" >> .env; }
 
             case "$ACTION" in
               audit)
@@ -121,10 +128,24 @@ jobs:
                 else
                   echo "  ACCESSTRADE_WEBHOOK_SECRET: đã có, giữ nguyên"
                 fi
+                # AI tư vấn 24/7 (§6.14.3): DeepSeek + Gemini-proxy (OpenAI-compatible).
+                # Key bí mật lấy từ GitHub Secrets (forward qua env); base/model là literal.
+                # Chỉ ghi key khi secret KHÔNG rỗng (tránh đè value tốt bằng rỗng).
+                echo "=== AI tư vấn (DeepSeek + Gemini) ==="
+                if [ -n "${DEEPSEEK_API_KEY:-}" ]; then upsert_env DEEPSEEK_API_KEY "$DEEPSEEK_API_KEY"; else echo "  DEEPSEEK_API_KEY: secret rỗng — giữ nguyên"; fi
+                upsert_env DEEPSEEK_BASE_URL "https://api.deepseek.com"
+                upsert_env DEEPSEEK_MODEL "deepseek-chat"
+                if [ -n "${GEMINI_API_KEY:-}" ]; then upsert_env GEMINI_API_KEY "$GEMINI_API_KEY"; else echo "  GEMINI_API_KEY: secret rỗng — giữ nguyên"; fi
+                upsert_env GEMINI_BASE_URL "https://gemini-api.thailam.io.vn/v1"
+                upsert_env GEMINI_MODEL "gemini-3.5-flash"
+
                 echo "=== Trạng thái sau khi set (chỉ SET/EMPTY) ==="
                 envstate CORS_ORIGINS
                 envstate ACCESSTRADE_WEBHOOK_SECRET
                 envstate PANCAKE_WEBHOOK_SECRET
+                envstate DEEPSEEK_API_KEY
+                envstate GEMINI_API_KEY
+                envstate GEMINI_BASE_URL
                 echo "(API sẽ nạp env mới ở lần deploy/restart kế tiếp)"
                 ;;
 
