@@ -43,6 +43,14 @@ export const envSchema = z.object({
 
   // CORS allowlist (CSV các origin). Ở prod nên cấu hình rõ ràng.
   CORS_ORIGINS: z.string().default(''),
+
+  // AI tư vấn 24/7 (§6.14.3) — DeepSeek (chính) + Gemini (dự phòng). Trống → tính năng tự tắt graceful.
+  DEEPSEEK_API_KEY: z.string().default(''),
+  DEEPSEEK_BASE_URL: z.string().default('https://api.deepseek.com'),
+  DEEPSEEK_MODEL: z.string().default('deepseek-chat'),
+  GEMINI_API_KEY: z.string().default(''),
+  GEMINI_BASE_URL: z.string().default('https://generativelanguage.googleapis.com'),
+  GEMINI_MODEL: z.string().default('gemini-2.0-flash'),
 }).superRefine((env, ctx) => {
   // Fail-closed ở production: bắt buộc khai báo webhook secret để không bị forge.
   if (env.NODE_ENV === 'production') {

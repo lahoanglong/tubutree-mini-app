@@ -20,6 +20,7 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { GameModule } from './modules/game/game.module';
 import { FeedModule } from './modules/feed/feed.module';
+import { AiAdvisorModule } from './modules/ai-advisor/ai-advisor.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { VouchersModule } from './modules/vouchers/vouchers.module';
@@ -58,6 +59,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     OrdersModule,
     GameModule,
     FeedModule,
+    AiAdvisorModule,
     ReviewsModule,
     WishlistModule,
     VouchersModule,

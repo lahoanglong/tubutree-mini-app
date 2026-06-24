@@ -1,6 +1,6 @@
 import { Box, Page, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, ShoppingCart, Search, ChevronRight, Baby, SprayCan, Droplets, Recycle, Map, type LucideIcon } from 'lucide-react';
+import { Bell, ShoppingCart, Search, ChevronRight, Baby, SprayCan, Droplets, Recycle, Map, Sparkles, type LucideIcon } from 'lucide-react';
 import { fetchProducts, fetchBrands } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -105,6 +105,34 @@ export default function HomePage() {
           <Text size="small" style={{ color: 'var(--neutral-400)' }}>
             {vi.home.searchPlaceholder}
           </Text>
+        </Box>
+      </Box>
+
+      {/* ── Trợ lý AI tư vấn 24/7 (§6.14.3) ── */}
+      <Box px={4} pb={3}>
+        <Box
+          role="button"
+          aria-label="Hỏi trợ lý AI"
+          className="tubu-press"
+          onClick={() => { haptic('light'); navigate('/ai-advisor'); }}
+          style={{
+            background: 'linear-gradient(120deg, var(--leaf-50), var(--primary-50, #eef7ff))',
+            border: '1px solid var(--leaf-400)',
+            borderRadius: 'var(--radius-full)',
+            padding: '10px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            minHeight: 46,
+            boxSizing: 'border-box',
+          }}
+        >
+          <Sparkles size={18} color="var(--leaf-700)" strokeWidth={2} />
+          <Box style={{ flex: 1 }}>
+            <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>Hỏi trợ lý AI 24/7</Text>
+            <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Tư vấn sản phẩm xanh phù hợp cho bạn</Text>
+          </Box>
+          <ChevronRight size={18} color="var(--leaf-700)" strokeWidth={2} />
         </Box>
       </Box>
 
