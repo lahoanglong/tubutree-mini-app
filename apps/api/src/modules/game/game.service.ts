@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
+import { CoinsService } from '../wallet/coins.service';
 import { DEFAULT_TREE_TYPE } from './game.constants';
 
 interface SpinPrize {
@@ -31,6 +32,8 @@ export class GameService {
     @Optional() private readonly community?: GameCommunityService,
     // Optional: sổ tay loài Phase 3. Thu hoạch → sưu tập 1 loài.
     @Optional() private readonly collection?: GameCollectionService,
+    // Optional: ví TubuXu — mua nước/cây bằng xu. Tests dựng GameService không cần coins thì bỏ qua.
+    @Optional() private readonly coins?: CoinsService,
   ) {}
 
   // ── Profile ────────────────────────────────────────
@@ -200,6 +203,39 @@ export class GameService {
     const certificateCode = `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
     await this.prisma.plantedTree.create({ data: { userId, treeType, certificateCode } });
     return certificateCode;
+  }
+
+  // ── Mua bằng TubuXu (sink tiêu xu) ─────────────────
+  /** Mua nước (giọt) bằng TubuXu. Trừ xu + cộng totalSeeds ATOMIC, không vượt sức chứa bình. */
+  async buySeeds(userId: string, seeds: number) {
+    if (!this.coins) throw new BadRequestException('Tính năng mua nước chưa khả dụng.');
+    if (!Number.isInteger(seeds) || seeds <= 0) throw new BadRequestException('Số giọt nước không hợp lệ.');
+    const xuPerSeed = await this.config.get<number>('game.xu_per_seed', 1);
+    const cap = await this.config.get<number>('game.tank_capacity', 500);
+    const cost = seeds * xuPerSeed;
+
+    const profile = await this.ensureProfile(userId);
+    const newTotal = profile.totalSeeds + seeds;
+    if (newTotal > cap) {
+      throw new BadRequestException(`Bình chứa tối đa ${cap}💧 — không thể mua thêm ${seeds}💧.`);
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await this.coins!.spendCoins(userId, cost, 'GAME_BUY_SEEDS', 'GAME', undefined, tx);
+      await tx.gameProfile.update({ where: { userId }, data: { totalSeeds: newTotal } });
+    });
+    return { seeds, cost, totalSeeds: newTotal };
+  }
+
+  /** Mua 1 cây THẬT (PlantedTree, cam kết trồng qua PanNature) bằng TubuXu. */
+  async buyTree(userId: string) {
+    if (!this.coins) throw new BadRequestException('Tính năng mua cây chưa khả dụng.');
+    const price = await this.config.get<number>('game.tree_xu_price', 50000);
+    const certificateCode = `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
+    await this.prisma.$transaction(async (tx) => {
+      await this.coins!.spendCoins(userId, price, `GAME_BUY_TREE:${certificateCode}`, 'GAME', undefined, tx);
+      await tx.plantedTree.create({ data: { userId, treeType: DEFAULT_TREE_TYPE, certificateCode } });
+    });
+    return { certificateCode, treeType: DEFAULT_TREE_TYPE, cost: price };
   }
 
   /** "Khu rừng của tôi" — danh sách cây thật đã cam kết + chứng nhận (§6.7.7). */

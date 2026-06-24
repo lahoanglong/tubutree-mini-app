@@ -2,7 +2,7 @@ import { Body, Controller, Get, Headers, Post, UnauthorizedException } from '@ne
 import { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
 import { timingSafeEqual } from 'node:crypto';
-import { IsInt, IsOptional, IsString } from 'class-validator';
+import { IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CashbackService } from './cashback.service';
@@ -16,8 +16,8 @@ class ClickDto {
 class PostbackDto {
   @IsString() utm_content!: string;
   @IsString() order_id!: string;
-  @IsInt() amount!: number;
-  @IsInt() commission!: number;
+  @IsInt() @Min(0) amount!: number;
+  @IsInt() @Min(0) commission!: number;
   @IsString() status!: 'pending' | 'approved' | 'rejected';
 }
 

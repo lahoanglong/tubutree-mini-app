@@ -2,7 +2,11 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 
-/** Ví Tubu (Build Spec §6.x, §15 affiliate.min_withdraw_bank). */
+/**
+ * Ví Tubu (walletBalance, VND thật) — nhận hoa hồng CTV + cashback Shopee.
+ * Hai đường ra: đổi sang TubuXu (×1.2, khuyến khích tiêu trong app) hoặc rút ngân hàng
+ * (min wallet.withdraw_min, phí wallet.withdraw_fee). Xem docs spec TubuXu 2026-06-24.
+ */
 @Injectable()
 export class WalletService {
   constructor(
@@ -12,7 +16,7 @@ export class WalletService {
 
   async getWallet(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const [commApproved, commPending] = await Promise.all([
+    const [commApproved, commPending, multiplier, withdrawMin, withdrawFee] = await Promise.all([
       this.prisma.commission.aggregate({
         where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
         _sum: { amount: true },
@@ -21,21 +25,57 @@ export class WalletService {
         where: { affiliateUserId: userId, status: { in: ['PENDING', 'LOCKED'] } },
         _sum: { amount: true },
       }),
+      this.config.get<number>('wallet.xu_convert_multiplier', 1.2),
+      this.config.get<number>('wallet.withdraw_min', 100000),
+      this.config.get<number>('wallet.withdraw_fee', 3000),
     ]);
     return {
-      walletBalance: user.walletBalance, // số dư khả dụng (rút/thanh toán)
+      walletBalance: user.walletBalance, // số dư khả dụng (rút/đổi xu)
+      coinsBalance: user.coinsBalance, // TubuXu (tiêu trong app)
       cashbackPending: user.cashbackPending, // cashback chờ hết hold
       commissionApproved: commApproved._sum.amount ?? 0, // hoa hồng có thể rút
       commissionPending: commPending._sum.amount ?? 0,
+      xuConvertMultiplier: multiplier, // 1.2 → đổi Ví nhận thêm 20% xu
+      withdrawMin, // rút tối thiểu
+      withdrawFee, // phí chuyển khoản ngân hàng
     };
   }
 
-  /** Rút từ Ví Tubu (walletBalance) về STK ngân hàng. */
+  /**
+   * Đổi Ví → TubuXu (×multiplier). Atomic: trừ ví (gte guard chống overdraft) +
+   * cộng xu + ghi CoinTransaction trong 1 transaction (bất biến coinsBalance == Σdelta).
+   */
+  async convertToXu(userId: string, amountVnd: number) {
+    if (!Number.isInteger(amountVnd) || amountVnd <= 0) {
+      throw new BadRequestException('Số tiền đổi không hợp lệ.');
+    }
+    const multiplier = await this.config.get<number>('wallet.xu_convert_multiplier', 1.2);
+    const received = Math.floor(amountVnd * multiplier);
+    await this.prisma.$transaction(async (tx) => {
+      const dec = await tx.user.updateMany({
+        where: { id: userId, walletBalance: { gte: amountVnd } },
+        data: { walletBalance: { decrement: amountVnd } },
+      });
+      if (dec.count === 0) throw new BadRequestException('Số dư Ví không đủ.');
+      await tx.user.update({ where: { id: userId }, data: { coinsBalance: { increment: received } } });
+      await tx.coinTransaction.create({
+        data: { userId, delta: received, reason: 'CONVERT_FROM_WALLET', refType: 'CONVERT' },
+      });
+    });
+    return { spent: amountVnd, received, multiplier };
+  }
+
+  /**
+   * Rút từ Ví Tubu (walletBalance) về STK ngân hàng. Min wallet.withdraw_min, trừ
+   * phí chuyển khoản wallet.withdraw_fee → Payout.amount = số thực nhận (net).
+   */
   async withdraw(userId: string, amount: number, bankInfo: object) {
-    const min = await this.config.get<number>('affiliate.min_withdraw_bank', 50000);
+    const min = await this.config.get<number>('wallet.withdraw_min', 100000);
+    const fee = await this.config.get<number>('wallet.withdraw_fee', 3000);
     if (amount < min) {
       throw new BadRequestException(`Số tiền rút tối thiểu ${min.toLocaleString('vi-VN')}đ.`);
     }
+    const net = amount - fee;
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.walletBalance < amount) throw new BadRequestException('Số dư ví không đủ.');
 
@@ -48,9 +88,9 @@ export class WalletService {
       });
       if (dec.count === 0) throw new BadRequestException('Số dư ví không đủ.');
       return tx.payout.create({
-        data: { userId, amount, method: 'BANK', bankInfo, status: 'REQUESTED' },
+        data: { userId, amount: net, fee, method: 'BANK', bankInfo, status: 'REQUESTED' },
       });
     });
-    return { ok: true, payoutId: payout.id, status: 'REQUESTED' };
+    return { ok: true, payoutId: payout.id, status: 'REQUESTED' as const, withdrawn: amount, fee, net };
   }
 }

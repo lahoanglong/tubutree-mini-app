@@ -10,4 +10,9 @@ export class ZaloOAuthDto {
   @IsOptional()
   @IsString()
   codeVerifier?: string;
+
+  /** Mã giới thiệu từ deep link ?ref= (nếu được bạn bè mời vào app). */
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
 }

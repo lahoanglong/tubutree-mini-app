@@ -9,6 +9,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
+import { CoinsService } from '../wallet/coins.service';
 import { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 
 @Injectable()
@@ -24,6 +25,7 @@ export class CheckoutService {
     private readonly notifications: NotificationsService,
     private readonly pancakeOrder: PancakeOrderService,
     private readonly affiliate: AffiliateService,
+    private readonly coins: CoinsService,
   ) {}
 
   /** Map mã giới thiệu → userId CTV (khác người mua). */
@@ -66,12 +68,16 @@ export class CheckoutService {
     if (dto.paymentMethod === 'WALLET' && user.walletBalance < computed.total) {
       throw new BadRequestException('Số dư Ví Tubu không đủ.');
     }
+    if (dto.paymentMethod === 'XU' && user.coinsBalance < computed.total) {
+      throw new BadRequestException('Số dư TubuXu không đủ.');
+    }
     const codMax = 5_000_000;
     if (dto.paymentMethod === 'COD' && computed.total > codMax) {
       throw new BadRequestException('Đơn vượt hạn mức COD, vui lòng chọn phương thức khác.');
     }
 
-    const paid = dto.paymentMethod === 'WALLET';
+    // WALLET và XU đều thanh toán ngay (đơn CONFIRMED + PAID); 1 xu = 1đ.
+    const paid = dto.paymentMethod === 'WALLET' || dto.paymentMethod === 'XU';
     const status = dto.paymentMethod === 'COD' || paid ? 'CONFIRMED' : 'PENDING_PAYMENT';
     const code = await this.generateCode();
     const referrerUserId = await this.resolveReferrer(dto.referralCode, userId);
@@ -142,13 +148,17 @@ export class CheckoutService {
             },
           });
         }
-        if (paid) {
+        if (dto.paymentMethod === 'WALLET') {
           // Trừ ví ATOMIC (gte) — chống overdraft khi 2 đơn WALLET chạy đồng thời.
           const dec = await tx.user.updateMany({
             where: { id: userId, walletBalance: { gte: computed.total } },
             data: { walletBalance: { decrement: computed.total } },
           });
           if (dec.count === 0) throw new BadRequestException('Số dư Ví Tubu không đủ.');
+        } else if (dto.paymentMethod === 'XU') {
+          // Trả đơn bằng TubuXu (1 xu = 1đ): trừ xu ATOMIC trong CÙNG tx — không đủ → throw
+          // rollback toàn bộ đơn/stock/điểm. Ghi CoinTransaction(-total, ORDER_PAY:<code>).
+          await this.coins.spendCoins(userId, computed.total, `ORDER_PAY:${code}`, 'ORDER', created.id, tx);
         }
         // B4: redeem coupon ATOMIC trong cùng tx — chống race usageLimit/perUserLimit khi 2 đơn
         // đồng thời cùng dùng 1 mã (đặc biệt voucher giới thiệu usageLimit=1). Nếu hết lượt

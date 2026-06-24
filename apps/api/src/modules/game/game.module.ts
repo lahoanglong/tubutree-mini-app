@@ -9,9 +9,10 @@ import { GameCollectionService } from './game-collection.service';
 import { GameSeasonService } from './game-season.service';
 import { GameGiftService } from './game-gift.service';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
-  imports: [NotificationsModule],
+  imports: [NotificationsModule, WalletModule],
   controllers: [GameController],
   providers: [
     GameService,

@@ -14,4 +14,9 @@ export class ZaloMiniAppLoginDto {
   @IsString()
   @IsOptional()
   phoneToken?: string;
+
+  /** Mã giới thiệu từ deep link ?ref= (nếu được bạn bè mời vào app). */
+  @IsString()
+  @IsOptional()
+  referralCode?: string;
 }

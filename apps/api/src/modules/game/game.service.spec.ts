@@ -218,6 +218,49 @@ describe('GameService.waterTree — cây chết mất tiến trình (§6.7.3)', 
   });
 });
 
+describe('GameService.buySeeds / buyTree (mua bằng TubuXu)', () => {
+  // $transaction chạy callback để spendCoins + cập nhật chạy thật.
+  function buyPrisma(over: Record<string, unknown> = {}) {
+    const prisma = makePrisma(over) as unknown as Record<string, unknown>;
+    (prisma as { $transaction: jest.Mock }).$transaction = jest
+      .fn()
+      .mockImplementation(async (cb: (t: unknown) => unknown) => cb(prisma));
+    return prisma as unknown as PrismaService;
+  }
+  const coinsStub = () => ({ spendCoins: jest.fn().mockResolvedValue(undefined) });
+
+  it('mua nước: trừ xu (seeds×1) + cộng totalSeeds, không vượt sức chứa', async () => {
+    const prisma = buyPrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 100 }));
+    const coins = coinsStub();
+    const svc = new GameService(prisma, makeConfig(), undefined, undefined, coins as never);
+    const r = await svc.buySeeds('u1', 50);
+    expect(r).toMatchObject({ seeds: 50, cost: 50, totalSeeds: 150 });
+    expect(coins.spendCoins).toHaveBeenCalledWith('u1', 50, 'GAME_BUY_SEEDS', 'GAME', undefined, prisma);
+    expect((prisma.gameProfile.update as jest.Mock).mock.calls[0][0].data.totalSeeds).toBe(150);
+  });
+
+  it('mua nước vượt sức chứa bình → throw, KHÔNG trừ xu', async () => {
+    const prisma = buyPrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 480 }));
+    const coins = coinsStub();
+    const svc = new GameService(prisma, makeConfig({ 'game.tank_capacity': 500 }), undefined, undefined, coins as never);
+    await expect(svc.buySeeds('u1', 50)).rejects.toThrow('Bình chứa');
+    expect(coins.spendCoins).not.toHaveBeenCalled();
+  });
+
+  it('mua cây thật: trừ xu (tree_xu_price) + tạo PlantedTree có chứng nhận', async () => {
+    const prisma = buyPrisma();
+    const coins = coinsStub();
+    const svc = new GameService(prisma, makeConfig({ 'game.tree_xu_price': 50000 }), undefined, undefined, coins as never);
+    const r = await svc.buyTree('u1');
+    expect(r.cost).toBe(50000);
+    expect(r.certificateCode).toMatch(/^TUBU-/);
+    expect(coins.spendCoins).toHaveBeenCalledWith('u1', 50000, expect.stringMatching(/^GAME_BUY_TREE:TUBU-/), 'GAME', undefined, prisma);
+    expect((prisma.plantedTree.create as jest.Mock).mock.calls[0][0].data.certificateCode).toBe(r.certificateCode);
+  });
+});
+
 describe('GameService.pickWeighted (phân phối theo trọng số)', () => {
   type Prize = { id: string; name: string; weight: number; rewardType: string; value: number };
   const pick = (prizes: Prize[], rand: number) => {

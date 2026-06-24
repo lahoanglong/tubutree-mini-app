@@ -41,6 +41,7 @@ model User {
   referredById      String?
   pointsBalance     Int      @default(0)
   walletBalance     Int      @default(0)
+  coinsBalance      Int      @default(0) // TubuXu — tiền tệ tiêu trong app (không rút được)
   cashbackPending   Int      @default(0)
   isBlocked         Boolean  @default(false)
   pancakeCustomerId String?  @unique
@@ -53,6 +54,7 @@ model User {
   cart                Cart?
   orders              Order[]
   pointsTransactions  PointsTransaction[]
+  coinTransactions    CoinTransaction[]
   affiliateLinks      AffiliateLink[]
   commissions         Commission[]
   payouts             Payout[]
@@ -242,6 +244,7 @@ enum PaymentMethod {
   VNPAY
   BANK_TRANSFER
   WALLET
+  XU
 }
 
 enum PaymentStatus {
@@ -330,6 +333,20 @@ model PointsTransaction {
 
   @@index([userId])
   @@map("points_transactions")
+}
+
+model CoinTransaction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  delta     Int // +thưởng/đổi-vào, -tiêu
+  reason    String // CONVERT_FROM_WALLET | REFERRAL_CASHBACK:<id> | REFERRED_CASHBACK:<id> | ORDER_PAY:<code> | GAME_BUY_SEEDS | GAME_BUY_TREE:<cert>
+  refType   String? // CONVERT | REFERRAL | ORDER | GAME | ADMIN
+  refId     String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("coin_transactions")
 }
 
 enum CouponType {
@@ -453,7 +470,8 @@ model Payout {
   id          String       @id @default(cuid())
   userId      String
   user        User         @relation(fields: [userId], references: [id])
-  amount      Int
+  amount      Int // số thực nhận (đã trừ phí)
+  fee         Int          @default(0) // phí chuyển khoản ngân hàng
   method      String
   bankInfo    Json?
   status      PayoutStatus @default(REQUESTED)

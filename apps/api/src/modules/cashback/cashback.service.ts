@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { CoinsService } from '../wallet/coins.service';
 
 interface AccesstradePostback {
   utm_content: string; // clickId
@@ -25,6 +26,7 @@ export class CashbackService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    private readonly coins: CoinsService,
   ) {}
 
   listMerchants() {
@@ -62,6 +64,12 @@ export class CashbackService {
 
   /** Webhook postback Accesstrade. Idempotent theo merchantOrderId. */
   async handlePostback(payload: AccesstradePostback) {
+    // Phòng thủ: AT gửi số âm (bug/forge) → KHÔNG để cộng số âm vào pending/ví. DTO đã @Min(0)
+    // nhưng handlePostback có thể được gọi nội bộ nên guard lại ở đây.
+    if (payload.amount < 0 || payload.commission < 0) {
+      this.logger.warn(`Postback amount/commission âm — bỏ qua. order=${payload.order_id}`);
+      return { ok: false };
+    }
     const click = await this.prisma.cashbackClick.findUnique({
       where: { utmTraceId: payload.utm_content },
     });
@@ -76,10 +84,18 @@ export class CashbackService {
     const existing = await this.prisma.cashbackTransaction.findFirst({
       where: { merchantOrderId: payload.order_id },
     });
+
+    // becameConfirmed + ai → sau khi commit thì thưởng xu giới thiệu (referee có cashback đầu).
+    let becameConfirmed = false;
+    let confirmedUserId: string | null = null;
+
     if (existing) {
-      // Điều chỉnh cashbackPending theo CHUYỂN TRẠNG THÁI (trước đây chỉ cộng ở nhánh
-      // create → postback PENDING rồi APPROVED sẽ không bao giờ cộng pending; và
-      // CONFIRMED→REJECTED không trừ lại). Không đụng nếu đã PAID (đã về Ví).
+      // Đã settle về Ví (PAID) → BỎ QUA mọi postback đến sau: không ghi đè status (giữ dấu
+      // đã trả tiền), không đụng số dư (không thể claw-back tiền đã về Ví).
+      if (existing.status === 'PAID') return { ok: true };
+
+      // Điều chỉnh cashbackPending theo CHUYỂN TRẠNG THÁI (PENDING→CONFIRMED cộng,
+      // CONFIRMED→REJECTED trừ lại).
       const wasConfirmed = existing.status === 'CONFIRMED';
       const nowConfirmed = status === 'CONFIRMED';
       const ops: ReturnType<typeof this.prisma.cashbackTransaction.update>[] = [
@@ -88,22 +104,22 @@ export class CashbackService {
           data: { status, confirmedAt: nowConfirmed ? (existing.confirmedAt ?? new Date()) : existing.confirmedAt },
         }),
       ];
-      if (existing.status !== 'PAID') {
-        if (nowConfirmed && !wasConfirmed) {
-          ops.push(
-            this.prisma.user.update({
-              where: { id: existing.userId },
-              data: { cashbackPending: { increment: existing.userReward } },
-            }) as never,
-          );
-        } else if (wasConfirmed && !nowConfirmed) {
-          ops.push(
-            this.prisma.user.update({
-              where: { id: existing.userId },
-              data: { cashbackPending: { decrement: existing.userReward } },
-            }) as never,
-          );
-        }
+      if (nowConfirmed && !wasConfirmed) {
+        ops.push(
+          this.prisma.user.update({
+            where: { id: existing.userId },
+            data: { cashbackPending: { increment: existing.userReward } },
+          }) as never,
+        );
+        becameConfirmed = true;
+        confirmedUserId = existing.userId;
+      } else if (wasConfirmed && !nowConfirmed) {
+        ops.push(
+          this.prisma.user.update({
+            where: { id: existing.userId },
+            data: { cashbackPending: { decrement: existing.userReward } },
+          }) as never,
+        );
       }
       await this.prisma.$transaction(ops);
     } else {
@@ -132,6 +148,8 @@ export class CashbackService {
               data: { cashbackPending: { increment: userReward } },
             }),
           );
+          becameConfirmed = true;
+          confirmedUserId = click.userId;
         }
         await this.prisma.$transaction(ops);
       } catch (err) {
@@ -141,6 +159,12 @@ export class CashbackService {
         }
         throw err;
       }
+    }
+
+    // Thưởng xu giới thiệu khi referee có cashback CONFIRMED (ngoài tx tài chính để không phình
+    // tx; idempotent qua unique index nên gọi nhiều lần vô hại). Lỗi thưởng không làm hỏng postback.
+    if (becameConfirmed && confirmedUserId) {
+      await this.coins.grantReferralCoins(confirmedUserId);
     }
     return { ok: true };
   }

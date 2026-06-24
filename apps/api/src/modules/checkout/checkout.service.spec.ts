@@ -7,6 +7,7 @@ import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
+import type { CoinsService } from '../wallet/coins.service';
 
 const ADDRESS = {
   id: 'addr1', userId: 'u1', recipient: 'A', phone: '09', province: 'HN', district: 'BD',
@@ -20,6 +21,7 @@ const CART = {
 function build(
   opts: {
     walletBalance?: number;
+    coinsBalance?: number;
     total?: number;
     pointsUsed?: number;
     decCount?: number;
@@ -35,7 +37,7 @@ function build(
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(null), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }), create: orderCreate },
     user: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, pointsBalance: 1000, tierId: null }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, coinsBalance: opts.coinsBalance ?? 1000, pointsBalance: 1000, tierId: null }),
       findUnique: jest.fn().mockResolvedValue(null),
       updateMany,
     },
@@ -58,9 +60,10 @@ function build(
   const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
   const pancake = { pushOrder: jest.fn().mockResolvedValue(null) } as unknown as PancakeOrderService;
   const affiliate = { createCommissionForOrder: jest.fn() } as unknown as AffiliateService;
+  const coins = { spendCoins: jest.fn().mockResolvedValue(undefined) } as unknown as CoinsService;
 
-  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, affiliate);
-  return { svc, prisma, updateMany, orderCreate, variationUpdateMany, total };
+  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, affiliate, coins);
+  return { svc, prisma, updateMany, orderCreate, variationUpdateMany, total, coins };
 }
 
 describe('CheckoutService.placeOrder — money safety', () => {
@@ -84,6 +87,22 @@ describe('CheckoutService.placeOrder — money safety', () => {
     await expect(
       svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never),
     ).rejects.toThrow('Ví Tubu không đủ');
+  });
+
+  it('XU số dư không đủ (check sớm) → BadRequest, không tạo đơn', async () => {
+    const { svc, orderCreate } = build({ coinsBalance: 50, total: 100 });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'XU' } as never),
+    ).rejects.toThrow('TubuXu không đủ');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('XU hợp lệ → spendCoins(total) trong tx với reason ORDER_PAY + tạo đơn PAID', async () => {
+    const { svc, coins, prisma } = build({ coinsBalance: 1000, total: 100 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'XU' } as never);
+    expect(coins.spendCoins).toHaveBeenCalledWith(
+      'u1', 100, expect.stringMatching(/^ORDER_PAY:/), 'ORDER', 'o1', prisma,
+    );
   });
 
   it('COD vượt hạn mức 5tr → BadRequest', async () => {

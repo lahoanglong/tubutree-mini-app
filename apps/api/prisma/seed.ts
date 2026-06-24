@@ -45,6 +45,15 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'cashback.tubu_wallet_multiplier', value: 1.5, category: 'cashback', description: 'x1.5 khi chuyển Ví Tubu' },
   { key: 'cashback.click_rate_limit_seconds', value: 30, category: 'cashback', description: '1 click/merchant/user/30s' },
 
+  // TubuXu (tiền tệ tiêu trong app) — Ví đổi sang xu ×1.2; rút Ví min 100k, phí 3k.
+  { key: 'wallet.xu_convert_multiplier', value: 1.2, category: 'wallet', description: 'Đổi Ví → TubuXu nhận thêm 20%' },
+  { key: 'wallet.withdraw_min', value: 100000, category: 'wallet', description: 'Rút Ví về ngân hàng tối thiểu' },
+  { key: 'wallet.withdraw_fee', value: 3000, category: 'wallet', description: 'Phí chuyển khoản ngân hàng/lần' },
+  { key: 'coins.referrer_reward', value: 5000, category: 'coins', description: 'Xu thưởng người giới thiệu (mỗi bạn có cashback đầu)' },
+  { key: 'coins.referee_reward', value: 5000, category: 'coins', description: 'Xu thưởng người được mời' },
+  { key: 'game.xu_per_seed', value: 1, category: 'game', description: 'Giá mua nước: xu / 1 giọt' },
+  { key: 'game.tree_xu_price', value: 50000, category: 'game', description: 'Giá mua 1 cây thật bằng xu' },
+
   // Dealer
   { key: 'dealer.max_discount_pct', value: 0.45, category: 'dealer', description: 'Chiết khấu tối đa hard cap' },
   { key: 'dealer.kyc_required', value: true, category: 'dealer', description: 'Bắt buộc CCCD khi đăng ký' },

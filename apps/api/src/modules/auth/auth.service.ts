@@ -22,7 +22,7 @@ export class AuthService {
    * (app chưa kích hoạt -1401). Tạo/lấy user ổn định theo thiết bị để app chạy đầy đủ.
    * Khi Zalo login khả dụng, có thể nâng cấp guest → tài khoản Zalo qua phone-merge.
    */
-  async loginAsGuest(deviceId: string): Promise<LoginResponse> {
+  async loginAsGuest(deviceId: string, referralCode?: string): Promise<LoginResponse> {
     const guestKey = `guest_${deviceId}`;
     let user = await this.prisma.user.findUnique({ where: { zaloId: guestKey } });
     if (!user) {
@@ -31,6 +31,7 @@ export class AuthService {
           zaloId: guestKey,
           fullName: 'Khách',
           referralCode: await this.generateReferralCode(),
+          referredById: await this.resolveReferrerId(referralCode),
         },
       });
     }
@@ -42,6 +43,7 @@ export class AuthService {
     code: string,
     accessToken: string,
     phoneToken?: string,
+    referralCode?: string,
   ): Promise<LoginResponse> {
     // code hiện chưa cần đổi token server-side cho mini app (token đã do SDK cấp);
     // giữ tham số để mở rộng OAuth web sau này.
@@ -82,6 +84,7 @@ export class AuthService {
             avatarUrl: info.avatar,
             phone: await this.phoneIfFree(phone),
             referralCode: await this.generateReferralCode(),
+            referredById: await this.resolveReferrerId(referralCode),
           },
         }),
       );
@@ -113,7 +116,11 @@ export class AuthService {
   }
 
   /** Luồng đăng nhập web (Zalo Web Login OAuth): đổi code → access token → upsert user → JWT. */
-  async loginWithZaloOAuth(code: string, codeVerifier?: string): Promise<LoginResponse> {
+  async loginWithZaloOAuth(
+    code: string,
+    codeVerifier?: string,
+    referralCode?: string,
+  ): Promise<LoginResponse> {
     const accessToken = await this.zalo.exchangeOAuthCode(code, codeVerifier);
     const info = await this.zalo.getUserInfo(accessToken);
 
@@ -125,6 +132,7 @@ export class AuthService {
           fullName: info.name,
           avatarUrl: info.avatar,
           referralCode: await this.generateReferralCode(),
+          referredById: await this.resolveReferrerId(referralCode),
         },
       });
     } else if (info.name && user.fullName !== info.name) {
@@ -207,6 +215,20 @@ export class AuthService {
 
   private hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  /**
+   * Map mã giới thiệu (từ deep link ?ref=) → userId người giới thiệu, khi TẠO user mới.
+   * Chuẩn hoá hoa (referralCode lưu uppercase). Trả null nếu không có/không tồn tại → khách
+   * vẫn đăng ký bình thường. Chỉ gọi ở nhánh create nên referrer luôn ≠ user mới.
+   */
+  private async resolveReferrerId(referralCode?: string): Promise<string | null> {
+    if (!referralCode) return null;
+    const ref = await this.prisma.user.findUnique({
+      where: { referralCode: referralCode.toUpperCase() },
+      select: { id: true },
+    });
+    return ref?.id ?? null;
   }
 
   /** Sinh referralCode duy nhất (8 ký tự base36 không lẫn ký tự dễ nhầm). */

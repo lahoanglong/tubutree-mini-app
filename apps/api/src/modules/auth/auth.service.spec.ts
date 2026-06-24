@@ -133,3 +133,47 @@ describe('AuthService.logout', () => {
     );
   });
 });
+
+describe('AuthService — ghi nhận người giới thiệu lúc đăng ký (referredById)', () => {
+  function guestSvc(referrer: { id: string } | null, existingGuest = false) {
+    const create = jest
+      .fn()
+      .mockImplementation(({ data }) => ({ id: 'newuser', role: 'CUSTOMER', ...data }));
+    const findUnique = jest.fn().mockImplementation(({ where }: { where: Record<string, unknown> }) => {
+      if (where.zaloId) return existingGuest ? { ...USER, zaloId: where.zaloId } : null;
+      if (where.referralCode === 'REF1') return referrer; // resolveReferrerId (đã chuẩn hoá hoa)
+      return null; // generateReferralCode: code sinh ra chưa bị chiếm
+    });
+    const prisma = {
+      refreshToken: { create: jest.fn().mockResolvedValue({}) },
+      user: { findUnique, create },
+    } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('jwt') } as unknown as JwtService;
+    const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
+    return { svc: new AuthService(prisma, jwt, config, {} as unknown as ZaloService), create, findUnique };
+  }
+
+  it('guest mới + referralCode hợp lệ (chuẩn hoá hoa) → set referredById = người giới thiệu', async () => {
+    const { svc, create } = guestSvc({ id: 'referrer1' });
+    await svc.loginAsGuest('dev1', 'ref1'); // lowercase → chuẩn hoá REF1
+    expect(create.mock.calls[0][0].data.referredById).toBe('referrer1');
+  });
+
+  it('guest mới + referralCode không tồn tại → referredById null', async () => {
+    const { svc, create } = guestSvc(null);
+    await svc.loginAsGuest('dev1', 'REF1');
+    expect(create.mock.calls[0][0].data.referredById).toBeNull();
+  });
+
+  it('guest mới KHÔNG có referralCode → referredById null', async () => {
+    const { svc, create } = guestSvc({ id: 'referrer1' });
+    await svc.loginAsGuest('dev1');
+    expect(create.mock.calls[0][0].data.referredById).toBeNull();
+  });
+
+  it('guest ĐÃ tồn tại + referralCode → KHÔNG tạo lại, KHÔNG ghi đè referredById', async () => {
+    const { svc, create } = guestSvc({ id: 'referrer1' }, true);
+    await svc.loginAsGuest('dev1', 'REF1');
+    expect(create).not.toHaveBeenCalled();
+  });
+});

@@ -12,6 +12,7 @@ import { GameGiftService } from './game-gift.service';
 
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
+class BuySeedsDto { @IsInt() @Min(1) seeds!: number; }
 
 @Controller('game')
 export class GameController {
@@ -50,6 +51,12 @@ export class GameController {
 
   @Post('tree/water')
   water(@CurrentUser('sub') userId: string, @Body() dto: WaterDto) { return this.game.waterTree(userId, dto.drops); }
+
+  @Post('seeds/buy')
+  buySeeds(@CurrentUser('sub') userId: string, @Body() dto: BuySeedsDto) { return this.game.buySeeds(userId, dto.seeds); }
+
+  @Post('tree/buy')
+  buyTree(@CurrentUser('sub') userId: string) { return this.game.buyTree(userId); }
 
   @Get('missions')
   missions(@CurrentUser('sub') userId: string) { return this.game.getMissions(userId); }
