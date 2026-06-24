@@ -55,33 +55,33 @@ export class LlmClient {
     throw new ServiceUnavailableException('AI tư vấn tạm thời chưa khả dụng.');
   }
 
-  /** DeepSeek — OpenAI-compatible /chat/completions. */
-  private async callDeepSeek(messages: ChatMessage[]): Promise<string> {
-    const { data } = await axios.post(
-      `${this.deepseekBase}/chat/completions`,
-      { model: this.deepseekModel, messages, temperature: 0.7, max_tokens: 800 },
-      { headers: { Authorization: `Bearer ${this.deepseekKey}` }, timeout: 30000 },
-    );
-    const text = data?.choices?.[0]?.message?.content;
-    if (!text) throw new Error('DeepSeek trả về rỗng.');
-    return String(text).trim();
+  private callDeepSeek(messages: ChatMessage[]): Promise<string> {
+    return this.callChat(this.deepseekBase, this.deepseekKey, this.deepseekModel, 'DeepSeek', messages);
   }
 
-  /** Gemini — generateContent. role 'assistant'→'model'; system → systemInstruction. */
-  private async callGemini(messages: ChatMessage[]): Promise<string> {
-    const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
-    const contents = messages
-      .filter((m) => m.role !== 'system')
-      .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
-    const body: Record<string, unknown> = { contents, generationConfig: { temperature: 0.7, maxOutputTokens: 800 } };
-    if (system) body.systemInstruction = { parts: [{ text: system }] };
+  private callGemini(messages: ChatMessage[]): Promise<string> {
+    return this.callChat(this.geminiBase, this.geminiKey, this.geminiModel, 'Gemini', messages);
+  }
+
+  /**
+   * Gọi endpoint OpenAI-compatible (/chat/completions, Bearer auth). Dùng chung cho
+   * DeepSeek và Gemini-proxy (gemini-api.thailam.io.vn — proxy OpenAI-compatible, KHÔNG
+   * phải native Google generateContent). baseURL đã gồm phần version (vd .../v1).
+   */
+  private async callChat(
+    baseURL: string,
+    apiKey: string,
+    model: string,
+    label: string,
+    messages: ChatMessage[],
+  ): Promise<string> {
     const { data } = await axios.post(
-      `${this.geminiBase}/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiKey}`,
-      body,
-      { timeout: 30000 },
+      `${baseURL.replace(/\/$/, '')}/chat/completions`,
+      { model, messages, temperature: 0.7, max_tokens: 800 },
+      { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 30000 },
     );
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error('Gemini trả về rỗng.');
+    const text = data?.choices?.[0]?.message?.content;
+    if (!text) throw new Error(`${label} trả về rỗng.`);
     return String(text).trim();
   }
 }
