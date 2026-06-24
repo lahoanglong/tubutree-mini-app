@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock, CheckCircle2, ShoppingBag, Coins, Gift, ArrowRightLeft, Landmark, type LucideIcon } from 'lucide-react';
-import { getWallet, withdraw, getCoins, convertToXu, type BankInfo } from '../services/account-api';
+import { Clock, CheckCircle2, ShoppingBag, Coins, Gift, Leaf, ChevronRight, ArrowRightLeft, Landmark, type LucideIcon } from 'lucide-react';
+import { getWallet, withdraw, getCoins, convertToXu, getLoyalty, type BankInfo } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
 import { newIdempotencyKey } from '../utils/idempotency';
@@ -10,12 +11,15 @@ import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 
 const formatXu = (n: number) => `${n.toLocaleString('vi-VN')} xu`;
+const formatPoints = (n: number) => `${n.toLocaleString('vi-VN')} điểm`;
 
 export default function WalletPage() {
   const { openSnackbar } = useSnackbar();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet });
   const coinsQ = useQuery({ queryKey: ['coins'], queryFn: getCoins });
+  const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty });
 
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
@@ -56,6 +60,7 @@ export default function WalletPage() {
 
   const w = walletQ.data;
   const coins = coinsQ.data;
+  const loyalty = loyaltyQ.data;
   const amountNum = Number(amount) || 0;
   const convertNum = Number(convertAmount) || 0;
   const fee = w?.withdrawFee ?? 3000;
@@ -138,6 +143,9 @@ export default function WalletPage() {
                 </Button>
               </Box>
             </Box>
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, paddingLeft: 4 }}>
+              Tiền thật từ hoa hồng &amp; hoàn tiền sàn ngoài — rút về ngân hàng hoặc đổi sang TubuXu (×{multiplier}).
+            </Text>
           </Box>
 
           {/* TubuXu */}
@@ -167,7 +175,45 @@ export default function WalletPage() {
               </Box>
             </Box>
             <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, paddingLeft: 4 }}>
-              Dùng TubuXu để mua hàng, mua nước 💧 và mua cây 🌳 trong app.
+              Dùng để mua hàng, mua nước 💧 và mua cây 🌳 trong app. Không rút được.
+            </Text>
+          </Box>
+
+          {/* Điểm Xanh (đổi giảm giá) */}
+          <Box px={4} pb={2}>
+            <Box
+              p={4}
+              flex
+              onClick={() => navigate('/loyalty')}
+              style={{
+                alignItems: 'center',
+                gap: 12,
+                background: 'var(--neutral-0)',
+                borderRadius: 'var(--radius-xl)',
+                boxShadow: 'var(--shadow-sm)',
+                cursor: 'pointer',
+              }}
+            >
+              <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                <Leaf size={22} color="var(--leaf-700)" strokeWidth={2} />
+              </Box>
+              <Box style={{ flex: 1 }}>
+                <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+                  Điểm Xanh (đổi giảm giá)
+                </Text>
+                <Text bold style={{ fontSize: 24, color: 'var(--neutral-900)', lineHeight: '30px' }}>
+                  {formatPoints(loyalty?.pointsBalance ?? 0)}
+                </Text>
+              </Box>
+              {loyalty?.tier && (
+                <Box px={2} py={1} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', flex: '0 0 auto' }}>
+                  <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>{loyalty.tier.name}</Text>
+                </Box>
+              )}
+              <ChevronRight size={18} color="var(--neutral-300)" style={{ flex: '0 0 auto' }} />
+            </Box>
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, paddingLeft: 4 }}>
+              Tích từ mỗi đơn đã giao — đổi giảm giá cho đơn sau &amp; lên hạng thành viên.
             </Text>
           </Box>
 
