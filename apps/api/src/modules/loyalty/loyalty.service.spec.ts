@@ -278,12 +278,13 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
   ];
   function prismaFor(user: { pointsBalance: number; tierId: string | null }, spent12m: number) {
     const update = jest.fn().mockResolvedValue({});
+    const aggregate = jest.fn().mockResolvedValue({ _sum: { total: spent12m } });
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', ...user }), update },
       membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
-      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: spent12m } }) },
+      order: { aggregate },
     } as unknown as PrismaService;
-    return { prisma, update };
+    return { prisma, update, aggregate };
   }
 
   it('đạt hạng theo ĐIỂM → nâng lên hạng cao nhất đạt', async () => {
@@ -302,5 +303,23 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     const { prisma, update } = prismaFor({ pointsBalance: 0, tierId: 'mam' }, 0);
     await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('mặc định: chi tiêu lên hạng LOẠI TRỪ đơn trả bằng XU (chống lên hạng rẻ bằng xu)', async () => {
+    const { prisma, aggregate } = prismaFor({ pointsBalance: 0, tierId: 'mam' }, 0);
+    await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
+    expect(aggregate.mock.calls[0][0].where).toMatchObject({
+      status: 'DELIVERED',
+      paymentMethod: { not: 'XU' },
+    });
+  });
+
+  it('config loyalty.earn_points_on_xu=true → KHÔNG loại trừ XU khỏi chi tiêu lên hạng', async () => {
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> => (k === 'loyalty.earn_points_on_xu' ? (true as T) : (fb as T)),
+    } as unknown as SystemConfigService;
+    const { prisma, aggregate } = prismaFor({ pointsBalance: 0, tierId: 'mam' }, 0);
+    await new LoyaltyService(prisma, cfg).recalcTier('u1');
+    expect(aggregate.mock.calls[0][0].where.paymentMethod).toBeUndefined();
   });
 });

@@ -71,10 +71,13 @@ export class WalletService {
    * phí chuyển khoản wallet.withdraw_fee → Payout.amount = số thực nhận (net).
    */
   async withdraw(userId: string, amount: number, bankInfo: object, idempotencyKey?: string) {
+    // Chuẩn hoá '' / khoảng trắng → undefined: header rỗng (proxy/bug) nếu giữ '' sẽ ghi vào
+    // payouts.idempotencyKey='' rồi lệnh rút thứ 2 cũng '' đụng unique index → P2002 thoát ra 500.
+    const key = idempotencyKey?.trim() || undefined;
     // Idempotency: double-tap nút Rút / retry sau timeout cùng key → trả lại Payout đã tạo,
     // KHÔNG trừ ví lần 2 (mirror place-order). Unique index payouts.idempotencyKey là guard cứng.
-    if (idempotencyKey) {
-      const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey } });
+    if (key) {
+      const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey: key } });
       if (existing) {
         return {
           ok: true,
@@ -111,14 +114,14 @@ export class WalletService {
         });
         if (dec.count === 0) throw new BadRequestException('Số dư ví không đủ.');
         return tx.payout.create({
-          data: { userId, amount: net, fee, method: 'BANK', bankInfo, status: 'REQUESTED', idempotencyKey },
+          data: { userId, amount: net, fee, method: 'BANK', bankInfo, status: 'REQUESTED', idempotencyKey: key },
         });
       });
     } catch (err) {
       // Race 2 request cùng Idempotency-Key: kẻ thua ăn P2002 trên unique key → trả lại Payout
       // mà kẻ thắng đã tạo (đã trừ ví đúng 1 lần), KHÔNG để lỗi ra ngoài.
-      if (idempotencyKey && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey } });
+      if (key && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey: key } });
         if (existing) {
           return {
             ok: true,

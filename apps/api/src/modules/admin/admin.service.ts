@@ -83,12 +83,24 @@ export class AdminService {
       if (flipped.count === 0) {
         throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
       }
-      if (wasPaidToWallet) {
+      // Hoàn tiền gate trên paymentStatus PAID→REFUNDED (count=1) — NHẤT QUÁN với orders.cancel:
+      // cùng 1 đường flip một-chiều nên dù qua cancel hay reviewReturn cũng chỉ hoàn đúng 1 lần.
+      // Đồng thời tránh để đơn RETURNED còn paymentStatus='PAID' (landmine cho mọi job/refund sau
+      // này dựa trên paymentStatus=='PAID' → trả tiền lần 2).
+      let didRefund = false;
+      if (wasPaidToWallet || wasPaidWithXu) {
+        const refunded = await tx.order.updateMany({
+          where: { id: order.id, paymentStatus: 'PAID' },
+          data: { paymentStatus: 'REFUNDED' },
+        });
+        didRefund = refunded.count === 1;
+      }
+      if (didRefund && wasPaidToWallet) {
         await tx.user.update({
           where: { id: order.userId },
           data: { walletBalance: { increment: order.total } },
         });
-      } else if (wasPaidWithXu) {
+      } else if (didRefund && wasPaidWithXu) {
         await tx.user.update({
           where: { id: order.userId },
           data: { coinsBalance: { increment: order.total } },

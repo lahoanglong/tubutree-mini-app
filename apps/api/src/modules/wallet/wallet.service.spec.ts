@@ -78,6 +78,13 @@ describe('WalletService.withdraw (Ví → ngân hàng, min 100k, phí 3k)', () =
     expect(payoutCreate).not.toHaveBeenCalled();
   });
 
+  it('Idempotency-Key rỗng/khoảng trắng → coi như KHÔNG có key (không pre-check, payout key=undefined)', async () => {
+    const { prisma, payoutCreate, payoutFindUnique } = makePrisma(200_000);
+    await new WalletService(prisma, config).withdraw('u1', 100_000, {}, '   ');
+    expect(payoutFindUnique).not.toHaveBeenCalled(); // không tra cứu theo key rỗng
+    expect(payoutCreate.mock.calls[0][0].data.idempotencyKey).toBeUndefined();
+  });
+
   it('idempotency race: create ăn P2002 → trả payout của kẻ thắng, không ném lỗi', async () => {
     const { prisma, payoutCreate, payoutFindUnique } = makePrisma(200_000);
     // lần đầu findUnique (pre-check) = null → đi tiếp; create ném P2002; findUnique lần 2 thấy payout kẻ thắng.

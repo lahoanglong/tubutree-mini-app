@@ -84,7 +84,9 @@ export class CheckoutService {
     // Đơn trả bằng TubuXu KHÔNG sinh điểm Xanh mới (mặc định): xu là tín dụng tiêu-trong-app
     // (đã thưởng ×1.2 khi đổi từ Ví) — cộng thêm điểm trên đơn tự-fund = vòng khuếch đại giá trị.
     // Lật bằng config loyalty.earn_points_on_xu=true nếu muốn xu cũng tích điểm.
-    const earnPointsOnXu = await this.config.get<boolean>('loyalty.earn_points_on_xu', false);
+    // So sánh === true: config là cột Json, giá trị lỗi kiểu chuỗi "false"/"0" vẫn truthy →
+    // chỉ đúng boolean true mới cho đơn XU tích điểm (mặc định/khác → không tích).
+    const earnPointsOnXu = (await this.config.get<boolean>('loyalty.earn_points_on_xu', false)) === true;
     const pointsEarned =
       dto.paymentMethod === 'XU' && !earnPointsOnXu ? 0 : computed.pointsEarned;
     const code = await this.generateCode();

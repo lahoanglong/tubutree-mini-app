@@ -27,6 +27,25 @@ mới (TubuXu, referral, cashback, loyalty/coupon hardening). Đây là phần `
 
 Tổng kết backlog: **+5 test mới, 331 test pass, typecheck (api+FE) + lint 0 error.**
 
+## Vòng review #2 — soi lại CHÍNH các fix vừa làm (587a07c..HEAD)
+
+3 finder song song + verify trên diff của phiên. Core (refund XU / CAS cashback / idempotency
+withdraw / P2002 loyalty) **xác nhận đúng**. 5 mục hoàn thiện thêm + 2 mục defer:
+
+| # | File | Vấn đề | Fix |
+|---|------|--------|-----|
+| F1 | checkout.service.ts | `!earnPointsOnXu` truthiness: config Json kiểu chuỗi `"false"` là truthy → XU lại tích điểm | So sánh `=== true` |
+| F2 | loyalty.service.ts `recalcTier` | B1 mới chặn ĐIỂM, chưa chặn **chi tiêu lên HẠNG** — đơn XU vẫn vào `spent12m` → lên hạng rẻ bằng xu | Loại `paymentMethod:'XU'` khỏi aggregate (gate cùng config `earn_points_on_xu`) |
+| F3 | admin.service.ts `reviewReturn` | Hoàn nhưng **để paymentStatus='PAID'** (landmine + lệch với cancel) | Flip `PAID→REFUNDED` count=1 + gate refund → chống double-refund nhất quán 2 path |
+| F4 | wallet.service.ts `withdraw` | Header `Idempotency-Key: ''` (rỗng) ghi vào DB → lệnh rút thứ 2 đụng unique → P2002 ra 500 | Chuẩn hoá `''`/khoảng trắng → `undefined` |
+| F5 | wallet.tsx (FE) | withdrawKey chỉ regenerate onSuccess → sửa số sau khi lỗi có thể dùng lại key cũ | Regenerate khi MỞ Sheet rút (mỗi phiên rút = key mới) |
+
+**Defer (ghi nhận, không sửa):**
+- **Thưởng referral mất nếu `grantReferralCoins` lỗi transient** (non-P2002): `.catch` nuốt + trả 200 → AT không retry, row đã CONFIRMED nên không thưởng lại. Xác suất thấp, là tradeoff chủ đích. **Backlog:** cron backfill quét cashback CONFIRMED có `referredById` mà chưa có reward → gọi lại `grantReferralCoins` (idempotent).
+- **withdraw idempotency-key không bind theo amount/bank:** dùng lại key với số khác sẽ trả payout cũ. Hiện **an toàn tiền** (ví chỉ trừ 1 lần, payout REQUESTED admin duyệt) + F5 đã thu hẹp; chỉ là lệch hiển thị hiếm gặp.
+
+Tổng kết vòng #2: **+5 test (336 pass), typecheck (api+FE) + lint 0 error, FE build sạch.**
+
 ## Bất biến được giữ
 - `coinsBalance == SUM(CoinTransaction.delta)`: mọi hoàn xu (#1a/#1b) đều ghi kèm CoinTransaction.
 - Tiền/xu thao tác atomic (`updateMany` guard `gte`/`lte`/status), idempotent theo guard count=1/CAS.

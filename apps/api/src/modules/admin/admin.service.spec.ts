@@ -302,6 +302,27 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     );
   });
 
+  it('hoàn tiền flip paymentStatus PAID→REFUNDED (nhất quán cancel, không để RETURNED còn PAID)', async () => {
+    const { prisma, orderUpdate } = makeReturnPrisma({
+      order: { id: 'o1', code: 'TUBU1', userId: 'u1', total: 120000, paymentMethod: 'XU', paymentStatus: 'PAID', items: [{ variationId: 'v1', quantity: 1 }] },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(orderUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'o1', paymentStatus: 'PAID' }, data: { paymentStatus: 'REFUNDED' } }),
+    );
+  });
+
+  it('paymentStatus flip THUA race (count=0, đã refund nơi khác) → KHÔNG hoàn xu lần 2', async () => {
+    const { prisma, orderUpdate, userUpdate, coinCreate } = makeReturnPrisma({
+      order: { id: 'o1', code: 'TUBU1', userId: 'u1', total: 120000, paymentMethod: 'XU', paymentStatus: 'PAID', items: [{ variationId: 'v1', quantity: 1 }] },
+    });
+    // status flip count=1 (thắng), paymentStatus flip count=0 (đã REFUNDED bởi path khác).
+    orderUpdate.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(coinCreate).not.toHaveBeenCalled();
+  });
+
   it('race 2 admin approve cùng request → bên thua (updateMany count=0) throw, không hoàn ví/restock', async () => {
     const { prisma, userUpdate, variationUpdate } = makeReturnPrisma({ returnUpdateManyCount: 0 });
     await expect(mkAdmin(prisma).reviewReturn('admin2', 'r1', true)).rejects.toBeInstanceOf(

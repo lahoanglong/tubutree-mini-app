@@ -172,8 +172,17 @@ export class LoyaltyService {
 
     const since = new Date();
     since.setMonth(since.getMonth() - 12);
+    // Đơn trả bằng TubuXu (tín dụng tự-fund) KHÔNG tính vào chi tiêu lên hạng (mặc định) — nhất quán
+    // với việc đơn XU không sinh điểm (checkout). Tránh khuếch đại: đổi Ví→xu ×1.2 rồi tiêu để lên
+    // hạng rẻ tiền. Lật cùng config loyalty.earn_points_on_xu=true thì XU lại được tính cả điểm lẫn hạng.
+    const earnOnXu = (await this.config.get<boolean>('loyalty.earn_points_on_xu', false)) === true;
     const spentAgg = await this.prisma.order.aggregate({
-      where: { userId, status: 'DELIVERED', createdAt: { gte: since } },
+      where: {
+        userId,
+        status: 'DELIVERED',
+        createdAt: { gte: since },
+        ...(earnOnXu ? {} : { paymentMethod: { not: 'XU' } }),
+      },
       _sum: { total: true },
     });
     const spent12m = spentAgg._sum.total ?? 0;

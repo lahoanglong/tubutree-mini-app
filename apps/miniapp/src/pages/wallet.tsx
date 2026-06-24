@@ -137,7 +137,12 @@ export default function WalletPage() {
                   style={{ flex: 1, background: 'rgba(255,255,255,0.18)', color: '#fff' }}
                   prefixIcon={<Landmark size={15} strokeWidth={2} />}
                   disabled={w.walletBalance < min}
-                  onClick={() => setWithdrawOpen(true)}
+                  onClick={() => {
+                    // Mỗi lần MỞ Sheet = 1 lệnh rút mới → key mới (double-tap trong cùng phiên giữ
+                    // nguyên key = idempotent; mở lại với số khác = key khác, không bị BE trả payout cũ).
+                    withdrawKey.current = newIdempotencyKey();
+                    setWithdrawOpen(true);
+                  }}
                 >
                   Rút ngân hàng
                 </Button>
