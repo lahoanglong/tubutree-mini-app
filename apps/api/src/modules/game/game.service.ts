@@ -216,12 +216,22 @@ export class GameService {
 
     const profile = await this.ensureProfile(userId);
     const newTotal = profile.totalSeeds + seeds;
+    // Check sớm (UX, fail-fast trước khi trừ xu); guard THẬT là updateMany atomic bên dưới.
     if (newTotal > cap) {
       throw new BadRequestException(`Bình chứa tối đa ${cap}💧 — không thể mua thêm ${seeds}💧.`);
     }
     await this.prisma.$transaction(async (tx) => {
       await this.coins!.spendCoins(userId, cost, 'GAME_BUY_SEEDS', 'GAME', undefined, tx);
-      await tx.gameProfile.update({ where: { userId }, data: { totalSeeds: newTotal } });
+      // Cộng totalSeeds ATOMIC bằng increment + guard cap trong CÙNG tx — chống lost-update khi
+      // 2 lệnh mua song song (set giá trị tuyệt đối đọc-ngoài-tx sẽ ghi đè nhau → mất xu/quá cap).
+      // count=0 = đã đầy bình do lệnh khác → throw rollback (hoàn lại xu vừa spendCoins).
+      const inc = await tx.gameProfile.updateMany({
+        where: { userId, totalSeeds: { lte: cap - seeds } },
+        data: { totalSeeds: { increment: seeds } },
+      });
+      if (inc.count === 0) {
+        throw new BadRequestException(`Bình chứa tối đa ${cap}💧 — không thể mua thêm ${seeds}💧.`);
+      }
     });
     return { seeds, cost, totalSeeds: newTotal };
   }

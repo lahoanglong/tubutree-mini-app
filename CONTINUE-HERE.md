@@ -83,23 +83,24 @@ Bundle production đã build sẵn (`apps/miniapp/www/`, trỏ API prod).
 - Partial unique violation `points_transactions` / `coupon_redemptions` — nếu xuất hiện P2002 ≥1/giờ là dấu hiệu race thật đang được chặn idempotent (good signal).
 - Số request/min throttler (mặc định 60/min global, auth 5/min) — nếu user thật bị 429 → cân nhắc nới.
 
-## 5. Code review xhigh chưa hoàn tất
+## 5. Code review money-path — ĐÃ HOÀN TẤT (2026-06-24)
 
-`/code-review` xhigh được chạy ở cuối phiên nhưng bị ngắt do session limit. Đã có:
-- 2/10 finder hoàn tất (13 raw candidate)
-- 0/13 verifier hoàn tất → **không phân biệt được confirmed vs refuted**
+`/code-review` recall-cao trên 5 commit money-path TubuXu (`eab2478~1..HEAD`) đã chạy xong:
+10 finder angle + verify trực tiếp nguồn. **6 bug CONFIRMED → đã FIX (TDD)**, chi tiết:
+`docs/CODE-REVIEW-2026-06-24-moneypath.md`.
 
-**Nếu muốn rigorous hơn trước launch:** sau quota reset chạy lại `/code-review` trên 4 commit vừa tạo:
-```bash
-git diff HEAD~4...HEAD
-```
-Hoặc trust adversarial review (đã 24 confirmed → fixed) + monitor 48h sau launch.
+Tóm tắt: (1) hủy/đổi-trả đơn **XU** không hoàn xu = mất tiền user → hoàn vào coinsBalance + sổ cái;
+(2) `buySeeds` lost-update → increment atomic + guard cap; (3) `grantReferralCoins` thiếu `.catch`
+→ thưởng referral mất khi AT retry; (4) cashback nhánh existing thiếu atomic gate → double-credit
+pending → optimistic CAS; (5) `confirmedAt` không reset khi REJECTED→CONFIRMED → né hold; (6) withdraw
+guard `net > 0`. **326 test pass, typecheck + lint 0 error.** Còn 4 mục ghi-nhận-không-sửa (xem doc).
 
 ## 6. Bản đồ tài liệu
 
 | File | Nội dung |
 |---|---|
 | `CONTINUE-HERE.md` | (file này) điểm vào nhanh |
+| `docs/CODE-REVIEW-2026-06-24-moneypath.md` | Review money-path TubuXu: 6 bug confirmed→fixed + 4 mục backlog |
 | `PRODUCTION_READINESS.md` | Báo cáo audit + kế hoạch 8 ngày (đã hoàn thành đa số) |
 | `DEPLOY_ZALO.md` | 2 lệnh đưa Mini App lên Zalo |
 | `CHANGELOG_OVERNIGHT.md` | Lịch sử phiên trước (2026-06-15→16) |

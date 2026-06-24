@@ -17,6 +17,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       findMany: jest.fn().mockResolvedValue([]),
     },
     user: { findUniqueOrThrow: jest.fn(), update: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
@@ -229,7 +230,7 @@ describe('GameService.buySeeds / buyTree (mua bằng TubuXu)', () => {
   }
   const coinsStub = () => ({ spendCoins: jest.fn().mockResolvedValue(undefined) });
 
-  it('mua nước: trừ xu (seeds×1) + cộng totalSeeds, không vượt sức chứa', async () => {
+  it('mua nước: trừ xu (seeds×1) + cộng totalSeeds ATOMIC (increment, guard cap), không vượt sức chứa', async () => {
     const prisma = buyPrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 100 }));
     const coins = coinsStub();
@@ -237,16 +238,30 @@ describe('GameService.buySeeds / buyTree (mua bằng TubuXu)', () => {
     const r = await svc.buySeeds('u1', 50);
     expect(r).toMatchObject({ seeds: 50, cost: 50, totalSeeds: 150 });
     expect(coins.spendCoins).toHaveBeenCalledWith('u1', 50, 'GAME_BUY_SEEDS', 'GAME', undefined, prisma);
-    expect((prisma.gameProfile.update as jest.Mock).mock.calls[0][0].data.totalSeeds).toBe(150);
+    // Cộng ATOMIC qua updateMany increment + guard cap (chống lost-update khi mua song song),
+    // KHÔNG set giá trị tuyệt đối đọc-ngoài-tx.
+    const call = (prisma.gameProfile.updateMany as jest.Mock).mock.calls[0][0];
+    expect(call.where).toEqual({ userId: 'u1', totalSeeds: { lte: 500 - 50 } });
+    expect(call.data).toEqual({ totalSeeds: { increment: 50 } });
   });
 
-  it('mua nước vượt sức chứa bình → throw, KHÔNG trừ xu', async () => {
+  it('mua nước vượt sức chứa bình (check sớm) → throw, KHÔNG trừ xu', async () => {
     const prisma = buyPrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 480 }));
     const coins = coinsStub();
     const svc = new GameService(prisma, makeConfig({ 'game.tank_capacity': 500 }), undefined, undefined, coins as never);
     await expect(svc.buySeeds('u1', 50)).rejects.toThrow('Bình chứa');
     expect(coins.spendCoins).not.toHaveBeenCalled();
+  });
+
+  it('lost-update race: updateMany guard cap count=0 (bình đầy do lệnh song song) → throw rollback', async () => {
+    const prisma = buyPrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 100 }));
+    (prisma.gameProfile.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    const coins = coinsStub();
+    const svc = new GameService(prisma, makeConfig({ 'game.tank_capacity': 500 }), undefined, undefined, coins as never);
+    // Vượt cap atomic → throw → tx rollback (xu vừa trừ được hoàn lại do rollback).
+    await expect(svc.buySeeds('u1', 50)).rejects.toThrow('Bình chứa');
   });
 
   it('mua cây thật: trừ xu (tree_xu_price) + tạo PlantedTree có chứng nhận', async () => {

@@ -70,17 +70,21 @@ describe('CashbackService.handlePostback', () => {
     expect(userUpdate).not.toHaveBeenCalled();
   });
 
-  // ── transition existing (idempotent + chuyển trạng thái) ──
-  function updateBranchPrisma(existing: Record<string, unknown>) {
-    const update = jest.fn().mockResolvedValue({});
-    const userUpdate = jest.fn().mockReturnValue({ __op: 'user.update' });
+  // ── transition existing (idempotent + chuyển trạng thái ATOMIC) ──
+  // Nhánh existing giờ dùng $transaction callback + cashbackTransaction.updateMany (optimistic CAS
+  // theo status) → moveCount mô phỏng thắng/thua race.
+  function updateBranchPrisma(existing: Record<string, unknown>, moveCount = 1) {
+    const updateMany = jest.fn().mockResolvedValue({ count: moveCount });
+    const userUpdate = jest.fn().mockResolvedValue({});
     const prisma = {
       cashbackClick: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', userId: 'u1' }) },
-      cashbackTransaction: { findFirst: jest.fn().mockResolvedValue(existing), create: jest.fn(), update },
+      cashbackTransaction: { findFirst: jest.fn().mockResolvedValue(existing), create: jest.fn(), updateMany },
       user: { update: userUpdate },
-      $transaction: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
-    return { prisma, update, userUpdate };
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
+      .fn()
+      .mockImplementation(async (cb: (t: unknown) => unknown) => cb(prisma));
+    return { prisma, updateMany, userUpdate };
   }
 
   it('duplicate APPROVED (đã CONFIRMED) → update, KHÔNG cộng pending lần nữa', async () => {
@@ -117,6 +121,43 @@ describe('CashbackService.handlePostback', () => {
     });
     await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'rejected' }));
     expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it('race chuyển trạng thái: updateMany count=0 (racer khác đã chuyển) → KHÔNG cộng pending lần 2, KHÔNG thưởng xu', async () => {
+    const { prisma, userUpdate } = updateBranchPrisma(
+      { id: 'tx1', status: 'PENDING', confirmedAt: null, userId: 'u9', userReward: 35000 },
+      0, // CAS thua: status đã bị racer khác đổi
+    );
+    await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'approved' }));
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(coins.grantReferralCoins).not.toHaveBeenCalled();
+  });
+
+  it('REJECTED → CONFIRMED → confirmedAt RESET (đồng hồ hold chạy lại), cộng pending', async () => {
+    const oldConfirmedAt = new Date(Date.now() - 60 * 24 * 3600 * 1000); // 60 ngày trước
+    const { prisma, updateMany, userUpdate } = updateBranchPrisma({
+      id: 'tx1', status: 'REJECTED', confirmedAt: oldConfirmedAt, userId: 'u1', userReward: 35000,
+    });
+    await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'approved' }));
+    const data = updateMany.mock.calls[0][0].data;
+    expect(data.confirmedAt).toBeInstanceOf(Date);
+    // KHÔNG giữ confirmedAt cũ (nếu giữ → settle ngay, né hết 30 ngày hold).
+    expect(data.confirmedAt.getTime()).toBeGreaterThan(oldConfirmedAt.getTime());
+    expect(userUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { cashbackPending: { increment: 35000 } } }),
+    );
+  });
+
+  it('grantReferralCoins lỗi → postback VẪN ok (side-effect không làm vỡ webhook)', async () => {
+    (coins.grantReferralCoins as jest.Mock).mockRejectedValueOnce(new Error('db hiccup'));
+    const prisma = {
+      cashbackClick: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', userId: 'u1' }) },
+      cashbackTransaction: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+      user: { update: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    const r = await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'approved' }));
+    expect(r).toEqual({ ok: true });
   });
 
   // ── guard âm + thưởng xu giới thiệu khi CONFIRMED lần đầu ──

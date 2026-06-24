@@ -66,9 +66,12 @@ export class AdminService {
       // - WALLET/ZALOPAY + PAID: hoàn về Ví Tubu (instant) vì khách đã trả tiền thật.
       // - COD UNPAID: KHÔNG hoàn ví (khách chưa trả gì cả → ví không tăng).
       // - COD đã giao mà PAID (ship đã thu hộ): hoàn ví (instant) như kênh prepaid.
-      const wasPaid =
+      // - XU + PAID: hoàn lại XU (coinsBalance) + ghi CoinTransaction(+total), KHÔNG hoàn ví
+      //   (xu không rút được; hoàn vào ví = biến xu thành tiền rút được = leak giá trị).
+      const wasPaidToWallet =
         order.paymentStatus === 'PAID' &&
         (order.paymentMethod === 'WALLET' || order.paymentMethod === 'ZALOPAY' || order.paymentMethod === 'COD');
+      const wasPaidWithXu = order.paymentStatus === 'PAID' && order.paymentMethod === 'XU';
 
       // Guard status='DELIVERED' để KHÔNG đè CANCELLED/RETURNED (đơn đã hủy đã hoàn
       // ví ở orders.cancel — nếu đè thêm RETURNED rồi hoàn ví nữa = DOUBLE refund).
@@ -79,10 +82,24 @@ export class AdminService {
       if (flipped.count === 0) {
         throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
       }
-      if (wasPaid) {
+      if (wasPaidToWallet) {
         await tx.user.update({
           where: { id: order.userId },
           data: { walletBalance: { increment: order.total } },
+        });
+      } else if (wasPaidWithXu) {
+        await tx.user.update({
+          where: { id: order.userId },
+          data: { coinsBalance: { increment: order.total } },
+        });
+        await tx.coinTransaction.create({
+          data: {
+            userId: order.userId,
+            delta: order.total,
+            reason: `ORDER_REFUND:${order.code}`,
+            refType: 'ORDER',
+            refId: order.id,
+          },
         });
       }
       // Hoàn stock — chỉ ở nhánh THẮNG để tránh restock 2 lần.

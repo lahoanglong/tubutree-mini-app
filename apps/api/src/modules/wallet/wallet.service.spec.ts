@@ -54,6 +54,18 @@ describe('WalletService.withdraw (Ví → ngân hàng, min 100k, phí 3k)', () =
     await expect(new WalletService(prisma, config).withdraw('u1', 100_000, {})).rejects.toThrow('không đủ');
     expect(payoutCreate).not.toHaveBeenCalled();
   });
+
+  it('cấu hình sai (phí ≥ tiền rút) → net ≤ 0 bị chặn, KHÔNG trừ ví/ tạo payout âm', async () => {
+    // min=2000, fee=3000 → withdraw 2000 qua được check min nhưng net = -1000.
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> =>
+        (k === 'wallet.withdraw_min' ? 2000 : k === 'wallet.withdraw_fee' ? 3000 : fb) as T,
+    } as unknown as SystemConfigService;
+    const { prisma, updateMany, payoutCreate } = makePrisma(200_000);
+    await expect(new WalletService(prisma, cfg).withdraw('u1', 2000, {})).rejects.toThrow();
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(payoutCreate).not.toHaveBeenCalled();
+  });
 });
 
 describe('WalletService.convertToXu (Ví → TubuXu ×1.2)', () => {

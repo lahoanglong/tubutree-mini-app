@@ -76,6 +76,10 @@ export class WalletService {
       throw new BadRequestException(`Số tiền rút tối thiểu ${min.toLocaleString('vi-VN')}đ.`);
     }
     const net = amount - fee;
+    // Phòng thủ cấu hình sai (phí ≥ tiền rút): không bao giờ trừ ví rồi tạo Payout 0/âm.
+    if (net <= 0) {
+      throw new BadRequestException('Số tiền rút phải lớn hơn phí chuyển khoản ngân hàng.');
+    }
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.walletBalance < amount) throw new BadRequestException('Số dư ví không đủ.');
 

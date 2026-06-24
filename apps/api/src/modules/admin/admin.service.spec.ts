@@ -131,7 +131,7 @@ type Order = {
   code: string;
   userId: string;
   total: number;
-  paymentMethod: 'COD' | 'WALLET' | 'ZALOPAY';
+  paymentMethod: 'COD' | 'WALLET' | 'ZALOPAY' | 'XU';
   paymentStatus: 'PAID' | 'UNPAID';
   items: Array<{ variationId: string; quantity: number }>;
 };
@@ -159,6 +159,7 @@ function makeReturnPrisma(opts: {
   const orderUpdate = jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = jest.fn().mockResolvedValue({});
   const variationUpdate = jest.fn().mockResolvedValue({});
+  const coinCreate = jest.fn().mockResolvedValue({});
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       returnRequest: { updateMany: returnUpdateMany },
@@ -170,6 +171,7 @@ function makeReturnPrisma(opts: {
       },
       user: { update: userUpdate },
       variation: { update: variationUpdate },
+      coinTransaction: { create: coinCreate },
     }),
   );
   const prisma = {
@@ -177,7 +179,7 @@ function makeReturnPrisma(opts: {
     order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
     $transaction,
   } as unknown as PrismaService;
-  return { prisma, returnUpdateMany, orderUpdate, userUpdate, variationUpdate, $transaction };
+  return { prisma, returnUpdateMany, orderUpdate, userUpdate, variationUpdate, coinCreate, $transaction };
 }
 
 describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', () => {
@@ -271,6 +273,33 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
       where: { id: 'u1' },
       data: { walletBalance: { increment: 200000 } },
     });
+  });
+
+  it('APPROVE với XU PAID → hoàn coinsBalance + CoinTransaction, KHÔNG hoàn ví', async () => {
+    const { prisma, userUpdate, coinCreate } = makeReturnPrisma({
+      order: {
+        id: 'o1',
+        code: 'TUBU1',
+        userId: 'u1',
+        total: 120000,
+        paymentMethod: 'XU',
+        paymentStatus: 'PAID',
+        items: [{ variationId: 'v1', quantity: 1 }],
+      },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(userUpdate).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { coinsBalance: { increment: 120000 } },
+    });
+    expect(userUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: { walletBalance: { increment: 120000 } } }),
+    );
+    expect(coinCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ userId: 'u1', delta: 120000, reason: 'ORDER_REFUND:TUBU1', refType: 'ORDER' }),
+      }),
+    );
   });
 
   it('race 2 admin approve cùng request → bên thua (updateMany count=0) throw, không hoàn ví/restock', async () => {

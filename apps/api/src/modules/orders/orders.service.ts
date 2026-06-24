@@ -66,16 +66,38 @@ export class OrdersService {
       // ZaloPay đã trả tiền thật mà user hủy thì KHÔNG được hoàn. COD lúc hủy luôn UNPAID
       // (chỉ PAID khi đã giao, mà đơn DELIVERED không hủy được) nên guard paymentStatus:'PAID'
       // tự loại COD; count=1 bảo đảm increment chỉ chạy đúng 1 lần ở nhánh thắng race.
-      if (order.paymentMethod === 'WALLET' || order.paymentMethod === 'ZALOPAY') {
+      // XU: đơn trả bằng TubuXu → hoàn lại XU (coinsBalance) + ghi CoinTransaction(+total),
+      // KHÔNG hoàn ví tiền thật (xu không rút được; hoàn vào ví = biến xu thành tiền rút được).
+      if (
+        order.paymentMethod === 'WALLET' ||
+        order.paymentMethod === 'ZALOPAY' ||
+        order.paymentMethod === 'XU'
+      ) {
         const refunded = await tx.order.updateMany({
           where: { id: order.id, paymentStatus: 'PAID' },
           data: { paymentStatus: 'REFUNDED' },
         });
         if (refunded.count === 1) {
-          await tx.user.update({
-            where: { id: userId },
-            data: { walletBalance: { increment: order.total } },
-          });
+          if (order.paymentMethod === 'XU') {
+            await tx.user.update({
+              where: { id: userId },
+              data: { coinsBalance: { increment: order.total } },
+            });
+            await tx.coinTransaction.create({
+              data: {
+                userId,
+                delta: order.total,
+                reason: `ORDER_REFUND:${order.code}`,
+                refType: 'ORDER',
+                refId: order.id,
+              },
+            });
+          } else {
+            await tx.user.update({
+              where: { id: userId },
+              data: { walletBalance: { increment: order.total } },
+            });
+          }
         }
       }
       // Hoàn stock atomic — chỉ chạy ở nhánh THẮNG race (count=1) để tránh restock 2 lần

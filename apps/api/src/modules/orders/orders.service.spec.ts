@@ -12,24 +12,32 @@ const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as 
 
 function makeService(
   order: Record<string, unknown>,
-  spies: { updateMany?: jest.Mock; userUpdate?: jest.Mock; variationUpdate?: jest.Mock } = {},
+  spies: {
+    updateMany?: jest.Mock;
+    userUpdate?: jest.Mock;
+    variationUpdate?: jest.Mock;
+    coinCreate?: jest.Mock;
+  } = {},
 ) {
   // updateMany trả count=1 (thắng race) mặc định; test race truyền count=0.
   const updateMany = spies.updateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = spies.userUpdate ?? jest.fn().mockResolvedValue({});
   const variationUpdate = spies.variationUpdate ?? jest.fn().mockResolvedValue({});
-  // $transaction giờ là CALLBACK form (flip-status + hoàn ví + restock ATOMIC). Forward tx ops vào cùng mock.
+  const coinCreate = spies.coinCreate ?? jest.fn().mockResolvedValue({});
+  // $transaction giờ là CALLBACK form (flip-status + hoàn ví/xu + restock ATOMIC). Forward tx ops vào cùng mock.
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       order: { updateMany },
       user: { update: userUpdate },
       variation: { update: variationUpdate },
+      coinTransaction: { create: coinCreate },
     }),
   );
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(order), updateMany },
     user: { update: userUpdate },
     variation: { update: variationUpdate },
+    coinTransaction: { create: coinCreate },
     $transaction,
   } as unknown as PrismaService;
   return {
@@ -37,6 +45,7 @@ function makeService(
     updateMany,
     userUpdate,
     variationUpdate,
+    coinCreate,
     $transaction,
   };
 }
@@ -113,6 +122,38 @@ describe('OrdersService.cancel', () => {
     const { svc, userUpdate } = makeService({ ...baseOrder, paymentMethod: 'COD', paymentStatus: 'UNPAID' });
     await svc.cancel('u1', 'TUBU1');
     expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it('hoàn XU (coinsBalance + CoinTransaction) khi đơn trả bằng XU + PAID — KHÔNG hoàn ví', async () => {
+    const { svc, userUpdate, coinCreate } = makeService({
+      ...baseOrder,
+      paymentMethod: 'XU',
+      paymentStatus: 'PAID',
+    });
+    await svc.cancel('u1', 'TUBU1');
+    // Hoàn vào coinsBalance, KHÔNG phải walletBalance (xu không rút được → tránh leak giá trị).
+    expect(userUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { coinsBalance: { increment: 300000 } } }),
+    );
+    expect(userUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: { walletBalance: { increment: 300000 } } }),
+    );
+    // Ghi sổ cái xu (+total) giữ bất biến coinsBalance == Σdelta.
+    expect(coinCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ userId: 'u1', delta: 300000, reason: 'ORDER_REFUND:TUBU1', refType: 'ORDER' }),
+      }),
+    );
+  });
+
+  it('hủy XU race THUA (count=0) → KHÔNG hoàn xu, KHÔNG ghi sổ cái', async () => {
+    const { svc, userUpdate, coinCreate } = makeService(
+      { ...baseOrder, paymentMethod: 'XU', paymentStatus: 'PAID' },
+      { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    );
+    await svc.cancel('u1', 'TUBU1');
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(coinCreate).not.toHaveBeenCalled();
   });
 
   it('chặn xem/hủy đơn của người khác', async () => {
