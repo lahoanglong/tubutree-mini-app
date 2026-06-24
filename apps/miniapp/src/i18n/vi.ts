@@ -94,6 +94,7 @@ export const vi = {
     paymentZalopay: 'ZaloPay',
     paymentBank: 'Chuyển khoản ngân hàng',
     paymentWallet: (balance: string) => `Ví Tubu (${balance})`,
+    paymentXu: (balance: string) => `TubuXu (${balance})`,
     points: 'Điểm Xanh',
     pointsUse: (n: number, value: string) => `Dùng ${n} điểm — giảm ${value}`,
     pointsAvailable: (n: number) => `Bạn đang có ${n} điểm`,

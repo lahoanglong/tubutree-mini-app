@@ -77,17 +77,19 @@ export async function loginZaloMiniApp(
   code: string,
   zaloAccessToken: string,
   phoneToken?: string,
+  referralCode?: string,
 ): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>('/auth/zalo-mini-app', {
     code,
     accessToken: zaloAccessToken,
     phoneToken,
+    referralCode,
   });
   return data;
 }
 
-export async function loginGuest(deviceId: string): Promise<LoginResponse> {
-  const { data } = await api.post<LoginResponse>('/auth/guest', { deviceId });
+export async function loginGuest(deviceId: string, referralCode?: string): Promise<LoginResponse> {
+  const { data } = await api.post<LoginResponse>('/auth/guest', { deviceId, referralCode });
   return data;
 }
 

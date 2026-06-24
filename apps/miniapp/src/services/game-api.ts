@@ -81,6 +81,12 @@ export const waterTree = (drops: number) =>
     treesPlanted: number;
     reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies };
   }>('/game/tree/water', { drops }).then((r) => r.data);
+/** Mua nước 💧 bằng TubuXu. */
+export const buySeeds = (seeds: number) =>
+  api.post<{ seeds: number; cost: number; totalSeeds: number }>('/game/seeds/buy', { seeds }).then((r) => r.data);
+/** Mua 1 cây thật (PlantedTree) bằng TubuXu. */
+export const buyTree = () =>
+  api.post<{ certificateCode: string; treeType: string; cost: number }>('/game/tree/buy').then((r) => r.data);
 export const getLeaderboard = () => api.get<LeaderRow[]>('/game/leaderboard').then((r) => r.data);
 export const getMissions = () => api.get<MissionItem[]>('/game/missions').then((r) => r.data);
 

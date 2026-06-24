@@ -10,6 +10,8 @@ import {
   getTodayQuiz,
   answerQuiz,
   waterTree,
+  buySeeds,
+  buyTree,
   getLeaderboard,
   getMissions,
   getForest,
@@ -28,6 +30,7 @@ import { useAuthStore } from '../store/auth';
 import { WheelOfFortune } from '../components/wheel';
 
 const FREEZE_COST = 80; // khớp default game.streak_freeze_cost (BE là nguồn chân lý)
+const BUY_SEEDS_PACK = 50; // gói mua nước bằng TubuXu (chi phí thực do BE quyết theo game.xu_per_seed)
 
 // Cùng ngày theo giờ VN (UTC+7) — khớp dayKey backend, để khoá nút đã dùng trong ngày.
 function isSameVNDay(iso: string | null): boolean {
@@ -132,6 +135,27 @@ export default function GamePage() {
       }
       refresh();
       void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
+    },
+    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+  });
+  const buySeedsM = useMutation({
+    mutationFn: () => buySeeds(BUY_SEEDS_PACK),
+    onSuccess: (r) => {
+      openSnackbar({ text: `Đã mua +${r.seeds}💧 (−${r.cost} xu) · còn ${r.totalSeeds}💧`, type: 'success' });
+      refresh();
+      void queryClient.invalidateQueries({ queryKey: ['coins'] });
+      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+    },
+    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+  });
+  const buyTreeM = useMutation({
+    mutationFn: buyTree,
+    onSuccess: (r) => {
+      openSnackbar({ text: `Đã mua 1 cây thật 🌳 (−${r.cost} xu) · mã ${r.certificateCode}`, type: 'success' });
+      refresh();
+      void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
+      void queryClient.invalidateQueries({ queryKey: ['coins'] });
+      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
     },
     onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
   });
@@ -301,6 +325,17 @@ export default function GamePage() {
         <Button fullWidth loading={waterM.isPending} variant="secondary" onClick={() => waterM.mutate()}>
           🚿 Tưới cây (20💧)
         </Button>
+        <Box flex style={{ gap: 8, marginTop: 8 }}>
+          <Button style={{ flex: 1 }} size="small" loading={buySeedsM.isPending} onClick={() => buySeedsM.mutate()}>
+            💧 Mua {BUY_SEEDS_PACK} nước
+          </Button>
+          <Button style={{ flex: 1 }} size="small" loading={buyTreeM.isPending} onClick={() => buyTreeM.mutate()}>
+            🌳 Mua cây thật
+          </Button>
+        </Box>
+        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, textAlign: 'center' }}>
+          Mua bằng TubuXu — đổi từ Ví trong mục Ví của tôi.
+        </Text>
       </Box>
 
       {/* Mốc cộng đồng cây thật (Phase 2) — hồ giọt nước toàn cộng đồng */}

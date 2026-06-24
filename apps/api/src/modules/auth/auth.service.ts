@@ -210,6 +210,7 @@ export class AuthService {
       referralCode: user.referralCode,
       pointsBalance: user.pointsBalance,
       walletBalance: user.walletBalance,
+      coinsBalance: user.coinsBalance,
     };
   }
 

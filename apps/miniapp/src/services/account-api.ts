@@ -29,9 +29,29 @@ export interface CouponDTO {
 
 export interface WalletSummary {
   walletBalance: number;
+  coinsBalance: number;
   cashbackPending: number;
   commissionApproved: number;
   commissionPending: number;
+  xuConvertMultiplier: number;
+  withdrawMin: number;
+  withdrawFee: number;
+}
+
+export interface CoinTxn {
+  id: string;
+  delta: number;
+  reason: string;
+  refType: string | null;
+  createdAt: string;
+}
+
+export interface CoinsOverview {
+  coinsBalance: number;
+  referralCode: string;
+  referralEarned: number;
+  referralSuccessCount: number;
+  transactions: CoinTxn[];
 }
 
 export interface BankInfo {
@@ -65,7 +85,17 @@ export const getCoupons = () => api.get<CouponDTO[]>('/me/coupons').then((r) => 
 export const getWallet = () => api.get<WalletSummary>('/me/wallet').then((r) => r.data);
 export const withdraw = (amount: number, bankInfo: BankInfo) =>
   api
-    .post<{ ok: boolean; payoutId: string; status: string }>('/wallet/withdraw', { amount, bankInfo })
+    .post<{ ok: boolean; payoutId: string; status: string; withdrawn: number; fee: number; net: number }>(
+      '/wallet/withdraw',
+      { amount, bankInfo },
+    )
+    .then((r) => r.data);
+
+// TubuXu
+export const getCoins = () => api.get<CoinsOverview>('/me/coins').then((r) => r.data);
+export const convertToXu = (amount: number) =>
+  api
+    .post<{ spent: number; received: number; multiplier: number }>('/wallet/convert-xu', { amount })
     .then((r) => r.data);
 
 // Notifications

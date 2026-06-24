@@ -69,12 +69,12 @@ export default function CheckoutPage() {
     !wantInvoice ||
     (invoice.taxCode.trim() && invoice.companyName.trim() && invoice.address.trim() && EMAIL.test(invoice.email.trim()));
 
-  // Đang chọn Ví Tubu mà tổng đơn vượt số dư → tự trả về COD, tránh đặt fail.
+  // Đang chọn Ví/TubuXu mà tổng đơn vượt số dư → tự trả về COD, tránh đặt fail.
   useEffect(() => {
-    if (payment === 'WALLET' && quote.data && (user?.walletBalance ?? 0) < quote.data.total) {
-      setPayment('COD');
-    }
-  }, [payment, quote.data, user?.walletBalance]);
+    if (!quote.data) return;
+    if (payment === 'WALLET' && (user?.walletBalance ?? 0) < quote.data.total) setPayment('COD');
+    if (payment === 'XU' && (user?.coinsBalance ?? 0) < quote.data.total) setPayment('COD');
+  }, [payment, quote.data, user?.walletBalance, user?.coinsBalance]);
 
   const order = useMutation({
     mutationFn: () =>
@@ -166,6 +166,7 @@ export default function CheckoutPage() {
   const total = quote.data?.total ?? 0;
   const canPlace = !!addressId && quote.isSuccess && !order.isPending && !!invoiceValid && !submitting;
 
+  const coinsBalance = user?.coinsBalance ?? 0;
   const paymentMethods = [
     { value: 'COD', label: vi.checkout.paymentCod, disabled: false },
     { value: 'ZALOPAY', label: vi.checkout.paymentZalopay, disabled: false },
@@ -174,6 +175,11 @@ export default function CheckoutPage() {
       value: 'WALLET',
       label: vi.checkout.paymentWallet(formatVnd(walletBalance)),
       disabled: quote.isSuccess && walletBalance < total,
+    },
+    {
+      value: 'XU',
+      label: vi.checkout.paymentXu(`${coinsBalance.toLocaleString('vi-VN')} xu`),
+      disabled: quote.isSuccess && coinsBalance < total,
     },
   ];
 

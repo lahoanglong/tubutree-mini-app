@@ -77,6 +77,7 @@ export class AuthController {
       referralCode: dbUser.referralCode,
       pointsBalance: dbUser.pointsBalance,
       walletBalance: dbUser.walletBalance,
+      coinsBalance: dbUser.coinsBalance,
     };
   }
 }

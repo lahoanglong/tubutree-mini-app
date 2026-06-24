@@ -22,6 +22,7 @@ export interface AuthUser {
   referralCode: string;
   pointsBalance: number;
   walletBalance: number;
+  coinsBalance: number;
 }
 
 export interface AuthTokens {

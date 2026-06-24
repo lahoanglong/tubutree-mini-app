@@ -102,6 +102,26 @@ export async function openOAChat(message?: string) {
   await openChat({ type: 'oa', id: OA_ID, message });
 }
 
+/**
+ * Lấy mã giới thiệu từ deep link mở app (?ref=CODE). ZMPRouter dùng hash nên param có thể
+ * nằm ở window.location.search HOẶC trong phần query của hash. Parse cả hai, không phụ thuộc SDK.
+ */
+export function getLaunchReferral(): string | undefined {
+  try {
+    const fromSearch = new URLSearchParams(window.location.search).get('ref');
+    if (fromSearch) return fromSearch;
+    const hash = window.location.hash || '';
+    const qIdx = hash.indexOf('?');
+    if (qIdx >= 0) {
+      const fromHash = new URLSearchParams(hash.slice(qIdx + 1)).get('ref');
+      if (fromHash) return fromHash;
+    }
+  } catch {
+    /* ngoài webview / không có window → bỏ qua */
+  }
+  return undefined;
+}
+
 /** Mở share sheet chia sẻ link sản phẩm (dùng cho Affiliate Phase 3). */
 export async function shareLink(params: { title: string; description: string; thumbnail?: string; path: string }) {
   await openShareSheet({
