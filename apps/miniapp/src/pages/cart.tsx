@@ -248,12 +248,10 @@ function CartLineRow({
   // user đang tap. Sau khi debouncedQty đã đuổi kịp localQty thì server-truth là an toàn.
   useEffect(() => {
     if (debouncedQty === localQty) setLocalQty(line.quantity);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [line.quantity]);
   useEffect(() => {
     if (debouncedQty !== line.quantity) onQty(debouncedQty);
     // onQty/line.quantity ổn định trong scope mutate; chỉ trigger khi debouncedQty đổi.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQty]);
   return (
     <Box
