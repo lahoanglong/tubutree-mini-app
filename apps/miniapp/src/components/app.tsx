@@ -36,6 +36,7 @@ const OrderDetailPage = lazy(() => import('../pages/order-detail'));
 const GamePage = lazy(() => import('../pages/game'));
 const FeedPage = lazy(() => import('../pages/feed'));
 const AiAdvisorPage = lazy(() => import('../pages/ai-advisor'));
+const GroupBuyPage = lazy(() => import('../pages/group-buy'));
 const ProfilePage = lazy(() => import('../pages/profile'));
 const LoyaltyPage = lazy(() => import('../pages/loyalty'));
 const WalletPage = lazy(() => import('../pages/wallet'));
@@ -106,6 +107,7 @@ export default function MyApp() {
                 <Route path="/game" element={<GamePage />} />
                 <Route path="/feed" element={<FeedPage />} />
                 <Route path="/ai-advisor" element={<AiAdvisorPage />} />
+                <Route path="/group-buy" element={<GroupBuyPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/loyalty" element={<LoyaltyPage />} />
                 <Route path="/wallet" element={<WalletPage />} />

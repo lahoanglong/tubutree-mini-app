@@ -11,6 +11,7 @@ import {
   type VariationDetail,
 } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
+import { createGroupBuy } from '../services/groupbuy-api';
 import { useAuthStore } from '../store/auth';
 import { shareLink } from '../services/zmp-bridge';
 import ProductCard from '../components/product-card';
@@ -94,6 +95,15 @@ export default function ProductDetailPage() {
       haptic('medium');
       setBadgeBounce(true);
       openSnackbar({ text: vi.product.added, type: 'success', duration: 2000 });
+    },
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const groupBuyMutation = useMutation({
+    mutationFn: (productId: string) => createGroupBuy(productId),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé 🛒', type: 'success' });
+      navigate('/group-buy');
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -295,6 +305,24 @@ export default function ProductDetailPage() {
             setQuantity(n);
           }}
         />
+      </Box>
+
+      {/* ── Mua chung (§6.14.8) ── */}
+      <Box
+        className="tubu-press"
+        p={4}
+        mt={2}
+        onClick={() => groupBuyMutation.mutate(p.id)}
+        style={{ background: 'var(--neutral-0)', display: 'flex', alignItems: 'center', gap: 12 }}
+      >
+        <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', fontSize: 20 }}>🛒</Box>
+        <Box style={{ flex: 1 }}>
+          <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>Mở nhóm mua chung — giá tốt hơn</Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+            Rủ bạn bè cho đủ nhóm, cả nhóm cùng được giảm giá
+          </Text>
+        </Box>
+        <ChevronRight size={18} color="var(--leaf-700)" strokeWidth={2} />
       </Box>
 
       {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}

@@ -74,6 +74,8 @@ model User {
   feedPosts           FeedPost[]
   feedReactions       FeedReaction[]
   feedComments        FeedComment[]
+  groupBuysStarted    GroupBuy[]     @relation("GroupBuysStarted")
+  groupBuyMemberships GroupBuyMember[]
 
   @@index([referredById])
   @@map("users")
@@ -157,6 +159,7 @@ model Product {
   certifications String[]
   variations     Variation[]
   reviews        Review[]
+  groupBuys      GroupBuy[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -845,6 +848,47 @@ model FeedComment {
 
   @@index([postId])
   @@map("feed_comments")
+}
+
+// Mua chung / Group Buy (§6.14.8). Đủ targetSize người trước expiresAt → SUCCESS,
+// mỗi thành viên nhận coupon = (basePrice − unitPrice) để mua với giá nhóm. Hết hạn → FAILED.
+model GroupBuy {
+  id          String           @id @default(cuid())
+  productId   String
+  product     Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  initiatorId String
+  initiator   User             @relation("GroupBuysStarted", fields: [initiatorId], references: [id], onDelete: Cascade)
+  targetSize  Int
+  currentSize Int              @default(0)
+  unitPrice   Int // giá nhóm/đơn vị
+  basePrice   Int // giá gốc lúc tạo (để tính phần giảm)
+  status      GroupBuyStatus   @default(OPEN)
+  expiresAt   DateTime
+  createdAt   DateTime         @default(now())
+  members     GroupBuyMember[]
+
+  @@index([status, expiresAt])
+  @@index([productId])
+  @@map("group_buys")
+}
+
+enum GroupBuyStatus {
+  OPEN
+  SUCCESS
+  FAILED
+}
+
+model GroupBuyMember {
+  id         String   @id @default(cuid())
+  groupBuyId String
+  groupBuy   GroupBuy @relation(fields: [groupBuyId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt   DateTime @default(now())
+
+  @@unique([groupBuyId, userId])
+  @@index([userId])
+  @@map("group_buy_members")
 }
 
 // Yêu cầu đổi/trả (§6.4): chỉ lỗi NSX, window 7 ngày, admin duyệt → hoàn Ví +

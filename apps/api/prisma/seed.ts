@@ -75,6 +75,9 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'game.plot_unlock_seed_base', value: 100, category: 'game', description: '💧 mở lô đất (giá = base × số thứ tự lô)' },
   { key: 'game.plot_unlock_xu_base', value: 200, category: 'game', description: 'Xu mở lô đất (giá = base × số thứ tự lô)' },
   { key: 'game.plot_target', value: 600, category: 'game', description: '💧 cần để thu hoạch 1 cây ở lô phụ' },
+  { key: 'groupbuy.discount_pct', value: 15, category: 'groupbuy', description: '% giảm giá khi mua chung đủ người' },
+  { key: 'groupbuy.target_size', value: 3, category: 'groupbuy', description: 'Số người cần để nhóm mua chung thành công' },
+  { key: 'groupbuy.window_hours', value: 48, category: 'groupbuy', description: 'Số giờ nhóm mua chung mở trước khi hết hạn' },
   {
     key: 'game.spin_prizes',
     value: [
@@ -537,6 +540,7 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-game-checkin', code: 'GAME_CHECKIN_REMINDER', channel: 'INAPP', bodyTemplate: '🔥 Chuỗi {{streak}} ngày của bạn sắp lỡ! Điểm danh Vườn Xanh hôm nay để giữ lửa nhé 🌿' },
   { id: 'nt-game-thirsty', code: 'GAME_TREE_THIRSTY', channel: 'INAPP', bodyTemplate: '🥀 Cây của bạn đang khát! Tưới nước hôm nay để cây không héo và mất tiến trình nhé 💧' },
   { id: 'nt-game-gift', code: 'GAME_WATER_GIFT', channel: 'INAPP', bodyTemplate: '🎁 Một người bạn vừa tặng bạn {{amount}}💧 cho Vườn Xanh! Vào tưới cây ngay nhé 🌿' },
+  { id: 'nt-groupbuy-ok', code: 'GROUP_BUY_SUCCESS', channel: 'INAPP', bodyTemplate: '🎉 Nhóm mua chung đã đủ người! Bạn nhận mã giảm {{discount}}đ để mua với giá nhóm. Đặt hàng ngay nhé 🛒' },
 ];
 
 const QUIZZES = [

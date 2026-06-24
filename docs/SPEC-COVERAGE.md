@@ -33,7 +33,7 @@ Trạng thái: **✅ xong** · **🟡 một phần / back-office** · **⏳ Phas
 | 6.14.4 Subscribe & Save | 2 | ✅ (đã làm sớm) |
 | 6.14.3 AI tư vấn 24/7 | 2 | ✅ (chatbot RAG catalog; DeepSeek chính + Gemini dự phòng; rate-limit 10/phút; tắt graceful khi thiếu key) |
 | 6.14.6 Refill/đổi vỏ chai | 2 | ⏳ |
-| 6.14.8 Mua chung (Group Buy) | 2 | ⏳ |
+| 6.14.8 Mua chung (Group Buy) | 2 | ✅ (mở nhóm/tham gia, đủ người trước hạn → SUCCESS + coupon giảm giá mỗi thành viên; cron hết hạn → FAILED; atomic chống vượt target) |
 | 6.14.9 Review video (UGC) | 2 | ⏳ |
 | 6.14.11 Beta Tester | 2 | ⏳ |
 | 6.14.12 Community Feed | 2 | ✅ (bảng tin: bài viết + thả tim 💚 + bình luận; auto-post khi thu hoạch; tên ẩn) |

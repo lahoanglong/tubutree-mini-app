@@ -1,6 +1,6 @@
 import { Box, Page, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, ShoppingCart, Search, ChevronRight, Baby, SprayCan, Droplets, Recycle, Map, Sparkles, type LucideIcon } from 'lucide-react';
+import { Bell, ShoppingCart, Search, ChevronRight, Baby, SprayCan, Droplets, Recycle, Map, Sparkles, Users, type LucideIcon } from 'lucide-react';
 import { fetchProducts, fetchBrands } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -133,6 +133,32 @@ export default function HomePage() {
             <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Tư vấn sản phẩm xanh phù hợp cho bạn</Text>
           </Box>
           <ChevronRight size={18} color="var(--leaf-700)" strokeWidth={2} />
+        </Box>
+
+        <Box
+          role="button"
+          aria-label="Mua chung giá tốt"
+          className="tubu-press"
+          onClick={() => { haptic('light'); navigate('/group-buy'); }}
+          style={{
+            marginTop: 8,
+            background: 'var(--neutral-0)',
+            border: '1px solid var(--neutral-200)',
+            borderRadius: 'var(--radius-full)',
+            padding: '10px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            minHeight: 46,
+            boxSizing: 'border-box',
+          }}
+        >
+          <Users size={18} color="var(--primary-700)" strokeWidth={2} />
+          <Box style={{ flex: 1 }}>
+            <Text size="small" bold style={{ color: 'var(--primary-700)' }}>Mua chung giá tốt 🛒</Text>
+            <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Rủ bạn cho đủ nhóm — cả nhóm cùng giảm giá</Text>
+          </Box>
+          <ChevronRight size={18} color="var(--primary-700)" strokeWidth={2} />
         </Box>
       </Box>
 
