@@ -8,6 +8,7 @@ import type { NotificationsService } from '../notifications/notifications.servic
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { CoinsService } from '../wallet/coins.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
 
 const ADDRESS = {
   id: 'addr1', userId: 'u1', recipient: 'A', phone: '09', province: 'HN', district: 'BD',
@@ -61,8 +62,10 @@ function build(
   const pancake = { pushOrder: jest.fn().mockResolvedValue(null) } as unknown as PancakeOrderService;
   const affiliate = { createCommissionForOrder: jest.fn() } as unknown as AffiliateService;
   const coins = { spendCoins: jest.fn().mockResolvedValue(undefined) } as unknown as CoinsService;
+  // config default → loyalty.earn_points_on_xu=false (đơn XU không sinh điểm).
+  const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 
-  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, affiliate, coins);
+  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, affiliate, coins, config);
   return { svc, prisma, updateMany, orderCreate, variationUpdateMany, total, coins };
 }
 
@@ -103,6 +106,18 @@ describe('CheckoutService.placeOrder — money safety', () => {
     expect(coins.spendCoins).toHaveBeenCalledWith(
       'u1', 100, expect.stringMatching(/^ORDER_PAY:/), 'ORDER', 'o1', prisma,
     );
+  });
+
+  it('đơn XU KHÔNG sinh điểm Xanh (pointsEarned=0) — chống vòng khuếch đại ×1.2', async () => {
+    const { svc, orderCreate } = build({ coinsBalance: 1000, total: 100 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'XU' } as never);
+    expect(orderCreate.mock.calls[0][0].data.pointsEarned).toBe(0);
+  });
+
+  it('đơn WALLET/COD VẪN sinh điểm bình thường (pointsEarned từ pricing)', async () => {
+    const { svc, orderCreate } = build({ walletBalance: 1000, total: 100 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never);
+    expect(orderCreate.mock.calls[0][0].data.pointsEarned).toBe(10); // calcPointsEarned mock = 10
   });
 
   it('COD vượt hạn mức 5tr → BadRequest', async () => {

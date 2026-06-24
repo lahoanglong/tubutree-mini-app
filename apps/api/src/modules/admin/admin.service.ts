@@ -68,6 +68,7 @@ export class AdminService {
       // - COD đã giao mà PAID (ship đã thu hộ): hoàn ví (instant) như kênh prepaid.
       // - XU + PAID: hoàn lại XU (coinsBalance) + ghi CoinTransaction(+total), KHÔNG hoàn ví
       //   (xu không rút được; hoàn vào ví = biến xu thành tiền rút được = leak giá trị).
+      // ⚠️ ZALOPAY hoàn vào Ví NỘI BỘ (không refund cổng) — xem docs/ZALOPAY-SETUP.md §5.
       const wasPaidToWallet =
         order.paymentStatus === 'PAID' &&
         (order.paymentMethod === 'WALLET' || order.paymentMethod === 'ZALOPAY' || order.paymentMethod === 'COD');

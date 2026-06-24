@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { WalletService } from './wallet.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -12,17 +13,18 @@ function makePrisma(walletBalance: number, decCount = 1) {
   const updateMany = jest.fn().mockResolvedValue({ count: decCount });
   const userUpdate = jest.fn().mockResolvedValue({});
   const payoutCreate = jest.fn().mockResolvedValue({ id: 'payout-1' });
+  const payoutFindUnique = jest.fn().mockResolvedValue(null);
   const coinCreate = jest.fn().mockResolvedValue({});
   const prisma = {
     user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance }), updateMany, update: userUpdate },
-    payout: { create: payoutCreate },
+    payout: { create: payoutCreate, findUnique: payoutFindUnique },
     coinTransaction: { create: coinCreate },
     $transaction: jest.fn(),
   } as unknown as PrismaService;
   (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
     .fn()
     .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
-  return { prisma, updateMany, userUpdate, payoutCreate, coinCreate };
+  return { prisma, updateMany, userUpdate, payoutCreate, payoutFindUnique, coinCreate };
 }
 
 describe('WalletService.withdraw (Ví → ngân hàng, min 100k, phí 3k)', () => {
@@ -65,6 +67,28 @@ describe('WalletService.withdraw (Ví → ngân hàng, min 100k, phí 3k)', () =
     await expect(new WalletService(prisma, cfg).withdraw('u1', 2000, {})).rejects.toThrow();
     expect(updateMany).not.toHaveBeenCalled();
     expect(payoutCreate).not.toHaveBeenCalled();
+  });
+
+  it('idempotency: key đã có payout → trả lại payout cũ, KHÔNG trừ ví / tạo payout mới', async () => {
+    const { prisma, updateMany, payoutCreate, payoutFindUnique } = makePrisma(200_000);
+    payoutFindUnique.mockResolvedValue({ id: 'payout-old', status: 'REQUESTED', amount: 97_000, fee: 3000 });
+    const r = await new WalletService(prisma, config).withdraw('u1', 100_000, {}, 'idk-1');
+    expect(r).toMatchObject({ payoutId: 'payout-old', net: 97_000, fee: 3000, withdrawn: 100_000 });
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(payoutCreate).not.toHaveBeenCalled();
+  });
+
+  it('idempotency race: create ăn P2002 → trả payout của kẻ thắng, không ném lỗi', async () => {
+    const { prisma, payoutCreate, payoutFindUnique } = makePrisma(200_000);
+    // lần đầu findUnique (pre-check) = null → đi tiếp; create ném P2002; findUnique lần 2 thấy payout kẻ thắng.
+    payoutFindUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'payout-winner', status: 'REQUESTED', amount: 97_000, fee: 3000,
+    });
+    payoutCreate.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: '5' }),
+    );
+    const r = await new WalletService(prisma, config).withdraw('u1', 100_000, {}, 'idk-2');
+    expect(r).toMatchObject({ payoutId: 'payout-winner', net: 97_000 });
   });
 });
 

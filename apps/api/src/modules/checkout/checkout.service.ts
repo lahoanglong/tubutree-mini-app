@@ -10,6 +10,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { CoinsService } from '../wallet/coins.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 import { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class CheckoutService {
     private readonly pancakeOrder: PancakeOrderService,
     private readonly affiliate: AffiliateService,
     private readonly coins: CoinsService,
+    private readonly config: SystemConfigService,
   ) {}
 
   /** Map mã giới thiệu → userId CTV (khác người mua). */
@@ -79,6 +81,12 @@ export class CheckoutService {
     // WALLET và XU đều thanh toán ngay (đơn CONFIRMED + PAID); 1 xu = 1đ.
     const paid = dto.paymentMethod === 'WALLET' || dto.paymentMethod === 'XU';
     const status = dto.paymentMethod === 'COD' || paid ? 'CONFIRMED' : 'PENDING_PAYMENT';
+    // Đơn trả bằng TubuXu KHÔNG sinh điểm Xanh mới (mặc định): xu là tín dụng tiêu-trong-app
+    // (đã thưởng ×1.2 khi đổi từ Ví) — cộng thêm điểm trên đơn tự-fund = vòng khuếch đại giá trị.
+    // Lật bằng config loyalty.earn_points_on_xu=true nếu muốn xu cũng tích điểm.
+    const earnPointsOnXu = await this.config.get<boolean>('loyalty.earn_points_on_xu', false);
+    const pointsEarned =
+      dto.paymentMethod === 'XU' && !earnPointsOnXu ? 0 : computed.pointsEarned;
     const code = await this.generateCode();
     const referrerUserId = await this.resolveReferrer(dto.referralCode, userId);
 
@@ -108,7 +116,7 @@ export class CheckoutService {
             discount: computed.discount + computed.pointsDiscount,
             shippingFee: computed.shippingFee,
             total: computed.total,
-            pointsEarned: computed.pointsEarned,
+            pointsEarned,
             pointsUsed: computed.pointsUsed,
             paymentMethod: dto.paymentMethod,
             paymentStatus: paid ? 'PAID' : 'UNPAID',

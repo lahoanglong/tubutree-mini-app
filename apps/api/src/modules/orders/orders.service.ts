@@ -68,6 +68,8 @@ export class OrdersService {
       // tự loại COD; count=1 bảo đảm increment chỉ chạy đúng 1 lần ở nhánh thắng race.
       // XU: đơn trả bằng TubuXu → hoàn lại XU (coinsBalance) + ghi CoinTransaction(+total),
       // KHÔNG hoàn ví tiền thật (xu không rút được; hoàn vào ví = biến xu thành tiền rút được).
+      // ⚠️ ZALOPAY hoàn vào Ví NỘI BỘ (không refund cổng) — nếu sau này thêm refund cổng phải
+      // tránh hoàn 2 lần. Xem docs/ZALOPAY-SETUP.md §5.
       if (
         order.paymentMethod === 'WALLET' ||
         order.paymentMethod === 'ZALOPAY' ||

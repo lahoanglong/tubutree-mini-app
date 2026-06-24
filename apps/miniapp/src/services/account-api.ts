@@ -83,11 +83,12 @@ export const getCoupons = () => api.get<CouponDTO[]>('/me/coupons').then((r) => 
 
 // Wallet
 export const getWallet = () => api.get<WalletSummary>('/me/wallet').then((r) => r.data);
-export const withdraw = (amount: number, bankInfo: BankInfo) =>
+export const withdraw = (amount: number, bankInfo: BankInfo, idempotencyKey?: string) =>
   api
     .post<{ ok: boolean; payoutId: string; status: string; withdrawn: number; fee: number; net: number }>(
       '/wallet/withdraw',
       { amount, bankInfo },
+      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined,
     )
     .then((r) => r.data);
 

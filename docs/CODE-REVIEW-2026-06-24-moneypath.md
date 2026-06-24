@@ -16,19 +16,16 @@ mới (TubuXu, referral, cashback, loyalty/coupon hardening). Đây là phần `
 | 5 | `cashback.service.ts` postback | `confirmedAt: existing.confirmedAt ?? new Date()` giữ timestamp cũ khi REJECTED→CONFIRMED | Đồng hồ hold 30 ngày không reset → settle ngay, né clawback window | `confirmedAt: nowConfirmed && !wasConfirmed ? new Date() : existing.confirmedAt` (reset khi chuyển TỪ chưa-confirmed SANG confirmed) |
 | 6 | `wallet.service.ts` withdraw | `net = amount - fee` không guard `> 0` | Cấu hình sai (phí ≥ min) → trừ ví full + tạo Payout 0/âm | Thêm guard `if (net <= 0) throw` (phòng thủ misconfig) |
 
-## Đã xem xét — KHÔNG phải bug / để backlog (ghi nhận, không sửa)
+## Backlog 4 mục — ĐÃ XỬ LÝ (2026-06-24, theo yêu cầu user)
 
-- **Hoàn ZaloPay vào Ví nội bộ** (`orders.cancel`/`reviewReturn`): CHỦ ĐÍCH (thiết kế hoàn về Ví Tubu).
-  ⚠️ Ops note: nếu sau này có refund qua cổng ZaloPay thật thì phải tránh hoàn 2 lần (Ví nội bộ + cổng).
-- **Đơn XU vẫn cộng điểm Xanh + tier**: quyết định nghiệp vụ (TubuXu thiết kế chủ đích). Lưu ý vòng
-  khuếch đại giá trị: Ví→xu ×1.2 + điểm/tier trên đơn tự-fund. Nếu muốn chặn, tính `pointsEarned`
-  bằng 0 cho `paymentMethod === 'XU'` — **cần bạn quyết**.
-- **withdraw không có idempotency key**: double-tap/retry có thể tạo 2 Payout. Mitigation hiện tại:
-  Payout ở trạng thái REQUESTED, admin duyệt trước khi chi → admin bắt được trùng. Backlog: thêm
-  Idempotency-Key cho `/wallet/withdraw` (cần FE gửi key).
-- **loyalty `creditOrderPoints` catch nuốt mọi P2002**: hiện chỉ có 1 unique index (idempotency điểm)
-  có thể bắn P2002 trong tx đó → an toàn hôm nay. Nếu thêm unique constraint mới trên cùng tx về sau,
-  cần thu hẹp catch theo `err.meta.target`. Theo dõi.
+| # | Mục | Cách xử lý |
+|---|-----|-----------|
+| B1 | **Đơn XU cộng điểm Xanh** (vòng khuếch đại ×1.2 + điểm/tier trên đơn tự-fund) | `checkout.placeOrder`: `pointsEarned=0` cho `paymentMethod==='XU'`, **config `loyalty.earn_points_on_xu` (default false)** — lật `true` nếu muốn xu cũng tích điểm. Tier-recalc theo điểm nên cũng không bị thổi. |
+| B2 | **withdraw không idempotency** (double-tap/retry → 2 Payout) | Thêm `Payout.idempotencyKey @unique` (migration `20260624010000_payout_idempotency`); `wallet.withdraw` nhận key → pre-check trả payout cũ + catch P2002 race; controller đọc header `Idempotency-Key`; FE `wallet.tsx` sinh key/lần rút (regenerate sau success), mirror place-order. |
+| B3 | **Hoàn ZaloPay vào Ví nội bộ** (rủi ro double-refund nếu thêm refund cổng) | Xác nhận **an toàn in-app** (guard count=1 ở cancel + reviewReturn). Ghi **ops note** `docs/ZALOPAY-SETUP.md §5` + comment ở 2 chỗ hoàn tiền: 1 đơn chỉ hoàn 1 kênh; nếu thêm refund cổng phải bỏ ZALOPAY khỏi nhánh hoàn-Ví. |
+| B4 | **loyalty `creditOrderPoints` nuốt mọi P2002** | Thu hẹp: trong catch **re-query** bản ghi `reason` — chỉ skip nếu đã tồn tại (đúng idempotency index); P2002 từ constraint khác → row chưa có → **re-throw** (không âm thầm mất điểm). |
+
+Tổng kết backlog: **+5 test mới, 331 test pass, typecheck (api+FE) + lint 0 error.**
 
 ## Bất biến được giữ
 - `coinsBalance == SUM(CoinTransaction.delta)`: mọi hoàn xu (#1a/#1b) đều ghi kèm CoinTransaction.

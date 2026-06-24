@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 
@@ -69,7 +70,23 @@ export class WalletService {
    * Rút từ Ví Tubu (walletBalance) về STK ngân hàng. Min wallet.withdraw_min, trừ
    * phí chuyển khoản wallet.withdraw_fee → Payout.amount = số thực nhận (net).
    */
-  async withdraw(userId: string, amount: number, bankInfo: object) {
+  async withdraw(userId: string, amount: number, bankInfo: object, idempotencyKey?: string) {
+    // Idempotency: double-tap nút Rút / retry sau timeout cùng key → trả lại Payout đã tạo,
+    // KHÔNG trừ ví lần 2 (mirror place-order). Unique index payouts.idempotencyKey là guard cứng.
+    if (idempotencyKey) {
+      const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey } });
+      if (existing) {
+        return {
+          ok: true,
+          payoutId: existing.id,
+          status: existing.status,
+          withdrawn: existing.amount + existing.fee,
+          fee: existing.fee,
+          net: existing.amount,
+        };
+      }
+    }
+
     const min = await this.config.get<number>('wallet.withdraw_min', 100000);
     const fee = await this.config.get<number>('wallet.withdraw_fee', 3000);
     if (amount < min) {
@@ -83,18 +100,38 @@ export class WalletService {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.walletBalance < amount) throw new BadRequestException('Số dư ví không đủ.');
 
-    const payout = await this.prisma.$transaction(async (tx) => {
-      // Trừ tiền ATOMIC: chỉ trừ nếu số dư còn đủ (where gte) — chống TOCTOU/overdraft
-      // khi 2 lệnh rút chạy đồng thời (check ở trên có thể đã cũ).
-      const dec = await tx.user.updateMany({
-        where: { id: userId, walletBalance: { gte: amount } },
-        data: { walletBalance: { decrement: amount } },
+    let payout: Awaited<ReturnType<typeof this.prisma.payout.create>>;
+    try {
+      payout = await this.prisma.$transaction(async (tx) => {
+        // Trừ tiền ATOMIC: chỉ trừ nếu số dư còn đủ (where gte) — chống TOCTOU/overdraft
+        // khi 2 lệnh rút chạy đồng thời (check ở trên có thể đã cũ).
+        const dec = await tx.user.updateMany({
+          where: { id: userId, walletBalance: { gte: amount } },
+          data: { walletBalance: { decrement: amount } },
+        });
+        if (dec.count === 0) throw new BadRequestException('Số dư ví không đủ.');
+        return tx.payout.create({
+          data: { userId, amount: net, fee, method: 'BANK', bankInfo, status: 'REQUESTED', idempotencyKey },
+        });
       });
-      if (dec.count === 0) throw new BadRequestException('Số dư ví không đủ.');
-      return tx.payout.create({
-        data: { userId, amount: net, fee, method: 'BANK', bankInfo, status: 'REQUESTED' },
-      });
-    });
+    } catch (err) {
+      // Race 2 request cùng Idempotency-Key: kẻ thua ăn P2002 trên unique key → trả lại Payout
+      // mà kẻ thắng đã tạo (đã trừ ví đúng 1 lần), KHÔNG để lỗi ra ngoài.
+      if (idempotencyKey && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey } });
+        if (existing) {
+          return {
+            ok: true,
+            payoutId: existing.id,
+            status: existing.status,
+            withdrawn: existing.amount + existing.fee,
+            fee: existing.fee,
+            net: existing.amount,
+          };
+        }
+      }
+      throw err;
+    }
     return { ok: true, payoutId: payout.id, status: 'REQUESTED' as const, withdrawn: amount, fee, net };
   }
 }

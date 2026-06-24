@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Clock, CheckCircle2, ShoppingBag, Coins, Gift, ArrowRightLeft, Landmark, type LucideIcon } from 'lucide-react';
 import { getWallet, withdraw, getCoins, convertToXu, type BankInfo } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
+import { newIdempotencyKey } from '../utils/idempotency';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 
@@ -27,10 +28,14 @@ export default function WalletPage() {
     void qc.invalidateQueries({ queryKey: ['coins'] });
   };
 
+  // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lệnh rút (double-tap/timeout) →
+  // BE không trừ ví/ tạo payout 2 lần; regenerate sau khi rút thành công (lệnh sau là lệnh mới).
+  const withdrawKey = useRef(newIdempotencyKey());
   const withdrawMut = useMutation({
-    mutationFn: () => withdraw(Number(amount), bank),
+    mutationFn: () => withdraw(Number(amount), bank, withdrawKey.current),
     onSuccess: (r) => {
       openSnackbar({ text: `Đã gửi yêu cầu rút. Thực nhận ${formatVnd(r.net)} trong 1-3 ngày làm việc.`, type: 'success' });
+      withdrawKey.current = newIdempotencyKey();
       setWithdrawOpen(false);
       setAmount('');
       refreshAll();

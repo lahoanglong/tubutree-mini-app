@@ -467,16 +467,17 @@ enum PayoutStatus {
 }
 
 model Payout {
-  id          String       @id @default(cuid())
-  userId      String
-  user        User         @relation(fields: [userId], references: [id])
-  amount      Int // số thực nhận (đã trừ phí)
-  fee         Int          @default(0) // phí chuyển khoản ngân hàng
-  method      String
-  bankInfo    Json?
-  status      PayoutStatus @default(REQUESTED)
-  requestedAt DateTime     @default(now())
-  paidAt      DateTime?
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  amount         Int // số thực nhận (đã trừ phí)
+  fee            Int          @default(0) // phí chuyển khoản ngân hàng
+  method         String
+  bankInfo       Json?
+  status         PayoutStatus @default(REQUESTED)
+  idempotencyKey String?      @unique // chống double-submit rút tiền (double-tap/retry timeout)
+  requestedAt    DateTime     @default(now())
+  paidAt         DateTime?
 
   @@index([userId])
   @@map("payouts")

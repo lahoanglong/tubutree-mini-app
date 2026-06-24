@@ -55,3 +55,14 @@ Restart API: `docker compose -f docker-compose.prod.yml up -d api`.
 - **KHÔNG commit** Key1/Key2 vào git (chỉ nằm trong `.env` trên VM).
 - Sandbox và production là **2 bộ key khác nhau** + 2 endpoint khác nhau — đừng trộn.
 - ZaloPay là **tùy chọn**: có thể go-live 30/06 chỉ COD/Ví, bật ZaloPay sau khi có key thật.
+
+## 5. ⚠️ Hoàn tiền đơn ZaloPay — chống HOÀN 2 LẦN (ops)
+Khi hủy ([orders.cancel](apps/api/src/modules/orders/orders.service.ts)) hoặc đổi/trả được duyệt
+([admin.reviewReturn](apps/api/src/modules/admin/admin.service.ts)) đơn đã thanh toán ZaloPay,
+hệ thống **hoàn vào Ví Tubu nội bộ** (`walletBalance += total`), KHÔNG gọi API refund cổng ZaloPay.
+- **An toàn trong app:** mỗi đơn chỉ hoàn đúng 1 lần — guard atomic `paymentStatus PAID→REFUNDED`
+  (cancel, count=1) và `status DELIVERED→RETURNED` (reviewReturn, flipped.count=1). Hủy rồi không
+  trả được nữa và ngược lại.
+- **RỦI RO ops:** nếu sau này tích hợp **refund qua cổng ZaloPay** (trả tiền về thẻ/tài khoản khách),
+  PHẢI tránh hoàn 2 lần (Ví nội bộ **+** cổng). Quy ước: 1 đơn chỉ hoàn 1 kênh. Nếu chuyển sang refund
+  cổng cho ZaloPay, bỏ nhánh `ZALOPAY` khỏi hoàn-Ví ở 2 chỗ trên (giữ WALLET/COD).

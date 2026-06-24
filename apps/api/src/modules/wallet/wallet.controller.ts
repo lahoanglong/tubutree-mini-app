@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post } from '@nestjs/common';
 import { IsInt, IsObject, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { WalletService } from './wallet.service';
@@ -26,8 +26,12 @@ export class WalletController {
   }
 
   @Post('wallet/withdraw')
-  withdraw(@CurrentUser('sub') userId: string, @Body() dto: WithdrawDto) {
-    return this.wallet.withdraw(userId, dto.amount, dto.bankInfo);
+  withdraw(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: WithdrawDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.wallet.withdraw(userId, dto.amount, dto.bankInfo, idempotencyKey);
   }
 
   @Post('wallet/convert-xu')

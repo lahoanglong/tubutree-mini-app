@@ -62,9 +62,21 @@ export class LoyaltyService {
       ]);
     } catch (err) {
       // Partial unique (reason, refId) chặn double-credit — caller thua race ăn P2002 → no-op.
+      // CHỈ coi idempotent skip nếu P2002 ĐÚNG là index credit này: re-query thấy bản ghi reason
+      // đã tồn tại (kẻ thắng race đã commit). P2002 từ constraint KHÁC (vd unique mới thêm sau này
+      // trên cùng tx) → bản ghi reason vẫn chưa có → re-throw, KHÔNG nuốt lỗi thật làm mất điểm âm thầm.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        this.logger.debug(`creditOrderPoints idempotent skip order=${order.code}`);
-        return;
+        const already = await this.prisma.pointsTransaction.findFirst({
+          where: { userId: order.userId, reason },
+          select: { id: true },
+        });
+        if (already) {
+          this.logger.debug(`creditOrderPoints idempotent skip order=${order.code}`);
+          return;
+        }
+        this.logger.error(
+          `creditOrderPoints P2002 KHÔNG khớp idempotency (reason=${reason}) order=${order.code} — re-throw`,
+        );
       }
       throw err;
     }

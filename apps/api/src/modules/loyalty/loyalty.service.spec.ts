@@ -100,18 +100,20 @@ describe('LoyaltyService.creditOrderPoints', () => {
   });
 
   it('race: webhook DELIVERED thứ 2 ăn P2002 từ unique index → idempotent (KHÔNG throw, KHÔNG recalc)', async () => {
-    // pre-check findFirst=null (cả 2 caller chưa thấy bản ghi), nhưng $transaction reject P2002
-    // do partial unique index (reason, refId) — caller thua phải bail im lặng, không cộng lần 2.
+    // pre-check findFirst=null (cả 2 caller chưa thấy bản ghi), $transaction reject P2002 do partial
+    // unique index (reason, refId). Catch RE-QUERY thấy bản ghi reason kẻ-thắng đã commit → bail im lặng.
     const p2002 = new Prisma.PrismaClientKnownRequestError('dup', {
       code: 'P2002',
       clientVersion: 'test',
     });
     const userFind = jest.fn();
+    // findFirst: lần 1 (pre-check)=null → đi tiếp; lần 2 (re-query trong catch)=có bản ghi → skip.
+    const findFirst = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'tx-winner' });
     const prisma = {
       order: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 }),
       },
-      pointsTransaction: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
+      pointsTransaction: { findFirst, create: jest.fn() },
       user: { findUniqueOrThrow: userFind, update: jest.fn() },
       $transaction: jest.fn().mockRejectedValue(p2002),
     } as unknown as PrismaService;
@@ -121,6 +123,25 @@ describe('LoyaltyService.creditOrderPoints', () => {
     ).resolves.toBeUndefined();
     // recalcTier (gọi user.findUniqueOrThrow) KHÔNG chạy vì đã bail ở catch P2002.
     expect(userFind).not.toHaveBeenCalled();
+  });
+
+  it('P2002 từ constraint KHÁC (re-query KHÔNG thấy bản ghi reason) → re-throw, KHÔNG nuốt lỗi', async () => {
+    // P2002 không phải từ idempotency index credit này → bản ghi reason vẫn chưa tồn tại →
+    // phải ném lỗi để không âm thầm mất điểm.
+    const p2002 = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' });
+    const prisma = {
+      order: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 }),
+      },
+      // pre-check=null VÀ re-query trong catch cũng=null (không có bản ghi reason).
+      pointsTransaction: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
+      user: { findUniqueOrThrow: jest.fn(), update: jest.fn() },
+      $transaction: jest.fn().mockRejectedValue(p2002),
+    } as unknown as PrismaService;
+
+    await expect(
+      new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1'),
+    ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
   });
 });
 
