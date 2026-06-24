@@ -17,8 +17,9 @@ pnpm dev                       # chạy api + web + miniapp (turbo)
 
 ## 1. Trạng thái tổng thể
 - **Backend §6.1–6.14 (Build Spec v1.1): xong, user-facing đầy đủ.** Chi tiết: `docs/SPEC-COVERAGE.md`.
-- **236+ unit test pass** (34 suite), 3 app build sạch (local + Docker).
+- **318 unit test pass** (38 suite), 3 app typecheck + build sạch.
 - **Vườn Xanh 2.0: HOÀN TẤT 4 phase + social.** (xem mục 2)
+- **TubuXu (2026-06-24):** tiền tệ tiêu-trong-app (Ví→xu ×1.2, rút min 100k/phí 3k, mua hàng/nước/cây bằng xu) + giới thiệu bạn bè thưởng xu 2 chiều khi referee có cashback CONFIRMED + hoàn thiện cashback (thông báo, guard). Spec: `docs/superpowers/specs/2026-06-24-tubuxu-referral-cashback-design.md`. Đối soát điểm: `pnpm --filter @tubutree/api reconcile:points`.
 - **Prod đang chạy LIVE trên GCP VM** (`api.tubutree.com` + `app.tubutree.com`, IP `34.142.194.160`) — CD wired qua GitHub Actions (xem mục 4).
 - Code đã push hết lên `main`, working tree sạch.
 

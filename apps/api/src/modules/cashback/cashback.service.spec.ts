@@ -2,6 +2,7 @@ import { CashbackService } from './cashback.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { CoinsService } from '../wallet/coins.service';
+import type { NotificationsService } from '../notifications/notifications.service';
 
 const config = {
   get: async <T>(_k: string, fb?: T): Promise<T> => fb as T, // dùng default 0.7
@@ -9,7 +10,12 @@ const config = {
 
 // Stub CoinsService — assert có gọi thưởng xu giới thiệu khi cashback CONFIRMED.
 const coins = { grantReferralCoins: jest.fn().mockResolvedValue(undefined) } as unknown as CoinsService;
-beforeEach(() => (coins.grantReferralCoins as jest.Mock).mockClear());
+// Stub NotificationsService — assert có bắn CASHBACK_PAID khi tiền về Ví.
+const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+beforeEach(() => {
+  (coins.grantReferralCoins as jest.Mock).mockClear();
+  (notifications.notify as jest.Mock).mockClear();
+});
 
 const payload = (over: Partial<Record<string, unknown>> = {}) => ({
   utm_content: 'click-1',
@@ -27,7 +33,7 @@ describe('CashbackService.handlePostback', () => {
       cashbackClick: { findUnique: jest.fn().mockResolvedValue(null) },
       cashbackTransaction: { findFirst: jest.fn(), create },
     } as unknown as PrismaService;
-    const r = await new CashbackService(prisma, config, coins).handlePostback(payload());
+    const r = await new CashbackService(prisma, config, coins, notifications).handlePostback(payload());
     expect(r).toEqual({ ok: false });
     expect(create).not.toHaveBeenCalled();
   });
@@ -41,7 +47,7 @@ describe('CashbackService.handlePostback', () => {
       user: { update: userUpdate },
       $transaction: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
-    await new CashbackService(prisma, config, coins).handlePostback(payload());
+    await new CashbackService(prisma, config, coins, notifications).handlePostback(payload());
     const data = create.mock.calls[0][0].data;
     expect(data.userReward).toBe(35000); // floor(50000 * 0.7)
     expect(data.status).toBe('CONFIRMED');
@@ -59,7 +65,7 @@ describe('CashbackService.handlePostback', () => {
       user: { update: userUpdate },
       $transaction: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
-    await new CashbackService(prisma, config, coins).handlePostback(payload({ status: 'pending' }));
+    await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'pending' }));
     expect(create.mock.calls[0][0].data.status).toBe('PENDING');
     expect(userUpdate).not.toHaveBeenCalled();
   });
@@ -81,7 +87,7 @@ describe('CashbackService.handlePostback', () => {
     const { prisma, userUpdate } = updateBranchPrisma({
       id: 'tx1', status: 'CONFIRMED', confirmedAt: new Date(), userId: 'u1', userReward: 35000,
     });
-    await new CashbackService(prisma, config, coins).handlePostback(payload({ status: 'approved' }));
+    await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'approved' }));
     expect(userUpdate).not.toHaveBeenCalled();
   });
 
@@ -89,7 +95,7 @@ describe('CashbackService.handlePostback', () => {
     const { prisma, userUpdate } = updateBranchPrisma({
       id: 'tx1', status: 'PENDING', confirmedAt: null, userId: 'u1', userReward: 35000,
     });
-    await new CashbackService(prisma, config, coins).handlePostback(payload({ status: 'approved' }));
+    await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'approved' }));
     expect(userUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: { cashbackPending: { increment: 35000 } } }),
     );
@@ -99,7 +105,7 @@ describe('CashbackService.handlePostback', () => {
     const { prisma, userUpdate } = updateBranchPrisma({
       id: 'tx1', status: 'CONFIRMED', confirmedAt: new Date(), userId: 'u1', userReward: 35000,
     });
-    await new CashbackService(prisma, config, coins).handlePostback(payload({ status: 'rejected' }));
+    await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'rejected' }));
     expect(userUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: { cashbackPending: { decrement: 35000 } } }),
     );
@@ -109,7 +115,7 @@ describe('CashbackService.handlePostback', () => {
     const { prisma, userUpdate } = updateBranchPrisma({
       id: 'tx1', status: 'PAID', confirmedAt: new Date(), userId: 'u1', userReward: 35000,
     });
-    await new CashbackService(prisma, config, coins).handlePostback(payload({ status: 'rejected' }));
+    await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'rejected' }));
     expect(userUpdate).not.toHaveBeenCalled();
   });
 
@@ -117,7 +123,7 @@ describe('CashbackService.handlePostback', () => {
   it('commission âm → ok:false, không tạo giao dịch (chống cộng số dư âm)', async () => {
     const findUnique = jest.fn();
     const prisma = { cashbackClick: { findUnique } } as unknown as PrismaService;
-    const r = await new CashbackService(prisma, config, coins).handlePostback(payload({ commission: -1 }));
+    const r = await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ commission: -1 }));
     expect(r).toEqual({ ok: false });
     expect(findUnique).not.toHaveBeenCalled(); // chặn trước cả khi tra click
   });
@@ -129,7 +135,7 @@ describe('CashbackService.handlePostback', () => {
       user: { update: jest.fn().mockResolvedValue({}) },
       $transaction: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
-    await new CashbackService(prisma, config, coins).handlePostback(payload({ status: 'approved' }));
+    await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'approved' }));
     expect(coins.grantReferralCoins).toHaveBeenCalledWith('u1');
   });
 
@@ -137,7 +143,7 @@ describe('CashbackService.handlePostback', () => {
     const { prisma } = updateBranchPrisma({
       id: 'tx1', status: 'PENDING', confirmedAt: null, userId: 'u9', userReward: 35000,
     });
-    await new CashbackService(prisma, config, coins).handlePostback(payload({ status: 'approved' }));
+    await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'approved' }));
     expect(coins.grantReferralCoins).toHaveBeenCalledWith('u9');
   });
 
@@ -148,7 +154,7 @@ describe('CashbackService.handlePostback', () => {
       user: { update: jest.fn() },
       $transaction: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
-    await new CashbackService(prisma, config, coins).handlePostback(payload({ status: 'pending' }));
+    await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'pending' }));
     expect(coins.grantReferralCoins).not.toHaveBeenCalled();
   });
 
@@ -156,7 +162,7 @@ describe('CashbackService.handlePostback', () => {
     const { prisma } = updateBranchPrisma({
       id: 'tx1', status: 'CONFIRMED', confirmedAt: new Date(), userId: 'u1', userReward: 35000,
     });
-    await new CashbackService(prisma, config, coins).handlePostback(payload({ status: 'approved' }));
+    await new CashbackService(prisma, config, coins, notifications).handlePostback(payload({ status: 'approved' }));
     expect(coins.grantReferralCoins).not.toHaveBeenCalled();
   });
 });
@@ -175,18 +181,20 @@ describe('CashbackService.settleConfirmed', () => {
     return { prisma, updateMany, userUpdate };
   }
 
-  it('CONFIRMED quá hold → set PAID atomic + chuyển pending→Ví', async () => {
+  it('CONFIRMED quá hold → set PAID atomic + chuyển pending→Ví + bắn CASHBACK_PAID', async () => {
     const { prisma, updateMany, userUpdate } = settlePrisma([{ id: 'tx1', userId: 'u1', userReward: 35000 }]);
-    await new CashbackService(prisma, config, coins).settleConfirmed();
+    await new CashbackService(prisma, config, coins, notifications).settleConfirmed();
     expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'tx1', status: 'CONFIRMED' });
     expect(userUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: { cashbackPending: { decrement: 35000 }, walletBalance: { increment: 35000 } } }),
     );
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'CASHBACK_PAID', { amount: '35.000' });
   });
 
-  it('multi-instance race: updateMany count=0 → KHÔNG cộng ví lần nữa', async () => {
+  it('multi-instance race: updateMany count=0 → KHÔNG cộng ví lần nữa, KHÔNG thông báo', async () => {
     const { prisma, userUpdate } = settlePrisma([{ id: 'tx1', userId: 'u1', userReward: 35000 }], 0);
-    await new CashbackService(prisma, config, coins).settleConfirmed();
+    await new CashbackService(prisma, config, coins, notifications).settleConfirmed();
     expect(userUpdate).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
   });
 });

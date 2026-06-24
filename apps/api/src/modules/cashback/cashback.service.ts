@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { CoinsService } from '../wallet/coins.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 interface AccesstradePostback {
   utm_content: string; // clickId
@@ -27,6 +28,7 @@ export class CashbackService {
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
     private readonly coins: CoinsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   listMerchants() {
@@ -178,14 +180,14 @@ export class CashbackService {
       where: { status: 'CONFIRMED', confirmedAt: { lte: threshold } },
     });
     for (const tx of due) {
-      await this.prisma.$transaction(async (t) => {
+      const settled = await this.prisma.$transaction(async (t) => {
         // Gate atomic: chỉ settle nếu vẫn CONFIRMED → multi-instance cron không
         // double-credit ví (instance thua cuộc thấy count=0 → bỏ qua).
         const marked = await t.cashbackTransaction.updateMany({
           where: { id: tx.id, status: 'CONFIRMED' },
           data: { status: 'PAID', paidAt: new Date() },
         });
-        if (marked.count === 0) return;
+        if (marked.count === 0) return false;
         await t.user.update({
           where: { id: tx.userId },
           data: {
@@ -193,7 +195,14 @@ export class CashbackService {
             walletBalance: { increment: tx.userReward },
           },
         });
+        return true;
       });
+      // Thông báo tiền đã về Ví (side-effect — lỗi gửi KHÔNG làm hỏng settle/cron).
+      if (settled) {
+        await this.notifications
+          .notify(tx.userId, 'CASHBACK_PAID', { amount: tx.userReward.toLocaleString('vi-VN') })
+          .catch((err) => this.logger.error(`Notify CASHBACK_PAID lỗi: ${err instanceof Error ? err.message : err}`));
+      }
     }
     if (due.length > 0) this.logger.log(`Settle ${due.length} cashback → Ví Tubu.`);
   }
