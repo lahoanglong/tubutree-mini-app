@@ -78,6 +78,9 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'groupbuy.discount_pct', value: 15, category: 'groupbuy', description: '% giảm giá khi mua chung đủ người' },
   { key: 'groupbuy.target_size', value: 3, category: 'groupbuy', description: 'Số người cần để nhóm mua chung thành công' },
   { key: 'groupbuy.window_hours', value: 48, category: 'groupbuy', description: 'Số giờ nhóm mua chung mở trước khi hết hạn' },
+  { key: 'refill.seeds_per_bottle', value: 50, category: 'refill', description: '💧 thưởng cho mỗi vỏ chai đổi' },
+  { key: 'refill.monthly_cap_bottles', value: 20, category: 'refill', description: 'Trần số vỏ chai đổi được mỗi tháng/user (chống lạm dụng)' },
+  { key: 'beta.features', value: [], category: 'beta', description: 'Danh sách tính năng beta hiển thị cho người tham gia (mảng {key,title,desc})' },
   {
     key: 'game.spin_prizes',
     value: [

@@ -261,6 +261,24 @@ export default function GamePage() {
         <Text style={{ color: 'var(--leaf-700)' }}>›</Text>
       </Box>
 
+      {/* Đổi vỏ chai lấy nước (§6.14.6) */}
+      <Box
+        className="tubu-press"
+        mx={3}
+        mt={2}
+        p={3}
+        onClick={() => navigate('/refill')}
+        style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+      >
+        <Box>
+          <Text size="small" bold>♻️ Đổi vỏ chai lấy nước</Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+            Mang vỏ rỗng đến cửa hàng → nhận 💧 tưới vườn
+          </Text>
+        </Box>
+        <Text style={{ color: 'var(--leaf-700)' }}>›</Text>
+      </Box>
+
       {/* Banner mùa/sự kiện (Phase 4) */}
       {season && (
         <Box mx={3} mt={2} p={3} style={{ background: 'linear-gradient(120deg, var(--leaf-50, #eef7ee), var(--sun-50, #fdf6e3))', borderRadius: 'var(--radius-lg)', border: '1px solid var(--leaf-400)' }}>

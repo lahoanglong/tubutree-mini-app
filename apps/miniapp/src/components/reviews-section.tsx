@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchReviews, createReview } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
-import { MultiImageUpload } from './image-upload';
+import { MultiImageUpload, VideoUpload } from './image-upload';
 import { haptic } from '../utils/haptic';
 
 /** Dải sao tĩnh (hiển thị) — size tùy chỉnh. */
@@ -26,14 +26,20 @@ export function Stars({ value, size = 14 }: { value: number; size?: number }) {
 export function ReviewsSection({ slug }: { slug: string }) {
   const { status, login } = useAuthStore();
   const [writing, setWriting] = useState(false);
-  const [filter, setFilter] = useState<number | 'all' | 'photo'>('all');
+  const [filter, setFilter] = useState<number | 'all' | 'photo' | 'video'>('all');
   const [visible, setVisible] = useState(5);
   const reviewsQ = useQuery({ queryKey: ['reviews', slug], queryFn: () => fetchReviews(slug) });
 
   const data = reviewsQ.data;
   const dist = data?.distribution ?? {};
   const filtered = (data?.items ?? []).filter((r) =>
-    filter === 'all' ? true : filter === 'photo' ? r.images.length > 0 : r.rating === filter,
+    filter === 'all'
+      ? true
+      : filter === 'photo'
+        ? r.images.length > 0
+        : filter === 'video'
+          ? !!r.videoUrl
+          : r.rating === filter,
   );
 
   return (
@@ -99,6 +105,7 @@ export function ReviewsSection({ slug }: { slug: string }) {
               { k: 4 as const, label: '4★' },
               { k: 3 as const, label: '3★' },
               { k: 'photo' as const, label: 'Có ảnh' },
+              ...((data.videoCount ?? 0) > 0 ? [{ k: 'video' as const, label: `🎬 Có video (${data.videoCount})` }] : []),
             ]).map((f) => (
               <Text
                 key={String(f.k)}
@@ -164,6 +171,15 @@ export function ReviewsSection({ slug }: { slug: string }) {
                     ))}
                   </Box>
                 )}
+                {r.videoUrl && (
+                  <video
+                    src={r.videoUrl}
+                    controls
+                    preload="metadata"
+                    playsInline
+                    style={{ width: '100%', maxHeight: 220, marginTop: 8, borderRadius: 'var(--radius-sm)', background: '#000' }}
+                  />
+                )}
               </Box>
             ))}
             {filtered.length === 0 && (
@@ -202,6 +218,7 @@ function WriteReview({ slug, onDone }: { slug: string; onDone: () => void }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [images, setImages] = useState<string[]>([]);
+  const [video, setVideo] = useState('');
 
   const submit = useMutation({
     mutationFn: () =>
@@ -209,6 +226,7 @@ function WriteReview({ slug, onDone }: { slug: string; onDone: () => void }) {
         rating,
         comment: comment.trim() || undefined,
         images: images.length > 0 ? images : undefined,
+        videoUrl: video.trim() || undefined,
       }),
     onSuccess: () => {
       haptic('medium');
@@ -247,13 +265,16 @@ function WriteReview({ slug, onDone }: { slug: string; onDone: () => void }) {
         rows={4}
       />
       <MultiImageUpload value={images} onChange={setImages} max={5} />
+      <VideoUpload value={video} onChange={setVideo} />
       <Text
         size="xSmall"
-        style={{ color: images.length > 0 ? 'var(--leaf-700)' : 'var(--neutral-400)', marginTop: 8, fontWeight: images.length > 0 ? 600 : 400 }}
+        style={{ color: video || images.length > 0 ? 'var(--leaf-700)' : 'var(--neutral-400)', marginTop: 8, fontWeight: video || images.length > 0 ? 600 : 400 }}
       >
-        {images.length > 0
-          ? '🌿 Bạn sẽ nhận +10 Điểm Xanh cho đánh giá có ảnh!'
-          : 'Thêm ảnh để nhận +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.'}
+        {video
+          ? '🎬 Tuyệt! Đánh giá có video nhận +15 Điểm Xanh!'
+          : images.length > 0
+            ? '🌿 Bạn sẽ nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.'
+            : 'Thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.'}
       </Text>
       <Button
         fullWidth

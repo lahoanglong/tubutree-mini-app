@@ -31,8 +31,10 @@ export class ReviewsService {
     const existing = await this.prisma.review.findFirst({ where: { userId, productId: product.id } });
     if (existing) throw new BadRequestException('Bạn đã đánh giá sản phẩm này rồi.');
 
+    // Thưởng điểm theo độ phong phú UGC: video (§6.14.9) > ảnh > chỉ chữ.
+    const hasVideo = !!dto.videoUrl;
     const hasImages = (dto.images?.length ?? 0) > 0;
-    const pointsEarned = hasImages ? 10 : 5;
+    const pointsEarned = hasVideo ? 15 : hasImages ? 10 : 5;
 
     let review;
     try {
@@ -45,6 +47,7 @@ export class ReviewsService {
             rating: dto.rating,
             comment: dto.comment,
             images: dto.images ?? [],
+            videoUrl: dto.videoUrl ?? null,
             pointsEarned,
           },
         });
@@ -100,12 +103,14 @@ export class ReviewsService {
     return {
       average: Math.round(avg * 10) / 10,
       count: reviews.length,
+      videoCount: reviews.filter((r) => !!r.videoUrl).length,
       distribution,
       items: reviews.map((r) => ({
         id: r.id,
         rating: r.rating,
         comment: r.comment,
         images: r.images,
+        videoUrl: r.videoUrl,
         createdAt: r.createdAt,
         author: r.user.fullName ?? 'Khách Tubu',
         avatar: r.user.avatarUrl,

@@ -32,17 +32,17 @@ Trạng thái: **✅ xong** · **🟡 một phần / back-office** · **⏳ Phas
 | 6.14.10 Wishlist + Price Drop Alert | 1 | ✅ |
 | 6.14.4 Subscribe & Save | 2 | ✅ (đã làm sớm) |
 | 6.14.3 AI tư vấn 24/7 | 2 | ✅ (chatbot RAG catalog; DeepSeek chính + Gemini dự phòng; rate-limit 10/phút; tắt graceful khi thiếu key) |
-| 6.14.6 Refill/đổi vỏ chai | 2 | ⏳ |
+| 6.14.6 Refill/đổi vỏ chai | 2 | ✅ (đổi vỏ chai rỗng → thưởng 💧 tưới vườn, trần tháng chống lạm dụng, dấu chân xanh tích luỹ; 2026-06-25) |
 | 6.14.8 Mua chung (Group Buy) | 2 | ✅ (mở nhóm/tham gia, đủ người trước hạn → SUCCESS + coupon giảm giá mỗi thành viên; cron hết hạn → FAILED; atomic chống vượt target) |
-| 6.14.9 Review video (UGC) | 2 | ⏳ |
-| 6.14.11 Beta Tester | 2 | ⏳ |
+| 6.14.9 Review video (UGC) | 2 | ✅ (đính kèm video review qua Cloudinary; +15 điểm > ảnh +10 > chữ +5; lọc "có video"; 2026-06-25) |
+| 6.14.11 Beta Tester | 2 | ✅ (tham gia/rời chương trình trải nghiệm sớm + kênh góp ý; gate beta.features cho người tham gia; 2026-06-25) |
 | 6.14.12 Community Feed | 2 | ✅ (bảng tin: bài viết + thả tim 💚 + bình luận; auto-post khi thu hoạch; tên ẩn) |
 
 ## Tổng kết
 - **Toàn bộ §6.1–6.14 đã audit. Phase-1 user-facing hoàn thiện** — miniapp dùng được full chức năng (với COD/Ví/TubuXu; ZaloPay/ZNS/Pancake/Accesstrade/eSMS bật khi có key).
-- **399 unit test pass**, 43 suite (gồm Vườn Xanh 2.0 + TubuXu + Group Buy + Garden plot atomic/guard 2026-06-25). 3-app typecheck + build sạch. API boot + health OK.
+- **413 unit test pass**, 45 suite (gồm Vườn Xanh 2.0 + TubuXu + Group Buy + Garden atomic/guard + Refill + Review video + Beta Tester 2026-06-25). 3-app typecheck + build sạch + migration validate trên PG18 thật.
 - **TubuXu (2026-06-24):** Ví→xu ×1.2; rút bank min 100k/phí 3k; thanh toán đơn bằng xu; mua nước/cây thật bằng xu; giới thiệu bạn thưởng xu 2 chiều khi referee có cashback CONFIRMED. Đối soát: `pnpm --filter @tubutree/api reconcile:points`. Spec: `docs/superpowers/specs/2026-06-24-tubuxu-referral-cashback-design.md`.
 - **Cần bạn quyết/cấp:** (1) cách tính điểm-hạng cho tier-recalc cron §6.6; (2) API keys go-live còn thiếu (ZaloPay/OA-ZNS/Accesstrade/Cloudinary) — xem `.env.production.example`. **Pancake đã có key trong `.env`.**
-- **Đã hoàn thiện thêm (2026-06-24/25):** AI tư vấn 24/7 ✅, Mua chung/Group Buy ✅ (idempotent coupon + cron reconcile), Community Feed ✅, lô đất/mở rộng vườn ✅.
-- **Back-office/Phase-2 còn hoãn có chủ đích:** thưởng quý đại lý, admin Excel giá, **6.14.6 Refill/đổi vỏ chai**, **6.14.9 Review video (UGC)**, **6.14.11 Beta Tester**.
+- **Đã hoàn thiện thêm (2026-06-24/25):** AI tư vấn 24/7 ✅, Mua chung/Group Buy ✅ (idempotent coupon + cron reconcile), Community Feed ✅, lô đất ✅, **Refill/đổi vỏ chai ✅**, **Review video UGC ✅**, **Beta Tester ✅**. → TOÀN BỘ §6.14 Discovery đã xong.
+- **Back-office còn hoãn có chủ đích (không phải user-facing):** thưởng quý đại lý, admin upload Excel giá, DealerPriceHistory.
 - Deploy: xem `docs/DEPLOY-GCP.md` (đã push GitHub, đợi bạn dựng VM).

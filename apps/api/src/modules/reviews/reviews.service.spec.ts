@@ -77,6 +77,20 @@ describe('ReviewsService.create', () => {
     expect(ptx.mock.calls[0][0].data.delta).toBe(10);
   });
 
+  it('có video (UGC) → +15 điểm + lưu videoUrl', async () => {
+    const prisma = makePrisma();
+    await new ReviewsService(prisma).create('u1', 'tinh-dau', {
+      ...dto,
+      videoUrl: 'https://res.cloudinary.com/x/video/upload/v1/rv.mp4',
+    } as never);
+    const p = prisma as unknown as {
+      pointsTransaction: { create: jest.Mock };
+      review: { create: jest.Mock };
+    };
+    expect(p.pointsTransaction.create.mock.calls[0][0].data.delta).toBe(15); // video > ảnh > text
+    expect(p.review.create.mock.calls[0][0].data.videoUrl).toBe('https://res.cloudinary.com/x/video/upload/v1/rv.mp4');
+  });
+
   it('race P2002 khi tạo → dịch sang BadRequest', async () => {
     const prisma = makePrisma();
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
@@ -85,6 +99,25 @@ describe('ReviewsService.create', () => {
     await expect(new ReviewsService(prisma).create('u1', 'tinh-dau', dto as never)).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+});
+
+describe('ReviewsService.listByProduct (video UGC §6.14.9)', () => {
+  it('trả videoUrl trong items + videoCount đếm review có video', async () => {
+    const prisma = makePrisma({
+      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', slug: 'tinh-dau' }) },
+      review: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'r1', rating: 5, comment: 'tốt', images: [], videoUrl: 'https://x/v.mp4', createdAt: new Date(), user: { fullName: 'An', avatarUrl: null } },
+          { id: 'r2', rating: 4, comment: 'ổn', images: ['a.jpg'], videoUrl: null, createdAt: new Date(), user: { fullName: 'Bình', avatarUrl: null } },
+        ]),
+      },
+    });
+    const r = await new ReviewsService(prisma).listByProduct('tinh-dau');
+    expect(r.count).toBe(2);
+    expect(r.videoCount).toBe(1);
+    expect(r.items[0]!.videoUrl).toBe('https://x/v.mp4');
+    expect(r.items[1]!.videoUrl).toBeNull();
   });
 });
 

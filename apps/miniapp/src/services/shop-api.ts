@@ -157,6 +157,7 @@ export interface ReviewItem {
   rating: number;
   comment: string | null;
   images: string[];
+  videoUrl: string | null;
   createdAt: string;
   author: string;
   avatar: string | null;
@@ -165,6 +166,7 @@ export interface ReviewItem {
 export interface ReviewSummary {
   average: number;
   count: number;
+  videoCount?: number;
   distribution?: Record<string, number>;
   items: ReviewItem[];
 }
@@ -172,7 +174,7 @@ export const fetchReviews = (slug: string) =>
   api.get<ReviewSummary>(`/products/${slug}/reviews`).then((r) => r.data);
 export const createReview = (
   slug: string,
-  data: { rating: number; comment?: string; images?: string[] },
+  data: { rating: number; comment?: string; images?: string[]; videoUrl?: string },
 ) => api.post<ReviewItem>(`/products/${slug}/reviews`, data).then((r) => r.data);
 
 // Orders

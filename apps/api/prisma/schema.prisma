@@ -76,6 +76,9 @@ model User {
   feedComments        FeedComment[]
   groupBuysStarted    GroupBuy[]     @relation("GroupBuysStarted")
   groupBuyMemberships GroupBuyMember[]
+  bottleReturns       BottleReturn[]
+  betaTester          BetaTester?
+  betaFeedbacks       BetaFeedback[]
 
   @@index([referredById])
   @@map("users")
@@ -799,6 +802,46 @@ model GardenPlot {
   @@map("garden_plots")
 }
 
+// Refill / đổi vỏ chai (§6.14.6) — mỗi lần khách đổi vỏ chai rỗng lấy thưởng 💧.
+model BottleReturn {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quantity     Int // số vỏ chai đổi lần này
+  seedsAwarded Int // 💧 đã thưởng
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("bottle_returns")
+}
+
+// Beta Tester (§6.14.11) — chương trình trải nghiệm sớm + kênh góp ý.
+model BetaTester {
+  id       String     @id @default(cuid())
+  userId   String     @unique
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status   BetaStatus @default(ACTIVE)
+  joinedAt DateTime   @default(now())
+
+  @@map("beta_testers")
+}
+
+enum BetaStatus {
+  ACTIVE
+  LEFT
+}
+
+model BetaFeedback {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("beta_feedbacks")
+}
+
 // Community Feed (§6.14.12) — bảng tin cộng đồng Vườn Xanh.
 // kind: MANUAL (user tự đăng) / HARVEST / MILESTONE / SPECIES (auto-post thành tích).
 model FeedPost {
@@ -1012,6 +1055,7 @@ model Review {
   rating       Int
   comment      String?
   images       String[]
+  videoUrl     String? // review video (UGC §6.14.9)
   pointsEarned Int      @default(0)
   isVerified   Boolean  @default(true)
   isVisible    Boolean  @default(true)
