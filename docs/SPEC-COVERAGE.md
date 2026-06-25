@@ -40,8 +40,9 @@ Trạng thái: **✅ xong** · **🟡 một phần / back-office** · **⏳ Phas
 
 ## Tổng kết
 - **Toàn bộ §6.1–6.14 đã audit. Phase-1 user-facing hoàn thiện** — miniapp dùng được full chức năng (với COD/Ví/TubuXu; ZaloPay/ZNS/Pancake/Accesstrade/eSMS bật khi có key).
-- **331 unit test pass**, 38 suite (gồm Vườn Xanh 2.0 + TubuXu: wallet/coins/convert/referral/cashback + review money-path 2026-06-24). 3-app typecheck + build sạch. API boot + health OK.
+- **399 unit test pass**, 43 suite (gồm Vườn Xanh 2.0 + TubuXu + Group Buy + Garden plot atomic/guard 2026-06-25). 3-app typecheck + build sạch. API boot + health OK.
 - **TubuXu (2026-06-24):** Ví→xu ×1.2; rút bank min 100k/phí 3k; thanh toán đơn bằng xu; mua nước/cây thật bằng xu; giới thiệu bạn thưởng xu 2 chiều khi referee có cashback CONFIRMED. Đối soát: `pnpm --filter @tubutree/api reconcile:points`. Spec: `docs/superpowers/specs/2026-06-24-tubuxu-referral-cashback-design.md`.
 - **Cần bạn quyết/cấp:** (1) cách tính điểm-hạng cho tier-recalc cron §6.6; (2) API keys go-live còn thiếu (ZaloPay/OA-ZNS/Accesstrade/Cloudinary) — xem `.env.production.example`. **Pancake đã có key trong `.env`.**
-- **Back-office/Phase-2 hoãn có chủ đích:** thưởng quý đại lý, admin Excel giá, AI tư vấn, group buy, review video, community feed.
+- **Đã hoàn thiện thêm (2026-06-24/25):** AI tư vấn 24/7 ✅, Mua chung/Group Buy ✅ (idempotent coupon + cron reconcile), Community Feed ✅, lô đất/mở rộng vườn ✅.
+- **Back-office/Phase-2 còn hoãn có chủ đích:** thưởng quý đại lý, admin Excel giá, **6.14.6 Refill/đổi vỏ chai**, **6.14.9 Review video (UGC)**, **6.14.11 Beta Tester**.
 - Deploy: xem `docs/DEPLOY-GCP.md` (đã push GitHub, đợi bạn dựng VM).

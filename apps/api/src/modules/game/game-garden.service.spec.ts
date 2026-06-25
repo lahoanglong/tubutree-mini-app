@@ -217,6 +217,14 @@ describe('GameGardenService.waterPlot', () => {
     expect(prisma.plantedTree.create).toHaveBeenCalledTimes(1);
   });
 
+  it('lô có target <= 0 (config lỗi) → throw, KHÔNG treo vòng lặp vô hạn', async () => {
+    const prisma = makePrisma();
+    (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 0, target: 0 }));
+    const svc = new GameGardenService(prisma, makeConfig());
+    await expect(svc.waterPlot('u1', 'p1', 20)).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.gardenPlot.update).not.toHaveBeenCalled();
+  }, 3000);
+
   it('tưới lô CHẾT (≥ death_days) → reset tiến trình rồi +drops, revivedFromDead', async () => {
     const prisma = makePrisma();
     (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(
@@ -227,6 +235,27 @@ describe('GameGardenService.waterPlot', () => {
     expect(r.revivedFromDead).toBe(true);
     expect(r.progress).toBe(20);
     expect(r.harvested).toBe(false);
+  });
+
+  it('thu hoạch gói trừ-nước + cấp-thưởng + cập-nhật-lô trong 1 $transaction (atomic)', async () => {
+    const prisma = makePrisma();
+    (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 590, target: 600 }));
+    const svc = new GameGardenService(prisma, makeConfig());
+    await svc.waterPlot('u1', 'p1', 20);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    // các thao tác ghi (trừ nước, coupon, cây thật, cập nhật lô) phải nằm TRONG transaction
+    expect(prisma.gameProfile.updateMany).toHaveBeenCalled();
+    expect(prisma.coupon.create).toHaveBeenCalledTimes(1);
+    expect(prisma.plantedTree.create).toHaveBeenCalledTimes(1);
+    expect(prisma.gardenPlot.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('cập-nhật-lô lỗi → throw (không nuốt) → cả transaction rollback (trừ nước không thoát)', async () => {
+    const prisma = makePrisma();
+    (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 590, target: 600 }));
+    (prisma.gardenPlot.update as jest.Mock).mockRejectedValue(new Error('db down'));
+    const svc = new GameGardenService(prisma, makeConfig());
+    await expect(svc.waterPlot('u1', 'p1', 20)).rejects.toThrow('db down');
   });
 
   it('thu hoạch → sưu tập loài (collection) + góp hồ cộng đồng (community)', async () => {

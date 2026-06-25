@@ -93,18 +93,77 @@ export class GroupBuyService {
     return { joined: true, currentSize: result.currentSize, status: result.succeeded ? 'SUCCESS' : 'OPEN' };
   }
 
-  /** Nhóm đủ người: cấp coupon giảm giá cho từng thành viên + thông báo. Lỗi 1 người không chặn người khác. */
+  /**
+   * Nhóm đủ người: cấp coupon giảm giá cho từng thành viên + thông báo.
+   * Chỉ đánh dấu `couponsGrantedAt` khi TẤT CẢ thành viên đã có coupon — nếu còn sót
+   * (lỗi DB tạm thời), để null cho cron `reconcileSuccessfulGroups` thử lại sau.
+   */
   private async onSuccess(group: GroupRow) {
+    const allGranted = await this.grantAllMembers(group);
+    if (allGranted) await this.markGranted(group.id);
+  }
+
+  /** Cấp coupon (idempotent qua mã tất định + @unique) + thông báo MỚI cho từng thành viên.
+   *  Trả true nếu mọi thành viên đều đã có coupon (mới cấp hoặc đã có sẵn — P2002). */
+  private async grantAllMembers(group: GroupRow): Promise<boolean> {
     const members = await this.prisma.groupBuyMember.findMany({ where: { groupBuyId: group.id } });
     const discount = group.basePrice - group.unitPrice;
+    let allGranted = true;
     for (const m of members) {
-      await this.grantCoupon(m.userId, discount).catch((e) => this.logger.warn(`grantCoupon lỗi: ${(e as Error).message}`));
-      if (this.notifications) {
+      let newlyGranted = false;
+      try {
+        await this.grantCoupon(group.id, m.userId, discount);
+        newlyGranted = true;
+      } catch (e) {
+        if (this.isAlreadyGranted(e)) {
+          newlyGranted = false; // đã cấp ở lần trước → coi như đã có, KHÔNG thông báo lại
+        } else {
+          allGranted = false;
+          this.logger.warn(`grantCoupon lỗi (nhóm ${group.id}, user ${m.userId}): ${(e as Error).message}`);
+        }
+      }
+      // Chỉ thông báo khi coupon vừa được cấp mới (tránh spam khi reconcile chạy lại).
+      if (newlyGranted && this.notifications) {
         await this.notifications
           .notify(m.userId, 'GROUP_BUY_SUCCESS', { discount: discount.toLocaleString('vi-VN') })
           .catch((e) => this.logger.warn(`notify lỗi: ${(e as Error).message}`));
       }
     }
+    return allGranted;
+  }
+
+  private async markGranted(groupBuyId: string): Promise<void> {
+    await this.prisma.groupBuy
+      .update({ where: { id: groupBuyId }, data: { couponsGrantedAt: new Date() } })
+      .catch((e) => this.logger.warn(`markGranted lỗi (${groupBuyId}): ${(e as Error).message}`));
+  }
+
+  /** P2002 (unique violation trên coupon.code tất định) = coupon đã tồn tại → idempotent OK. */
+  private isAlreadyGranted(e: unknown): boolean {
+    return (e as { code?: string } | null)?.code === 'P2002';
+  }
+
+  /**
+   * Cron đối soát: nhóm đã SUCCESS nhưng chưa phát đủ coupon (couponsGrantedAt null) → cấp lại.
+   * Bù cho trường hợp `onSuccess` lỗi DB tạm thời ở 1 vài thành viên. Mã coupon tất định +
+   * @unique đảm bảo cấp lại KHÔNG tạo trùng. Giới hạn quét nhóm gần đây để chặn chi phí.
+   */
+  async reconcileSuccessfulGroups(maxAgeHours = 72): Promise<number> {
+    const since = new Date(Date.now() - maxAgeHours * 3600 * 1000);
+    const groups = (await this.prisma.groupBuy.findMany({
+      where: { status: 'SUCCESS', couponsGrantedAt: null, createdAt: { gte: since } },
+      take: 100,
+    })) as unknown as GroupRow[];
+    let fixed = 0;
+    for (const g of groups) {
+      const allGranted = await this.grantAllMembers(g);
+      if (allGranted) {
+        await this.markGranted(g.id);
+        fixed += 1;
+      }
+    }
+    if (fixed > 0) this.logger.log(`reconcile: đã phát đủ coupon cho ${fixed} nhóm mua chung SUCCESS.`);
+    return fixed;
   }
 
   async getGroup(groupBuyId: string, userId?: string) {
@@ -162,8 +221,9 @@ export class GroupBuyService {
     };
   }
 
-  private async grantCoupon(userId: string, amount: number): Promise<string> {
-    const code = `GROUP${amount}-${userId.slice(-5)}-${Math.floor(Math.random() * 9000 + 1000)}`.toUpperCase();
+  /** Mã TẤT ĐỊNH theo (nhóm, user) → cấp lại an toàn: coupon.code @unique chặn trùng (P2002). */
+  private async grantCoupon(groupBuyId: string, userId: string, amount: number): Promise<string> {
+    const code = `GBUY-${groupBuyId.slice(-8)}-${userId.slice(-8)}`.toUpperCase();
     const end = new Date();
     end.setDate(end.getDate() + 30);
     await this.prisma.coupon.create({
@@ -175,7 +235,7 @@ export class GroupBuyService {
         endAt: end,
         perUserLimit: 1,
         scope: 'USER_GROUP',
-        scopeMeta: { userId } as object,
+        scopeMeta: { userId, groupBuyId } as object,
       },
     });
     return code;

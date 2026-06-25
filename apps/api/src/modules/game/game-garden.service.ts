@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -10,6 +11,7 @@ import { DEFAULT_TREE_TYPE } from './game.constants';
 
 type TreeHealth = 'HEALTHY' | 'WILTED' | 'DEAD';
 type UnlockCurrency = 'SEEDS' | 'XU';
+type Db = PrismaService | Prisma.TransactionClient;
 
 interface PlotView {
   id: string | null; // null = lô nhà (slot 0, từ GameProfile)
@@ -138,55 +140,67 @@ export class GameGardenService {
     if (!Number.isInteger(drops) || drops <= 0) throw new BadRequestException('Số giọt nước không hợp lệ.');
     const plot = await this.prisma.gardenPlot.findFirst({ where: { id: plotId, userId } });
     if (!plot) throw new NotFoundException('Không tìm thấy lô đất.');
-
-    // Trừ nước ATOMIC từ bình chung (GameProfile.totalSeeds).
-    const dec = await this.prisma.gameProfile.updateMany({
-      where: { userId, totalSeeds: { gte: drops } },
-      data: { totalSeeds: { decrement: drops } },
-    });
-    if (dec.count === 0) throw new BadRequestException('Không đủ giọt nước.');
+    // Guard target hợp lệ: nếu config lỗi để target<=0 thì vòng `while (progress >= target)`
+    // dưới đây sẽ lặp vô hạn (treo API + OOM). Fail-fast thay vì treo.
+    if (!Number.isInteger(plot.target) || plot.target <= 0) {
+      throw new BadRequestException('Lô đất chưa cấu hình mục tiêu hợp lệ.');
+    }
 
     const deathDays = await this.config.get<number>('game.death_days', 7);
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
 
-    let progress = plot.progress;
-    // §6.7.3: lô CHẾT (≥ death_days không tưới, có tiến trình) → reset, trồng lại.
-    let revivedFromDead = false;
-    if (
-      plot.lastWateredAt &&
-      progress > 0 &&
-      (Date.now() - new Date(plot.lastWateredAt).getTime()) / 864e5 >= deathDays
-    ) {
-      progress = 0;
-      revivedFromDead = true;
-    }
-    progress += drops;
+    // ATOMIC: trừ nước + cấp thưởng (coupon/cây thật) + cập nhật lô trong CÙNG 1 transaction.
+    // Nếu bất kỳ bước nào lỗi → rollback cả cụm: không thể "trừ nước rồi mất", cũng không
+    // "cấp thưởng nhưng không lưu progress" (lỗ hổng thu-hoạch-lại trước đây).
+    const tx = await this.prisma.$transaction(async (db) => {
+      const dec = await db.gameProfile.updateMany({
+        where: { userId, totalSeeds: { gte: drops } },
+        data: { totalSeeds: { decrement: drops } },
+      });
+      if (dec.count === 0) throw new BadRequestException('Không đủ giọt nước.');
 
-    let treesPlanted = plot.treesPlanted;
-    let harvestCount = 0;
-    let couponCode: string | undefined;
-    let certificateCode: string | undefined;
-    while (progress >= plot.target) {
-      progress -= plot.target;
-      treesPlanted += 1;
-      harvestCount += 1;
-      couponCode = await this.grantCoupon(userId, harvestAmount);
-      certificateCode = await this.plantTree(userId, plot.treeType);
-    }
+      let progress = plot.progress;
+      // §6.7.3: lô CHẾT (≥ death_days không tưới, có tiến trình) → reset, trồng lại.
+      let revivedFromDead = false;
+      if (
+        plot.lastWateredAt &&
+        progress > 0 &&
+        (Date.now() - new Date(plot.lastWateredAt).getTime()) / 864e5 >= deathDays
+      ) {
+        progress = 0;
+        revivedFromDead = true;
+      }
+      progress += drops;
+
+      let treesPlanted = plot.treesPlanted;
+      let harvestCount = 0;
+      let couponCode: string | undefined;
+      let certificateCode: string | undefined;
+      while (progress >= plot.target) {
+        progress -= plot.target;
+        treesPlanted += 1;
+        harvestCount += 1;
+        couponCode = await this.grantCoupon(userId, harvestAmount, db);
+        certificateCode = await this.plantTree(userId, plot.treeType, db);
+      }
+
+      const stage = Math.min(4, Math.max(1, Math.ceil((progress / plot.target) * 4)));
+      await db.gardenPlot.update({
+        where: { id: plot.id },
+        data: { progress, treeStage: stage, treesPlanted, lastWateredAt: new Date() },
+      });
+      return { progress, treesPlanted, harvestCount, couponCode, certificateCode, revivedFromDead };
+    });
+
+    const { progress, treesPlanted, harvestCount, couponCode, certificateCode, revivedFromDead } = tx;
     const harvested = harvestCount > 0;
 
-    // Phase 3: thu hoạch → sưu tập 1 loài. Lỗi sưu tập không chặn thu hoạch.
+    // Phase 3: thu hoạch → sưu tập 1 loài. Lỗi sưu tập không chặn thu hoạch (ngoài tx, best-effort).
     let species: { name: string; emoji: string; rarity: string; ecoFact: string | null } | undefined;
     if (harvested && this.collection) {
       const got = await this.collection.collectOnHarvest(userId).catch(() => null);
       if (got) species = { name: got.name, emoji: got.emoji, rarity: got.rarity, ecoFact: got.ecoFact };
     }
-
-    const stage = Math.min(4, Math.max(1, Math.ceil((progress / plot.target) * 4)));
-    await this.prisma.gardenPlot.update({
-      where: { id: plot.id },
-      data: { progress, treeStage: stage, treesPlanted, lastWateredAt: new Date() },
-    });
 
     // Phase 2: thu hoạch → 💧 đã nuôi cây góp vào hồ cộng đồng. Lỗi góp hồ không chặn thu hoạch.
     if (harvested && this.community) {
@@ -249,11 +263,11 @@ export class GameGardenService {
     return 'HEALTHY';
   }
 
-  private async grantCoupon(userId: string, amount: number): Promise<string> {
+  private async grantCoupon(userId: string, amount: number, db: Db = this.prisma): Promise<string> {
     const code = `GARDEN${amount}-${userId.slice(-5)}-${Math.floor(Math.random() * 9000 + 1000)}`.toUpperCase();
     const end = new Date();
     end.setDate(end.getDate() + 30);
-    await this.prisma.coupon.create({
+    await db.coupon.create({
       data: {
         code,
         type: 'AMOUNT',
@@ -268,9 +282,9 @@ export class GameGardenService {
     return code;
   }
 
-  private async plantTree(userId: string, treeType: string): Promise<string> {
+  private async plantTree(userId: string, treeType: string, db: Db = this.prisma): Promise<string> {
     const certificateCode = `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
-    await this.prisma.plantedTree.create({ data: { userId, treeType, certificateCode } });
+    await db.plantedTree.create({ data: { userId, treeType, certificateCode } });
     return certificateCode;
   }
 

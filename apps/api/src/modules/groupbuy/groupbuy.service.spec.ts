@@ -119,6 +119,52 @@ describe('GroupBuyService.join', () => {
     expect(c.value).toBe(15000); // basePrice 100000 − unitPrice 85000
   });
 
+  it('join đủ target → mã coupon TẤT ĐỊNH theo (nhóm,user) + đánh dấu couponsGrantedAt', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findUnique as jest.Mock)
+      .mockResolvedValueOnce(group({ id: 'gbABC', currentSize: 2, targetSize: 3 }))
+      .mockResolvedValueOnce(group({ id: 'gbABC', currentSize: 3, targetSize: 3 }));
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'userZZZ' }]);
+    await new GroupBuyService(prisma, makeConfig()).join('u1', 'gbABC');
+    const code = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data.code as string;
+    // tất định: KHÔNG số ngẫu nhiên — chạy lại cho ra đúng mã này (để @unique chặn cấp trùng)
+    expect(code).toBe(`GBUY-GBABC-USERZZZ`);
+    // cấp xong không lỗi → đánh dấu đã phát coupon
+    const marked = (prisma.groupBuy.update as jest.Mock).mock.calls.find(
+      (c) => c[0]?.data?.couponsGrantedAt,
+    );
+    expect(marked).toBeTruthy();
+  });
+
+  it('grant coupon gặp P2002 (đã có) → coi như đã cấp, KHÔNG re-notify, vẫn đánh dấu granted', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findUnique as jest.Mock)
+      .mockResolvedValueOnce(group({ currentSize: 2, targetSize: 3 }))
+      .mockResolvedValueOnce(group({ currentSize: 3, targetSize: 3 }));
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u0' }]);
+    (prisma.coupon.create as jest.Mock).mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' }));
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const svc = new GroupBuyService(prisma, makeConfig(), notifications as never);
+    const r = await svc.join('u1', 'gb1');
+    expect(r.status).toBe('SUCCESS'); // P2002 không làm hỏng flow
+    expect(notifications.notify).not.toHaveBeenCalled(); // đã cấp trước đó → không spam thông báo lại
+    const marked = (prisma.groupBuy.update as jest.Mock).mock.calls.find((c) => c[0]?.data?.couponsGrantedAt);
+    expect(marked).toBeTruthy();
+  });
+
+  it('grant coupon lỗi thật (không phải P2002) → KHÔNG đánh dấu granted (để reconcile thử lại)', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findUnique as jest.Mock)
+      .mockResolvedValueOnce(group({ currentSize: 2, targetSize: 3 }))
+      .mockResolvedValueOnce(group({ currentSize: 3, targetSize: 3 }));
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u0' }]);
+    (prisma.coupon.create as jest.Mock).mockRejectedValue(new Error('db down'));
+    const r = await new GroupBuyService(prisma, makeConfig()).join('u1', 'gb1');
+    expect(r.status).toBe('SUCCESS'); // join vẫn thành công (lỗi cấp coupon không chặn)
+    const marked = (prisma.groupBuy.update as jest.Mock).mock.calls.find((c) => c[0]?.data?.couponsGrantedAt);
+    expect(marked).toBeFalsy(); // chưa cấp đủ → không đánh dấu
+  });
+
   it('race: increment guard count=0 (nhóm vừa đủ) → throw, rollback', async () => {
     const prisma = makePrisma();
     (prisma.groupBuy.findUnique as jest.Mock).mockResolvedValue(group({ currentSize: 2, targetSize: 3 }));
@@ -148,5 +194,30 @@ describe('GroupBuyService.listOpen / expireGroups', () => {
     const call = (prisma.groupBuy.updateMany as jest.Mock).mock.calls[0][0];
     expect(call.where.status).toBe('OPEN');
     expect(call.data.status).toBe('FAILED');
+  });
+});
+
+describe('GroupBuyService.reconcileSuccessfulGroups', () => {
+  it('nhóm SUCCESS chưa phát coupon (couponsGrantedAt null) → cấp lại cho mọi thành viên + đánh dấu', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([group({ id: 'gbX', status: 'SUCCESS' })]);
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u0' }, { userId: 'uA' }]);
+    const n = await new GroupBuyService(prisma, makeConfig()).reconcileSuccessfulGroups();
+    expect(n).toBe(1);
+    // chỉ quét nhóm SUCCESS chưa granted
+    const where = (prisma.groupBuy.findMany as jest.Mock).mock.calls[0][0].where;
+    expect(where.status).toBe('SUCCESS');
+    expect(where.couponsGrantedAt).toBeNull();
+    expect(prisma.coupon.create).toHaveBeenCalledTimes(2); // 2 thành viên
+    const marked = (prisma.groupBuy.update as jest.Mock).mock.calls.find((c) => c[0]?.data?.couponsGrantedAt);
+    expect(marked).toBeTruthy();
+  });
+
+  it('không có nhóm cần reconcile → trả 0, không cấp coupon', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([]);
+    const n = await new GroupBuyService(prisma, makeConfig()).reconcileSuccessfulGroups();
+    expect(n).toBe(0);
+    expect(prisma.coupon.create).not.toHaveBeenCalled();
   });
 });

@@ -865,9 +865,11 @@ model GroupBuy {
   status      GroupBuyStatus   @default(OPEN)
   expiresAt   DateTime
   createdAt   DateTime         @default(now())
+  couponsGrantedAt DateTime? // đã phát đủ coupon cho mọi thành viên? null = chưa/còn sót → cron reconcile
   members     GroupBuyMember[]
 
   @@index([status, expiresAt])
+  @@index([status, couponsGrantedAt]) // cron reconcile quét nhóm SUCCESS chưa phát đủ coupon
   @@index([productId])
   @@map("group_buys")
 }
