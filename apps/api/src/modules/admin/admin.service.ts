@@ -254,4 +254,53 @@ export class AdminService {
       },
     });
   }
+
+  // ── Import bảng giá đại lý theo bậc (§ back-office "admin Excel giá") ──
+  /**
+   * Nhập/đè giá đại lý cho 1 BẬC (tierId) từ danh sách {sku, price}.
+   * Ghi vào Variation.dealerPrices[tierId] (MERGE, không mất bậc khác) + lưu DealerPriceHistory
+   * (old→new, ai đổi) để truy vết. Bỏ qua dòng lỗi (sku rỗng/giá ≤ 0), gom SKU không tồn tại.
+   */
+  async importDealerPrices(adminId: string, tierId: string, rows: { sku: string; price: number }[]) {
+    const tier = await this.prisma.dealerTier.findUnique({ where: { id: tierId } });
+    if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
+
+    let updated = 0;
+    const notFound: string[] = [];
+    for (const row of rows ?? []) {
+      const sku = String(row?.sku ?? '').trim();
+      const price = Math.round(Number(row?.price));
+      if (!sku || !Number.isFinite(price) || price <= 0) continue; // bỏ dòng lỗi
+
+      const v = await this.prisma.variation.findUnique({ where: { sku } });
+      if (!v) {
+        notFound.push(sku);
+        continue;
+      }
+      const current = ((v.dealerPrices as Record<string, number> | null) ?? {});
+      const oldPrice = typeof current[tierId] === 'number' ? current[tierId] : null;
+      if (oldPrice === price) continue; // không đổi → không ghi lịch sử thừa
+
+      await this.prisma.$transaction([
+        this.prisma.variation.update({
+          where: { id: v.id },
+          data: { dealerPrices: { ...current, [tierId]: price } },
+        }),
+        this.prisma.dealerPriceHistory.create({
+          data: { variationId: v.id, sku, tierId, oldPrice, newPrice: price, changedBy: adminId },
+        }),
+      ]);
+      updated += 1;
+    }
+    return { tierId, updated, notFound, skipped: (rows?.length ?? 0) - updated - notFound.length };
+  }
+
+  /** Lịch sử đổi giá đại lý (mới nhất trước), lọc theo variation nếu có. */
+  getDealerPriceHistory(variationId?: string) {
+    return this.prisma.dealerPriceHistory.findMany({
+      where: variationId ? { variationId } : {},
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+  }
 }

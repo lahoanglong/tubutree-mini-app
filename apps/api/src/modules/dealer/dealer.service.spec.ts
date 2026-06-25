@@ -83,3 +83,58 @@ describe('DealerService.quarterlyReport (thưởng doanh số quý)', () => {
     expect(r.nextTier).toBeNull();
   });
 });
+
+describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () => {
+  const TIERS = [
+    { min: 50_000_000, pct: 2 },
+    { min: 100_000_000, pct: 3 },
+    { min: 200_000_000, pct: 4 },
+  ];
+  // 2026-04-15 → quý vừa kết thúc = Q1/2026 (theo giờ VN).
+  const NOW = new Date('2026-04-15T00:00:00Z');
+
+  function prismaForPayout(over: Record<string, unknown> = {}) {
+    const base: Record<string, unknown> = {
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 }, _count: 0 }) },
+      dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    };
+    return { ...base, ...over } as unknown as PrismaService;
+  }
+
+  it('đại lý đạt mốc → cộng thưởng (delta âm = giảm công nợ) + thông báo', async () => {
+    const prisma = prismaForPayout({
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
+      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 120_000_000 }, _count: 5 }) },
+    });
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const r = await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS }), notifications as never).payoutQuarterlyBonuses(NOW);
+    expect(r).toEqual({ paid: 1, quarter: 'Q1/2026' });
+    const led = (prisma.dealerCreditLedger.create as jest.Mock).mock.calls[0][0].data;
+    expect(led).toMatchObject({ userId: 'd1', delta: -3_600_000, refType: 'QUARTER_BONUS', refId: 'Q1/2026' }); // 120tr × 3%
+    expect(notifications.notify).toHaveBeenCalledWith('d1', 'DEALER_BONUS_PAID', expect.objectContaining({ quarter: 'Q1/2026' }));
+  });
+
+  it('doanh số dưới mốc thấp nhất → KHÔNG cộng thưởng', async () => {
+    const prisma = prismaForPayout({
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
+      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 10_000_000 }, _count: 1 }) },
+    });
+    const r = await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS })).payoutQuarterlyBonuses(NOW);
+    expect(r.paid).toBe(0);
+    expect(prisma.dealerCreditLedger.create).not.toHaveBeenCalled();
+  });
+
+  it('đã trả thưởng quý này rồi → idempotent skip', async () => {
+    const prisma = prismaForPayout({
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
+      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 120_000_000 }, _count: 5 }) },
+      dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue({ id: 'existing' }), create: jest.fn().mockResolvedValue({}) },
+    });
+    const r = await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS })).payoutQuarterlyBonuses(NOW);
+    expect(r.paid).toBe(0);
+    expect(prisma.dealerCreditLedger.create).not.toHaveBeenCalled();
+    const where = (prisma.dealerCreditLedger.findFirst as jest.Mock).mock.calls[0][0].where;
+    expect(where).toMatchObject({ userId: 'd1', refType: 'QUARTER_BONUS', refId: 'Q1/2026' });
+  });
+});

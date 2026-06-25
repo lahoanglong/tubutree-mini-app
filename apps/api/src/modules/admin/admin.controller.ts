@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import {
   Allow,
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -39,6 +40,25 @@ class CreateCouponDto {
   @IsOptional() @IsInt() perUserLimit?: number;
   @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE'])
   scope!: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE';
+}
+class ImportDealerPricesDto {
+  @IsString() tierId!: string;
+  // Dán trực tiếp 2 cột Excel "sku,giá" (mỗi dòng 1 SKU). Hoặc gửi rows JSON.
+  @IsOptional() @IsString() csv?: string;
+  @IsOptional() @IsArray() rows?: { sku: string; price: number }[];
+}
+
+/** Parse CSV "sku,giá" (phân tách , ; hoặc tab); bỏ dòng header/giá không hợp lệ. */
+function parseDealerPriceCsv(csv: string): { sku: string; price: number }[] {
+  return csv
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [sku, priceRaw] = line.split(/[,;\t]/);
+      return { sku: (sku ?? '').trim(), price: Number((priceRaw ?? '').replace(/[^\d.-]/g, '')) };
+    })
+    .filter((r) => r.sku && Number.isFinite(r.price) && r.price > 0);
 }
 
 @Roles('ADMIN')
@@ -89,5 +109,17 @@ export class AdminController {
   @Post('coupons')
   createCoupon(@Body() dto: CreateCouponDto) {
     return this.admin.createCoupon(dto);
+  }
+
+  // Import bảng giá đại lý theo bậc (dán CSV "sku,giá" từ Excel hoặc gửi rows JSON).
+  @Post('dealer-prices/import')
+  importDealerPrices(@CurrentUser('sub') adminId: string, @Body() dto: ImportDealerPricesDto) {
+    const rows = dto.csv ? parseDealerPriceCsv(dto.csv) : (dto.rows ?? []);
+    return this.admin.importDealerPrices(adminId, dto.tierId, rows);
+  }
+
+  @Get('dealer-prices/history')
+  dealerPriceHistory(@Query('variationId') variationId?: string) {
+    return this.admin.getDealerPriceHistory(variationId);
   }
 }

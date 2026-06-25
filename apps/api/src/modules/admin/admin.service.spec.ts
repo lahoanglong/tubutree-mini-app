@@ -357,3 +357,67 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     );
   });
 });
+
+describe('AdminService.importDealerPrices (import bảng giá đại lý theo bậc)', () => {
+  function importPrisma(over: Record<string, unknown> = {}) {
+    const base = {
+      dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1', name: 'Bạc' }) },
+      variation: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'v1', sku: 'SKU-1', dealerPrices: { t0: 99000 } }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      dealerPriceHistory: { create: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn().mockResolvedValue([]),
+    };
+    return { ...base, ...over } as unknown as PrismaService;
+  }
+
+  it('bậc đại lý không tồn tại → BadRequest', async () => {
+    const prisma = importPrisma({ dealerTier: { findUnique: jest.fn().mockResolvedValue(null) } });
+    await expect(mkAdmin(prisma).importDealerPrices('admin1', 'bad', [{ sku: 'SKU-1', price: 100000 }])).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('import hợp lệ → MERGE giá vào dealerPrices[tierId] + ghi DealerPriceHistory (old→new)', async () => {
+    const prisma = importPrisma();
+    const r = await mkAdmin(prisma).importDealerPrices('admin1', 't1', [{ sku: 'SKU-1', price: 180000 }]);
+    expect(r).toMatchObject({ tierId: 't1', updated: 1, notFound: [] });
+    const upd = (prisma.variation.update as jest.Mock).mock.calls[0][0];
+    expect(upd.where).toEqual({ id: 'v1' });
+    expect(upd.data.dealerPrices).toEqual({ t0: 99000, t1: 180000 }); // merge, không mất bậc khác
+    const hist = (prisma.dealerPriceHistory.create as jest.Mock).mock.calls[0][0].data;
+    expect(hist).toMatchObject({ variationId: 'v1', tierId: 't1', oldPrice: null, newPrice: 180000, changedBy: 'admin1' });
+  });
+
+  it('SKU không tồn tại → vào notFound, không update', async () => {
+    const prisma = importPrisma({
+      variation: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() },
+    });
+    const r = await mkAdmin(prisma).importDealerPrices('admin1', 't1', [{ sku: 'SKU-X', price: 100000 }]);
+    expect(r.updated).toBe(0);
+    expect(r.notFound).toEqual(['SKU-X']);
+    expect(prisma.variation.update).not.toHaveBeenCalled();
+  });
+
+  it('giá không đổi → bỏ qua (không update/không ghi history thừa)', async () => {
+    const prisma = importPrisma({
+      variation: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'v1', sku: 'SKU-1', dealerPrices: { t1: 150000 } }),
+        update: jest.fn(),
+      },
+    });
+    const r = await mkAdmin(prisma).importDealerPrices('admin1', 't1', [{ sku: 'SKU-1', price: 150000 }]);
+    expect(r.updated).toBe(0);
+    expect(prisma.variation.update).not.toHaveBeenCalled();
+    expect(prisma.dealerPriceHistory.create).not.toHaveBeenCalled();
+  });
+
+  it('giá <= 0 hoặc sku rỗng → bỏ dòng lỗi (không update)', async () => {
+    const prisma = importPrisma();
+    const r = await mkAdmin(prisma).importDealerPrices('admin1', 't1', [
+      { sku: '', price: 100000 },
+      { sku: 'SKU-1', price: 0 },
+    ]);
+    expect(r.updated).toBe(0);
+    expect(prisma.variation.update).not.toHaveBeenCalled();
+  });
+});

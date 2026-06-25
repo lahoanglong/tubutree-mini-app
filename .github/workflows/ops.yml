@@ -25,15 +25,27 @@ jobs:
       - name: Run ${{ github.event.inputs.action }} on VM
         uses: appleboy/ssh-action@v1.0.3
         env:
-          # Secret AI keys — forward qua SSH (GitHub tự mask trong log; script chỉ in SET/EMPTY).
+          # Secret keys — forward qua SSH (GitHub tự mask trong log; script chỉ in SET/EMPTY).
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Key go-live (đăng ký theo docs/GO-LIVE-KEYS.md) — chỉ ghi vào .env khi secret KHÔNG rỗng.
+          ZALOPAY_APP_ID: ${{ secrets.ZALOPAY_APP_ID }}
+          ZALOPAY_KEY1: ${{ secrets.ZALOPAY_KEY1 }}
+          ZALOPAY_KEY2: ${{ secrets.ZALOPAY_KEY2 }}
+          ZALOPAY_ENDPOINT: ${{ secrets.ZALOPAY_ENDPOINT }}
+          ZALO_APP_ID: ${{ secrets.ZALO_APP_ID }}
+          ZALO_APP_SECRET: ${{ secrets.ZALO_APP_SECRET }}
+          ZALO_OA_ID: ${{ secrets.ZALO_OA_ID }}
+          ZALO_OA_ACCESS_TOKEN: ${{ secrets.ZALO_OA_ACCESS_TOKEN }}
+          ACCESSTRADE_TOKEN: ${{ secrets.ACCESSTRADE_TOKEN }}
+          ACCESSTRADE_PUBLISHER_ID: ${{ secrets.ACCESSTRADE_PUBLISHER_ID }}
+          ACCESSTRADE_WEBHOOK_SECRET_GH: ${{ secrets.ACCESSTRADE_WEBHOOK_SECRET }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 15m
-          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY
+          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH
           script: |
             set -uo pipefail
             ACTION="${{ github.event.inputs.action }}"
@@ -138,6 +150,22 @@ jobs:
                 if [ -n "${GEMINI_API_KEY:-}" ]; then upsert_env GEMINI_API_KEY "$GEMINI_API_KEY"; else echo "  GEMINI_API_KEY: secret rỗng — giữ nguyên"; fi
                 upsert_env GEMINI_BASE_URL "https://gemini-api.thailam.io.vn/v1"
                 upsert_env GEMINI_MODEL "gemini-3.5-flash"
+
+                # === Key go-live (docs/GO-LIVE-KEYS.md) — chỉ ghi khi secret KHÔNG rỗng (tránh đè value tốt bằng rỗng) ===
+                echo "=== Key go-live (ZaloPay / Zalo OA-ZNS / Accesstrade) ==="
+                set_if() { local k="$1"; local v="$2"; if [ -n "$v" ]; then upsert_env "$k" "$v"; echo "  $k: đã set"; else echo "  $k: secret rỗng — giữ nguyên"; fi; }
+                set_if ZALOPAY_APP_ID "${ZALOPAY_APP_ID:-}"
+                set_if ZALOPAY_KEY1 "${ZALOPAY_KEY1:-}"
+                set_if ZALOPAY_KEY2 "${ZALOPAY_KEY2:-}"
+                set_if ZALOPAY_ENDPOINT "${ZALOPAY_ENDPOINT:-}"
+                set_if ZALO_APP_ID "${ZALO_APP_ID:-}"
+                set_if ZALO_APP_SECRET "${ZALO_APP_SECRET:-}"
+                set_if ZALO_OA_ID "${ZALO_OA_ID:-}"
+                set_if ZALO_OA_ACCESS_TOKEN "${ZALO_OA_ACCESS_TOKEN:-}"
+                set_if ACCESSTRADE_TOKEN "${ACCESSTRADE_TOKEN:-}"
+                set_if ACCESSTRADE_PUBLISHER_ID "${ACCESSTRADE_PUBLISHER_ID:-}"
+                # Webhook secret thật (nếu cấp) ĐÈ placeholder ngẫu nhiên sinh ở trên.
+                set_if ACCESSTRADE_WEBHOOK_SECRET "${ACCESSTRADE_WEBHOOK_SECRET_GH:-}"
 
                 echo "=== Trạng thái sau khi set (chỉ SET/EMPTY) ==="
                 envstate CORS_ORIGINS

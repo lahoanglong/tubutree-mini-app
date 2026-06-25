@@ -37,6 +37,7 @@ model User {
   role              UserRole @default(CUSTOMER)
   tierId            String?
   tier              MembershipTier? @relation(fields: [tierId], references: [id])
+  tierGraceUntil    DateTime? // §6.6: thời hạn ân hạn trước khi rớt hạng (null = không treo rớt)
   referralCode      String   @unique
   referredById      String?
   pointsBalance     Int      @default(0)
@@ -188,6 +189,7 @@ model Variation {
   weight       Int?
 
   cartItems    CartItem[]
+  dealerPriceHistory DealerPriceHistory[]
 
   @@index([productId])
   @@map("variations")
@@ -611,6 +613,23 @@ model DealerCreditLedger {
 
   @@index([userId])
   @@map("dealer_credit_ledgers")
+}
+
+// Lịch sử đổi giá đại lý theo bậc (back-office "admin Excel giá") — truy vết old→new, ai đổi.
+model DealerPriceHistory {
+  id          String   @id @default(cuid())
+  variationId String
+  variation   Variation @relation(fields: [variationId], references: [id], onDelete: Cascade)
+  sku         String
+  tierId      String // bậc đại lý áp giá
+  oldPrice    Int? // null = trước đó chưa có giá riêng cho bậc này
+  newPrice    Int
+  changedBy   String // adminId
+  createdAt   DateTime @default(now())
+
+  @@index([variationId, createdAt])
+  @@index([tierId])
+  @@map("dealer_price_history")
 }
 
 /// Mẫu đơn đại lý lưu sẵn (#64) — đặt lại 1 chạm. items: [{variationId, quantity}].

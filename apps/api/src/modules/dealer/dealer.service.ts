@@ -1,8 +1,22 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, Optional } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
+
+interface BonusTier {
+  min: number;
+  pct: number;
+}
+
+/** Tính phần thưởng cho 1 mức doanh số theo bậc (thuần). */
+function bonusForRevenue(revenue: number, sortedTiers: BonusTier[]) {
+  const reached = [...sortedTiers].reverse().find((t) => revenue >= t.min) ?? null;
+  const next = sortedTiers.find((t) => revenue < t.min) ?? null;
+  const bonusPct = reached?.pct ?? 0;
+  return { bonusPct, bonusAmount: Math.round((revenue * bonusPct) / 100), reached, next };
+}
 
 /**
  * Đại lý B2B (Build Spec §6.x, §15 dealer.*).
@@ -11,9 +25,12 @@ import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
  */
 @Injectable()
 export class DealerService {
+  private readonly logger = new Logger(DealerService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   async apply(userId: string, dto: ApplyDealerDto) {
@@ -49,13 +66,13 @@ export class DealerService {
 
   /** Bảng giá đại lý theo bậc của user. */
   async pricelist(userId: string) {
-    const { discountPct } = await this.dealerContext(userId);
+    const { discountPct, tier } = await this.dealerContext(userId);
     const variations = await this.prisma.variation.findMany({
       where: { isActive: true },
       include: { product: { select: { name: true, brand: true } } },
     });
     return variations.map((v) => {
-      const dealerPrice = Math.round(v.retailPrice * (1 - discountPct));
+      const dealerPrice = this.unitPrice(v, tier?.id, discountPct);
       return {
         variationId: v.id,
         sku: v.sku,
@@ -84,7 +101,7 @@ export class DealerService {
     const items = dto.items.map((line) => {
       const v = vmap.get(line.variationId);
       if (!v) throw new BadRequestException(`Sản phẩm ${line.variationId} không tồn tại.`);
-      const unitPrice = Math.round(v.retailPrice * (1 - discountPct));
+      const unitPrice = this.unitPrice(v, tier?.id, discountPct);
       const total = unitPrice * line.quantity;
       subtotal += total;
       return {
@@ -209,16 +226,8 @@ export class DealerService {
     });
     const revenue = agg._sum.total ?? 0;
 
-    const tiers = await this.config.get<{ min: number; pct: number }[]>('dealer.quarterly_bonus_tiers', [
-      { min: 50_000_000, pct: 2 },
-      { min: 100_000_000, pct: 3 },
-      { min: 200_000_000, pct: 4 },
-    ]);
-    const sorted = [...tiers].sort((a, b) => a.min - b.min);
-    const reached = [...sorted].reverse().find((t) => revenue >= t.min) ?? null;
-    const next = sorted.find((t) => revenue < t.min) ?? null;
-    const bonusPct = reached?.pct ?? 0;
-    const bonusAmount = Math.round((revenue * bonusPct) / 100);
+    const sorted = await this.bonusTiers();
+    const { bonusPct, bonusAmount, next } = bonusForRevenue(revenue, sorted);
 
     return {
       quarter: `Q${q + 1}/${year}`,
@@ -231,6 +240,71 @@ export class DealerService {
       nextTier: next ? { min: next.min, pct: next.pct, toNext: next.min - revenue } : null,
       tiers: sorted,
     };
+  }
+
+  private async bonusTiers(): Promise<BonusTier[]> {
+    const tiers = await this.config.get<BonusTier[]>('dealer.quarterly_bonus_tiers', [
+      { min: 50_000_000, pct: 2 },
+      { min: 100_000_000, pct: 3 },
+      { min: 200_000_000, pct: 4 },
+    ]);
+    return [...tiers].sort((a, b) => a.min - b.min);
+  }
+
+  /**
+   * Cron (đầu mỗi quý): trả thưởng doanh số cho quý VỪA KẾT THÚC cho mọi đại lý.
+   * Thưởng ghi vào DealerCreditLedger delta ÂM (giảm công nợ) — nhất quán với creditPayment.
+   * Idempotent theo (userId, refType=QUARTER_BONUS, refId=quý) → cron chạy lại không cộng trùng.
+   */
+  async payoutQuarterlyBonuses(now: Date = new Date()): Promise<{ paid: number; quarter: string }> {
+    const VN = 7 * 60 * 60 * 1000;
+    const vnNow = new Date(now.getTime() + VN);
+    let q = Math.floor(vnNow.getUTCMonth() / 3) - 1; // quý TRƯỚC (vừa kết thúc)
+    let year = vnNow.getUTCFullYear();
+    if (q < 0) {
+      q = 3;
+      year -= 1;
+    }
+    const start = new Date(Date.UTC(year, q * 3, 1) - VN);
+    const end = new Date(Date.UTC(year, q * 3 + 3, 1) - VN);
+    const quarter = `Q${q + 1}/${year}`;
+
+    const sorted = await this.bonusTiers();
+    const dealers = await this.prisma.user.findMany({ where: { role: 'DEALER' }, select: { id: true } });
+
+    let paid = 0;
+    for (const d of dealers) {
+      const agg = await this.prisma.order.aggregate({
+        where: { userId: d.id, type: 'DEALER', status: { notIn: ['CANCELLED', 'RETURNED'] }, createdAt: { gte: start, lt: end } },
+        _sum: { total: true },
+      });
+      const revenue = agg._sum.total ?? 0;
+      const { bonusAmount } = bonusForRevenue(revenue, sorted);
+      if (bonusAmount <= 0) continue;
+
+      // Idempotent: đã trả thưởng quý này cho đại lý này thì bỏ qua.
+      const existed = await this.prisma.dealerCreditLedger.findFirst({
+        where: { userId: d.id, refType: 'QUARTER_BONUS', refId: quarter },
+        select: { id: true },
+      });
+      if (existed) continue;
+
+      await this.prisma.dealerCreditLedger.create({
+        data: { userId: d.id, delta: -bonusAmount, refType: 'QUARTER_BONUS', refId: quarter, note: `Thưởng doanh số ${quarter}` },
+      });
+      if (this.notifications) {
+        await this.notifications
+          .notify(d.id, 'DEALER_BONUS_PAID', {
+            quarter,
+            amount: bonusAmount.toLocaleString('vi-VN'),
+            revenue: revenue.toLocaleString('vi-VN'),
+          })
+          .catch((e) => this.logger.warn(`notify thưởng quý lỗi (${d.id}): ${(e as Error).message}`));
+      }
+      paid += 1;
+    }
+    if (paid > 0) this.logger.log(`Đã trả thưởng quý ${quarter} cho ${paid} đại lý.`);
+    return { paid, quarter };
   }
 
   // ── Mẫu đơn lưu sẵn (#64) ──
@@ -263,6 +337,20 @@ export class DealerService {
   }
 
   // ── Helpers ──
+  /**
+   * Giá đại lý cho 1 variation: ƯU TIÊN giá riêng theo bậc đã nhập (Variation.dealerPrices[tierId]),
+   * fallback giá lẻ × (1 - chiết khấu bậc). Cho phép admin đặt giá B2B cố định khác công thức %.
+   */
+  private unitPrice(
+    v: { retailPrice: number; dealerPrices?: unknown },
+    tierId: string | undefined,
+    discountPct: number,
+  ): number {
+    const override = tierId ? (v.dealerPrices as Record<string, number> | null)?.[tierId] : undefined;
+    if (typeof override === 'number' && override > 0) return override;
+    return Math.round(v.retailPrice * (1 - discountPct));
+  }
+
   private async dealerContext(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.role !== 'DEALER') throw new ForbiddenException('Tài khoản chưa được duyệt làm đại lý.');

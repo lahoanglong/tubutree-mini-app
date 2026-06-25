@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible } from '../coupons/coupon-scope';
+import { decideTier } from './tier-policy';
 
 /**
  * Loyalty core (Build Spec §6.6). Phase 1 dùng cho vòng đời đơn:
@@ -193,9 +194,39 @@ export class LoyaltyService {
       const bySpending = t.minSpending != null && spent12m >= t.minSpending;
       if (byPoints || bySpending) qualified = t;
     }
-    if (qualified && user.tierId !== qualified.id) {
-      await this.prisma.user.update({ where: { id: userId }, data: { tierId: qualified.id } });
+    if (!qualified) return;
+
+    // Lên hạng áp ngay; RỚT hạng có ân hạn (config loyalty.tier_grace_days) để không
+    // tụt hạng đột ngột khi điểm/chi tiêu 12 tháng vừa rớt mốc.
+    const graceDays = await this.config.get<number>('loyalty.tier_grace_days', 30);
+    const decision = decideTier({
+      currentTierId: user.tierId,
+      tiers: tiers.map((t) => ({ id: t.id, sortOrder: t.sortOrder })),
+      qualifiedId: qualified.id,
+      graceUntil: user.tierGraceUntil,
+      now: new Date(),
+      graceDays,
+    });
+    const graceChanged = (decision.graceUntil?.getTime() ?? null) !== (user.tierGraceUntil?.getTime() ?? null);
+    if (decision.tierId !== user.tierId || graceChanged) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { tierId: decision.tierId, tierGraceUntil: decision.graceUntil },
+      });
     }
+  }
+
+  /**
+   * Cron nightly: tính lại hạng cho mọi user ĐÃ có hạng — nơi DUY NHẤT thực sự áp rớt hạng
+   * sau khi hết ân hạn (sự kiện đơn hàng chỉ chạy lẻ tẻ). User chưa có hạng sẽ được gán
+   * hạng ở đơn DELIVERED đầu tiên nên không cần quét. Lỗi 1 user không chặn người khác.
+   */
+  async recalcAllTiers(): Promise<number> {
+    const users = await this.prisma.user.findMany({ where: { tierId: { not: null } }, select: { id: true } });
+    for (const u of users) {
+      await this.recalcTier(u.id).catch((e) => this.logger.warn(`recalcTier lỗi user=${u.id}: ${(e as Error).message}`));
+    }
+    return users.length;
   }
 
   /** Multiplier điểm của hạng hiện tại (1 nếu chưa có hạng). */
