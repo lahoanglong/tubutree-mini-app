@@ -2,24 +2,23 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import type { Env } from '../../../config/env.validation';
+import { ZaloOaTokenService } from './zalo-oa-token.service';
 
 /**
  * Client ZNS (Zalo Notification Service) — Build Spec §11.
- * Gate bằng OA access token; chưa cấu hình → trả false (caller log INAPP fallback).
+ * Lấy OA access token ĐỘNG từ ZaloOaTokenService (token được cron làm mới ~mỗi 6h, lưu DB)
+ * → KHÔNG chết sau ~25h như token tĩnh trong env. Chưa cấu hình → trả false (caller log INAPP).
  */
 @Injectable()
 export class ZnsClient {
   private readonly logger = new Logger(ZnsClient.name);
   private readonly baseUrl: string;
-  private readonly oaToken: string;
 
-  constructor(config: ConfigService<Env, true>) {
+  constructor(
+    config: ConfigService<Env, true>,
+    private readonly tokens: ZaloOaTokenService,
+  ) {
     this.baseUrl = config.get('ZNS_BASE_URL', { infer: true });
-    this.oaToken = config.get('ZALO_OA_ACCESS_TOKEN', { infer: true });
-  }
-
-  isConfigured(): boolean {
-    return Boolean(this.oaToken);
   }
 
   async sendTemplate(
@@ -27,7 +26,8 @@ export class ZnsClient {
     templateId: string,
     templateData: Record<string, string>,
   ): Promise<boolean> {
-    if (!this.isConfigured() || !templateId) {
+    const accessToken = await this.tokens.getAccessToken();
+    if (!accessToken || !templateId) {
       this.logger.warn(`ZNS chưa cấu hình — skip gửi template ${templateId} cho ${phone}.`);
       return false;
     }
@@ -35,7 +35,7 @@ export class ZnsClient {
       await axios.post(
         `${this.baseUrl}/message/template`,
         { phone, template_id: templateId, template_data: templateData },
-        { headers: { access_token: this.oaToken }, timeout: 10000 },
+        { headers: { access_token: accessToken }, timeout: 10000 },
       );
       return true;
     } catch (err) {

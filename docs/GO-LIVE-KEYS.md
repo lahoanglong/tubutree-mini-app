@@ -63,10 +63,11 @@ Dùng cho: gửi **ZNS** (xác nhận đơn, giao hàng, voucher) và là nền 
 4. **Liên kết OA với ứng dụng** (Quản lý ứng dụng → Official Account → liên kết OA đã tạo ở bước A).
    - `OA ID` (ID của Official Account) → `ZALO_OA_ID`
 
-### Bước C — Lấy OA Access Token (quan trọng: token có hạn, cần refresh)
+### Bước C — Lấy OA Access Token + Refresh Token (hệ thống TỰ làm mới)
 5. Cấp quyền để lấy **OA Access Token + Refresh Token** (luồng OAuth của Zalo, scope gửi ZNS).
    - `Access Token` → `ZALO_OA_ACCESS_TOKEN`
-   - ⚠️ Access token Zalo hết hạn ~25h; cần job refresh bằng refresh token. (Hiện hệ thống nhận token tĩnh — khi đăng ký xong báo lại để bổ sung cron refresh token nếu cần.)
+   - `Refresh Token` → `ZALO_OA_REFRESH_TOKEN`
+   - ✅ **Đã có cron tự refresh (2026-06-26):** access token Zalo hết hạn ~25h và refresh_token **xoay vòng** mỗi lần — hệ thống tự gọi Zalo OAuth mỗi 6h (khi sắp hết hạn), lưu token mới vào DB. Bạn **chỉ cần cấp 2 token ban đầu**; sau đó hệ thống tự duy trì, không cần can thiệp.
 
 ### Bước D — Đăng ký template ZNS (LEAD TIME LÂU NHẤT ~7–14 ngày)
 6. Trong Zalo OA → **ZNS → Tạo mẫu thông báo**. Mỗi loại thông báo là 1 template được Zalo **duyệt nội dung** riêng.
@@ -80,8 +81,9 @@ Dùng cho: gửi **ZNS** (xác nhận đơn, giao hàng, voucher) và là nền 
 ```bash
 gh secret set ZALO_APP_ID          --body "<app_id>"
 gh secret set ZALO_APP_SECRET      --body "<app_secret>"
-gh secret set ZALO_OA_ID           --body "<oa_id>"
-gh secret set ZALO_OA_ACCESS_TOKEN --body "<oa_access_token>"
+gh secret set ZALO_OA_ID            --body "<oa_id>"
+gh secret set ZALO_OA_ACCESS_TOKEN  --body "<oa_access_token>"
+gh secret set ZALO_OA_REFRESH_TOKEN --body "<oa_refresh_token>"   # để cron tự làm mới
 gh workflow run ops.yml -f action=set-env
 ```
 

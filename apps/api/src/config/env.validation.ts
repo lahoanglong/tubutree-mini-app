@@ -17,7 +17,9 @@ export const envSchema = z.object({
   ZALO_APP_ID: z.string().default(''),
   ZALO_APP_SECRET: z.string().default(''),
   ZALO_OA_ACCESS_TOKEN: z.string().default(''),
+  ZALO_OA_REFRESH_TOKEN: z.string().default(''), // bootstrap; sau đó token mới lưu DB (xoay vòng)
   ZALO_OA_ID: z.string().default(''),
+  ZALO_OAUTH_BASE: z.string().default('https://oauth.zaloapp.com'),
 
   // Pancake POS
   PANCAKE_BASE_URL: z.string().default('https://pos.pages.fm/api/v1'),

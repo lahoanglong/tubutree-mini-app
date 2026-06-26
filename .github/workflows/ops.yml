@@ -37,6 +37,7 @@ jobs:
           ZALO_APP_SECRET: ${{ secrets.ZALO_APP_SECRET }}
           ZALO_OA_ID: ${{ secrets.ZALO_OA_ID }}
           ZALO_OA_ACCESS_TOKEN: ${{ secrets.ZALO_OA_ACCESS_TOKEN }}
+          ZALO_OA_REFRESH_TOKEN: ${{ secrets.ZALO_OA_REFRESH_TOKEN }}
           ACCESSTRADE_TOKEN: ${{ secrets.ACCESSTRADE_TOKEN }}
           ACCESSTRADE_PUBLISHER_ID: ${{ secrets.ACCESSTRADE_PUBLISHER_ID }}
           ACCESSTRADE_WEBHOOK_SECRET_GH: ${{ secrets.ACCESSTRADE_WEBHOOK_SECRET }}
@@ -45,7 +46,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 15m
-          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH
+          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH
           script: |
             set -uo pipefail
             ACTION="${{ github.event.inputs.action }}"
@@ -162,6 +163,7 @@ jobs:
                 set_if ZALO_APP_SECRET "${ZALO_APP_SECRET:-}"
                 set_if ZALO_OA_ID "${ZALO_OA_ID:-}"
                 set_if ZALO_OA_ACCESS_TOKEN "${ZALO_OA_ACCESS_TOKEN:-}"
+                set_if ZALO_OA_REFRESH_TOKEN "${ZALO_OA_REFRESH_TOKEN:-}"
                 set_if ACCESSTRADE_TOKEN "${ACCESSTRADE_TOKEN:-}"
                 set_if ACCESSTRADE_PUBLISHER_ID "${ACCESSTRADE_PUBLISHER_ID:-}"
                 # Webhook secret thật (nếu cấp) ĐÈ placeholder ngẫu nhiên sinh ở trên.
