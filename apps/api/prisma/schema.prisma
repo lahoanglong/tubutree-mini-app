@@ -385,6 +385,7 @@ model Order {
   invoiceUrl      String?
   invoiceStatus   InvoiceStatus? @default(NOT_REQUESTED)
   referrerUserId  String?
+  storefrontSlug  String?
   commission      Int           @default(0)
   couponCode      String?
   note            String?
@@ -394,6 +395,7 @@ model Order {
 
   @@index([userId, status])
   @@index([referrerUserId])
+  @@index([storefrontSlug])
   @@map("orders")
 }
 
