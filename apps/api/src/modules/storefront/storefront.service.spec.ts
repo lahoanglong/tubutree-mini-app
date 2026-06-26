@@ -48,3 +48,25 @@ describe('StorefrontService.getOrCreateMine', () => {
     await expect(svc.getOrCreateMine('u1')).rejects.toBeInstanceOf(BadRequestException);
   });
 });
+
+describe('StorefrontService.updateMine/publishMine', () => {
+  it('cập nhật title/note/theme', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1' });
+    (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
+    const svc = new StorefrontService(prisma);
+    const r = await svc.updateMine('u1', { title: 'Shop Linh', headerNote: 'xin chào', theme: 'leaf-orange' });
+    expect(r.title).toBe('Shop Linh');
+    expect(prisma.storefront.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 's1' } }));
+  });
+
+  it('publish set isPublished + publishedAt', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1' });
+    (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
+    const svc = new StorefrontService(prisma);
+    const r = await svc.publishMine('u1', true);
+    expect(r.isPublished).toBe(true);
+    expect(r.publishedAt).toBeInstanceOf(Date);
+  });
+});

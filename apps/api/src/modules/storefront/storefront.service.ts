@@ -37,6 +37,22 @@ export class StorefrontService {
   }
 
   // helper dùng lại ở các task sau
+  async updateMine(
+    userId: string,
+    dto: { title?: string; headerNote?: string; avatarUrl?: string; coverUrl?: string; theme?: string },
+  ) {
+    const sf = await this.assertOwnedStorefront(userId);
+    return this.prisma.storefront.update({ where: { id: sf.id }, data: dto });
+  }
+
+  async publishMine(userId: string, isPublished: boolean) {
+    const sf = await this.assertOwnedStorefront(userId);
+    return this.prisma.storefront.update({
+      where: { id: sf.id },
+      data: { isPublished, publishedAt: isPublished ? new Date() : null },
+    });
+  }
+
   private async assertOwnedStorefront(userId: string) {
     const sf = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId, type: 'CTV' } });
     if (!sf) throw new NotFoundException('Chưa có gian hàng.');
