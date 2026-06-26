@@ -9,6 +9,7 @@ import BottomNav from './bottom-nav';
 import BackButton from './back-button';
 import { OnboardingGate } from './onboarding';
 import { useAuthStore } from '../store/auth';
+import { useStorefrontContext } from '../store/storefront-context';
 
 const FONT_PX: Record<string, string> = { small: '15px', normal: '16px', large: '18px' };
 /** Áp cỡ chữ đã lưu (Cài đặt) ngay khi mở app để giữ a11y qua các phiên. */
@@ -89,11 +90,23 @@ function RouteFallback() {
 
 export default function MyApp() {
   const restore = useAuthStore((s) => s.restore);
+  const setSfContext = useStorefrontContext((s) => s.setContext);
 
   useEffect(() => {
     void restore(); // silent login từ refresh token đã lưu
     applySavedFontScale();
   }, [restore]);
+
+  useEffect(() => {
+    const parse = (qs: string) => new URLSearchParams(qs);
+    const search = parse(window.location.search);
+    const hash = window.location.hash.includes('?')
+      ? parse(window.location.hash.slice(window.location.hash.indexOf('?') + 1))
+      : new URLSearchParams();
+    const slug = search.get('s') ?? hash.get('s');
+    const ref = search.get('ref') ?? hash.get('ref');
+    if (slug || ref) setSfContext({ slug: slug ?? null, referralCode: ref ?? null });
+  }, [setSfContext]);
 
   return (
     <QueryClientProvider client={queryClient}>

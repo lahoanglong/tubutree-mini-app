@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Box, Page, Text, Button, useParams, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { getPublicStorefront } from '../services/storefront-api';
@@ -6,6 +7,7 @@ import { formatVnd } from '../utils/format';
 import { shareLink } from '../services/zmp-bridge';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
+import { useStorefrontContext } from '../store/storefront-context';
 
 const THEME: Record<string, string> = {
   'leaf-orange': 'linear-gradient(120deg, var(--leaf-600), var(--primary-600))',
@@ -14,10 +16,15 @@ const THEME: Record<string, string> = {
 export default function StorefrontViewPage() {
   const { slug = '' } = useParams<{ slug: string }>();
   const q = useQuery({ queryKey: ['public-storefront', slug], queryFn: () => getPublicStorefront(slug), staleTime: 60_000 });
+  const setSfContext = useStorefrontContext((s) => s.setContext);
+
+  const sf = q.data;
+  useEffect(() => {
+    if (sf) setSfContext({ slug: sf.slug, referralCode: sf.type === 'CTV' ? sf.slug : null });
+  }, [sf, setSfContext]);
 
   if (q.isLoading) return <Page className="page"><Box p={4}><Skeleton style={{ height: 180, borderRadius: 16 }} /></Box></Page>;
-  if (q.isError || !q.data) return <Page className="page"><Box p={6}><ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} /></Box></Page>;
-  const sf = q.data;
+  if (q.isError || !sf) return <Page className="page"><Box p={6}><ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} /></Box></Page>;
 
   return (
     <Page className="page page-bleed" style={{ background: 'var(--neutral-50)', paddingBottom: 90 }}>
