@@ -174,6 +174,22 @@ export const vi = {
     myOrders: 'Đơn hàng của tôi',
     logout: 'Đăng xuất',
   },
+
+  storefront: {
+    title: 'Gian hàng của tôi',
+    empty: 'Tạo gian hàng để chia sẻ sản phẩm bạn tâm đắc.',
+    create: 'Tạo gian hàng',
+    addProduct: 'Thêm sản phẩm',
+    addCollection: 'Tạo bộ sưu tập',
+    preview: 'Xem trước',
+    publish: 'Lưu & Đăng',
+    published: 'Đã đăng gian hàng 🎉',
+    pinTop: 'Đẩy lên đầu',
+    hide: 'Ẩn',
+    show: 'Hiện',
+    pickerSearch: 'Tìm sản phẩm…',
+    commission: 'hoa hồng',
+  },
 } as const;
 
 export type ViStrings = typeof vi;
