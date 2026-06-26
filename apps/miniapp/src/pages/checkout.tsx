@@ -5,6 +5,7 @@ import type { OrderDTO } from '@tubutree/shared-types';
 import { getAddresses, getCart, checkoutQuote, placeOrder } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { Skeleton } from '../components/ui/skeleton';
@@ -20,6 +21,7 @@ export default function CheckoutPage() {
   const queryClient = useQueryClient();
   const { user, status } = useAuthStore();
   const authed = status === 'authenticated';
+  const sfCtx = useStorefrontContext();
 
   const [addressId, setAddressId] = useState<string | null>(null);
   const [payment, setPayment] = useState('COD');
@@ -92,6 +94,8 @@ export default function CheckoutPage() {
                 email: invoice.email.trim(),
               }
             : undefined,
+          referralCode: sfCtx.referralCode ?? undefined,
+          storefrontSlug: sfCtx.slug ?? undefined,
         },
         idempotencyKey.current,
       ),

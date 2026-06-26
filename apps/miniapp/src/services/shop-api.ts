@@ -142,6 +142,8 @@ export const placeOrder = (
     pointsToUse?: number;
     note?: string;
     invoiceRequest?: InvoiceRequest;
+    referralCode?: string;
+    storefrontSlug?: string;
   },
   idempotencyKey: string,
 ) =>
