@@ -9,6 +9,8 @@ import {
   createAffiliateLink,
   getCommissions,
   requestPayout,
+  getStorefrontAnalytics,
+  getProductBreakdown,
   type Commission,
   type CommissionStatus,
 } from '../services/affiliate-api';
@@ -127,6 +129,8 @@ function Dashboard() {
   const dashQ = useQuery({ queryKey: ['affiliate-dashboard'], queryFn: getAffiliateDashboard });
   const linksQ = useQuery({ queryKey: ['affiliate-links'], queryFn: getAffiliateLinks });
   const commQ = useQuery({ queryKey: ['affiliate-commissions'], queryFn: getCommissions });
+  const sfQ = useQuery({ queryKey: ['affiliate-sf-analytics'], queryFn: getStorefrontAnalytics });
+  const pbQ = useQuery({ queryKey: ['affiliate-product-breakdown'], queryFn: getProductBreakdown });
   const [withdrawing, setWithdrawing] = useState(false);
 
   const createLink = useMutation({
@@ -402,6 +406,82 @@ function Dashboard() {
         ) : (
           <Text size="small" style={{ color: 'var(--neutral-400)' }}>
             Chưa có hoa hồng. Chia sẻ link để nhận hoa hồng từ đơn của bạn bè.
+          </Text>
+        )}
+      </Section>
+
+      {/* Hoa hồng theo gian hàng */}
+      <Section title="Theo gian hàng">
+        {sfQ.isError ? (
+          <ErrorState message={getErrorMessage(sfQ.error)} onRetry={() => void sfQ.refetch()} />
+        ) : sfQ.data && sfQ.data.storefronts.length > 0 ? (
+          <Box flex flexDirection="column" style={{ gap: 2 }}>
+            {sfQ.data.storefronts.map((sf) => (
+              <Box
+                key={sf.slug}
+                flex
+                alignItems="center"
+                justifyContent="space-between"
+                py={2}
+                style={{ borderBottom: '1px solid var(--neutral-100)' }}
+              >
+                <Box>
+                  <Text size="small" bold>
+                    {sf.title ?? sf.slug}
+                  </Text>
+                  <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                    {sf.orders} đơn · DS {formatVnd(sf.revenue)}
+                  </Text>
+                </Box>
+                <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
+                  +{formatVnd(sf.commission)}
+                </Text>
+              </Box>
+            ))}
+          </Box>
+        ) : sfQ.isLoading ? (
+          <Text size="small" style={{ color: 'var(--neutral-400)' }}>Đang tải…</Text>
+        ) : (
+          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+            Chưa có đơn từ gian hàng nào. Chia sẻ link gian hàng để nhận hoa hồng.
+          </Text>
+        )}
+      </Section>
+
+      {/* Hoa hồng theo sản phẩm */}
+      <Section title="Theo sản phẩm">
+        {pbQ.isError ? (
+          <ErrorState message={getErrorMessage(pbQ.error)} onRetry={() => void pbQ.refetch()} />
+        ) : pbQ.data && pbQ.data.length > 0 ? (
+          <Box flex flexDirection="column" style={{ gap: 2 }}>
+            {pbQ.data.slice(0, 10).map((p, i) => (
+              <Box
+                key={i}
+                flex
+                alignItems="center"
+                justifyContent="space-between"
+                py={2}
+                style={{ borderBottom: '1px solid var(--neutral-100)' }}
+              >
+                <Box>
+                  <Text size="small" bold>
+                    {p.productName}
+                  </Text>
+                  <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                    {p.orders} đơn
+                  </Text>
+                </Box>
+                <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
+                  +{formatVnd(p.commission)}
+                </Text>
+              </Box>
+            ))}
+          </Box>
+        ) : pbQ.isLoading ? (
+          <Text size="small" style={{ color: 'var(--neutral-400)' }}>Đang tải…</Text>
+        ) : (
+          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+            Chưa có hoa hồng theo sản phẩm. Chia sẻ link sản phẩm để bắt đầu.
           </Text>
         )}
       </Section>

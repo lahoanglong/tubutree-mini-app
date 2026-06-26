@@ -71,3 +71,20 @@ export const requestPayout = (
   method: 'BANK' | 'WALLET_BALANCE' | 'ZALOPAY',
   bankInfo?: { bankName: string; accountNumber: string; accountName: string },
 ) => api.post<PayoutResult>('/affiliate/payouts', { amount, method, bankInfo }).then((r) => r.data);
+
+export interface StorefrontStat {
+  slug: string;
+  title?: string;
+  orders: number;
+  revenue: number;
+  commission: number;
+}
+export interface ProductStat {
+  productName: string;
+  commission: number;
+  orders: number;
+}
+export const getStorefrontAnalytics = () =>
+  api.get('/affiliate/analytics/storefronts').then((r) => r.data as { storefronts: StorefrontStat[] });
+export const getProductBreakdown = () =>
+  api.get('/affiliate/analytics/products').then((r) => r.data as ProductStat[]);
