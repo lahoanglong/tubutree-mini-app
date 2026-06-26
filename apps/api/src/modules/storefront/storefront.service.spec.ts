@@ -64,8 +64,9 @@ describe('StorefrontService.getMine', () => {
 
     // verify behavior: trả đúng cây dữ liệu, item ẩn vẫn còn (để CTV sửa)
     expect(sf).toBe(sfWithChildren);
-    expect(sf.collections[0].items).toHaveLength(2);
-    expect(sf.collections[0].items.some((i: any) => i.isHidden === true)).toBe(true);
+    const col0 = sf.collections[0]!;
+    expect(col0.items).toHaveLength(2);
+    expect(col0.items.some((i: any) => i.isHidden === true)).toBe(true);
     // include đúng: có collections.orderBy sortOrder + items
     const arg = (prisma.storefront.findFirst as jest.Mock).mock.calls[0][0];
     expect(arg.where).toEqual({ ownerUserId: 'u1', type: 'CTV' });
@@ -245,11 +246,12 @@ describe('StorefrontService.pickerProducts', () => {
     });
     const svc = new StorefrontService(prisma);
     const r = await svc.pickerProducts('u1', { search: 'dầu' });
-    expect((prisma.product.findMany as jest.Mock).mock.calls[0][0].where.affiliateBlocked).toBe(false);
-    expect(r[0].maxAffiliateRate).toBe(10);
-    expect(r[0].name).toBe('Dầu gội');
+    expect((prisma.product.findMany as jest.Mock).mock.calls[0]?.[0].where.affiliateBlocked).toBe(false);
+    const first = r[0]!;
+    expect(first.maxAffiliateRate).toBe(10);
+    expect(first.name).toBe('Dầu gội');
     // KHÔNG lộ mảng variations (chứa affiliateRate từng biến thể) cho CTV
-    expect((r[0] as any).variations).toBeUndefined();
+    expect((first as any).variations).toBeUndefined();
     expect(JSON.stringify(r)).not.toContain('affiliateRate');
   });
 });
@@ -276,8 +278,9 @@ describe('StorefrontService.getPublicBySlug', () => {
     });
     const svc = new StorefrontService(prisma);
     const r = await svc.getPublicBySlug('linh');
-    expect(r.collections[0].items).toHaveLength(1);
-    expect(r.collections[0].items[0].id).toBe('i1');
+    const col0 = r.collections[0]!;
+    expect(col0.items).toHaveLength(1);
+    expect(col0.items[0]!.id).toBe('i1');
     expect(JSON.stringify(r)).not.toContain('affiliateRate');
   });
 });

@@ -168,6 +168,7 @@ model Product {
   variations     Variation[]
   reviews        Review[]
   groupBuys      GroupBuy[]
+  storefrontItems StorefrontItem[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -243,6 +244,7 @@ model StorefrontItem {
   collectionId String
   collection   StorefrontCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   productId    String
+  product      Product              @relation(fields: [productId], references: [id])
   variationId  String?
   note         String?
   sortOrder    Int                  @default(0)
@@ -250,6 +252,7 @@ model StorefrontItem {
   isHidden     Boolean              @default(false)
 
   @@index([collectionId])
+  @@index([productId])
   @@map("storefront_items")
 }
 
