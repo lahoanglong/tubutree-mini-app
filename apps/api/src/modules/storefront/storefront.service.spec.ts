@@ -134,3 +134,31 @@ describe('StorefrontService.pickerProducts', () => {
     expect(r[0].name).toBe('Dầu gội');
   });
 });
+
+describe('StorefrontService.getPublicBySlug', () => {
+  it('404 nếu chưa publish', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(null) } });
+    const svc = new StorefrontService(prisma);
+    await expect(svc.getPublicBySlug('x')).rejects.toThrow();
+  });
+
+  it('ẩn item isHidden + không trả affiliateRate', async () => {
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'linh', title: 'Shop', isPublished: true,
+        collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'CAROUSEL', sortOrder: 0,
+          items: [
+            { id: 'i1', isHidden: false, isPinned: false, sortOrder: 0, note: null, variationId: null,
+              product: { id: 'p1', name: 'P1', slug: 'p1', thumbnail: 't', brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 4.5, reviewCount: 3, isActive: true } },
+            { id: 'i2', isHidden: true, isPinned: false, sortOrder: 1, note: null, variationId: null,
+              product: { id: 'p2', name: 'P2', slug: 'p2', thumbnail: 't', brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 0, reviewCount: 0, isActive: true } },
+          ] }],
+      }) },
+    });
+    const svc = new StorefrontService(prisma);
+    const r = await svc.getPublicBySlug('linh');
+    expect(r.collections[0].items).toHaveLength(1);
+    expect(r.collections[0].items[0].id).toBe('i1');
+    expect(JSON.stringify(r)).not.toContain('affiliateRate');
+  });
+});

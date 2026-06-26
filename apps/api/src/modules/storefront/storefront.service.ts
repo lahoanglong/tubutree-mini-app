@@ -79,6 +79,48 @@ export class StorefrontService {
     }));
   }
 
+  async getPublicBySlug(slug: string) {
+    const sf = await this.prisma.storefront.findFirst({
+      where: { slug, isPublished: true },
+      include: {
+        collections: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            items: {
+              orderBy: [{ isPinned: 'desc' }, { sortOrder: 'asc' }],
+              include: {
+                product: {
+                  select: {
+                    id: true, name: true, slug: true, thumbnail: true, brand: true,
+                    basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, isActive: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!sf) throw new NotFoundException('Gian hàng không tồn tại hoặc chưa đăng.');
+    return {
+      id: sf.id, slug: sf.slug, type: sf.type, title: sf.title, headerNote: sf.headerNote,
+      avatarUrl: sf.avatarUrl, coverUrl: sf.coverUrl, theme: sf.theme,
+      collections: sf.collections.map((c) => ({
+        id: c.id, title: c.title, kind: c.kind, layout: c.layout, comboDiscountPct: c.comboDiscountPct,
+        items: c.items
+          .filter((i) => !i.isHidden && i.product.isActive)
+          .map((i) => ({
+            id: i.id, note: i.note, variationId: i.variationId,
+            product: {
+              id: i.product.id, name: i.product.name, slug: i.product.slug, thumbnail: i.product.thumbnail,
+              brand: i.product.brand, basePrice: i.product.basePrice, salePrice: i.product.salePrice,
+              ratingAvg: i.product.ratingAvg, reviewCount: i.product.reviewCount,
+            },
+          })),
+      })),
+    };
+  }
+
   private async assertOwnedStorefront(userId: string) {
     const sf = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId, type: 'CTV' } });
     if (!sf) throw new NotFoundException('Chưa có gian hàng.');
