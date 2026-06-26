@@ -1,13 +1,13 @@
-import { useEffect } from 'react';
-import { Box, Page, Text, Button, useParams, useSnackbar } from 'zmp-ui';
+import { useEffect, useState } from 'react';
+import { Box, Page, Text, Button, useParams } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { getPublicStorefront } from '../services/storefront-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
-import { shareLink } from '../services/zmp-bridge';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { useStorefrontContext } from '../store/storefront-context';
+import { ShareSheet } from '../components/share-sheet';
 
 const THEME: Record<string, string> = {
   'leaf-orange': 'linear-gradient(120deg, var(--leaf-600), var(--primary-600))',
@@ -17,6 +17,7 @@ export default function StorefrontViewPage() {
   const { slug = '' } = useParams<{ slug: string }>();
   const q = useQuery({ queryKey: ['public-storefront', slug], queryFn: () => getPublicStorefront(slug), staleTime: 60_000 });
   const setSfContext = useStorefrontContext((s) => s.setContext);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const sf = q.data;
   useEffect(() => {
@@ -69,18 +70,19 @@ export default function StorefrontViewPage() {
       ))}
 
       <Box style={{ position: 'fixed', left: 0, right: 0, bottom: 0, padding: 12, display: 'flex', gap: 8 }}>
-        <ShareBtn slug={sf.slug} title={sf.title} />
+        <Button fullWidth style={{ background: 'var(--primary-600)' }} onClick={() => setShareOpen(true)}>
+          ↗ Chia sẻ gian hàng
+        </Button>
       </Box>
-    </Page>
-  );
-}
 
-function ShareBtn({ slug, title }: { slug: string; title: string }) {
-  const { openSnackbar } = useSnackbar();
-  return (
-    <Button fullWidth style={{ background: 'var(--primary-600)' }}
-      onClick={() => { void shareLink({ title, description: 'Gian hàng sống xanh tuyển chọn', path: `/s/${slug}` }).catch(() => openSnackbar({ text: 'Không chia sẻ được', type: 'error' })); }}>
-      ↗ Chia sẻ gian hàng
-    </Button>
+      <ShareSheet
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+        slug={sf.slug}
+        title={sf.title}
+        referralCode={sf.type === 'CTV' ? sf.slug : null}
+        thumbnail={sf.collections[0]?.items[0]?.product.thumbnail ?? undefined}
+      />
+    </Page>
   );
 }

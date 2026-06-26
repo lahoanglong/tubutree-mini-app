@@ -191,6 +191,11 @@ export const vi = {
     commission: 'hoa hồng',
     inStore: 'Đang xem cửa hàng',
     backToTubu: '⤺ Về Tubu Tree',
+    shareTitle: 'Chia sẻ gian hàng',
+    shareZalo: 'Chia sẻ qua Zalo',
+    copyLink: 'Sao chép link',
+    captionHint: 'Caption gợi ý (chạm để sao chép)',
+    copied: 'Đã sao chép',
   },
 } as const;
 
