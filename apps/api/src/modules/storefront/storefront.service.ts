@@ -59,6 +59,52 @@ export class StorefrontService {
     return sf;
   }
 
+  async createCollection(
+    userId: string,
+    dto: { title: string; kind?: 'NORMAL' | 'COMBO'; layout?: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct?: number },
+  ) {
+    const sf = await this.assertOwnedStorefront(userId);
+    const count = await this.prisma.storefrontCollection.count({ where: { storefrontId: sf.id } });
+    return this.prisma.storefrontCollection.create({
+      data: {
+        storefrontId: sf.id,
+        title: dto.title,
+        kind: dto.kind ?? 'NORMAL',
+        layout: dto.layout ?? 'CAROUSEL',
+        comboDiscountPct: dto.kind === 'COMBO' ? dto.comboDiscountPct ?? 0 : null,
+        sortOrder: count,
+      },
+    });
+  }
+
+  async updateCollection(
+    userId: string,
+    collectionId: string,
+    dto: { title?: string; layout?: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct?: number },
+  ) {
+    await this.assertOwnedCollection(userId, collectionId);
+    return this.prisma.storefrontCollection.update({ where: { id: collectionId }, data: dto });
+  }
+
+  async deleteCollection(userId: string, collectionId: string) {
+    await this.assertOwnedCollection(userId, collectionId);
+    await this.prisma.storefrontCollection.delete({ where: { id: collectionId } });
+    return { ok: true };
+  }
+
+  async reorderCollections(userId: string, orderedIds: string[]) {
+    const sf = await this.assertOwnedStorefront(userId);
+    const owned = await this.prisma.storefrontCollection.findMany({
+      where: { storefrontId: sf.id }, select: { id: true },
+    });
+    const ownedSet = new Set(owned.map((c) => c.id));
+    const ops = orderedIds
+      .filter((id) => ownedSet.has(id))
+      .map((id, i) => this.prisma.storefrontCollection.update({ where: { id }, data: { sortOrder: i } }));
+    await this.prisma.$transaction(ops);
+    return { ok: true };
+  }
+
   private async assertOwnedCollection(userId: string, collectionId: string) {
     const col = await this.prisma.storefrontCollection.findUnique({
       where: { id: collectionId },

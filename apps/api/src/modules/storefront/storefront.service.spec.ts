@@ -70,3 +70,29 @@ describe('StorefrontService.updateMine/publishMine', () => {
     expect(r.publishedAt).toBeInstanceOf(Date);
   });
 });
+
+describe('StorefrontService collections', () => {
+  it('createCollection gắn vào storefront của tôi, sortOrder kế tiếp', async () => {
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', ownerUserId: 'u1' }) },
+      storefrontCollection: { count: jest.fn().mockResolvedValue(2), create: jest.fn().mockImplementation(({ data }) => ({ id: 'c3', ...data })) },
+    });
+    const svc = new StorefrontService(prisma);
+    const c = await svc.createCollection('u1', { title: 'Skincare' });
+    expect(c.storefrontId).toBe('s1');
+    expect(c.sortOrder).toBe(2);
+    expect(c.kind).toBe('NORMAL');
+  });
+
+  it('reorderCollections cập nhật sortOrder theo thứ tự mảng', async () => {
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', ownerUserId: 'u1' }) },
+      storefrontCollection: { findMany: jest.fn().mockResolvedValue([{ id: 'a' }, { id: 'b' }]), update: jest.fn() },
+      $transaction: jest.fn((ops) => Promise.all(ops)),
+    });
+    const svc = new StorefrontService(prisma);
+    await svc.reorderCollections('u1', ['b', 'a']);
+    expect(prisma.storefrontCollection.update).toHaveBeenCalledWith({ where: { id: 'b' }, data: { sortOrder: 0 } });
+    expect(prisma.storefrontCollection.update).toHaveBeenCalledWith({ where: { id: 'a' }, data: { sortOrder: 1 } });
+  });
+});
