@@ -36,7 +36,6 @@ export class StorefrontService {
     return sf;
   }
 
-  // helper dùng lại ở các task sau
   async updateMine(
     userId: string,
     dto: { title?: string; headerNote?: string; avatarUrl?: string; coverUrl?: string; theme?: string },
@@ -71,12 +70,15 @@ export class StorefrontService {
         variations: { select: { affiliateRate: true } },
       },
     });
-    return products.map((p) => ({
-      ...p,
-      maxAffiliateRate: p.variations.reduce(
-        (m, v) => Math.max(m, v.affiliateRate ? Number(v.affiliateRate) : 0), 0,
-      ),
-    }));
+    return products.map((p) => {
+      const { variations, ...rest } = p;
+      return {
+        ...rest,
+        maxAffiliateRate: variations.reduce(
+          (m, v) => Math.max(m, v.affiliateRate ? Number(v.affiliateRate) : 0), 0,
+        ),
+      };
+    });
   }
 
   async getPublicBySlug(slug: string) {
@@ -178,7 +180,7 @@ export class StorefrontService {
       where: { id: collectionId },
       include: { storefront: true },
     });
-    if (!col || col.storefront.ownerUserId !== userId) throw new ForbiddenException('Không có quyền.');
+    if (!col || !col.storefront || col.storefront.ownerUserId !== userId) throw new ForbiddenException('Không có quyền.');
     return col;
   }
 
@@ -225,7 +227,7 @@ export class StorefrontService {
       where: { id: itemId },
       include: { collection: { include: { storefront: true } } },
     });
-    if (!item || item.collection.storefront.ownerUserId !== userId) throw new ForbiddenException('Không có quyền.');
+    if (!item || !item.collection || !item.collection.storefront || item.collection.storefront.ownerUserId !== userId) throw new ForbiddenException('Không có quyền.');
     return item;
   }
 }

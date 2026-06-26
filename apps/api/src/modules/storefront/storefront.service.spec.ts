@@ -49,6 +49,38 @@ describe('StorefrontService.getOrCreateMine', () => {
   });
 });
 
+describe('StorefrontService.getMine', () => {
+  it('trả gian hàng kèm collections+items (gồm cả isHidden) theo sortOrder', async () => {
+    const sfWithChildren = {
+      id: 's1', ownerUserId: 'u1', type: 'CTV',
+      collections: [
+        { id: 'c1', sortOrder: 0, items: [{ id: 'i1', isHidden: true }, { id: 'i2', isHidden: false }] },
+      ],
+    };
+    const prisma = makePrisma();
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue(sfWithChildren);
+    const svc = new StorefrontService(prisma);
+    const sf = await svc.getMine('u1');
+
+    // verify behavior: trả đúng cây dữ liệu, item ẩn vẫn còn (để CTV sửa)
+    expect(sf).toBe(sfWithChildren);
+    expect(sf.collections[0].items).toHaveLength(2);
+    expect(sf.collections[0].items.some((i: any) => i.isHidden === true)).toBe(true);
+    // include đúng: có collections.orderBy sortOrder + items
+    const arg = (prisma.storefront.findFirst as jest.Mock).mock.calls[0][0];
+    expect(arg.where).toEqual({ ownerUserId: 'u1', type: 'CTV' });
+    expect(arg.include.collections.orderBy).toEqual({ sortOrder: 'asc' });
+    expect(arg.include.collections.include.items).toBeDefined();
+  });
+
+  it('throw NotFound khi chưa có gian hàng', async () => {
+    const prisma = makePrisma();
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue(null);
+    const svc = new StorefrontService(prisma);
+    await expect(svc.getMine('u1')).rejects.toThrow();
+  });
+});
+
 describe('StorefrontService.updateMine/publishMine', () => {
   it('cập nhật title/note/theme', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
@@ -95,6 +127,56 @@ describe('StorefrontService collections', () => {
     expect(prisma.storefrontCollection.update).toHaveBeenCalledWith({ where: { id: 'b' }, data: { sortOrder: 0 } });
     expect(prisma.storefrontCollection.update).toHaveBeenCalledWith({ where: { id: 'a' }, data: { sortOrder: 1 } });
   });
+
+  it('updateCollection: owner sửa được', async () => {
+    const prisma = makePrisma({
+      storefrontCollection: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'u1' } }),
+        update: jest.fn().mockImplementation(({ data }) => ({ id: 'c1', ...data })),
+      },
+    });
+    const svc = new StorefrontService(prisma);
+    const r = await svc.updateCollection('u1', 'c1', { title: 'New' });
+    expect(r.title).toBe('New');
+    expect(prisma.storefrontCollection.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { title: 'New' } });
+  });
+
+  it('updateCollection: non-owner bị reject, không gọi update', async () => {
+    const prisma = makePrisma({
+      storefrontCollection: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'OTHER' } }),
+        update: jest.fn(),
+      },
+    });
+    const svc = new StorefrontService(prisma);
+    await expect(svc.updateCollection('u1', 'c1', { title: 'New' })).rejects.toThrow();
+    expect(prisma.storefrontCollection.update).not.toHaveBeenCalled();
+  });
+
+  it('deleteCollection: owner xoá được', async () => {
+    const prisma = makePrisma({
+      storefrontCollection: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'u1' } }),
+        delete: jest.fn().mockResolvedValue({ id: 'c1' }),
+      },
+    });
+    const svc = new StorefrontService(prisma);
+    const r = await svc.deleteCollection('u1', 'c1');
+    expect(r).toEqual({ ok: true });
+    expect(prisma.storefrontCollection.delete).toHaveBeenCalledWith({ where: { id: 'c1' } });
+  });
+
+  it('deleteCollection: non-owner bị reject, không gọi delete', async () => {
+    const prisma = makePrisma({
+      storefrontCollection: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'OTHER' } }),
+        delete: jest.fn(),
+      },
+    });
+    const svc = new StorefrontService(prisma);
+    await expect(svc.deleteCollection('u1', 'c1')).rejects.toThrow();
+    expect(prisma.storefrontCollection.delete).not.toHaveBeenCalled();
+  });
 });
 
 describe('StorefrontService items', () => {
@@ -117,6 +199,40 @@ describe('StorefrontService items', () => {
     const svc = new StorefrontService(prisma);
     await expect(svc.updateItem('u1', 'i1', { isHidden: true })).rejects.toThrow();
   });
+
+  it('removeItem: owner xoá item của mình', async () => {
+    const prisma = makePrisma({
+      storefrontItem: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'i1', collection: { storefront: { ownerUserId: 'u1' } } }),
+        delete: jest.fn().mockResolvedValue({ id: 'i1' }),
+      },
+    });
+    const svc = new StorefrontService(prisma);
+    const r = await svc.removeItem('u1', 'i1');
+    expect(r).toEqual({ ok: true });
+    expect(prisma.storefrontItem.delete).toHaveBeenCalledWith({ where: { id: 'i1' } });
+  });
+
+  it('reorderItems: chỉ cập nhật id thuộc collection, id lạ bị loại khỏi ops', async () => {
+    const prisma = makePrisma({
+      storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'u1' } }) },
+      storefrontItem: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'i1' }, { id: 'i2' }]),
+        update: jest.fn(),
+      },
+      $transaction: jest.fn((ops) => Promise.all(ops)),
+    });
+    const svc = new StorefrontService(prisma);
+    // 'STRANGER' không thuộc collection → phải bị loại
+    await svc.reorderItems('u1', 'c1', ['i2', 'STRANGER', 'i1']);
+    expect(prisma.storefrontItem.update).toHaveBeenCalledWith({ where: { id: 'i2' }, data: { sortOrder: 0 } });
+    expect(prisma.storefrontItem.update).toHaveBeenCalledWith({ where: { id: 'i1' }, data: { sortOrder: 1 } });
+    // id lạ KHÔNG được cập nhật, và chỉ có đúng 2 lần update
+    expect(prisma.storefrontItem.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'STRANGER' } }),
+    );
+    expect(prisma.storefrontItem.update).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('StorefrontService.pickerProducts', () => {
@@ -132,6 +248,9 @@ describe('StorefrontService.pickerProducts', () => {
     expect((prisma.product.findMany as jest.Mock).mock.calls[0][0].where.affiliateBlocked).toBe(false);
     expect(r[0].maxAffiliateRate).toBe(10);
     expect(r[0].name).toBe('Dầu gội');
+    // KHÔNG lộ mảng variations (chứa affiliateRate từng biến thể) cho CTV
+    expect((r[0] as any).variations).toBeUndefined();
+    expect(JSON.stringify(r)).not.toContain('affiliateRate');
   });
 });
 
