@@ -184,6 +184,7 @@ describe('StorefrontService items', () => {
   it('addItem gắn vào collection của tôi', async () => {
     const prisma = makePrisma({
       storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'u1' } }) },
+      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true, affiliateBlocked: false }) },
       storefrontItem: { count: jest.fn().mockResolvedValue(1), create: jest.fn().mockImplementation(({ data }) => ({ id: 'i2', ...data })) },
     });
     const svc = new StorefrontService(prisma);
@@ -191,6 +192,39 @@ describe('StorefrontService items', () => {
     expect(it.collectionId).toBe('c1');
     expect(it.productId).toBe('p1');
     expect(it.sortOrder).toBe(1);
+  });
+
+  it('addItem chặn SP affiliateBlocked=true, không tạo item', async () => {
+    const prisma = makePrisma({
+      storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'u1' } }) },
+      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true, affiliateBlocked: true }) },
+      storefrontItem: { count: jest.fn(), create: jest.fn() },
+    });
+    const svc = new StorefrontService(prisma);
+    await expect(svc.addItem('u1', 'c1', { productId: 'p1' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.storefrontItem.create).not.toHaveBeenCalled();
+  });
+
+  it('addItem chặn SP isActive=false, không tạo item', async () => {
+    const prisma = makePrisma({
+      storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'u1' } }) },
+      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: false, affiliateBlocked: false }) },
+      storefrontItem: { count: jest.fn(), create: jest.fn() },
+    });
+    const svc = new StorefrontService(prisma);
+    await expect(svc.addItem('u1', 'c1', { productId: 'p1' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.storefrontItem.create).not.toHaveBeenCalled();
+  });
+
+  it('addItem chặn productId không tồn tại', async () => {
+    const prisma = makePrisma({
+      storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'u1' } }) },
+      product: { findUnique: jest.fn().mockResolvedValue(null) },
+      storefrontItem: { count: jest.fn(), create: jest.fn() },
+    });
+    const svc = new StorefrontService(prisma);
+    await expect(svc.addItem('u1', 'c1', { productId: 'nope' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.storefrontItem.create).not.toHaveBeenCalled();
   });
 
   it('updateItem chặn người không sở hữu', async () => {
@@ -263,24 +297,29 @@ describe('StorefrontService.getPublicBySlug', () => {
     await expect(svc.getPublicBySlug('x')).rejects.toThrow();
   });
 
-  it('ẩn item isHidden + không trả affiliateRate', async () => {
+  it('ẩn item isHidden + loại SP inactive/affiliateBlocked + không trả affiliateRate', async () => {
     const prisma = makePrisma({
       storefront: { findFirst: jest.fn().mockResolvedValue({
         id: 's1', slug: 'linh', title: 'Shop', isPublished: true,
         collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'CAROUSEL', sortOrder: 0,
           items: [
             { id: 'i1', isHidden: false, isPinned: false, sortOrder: 0, note: null, variationId: null,
-              product: { id: 'p1', name: 'P1', slug: 'p1', thumbnail: 't', brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 4.5, reviewCount: 3, isActive: true } },
+              product: { id: 'p1', name: 'P1', slug: 'p1', thumbnail: 't', brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 4.5, reviewCount: 3, isActive: true, affiliateBlocked: false } },
             { id: 'i2', isHidden: true, isPinned: false, sortOrder: 1, note: null, variationId: null,
-              product: { id: 'p2', name: 'P2', slug: 'p2', thumbnail: 't', brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 0, reviewCount: 0, isActive: true } },
+              product: { id: 'p2', name: 'P2', slug: 'p2', thumbnail: 't', brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 0, reviewCount: 0, isActive: true, affiliateBlocked: false } },
+            { id: 'i3', isHidden: false, isPinned: false, sortOrder: 2, note: null, variationId: null,
+              product: { id: 'p3', name: 'P3', slug: 'p3', thumbnail: 't', brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 0, reviewCount: 0, isActive: true, affiliateBlocked: true } },
           ] }],
       }) },
     });
     const svc = new StorefrontService(prisma);
     const r = await svc.getPublicBySlug('linh');
     const col0 = r.collections[0]!;
+    // i2 ẩn (isHidden), i3 bị chặn (affiliateBlocked) → chỉ còn i1
     expect(col0.items).toHaveLength(1);
     expect(col0.items[0]!.id).toBe('i1');
+    // affiliateRate không lộ; affiliateBlocked chỉ dùng để lọc, không nằm trong output
     expect(JSON.stringify(r)).not.toContain('affiliateRate');
+    expect(JSON.stringify(r)).not.toContain('affiliateBlocked');
   });
 });

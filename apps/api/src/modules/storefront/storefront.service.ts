@@ -95,6 +95,7 @@ export class StorefrontService {
                   select: {
                     id: true, name: true, slug: true, thumbnail: true, brand: true,
                     basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, isActive: true,
+                    affiliateBlocked: true,
                   },
                 },
               },
@@ -110,7 +111,7 @@ export class StorefrontService {
       collections: sf.collections.map((c) => ({
         id: c.id, title: c.title, kind: c.kind, layout: c.layout, comboDiscountPct: c.comboDiscountPct,
         items: c.items
-          .filter((i) => !i.isHidden && i.product.isActive)
+          .filter((i) => !i.isHidden && i.product.isActive && !i.product.affiliateBlocked)
           .map((i) => ({
             id: i.id, note: i.note, variationId: i.variationId,
             product: {
@@ -190,6 +191,13 @@ export class StorefrontService {
     dto: { productId: string; variationId?: string; note?: string },
   ) {
     await this.assertOwnedCollection(userId, collectionId);
+    const product = await this.prisma.product.findUnique({
+      where: { id: dto.productId },
+      select: { id: true, isActive: true, affiliateBlocked: true },
+    });
+    if (!product || !product.isActive || product.affiliateBlocked) {
+      throw new BadRequestException('Sản phẩm không khả dụng để thêm vào gian hàng.');
+    }
     const count = await this.prisma.storefrontItem.count({ where: { collectionId } });
     return this.prisma.storefrontItem.create({
       data: { collectionId, productId: dto.productId, variationId: dto.variationId ?? null, note: dto.note ?? null, sortOrder: count },
