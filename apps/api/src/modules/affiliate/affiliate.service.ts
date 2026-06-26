@@ -320,6 +320,60 @@ export class AffiliateService {
     if (res.count > 0) this.logger.log(`Duyệt ${res.count} commission hết hold.`);
   }
 
+  /** Thống kê theo từng gian hàng của CTV (đơn có storefrontSlug thuộc tôi + referrer là tôi). */
+  async storefrontAnalytics(userId: string) {
+    const myStores = await this.prisma.storefront.findMany({
+      where: { ownerUserId: userId }, select: { slug: true, title: true },
+    });
+    const out = [] as Array<{ slug: string; title?: string; orders: number; revenue: number; commission: number }>;
+    for (const s of myStores) {
+      const [orderAgg, commAgg] = await Promise.all([
+        this.prisma.order.aggregate({
+          where: { storefrontSlug: s.slug, referrerUserId: userId },
+          _count: { _all: true }, _sum: { total: true },
+        }),
+        this.prisma.commission.aggregate({
+          where: { affiliateUserId: userId, order: { storefrontSlug: s.slug } },
+          _sum: { amount: true },
+        }),
+      ]);
+      out.push({
+        slug: s.slug, title: (s as { title?: string }).title,
+        orders: orderAgg._count._all, revenue: orderAgg._sum.total ?? 0,
+        commission: commAgg._sum.amount ?? 0,
+      });
+    }
+    return { storefronts: out };
+  }
+
+  /** Phân rã hoa hồng theo sản phẩm (join Commission→Order.items, tính theo affiliateRate). */
+  async productCommissionBreakdown(userId: string) {
+    const commissions = await this.prisma.commission.findMany({
+      where: { affiliateUserId: userId, status: { not: 'REJECTED' } },
+      include: { order: { include: { items: true } } },
+      take: 500,
+    });
+    const variationIds = [
+      ...new Set(commissions.flatMap((c) => c.order?.items.map((i) => i.variationId) ?? [])),
+    ];
+    const variations = await this.prisma.variation.findMany({
+      where: { id: { in: variationIds } }, select: { id: true, affiliateRate: true },
+    });
+    const rate = new Map(variations.map((v) => [v.id, v.affiliateRate ? Number(v.affiliateRate) : 0]));
+    const acc = new Map<string, { productName: string; commission: number; orders: number }>();
+    for (const c of commissions) {
+      for (const it of c.order?.items ?? []) {
+        const r = rate.get(it.variationId) ?? 0;
+        if (r <= 0) continue;
+        const amount = Math.floor((it.total * r) / 100);
+        const cur = acc.get(it.productName) ?? { productName: it.productName, commission: 0, orders: 0 };
+        cur.commission += amount; cur.orders += 1;
+        acc.set(it.productName, cur);
+      }
+    }
+    return [...acc.values()].sort((a, b) => b.commission - a.commission);
+  }
+
   // ── Helpers ──
   private async sumCommission(userId: string, since: Date): Promise<number> {
     const agg = await this.prisma.commission.aggregate({

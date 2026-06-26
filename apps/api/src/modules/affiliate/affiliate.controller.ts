@@ -52,4 +52,14 @@ export class AffiliateController {
   payout(@CurrentUser('sub') userId: string, @Body() dto: PayoutDto) {
     return this.affiliate.requestPayout(userId, dto.amount, dto.method, dto.bankInfo);
   }
+
+  @Get('analytics/storefronts')
+  storefrontAnalytics(@CurrentUser('sub') userId: string) {
+    return this.affiliate.storefrontAnalytics(userId);
+  }
+
+  @Get('analytics/products')
+  productBreakdown(@CurrentUser('sub') userId: string) {
+    return this.affiliate.productCommissionBreakdown(userId);
+  }
 }

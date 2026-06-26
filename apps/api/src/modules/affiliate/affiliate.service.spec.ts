@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import { AffiliateService } from './affiliate.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -230,5 +231,37 @@ describe('AffiliateService.grantReferralReward (refer-reward 1 lần, cộng d�
     );
     await new AffiliateService(prisma, config).grantReferralReward('o1');
     expect(couponCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('AffiliateService analytics', () => {
+  it('storefrontAnalytics gom theo gian hàng của tôi', async () => {
+    const prisma = {
+      storefront: { findMany: jest.fn().mockResolvedValue([{ slug: 'linh', title: 'Cửa hàng Linh' }]) },
+      order: { aggregate: jest.fn().mockResolvedValue({ _count: { _all: 3 }, _sum: { total: 900000 } }) },
+      commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 72000 } }) },
+    } as unknown as PrismaService;
+    const svc = new AffiliateService(prisma, config);
+    const r = await svc.storefrontAnalytics('u1');
+    expect(r.storefronts[0]).toMatchObject({ slug: 'linh', orders: 3, revenue: 900000, commission: 72000 });
+  });
+
+  it('productCommissionBreakdown nhóm theo sản phẩm', async () => {
+    const prisma = {
+      commission: { findMany: jest.fn().mockResolvedValue([
+        { id: 'c1', order: { items: [
+          { productName: 'Dầu gội', variationId: 'v1', total: 100000 },
+          { productName: 'Xà phòng', variationId: 'v2', total: 50000 },
+        ] } },
+      ]) },
+      variation: { findMany: jest.fn().mockResolvedValue([
+        { id: 'v1', affiliateRate: '10' }, { id: 'v2', affiliateRate: '8' },
+      ]) },
+    } as unknown as PrismaService;
+    const svc = new AffiliateService(prisma, config);
+    const r = await svc.productCommissionBreakdown('u1');
+    const dau = r.find((x) => x.productName === 'Dầu gội');
+    expect(dau?.commission).toBe(10000); // floor(100000*10/100)
+    expect(r.find((x) => x.productName === 'Xà phòng')?.commission).toBe(4000);
   });
 });

@@ -390,6 +390,7 @@ model Order {
   couponCode      String?
   note            String?
   items           OrderItem[]
+  commissions     Commission[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -559,6 +560,7 @@ model Commission {
   affiliateUserId String
   user            User             @relation(fields: [affiliateUserId], references: [id])
   orderId         String
+  order           Order            @relation(fields: [orderId], references: [id])
   orderTotal      Int
   rate            Decimal
   amount          Int
