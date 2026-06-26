@@ -74,6 +74,54 @@ export async function getBrands(): Promise<{ brand: string; count: number }[]> {
   }
 }
 
+export async function getStorefront(slug: string): Promise<StorefrontDetail | null> {
+  try {
+    const res = await fetch(`${BASE}/storefront/public/${slug}`, { next: { revalidate: 300 } });
+    if (!res.ok) return null;
+    return (await res.json()) as StorefrontDetail;
+  } catch {
+    return null;
+  }
+}
+
+export interface StorefrontItem {
+  id: string;
+  note?: string | null;
+  variationId?: string | null;
+  product: {
+    id: string;
+    name: string;
+    slug: string;
+    thumbnail?: string | null;
+    brand?: string | null;
+    basePrice: number;
+    salePrice?: number | null;
+    ratingAvg?: number | null;
+    reviewCount?: number | null;
+  };
+}
+
+export interface StorefrontCollection {
+  id: string;
+  title: string;
+  kind?: string | null;
+  layout?: string | null;
+  comboDiscountPct?: number | null;
+  items: StorefrontItem[];
+}
+
+export interface StorefrontDetail {
+  id: string;
+  slug: string;
+  type?: string | null;
+  title: string;
+  headerNote?: string | null;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
+  theme?: string | null;
+  collections: StorefrontCollection[];
+}
+
 export function formatVnd(n: number): string {
   return `${n.toLocaleString('vi-VN')}đ`;
 }
