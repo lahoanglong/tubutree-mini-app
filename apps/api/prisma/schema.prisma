@@ -58,6 +58,7 @@ model User {
   coinTransactions    CoinTransaction[]
   affiliateLinks      AffiliateLink[]
   commissions         Commission[]
+  storefronts         Storefront[]
   payouts             Payout[]
   cashbackClicks      CashbackClick[]
   cashbackTxns        CashbackTransaction[]
@@ -141,6 +142,9 @@ model Product {
   id             String   @id @default(cuid())
   pancakeId      String   @unique
   brand          String
+  brandId         String?
+  brandRef        Brand?   @relation(fields: [brandId], references: [id])
+  affiliateBlocked Boolean @default(false)
   slug           String   @unique
   name           String
   description    String   @db.Text
@@ -168,8 +172,85 @@ model Product {
   updatedAt      DateTime @updatedAt
 
   @@index([brand])
+  @@index([brandId])
   @@index([isActive, isFeatured])
   @@map("products")
+}
+
+model Brand {
+  id             String     @id @default(cuid())
+  slug           String     @unique
+  name           String     @unique
+  logoUrl        String?
+  coverUrl       String?
+  tagline        String?
+  story          String?    @db.Text
+  storyImages    String[]
+  origin         String?
+  certifications Json?
+  isVerified     Boolean    @default(false)
+  isPublished    Boolean    @default(false)
+  ownerUserId    String?
+  followerCount  Int        @default(0)
+  products       Product[]
+  storefront     Storefront?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@map("brands")
+}
+
+model Storefront {
+  id          String                 @id @default(cuid())
+  type        StorefrontType
+  slug        String                 @unique
+  ownerUserId String?
+  owner       User?                  @relation(fields: [ownerUserId], references: [id])
+  brandId     String?                @unique
+  brand       Brand?                 @relation(fields: [brandId], references: [id])
+  title       String
+  headerNote  String?
+  avatarUrl   String?
+  coverUrl    String?
+  theme       String                 @default("leaf-orange")
+  isPublished Boolean                @default(false)
+  publishedAt DateTime?
+  collections StorefrontCollection[]
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@index([ownerUserId])
+  @@map("storefronts")
+}
+
+model StorefrontCollection {
+  id               String           @id @default(cuid())
+  storefrontId     String
+  storefront       Storefront       @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  title            String
+  kind             CollectionKind   @default(NORMAL)
+  layout           CollectionLayout @default(CAROUSEL)
+  sortOrder        Int              @default(0)
+  comboDiscountPct Int?
+  items            StorefrontItem[]
+
+  @@index([storefrontId])
+  @@map("storefront_collections")
+}
+
+model StorefrontItem {
+  id           String               @id @default(cuid())
+  collectionId String
+  collection   StorefrontCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  productId    String
+  variationId  String?
+  note         String?
+  sortOrder    Int                  @default(0)
+  isPinned     Boolean              @default(false)
+  isHidden     Boolean              @default(false)
+
+  @@index([collectionId])
+  @@map("storefront_items")
 }
 
 model Variation {
@@ -450,6 +531,22 @@ enum CommissionStatus {
   APPROVED
   PAID
   REJECTED
+}
+
+enum StorefrontType {
+  CTV
+  BRAND
+}
+
+enum CollectionKind {
+  NORMAL
+  COMBO
+}
+
+enum CollectionLayout {
+  GRID
+  CAROUSEL
+  STACK
 }
 
 model Commission {
