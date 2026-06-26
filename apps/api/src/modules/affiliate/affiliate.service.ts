@@ -352,6 +352,7 @@ export class AffiliateService {
     const commissions = await this.prisma.commission.findMany({
       where: { affiliateUserId: userId, status: { not: CommissionStatus.REJECTED } },
       include: { order: { include: { items: true } } },
+      orderBy: { createdAt: 'desc' }, // cửa sổ 500 commission gần nhất (deterministic)
       take: 500,
     });
     const variationIds = [

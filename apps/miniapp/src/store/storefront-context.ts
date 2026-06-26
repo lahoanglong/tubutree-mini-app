@@ -19,7 +19,14 @@ interface StorefrontCtxState extends Ctx {
 export const useStorefrontContext = create<StorefrontCtxState>((set, get) => ({
   ...load(),
   setContext: (ctx) => {
-    const next = { slug: ctx.slug ?? get().slug, referralCode: ctx.referralCode ?? get().referralCode };
+    // Phân biệt "absent (undefined → giữ giá trị cũ)" vs "explicit null (→ xoá field)":
+    // mở link affiliate thuần /?ref=CODE truyền {slug:null} phải XOÁ slug session trước,
+    // tránh gán nhầm storefrontSlug cũ vào đơn (sai analytics).
+    const cur = get();
+    const next = {
+      slug: ctx.slug !== undefined ? ctx.slug : cur.slug,
+      referralCode: ctx.referralCode !== undefined ? ctx.referralCode : cur.referralCode,
+    };
     try { sessionStorage.setItem(KEY, JSON.stringify(next)); } catch { /* ignore */ }
     set(next);
   },
