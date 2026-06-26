@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { CommissionStatus } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -338,7 +339,7 @@ export class AffiliateService {
         }),
       ]);
       out.push({
-        slug: s.slug, title: (s as { title?: string }).title,
+        slug: s.slug, title: s.title,
         orders: orderAgg._count._all, revenue: orderAgg._sum.total ?? 0,
         commission: commAgg._sum.amount ?? 0,
       });
@@ -349,7 +350,7 @@ export class AffiliateService {
   /** Phân rã hoa hồng theo sản phẩm (join Commission→Order.items, tính theo affiliateRate). */
   async productCommissionBreakdown(userId: string) {
     const commissions = await this.prisma.commission.findMany({
-      where: { affiliateUserId: userId, status: { not: 'REJECTED' } },
+      where: { affiliateUserId: userId, status: { not: CommissionStatus.REJECTED } },
       include: { order: { include: { items: true } } },
       take: 500,
     });
@@ -360,18 +361,23 @@ export class AffiliateService {
       where: { id: { in: variationIds } }, select: { id: true, affiliateRate: true },
     });
     const rate = new Map(variations.map((v) => [v.id, v.affiliateRate ? Number(v.affiliateRate) : 0]));
-    const acc = new Map<string, { productName: string; commission: number; orders: number }>();
+    // Đếm đơn theo orderId riêng biệt (Set) — 1 đơn có 2 item cùng SP vẫn tính 1 đơn.
+    const acc = new Map<string, { productName: string; commission: number; orderIds: Set<string> }>();
     for (const c of commissions) {
       for (const it of c.order?.items ?? []) {
         const r = rate.get(it.variationId) ?? 0;
         if (r <= 0) continue;
         const amount = Math.floor((it.total * r) / 100);
-        const cur = acc.get(it.productName) ?? { productName: it.productName, commission: 0, orders: 0 };
-        cur.commission += amount; cur.orders += 1;
+        const cur =
+          acc.get(it.productName) ?? { productName: it.productName, commission: 0, orderIds: new Set<string>() };
+        cur.commission += amount;
+        cur.orderIds.add(c.orderId);
         acc.set(it.productName, cur);
       }
     }
-    return [...acc.values()].sort((a, b) => b.commission - a.commission);
+    return [...acc.values()]
+      .map((x) => ({ productName: x.productName, commission: x.commission, orders: x.orderIds.size }))
+      .sort((a, b) => b.commission - a.commission);
   }
 
   // ── Helpers ──

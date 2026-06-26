@@ -236,20 +236,31 @@ describe('AffiliateService.grantReferralReward (refer-reward 1 lần, cộng d�
 
 describe('AffiliateService analytics', () => {
   it('storefrontAnalytics gom theo gian hàng của tôi', async () => {
+    const orderAggregate = jest.fn().mockResolvedValue({ _count: { _all: 3 }, _sum: { total: 900000 } });
+    const commissionAggregate = jest.fn().mockResolvedValue({ _sum: { amount: 72000 } });
     const prisma = {
       storefront: { findMany: jest.fn().mockResolvedValue([{ slug: 'linh', title: 'Cửa hàng Linh' }]) },
-      order: { aggregate: jest.fn().mockResolvedValue({ _count: { _all: 3 }, _sum: { total: 900000 } }) },
-      commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 72000 } }) },
+      order: { aggregate: orderAggregate },
+      commission: { aggregate: commissionAggregate },
     } as unknown as PrismaService;
     const svc = new AffiliateService(prisma, config);
     const r = await svc.storefrontAnalytics('u1');
     expect(r.storefronts[0]).toMatchObject({ slug: 'linh', orders: 3, revenue: 900000, commission: 72000 });
+    // Hardening: WHERE phải scope đúng theo slug + referrer (chống đếm chéo người dùng).
+    expect(orderAggregate).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ storefrontSlug: 'linh', referrerUserId: 'u1' }) }),
+    );
+    expect(commissionAggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ affiliateUserId: 'u1', order: { storefrontSlug: 'linh' } }),
+      }),
+    );
   });
 
   it('productCommissionBreakdown nhóm theo sản phẩm', async () => {
     const prisma = {
       commission: { findMany: jest.fn().mockResolvedValue([
-        { id: 'c1', order: { items: [
+        { id: 'c1', orderId: 'o1', order: { id: 'o1', items: [
           { productName: 'Dầu gội', variationId: 'v1', total: 100000 },
           { productName: 'Xà phòng', variationId: 'v2', total: 50000 },
         ] } },
@@ -262,6 +273,26 @@ describe('AffiliateService analytics', () => {
     const r = await svc.productCommissionBreakdown('u1');
     const dau = r.find((x) => x.productName === 'Dầu gội');
     expect(dau?.commission).toBe(10000); // floor(100000*10/100)
+    expect(dau?.orders).toBe(1);
     expect(r.find((x) => x.productName === 'Xà phòng')?.commission).toBe(4000);
+  });
+
+  it('productCommissionBreakdown: 1 đơn có 2 item CÙNG sản phẩm → orders=1, hoa hồng cộng dồn', async () => {
+    const prisma = {
+      commission: { findMany: jest.fn().mockResolvedValue([
+        { id: 'c1', orderId: 'o1', order: { id: 'o1', items: [
+          { productName: 'Dầu gội', variationId: 'v1', total: 100000 },
+          { productName: 'Dầu gội', variationId: 'v1', total: 60000 },
+        ] } },
+      ]) },
+      variation: { findMany: jest.fn().mockResolvedValue([
+        { id: 'v1', affiliateRate: '10' },
+      ]) },
+    } as unknown as PrismaService;
+    const svc = new AffiliateService(prisma, config);
+    const r = await svc.productCommissionBreakdown('u1');
+    const dau = r.find((x) => x.productName === 'Dầu gội');
+    expect(dau?.orders).toBe(1); // 2 item cùng đơn → 1 đơn
+    expect(dau?.commission).toBe(16000); // floor(100000*10/100) + floor(60000*10/100)
   });
 });
