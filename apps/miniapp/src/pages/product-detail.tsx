@@ -26,6 +26,7 @@ import { brandAccent } from '../utils/brands';
 import { formatVnd } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { StorefrontContextBar } from '../components/storefront-context-bar';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -150,6 +151,7 @@ export default function ProductDetailPage() {
   return (
     <Page className="page page-bleed" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
 
+      <StorefrontContextBar />
       <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} alt={p.name} />
 
       {/* ── Info chính ── */}

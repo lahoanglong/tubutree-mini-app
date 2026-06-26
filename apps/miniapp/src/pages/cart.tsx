@@ -21,6 +21,7 @@ import { formatVnd } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
+import { StorefrontContextBar } from '../components/storefront-context-bar';
 
 const UNDO_WINDOW_MS = 3500;
 const CART_KEY = ['cart'] as const;
@@ -155,6 +156,7 @@ export default function CartPage() {
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 190 }}>
 
+      <StorefrontContextBar />
       {empty ? (
         <EmptyState
           art="basket"

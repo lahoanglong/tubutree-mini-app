@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'zmp-ui';
 import { ChevronLeft } from 'lucide-react';
+import { useStorefrontContext } from '../store/storefront-context';
 
 /**
  * Nút back NỔI cho trang con. Vì đã ẩn actionBar gốc Zalo (immersive, content tràn
@@ -16,6 +17,7 @@ const ROOTS = ['/', '/browse', '/game', '/wallet', '/profile'];
 export default function BackButton() {
   const navigate = useNavigate();
   const location = useLocation();
+  const sfSlug = useStorefrontContext((s) => s.slug);
   const show = !ROOTS.includes(location.pathname);
 
   useEffect(() => {
@@ -34,7 +36,7 @@ export default function BackButton() {
         // Mở thẳng trang con (share-link/thông báo) → history rỗng, navigate(-1) kẹt.
         const idx = (window.history.state?.idx as number | undefined) ?? 0;
         if (idx > 0) navigate(-1);
-        else navigate('/');
+        else navigate(sfSlug ? `/s/${sfSlug}` : '/');
       }}
       style={{
         position: 'fixed',

@@ -1,6 +1,7 @@
-import { Box, Text, Button } from 'zmp-ui';
+import { Box, Text, Button, useNavigate } from 'zmp-ui';
 import type { OrderDTO } from '@tubutree/shared-types';
 import { vi } from '../../i18n/vi';
+import { useStorefrontContext } from '../../store/storefront-context';
 
 const LEAVES = [
   { left: '12%', delay: '0ms', size: 16, rotate: 20 },
@@ -32,6 +33,17 @@ export function OrderSuccess({
   onTrack: () => void;
   onContinue: () => void;
 }) {
+  const navigate = useNavigate();
+  const sfSlug = useStorefrontContext((s) => s.slug);
+
+  const handleContinue = () => {
+    if (sfSlug) {
+      navigate(`/s/${sfSlug}`, { replace: true });
+    } else {
+      onContinue();
+    }
+  };
+
   return (
     <Box
       style={{
@@ -96,7 +108,7 @@ export function OrderSuccess({
         <Button fullWidth onClick={onTrack} style={{ background: 'var(--primary-600)', minHeight: 48, fontWeight: 600 }}>
           {vi.success.trackOrder}
         </Button>
-        <Button fullWidth variant="tertiary" onClick={onContinue} style={{ color: 'var(--primary-700)', minHeight: 44 }}>
+        <Button fullWidth variant="tertiary" onClick={handleContinue} style={{ color: 'var(--primary-700)', minHeight: 44 }}>
           {vi.success.keepShopping}
         </Button>
       </Box>

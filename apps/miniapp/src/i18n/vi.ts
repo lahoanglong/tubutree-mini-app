@@ -189,6 +189,8 @@ export const vi = {
     show: 'Hiện',
     pickerSearch: 'Tìm sản phẩm…',
     commission: 'hoa hồng',
+    inStore: 'Đang xem cửa hàng',
+    backToTubu: '⤺ Về Tubu Tree',
   },
 } as const;
 
