@@ -114,6 +114,44 @@ export class StorefrontService {
     return col;
   }
 
+  async addItem(
+    userId: string,
+    collectionId: string,
+    dto: { productId: string; variationId?: string; note?: string },
+  ) {
+    await this.assertOwnedCollection(userId, collectionId);
+    const count = await this.prisma.storefrontItem.count({ where: { collectionId } });
+    return this.prisma.storefrontItem.create({
+      data: { collectionId, productId: dto.productId, variationId: dto.variationId ?? null, note: dto.note ?? null, sortOrder: count },
+    });
+  }
+
+  async updateItem(
+    userId: string,
+    itemId: string,
+    dto: { note?: string; isPinned?: boolean; isHidden?: boolean },
+  ) {
+    await this.assertOwnedItem(userId, itemId);
+    return this.prisma.storefrontItem.update({ where: { id: itemId }, data: dto });
+  }
+
+  async removeItem(userId: string, itemId: string) {
+    await this.assertOwnedItem(userId, itemId);
+    await this.prisma.storefrontItem.delete({ where: { id: itemId } });
+    return { ok: true };
+  }
+
+  async reorderItems(userId: string, collectionId: string, orderedItemIds: string[]) {
+    await this.assertOwnedCollection(userId, collectionId);
+    const owned = await this.prisma.storefrontItem.findMany({ where: { collectionId }, select: { id: true } });
+    const ownedSet = new Set(owned.map((i) => i.id));
+    const ops = orderedItemIds
+      .filter((id) => ownedSet.has(id))
+      .map((id, i) => this.prisma.storefrontItem.update({ where: { id }, data: { sortOrder: i } }));
+    await this.prisma.$transaction(ops);
+    return { ok: true };
+  }
+
   private async assertOwnedItem(userId: string, itemId: string) {
     const item = await this.prisma.storefrontItem.findUnique({
       where: { id: itemId },

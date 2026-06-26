@@ -96,3 +96,25 @@ describe('StorefrontService collections', () => {
     expect(prisma.storefrontCollection.update).toHaveBeenCalledWith({ where: { id: 'a' }, data: { sortOrder: 1 } });
   });
 });
+
+describe('StorefrontService items', () => {
+  it('addItem gắn vào collection của tôi', async () => {
+    const prisma = makePrisma({
+      storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'u1' } }) },
+      storefrontItem: { count: jest.fn().mockResolvedValue(1), create: jest.fn().mockImplementation(({ data }) => ({ id: 'i2', ...data })) },
+    });
+    const svc = new StorefrontService(prisma);
+    const it = await svc.addItem('u1', 'c1', { productId: 'p1', note: 'thích' });
+    expect(it.collectionId).toBe('c1');
+    expect(it.productId).toBe('p1');
+    expect(it.sortOrder).toBe(1);
+  });
+
+  it('updateItem chặn người không sở hữu', async () => {
+    const prisma = makePrisma({
+      storefrontItem: { findUnique: jest.fn().mockResolvedValue({ id: 'i1', collection: { storefront: { ownerUserId: 'OTHER' } } }) },
+    });
+    const svc = new StorefrontService(prisma);
+    await expect(svc.updateItem('u1', 'i1', { isHidden: true })).rejects.toThrow();
+  });
+});
