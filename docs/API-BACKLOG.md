@@ -12,9 +12,9 @@ Tổng hợp sau khi audit toàn bộ tích hợp. **Phần lớn đã code xong
 | A2 | **Điền `zaloTemplateId` cho từng template** | `notifications.service` chỉ gửi ZNS khi template có `zaloTemplateId` (ID thật Zalo cấp). Hiện cột này đang trống → ZNS tự fallback INAPP. Sau khi Zalo duyệt template phải map ID vào. Có thể cần thêm 1 endpoint admin `PUT zaloTemplateId` (hiện chưa có) hoặc cập nhật bằng SQL. | Chờ **Template ID** từ Zalo (sau ~7–14 ngày duyệt). | **CAO** (sau khi có template) |
 | A3 | **Cron đối soát Accesstrade** (`GET /transactions`) | Hiện chỉ nhận **postback** (event-driven) — đã đủ chạy. Cron kéo `/transactions` định kỳ là lớp đối soát bù khi postback rớt. | `ACCESSTRADE_TOKEN`. **Code viết được ngay.** | TRUNG BÌNH (tăng độ chắc, không bắt buộc) |
 | A4 | **Tích hợp eSMS (SMS OTP cho web)** | Hoàn toàn chưa có trong code. Đăng nhập web hiện đã dùng **Zalo OAuth** nên OTP SMS là tuỳ chọn. | Tài khoản eSMS (hoặc provider khác). | THẤP (Zalo login đã phủ) |
-| A5 | **Webhook ngân hàng (VietQR / Casso / TPBank)** | Chưa có. Chỉ cần nếu muốn **tự động xác nhận** chuyển khoản ngân hàng (ngoài ZaloPay). | Quyết định nghiệp vụ (mục B2) + tài khoản Casso/bank API. | THẤP (ZaloPay đã lo thanh toán online) |
+| A5 | ~~Webhook ngân hàng (VietQR/Casso)~~ | **✅ ĐÃ LÀM (2026-06-26)** qua Pancake: sinh VietQR phía server (nội dung CK = mã đơn), Pancake POS đối soát chuyển khoản → webhook `order` → `isPancakeOrderPaid` lật đơn `BANK_TRANSFER` UNPAID→PAID. FE màn `/bank-payment/:code`. **Cần:** liên kết TK ngân hàng shop trong Pancake + đặt đúng `payment.bank_*` (admin config). | Pancake đã có key. | XONG |
 
-> A1 + A3 tôi có thể **viết ngay bây giờ** (code chạy khi có key/OA). A2 phải chờ Template ID. A4/A5 tuỳ nhu cầu.
+> A1 + A3 tôi có thể **viết ngay bây giờ** (code chạy khi có key/OA). A2 phải chờ Template ID. A4 tuỳ nhu cầu.
 
 ---
 
