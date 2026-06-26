@@ -31,6 +31,7 @@ const BrowsePage = lazy(() => import('../pages/browse'));
 const ProductDetailPage = lazy(() => import('../pages/product-detail'));
 const CartPage = lazy(() => import('../pages/cart'));
 const CheckoutPage = lazy(() => import('../pages/checkout'));
+const BankPaymentPage = lazy(() => import('../pages/bank-payment'));
 const OrdersPage = lazy(() => import('../pages/orders'));
 const OrderDetailPage = lazy(() => import('../pages/order-detail'));
 const GamePage = lazy(() => import('../pages/game'));
@@ -104,6 +105,7 @@ export default function MyApp() {
                 <Route path="/product/:slug" element={<ProductDetailPage />} />
                 <Route path="/cart" element={<CartPage />} />
                 <Route path="/checkout" element={<CheckoutPage />} />
+                <Route path="/bank-payment/:code" element={<BankPaymentPage />} />
                 <Route path="/orders" element={<OrdersPage />} />
                 <Route path="/order/:code" element={<OrderDetailPage />} />
                 <Route path="/game" element={<GamePage />} />

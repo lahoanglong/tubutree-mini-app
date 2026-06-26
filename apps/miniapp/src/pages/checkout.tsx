@@ -114,6 +114,11 @@ export default function CheckoutPage() {
       // Refresh auth store (user.walletBalance / pointsBalance dùng ở header/checkout) để UI đồng bộ.
       void useAuthStore.getState().restore().catch(() => undefined);
       idempotencyKey.current = newIdempotencyKey(); // đơn sau là đơn mới
+      // Chuyển khoản: sang màn VietQR để khách quét trả ngay (Pancake đối soát → tự xác nhận).
+      if (payment === 'BANK_TRANSFER') {
+        navigate(`/bank-payment/${o.code}`, { replace: true });
+        return;
+      }
       setPlaced(o);
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),

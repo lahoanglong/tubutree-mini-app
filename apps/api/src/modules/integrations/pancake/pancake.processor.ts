@@ -7,6 +7,7 @@ import { LoyaltyService } from '../../loyalty/loyalty.service';
 import { AffiliateService } from '../../affiliate/affiliate.service';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { mapPancakeStatus } from './pancake-status.map';
+import { isPancakeOrderPaid } from './pancake-payment.util';
 
 interface EventData {
   event?: string;
@@ -66,6 +67,8 @@ export class PancakeProcessor extends WorkerHost {
       case 'order.status_updated':
       case 'order.updated':
         await this.onStatusUpdated(data);
+        // Đối soát thanh toán: Pancake ghi nhận chuyển khoản (QR) → lật đơn UNPAID→PAID.
+        await this.onPaymentReconcile(data);
         // Đơn Pancake kèm thông tin vận chuyển → cập nhật luôn nếu có (field thật ở `partner`).
         if (data['partner'] || data['tracking_link'] || data['shipping_status'] || data['tracking_number']) {
           await this.onShippingUpdated(data);
@@ -128,6 +131,27 @@ export class PancakeProcessor extends WorkerHost {
     await this.notifications.notify(order.userId, `ORDER_${status}`, {
       order_code: order.code,
     });
+  }
+
+  /** Đối soát thanh toán chuyển khoản: chỉ lật đơn BANK_TRANSFER còn UNPAID → PAID (idempotent). */
+  private async onPaymentReconcile(data: Record<string, unknown>): Promise<void> {
+    const order = await this.findOrder(data);
+    if (!order) return;
+    if (order.paymentMethod !== 'BANK_TRANSFER' || order.paymentStatus !== 'UNPAID') return;
+    if (!isPancakeOrderPaid(data, order.total)) return;
+
+    // updateMany guard paymentStatus='UNPAID' → 2 webhook song song chỉ lật 1 lần.
+    const flip = await this.prisma.order.updateMany({
+      where: { id: order.id, paymentStatus: 'UNPAID' },
+      data: {
+        paymentStatus: 'PAID',
+        ...(order.status === 'PENDING_PAYMENT' ? { status: 'CONFIRMED' } : {}),
+      },
+    });
+    if (flip.count > 0) {
+      this.logger.log(`Pancake xác nhận thanh toán đơn ${order.code} → PAID`);
+      await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
+    }
   }
 
   private async onShippingUpdated(data: Record<string, unknown>): Promise<void> {
