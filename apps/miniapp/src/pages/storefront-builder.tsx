@@ -27,14 +27,23 @@ export default function StorefrontBuilderPage() {
   if (sfQ.isLoading) {
     return <Page className="page"><Box p={4}><Skeleton style={{ height: 120, borderRadius: 16 }} /></Box></Page>;
   }
-  // 404 = chưa có gian hàng → mời tạo
   if (sfQ.isError) {
+    // Chỉ 404 = chưa có gian hàng → mời tạo. Lỗi network/500/401 → ErrorState có retry
+    // (không nuốt lỗi thành "Tạo gian hàng" vì bấm Tạo cũng sẽ fail). retry:false để 404 không retry.
+    const status = (sfQ.error as { response?: { status?: number } })?.response?.status;
+    if (status === 404) {
+      return (
+        <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+          <Box p={6}>
+            <EmptyState art="sprout" heading={vi.storefront.title} body={vi.storefront.empty}
+              ctaLabel={vi.storefront.create} onCta={() => createMut.mutate()} />
+          </Box>
+        </Page>
+      );
+    }
     return (
       <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Box p={6}>
-          <EmptyState art="sprout" heading={vi.storefront.title} body={vi.storefront.empty}
-            ctaLabel={vi.storefront.create} onCta={() => createMut.mutate()} />
-        </Box>
+        <Box p={6}><ErrorState message={getErrorMessage(sfQ.error)} onRetry={() => void sfQ.refetch()} /></Box>
       </Page>
     );
   }
@@ -60,9 +69,14 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   });
   const itemMut = useMutation({
     mutationFn: (v: { id: string; dto: { isPinned?: boolean; isHidden?: boolean } }) => updateItem(v.id, v.dto),
-    onSuccess: () => void refresh(),
+    onSuccess: () => { haptic('light'); void refresh(); },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
-  const delItemMut = useMutation({ mutationFn: removeItem, onSuccess: () => void refresh() });
+  const delItemMut = useMutation({
+    mutationFn: removeItem,
+    onSuccess: () => void refresh(),
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
