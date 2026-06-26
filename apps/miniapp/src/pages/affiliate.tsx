@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getAffiliateMe,
@@ -121,6 +121,7 @@ function RegisterGate() {
 
 function Dashboard() {
   const { openSnackbar } = useSnackbar();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const meQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe });
   const dashQ = useQuery({ queryKey: ['affiliate-dashboard'], queryFn: getAffiliateDashboard });
@@ -242,6 +243,12 @@ function Dashboard() {
           onClick={() => setWithdrawing(true)}
         >
           Rút hoa hồng
+        </Button>
+      </Box>
+
+      <Box mx={4} mb={3}>
+        <Button fullWidth variant="secondary" onClick={() => navigate('/storefront')}>
+          🏪 Gian hàng của tôi
         </Button>
       </Box>
 
