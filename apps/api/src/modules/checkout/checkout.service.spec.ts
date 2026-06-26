@@ -141,6 +141,20 @@ describe('CheckoutService.placeOrder — money safety', () => {
   });
 });
 
+describe('CheckoutService.placeOrder — storefrontSlug attribution (Lớp 2)', () => {
+  it('lưu storefrontSlug vào order khi đặt từ gian hàng', async () => {
+    const { svc, orderCreate } = build({ stockCount: 1 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop' } as never);
+    expect(orderCreate.mock.calls[0][0].data.storefrontSlug).toBe('linh-shop');
+  });
+
+  it('storefrontSlug null khi không truyền', async () => {
+    const { svc, orderCreate } = build({ stockCount: 1 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(orderCreate.mock.calls[0][0].data.storefrontSlug).toBeNull();
+  });
+});
+
 describe('CheckoutService.placeOrder — stock atomic (B5)', () => {
   it('stock đủ → trừ đúng số lượng atomic (where gte) + tạo đơn', async () => {
     const { svc, variationUpdateMany, orderCreate } = build({ stockCount: 1 });

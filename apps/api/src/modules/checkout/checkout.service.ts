@@ -124,6 +124,7 @@ export class CheckoutService {
             paymentStatus: paid ? 'PAID' : 'UNPAID',
             shippingAddress: this.addressSnapshot(address),
             referrerUserId,
+            storefrontSlug: dto.storefrontSlug ?? null,
             couponCode: cart.couponCode,
             invoiceRequest: dto.invoiceRequest ? (dto.invoiceRequest as object) : undefined,
             invoiceStatus: dto.invoiceRequest ? 'REQUESTED' : 'NOT_REQUESTED',

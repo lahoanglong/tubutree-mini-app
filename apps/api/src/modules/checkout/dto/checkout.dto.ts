@@ -28,6 +28,9 @@ export class PlaceOrderDto {
   /** Mã giới thiệu CTV (nếu mua qua link chia sẻ). */
   @IsOptional() @IsString() referralCode?: string;
 
+  /** Slug gian hàng CTV (attribution — lưu vào Order.storefrontSlug). */
+  @IsOptional() @IsString() storefrontSlug?: string;
+
   @IsOptional()
   @IsObject()
   @ValidateNested()
