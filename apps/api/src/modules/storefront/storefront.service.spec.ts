@@ -118,3 +118,19 @@ describe('StorefrontService items', () => {
     await expect(svc.updateItem('u1', 'i1', { isHidden: true })).rejects.toThrow();
   });
 });
+
+describe('StorefrontService.pickerProducts', () => {
+  it('loại SP affiliateBlocked, trả maxRate', async () => {
+    const prisma = makePrisma({
+      product: { findMany: jest.fn().mockResolvedValue([
+        { id: 'p1', name: 'Dầu gội', slug: 'dau-goi', thumbnail: 't', basePrice: 189000, salePrice: null, ratingAvg: 4.8, reviewCount: 42,
+          variations: [{ affiliateRate: '8' }, { affiliateRate: '10' }] },
+      ]) },
+    });
+    const svc = new StorefrontService(prisma);
+    const r = await svc.pickerProducts('u1', { search: 'dầu' });
+    expect((prisma.product.findMany as jest.Mock).mock.calls[0][0].where.affiliateBlocked).toBe(false);
+    expect(r[0].maxAffiliateRate).toBe(10);
+    expect(r[0].name).toBe('Dầu gội');
+  });
+});

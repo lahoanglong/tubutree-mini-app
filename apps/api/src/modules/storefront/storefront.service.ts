@@ -53,6 +53,32 @@ export class StorefrontService {
     });
   }
 
+  async pickerProducts(_userId: string, q: { search?: string; page?: number; limit?: number }) {
+    const take = Math.min(q.limit ?? 20, 50);
+    const skip = ((q.page ?? 1) - 1) * take;
+    const products = await this.prisma.product.findMany({
+      where: {
+        isActive: true,
+        affiliateBlocked: false,
+        ...(q.search ? { name: { contains: q.search, mode: 'insensitive' } } : {}),
+      },
+      orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
+      take,
+      skip,
+      select: {
+        id: true, name: true, slug: true, thumbnail: true, brand: true,
+        basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true,
+        variations: { select: { affiliateRate: true } },
+      },
+    });
+    return products.map((p) => ({
+      ...p,
+      maxAffiliateRate: p.variations.reduce(
+        (m, v) => Math.max(m, v.affiliateRate ? Number(v.affiliateRate) : 0), 0,
+      ),
+    }));
+  }
+
   private async assertOwnedStorefront(userId: string) {
     const sf = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId, type: 'CTV' } });
     if (!sf) throw new NotFoundException('Chưa có gian hàng.');
