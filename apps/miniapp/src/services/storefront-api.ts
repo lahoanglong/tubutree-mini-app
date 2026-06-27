@@ -50,3 +50,13 @@ export const reorderItems = (collectionId: string, orderedIds: string[]) =>
 
 export const pickerProducts = (search?: string) =>
   api.get('/storefront/me/products', { params: { search } }).then((r) => r.data as PickerProduct[]);
+
+export interface StorefrontQuest {
+  code: string; title: string; hint: string; goal: number; rewardXu: number;
+  progress: number; done: boolean; claimed: boolean;
+}
+export interface QuestList { quests: StorefrontQuest[]; totalEarnedXu: number; level: number; levelMax: number; }
+
+export const getQuests = () => api.get('/storefront/me/quests').then((r) => r.data as QuestList);
+export const claimQuest = (code: string) =>
+  api.post(`/storefront/me/quests/${code}/claim`).then((r) => r.data as { claimed: boolean; code: string; rewardXu: number; coinsBalance: number });

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getMyStorefront, createStorefront, publishStorefront,
   createCollection, addItem, updateItem, removeItem, pickerProducts,
+  getQuests, claimQuest,
   type StorefrontEdit, type PickerProduct,
 } from '../services/storefront-api';
 import { getErrorMessage } from '../services/api';
@@ -107,6 +108,9 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         <Button fullWidth variant="secondary" onClick={() => newColMut.mutate()}>+ {vi.storefront.addCollection}</Button>
       </Box>
 
+      <QuestSection />
+
+
       <Box style={{ position: 'fixed', left: 0, right: 0, bottom: 0, padding: 12, background: 'var(--neutral-50)', display: 'flex', gap: 8 }}>
         <Button variant="secondary" style={{ flex: 1 }} onClick={() => navigate(`/s/${sf.slug}`)}>{vi.storefront.preview}</Button>
         <Button style={{ flex: 1, background: 'var(--primary-600)' }} loading={publishMut.isPending} onClick={() => publishMut.mutate()}>{vi.storefront.publish}</Button>
@@ -116,6 +120,67 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         {pickerCol && <PickerSheet collectionId={pickerCol} onAdded={() => { void refresh(); }} onClose={() => setPickerCol(null)} />}
       </Sheet>
     </Page>
+  );
+}
+
+/** Section "Hành trình gian hàng" — chuỗi nhiệm vụ early-win thưởng TubuXu. */
+function QuestSection() {
+  const qc = useQueryClient();
+  const { openSnackbar } = useSnackbar();
+  const questsQ = useQuery({ queryKey: ['storefront-quests'], queryFn: getQuests });
+  const claimMut = useMutation({
+    mutationFn: (code: string) => claimQuest(code),
+    onSuccess: (r) => {
+      haptic('medium');
+      openSnackbar({ text: `+${r.rewardXu.toLocaleString('vi-VN')} TubuXu 🎉`, type: 'success' });
+      void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const data = questsQ.data;
+  if (!data) return null;
+
+  return (
+    <Box mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
+      <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 4 }}>
+        <Text bold>🎯 Hành trình gian hàng</Text>
+        <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>{data.level}/{data.levelMax}</Text>
+      </Box>
+      <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginBottom: 10 }}>
+        Đã nhận {data.totalEarnedXu.toLocaleString('vi-VN')} TubuXu
+      </Text>
+      {data.quests.map((q) => (
+        <Box key={q.code} style={{ padding: '8px 0', borderTop: '1px solid var(--neutral-100)' }}>
+          <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8 }}>
+            <Box style={{ flex: 1 }}>
+              <Text size="small" style={{ opacity: q.claimed ? 0.6 : 1 }}>
+                {q.claimed ? '✓ ' : ''}{q.title}
+              </Text>
+              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>{q.hint}</Text>
+            </Box>
+            {q.claimed ? (
+              <Text size="xSmall" style={{ color: 'var(--leaf-700)', whiteSpace: 'nowrap' }}>Đã nhận</Text>
+            ) : q.done ? (
+              <Button
+                size="small"
+                style={{ background: 'var(--primary-600)', whiteSpace: 'nowrap' }}
+                loading={claimMut.isPending && claimMut.variables === q.code}
+                onClick={() => claimMut.mutate(q.code)}
+              >
+                +{q.rewardXu.toLocaleString('vi-VN')} xu
+              </Button>
+            ) : (
+              <Text size="xSmall" style={{ color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>{q.progress}/{q.goal}</Text>
+            )}
+          </Box>
+          {/* thanh tiến trình mảnh */}
+          <Box style={{ height: 4, background: 'var(--neutral-100)', borderRadius: 'var(--radius-full)', marginTop: 6, overflow: 'hidden' }}>
+            <Box style={{ height: '100%', width: `${Math.round((q.progress / q.goal) * 100)}%`, background: q.done ? 'var(--leaf-600)' : 'var(--primary-400)' }} />
+          </Box>
+        </Box>
+      ))}
+    </Box>
   );
 }
 
