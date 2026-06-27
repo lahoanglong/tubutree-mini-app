@@ -122,6 +122,58 @@ export interface StorefrontDetail {
   collections: StorefrontCollection[];
 }
 
+export interface BrandDetail {
+  id: string;
+  slug: string;
+  name: string;
+  logoUrl?: string | null;
+  coverUrl?: string | null;
+  tagline?: string | null;
+  story?: string | null;
+  storyImages: string[];
+  origin?: string | null;
+  isVerified: boolean;
+  followerCount: number;
+  certifications: { code: string; label: string; proofUrl?: string | null }[];
+  promotions: {
+    id: string;
+    title: string;
+    subtitle?: string | null;
+    themeColor?: string | null;
+    couponCode?: string | null;
+    startAt: string;
+    endAt: string;
+  }[];
+  products: {
+    id: string;
+    name: string;
+    slug: string;
+    thumbnail?: string | null;
+    basePrice: number;
+    salePrice?: number | null;
+    ratingAvg?: number | null;
+    reviewCount?: number | null;
+  }[];
+  dealerRewards: {
+    id: string;
+    type: string;
+    title: string;
+    description?: string | null;
+    threshold: number;
+    period: string;
+  }[];
+}
+
+export async function getBrand(slug: string): Promise<BrandDetail | null> {
+  try {
+    const res = await fetch(`${BASE}/brand/public/${slug}`, { next: { revalidate: 300 } });
+    if (!res.ok) return null;
+    return (await res.json()) as BrandDetail;
+  } catch {
+    return null;
+  }
+}
+
 export function formatVnd(n: number): string {
   return `${n.toLocaleString('vi-VN')}đ`;
 }
