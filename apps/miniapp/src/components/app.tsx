@@ -57,6 +57,7 @@ const BrandStoryPage = lazy(() => import('../pages/brand-story'));
 const SubscriptionsPage = lazy(() => import('../pages/subscriptions'));
 const StorefrontBuilderPage = lazy(() => import('../pages/storefront-builder'));
 const StorefrontViewPage = lazy(() => import('../pages/storefront-view'));
+const BrandViewPage = lazy(() => import('../pages/brand-view'));
 const NotFoundPage = lazy(() => import('../pages/not-found'));
 
 const queryClient = new QueryClient({
@@ -145,6 +146,7 @@ export default function MyApp() {
                 <Route path="/subscriptions" element={<SubscriptionsPage />} />
                 <Route path="/storefront" element={<StorefrontBuilderPage />} />
                 <Route path="/s/:slug" element={<StorefrontViewPage />} />
+                <Route path="/brand/:slug" element={<BrandViewPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </AnimationRoutes>
             </Suspense>

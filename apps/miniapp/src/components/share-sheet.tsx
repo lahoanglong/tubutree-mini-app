@@ -11,6 +11,8 @@ export function ShareSheet({
   title,
   referralCode,
   thumbnail,
+  pathPrefix = 's',
+  captions: captionsProp,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -18,15 +20,22 @@ export function ShareSheet({
   title: string;
   referralCode?: string | null;
   thumbnail?: string;
+  /** 's' cho gian hàng CTV (/s/:slug), 'brand' cho trang nhãn (/brand/:slug). */
+  pathPrefix?: 's' | 'brand';
+  /** Caption tuỳ biến (vd brand share-to-earn). Mặc định bộ caption gian hàng CTV. */
+  captions?: string[];
 }) {
   const { openSnackbar } = useSnackbar();
   const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
-  const url = `${base}/s/${slug}${referralCode ? `?ref=${referralCode}` : ''}`;
-  const captions = [
-    `Mình tuyển vài món sống xanh đang dùng, ghé xem nha 🌿 ${url}`,
-    `Gian hàng sống xanh của mình đây 💚 ${url}`,
-    `Đồ thiên nhiên lành cho da & nhẹ với đất 🌱 ${url}`,
-  ];
+  const path = `/${pathPrefix}/${slug}`;
+  const url = `${base}${path}${referralCode ? `?ref=${referralCode}` : ''}`;
+  const captions = (
+    captionsProp ?? [
+      `Mình tuyển vài món sống xanh đang dùng, ghé xem nha 🌿 ${url}`,
+      `Gian hàng sống xanh của mình đây 💚 ${url}`,
+      `Đồ thiên nhiên lành cho da & nhẹ với đất 🌱 ${url}`,
+    ]
+  ).map((c) => (c.includes(url) ? c : `${c} ${url}`)); // luôn đảm bảo có link để dán
   const copy = (t: string) => {
     if (navigator.clipboard) {
       void navigator.clipboard.writeText(t);
@@ -43,7 +52,7 @@ export function ShareSheet({
           style={{ background: 'var(--primary-600)', marginBottom: 8 }}
           onClick={() => {
             haptic('light');
-            void shareLink({ title, description: captions[0] ?? '', thumbnail, path: `/s/${slug}` }).catch(() => {});
+            void shareLink({ title, description: captions[0] ?? '', thumbnail, path }).catch(() => {});
           }}
         >
           ↗ {vi.storefront.shareZalo}
