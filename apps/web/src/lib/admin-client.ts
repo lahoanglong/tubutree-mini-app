@@ -68,11 +68,22 @@ export const createCoupon = (input: CreateCouponInput) =>
   apiFetch('/admin/coupons', { method: 'POST', body: input });
 
 // ── Nhãn hàng (storefront Lớp 3) ──
+export interface BrandCert {
+  code: string;
+  label: string;
+  verified?: boolean;
+  proofUrl?: string;
+}
 export interface AdminBrand {
   id: string;
   slug: string;
   name: string;
   tagline: string | null;
+  logoUrl: string | null;
+  coverUrl: string | null;
+  story: string | null;
+  origin: string | null;
+  certifications: BrandCert[] | null;
   isVerified: boolean;
   isPublished: boolean;
   followerCount: number;
@@ -107,8 +118,19 @@ export interface AdminDealerReward {
 export const listBrands = () => apiFetch<AdminBrand[]>('/admin/brands');
 export const createBrand = (body: { name: string; tagline?: string; isPublished?: boolean }) =>
   apiFetch<AdminBrand>('/admin/brands', { method: 'POST', body });
-export const updateBrand = (id: string, body: Partial<{ name: string; tagline: string; isPublished: boolean }>) =>
-  apiFetch<AdminBrand>(`/admin/brands/${id}`, { method: 'PATCH', body });
+export const updateBrand = (
+  id: string,
+  body: Partial<{
+    name: string;
+    tagline: string;
+    logoUrl: string;
+    coverUrl: string;
+    story: string;
+    origin: string;
+    certifications: BrandCert[];
+    isPublished: boolean;
+  }>,
+) => apiFetch<AdminBrand>(`/admin/brands/${id}`, { method: 'PATCH', body });
 export const verifyBrand = (id: string, isVerified: boolean) =>
   apiFetch<AdminBrand>(`/admin/brands/${id}/verify`, { method: 'PATCH', body: { isVerified } });
 export const listBrandProducts = (id: string) =>

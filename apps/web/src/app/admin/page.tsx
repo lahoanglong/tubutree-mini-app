@@ -28,6 +28,7 @@ import {
   deleteDealerReward,
   type ConfigRow,
   type AdminBrand,
+  type BrandCert,
 } from '@/lib/admin-client';
 
 type Tab = 'dealers' | 'orders' | 'users' | 'config' | 'coupons' | 'brands';
@@ -340,6 +341,8 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
             {link.data && <span className="self-center text-sm text-green-700">Đã gán {link.data.linked} SP</span>}
           </div>
 
+          <BrandInfoForm brand={brand} />
+
           <div>
             <div className="mb-1 text-sm font-medium">Sản phẩm ({products.data?.length ?? 0})</div>
             <div className="max-h-48 space-y-1 overflow-y-auto">
@@ -373,6 +376,68 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function BrandInfoForm({ brand }: { brand: AdminBrand }) {
+  const qc = useQueryClient();
+  const [f, setF] = useState({
+    logoUrl: brand.logoUrl ?? '',
+    coverUrl: brand.coverUrl ?? '',
+    tagline: brand.tagline ?? '',
+    origin: brand.origin ?? '',
+    story: brand.story ?? '',
+  });
+  const [certs, setCerts] = useState<BrandCert[]>(brand.certifications ?? []);
+  const save = useMutation({
+    mutationFn: () =>
+      updateBrand(brand.id, {
+        logoUrl: f.logoUrl.trim(),
+        coverUrl: f.coverUrl.trim(),
+        tagline: f.tagline.trim(),
+        origin: f.origin.trim(),
+        story: f.story.trim(),
+        certifications: certs.filter((c) => c.code.trim() && c.label.trim()),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-brands'] }),
+  });
+
+  const setCert = (i: number, patch: Partial<BrandCert>) =>
+    setCerts((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
+
+  return (
+    <div className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-3">
+      <div className="mb-2 text-sm font-medium">Thông tin nhãn</div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <input placeholder="Logo URL" value={f.logoUrl} onChange={(e) => setF({ ...f, logoUrl: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
+        <input placeholder="Cover URL" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
+        <input placeholder="Tagline" value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
+        <input placeholder="Nguồn gốc (vd Bến Tre)" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
+      </div>
+      <textarea placeholder="Câu chuyện thương hiệu" value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} rows={3} className="mt-2 w-full rounded border border-neutral-200 px-2 py-1 text-sm" />
+
+      <div className="mt-3 text-sm font-medium">Chứng nhận (chỉ cái ✓ đã xác minh mới hiện cho khách)</div>
+      <div className="space-y-1">
+        {certs.map((c, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
+            <input placeholder="Mã (ORG)" value={c.code} onChange={(e) => setCert(i, { code: e.target.value })} className="w-24 rounded border border-neutral-200 px-2 py-1" />
+            <input placeholder="Nhãn (Hữu cơ USDA)" value={c.label} onChange={(e) => setCert(i, { label: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1" />
+            <input placeholder="Proof URL" value={c.proofUrl ?? ''} onChange={(e) => setCert(i, { proofUrl: e.target.value })} className="w-40 rounded border border-neutral-200 px-2 py-1" />
+            <label className="flex items-center gap-1">
+              <input type="checkbox" checked={c.verified ?? false} onChange={(e) => setCert(i, { verified: e.target.checked })} /> ✓ verified
+            </label>
+            <button onClick={() => setCerts((cs) => cs.filter((_, idx) => idx !== i))} className="text-xs text-red-600">Xoá</button>
+          </div>
+        ))}
+      </div>
+      <button onClick={() => setCerts((cs) => [...cs, { code: '', label: '', verified: false }])} className="mt-1 text-sm text-green-700 underline">+ Thêm chứng nhận</button>
+
+      <div className="mt-2">
+        <button onClick={() => save.mutate()} disabled={save.isPending} className="rounded bg-green-600 px-4 py-1.5 text-sm text-white disabled:bg-neutral-300">Lưu thông tin</button>
+        {save.isSuccess && <span className="ml-2 text-sm text-green-700">Đã lưu ✓</span>}
+        {save.isError && <span className="ml-2 text-sm text-red-600">{(save.error as Error).message}</span>}
+      </div>
     </div>
   );
 }
