@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, useParams, useNavigate } from 'zmp-ui';
-import { useQuery } from '@tanstack/react-query';
-import { getPublicBrand, getBrandShareToEarn } from '../services/brand-api';
+import { Box, Page, Text, Button, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  getPublicBrand, getBrandShareToEarn,
+  getBrandFollowState, followBrand, unfollowBrand,
+} from '../services/brand-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
@@ -13,8 +16,20 @@ const HEADER_BG = 'linear-gradient(120deg, var(--leaf-600), var(--primary-600))'
 export default function BrandViewPage() {
   const { slug = '' } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { openSnackbar } = useSnackbar();
   const [shareOpen, setShareOpen] = useState(false);
   const q = useQuery({ queryKey: ['public-brand', slug], queryFn: () => getPublicBrand(slug), staleTime: 60_000 });
+  // Trạng thái theo dõi (cần đăng nhập; lỗi/401 coi như chưa theo dõi).
+  const followQ = useQuery({ queryKey: ['brand-follow', slug], queryFn: () => getBrandFollowState(slug), retry: false });
+  const followMut = useMutation({
+    mutationFn: () => (followQ.data?.following ? unfollowBrand(slug) : followBrand(slug)),
+    onSuccess: (r) => {
+      qc.setQueryData(['brand-follow', slug], r);
+      openSnackbar({ text: r.following ? 'Đã theo dõi nhãn 💚' : 'Đã bỏ theo dõi', type: 'success' });
+    },
+    onError: () => openSnackbar({ text: 'Cần đăng nhập để theo dõi nhãn.', type: 'warning' }),
+  });
   // Banner share-to-earn: chỉ AFFILIATE đăng nhập mới eligible; lỗi (401/chưa login) coi như ẩn.
   const steQ = useQuery({
     queryKey: ['brand-ste', slug],
@@ -178,8 +193,16 @@ export default function BrandViewPage() {
       )}
 
       <Box style={{ position: 'fixed', left: 0, right: 0, bottom: 0, padding: 12, display: 'flex', gap: 8 }}>
-        <Button fullWidth style={{ background: 'var(--primary-600)' }} onClick={() => setShareOpen(true)}>
-          ↗ Chia sẻ nhãn hàng
+        <Button
+          variant="secondary"
+          style={{ flex: 1 }}
+          loading={followMut.isPending}
+          onClick={() => followMut.mutate()}
+        >
+          {followQ.data?.following ? '✓ Đang theo dõi' : '+ Theo dõi'}
+        </Button>
+        <Button style={{ flex: 1, background: 'var(--primary-600)' }} onClick={() => setShareOpen(true)}>
+          ↗ Chia sẻ
         </Button>
       </Box>
 

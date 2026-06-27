@@ -58,3 +58,14 @@ export const getPublicBrand = (slug: string) =>
 
 export const getBrandShareToEarn = (slug: string) =>
   api.get(`/brand/${slug}/share-to-earn`).then((r) => r.data as ShareToEarn);
+
+export interface FollowState {
+  following: boolean;
+  followerCount: number;
+}
+export const getBrandFollowState = (slug: string) =>
+  api.get(`/brand/${slug}/follow-state`).then((r) => r.data as FollowState);
+export const followBrand = (slug: string) =>
+  api.post(`/brand/${slug}/follow`).then((r) => r.data as FollowState);
+export const unfollowBrand = (slug: string) =>
+  api.delete(`/brand/${slug}/follow`).then((r) => r.data as FollowState);

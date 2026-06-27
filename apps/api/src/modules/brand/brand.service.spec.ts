@@ -27,6 +27,8 @@ function makePrisma(overrides: any = {}) {
     dealerReward: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     variation: { findMany: jest.fn().mockResolvedValue([]) },
     user: { findUniqueOrThrow: jest.fn() },
+    brandFollow: { create: jest.fn(), deleteMany: jest.fn().mockResolvedValue({ count: 0 }), findUnique: jest.fn().mockResolvedValue(null) },
+    $transaction: jest.fn().mockResolvedValue([]),
     ...overrides,
   } as any;
 }
@@ -200,5 +202,66 @@ describe('BrandService gán sản phẩm vào nhãn', () => {
     const out = await svc.listBrandProducts('b1');
     expect(prisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { brandId: 'b1' } }));
     expect(out).toHaveLength(1);
+  });
+});
+
+describe('BrandService follow nhãn', () => {
+  it('followBrand: tạo follow + tăng followerCount (transaction)', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1' });
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ followerCount: 6 });
+    const svc = new BrandService(prisma);
+    const out = await svc.followBrand('u1', 'sachi');
+    expect(prisma.$transaction).toHaveBeenCalled();
+    expect(out).toEqual({ following: true, followerCount: 6 });
+  });
+
+  it('followBrand idempotent: đã follow (P2002) → no-op, không ném', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1' });
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ followerCount: 6 });
+    const { Prisma } = require('@prisma/client');
+    prisma.$transaction.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
+    const svc = new BrandService(prisma);
+    const out = await svc.followBrand('u1', 'sachi');
+    expect(out.following).toBe(true);
+  });
+
+  it('followBrand NotFound nếu nhãn chưa publish', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue(null);
+    const svc = new BrandService(prisma);
+    await expect(svc.followBrand('u1', 'x')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('unfollowBrand: xoá + giảm count khi đang follow', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1' });
+    prisma.brandFollow.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.brand.update.mockResolvedValue({});
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ followerCount: 5 });
+    const svc = new BrandService(prisma);
+    const out = await svc.unfollowBrand('u1', 'sachi');
+    expect(prisma.brand.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { followerCount: { decrement: 1 } } });
+    expect(out).toEqual({ following: false, followerCount: 5 });
+  });
+
+  it('unfollowBrand: chưa follow (count 0) → KHÔNG giảm count', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1' });
+    prisma.brandFollow.deleteMany.mockResolvedValue({ count: 0 });
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ followerCount: 5 });
+    const svc = new BrandService(prisma);
+    await svc.unfollowBrand('u1', 'sachi');
+    expect(prisma.brand.update).not.toHaveBeenCalled();
+  });
+
+  it('followState trả following + followerCount', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', followerCount: 9 });
+    prisma.brandFollow.findUnique.mockResolvedValue({ id: 'f1' });
+    const svc = new BrandService(prisma);
+    const out = await svc.followState('u1', 'sachi');
+    expect(out).toEqual({ following: true, followerCount: 9 });
   });
 });

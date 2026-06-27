@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 interface Cert {
@@ -292,5 +293,43 @@ export class BrandService {
       data: { brandId },
     });
     return { linked: res.count };
+  }
+
+  // ---- Theo dõi nhãn ----
+  /** Theo dõi nhãn (idempotent qua @@unique(userId,brandId): theo dõi lại → no-op). */
+  async followBrand(userId: string, slug: string) {
+    const brand = await this.prisma.brand.findFirst({ where: { slug, isPublished: true }, select: { id: true } });
+    if (!brand) throw new NotFoundException('Nhãn hàng không tồn tại.');
+    try {
+      await this.prisma.$transaction([
+        this.prisma.brandFollow.create({ data: { userId, brandId: brand.id } }),
+        this.prisma.brand.update({ where: { id: brand.id }, data: { followerCount: { increment: 1 } } }),
+      ]);
+    } catch (err) {
+      // Đã theo dõi (unique violation) → bỏ qua, không tăng count lần nữa.
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+    }
+    const fresh = await this.prisma.brand.findUniqueOrThrow({ where: { id: brand.id }, select: { followerCount: true } });
+    return { following: true, followerCount: fresh.followerCount };
+  }
+
+  /** Bỏ theo dõi (chỉ giảm count khi thực sự đang theo dõi). */
+  async unfollowBrand(userId: string, slug: string) {
+    const brand = await this.prisma.brand.findFirst({ where: { slug }, select: { id: true } });
+    if (!brand) throw new NotFoundException('Nhãn hàng không tồn tại.');
+    const del = await this.prisma.brandFollow.deleteMany({ where: { userId, brandId: brand.id } });
+    if (del.count > 0) {
+      await this.prisma.brand.update({ where: { id: brand.id }, data: { followerCount: { decrement: 1 } } });
+    }
+    const fresh = await this.prisma.brand.findUniqueOrThrow({ where: { id: brand.id }, select: { followerCount: true } });
+    return { following: false, followerCount: fresh.followerCount };
+  }
+
+  /** Trạng thái theo dõi của user với nhãn (cho FE hiện nút). */
+  async followState(userId: string, slug: string) {
+    const brand = await this.prisma.brand.findFirst({ where: { slug, isPublished: true }, select: { id: true, followerCount: true } });
+    if (!brand) throw new NotFoundException('Nhãn hàng không tồn tại.');
+    const f = await this.prisma.brandFollow.findUnique({ where: { userId_brandId: { userId, brandId: brand.id } } });
+    return { following: Boolean(f), followerCount: brand.followerCount };
   }
 }

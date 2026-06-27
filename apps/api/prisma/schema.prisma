@@ -197,10 +197,23 @@ model Brand {
   storefront     Storefront?
   promotions     BrandPromotion[]
   dealerRewards  DealerReward[]
+  follows        BrandFollow[]
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
   @@map("brands")
+}
+
+model BrandFollow {
+  id        String   @id @default(cuid())
+  userId    String
+  brandId   String
+  brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, brandId])
+  @@index([brandId])
+  @@map("brand_follows")
 }
 
 model BrandPromotion {
