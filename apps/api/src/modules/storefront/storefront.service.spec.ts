@@ -273,6 +273,7 @@ describe('StorefrontService items', () => {
 describe('StorefrontService.pickerProducts', () => {
   it('loại SP affiliateBlocked, trả maxRate', async () => {
     const prisma = makePrisma({
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
       product: { findMany: jest.fn().mockResolvedValue([
         { id: 'p1', name: 'Dầu gội', slug: 'dau-goi', thumbnail: 't', basePrice: 189000, salePrice: null, ratingAvg: 4.8, reviewCount: 42,
           variations: [{ affiliateRate: '8' }, { affiliateRate: '10' }] },
@@ -321,5 +322,29 @@ describe('StorefrontService.getPublicBySlug', () => {
     // affiliateRate không lộ; affiliateBlocked chỉ dùng để lọc, không nằm trong output
     expect(JSON.stringify(r)).not.toContain('affiliateRate');
     expect(JSON.stringify(r)).not.toContain('affiliateBlocked');
+  });
+});
+
+describe('StorefrontService.pickerProducts — guardrail role', () => {
+  it('CUSTOMER gọi picker → BadRequest (không lộ %HH cho khách)', async () => {
+    const prisma = makePrisma({
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER' }) },
+      product: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    const svc = new StorefrontService(prisma);
+    await expect(svc.pickerProducts('u1', {})).rejects.toBeInstanceOf(BadRequestException);
+    expect((prisma as any).product.findMany).not.toHaveBeenCalled();
+  });
+
+  it('AFFILIATE gọi picker → trả SP kèm maxAffiliateRate', async () => {
+    const prisma = makePrisma({
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
+      product: { findMany: jest.fn().mockResolvedValue([
+        { id: 'p1', name: 'X', slug: 'x', thumbnail: null, brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 0, reviewCount: 0, variations: [{ affiliateRate: 8 }] },
+      ]) },
+    });
+    const svc = new StorefrontService(prisma);
+    const out = await svc.pickerProducts('u1', {});
+    expect(out[0]!.maxAffiliateRate).toBe(8);
   });
 });

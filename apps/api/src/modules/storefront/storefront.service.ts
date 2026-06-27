@@ -52,7 +52,13 @@ export class StorefrontService {
     });
   }
 
-  async pickerProducts(_userId: string, q: { search?: string; page?: number; limit?: number }) {
+  async pickerProducts(userId: string, q: { search?: string; page?: number; limit?: number }) {
+    // Guardrail §9: picker trả maxAffiliateRate (% hoa hồng) → CHỈ CTV/Admin được gọi,
+    // không lộ % hoa hồng cho khách thường.
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { role: true } });
+    if (user.role !== 'AFFILIATE' && user.role !== 'ADMIN') {
+      throw new BadRequestException('Chỉ CTV mới xem được danh sách sản phẩm để thêm vào gian hàng.');
+    }
     const take = Math.min(q.limit ?? 20, 50);
     const skip = ((q.page ?? 1) - 1) * take;
     const products = await this.prisma.product.findMany({

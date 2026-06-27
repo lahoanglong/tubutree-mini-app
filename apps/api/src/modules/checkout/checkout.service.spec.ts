@@ -30,6 +30,7 @@ function build(
     stockCount?: number; // count trả về của variation.updateMany (decrement stock)
     variationUpdateMany?: jest.Mock; // override khi muốn mock chuỗi (race)
     combo?: { computeForStorefront: jest.Mock }; // override ComboService
+    validateAndCompute?: jest.Mock; // override coupons.validateAndCompute
   } = {},
 ) {
   const total = opts.total ?? 100;
@@ -53,7 +54,11 @@ function build(
     .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
 
   const cart = { getCart: jest.fn().mockResolvedValue(CART), clear: jest.fn() } as unknown as CartService;
-  const coupons = { redeem: jest.fn() } as unknown as CouponsService;
+  const coupons = {
+    redeem: jest.fn(),
+    validateAndCompute:
+      opts.validateAndCompute ?? jest.fn().mockResolvedValue({ discount: 0, freeship: false }),
+  } as unknown as CouponsService;
   const pricing = {
     resolvePointsRedemption: jest.fn().mockResolvedValue({ pointsUsed: opts.pointsUsed ?? 0, discount: 0 }),
     calcShippingFee: jest.fn().mockResolvedValue(0),
@@ -187,6 +192,44 @@ describe('CheckoutService.placeOrder — combo discount (§7.2)', () => {
     const { svc, orderCreate } = build({ stockCount: 1 });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     expect(orderCreate.mock.calls[0][0].data.items.create[0].total).toBe(100);
+  });
+
+  it('combo + coupon TUẦN TỰ: coupon tính trên base SAU combo (không giảm chồng) + invariant', async () => {
+    // subtotal 100, combo 20 → goodsAfterCombo 80; coupon 30% → validateAndCompute(_, 80) = 24
+    const combo = { computeForStorefront: jest.fn().mockResolvedValue({ total: 20, perLine: { v1: 20 } }) };
+    const validateAndCompute = jest.fn().mockResolvedValue({ discount: 24, freeship: false });
+    (CART as { couponCode: string | null }).couponCode = 'SALE30';
+    try {
+      const { svc, orderCreate } = build({ stockCount: 1, combo, validateAndCompute });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop' } as never);
+      // coupon được tính trên 80 (sau combo), KHÔNG phải 100
+      expect(validateAndCompute).toHaveBeenCalledWith('SALE30', 'u1', 80);
+      const data = orderCreate.mock.calls[0][0].data;
+      // discount = combo 20 + coupon 24 = 44 (≤ subtotal); total = 100 - 44 = 56
+      expect(data.discount).toBe(44);
+      expect(data.total).toBe(56);
+      expect(data.discount).toBeLessThanOrEqual(data.subtotal);
+    } finally {
+      (CART as { couponCode: string | null }).couponCode = null;
+    }
+  });
+
+  it('invariant: tổng giảm KHÔNG vượt subtotal (coupon AMOUNT lớn + combo)', async () => {
+    // subtotal 100, combo 20 → 80; coupon AMOUNT 90 nhưng validateAndCompute trả min(90,80)=80
+    const combo = { computeForStorefront: jest.fn().mockResolvedValue({ total: 20, perLine: { v1: 20 } }) };
+    const validateAndCompute = jest.fn().mockResolvedValue({ discount: 80, freeship: false });
+    (CART as { couponCode: string | null }).couponCode = 'BIG';
+    try {
+      const { svc, orderCreate } = build({ stockCount: 1, combo, validateAndCompute });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop' } as never);
+      const data = orderCreate.mock.calls[0][0].data;
+      // combo 20 + coupon 80 = 100 = subtotal; total = 0
+      expect(data.discount).toBe(100);
+      expect(data.discount).toBeLessThanOrEqual(data.subtotal);
+      expect(data.total).toBe(0);
+    } finally {
+      (CART as { couponCode: string | null }).couponCode = null;
+    }
   });
 });
 

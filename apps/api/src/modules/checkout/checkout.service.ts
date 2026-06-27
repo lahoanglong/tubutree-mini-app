@@ -231,14 +231,33 @@ export class CheckoutService {
       throw new BadRequestException('Địa chỉ giao hàng không hợp lệ.');
     }
 
-    const discount = cart.discount; // từ coupon
-    // Combo (shop tài trợ): giảm phân bổ vào từng dòng → khấu trừ goods + ghi vào OrderItem.total
-    // để hoa hồng tính trên giá thực trả (§7.2). Chỉ áp khi đặt qua gian hàng (storefrontSlug).
+    // Thứ tự áp giảm TUẦN TỰ (mỗi mức trên phần còn lại) để KHÔNG giảm chồng và KHÔNG vượt
+    // giá trị hàng (giữ invariant subtotal - tổng-giảm = goods):
+    //   1) Combo (shop tài trợ) — phân bổ vào từng dòng → cũng ghi vào OrderItem.total (§7.2, hoa hồng trên giá thực trả).
+    //   2) Coupon (Tubu tài trợ) — tính lại trên base SAU combo (đơn không-combo: base = subtotal → y hệt cũ).
+    //   3) Điểm Xanh — trên phần còn lại sau coupon.
     const combo = await this.combo.computeForStorefront(
       storefrontSlug,
       cart.items.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
     );
-    const goodsAfterCoupon = Math.max(0, cart.subtotal - discount - combo.total);
+    const goodsAfterCombo = Math.max(0, cart.subtotal - combo.total);
+
+    let discount = 0; // coupon (sau combo)
+    let freeship = false;
+    if (cart.couponCode) {
+      try {
+        const r = await this.coupons.validateAndCompute(cart.couponCode, userId, goodsAfterCombo);
+        discount = Math.min(r.discount, goodsAfterCombo);
+        freeship = r.freeship;
+      } catch {
+        // Coupon không còn hợp lệ trên base sau-combo (vd combo kéo xuống dưới minOrder):
+        // GIỮ theo giá trị cart đã validate trên gross nhưng kẹp vào phần còn lại — tránh lệch
+        // với bước redeem (placeOrder vẫn redeem theo cart.couponCode) và tránh giảm âm.
+        discount = Math.min(cart.discount, goodsAfterCombo);
+        freeship = cart.freeship;
+      }
+    }
+    const goodsAfterCoupon = Math.max(0, goodsAfterCombo - discount);
 
     const redemption = await this.pricing.resolvePointsRedemption(
       pointsToUse ?? 0,
@@ -251,7 +270,7 @@ export class CheckoutService {
       subtotal: cart.subtotal,
       tierId: user.tierId,
     });
-    if (cart.freeship) shippingFee = 0;
+    if (freeship) shippingFee = 0;
 
     const multiplier = await this.loyalty.getTierMultiplier(user.tierId);
     const pointsEarned = await this.pricing.calcPointsEarned(goodsAfterAll, multiplier);

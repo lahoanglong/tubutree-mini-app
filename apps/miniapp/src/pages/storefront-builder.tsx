@@ -56,7 +56,11 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const [pickerCol, setPickerCol] = useState<string | null>(null);
-  const refresh = () => qc.invalidateQueries({ queryKey: ['my-storefront'] });
+  const refresh = () => {
+    // Cập nhật cả tiến trình "Hành trình gian hàng" sau khi thêm SP/đăng (quest đọc từ cùng dữ liệu).
+    void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
+    return qc.invalidateQueries({ queryKey: ['my-storefront'] });
+  };
 
   const publishMut = useMutation({
     mutationFn: () => publishStorefront(true),

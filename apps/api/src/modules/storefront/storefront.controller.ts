@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -18,12 +18,12 @@ class CreateCollectionDto {
   @IsString() title!: string;
   @IsOptional() @IsIn(['NORMAL', 'COMBO']) kind?: 'NORMAL' | 'COMBO';
   @IsOptional() @IsIn(['GRID', 'CAROUSEL', 'STACK']) layout?: 'GRID' | 'CAROUSEL' | 'STACK';
-  @IsOptional() @IsInt() @Min(0) comboDiscountPct?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100) comboDiscountPct?: number;
 }
 class UpdateCollectionDto {
   @IsOptional() @IsString() title?: string;
   @IsOptional() @IsIn(['GRID', 'CAROUSEL', 'STACK']) layout?: 'GRID' | 'CAROUSEL' | 'STACK';
-  @IsOptional() @IsInt() @Min(0) comboDiscountPct?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100) comboDiscountPct?: number;
 }
 class AddItemDto {
   @IsString() productId!: string;
