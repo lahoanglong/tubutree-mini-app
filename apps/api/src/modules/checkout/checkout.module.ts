@@ -4,9 +4,10 @@ import { CheckoutController } from './checkout.controller';
 import { CartModule } from '../cart/cart.module';
 import { PancakeModule } from '../integrations/pancake/pancake.module';
 import { WalletModule } from '../wallet/wallet.module';
+import { StorefrontModule } from '../storefront/storefront.module';
 
 @Module({
-  imports: [CartModule, PancakeModule, WalletModule],
+  imports: [CartModule, PancakeModule, WalletModule, StorefrontModule],
   controllers: [CheckoutController],
   providers: [CheckoutService],
 })

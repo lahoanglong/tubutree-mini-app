@@ -9,13 +9,14 @@ import type { PancakeOrderService } from '../integrations/pancake/pancake-order.
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { CoinsService } from '../wallet/coins.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import type { ComboService } from '../storefront/combo.service';
 
 const ADDRESS = {
   id: 'addr1', userId: 'u1', recipient: 'A', phone: '09', province: 'HN', district: 'BD',
   ward: 'W', street: 'S', provinceCode: '1', districtCode: '2', wardCode: '3',
 };
 const CART = {
-  items: [{ variationId: 'v1', productName: 'P', variationName: 'V', unitPrice: 100, quantity: 1, total: 100 }],
+  items: [{ variationId: 'v1', productId: 'prod1', productName: 'P', variationName: 'V', unitPrice: 100, quantity: 1, total: 100 }],
   subtotal: 100, discount: 0, freeship: false, couponCode: null,
 };
 
@@ -28,6 +29,7 @@ function build(
     decCount?: number;
     stockCount?: number; // count trả về của variation.updateMany (decrement stock)
     variationUpdateMany?: jest.Mock; // override khi muốn mock chuỗi (race)
+    combo?: { computeForStorefront: jest.Mock }; // override ComboService
   } = {},
 ) {
   const total = opts.total ?? 100;
@@ -64,9 +66,11 @@ function build(
   const coins = { spendCoins: jest.fn().mockResolvedValue(undefined) } as unknown as CoinsService;
   // config default → loyalty.earn_points_on_xu=false (đơn XU không sinh điểm).
   const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
+  // combo mặc định: không giảm (override qua opts.combo cho test combo).
+  const combo = (opts.combo ?? { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) }) as unknown as ComboService;
 
-  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, affiliate, coins, config);
-  return { svc, prisma, updateMany, orderCreate, variationUpdateMany, total, coins };
+  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, affiliate, coins, config, combo);
+  return { svc, prisma, updateMany, orderCreate, variationUpdateMany, total, coins, combo };
 }
 
 describe('CheckoutService.placeOrder — money safety', () => {
@@ -152,6 +156,37 @@ describe('CheckoutService.placeOrder — storefrontSlug attribution (Lớp 2)', 
     const { svc, orderCreate } = build({ stockCount: 1 });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     expect(orderCreate.mock.calls[0][0].data.storefrontSlug).toBeNull();
+  });
+});
+
+describe('CheckoutService.placeOrder — combo discount (§7.2)', () => {
+  it('combo giảm: trừ vào OrderItem.total + cộng vào order.discount + giảm total', async () => {
+    const combo = { computeForStorefront: jest.fn().mockResolvedValue({ total: 10, perLine: { v1: 10 } }) };
+    const { svc, orderCreate } = build({ stockCount: 1, combo });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop' } as never);
+    const data = orderCreate.mock.calls[0][0].data;
+    // item.total = 100 - 10 = 90 → hoa hồng tính trên 90
+    expect(data.items.create[0].total).toBe(90);
+    // order.discount gồm combo (coupon 0 + combo 10 + points 0)
+    expect(data.discount).toBe(10);
+    // total = goods (100-10) + ship(0) = 90
+    expect(data.total).toBe(90);
+  });
+
+  it('combo nhận đúng storefrontSlug + lines có productId', async () => {
+    const combo = { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) };
+    const { svc } = build({ stockCount: 1, combo });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop' } as never);
+    expect(combo.computeForStorefront).toHaveBeenCalledWith(
+      'linh-shop',
+      [{ variationId: 'v1', productId: 'prod1', total: 100 }],
+    );
+  });
+
+  it('không combo (perLine rỗng) → item.total giữ nguyên', async () => {
+    const { svc, orderCreate } = build({ stockCount: 1 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(orderCreate.mock.calls[0][0].data.items.create[0].total).toBe(100);
   });
 });
 

@@ -33,6 +33,7 @@ export class CartService {
       return {
         id: it.id,
         variationId: it.variationId,
+        productId: it.variation.productId,
         productName: it.variation.product.name,
         variationName: it.variation.name,
         slug: it.variation.product.slug,

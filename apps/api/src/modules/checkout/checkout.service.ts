@@ -11,6 +11,7 @@ import { PancakeOrderService } from '../integrations/pancake/pancake-order.servi
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { CoinsService } from '../wallet/coins.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { ComboService } from '../storefront/combo.service';
 import { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 
 @Injectable()
@@ -28,6 +29,7 @@ export class CheckoutService {
     private readonly affiliate: AffiliateService,
     private readonly coins: CoinsService,
     private readonly config: SystemConfigService,
+    private readonly combo: ComboService,
   ) {}
 
   /** Map mã giới thiệu → userId CTV (khác người mua). */
@@ -40,10 +42,11 @@ export class CheckoutService {
 
   /** Tính tạm đơn (ship + giảm + điểm) cho màn checkout. */
   async quote(userId: string, dto: QuoteDto) {
-    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse);
+    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, dto.storefrontSlug);
     return {
       subtotal: cart.subtotal,
       discount: computed.discount,
+      comboDiscount: computed.comboDiscount,
       pointsUsed: computed.pointsUsed,
       pointsDiscount: computed.pointsDiscount,
       shippingFee: computed.shippingFee,
@@ -64,6 +67,7 @@ export class CheckoutService {
       userId,
       dto.addressId,
       dto.pointsToUse,
+      dto.storefrontSlug,
     );
     if (cart.items.length === 0) throw new BadRequestException('Giỏ hàng trống.');
 
@@ -115,7 +119,7 @@ export class CheckoutService {
             type: 'RETAIL',
             status,
             subtotal: cart.subtotal,
-            discount: computed.discount + computed.pointsDiscount,
+            discount: computed.discount + computed.comboDiscount + computed.pointsDiscount,
             shippingFee: computed.shippingFee,
             total: computed.total,
             pointsEarned,
@@ -130,13 +134,15 @@ export class CheckoutService {
             invoiceStatus: dto.invoiceRequest ? 'REQUESTED' : 'NOT_REQUESTED',
             note: dto.note,
             items: {
+              // Combo: trừ phần giảm phân bổ vào total từng dòng → hoa hồng (đọc OrderItem.total)
+              // tính trên giá thực trả sau giảm combo (§7.2).
               create: cart.items.map((l) => ({
                 variationId: l.variationId,
                 productName: l.productName,
                 variationName: l.variationName,
                 unitPrice: l.unitPrice,
                 quantity: l.quantity,
-                total: l.total,
+                total: l.total - (computed.comboPerLine[l.variationId] ?? 0),
               })),
             },
           },
@@ -217,7 +223,7 @@ export class CheckoutService {
     return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
   }
 
-  private async compute(userId: string, addressId: string, pointsToUse?: number) {
+  private async compute(userId: string, addressId: string, pointsToUse?: number, storefrontSlug?: string) {
     const cart = await this.cart.getCart(userId);
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const address = await this.prisma.address.findUnique({ where: { id: addressId } });
@@ -226,7 +232,13 @@ export class CheckoutService {
     }
 
     const discount = cart.discount; // từ coupon
-    const goodsAfterCoupon = Math.max(0, cart.subtotal - discount);
+    // Combo (shop tài trợ): giảm phân bổ vào từng dòng → khấu trừ goods + ghi vào OrderItem.total
+    // để hoa hồng tính trên giá thực trả (§7.2). Chỉ áp khi đặt qua gian hàng (storefrontSlug).
+    const combo = await this.combo.computeForStorefront(
+      storefrontSlug,
+      cart.items.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
+    );
+    const goodsAfterCoupon = Math.max(0, cart.subtotal - discount - combo.total);
 
     const redemption = await this.pricing.resolvePointsRedemption(
       pointsToUse ?? 0,
@@ -251,6 +263,8 @@ export class CheckoutService {
       address,
       computed: {
         discount,
+        comboDiscount: combo.total,
+        comboPerLine: combo.perLine,
         pointsUsed: redemption.pointsUsed,
         pointsDiscount: redemption.discount,
         shippingFee,

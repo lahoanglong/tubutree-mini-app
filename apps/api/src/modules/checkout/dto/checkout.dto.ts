@@ -13,6 +13,8 @@ export class InvoiceRequestDto {
 export class QuoteDto {
   @IsString() addressId!: string;
   @IsOptional() @IsInt() @Min(0) pointsToUse?: number;
+  /** Slug gian hàng — để tính giảm combo (nếu mua qua gian hàng). */
+  @IsOptional() @IsString() storefrontSlug?: string;
 }
 
 export class PlaceOrderDto {
