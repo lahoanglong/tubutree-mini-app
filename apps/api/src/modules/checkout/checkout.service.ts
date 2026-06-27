@@ -63,11 +63,25 @@ export class CheckoutService {
       if (existing) return this.findOrderResponse(existing.id);
     }
 
+    // Attribution: ưu tiên referralCode/slug của phiên hiện tại; nếu phiên mất nhưng còn
+    // "chạm" giới thiệu trong hạn (3 ngày) → fallback. Resolve TRƯỚC compute() để combo +
+    // storefrontSlug dùng đúng slug hiệu lực.
+    let referrerUserId = await this.resolveReferrer(dto.referralCode, userId);
+    let storefrontSlug = dto.storefrontSlug ?? null;
+    if (!referrerUserId || !storefrontSlug) {
+      const touch = await this.affiliate.getActiveTouch(userId);
+      if (touch) {
+        if (!referrerUserId) referrerUserId = touch.referrerUserId;
+        // chỉ lấy slug từ touch kind=ctv (brand không gắn storefrontSlug — tránh ô nhiễm analytics)
+        if (!storefrontSlug && touch.kind === 'ctv') storefrontSlug = touch.storefrontSlug;
+      }
+    }
+
     const { cart, user, address, computed } = await this.compute(
       userId,
       dto.addressId,
       dto.pointsToUse,
-      dto.storefrontSlug,
+      storefrontSlug ?? undefined,
     );
     if (cart.items.length === 0) throw new BadRequestException('Giỏ hàng trống.');
 
@@ -94,7 +108,6 @@ export class CheckoutService {
     const pointsEarned =
       dto.paymentMethod === 'XU' && !earnPointsOnXu ? 0 : computed.pointsEarned;
     const code = await this.generateCode();
-    const referrerUserId = await this.resolveReferrer(dto.referralCode, userId);
 
     let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
     try {
@@ -128,7 +141,7 @@ export class CheckoutService {
             paymentStatus: paid ? 'PAID' : 'UNPAID',
             shippingAddress: this.addressSnapshot(address),
             referrerUserId,
-            storefrontSlug: dto.storefrontSlug ?? null,
+            storefrontSlug,
             couponCode: cart.couponCode,
             invoiceRequest: dto.invoiceRequest ? (dto.invoiceRequest as object) : undefined,
             invoiceStatus: dto.invoiceRequest ? 'REQUESTED' : 'NOT_REQUESTED',

@@ -14,6 +14,12 @@ class PayoutDto {
   @IsOptional() @IsObject() bankInfo?: object;
 }
 
+class TouchDto {
+  @IsString() referralCode!: string;
+  @IsOptional() @IsString() storefrontSlug?: string;
+  @IsOptional() @IsIn(['ctv', 'brand']) kind?: string;
+}
+
 @Controller('affiliate')
 export class AffiliateController {
   constructor(private readonly affiliate: AffiliateService) {}
@@ -21,6 +27,12 @@ export class AffiliateController {
   @Post('register')
   register(@CurrentUser('sub') userId: string) {
     return this.affiliate.register(userId);
+  }
+
+  // Ghi "chạm" giới thiệu để attribution sống 3 ngày (fallback khi phiên mất).
+  @Post('touch')
+  touch(@CurrentUser('sub') userId: string, @Body() dto: TouchDto) {
+    return this.affiliate.recordTouch(userId, dto);
   }
 
   @Get('me')

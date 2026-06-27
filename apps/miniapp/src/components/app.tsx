@@ -10,6 +10,7 @@ import BackButton from './back-button';
 import { OnboardingGate } from './onboarding';
 import { useAuthStore } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
+import { recordReferralTouch } from '../services/affiliate-api';
 
 const FONT_PX: Record<string, string> = { small: '15px', normal: '16px', large: '18px' };
 /** Áp cỡ chữ đã lưu (Cài đặt) ngay khi mở app để giữ a11y qua các phiên. */
@@ -91,12 +92,30 @@ function RouteFallback() {
 
 export default function MyApp() {
   const restore = useAuthStore((s) => s.restore);
+  const authed = useAuthStore((s) => s.status === 'authenticated');
   const setSfContext = useStorefrontContext((s) => s.setContext);
+  const sfReferralCode = useStorefrontContext((s) => s.referralCode);
+  const sfSlug = useStorefrontContext((s) => s.slug);
+  const sfKind = useStorefrontContext((s) => s.kind);
 
   useEffect(() => {
     void restore(); // silent login từ refresh token đã lưu
     applySavedFontScale();
   }, [restore]);
+
+  // Attribution 3 ngày: khi đã đăng nhập + có ngữ cảnh giới thiệu (ref/slug từ link),
+  // ghi "chạm" server-side (fire-and-forget). Mọi đường vào (/, /s/:slug, /brand/:slug) đều
+  // set storefront-context nên 1 effect tập trung ở đây cover tất cả; upsert làm mới hạn.
+  useEffect(() => {
+    if (!authed) return;
+    const referralCode = sfReferralCode ?? sfSlug;
+    if (!referralCode) return;
+    void recordReferralTouch({
+      referralCode,
+      storefrontSlug: sfKind === 'ctv' ? (sfSlug ?? undefined) : undefined,
+      kind: sfKind,
+    }).catch(() => {});
+  }, [authed, sfReferralCode, sfSlug, sfKind]);
 
   useEffect(() => {
     const parse = (qs: string) => new URLSearchParams(qs);

@@ -259,6 +259,20 @@ model DealerReward {
   @@map("dealer_rewards")
 }
 
+model ReferralTouch {
+  id             String   @id @default(cuid())
+  userId         String   @unique // khách đã đăng nhập
+  referrerUserId String // CTV được công (đã resolve từ referralCode lúc ghi)
+  storefrontSlug String? // chỉ set khi đến từ gian hàng CTV (kind=ctv); brand → null
+  kind           String   @default("ctv") // ctv | brand
+  expiresAt      DateTime // now + config(affiliate.attribution_days, mặc định 3 ngày)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@map("referral_touches")
+}
+
 model Storefront {
   id          String                 @id @default(cuid())
   type        StorefrontType

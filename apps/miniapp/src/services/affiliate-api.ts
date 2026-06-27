@@ -88,3 +88,7 @@ export const getStorefrontAnalytics = () =>
   api.get('/affiliate/analytics/storefronts').then((r) => r.data as { storefronts: StorefrontStat[] });
 export const getProductBreakdown = () =>
   api.get('/affiliate/analytics/products').then((r) => r.data as ProductStat[]);
+
+/** Ghi "chạm" giới thiệu để attribution sống 3 ngày (fallback khi phiên mất). Fire-and-forget. */
+export const recordReferralTouch = (dto: { referralCode: string; storefrontSlug?: string; kind?: 'ctv' | 'brand' }) =>
+  api.post('/affiliate/touch', dto).then((r) => r.data as { ok: boolean });

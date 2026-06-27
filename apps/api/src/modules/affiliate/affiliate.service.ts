@@ -39,6 +39,48 @@ export class AffiliateService {
     };
   }
 
+  /**
+   * Ghi "chạm" giới thiệu (attribution last-touch persistent §quyết-định). Khi khách (đã đăng nhập)
+   * mở link CTV/nhãn → lưu referrerUserId + slug, hạn = now + config(attribution_days, mặc định 3).
+   * Mỗi lần mở làm mới hạn. Bỏ qua nếu thiếu code / code không tồn tại / trỏ chính mình.
+   */
+  async recordTouch(
+    userId: string,
+    dto: { referralCode?: string; storefrontSlug?: string; kind?: string },
+    now: Date = new Date(),
+  ): Promise<{ ok: boolean }> {
+    if (!dto.referralCode) return { ok: false };
+    const ref = await this.prisma.user.findUnique({
+      where: { referralCode: dto.referralCode },
+      select: { id: true },
+    });
+    if (!ref || ref.id === userId) return { ok: false };
+    const days = await this.config.get<number>('affiliate.attribution_days', 3);
+    const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    const data = {
+      referrerUserId: ref.id,
+      storefrontSlug: dto.storefrontSlug ?? null,
+      kind: dto.kind ?? 'ctv',
+      expiresAt,
+    };
+    await this.prisma.referralTouch.upsert({
+      where: { userId },
+      update: data,
+      create: { userId, ...data },
+    });
+    return { ok: true };
+  }
+
+  /** Lấy "chạm" còn hạn của khách (fallback attribution khi phiên đã mất). */
+  async getActiveTouch(
+    userId: string,
+    now: Date = new Date(),
+  ): Promise<{ referrerUserId: string; storefrontSlug: string | null; kind: string } | null> {
+    const t = await this.prisma.referralTouch.findUnique({ where: { userId } });
+    if (!t || t.expiresAt <= now) return null;
+    return { referrerUserId: t.referrerUserId, storefrontSlug: t.storefrontSlug, kind: t.kind };
+  }
+
   async createLink(userId: string, targetType: string, targetId?: string) {
     const shortCode = randomBytes(5).toString('base64url');
     return this.prisma.affiliateLink.create({

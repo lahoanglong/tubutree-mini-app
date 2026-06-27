@@ -31,6 +31,7 @@ function build(
     variationUpdateMany?: jest.Mock; // override khi muốn mock chuỗi (race)
     combo?: { computeForStorefront: jest.Mock }; // override ComboService
     validateAndCompute?: jest.Mock; // override coupons.validateAndCompute
+    getActiveTouch?: jest.Mock; // override affiliate.getActiveTouch (attribution 3 ngày)
   } = {},
 ) {
   const total = opts.total ?? 100;
@@ -67,7 +68,10 @@ function build(
   const loyalty = { getTierMultiplier: jest.fn().mockResolvedValue(1) } as unknown as LoyaltyService;
   const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
   const pancake = { pushOrder: jest.fn().mockResolvedValue(null) } as unknown as PancakeOrderService;
-  const affiliate = { createCommissionForOrder: jest.fn() } as unknown as AffiliateService;
+  const affiliate = {
+    createCommissionForOrder: jest.fn().mockResolvedValue(undefined),
+    getActiveTouch: opts.getActiveTouch ?? jest.fn().mockResolvedValue(null),
+  } as unknown as AffiliateService;
   const coins = { spendCoins: jest.fn().mockResolvedValue(undefined) } as unknown as CoinsService;
   // config default → loyalty.earn_points_on_xu=false (đơn XU không sinh điểm).
   const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
@@ -161,6 +165,24 @@ describe('CheckoutService.placeOrder — storefrontSlug attribution (Lớp 2)', 
     const { svc, orderCreate } = build({ stockCount: 1 });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     expect(orderCreate.mock.calls[0][0].data.storefrontSlug).toBeNull();
+  });
+
+  it('attribution 3 ngày: KHÔNG có referralCode nhưng còn touch → referrer + slug từ touch', async () => {
+    const getActiveTouch = jest.fn().mockResolvedValue({ referrerUserId: 'ctv9', storefrontSlug: 'shopX', kind: 'ctv' });
+    const { svc, orderCreate } = build({ stockCount: 1, getActiveTouch });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.referrerUserId).toBe('ctv9');
+    expect(data.storefrontSlug).toBe('shopX');
+  });
+
+  it('attribution 3 ngày: touch kind=brand → KHÔNG lấy storefrontSlug (vẫn lấy referrer)', async () => {
+    const getActiveTouch = jest.fn().mockResolvedValue({ referrerUserId: 'ctv9', storefrontSlug: null, kind: 'brand' });
+    const { svc, orderCreate } = build({ stockCount: 1, getActiveTouch });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.referrerUserId).toBe('ctv9');
+    expect(data.storefrontSlug).toBeNull();
   });
 });
 

@@ -296,3 +296,60 @@ describe('AffiliateService analytics', () => {
     expect(dau?.commission).toBe(16000); // floor(100000*10/100) + floor(60000*10/100)
   });
 });
+
+describe('AffiliateService.recordTouch / getActiveTouch (attribution 3 ngày)', () => {
+  const NOW = new Date('2026-06-27T00:00:00Z');
+  function makePrisma(over: any = {}) {
+    return {
+      user: { findUnique: jest.fn() },
+      referralTouch: { upsert: jest.fn().mockResolvedValue({}), findUnique: jest.fn() },
+      ...over,
+    } as unknown as PrismaService;
+  }
+
+  it('recordTouch: resolve referralCode → upsert với expiresAt = now + 3 ngày', async () => {
+    const prisma = makePrisma();
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1' });
+    await new AffiliateService(prisma, config).recordTouch('buyer1', { referralCode: 'LINH', storefrontSlug: 'LINH', kind: 'ctv' }, NOW);
+    const call = (prisma as any).referralTouch.upsert.mock.calls[0][0];
+    expect(call.where).toEqual({ userId: 'buyer1' });
+    expect(call.create.referrerUserId).toBe('ctv1');
+    expect(call.create.expiresAt.getTime()).toBe(NOW.getTime() + 3 * 86400000);
+  });
+
+  it('recordTouch: bỏ qua nếu không có referralCode', async () => {
+    const prisma = makePrisma();
+    const r = await new AffiliateService(prisma, config).recordTouch('buyer1', {}, NOW);
+    expect(r.ok).toBe(false);
+    expect((prisma as any).referralTouch.upsert).not.toHaveBeenCalled();
+  });
+
+  it('recordTouch: bỏ qua tự giới thiệu (code trỏ chính mình)', async () => {
+    const prisma = makePrisma();
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'buyer1' });
+    const r = await new AffiliateService(prisma, config).recordTouch('buyer1', { referralCode: 'SELF' }, NOW);
+    expect(r.ok).toBe(false);
+    expect((prisma as any).referralTouch.upsert).not.toHaveBeenCalled();
+  });
+
+  it('recordTouch: bỏ qua code không tồn tại', async () => {
+    const prisma = makePrisma();
+    (prisma as any).user.findUnique.mockResolvedValue(null);
+    const r = await new AffiliateService(prisma, config).recordTouch('buyer1', { referralCode: 'NOPE' }, NOW);
+    expect(r.ok).toBe(false);
+  });
+
+  it('getActiveTouch: trả touch khi còn hạn', async () => {
+    const prisma = makePrisma();
+    (prisma as any).referralTouch.findUnique.mockResolvedValue({ referrerUserId: 'ctv1', storefrontSlug: 'LINH', kind: 'ctv', expiresAt: new Date(NOW.getTime() + 1000) });
+    const t = await new AffiliateService(prisma, config).getActiveTouch('buyer1', NOW);
+    expect(t).toEqual({ referrerUserId: 'ctv1', storefrontSlug: 'LINH', kind: 'ctv' });
+  });
+
+  it('getActiveTouch: null khi hết hạn', async () => {
+    const prisma = makePrisma();
+    (prisma as any).referralTouch.findUnique.mockResolvedValue({ referrerUserId: 'ctv1', storefrontSlug: null, kind: 'ctv', expiresAt: new Date(NOW.getTime() - 1000) });
+    const t = await new AffiliateService(prisma, config).getActiveTouch('buyer1', NOW);
+    expect(t).toBeNull();
+  });
+});
