@@ -6,7 +6,7 @@ export interface StorefrontItem {
   variationId: string | null;
   product: {
     id: string; name: string; slug: string; thumbnail: string | null; brand: string;
-    basePrice: number; salePrice: number | null; ratingAvg: number; reviewCount: number;
+    basePrice: number; salePrice: number | null; ratingAvg: number; reviewCount: number; sold?: number;
   };
 }
 export interface StorefrontItemEdit extends StorefrontItem { isPinned: boolean; isHidden: boolean; sortOrder: number; productId: string; }

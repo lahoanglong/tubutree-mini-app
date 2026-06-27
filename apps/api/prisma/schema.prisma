@@ -158,6 +158,8 @@ model Product {
   isCombo        Boolean  @default(false)
   ratingAvg      Float    @default(0) // denormalized từ reviews (cập nhật khi tạo review)
   reviewCount    Int      @default(0)
+  soldExternal   Int      @default(0) // admin nhập — tổng đã bán gom từ các sàn TMĐT ngoài
+  soldApp        Int      @default(0) // system — đơn DELIVERED trong app (cron recompute). Hiển thị = soldExternal + soldApp
   basePrice      Int
   salePrice      Int?
   metaTitle      String?

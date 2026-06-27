@@ -12,6 +12,7 @@ export interface ProductCard {
   basePrice: number;
   salePrice: number | null;
   isFeatured: boolean;
+  sold?: number;
   inStock: boolean;
 }
 export interface VariationDetail {
@@ -98,6 +99,7 @@ export interface StorefrontItem {
     salePrice?: number | null;
     ratingAvg?: number | null;
     reviewCount?: number | null;
+    sold?: number | null;
   };
 }
 
@@ -153,6 +155,7 @@ export interface BrandDetail {
     salePrice?: number | null;
     ratingAvg?: number | null;
     reviewCount?: number | null;
+    sold?: number | null;
   }[];
   dealerRewards: {
     id: string;
@@ -176,4 +179,14 @@ export async function getBrand(slug: string): Promise<BrandDetail | null> {
 
 export function formatVnd(n: number): string {
   return `${n.toLocaleString('vi-VN')}đ`;
+}
+
+/** "Đã bán" kiểu Shopee: <1 ẩn; <1000 "Đã bán 12"; ≥1000 "Đã bán 1,2k+"; ≥1tr "...tr+". */
+export function formatSold(n: number | null | undefined): string | null {
+  const v = Number(n ?? 0);
+  if (!Number.isFinite(v) || v < 1) return null;
+  const trim = (x: number) => x.toFixed(1).replace(/\.0$/, '').replace('.', ',');
+  if (v < 1000) return `Đã bán ${v}`;
+  if (v < 1_000_000) return `Đã bán ${trim(v / 1000)}k+`;
+  return `Đã bán ${trim(v / 1_000_000)}tr+`;
 }

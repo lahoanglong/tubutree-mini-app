@@ -101,7 +101,7 @@ export class StorefrontService {
                   select: {
                     id: true, name: true, slug: true, thumbnail: true, brand: true,
                     basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, isActive: true,
-                    affiliateBlocked: true,
+                    affiliateBlocked: true, soldExternal: true, soldApp: true,
                   },
                 },
               },
@@ -124,6 +124,7 @@ export class StorefrontService {
               id: i.product.id, name: i.product.name, slug: i.product.slug, thumbnail: i.product.thumbnail,
               brand: i.product.brand, basePrice: i.product.basePrice, salePrice: i.product.salePrice,
               ratingAvg: i.product.ratingAvg, reviewCount: i.product.reviewCount,
+              sold: i.product.soldExternal + i.product.soldApp,
             },
           })),
       })),

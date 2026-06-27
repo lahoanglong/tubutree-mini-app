@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
@@ -54,7 +55,7 @@ export class CatalogService {
       include: { variations: { where: { isActive: true } }, reviews: { where: { isVisible: true } } },
     });
     if (!product || !product.isActive) throw new NotFoundException('Không tìm thấy sản phẩm.');
-    return product;
+    return { ...product, sold: product.soldExternal + product.soldApp };
   }
 
   async related(slug: string) {
@@ -160,6 +161,8 @@ export class CatalogService {
     isFeatured: boolean;
     ratingAvg: number;
     reviewCount: number;
+    soldExternal: number;
+    soldApp: number;
     variations: { stock: number }[];
   }) {
     return {
@@ -173,7 +176,65 @@ export class CatalogService {
       isFeatured: p.isFeatured,
       ratingAvg: p.ratingAvg,
       reviewCount: p.reviewCount,
+      sold: (p.soldExternal ?? 0) + (p.soldApp ?? 0), // tổng "đã bán" (sàn ngoài + app)
       inStock: p.variations.some((v) => v.stock > 0),
     };
+  }
+
+  /**
+   * Tính lại `soldApp` (đơn DELIVERED, cộng dồn theo product) — idempotent: reset 0 rồi set,
+   * nên tự GIẢM khi đơn bị RETURNED. Hiển thị "đã bán" = soldExternal + soldApp.
+   */
+  async recomputeSoldCounts(): Promise<{ updated: number }> {
+    const grouped = await this.prisma.orderItem.groupBy({
+      by: ['variationId'],
+      where: { order: { status: 'DELIVERED' } },
+      _sum: { quantity: true },
+    });
+    const variationIds = grouped.map((g) => g.variationId);
+    const vars = variationIds.length
+      ? await this.prisma.variation.findMany({
+          where: { id: { in: variationIds } },
+          select: { id: true, productId: true },
+        })
+      : [];
+    const vmap = new Map(vars.map((v) => [v.id, v.productId]));
+    const perProduct = new Map<string, number>();
+    for (const g of grouped) {
+      const pid = vmap.get(g.variationId);
+      if (!pid) continue;
+      perProduct.set(pid, (perProduct.get(pid) ?? 0) + (g._sum.quantity ?? 0));
+    }
+    await this.prisma.product.updateMany({ data: { soldApp: 0 } });
+    const ops = [...perProduct.entries()].map(([productId, sold]) =>
+      this.prisma.product.update({ where: { id: productId }, data: { soldApp: sold } }),
+    );
+    if (ops.length) await this.prisma.$transaction(ops);
+    return { updated: perProduct.size };
+  }
+
+  /** Cron 03:00 hằng ngày — tính lại số đã bán (social proof không cần realtime). */
+  @Cron('0 3 * * *')
+  async recomputeSoldCron(): Promise<void> {
+    await this.recomputeSoldCounts().catch(() => undefined);
+  }
+
+  /** Admin nhập tổng đã bán từ sàn ngoài theo SKU (variation.sku → product.soldExternal). */
+  async setSoldExternal(rows: { sku: string; count: number }[]): Promise<{ updated: number }> {
+    let updated = 0;
+    for (const r of rows) {
+      if (!r.sku || !Number.isFinite(r.count) || r.count < 0) continue;
+      const v = await this.prisma.variation.findUnique({
+        where: { sku: r.sku },
+        select: { productId: true },
+      });
+      if (!v) continue;
+      await this.prisma.product.update({
+        where: { id: v.productId },
+        data: { soldExternal: Math.floor(r.count) },
+      });
+      updated++;
+    }
+    return { updated };
   }
 }

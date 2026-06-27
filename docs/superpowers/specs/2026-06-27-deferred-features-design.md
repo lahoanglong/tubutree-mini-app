@@ -62,6 +62,28 @@ model ReferralTouch {
 
 ---
 
-## Mục 2 — "Đã bán N" trên thẻ SP — (chờ brainstorm nguồn dữ liệu)
+## Mục 2 — "Đã bán N" trên thẻ SP (Hybrid: sàn ngoài + đơn Tubu)
+
+**Chốt:** Hiển thị **tổng đã bán** = `soldExternal` (admin nhập, gom từ Shopee/Lazada/TikTok…) + `soldApp` (đơn DELIVERED trong app, cộng dồn trọn đời). Hiển thị kiểu Shopee ("Đã bán 1,2k+"). Auto-sync API từng sàn = hoãn (cần credentials).
+
+### Data
+- `Product.soldExternal Int @default(0)` — admin-owned (baseline sàn ngoài).
+- `Product.soldApp Int @default(0)` — system-owned (đơn DELIVERED).
+- Tổng hiển thị = `soldExternal + soldApp`.
+
+### Backend
+- **CatalogService.recomputeSoldCounts()** (idempotent): `orderItem.groupBy(variationId, where order.status=DELIVERED, _sum quantity)` → map variation→productId → tổng theo product → reset toàn bộ `soldApp=0` rồi set theo nhóm (transaction). Không double-count, tự giảm khi đơn bị RETURNED. `@Cron` 03:00 hằng ngày + chạy 1 lần khi boot (catalog nhỏ ~143 SP).
+- **Admin setSoldExternal(rows: {sku, count}[])**: cập nhật `soldExternal` theo SKU (variation.sku → product). Endpoint `POST /admin/products/sold-external` nhận `csv` ("sku,count" mỗi dòng) hoặc `rows` — tái dùng pattern `importDealerPrices`.
+- Payload public kèm `sold` (= soldExternal+soldApp) ở: catalog list, storefront `getPublicBySlug` items, brand `getPublicBySlug` products.
+
+### Frontend
+- Util `formatSold(n)`: n<1 → ẩn; <1000 → "Đã bán {n}"; <1tr → "Đã bán {n/1000}k+" (dấu phẩy thập phân VN, vd 1,2k+); ≥1tr → "Đã bán {n/1tr}tr+".
+- Badge trên thẻ SP (miniapp ProductCard, web product-card, ô SP trong brand/storefront) + PDP. Đặt cạnh giá/★ giống Shopee.
+
+### Test
+- Unit `formatSold` (các mốc + làm tròn + ẩn 0).
+- Unit `recomputeSoldCounts` (mock groupBy → set đúng + reset về 0 khi không còn DELIVERED).
+- Unit `setSoldExternal` (map sku→product, cập nhật).
+- E2E: tạo đơn DELIVERED → recompute → `sold` tăng; set soldExternal → tổng = external+app.
 ## Mục 3 — Auto đối soát DealerReward — (chờ brainstorm)
 ## Mục 4 — Brand-owner tự quản (lộ trình B) — (chờ brainstorm)

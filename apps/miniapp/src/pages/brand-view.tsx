@@ -7,7 +7,7 @@ import {
 } from '../services/brand-api';
 import { useStorefrontContext } from '../store/storefront-context';
 import { getErrorMessage } from '../services/api';
-import { formatVnd } from '../utils/format';
+import { formatVnd, formatSold } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { ShareSheet } from '../components/share-sheet';
@@ -167,6 +167,9 @@ export default function BrandViewPage() {
                     <Text size="small" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: 36 }}>{p.name}</Text>
                     {p.reviewCount > 0 && (
                       <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>★ {p.ratingAvg.toFixed(1)} ({p.reviewCount})</Text>
+                    )}
+                    {formatSold(p.sold) && (
+                      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{formatSold(p.sold)}</Text>
                     )}
                     <Text bold style={{ color: 'var(--primary-700)', fontSize: 15 }}>{formatVnd(price)}</Text>
                   </Box>

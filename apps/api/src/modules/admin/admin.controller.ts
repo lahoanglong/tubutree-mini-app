@@ -13,6 +13,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AdminService } from './admin.service';
+import { CatalogService } from '../catalog/catalog.service';
 
 class ReviewDto {
   @IsBoolean() approve!: boolean;
@@ -47,6 +48,11 @@ class ImportDealerPricesDto {
   @IsOptional() @IsString() csv?: string;
   @IsOptional() @IsArray() rows?: { sku: string; price: number }[];
 }
+class ImportSoldExternalDto {
+  // Dán "sku,số-đã-bán" (mỗi dòng 1 SKU) — tổng đã bán gom từ sàn ngoài. Hoặc rows JSON.
+  @IsOptional() @IsString() csv?: string;
+  @IsOptional() @IsArray() rows?: { sku: string; count: number }[];
+}
 
 /** Parse CSV "sku,giá" (phân tách , ; hoặc tab); bỏ dòng header/giá không hợp lệ. */
 function parseDealerPriceCsv(csv: string): { sku: string; price: number }[] {
@@ -64,7 +70,10 @@ function parseDealerPriceCsv(csv: string): { sku: string; price: number }[] {
 @Roles('ADMIN')
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly catalog: CatalogService,
+  ) {}
 
   @Get('dealer-applications')
   dealerApps(@Query('status') status?: string) {
@@ -121,5 +130,20 @@ export class AdminController {
   @Get('dealer-prices/history')
   dealerPriceHistory(@Query('variationId') variationId?: string) {
     return this.admin.getDealerPriceHistory(variationId);
+  }
+
+  // "Đã bán" gom từ sàn ngoài: dán "sku,số-đã-bán" hoặc rows JSON.
+  @Post('products/sold-external')
+  setSoldExternal(@Body() dto: ImportSoldExternalDto) {
+    const rows = dto.csv
+      ? parseDealerPriceCsv(dto.csv).map((r) => ({ sku: r.sku, count: r.price }))
+      : (dto.rows ?? []);
+    return this.catalog.setSoldExternal(rows);
+  }
+
+  // Tính lại "đã bán trong app" ngay (thường chạy cron 03:00).
+  @Post('products/recompute-sold')
+  recomputeSold() {
+    return this.catalog.recomputeSoldCounts();
   }
 }

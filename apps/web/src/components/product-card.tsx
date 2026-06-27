@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { type ProductCard as P, formatVnd } from '@/lib/api';
+import { type ProductCard as P, formatVnd, formatSold } from '@/lib/api';
 
 export default function ProductCard({ product }: { product: P }) {
   const price = product.salePrice ?? product.basePrice;
@@ -26,6 +26,9 @@ export default function ProductCard({ product }: { product: P }) {
             <span className="text-xs text-neutral-400 line-through">{formatVnd(product.basePrice)}</span>
           )}
         </div>
+        {formatSold(product.sold) && (
+          <div className="mt-0.5 text-xs text-neutral-400">{formatSold(product.sold)}</div>
+        )}
       </div>
     </Link>
   );

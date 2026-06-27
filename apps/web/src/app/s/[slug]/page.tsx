@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { getStorefront, formatVnd } from '@/lib/api';
+import { getStorefront, formatVnd, formatSold } from '@/lib/api';
 
 export const revalidate = 300;
 
@@ -78,6 +78,9 @@ export default async function StorefrontPage({
                   <p className="mt-1 font-bold text-clay-700">
                     {formatVnd(it.product.salePrice ?? it.product.basePrice)}
                   </p>
+                  {formatSold(it.product.sold) && (
+                    <p className="mt-0.5 text-xs text-neutral-400">{formatSold(it.product.sold)}</p>
+                  )}
                 </div>
               </a>
             ))}

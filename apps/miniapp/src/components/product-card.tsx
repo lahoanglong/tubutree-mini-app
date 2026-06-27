@@ -1,7 +1,7 @@
 import { useNavigate } from 'zmp-ui';
 import { Box, Text } from 'zmp-ui';
 import type { ProductCard as ProductCardType } from '../services/shop-api';
-import { formatVnd } from '../utils/format';
+import { formatVnd, formatSold } from '../utils/format';
 import { brandAccent } from '../utils/brands';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
@@ -136,15 +136,24 @@ export default function ProductCard({ product }: { product: ProductCardType }) {
         >
           {product.name}
         </Text>
-        {(product.reviewCount ?? 0) > 0 && (
-          <Box flex alignItems="center" style={{ gap: 3, marginTop: 2 }}>
-            <span style={{ color: 'var(--sun-500)', fontSize: 11 }}>★</span>
-            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-              {product.ratingAvg?.toFixed(1)}
-            </Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-              ({product.reviewCount})
-            </Text>
+        {((product.reviewCount ?? 0) > 0 || formatSold(product.sold)) && (
+          <Box flex alignItems="center" style={{ gap: 4, marginTop: 2 }}>
+            {(product.reviewCount ?? 0) > 0 && (
+              <>
+                <span style={{ color: 'var(--sun-500)', fontSize: 11 }}>★</span>
+                <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+                  {product.ratingAvg?.toFixed(1)}
+                </Text>
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                  ({product.reviewCount})
+                </Text>
+              </>
+            )}
+            {formatSold(product.sold) && (
+              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                {(product.reviewCount ?? 0) > 0 ? '· ' : ''}{formatSold(product.sold)}
+              </Text>
+            )}
           </Box>
         )}
         <Box flex alignItems="baseline" style={{ gap: 6, marginTop: 4 }}>

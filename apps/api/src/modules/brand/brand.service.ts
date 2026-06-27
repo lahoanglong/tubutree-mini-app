@@ -56,7 +56,7 @@ export class BrandService {
         where: { brandId: brand.id, isActive: true },
         orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
         take: 30,
-        select: { id: true, name: true, slug: true, thumbnail: true, basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true },
+        select: { id: true, name: true, slug: true, thumbnail: true, basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, soldExternal: true, soldApp: true },
       }),
       this.prisma.dealerReward.findMany({
         where: { OR: [{ brandId: brand.id }, { brandId: null }], isActive: true },
@@ -79,7 +79,7 @@ export class BrandService {
       followerCount: brand.followerCount,
       certifications: verifiedCerts,
       promotions,
-      products,
+      products: products.map(({ soldExternal, soldApp, ...p }) => ({ ...p, sold: soldExternal + soldApp })),
       dealerRewards,
     };
   }

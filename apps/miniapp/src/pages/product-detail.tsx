@@ -23,7 +23,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { brandAccent } from '../utils/brands';
-import { formatVnd } from '../utils/format';
+import { formatVnd, formatSold } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
@@ -205,6 +205,9 @@ export default function ProductDetailPage() {
             <Text size="small" style={{ color: 'var(--neutral-400)', textDecoration: 'line-through' }}>
               {formatVnd(originalPrice)}
             </Text>
+          )}
+          {formatSold(p.sold) && (
+            <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginLeft: 'auto' }}>{formatSold(p.sold)}</Text>
           )}
         </Box>
 

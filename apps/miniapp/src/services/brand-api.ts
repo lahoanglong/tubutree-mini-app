@@ -23,6 +23,7 @@ export interface BrandProductView {
   salePrice: number | null;
   ratingAvg: number;
   reviewCount: number;
+  sold?: number;
 }
 export interface DealerRewardView {
   id: string;

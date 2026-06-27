@@ -18,6 +18,7 @@ export interface ProductCard {
   isFeatured: boolean;
   ratingAvg?: number;
   reviewCount?: number;
+  sold?: number;
   inStock: boolean;
 }
 
@@ -44,6 +45,7 @@ export interface ProductDetail {
   salePrice: number | null;
   certifications: string[];
   ingredients?: { name: string; percentage?: string; benefit?: string }[] | null;
+  sold?: number;
   variations: VariationDetail[];
 }
 

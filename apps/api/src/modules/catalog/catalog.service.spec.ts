@@ -14,6 +14,8 @@ const card = (id: string) => ({
   isFeatured: false,
   ratingAvg: 0,
   reviewCount: 0,
+  soldExternal: 0,
+  soldApp: 0,
   variations: [{ stock: 5 }],
 });
 
@@ -78,5 +80,49 @@ describe('CatalogService.brands cache 60s', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
+  it('recomputeSoldCounts: gom đơn DELIVERED theo product (reset 0 rồi set)', async () => {
+    const tx = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      orderItem: { groupBy: jest.fn().mockResolvedValue([
+        { variationId: 'v1', _sum: { quantity: 5 } },
+        { variationId: 'v2', _sum: { quantity: 3 } },
+      ]) },
+      variation: { findMany: jest.fn().mockResolvedValue([
+        { id: 'v1', productId: 'p1' }, { id: 'v2', productId: 'p1' },
+      ]) },
+      product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn() },
+      $transaction: tx,
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).recomputeSoldCounts();
+    // reset toàn bộ về 0 trước
+    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({ data: { soldApp: 0 } });
+    // p1 = 5 + 3 = 8 (gộp 2 biến thể)
+    expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldApp: 8 } });
+    expect(r.updated).toBe(1);
+  });
+
+  it('setSoldExternal: map sku→product, set soldExternal', async () => {
+    const prisma = {
+      variation: { findUnique: jest.fn().mockResolvedValue({ productId: 'p1' }) },
+      product: { update: jest.fn().mockResolvedValue({}) },
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).setSoldExternal([{ sku: 'SKU1', count: 1200 }]);
+    expect((prisma as any).variation.findUnique).toHaveBeenCalledWith({ where: { sku: 'SKU1' }, select: { productId: true } });
+    expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldExternal: 1200 } });
+    expect(r.updated).toBe(1);
+  });
+
+  it('setSoldExternal: bỏ qua sku không tồn tại / count âm', async () => {
+    const prisma = {
+      variation: { findUnique: jest.fn().mockResolvedValue(null) },
+      product: { update: jest.fn() },
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).setSoldExternal([{ sku: 'NOPE', count: 5 }, { sku: 'X', count: -1 }]);
+    expect((prisma as any).product.update).not.toHaveBeenCalled();
+    expect(r.updated).toBe(0);
   });
 });

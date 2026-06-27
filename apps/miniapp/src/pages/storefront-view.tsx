@@ -3,7 +3,7 @@ import { Box, Page, Text, Button, useParams } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { getPublicStorefront } from '../services/storefront-api';
 import { getErrorMessage } from '../services/api';
-import { formatVnd } from '../utils/format';
+import { formatVnd, formatSold } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { useStorefrontContext } from '../store/storefront-context';
@@ -58,6 +58,9 @@ export default function StorefrontViewPage() {
                     <Text size="small" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: 36 }}>{it.product.name}</Text>
                     {it.product.reviewCount > 0 && (
                       <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>★ {it.product.ratingAvg.toFixed(1)} ({it.product.reviewCount})</Text>
+                    )}
+                    {formatSold(it.product.sold) && (
+                      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{formatSold(it.product.sold)}</Text>
                     )}
                     <Text bold style={{ color: 'var(--primary-700)', fontSize: 15 }}>{formatVnd(price)}</Text>
                     {it.note && <Text size="xSmall" style={{ color: 'var(--leaf-700)', background: 'var(--leaf-50)', padding: '4px 8px', borderRadius: 10, marginTop: 4 }}>💬 {it.note}</Text>}
