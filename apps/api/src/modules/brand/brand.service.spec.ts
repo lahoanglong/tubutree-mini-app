@@ -36,7 +36,7 @@ describe('BrandService.getPublicBySlug', () => {
     const svc = new BrandService(prisma);
     const out = await svc.getPublicBySlug('sachi', NOW);
     expect(out.certifications).toHaveLength(1);
-    expect(out.certifications[0].code).toBe('ORG');
+    expect(out.certifications[0]?.code).toBe('ORG');
   });
 
   it('lọc promotions theo isActive + khoảng thời gian', async () => {

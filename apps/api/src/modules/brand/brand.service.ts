@@ -125,7 +125,20 @@ export class BrandService {
     });
   }
 
-  async updateBrand(id: string, dto: Record<string, unknown>) {
+  async updateBrand(
+    id: string,
+    dto: {
+      name?: string;
+      slug?: string;
+      logoUrl?: string;
+      coverUrl?: string;
+      tagline?: string;
+      story?: string;
+      origin?: string;
+      certifications?: unknown;
+      isPublished?: boolean;
+    },
+  ) {
     await this.prisma.brand.findUniqueOrThrow({ where: { id } });
     const data: Record<string, unknown> = { ...dto };
     if (typeof dto.slug === 'string' && dto.slug.trim()) data.slug = slugifyVi(dto.slug);
@@ -155,7 +168,19 @@ export class BrandService {
     });
   }
 
-  updatePromotion(id: string, dto: Record<string, unknown>) {
+  updatePromotion(
+    id: string,
+    dto: {
+      title?: string;
+      subtitle?: string;
+      themeColor?: string;
+      couponCode?: string;
+      startAt?: string;
+      endAt?: string;
+      isActive?: boolean;
+      sortOrder?: number;
+    },
+  ) {
     const data: Record<string, unknown> = { ...dto };
     if (typeof dto.startAt === 'string') data.startAt = new Date(dto.startAt);
     if (typeof dto.endAt === 'string') data.endAt = new Date(dto.endAt);
@@ -194,7 +219,17 @@ export class BrandService {
     });
   }
 
-  updateDealerReward(id: string, dto: Record<string, unknown>) {
+  updateDealerReward(
+    id: string,
+    dto: {
+      title?: string;
+      description?: string;
+      threshold?: number;
+      period?: string;
+      isActive?: boolean;
+      sortOrder?: number;
+    },
+  ) {
     return this.prisma.dealerReward.update({ where: { id }, data: dto });
   }
 
