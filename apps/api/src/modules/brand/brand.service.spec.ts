@@ -1,0 +1,138 @@
+import { NotFoundException } from '@nestjs/common';
+import { BrandService } from './brand.service';
+
+function makePrisma(overrides: any = {}) {
+  return {
+    brand: { findFirst: jest.fn(), findUnique: jest.fn(), findUniqueOrThrow: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
+    product: { findMany: jest.fn().mockResolvedValue([]) },
+    brandPromotion: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
+    dealerReward: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
+    variation: { findMany: jest.fn().mockResolvedValue([]) },
+    user: { findUniqueOrThrow: jest.fn() },
+    ...overrides,
+  } as any;
+}
+
+describe('BrandService.getPublicBySlug', () => {
+  const NOW = new Date('2026-06-27T00:00:00Z');
+
+  it('ném NotFound khi brand chưa published', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue(null);
+    const svc = new BrandService(prisma);
+    await expect(svc.getPublicBySlug('khong-co', NOW)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('chỉ trả cert verified=true', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({
+      id: 'b1', slug: 'sachi', name: 'Sachi', logoUrl: null, coverUrl: null, tagline: 't',
+      story: null, storyImages: [], origin: 'Bến Tre', isVerified: true, followerCount: 5,
+      certifications: [
+        { code: 'ORG', label: 'Hữu cơ', verified: true, proofUrl: 'u' },
+        { code: 'FAKE', label: 'Giả', verified: false },
+      ],
+    });
+    const svc = new BrandService(prisma);
+    const out = await svc.getPublicBySlug('sachi', NOW);
+    expect(out.certifications).toHaveLength(1);
+    expect(out.certifications[0].code).toBe('ORG');
+  });
+
+  it('lọc promotions theo isActive + khoảng thời gian', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({
+      id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0,
+    });
+    prisma.brandPromotion.findMany.mockResolvedValue([
+      { id: 'p1', title: 'MUA 2 TẶNG 1', subtitle: null, themeColor: null, couponCode: null, startAt: new Date('2026-06-01'), endAt: new Date('2026-07-01') },
+    ]);
+    const svc = new BrandService(prisma);
+    const out = await svc.getPublicBySlug('sachi', NOW);
+    expect(prisma.brandPromotion.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ brandId: 'b1', isActive: true, startAt: { lte: NOW }, endAt: { gte: NOW } }),
+    }));
+    expect(out.promotions).toHaveLength(1);
+  });
+
+  it('KHÔNG bao giờ kèm affiliateRate/commission trong payload public', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });
+    prisma.product.findMany.mockResolvedValue([
+      { id: 'pr1', name: 'Dầu gội', slug: 'dau-goi', thumbnail: null, basePrice: 100000, salePrice: null, ratingAvg: 4.5, reviewCount: 3 },
+    ]);
+    const svc = new BrandService(prisma);
+    const out = await svc.getPublicBySlug('sachi', NOW);
+    expect(JSON.stringify(out)).not.toMatch(/affiliateRate|commission/i);
+  });
+
+  it('gộp dealerReward của nhãn + toàn shop (brandId null)', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });
+    prisma.dealerReward.findMany.mockResolvedValue([{ id: 'd1', type: 'TOUR', title: 'Tour', description: null, threshold: 50000000, period: 'QUARTER' }]);
+    const svc = new BrandService(prisma);
+    const out = await svc.getPublicBySlug('sachi', NOW);
+    expect(prisma.dealerReward.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ OR: [{ brandId: 'b1' }, { brandId: null }], isActive: true }),
+    }));
+    expect(out.dealerRewards).toHaveLength(1);
+  });
+});
+
+describe('BrandService.getShareToEarn', () => {
+  it('trả eligible=false nếu user không phải AFFILIATE', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi' });
+    prisma.user.findUniqueOrThrow.mockResolvedValue({ role: 'CUSTOMER', referralCode: 'X' });
+    const svc = new BrandService(prisma);
+    const out = await svc.getShareToEarn('sachi', 'u1');
+    expect(out.eligible).toBe(false);
+    expect((out as any).maxAffiliateRate).toBeUndefined();
+  });
+
+  it('trả maxAffiliateRate (cao nhất SP nhãn) + referralCode cho AFFILIATE', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi' });
+    prisma.user.findUniqueOrThrow.mockResolvedValue({ role: 'AFFILIATE', referralCode: 'LINH123' });
+    prisma.variation.findMany.mockResolvedValue([{ affiliateRate: 8 }, { affiliateRate: 12 }, { affiliateRate: null }]);
+    const svc = new BrandService(prisma);
+    const out = await svc.getShareToEarn('sachi', 'u1');
+    expect(out).toEqual({ eligible: true, maxAffiliateRate: 12, referralCode: 'LINH123', brandSlug: 'sachi' });
+  });
+});
+
+describe('BrandService admin', () => {
+  it('createBrand slugify tên tiếng Việt', async () => {
+    const prisma = makePrisma();
+    prisma.brand.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'b1', ...data }));
+    const svc = new BrandService(prisma);
+    const out = await svc.createBrand({ name: 'Dừa Bến Tre' });
+    expect(out.slug).toBe('dua-ben-tre');
+  });
+
+  it('verifyBrand set isVerified', async () => {
+    const prisma = makePrisma();
+    prisma.brand.update.mockResolvedValue({ id: 'b1', isVerified: true });
+    const svc = new BrandService(prisma);
+    await svc.verifyBrand('b1', true);
+    expect(prisma.brand.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { isVerified: true } });
+  });
+
+  it('createPromotion gắn brandId + ép Date', async () => {
+    const prisma = makePrisma();
+    prisma.brandPromotion.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'p1', ...data }));
+    const svc = new BrandService(prisma);
+    const out = await svc.createPromotion('b1', { title: 'Sale', startAt: '2026-06-01', endAt: '2026-07-01' });
+    expect(out.brandId).toBe('b1');
+    expect(out.startAt).toBeInstanceOf(Date);
+  });
+
+  it('createDealerReward giữ type', async () => {
+    const prisma = makePrisma();
+    prisma.dealerReward.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'd1', ...data }));
+    const svc = new BrandService(prisma);
+    const out = await svc.createDealerReward({ type: 'TOUR', title: 'Tour Phú Quốc', threshold: 50000000 });
+    expect(out.type).toBe('TOUR');
+    expect(out.period).toBe('QUARTER');
+  });
+});
