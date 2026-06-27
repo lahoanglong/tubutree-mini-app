@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -149,6 +149,7 @@ export class BrandService {
       origin?: string;
       certifications?: unknown;
       isPublished?: boolean;
+      ownerUserId?: string;
     },
   ) {
     await this.prisma.brand.findUniqueOrThrow({ where: { id } });
@@ -332,6 +333,65 @@ export class BrandService {
     }
     const fresh = await this.prisma.brand.findUniqueOrThrow({ where: { id: brand.id }, select: { followerCount: true } });
     return { following: false, followerCount: fresh.followerCount };
+  }
+
+  // ---- Brand-owner tự quản (lộ trình B) — auth bằng quyền sở hữu ----
+  private async assertOwnedBrand(userId: string) {
+    const brand = await this.prisma.brand.findFirst({ where: { ownerUserId: userId } });
+    if (!brand) throw new NotFoundException('Bạn chưa được cấp quyền quản lý nhãn nào.');
+    return brand;
+  }
+
+  /** Nhãn mà user đang sở hữu (+ promotions) cho màn quản lý. */
+  async getOwnedBrand(userId: string) {
+    const brand = await this.assertOwnedBrand(userId);
+    const promotions = await this.prisma.brandPromotion.findMany({
+      where: { brandId: brand.id },
+      orderBy: { sortOrder: 'asc' },
+    });
+    return { ...brand, promotions };
+  }
+
+  /** Brand-owner sửa THÔNG TIN nhãn — CHỈ logo/cover/tagline/story/origin (chống sửa name/verified/publish/cert). */
+  async updateOwnedBrand(
+    userId: string,
+    dto: { logoUrl?: string; coverUrl?: string; tagline?: string; story?: string; origin?: string },
+  ) {
+    const brand = await this.assertOwnedBrand(userId);
+    const data: Record<string, unknown> = {};
+    for (const k of ['logoUrl', 'coverUrl', 'tagline', 'story', 'origin'] as const) {
+      if (dto[k] !== undefined) data[k] = dto[k];
+    }
+    return this.prisma.brand.update({ where: { id: brand.id }, data });
+  }
+
+  listOwnedPromotions(userId: string) {
+    return this.assertOwnedBrand(userId).then((b) => this.listPromotions(b.id));
+  }
+
+  async createOwnedPromotion(
+    userId: string,
+    dto: { title: string; subtitle?: string; themeColor?: string; couponCode?: string; startAt: string; endAt: string; sortOrder?: number },
+  ) {
+    const brand = await this.assertOwnedBrand(userId);
+    return this.createPromotion(brand.id, dto);
+  }
+
+  private async assertOwnedPromotion(userId: string, promoId: string) {
+    const brand = await this.assertOwnedBrand(userId);
+    const promo = await this.prisma.brandPromotion.findUnique({ where: { id: promoId } });
+    if (!promo || promo.brandId !== brand.id) throw new ForbiddenException('Không có quyền với khuyến mãi này.');
+    return promo;
+  }
+
+  async updateOwnedPromotion(userId: string, promoId: string, dto: Parameters<BrandService['updatePromotion']>[1]) {
+    await this.assertOwnedPromotion(userId, promoId);
+    return this.updatePromotion(promoId, dto);
+  }
+
+  async deleteOwnedPromotion(userId: string, promoId: string) {
+    await this.assertOwnedPromotion(userId, promoId);
+    return this.deletePromotion(promoId);
   }
 
   /** Trạng thái theo dõi của user với nhãn (cho FE hiện nút). */

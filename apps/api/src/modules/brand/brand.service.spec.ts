@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { BrandService, slugifyVi } from './brand.service';
 
 describe('slugifyVi', () => {
@@ -23,7 +23,7 @@ function makePrisma(overrides: any = {}) {
   return {
     brand: { findFirst: jest.fn(), findUnique: jest.fn(), findUniqueOrThrow: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
     product: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
-    brandPromotion: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
+    brandPromotion: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     dealerReward: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     variation: { findMany: jest.fn().mockResolvedValue([]) },
     user: { findUniqueOrThrow: jest.fn() },
@@ -280,5 +280,59 @@ describe('BrandService follow nhãn', () => {
     const svc = new BrandService(prisma);
     const out = await svc.followState('u1', 'sachi');
     expect(out).toEqual({ following: true, followerCount: 9 });
+  });
+});
+
+describe('BrandService brand-owner tự quản', () => {
+  it('getOwnedBrand: NotFound nếu user không sở hữu nhãn', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue(null);
+    await expect(new BrandService(prisma).getOwnedBrand('u1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('getOwnedBrand: trả nhãn + promotions', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', name: 'N', ownerUserId: 'u1' });
+    prisma.brandPromotion.findMany.mockResolvedValue([{ id: 'p1' }]);
+    const out = await new BrandService(prisma).getOwnedBrand('u1');
+    expect(out.id).toBe('b1');
+    expect(out.promotions).toHaveLength(1);
+  });
+
+  it('updateOwnedBrand: CHỈ set field cho phép (bỏ name/isVerified/isPublished)', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', ownerUserId: 'u1' });
+    prisma.brand.update.mockResolvedValue({});
+    await new BrandService(prisma).updateOwnedBrand('u1', { logoUrl: 'L', story: 'S', name: 'HACK', isVerified: true, isPublished: true } as any);
+    const data = prisma.brand.update.mock.calls[0][0].data;
+    expect(data).toEqual({ logoUrl: 'L', story: 'S' });
+    expect(data.name).toBeUndefined();
+    expect(data.isVerified).toBeUndefined();
+    expect(data.isPublished).toBeUndefined();
+  });
+
+  it('createOwnedPromotion: gắn brandId của nhãn sở hữu', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', ownerUserId: 'u1' });
+    prisma.brandPromotion.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'p1', ...data }));
+    const out = await new BrandService(prisma).createOwnedPromotion('u1', { title: 'Sale', startAt: '2026-06-01', endAt: '2026-07-01' });
+    expect(out.brandId).toBe('b1');
+  });
+
+  it('updateOwnedPromotion: Forbidden nếu promo thuộc nhãn khác', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', ownerUserId: 'u1' });
+    prisma.brandPromotion.findUnique.mockResolvedValue({ id: 'p9', brandId: 'OTHER' });
+    await expect(new BrandService(prisma).updateOwnedPromotion('u1', 'p9', { title: 'x' })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.brandPromotion.update).not.toHaveBeenCalled();
+  });
+
+  it('deleteOwnedPromotion: OK khi promo thuộc nhãn sở hữu', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', ownerUserId: 'u1' });
+    prisma.brandPromotion.findUnique.mockResolvedValue({ id: 'p1', brandId: 'b1' });
+    prisma.brandPromotion.delete.mockResolvedValue({});
+    const out = await new BrandService(prisma).deleteOwnedPromotion('u1', 'p1');
+    expect(out).toEqual({ ok: true });
   });
 });

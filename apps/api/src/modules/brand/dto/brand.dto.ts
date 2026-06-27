@@ -22,10 +22,21 @@ export class UpdateBrandDto {
   @IsOptional() @IsString() origin?: string;
   @IsOptional() @Allow() certifications?: unknown;
   @IsOptional() @IsBoolean() isPublished?: boolean;
+  // Gán chủ nhãn (lộ trình B): userId của đối tác → cho phép họ tự quản nhãn.
+  @IsOptional() @IsString() ownerUserId?: string;
 }
 
 export class VerifyBrandDto {
   @IsBoolean() isVerified!: boolean;
+}
+
+/** Brand-owner CHỈ sửa thông tin nhãn (không name/slug/verified/publish/cert). */
+export class UpdateOwnedBrandDto {
+  @IsOptional() @IsString() logoUrl?: string;
+  @IsOptional() @IsString() coverUrl?: string;
+  @IsOptional() @IsString() tagline?: string;
+  @IsOptional() @IsString() story?: string;
+  @IsOptional() @IsString() origin?: string;
 }
 
 export class PromotionDto {

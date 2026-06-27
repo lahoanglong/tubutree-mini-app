@@ -288,6 +288,11 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
     mutationFn: (v: boolean) => verifyBrand(brand.id, v),
     onSuccess: refreshBrands,
   });
+  const [ownerInput, setOwnerInput] = useState('');
+  const assignOwner = useMutation({
+    mutationFn: () => updateBrand(brand.id, { ownerUserId: ownerInput.trim() }),
+    onSuccess: () => { setOwnerInput(''); refreshBrands(); },
+  });
   const products = useQuery({ queryKey: ['admin-brand-products', brand.id], queryFn: () => listBrandProducts(brand.id), enabled: open });
   const promos = useQuery({ queryKey: ['admin-brand-promos', brand.id], queryFn: () => listPromotions(brand.id), enabled: open });
   const link = useMutation({
@@ -339,6 +344,21 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
               Gán SP theo tên nhãn
             </button>
             {link.data && <span className="self-center text-sm text-green-700">Đã gán {link.data.linked} SP</span>}
+          </div>
+
+          {/* Gán chủ nhãn (lộ trình B) — đối tác tự quản nhãn trong Mini App */}
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-neutral-500">Chủ nhãn (userId):</span>
+            <input
+              placeholder="userId đối tác"
+              value={ownerInput}
+              onChange={(e) => setOwnerInput(e.target.value)}
+              className="flex-1 rounded border border-neutral-200 px-2 py-1"
+            />
+            <button onClick={() => assignOwner.mutate()} disabled={!ownerInput.trim() || assignOwner.isPending} className="rounded border border-neutral-200 px-3 py-1 disabled:opacity-50">
+              Gán chủ nhãn
+            </button>
+            {assignOwner.isSuccess && <span className="text-green-700">Đã gán ✓</span>}
           </div>
 
           <BrandInfoForm brand={brand} />

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { getLoyalty, getNotifications } from '../services/account-api';
+import { getOwnedBrand } from '../services/brand-owner-api';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 
@@ -86,6 +87,21 @@ export default function ProfilePage() {
     enabled: status === 'authenticated',
   });
   const unreadCount = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
+
+  // Brand-owner (lộ trình B): chỉ hiện mục "Quản lý nhãn" khi user sở hữu 1 nhãn.
+  const ownedBrandQ = useQuery({
+    queryKey: ['owned-brand-nav'],
+    queryFn: getOwnedBrand,
+    enabled: status === 'authenticated',
+    retry: false,
+  });
+  const menu = ownedBrandQ.data
+    ? MENU.map((s) =>
+        s.group === 'Kiếm thưởng'
+          ? { ...s, items: [...s.items, { Icon: Store, label: 'Quản lý nhãn hàng', to: '/brand-owner', hint: ownedBrandQ.data!.name }] }
+          : s,
+      )
+    : MENU;
 
   // Đang đăng nhập ngầm → spinner. Nếu login fail (idle/error) → nút thử lại,
   // KHÔNG để spinner quay vô hạn ("tài khoản load mãi").
@@ -198,7 +214,7 @@ export default function ProfilePage() {
       </Box>
 
       {/* Menu */}
-      {MENU.map((section) => (
+      {menu.map((section) => (
         <Box key={section.group} mx={4} mb={3}>
           <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginBottom: 6, marginLeft: 4 }}>
             {section.group.toUpperCase()}

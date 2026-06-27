@@ -93,4 +93,21 @@ model ReferralTouch {
 - Endpoint `GET /dealer/rewards` (auth dealer).
 - FE miniapp `dealer.tsx` tab Báo cáo: card "🏪 Phần thưởng đại lý" — mỗi thưởng có thanh tiến trình volume/threshold + "Còn X để đạt" / "Đã đạt — Tubu sẽ liên hệ trao thưởng".
 - Test: unit rewardsProgress (map period, achieved/toGo, chặn non-dealer).
-## Mục 4 — Brand-owner tự quản (lộ trình B) — (chờ brainstorm)
+## Mục 4 — Brand-owner tự quản (lộ trình B) — Mini App, scope info + khuyến mãi
+
+**Chốt:** brand-owner = User được admin gán `Brand.ownerUserId`. Auth = **kiểm quyền sở hữu** (ownerUserId === user), KHÔNG role mới. Quyền: sửa **thông tin nhãn** (logoUrl/coverUrl/tagline/story/origin) + **khuyến mãi** (CRUD). GIỮ cho admin: name/slug, isVerified, isPublished, certifications, gán SP. Giao diện: **Mini App**.
+
+### Backend (BrandService + brand.controller, prefix `/brand/owner`)
+- `getOwnedBrand(userId)` → brand mà ownerUserId=userId (kèm promotions); 404 nếu không có.
+- `updateOwnedBrand(userId, dto)` → assert owned; CHỈ set logoUrl/coverUrl/tagline/story/origin (bỏ qua field khác — chống sửa name/verified/publish/cert).
+- Promotions owner CRUD: `listOwnedPromotions`, `createOwnedPromotion`, `updateOwnedPromotion`, `deleteOwnedPromotion` — assert promotion.brandId === owned brand.
+- Routes (auth, không @Roles): `GET /brand/owner/me`, `PATCH /brand/owner/me`, `GET|POST /brand/owner/me/promotions`, `PATCH|DELETE /brand/owner/me/promotions/:id`.
+- Admin gán chủ nhãn: thêm `ownerUserId` vào `UpdateBrandDto` + ô nhập trong admin brand form (web).
+
+### Frontend Mini App
+- `brand-owner.tsx` (route `/brand-owner`): nếu `getOwnedBrand` 404 → empty-state "Chưa được cấp quyền quản lý nhãn". Có nhãn → form sửa info + danh sách/sửa/xoá/thêm khuyến mãi. Reuse ImageUpload cho logo/cover.
+- `brand-owner-api.ts`. Entry: link "Quản lý nhãn" ở profile (hiện khi sở hữu nhãn).
+
+### Test
+- Unit: getOwnedBrand (404 khi không sở hữu), updateOwnedBrand (chỉ set field cho phép, bỏ name/verified), promotions owner CRUD assert ownership (ForbiddenException khi promo thuộc nhãn khác).
+- E2E: admin gán ownerUserId → owner GET/PATCH /brand/owner/me + thêm promotion → public brand phản ánh.

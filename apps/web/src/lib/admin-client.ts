@@ -129,6 +129,7 @@ export const updateBrand = (
     origin: string;
     certifications: BrandCert[];
     isPublished: boolean;
+    ownerUserId: string;
   }>,
 ) => apiFetch<AdminBrand>(`/admin/brands/${id}`, { method: 'PATCH', body });
 export const verifyBrand = (id: string, isVerified: boolean) =>
