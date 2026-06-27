@@ -4,6 +4,7 @@ import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { StorefrontService } from './storefront.service';
+import { StorefrontQuestService } from './storefront-quest.service';
 
 class UpdateStorefrontDto {
   @IsOptional() @IsString() title?: string;
@@ -43,7 +44,10 @@ class PickerQuery {
 
 @Controller('storefront')
 export class StorefrontController {
-  constructor(private readonly svc: StorefrontService) {}
+  constructor(
+    private readonly svc: StorefrontService,
+    private readonly quests: StorefrontQuestService,
+  ) {}
 
   @Post() create(@CurrentUser('sub') uid: string) { return this.svc.getOrCreateMine(uid); }
   @Get('me') me(@CurrentUser('sub') uid: string) { return this.svc.getMine(uid); }
@@ -61,6 +65,9 @@ export class StorefrontController {
   @Post('me/collections/:id/items/reorder') reorderItems(@CurrentUser('sub') uid: string, @Param('id') id: string, @Body() dto: ReorderDto) { return this.svc.reorderItems(uid, id, dto.orderedIds); }
 
   @Get('me/products') picker(@CurrentUser('sub') uid: string, @Query() q: PickerQuery) { return this.svc.pickerProducts(uid, q); }
+
+  @Get('me/quests') listQuests(@CurrentUser('sub') uid: string) { return this.quests.listQuests(uid); }
+  @Post('me/quests/:code/claim') claimQuest(@CurrentUser('sub') uid: string, @Param('code') code: string) { return this.quests.claimQuest(uid, code); }
 
   @Public() @Get('public/:slug') publicView(@Param('slug') slug: string) { return this.svc.getPublicBySlug(slug); }
 }

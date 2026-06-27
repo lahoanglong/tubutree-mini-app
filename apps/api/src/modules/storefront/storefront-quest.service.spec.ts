@@ -33,13 +33,13 @@ describe('StorefrontQuestService.listQuests', () => {
     const svc = new StorefrontQuestService(prisma, coins);
     const out = await svc.listQuests('u1');
     const byCode = Object.fromEntries(out.quests.map((q) => [q.code, q]));
-    expect(byCode['profile_complete'].done).toBe(true);
-    expect(byCode['profile_complete'].claimed).toBe(true);
-    expect(byCode['add_5_products'].done).toBe(true); // 5 items
-    expect(byCode['add_5_products'].claimed).toBe(false);
-    expect(byCode['notes_3'].done).toBe(true); // 4 có note >= 3
-    expect(byCode['publish'].done).toBe(true);
-    expect(byCode['first_order'].done).toBe(true);
+    expect(byCode['profile_complete']?.done).toBe(true);
+    expect(byCode['profile_complete']?.claimed).toBe(true);
+    expect(byCode['add_5_products']?.done).toBe(true); // 5 items
+    expect(byCode['add_5_products']?.claimed).toBe(false);
+    expect(byCode['notes_3']?.done).toBe(true); // 4 có note >= 3
+    expect(byCode['publish']?.done).toBe(true);
+    expect(byCode['first_order']?.done).toBe(true);
     expect(out.totalEarnedXu).toBe(QUESTS.find((q) => q.code === 'profile_complete')!.rewardXu);
     expect(out.level).toBe(1);
     expect(out.levelMax).toBe(QUESTS.length);
@@ -54,9 +54,9 @@ describe('StorefrontQuestService.listQuests', () => {
     const svc = new StorefrontQuestService(prisma, coins);
     const out = await svc.listQuests('u1');
     const byCode = Object.fromEntries(out.quests.map((q) => [q.code, q]));
-    expect(byCode['profile_complete'].done).toBe(false);
-    expect(byCode['add_5_products'].progress).toBe(1);
-    expect(byCode['add_5_products'].done).toBe(false);
+    expect(byCode['profile_complete']?.done).toBe(false);
+    expect(byCode['add_5_products']?.progress).toBe(1);
+    expect(byCode['add_5_products']?.done).toBe(false);
   });
 });
 
