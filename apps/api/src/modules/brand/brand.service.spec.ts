@@ -130,6 +130,14 @@ describe('BrandService admin', () => {
     expect(out.slug).toBe('dua-ben-tre');
   });
 
+  it('updateBrand ném BadRequest nếu slug slugify ra rỗng (vd toàn ký tự đặc biệt)', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
+    const svc = new BrandService(prisma);
+    await expect(svc.updateBrand('b1', { slug: '!!!@@@' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.brand.update).not.toHaveBeenCalled();
+  });
+
   it('verifyBrand set isVerified', async () => {
     const prisma = makePrisma();
     prisma.brand.update.mockResolvedValue({ id: 'b1', isVerified: true });

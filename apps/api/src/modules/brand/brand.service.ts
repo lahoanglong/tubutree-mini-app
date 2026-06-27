@@ -153,7 +153,11 @@ export class BrandService {
   ) {
     await this.prisma.brand.findUniqueOrThrow({ where: { id } });
     const data: Record<string, unknown> = { ...dto };
-    if (typeof dto.slug === 'string' && dto.slug.trim()) data.slug = slugifyVi(dto.slug);
+    if (typeof dto.slug === 'string' && dto.slug.trim()) {
+      const slug = slugifyVi(dto.slug);
+      if (!slug) throw new BadRequestException('Slug không hợp lệ (rỗng sau khi chuẩn hoá).');
+      data.slug = slug;
+    }
     return this.prisma.brand.update({ where: { id }, data });
   }
 
