@@ -35,10 +35,11 @@ export function OrderSuccess({
 }) {
   const navigate = useNavigate();
   const sfSlug = useStorefrontContext((s) => s.slug);
+  const sfKind = useStorefrontContext((s) => s.kind);
 
   const handleContinue = () => {
     if (sfSlug) {
-      navigate(`/s/${sfSlug}`, { replace: true });
+      navigate(sfKind === 'brand' ? `/brand/${sfSlug}` : `/s/${sfSlug}`, { replace: true });
     } else {
       onContinue();
     }

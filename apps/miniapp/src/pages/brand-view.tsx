@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Page, Text, Button, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getPublicBrand, getBrandShareToEarn,
   getBrandFollowState, followBrand, unfollowBrand,
 } from '../services/brand-api';
+import { useStorefrontContext } from '../store/storefront-context';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
@@ -19,7 +20,14 @@ export default function BrandViewPage() {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
   const [shareOpen, setShareOpen] = useState(false);
+  const setSfContext = useStorefrontContext((s) => s.setContext);
   const q = useQuery({ queryKey: ['public-brand', slug], queryFn: () => getPublicBrand(slug), staleTime: 60_000 });
+
+  // Vào trang nhãn → lưu store-context kind 'brand' để back/sau-mua quay về trang nhãn.
+  // KHÔNG set storefrontSlug khi checkout (kind='brand') → tránh ô nhiễm analytics gian hàng CTV.
+  useEffect(() => {
+    if (slug) setSfContext({ slug, kind: 'brand' });
+  }, [slug, setSfContext]);
   // Trạng thái theo dõi (cần đăng nhập; lỗi/401 coi như chưa theo dõi).
   const followQ = useQuery({ queryKey: ['brand-follow', slug], queryFn: () => getBrandFollowState(slug), retry: false });
   const followMut = useMutation({

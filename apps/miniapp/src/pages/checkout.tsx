@@ -22,6 +22,9 @@ export default function CheckoutPage() {
   const { user, status } = useAuthStore();
   const authed = status === 'authenticated';
   const sfCtx = useStorefrontContext();
+  // Chỉ gian hàng CTV (kind='ctv') mới gắn storefrontSlug (combo + attribution).
+  // Trang nhãn (kind='brand') KHÔNG gửi → tránh ô nhiễm analytics CTV; vẫn giữ referralCode.
+  const ctvSlug = sfCtx.kind === 'ctv' ? (sfCtx.slug ?? undefined) : undefined;
 
   const [addressId, setAddressId] = useState<string | null>(null);
   const [payment, setPayment] = useState('COD');
@@ -61,8 +64,8 @@ export default function CheckoutPage() {
 
   const pointsToUse = usePoints ? (user?.pointsBalance ?? 0) : 0;
   const quote = useQuery({
-    queryKey: ['quote', addressId, pointsToUse, sfCtx.slug],
-    queryFn: () => checkoutQuote(addressId!, pointsToUse, sfCtx.slug ?? undefined),
+    queryKey: ['quote', addressId, pointsToUse, ctvSlug],
+    queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug),
     enabled: !!addressId && authed,
   });
 
@@ -95,7 +98,7 @@ export default function CheckoutPage() {
               }
             : undefined,
           referralCode: sfCtx.referralCode ?? undefined,
-          storefrontSlug: sfCtx.slug ?? undefined,
+          storefrontSlug: ctvSlug,
         },
         idempotencyKey.current,
       ),

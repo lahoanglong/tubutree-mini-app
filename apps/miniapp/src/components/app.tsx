@@ -106,7 +106,8 @@ export default function MyApp() {
       : new URLSearchParams();
     const slug = search.get('s') ?? hash.get('s');
     const ref = search.get('ref') ?? hash.get('ref');
-    if (slug || ref) setSfContext({ slug: slug ?? null, referralCode: ref ?? null });
+    // ?s= = link gian hàng CTV → kind 'ctv'. (Trang nhãn /brand tự set kind 'brand' khi mở.)
+    if (slug || ref) setSfContext({ slug: slug ?? null, referralCode: ref ?? null, ...(slug ? { kind: 'ctv' as const } : {}) });
   }, [setSfContext]);
 
   return (
