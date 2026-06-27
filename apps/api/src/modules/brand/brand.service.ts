@@ -162,6 +162,11 @@ export class BrandService {
   }
 
   // ---- Admin: BrandPromotion ----
+  /** Tất cả khuyến mãi của nhãn (admin — gồm cả hết hạn/đã tắt). */
+  listPromotions(brandId: string) {
+    return this.prisma.brandPromotion.findMany({ where: { brandId }, orderBy: { sortOrder: 'asc' } });
+  }
+
   createPromotion(
     brandId: string,
     dto: { title: string; subtitle?: string; themeColor?: string; couponCode?: string; startAt: string; endAt: string; sortOrder?: number },

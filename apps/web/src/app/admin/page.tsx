@@ -13,16 +13,31 @@ import {
   getConfig,
   setConfig,
   createCoupon,
+  listBrands,
+  createBrand,
+  updateBrand,
+  verifyBrand,
+  listBrandProducts,
+  linkBrandByName,
+  detachBrandProducts,
+  listPromotions,
+  createPromotion,
+  deletePromotion,
+  listDealerRewards,
+  createDealerReward,
+  deleteDealerReward,
   type ConfigRow,
+  type AdminBrand,
 } from '@/lib/admin-client';
 
-type Tab = 'dealers' | 'orders' | 'users' | 'config' | 'coupons';
+type Tab = 'dealers' | 'orders' | 'users' | 'config' | 'coupons' | 'brands';
 const TABS: { k: Tab; label: string }[] = [
   { k: 'dealers', label: 'Đại lý' },
   { k: 'orders', label: 'Đơn hàng' },
   { k: 'users', label: 'Người dùng' },
   { k: 'config', label: 'Cấu hình' },
   { k: 'coupons', label: 'Voucher' },
+  { k: 'brands', label: 'Nhãn hàng' },
 ];
 
 export default function AdminPage() {
@@ -62,6 +77,7 @@ export default function AdminPage() {
         {tab === 'users' && <UsersTab />}
         {tab === 'config' && <ConfigTab />}
         {tab === 'coupons' && <CouponsTab />}
+        {tab === 'brands' && <BrandsTab />}
       </div>
     </main>
   );
@@ -227,6 +243,178 @@ function CouponsTab() {
       </div>
       <button onClick={() => create.mutate()} disabled={!f.code} className="w-full rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300">Tạo voucher</button>
       {msg && <p className="text-sm text-green-700">{msg}</p>}
+    </div>
+  );
+}
+
+function BrandsTab() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['admin-brands'], queryFn: listBrands });
+  const [form, setForm] = useState({ name: '', tagline: '' });
+  const create = useMutation({
+    mutationFn: () => createBrand({ name: form.name.trim(), tagline: form.tagline.trim() || undefined }),
+    onSuccess: () => { setForm({ name: '', tagline: '' }); void qc.invalidateQueries({ queryKey: ['admin-brands'] }); },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-2 rounded-lg border border-neutral-100 bg-white p-3">
+        <input placeholder="Tên nhãn (vd Dừa Bến Tre)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm" />
+        <input placeholder="Tagline" value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm" />
+        <button onClick={() => create.mutate()} disabled={!form.name.trim() || create.isPending} className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300">Tạo nhãn</button>
+      </div>
+      {create.isError && <p className="text-sm text-red-600">{(create.error as Error).message}</p>}
+
+      <div className="space-y-3">
+        {q.data?.map((b) => <BrandRow key={b.id} brand={b} />)}
+        {q.data?.length === 0 && <Empty>Chưa có nhãn hàng. Tạo nhãn đầu tiên ở trên.</Empty>}
+      </div>
+
+      <DealerRewardsSection />
+    </div>
+  );
+}
+
+function BrandRow({ brand }: { brand: AdminBrand }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const refreshBrands = () => qc.invalidateQueries({ queryKey: ['admin-brands'] });
+  const patch = useMutation({
+    mutationFn: (body: Partial<{ isPublished: boolean }>) => updateBrand(brand.id, body),
+    onSuccess: refreshBrands,
+  });
+  const verify = useMutation({
+    mutationFn: (v: boolean) => verifyBrand(brand.id, v),
+    onSuccess: refreshBrands,
+  });
+  const products = useQuery({ queryKey: ['admin-brand-products', brand.id], queryFn: () => listBrandProducts(brand.id), enabled: open });
+  const promos = useQuery({ queryKey: ['admin-brand-promos', brand.id], queryFn: () => listPromotions(brand.id), enabled: open });
+  const link = useMutation({
+    mutationFn: () => linkBrandByName(brand.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-brand-products', brand.id] }),
+  });
+  const detach = useMutation({
+    mutationFn: (pid: string) => detachBrandProducts(brand.id, [pid]),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-brand-products', brand.id] }),
+  });
+  const [promo, setPromo] = useState({ title: '', subtitle: '', startAt: '', endAt: '' });
+  const addPromo = useMutation({
+    mutationFn: () => createPromotion(brand.id, {
+      title: promo.title.trim(), subtitle: promo.subtitle.trim() || undefined,
+      startAt: new Date(promo.startAt || Date.now()).toISOString(),
+      endAt: new Date(promo.endAt || Date.now() + 30 * 864e5).toISOString(),
+    }),
+    onSuccess: () => { setPromo({ title: '', subtitle: '', startAt: '', endAt: '' }); void qc.invalidateQueries({ queryKey: ['admin-brand-promos', brand.id] }); },
+  });
+  const delPromo = useMutation({
+    mutationFn: (pid: string) => deletePromotion(pid),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-brand-promos', brand.id] }),
+  });
+
+  return (
+    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 font-medium">
+            {brand.name}
+            {brand.isVerified && <span className="rounded-full bg-green-600 px-2 py-0.5 text-xs text-white">✓ Chính hãng</span>}
+            {!brand.isPublished && <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-xs text-neutral-600">Nháp</span>}
+          </div>
+          <div className="text-xs text-neutral-400">/{brand.slug} · {brand.followerCount} theo dõi</div>
+        </div>
+        <button onClick={() => setOpen((o) => !o)} className="text-sm text-green-700 underline">{open ? 'Thu gọn' : 'Quản lý'}</button>
+      </div>
+
+      {open && (
+        <div className="mt-3 space-y-4 border-t border-neutral-100 pt-3">
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => patch.mutate({ isPublished: !brand.isPublished })} className="rounded border border-neutral-200 px-3 py-1.5 text-sm">
+              {brand.isPublished ? 'Ẩn (chuyển nháp)' : 'Đăng (publish)'}
+            </button>
+            <button onClick={() => verify.mutate(!brand.isVerified)} className="rounded border border-neutral-200 px-3 py-1.5 text-sm">
+              {brand.isVerified ? 'Bỏ chính hãng' : 'Cấp ✓ chính hãng'}
+            </button>
+            <button onClick={() => link.mutate()} disabled={link.isPending} className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300">
+              Gán SP theo tên nhãn
+            </button>
+            {link.data && <span className="self-center text-sm text-green-700">Đã gán {link.data.linked} SP</span>}
+          </div>
+
+          <div>
+            <div className="mb-1 text-sm font-medium">Sản phẩm ({products.data?.length ?? 0})</div>
+            <div className="max-h-48 space-y-1 overflow-y-auto">
+              {products.data?.map((p) => (
+                <div key={p.id} className="flex items-center justify-between rounded border border-neutral-100 px-2 py-1 text-sm">
+                  <span className="truncate">{p.name}</span>
+                  <button onClick={() => detach.mutate(p.id)} className="ml-2 shrink-0 text-xs text-red-600">Gỡ</button>
+                </div>
+              ))}
+              {products.data?.length === 0 && <p className="text-xs text-neutral-400">Chưa có SP. Bấm “Gán SP theo tên nhãn” để liên kết catalog.</p>}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-1 text-sm font-medium">Khuyến mãi</div>
+            <div className="space-y-1">
+              {promos.data?.map((pm) => (
+                <div key={pm.id} className="flex items-center justify-between rounded border border-neutral-100 px-2 py-1 text-sm">
+                  <span>{pm.title}{pm.subtitle ? ` · ${pm.subtitle}` : ''}</span>
+                  <button onClick={() => delPromo.mutate(pm.id)} className="ml-2 shrink-0 text-xs text-red-600">Xoá</button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <input placeholder="Tiêu đề (MUA 2 TẶNG 1)" value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1 text-sm" />
+              <input placeholder="Mô tả" value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1 text-sm" />
+              <input type="date" value={promo.startAt} onChange={(e) => setPromo({ ...promo, startAt: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
+              <input type="date" value={promo.endAt} onChange={(e) => setPromo({ ...promo, endAt: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
+              <button onClick={() => addPromo.mutate()} disabled={!promo.title.trim()} className="rounded bg-green-600 px-3 py-1 text-sm text-white disabled:bg-neutral-300">Thêm KM</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DealerRewardsSection() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['admin-dealer-rewards'], queryFn: listDealerRewards });
+  const [f, setF] = useState({ type: 'TOUR', title: '', description: '', threshold: 50000000 });
+  const create = useMutation({
+    mutationFn: () => createDealerReward({
+      type: f.type as 'TOUR' | 'GIFT' | 'OTHER', title: f.title.trim(),
+      description: f.description.trim() || undefined, threshold: Number(f.threshold),
+    }),
+    onSuccess: () => { setF({ type: 'TOUR', title: '', description: '', threshold: 50000000 }); void qc.invalidateQueries({ queryKey: ['admin-dealer-rewards'] }); },
+  });
+  const del = useMutation({
+    mutationFn: (id: string) => deleteDealerReward(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-dealer-rewards'] }),
+  });
+
+  return (
+    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+      <div className="mb-2 font-medium">🏪 Chương trình đại lý (thưởng doanh số)</div>
+      <div className="space-y-1">
+        {q.data?.map((d) => (
+          <div key={d.id} className="flex items-center justify-between rounded border border-neutral-100 px-2 py-1 text-sm">
+            <span>[{d.type}] {d.title} · mốc {formatVnd(d.threshold)}/{d.period === 'YEAR' ? 'năm' : 'quý'}{d.brandId ? '' : ' · toàn shop'}</span>
+            <button onClick={() => del.mutate(d.id)} className="ml-2 shrink-0 text-xs text-red-600">Xoá</button>
+          </div>
+        ))}
+        {q.data?.length === 0 && <p className="text-xs text-neutral-400">Chưa có chương trình.</p>}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm">
+          <option value="TOUR">Tour</option>
+          <option value="GIFT">Quà</option>
+          <option value="OTHER">Khác</option>
+        </select>
+        <input placeholder="Tiêu đề (Tour Phú Quốc)" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1 text-sm" />
+        <input type="number" placeholder="Mốc doanh số" value={f.threshold} onChange={(e) => setF({ ...f, threshold: Number(e.target.value) })} className="w-36 rounded border border-neutral-200 px-2 py-1 text-sm" />
+        <button onClick={() => create.mutate()} disabled={!f.title.trim()} className="rounded bg-green-600 px-3 py-1 text-sm text-white disabled:bg-neutral-300">Thêm</button>
+      </div>
     </div>
   );
 }

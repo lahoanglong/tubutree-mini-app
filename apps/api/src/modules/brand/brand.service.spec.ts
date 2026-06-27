@@ -138,6 +138,15 @@ describe('BrandService admin', () => {
     expect(prisma.brand.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { isVerified: true } });
   });
 
+  it('listPromotions truy vấn theo brandId', async () => {
+    const prisma = makePrisma();
+    prisma.brandPromotion.findMany.mockResolvedValue([{ id: 'p1' }]);
+    const svc = new BrandService(prisma);
+    const out = await svc.listPromotions('b1');
+    expect(prisma.brandPromotion.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { brandId: 'b1' } }));
+    expect(out).toHaveLength(1);
+  });
+
   it('createPromotion gắn brandId + ép Date', async () => {
     const prisma = makePrisma();
     prisma.brandPromotion.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'p1', ...data }));

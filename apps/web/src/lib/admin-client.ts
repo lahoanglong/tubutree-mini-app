@@ -66,3 +66,65 @@ export interface CreateCouponInput {
 }
 export const createCoupon = (input: CreateCouponInput) =>
   apiFetch('/admin/coupons', { method: 'POST', body: input });
+
+// ── Nhãn hàng (storefront Lớp 3) ──
+export interface AdminBrand {
+  id: string;
+  slug: string;
+  name: string;
+  tagline: string | null;
+  isVerified: boolean;
+  isPublished: boolean;
+  followerCount: number;
+}
+export interface AdminBrandProduct {
+  id: string;
+  name: string;
+  slug: string;
+  thumbnail: string | null;
+  brand: string;
+  isActive: boolean;
+}
+export interface AdminPromotion {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  startAt: string;
+  endAt: string;
+  isActive: boolean;
+}
+export interface AdminDealerReward {
+  id: string;
+  brandId: string | null;
+  type: 'TOUR' | 'GIFT' | 'OTHER';
+  title: string;
+  description: string | null;
+  threshold: number;
+  period: string;
+  isActive: boolean;
+}
+
+export const listBrands = () => apiFetch<AdminBrand[]>('/admin/brands');
+export const createBrand = (body: { name: string; tagline?: string; isPublished?: boolean }) =>
+  apiFetch<AdminBrand>('/admin/brands', { method: 'POST', body });
+export const updateBrand = (id: string, body: Partial<{ name: string; tagline: string; isPublished: boolean }>) =>
+  apiFetch<AdminBrand>(`/admin/brands/${id}`, { method: 'PATCH', body });
+export const verifyBrand = (id: string, isVerified: boolean) =>
+  apiFetch<AdminBrand>(`/admin/brands/${id}/verify`, { method: 'PATCH', body: { isVerified } });
+export const listBrandProducts = (id: string) =>
+  apiFetch<AdminBrandProduct[]>(`/admin/brands/${id}/products`);
+export const linkBrandByName = (id: string) =>
+  apiFetch<{ linked: number }>(`/admin/brands/${id}/link-by-name`, { method: 'POST' });
+export const detachBrandProducts = (id: string, productIds: string[]) =>
+  apiFetch<{ detached: number }>(`/admin/brands/${id}/products`, { method: 'DELETE', body: { productIds } });
+export const listPromotions = (id: string) =>
+  apiFetch<AdminPromotion[]>(`/admin/brands/${id}/promotions`);
+export const createPromotion = (id: string, body: { title: string; subtitle?: string; startAt: string; endAt: string }) =>
+  apiFetch<AdminPromotion>(`/admin/brands/${id}/promotions`, { method: 'POST', body });
+export const deletePromotion = (id: string) =>
+  apiFetch(`/admin/promotions/${id}`, { method: 'DELETE' });
+export const listDealerRewards = () => apiFetch<AdminDealerReward[]>('/admin/dealer-rewards');
+export const createDealerReward = (body: { brandId?: string; type: 'TOUR' | 'GIFT' | 'OTHER'; title: string; description?: string; threshold: number; period?: string }) =>
+  apiFetch<AdminDealerReward>('/admin/dealer-rewards', { method: 'POST', body });
+export const deleteDealerReward = (id: string) =>
+  apiFetch(`/admin/dealer-rewards/${id}`, { method: 'DELETE' });

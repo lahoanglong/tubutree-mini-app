@@ -44,6 +44,9 @@ export class BrandAdminController {
     return this.svc.linkProductsByName(id);
   }
 
+  @Get('brands/:id/promotions') listPromos(@Param('id') id: string) {
+    return this.svc.listPromotions(id);
+  }
   @Post('brands/:id/promotions') addPromo(@Param('id') id: string, @Body() dto: PromotionDto) {
     return this.svc.createPromotion(id, dto);
   }
