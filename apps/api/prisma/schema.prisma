@@ -195,10 +195,55 @@ model Brand {
   followerCount  Int        @default(0)
   products       Product[]
   storefront     Storefront?
+  promotions     BrandPromotion[]
+  dealerRewards  DealerReward[]
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
   @@map("brands")
+}
+
+model BrandPromotion {
+  id         String   @id @default(cuid())
+  brandId    String
+  brand      Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  title      String
+  subtitle   String?
+  themeColor String?
+  couponCode String?
+  startAt    DateTime
+  endAt      DateTime
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([brandId, isActive])
+  @@map("brand_promotions")
+}
+
+enum DealerRewardType {
+  TOUR
+  GIFT
+  OTHER
+}
+
+model DealerReward {
+  id          String           @id @default(cuid())
+  brandId     String?
+  brand       Brand?           @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  type        DealerRewardType
+  title       String
+  description String?
+  threshold   Int
+  period      String           @default("QUARTER")
+  isActive    Boolean          @default(true)
+  sortOrder   Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([brandId, isActive])
+  @@map("dealer_rewards")
 }
 
 model Storefront {
