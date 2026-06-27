@@ -10,6 +10,7 @@ import {
   getCreditLedger,
   payCredit,
   getQuarterlyReport,
+  getDealerRewards,
   getTemplates,
   saveTemplate,
   deleteTemplate,
@@ -806,6 +807,47 @@ function DealerReport() {
           Thưởng tính trên tổng đơn đại lý (không tính đơn huỷ/trả) trong quý. Chốt cuối quý.
         </Text>
       </Box>
+
+      <DealerRewardsCard />
+    </Box>
+  );
+}
+
+/** Phần thưởng đại lý (tour/quà): hiển thị điều kiện + tiến trình đạt mốc. Trao thưởng admin làm offline. */
+function DealerRewardsCard() {
+  const q = useQuery({ queryKey: ['dealer-rewards'], queryFn: getDealerRewards });
+  const rewards = q.data?.rewards ?? [];
+  if (!rewards.length) return null;
+  const icon = (t: string) => (t === 'TOUR' ? '🏝️' : t === 'GIFT' ? '🎁' : '🏆');
+  return (
+    <Box p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
+      <Text size="small" bold style={{ marginBottom: 8 }}>
+        🏪 Phần thưởng đại lý
+      </Text>
+      {rewards.map((r) => {
+        const pct = Math.min(100, Math.round((r.volume / r.threshold) * 100));
+        return (
+          <Box key={r.id} py={2} style={{ borderBottom: '1px solid var(--neutral-100)' }}>
+            <Box flex justifyContent="space-between" alignItems="center" style={{ gap: 8 }}>
+              <Text size="small" style={{ color: r.achieved ? 'var(--leaf-700)' : 'var(--neutral-800)' }}>
+                {r.achieved ? '✓ ' : ''}{icon(r.type)} {r.title}
+              </Text>
+              <Text size="xSmall" style={{ color: 'var(--neutral-500)', whiteSpace: 'nowrap' }}>
+                {formatVnd(r.threshold)}/{r.period === 'YEAR' ? 'năm' : 'quý'}
+              </Text>
+            </Box>
+            {r.description && (
+              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>{r.description}</Text>
+            )}
+            <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 6, marginTop: 6, overflow: 'hidden' }}>
+              <Box style={{ width: `${pct}%`, height: 6, background: r.achieved ? 'var(--leaf-500)' : 'var(--primary-400)', borderRadius: 99 }} />
+            </Box>
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+              {r.achieved ? 'Đã đạt — Tubu sẽ liên hệ trao thưởng' : `Còn ${formatVnd(r.toGo)} để đạt`}
+            </Text>
+          </Box>
+        );
+      })}
     </Box>
   );
 }

@@ -73,6 +73,27 @@ export interface QuarterlyReport {
 export const getQuarterlyReport = () =>
   api.get<QuarterlyReport>('/dealer/quarterly-report').then((r) => r.data);
 
+export interface DealerRewardProgress {
+  id: string;
+  type: 'TOUR' | 'GIFT' | 'OTHER';
+  title: string;
+  description: string | null;
+  threshold: number;
+  period: string;
+  volume: number;
+  achieved: boolean;
+  toGo: number;
+}
+export interface DealerRewardsView {
+  quarter: string;
+  year: number;
+  quarterVolume: number;
+  yearVolume: number;
+  rewards: DealerRewardProgress[];
+}
+export const getDealerRewards = () =>
+  api.get<DealerRewardsView>('/dealer/rewards').then((r) => r.data);
+
 // ── Mẫu đơn lưu sẵn (#64) ──
 export interface DealerTemplate {
   id: string;

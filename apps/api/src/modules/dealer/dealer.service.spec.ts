@@ -138,3 +138,37 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
     expect(where).toMatchObject({ userId: 'd1', refType: 'QUARTER_BONUS', refId: 'Q1/2026' });
   });
 });
+
+describe('DealerService.rewardsProgress (hiển thị điều kiện + tiến trình)', () => {
+  const NOW = new Date('2026-08-15T00:00:00Z'); // Q3/2026
+
+  it('map period: QUARTER dùng doanh số quý, YEAR dùng năm; achieved/toGo đúng', async () => {
+    const aggregate = jest
+      .fn()
+      .mockResolvedValueOnce({ _sum: { total: 30_000_000 } }) // quý
+      .mockResolvedValueOnce({ _sum: { total: 120_000_000 } }); // năm
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
+      dealerTier: { findUnique: jest.fn() },
+      order: { aggregate },
+      dealerReward: { findMany: jest.fn().mockResolvedValue([
+        { id: 'r1', type: 'TOUR', title: 'Tour', description: null, threshold: 50_000_000, period: 'QUARTER', sortOrder: 0 },
+        { id: 'r2', type: 'GIFT', title: 'Quà năm', description: null, threshold: 100_000_000, period: 'YEAR', sortOrder: 1 },
+      ]) },
+    } as unknown as PrismaService;
+    const out = await new DealerService(prisma, makeConfig()).rewardsProgress('d1', NOW);
+    const r1 = out.rewards.find((r) => r.id === 'r1')!;
+    const r2 = out.rewards.find((r) => r.id === 'r2')!;
+    expect(r1.volume).toBe(30_000_000);
+    expect(r1.achieved).toBe(false);
+    expect(r1.toGo).toBe(20_000_000);
+    expect(r2.volume).toBe(120_000_000);
+    expect(r2.achieved).toBe(true);
+    expect(r2.toGo).toBe(0);
+  });
+
+  it('chặn nếu không phải đại lý', async () => {
+    const prisma = { user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ role: 'CUSTOMER' }) } } as unknown as PrismaService;
+    await expect(new DealerService(prisma, makeConfig()).rewardsProgress('u1', NOW)).rejects.toThrow();
+  });
+});

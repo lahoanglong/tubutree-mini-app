@@ -85,5 +85,12 @@ model ReferralTouch {
 - Unit `recomputeSoldCounts` (mock groupBy → set đúng + reset về 0 khi không còn DELIVERED).
 - Unit `setSoldExternal` (map sku→product, cập nhật).
 - E2E: tạo đơn DELIVERED → recompute → `sold` tăng; set soldExternal → tổng = external+app.
-## Mục 3 — Auto đối soát DealerReward — (chờ brainstorm)
+## Mục 3 — DealerReward: hiển thị điều kiện + tiến trình (đã chốt gọn)
+
+**Làm rõ với user:** TOUR/GIFT/OTHER chỉ là *loại* phần thưởng (nhãn) để hiển thị "thẻ điều kiện" — KHÔNG có chức năng đặt tour/gửi quà. Trao thưởng admin làm OFFLINE. **Chọn mức gọn:** chỉ hiển thị điều kiện + tiến trình đại lý (KHÔNG cron/notify/bảng achievement).
+
+- **`DealerService.rewardsProgress(userId, now)`**: đối chiếu doanh số nhập kỳ (quý + năm, giờ VN, đơn `type='DEALER'` không huỷ/hoàn) với từng `DealerReward` active → trả `{ quarter, year, quarterVolume, yearVolume, rewards: [{id,type,title,description,threshold,period,volume,achieved,toGo}] }`. period='YEAR' dùng yearVolume, còn lại quarterVolume.
+- Endpoint `GET /dealer/rewards` (auth dealer).
+- FE miniapp `dealer.tsx` tab Báo cáo: card "🏪 Phần thưởng đại lý" — mỗi thưởng có thanh tiến trình volume/threshold + "Còn X để đạt" / "Đã đạt — Tubu sẽ liên hệ trao thưởng".
+- Test: unit rewardsProgress (map period, achieved/toGo, chặn non-dealer).
 ## Mục 4 — Brand-owner tự quản (lộ trình B) — (chờ brainstorm)

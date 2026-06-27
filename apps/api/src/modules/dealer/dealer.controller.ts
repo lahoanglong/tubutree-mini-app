@@ -72,6 +72,12 @@ export class DealerController {
     return this.dealer.quarterlyReport(userId);
   }
 
+  // Tiến trình đạt mốc phần thưởng đại lý (tour/quà — hiển thị điều kiện + tiến trình).
+  @Get('rewards')
+  rewards(@CurrentUser('sub') userId: string) {
+    return this.dealer.rewardsProgress(userId);
+  }
+
   @Get('templates')
   templates(@CurrentUser('sub') userId: string) {
     return this.dealer.listTemplates(userId);

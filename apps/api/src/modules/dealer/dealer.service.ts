@@ -242,6 +242,54 @@ export class DealerService {
     };
   }
 
+  /**
+   * Tiến trình đạt mốc DealerReward (#hoãn): đối chiếu doanh số nhập kỳ (quý/năm theo giờ VN)
+   * với điều kiện từng phần thưởng → hiển thị cho đại lý. CHỈ hiển thị điều kiện + tiến trình;
+   * trao thưởng (tour/quà) admin làm offline. `now` truyền vào để test tất định.
+   */
+  async rewardsProgress(userId: string, now: Date = new Date()) {
+    await this.dealerContext(userId); // chặn nếu chưa phải đại lý
+    const VN = 7 * 60 * 60 * 1000;
+    const vnNow = new Date(now.getTime() + VN);
+    const q = Math.floor(vnNow.getUTCMonth() / 3);
+    const year = vnNow.getUTCFullYear();
+    const qStart = new Date(Date.UTC(year, q * 3, 1) - VN);
+    const qEnd = new Date(Date.UTC(year, q * 3 + 3, 1) - VN);
+    const yStart = new Date(Date.UTC(year, 0, 1) - VN);
+    const yEnd = new Date(Date.UTC(year + 1, 0, 1) - VN);
+    const base = { userId, type: 'DEALER' as const, status: { notIn: ['CANCELLED', 'RETURNED'] as ('CANCELLED' | 'RETURNED')[] } };
+    const [qAgg, yAgg] = await Promise.all([
+      this.prisma.order.aggregate({ where: { ...base, createdAt: { gte: qStart, lt: qEnd } }, _sum: { total: true } }),
+      this.prisma.order.aggregate({ where: { ...base, createdAt: { gte: yStart, lt: yEnd } }, _sum: { total: true } }),
+    ]);
+    const quarterVolume = qAgg._sum.total ?? 0;
+    const yearVolume = yAgg._sum.total ?? 0;
+    const rewards = await this.prisma.dealerReward.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }],
+    });
+    return {
+      quarter: `Q${q + 1}/${year}`,
+      year,
+      quarterVolume,
+      yearVolume,
+      rewards: rewards.map((r) => {
+        const volume = r.period === 'YEAR' ? yearVolume : quarterVolume;
+        return {
+          id: r.id,
+          type: r.type,
+          title: r.title,
+          description: r.description,
+          threshold: r.threshold,
+          period: r.period,
+          volume,
+          achieved: volume >= r.threshold,
+          toGo: Math.max(0, r.threshold - volume),
+        };
+      }),
+    };
+  }
+
   private async bonusTiers(): Promise<BonusTier[]> {
     const tiers = await this.config.get<BonusTier[]>('dealer.quarterly_bonus_tiers', [
       { min: 50_000_000, pct: 2 },
