@@ -1,5 +1,23 @@
 import { NotFoundException } from '@nestjs/common';
-import { BrandService } from './brand.service';
+import { BrandService, slugifyVi } from './brand.service';
+
+describe('slugifyVi', () => {
+  it('xử lý nguyên âm có móc ư/ơ + dấu thanh + đ', () => {
+    // "Dừa Bến Tre" dựng từ unicode escape để chắc chắn không phụ thuộc encoding file
+    const dua = 'Dừa Bến Tre'; // Dừa Bến Tre
+    expect(slugifyVi(dua)).toBe('dua-ben-tre');
+    expect(slugifyVi('Hương Đồng')).toBe('huong-dong'); // "Hương Đồng"
+    expect(slugifyVi('  Nhãn  Test!! ')).toBe('nhan-test');
+  });
+
+  it('xử lý ư/ơ dạng ATOMIC (U+01B0/U+01A1 — không decompose dưới NFD)', () => {
+    // "Vườn" dựng từ codepoint atomic: V + ư(U+01B0) + ờ(U+1EDD) + n
+    const vuon = 'V' + String.fromCharCode(0x01b0) + String.fromCharCode(0x1edd) + 'n';
+    expect(slugifyVi(vuon)).toBe('vuon');
+    // ơ atomic đơn lẻ
+    expect(slugifyVi('H' + String.fromCharCode(0x01a1) + 'a')).toBe('hoa');
+  });
+});
 
 function makePrisma(overrides: any = {}) {
   return {

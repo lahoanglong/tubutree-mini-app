@@ -9,10 +9,21 @@ interface Cert {
 }
 
 /** Slugify tiếng Việt: bỏ dấu, đ→d, gạch nối, an toàn cho URL. */
+// Combining marks U+0300–U+036F (gồm U+031B 'horn' của ư/ơ). RegExp constructor để source thuần ASCII, tránh lỗi encoding.
+const COMBINING_MARKS = new RegExp('[\u0300-\u036f]', 'g');
+// \u01b0/\u01af (U+01B0/U+01AF) v\u00e0 \u01a1/\u01a0 (U+01A1/U+01A0) l\u00e0 k\u00fd t\u1ef1 ATOMIC \u2014 KH\u00d4NG decompose d\u01b0\u1edbi NFD,
+// n\u00ean combining-strip \u1edf tr\u00ean b\u1ecf s\u00f3t; x\u1eed l\u00fd ri\u00eang. Escape ASCII \u0111\u1ec3 source kh\u00f4ng l\u1ed7i encoding.
+const HORNED_U = new RegExp('[\u01b0\u01af]', 'g');
+const HORNED_O = new RegExp('[\u01a1\u01a0]', 'g');
+
 export function slugifyVi(input: string): string {
   return input
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    // Bỏ toàn bộ combining marks U+0300–U+036F (gồm cả U+031B "horn" của ư/ơ).
+    // Dùng unicode escape thay literal để không phụ thuộc encoding file.
+    .replace(COMBINING_MARKS, '')
+    .replace(HORNED_U, 'u')
+    .replace(HORNED_O, 'o')
     .replace(/đ/g, 'd')
     .replace(/Đ/g, 'D')
     .toLowerCase()
