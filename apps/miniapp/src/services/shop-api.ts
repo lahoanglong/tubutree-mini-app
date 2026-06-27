@@ -74,6 +74,7 @@ export interface CartSummary {
 export interface CheckoutQuote {
   subtotal: number;
   discount: number;
+  comboDiscount: number;
   pointsUsed: number;
   pointsDiscount: number;
   shippingFee: number;
@@ -126,8 +127,8 @@ export const createAddress = (data: Omit<AddressDTO, 'id' | 'isDefault'>) =>
   api.post<AddressDTO>('/me/addresses', data).then((r) => r.data);
 
 // Checkout
-export const checkoutQuote = (addressId: string, pointsToUse?: number) =>
-  api.post<CheckoutQuote>('/checkout/quote', { addressId, pointsToUse }).then((r) => r.data);
+export const checkoutQuote = (addressId: string, pointsToUse?: number, storefrontSlug?: string) =>
+  api.post<CheckoutQuote>('/checkout/quote', { addressId, pointsToUse, storefrontSlug }).then((r) => r.data);
 /** Đặt hàng kèm Idempotency-Key (AD-004) — retry sau timeout không tạo đơn đôi. */
 export interface InvoiceRequest {
   taxCode: string;

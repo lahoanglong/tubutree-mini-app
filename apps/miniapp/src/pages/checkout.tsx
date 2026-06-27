@@ -61,8 +61,8 @@ export default function CheckoutPage() {
 
   const pointsToUse = usePoints ? (user?.pointsBalance ?? 0) : 0;
   const quote = useQuery({
-    queryKey: ['quote', addressId, pointsToUse],
-    queryFn: () => checkoutQuote(addressId!, pointsToUse),
+    queryKey: ['quote', addressId, pointsToUse, sfCtx.slug],
+    queryFn: () => checkoutQuote(addressId!, pointsToUse, sfCtx.slug ?? undefined),
     enabled: !!addressId && authed,
   });
 
@@ -349,6 +349,9 @@ export default function CheckoutPage() {
             <Row label={vi.cart.subtotal} value={formatVnd(quote.data.subtotal)} />
             {quote.data.discount > 0 && (
               <Row label={vi.cart.discount} value={`-${formatVnd(quote.data.discount)}`} accent="leaf" />
+            )}
+            {quote.data.comboDiscount > 0 && (
+              <Row label="Ưu đãi combo" value={`-${formatVnd(quote.data.comboDiscount)}`} accent="leaf" />
             )}
             {quote.data.pointsDiscount > 0 && (
               <Row label={vi.checkout.points} value={`-${formatVnd(quote.data.pointsDiscount)}`} accent="leaf" />
