@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { BrandService, slugifyVi } from './brand.service';
 
 describe('slugifyVi', () => {
@@ -22,7 +22,7 @@ describe('slugifyVi', () => {
 function makePrisma(overrides: any = {}) {
   return {
     brand: { findFirst: jest.fn(), findUnique: jest.fn(), findUniqueOrThrow: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
-    product: { findMany: jest.fn().mockResolvedValue([]) },
+    product: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     brandPromotion: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     dealerReward: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     variation: { findMany: jest.fn().mockResolvedValue([]) },
@@ -152,5 +152,53 @@ describe('BrandService admin', () => {
     const out = await svc.createDealerReward({ type: 'TOUR', title: 'Tour Phú Quốc', threshold: 50000000 });
     expect(out.type).toBe('TOUR');
     expect(out.period).toBe('QUARTER');
+  });
+});
+
+describe('BrandService gán sản phẩm vào nhãn', () => {
+  it('attachProducts set brandId cho các productId (sau khi brand tồn tại)', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
+    prisma.product.updateMany.mockResolvedValue({ count: 2 });
+    const svc = new BrandService(prisma);
+    const out = await svc.attachProducts('b1', ['p1', 'p2']);
+    expect(prisma.product.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['p1', 'p2'] } }, data: { brandId: 'b1' } });
+    expect(out).toEqual({ attached: 2 });
+  });
+
+  it('attachProducts ném BadRequest nếu danh sách rỗng', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
+    const svc = new BrandService(prisma);
+    await expect(svc.attachProducts('b1', [])).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('detachProducts chỉ gỡ SP đang thuộc đúng nhãn này (where brandId)', async () => {
+    const prisma = makePrisma();
+    prisma.product.updateMany.mockResolvedValue({ count: 1 });
+    const svc = new BrandService(prisma);
+    const out = await svc.detachProducts('b1', ['p1']);
+    expect(prisma.product.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['p1'] }, brandId: 'b1' }, data: { brandId: null } });
+    expect(out).toEqual({ detached: 1 });
+  });
+
+  it('linkProductsByName gán theo Product.brand == brand.name', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1', name: 'Sachi' });
+    prisma.product.updateMany.mockResolvedValue({ count: 5 });
+    const svc = new BrandService(prisma);
+    const out = await svc.linkProductsByName('b1');
+    expect(prisma.product.updateMany).toHaveBeenCalledWith({ where: { brand: 'Sachi' }, data: { brandId: 'b1' } });
+    expect(out).toEqual({ linked: 5 });
+  });
+
+  it('listBrandProducts truy vấn theo brandId', async () => {
+    const prisma = makePrisma();
+    prisma.product.findMany.mockResolvedValue([{ id: 'p1', name: 'X' }]);
+    const svc = new BrandService(prisma);
+    const out = await svc.listBrandProducts('b1');
+    expect(prisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { brandId: 'b1' } }));
+    expect(out).toHaveLength(1);
   });
 });

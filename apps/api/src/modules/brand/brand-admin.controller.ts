@@ -4,6 +4,7 @@ import { BrandService } from './brand.service';
 import {
   CreateBrandDto,
   DealerRewardDto,
+  ProductIdsDto,
   PromotionDto,
   UpdateBrandDto,
   UpdateDealerRewardDto,
@@ -27,6 +28,20 @@ export class BrandAdminController {
   }
   @Patch('brands/:id/verify') verify(@Param('id') id: string, @Body() dto: VerifyBrandDto) {
     return this.svc.verifyBrand(id, dto.isVerified);
+  }
+
+  // Gán/gỡ sản phẩm vào nhãn (Product.brandId).
+  @Get('brands/:id/products') listProducts(@Param('id') id: string) {
+    return this.svc.listBrandProducts(id);
+  }
+  @Post('brands/:id/products') attachProducts(@Param('id') id: string, @Body() dto: ProductIdsDto) {
+    return this.svc.attachProducts(id, dto.productIds);
+  }
+  @Delete('brands/:id/products') detachProducts(@Param('id') id: string, @Body() dto: ProductIdsDto) {
+    return this.svc.detachProducts(id, dto.productIds);
+  }
+  @Post('brands/:id/link-by-name') linkByName(@Param('id') id: string) {
+    return this.svc.linkProductsByName(id);
   }
 
   @Post('brands/:id/promotions') addPromo(@Param('id') id: string, @Body() dto: PromotionDto) {

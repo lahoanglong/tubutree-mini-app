@@ -248,4 +248,49 @@ export class BrandService {
     await this.prisma.dealerReward.delete({ where: { id } });
     return { ok: true };
   }
+
+  // ---- Admin: gán sản phẩm vào nhãn (Product.brandId) ----
+  /** SP của nhãn (admin xem để quản lý). */
+  listBrandProducts(brandId: string) {
+    return this.prisma.product.findMany({
+      where: { brandId },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+      select: { id: true, name: true, slug: true, thumbnail: true, brand: true, isActive: true },
+    });
+  }
+
+  /** Gán 1 danh sách SP vào nhãn (set brandId). */
+  async attachProducts(brandId: string, productIds: string[]) {
+    await this.prisma.brand.findUniqueOrThrow({ where: { id: brandId } });
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      throw new BadRequestException('Cần ít nhất một sản phẩm để gán.');
+    }
+    const res = await this.prisma.product.updateMany({
+      where: { id: { in: productIds } },
+      data: { brandId },
+    });
+    return { attached: res.count };
+  }
+
+  /** Gỡ SP khỏi nhãn — CHỈ gỡ SP đang thuộc đúng nhãn này (tránh gỡ nhầm của nhãn khác). */
+  async detachProducts(brandId: string, productIds: string[]) {
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      throw new BadRequestException('Cần ít nhất một sản phẩm để gỡ.');
+    }
+    const res = await this.prisma.product.updateMany({
+      where: { id: { in: productIds }, brandId },
+      data: { brandId: null },
+    });
+    return { detached: res.count };
+  }
+
+  /** Tự động gán tất cả SP có chuỗi `Product.brand` trùng tên nhãn (tận dụng dữ liệu cũ). */
+  async linkProductsByName(brandId: string) {
+    const brand = await this.prisma.brand.findUniqueOrThrow({ where: { id: brandId } });
+    const res = await this.prisma.product.updateMany({
+      where: { brand: brand.name },
+      data: { brandId },
+    });
+    return { linked: res.count };
+  }
 }
