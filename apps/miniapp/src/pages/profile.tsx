@@ -35,6 +35,8 @@ const READY = new Set([
   '/settings',
   '/edit-profile',
   '/subscriptions',
+  '/brand-owner',
+  '/storefront',
 ]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [
