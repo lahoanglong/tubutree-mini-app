@@ -64,7 +64,7 @@ async function bootstrap() {
   }
 
   const port = Number(process.env.PORT ?? 3001);
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   Logger.log(`🌿 Tubu Tree API listening on http://localhost:${port}/api`, 'Bootstrap');
 }
 

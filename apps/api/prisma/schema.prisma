@@ -25,62 +25,63 @@ enum UserRole {
 }
 
 model User {
-  id                String   @id @default(cuid())
-  zaloId            String?  @unique // openId từ Zalo
+  id                String          @id @default(cuid())
+  zaloId            String?         @unique // openId từ Zalo
   zaloAccessToken   String? // mã hóa
   zaloRefreshToken  String? // mã hóa
-  phone             String?  @unique
+  phone             String?         @unique
   email             String?
   fullName          String?
   dob               DateTime?
   avatarUrl         String?
-  role              UserRole @default(CUSTOMER)
+  role              UserRole        @default(CUSTOMER)
   tierId            String?
   tier              MembershipTier? @relation(fields: [tierId], references: [id])
   tierGraceUntil    DateTime? // §6.6: thời hạn ân hạn trước khi rớt hạng (null = không treo rớt)
-  referralCode      String   @unique
+  referralCode      String          @unique
   referredById      String?
-  pointsBalance     Int      @default(0)
-  walletBalance     Int      @default(0)
-  coinsBalance      Int      @default(0) // TubuXu — tiền tệ tiêu trong app (không rút được)
-  cashbackPending   Int      @default(0)
-  isBlocked         Boolean  @default(false)
-  pancakeCustomerId String?  @unique
+  pointsBalance     Int             @default(0)
+  walletBalance     Int             @default(0)
+  coinsBalance      Int             @default(0) // TubuXu — tiền tệ tiêu trong app (không rút được)
+  cashbackPending   Int             @default(0)
+  isBlocked         Boolean         @default(false)
+  pancakeCustomerId String?         @unique
   metadata          Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   // Quan hệ ngược
-  addresses           Address[]
-  cart                Cart?
-  orders              Order[]
-  pointsTransactions  PointsTransaction[]
-  coinTransactions    CoinTransaction[]
-  affiliateLinks      AffiliateLink[]
-  commissions         Commission[]
-  storefronts         Storefront[]
-  payouts             Payout[]
-  cashbackClicks      CashbackClick[]
-  cashbackTxns        CashbackTransaction[]
-  dealerApplications  DealerApplication[]
-  dealerTemplates     DealerOrderTemplate[]
-  gameProfile         GameProfile?
-  reviews             Review[]
-  refreshTokens       RefreshToken[]
-  plantedTrees        PlantedTree[]
+  addresses              Address[]
+  cart                   Cart?
+  orders                 Order[]
+  pointsTransactions     PointsTransaction[]
+  coinTransactions       CoinTransaction[]
+  affiliateLinks         AffiliateLink[]
+  commissions            Commission[]
+  storefronts            Storefront[]
+  payouts                Payout[]
+  cashbackClicks         CashbackClick[]
+  cashbackTxns           CashbackTransaction[]
+  dealerApplications     DealerApplication[]
+  dealerTemplates        DealerOrderTemplate[]
+  gameProfile            GameProfile?
+  reviews                Review[]
+  refreshTokens          RefreshToken[]
+  plantedTrees           PlantedTree[]
   communityContributions CommunityContribution[]
-  species             UserSpecies[]
-  giftsSent           WaterGift[] @relation("GiftsSent")
-  giftsReceived       WaterGift[] @relation("GiftsReceived")
-  gardenPlots         GardenPlot[]
-  feedPosts           FeedPost[]
-  feedReactions       FeedReaction[]
-  feedComments        FeedComment[]
-  groupBuysStarted    GroupBuy[]     @relation("GroupBuysStarted")
-  groupBuyMemberships GroupBuyMember[]
-  bottleReturns       BottleReturn[]
-  betaTester          BetaTester?
-  betaFeedbacks       BetaFeedback[]
+  species                UserSpecies[]
+  giftsSent              WaterGift[]             @relation("GiftsSent")
+  giftsReceived          WaterGift[]             @relation("GiftsReceived")
+  gardenPlots            GardenPlot[]
+  feedPosts              FeedPost[]
+  feedReactions          FeedReaction[]
+  feedComments           FeedComment[]
+  groupBuysStarted       GroupBuy[]              @relation("GroupBuysStarted")
+  groupBuyMemberships    GroupBuyMember[]
+  bottleReturns          BottleReturn[]
+  betaTester             BetaTester?
+  betaFeedbacks          BetaFeedback[]
+  subscriptions          Subscription[]
 
   @@index([referredById])
   @@map("users")
@@ -88,47 +89,48 @@ model User {
 
 // Refresh token lưu hash (rotation). Phục vụ Zalo auth flow Phase 0.
 model RefreshToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
   expiresAt DateTime
   revokedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
   @@map("refresh_tokens")
 }
 
 model MembershipTier {
-  id            String   @id
-  name          String
-  minPoints     Int
-  minSpending   Int?
-  discountPct   Decimal  @default(0)
+  id              String  @id
+  name            String
+  minPoints       Int
+  minSpending     Int?
+  discountPct     Decimal @default(0)
   pointMultiplier Decimal @default(1)
-  perks         Json
-  badgeImageUrl String?
-  sortOrder     Int      @default(0)
-  users         User[]
+  perks           Json
+  badgeImageUrl   String?
+  sortOrder       Int     @default(0)
+  users           User[]
 
   @@map("membership_tiers")
 }
 
 model Address {
-  id           String  @id @default(cuid())
-  userId       String
-  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recipient    String
-  phone        String
-  province     String
-  district     String
-  ward         String
-  street       String
-  isDefault    Boolean @default(false)
-  provinceCode String
-  districtCode String
-  wardCode     String
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipient     String
+  phone         String
+  province      String
+  district      String
+  ward          String
+  street        String
+  isDefault     Boolean        @default(false)
+  provinceCode  String
+  districtCode  String
+  wardCode      String
+  subscriptions Subscription[]
 
   @@index([userId])
   @@map("addresses")
@@ -139,40 +141,40 @@ model Address {
 // ============================================================
 
 model Product {
-  id             String   @id @default(cuid())
-  pancakeId      String   @unique
-  brand          String
-  brandId         String?
-  brandRef        Brand?   @relation(fields: [brandId], references: [id])
-  affiliateBlocked Boolean @default(false)
-  slug           String   @unique
-  name           String
-  description    String   @db.Text
-  shortDesc      String?
-  images         String[]
-  thumbnail      String?
-  categoryIds    String[]
-  tags           String[]
-  isActive       Boolean  @default(true)
-  isFeatured     Boolean  @default(false)
-  isCombo        Boolean  @default(false)
-  ratingAvg      Float    @default(0) // denormalized từ reviews (cập nhật khi tạo review)
-  reviewCount    Int      @default(0)
-  soldExternal   Int      @default(0) // admin nhập — tổng đã bán gom từ các sàn TMĐT ngoài
-  soldApp        Int      @default(0) // system — đơn DELIVERED trong app (cron recompute). Hiển thị = soldExternal + soldApp
-  basePrice      Int
-  salePrice      Int?
-  metaTitle      String?
-  metaDesc       String?
-  forSegment     String[]
-  ingredients    Json?
-  certifications String[]
-  variations     Variation[]
-  reviews        Review[]
-  groupBuys      GroupBuy[]
-  storefrontItems StorefrontItem[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String           @id @default(cuid())
+  pancakeId        String           @unique
+  brand            String
+  brandId          String?
+  brandRef         Brand?           @relation(fields: [brandId], references: [id])
+  affiliateBlocked Boolean          @default(false)
+  slug             String           @unique
+  name             String
+  description      String           @db.Text
+  shortDesc        String?
+  images           String[]
+  thumbnail        String?
+  categoryIds      String[]
+  tags             String[]
+  isActive         Boolean          @default(true)
+  isFeatured       Boolean          @default(false)
+  isCombo          Boolean          @default(false)
+  ratingAvg        Float            @default(0) // denormalized từ reviews (cập nhật khi tạo review)
+  reviewCount      Int              @default(0)
+  soldExternal     Int              @default(0) // admin nhập — tổng đã bán gom từ các sàn TMĐT ngoài
+  soldApp          Int              @default(0) // system — đơn DELIVERED trong app (cron recompute). Hiển thị = soldExternal + soldApp
+  basePrice        Int
+  salePrice        Int?
+  metaTitle        String?
+  metaDesc         String?
+  forSegment       String[]
+  ingredients      Json?
+  certifications   String[]
+  variations       Variation[]
+  reviews          Review[]
+  groupBuys        GroupBuy[]
+  storefrontItems  StorefrontItem[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@index([brand])
   @@index([brandId])
@@ -181,27 +183,27 @@ model Product {
 }
 
 model Brand {
-  id             String     @id @default(cuid())
-  slug           String     @unique
-  name           String     @unique
+  id             String           @id @default(cuid())
+  slug           String           @unique
+  name           String           @unique
   logoUrl        String?
   coverUrl       String?
   tagline        String?
-  story          String?    @db.Text
+  story          String?          @db.Text
   storyImages    String[]
   origin         String?
   certifications Json?
-  isVerified     Boolean    @default(false)
-  isPublished    Boolean    @default(false)
+  isVerified     Boolean          @default(false)
+  isPublished    Boolean          @default(false)
   ownerUserId    String?
-  followerCount  Int        @default(0)
+  followerCount  Int              @default(0)
   products       Product[]
   storefront     Storefront?
   promotions     BrandPromotion[]
   dealerRewards  DealerReward[]
   follows        BrandFollow[]
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@map("brands")
 }
@@ -331,23 +333,24 @@ model StorefrontItem {
 }
 
 model Variation {
-  id           String  @id @default(cuid())
-  pancakeId    String  @unique
-  productId    String
-  product      Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sku          String  @unique
-  name         String
-  attributes   Json
-  retailPrice  Int
-  salePrice    Int?
-  dealerPrices Json? // {tier_silver: 200000, tier_gold: 190000}
+  id            String   @id @default(cuid())
+  pancakeId     String   @unique
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku           String   @unique
+  name          String
+  attributes    Json
+  retailPrice   Int
+  salePrice     Int?
+  dealerPrices  Json? // {tier_silver: 200000, tier_gold: 190000}
   affiliateRate Decimal? // % hoa hồng CTV (import Excel) — spec 15.2 affiliate.product_rate_source
-  stock        Int     @default(0)
-  isActive     Boolean @default(true)
-  weight       Int?
+  stock         Int      @default(0)
+  isActive      Boolean  @default(true)
+  weight        Int?
 
-  cartItems    CartItem[]
+  cartItems          CartItem[]
   dealerPriceHistory DealerPriceHistory[]
+  subscriptions      Subscription[]
 
   @@index([productId])
   @@map("variations")
@@ -432,20 +435,20 @@ enum InvoiceStatus {
 }
 
 model Order {
-  id              String        @id @default(cuid())
-  code            String        @unique
-  idempotencyKey  String?       @unique // chống double-submit place-order (§12.1)
-  pancakeOrderId  String?       @unique
+  id              String         @id @default(cuid())
+  code            String         @unique
+  idempotencyKey  String?        @unique // chống double-submit place-order (§12.1)
+  pancakeOrderId  String?        @unique
   userId          String
-  user            User          @relation(fields: [userId], references: [id])
+  user            User           @relation(fields: [userId], references: [id])
   type            OrderType
   status          OrderStatus
   subtotal        Int
-  discount        Int           @default(0)
-  shippingFee     Int           @default(0)
+  discount        Int            @default(0)
+  shippingFee     Int            @default(0)
   total           Int
-  pointsEarned    Int           @default(0)
-  pointsUsed      Int           @default(0)
+  pointsEarned    Int            @default(0)
+  pointsUsed      Int            @default(0)
   paymentMethod   PaymentMethod
   paymentStatus   PaymentStatus
   paymentTxnId    String?
@@ -460,13 +463,13 @@ model Order {
   invoiceStatus   InvoiceStatus? @default(NOT_REQUESTED)
   referrerUserId  String?
   storefrontSlug  String?
-  commission      Int           @default(0)
+  commission      Int            @default(0)
   couponCode      String?
   note            String?
   items           OrderItem[]
   commissions     Commission[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@index([userId, status])
   @@index([referrerUserId])
@@ -537,8 +540,8 @@ enum CouponScope {
 }
 
 model Coupon {
-  id           String       @id @default(cuid())
-  code         String       @unique
+  id           String             @id @default(cuid())
+  code         String             @unique
   type         CouponType
   value        Int
   minOrder     Int?
@@ -546,10 +549,10 @@ model Coupon {
   startAt      DateTime
   endAt        DateTime
   usageLimit   Int?
-  usedCount    Int          @default(0) // B4: bộ đếm atomic dùng cho updateMany guard
-  perUserLimit Int          @default(1)
+  usedCount    Int                @default(0) // B4: bộ đếm atomic dùng cho updateMany guard
+  perUserLimit Int                @default(1)
   applyTo      Json?
-  isStackable  Boolean      @default(false)
+  isStackable  Boolean            @default(false)
   scope        CouponScope
   scopeMeta    Json?
   redemptions  CouponRedemption[]
@@ -678,14 +681,14 @@ model Payout {
 // ============================================================
 
 model CashbackMerchant {
-  id               String                @id @default(cuid())
-  slug             String                @unique
+  id               String          @id @default(cuid())
+  slug             String          @unique
   name             String
   logoUrl          String
   category         String
   baseRate         Decimal
   fullRate         Decimal
-  isActive         Boolean               @default(true)
+  isActive         Boolean         @default(true)
   deeplinkTemplate String
   terms            String?
   clicks           CashbackClick[]
@@ -795,7 +798,7 @@ model DealerCreditLedger {
 
 // Lịch sử đổi giá đại lý theo bậc (back-office "admin Excel giá") — truy vết old→new, ai đổi.
 model DealerPriceHistory {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   variationId String
   variation   Variation @relation(fields: [variationId], references: [id], onDelete: Cascade)
   sku         String
@@ -803,7 +806,7 @@ model DealerPriceHistory {
   oldPrice    Int? // null = trước đó chưa có giá riêng cho bậc này
   newPrice    Int
   changedBy   String // adminId
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@index([variationId, createdAt])
   @@index([tierId])
@@ -848,14 +851,14 @@ model GameProfile {
 // Cây thật cam kết trồng khi user thu hoạch cây ảo (§6.7.7 "Tác động xanh").
 // status: PLEDGED (đã cam kết) → PLANTED (PanNature xác nhận trồng thật).
 model PlantedTree {
-  id              String       @id @default(cuid())
+  id              String        @id @default(cuid())
   userId          String
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  certificateCode String       @unique // mã chứng nhận hiển thị cho user
-  treeType        String       @default("Cây Dứa Fuwa3e")
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  certificateCode String        @unique // mã chứng nhận hiển thị cho user
+  treeType        String        @default("Cây Dứa Fuwa3e")
   region          String? // vùng trồng (khi PanNature xác nhận)
   status          PlantedStatus @default(PLEDGED)
-  pledgedAt       DateTime     @default(now())
+  pledgedAt       DateTime      @default(now())
   plantedAt       DateTime? // thời điểm PanNature xác nhận trồng thật
 
   @@index([userId])
@@ -871,16 +874,16 @@ enum PlantedStatus {
 // Hồ giọt nước toàn user; đủ targetDrops → Tubu cam kết trồng treesToPlant cây thật
 // ở vùng có tên (PanNature gate). Fulfil có status-guard chống trồng batch 2 lần.
 model CommunityGoal {
-  id           String                  @id @default(cuid())
-  title        String
-  region       String // vùng trồng có tên (VD: "Rừng phòng hộ Cần Giờ")
-  targetDrops  Int
-  currentDrops Int                     @default(0)
-  treesToPlant Int
-  status       CommunityGoalStatus     @default(ACTIVE)
-  startAt      DateTime                @default(now())
-  endAt        DateTime?
-  fulfilledAt  DateTime?
+  id            String                  @id @default(cuid())
+  title         String
+  region        String // vùng trồng có tên (VD: "Rừng phòng hộ Cần Giờ")
+  targetDrops   Int
+  currentDrops  Int                     @default(0)
+  treesToPlant  Int
+  status        CommunityGoalStatus     @default(ACTIVE)
+  startAt       DateTime                @default(now())
+  endAt         DateTime?
+  fulfilledAt   DateTime?
   contributions CommunityContribution[]
 
   @@index([status])
@@ -911,14 +914,14 @@ enum CommunityGoalStatus {
 // Mỗi lần thu hoạch, user "sưu tập" 1 loài (weighted theo rarity). Mỗi loài kèm
 // chuyện sinh thái + ecoFact để học. SpeciesCodex (FE) hiển thị lưới đã/chưa mở.
 model PlantSpecies {
-  id             String         @id
+  id             String        @id
   name           String
   scientificName String?
   region         String?
-  rarity         SpeciesRarity  @default(COMMON)
+  rarity         SpeciesRarity @default(COMMON)
   story          String? // chuyện về loài (sinh thái/văn hoá)
   ecoFact        String? // 1 sự thật sinh thái ngắn
-  emoji          String         @default("🌳") // minh hoạ (chưa có imageUrl thật)
+  emoji          String        @default("🌳") // minh hoạ (chưa có imageUrl thật)
   imageUrl       String?
   collectedBy    UserSpecies[]
 
@@ -1093,20 +1096,20 @@ model FeedComment {
 // Mua chung / Group Buy (§6.14.8). Đủ targetSize người trước expiresAt → SUCCESS,
 // mỗi thành viên nhận coupon = (basePrice − unitPrice) để mua với giá nhóm. Hết hạn → FAILED.
 model GroupBuy {
-  id          String           @id @default(cuid())
-  productId   String
-  product     Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
-  initiatorId String
-  initiator   User             @relation("GroupBuysStarted", fields: [initiatorId], references: [id], onDelete: Cascade)
-  targetSize  Int
-  currentSize Int              @default(0)
-  unitPrice   Int // giá nhóm/đơn vị
-  basePrice   Int // giá gốc lúc tạo (để tính phần giảm)
-  status      GroupBuyStatus   @default(OPEN)
-  expiresAt   DateTime
-  createdAt   DateTime         @default(now())
+  id               String           @id @default(cuid())
+  productId        String
+  product          Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  initiatorId      String
+  initiator        User             @relation("GroupBuysStarted", fields: [initiatorId], references: [id], onDelete: Cascade)
+  targetSize       Int
+  currentSize      Int              @default(0)
+  unitPrice        Int // giá nhóm/đơn vị
+  basePrice        Int // giá gốc lúc tạo (để tính phần giảm)
+  status           GroupBuyStatus   @default(OPEN)
+  expiresAt        DateTime
+  createdAt        DateTime         @default(now())
   couponsGrantedAt DateTime? // đã phát đủ coupon cho mọi thành viên? null = chưa/còn sót → cron reconcile
-  members     GroupBuyMember[]
+  members          GroupBuyMember[]
 
   @@index([status, expiresAt])
   @@index([status, couponsGrantedAt]) // cron reconcile quét nhóm SUCCESS chưa phát đủ coupon
@@ -1348,17 +1351,20 @@ model Wishlist {
 }
 
 model Subscription {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   variationId   String
-  quantity      Int      @default(1)
-  intervalWeeks Int      // 4 / 6 / 8 / 10
+  variation     Variation @relation(fields: [variationId], references: [id], onDelete: Cascade)
+  quantity      Int       @default(1)
+  intervalWeeks Int // 4 / 6 / 8 / 10
   addressId     String
-  status        String   @default("ACTIVE") // ACTIVE | PAUSED | CANCELLED
+  address       Address   @relation(fields: [addressId], references: [id], onDelete: Cascade)
+  status        String    @default("ACTIVE") // ACTIVE | PAUSED | CANCELLED
   nextRunAt     DateTime
   lastOrderId   String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([status, nextRunAt])
   @@index([userId])

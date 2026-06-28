@@ -1,0 +1,57 @@
+name: Playwright E2E Tests
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    # 1. Cài đặt pnpm
+    - uses: pnpm/action-setup@v3
+      with:
+        version: 9.15.9
+
+    # 2. Cài đặt Node.js
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'pnpm'
+
+    # 3. Cài đặt Dependencies cho Monorepo
+    - name: Install dependencies
+      run: pnpm install
+
+    # 4. Cài đặt trình duyệt Playwright
+    - name: Install Playwright Browsers
+      run: pnpm --filter @tubutree/e2e exec playwright install --with-deps
+
+    # 5. Khởi chạy Database (Postgres) qua Docker Compose
+    - name: Start Database
+      run: docker compose -f docker-compose.dev.yml up -d
+
+    # 6. Build toàn bộ dự án (tuỳ chọn, nhưng cần thiết nếu có config build trước khi dev)
+    - name: Build Monorepo
+      run: pnpm build
+
+    # 7. Chạy Playwright Tests
+    # Lưu ý: Cần thêm lệnh để Playwright tự động start webServer trong playwright.config.ts 
+    # Hoặc có thể bật server bằng `pnpm dev &` trước khi chạy.
+    - name: Run Playwright tests
+      run: pnpm --filter @tubutree/e2e test
+      env:
+        TEST_JWT_TOKEN: ${{ secrets.TEST_JWT_TOKEN }}
+
+    # 8. Upload báo cáo nếu test rớt
+    - uses: actions/upload-artifact@v4
+      if: ${{ !cancelled() }}
+      with:
+        name: playwright-report
+        path: apps/e2e/playwright-report/
+        retention-days: 30

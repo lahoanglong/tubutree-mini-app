@@ -8,4 +8,5 @@ export default defineConfig({
   root: '.',
   base: '',
   plugins: [zaloMiniApp(), react()],
+  server: { port: 3113, host: '0.0.0.0' },
 });
