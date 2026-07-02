@@ -53,6 +53,11 @@ class ImportSoldExternalDto {
   @IsOptional() @IsString() csv?: string;
   @IsOptional() @IsArray() rows?: { sku: string; count: number }[];
 }
+class SetUserRoleDto {
+  @IsString() phone!: string;
+  @IsIn(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'])
+  role!: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
+}
 
 /** Parse CSV "sku,giá" (phân tách , ; hoặc tab); bỏ dòng header/giá không hợp lệ. */
 function parseDealerPriceCsv(csv: string): { sku: string; price: number }[] {
@@ -98,6 +103,12 @@ export class AdminController {
   @Get('users')
   users(@Query() q: PaginationQuery) {
     return this.admin.listUsers(q.page, q.limit);
+  }
+
+  // Cấp/đổi role theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi).
+  @Post('users/role')
+  setUserRole(@CurrentUser('sub') adminId: string, @Body() dto: SetUserRoleDto) {
+    return this.admin.setUserRole(adminId, dto.phone, dto.role);
   }
 
   @Get('orders')

@@ -46,6 +46,12 @@ export const reviewDealerApp = (id: string, approve: boolean, tierId?: string, r
   apiFetch(`/admin/dealer-applications/${id}/review`, { method: 'POST', body: { approve, tierId, reason } });
 export const listUsers = (page = 1) =>
   apiFetch<Page<AdminUser>>(`/admin/users?page=${page}&limit=20`);
+export type UserRole = 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
+export const setUserRole = (phone: string, role: UserRole) =>
+  apiFetch<{ ok: boolean; id: string; phone: string | null; fullName: string | null; role: string; previousRole: string }>(
+    '/admin/users/role',
+    { method: 'POST', body: { phone, role } },
+  );
 export const listOrders = (page = 1, status?: string) =>
   apiFetch<Page<AdminOrder>>(`/admin/orders?page=${page}&limit=20${status ? `&status=${status}` : ''}`);
 export const getConfig = (category?: string) =>

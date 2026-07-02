@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
@@ -8,6 +8,8 @@ import { paginated, skipTake } from '../../common/pagination';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
@@ -198,6 +200,30 @@ export class AdminService {
       this.prisma.user.count(),
     ]);
     return paginated(items, page, limit, total);
+  }
+
+  /**
+   * Cấp/đổi role cho user theo SĐT — THAY cho script SSH grant-admin.js (không audit, đi ngoài
+   * hạ tầng quyền). Gọi qua endpoint @Roles('ADMIN') nên chỉ admin đăng nhập mới chạy được;
+   * ghi log ai đổi (adminId) + role cũ→mới. KHÔNG tự tạo user (khác script test): SĐT chưa mở app
+   * → NotFound để admin biết đối tác cần đăng nhập Zalo Mini App ít nhất 1 lần trước.
+   */
+  async setUserRole(
+    adminId: string,
+    phone: string,
+    role: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN',
+  ) {
+    const normalized = phone.trim();
+    const user = await this.prisma.user.findUnique({ where: { phone: normalized } });
+    if (!user) throw new NotFoundException('Không tìm thấy user với SĐT này (cần mở Mini App Zalo ≥1 lần).');
+    const previousRole = user.role;
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { role },
+      select: { id: true, phone: true, fullName: true, role: true },
+    });
+    this.logger.warn(`Admin ${adminId} đổi role user ${user.id} (${normalized}): ${previousRole} → ${role}`);
+    return { ok: true, ...updated, previousRole };
   }
 
   async listOrders(page: number, limit: number, status?: string) {

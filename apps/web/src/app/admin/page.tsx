@@ -9,6 +9,8 @@ import {
   listDealerApps,
   reviewDealerApp,
   listUsers,
+  setUserRole,
+  type UserRole,
   listOrders,
   getConfig,
   setConfig,
@@ -155,20 +157,73 @@ function OrdersTab() {
   );
 }
 
+const ROLES: UserRole[] = ['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'];
+
 function UsersTab() {
   const q = useQuery({ queryKey: ['admin-users'], queryFn: () => listUsers(1) });
   return (
-    <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày']}>
-      {q.data?.data.map((u) => (
-        <tr key={u.id} className="border-t border-neutral-100">
-          <td className="py-2 font-medium">{u.fullName ?? '—'}</td>
-          <td>{u.phone ?? '—'}</td>
-          <td>{u.role}</td>
-          <td>{u.pointsBalance}</td>
-          <td className="text-neutral-400">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
-        </tr>
-      ))}
-    </Table>
+    <div className="space-y-4">
+      <GrantRoleForm onDone={() => q.refetch()} />
+      <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày']}>
+        {q.data?.data.map((u) => (
+          <tr key={u.id} className="border-t border-neutral-100">
+            <td className="py-2 font-medium">{u.fullName ?? '—'}</td>
+            <td>{u.phone ?? '—'}</td>
+            <td>{u.role}</td>
+            <td>{u.pointsBalance}</td>
+            <td className="text-neutral-400">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
+          </tr>
+        ))}
+      </Table>
+    </div>
+  );
+}
+
+/** Cấp/đổi vai trò theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi). */
+function GrantRoleForm({ onDone }: { onDone: () => void }) {
+  const [phone, setPhone] = useState('');
+  const [role, setRole] = useState<UserRole>('ADMIN');
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const mut = useMutation({
+    mutationFn: () => setUserRole(phone.trim(), role),
+    onSuccess: (r) => {
+      setMsg({ ok: true, text: `Đã đổi ${r.phone ?? r.id}: ${r.previousRole} → ${r.role}` });
+      setPhone('');
+      onDone();
+    },
+    onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi cấp quyền' }),
+  });
+  return (
+    <div className="rounded-lg border border-neutral-200 p-4">
+      <h3 className="mb-2 text-sm font-semibold">Cấp / đổi vai trò theo SĐT</h3>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          className="rounded border border-neutral-300 px-3 py-1.5 text-sm"
+          placeholder="SĐT (user đã mở Mini App)"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+        />
+        <select
+          className="rounded border border-neutral-300 px-3 py-1.5 text-sm"
+          value={role}
+          onChange={(e) => setRole(e.target.value as UserRole)}
+        >
+          {ROLES.map((r) => (
+            <option key={r} value={r}>{r}</option>
+          ))}
+        </select>
+        <button
+          className="rounded bg-green-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          disabled={!phone.trim() || mut.isPending}
+          onClick={() => { setMsg(null); mut.mutate(); }}
+        >
+          {mut.isPending ? 'Đang lưu…' : 'Cấp quyền'}
+        </button>
+      </div>
+      {msg && (
+        <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>
+      )}
+    </div>
   );
 }
 

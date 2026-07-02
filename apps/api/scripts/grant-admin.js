@@ -1,7 +1,12 @@
 /**
- * Cấp role ADMIN cho 1 user theo số điện thoại (tạo user nếu chưa có).
- * KHÔNG hardcode số điện thoại trong source (repo public) — luôn đọc từ env ADMIN_PHONE.
+ * BOOTSTRAP-ONLY: cấp role ADMIN cho 1 user theo SĐT (tạo user nếu chưa có).
  *
+ * Dùng khi CHƯA có admin nào để đăng nhập web panel (admin đầu tiên), hoặc user đích chưa
+ * mở Mini App lần nào (chưa có User row). Với các lần cấp quyền THÔNG THƯỜNG (đã có admin),
+ * dùng trang Admin → tab "Người dùng" → "Cấp / đổi vai trò" (POST /admin/users/role,
+ * có @Roles('ADMIN') + log ai đổi) thay vì chạy script SSH này.
+ *
+ * KHÔNG hardcode SĐT trong source (repo public) — luôn đọc từ env ADMIN_PHONE.
  * Dùng: ADMIN_PHONE=<số điện thoại> node scripts/grant-admin.js
  * (trên VM prod: gọi qua .github/workflows/ops.yml action=grant-admin, secret ADMIN_PHONE)
  */

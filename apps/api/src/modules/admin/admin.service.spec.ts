@@ -421,3 +421,26 @@ describe('AdminService.importDealerPrices (import bảng giá đại lý theo b�
     expect(prisma.variation.update).not.toHaveBeenCalled();
   });
 });
+
+describe('AdminService.setUserRole', () => {
+  it('SĐT không tồn tại → NotFound (không tự tạo user như script SSH cũ)', async () => {
+    const prisma = makePrisma({ user: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() } });
+    await expect(mkAdmin(prisma).setUserRole('admin1', '0900000000', 'ADMIN')).rejects.toBeInstanceOf(NotFoundException);
+    expect((prisma as unknown as { user: { update: jest.Mock } }).user.update).not.toHaveBeenCalled();
+  });
+
+  it('cấp role: update đúng user + trả previousRole (audit ai đổi)', async () => {
+    const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'ADMIN', fullName: 'X' });
+    const prisma = makePrisma({
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'CUSTOMER' }), update },
+    });
+    const out = await mkAdmin(prisma).setUserRole('admin1', ' 0899625240 ', 'ADMIN');
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { role: 'ADMIN' },
+      select: { id: true, phone: true, fullName: true, role: true },
+    });
+    expect(out.previousRole).toBe('CUSTOMER');
+    expect(out.role).toBe('ADMIN');
+  });
+});
