@@ -77,7 +77,7 @@ const MENU: { group: string; items: MenuItem[] }[] = [
 export default function ProfilePage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
-  const { user, status, logout, login } = useAuthStore();
+  const { user, status, error, logout, restore } = useAuthStore();
   const loyaltyQ = useQuery({
     queryKey: ['loyalty'],
     queryFn: getLoyalty,
@@ -118,8 +118,11 @@ export default function ProfilePage() {
           ) : (
             <>
               <Text style={{ fontSize: 48 }}>🌿</Text>
-              <Text style={{ color: 'var(--neutral-600)' }}>Chưa kết nối được tài khoản Zalo.</Text>
-              <Button onClick={() => void login()} style={{ background: 'var(--leaf-600)', minWidth: 180 }}>
+              {/* Thông điệp theo lỗi thật (mạng/server) — không mặc định đổ cho "tài khoản Zalo"
+                  vì app luôn fallback guest, lỗi thường là kết nối. Retry gọi restore() (thử
+                  refresh-token → Zalo → guest) thay vì chỉ login(). */}
+              <Text style={{ color: 'var(--neutral-600)' }}>{error ?? 'Chưa kết nối được, vui lòng thử lại.'}</Text>
+              <Button onClick={() => void restore()} style={{ background: 'var(--leaf-600)', minWidth: 180 }}>
                 Thử lại
               </Button>
             </>

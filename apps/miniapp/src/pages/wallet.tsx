@@ -6,9 +6,11 @@ import { Clock, CheckCircle2, ShoppingBag, Coins, Gift, Leaf, ChevronRight, Arro
 import { getWallet, withdraw, getCoins, convertToXu, getLoyalty, type BankInfo } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
+import { useAuthStore } from '../store/auth';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
+import { ErrorState } from '../components/ui/empty-state';
 
 const formatXu = (n: number) => `${n.toLocaleString('vi-VN')} xu`;
 const formatPoints = (n: number) => `${n.toLocaleString('vi-VN')} điểm`;
@@ -17,9 +19,12 @@ export default function WalletPage() {
   const { openSnackbar } = useSnackbar();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet });
-  const coinsQ = useQuery({ queryKey: ['coins'], queryFn: getCoins });
-  const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty });
+  // enabled theo trạng thái auth: nếu fetch trước khi restore() xong → 401 → (retry:false) kẹt
+  // error vĩnh viễn dù login thành công ~200ms sau → màn Ví "trắng". Chờ authenticated rồi mới fetch.
+  const authed = useAuthStore((s) => s.status === 'authenticated');
+  const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
+  const coinsQ = useQuery({ queryKey: ['coins'], queryFn: getCoins, enabled: authed });
+  const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
 
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
@@ -91,15 +96,15 @@ export default function WalletPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      {walletQ.isLoading ? (
+      {!authed || walletQ.isLoading ? (
         <Box p={4} style={{ gap: 12 }} flex flexDirection="column">
           <Skeleton style={{ height: 140, borderRadius: 16 }} />
           <Skeleton style={{ height: 110, borderRadius: 16 }} />
           <Skeleton style={{ height: 90, borderRadius: 16 }} />
         </Box>
       ) : walletQ.isError ? (
-        <Box p={6} style={{ textAlign: 'center' }}>
-          <Text style={{ color: 'var(--danger)' }}>{getErrorMessage(walletQ.error)}</Text>
+        <Box p={6}>
+          <ErrorState message={getErrorMessage(walletQ.error)} onRetry={() => void walletQ.refetch()} />
         </Box>
       ) : w ? (
         <>

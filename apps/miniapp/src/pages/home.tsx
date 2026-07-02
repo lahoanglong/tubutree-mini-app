@@ -108,31 +108,29 @@ export default function HomePage() {
         </Box>
       </Box>
 
-      {/* ── Trợ lý AI tư vấn 24/7 (§6.14.3) ── */}
-      <Box px={4} pb={3}>
+      {/* ── Quick actions: AI tư vấn + Mua chung — 1 HÀNG gọn (trước đây 2 banner full-width
+          chiếm quá nhiều đầu trang, đẩy sản phẩm xuống sâu). 2 ô ngang, icon + nhãn ngắn. ── */}
+      <Box px={4} pb={3} flex style={{ gap: 10 }}>
         <Box
           role="button"
-          aria-label="Hỏi trợ lý AI"
+          aria-label="Hỏi trợ lý AI 24/7"
           className="tubu-press"
           onClick={() => { haptic('light'); navigate('/ai-advisor'); }}
           style={{
+            flex: 1,
             background: 'linear-gradient(120deg, var(--leaf-50), var(--primary-50, #eef7ff))',
             border: '1px solid var(--leaf-400)',
-            borderRadius: 'var(--radius-full)',
-            padding: '10px 16px',
+            borderRadius: 'var(--radius-lg)',
+            padding: '10px 12px',
             display: 'flex',
             alignItems: 'center',
-            gap: 10,
-            minHeight: 46,
+            gap: 8,
+            minHeight: 44,
             boxSizing: 'border-box',
           }}
         >
-          <Sparkles size={18} color="var(--leaf-700)" strokeWidth={2} />
-          <Box style={{ flex: 1 }}>
-            <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>Hỏi trợ lý AI 24/7</Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Tư vấn sản phẩm xanh phù hợp cho bạn</Text>
-          </Box>
-          <ChevronRight size={18} color="var(--leaf-700)" strokeWidth={2} />
+          <Sparkles size={18} color="var(--leaf-700)" strokeWidth={2} style={{ flexShrink: 0 }} />
+          <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', lineHeight: 1.2 }}>Trợ lý AI 24/7</Text>
         </Box>
 
         <Box
@@ -141,24 +139,20 @@ export default function HomePage() {
           className="tubu-press"
           onClick={() => { haptic('light'); navigate('/group-buy'); }}
           style={{
-            marginTop: 8,
+            flex: 1,
             background: 'var(--neutral-0)',
             border: '1px solid var(--neutral-200)',
-            borderRadius: 'var(--radius-full)',
-            padding: '10px 16px',
+            borderRadius: 'var(--radius-lg)',
+            padding: '10px 12px',
             display: 'flex',
             alignItems: 'center',
-            gap: 10,
-            minHeight: 46,
+            gap: 8,
+            minHeight: 44,
             boxSizing: 'border-box',
           }}
         >
-          <Users size={18} color="var(--primary-700)" strokeWidth={2} />
-          <Box style={{ flex: 1 }}>
-            <Text size="small" bold style={{ color: 'var(--primary-700)' }}>Mua chung giá tốt 🛒</Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Rủ bạn cho đủ nhóm — cả nhóm cùng giảm giá</Text>
-          </Box>
-          <ChevronRight size={18} color="var(--primary-700)" strokeWidth={2} />
+          <Users size={18} color="var(--primary-700)" strokeWidth={2} style={{ flexShrink: 0 }} />
+          <Text size="xSmall" bold style={{ color: 'var(--primary-700)', lineHeight: 1.2 }}>Mua chung giá tốt</Text>
         </Box>
       </Box>
 

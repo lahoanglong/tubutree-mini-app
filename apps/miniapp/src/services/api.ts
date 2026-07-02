@@ -66,7 +66,12 @@ export function getErrorMessage(error: unknown): string {
     // Message backend 4xx là nghiệp vụ (viết sẵn tiếng Việt) — hiển thị thẳng.
     if (backendMsg && error.response && error.response.status < 500) return backendMsg;
     if (error.code === 'ECONNABORTED') return vi.errors.timeout;
-    if (!error.response) return vi.errors.network;
+    // Không có response: phân biệt MẤT MẠNG thật (navigator.onLine=false) với server/CORS không
+    // phản hồi (vẫn có mạng) — tránh báo "mất mạng" sai khi thực chất là lỗi máy chủ.
+    if (!error.response) {
+      const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      return offline ? vi.errors.offline : vi.errors.server;
+    }
     return vi.errors.server;
   }
   return vi.errors.generic;

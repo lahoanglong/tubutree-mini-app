@@ -194,18 +194,22 @@ export default function BrowsePage() {
         </Box>
       )}
 
-      <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10 }}>
-        <Chip label={vi.home.allBrands} active={!brand} onClick={() => pick(undefined)} />
-        {brands.data?.map((b) => (
-          <Chip
-            key={b.brand}
-            label={b.brand}
-            dotColor={brandAccent(b.brand)}
-            active={brand === b.brand}
-            onClick={() => pick(b.brand)}
-          />
-        ))}
-      </Box>
+      {/* Lọc thương hiệu — CHỈ hiện khi có ≥1 brand (trước đây rỗng vẫn hiện mỗi chip "Tất cả"
+          đứng trơ 1 dòng, phí diện tích). "Tất cả" đi cùng danh sách brand để reset. */}
+      {(brands.data?.length ?? 0) > 0 && (
+        <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10 }}>
+          <Chip label={vi.home.allBrands} active={!brand} onClick={() => pick(undefined)} />
+          {brands.data?.map((b) => (
+            <Chip
+              key={b.brand}
+              label={b.brand}
+              dotColor={brandAccent(b.brand)}
+              active={brand === b.brand}
+              onClick={() => pick(b.brand)}
+            />
+          ))}
+        </Box>
+      )}
 
       {/* Sắp xếp (backend orderBy: newest/price_asc/price_desc/featured) */}
       <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10 }}>

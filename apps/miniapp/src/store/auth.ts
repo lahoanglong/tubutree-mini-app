@@ -127,8 +127,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       setAccessToken(res.accessToken);
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });
-    } catch {
-      set({ status: 'idle' });
+    } catch (err) {
+      // Guest fallback fail = lỗi mạng/server/CORS (không phải "chưa đăng nhập") → set 'error' +
+      // message để UI báo đúng "chưa kết nối được, thử lại" thay vì 'idle' im lặng (mất ngữ cảnh).
+      set({ status: 'error', error: err instanceof Error ? err.message : 'Chưa kết nối được máy chủ' });
     }
   },
 
