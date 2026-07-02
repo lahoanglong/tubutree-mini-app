@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Page, Text, Input, useLocation, useNavigate } from 'zmp-ui';
-import { useQuery } from '@tanstack/react-query';
+import { Box, Page, Text, Button, Input, useLocation, useNavigate } from 'zmp-ui';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { fetchProducts, fetchBrands } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import ProductCard from '../components/product-card';
@@ -68,16 +68,23 @@ export default function BrowsePage() {
 
   // Brand/category chậm đổi (sync Pancake ~15p/lần) → cache 60s, override default 10s.
   const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands, staleTime: 60_000 });
-  const products = useQuery({
+  // Infinite scroll (trước đây chỉ lấy 30 SP/1 lần → catalog >30 trong 1 bộ lọc bị giấu mất).
+  const products = useInfiniteQuery({
     queryKey: ['products', 'browse', debouncedQ, brand, segment, sort],
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       fetchProducts({
+        page: pageParam,
         limit: PAGE_LIMIT,
         ...(debouncedQ ? { q: debouncedQ } : {}),
         ...(brand ? { brand } : {}),
         ...(segment ? { segment } : {}),
         ...(sort ? { sort } : {}),
       }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const { page, limit, total } = lastPage.meta;
+      return page * limit < total ? page + 1 : undefined;
+    },
   });
 
   const SORTS = [
@@ -102,7 +109,7 @@ export default function BrowsePage() {
     if (initialBrand && b !== initialBrand) navigate('/browse', { replace: true });
   };
 
-  const list = products.data?.data ?? [];
+  const list = products.data?.pages.flatMap((pg) => pg.data) ?? [];
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 72 }}>
@@ -247,11 +254,25 @@ export default function BrowsePage() {
             <EmptyState art="leaf" heading={vi.browse.emptyHeading} body={vi.browse.emptyBody} />
           )
         ) : (
-          <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {list.map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </Box>
+          <>
+            <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {list.map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
+            </Box>
+            {products.hasNextPage && (
+              <Box flex justifyContent="center" pt={4}>
+                <Button
+                  variant="secondary"
+                  loading={products.isFetchingNextPage}
+                  onClick={() => void products.fetchNextPage()}
+                  style={{ minWidth: 160 }}
+                >
+                  Xem thêm
+                </Button>
+              </Box>
+            )}
+          </>
         )}
       </Box>
 

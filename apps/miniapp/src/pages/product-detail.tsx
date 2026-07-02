@@ -100,6 +100,18 @@ export default function ProductDetailPage() {
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  // "Mua ngay": thêm vào giỏ rồi tới thẳng checkout (giảm 2 chạm so với thêm-giỏ→mở-giỏ→checkout).
+  const buyNowMutation = useMutation({
+    mutationFn: (input: { variation: VariationDetail; qty: number }) =>
+      addToCart(input.variation.id, input.qty),
+    onSuccess: (updatedCart) => {
+      queryClient.setQueryData(['cart'], updatedCart);
+      haptic('medium');
+      navigate('/checkout');
+    },
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
   const groupBuyMutation = useMutation({
     mutationFn: (productId: string) => createGroupBuy(productId),
     onSuccess: () => {
@@ -133,6 +145,16 @@ export default function ProductDetailPage() {
     }
     if (selected && inStock && !addMutation.isPending) {
       addMutation.mutate({ variation: selected, qty: quantity });
+    }
+  };
+
+  const handleBuyNow = async () => {
+    if (status !== 'authenticated') {
+      await login();
+      if (useAuthStore.getState().status !== 'authenticated') return;
+    }
+    if (selected && inStock && !buyNowMutation.isPending) {
+      buyNowMutation.mutate({ variation: selected, qty: quantity });
     }
   };
 
@@ -483,19 +505,36 @@ export default function ProductDetailPage() {
             </span>
           )}
         </Box>
-        <Button
-          fullWidth
-          loading={addMutation.isPending}
-          disabled={!selected || !inStock}
-          onClick={handleAdd}
-          style={{
-            background: inStock ? 'var(--primary-600)' : 'var(--neutral-200)',
-            minHeight: 48,
-            fontWeight: 600,
-          }}
-        >
-          {inStock ? `${vi.product.addToCart} · ${formatVnd(price * quantity)}` : vi.product.outOfStock}
-        </Button>
+        {inStock ? (
+          <>
+            {/* CTA đôi kiểu Shopee: Thêm giỏ (viền) + Mua ngay (đặc, tới thẳng checkout). */}
+            <Button
+              variant="secondary"
+              loading={addMutation.isPending}
+              disabled={!selected}
+              onClick={handleAdd}
+              style={{ flex: 1, minHeight: 48, fontWeight: 600 }}
+            >
+              {vi.product.addToCart}
+            </Button>
+            <Button
+              loading={buyNowMutation.isPending}
+              disabled={!selected}
+              onClick={handleBuyNow}
+              style={{ flex: 1, background: 'var(--primary-600)', minHeight: 48, fontWeight: 700 }}
+            >
+              Mua ngay · {formatVnd(price * quantity)}
+            </Button>
+          </>
+        ) : (
+          <Button
+            fullWidth
+            disabled
+            style={{ background: 'var(--neutral-200)', minHeight: 48, fontWeight: 600 }}
+          >
+            {vi.product.outOfStock}
+          </Button>
+        )}
       </Box>
     </Page>
   );

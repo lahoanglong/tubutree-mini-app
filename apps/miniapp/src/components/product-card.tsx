@@ -136,26 +136,28 @@ export default function ProductCard({ product }: { product: ProductCardType }) {
         >
           {product.name}
         </Text>
-        {((product.reviewCount ?? 0) > 0 || formatSold(product.sold)) && (
-          <Box flex alignItems="center" style={{ gap: 4, marginTop: 2 }}>
-            {(product.reviewCount ?? 0) > 0 && (
-              <>
-                <span style={{ color: 'var(--sun-500)', fontSize: 11 }}>★</span>
-                <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                  {product.ratingAvg?.toFixed(1)}
-                </Text>
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                  ({product.reviewCount})
-                </Text>
-              </>
-            )}
-            {formatSold(product.sold) && (
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                {(product.reviewCount ?? 0) > 0 ? '· ' : ''}{formatSold(product.sold)}
+        {/* Dòng social-proof LUÔN render (chiều cao cố định) → thẻ đều nhau, không nhảy layout.
+            Chưa có đánh giá → "★ Mới" (thay vì ẩn cả dòng làm thẻ cao thấp khác nhau). */}
+        <Box flex alignItems="center" style={{ gap: 4, marginTop: 3, minHeight: 16 }}>
+          {(product.reviewCount ?? 0) > 0 ? (
+            <>
+              <span style={{ color: 'var(--sun-500)', fontSize: 11 }}>★</span>
+              <Text size="xSmall" style={{ color: 'var(--neutral-600)', fontWeight: 600 }}>
+                {product.ratingAvg?.toFixed(1)}
               </Text>
-            )}
-          </Box>
-        )}
+              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                ({product.reviewCount})
+              </Text>
+            </>
+          ) : (
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>★ Mới</Text>
+          )}
+          {formatSold(product.sold) && (
+            <Text size="xSmall" style={{ color: 'var(--neutral-500)', fontWeight: 600 }}>
+              · {formatSold(product.sold)}
+            </Text>
+          )}
+        </Box>
         <Box flex alignItems="baseline" style={{ gap: 6, marginTop: 4 }}>
           <Text bold style={{ color: 'var(--primary-700)', fontSize: 15 }}>
             {formatVnd(price)}

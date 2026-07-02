@@ -181,7 +181,8 @@ export default function CheckoutPage() {
   const coinsBalance = user?.coinsBalance ?? 0;
   const paymentMethods = [
     { value: 'COD', label: vi.checkout.paymentCod, disabled: false },
-    { value: 'ZALOPAY', label: vi.checkout.paymentZalopay, disabled: false },
+    // ZALOPAY tạm ẨN: chưa nối cổng thanh toán thật → nếu hiện, bấm đặt sẽ ra "thành công"
+    // mà KHÔNG thu tiền (như COD) → đơn treo/sai đối soát. Mở lại khi tích hợp Payment API Zalo.
     { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank, disabled: false },
     {
       value: 'WALLET',
@@ -203,6 +204,37 @@ export default function CheckoutPage() {
         selectedId={addressId}
         onSelect={setAddressId}
       />
+
+      {/* ── Sản phẩm sẽ mua ── (trước đây checkout KHÔNG liệt kê món → khách đặt đơn mà
+          không thấy lại sản phẩm/số lượng; đây là tín hiệu tin cậy chuẩn của e-commerce) */}
+      {cart.data && cart.data.items.length > 0 && (
+        <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+          <Text bold size="small" style={{ marginBottom: 10 }}>
+            Sản phẩm ({cart.data.itemCount})
+          </Text>
+          <Box flex flexDirection="column" style={{ gap: 12 }}>
+            {cart.data.items.map((it) => (
+              <Box key={it.id} flex alignItems="center" style={{ gap: 10 }}>
+                <img
+                  src={it.thumbnail ?? undefined}
+                  alt={it.productName}
+                  style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', background: 'var(--neutral-100)', flexShrink: 0 }}
+                />
+                <Box style={{ flex: 1, minWidth: 0 }}>
+                  <Text size="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.productName}</Text>
+                  {it.variationName && (
+                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{it.variationName}</Text>
+                  )}
+                  <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                    {formatVnd(it.unitPrice)} × {it.quantity}
+                  </Text>
+                </Box>
+                <Text size="small" bold style={{ whiteSpace: 'nowrap' }}>{formatVnd(it.total)}</Text>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
 
       {/* ── Thanh toán ── */}
       <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
