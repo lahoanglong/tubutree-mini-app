@@ -1,7 +1,7 @@
 import { Box, Page, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { Bell, ShoppingCart, Search, ChevronRight, Baby, SprayCan, Droplets, Recycle, Map, Sparkles, Users, type LucideIcon } from 'lucide-react';
-import { fetchProducts, fetchBrands } from '../services/shop-api';
+import { fetchProducts, fetchBrands, getCart } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import ProductCard from '../components/product-card';
@@ -26,6 +26,9 @@ const SEGMENTS: { key: string; label: string; Icon: LucideIcon }[] = [
 export default function HomePage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const authed = useAuthStore((s) => s.status === 'authenticated');
+  // Badge số lượng giỏ trên header (gate theo auth — tránh 401 lúc chưa login xong).
+  const cartCount = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: authed }).data?.itemCount ?? 0;
 
   const featured = useQuery({
     queryKey: ['products', 'home-featured'],
@@ -74,9 +77,21 @@ export default function HomePage() {
             aria-label="Giỏ hàng"
             className="tubu-press"
             onClick={() => navigate('/cart')}
-            style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}
+            style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}
           >
             <ShoppingCart size={20} color="var(--leaf-700)" strokeWidth={1.8} />
+            {cartCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18,
+                  borderRadius: 'var(--radius-full)', background: 'var(--clay-500)', color: '#fff',
+                  fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box',
+                }}
+              >
+                {cartCount > 99 ? '99+' : cartCount}
+              </span>
+            )}
           </Box>
         </Box>
       </Box>

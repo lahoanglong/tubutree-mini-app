@@ -391,6 +391,19 @@ export default function ProductDetailPage() {
         </Box>
       )}
 
+      {/* ── Cam kết / chính sách (tín hiệu an tâm trước mua — trước đây PDP không có) ── */}
+      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Text bold size="small" style={{ marginBottom: 8 }}>Cam kết Tubu</Text>
+        <Box flex flexDirection="column" style={{ gap: 6 }}>
+          {['Hàng chính hãng — nguồn gốc rõ ràng', 'Đổi trả trong 7 ngày nếu lỗi', 'Sản phẩm xanh, an lành cho cả nhà'].map((t) => (
+            <Box key={t} flex alignItems="center" style={{ gap: 8 }}>
+              <span style={{ color: 'var(--leaf-600)', fontWeight: 700, flexShrink: 0 }}>✓</span>
+              <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>{t}</Text>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
       {/* ── Mô tả ── */}
       {p.description && <CollapsibleDescription text={p.description} />}
 
@@ -646,8 +659,10 @@ function VariationChip({
     <Box
       role="button"
       aria-pressed={active}
-      className="tubu-press"
-      onClick={onClick}
+      aria-disabled={out}
+      // Hết hàng → KHÔNG cho chọn (trước đây vẫn select được → CTA disable, gây khó hiểu).
+      className={out ? undefined : 'tubu-press'}
+      onClick={out ? undefined : onClick}
       style={{
         padding: '8px 14px',
         borderRadius: 'var(--radius-md)',
