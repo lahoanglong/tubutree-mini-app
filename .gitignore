@@ -40,6 +40,9 @@ apps/api/uploads/
 coverage/
 .superpowers/
 
+# Agent framework của bên thứ 3 (BMAD) — công cụ dev cục bộ, không thuộc source dự án
+.agents/
+
 # Playwright (kết quả chạy local, đổi mỗi lần test — không phải nguồn)
 apps/e2e/playwright-report/
 apps/e2e/test-results/
