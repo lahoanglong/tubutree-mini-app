@@ -9,6 +9,7 @@ name: VM Ops (maintenance)
 #   gh workflow run ops.yml -f action=gin
 #   gh workflow run ops.yml -f action=set-env
 #   gh workflow run ops.yml -f action=crontab
+#   gh workflow run ops.yml -f action=grant-admin   # cần secret ADMIN_PHONE (gh secret set ADMIN_PHONE --body "...")
 on:
   workflow_dispatch:
     inputs:
@@ -16,7 +17,7 @@ on:
         description: 'Tác vụ bảo trì'
         required: true
         type: choice
-        options: [audit, backup, gin, set-env, crontab]
+        options: [audit, backup, gin, set-env, crontab, grant-admin]
 
 jobs:
   ops:
@@ -41,12 +42,15 @@ jobs:
           ACCESSTRADE_TOKEN: ${{ secrets.ACCESSTRADE_TOKEN }}
           ACCESSTRADE_PUBLISHER_ID: ${{ secrets.ACCESSTRADE_PUBLISHER_ID }}
           ACCESSTRADE_WEBHOOK_SECRET_GH: ${{ secrets.ACCESSTRADE_WEBHOOK_SECRET }}
+          # Chỉ dùng cho action=grant-admin — SĐT tài khoản cần cấp quyền ADMIN. GitHub tự mask
+          # giá trị secret này trong mọi log (kể cả khi script echo ra) → không lộ dù repo public.
+          ADMIN_PHONE: ${{ secrets.ADMIN_PHONE }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 15m
-          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH
+          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE
           script: |
             set -uo pipefail
             ACTION="${{ github.event.inputs.action }}"
@@ -60,7 +64,7 @@ jobs:
             # AN TOÀN: chỉ cập nhật file trên đĩa, KHÔNG rebuild/restart container (image cũ
             # vẫn chạy, migration chỉ áp khi `docker compose up --build` ở bước deploy riêng).
             case "$ACTION" in
-              backup|gin|crontab)
+              backup|gin|crontab|grant-admin)
                 echo "=== git pull (lấy tools/migrations mới; KHÔNG đụng container đang chạy) ==="
                 git fetch origin -q
                 git pull --ff-only origin main || { echo "git pull FAIL — dừng."; exit 1; }
@@ -177,6 +181,12 @@ jobs:
                 envstate GEMINI_API_KEY
                 envstate GEMINI_BASE_URL
                 echo "(API sẽ nạp env mới ở lần deploy/restart kế tiếp)"
+                ;;
+
+              grant-admin)
+                echo "=== Cấp role ADMIN (scripts/grant-admin.js, số điện thoại từ secret ADMIN_PHONE) ==="
+                if [ -z "${ADMIN_PHONE:-}" ]; then echo "ADMIN_PHONE secret rỗng — dừng."; exit 1; fi
+                $COMPOSE exec -T -e ADMIN_PHONE="$ADMIN_PHONE" api node scripts/grant-admin.js
                 ;;
 
               crontab)

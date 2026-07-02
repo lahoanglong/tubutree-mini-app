@@ -39,3 +39,8 @@ apps/api/uploads/
 # Coverage
 coverage/
 .superpowers/
+
+# Playwright (kết quả chạy local, đổi mỗi lần test — không phải nguồn)
+apps/e2e/playwright-report/
+apps/e2e/test-results/
+apps/e2e/*.png
