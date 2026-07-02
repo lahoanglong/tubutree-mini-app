@@ -184,9 +184,11 @@ jobs:
                 ;;
 
               grant-admin)
-                echo "=== Cấp role ADMIN (scripts/grant-admin.js, số điện thoại từ secret ADMIN_PHONE) ==="
+                echo "=== Cấp role ADMIN (apps/api/scripts/grant-admin.js, SĐT từ secret ADMIN_PHONE) ==="
                 if [ -z "${ADMIN_PHONE:-}" ]; then echo "ADMIN_PHONE secret rỗng — dừng."; exit 1; fi
-                $COMPOSE exec -T -e ADMIN_PHONE="$ADMIN_PHONE" api node scripts/grant-admin.js
+                # Container đang chạy = image build cũ (chưa có file này) → pipe script từ working
+                # tree (vừa git pull) qua stdin thay vì gọi theo đường dẫn trong container.
+                $COMPOSE exec -T -e ADMIN_PHONE="$ADMIN_PHONE" api node < apps/api/scripts/grant-admin.js
                 ;;
 
               crontab)
