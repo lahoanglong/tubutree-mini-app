@@ -18,17 +18,23 @@ async function bootstrap() {
     .split(',')
     .map((o) => o.trim())
     .filter((o) => o.length > 0);
-  let corsOrigin: boolean | string[];
-  if (corsOrigins.length > 0) {
-    corsOrigin = corsOrigins;
-  } else if (!isProd) {
-    corsOrigin = true;
-  } else {
-    // Dùng instance logger — Logger static có thể no-op trước khi NestFactory.create init
-    // → ops sẽ KHÔNG thấy warning fallback nếu dùng `Logger.warn` static.
+  // Allowlist tĩnh từ env (prod rỗng → fallback domain chính thức).
+  const staticAllow = corsOrigins.length > 0 ? corsOrigins : ['https://tubutree.com', 'https://app.tubutree.com'];
+  if (isProd && corsOrigins.length === 0) {
     bootLogger.warn('CORS_ORIGINS chưa cấu hình ở production — fallback về domain chính thức.');
-    corsOrigin = ['https://tubutree.com', 'https://app.tubutree.com'];
   }
+  // Origin webview Zalo Mini App — LUÔN cho phép (backend này phục vụ Mini App Zalo, không
+  // phụ thuộc env). Nếu thiếu → trình duyệt Zalo chặn MỌI response API: không load được sản phẩm,
+  // không login, Ví/Cá nhân trắng (đúng lỗi gặp trên thiết bị). Bao gồm h5.zdn.vn, *.zadn.vn, zalo.me.
+  const zaloOriginRe = /^https:\/\/([a-z0-9-]+\.)*(zdn\.vn|zadn\.vn|zalo\.me)$/i;
+  const corsOrigin = (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
+    // Không có Origin (app native/WebView không gửi, health check, server-to-server, curl) → cho qua.
+    if (!origin) return cb(null, true);
+    if (zaloOriginRe.test(origin)) return cb(null, true);
+    if (staticAllow.includes(origin)) return cb(null, true);
+    if (!isProd) return cb(null, true); // dev: mở hết cho tiện test local
+    return cb(null, false); // prod + origin lạ → chặn (không set Allow-Origin)
+  };
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     cors: { origin: corsOrigin, credentials: true },
