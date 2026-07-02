@@ -198,14 +198,10 @@ type SeedProduct = {
   variations: { sku: string; name: string; attributes: Record<string, string>; retailPrice: number; salePrice?: number; stock: number; weight: number }[];
 };
 
-/** Ảnh demo ổn định theo slug (ảnh thật, luôn tải được). Khi có Pancake/Cloudinary thật → sync ghi đè. */
-function demoImage(slug: string): string {
-  return `https://picsum.photos/seed/tubu-${slug}/800/800`;
-}
-
 // Catalog mẫu đa thương hiệu (8 brand đại diện hệ sinh thái tubutree.com): Visante, Pơ Lang,
-// Fuwa3e, Cobote, Le Plateau Coffee, BH.Nong, Sokfram, Hector. Ảnh demo theo slug (picsum) —
-// khi có Pancake key thật, sync sẽ ghi đè giá/tồn/ảnh theo pancakeId. ≥40 SP để demo "đa thương hiệu".
+// Fuwa3e, Cobote, Le Plateau Coffee, BH.Nong, Sokfram, Hector. KHÔNG dùng ảnh demo picsum
+// (trông giả/rẻ tiền) — để rỗng cho FE hiện placeholder lá; Pancake sync ghi đè ảnh THẬT khi có.
+// ≥40 SP để demo "đa thương hiệu".
 const PRODUCTS: SeedProduct[] = [
   // ── Visante — mỹ phẩm thiên nhiên ─────────────────────────────
   {
@@ -613,7 +609,6 @@ async function main() {
   console.log('🌱 Seeding Products (sample catalog)...');
   let variationCount = 0;
   for (const p of PRODUCTS) {
-    const thumb = demoImage(p.slug);
     await prisma.product.upsert({
       where: { id: p.id },
       update: {
@@ -621,14 +616,13 @@ async function main() {
         brand: p.brand, categoryIds: p.categoryIds, forSegment: p.forSegment,
         certifications: p.certifications, isFeatured: p.isFeatured ?? false,
         ingredients: p.ingredients ?? undefined,
-        // Backfill ảnh demo (sản phẩm seed cũ trước đây images rỗng) — sync Pancake sẽ ghi đè sau.
-        images: [thumb], thumbnail: thumb,
+        // KHÔNG đụng images/thumbnail ở update → giữ ảnh THẬT nếu Pancake sync đã ghi.
       },
       create: {
         id: p.id,
         pancakeId: `seed-${p.id}`, // placeholder; sync thật sẽ map theo pancakeId riêng
         brand: p.brand, slug: p.slug, name: p.name, shortDesc: p.shortDesc,
-        description: p.shortDesc, images: [thumb], thumbnail: thumb,
+        description: p.shortDesc, images: [], thumbnail: null,
         categoryIds: p.categoryIds, tags: [p.brand.toLowerCase()],
         basePrice: p.basePrice, salePrice: p.salePrice ?? null,
         forSegment: p.forSegment, certifications: p.certifications, isFeatured: p.isFeatured ?? false,
