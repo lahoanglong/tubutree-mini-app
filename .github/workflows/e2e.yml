@@ -32,17 +32,35 @@ jobs:
     - name: Install Playwright Browsers
       run: pnpm --filter @tubutree/e2e exec playwright install --with-deps
 
-    # 5. Khởi chạy Database (Postgres) qua Docker Compose
+    # 5. Khởi chạy Database (Postgres :5434) + Redis (:6381) qua Docker Compose
     - name: Start Database
       run: docker compose -f docker-compose.dev.yml up -d
 
-    # 6. Build toàn bộ dự án (tuỳ chọn, nhưng cần thiết nếu có config build trước khi dev)
+    # 6. Tạo apps/api/.env cho CI (.env bị gitignore). Chỉ DATABASE_URL + JWT bắt buộc lúc boot
+    #    (env.validation.ts: webhook fail-closed CHỈ khi NODE_ENV=production → dùng test).
+    #    global-setup.ts đọc file này để ký JWT test khớp secret API dùng.
+    - name: Prepare API env (CI)
+      run: |
+        cat > apps/api/.env <<EOF
+        NODE_ENV=test
+        PORT=3111
+        DATABASE_URL=postgresql://tubu:tubu@localhost:5434/tubutree
+        REDIS_URL=redis://localhost:6381
+        JWT_ACCESS_SECRET=ci-access-secret-$(openssl rand -hex 16)
+        JWT_REFRESH_SECRET=ci-refresh-secret-$(openssl rand -hex 16)
+        EOF
+
+    # 7. Prisma: generate client + áp migration lên DB CI (API dev cần schema sẵn để boot).
+    - name: Prisma migrate + generate
+      run: |
+        pnpm --filter @tubutree/api exec prisma generate
+        pnpm --filter @tubutree/api exec prisma migrate deploy
+
+    # 8. Build toàn bộ dự án (shared-types cần build trước khi API/web dev import được).
     - name: Build Monorepo
       run: pnpm build
 
-    # 7. Chạy Playwright Tests
-    # Lưu ý: Cần thêm lệnh để Playwright tự động start webServer trong playwright.config.ts 
-    # Hoặc có thể bật server bằng `pnpm dev &` trước khi chạy.
+    # 9. Chạy Playwright — webServer trong playwright.config.ts TỰ start API/web/miniapp rồi chờ health.
     - name: Run Playwright tests
       run: pnpm --filter @tubutree/e2e test
       env:

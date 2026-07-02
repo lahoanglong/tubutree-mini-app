@@ -9,8 +9,10 @@ import { defineConfig, devices } from '@playwright/test';
  *   Mini App  → http://localhost:3113 (Vite / ZMA)
  *
  * Yêu cầu trước khi test:
- *   1. Docker DB đang chạy: pnpm dev:infra
- *   2. Dev servers đang chạy: pnpm dev (từ root)
+ *   1. Docker DB đang chạy: pnpm dev:infra (Postgres :5434, Redis :6381)
+ *   2. Dev servers: Playwright TỰ start qua `webServer` bên dưới.
+ *      - Local: reuseExistingServer=true → dùng lại `pnpm dev` đang chạy nếu có (không start trùng).
+ *      - CI: tự spawn 3 server, chờ health trước khi chạy test.
  */
 export default defineConfig({
   testDir: './tests',
@@ -24,6 +26,31 @@ export default defineConfig({
     baseURL: 'http://localhost:3112', // Web Admin là default base
     trace: 'on-first-retry',
   },
+  // Tự khởi động API/Web/Mini App rồi CHỜ tới khi sẵn sàng — trước đây CI chạy test khi
+  // chưa có server nào listen → mọi test fail connection-refused. cwd = repo root (../..).
+  webServer: [
+    {
+      command: 'pnpm --filter @tubutree/api dev',
+      url: 'http://localhost:3111/api/health',
+      cwd: '../..',
+      timeout: 180_000,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
+      command: 'pnpm --filter @tubutree/web dev',
+      url: 'http://localhost:3112',
+      cwd: '../..',
+      timeout: 180_000,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
+      command: 'pnpm --filter @tubutree/miniapp dev',
+      url: 'http://localhost:3113',
+      cwd: '../..',
+      timeout: 180_000,
+      reuseExistingServer: !process.env.CI,
+    },
+  ],
   projects: [
     {
       name: 'API',
