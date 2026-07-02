@@ -5,6 +5,7 @@ import {
   getOwnedBrand,
   updateOwnedBrand,
   createOwnedPromotion,
+  updateOwnedPromotion,
   deleteOwnedPromotion,
   type OwnedBrand,
 } from '../services/brand-owner-api';
@@ -55,22 +56,45 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [promo, setPromo] = useState({ title: '', subtitle: '', startAt: '', endAt: '' });
-  const addPromo = useMutation({
-    mutationFn: () => createOwnedPromotion({
+  const resetPromoForm = () => { setEditingId(null); setPromo({ title: '', subtitle: '', startAt: '', endAt: '' }); };
+  // startAt/endAt (yyyy-mm-dd từ input date) → ISO. endAt mặc định = startAt + 30 ngày
+  // (KHÔNG phải now+30d — nếu chiến dịch bắt đầu >30 ngày sau thì endAt<startAt, KM không bao giờ hiện).
+  const promoIso = () => {
+    const startMs = promo.startAt ? new Date(promo.startAt).getTime() : Date.now();
+    const endMs = promo.endAt ? new Date(promo.endAt).getTime() : startMs + 30 * 864e5;
+    return {
       title: promo.title.trim(),
       subtitle: promo.subtitle.trim() || undefined,
-      startAt: new Date(promo.startAt || Date.now()).toISOString(),
-      endAt: new Date(promo.endAt || Date.now() + 30 * 864e5).toISOString(),
-    }),
-    onSuccess: () => { setPromo({ title: '', subtitle: '', startAt: '', endAt: '' }); openSnackbar({ text: 'Đã thêm khuyến mãi', type: 'success' }); void refresh(); },
+      startAt: new Date(startMs).toISOString(),
+      endAt: new Date(endMs).toISOString(),
+    };
+  };
+  const addPromo = useMutation({
+    mutationFn: () => createOwnedPromotion(promoIso()),
+    onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã thêm khuyến mãi', type: 'success' }); void refresh(); },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+  const updPromo = useMutation({
+    mutationFn: () => updateOwnedPromotion(editingId!, promoIso()),
+    onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã cập nhật khuyến mãi', type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const delPromo = useMutation({
     mutationFn: (id: string) => deleteOwnedPromotion(id),
-    onSuccess: () => void refresh(),
+    onSuccess: () => { if (editingId) resetPromoForm(); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const startEdit = (p: OwnedBrand['promotions'][number]) => {
+    setEditingId(p.id);
+    setPromo({
+      title: p.title,
+      subtitle: p.subtitle ?? '',
+      startAt: p.startAt ? new Date(p.startAt).toISOString().slice(0, 10) : '',
+      endAt: p.endAt ? new Date(p.endAt).toISOString().slice(0, 10) : '',
+    });
+  };
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
@@ -112,7 +136,10 @@ function Editor({ brand }: { brand: OwnedBrand }) {
               <Text size="small">{p.title}</Text>
               {p.subtitle && <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>{p.subtitle}</Text>}
             </Box>
-            <Text size="xSmall" className="tubu-press" style={{ color: 'var(--danger)' }} onClick={() => delPromo.mutate(p.id)}>Xoá</Text>
+            <Box flex style={{ gap: 12 }}>
+              <Text size="xSmall" className="tubu-press" style={{ color: 'var(--primary-600)' }} onClick={() => startEdit(p)}>Sửa</Text>
+              <Text size="xSmall" className="tubu-press" style={{ color: 'var(--danger)' }} onClick={() => delPromo.mutate(p.id)}>Xoá</Text>
+            </Box>
           </Box>
         ))}
         <Box mt={2} flex flexDirection="column" style={{ gap: 6 }}>
@@ -134,7 +161,14 @@ function Editor({ brand }: { brand: OwnedBrand }) {
               style={{ flex: 1, padding: 8, borderRadius: 8, border: '1px solid var(--neutral-200)' }}
             />
           </Box>
-          <Button variant="secondary" disabled={!promo.title.trim()} onClick={() => addPromo.mutate()}>+ Thêm khuyến mãi</Button>
+          {editingId ? (
+            <Box flex style={{ gap: 6 }}>
+              <Button variant="secondary" style={{ flex: 1 }} disabled={!promo.title.trim()} loading={updPromo.isPending} onClick={() => updPromo.mutate()}>Lưu thay đổi</Button>
+              <Button variant="tertiary" onClick={resetPromoForm}>Huỷ</Button>
+            </Box>
+          ) : (
+            <Button variant="secondary" disabled={!promo.title.trim()} loading={addPromo.isPending} onClick={() => addPromo.mutate()}>+ Thêm khuyến mãi</Button>
+          )}
         </Box>
       </Box>
     </Page>

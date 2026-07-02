@@ -334,6 +334,10 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
       void qc.invalidateQueries({ queryKey: ['dealer-orders'] });
       void qc.invalidateQueries({ queryKey: ['dealer-me'] });
       void qc.invalidateQueries({ queryKey: ['dealer-credit'] });
+      // Đơn mới làm tăng doanh số quý/năm → refresh thẻ tiến trình phần thưởng & báo cáo quý,
+      // nếu không card vẫn hiện "Còn X để đạt" dù backend đã tính achieved.
+      void qc.invalidateQueries({ queryKey: ['dealer-rewards'] });
+      void qc.invalidateQueries({ queryKey: ['dealer-report'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -825,7 +829,8 @@ function DealerRewardsCard() {
         🏪 Phần thưởng đại lý
       </Text>
       {rewards.map((r) => {
-        const pct = Math.min(100, Math.round((r.volume / r.threshold) * 100));
+        // Guard chia-0: threshold=0 (admin cho phép @Min(0)) → 0/0=NaN → width:'NaN%'. Đạt ngay = 100%.
+        const pct = r.threshold > 0 ? Math.min(100, Math.round((r.volume / r.threshold) * 100)) : 100;
         return (
           <Box key={r.id} py={2} style={{ borderBottom: '1px solid var(--neutral-100)' }}>
             <Box flex justifyContent="space-between" alignItems="center" style={{ gap: 8 }}>

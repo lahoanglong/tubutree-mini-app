@@ -91,8 +91,10 @@ export default function ProfilePage() {
   const unreadCount = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
 
   // Brand-owner (lộ trình B): chỉ hiện mục "Quản lý nhãn" khi user sở hữu 1 nhãn.
+  // Dùng CHUNG queryKey ['owned-brand'] với brand-owner.tsx → 1 lần fetch phục vụ cả 2 màn,
+  // và khi chủ nhãn sửa thông tin (invalidate ['owned-brand']) menu hint cũng cập nhật theo.
   const ownedBrandQ = useQuery({
-    queryKey: ['owned-brand-nav'],
+    queryKey: ['owned-brand'],
     queryFn: getOwnedBrand,
     enabled: status === 'authenticated',
     retry: false,
