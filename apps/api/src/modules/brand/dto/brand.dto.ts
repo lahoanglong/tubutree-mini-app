@@ -1,4 +1,4 @@
-import { Allow, ArrayNotEmpty, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { Allow, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateBrandDto {
   @IsString() name!: string;
@@ -44,8 +44,10 @@ export class PromotionDto {
   @IsOptional() @IsString() subtitle?: string;
   @IsOptional() @IsString() themeColor?: string;
   @IsOptional() @IsString() couponCode?: string;
-  @IsString() startAt!: string;
-  @IsString() endAt!: string;
+  // @IsDateString: endpoint self-service /brand/owner/* dùng chung DTO này với client ít
+  // tin cậy hơn admin → chặn chuỗi không phải ngày (new Date('x')→Invalid Date→Prisma 500).
+  @IsDateString() startAt!: string;
+  @IsDateString() endAt!: string;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
 }
 
@@ -54,8 +56,8 @@ export class UpdatePromotionDto {
   @IsOptional() @IsString() subtitle?: string;
   @IsOptional() @IsString() themeColor?: string;
   @IsOptional() @IsString() couponCode?: string;
-  @IsOptional() @IsString() startAt?: string;
-  @IsOptional() @IsString() endAt?: string;
+  @IsOptional() @IsDateString() startAt?: string;
+  @IsOptional() @IsDateString() endAt?: string;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
 }
@@ -66,7 +68,7 @@ export class DealerRewardDto {
   @IsString() title!: string;
   @IsOptional() @IsString() description?: string;
   @IsInt() @Min(0) threshold!: number;
-  @IsOptional() @IsString() period?: string;
+  @IsOptional() @IsIn(['QUARTER', 'YEAR']) period?: string;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
 }
 
@@ -78,7 +80,7 @@ export class UpdateDealerRewardDto {
   @IsOptional() @IsString() title?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsInt() @Min(0) threshold?: number;
-  @IsOptional() @IsString() period?: string;
+  @IsOptional() @IsIn(['QUARTER', 'YEAR']) period?: string;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
 }

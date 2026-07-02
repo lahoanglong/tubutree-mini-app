@@ -159,6 +159,13 @@ export class BrandService {
       if (!slug) throw new BadRequestException('Slug không hợp lệ (rỗng sau khi chuẩn hoá).');
       data.slug = slug;
     }
+    // Gán chủ nhãn: Brand.ownerUserId không có FK tới User (nullable, gán tay) → tự kiểm tra
+    // user tồn tại, tránh admin gõ sai id → gán "chủ ma" mà không ai được cảnh báo.
+    if (typeof dto.ownerUserId === 'string' && dto.ownerUserId.trim()) {
+      const owner = await this.prisma.user.findUnique({ where: { id: dto.ownerUserId.trim() }, select: { id: true } });
+      if (!owner) throw new BadRequestException('userId chủ nhãn không tồn tại.');
+      data.ownerUserId = owner.id;
+    }
     return this.prisma.brand.update({ where: { id }, data });
   }
 
@@ -337,19 +344,25 @@ export class BrandService {
 
   // ---- Brand-owner tự quản (lộ trình B) — auth bằng quyền sở hữu ----
   private async assertOwnedBrand(userId: string) {
-    const brand = await this.prisma.brand.findFirst({ where: { ownerUserId: userId } });
+    // orderBy tất định: nếu 1 user (do admin gán) sở hữu >1 nhãn, luôn trả nhãn CŨ NHẤT
+    // (thay vì thứ tự ngẫu nhiên của Postgres) — người chủ luôn vào đúng 1 nhãn nhất quán.
+    const brand = await this.prisma.brand.findFirst({
+      where: { ownerUserId: userId },
+      orderBy: { createdAt: 'asc' },
+    });
     if (!brand) throw new NotFoundException('Bạn chưa được cấp quyền quản lý nhãn nào.');
     return brand;
   }
 
-  /** Nhãn mà user đang sở hữu (+ promotions) cho màn quản lý. */
+  /** Nhãn mà user đang sở hữu (+ promotions) cho màn quản lý — 1 query (include) thay vì 2 round-trip. */
   async getOwnedBrand(userId: string) {
-    const brand = await this.assertOwnedBrand(userId);
-    const promotions = await this.prisma.brandPromotion.findMany({
-      where: { brandId: brand.id },
-      orderBy: { sortOrder: 'asc' },
+    const brand = await this.prisma.brand.findFirst({
+      where: { ownerUserId: userId },
+      orderBy: { createdAt: 'asc' },
+      include: { promotions: { orderBy: { sortOrder: 'asc' } } },
     });
-    return { ...brand, promotions };
+    if (!brand) throw new NotFoundException('Bạn chưa được cấp quyền quản lý nhãn nào.');
+    return brand;
   }
 
   /** Brand-owner sửa THÔNG TIN nhãn — CHỈ logo/cover/tagline/story/origin (chống sửa name/verified/publish/cert). */

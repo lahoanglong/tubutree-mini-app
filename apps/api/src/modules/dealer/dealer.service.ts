@@ -199,20 +199,45 @@ export class DealerService {
     return this.creditLedger(userId);
   }
 
+  /** Chênh lệch giờ VN (UTC+7) so với UTC — mốc quý/năm tính theo giờ tường VN, độc lập TZ máy chủ. */
+  private static readonly VN_OFFSET = 7 * 60 * 60 * 1000;
+
+  /** Mốc UTC [start, end) của quý `q` (0..3) năm `year`, theo giờ VN. */
+  private static vnQuarterRange(year: number, q: number) {
+    const VN = DealerService.VN_OFFSET;
+    return {
+      start: new Date(Date.UTC(year, q * 3, 1) - VN),
+      end: new Date(Date.UTC(year, q * 3 + 3, 1) - VN),
+    };
+  }
+
+  /**
+   * Quý/năm HIỆN TẠI theo giờ VN + mốc UTC [start,end) của quý và của năm.
+   * Dùng chung cho quarterlyReport / rewardsProgress / payoutQuarterlyBonuses (tránh lệch mốc).
+   */
+  private vnPeriodBounds(now: Date) {
+    const VN = DealerService.VN_OFFSET;
+    const vnNow = new Date(now.getTime() + VN); // giờ tường VN, đọc qua các field UTC*
+    const q = Math.floor(vnNow.getUTCMonth() / 3); // 0..3
+    const year = vnNow.getUTCFullYear();
+    const quarter = DealerService.vnQuarterRange(year, q);
+    return {
+      q,
+      year,
+      qStart: quarter.start,
+      qEnd: quarter.end,
+      yStart: new Date(Date.UTC(year, 0, 1) - VN),
+      yEnd: new Date(Date.UTC(year + 1, 0, 1) - VN),
+    };
+  }
+
   /**
    * Báo cáo quý đại lý (#71): doanh số quý hiện tại (đơn DEALER không huỷ) + bậc thưởng đạt được.
    * Bậc thưởng lấy từ config dealer.quarterly_bonus_tiers (mặc định 50tr→2%, 100tr→3%, 200tr→4%).
    */
   async quarterlyReport(userId: string) {
     await this.dealerContext(userId); // chặn nếu chưa phải đại lý
-    // Mốc quý theo GIỜ VN (UTC+7), không phụ thuộc timezone máy chủ (container UTC).
-    const VN = 7 * 60 * 60 * 1000;
-    const vnNow = new Date(Date.now() + VN); // giờ tường VN, đọc bằng các field UTC*
-    const q = Math.floor(vnNow.getUTCMonth() / 3); // 0..3
-    const year = vnNow.getUTCFullYear();
-    // Đầu/cuối quý theo giờ VN → quy về mốc UTC chuẩn để so với createdAt (UTC).
-    const start = new Date(Date.UTC(year, q * 3, 1) - VN);
-    const end = new Date(Date.UTC(year, q * 3 + 3, 1) - VN);
+    const { q, year, qStart: start, qEnd: end } = this.vnPeriodBounds(new Date());
 
     const agg = await this.prisma.order.aggregate({
       where: {
@@ -249,14 +274,7 @@ export class DealerService {
    */
   async rewardsProgress(userId: string, now: Date = new Date()) {
     await this.dealerContext(userId); // chặn nếu chưa phải đại lý
-    const VN = 7 * 60 * 60 * 1000;
-    const vnNow = new Date(now.getTime() + VN);
-    const q = Math.floor(vnNow.getUTCMonth() / 3);
-    const year = vnNow.getUTCFullYear();
-    const qStart = new Date(Date.UTC(year, q * 3, 1) - VN);
-    const qEnd = new Date(Date.UTC(year, q * 3 + 3, 1) - VN);
-    const yStart = new Date(Date.UTC(year, 0, 1) - VN);
-    const yEnd = new Date(Date.UTC(year + 1, 0, 1) - VN);
+    const { q, year, qStart, qEnd, yStart, yEnd } = this.vnPeriodBounds(now);
     const base = { userId, type: 'DEALER' as const, status: { notIn: ['CANCELLED', 'RETURNED'] as ('CANCELLED' | 'RETURNED')[] } };
     const [qAgg, yAgg] = await Promise.all([
       this.prisma.order.aggregate({ where: { ...base, createdAt: { gte: qStart, lt: qEnd } }, _sum: { total: true } }),
@@ -305,16 +323,14 @@ export class DealerService {
    * Idempotent theo (userId, refType=QUARTER_BONUS, refId=quý) → cron chạy lại không cộng trùng.
    */
   async payoutQuarterlyBonuses(now: Date = new Date()): Promise<{ paid: number; quarter: string }> {
-    const VN = 7 * 60 * 60 * 1000;
-    const vnNow = new Date(now.getTime() + VN);
-    let q = Math.floor(vnNow.getUTCMonth() / 3) - 1; // quý TRƯỚC (vừa kết thúc)
-    let year = vnNow.getUTCFullYear();
+    const cur = this.vnPeriodBounds(now);
+    let q = cur.q - 1; // quý TRƯỚC (vừa kết thúc)
+    let year = cur.year;
     if (q < 0) {
       q = 3;
       year -= 1;
     }
-    const start = new Date(Date.UTC(year, q * 3, 1) - VN);
-    const end = new Date(Date.UTC(year, q * 3 + 3, 1) - VN);
+    const { start, end } = DealerService.vnQuarterRange(year, q);
     const quarter = `Q${q + 1}/${year}`;
 
     const sorted = await this.bonusTiers();

@@ -26,7 +26,7 @@ function makePrisma(overrides: any = {}) {
     brandPromotion: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     dealerReward: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     variation: { findMany: jest.fn().mockResolvedValue([]) },
-    user: { findUniqueOrThrow: jest.fn() },
+    user: { findUniqueOrThrow: jest.fn(), findUnique: jest.fn() },
     brandFollow: { create: jest.fn(), deleteMany: jest.fn().mockResolvedValue({ count: 0 }), findUnique: jest.fn().mockResolvedValue(null) },
     $transaction: jest.fn().mockResolvedValue([]),
     ...overrides,
@@ -136,6 +136,25 @@ describe('BrandService admin', () => {
     const svc = new BrandService(prisma);
     await expect(svc.updateBrand('b1', { slug: '!!!@@@' })).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.brand.update).not.toHaveBeenCalled();
+  });
+
+  it('updateBrand ném BadRequest nếu gán ownerUserId không tồn tại (Brand không có FK tới User)', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
+    prisma.user.findUnique.mockResolvedValue(null); // userId gõ sai → không có user
+    const svc = new BrandService(prisma);
+    await expect(svc.updateBrand('b1', { ownerUserId: 'ghost' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.brand.update).not.toHaveBeenCalled();
+  });
+
+  it('updateBrand gán ownerUserId hợp lệ khi user tồn tại', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
+    prisma.brand.update.mockResolvedValue({ id: 'b1', ownerUserId: 'u1' });
+    const svc = new BrandService(prisma);
+    await svc.updateBrand('b1', { ownerUserId: 'u1' });
+    expect(prisma.brand.update.mock.calls[0][0].data.ownerUserId).toBe('u1');
   });
 
   it('verifyBrand set isVerified', async () => {
@@ -290,13 +309,15 @@ describe('BrandService brand-owner tự quản', () => {
     await expect(new BrandService(prisma).getOwnedBrand('u1')).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('getOwnedBrand: trả nhãn + promotions', async () => {
+  it('getOwnedBrand: trả nhãn + promotions (1 query include, orderBy tất định)', async () => {
     const prisma = makePrisma();
-    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', name: 'N', ownerUserId: 'u1' });
-    prisma.brandPromotion.findMany.mockResolvedValue([{ id: 'p1' }]);
+    // Refactor: promotions lấy qua include trên brand.findFirst (không còn findMany riêng).
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', name: 'N', ownerUserId: 'u1', promotions: [{ id: 'p1' }] });
     const out = await new BrandService(prisma).getOwnedBrand('u1');
     expect(out.id).toBe('b1');
     expect(out.promotions).toHaveLength(1);
+    // Tất định: orderBy createdAt asc (chống non-deterministic khi 1 user sở hữu >1 nhãn).
+    expect(prisma.brand.findFirst).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { createdAt: 'asc' } }));
   });
 
   it('updateOwnedBrand: CHỈ set field cho phép (bỏ name/isVerified/isPublished)', async () => {

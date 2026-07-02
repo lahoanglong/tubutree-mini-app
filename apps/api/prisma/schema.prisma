@@ -179,6 +179,12 @@ model Product {
   @@index([brand])
   @@index([brandId])
   @@index([isActive, isFeatured])
+  // GIN cho 3 cột mảng lọc bằng 'has' trong catalog.service.ts list(). PHẢI khai báo trong
+  // schema (không chỉ raw SQL) để `prisma migrate` KHÔNG coi chúng là drift rồi tự sinh
+  // migration DROP — đúng lỗi migration 20260628035408 đã vô tình xoá 3 index này.
+  @@index([categoryIds], type: Gin, map: "products_categoryIds_gin")
+  @@index([forSegment], type: Gin, map: "products_forSegment_gin")
+  @@index([tags], type: Gin, map: "products_tags_gin")
   @@map("products")
 }
 
@@ -205,6 +211,8 @@ model Brand {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
+  // Index như Storefront.ownerUserId — tra nhãn theo chủ sở hữu (assertOwnedBrand) không seq-scan.
+  @@index([ownerUserId])
   @@map("brands")
 }
 
