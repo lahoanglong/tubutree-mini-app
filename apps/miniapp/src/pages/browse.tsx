@@ -122,6 +122,43 @@ export default function BrowsePage() {
         />
       </Box>
 
+      {/* Lưới Danh mục — hiện khi ở trạng thái duyệt gốc (chưa gõ/chưa lọc). Trước đây tab
+          "Danh mục" chỉ là ô tìm kiếm, không có lối duyệt theo nhóm → thêm grid phân khúc. */}
+      {!q.trim() && !segment && !brand && (
+        <Box px={3} pb={2}>
+          <Text size="xSmall" bold style={{ color: 'var(--neutral-600)', display: 'block', marginBottom: 8 }}>
+            Danh mục
+          </Text>
+          <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {Object.entries(SEGMENT_LABELS).map(([key, label]) => (
+              <Box
+                key={key}
+                role="button"
+                aria-label={label}
+                className="tubu-press"
+                onClick={() => {
+                  haptic('light');
+                  navigate(`/browse?segment=${key}`);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  background: 'var(--neutral-0)',
+                  border: '1px solid var(--neutral-150, var(--neutral-100))',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: '12px 14px',
+                  minHeight: 48,
+                  boxSizing: 'border-box',
+                }}
+              >
+                <Text size="small" style={{ fontWeight: 600 }}>{label}</Text>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
+
       {/* Tìm gần đây + Xu hướng — chỉ hiện khi chưa gõ gì (màn tìm kiếm §6.12). */}
       {!q.trim() && (
         <Box px={3} pb={1}>
