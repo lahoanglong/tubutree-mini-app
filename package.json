@@ -12,6 +12,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:ci": "turbo run test --filter=!@tubutree/e2e",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "db:generate": "pnpm --filter @tubutree/api prisma:generate",
     "db:migrate": "pnpm --filter @tubutree/api prisma:migrate",
