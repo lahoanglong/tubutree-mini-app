@@ -23,9 +23,19 @@ import {
   deleteTemplate,
   type AdminShift,
 } from '../services/shifts-api';
+import {
+  adminGetPayroll,
+  setRate,
+  finalizePayroll,
+  markPaid,
+  type AdminPayrollRow,
+  type PayrollStatus,
+} from '../services/payroll-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { Skeleton } from '../components/ui/skeleton';
+import { ImageUpload } from '../components/image-upload';
+import { formatVnd } from '../utils/format';
 import {
   mondayKeyOf,
   addDaysKey,
@@ -36,6 +46,8 @@ import {
   hhmmToMin,
   shortDayLabel,
   dowLabel,
+  currentVnYearMonth,
+  shiftYearMonth,
 } from '../utils/week';
 
 export default function AdminPage() {
@@ -54,22 +66,156 @@ export default function AdminPage() {
   return <AdminHub />;
 }
 
-type Tab = 'staff' | 'shifts';
+type Tab = 'staff' | 'shifts' | 'payroll';
 
 function AdminHub() {
   const [tab, setTab] = useState<Tab>('staff');
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
-      <Box p={4} flex style={{ gap: 8 }}>
+      <Box p={4} flex style={{ gap: 8, flexWrap: 'wrap' }}>
         <Button size="small" variant={tab === 'staff' ? undefined : 'secondary'} onClick={() => setTab('staff')}>
           Nhân sự
         </Button>
         <Button size="small" variant={tab === 'shifts' ? undefined : 'secondary'} onClick={() => setTab('shifts')}>
           Duyệt ca
         </Button>
+        <Button size="small" variant={tab === 'payroll' ? undefined : 'secondary'} onClick={() => setTab('payroll')}>
+          Lương
+        </Button>
       </Box>
-      {tab === 'staff' ? <StaffSection /> : <ShiftsSection />}
+      {tab === 'staff' ? <StaffSection /> : tab === 'shifts' ? <ShiftsSection /> : <PayrollSection />}
     </Page>
+  );
+}
+
+const PAY_STATUS: Record<PayrollStatus, string> = { OPEN: 'Đang tính', FINALIZED: 'Đã chốt', PAID: 'Đã trả' };
+const fmtHM = (min: number) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
+
+function PayrollSection() {
+  const qc = useQueryClient();
+  const { openSnackbar } = useSnackbar();
+  const [ym, setYm] = useState(() => currentVnYearMonth());
+  const payQ = useQuery({ queryKey: ['admin-payroll', ym.year, ym.month], queryFn: () => adminGetPayroll(ym.year, ym.month) });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['admin-payroll', ym.year, ym.month] });
+
+  const [qrRow, setQrRow] = useState<AdminPayrollRow | null>(null);
+  const [rateRow, setRateRow] = useState<AdminPayrollRow | null>(null);
+  const [rateVal, setRateVal] = useState('');
+  const [payRow, setPayRow] = useState<AdminPayrollRow | null>(null);
+  const [proof, setProof] = useState('');
+  const [note, setNote] = useState('');
+
+  const rateM = useMutation({
+    mutationFn: () => setRate(rateRow!.staff.id, Number(rateVal)),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã lưu đơn giá.', type: 'success' });
+      setRateRow(null);
+      invalidate();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+  const finalizeM = useMutation({
+    mutationFn: (r: AdminPayrollRow) => finalizePayroll(r.staff.id, ym.year, ym.month),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã chốt lương.', type: 'success' });
+      invalidate();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+  const paidM = useMutation({
+    mutationFn: () => markPaid(payRow!.staff.id, { year: ym.year, month: ym.month, proofImageUrl: proof, note: note || undefined }),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã đánh dấu đã trả lương.', type: 'success' });
+      setPayRow(null);
+      setProof('');
+      setNote('');
+      invalidate();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  return (
+    <Box px={4} pb={4} flex flexDirection="column" style={{ gap: 12 }}>
+      <Box flex alignItems="center" justifyContent="space-between" style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: '8px 12px' }}>
+        <Button size="small" variant="tertiary" onClick={() => setYm(shiftYearMonth(ym.year, ym.month, -1))}>
+          <ChevronLeft size={18} />
+        </Button>
+        <Text size="small" bold>Tháng {ym.month}/{ym.year}</Text>
+        <Button size="small" variant="tertiary" onClick={() => setYm(shiftYearMonth(ym.year, ym.month, 1))}>
+          <ChevronRight size={18} />
+        </Button>
+      </Box>
+
+      {payQ.isLoading && <Skeleton style={{ height: 120, borderRadius: 12 }} />}
+      {payQ.isError && <Text style={{ color: 'var(--danger, #d64545)' }}>{getErrorMessage(payQ.error)}</Text>}
+
+      {payQ.data?.map((row) => (
+        <Box key={row.staff.id} style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
+          <Box flex justifyContent="space-between" alignItems="center">
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Text bold>{row.staff.fullName ?? row.staff.phone ?? 'NV'}</Text>
+              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                {fmtHM(row.month.totalMinutes)} · {formatVnd(row.profile?.hourlyRate ?? 0)}/h · {PAY_STATUS[row.month.status]}
+              </Text>
+            </Box>
+            <Box style={{ textAlign: 'right' }}>
+              <Text bold style={{ color: 'var(--leaf-700)' }}>{formatVnd(row.month.net)}</Text>
+              {row.month.totalFines > 0 && <Text size="xSmall" style={{ color: 'var(--danger, #d64545)' }}>−{formatVnd(row.month.totalFines)}</Text>}
+            </Box>
+          </Box>
+          <Box flex style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            <Button size="small" variant="secondary" onClick={() => { setRateRow(row); setRateVal(String(row.profile?.hourlyRate ?? 0)); }}>Đơn giá</Button>
+            {(row.qrImageUrl || row.profile?.qrImageUrl) && (
+              <Button size="small" variant="secondary" onClick={() => setQrRow(row)}>QR chuyển</Button>
+            )}
+            {row.month.status === 'OPEN' && (
+              <Button size="small" variant="secondary" loading={finalizeM.isPending} onClick={() => finalizeM.mutate(row)}>Chốt</Button>
+            )}
+            {row.month.status !== 'PAID' && (
+              <Button size="small" onClick={() => { setPayRow(row); setProof(''); setNote(''); }}>Đã chuyển</Button>
+            )}
+          </Box>
+        </Box>
+      ))}
+      {payQ.data && payQ.data.length === 0 && (
+        <Text size="small" style={{ color: 'var(--neutral-500)' }}>Chưa có nhân sự.</Text>
+      )}
+
+      {/* Sheet QR */}
+      <Sheet visible={!!qrRow} onClose={() => setQrRow(null)} autoHeight>
+        <Box p={4} flex flexDirection="column" alignItems="center" style={{ gap: 10 }}>
+          <Text.Title size="small">Chuyển lương {qrRow?.staff.fullName ?? ''}</Text.Title>
+          <Text bold style={{ color: 'var(--leaf-700)', fontSize: 22 }}>{formatVnd(qrRow?.month.net ?? 0)}</Text>
+          {qrRow && (qrRow.qrImageUrl || qrRow.profile?.qrImageUrl) && (
+            <img src={(qrRow.qrImageUrl ?? qrRow.profile?.qrImageUrl) as string} alt="QR" style={{ maxWidth: 260, width: '100%' }} />
+          )}
+          {qrRow?.profile?.bankAccountNo && (
+            <Text size="small">{qrRow.profile.bankAccountName} · {qrRow.profile.bankAccountNo}</Text>
+          )}
+          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Quét chuyển khoản rồi bấm "Đã chuyển" để tải ảnh xác nhận.</Text>
+        </Box>
+      </Sheet>
+
+      {/* Sheet đơn giá */}
+      <Sheet visible={!!rateRow} onClose={() => setRateRow(null)} autoHeight>
+        <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
+          <Text.Title size="small">Đơn giá giờ · {rateRow?.staff.fullName ?? ''}</Text.Title>
+          <Input type="number" label="Đơn giá (VND/giờ)" value={rateVal} onChange={(e) => setRateVal(e.target.value)} />
+          <Button fullWidth loading={rateM.isPending} disabled={!/^\d+$/.test(rateVal)} onClick={() => rateM.mutate()}>Lưu đơn giá</Button>
+        </Box>
+      </Sheet>
+
+      {/* Sheet đã chuyển */}
+      <Sheet visible={!!payRow} onClose={() => setPayRow(null)} autoHeight>
+        <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
+          <Text.Title size="small">Xác nhận đã chuyển · {payRow?.staff.fullName ?? ''}</Text.Title>
+          <Text size="small">Số tiền: <b>{formatVnd(payRow?.month.net ?? 0)}</b></Text>
+          <ImageUpload label="Ảnh xác nhận chuyển khoản *" value={proof} onChange={setProof} />
+          <Input label="Ghi chú (tuỳ chọn)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <Button fullWidth loading={paidM.isPending} disabled={!proof} onClick={() => paidM.mutate()}>Đánh dấu đã trả</Button>
+        </Box>
+      </Sheet>
+    </Box>
   );
 }
 

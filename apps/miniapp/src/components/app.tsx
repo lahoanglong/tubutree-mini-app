@@ -62,6 +62,7 @@ const BrandViewPage = lazy(() => import('../pages/brand-view'));
 const BrandOwnerPage = lazy(() => import('../pages/brand-owner'));
 const AdminPage = lazy(() => import('../pages/admin'));
 const StaffPage = lazy(() => import('../pages/staff'));
+const MyPayrollPage = lazy(() => import('../pages/my-payroll'));
 const NotFoundPage = lazy(() => import('../pages/not-found'));
 
 const queryClient = new QueryClient({
@@ -173,6 +174,7 @@ export default function MyApp() {
                 <Route path="/brand-owner" element={<BrandOwnerPage />} />
                 <Route path="/admin" element={<AdminPage />} />
                 <Route path="/staff" element={<StaffPage />} />
+                <Route path="/my-payroll" element={<MyPayrollPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </AnimationRoutes>
             </Suspense>

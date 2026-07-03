@@ -66,3 +66,20 @@ export function dowLabel(key: string): string {
   const d = new Date(`${key}T00:00:00Z`);
   return DOW_VN[(d.getUTCDay() + 6) % 7] ?? '';
 }
+
+/** {year, month} hiện tại theo giờ VN. */
+export function currentVnYearMonth(): { year: number; month: number } {
+  const vn = new Date(Date.now() + VN);
+  return { year: vn.getUTCFullYear(), month: vn.getUTCMonth() + 1 };
+}
+
+/** Dịch tháng (delta ±) giữ đúng năm. */
+export function shiftYearMonth(year: number, month: number, delta: number): { year: number; month: number } {
+  const idx = year * 12 + (month - 1) + delta;
+  return { year: Math.floor(idx / 12), month: (idx % 12) + 1 };
+}
+
+/** date-key (YYYY-MM-DD) → nhãn 'dd/mm' đã có ở shortDayLabel; đây là 'dd' đơn. */
+export function dayOfMonth(key: string): string {
+  return key.split('-')[2] ?? '';
+}

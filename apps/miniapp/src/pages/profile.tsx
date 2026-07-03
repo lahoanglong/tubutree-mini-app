@@ -39,6 +39,7 @@ const READY = new Set([
   '/storefront',
   '/admin',
   '/staff',
+  '/my-payroll',
 ]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [
@@ -112,7 +113,8 @@ export default function ProfilePage() {
   const isStaffOrAdmin = user?.role === 'STAFF' || user?.role === 'ADMIN';
   const workItems: MenuItem[] = [];
   if (isStaffOrAdmin) {
-    workItems.push({ Icon: CalendarClock, label: 'Ca làm & chấm công', to: '/staff', hint: 'Đăng ký ca — chấm công — lương' });
+    workItems.push({ Icon: CalendarClock, label: 'Ca làm & chấm công', to: '/staff', hint: 'Đăng ký ca — chấm công' });
+    workItems.push({ Icon: Wallet, label: 'Lương của tôi', to: '/my-payroll', hint: 'Xem lương & thông tin nhận' });
   }
   if (user?.role === 'ADMIN') {
     workItems.push({ Icon: ShieldCheck, label: 'Quản trị nhân sự', to: '/admin', hint: 'Cấp quyền — duyệt ca — lương' });
