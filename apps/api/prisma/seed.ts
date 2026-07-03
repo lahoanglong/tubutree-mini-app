@@ -126,8 +126,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
 
   // Chấm công (Phase C) — nhập IP/toạ độ công ty thật qua hub/DB trước khi dùng.
   { key: 'attendance.office_ips', value: [], category: 'attendance', description: 'Danh sách IP/CIDR nội bộ được phép checkin' },
-  { key: 'attendance.office_lat', value: null, category: 'attendance', description: 'Vĩ độ công ty' },
-  { key: 'attendance.office_lng', value: null, category: 'attendance', description: 'Kinh độ công ty' },
+  // office_lat / office_lng: KHÔNG seed (để null mặc định) — admin nhập toạ độ thật qua config.
   { key: 'attendance.radius_m', value: 150, category: 'attendance', description: 'Bán kính GPS cho phép (m)' },
   { key: 'attendance.late_grace_min', value: 30, category: 'attendance', description: 'Trễ quá X phút thì phạt' },
   { key: 'attendance.late_fine', value: 10000, category: 'attendance', description: 'Tiền phạt đi trễ (VND)' },
