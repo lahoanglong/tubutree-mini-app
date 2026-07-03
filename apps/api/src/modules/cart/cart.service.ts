@@ -120,6 +120,14 @@ export class CartService {
     return this.getCart(userId);
   }
 
+  /** Xoá nhiều dòng (dùng sau khi đặt đơn checkout TẬP CON — chỉ dọn món đã mua, giữ phần còn lại). */
+  async removeItems(userId: string, itemIds: string[]): Promise<void> {
+    if (itemIds.length === 0) return;
+    const cart = await this.prisma.cart.findUnique({ where: { userId } });
+    if (!cart) return;
+    await this.prisma.cartItem.deleteMany({ where: { cartId: cart.id, id: { in: itemIds } } });
+  }
+
   async applyCoupon(userId: string, code: string) {
     const cart = await this.getCart(userId);
     // validate với subtotal hiện tại (ném lỗi nếu không hợp lệ)

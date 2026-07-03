@@ -32,6 +32,7 @@ function build(
     combo?: { computeForStorefront: jest.Mock }; // override ComboService
     validateAndCompute?: jest.Mock; // override coupons.validateAndCompute
     getActiveTouch?: jest.Mock; // override affiliate.getActiveTouch (attribution 3 ngày)
+    cartData?: unknown; // override giỏ (test checkout tập con)
   } = {},
 ) {
   const total = opts.total ?? 100;
@@ -54,7 +55,7 @@ function build(
     .fn()
     .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
 
-  const cart = { getCart: jest.fn().mockResolvedValue(CART), clear: jest.fn() } as unknown as CartService;
+  const cart = { getCart: jest.fn().mockResolvedValue(opts.cartData ?? CART), clear: jest.fn(), removeItems: jest.fn() } as unknown as CartService;
   const coupons = {
     redeem: jest.fn(),
     validateAndCompute:
@@ -79,7 +80,7 @@ function build(
   const combo = (opts.combo ?? { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) }) as unknown as ComboService;
 
   const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, affiliate, coins, config, combo);
-  return { svc, prisma, updateMany, orderCreate, variationUpdateMany, total, coins, combo };
+  return { svc, prisma, updateMany, orderCreate, variationUpdateMany, total, coins, combo, cart, coupons };
 }
 
 describe('CheckoutService.placeOrder — money safety', () => {
@@ -304,5 +305,56 @@ describe('CheckoutService.placeOrder — stock atomic (B5)', () => {
     await expect(
       svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
     ).rejects.toThrow('không đủ tồn kho');
+  });
+});
+
+describe('CheckoutService — checkout TẬP CON (chọn từng món)', () => {
+  // Giỏ 2 dòng: chọn thanh toán chỉ 1 dòng (i2).
+  const TWO_ITEM_CART = {
+    items: [
+      { id: 'i1', variationId: 'v1', productId: 'p1', productName: 'A', variationName: 'VA', unitPrice: 100, quantity: 1, total: 100 },
+      { id: 'i2', variationId: 'v2', productId: 'p2', productName: 'B', variationName: 'VB', unitPrice: 300, quantity: 1, total: 300 },
+    ],
+    subtotal: 400, discount: 0, freeship: false, couponCode: null,
+  };
+
+  it('quote itemIds=[i2] → subtotal chỉ tính dòng đã chọn (300, không phải 400)', async () => {
+    const { svc } = build({ cartData: TWO_ITEM_CART });
+    const q = await svc.quote('u1', { addressId: 'addr1', itemIds: ['i2'] } as never);
+    expect(q.subtotal).toBe(300);
+    expect(q.items).toHaveLength(1);
+    expect(q.items[0].id).toBe('i2');
+  });
+
+  it('placeOrder itemIds=[i2] → chỉ xoá món đã mua (removeItems), KHÔNG clear cả giỏ', async () => {
+    const { svc, cart } = build({ cartData: TWO_ITEM_CART });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', itemIds: ['i2'] } as never);
+    const cartMock = cart as unknown as { removeItems: jest.Mock; clear: jest.Mock };
+    expect(cartMock.removeItems).toHaveBeenCalledWith('u1', ['i2']);
+    expect(cartMock.clear).not.toHaveBeenCalled();
+  });
+
+  it('subset < minOrder coupon → BỎ coupon (không redeem, order.couponCode=null)', async () => {
+    // Coupon áp được trên full cart, nhưng subset 300đ < minOrder → validateAndCompute THROW.
+    const validateAndCompute = jest.fn().mockRejectedValue(new Error('Đơn tối thiểu chưa đạt'));
+    const { svc, orderCreate, coupons } = build({
+      cartData: { ...TWO_ITEM_CART, couponCode: 'GIAM50', discount: 50 },
+      validateAndCompute,
+    });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', itemIds: ['i2'] } as never);
+    // KHÔNG redeem coupon (không tiêu lượt của khách khi không được giảm).
+    expect((coupons as unknown as { redeem: jest.Mock }).redeem).not.toHaveBeenCalled();
+    // Đơn không gắn coupon + subtotal = 300 (subset), discount coupon = 0.
+    const orderData = orderCreate.mock.calls[0][0].data;
+    expect(orderData.couponCode).toBeNull();
+    expect(orderData.subtotal).toBe(300);
+  });
+
+  it('full cart (không itemIds) → clear cả giỏ như cũ (không regression)', async () => {
+    const { svc, cart } = build({ cartData: TWO_ITEM_CART });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const cartMock = cart as unknown as { removeItems: jest.Mock; clear: jest.Mock };
+    expect(cartMock.clear).toHaveBeenCalledWith('u1');
+    expect(cartMock.removeItems).not.toHaveBeenCalled();
   });
 });

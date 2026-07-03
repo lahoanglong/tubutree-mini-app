@@ -72,6 +72,16 @@ export default function CartPage() {
   const cart = useQuery({ queryKey: CART_KEY, queryFn: getCart, enabled: status === 'authenticated' });
   const [removed, setRemoved] = useState<CartLine | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Chọn từng món: lưu tập ĐÃ BỎ CHỌN (deselected) → món mới auto-chọn, món xoá tự biến mất
+  // (không cần đồng bộ tay). checkout chỉ thanh toán các món đang chọn.
+  const [deselected, setDeselected] = useState<Set<string>>(new Set());
+  const toggleSelect = (id: string) =>
+    setDeselected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   useEffect(() => () => {
     if (undoTimer.current) clearTimeout(undoTimer.current);
@@ -152,6 +162,20 @@ export default function CartPage() {
     );
   }
   const empty = summary.items.length === 0;
+  // Món đang chọn (không nằm trong deselected). Toàn-chọn → checkout gửi itemIds=undefined (toàn giỏ).
+  const selectedItems = summary.items.filter((l) => !deselected.has(l.id));
+  const allSelected = selectedItems.length === summary.items.length;
+  const selectedSubtotal = selectedItems.reduce((s, l) => s + l.total, 0);
+  const selectedCount = selectedItems.reduce((s, l) => s + l.quantity, 0);
+  const toggleAll = () => {
+    haptic('light');
+    setDeselected(allSelected ? new Set(summary.items.map((l) => l.id)) : new Set());
+  };
+  const goCheckout = () => {
+    if (selectedItems.length === 0) return;
+    const itemIds = allSelected ? undefined : selectedItems.map((l) => l.id);
+    navigate('/checkout', itemIds ? { state: { itemIds } } : undefined);
+  };
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 190 }}>
@@ -167,11 +191,18 @@ export default function CartPage() {
         />
       ) : (
         <>
-          <Box p={3} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Chọn tất cả */}
+          <Box px={3} pt={2} flex alignItems="center" style={{ gap: 10 }}>
+            <Checkbox checked={allSelected} onToggle={toggleAll} ariaLabel="Chọn tất cả" />
+            <Text size="small" className="tubu-press" onClick={toggleAll}>Chọn tất cả</Text>
+          </Box>
+          <Box p={3} pt={2} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {summary.items.map((line) => (
               <CartLineRow
                 key={line.id}
                 line={line}
+                selected={!deselected.has(line.id)}
+                onToggleSelect={() => toggleSelect(line.id)}
                 onQty={(qty) => update.mutate({ id: line.id, qty })}
                 onRemove={() => handleRemove(line)}
                 onOpen={() => navigate(`/product/${line.slug}`)}
@@ -216,8 +247,37 @@ export default function CartPage() {
         </Box>
       )}
 
-      {!empty && <StickySummary summary={summary} onCheckout={() => navigate('/checkout')} />}
+      {!empty && (
+        <StickySummary
+          summary={summary}
+          selectedSubtotal={selectedSubtotal}
+          selectedCount={selectedCount}
+          allSelected={allSelected}
+          onCheckout={goCheckout}
+        />
+      )}
     </Page>
+  );
+}
+
+/** Checkbox tròn dùng chung cho chọn món trong giỏ. */
+function Checkbox({ checked, onToggle, ariaLabel }: { checked: boolean; onToggle: () => void; ariaLabel: string }) {
+  return (
+    <Box
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      className="tubu-press"
+      onClick={onToggle}
+      style={{
+        width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+        border: `2px solid ${checked ? 'var(--primary-600)' : 'var(--neutral-300)'}`,
+        background: checked ? 'var(--primary-600)' : 'transparent',
+        display: 'grid', placeItems: 'center',
+      }}
+    >
+      {checked && <span style={{ color: '#fff', fontSize: 13, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+    </Box>
   );
 }
 
@@ -231,11 +291,15 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 function CartLineRow({
   line,
+  selected,
+  onToggleSelect,
   onQty,
   onRemove,
   onOpen,
 }: {
   line: CartLine;
+  selected: boolean;
+  onToggleSelect: () => void;
   onQty: (qty: number) => void;
   onRemove: () => void;
   onOpen: () => void;
@@ -263,9 +327,11 @@ function CartLineRow({
         borderRadius: 'var(--radius-lg)',
         display: 'flex',
         gap: 12,
+        alignItems: 'center',
         boxShadow: 'var(--shadow-xs)',
       }}
     >
+      <Checkbox checked={selected} onToggle={onToggleSelect} ariaLabel={`Chọn ${line.productName}`} />
       <Box
         role="button"
         aria-label={line.productName}
@@ -420,11 +486,26 @@ function CouponBlock({ summary }: { summary: CartSummary }) {
 }
 
 /** Sticky summary + freeship progress (DI #1). */
-function StickySummary({ summary, onCheckout }: { summary: CartSummary; onCheckout: () => void }) {
+function StickySummary({
+  summary,
+  selectedSubtotal,
+  selectedCount,
+  allSelected,
+  onCheckout,
+}: {
+  summary: CartSummary;
+  selectedSubtotal: number;
+  selectedCount: number;
+  allSelected: boolean;
+  onCheckout: () => void;
+}) {
   const threshold = summary.freeshipThreshold;
-  const reached = summary.freeship || summary.subtotal >= threshold;
-  const progressPct = Math.min(100, Math.round((summary.subtotal / threshold) * 100));
-  const remaining = Math.max(0, threshold - summary.subtotal);
+  // Freeship progress theo tổng ĐANG CHỌN (không phải toàn giỏ) — khớp số tiền sẽ thanh toán.
+  const reached = (allSelected && summary.freeship) || selectedSubtotal >= threshold;
+  const progressPct = Math.min(100, Math.round((selectedSubtotal / threshold) * 100));
+  const remaining = Math.max(0, threshold - selectedSubtotal);
+  // Coupon giảm chỉ hiển thị khi chọn TOÀN giỏ (subset re-tính ở checkout — tránh số sai).
+  const discount = allSelected ? summary.discount : 0;
 
   return (
     <Box
@@ -467,13 +548,13 @@ function StickySummary({ summary, onCheckout }: { summary: CartSummary; onChecko
         </Box>
       </Box>
 
-      {summary.discount > 0 && (
+      {discount > 0 && (
         <Box flex justifyContent="space-between">
           <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
             {vi.cart.discount}
           </Text>
           <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-            -{formatVnd(summary.discount)}
+            -{formatVnd(discount)}
           </Text>
         </Box>
       )}
@@ -482,15 +563,16 @@ function StickySummary({ summary, onCheckout }: { summary: CartSummary; onChecko
           {vi.cart.subtotal}
         </Text>
         <Text bold style={{ fontSize: 18, color: 'var(--primary-700)' }}>
-          {formatVnd(Math.max(0, summary.subtotal - summary.discount))}
+          {formatVnd(Math.max(0, selectedSubtotal - discount))}
         </Text>
       </Box>
       <Button
         fullWidth
+        disabled={selectedCount === 0}
         onClick={onCheckout}
         style={{ background: 'var(--primary-600)', marginTop: 8, minHeight: 48, fontWeight: 600 }}
       >
-        {vi.cart.checkout(summary.itemCount)}
+        {vi.cart.checkout(selectedCount)}
       </Button>
     </Box>
   );

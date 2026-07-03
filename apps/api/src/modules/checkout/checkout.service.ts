@@ -42,7 +42,7 @@ export class CheckoutService {
 
   /** Tính tạm đơn (ship + giảm + điểm) cho màn checkout. */
   async quote(userId: string, dto: QuoteDto) {
-    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, dto.storefrontSlug);
+    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, dto.storefrontSlug, dto.itemIds);
     return {
       subtotal: cart.subtotal,
       discount: computed.discount,
@@ -82,8 +82,9 @@ export class CheckoutService {
       dto.addressId,
       dto.pointsToUse,
       storefrontSlug ?? undefined,
+      dto.itemIds,
     );
-    if (cart.items.length === 0) throw new BadRequestException('Giỏ hàng trống.');
+    if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
 
     if (dto.paymentMethod === 'WALLET' && user.walletBalance < computed.total) {
       throw new BadRequestException('Số dư Ví Tubu không đủ.');
@@ -142,7 +143,8 @@ export class CheckoutService {
             shippingAddress: this.addressSnapshot(address),
             referrerUserId,
             storefrontSlug,
-            couponCode: cart.couponCode,
+            // Chỉ gắn coupon khi THỰC SỰ áp (subset không đạt điều kiện → couponApplied=false).
+            couponCode: computed.couponApplied ? cart.couponCode : null,
             invoiceRequest: dto.invoiceRequest ? (dto.invoiceRequest as object) : undefined,
             invoiceStatus: dto.invoiceRequest ? 'REQUESTED' : 'NOT_REQUESTED',
             note: dto.note,
@@ -193,7 +195,7 @@ export class CheckoutService {
         // B4: redeem coupon ATOMIC trong cùng tx — chống race usageLimit/perUserLimit khi 2 đơn
         // đồng thời cùng dùng 1 mã (đặc biệt voucher giới thiệu usageLimit=1). Nếu hết lượt
         // sẽ throw → rollback toàn bộ order/stock/ví/điểm, đảm bảo không bị "đặt nửa".
-        if (cart.couponCode) {
+        if (cart.couponCode && computed.couponApplied) {
           await this.coupons.redeem(cart.couponCode, userId, created.id, tx);
         }
         return created;
@@ -209,7 +211,12 @@ export class CheckoutService {
     }
 
     // Dọn giỏ + đẩy Pancake (ngoài transaction chính). Coupon redeem đã chạy trong tx ở trên.
-    await this.cart.clear(userId);
+    // Checkout TẬP CON: chỉ xoá món ĐÃ mua, giữ phần còn lại (không clear coupon toàn giỏ).
+    if (Array.isArray(dto.itemIds) && dto.itemIds.length > 0) {
+      await this.cart.removeItems(userId, cart.items.map((l) => l.id));
+    } else {
+      await this.cart.clear(userId);
+    }
     try {
       await this.pancakeOrder.pushOrder(order.id);
     } catch (err) {
@@ -236,8 +243,14 @@ export class CheckoutService {
     return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
   }
 
-  private async compute(userId: string, addressId: string, pointsToUse?: number, storefrontSlug?: string) {
-    const cart = await this.cart.getCart(userId);
+  private async compute(userId: string, addressId: string, pointsToUse?: number, storefrontSlug?: string, itemIds?: string[]) {
+    const fullCart = await this.cart.getCart(userId);
+    // Checkout TẬP CON: chỉ tính trên các dòng được chọn, tính lại subtotal từ subset (combo/
+    // coupon/điểm/ship đều dựa subtotal này). Rỗng/thiếu itemIds = toàn giỏ (tương thích ngược).
+    const subset = Array.isArray(itemIds) && itemIds.length > 0;
+    const items = subset ? fullCart.items.filter((l) => itemIds!.includes(l.id)) : fullCart.items;
+    const subtotal = subset ? items.reduce((s, l) => s + l.total, 0) : fullCart.subtotal;
+    const cart = { ...fullCart, items, subtotal };
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const address = await this.prisma.address.findUnique({ where: { id: addressId } });
     if (!address || address.userId !== userId) {
@@ -257,17 +270,28 @@ export class CheckoutService {
 
     let discount = 0; // coupon (sau combo)
     let freeship = false;
+    let couponApplied = false; // coupon có THỰC SỰ áp không → placeOrder chỉ redeem khi true
     if (cart.couponCode) {
       try {
         const r = await this.coupons.validateAndCompute(cart.couponCode, userId, goodsAfterCombo);
         discount = Math.min(r.discount, goodsAfterCombo);
         freeship = r.freeship;
+        couponApplied = true;
       } catch {
-        // Coupon không còn hợp lệ trên base sau-combo (vd combo kéo xuống dưới minOrder):
-        // GIỮ theo giá trị cart đã validate trên gross nhưng kẹp vào phần còn lại — tránh lệch
-        // với bước redeem (placeOrder vẫn redeem theo cart.couponCode) và tránh giảm âm.
-        discount = Math.min(cart.discount, goodsAfterCombo);
-        freeship = cart.freeship;
+        if (subset) {
+          // Subset không đạt điều kiện coupon (vd < minOrder của mã) → BỎ coupon: không giảm,
+          // KHÔNG redeem (tránh tiêu lượt dùng coupon của khách mà không được giảm).
+          discount = 0;
+          freeship = false;
+          couponApplied = false;
+        } else {
+          // Full cart (hành vi cũ giữ nguyên): coupon không còn hợp lệ trên base sau-combo (vd
+          // combo kéo xuống dưới minOrder) → GIỮ theo cart.discount đã validate trên gross, kẹp
+          // vào phần còn lại; vẫn redeem theo cart.couponCode (khớp bước redeem placeOrder).
+          discount = Math.min(cart.discount, goodsAfterCombo);
+          freeship = cart.freeship;
+          couponApplied = true;
+        }
       }
     }
     const goodsAfterCoupon = Math.max(0, goodsAfterCombo - discount);
@@ -295,6 +319,7 @@ export class CheckoutService {
       address,
       computed: {
         discount,
+        couponApplied,
         comboDiscount: combo.total,
         comboPerLine: combo.perLine,
         pointsUsed: redemption.pointsUsed,

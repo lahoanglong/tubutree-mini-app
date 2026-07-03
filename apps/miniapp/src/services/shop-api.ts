@@ -134,8 +134,8 @@ export const createAddress = (data: Omit<AddressDTO, 'id' | 'isDefault'>) =>
   api.post<AddressDTO>('/me/addresses', data).then((r) => r.data);
 
 // Checkout
-export const checkoutQuote = (addressId: string, pointsToUse?: number, storefrontSlug?: string) =>
-  api.post<CheckoutQuote>('/checkout/quote', { addressId, pointsToUse, storefrontSlug }).then((r) => r.data);
+export const checkoutQuote = (addressId: string, pointsToUse?: number, storefrontSlug?: string, itemIds?: string[]) =>
+  api.post<CheckoutQuote>('/checkout/quote', { addressId, pointsToUse, storefrontSlug, itemIds }).then((r) => r.data);
 /** Đặt hàng kèm Idempotency-Key (AD-004) — retry sau timeout không tạo đơn đôi. */
 export interface InvoiceRequest {
   taxCode: string;
@@ -152,6 +152,7 @@ export const placeOrder = (
     invoiceRequest?: InvoiceRequest;
     referralCode?: string;
     storefrontSlug?: string;
+    itemIds?: string[];
   },
   idempotencyKey: string,
 ) =>

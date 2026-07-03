@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Page, Text, Button, Input, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { OrderDTO } from '@tubutree/shared-types';
 import { getAddresses, getCart, checkoutQuote, placeOrder } from '../services/shop-api';
@@ -62,10 +62,16 @@ export default function CheckoutPage() {
     }
   }, [addresses.data, addressId]);
 
+  // Checkout TẬP CON: itemIds do trang Giỏ truyền qua navigation state (chọn từng món).
+  // Không có state (vd "Mua ngay" từ PDP / mở trực tiếp) → undefined = toàn giỏ.
+  const location = useLocation();
+  const itemIds = (location.state as { itemIds?: string[] } | null)?.itemIds;
+  const itemIdsKey = itemIds ? itemIds.join(',') : '';
+
   const pointsToUse = usePoints ? (user?.pointsBalance ?? 0) : 0;
   const quote = useQuery({
-    queryKey: ['quote', addressId, pointsToUse, ctvSlug],
-    queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug),
+    queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey],
+    queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
     enabled: !!addressId && authed,
   });
 
@@ -99,6 +105,7 @@ export default function CheckoutPage() {
             : undefined,
           referralCode: sfCtx.referralCode ?? undefined,
           storefrontSlug: ctvSlug,
+          itemIds,
         },
         idempotencyKey.current,
       ),
@@ -205,15 +212,19 @@ export default function CheckoutPage() {
         onSelect={setAddressId}
       />
 
-      {/* ── Sản phẩm sẽ mua ── (trước đây checkout KHÔNG liệt kê món → khách đặt đơn mà
-          không thấy lại sản phẩm/số lượng; đây là tín hiệu tin cậy chuẩn của e-commerce) */}
-      {cart.data && cart.data.items.length > 0 && (
+      {/* ── Sản phẩm sẽ mua ── (liệt kê món; nếu checkout TẬP CON thì chỉ hiện món đã chọn) */}
+      {(() => {
+        const shownItems = itemIds
+          ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
+          : (cart.data?.items ?? []);
+        const shownCount = shownItems.reduce((s, it) => s + it.quantity, 0);
+        return shownItems.length > 0 ? (
         <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
           <Text bold size="small" style={{ marginBottom: 10 }}>
-            Sản phẩm ({cart.data.itemCount})
+            Sản phẩm ({shownCount})
           </Text>
           <Box flex flexDirection="column" style={{ gap: 12 }}>
-            {cart.data.items.map((it) => (
+            {shownItems.map((it) => (
               <Box key={it.id} flex alignItems="center" style={{ gap: 10 }}>
                 <img
                   src={it.thumbnail ?? undefined}
@@ -234,7 +245,8 @@ export default function CheckoutPage() {
             ))}
           </Box>
         </Box>
-      )}
+        ) : null;
+      })()}
 
       {/* ── Thanh toán ── */}
       <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsEmail, IsInt, IsObject, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsEmail, IsInt, IsObject, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { PaymentMethod } from '@tubutree/shared-types';
 import { IsIn } from 'class-validator';
 
@@ -15,6 +15,8 @@ export class QuoteDto {
   @IsOptional() @IsInt() @Min(0) pointsToUse?: number;
   /** Slug gian hàng — để tính giảm combo (nếu mua qua gian hàng). */
   @IsOptional() @IsString() storefrontSlug?: string;
+  /** ID các dòng giỏ được CHỌN để thanh toán. Rỗng/thiếu = toàn giỏ (tương thích ngược). */
+  @IsOptional() @IsArray() @IsString({ each: true }) itemIds?: string[];
 }
 
 export class PlaceOrderDto {
@@ -32,6 +34,9 @@ export class PlaceOrderDto {
 
   /** Slug gian hàng CTV (attribution — lưu vào Order.storefrontSlug). */
   @IsOptional() @IsString() storefrontSlug?: string;
+
+  /** ID các dòng giỏ được CHỌN để thanh toán. Rỗng/thiếu = toàn giỏ (tương thích ngược). */
+  @IsOptional() @IsArray() @IsString({ each: true }) itemIds?: string[];
 
   @IsOptional()
   @IsObject()
