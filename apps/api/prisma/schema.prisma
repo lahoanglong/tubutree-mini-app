@@ -173,6 +173,7 @@ model Product {
   reviews          Review[]
   groupBuys        GroupBuy[]
   storefrontItems  StorefrontItem[]
+  communityTags    PostProductTag[]
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
@@ -1051,19 +1052,32 @@ model BetaFeedback {
 }
 
 // Community Feed (§6.14.12) — bảng tin cộng đồng Vườn Xanh.
-// kind: MANUAL (user tự đăng) / HARVEST / MILESTONE / SPECIES (auto-post thành tích).
+// kind: MANUAL (user tự đăng) / HARVEST / MILESTONE / SPECIES (auto-post thành tích) /
+// QUESTION / SHOWCASE / TIP (Cộng đồng Vườn Tubu Q&A — Pha 1a).
 model FeedPost {
-  id        String         @id @default(cuid())
-  userId    String
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kind      FeedPostKind   @default(MANUAL)
-  body      String
-  meta      Json?
-  createdAt DateTime       @default(now())
-  reactions FeedReaction[]
-  comments  FeedComment[]
+  id            String             @id @default(cuid())
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind          FeedPostKind       @default(MANUAL)
+  status        FeedPostStatus     @default(PUBLISHED)
+  categoryId    String?
+  category      CommunityCategory? @relation(fields: [categoryId], references: [id])
+  title         String?
+  body          String
+  images        String[]
+  meta          Json?
+  isPinned      Boolean            @default(false)
+  bestCommentId String?            @unique
+  editedAt      DateTime?
+  viewCount     Int                @default(0)
+  createdAt     DateTime           @default(now())
+  reactions     FeedReaction[]
+  comments      FeedComment[]
+  productTags   PostProductTag[]
 
-  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([categoryId, status, createdAt])
+  @@index([kind, status, createdAt])
   @@map("feed_posts")
 }
 
@@ -1072,6 +1086,16 @@ enum FeedPostKind {
   HARVEST
   MILESTONE
   SPECIES
+  QUESTION
+  SHOWCASE
+  TIP
+}
+
+enum FeedPostStatus {
+  PENDING
+  PUBLISHED
+  HIDDEN
+  REMOVED
 }
 
 // Thả tim 💚 — mỗi user 1 tim/bài (unique chống đếm trùng).
@@ -1089,16 +1113,44 @@ model FeedReaction {
 }
 
 model FeedComment {
-  id        String   @id @default(cuid())
-  postId    String
-  post      FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  body      String
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  postId     String
+  post       FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body       String
+  isAccepted Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   @@index([postId])
   @@map("feed_comments")
+}
+
+// Danh mục cộng đồng (Cộng đồng Vườn Tubu Pha 1a) — 6 danh mục cố định, seed idempotent.
+model CommunityCategory {
+  id       String     @id @default(cuid())
+  slug     String     @unique
+  name     String
+  icon     String?
+  order    Int        @default(0)
+  isActive Boolean    @default(true)
+  posts    FeedPost[]
+
+  @@map("community_categories")
+}
+
+// Gắn thẻ sản phẩm vào bài viết cộng đồng (Q&A/Showcase) — dùng cho "hỏi mua gì" / khoe vườn.
+model PostProductTag {
+  id        String   @id @default(cuid())
+  postId    String
+  post      FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([postId, productId])
+  @@index([productId])
+  @@map("post_product_tags")
 }
 
 // Mua chung / Group Buy (§6.14.8). Đủ targetSize người trước expiresAt → SUCCESS,

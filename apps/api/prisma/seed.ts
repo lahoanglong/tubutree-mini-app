@@ -716,6 +716,21 @@ async function main() {
     },
   });
 
+  // Cộng đồng Vườn Tubu Pha 1a — 6 danh mục Q&A cố định.
+  console.log('🌱 Seeding Community Categories...');
+  const COMMUNITY_CATEGORIES = [
+    { slug: 'cham-soc', name: 'Chăm sóc cây', icon: '🌱', order: 1 },
+    { slug: 'sau-benh', name: 'Sâu bệnh', icon: '🐛', order: 2 },
+    { slug: 'phoi-canh', name: 'Phối cảnh / décor', icon: '🪴', order: 3 },
+    { slug: 'khoe-vuon', name: 'Khoe vườn', icon: '🌿', order: 4 },
+    { slug: 'hoi-mua-gi', name: 'Hỏi mua gì', icon: '🛒', order: 5 },
+    { slug: 'meo-hay', name: 'Mẹo hay', icon: '💡', order: 6 },
+  ];
+  for (const c of COMMUNITY_CATEGORIES) {
+    await prisma.communityCategory.upsert({ where: { slug: c.slug }, update: { name: c.name, icon: c.icon, order: c.order }, create: c });
+  }
+  console.log(`Seeded ${COMMUNITY_CATEGORIES.length} community categories`);
+
   console.log('✅ Seed done.');
 }
 
