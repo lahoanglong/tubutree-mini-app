@@ -38,6 +38,7 @@ import { PancakeModule } from './modules/integrations/pancake/pancake.module';
 import { PaymentModule } from './modules/integrations/payment/payment.module';
 import { StorefrontModule } from './modules/storefront/storefront.module';
 import { BrandModule } from './modules/brand/brand.module';
+import { StaffModule } from './modules/staff/staff.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -82,6 +83,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     PaymentModule,
     StorefrontModule,
     BrandModule,
+    StaffModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
