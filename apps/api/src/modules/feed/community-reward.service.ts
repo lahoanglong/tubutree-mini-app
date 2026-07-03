@@ -29,10 +29,18 @@ export class CommunityRewardService {
     await this.coins.grantCoins(userId, amount, `COMMUNITY_POST:${postId}`, 'COMMUNITY', postId);
   }
 
-  /** Thưởng người trả lời (không thưởng khi tự trả lời bài của chính mình). */
+  /** Thưởng người trả lời (không thưởng khi tự trả lời bài của chính mình). Trần số lần/ngày để chống farm xu. */
   async rewardAnswer(answererId: string, postAuthorId: string, commentId: string): Promise<void> {
     if (answererId === postAuthorId) return;
     const amount = await this.config.get<number>('community.answer_reward', 100);
+    if (amount <= 0) return;
+    const cap = await this.config.get<number>('community.daily_answer_reward_cap', 10);
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    const todayCount = await this.prisma.coinTransaction.count({
+      where: { userId: answererId, refType: 'COMMUNITY', reason: { startsWith: 'COMMUNITY_ANSWER:' }, createdAt: { gte: since } },
+    });
+    if (todayCount >= cap) return;
     await this.coins.grantCoins(answererId, amount, `COMMUNITY_ANSWER:${commentId}`, 'COMMUNITY', commentId);
   }
 

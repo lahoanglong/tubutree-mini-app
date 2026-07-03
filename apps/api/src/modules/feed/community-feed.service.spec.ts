@@ -121,6 +121,13 @@ describe('CommunityFeedService.getPost', () => {
     // check-then-act: findUnique null → không được gọi update (Prisma update thật ném P2025 nếu thiếu row)
     expect(prisma.feedPost.update).not.toHaveBeenCalled();
   });
+
+  it('bài đã bị xoá mềm (REMOVED) → NotFound, KHÔNG tăng viewCount', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row(), status: 'REMOVED' });
+    await expect(makeSvc(prisma).getPost('u1', 'p1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.feedPost.update).not.toHaveBeenCalled();
+  });
 });
 
 describe('CommunityFeedService.createPost', () => {
@@ -185,6 +192,15 @@ describe('CommunityFeedService.addComment', () => {
     await expect(makeSvc(prisma).addComment('u1', 'pX', 'hay quá')).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+
+  it('bài đã bị xoá mềm (REMOVED) → NotFound, KHÔNG tạo comment', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION', status: 'REMOVED' });
+    await expect(makeSvc(prisma).addComment('u1', 'p1', 'hay quá')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(prisma.feedComment.create).not.toHaveBeenCalled();
   });
 
   it('hợp lệ → tạo comment (trim)', async () => {

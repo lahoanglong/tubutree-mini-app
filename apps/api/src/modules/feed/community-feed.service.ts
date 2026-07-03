@@ -75,7 +75,7 @@ export class CommunityFeedService {
       where: { id: postId },
       include: { ...FEED_INCLUDE, reactions: { where: { userId }, select: { id: true } } },
     });
-    if (!p) throw new NotFoundException('Bài viết không tồn tại.');
+    if (!p || p.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
     await this.prisma.feedPost.update({ where: { id: postId }, data: { viewCount: { increment: 1 } } });
     return this.toItem(p);
   }
@@ -165,8 +165,8 @@ export class CommunityFeedService {
     const text = (body ?? '').trim();
     if (!text) throw new BadRequestException('Nội dung bình luận trống.');
     if (text.length > MAX_COMMENT) throw new BadRequestException('Bình luận quá dài.');
-    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true } });
-    if (!post) throw new NotFoundException('Bài viết không tồn tại.');
+    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true, status: true } });
+    if (!post || post.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
     const comment = await this.prisma.feedComment.create({ data: { userId, postId, body: text } });
     if (post.kind === 'QUESTION') {
       try {

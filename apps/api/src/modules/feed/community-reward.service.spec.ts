@@ -42,6 +42,15 @@ describe('CommunityRewardService.rewardAnswer', () => {
     await make(d).rewardAnswer('same', 'same', 'c1');
     expect(d.coins.grantCoins).not.toHaveBeenCalled();
   });
+
+  it('chạm trần trả lời/ngày → KHÔNG thưởng', async () => {
+    const d = deps();
+    d.config.get.mockImplementation(async (k: string, f: number) =>
+      k === 'community.answer_reward' ? 100 : k === 'community.daily_answer_reward_cap' ? 10 : f);
+    d.prisma.coinTransaction.count.mockResolvedValue(10);
+    await make(d).rewardAnswer('answerer', 'author', 'c1');
+    expect(d.coins.grantCoins).not.toHaveBeenCalled();
+  });
 });
 
 describe('CommunityRewardService.rewardBestAnswer', () => {
