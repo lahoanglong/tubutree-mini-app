@@ -8,9 +8,11 @@ import {
   fetchBoughtTogether,
   getCart,
   addToCart,
+  getPublicConfig,
   type VariationDetail,
 } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
+import { getCoupons, type CouponDTO } from '../services/account-api';
 import { createGroupBuy } from '../services/groupbuy-api';
 import { useAuthStore } from '../store/auth';
 import { shareLink } from '../services/zmp-bridge';
@@ -31,12 +33,28 @@ import { StorefrontContextBar } from '../components/storefront-context-bar';
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
 
+/** Nhãn ngắn cho voucher hiển thị ở PDP. */
+function couponLabel(c: CouponDTO): string {
+  if (c.type === 'FREESHIP') return 'Miễn phí vận chuyển';
+  if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
+  return `Giảm ${formatVnd(c.value)}`;
+}
+
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const { status, login } = useAuthStore();
+  // Voucher khả dụng (endpoint /me/coupons đã lọc active + scope-eligible + chưa hết lượt).
+  // Hiển thị để user KHÁM PHÁ ưu đãi ngay ở PDP (trước đây phải tự biết mã mới gõ ở giỏ).
+  const couponsQ = useQuery({
+    queryKey: ['available-coupons'],
+    queryFn: getCoupons,
+    enabled: status === 'authenticated',
+  });
+  // Ngưỡng freeship (public config) cho badge "Miễn phí vận chuyển" — tín hiệu tin cậy ở PDP.
+  const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -245,6 +263,16 @@ export default function ProductDetailPage() {
           </Text>
         )}
 
+        {/* Badge freeship — tín hiệu vận chuyển ở nơi ra quyết định mua (trước đây chỉ có ở giỏ). */}
+        {configQ.data && (
+          <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
+            <span aria-hidden style={{ fontSize: 14 }}>🚚</span>
+            <Text size="xSmall" style={{ color: 'var(--leaf-700)', fontWeight: 600 }}>
+              Miễn phí vận chuyển cho đơn từ {formatVnd(configQ.data.freeshipThreshold)}
+            </Text>
+          </Box>
+        )}
+
         {p.certifications.length > 0 && (
           <Box flex style={{ gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
             {p.certifications.map((c) => (
@@ -261,6 +289,43 @@ export default function ProductDetailPage() {
               >
                 ✓ {c}
               </Text>
+            ))}
+          </Box>
+        )}
+
+        {/* Voucher khả dụng — chạm để COPY mã (áp ở giỏ). Discovery ưu đãi ngay tại PDP. */}
+        {(couponsQ.data?.length ?? 0) > 0 && (
+          <Box style={{ display: 'flex', gap: 8, marginTop: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            {couponsQ.data!.slice(0, 6).map((c) => (
+              <Box
+                key={c.code}
+                role="button"
+                aria-label={`Sao chép mã ${c.code}`}
+                className="tubu-press"
+                onClick={() => {
+                  haptic('light');
+                  if (navigator.clipboard) void navigator.clipboard.writeText(c.code);
+                  openSnackbar({ text: `Đã chép mã ${c.code} — dán ở giỏ hàng để áp dụng`, type: 'success', duration: 2200 });
+                }}
+                style={{
+                  flex: '0 0 auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
+                  background: 'var(--clay-50)',
+                  border: '1px dashed var(--clay-500)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '6px 12px',
+                  minHeight: 44,
+                  justifyContent: 'center',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <Text size="xSmall" bold style={{ color: 'var(--clay-700)' }}>{couponLabel(c)}</Text>
+                {c.minOrder ? (
+                  <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Đơn từ {formatVnd(c.minOrder)}</Text>
+                ) : null}
+              </Box>
             ))}
           </Box>
         )}

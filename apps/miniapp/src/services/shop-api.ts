@@ -100,6 +100,11 @@ export interface AddressDTO {
 }
 
 // Catalog (public)
+export interface PublicConfig {
+  freeshipThreshold: number;
+}
+export const getPublicConfig = () =>
+  api.get<PublicConfig>('/config/public').then((r) => r.data);
 export const fetchProducts = (params: Record<string, string | number> = {}) =>
   api.get<PageResponse<ProductCard>>('/products', { params }).then((r) => r.data);
 export const fetchProduct = (slug: string) =>
