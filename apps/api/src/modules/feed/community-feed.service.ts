@@ -168,7 +168,13 @@ export class CommunityFeedService {
     const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     const comment = await this.prisma.feedComment.create({ data: { userId, postId, body: text } });
-    if (post.kind === 'QUESTION') await this.reward.rewardAnswer(userId, post.userId, comment.id);
+    if (post.kind === 'QUESTION') {
+      try {
+        await this.reward.rewardAnswer(userId, post.userId, comment.id);
+      } catch (err) {
+        this.logger.warn(`rewardAnswer failed for comment ${comment.id}: ${(err as Error).message}`);
+      }
+    }
     return { id: comment.id };
   }
 
@@ -201,7 +207,11 @@ export class CommunityFeedService {
     await this.prisma.feedComment.updateMany({ where: { postId }, data: { isAccepted: false } });
     await this.prisma.feedComment.update({ where: { id: commentId }, data: { isAccepted: true } });
     await this.prisma.feedPost.update({ where: { id: postId }, data: { bestCommentId: commentId } });
-    await this.reward.rewardBestAnswer(comment.userId, post.userId, commentId);
+    try {
+      await this.reward.rewardBestAnswer(comment.userId, post.userId, commentId);
+    } catch (err) {
+      this.logger.warn(`rewardBestAnswer failed for comment ${commentId}: ${(err as Error).message}`);
+    }
     return { ok: true };
   }
 

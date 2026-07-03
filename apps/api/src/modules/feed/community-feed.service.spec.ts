@@ -213,6 +213,15 @@ describe('CommunityFeedService.addComment (thưởng answer)', () => {
     await makeSvc(prisma, reward).addComment('u2', 'p1', 'đẹp quá');
     expect(reward.rewardAnswer).not.toHaveBeenCalled();
   });
+
+  it('rewardAnswer lỗi → bình luận vẫn tạo (thưởng không chặn)', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION' });
+    (prisma.feedComment.create as jest.Mock).mockResolvedValue({ id: 'c1' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn().mockRejectedValue(new Error('boom')), rewardBestAnswer: jest.fn() };
+    const r = await makeSvc(prisma, reward).addComment('answerer', 'p1', 'trả lời');
+    expect(r).toEqual({ id: 'c1' });
+  });
 });
 
 describe('CommunityFeedService.setBestAnswer', () => {
@@ -249,6 +258,23 @@ describe('CommunityFeedService.deletePost', () => {
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'TIP' });
     await makeSvc(prisma).deletePost('author', 'CUSTOMER', 'p1');
     expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { status: 'REMOVED' } });
+  });
+});
+
+describe('CommunityFeedService.editPost', () => {
+  it('người khác → Forbidden', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author' });
+    await expect(makeSvc(prisma).editPost('intruder', 'p1', { body: 'x' })).rejects.toBeInstanceOf(ForbiddenException);
+  });
+  it('chủ bài → cập nhật body + set editedAt', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author' });
+    await makeSvc(prisma).editPost('author', 'p1', { body: '  nội dung mới  ' });
+    const arg = (prisma.feedPost.update as jest.Mock).mock.calls[0][0];
+    expect(arg.where).toEqual({ id: 'p1' });
+    expect(arg.data.body).toBe('nội dung mới');
+    expect(arg.data.editedAt).toBeInstanceOf(Date);
   });
 });
 
