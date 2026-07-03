@@ -44,6 +44,54 @@ model RoleGrant {
   @@map("role_grants")
 }
 
+enum ShiftStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// Ca chuẩn admin định nghĩa (phút trong ngày để render lưới nhanh, không lệch TZ).
+model ShiftTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  startMin  Int // phút từ 00:00, 480 = 08:00
+  endMin    Int // 720 = 12:00
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("shift_templates")
+}
+
+/// Ca làm nhân viên đăng ký → admin duyệt (chỉnh giờ được). Cửa sổ hiệu lực = approved* ?? start/end.
+model Shift {
+  id            String      @id @default(cuid())
+  staffId       String
+  staff         User        @relation("StaffShifts", fields: [staffId], references: [id], onDelete: Cascade)
+  workDate      DateTime    @db.Date
+  startAt       DateTime
+  endAt         DateTime
+  templateId    String?
+  status        ShiftStatus @default(PENDING)
+  approvedStart DateTime?
+  approvedEnd   DateTime?
+  approvedBy    String?
+  approvedAt    DateTime?
+  rejectReason  String?
+  cancelReason  String?
+  cancelledAt   DateTime?
+  isEmergency   Boolean     @default(false)
+  evidenceUrl   String?
+  cancelPenalty Boolean     @default(false) // Phase D quy ra tiền (1h công)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([staffId, workDate])
+  @@index([workDate, status])
+  @@map("shifts")
+}
+
 model User {
   id                String          @id @default(cuid())
   zaloId            String?         @unique // openId từ Zalo
@@ -102,6 +150,7 @@ model User {
   betaTester             BetaTester?
   betaFeedbacks          BetaFeedback[]
   subscriptions          Subscription[]
+  staffShifts            Shift[]                 @relation("StaffShifts")
 
   @@index([referredById])
   @@map("users")
