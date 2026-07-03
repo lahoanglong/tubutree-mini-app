@@ -284,6 +284,17 @@ body.with-back-btn .page.page-bleed {
   animation: tubu-bounce 350ms var(--ease-out);
 }
 
+/* Pull-to-refresh: lá xoay khi đang làm mới */
+@keyframes ptr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ptr-spin {
+  animation: ptr-spin 700ms linear infinite;
+  display: inline-block;
+}
+
 /* Cây Vườn Xanh đung đưa nhẹ (Garden) */
 @keyframes tubu-sway {
   0%,

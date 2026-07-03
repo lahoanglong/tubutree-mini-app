@@ -6,6 +6,7 @@ import { getErrorMessage } from '../services/api';
 import ProductCard from '../components/product-card';
 import { ProductGridSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { PullToRefresh } from '../components/pull-to-refresh';
 import { brandAccent } from '../utils/brands';
 import { useDebounced } from '../utils/use-debounced';
 import { vi } from '../i18n/vi';
@@ -113,6 +114,7 @@ export default function BrowsePage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 72 }}>
+      <PullToRefresh onRefresh={() => Promise.all([products.refetch(), brands.refetch()])} />
       <Box p={3}>
         <Input.Search
           placeholder={vi.browse.searchPlaceholder}

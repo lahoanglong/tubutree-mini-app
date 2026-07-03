@@ -8,6 +8,7 @@ import ProductCard from '../components/product-card';
 import { ProductGridSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { FlashSale } from '../components/flash-sale';
+import { PullToRefresh } from '../components/pull-to-refresh';
 import { brandAccent } from '../utils/brands';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
@@ -53,6 +54,7 @@ export default function HomePage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 72 }}>
+      <PullToRefresh onRefresh={() => Promise.all([featured.refetch(), newest.refetch(), momBaby.refetch(), brands.refetch()])} />
       {/* ── Top bar: logo + actions (immersive — actionBar Zalo đã ẩn) ── */}
       <Box
         px={4}
