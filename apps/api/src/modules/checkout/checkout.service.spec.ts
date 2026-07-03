@@ -323,7 +323,7 @@ describe('CheckoutService — checkout TẬP CON (chọn từng món)', () => {
     const q = await svc.quote('u1', { addressId: 'addr1', itemIds: ['i2'] } as never);
     expect(q.subtotal).toBe(300);
     expect(q.items).toHaveLength(1);
-    expect(q.items[0].id).toBe('i2');
+    expect(q.items[0]?.id).toBe('i2');
   });
 
   it('placeOrder itemIds=[i2] → chỉ xoá món đã mua (removeItems), KHÔNG clear cả giỏ', async () => {
