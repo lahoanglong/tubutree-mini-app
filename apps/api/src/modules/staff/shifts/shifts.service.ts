@@ -41,8 +41,10 @@ export class ShiftsService {
     }
     // chồng trong batch
     for (let i = 0; i < items.length; i++) {
+      const a = items[i]!;
       for (let j = i + 1; j < items.length; j++) {
-        if (rangesOverlap(items[i].startAt, items[i].endAt, items[j].startAt, items[j].endAt)) {
+        const b = items[j]!;
+        if (rangesOverlap(a.startAt, a.endAt, b.startAt, b.endAt)) {
           throw new BadRequestException('Các ca đăng ký bị chồng giờ nhau.');
         }
       }
