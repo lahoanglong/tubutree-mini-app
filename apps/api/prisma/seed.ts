@@ -120,6 +120,9 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'eco.real_tree_partner', value: 'PanNature - Rừng Xanh Lên', category: 'eco', description: 'Đối tác trồng cây — nature.org.vn' },
   { key: 'eco.real_tree_cost_each', value: 50000, category: 'eco', description: 'Chi phí 1 cây thật (VND)' },
   { key: 'eco.real_tree_monthly_budget', value: 5000000, category: 'eco', description: 'Trần ngân sách trồng cây/tháng' },
+
+  // RBAC nhân sự (Phase A) — SĐT admin thật cấp qua hub/DB; giữ rỗng để không cấp nhầm.
+  { key: 'rbac.admin_phones', value: [], category: 'rbac', description: 'Danh sách SĐT admin gán sẵn (tham chiếu; grant thực nằm ở role_grants)' },
 ];
 
 const TIERS = [
@@ -579,6 +582,23 @@ async function main() {
     });
   }
   console.log(`   → ${SYSTEM_CONFIGS.length} config keys.`);
+
+  // 🌱 RBAC — grant admin gán sẵn từ env SEED_ADMIN_PHONES (CSV). Idempotent.
+  const seedAdminPhones = (process.env.SEED_ADMIN_PHONES ?? '')
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  for (const phone of seedAdminPhones) {
+    const has = await prisma.roleGrant.findFirst({
+      where: { phone, role: 'ADMIN', revokedAt: null },
+    });
+    if (!has) {
+      await prisma.roleGrant.create({ data: { phone, role: 'ADMIN', grantedBy: 'seed' } });
+    }
+  }
+  if (seedAdminPhones.length > 0) {
+    console.log(`🌱 RoleGrant ADMIN cho ${seedAdminPhones.length} SĐT (SEED_ADMIN_PHONES).`);
+  }
 
   console.log('🌱 Seeding MembershipTier...');
   for (const tier of TIERS) {
