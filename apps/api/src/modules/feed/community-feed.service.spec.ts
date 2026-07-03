@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CommunityFeedService } from './community-feed.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
@@ -6,7 +6,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
   const base: Record<string, unknown> = {
     feedPost: {
       findMany: jest.fn().mockResolvedValue([]),
-      findUnique: jest.fn().mockResolvedValue({ id: 'post1' }),
+      findUnique: jest.fn().mockResolvedValue({ id: 'post1', userId: 'author', kind: 'SHOWCASE' }),
       create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'new', ...data })),
       update: jest.fn().mockResolvedValue({}),
     },
@@ -17,7 +17,10 @@ function makePrisma(over: Record<string, unknown> = {}) {
     },
     feedComment: {
       findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue({ id: 'c1', postId: 'p1', userId: 'answerer' }),
       create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'c1', ...data })),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      update: jest.fn().mockResolvedValue({}),
     },
     product: { findMany: jest.fn().mockResolvedValue([]) },
     postProductTag: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
@@ -189,6 +192,63 @@ describe('CommunityFeedService.addComment', () => {
     await makeSvc(prisma).addComment('u1', 'p1', '  tuyệt vời  ');
     const data = (prisma.feedComment.create as jest.Mock).mock.calls[0][0].data;
     expect(data).toMatchObject({ userId: 'u1', postId: 'p1', body: 'tuyệt vời' });
+  });
+});
+
+describe('CommunityFeedService.addComment (thưởng answer)', () => {
+  it('trả lời bài QUESTION của người khác → tạo comment + thưởng answer', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION' });
+    (prisma.feedComment.create as jest.Mock).mockResolvedValue({ id: 'c1' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    await makeSvc(prisma, reward).addComment('answerer', 'p1', 'Bạn tưới ít lại nhé');
+    expect(reward.rewardAnswer).toHaveBeenCalledWith('answerer', 'author', 'c1');
+  });
+
+  it('bình luận bài không phải QUESTION → KHÔNG thưởng', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'SHOWCASE' });
+    (prisma.feedComment.create as jest.Mock).mockResolvedValue({ id: 'c1' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    await makeSvc(prisma, reward).addComment('u2', 'p1', 'đẹp quá');
+    expect(reward.rewardAnswer).not.toHaveBeenCalled();
+  });
+});
+
+describe('CommunityFeedService.setBestAnswer', () => {
+  it('không phải chủ bài & không admin → Forbidden', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION' });
+    await expect(makeSvc(prisma).setBestAnswer('intruder', 'CUSTOMER', 'p1', 'c1')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('chủ bài chọn best-answer → set bestCommentId, đánh isAccepted, bỏ cờ cũ, thưởng', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION' });
+    (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue({ id: 'c1', postId: 'p1', userId: 'answerer' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    await makeSvc(prisma, reward).setBestAnswer('author', 'CUSTOMER', 'p1', 'c1');
+    expect(prisma.feedComment.updateMany).toHaveBeenCalledWith({ where: { postId: 'p1' }, data: { isAccepted: false } });
+    expect(prisma.feedComment.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { isAccepted: true } });
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { bestCommentId: 'c1' } });
+    expect(reward.rewardBestAnswer).toHaveBeenCalledWith('answerer', 'author', 'c1');
+  });
+});
+
+describe('CommunityFeedService.deletePost', () => {
+  it('người khác (không admin) → Forbidden', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'TIP' });
+    await expect(makeSvc(prisma).deletePost('intruder', 'CUSTOMER', 'p1')).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('chủ bài → set status REMOVED', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'TIP' });
+    await makeSvc(prisma).deletePost('author', 'CUSTOMER', 'p1');
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { status: 'REMOVED' } });
   });
 });
 

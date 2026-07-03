@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CommunityRewardService } from './community-reward.service';
 import { authorBadge } from './author-badge';
@@ -165,23 +165,69 @@ export class CommunityFeedService {
     const text = (body ?? '').trim();
     if (!text) throw new BadRequestException('Nội dung bình luận trống.');
     if (text.length > MAX_COMMENT) throw new BadRequestException('Bình luận quá dài.');
-    const post = await this.prisma.feedPost.findUnique({ where: { id: postId } });
+    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
-    return this.prisma.feedComment.create({ data: { userId, postId, body: text } });
+    const comment = await this.prisma.feedComment.create({ data: { userId, postId, body: text } });
+    if (post.kind === 'QUESTION') await this.reward.rewardAnswer(userId, post.userId, comment.id);
+    return { id: comment.id };
   }
 
   async getComments(postId: string, take = 50) {
     const comments = await this.prisma.feedComment.findMany({
       where: { postId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ isAccepted: 'desc' }, { createdAt: 'asc' }],
       take,
-      include: { user: { select: { fullName: true } } },
+      include: { user: { select: { fullName: true, avatarUrl: true, role: true } } },
     });
     return comments.map((c) => ({
       id: c.id,
       body: c.body,
       author: c.user.fullName ?? 'Bạn Tubu',
+      avatar: c.user.avatarUrl ?? null,
+      badge: authorBadge(c.user.role),
+      isAccepted: c.isAccepted,
       createdAt: c.createdAt,
     }));
+  }
+
+  /** Chọn câu trả lời hay nhất — chủ bài QUESTION hoặc ADMIN. */
+  async setBestAnswer(userId: string, role: string, postId: string, commentId: string) {
+    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true } });
+    if (!post) throw new NotFoundException('Bài viết không tồn tại.');
+    if (post.kind !== 'QUESTION') throw new BadRequestException('Chỉ câu hỏi mới có câu trả lời hay nhất.');
+    if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Chỉ chủ bài mới chọn được.');
+    const comment = await this.prisma.feedComment.findUnique({ where: { id: commentId }, select: { id: true, postId: true, userId: true } });
+    if (!comment || comment.postId !== postId) throw new NotFoundException('Câu trả lời không tồn tại.');
+    await this.prisma.feedComment.updateMany({ where: { postId }, data: { isAccepted: false } });
+    await this.prisma.feedComment.update({ where: { id: commentId }, data: { isAccepted: true } });
+    await this.prisma.feedPost.update({ where: { id: postId }, data: { bestCommentId: commentId } });
+    await this.reward.rewardBestAnswer(comment.userId, post.userId, commentId);
+    return { ok: true };
+  }
+
+  /** Sửa bài — chỉ chủ bài; set editedAt. */
+  async editPost(userId: string, postId: string, patch: { title?: string; body?: string; images?: string[] }) {
+    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { userId: true } });
+    if (!post) throw new NotFoundException('Bài viết không tồn tại.');
+    if (post.userId !== userId) throw new ForbiddenException('Chỉ chủ bài mới sửa được.');
+    const data: Record<string, unknown> = { editedAt: new Date() };
+    if (patch.body !== undefined) {
+      const b = patch.body.trim();
+      if (!b || b.length > MAX_BODY) throw new BadRequestException('Nội dung không hợp lệ.');
+      data.body = b;
+    }
+    if (patch.title !== undefined) data.title = patch.title.trim().slice(0, MAX_TITLE) || null;
+    if (patch.images !== undefined) data.images = patch.images.filter((u) => u?.trim()).slice(0, MAX_IMAGES);
+    await this.prisma.feedPost.update({ where: { id: postId }, data });
+    return { ok: true };
+  }
+
+  /** Xoá mềm — chủ bài hoặc ADMIN. */
+  async deletePost(userId: string, role: string, postId: string) {
+    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { userId: true } });
+    if (!post) throw new NotFoundException('Bài viết không tồn tại.');
+    if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Không có quyền xoá.');
+    await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
+    return { ok: true };
   }
 }
