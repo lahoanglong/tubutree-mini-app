@@ -2,7 +2,7 @@ import { Box, Page, Text, Button, Avatar, Spinner, useNavigate, useSnackbar } fr
 import { useQuery } from '@tanstack/react-query';
 import {
   Package, Repeat, Heart, MapPin, Leaf, Wallet, Users, BadgePercent,
-  Bell, Store, Settings, Info, ChevronRight, Copy, type LucideIcon,
+  Bell, Store, Settings, Info, ChevronRight, Copy, ShieldCheck, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { getLoyalty, getNotifications } from '../services/account-api';
@@ -37,6 +37,7 @@ const READY = new Set([
   '/subscriptions',
   '/brand-owner',
   '/storefront',
+  '/admin',
 ]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [
@@ -99,13 +100,26 @@ export default function ProfilePage() {
     enabled: status === 'authenticated',
     retry: false,
   });
-  const menu = ownedBrandQ.data
+  const baseMenu = ownedBrandQ.data
     ? MENU.map((s) =>
         s.group === 'Kiếm thưởng'
           ? { ...s, items: [...s.items, { Icon: Store, label: 'Quản lý nhãn hàng', to: '/brand-owner', hint: ownedBrandQ.data!.name }] }
           : s,
       )
     : MENU;
+  // Nhóm công việc nội bộ — chỉ hiện với ADMIN (nhân viên STAFF sẽ có mục riêng ở Phase B).
+  const menu =
+    user?.role === 'ADMIN'
+      ? [
+          ...baseMenu,
+          {
+            group: 'Công việc',
+            items: [
+              { Icon: ShieldCheck, label: 'Quản trị nhân sự', to: '/admin', hint: 'Cấp quyền theo SĐT' },
+            ] as MenuItem[],
+          },
+        ]
+      : baseMenu;
 
   // Đang đăng nhập ngầm → spinner. Nếu login fail (idle/error) → nút thử lại,
   // KHÔNG để spinner quay vô hạn ("tài khoản load mãi").
