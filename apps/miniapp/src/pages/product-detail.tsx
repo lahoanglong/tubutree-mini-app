@@ -121,11 +121,13 @@ export default function ProductDetailPage() {
   // "Mua ngay": thêm vào giỏ rồi tới thẳng checkout (giảm 2 chạm so với thêm-giỏ→mở-giỏ→checkout).
   const buyNowMutation = useMutation({
     mutationFn: (input: { variation: VariationDetail; qty: number }) =>
-      addToCart(input.variation.id, input.qty),
-    onSuccess: (updatedCart) => {
+      addToCart(input.variation.id, input.qty).then((updatedCart) => ({ updatedCart, variationId: input.variation.id })),
+    onSuccess: ({ updatedCart, variationId }) => {
       queryClient.setQueryData(['cart'], updatedCart);
       haptic('medium');
-      navigate('/checkout');
+      // Chỉ chọn đúng dòng vừa "Mua ngay" — tránh charge nhầm các món khác đã có sẵn trong giỏ.
+      const line = updatedCart.items.find((l) => l.variationId === variationId);
+      navigate('/checkout', line ? { state: { itemIds: [line.id] } } : undefined);
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });

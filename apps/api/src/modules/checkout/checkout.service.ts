@@ -43,6 +43,7 @@ export class CheckoutService {
   /** Tính tạm đơn (ship + giảm + điểm) cho màn checkout. */
   async quote(userId: string, dto: QuoteDto) {
     const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, dto.storefrontSlug, dto.itemIds);
+    if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
     return {
       subtotal: cart.subtotal,
       discount: computed.discount,

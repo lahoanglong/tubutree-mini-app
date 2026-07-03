@@ -357,4 +357,11 @@ describe('CheckoutService — checkout TẬP CON (chọn từng món)', () => {
     expect(cartMock.clear).toHaveBeenCalledWith('u1');
     expect(cartMock.removeItems).not.toHaveBeenCalled();
   });
+
+  it('quote itemIds không khớp món nào (đã bị xoá khỏi giỏ) → BadRequest, KHÔNG trả quote rỗng', async () => {
+    const { svc } = build({ cartData: TWO_ITEM_CART });
+    await expect(svc.quote('u1', { addressId: 'addr1', itemIds: ['khong-ton-tai'] } as never)).rejects.toThrow(
+      'Chưa chọn sản phẩm để thanh toán.',
+    );
+  });
 });
