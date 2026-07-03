@@ -24,6 +24,26 @@ enum UserRole {
   ADMIN
 }
 
+enum RoleGrantRole {
+  STAFF
+  ADMIN
+}
+
+/// Cấp quyền theo SĐT — áp cả khi user CHƯA mở app. Khi login/refresh, auth áp grant
+/// cao nhất còn hiệu lực nếu cao hơn role hiện tại. Chỉ quản STAFF/ADMIN (CTV/đại lý đi DealerApplication).
+model RoleGrant {
+  id        String        @id @default(cuid())
+  phone     String
+  role      RoleGrantRole
+  grantedBy String // adminId, hoặc "seed" cho admin gán sẵn ban đầu
+  note      String?
+  revokedAt DateTime? // null = còn hiệu lực
+  createdAt DateTime      @default(now())
+
+  @@index([phone, revokedAt])
+  @@map("role_grants")
+}
+
 model User {
   id                String          @id @default(cuid())
   zaloId            String?         @unique // openId từ Zalo
