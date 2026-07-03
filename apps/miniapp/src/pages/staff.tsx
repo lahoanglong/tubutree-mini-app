@@ -1,7 +1,25 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Plus, Copy, Trash2, Pencil, CalendarClock } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Copy,
+  Trash2,
+  Pencil,
+  CalendarClock,
+  LogIn,
+  LogOut,
+  MapPin,
+} from 'lucide-react';
+import {
+  getAttendanceStatus,
+  acquireLocationPayload,
+  checkin as attnCheckin,
+  checkout as attnCheckout,
+  heartbeat as attnHeartbeat,
+} from '../services/attendance-api';
 import {
   getShifts,
   getShiftTemplates,
@@ -50,6 +68,135 @@ export default function StaffPage() {
     );
   }
   return <StaffHub />;
+}
+
+/** Thẻ "Hôm nay" — checkin/checkout theo IP+GPS + heartbeat tự động khi đang trong ca. */
+function TodayCard() {
+  const qc = useQueryClient();
+  const { openSnackbar } = useSnackbar();
+  const statusQ = useQuery({ queryKey: ['attn-status'], queryFn: getAttendanceStatus });
+  const open = statusQ.data?.openSession ?? null;
+  const todayShifts = statusQ.data?.shifts ?? [];
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['attn-status'] });
+
+  const checkinM = useMutation({
+    mutationFn: async (shiftId: string) => {
+      const loc = await acquireLocationPayload();
+      return attnCheckin({ shiftId, ...loc });
+    },
+    onSuccess: (r) => {
+      openSnackbar({
+        text: r.isLate ? 'Đã checkin (đi trễ — có thể bị phạt).' : 'Đã checkin. Chúc làm việc vui!',
+        type: r.isLate ? 'info' : 'success',
+      });
+      invalidate();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const checkoutM = useMutation({
+    mutationFn: () => attnCheckout(),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã checkout.', type: 'success' });
+      invalidate();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  // Heartbeat mỗi 3 phút khi đang trong ca — rớt vùng thì backend tự checkout.
+  const openId = open?.id ?? null;
+  const hbRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!openId) return;
+    const tick = async () => {
+      try {
+        const loc = await acquireLocationPayload();
+        const r = await attnHeartbeat(loc);
+        if (r.closed) {
+          openSnackbar({ text: 'Đã tự checkout (ra khỏi vùng công ty).', type: 'info' });
+          invalidate();
+        }
+      } catch {
+        /* bỏ qua nhịp lỗi */
+      }
+    };
+    hbRef.current = setInterval(tick, 3 * 60 * 1000);
+    return () => {
+      if (hbRef.current) clearInterval(hbRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId]);
+
+  return (
+    <Box
+      style={{
+        background: open ? 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))' : 'var(--neutral-0)',
+        color: open ? '#fff' : 'inherit',
+        borderRadius: 14,
+        padding: 16,
+      }}
+    >
+      <Box flex alignItems="center" style={{ gap: 8, marginBottom: 8 }}>
+        <MapPin size={18} color={open ? '#fff' : 'var(--leaf-700)'} />
+        <Text bold style={{ color: open ? '#fff' : 'inherit' }}>
+          Chấm công hôm nay
+        </Text>
+      </Box>
+
+      {statusQ.isLoading && <Skeleton style={{ height: 40, borderRadius: 10 }} />}
+
+      {open ? (
+        <>
+          <Text size="small" style={{ color: 'rgba(255,255,255,0.9)' }}>
+            Đang trong ca · vào lúc {isoToVnHHMM(open.checkinAt)}
+            {open.isLate ? ' · đi trễ' : ''}
+          </Text>
+          <Button
+            fullWidth
+            variant="secondary"
+            prefixIcon={<LogOut size={16} />}
+            style={{ marginTop: 10 }}
+            loading={checkoutM.isPending}
+            onClick={() => checkoutM.mutate()}
+          >
+            Checkout
+          </Button>
+          <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.8)', marginTop: 6 }}>
+            Nghỉ giữa ca? Bấm Checkout rồi Checkin lại khi quay lại.
+          </Text>
+        </>
+      ) : todayShifts.length === 0 ? (
+        <Text size="small" style={{ color: 'var(--neutral-500)' }}>
+          Hôm nay bạn không có ca đã duyệt.
+        </Text>
+      ) : (
+        todayShifts.map((s) => (
+          <Box
+            key={s.id}
+            flex
+            alignItems="center"
+            justifyContent="space-between"
+            style={{ marginTop: 8, gap: 8 }}
+          >
+            <Text size="small">
+              Ca {isoToVnHHMM(s.approvedStart ?? s.startAt)}–{isoToVnHHMM(s.approvedEnd ?? s.endAt)}
+            </Text>
+            <Button
+              size="small"
+              prefixIcon={<LogIn size={15} />}
+              loading={checkinM.isPending}
+              onClick={() => checkinM.mutate(s.id)}
+            >
+              Checkin
+            </Button>
+          </Box>
+        ))
+      )}
+      <Text size="xSmall" style={{ color: open ? 'rgba(255,255,255,0.8)' : 'var(--neutral-400)', marginTop: 8 }}>
+        Cần ở đúng mạng WiFi công ty & trong vùng để chấm công.
+      </Text>
+    </Box>
+  );
 }
 
 function StaffHub() {
@@ -185,6 +332,8 @@ function StaffHub() {
           <CalendarClock size={22} color="var(--leaf-700)" />
           <Text.Title size="small">Ca làm của tôi</Text.Title>
         </Box>
+
+        <TodayCard />
 
         {/* Điều hướng tuần */}
         <Box

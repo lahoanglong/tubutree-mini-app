@@ -2,6 +2,7 @@ import {
   getAccessToken,
   getPhoneNumber,
   getUserInfo,
+  getLocation,
   login as zmpLogin,
   openShareSheet,
   openWebview,
@@ -76,6 +77,20 @@ export async function requestZaloPhoneToken(): Promise<string | null> {
   try {
     const res = await getPhoneNumber({});
     return (res as { token?: string }).token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Xin vị trí (scope.userLocation) — trả token để backend đổi ra toạ độ (giống getPhoneNumber).
+ * null nếu user từ chối / SDK lỗi / chạy ngoài Zalo.
+ */
+export async function requestZaloLocation(): Promise<{ token: string } | null> {
+  try {
+    const res = await getLocation({});
+    const token = (res as { token?: string }).token;
+    return token ? { token } : null;
   } catch {
     return null;
   }
