@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CommunityRewardService } from './community-reward.service';
+import { authorBadge } from './author-badge';
 
 type FeedPostKind = 'MANUAL' | 'HARVEST' | 'MILESTONE' | 'SPECIES' | 'QUESTION' | 'SHOWCASE' | 'TIP';
 
@@ -19,10 +20,18 @@ export interface CreatePostInput {
   productSlugs?: string[];
 }
 
+const FEED_INCLUDE = {
+  user: { select: { fullName: true, avatarUrl: true, role: true } },
+  category: { select: { slug: true, name: true, icon: true } },
+  productTags: { include: { product: { select: { slug: true, name: true, thumbnail: true, salePrice: true, basePrice: true } } } },
+  _count: { select: { reactions: true, comments: true } },
+} as const;
+
 /**
  * Community Feed (§6.14.12) — bảng tin cộng đồng Vườn Xanh.
  * User khoe thành tích xanh (thu hoạch cây, mốc cộng đồng, sưu tập loài) hoặc đăng
- * bài tự do; người khác thả tim 💚 + bình luận. Tên hiển thị ẩn (mask) như BXH.
+ * bài tự do; người khác thả tim 💚 + bình luận. Hiện tên thật + avatar + badge tác giả
+ * (khác BXH — leaderboard vẫn ẩn danh riêng ở GameService).
  * Auto-post thành tích qua createAchievementPost (gọi @Optional từ GameService).
  */
 @Injectable()
@@ -34,28 +43,65 @@ export class CommunityFeedService {
     private readonly reward: CommunityRewardService,
   ) {}
 
-  async getFeed(userId: string, take = 20) {
+  async getFeed(
+    userId: string,
+    opts: { category?: string; kind?: string; sort?: 'new' | 'popular'; cursor?: string; take?: number } = {},
+  ) {
+    const take = Math.min(opts.take ?? 20, 50);
+    const where: Record<string, unknown> = { status: 'PUBLISHED' };
+    if (opts.category) where.category = { slug: opts.category };
+    if (opts.kind) where.kind = opts.kind;
+    const orderBy =
+      opts.sort === 'popular'
+        ? [{ reactions: { _count: 'desc' as const } }, { createdAt: 'desc' as const }]
+        : [{ createdAt: 'desc' as const }];
     const posts = await this.prisma.feedPost.findMany({
-      orderBy: { createdAt: 'desc' },
-      take,
-      include: {
-        user: { select: { fullName: true } },
-        _count: { select: { reactions: true, comments: true } },
-        reactions: { where: { userId }, select: { id: true } },
-      },
+      where,
+      orderBy,
+      take: take + 1,
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+      include: { ...FEED_INCLUDE, reactions: { where: { userId }, select: { id: true } } },
     });
+    const hasMore = posts.length > take;
+    const page = hasMore ? posts.slice(0, take) : posts;
     return {
-      posts: posts.map((p) => ({
-        id: p.id,
-        kind: p.kind as FeedPostKind,
-        body: p.body,
-        meta: p.meta,
-        createdAt: p.createdAt,
-        author: this.maskName(p.user.fullName),
-        likeCount: p._count.reactions,
-        commentCount: p._count.comments,
-        liked: p.reactions.length > 0,
+      posts: page.map((p) => this.toItem(p)),
+      nextCursor: hasMore ? page[page.length - 1]!.id : null,
+    };
+  }
+
+  async getPost(userId: string, postId: string) {
+    await this.prisma.feedPost.update({ where: { id: postId }, data: { viewCount: { increment: 1 } } });
+    const p = await this.prisma.feedPost.findUnique({
+      where: { id: postId },
+      include: { ...FEED_INCLUDE, reactions: { where: { userId }, select: { id: true } } },
+    });
+    if (!p) throw new NotFoundException('Bài viết không tồn tại.');
+    return this.toItem(p);
+  }
+
+  private toItem(p: any) {
+    return {
+      id: p.id,
+      kind: p.kind,
+      status: p.status,
+      title: p.title ?? null,
+      body: p.body,
+      images: p.images ?? [],
+      meta: p.meta,
+      createdAt: p.createdAt,
+      author: p.user.fullName ?? 'Bạn Tubu',
+      avatar: p.user.avatarUrl ?? null,
+      badge: authorBadge(p.user.role),
+      category: p.category ? { slug: p.category.slug, name: p.category.name, icon: p.category.icon } : null,
+      productTags: (p.productTags ?? []).map((t: any) => ({
+        slug: t.product.slug, name: t.product.name, thumbnail: t.product.thumbnail,
+        salePrice: t.product.salePrice, basePrice: t.product.basePrice,
       })),
+      likeCount: p._count.reactions,
+      commentCount: p._count.comments,
+      liked: p.reactions.length > 0,
+      bestCommentId: p.bestCommentId ?? null,
     };
   }
 
@@ -134,15 +180,8 @@ export class CommunityFeedService {
     return comments.map((c) => ({
       id: c.id,
       body: c.body,
-      author: this.maskName(c.user.fullName),
+      author: c.user.fullName ?? 'Bạn Tubu',
       createdAt: c.createdAt,
     }));
-  }
-
-  private maskName(name: string | null): string {
-    if (!name) return 'Bạn Tubu';
-    const parts = name.trim().split(' ');
-    const last = parts[parts.length - 1] ?? 'Tubu';
-    return `${last}***`;
   }
 }

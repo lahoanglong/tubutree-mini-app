@@ -8,6 +8,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue({ id: 'post1' }),
       create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'new', ...data })),
+      update: jest.fn().mockResolvedValue({}),
     },
     feedReaction: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -28,42 +29,60 @@ function makeSvc(prisma: PrismaService, reward: any = { rewardPost: jest.fn(), r
   return new CommunityFeedService(prisma, reward);
 }
 
-describe('CommunityFeedService.getFeed', () => {
-  it('trả bài viết kèm số tim/bình luận + cờ "đã thả tim" + tên ẩn', async () => {
+// Dùng chung cho cả getFeed + getPost (row hình dạng Prisma trả về, đã include đủ quan hệ).
+const row = (over: Record<string, unknown> = {}) => ({
+  id: 'p1', kind: 'SHOWCASE', status: 'PUBLISHED', title: null, body: 'Khoe cây', images: ['i1'],
+  meta: null, bestCommentId: null, createdAt: new Date('2026-07-03'),
+  user: { fullName: 'Lã Hoàng Long', avatarUrl: 'https://a/1.png', role: 'CUSTOMER' },
+  category: { slug: 'khoe-vuon', name: 'Khoe vườn', icon: '🌿' },
+  productTags: [{ product: { slug: 'cay-a', name: 'Cây A', thumbnail: 't', salePrice: null, basePrice: 100 } }],
+  _count: { reactions: 3, comments: 2 }, reactions: [{ id: 'r1' }],
+  ...over,
+});
+
+describe('CommunityFeedService.getFeed (cộng đồng)', () => {
+  it('hiện tên thật + avatar + badge + chip SP + đã-thả-tim', async () => {
     const prisma = makePrisma();
-    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
-      {
-        id: 'p1',
-        kind: 'HARVEST',
-        body: 'Mình vừa thu hoạch 🌳',
-        meta: null,
-        createdAt: new Date('2026-06-24'),
-        user: { fullName: 'Lã Hoàng Long' },
-        _count: { reactions: 3, comments: 2 },
-        reactions: [{ id: 'r1' }], // current user đã thả tim
-      },
-    ]);
-    const svc = makeSvc(prisma);
-    const r = await svc.getFeed('u1');
-    expect(r.posts).toHaveLength(1);
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row()]);
+    const r = await makeSvc(prisma).getFeed('u1', { category: 'khoe-vuon' });
     expect(r.posts[0]).toMatchObject({
-      id: 'p1',
-      kind: 'HARVEST',
-      likeCount: 3,
-      commentCount: 2,
-      liked: true,
-      author: 'Long***',
+      id: 'p1', author: 'Lã Hoàng Long', avatar: 'https://a/1.png', badge: null,
+      likeCount: 3, commentCount: 2, liked: true,
+      category: { slug: 'khoe-vuon', name: 'Khoe vườn', icon: '🌿' },
+      productTags: [{ slug: 'cay-a', name: 'Cây A', thumbnail: 't', salePrice: null, basePrice: 100 }],
     });
+    // Lọc theo danh mục + chỉ PUBLISHED được truyền vào where
+    const where = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0].where;
+    expect(where).toMatchObject({ status: 'PUBLISHED', category: { slug: 'khoe-vuon' } });
   });
 
-  it('bài chưa thả tim → liked false', async () => {
+  it('tác giả STAFF → badge EXPERT; tên null → "Bạn Tubu"', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
-      { id: 'p1', kind: 'MANUAL', body: 'x', meta: null, createdAt: new Date(), user: { fullName: null }, _count: { reactions: 0, comments: 0 }, reactions: [] },
+      row({ user: { fullName: null, avatarUrl: null, role: 'STAFF' } }),
     ]);
     const r = await makeSvc(prisma).getFeed('u1');
-    expect(r.posts[0]!.liked).toBe(false);
-    expect(r.posts[0]!.author).toBe('Bạn Tubu');
+    expect(r.posts[0]).toMatchObject({ author: 'Bạn Tubu', avatar: null, badge: 'EXPERT' });
+  });
+});
+
+describe('CommunityFeedService.getPost', () => {
+  it('tăng viewCount và trả bài', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.update as jest.Mock) = jest.fn().mockResolvedValue({});
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({
+      ...row(), reactions: [], _count: { reactions: 0, comments: 0 },
+    });
+    const svc = makeSvc(prisma);
+    const r = await svc.getPost('u1', 'p1');
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { viewCount: { increment: 1 } } });
+    expect(r).toMatchObject({ id: 'p1' });
+  });
+
+  it('bài không tồn tại → NotFound', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue(null);
+    await expect(makeSvc(prisma).getPost('u1', 'pX')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 
@@ -140,13 +159,22 @@ describe('CommunityFeedService.addComment', () => {
 });
 
 describe('CommunityFeedService.getComments', () => {
-  it('trả comment kèm tên ẩn theo thời gian tăng dần', async () => {
+  it('trả comment kèm tên tác giả thật theo thời gian tăng dần', async () => {
     const prisma = makePrisma();
     (prisma.feedComment.findMany as jest.Mock).mockResolvedValue([
       { id: 'c1', body: 'hay', createdAt: new Date(), user: { fullName: 'Nguyễn Văn A' } },
     ]);
     const r = await makeSvc(prisma).getComments('p1');
-    expect(r[0]).toMatchObject({ id: 'c1', body: 'hay', author: 'A***' });
+    expect(r[0]).toMatchObject({ id: 'c1', body: 'hay', author: 'Nguyễn Văn A' });
+  });
+
+  it('tên null → "Bạn Tubu"', async () => {
+    const prisma = makePrisma();
+    (prisma.feedComment.findMany as jest.Mock).mockResolvedValue([
+      { id: 'c1', body: 'hay', createdAt: new Date(), user: { fullName: null } },
+    ]);
+    const r = await makeSvc(prisma).getComments('p1');
+    expect(r[0]).toMatchObject({ author: 'Bạn Tubu' });
   });
 });
 
