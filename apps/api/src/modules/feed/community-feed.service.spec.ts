@@ -192,4 +192,14 @@ describe('CommunityFeedService.createPost (mở rộng)', () => {
       makeSvc(prisma).createPost('u1', { body: 'x', productSlugs: ['a', 'b', 'c', 'd', 'e', 'f'] }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it('rewardPost lỗi → bài vẫn tạo (thưởng không chặn đăng bài)', async () => {
+    const prisma = makePrisma();
+    (prisma.product.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'newpost' });
+    const reward = { rewardPost: jest.fn().mockRejectedValue(new Error('boom')), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    const r = await makeSvc(prisma, reward).createPost('u1', { kind: 'TIP', body: 'mẹo hay' });
+    expect(r).toEqual({ id: 'newpost' });
+    expect(prisma.feedPost.create).toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CommunityRewardService } from './community-reward.service';
 
@@ -27,6 +27,8 @@ export interface CreatePostInput {
  */
 @Injectable()
 export class CommunityFeedService {
+  private readonly logger = new Logger(CommunityFeedService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly reward: CommunityRewardService,
@@ -85,7 +87,11 @@ export class CommunityFeedService {
       }
     }
 
-    await this.reward.rewardPost(userId, post.id);
+    try {
+      await this.reward.rewardPost(userId, post.id);
+    } catch (err) {
+      this.logger.warn(`rewardPost failed for post ${post.id}: ${(err as Error).message}`);
+    }
     return { id: post.id };
   }
 
