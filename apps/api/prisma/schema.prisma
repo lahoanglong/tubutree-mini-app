@@ -123,6 +123,90 @@ model AttendanceSession {
   @@map("attendance_sessions")
 }
 
+enum PayrollMonthStatus {
+  OPEN
+  FINALIZED
+  PAID
+}
+
+enum AdjustmentType {
+  LATE // đi trễ > grace → phạt cố định
+  LATE_CANCEL // huỷ ca < 3 ngày → phạt 1h công
+  MANUAL // admin cộng/trừ tay
+}
+
+/// Hồ sơ nhân viên: đơn giá giờ (theo từng người) + bank nhận lương.
+model StaffProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hourlyRate      Int      @default(0) // VND/giờ
+  bankBin         String? // mã Napas BIN (dựng VietQR)
+  bankAccountNo   String?
+  bankAccountName String?
+  qrImageUrl      String? // QR tĩnh NV tự tải (ưu tiên nếu có)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("staff_profiles")
+}
+
+model PayrollAdjustment {
+  id        String         @id @default(cuid())
+  staffId   String
+  workDate  DateTime       @db.Date
+  type      AdjustmentType
+  amount    Int // dương = trừ; MANUAL âm = thưởng/cộng
+  reason    String
+  shiftId   String?
+  createdBy String?
+  createdAt DateTime       @default(now())
+
+  @@index([staffId, workDate])
+  @@index([shiftId, type])
+  @@map("payroll_adjustments")
+}
+
+model PayrollDay {
+  id            String    @id @default(cuid())
+  staffId       String
+  workDate      DateTime  @db.Date
+  workedMinutes Int       @default(0)
+  hourlyRate    Int       @default(0) // snapshot
+  gross         Int       @default(0)
+  fines         Int       @default(0)
+  net           Int       @default(0)
+  finalizedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([staffId, workDate])
+  @@map("payroll_days")
+}
+
+model PayrollMonth {
+  id            String             @id @default(cuid())
+  staffId       String
+  year          Int
+  month         Int // 1..12
+  totalMinutes  Int                @default(0)
+  gross         Int                @default(0)
+  totalFines    Int                @default(0)
+  net           Int                @default(0)
+  status        PayrollMonthStatus @default(OPEN)
+  finalizedAt   DateTime?
+  paidAt        DateTime?
+  paidBy        String?
+  proofImageUrl String? // ảnh xác nhận đã chuyển
+  note          String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@unique([staffId, year, month])
+  @@map("payroll_months")
+}
+
 model User {
   id                String          @id @default(cuid())
   zaloId            String?         @unique // openId từ Zalo
@@ -182,6 +266,7 @@ model User {
   betaFeedbacks          BetaFeedback[]
   subscriptions          Subscription[]
   staffShifts            Shift[]                 @relation("StaffShifts")
+  staffProfile           StaffProfile?
 
   @@index([referredById])
   @@map("users")
