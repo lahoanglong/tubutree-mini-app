@@ -2,7 +2,7 @@ import { Box, Page, Text, Button, Avatar, Spinner, useNavigate, useSnackbar } fr
 import { useQuery } from '@tanstack/react-query';
 import {
   Package, Repeat, Heart, MapPin, Leaf, Wallet, Users, BadgePercent,
-  Bell, Store, Settings, Info, ChevronRight, Copy, ShieldCheck, type LucideIcon,
+  Bell, Store, Settings, Info, ChevronRight, Copy, ShieldCheck, CalendarClock, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { getLoyalty, getNotifications } from '../services/account-api';
@@ -38,6 +38,7 @@ const READY = new Set([
   '/brand-owner',
   '/storefront',
   '/admin',
+  '/staff',
 ]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [
@@ -107,19 +108,16 @@ export default function ProfilePage() {
           : s,
       )
     : MENU;
-  // Nhóm công việc nội bộ — chỉ hiện với ADMIN (nhân viên STAFF sẽ có mục riêng ở Phase B).
-  const menu =
-    user?.role === 'ADMIN'
-      ? [
-          ...baseMenu,
-          {
-            group: 'Công việc',
-            items: [
-              { Icon: ShieldCheck, label: 'Quản trị nhân sự', to: '/admin', hint: 'Cấp quyền theo SĐT' },
-            ] as MenuItem[],
-          },
-        ]
-      : baseMenu;
+  // Nhóm công việc nội bộ — STAFF thấy "Ca làm", ADMIN thấy thêm "Quản trị nhân sự".
+  const isStaffOrAdmin = user?.role === 'STAFF' || user?.role === 'ADMIN';
+  const workItems: MenuItem[] = [];
+  if (isStaffOrAdmin) {
+    workItems.push({ Icon: CalendarClock, label: 'Ca làm & chấm công', to: '/staff', hint: 'Đăng ký ca — chấm công — lương' });
+  }
+  if (user?.role === 'ADMIN') {
+    workItems.push({ Icon: ShieldCheck, label: 'Quản trị nhân sự', to: '/admin', hint: 'Cấp quyền — duyệt ca — lương' });
+  }
+  const menu = workItems.length > 0 ? [...baseMenu, { group: 'Công việc', items: workItems }] : baseMenu;
 
   // Đang đăng nhập ngầm → spinner. Nếu login fail (idle/error) → nút thử lại,
   // KHÔNG để spinner quay vô hạn ("tài khoản load mãi").

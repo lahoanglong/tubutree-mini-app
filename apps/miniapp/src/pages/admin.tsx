@@ -1,11 +1,42 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, ShieldCheck, Trash2 } from 'lucide-react';
+import {
+  UserPlus,
+  ShieldCheck,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Check,
+  X,
+  Clock,
+  Plus,
+} from 'lucide-react';
 import { listStaff, grantStaff, revokeStaff, type StaffRole } from '../services/staff-api';
+import {
+  adminGetShifts,
+  approveShift,
+  rejectShift,
+  bulkApproveShifts,
+  adminGetTemplates,
+  createTemplate,
+  deleteTemplate,
+  type AdminShift,
+} from '../services/shifts-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { Skeleton } from '../components/ui/skeleton';
+import {
+  mondayKeyOf,
+  addDaysKey,
+  keyToUtcMidnightISO,
+  vnDateTimeISO,
+  isoToVnHHMM,
+  minToHHMM,
+  hhmmToMin,
+  shortDayLabel,
+  dowLabel,
+} from '../utils/week';
 
 export default function AdminPage() {
   const role = useAuthStore((s) => s.user?.role);
@@ -23,9 +54,28 @@ export default function AdminPage() {
   return <AdminHub />;
 }
 
-const PHONE_RE = /^0\d{8,10}$/;
+type Tab = 'staff' | 'shifts';
 
 function AdminHub() {
+  const [tab, setTab] = useState<Tab>('staff');
+  return (
+    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
+      <Box p={4} flex style={{ gap: 8 }}>
+        <Button size="small" variant={tab === 'staff' ? undefined : 'secondary'} onClick={() => setTab('staff')}>
+          Nhân sự
+        </Button>
+        <Button size="small" variant={tab === 'shifts' ? undefined : 'secondary'} onClick={() => setTab('shifts')}>
+          Duyệt ca
+        </Button>
+      </Box>
+      {tab === 'staff' ? <StaffSection /> : <ShiftsSection />}
+    </Page>
+  );
+}
+
+const PHONE_RE = /^0\d{8,10}$/;
+
+function StaffSection() {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
   const staffQ = useQuery({ queryKey: ['admin-staff'], queryFn: listStaff });
@@ -57,82 +107,78 @@ function AdminHub() {
   });
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
-      <Box p={4} flex flexDirection="column" style={{ gap: 16 }}>
-        <Box flex justifyContent="space-between" alignItems="center">
-          <Text.Title size="small">Nhân sự</Text.Title>
-          <Button size="small" prefixIcon={<UserPlus size={16} />} onClick={() => setSheetOpen(true)}>
-            Thêm
-          </Button>
-        </Box>
-
-        {staffQ.isLoading && <Skeleton style={{ height: 80, borderRadius: 12 }} />}
-        {staffQ.isError && (
-          <Text style={{ color: 'var(--danger, #d64545)' }}>{getErrorMessage(staffQ.error)}</Text>
-        )}
-
-        {staffQ.data && (
-          <>
-            {staffQ.data.members.map((m) => (
-              <Box
-                key={m.id}
-                flex
-                justifyContent="space-between"
-                alignItems="center"
-                style={{ padding: 12, background: 'var(--neutral-0)', borderRadius: 12, gap: 8 }}
-              >
-                <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text bold>{m.fullName ?? 'Chưa có tên'}</Text>
-                  <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                    {m.phone ?? '—'} · {m.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
-                  </Text>
-                </Box>
-                {m.phone && (
-                  <Button
-                    size="small"
-                    variant="tertiary"
-                    prefixIcon={<Trash2 size={15} />}
-                    style={{ color: 'var(--danger, #d64545)' }}
-                    onClick={() => revokeM.mutate(m.phone as string)}
-                  >
-                    Thu hồi
-                  </Button>
-                )}
-              </Box>
-            ))}
-
-            {staffQ.data.members.length === 0 && (
-              <Text size="small" style={{ color: 'var(--neutral-500)' }}>
-                Chưa có nhân sự. Bấm “Thêm” để cấp quyền theo số điện thoại.
-              </Text>
-            )}
-
-            {staffQ.data.pendingInvites.length > 0 && (
-              <>
-                <Text bold style={{ marginTop: 8 }}>
-                  Chờ mở app
-                </Text>
-                {staffQ.data.pendingInvites.map((p) => (
-                  <Box
-                    key={p.phone}
-                    flex
-                    justifyContent="space-between"
-                    alignItems="center"
-                    style={{ padding: 12, background: 'var(--neutral-100)', borderRadius: 12, gap: 8 }}
-                  >
-                    <Text size="small">
-                      {p.phone} · {p.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
-                    </Text>
-                    <Button size="small" variant="tertiary" onClick={() => revokeM.mutate(p.phone)}>
-                      Huỷ
-                    </Button>
-                  </Box>
-                ))}
-              </>
-            )}
-          </>
-        )}
+    <Box px={4} pb={4} flex flexDirection="column" style={{ gap: 12 }}>
+      <Box flex justifyContent="space-between" alignItems="center">
+        <Text.Title size="small">Nhân sự</Text.Title>
+        <Button size="small" prefixIcon={<UserPlus size={16} />} onClick={() => setSheetOpen(true)}>
+          Thêm
+        </Button>
       </Box>
+
+      {staffQ.isLoading && <Skeleton style={{ height: 80, borderRadius: 12 }} />}
+      {staffQ.isError && <Text style={{ color: 'var(--danger, #d64545)' }}>{getErrorMessage(staffQ.error)}</Text>}
+
+      {staffQ.data && (
+        <>
+          {staffQ.data.members.map((m) => (
+            <Box
+              key={m.id}
+              flex
+              justifyContent="space-between"
+              alignItems="center"
+              style={{ padding: 12, background: 'var(--neutral-0)', borderRadius: 12, gap: 8 }}
+            >
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <Text bold>{m.fullName ?? 'Chưa có tên'}</Text>
+                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                  {m.phone ?? '—'} · {m.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
+                </Text>
+              </Box>
+              {m.phone && (
+                <Button
+                  size="small"
+                  variant="tertiary"
+                  prefixIcon={<Trash2 size={15} />}
+                  style={{ color: 'var(--danger, #d64545)' }}
+                  onClick={() => revokeM.mutate(m.phone as string)}
+                >
+                  Thu hồi
+                </Button>
+              )}
+            </Box>
+          ))}
+
+          {staffQ.data.members.length === 0 && (
+            <Text size="small" style={{ color: 'var(--neutral-500)' }}>
+              Chưa có nhân sự. Bấm “Thêm” để cấp quyền theo số điện thoại.
+            </Text>
+          )}
+
+          {staffQ.data.pendingInvites.length > 0 && (
+            <>
+              <Text bold style={{ marginTop: 8 }}>
+                Chờ mở app
+              </Text>
+              {staffQ.data.pendingInvites.map((p) => (
+                <Box
+                  key={p.phone}
+                  flex
+                  justifyContent="space-between"
+                  alignItems="center"
+                  style={{ padding: 12, background: 'var(--neutral-100)', borderRadius: 12, gap: 8 }}
+                >
+                  <Text size="small">
+                    {p.phone} · {p.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
+                  </Text>
+                  <Button size="small" variant="tertiary" onClick={() => revokeM.mutate(p.phone)}>
+                    Huỷ
+                  </Button>
+                </Box>
+              ))}
+            </>
+          )}
+        </>
+      )}
 
       <Sheet visible={sheetOpen} onClose={() => setSheetOpen(false)} autoHeight>
         <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
@@ -171,6 +217,298 @@ function AdminHub() {
           </Button>
         </Box>
       </Sheet>
-    </Page>
+    </Box>
+  );
+}
+
+function ShiftsSection() {
+  const qc = useQueryClient();
+  const { openSnackbar } = useSnackbar();
+  const [mondayKey, setMondayKey] = useState(() => mondayKeyOf(new Date()));
+  const fromISO = keyToUtcMidnightISO(mondayKey);
+  const toISO = `${addDaysKey(mondayKey, 6)}T23:59:59.999Z`;
+
+  const shiftsQ = useQuery({
+    queryKey: ['admin-shifts', mondayKey],
+    queryFn: () => adminGetShifts(fromISO, toISO),
+  });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['admin-shifts', mondayKey] });
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, { name: string; shifts: AdminShift[] }>();
+    for (const s of shiftsQ.data ?? []) {
+      const name = s.staff.fullName ?? s.staff.phone ?? 'NV';
+      const entry = map.get(s.staffId) ?? { name, shifts: [] };
+      entry.shifts.push(s);
+      map.set(s.staffId, entry);
+    }
+    return [...map.values()];
+  }, [shiftsQ.data]);
+
+  const pendingIds = useMemo(
+    () => (shiftsQ.data ?? []).filter((s) => s.status === 'PENDING').map((s) => s.id),
+    [shiftsQ.data],
+  );
+
+  const approveM = useMutation({
+    mutationFn: (v: { id: string; approvedStart?: string; approvedEnd?: string }) =>
+      approveShift(v.id, v.approvedStart ? { approvedStart: v.approvedStart, approvedEnd: v.approvedEnd } : undefined),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã duyệt ca.', type: 'success' });
+      setAdjust(null);
+      invalidate();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const rejectM = useMutation({
+    mutationFn: (v: { id: string; reason: string }) => rejectShift(v.id, v.reason),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã từ chối ca.', type: 'success' });
+      setRejectId(null);
+      setRejectReason('');
+      invalidate();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const bulkM = useMutation({
+    mutationFn: () => bulkApproveShifts(pendingIds),
+    onSuccess: (r) => {
+      openSnackbar({ text: `Đã duyệt ${r.approved} ca.`, type: 'success' });
+      invalidate();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const [adjust, setAdjust] = useState<{ id: string; dayKey: string } | null>(null);
+  const [adjStart, setAdjStart] = useState('08:00');
+  const [adjEnd, setAdjEnd] = useState('12:00');
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [tplOpen, setTplOpen] = useState(false);
+
+  const openAdjust = (s: AdminShift) => {
+    setAdjust({ id: s.id, dayKey: s.workDate.slice(0, 10) });
+    setAdjStart(isoToVnHHMM(s.startAt));
+    setAdjEnd(isoToVnHHMM(s.endAt));
+  };
+
+  return (
+    <Box px={4} pb={4} flex flexDirection="column" style={{ gap: 12 }}>
+      <Box flex justifyContent="space-between" alignItems="center">
+        <Text.Title size="small">Duyệt ca</Text.Title>
+        <Button size="small" variant="secondary" prefixIcon={<Clock size={15} />} onClick={() => setTplOpen(true)}>
+          Ca chuẩn
+        </Button>
+      </Box>
+
+      <Box
+        flex
+        alignItems="center"
+        justifyContent="space-between"
+        style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: '8px 12px' }}
+      >
+        <Button size="small" variant="tertiary" onClick={() => setMondayKey(addDaysKey(mondayKey, -7))}>
+          <ChevronLeft size={18} />
+        </Button>
+        <Text size="small" bold>
+          {shortDayLabel(mondayKey)} – {shortDayLabel(addDaysKey(mondayKey, 6))}
+        </Text>
+        <Button size="small" variant="tertiary" onClick={() => setMondayKey(addDaysKey(mondayKey, 7))}>
+          <ChevronRight size={18} />
+        </Button>
+      </Box>
+
+      {pendingIds.length > 0 && (
+        <Button size="small" loading={bulkM.isPending} onClick={() => bulkM.mutate()}>
+          Duyệt tất cả ({pendingIds.length})
+        </Button>
+      )}
+
+      {shiftsQ.isLoading && <Skeleton style={{ height: 120, borderRadius: 12 }} />}
+      {shiftsQ.isError && <Text style={{ color: 'var(--danger, #d64545)' }}>{getErrorMessage(shiftsQ.error)}</Text>}
+      {shiftsQ.data && grouped.length === 0 && (
+        <Text size="small" style={{ color: 'var(--neutral-500)' }}>
+          Không có ca nào trong tuần này.
+        </Text>
+      )}
+
+      {grouped.map((g) => (
+        <Box key={g.name} style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
+          <Text bold style={{ marginBottom: 6 }}>
+            {g.name}
+          </Text>
+          {g.shifts.map((s) => {
+            const start = isoToVnHHMM(s.approvedStart ?? s.startAt);
+            const end = isoToVnHHMM(s.approvedEnd ?? s.endAt);
+            return (
+              <Box
+                key={s.id}
+                flex
+                alignItems="center"
+                justifyContent="space-between"
+                style={{ padding: '8px 0', borderTop: '1px solid var(--neutral-100)', gap: 8 }}
+              >
+                <Box style={{ flex: 1, minWidth: 0 }}>
+                  <Text size="small">
+                    {dowLabel(s.workDate.slice(0, 10))} {shortDayLabel(s.workDate.slice(0, 10))} · {start}–{end}
+                  </Text>
+                  <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                    {s.status === 'PENDING'
+                      ? 'Chờ duyệt'
+                      : s.status === 'APPROVED'
+                        ? 'Đã duyệt'
+                        : s.status === 'REJECTED'
+                          ? 'Từ chối'
+                          : 'Đã huỷ'}
+                  </Text>
+                </Box>
+                {s.status === 'PENDING' && (
+                  <Box flex style={{ gap: 4 }}>
+                    <Button size="small" variant="tertiary" onClick={() => openAdjust(s)}>
+                      <Clock size={15} />
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="tertiary"
+                      style={{ color: 'var(--leaf-700)' }}
+                      onClick={() => approveM.mutate({ id: s.id })}
+                    >
+                      <Check size={16} />
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="tertiary"
+                      style={{ color: 'var(--danger, #d64545)' }}
+                      onClick={() => setRejectId(s.id)}
+                    >
+                      <X size={16} />
+                    </Button>
+                  </Box>
+                )}
+              </Box>
+            );
+          })}
+        </Box>
+      ))}
+
+      {/* Sheet chỉnh giờ + duyệt */}
+      <Sheet visible={!!adjust} onClose={() => setAdjust(null)} autoHeight>
+        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
+          <Text.Title size="small">Chỉnh giờ & duyệt</Text.Title>
+          <Box flex style={{ gap: 8 }}>
+            <Box style={{ flex: 1 }}>
+              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                Bắt đầu
+              </Text>
+              <Input type="text" value={adjStart} onChange={(e) => setAdjStart(e.target.value)} />
+            </Box>
+            <Box style={{ flex: 1 }}>
+              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                Kết thúc
+              </Text>
+              <Input type="text" value={adjEnd} onChange={(e) => setAdjEnd(e.target.value)} />
+            </Box>
+          </Box>
+          <Button
+            fullWidth
+            loading={approveM.isPending}
+            disabled={!/^\d{1,2}:\d{2}$/.test(adjStart) || !/^\d{1,2}:\d{2}$/.test(adjEnd)}
+            onClick={() =>
+              adjust &&
+              approveM.mutate({
+                id: adjust.id,
+                approvedStart: vnDateTimeISO(adjust.dayKey, adjStart),
+                approvedEnd: vnDateTimeISO(adjust.dayKey, adjEnd),
+              })
+            }
+          >
+            Duyệt với giờ đã chỉnh
+          </Button>
+        </Box>
+      </Sheet>
+
+      {/* Sheet từ chối */}
+      <Sheet visible={!!rejectId} onClose={() => setRejectId(null)} autoHeight>
+        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
+          <Text.Title size="small">Từ chối ca</Text.Title>
+          <Input.TextArea placeholder="Lý do" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+          <Button
+            fullWidth
+            loading={rejectM.isPending}
+            disabled={rejectReason.trim().length === 0}
+            onClick={() => rejectId && rejectM.mutate({ id: rejectId, reason: rejectReason.trim() })}
+          >
+            Xác nhận từ chối
+          </Button>
+        </Box>
+      </Sheet>
+
+      <TemplateSheet visible={tplOpen} onClose={() => setTplOpen(false)} />
+    </Box>
+  );
+}
+
+function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { openSnackbar } = useSnackbar();
+  const tplQ = useQuery({ queryKey: ['admin-templates'], queryFn: adminGetTemplates, enabled: visible });
+  const [name, setName] = useState('');
+  const [start, setStart] = useState('08:00');
+  const [end, setEnd] = useState('12:00');
+
+  const addM = useMutation({
+    mutationFn: () => createTemplate({ name: name.trim(), startMin: hhmmToMin(start), endMin: hhmmToMin(end) }),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã thêm ca chuẩn.', type: 'success' });
+      setName('');
+      qc.invalidateQueries({ queryKey: ['admin-templates'] });
+      qc.invalidateQueries({ queryKey: ['shift-templates'] });
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+  const delM = useMutation({
+    mutationFn: (id: string) => deleteTemplate(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-templates'] });
+      qc.invalidateQueries({ queryKey: ['shift-templates'] });
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  return (
+    <Sheet visible={visible} onClose={onClose} autoHeight>
+      <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
+        <Text.Title size="small">Ca chuẩn</Text.Title>
+        {(tplQ.data ?? []).map((t) => (
+          <Box key={t.id} flex justifyContent="space-between" alignItems="center">
+            <Text size="small">
+              {t.name} · {minToHHMM(t.startMin)}–{minToHHMM(t.endMin)}
+            </Text>
+            <Button size="small" variant="tertiary" style={{ color: 'var(--danger, #d64545)' }} onClick={() => delM.mutate(t.id)}>
+              <Trash2 size={15} />
+            </Button>
+          </Box>
+        ))}
+        <Box style={{ borderTop: '1px solid var(--neutral-100)', paddingTop: 10 }}>
+          <Input placeholder="Tên ca (VD Ca sáng)" value={name} onChange={(e) => setName(e.target.value)} />
+          <Box flex style={{ gap: 8, marginTop: 8 }}>
+            <Input type="text" value={start} onChange={(e) => setStart(e.target.value)} style={{ flex: 1 }} />
+            <Input type="text" value={end} onChange={(e) => setEnd(e.target.value)} style={{ flex: 1 }} />
+          </Box>
+          <Button
+            fullWidth
+            style={{ marginTop: 10 }}
+            prefixIcon={<Plus size={15} />}
+            loading={addM.isPending}
+            disabled={!name.trim() || !/^\d{1,2}:\d{2}$/.test(start) || !/^\d{1,2}:\d{2}$/.test(end)}
+            onClick={() => addM.mutate()}
+          >
+            Thêm ca chuẩn
+          </Button>
+        </Box>
+      </Box>
+    </Sheet>
   );
 }
