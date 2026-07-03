@@ -47,7 +47,7 @@ export class CommunityFeedService {
     userId: string,
     opts: { category?: string; kind?: string; sort?: 'new' | 'popular'; cursor?: string; take?: number } = {},
   ) {
-    const take = Math.min(opts.take ?? 20, 50);
+    const take = Math.max(1, Math.min(opts.take ?? 20, 50));
     const where: Record<string, unknown> = { status: 'PUBLISHED' };
     if (opts.category) where.category = { slug: opts.category };
     if (opts.kind) where.kind = opts.kind;
@@ -71,12 +71,12 @@ export class CommunityFeedService {
   }
 
   async getPost(userId: string, postId: string) {
-    await this.prisma.feedPost.update({ where: { id: postId }, data: { viewCount: { increment: 1 } } });
     const p = await this.prisma.feedPost.findUnique({
       where: { id: postId },
       include: { ...FEED_INCLUDE, reactions: { where: { userId }, select: { id: true } } },
     });
     if (!p) throw new NotFoundException('Bài viết không tồn tại.');
+    await this.prisma.feedPost.update({ where: { id: postId }, data: { viewCount: { increment: 1 } } });
     return this.toItem(p);
   }
 

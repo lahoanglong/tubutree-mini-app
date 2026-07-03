@@ -64,6 +64,38 @@ describe('CommunityFeedService.getFeed (cộng đồng)', () => {
     const r = await makeSvc(prisma).getFeed('u1');
     expect(r.posts[0]).toMatchObject({ author: 'Bạn Tubu', avatar: null, badge: 'EXPERT' });
   });
+
+  it('lọc theo kind → where.kind truyền vào findMany', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row()]);
+    await makeSvc(prisma).getFeed('u1', { kind: 'QUESTION' });
+    const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
+    expect(args.where).toMatchObject({ status: 'PUBLISHED', kind: 'QUESTION' });
+  });
+
+  it('sort=popular → orderBy theo số tim rồi createdAt', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row()]);
+    await makeSvc(prisma).getFeed('u1', { sort: 'popular' });
+    const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
+    expect(args.orderBy).toEqual([{ reactions: { _count: 'desc' } }, { createdAt: 'desc' }]);
+  });
+
+  it('phân trang cursor → lấy take+1, trả nextCursor + cắt đúng, truyền cursor/skip', async () => {
+    const prisma = makePrisma();
+    // take=2 → service xin 3 (take+1); trả 3 hàng để có hasMore
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
+      row({ id: 'a' }), row({ id: 'b' }), row({ id: 'c' }),
+    ]);
+    const r = await makeSvc(prisma).getFeed('u1', { take: 2, cursor: 'z' });
+    const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
+    expect(args.take).toBe(3);
+    expect(args.cursor).toEqual({ id: 'z' });
+    expect(args.skip).toBe(1);
+    expect(r.posts).toHaveLength(2);
+    expect(r.posts.map((p: any) => p.id)).toEqual(['a', 'b']);
+    expect(r.nextCursor).toBe('b');
+  });
 });
 
 describe('CommunityFeedService.getPost', () => {
@@ -79,10 +111,12 @@ describe('CommunityFeedService.getPost', () => {
     expect(r).toMatchObject({ id: 'p1' });
   });
 
-  it('bài không tồn tại → NotFound', async () => {
+  it('bài không tồn tại → NotFound, KHÔNG tăng viewCount', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue(null);
     await expect(makeSvc(prisma).getPost('u1', 'pX')).rejects.toBeInstanceOf(NotFoundException);
+    // check-then-act: findUnique null → không được gọi update (Prisma update thật ném P2025 nếu thiếu row)
+    expect(prisma.feedPost.update).not.toHaveBeenCalled();
   });
 });
 
