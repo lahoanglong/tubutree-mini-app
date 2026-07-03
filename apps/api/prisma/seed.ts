@@ -123,6 +123,18 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
 
   // RBAC nhân sự (Phase A) — SĐT admin thật cấp qua hub/DB; giữ rỗng để không cấp nhầm.
   { key: 'rbac.admin_phones', value: [], category: 'rbac', description: 'Danh sách SĐT admin gán sẵn (tham chiếu; grant thực nằm ở role_grants)' },
+
+  // Chấm công (Phase C) — nhập IP/toạ độ công ty thật qua hub/DB trước khi dùng.
+  { key: 'attendance.office_ips', value: [], category: 'attendance', description: 'Danh sách IP/CIDR nội bộ được phép checkin' },
+  { key: 'attendance.office_lat', value: null, category: 'attendance', description: 'Vĩ độ công ty' },
+  { key: 'attendance.office_lng', value: null, category: 'attendance', description: 'Kinh độ công ty' },
+  { key: 'attendance.radius_m', value: 150, category: 'attendance', description: 'Bán kính GPS cho phép (m)' },
+  { key: 'attendance.late_grace_min', value: 30, category: 'attendance', description: 'Trễ quá X phút thì phạt' },
+  { key: 'attendance.late_fine', value: 10000, category: 'attendance', description: 'Tiền phạt đi trễ (VND)' },
+  { key: 'attendance.cancel_notice_days', value: 3, category: 'attendance', description: 'Huỷ ca báo trước X ngày' },
+  { key: 'attendance.emergency_cap_month', value: 3, category: 'attendance', description: 'Số lần huỷ đột xuất miễn phạt/tháng' },
+  { key: 'attendance.heartbeat_stale_min', value: 10, category: 'attendance', description: 'Không heartbeat quá X phút → auto checkout' },
+  { key: 'attendance.enforce_ip', value: true, category: 'attendance', description: 'Bật kiểm IP (tắt nếu chưa có IP tĩnh)' },
 ];
 
 const TIERS = [

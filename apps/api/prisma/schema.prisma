@@ -87,9 +87,40 @@ model Shift {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
+  sessions      AttendanceSession[]
+
   @@index([staffId, workDate])
   @@index([workDate, status])
   @@map("shifts")
+}
+
+enum SessionCloseReason {
+  MANUAL // NV bấm checkout
+  OUT_OF_RANGE // heartbeat phát hiện rớt IP/GPS
+  STALE // cron: heartbeat cũ quá ngưỡng
+  SHIFT_END // cron chốt cuối ca
+  ADMIN // admin chỉnh tay
+}
+
+/// Phiên chấm công trong 1 ca. 1 ca có nhiều phiên (nghỉ giữa ca → checkout rồi checkin lại).
+model AttendanceSession {
+  id              String              @id @default(cuid())
+  shiftId         String
+  shift           Shift               @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  staffId         String
+  checkinAt       DateTime            @default(now())
+  checkoutAt      DateTime? // null = đang mở
+  checkinLat      Float
+  checkinLng      Float
+  checkinIp       String
+  lastHeartbeatAt DateTime            @default(now())
+  closeReason     SessionCloseReason?
+  isLate          Boolean             @default(false) // phiên đầu ca & trễ > grace (Phase D quy tiền)
+  createdAt       DateTime            @default(now())
+
+  @@index([shiftId])
+  @@index([staffId, checkoutAt])
+  @@map("attendance_sessions")
 }
 
 model User {
