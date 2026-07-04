@@ -25,6 +25,11 @@ function makePrisma(over: Record<string, unknown> = {}) {
     product: { findMany: jest.fn().mockResolvedValue([]) },
     postProductTag: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
     communityCategory: { findMany: jest.fn().mockResolvedValue([]) },
+    order: { findFirst: jest.fn().mockResolvedValue(null) },
+    communityProfile: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: jest.fn().mockResolvedValue({}),
+    },
   };
   return { ...base, ...over } as unknown as PrismaService;
 }
@@ -150,20 +155,20 @@ describe('CommunityFeedService.getPost', () => {
 describe('CommunityFeedService.createPost', () => {
   it('nội dung trống → throw, không tạo', async () => {
     const prisma = makePrisma();
-    await expect(makeSvc(prisma).createPost('u1', { body: '   ' })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(makeSvc(prisma).createPost('u1', 'STAFF', { body: '   ' })).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.feedPost.create).not.toHaveBeenCalled();
   });
 
   it('nội dung quá dài → throw', async () => {
     const prisma = makePrisma();
-    await expect(makeSvc(prisma).createPost('u1', { body: 'a'.repeat(5001) })).rejects.toBeInstanceOf(
+    await expect(makeSvc(prisma).createPost('u1', 'STAFF', { body: 'a'.repeat(5001) })).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });
 
   it('hợp lệ → tạo bài MANUAL (trim nội dung)', async () => {
     const prisma = makePrisma();
-    await makeSvc(prisma).createPost('u1', { body: '  Vườn mình xanh quá  ' });
+    await makeSvc(prisma).createPost('u1', 'STAFF', { body: '  Vườn mình xanh quá  ' });
     const data = (prisma.feedPost.create as jest.Mock).mock.calls[0][0].data;
     expect(data).toMatchObject({ userId: 'u1', kind: 'MANUAL', body: 'Vườn mình xanh quá' });
   });
@@ -359,7 +364,7 @@ describe('CommunityFeedService.createAchievementPost', () => {
 describe('CommunityFeedService.createPost (mở rộng)', () => {
   it('QUESTION thiếu title → BadRequest, không tạo', async () => {
     const prisma = makePrisma();
-    await expect(makeSvc(prisma).createPost('u1', { kind: 'QUESTION', body: 'lá vàng?' })).rejects.toBeInstanceOf(
+    await expect(makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'QUESTION', body: 'lá vàng?' })).rejects.toBeInstanceOf(
       BadRequestException,
     );
     expect(prisma.feedPost.create).not.toHaveBeenCalled();
@@ -370,10 +375,10 @@ describe('CommunityFeedService.createPost (mở rộng)', () => {
     (prisma.product.findMany as jest.Mock).mockResolvedValue([{ id: 'prod1' }, { id: 'prod2' }]);
     (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'newpost' });
     const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
-    const r = await makeSvc(prisma, reward).createPost('u1', {
+    const r = await makeSvc(prisma, reward).createPost('u1', 'STAFF', {
       kind: 'SHOWCASE', body: 'Khoe cây', images: ['https://img/1.jpg'], productSlugs: ['cay-a', 'cay-b'],
     });
-    expect(r).toEqual({ id: 'newpost' });
+    expect(r).toEqual({ id: 'newpost', status: 'PUBLISHED' });
     const data = (prisma.feedPost.create as jest.Mock).mock.calls[0][0].data;
     expect(data).toMatchObject({ userId: 'u1', kind: 'SHOWCASE', status: 'PUBLISHED', body: 'Khoe cây', images: ['https://img/1.jpg'] });
     expect(prisma.postProductTag.createMany).toHaveBeenCalledWith({
@@ -386,7 +391,7 @@ describe('CommunityFeedService.createPost (mở rộng)', () => {
   it('quá 5 SP → BadRequest', async () => {
     const prisma = makePrisma();
     await expect(
-      makeSvc(prisma).createPost('u1', { body: 'x', productSlugs: ['a', 'b', 'c', 'd', 'e', 'f'] }),
+      makeSvc(prisma).createPost('u1', 'STAFF', { body: 'x', productSlugs: ['a', 'b', 'c', 'd', 'e', 'f'] }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -395,8 +400,67 @@ describe('CommunityFeedService.createPost (mở rộng)', () => {
     (prisma.product.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'newpost' });
     const reward = { rewardPost: jest.fn().mockRejectedValue(new Error('boom')), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
-    const r = await makeSvc(prisma, reward).createPost('u1', { kind: 'TIP', body: 'mẹo hay' });
-    expect(r).toEqual({ id: 'newpost' });
+    const r = await makeSvc(prisma, reward).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay' });
+    expect(r).toEqual({ id: 'newpost', status: 'PUBLISHED' });
     expect(prisma.feedPost.create).toHaveBeenCalled();
+  });
+});
+
+describe('CommunityFeedService.isTrusted', () => {
+  it('role STAFF → trusted (không cần query đơn)', async () => {
+    const prisma = makePrisma();
+    expect(await makeSvc(prisma).isTrusted('u1', 'STAFF')).toBe(true);
+  });
+  it('CUSTOMER không đơn, không profile → không trusted', async () => {
+    const prisma = makePrisma();
+    expect(await makeSvc(prisma).isTrusted('u1', 'CUSTOMER')).toBe(false);
+  });
+  it('CUSTOMER có đơn DELIVERED → trusted', async () => {
+    const prisma = makePrisma();
+    (prisma.order.findFirst as jest.Mock).mockResolvedValue({ id: 'o1' });
+    expect(await makeSvc(prisma).isTrusted('u1', 'CUSTOMER')).toBe(true);
+  });
+  it('CommunityProfile.isTrusted=true → trusted', async () => {
+    const prisma = makePrisma();
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ isTrusted: true });
+    expect(await makeSvc(prisma).isTrusted('u1', 'CUSTOMER')).toBe(true);
+  });
+});
+
+describe('CommunityFeedService.createPost (kiểm duyệt lai)', () => {
+  it('khách KHÔNG trusted → PENDING, KHÔNG thưởng', async () => {
+    const prisma = makePrisma(); // CUSTOMER, no order, no profile → not trusted
+    (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'p1' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    await makeSvc(prisma, reward).createPost('u1', 'CUSTOMER', { kind: 'TIP', body: 'mẹo' });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+    expect(reward.rewardPost).not.toHaveBeenCalled();
+  });
+  it('khách trusted (STAFF) → PUBLISHED + thưởng', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'p1' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    await makeSvc(prisma, reward).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo' });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.status).toBe('PUBLISHED');
+    expect(reward.rewardPost).toHaveBeenCalledWith('u1', 'p1');
+  });
+});
+
+describe('CommunityFeedService.approvePost', () => {
+  it('PENDING → PUBLISHED + set author trusted + thưởng (idempotent)', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', status: 'PENDING' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    await makeSvc(prisma, reward).approvePost('p1');
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { status: 'PUBLISHED' } });
+    expect(prisma.communityProfile.upsert).toHaveBeenCalled();
+    expect(reward.rewardPost).toHaveBeenCalledWith('author', 'p1');
+  });
+  it('bài đã PUBLISHED → không thưởng lại (idempotent guard)', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', status: 'PUBLISHED' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    await makeSvc(prisma, reward).approvePost('p1');
+    expect(reward.rewardPost).not.toHaveBeenCalled();
   });
 });

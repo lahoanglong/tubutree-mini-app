@@ -37,11 +37,31 @@ const FEED_INCLUDE = {
 @Injectable()
 export class CommunityFeedService {
   private readonly logger = new Logger(CommunityFeedService.name);
+  private readonly TRUSTED_ROLES = new Set(['STAFF', 'ADMIN', 'DEALER', 'AFFILIATE']);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly reward: CommunityRewardService,
   ) {}
+
+  /**
+   * Kiểm duyệt lai (§6.14 moderation): STAFF/ADMIN/DEALER/AFFILIATE, hoặc user đã
+   * được đánh dấu isTrusted (qua approvePost trước đó), hoặc đã có đơn DELIVERED
+   * (khách hàng thật) → được đăng bài PUBLISHED ngay; còn lại vào hàng chờ duyệt.
+   */
+  async isTrusted(userId: string, role: string): Promise<boolean> {
+    if (this.TRUSTED_ROLES.has(role)) return true;
+    const profile = await this.prisma.communityProfile.findUnique({
+      where: { userId },
+      select: { isTrusted: true },
+    });
+    if (profile?.isTrusted) return true;
+    const delivered = await this.prisma.order.findFirst({
+      where: { userId, status: 'DELIVERED' },
+      select: { id: true },
+    });
+    return !!delivered;
+  }
 
   async getFeed(
     userId: string,
@@ -75,7 +95,9 @@ export class CommunityFeedService {
       where: { id: postId },
       include: { ...FEED_INCLUDE, reactions: { where: { userId }, select: { id: true } } },
     });
-    if (!p || p.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
+    if (!p) throw new NotFoundException('Bài viết không tồn tại.');
+    if (p.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
+    if (p.status === 'PENDING' && p.userId !== userId) throw new NotFoundException('Bài viết không tồn tại.');
     await this.prisma.feedPost.update({ where: { id: postId }, data: { viewCount: { increment: 1 } } });
     return this.toItem(p, userId);
   }
@@ -115,7 +137,7 @@ export class CommunityFeedService {
     };
   }
 
-  async createPost(userId: string, input: CreatePostInput): Promise<{ id: string }> {
+  async createPost(userId: string, role: string, input: CreatePostInput): Promise<{ id: string; status: string }> {
     const kind = input.kind ?? 'MANUAL';
     const body = (input.body ?? '').trim();
     if (!body) throw new BadRequestException('Nội dung bài viết trống.');
@@ -127,8 +149,11 @@ export class CommunityFeedService {
     const slugs = input.productSlugs ?? [];
     if (slugs.length > MAX_PRODUCT_TAGS) throw new BadRequestException('Chỉ gắn tối đa 5 sản phẩm.');
 
+    const trusted = await this.isTrusted(userId, role);
+    const status = trusted ? 'PUBLISHED' : 'PENDING';
+
     const post = await this.prisma.feedPost.create({
-      data: { userId, kind, status: 'PUBLISHED', body, title, images, categoryId: input.categoryId ?? null },
+      data: { userId, kind, status, body, title, images, categoryId: input.categoryId ?? null },
     });
 
     if (slugs.length) {
@@ -143,12 +168,44 @@ export class CommunityFeedService {
       }
     }
 
-    try {
-      await this.reward.rewardPost(userId, post.id);
-    } catch (err) {
-      this.logger.warn(`rewardPost failed for post ${post.id}: ${(err as Error).message}`);
+    if (status === 'PUBLISHED') {
+      try {
+        await this.reward.rewardPost(userId, post.id);
+      } catch (err) {
+        this.logger.warn(`rewardPost failed for post ${post.id}: ${(err as Error).message}`);
+      }
     }
-    return { id: post.id };
+    return { id: post.id, status };
+  }
+
+  /** Duyệt bài PENDING → PUBLISHED; đánh dấu tác giả isTrusted; thưởng (idempotent — không thưởng lại nếu đã PUBLISHED). */
+  async approvePost(postId: string) {
+    const post = await this.prisma.feedPost.findUnique({
+      where: { id: postId },
+      select: { id: true, userId: true, status: true },
+    });
+    if (!post) throw new NotFoundException('Bài viết không tồn tại.');
+    if (post.status === 'PUBLISHED') return { ok: true }; // idempotent, không thưởng lại
+    await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'PUBLISHED' } });
+    await this.prisma.communityProfile.upsert({
+      where: { userId: post.userId },
+      create: { userId: post.userId, isTrusted: true },
+      update: { isTrusted: true },
+    });
+    try {
+      await this.reward.rewardPost(post.userId, post.id);
+    } catch (err) {
+      this.logger.warn(`rewardPost(approve) failed ${post.id}: ${(err as Error).message}`);
+    }
+    return { ok: true };
+  }
+
+  /** Từ chối bài PENDING (hoặc bất kỳ) → xoá mềm REMOVED. */
+  async rejectPost(postId: string) {
+    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true } });
+    if (!post) throw new NotFoundException('Bài viết không tồn tại.');
+    await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
+    return { ok: true };
   }
 
   /** Tạo bài thành tích (auto-post). Không validate độ dài người-dùng-nhập. */
