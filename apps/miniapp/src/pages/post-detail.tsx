@@ -57,9 +57,15 @@ export default function PostDetailPage() {
     enabled: authed && !!id,
   });
 
+  // Root ['community'] là prefix của detail ['community', id], comments ['community', id, 'comments']
+  // VÀ list ['community', category, sort] → 1 lần invalidate làm mới cả trang chi tiết lẫn thẻ ở /feed
+  // (badge best-answer, tiêu đề sửa, số like/comment, bài đã xoá). Invalidation của React Query là
+  // theo prefix nên ['community', id] KHÔNG khớp key list — bắt buộc invalidate ở gốc.
+  const invalidateCommunity = () => qc.invalidateQueries({ queryKey: ['community'] });
+
   const react = useMutation({
     mutationFn: () => reactPost(id!),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['community', id] }),
+    onSuccess: () => void invalidateCommunity(),
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
@@ -67,8 +73,7 @@ export default function PostDetailPage() {
     mutationFn: (body: string) => addComment(id!, body),
     onSuccess: () => {
       setCommentText('');
-      void qc.invalidateQueries({ queryKey: ['community', id, 'comments'] });
-      void qc.invalidateQueries({ queryKey: ['community', id] });
+      void invalidateCommunity();
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -77,8 +82,7 @@ export default function PostDetailPage() {
     mutationFn: (commentId: string) => setBestAnswer(id!, commentId),
     onSuccess: () => {
       haptic('medium');
-      void qc.invalidateQueries({ queryKey: ['community', id, 'comments'] });
-      void qc.invalidateQueries({ queryKey: ['community', id] });
+      void invalidateCommunity();
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -88,7 +92,7 @@ export default function PostDetailPage() {
     onSuccess: () => {
       setEditing(false);
       openSnackbar({ text: vi.common.save, type: 'success' });
-      void qc.invalidateQueries({ queryKey: ['community', id] });
+      void invalidateCommunity();
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -96,6 +100,8 @@ export default function PostDetailPage() {
   const deleteMut = useMutation({
     mutationFn: () => deletePost(id!),
     onSuccess: () => {
+      // Invalidate TRƯỚC khi rời trang để list /feed refetch (bỏ bài đã xoá) ngay.
+      void invalidateCommunity();
       openSnackbar({ text: vi.community.deleted, type: 'success' });
       navigate('/feed');
     },
