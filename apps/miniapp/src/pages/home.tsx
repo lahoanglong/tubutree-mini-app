@@ -1,6 +1,6 @@
 import { Box, Page, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, ShoppingCart, Search, ChevronRight, Baby, SprayCan, Droplets, Recycle, Map, Sparkles, Users, type LucideIcon } from 'lucide-react';
+import { Bell, ShoppingCart, Search, ChevronRight, Baby, SprayCan, Droplets, Recycle, Map, Sparkles, Users, MessagesSquare, type LucideIcon } from 'lucide-react';
 import { fetchProducts, fetchBrands, getCart } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -329,6 +329,39 @@ export default function HomePage() {
             </Text>
           </Box>
           <ChevronRight size={20} color="#fff" strokeWidth={2} />
+        </Box>
+      </Box>
+
+      {/* ── Cộng đồng hỏi đáp (gắn kết + bán hàng) ── */}
+      <Box px={4} pt={3}>
+        <Box
+          role="button"
+          aria-label={vi.community.title}
+          className="tubu-press"
+          onClick={() => {
+            haptic('light');
+            navigate('/feed');
+          }}
+          flex
+          alignItems="center"
+          style={{
+            gap: 12,
+            padding: 14,
+            borderRadius: 'var(--radius-lg)',
+            background: 'var(--neutral-0)',
+            border: '1px solid var(--leaf-200)',
+          }}
+        >
+          <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+            <MessagesSquare size={22} color="var(--leaf-700)" strokeWidth={1.9} />
+          </Box>
+          <Box style={{ flex: 1 }}>
+            <Text bold>{vi.community.title}</Text>
+            <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+              {vi.community.subtitle}
+            </Text>
+          </Box>
+          <ChevronRight size={20} color="var(--neutral-400)" strokeWidth={2} />
         </Box>
       </Box>
 

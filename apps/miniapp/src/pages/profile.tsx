@@ -2,7 +2,7 @@ import { Box, Page, Text, Button, Avatar, Spinner, useNavigate, useSnackbar } fr
 import { useQuery } from '@tanstack/react-query';
 import {
   Package, Repeat, Heart, MapPin, Leaf, Wallet, Users, BadgePercent,
-  Bell, Store, Settings, Info, ChevronRight, Copy, type LucideIcon,
+  Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { getLoyalty, getNotifications } from '../services/account-api';
@@ -37,6 +37,7 @@ const READY = new Set([
   '/subscriptions',
   '/brand-owner',
   '/storefront',
+  '/feed',
 ]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [
@@ -47,6 +48,7 @@ const MENU: { group: string; items: MenuItem[] }[] = [
       { Icon: Repeat, label: 'Đặt định kỳ', to: '/subscriptions' },
       { Icon: Heart, label: 'Sản phẩm yêu thích', to: '/wishlist' },
       { Icon: MapPin, label: 'Sổ địa chỉ', to: '/addresses' },
+      { Icon: MessagesSquare, label: 'Cộng đồng hỏi đáp', to: '/feed', hint: 'Hỏi chăm cây · khoe vườn' },
     ],
   },
   {
