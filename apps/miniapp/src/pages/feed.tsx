@@ -36,6 +36,18 @@ export default function FeedPage() {
   });
   const posts = feed.data?.pages.flatMap((p) => p.posts) ?? [];
 
+  // Đang silent-login lúc mở app (restore chưa xong) → spinner thay vì chớp cổng đăng nhập.
+  if (status === 'loading') {
+    return (
+      <Page className="page">
+        <Box flex justifyContent="center" p={6}>
+          <Spinner />
+        </Box>
+      </Page>
+    );
+  }
+
+  // Chỉ hiện cổng đăng nhập khi đã chắc chắn user chưa đăng nhập (status settled, không authenticated).
   if (!authed) {
     return (
       <Page className="page">
@@ -124,7 +136,7 @@ export default function FeedPage() {
                 onClick={() => void feed.fetchNextPage()}
                 style={{ minWidth: 160 }}
               >
-                Xem thêm
+                {vi.community.loadMore}
               </Button>
             </Box>
           )}

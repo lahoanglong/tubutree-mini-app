@@ -8,9 +8,9 @@ const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
   QUESTION: '❓ ' + vi.community.kindQuestion,
   SHOWCASE: '🌿 ' + vi.community.kindShowcase,
   TIP: '💡 ' + vi.community.kindTip,
-  HARVEST: '🌳 Thu hoạch',
-  SPECIES: '📒 Sưu tập loài',
-  MILESTONE: '🌍 Mốc cộng đồng',
+  HARVEST: vi.community.kindHarvest,
+  SPECIES: vi.community.kindSpecies,
+  MILESTONE: vi.community.kindMilestone,
 };
 
 export default function PostCard({ post, onClick }: { post: FeedItem; onClick: () => void }) {
