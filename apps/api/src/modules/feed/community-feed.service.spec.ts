@@ -1244,9 +1244,29 @@ describe('CommunityFeedService.pickWinner (admin)', () => {
     await expect(makeSvc(prisma).pickWinner('evX', 'u1')).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('set winnerUserId + CLOSED, thưởng rewardXu của sự kiện', async () => {
+  it('sự kiện đã CLOSED → BadRequest, KHÔNG thưởng, KHÔNG update (chống trả thưởng đôi)', async () => {
     const prisma = makePrisma();
-    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000 });
+    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000, status: 'CLOSED' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() };
+    await expect(makeSvc(prisma, reward).pickWinner('ev1', 'u1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(reward.rewardEventWinner).not.toHaveBeenCalled();
+    expect(prisma.communityEvent.update).not.toHaveBeenCalled();
+  });
+
+  it('người dùng không tồn tại → NotFound, KHÔNG thưởng, KHÔNG update', async () => {
+    const prisma = makePrisma();
+    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000, status: 'OPEN' });
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() };
+    await expect(makeSvc(prisma, reward).pickWinner('ev1', 'u1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(reward.rewardEventWinner).not.toHaveBeenCalled();
+    expect(prisma.communityEvent.update).not.toHaveBeenCalled();
+  });
+
+  it('set winnerUserId + CLOSED, thưởng rewardXu của sự kiện (sự kiện OPEN)', async () => {
+    const prisma = makePrisma();
+    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000, status: 'OPEN' });
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1' });
     const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() };
     const r = await makeSvc(prisma, reward).pickWinner('ev1', 'u1');
     expect(prisma.communityEvent.update).toHaveBeenCalledWith({
@@ -1259,7 +1279,8 @@ describe('CommunityFeedService.pickWinner (admin)', () => {
 
   it('rewardEventWinner ném lỗi → pickWinner vẫn trả ok (non-fatal)', async () => {
     const prisma = makePrisma();
-    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000 });
+    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000, status: 'OPEN' });
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1' });
     const reward = {
       rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(),
       rewardEventWinner: jest.fn().mockRejectedValue(new Error('boom')),

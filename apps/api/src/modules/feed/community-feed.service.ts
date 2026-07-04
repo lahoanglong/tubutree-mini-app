@@ -587,10 +587,18 @@ export class CommunityFeedService {
   /**
    * Chọn người thắng sự kiện (admin) — đóng sự kiện + thưởng TubuXu. Thưởng NON-FATAL:
    * lỗi thưởng (vd trùng idempotency) không chặn việc chốt người thắng.
+   *
+   * Money-critical: CHỈ chốt được khi sự kiện còn OPEN. Vì reason thưởng nhúng userId
+   * (COMMUNITY_EVENT_WIN:<eventId>:<userId>), gọi pickWinner 2 lần với 2 userId KHÁC nhau
+   * trên cùng sự kiện sẽ trả thưởng CẢ HAI (unique index chỉ dedup theo từng user) → trả
+   * đôi. Guard OPEN đảm bảo chỉ chốt được 1 lần (double-submit/retry/sửa của admin sẽ bị chặn).
    */
   async pickWinner(eventId: string, userId: string) {
     const event = await this.prisma.communityEvent.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException('Sự kiện không tồn tại.');
+    if (event.status !== 'OPEN') throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
+    const winner = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!winner) throw new NotFoundException('Người dùng không tồn tại.');
     await this.prisma.communityEvent.update({
       where: { id: eventId },
       data: { winnerUserId: userId, status: 'CLOSED' },
