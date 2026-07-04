@@ -150,6 +150,21 @@ describe('CommunityFeedService.getPost', () => {
     await expect(makeSvc(prisma).getPost('u1', 'p1')).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.feedPost.update).not.toHaveBeenCalled();
   });
+
+  it('bài PENDING của người khác → NotFound + KHÔNG tăng viewCount', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row(), status: 'PENDING', userId: 'author', reactions: [], _count: { reactions: 0, comments: 0 } });
+    await expect(makeSvc(prisma).getPost('intruder', 'p1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.feedPost.update).not.toHaveBeenCalled();
+  });
+
+  it('chủ bài xem bài PENDING của mình → OK + tăng viewCount', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row(), status: 'PENDING', userId: 'owner', reactions: [], _count: { reactions: 0, comments: 0 } });
+    const r = await makeSvc(prisma).getPost('owner', 'p1');
+    expect(r.id).toBe('p1');
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { viewCount: { increment: 1 } } });
+  });
 });
 
 describe('CommunityFeedService.createPost', () => {
