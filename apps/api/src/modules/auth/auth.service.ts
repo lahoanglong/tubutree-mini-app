@@ -7,6 +7,7 @@ import type { User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Env } from '../../config/env.validation';
 import { ZaloService } from './zalo.service';
+import { RbacService } from '../staff/rbac/rbac.service';
 
 @Injectable()
 export class AuthService {
@@ -15,6 +16,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService<Env, true>,
     private readonly zalo: ZaloService,
+    private readonly rbac: RbacService,
   ) {}
 
   /**
@@ -174,6 +176,10 @@ export class AuthService {
   }
 
   private async issueTokens(user: User): Promise<LoginResponse> {
+    // Áp quyền theo SĐT (allowlist) — chạy cho cả login lẫn refresh ⇒ đổi role có hiệu lực
+    // ở lần refresh kế. Không có phone / không có grant → trả nguyên user.
+    user = await this.rbac.applyGrants(user);
+
     const payload: JwtPayload = {
       sub: user.id,
       role: user.role,

@@ -2,7 +2,7 @@ import { Box, Page, Text, Button, Avatar, Spinner, useNavigate, useSnackbar } fr
 import { useQuery } from '@tanstack/react-query';
 import {
   Package, Repeat, Heart, MapPin, Leaf, Wallet, Users, BadgePercent,
-  Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, type LucideIcon,
+  Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, ShieldCheck, CalendarClock, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { getLoyalty, getNotifications } from '../services/account-api';
@@ -38,6 +38,9 @@ const READY = new Set([
   '/brand-owner',
   '/storefront',
   '/feed',
+  '/admin',
+  '/staff',
+  '/my-payroll',
 ]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [
@@ -101,13 +104,24 @@ export default function ProfilePage() {
     enabled: status === 'authenticated',
     retry: false,
   });
-  const menu = ownedBrandQ.data
+  const baseMenu = ownedBrandQ.data
     ? MENU.map((s) =>
         s.group === 'Kiếm thưởng'
           ? { ...s, items: [...s.items, { Icon: Store, label: 'Quản lý nhãn hàng', to: '/brand-owner', hint: ownedBrandQ.data!.name }] }
           : s,
       )
     : MENU;
+  // Nhóm công việc nội bộ — STAFF thấy "Ca làm", ADMIN thấy thêm "Quản trị nhân sự".
+  const isStaffOrAdmin = user?.role === 'STAFF' || user?.role === 'ADMIN';
+  const workItems: MenuItem[] = [];
+  if (isStaffOrAdmin) {
+    workItems.push({ Icon: CalendarClock, label: 'Ca làm & chấm công', to: '/staff', hint: 'Đăng ký ca — chấm công' });
+    workItems.push({ Icon: Wallet, label: 'Lương của tôi', to: '/my-payroll', hint: 'Xem lương & thông tin nhận' });
+  }
+  if (user?.role === 'ADMIN') {
+    workItems.push({ Icon: ShieldCheck, label: 'Quản trị nhân sự', to: '/admin', hint: 'Cấp quyền — duyệt ca — lương' });
+  }
+  const menu = workItems.length > 0 ? [...baseMenu, { group: 'Công việc', items: workItems }] : baseMenu;
 
   // Đang đăng nhập ngầm → spinner. Nếu login fail (idle/error) → nút thử lại,
   // KHÔNG để spinner quay vô hạn ("tài khoản load mãi").

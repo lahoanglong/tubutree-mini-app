@@ -4,6 +4,11 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { JwtService } from '@nestjs/jwt';
 import type { ConfigService } from '@nestjs/config';
 import type { ZaloService } from './zalo.service';
+import type { RbacService } from '../staff/rbac/rbac.service';
+
+// applyGrants no-op (identity) cho unit test auth — không đụng DB.
+const mkRbac = () =>
+  ({ applyGrants: jest.fn(async (u: unknown) => u) } as unknown as RbacService);
 
 const configValues: Record<string, unknown> = {
   JWT_ACCESS_SECRET: 'access-secret',
@@ -25,7 +30,7 @@ function makeService(over: Record<string, unknown> = {}) {
   const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
   const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
   const zalo = {} as unknown as ZaloService;
-  return { svc: new AuthService(prisma, jwt, config, zalo), prisma, create, updateMany };
+  return { svc: new AuthService(prisma, jwt, config, zalo, mkRbac()), prisma, create, updateMany };
 }
 
 const USER = { id: 'u1', role: 'CUSTOMER', zaloId: 'z1', referralCode: 'R1' };
@@ -85,7 +90,7 @@ describe('AuthService.loginWithZaloMiniApp (phone)', () => {
     const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
     const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
     const zalo = zaloMocks as unknown as ZaloService;
-    return new AuthService(prisma, jwt, config, zalo);
+    return new AuthService(prisma, jwt, config, zalo, mkRbac());
   }
 
   it('user mới + có phoneToken → tạo user kèm SĐT đã chuẩn hoá', async () => {
@@ -150,7 +155,11 @@ describe('AuthService — ghi nhận người giới thiệu lúc đăng ký (re
     } as unknown as PrismaService;
     const jwt = { signAsync: jest.fn().mockResolvedValue('jwt') } as unknown as JwtService;
     const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
-    return { svc: new AuthService(prisma, jwt, config, {} as unknown as ZaloService), create, findUnique };
+    return {
+      svc: new AuthService(prisma, jwt, config, {} as unknown as ZaloService, mkRbac()),
+      create,
+      findUnique,
+    };
   }
 
   it('guest mới + referralCode hợp lệ (chuẩn hoá hoa) → set referredById = người giới thiệu', async () => {

@@ -5,9 +5,10 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { ZaloService } from './zalo.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { StaffModule } from '../staff/staff.module';
 
 @Module({
-  imports: [PassportModule, JwtModule.register({})],
+  imports: [PassportModule, JwtModule.register({}), StaffModule],
   controllers: [AuthController],
   providers: [AuthService, ZaloService, JwtStrategy],
   exports: [AuthService],

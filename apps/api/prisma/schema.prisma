@@ -24,6 +24,189 @@ enum UserRole {
   ADMIN
 }
 
+enum RoleGrantRole {
+  STAFF
+  ADMIN
+}
+
+/// Cấp quyền theo SĐT — áp cả khi user CHƯA mở app. Khi login/refresh, auth áp grant
+/// cao nhất còn hiệu lực nếu cao hơn role hiện tại. Chỉ quản STAFF/ADMIN (CTV/đại lý đi DealerApplication).
+model RoleGrant {
+  id        String        @id @default(cuid())
+  phone     String
+  role      RoleGrantRole
+  grantedBy String // adminId, hoặc "seed" cho admin gán sẵn ban đầu
+  note      String?
+  revokedAt DateTime? // null = còn hiệu lực
+  createdAt DateTime      @default(now())
+
+  @@index([phone, revokedAt])
+  @@map("role_grants")
+}
+
+enum ShiftStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// Ca chuẩn admin định nghĩa (phút trong ngày để render lưới nhanh, không lệch TZ).
+model ShiftTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  startMin  Int // phút từ 00:00, 480 = 08:00
+  endMin    Int // 720 = 12:00
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("shift_templates")
+}
+
+/// Ca làm nhân viên đăng ký → admin duyệt (chỉnh giờ được). Cửa sổ hiệu lực = approved* ?? start/end.
+model Shift {
+  id            String      @id @default(cuid())
+  staffId       String
+  staff         User        @relation("StaffShifts", fields: [staffId], references: [id], onDelete: Cascade)
+  workDate      DateTime    @db.Date
+  startAt       DateTime
+  endAt         DateTime
+  templateId    String?
+  status        ShiftStatus @default(PENDING)
+  approvedStart DateTime?
+  approvedEnd   DateTime?
+  approvedBy    String?
+  approvedAt    DateTime?
+  rejectReason  String?
+  cancelReason  String?
+  cancelledAt   DateTime?
+  isEmergency   Boolean     @default(false)
+  evidenceUrl   String?
+  cancelPenalty Boolean     @default(false) // Phase D quy ra tiền (1h công)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  sessions      AttendanceSession[]
+
+  @@index([staffId, workDate])
+  @@index([workDate, status])
+  @@map("shifts")
+}
+
+enum SessionCloseReason {
+  MANUAL // NV bấm checkout
+  OUT_OF_RANGE // heartbeat phát hiện rớt IP/GPS
+  STALE // cron: heartbeat cũ quá ngưỡng
+  SHIFT_END // cron chốt cuối ca
+  ADMIN // admin chỉnh tay
+}
+
+/// Phiên chấm công trong 1 ca. 1 ca có nhiều phiên (nghỉ giữa ca → checkout rồi checkin lại).
+model AttendanceSession {
+  id              String              @id @default(cuid())
+  shiftId         String
+  shift           Shift               @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  staffId         String
+  checkinAt       DateTime            @default(now())
+  checkoutAt      DateTime? // null = đang mở
+  checkinLat      Float
+  checkinLng      Float
+  checkinIp       String
+  lastHeartbeatAt DateTime            @default(now())
+  closeReason     SessionCloseReason?
+  isLate          Boolean             @default(false) // phiên đầu ca & trễ > grace (Phase D quy tiền)
+  createdAt       DateTime            @default(now())
+
+  @@index([shiftId])
+  @@index([staffId, checkoutAt])
+  @@map("attendance_sessions")
+}
+
+enum PayrollMonthStatus {
+  OPEN
+  FINALIZED
+  PAID
+}
+
+enum AdjustmentType {
+  LATE // đi trễ > grace → phạt cố định
+  LATE_CANCEL // huỷ ca < 3 ngày → phạt 1h công
+  MANUAL // admin cộng/trừ tay
+}
+
+/// Hồ sơ nhân viên: đơn giá giờ (theo từng người) + bank nhận lương.
+model StaffProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hourlyRate      Int      @default(0) // VND/giờ
+  bankBin         String? // mã Napas BIN (dựng VietQR)
+  bankAccountNo   String?
+  bankAccountName String?
+  qrImageUrl      String? // QR tĩnh NV tự tải (ưu tiên nếu có)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("staff_profiles")
+}
+
+model PayrollAdjustment {
+  id        String         @id @default(cuid())
+  staffId   String
+  workDate  DateTime       @db.Date
+  type      AdjustmentType
+  amount    Int // dương = trừ; MANUAL âm = thưởng/cộng
+  reason    String
+  shiftId   String?
+  createdBy String?
+  createdAt DateTime       @default(now())
+
+  @@index([staffId, workDate])
+  @@index([shiftId, type])
+  @@map("payroll_adjustments")
+}
+
+model PayrollDay {
+  id            String    @id @default(cuid())
+  staffId       String
+  workDate      DateTime  @db.Date
+  workedMinutes Int       @default(0)
+  hourlyRate    Int       @default(0) // snapshot
+  gross         Int       @default(0)
+  fines         Int       @default(0)
+  net           Int       @default(0)
+  finalizedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([staffId, workDate])
+  @@map("payroll_days")
+}
+
+model PayrollMonth {
+  id            String             @id @default(cuid())
+  staffId       String
+  year          Int
+  month         Int // 1..12
+  totalMinutes  Int                @default(0)
+  gross         Int                @default(0)
+  totalFines    Int                @default(0)
+  net           Int                @default(0)
+  status        PayrollMonthStatus @default(OPEN)
+  finalizedAt   DateTime?
+  paidAt        DateTime?
+  paidBy        String?
+  proofImageUrl String? // ảnh xác nhận đã chuyển
+  note          String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@unique([staffId, year, month])
+  @@map("payroll_months")
+}
+
 model User {
   id                String          @id @default(cuid())
   zaloId            String?         @unique // openId từ Zalo
@@ -82,6 +265,8 @@ model User {
   betaTester             BetaTester?
   betaFeedbacks          BetaFeedback[]
   subscriptions          Subscription[]
+  staffShifts            Shift[]                 @relation("StaffShifts")
+  staffProfile           StaffProfile?
 
   @@index([referredById])
   @@map("users")
