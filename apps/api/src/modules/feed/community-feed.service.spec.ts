@@ -30,6 +30,11 @@ function makePrisma(over: Record<string, unknown> = {}) {
       findUnique: jest.fn().mockResolvedValue(null),
       upsert: jest.fn().mockResolvedValue({}),
     },
+    communityReport: {
+      create: jest.fn().mockResolvedValue({ id: 'r1' }),
+      update: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   };
   return { ...base, ...over } as unknown as PrismaService;
 }
@@ -89,12 +94,20 @@ describe('CommunityFeedService.getFeed (cộng đồng)', () => {
     expect(args.where).toMatchObject({ status: 'PUBLISHED', kind: 'QUESTION' });
   });
 
-  it('sort=popular → orderBy theo số tim rồi createdAt', async () => {
+  it('sort=popular → orderBy pinned trước, rồi số tim, rồi createdAt', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row()]);
     await makeSvc(prisma).getFeed('u1', { sort: 'popular' });
     const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
-    expect(args.orderBy).toEqual([{ reactions: { _count: 'desc' } }, { createdAt: 'desc' }]);
+    expect(args.orderBy).toEqual([{ isPinned: 'desc' }, { reactions: { _count: 'desc' } }, { createdAt: 'desc' }]);
+  });
+
+  it('mặc định (new) → orderBy pinned trước, rồi createdAt', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row()]);
+    await makeSvc(prisma).getFeed('u1');
+    const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
+    expect(args.orderBy).toEqual([{ isPinned: 'desc' }, { createdAt: 'desc' }]);
   });
 
   it('phân trang cursor → lấy take+1, trả nextCursor + cắt đúng, truyền cursor/skip', async () => {
@@ -477,5 +490,92 @@ describe('CommunityFeedService.approvePost', () => {
     const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
     await makeSvc(prisma, reward).approvePost('p1');
     expect(reward.rewardPost).not.toHaveBeenCalled();
+  });
+});
+
+describe('CommunityFeedService.report', () => {
+  it('tạo report OPEN cho POST', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).report('u1', { targetType: 'POST', targetId: 'p1', reason: 'spam' });
+    expect((prisma.communityReport.create as jest.Mock).mock.calls[0][0].data).toMatchObject({
+      reporterId: 'u1', targetType: 'POST', targetId: 'p1', reason: 'spam', status: 'OPEN',
+    });
+  });
+
+  it('targetType không hợp lệ → chuẩn hoá về POST', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).report('u1', { targetType: 'WHATEVER', targetId: 'p1', reason: 'spam' });
+    expect((prisma.communityReport.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ targetType: 'POST' });
+  });
+
+  it('targetType COMMENT → giữ nguyên COMMENT', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).report('u1', { targetType: 'COMMENT', targetId: 'c1', reason: 'spam' });
+    expect((prisma.communityReport.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ targetType: 'COMMENT', targetId: 'c1' });
+  });
+
+  it('reason rỗng → fallback "Không phù hợp"', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).report('u1', { targetType: 'POST', targetId: 'p1', reason: '   ' });
+    expect((prisma.communityReport.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ reason: 'Không phù hợp' });
+  });
+
+  it('reason quá dài → cắt còn 500 ký tự', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).report('u1', { targetType: 'POST', targetId: 'p1', reason: 'a'.repeat(600) });
+    expect((prisma.communityReport.create as jest.Mock).mock.calls[0][0].data.reason).toHaveLength(500);
+  });
+});
+
+describe('CommunityFeedService.adminPending', () => {
+  it('lấy bài PENDING, sắp asc, kèm tên tác giả + tên danh mục', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
+      { id: 'p1', kind: 'TIP', title: 't', body: 'b', images: [], createdAt: new Date('2026-07-01'), user: { fullName: 'Long' }, category: { name: 'Chăm sóc' } },
+    ]);
+    const r = await makeSvc(prisma).adminPending();
+    const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
+    expect(args.where).toEqual({ status: 'PENDING' });
+    expect(args.orderBy).toEqual({ createdAt: 'asc' });
+    expect(r[0]).toMatchObject({ id: 'p1', author: 'Long', category: 'Chăm sóc' });
+  });
+
+  it('tác giả không tên, không danh mục → "Bạn Tubu" / null', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
+      { id: 'p1', kind: 'TIP', title: null, body: 'b', images: [], createdAt: new Date(), user: { fullName: null }, category: null },
+    ]);
+    const r = await makeSvc(prisma).adminPending();
+    expect(r[0]).toMatchObject({ author: 'Bạn Tubu', category: null });
+  });
+});
+
+describe('CommunityFeedService.adminReports', () => {
+  it('lấy report OPEN, sắp asc', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).adminReports();
+    expect(prisma.communityReport.findMany).toHaveBeenCalledWith({ where: { status: 'OPEN' }, orderBy: { createdAt: 'asc' }, take: 50 });
+  });
+});
+
+describe('CommunityFeedService.resolveReport', () => {
+  it('set RESOLVED', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).resolveReport('r1');
+    expect(prisma.communityReport.update).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { status: 'RESOLVED' } });
+  });
+});
+
+describe('CommunityFeedService.pinPost', () => {
+  it('set isPinned true', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).pinPost('p1', true);
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { isPinned: true } });
+  });
+
+  it('set isPinned false', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).pinPost('p1', false);
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { isPinned: false } });
   });
 });

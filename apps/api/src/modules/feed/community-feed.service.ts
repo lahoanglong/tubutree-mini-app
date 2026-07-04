@@ -73,8 +73,8 @@ export class CommunityFeedService {
     if (opts.kind) where.kind = opts.kind;
     const orderBy =
       opts.sort === 'popular'
-        ? [{ reactions: { _count: 'desc' as const } }, { createdAt: 'desc' as const }]
-        : [{ createdAt: 'desc' as const }];
+        ? [{ isPinned: 'desc' as const }, { reactions: { _count: 'desc' as const } }, { createdAt: 'desc' as const }]
+        : [{ isPinned: 'desc' as const }, { createdAt: 'desc' as const }];
     const posts = await this.prisma.feedPost.findMany({
       where,
       orderBy,
@@ -305,6 +305,53 @@ export class CommunityFeedService {
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Không có quyền xoá.');
     await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
+    return { ok: true };
+  }
+
+  /** Báo cáo bài/bình luận vi phạm — tạo CommunityReport OPEN. */
+  async report(reporterId: string, dto: { targetType: string; targetId: string; reason: string }) {
+    const type = dto.targetType === 'COMMENT' ? 'COMMENT' : 'POST';
+    const reason = (dto.reason ?? '').trim().slice(0, 500) || 'Không phù hợp';
+    await this.prisma.communityReport.create({
+      data: { reporterId, targetType: type, targetId: dto.targetId, reason, status: 'OPEN' },
+    });
+    return { ok: true };
+  }
+
+  /** Hàng chờ duyệt — bài PENDING, cũ nhất trước, kèm tên tác giả + danh mục. */
+  async adminPending(take = 50) {
+    const posts = await this.prisma.feedPost.findMany({
+      where: { status: 'PENDING' },
+      orderBy: { createdAt: 'asc' },
+      take,
+      include: { user: { select: { fullName: true } }, category: { select: { name: true } } },
+    });
+    return posts.map((p) => ({
+      id: p.id,
+      kind: p.kind,
+      title: p.title,
+      body: p.body,
+      images: p.images,
+      author: p.user.fullName ?? 'Bạn Tubu',
+      category: p.category?.name ?? null,
+      createdAt: p.createdAt,
+    }));
+  }
+
+  /** Danh sách report đang mở (OPEN), cũ nhất trước. */
+  async adminReports(take = 50) {
+    return this.prisma.communityReport.findMany({ where: { status: 'OPEN' }, orderBy: { createdAt: 'asc' }, take });
+  }
+
+  /** Đánh dấu report đã xử lý. */
+  async resolveReport(reportId: string) {
+    await this.prisma.communityReport.update({ where: { id: reportId }, data: { status: 'RESOLVED' } });
+    return { ok: true };
+  }
+
+  /** Ghim/bỏ ghim bài lên đầu bảng tin. */
+  async pinPost(postId: string, pinned: boolean) {
+    await this.prisma.feedPost.update({ where: { id: postId }, data: { isPinned: pinned } });
     return { ok: true };
   }
 }
