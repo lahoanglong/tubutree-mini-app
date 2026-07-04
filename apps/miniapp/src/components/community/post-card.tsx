@@ -4,6 +4,7 @@ import type { FeedItem } from '../../services/feed-api';
 import { timeAgo } from '../../utils/time-ago';
 import { formatVnd } from '../../utils/format';
 import { vi } from '../../i18n/vi';
+import { RankBadge } from './rank-badge';
 
 // Xuất để dùng lại ở community-moderation.tsx (localize post.kind thô "QUESTION"/"TIP"...).
 export const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
@@ -28,6 +29,7 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
           <Box flex alignItems="center" style={{ gap: 6 }}>
             <Text size="small" bold>{post.author}</Text>
             {post.badge === 'EXPERT' && <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>🌿 {vi.community.expert}</Text>}
+            <RankBadge level={post.authorLevel} />
           </Box>
           <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
             {timeAgo(post.createdAt)}{post.category ? ` · ${post.category.icon ?? ''} ${post.category.name}` : ''}

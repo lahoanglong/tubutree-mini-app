@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Page, Text, Button, Input, Spinner, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Plus, HelpCircle, Hash } from 'lucide-react';
+import { Plus, HelpCircle, Hash, Trophy } from 'lucide-react';
 import { getFeed, getCategories, type FeedSort } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -95,29 +95,52 @@ export default function FeedPage() {
           <Text bold size="large">{vi.community.title}</Text>
           <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{vi.community.subtitle}</Text>
         </Box>
-        <Box
-          role="button"
-          className="tubu-press"
-          onClick={() => {
-            haptic('light');
-            setComposing(true);
-          }}
-          flex
-          alignItems="center"
-          style={{
-            gap: 4,
-            background: 'var(--leaf-600)',
-            color: '#fff',
-            borderRadius: 'var(--radius-full)',
-            padding: '8px 14px',
-            fontSize: 13,
-            fontWeight: 600,
-            minHeight: 40,
-            boxSizing: 'border-box',
-          }}
-        >
-          <Plus size={16} />
-          {vi.community.compose}
+        <Box flex alignItems="center" style={{ gap: 8 }}>
+          <Box
+            role="button"
+            aria-label={vi.community.leaderboard}
+            className="tubu-press"
+            onClick={() => {
+              haptic('light');
+              navigate('/feed/leaderboard');
+            }}
+            flex
+            alignItems="center"
+            justifyContent="center"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              background: 'var(--leaf-50)',
+              boxSizing: 'border-box',
+            }}
+          >
+            <Trophy size={18} color="var(--leaf-700)" strokeWidth={1.8} />
+          </Box>
+          <Box
+            role="button"
+            className="tubu-press"
+            onClick={() => {
+              haptic('light');
+              setComposing(true);
+            }}
+            flex
+            alignItems="center"
+            style={{
+              gap: 4,
+              background: 'var(--leaf-600)',
+              color: '#fff',
+              borderRadius: 'var(--radius-full)',
+              padding: '8px 14px',
+              fontSize: 13,
+              fontWeight: 600,
+              minHeight: 40,
+              boxSizing: 'border-box',
+            }}
+          >
+            <Plus size={16} />
+            {vi.community.compose}
+          </Box>
         </Box>
       </Box>
 

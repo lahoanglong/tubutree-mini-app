@@ -32,6 +32,7 @@ export interface FeedItem {
   author: string;
   avatar: string | null;
   badge: 'EXPERT' | null;
+  authorLevel: number;
   category: FeedCategory | null;
   productTags: ProductTag[];
   tags: FeedTag[];
@@ -48,9 +49,17 @@ export interface FeedComment {
   author: string;
   avatar: string | null;
   badge: 'EXPERT' | null;
+  authorLevel: number;
   isAccepted: boolean;
   createdAt: string;
   isOwner: boolean;
+}
+export interface LeaderboardEntry {
+  author: string;
+  avatar: string | null;
+  reputation: number;
+  level: number;
+  levelName: string;
 }
 export interface FeedPage {
   posts: FeedItem[];
@@ -82,6 +91,8 @@ export const getFeed = (
 ) => api.get<FeedPage>('/feed', { params }).then((r) => r.data);
 
 export const getPost = (id: string) => api.get<FeedItem>(`/feed/${id}`).then((r) => r.data);
+
+export const getLeaderboard = () => api.get<LeaderboardEntry[]>('/feed/leaderboard').then((r) => r.data);
 
 export const createPost = (input: CreatePostInput) =>
   api.post<{ id: string; status?: string }>('/feed', input).then((r) => r.data);

@@ -271,6 +271,13 @@ export const vi = {
     pin: 'Ghim',
     unpin: 'Bỏ ghim',
     pinned: 'Đã ghim',
+    leaderboard: 'Bảng xếp hạng',
+    rank: 'Hạng',
+    points: 'điểm uy tín',
+    level1: 'Mầm',
+    level2: 'Cây non',
+    level3: 'Cây trưởng thành',
+    level4: 'Cổ thụ',
   },
 } as const;
 

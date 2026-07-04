@@ -22,6 +22,7 @@ import { formatVnd } from '../utils/format';
 import { ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
+import { RankBadge } from '../components/community/rank-badge';
 
 const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
   QUESTION: '❓ ' + vi.community.kindQuestion,
@@ -267,6 +268,7 @@ export default function PostDetailPage() {
                     🌿 {vi.community.expert}
                   </Text>
                 )}
+                <RankBadge level={p.authorLevel} />
               </Box>
               <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
                 {timeAgo(p.createdAt)}
@@ -624,6 +626,7 @@ function CommentRow({
                   🌿 {vi.community.expert}
                 </Text>
               )}
+              <RankBadge level={comment.authorLevel} />
             </Box>
             <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
               {timeAgo(comment.createdAt)}
