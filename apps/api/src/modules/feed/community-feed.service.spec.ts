@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { CommunityFeedService } from './community-feed.service';
+import { CommunityFeedService, levelFromReputation, levelName } from './community-feed.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 function makePrisma(over: Record<string, unknown> = {}) {
@@ -31,6 +31,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
     communityProfile: {
       findUnique: jest.fn().mockResolvedValue(null),
       upsert: jest.fn().mockResolvedValue({}),
+      update: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     communityReport: {
       create: jest.fn().mockResolvedValue({ id: 'r1' }),
@@ -44,19 +46,28 @@ function makePrisma(over: Record<string, unknown> = {}) {
   return { ...base, ...over } as unknown as PrismaService;
 }
 
+// Mock SystemConfigService — mặc định trả về fallback truyền vào (giống hành vi thật khi
+// key chưa cấu hình); truyền `overrides` để giả lập giá trị đã cấu hình cho key cụ thể.
+function makeConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    get: jest.fn(async (key: string, fallback?: unknown) => (key in overrides ? overrides[key] : fallback)),
+  };
+}
+
 function makeSvc(
   prisma: PrismaService,
   reward: any = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() },
   notify?: { notify: jest.Mock },
+  config: any = makeConfig(),
 ) {
-  return new CommunityFeedService(prisma, reward, notify as any);
+  return new CommunityFeedService(prisma, reward, config, notify as any);
 }
 
 // Dùng chung cho cả getFeed + getPost (row hình dạng Prisma trả về, đã include đủ quan hệ).
 const row = (over: Record<string, unknown> = {}) => ({
   id: 'p1', kind: 'SHOWCASE', status: 'PUBLISHED', title: null, body: 'Khoe cây', images: ['i1'],
   meta: null, bestCommentId: null, createdAt: new Date('2026-07-03'), userId: 'author', isPinned: false,
-  user: { fullName: 'Lã Hoàng Long', avatarUrl: 'https://a/1.png', role: 'CUSTOMER' },
+  user: { fullName: 'Lã Hoàng Long', avatarUrl: 'https://a/1.png', role: 'CUSTOMER', communityProfile: { level: 1 } },
   category: { slug: 'khoe-vuon', name: 'Khoe vườn', icon: '🌿' },
   productTags: [{ product: { slug: 'cay-a', name: 'Cây A', thumbnail: 't', salePrice: null, basePrice: 100 } }],
   tags: [],
@@ -858,5 +869,300 @@ describe('CommunityFeedService.pinPost', () => {
     const prisma = makePrisma();
     await makeSvc(prisma).pinPost('p1', false);
     expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { isPinned: false } });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pha 4 Task 1 — reputation/hạng + authorLevel trong DTO + leaderboard
+// ---------------------------------------------------------------------------
+
+describe('levelFromReputation (pure fn)', () => {
+  it('rep 0 → level 1', () => {
+    expect(levelFromReputation(0)).toBe(1);
+  });
+  it('rep 49 → level 1 (chưa đạt ngưỡng 50)', () => {
+    expect(levelFromReputation(49)).toBe(1);
+  });
+  it('rep 50 → level 2', () => {
+    expect(levelFromReputation(50)).toBe(2);
+  });
+  it('rep 200 → level 3', () => {
+    expect(levelFromReputation(200)).toBe(3);
+  });
+  it('rep 500 → level 4', () => {
+    expect(levelFromReputation(500)).toBe(4);
+  });
+  it('rep vượt xa ngưỡng cao nhất → vẫn level 4 (trần)', () => {
+    expect(levelFromReputation(9999)).toBe(4);
+  });
+  it('ngưỡng tuỳ biến truyền vào → dùng ngưỡng đó thay vì mặc định', () => {
+    expect(levelFromReputation(15, [0, 10, 20])).toBe(2);
+    expect(levelFromReputation(25, [0, 10, 20])).toBe(3);
+  });
+});
+
+describe('levelName (pure fn)', () => {
+  it.each([
+    [1, 'Mầm'],
+    [2, 'Cây non'],
+    [3, 'Cây trưởng thành'],
+    [4, 'Cổ thụ'],
+  ])('level %d → %s', (level, name) => {
+    expect(levelName(level as number)).toBe(name);
+  });
+  it('level không hợp lệ (0 hoặc ngoài khoảng) → fallback "Mầm"', () => {
+    expect(levelName(0)).toBe('Mầm');
+    expect(levelName(99)).toBe('Mầm');
+  });
+});
+
+describe('CommunityFeedService.bumpReputation', () => {
+  it('upsert increment reputation + set create.level theo ngưỡng mặc định', async () => {
+    const prisma = makePrisma();
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 5 });
+    await makeSvc(prisma).bumpReputation('u1', 5);
+    expect(prisma.communityProfile.upsert).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      create: { userId: 'u1', reputation: 5, level: 1 },
+      update: { reputation: { increment: 5 } },
+    });
+  });
+
+  it('sau upsert → đọc lại reputation rồi cập nhật level tương ứng (2 bước)', async () => {
+    const prisma = makePrisma();
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 210 });
+    await makeSvc(prisma).bumpReputation('u1', 10);
+    expect(prisma.communityProfile.findUnique).toHaveBeenCalledWith({ where: { userId: 'u1' }, select: { reputation: true } });
+    expect(prisma.communityProfile.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { level: 3 } });
+  });
+
+  it('đọc ngưỡng từ SystemConfig community.rep_thresholds (fallback [0,50,200,500])', async () => {
+    const prisma = makePrisma();
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 15 });
+    const config = makeConfig({ 'community.rep_thresholds': [0, 10, 20] });
+    await makeSvc(prisma, undefined, undefined, config).bumpReputation('u1', 15);
+    expect(config.get).toHaveBeenCalledWith('community.rep_thresholds', [0, 50, 200, 500]);
+    expect(prisma.communityProfile.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { level: 2 } });
+  });
+
+  it('upsert lỗi → nuốt lỗi, KHÔNG throw (non-fatal)', async () => {
+    const prisma = makePrisma({
+      communityProfile: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn().mockRejectedValue(new Error('db down')),
+        update: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    });
+    await expect(makeSvc(prisma).bumpReputation('u1', 5)).resolves.toBeUndefined();
+  });
+
+  it('findUnique/update lỗi sau upsert → vẫn nuốt lỗi, KHÔNG throw', async () => {
+    const prisma = makePrisma({
+      communityProfile: {
+        findUnique: jest.fn().mockRejectedValue(new Error('boom')),
+        upsert: jest.fn().mockResolvedValue({}),
+        update: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    });
+    await expect(makeSvc(prisma).bumpReputation('u1', 5)).resolves.toBeUndefined();
+  });
+});
+
+describe('CommunityFeedService.getLeaderboard', () => {
+  it('lấy top theo reputation desc, where reputation>0, map author/avatar/reputation/level/levelName', async () => {
+    const prisma = makePrisma();
+    (prisma.communityProfile.findMany as jest.Mock).mockResolvedValue([
+      { reputation: 520, level: 4, user: { fullName: 'Long', avatarUrl: 'https://a/1.png' } },
+      { reputation: 3, level: 1, user: { fullName: null, avatarUrl: null } },
+    ]);
+    const r = await makeSvc(prisma).getLeaderboard();
+    expect(prisma.communityProfile.findMany).toHaveBeenCalledWith({
+      orderBy: { reputation: 'desc' },
+      take: 20,
+      where: { reputation: { gt: 0 } },
+      include: { user: { select: { fullName: true, avatarUrl: true } } },
+    });
+    expect(r).toEqual([
+      { author: 'Long', avatar: 'https://a/1.png', reputation: 520, level: 4, levelName: 'Cổ thụ' },
+      { author: 'Bạn Tubu', avatar: null, reputation: 3, level: 1, levelName: 'Mầm' },
+    ]);
+  });
+
+  it('truyền take tuỳ biến → dùng take đó', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).getLeaderboard(5);
+    expect((prisma.communityProfile.findMany as jest.Mock).mock.calls[0][0].take).toBe(5);
+  });
+});
+
+describe('CommunityFeedService.createPost (cộng reputation — non-fatal)', () => {
+  it('đăng bài PUBLISHED (trusted) → cộng community.rep_post (mặc định 5) cho tác giả', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'newpost' });
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 5 });
+    await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay' });
+    expect(prisma.communityProfile.upsert).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      create: { userId: 'u1', reputation: 5, level: 1 },
+      update: { reputation: { increment: 5 } },
+    });
+  });
+
+  it('bài PENDING (chưa duyệt) → KHÔNG cộng reputation', async () => {
+    const prisma = makePrisma(); // CUSTOMER, không đơn, không profile → chưa trusted
+    (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'p1' });
+    await makeSvc(prisma).createPost('u1', 'CUSTOMER', { kind: 'TIP', body: 'mẹo' });
+    expect(prisma.communityProfile.upsert).not.toHaveBeenCalled();
+  });
+
+  it('bumpReputation lỗi → bài vẫn tạo thành công (non-fatal)', async () => {
+    const prisma = makePrisma({
+      communityProfile: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn().mockRejectedValue(new Error('boom')),
+        update: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    });
+    (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'newpost' });
+    const r = await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay' });
+    expect(r).toEqual({ id: 'newpost', status: 'PUBLISHED' });
+  });
+});
+
+describe('CommunityFeedService.addComment (cộng reputation — non-fatal)', () => {
+  it('trả lời QUESTION của người khác → cộng community.rep_answer (mặc định 2) cho answerer', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION', status: 'PUBLISHED', title: 't' });
+    (prisma.feedComment.create as jest.Mock).mockResolvedValue({ id: 'c1' });
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 2 });
+    await makeSvc(prisma).addComment('answerer', 'CUSTOMER', 'p1', 'trả lời');
+    expect(prisma.communityProfile.upsert).toHaveBeenCalledWith({
+      where: { userId: 'answerer' },
+      create: { userId: 'answerer', reputation: 2, level: 1 },
+      update: { reputation: { increment: 2 } },
+    });
+  });
+
+  it('tự trả lời câu hỏi của chính mình → KHÔNG cộng reputation', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION', status: 'PUBLISHED', title: 't' });
+    (prisma.feedComment.create as jest.Mock).mockResolvedValue({ id: 'c1' });
+    await makeSvc(prisma).addComment('author', 'CUSTOMER', 'p1', 'tự trả lời');
+    expect(prisma.communityProfile.upsert).not.toHaveBeenCalled();
+  });
+
+  it('bình luận bài không phải QUESTION → KHÔNG cộng reputation', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'SHOWCASE', status: 'PUBLISHED', title: null });
+    (prisma.feedComment.create as jest.Mock).mockResolvedValue({ id: 'c1' });
+    await makeSvc(prisma).addComment('u2', 'CUSTOMER', 'p1', 'đẹp quá');
+    expect(prisma.communityProfile.upsert).not.toHaveBeenCalled();
+  });
+
+  it('bumpReputation lỗi → bình luận vẫn tạo thành công (non-fatal)', async () => {
+    const prisma = makePrisma({
+      communityProfile: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn().mockRejectedValue(new Error('boom')),
+        update: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    });
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION', status: 'PUBLISHED', title: 't' });
+    (prisma.feedComment.create as jest.Mock).mockResolvedValue({ id: 'c1' });
+    const r = await makeSvc(prisma).addComment('answerer', 'CUSTOMER', 'p1', 'trả lời');
+    expect(r).toEqual({ id: 'c1' });
+  });
+});
+
+describe('CommunityFeedService.setBestAnswer (cộng reputation — non-fatal)', () => {
+  it('chọn best-answer → cộng community.rep_best (mặc định 10) cho answerer', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION' });
+    (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue({ id: 'c1', postId: 'p1', userId: 'answerer' });
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 10 });
+    await makeSvc(prisma).setBestAnswer('author', 'CUSTOMER', 'p1', 'c1');
+    expect(prisma.communityProfile.upsert).toHaveBeenCalledWith({
+      where: { userId: 'answerer' },
+      create: { userId: 'answerer', reputation: 10, level: 1 },
+      update: { reputation: { increment: 10 } },
+    });
+  });
+
+  it('bumpReputation lỗi → setBestAnswer vẫn trả ok (non-fatal)', async () => {
+    const prisma = makePrisma({
+      communityProfile: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn().mockRejectedValue(new Error('boom')),
+        update: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    });
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION' });
+    (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue({ id: 'c1', postId: 'p1', userId: 'answerer' });
+    const r = await makeSvc(prisma).setBestAnswer('author', 'CUSTOMER', 'p1', 'c1');
+    expect(r).toEqual({ ok: true });
+  });
+});
+
+describe('CommunityFeedService.approvePost (cộng reputation — non-fatal)', () => {
+  it('duyệt bài PENDING → cộng community.rep_post (mặc định 5) cho tác giả', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', status: 'PENDING' });
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 5 });
+    await makeSvc(prisma).approvePost('p1');
+    expect(prisma.communityProfile.upsert).toHaveBeenCalledWith({
+      where: { userId: 'author' },
+      create: { userId: 'author', reputation: 5, level: 1 },
+      update: { reputation: { increment: 5 } },
+    });
+  });
+
+  it('bumpReputation lỗi → approvePost vẫn trả ok (non-fatal)', async () => {
+    const prisma = makePrisma({
+      communityProfile: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn().mockRejectedValue(new Error('boom')),
+        update: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    });
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', status: 'PENDING' });
+    const r = await makeSvc(prisma).approvePost('p1');
+    expect(r).toEqual({ ok: true });
+  });
+});
+
+describe('CommunityFeedService authorLevel trong DTO (getFeed/getPost/getComments)', () => {
+  it('getFeed toItem → authorLevel lấy từ user.communityProfile.level', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
+      row({ user: { fullName: 'Long', avatarUrl: 'a', role: 'CUSTOMER', communityProfile: { level: 3 } } }),
+    ]);
+    const r = await makeSvc(prisma).getFeed('u1');
+    expect(r.posts[0]).toMatchObject({ authorLevel: 3 });
+  });
+
+  it('getFeed toItem → user không có communityProfile → authorLevel mặc định 1', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
+      row({ user: { fullName: 'Long', avatarUrl: 'a', role: 'CUSTOMER' } }),
+    ]);
+    const r = await makeSvc(prisma).getFeed('u1');
+    expect(r.posts[0]).toMatchObject({ authorLevel: 1 });
+  });
+
+  it('getComments → authorLevel lấy từ user.communityProfile.level, mặc định 1 nếu thiếu', async () => {
+    const prisma = makePrisma();
+    (prisma.feedComment.findMany as jest.Mock).mockResolvedValue([
+      { id: 'c1', body: 'hay', createdAt: new Date(), user: { fullName: 'A', communityProfile: { level: 2 } } },
+      { id: 'c2', body: 'tốt', createdAt: new Date(), user: { fullName: 'B' } },
+    ]);
+    const r = await makeSvc(prisma).getComments('p1');
+    expect(r[0]).toMatchObject({ authorLevel: 2 });
+    expect(r[1]).toMatchObject({ authorLevel: 1 });
   });
 });

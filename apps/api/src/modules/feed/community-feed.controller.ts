@@ -64,6 +64,12 @@ export class CommunityFeedController {
     return this.feed.getCategories();
   }
 
+  // Literal path (leaderboard) phải khai TRƯỚC @Get(':id') để không bị :id nuốt mất.
+  @Get('leaderboard')
+  leaderboard() {
+    return this.feed.getLeaderboard();
+  }
+
   // Admin (literal paths) phải khai TRƯỚC @Get(':id') để không bị :id nuốt mất.
   @Roles('ADMIN')
   @Get('admin/pending')

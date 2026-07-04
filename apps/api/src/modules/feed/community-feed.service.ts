@@ -2,7 +2,30 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { PrismaService } from '../../prisma/prisma.service';
 import { CommunityRewardService } from './community-reward.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 import { authorBadge } from './author-badge';
+
+const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];
+const LEVEL_NAMES: Record<number, string> = {
+  1: 'Mầm',
+  2: 'Cây non',
+  3: 'Cây trưởng thành',
+  4: 'Cổ thụ',
+};
+
+/** Level 1-based từ điểm reputation + ngưỡng (mặc định [0,50,200,500]) — pure fn, dễ test. */
+export function levelFromReputation(rep: number, thresholds: number[] = DEFAULT_REP_THRESHOLDS): number {
+  let level = 1;
+  for (let i = 0; i < thresholds.length; i++) {
+    if (rep >= thresholds[i]!) level = i + 1;
+  }
+  return level;
+}
+
+/** Tên hạng hiển thị FE — fallback 'Mầm' nếu level không hợp lệ. */
+export function levelName(level: number): string {
+  return LEVEL_NAMES[level] ?? 'Mầm';
+}
 
 type FeedPostKind = 'MANUAL' | 'HARVEST' | 'MILESTONE' | 'SPECIES' | 'QUESTION' | 'SHOWCASE' | 'TIP';
 
@@ -24,7 +47,7 @@ export interface CreatePostInput {
 }
 
 const FEED_INCLUDE = {
-  user: { select: { fullName: true, avatarUrl: true, role: true } },
+  user: { select: { fullName: true, avatarUrl: true, role: true, communityProfile: { select: { level: true } } } },
   category: { select: { slug: true, name: true, icon: true } },
   productTags: { include: { product: { select: { slug: true, name: true, thumbnail: true, salePrice: true, basePrice: true } } } },
   tags: { include: { tag: { select: { slug: true, name: true } } } },
@@ -46,9 +69,53 @@ export class CommunityFeedService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly reward: CommunityRewardService,
+    private readonly config: SystemConfigService,
     // Optional: thông báo trả lời/best-answer/duyệt bài — không chặn hành động chính nếu thiếu/lỗi.
     @Optional() private readonly notifications?: NotificationsService,
   ) {}
+
+  /**
+   * Cộng điểm reputation (§6.14 Pha 4) + cập nhật hạng — NON-FATAL: tự try/catch,
+   * không bao giờ throw ra caller (reputation chỉ mang tính trang trí, không ảnh hưởng
+   * tiền/nghiệp vụ chính). Đơn giản hoá 2 bước: upsert increment reputation, rồi đọc lại
+   * để tính level chính xác (tránh phải biết reputation "trước" khi tính increment).
+   */
+  async bumpReputation(userId: string, amount: number): Promise<void> {
+    try {
+      const thresholds = await this.config.get<number[]>('community.rep_thresholds', DEFAULT_REP_THRESHOLDS);
+      await this.prisma.communityProfile.upsert({
+        where: { userId },
+        create: { userId, reputation: amount, level: levelFromReputation(amount, thresholds) },
+        update: { reputation: { increment: amount } },
+      });
+      const profile = await this.prisma.communityProfile.findUnique({ where: { userId }, select: { reputation: true } });
+      if (profile) {
+        await this.prisma.communityProfile.update({
+          where: { userId },
+          data: { level: levelFromReputation(profile.reputation, thresholds) },
+        });
+      }
+    } catch (err) {
+      this.logger.warn(`bumpReputation failed for ${userId}: ${(err as Error).message}`);
+    }
+  }
+
+  /** Bảng xếp hạng cộng đồng theo reputation — tên thật + avatar (khác BXH ẩn danh của GameService). */
+  async getLeaderboard(take = 20) {
+    const rows = await this.prisma.communityProfile.findMany({
+      orderBy: { reputation: 'desc' },
+      take,
+      where: { reputation: { gt: 0 } },
+      include: { user: { select: { fullName: true, avatarUrl: true } } },
+    });
+    return rows.map((p) => ({
+      author: p.user.fullName ?? 'Bạn Tubu',
+      avatar: p.user.avatarUrl ?? null,
+      reputation: p.reputation,
+      level: p.level,
+      levelName: levelName(p.level),
+    }));
+  }
 
   /**
    * Kiểm duyệt lai (§6.14 moderation): STAFF/ADMIN/DEALER/AFFILIATE, hoặc user đã
@@ -150,6 +217,7 @@ export class CommunityFeedService {
       author: p.user.fullName ?? 'Bạn Tubu',
       avatar: p.user.avatarUrl ?? null,
       badge: authorBadge(p.user.role),
+      authorLevel: p.user.communityProfile?.level ?? 1,
       category: p.category ? { slug: p.category.slug, name: p.category.name, icon: p.category.icon } : null,
       productTags: (p.productTags ?? []).map((t: any) => ({
         slug: t.product.slug, name: t.product.name, thumbnail: t.product.thumbnail,
@@ -223,6 +291,12 @@ export class CommunityFeedService {
       } catch (err) {
         this.logger.warn(`rewardPost failed for post ${post.id}: ${(err as Error).message}`);
       }
+      try {
+        const amount = await this.config.get<number>('community.rep_post', 5);
+        await this.bumpReputation(userId, amount);
+      } catch (err) {
+        this.logger.warn(`bumpReputation(post) failed for ${userId}: ${(err as Error).message}`);
+      }
     }
     return { id: post.id, status };
   }
@@ -249,6 +323,12 @@ export class CommunityFeedService {
       await this.reward.rewardPost(post.userId, post.id);
     } catch (err) {
       this.logger.warn(`rewardPost(approve) failed ${post.id}: ${(err as Error).message}`);
+    }
+    try {
+      const amount = await this.config.get<number>('community.rep_post', 5);
+      await this.bumpReputation(post.userId, amount);
+    } catch (err) {
+      this.logger.warn(`bumpReputation(approve) failed for ${post.userId}: ${(err as Error).message}`);
     }
     try {
       await this.notifications?.notify(post.userId, 'COMMUNITY_POST_APPROVED', {});
@@ -310,6 +390,12 @@ export class CommunityFeedService {
         } catch (err) {
           this.logger.warn(`notify(answer) failed for comment ${comment.id}: ${(err as Error).message}`);
         }
+        try {
+          const amount = await this.config.get<number>('community.rep_answer', 2);
+          await this.bumpReputation(userId, amount);
+        } catch (err) {
+          this.logger.warn(`bumpReputation(answer) failed for ${userId}: ${(err as Error).message}`);
+        }
       }
     }
     return { id: comment.id };
@@ -320,7 +406,7 @@ export class CommunityFeedService {
       where: { postId },
       orderBy: [{ isAccepted: 'desc' }, { createdAt: 'asc' }],
       take,
-      include: { user: { select: { fullName: true, avatarUrl: true, role: true } } },
+      include: { user: { select: { fullName: true, avatarUrl: true, role: true, communityProfile: { select: { level: true } } } } },
     });
     return comments.map((c) => ({
       id: c.id,
@@ -328,6 +414,7 @@ export class CommunityFeedService {
       author: c.user.fullName ?? 'Bạn Tubu',
       avatar: c.user.avatarUrl ?? null,
       badge: authorBadge(c.user.role),
+      authorLevel: c.user.communityProfile?.level ?? 1,
       isAccepted: c.isAccepted,
       createdAt: c.createdAt,
       isOwner: c.userId === viewerId,
@@ -349,6 +436,12 @@ export class CommunityFeedService {
       await this.reward.rewardBestAnswer(comment.userId, post.userId, commentId);
     } catch (err) {
       this.logger.warn(`rewardBestAnswer failed for comment ${commentId}: ${(err as Error).message}`);
+    }
+    try {
+      const amount = await this.config.get<number>('community.rep_best', 10);
+      await this.bumpReputation(comment.userId, amount);
+    } catch (err) {
+      this.logger.warn(`bumpReputation(best-answer) failed for ${comment.userId}: ${(err as Error).message}`);
     }
     if (comment.userId !== post.userId) {
       try {
