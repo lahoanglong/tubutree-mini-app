@@ -1261,6 +1261,7 @@ model FeedPost {
   reactions     FeedReaction[]
   comments      FeedComment[]
   productTags   PostProductTag[]
+  tags          PostTag[]
 
   @@index([status, createdAt])
   @@index([categoryId, status, createdAt])
@@ -1367,6 +1368,28 @@ model CommunityProfile {
   bestAnswerCount Int      @default(0)
   updatedAt       DateTime @updatedAt
   @@map("community_profiles")
+}
+
+// Thẻ tự do (hashtag) cho bài viết cộng đồng — dùng để tìm kiếm/lọc theo chủ đề (Pha 3).
+model Tag {
+  id    String    @id @default(cuid())
+  slug  String    @unique
+  name  String
+  posts PostTag[]
+
+  @@map("community_tags")
+}
+
+// Gắn thẻ tự do (Tag) vào bài viết — khác PostProductTag (gắn sản phẩm).
+model PostTag {
+  postId String
+  post   FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tagId  String
+  tag    Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([tagId])
+  @@map("post_tags")
 }
 
 // Mua chung / Group Buy (§6.14.8). Đủ targetSize người trước expiresAt → SUCCESS,

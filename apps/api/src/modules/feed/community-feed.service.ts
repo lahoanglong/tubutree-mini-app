@@ -9,6 +9,7 @@ const MAX_TITLE = 160;
 const MAX_BODY = 5000;
 const MAX_IMAGES = 6;
 const MAX_PRODUCT_TAGS = 5;
+const MAX_TAGS = 5;
 const MAX_COMMENT = 500;
 
 export interface CreatePostInput {
@@ -18,12 +19,14 @@ export interface CreatePostInput {
   body: string;
   images?: string[];
   productSlugs?: string[];
+  tagSlugs?: string[];
 }
 
 const FEED_INCLUDE = {
   user: { select: { fullName: true, avatarUrl: true, role: true } },
   category: { select: { slug: true, name: true, icon: true } },
   productTags: { include: { product: { select: { slug: true, name: true, thumbnail: true, salePrice: true, basePrice: true } } } },
+  tags: { include: { tag: { select: { slug: true, name: true } } } },
   _count: { select: { reactions: true, comments: true } },
 } as const;
 
@@ -65,12 +68,32 @@ export class CommunityFeedService {
 
   async getFeed(
     userId: string,
-    opts: { category?: string; kind?: string; sort?: 'new' | 'popular'; cursor?: string; take?: number } = {},
+    opts: {
+      category?: string;
+      kind?: string;
+      sort?: 'new' | 'popular';
+      cursor?: string;
+      take?: number;
+      q?: string;
+      unanswered?: boolean;
+      tag?: string;
+    } = {},
   ) {
     const take = Math.max(1, Math.min(opts.take ?? 20, 50));
     const where: Record<string, unknown> = { status: 'PUBLISHED' };
     if (opts.category) where.category = { slug: opts.category };
     if (opts.kind) where.kind = opts.kind;
+    if (opts.q) {
+      where.OR = [
+        { title: { contains: opts.q, mode: 'insensitive' } },
+        { body: { contains: opts.q, mode: 'insensitive' } },
+      ];
+    }
+    if (opts.unanswered) {
+      where.kind = 'QUESTION';
+      where.bestCommentId = null;
+    }
+    if (opts.tag) where.tags = { some: { tag: { slug: opts.tag } } };
     const orderBy =
       opts.sort === 'popular'
         ? [{ isPinned: 'desc' as const }, { reactions: { _count: 'desc' as const } }, { createdAt: 'desc' as const }]
@@ -129,11 +152,13 @@ export class CommunityFeedService {
         slug: t.product.slug, name: t.product.name, thumbnail: t.product.thumbnail,
         salePrice: t.product.salePrice, basePrice: t.product.basePrice,
       })),
+      tags: (p.tags ?? []).map((t: any) => ({ slug: t.tag.slug, name: t.tag.name })),
       likeCount: p._count.reactions,
       commentCount: p._count.comments,
       liked: p.reactions.length > 0,
       bestCommentId: p.bestCommentId ?? null,
       isOwner: p.userId === userId,
+      isPinned: p.isPinned,
     };
   }
 
@@ -165,6 +190,27 @@ export class CommunityFeedService {
           data: products.map((p) => ({ postId: post.id, productId: p.id })),
           skipDuplicates: true,
         });
+      }
+    }
+
+    const tagLabels = (input.tagSlugs ?? [])
+      .map((raw) => (raw ?? '').trim().replace(/^#+/, '').trim())
+      .filter((s) => s.length > 0)
+      .slice(0, MAX_TAGS);
+    if (tagLabels.length) {
+      try {
+        const tags = await Promise.all(
+          tagLabels.map((label) => {
+            const slug = label.toLowerCase().replace(/\s+/g, '-');
+            return this.prisma.tag.upsert({ where: { slug }, create: { slug, name: label }, update: {} });
+          }),
+        );
+        await this.prisma.postTag.createMany({
+          data: tags.map((t) => ({ postId: post.id, tagId: t.id })),
+          skipDuplicates: true,
+        });
+      } catch (err) {
+        this.logger.warn(`gắn tag thất bại cho bài ${post.id}: ${(err as Error).message}`);
       }
     }
 
