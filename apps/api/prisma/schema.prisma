@@ -267,6 +267,8 @@ model User {
   subscriptions          Subscription[]
   staffShifts            Shift[]                 @relation("StaffShifts")
   staffProfile           StaffProfile?
+  communityReports       CommunityReport[]       @relation("CommunityReports")
+  communityProfile       CommunityProfile?       @relation("CommunityProfile")
 
   @@index([referredById])
   @@map("users")
@@ -1336,6 +1338,35 @@ model PostProductTag {
   @@unique([postId, productId])
   @@index([productId])
   @@map("post_product_tags")
+}
+
+// Báo cáo vi phạm bài viết/bình luận cộng đồng (Pha 2 — kiểm duyệt lai).
+model CommunityReport {
+  id         String   @id @default(cuid())
+  reporterId String
+  reporter   User     @relation("CommunityReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetType String   // POST | COMMENT
+  targetId   String
+  reason     String
+  status     String   @default("OPEN") // OPEN | RESOLVED
+  createdAt  DateTime @default(now())
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@map("community_reports")
+}
+
+// Hồ sơ uy tín cộng đồng — quyết định trust (bài PUBLISHED thẳng) vs PENDING (Pha 2).
+model CommunityProfile {
+  userId          String   @id
+  user            User     @relation("CommunityProfile", fields: [userId], references: [id], onDelete: Cascade)
+  reputation      Int      @default(0)
+  level           Int      @default(1)
+  isTrusted       Boolean  @default(false)
+  isExpert        Boolean  @default(false)
+  postCount       Int      @default(0)
+  bestAnswerCount Int      @default(0)
+  updatedAt       DateTime @updatedAt
+  @@map("community_profiles")
 }
 
 // Mua chung / Group Buy (§6.14.8). Đủ targetSize người trước expiresAt → SUCCESS,
