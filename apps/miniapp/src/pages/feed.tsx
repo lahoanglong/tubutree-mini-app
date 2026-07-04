@@ -1,69 +1,50 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Input, Spinner, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  getFeed,
-  createPost,
-  reactPost,
-  getComments,
-  addComment,
-  type FeedPost,
-  type FeedPostKind,
-} from '../services/feed-api';
+import { Box, Page, Text, Button, Spinner, useNavigate } from 'zmp-ui';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { Plus } from 'lucide-react';
+import { getFeed, getCategories, type FeedSort } from '../services/feed-api';
+import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { vi } from '../i18n/vi';
+import { PullToRefresh } from '../components/pull-to-refresh';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import PostCard from '../components/community/post-card';
+import PostComposer from '../components/community/post-composer';
+import { haptic } from '../utils/haptic';
 
-const KIND_BADGE: Record<FeedPostKind, string> = {
-  MANUAL: '',
-  HARVEST: '🌳 Thu hoạch',
-  MILESTONE: '🌍 Mốc cộng đồng',
-  SPECIES: '📒 Sưu tập loài',
-};
-
-function timeAgo(iso: string): string {
-  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return 'vừa xong';
-  if (diff < 3600) return `${Math.floor(diff / 60)} phút trước`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} giờ trước`;
-  return `${Math.floor(diff / 86400)} ngày trước`;
-}
-
-function msg(e: unknown): string {
-  const ax = e as { response?: { data?: { message?: string } }; message?: string };
-  return ax?.response?.data?.message ?? ax?.message ?? 'Có lỗi xảy ra';
-}
+const SORTS: { key: FeedSort; label: string }[] = [
+  { key: 'new', label: vi.community.sortNew },
+  { key: 'popular', label: vi.community.sortPopular },
+];
 
 export default function FeedPage() {
   const status = useAuthStore((s) => s.status);
+  const login = useAuthStore((s) => s.login);
   const authed = status === 'authenticated';
-  const { openSnackbar } = useSnackbar();
-  const queryClient = useQueryClient();
-  const [draft, setDraft] = useState('');
+  const navigate = useNavigate();
+  const [category, setCategory] = useState<string | undefined>(undefined);
+  const [sort, setSort] = useState<FeedSort>('new');
+  const [composing, setComposing] = useState(false);
 
-  const { data: posts, isLoading } = useQuery({ queryKey: ['feed'], queryFn: getFeed, enabled: authed });
-
-  const refresh = () => void queryClient.invalidateQueries({ queryKey: ['feed'] });
-
-  const postM = useMutation({
-    mutationFn: () => createPost(draft.trim()),
-    onSuccess: () => {
-      setDraft('');
-      openSnackbar({ text: 'Đã đăng bài 🌿', type: 'success' });
-      refresh();
-    },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+  const cats = useQuery({ queryKey: ['community', 'categories'], queryFn: getCategories, enabled: authed, staleTime: 60_000 });
+  const feed = useInfiniteQuery({
+    queryKey: ['community', category, sort],
+    queryFn: ({ pageParam }) => getFeed({ category, sort, cursor: pageParam as string | undefined }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: authed,
   });
+  const posts = feed.data?.pages.flatMap((p) => p.posts) ?? [];
 
-  const reactM = useMutation({
-    mutationFn: (id: string) => reactPost(id),
-    onSuccess: () => refresh(),
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
-  });
-
-  if (!authed || isLoading) {
+  if (!authed) {
     return (
-      <Page>
-        <Box flex justifyContent="center" p={6}>
-          <Spinner />
+      <Page className="page">
+        <Box style={{ textAlign: 'center', padding: 48 }}>
+          <Text style={{ fontSize: 48 }}>🌿</Text>
+          <Text style={{ marginTop: 8 }}>{vi.community.loginToView}</Text>
+          <Button style={{ marginTop: 12, background: 'var(--leaf-600)' }} onClick={() => void login()}>
+            {vi.auth.loginCta}
+          </Button>
         </Box>
       </Page>
     );
@@ -71,137 +52,123 @@ export default function FeedPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 80 }}>
-      <Box p={3} style={{ background: 'var(--neutral-0)' }}>
-        <Text bold size="large">🌿 Bảng tin cộng đồng</Text>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-          Khoe thành tích xanh, cổ vũ nhau trồng cây 🌳
-        </Text>
-        <Box mt={2} flex style={{ gap: 8 }}>
-          <Input
-            placeholder="Chia sẻ điều xanh hôm nay…"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            maxLength={1000}
-          />
-          <Button
-            size="small"
-            disabled={!draft.trim() || postM.isPending}
-            loading={postM.isPending}
-            onClick={() => postM.mutate()}
-            style={{ background: 'var(--leaf-600)' }}
-          >
-            Đăng
-          </Button>
+      <PullToRefresh onRefresh={() => feed.refetch()} />
+
+      <Box p={3} flex alignItems="center" justifyContent="space-between" style={{ background: 'var(--neutral-0)' }}>
+        <Box>
+          <Text bold size="large">{vi.community.title}</Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{vi.community.subtitle}</Text>
+        </Box>
+        <Box
+          role="button"
+          className="tubu-press"
+          onClick={() => {
+            haptic('light');
+            setComposing(true);
+          }}
+          flex
+          alignItems="center"
+          style={{
+            gap: 4,
+            background: 'var(--leaf-600)',
+            color: '#fff',
+            borderRadius: 'var(--radius-full)',
+            padding: '8px 14px',
+            fontSize: 13,
+            fontWeight: 600,
+            minHeight: 40,
+            boxSizing: 'border-box',
+          }}
+        >
+          <Plus size={16} />
+          {vi.community.compose}
         </Box>
       </Box>
 
-      {posts && posts.length > 0 ? (
-        posts.map((p) => (
-          <PostCard
-            key={p.id}
-            post={p}
-            onReact={() => reactM.mutate(p.id)}
-            reacting={reactM.isPending && reactM.variables === p.id}
+      <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingTop: 10, paddingBottom: 8, background: 'var(--neutral-0)' }}>
+        <Chip label={vi.community.tabAll} active={!category} onClick={() => setCategory(undefined)} />
+        {cats.data?.map((c) => (
+          <Chip
+            key={c.id}
+            label={`${c.icon ?? ''} ${c.name}`.trim()}
+            active={category === c.slug}
+            onClick={() => setCategory(c.slug)}
           />
-        ))
-      ) : (
-        <Box style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <Text style={{ fontSize: 48 }}>🌱</Text>
-          <Text style={{ color: 'var(--neutral-600)', marginTop: 8 }}>Chưa có bài viết nào</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-            Hãy là người đầu tiên chia sẻ thành tích xanh của bạn!
-          </Text>
+        ))}
+      </Box>
+
+      <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, background: 'var(--neutral-0)' }}>
+        {SORTS.map((s) => (
+          <Chip key={s.key} label={s.label} active={sort === s.key} onClick={() => setSort(s.key)} />
+        ))}
+      </Box>
+
+      {feed.isLoading ? (
+        <Box flex justifyContent="center" p={6}>
+          <Spinner />
         </Box>
+      ) : feed.isError ? (
+        <ErrorState message={getErrorMessage(feed.error)} onRetry={() => void feed.refetch()} />
+      ) : posts.length === 0 ? (
+        <EmptyState art="leaf" heading={vi.community.emptyHeading} body={vi.community.emptyBody} />
+      ) : (
+        <>
+          {posts.map((post) => (
+            <PostCard key={post.id} post={post} onClick={() => navigate(`/feed/${post.id}`)} />
+          ))}
+          {feed.hasNextPage && (
+            <Box flex justifyContent="center" pt={4}>
+              <Button
+                variant="secondary"
+                loading={feed.isFetchingNextPage}
+                onClick={() => void feed.fetchNextPage()}
+                style={{ minWidth: 160 }}
+              >
+                Xem thêm
+              </Button>
+            </Box>
+          )}
+        </>
       )}
+
+      <PostComposer
+        visible={composing}
+        onClose={() => setComposing(false)}
+        categories={cats.data ?? []}
+        onPosted={() => {
+          setComposing(false);
+          void feed.refetch();
+        }}
+      />
     </Page>
   );
 }
 
-function PostCard({ post, onReact, reacting }: { post: FeedPost; onReact: () => void; reacting: boolean }) {
-  const { openSnackbar } = useSnackbar();
-  const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState('');
-  const badge = KIND_BADGE[post.kind];
-
-  const { data: comments, isLoading } = useQuery({
-    queryKey: ['feed', post.id, 'comments'],
-    queryFn: () => getComments(post.id),
-    enabled: open,
-  });
-
-  const commentM = useMutation({
-    mutationFn: () => addComment(post.id, text.trim()),
-    onSuccess: () => {
-      setText('');
-      void queryClient.invalidateQueries({ queryKey: ['feed', post.id, 'comments'] });
-      void queryClient.invalidateQueries({ queryKey: ['feed'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
-  });
-
+function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
-    <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
-      <Box flex alignItems="center" justifyContent="space-between">
-        <Text size="small" bold>🌿 {post.author}</Text>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{timeAgo(post.createdAt)}</Text>
-      </Box>
-      {badge && (
-        <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', marginTop: 2 }}>{badge}</Text>
-      )}
-      <Text size="small" style={{ marginTop: 6, color: 'var(--neutral-900)' }}>{post.body}</Text>
-
-      <Box flex style={{ gap: 16, marginTop: 10 }}>
-        <Text
-          size="small"
-          onClick={() => !reacting && onReact()}
-          style={{ color: post.liked ? 'var(--leaf-700)' : 'var(--neutral-500)', cursor: 'pointer' }}
-        >
-          {post.liked ? '💚' : '🤍'} {post.likeCount}
-        </Text>
-        <Text
-          size="small"
-          onClick={() => setOpen((v) => !v)}
-          style={{ color: 'var(--neutral-500)', cursor: 'pointer' }}
-        >
-          💬 {post.commentCount}
-        </Text>
-      </Box>
-
-      {open && (
-        <Box mt={3} style={{ borderTop: '1px solid var(--neutral-100)', paddingTop: 10 }}>
-          {isLoading ? (
-            <Spinner />
-          ) : comments && comments.length > 0 ? (
-            comments.map((c) => (
-              <Box key={c.id} style={{ padding: '4px 0' }}>
-                <Text size="xSmall" bold style={{ color: 'var(--neutral-700)' }}>
-                  {c.author} <span style={{ color: 'var(--neutral-400)', fontWeight: 400 }}>· {timeAgo(c.createdAt)}</span>
-                </Text>
-                <Text size="small">{c.body}</Text>
-              </Box>
-            ))
-          ) : (
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>Chưa có bình luận.</Text>
-          )}
-          <Box mt={2} flex style={{ gap: 8 }}>
-            <Input
-              placeholder="Viết bình luận…"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              maxLength={500}
-            />
-            <Button
-              size="small"
-              disabled={!text.trim() || commentM.isPending}
-              loading={commentM.isPending}
-              onClick={() => commentM.mutate()}
-            >
-              Gửi
-            </Button>
-          </Box>
-        </Box>
-      )}
+    <Box
+      role="button"
+      aria-pressed={active}
+      className="tubu-press"
+      onClick={onClick}
+      style={{
+        whiteSpace: 'nowrap',
+        padding: '10px 14px',
+        borderRadius: 'var(--radius-full)',
+        fontSize: 13,
+        fontWeight: active ? 600 : 400,
+        background: active ? 'var(--primary-600)' : 'var(--neutral-0)',
+        border: `1px solid ${active ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
+        color: active ? 'white' : 'var(--neutral-600)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        minHeight: 40,
+        boxSizing: 'border-box',
+        flex: '0 0 auto',
+      }}
+    >
+      {label}
     </Box>
   );
 }

@@ -116,6 +116,10 @@ export const fetchRelated = (slug: string) =>
 export const fetchBoughtTogether = (slug: string) =>
   api.get<ProductCard[]>(`/products/${slug}/bought-together`).then((r) => r.data);
 
+export interface ProductSuggestion { slug: string; name: string; thumbnail: string | null; basePrice: number; }
+export const suggestProducts = (q: string) =>
+  api.get<ProductSuggestion[]>('/search/suggest', { params: { q } }).then((r) => r.data);
+
 // Cart
 export const getCart = () => api.get<CartSummary>('/cart').then((r) => r.data);
 export const addToCart = (variationId: string, quantity: number) =>
