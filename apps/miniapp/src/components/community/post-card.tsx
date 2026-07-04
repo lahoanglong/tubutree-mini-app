@@ -14,6 +14,7 @@ export const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
   HARVEST: vi.community.kindHarvest,
   SPECIES: vi.community.kindSpecies,
   MILESTONE: vi.community.kindMilestone,
+  MANUAL: vi.community.kindManual,
 };
 
 export default function PostCard({ post, onClick }: { post: FeedItem; onClick: () => void }) {
@@ -63,7 +64,7 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
               className="tubu-press"
               onClick={(e) => {
                 e.stopPropagation();
-                navigate(`/feed?tag=${encodeURIComponent(t.slug)}`);
+                navigate(`/feed?tag=${encodeURIComponent(t.slug)}&tagName=${encodeURIComponent(t.name)}`);
               }}
               flex
               alignItems="center"

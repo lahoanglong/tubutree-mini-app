@@ -212,6 +212,7 @@ export const vi = {
     kindHarvest: '🌳 Thu hoạch',
     kindSpecies: '📒 Sưu tập loài',
     kindMilestone: '🌍 Mốc cộng đồng',
+    kindManual: '📝 Chia sẻ',
     titlePlaceholder: 'Tiêu đề câu hỏi (vd: Lá cây lưỡi hổ bị vàng?)',
     bodyPlaceholder: 'Chia sẻ chi tiết…',
     pickCategory: 'Chọn danh mục',
@@ -273,6 +274,7 @@ export const vi = {
     pinned: 'Đã ghim',
     leaderboard: 'Bảng xếp hạng',
     rank: 'Hạng',
+    member: 'Thành viên',
     points: 'điểm uy tín',
     level1: 'Mầm',
     level2: 'Cây non',
@@ -297,6 +299,7 @@ export const vi = {
     winnerUserIdPlaceholder: 'Nhập userId người thắng',
     noEvents: 'Chưa có sự kiện nào',
     entryFor: 'Dự thi',
+    eventEnded: 'Đã kết thúc',
   },
 } as const;
 

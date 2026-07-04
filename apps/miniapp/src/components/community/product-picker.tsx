@@ -85,7 +85,10 @@ export function ProductPicker({
       <Input.Search
         placeholder={vi.community.searchProduct}
         value={q}
-        onChange={(e) => setQ(e.target.value)}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setMaxWarning(false);
+        }}
         clearable
       />
 

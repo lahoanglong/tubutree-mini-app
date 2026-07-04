@@ -186,8 +186,6 @@ export const adminPin = (id: string, pinned: boolean) =>
 // Sự kiện cộng đồng — danh sách/chi tiết công khai (authed) + quản lý (ADMIN).
 export const listEvents = () => api.get<CommunityEvent[]>('/feed/events').then((r) => r.data);
 
-export const getEvent = (id: string) => api.get<CommunityEvent>(`/feed/events/${id}`).then((r) => r.data);
-
 export const eventPosts = (id: string) => api.get<FeedItem[]>(`/feed/events/${id}/posts`).then((r) => r.data);
 
 export const createEvent = (dto: CreateEventInput) =>

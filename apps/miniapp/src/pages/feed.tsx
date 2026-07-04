@@ -33,13 +33,19 @@ export default function FeedPage() {
     () => new URLSearchParams(location.search).get('tag') ?? undefined,
     [location.search],
   );
+  const initialTagName = useMemo(
+    () => new URLSearchParams(location.search).get('tagName') ?? undefined,
+    [location.search],
+  );
   const [tag, setTag] = useState<string | undefined>(initialTag);
+  const [tagName, setTagName] = useState<string | undefined>(initialTagName);
   const dq = useDebounced(q, 300);
 
-  // Tag-nav từ post-card (điều hướng /feed?tag=slug) khi trang đã mounted → đồng bộ lại state.
+  // Tag-nav từ post-card (điều hướng /feed?tag=slug&tagName=...) khi trang đã mounted → đồng bộ lại state.
   useEffect(() => {
     setTag(initialTag);
-  }, [initialTag]);
+    setTagName(initialTagName);
+  }, [initialTag, initialTagName]);
 
   const cats = useQuery({ queryKey: ['community', 'categories'], queryFn: getCategories, enabled: authed, staleTime: 60_000 });
   const feed = useInfiniteQuery({
@@ -215,6 +221,7 @@ export default function FeedPage() {
             onClick={() => {
               haptic('light');
               setTag(undefined);
+              setTagName(undefined);
               navigate('/feed', { replace: true });
             }}
             style={{
@@ -230,7 +237,7 @@ export default function FeedPage() {
             }}
           >
             <Hash size={12} />
-            {tag} ✕
+            {tagName ?? tag} ✕
           </Box>
         </Box>
       )}

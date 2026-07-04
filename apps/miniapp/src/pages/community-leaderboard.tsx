@@ -67,7 +67,21 @@ export default function CommunityLeaderboardPage() {
         ) : !board.data || board.data.length === 0 ? (
           <EmptyState art="leaf" heading={vi.community.emptyHeading} />
         ) : (
-          board.data.map((entry, i) => <LeaderRow key={`${entry.author}-${i}`} rank={i + 1} entry={entry} />)
+          <>
+            <Box flex alignItems="center" px={3} pb={1} style={{ gap: 10 }}>
+              <Text size="xSmall" style={{ width: 28, textAlign: 'center', color: 'var(--neutral-400)' }}>
+                {vi.community.rank}
+              </Text>
+              <Box style={{ width: 36 }} />
+              <Text size="xSmall" style={{ flex: 1, color: 'var(--neutral-400)' }}>
+                {vi.community.member}
+              </Text>
+              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                {vi.community.points}
+              </Text>
+            </Box>
+            {board.data.map((entry, i) => <LeaderRow key={`${entry.author}-${i}`} rank={i + 1} entry={entry} />)}
+          </>
         )}
       </Box>
     </Page>

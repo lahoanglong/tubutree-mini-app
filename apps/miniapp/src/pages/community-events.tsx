@@ -17,6 +17,11 @@ function formatEventDate(iso: string): string {
   return new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+/** Sự kiện đã qua endAt → không nhận bài dự thi nữa. */
+function isEventEnded(event: Pick<CommunityEvent, 'endAt'>): boolean {
+  return new Date(event.endAt).getTime() < Date.now();
+}
+
 export default function CommunityEventsPage() {
   const status = useAuthStore((s) => s.status);
   const login = useAuthStore((s) => s.login);
@@ -132,6 +137,7 @@ function EventsList({
 }
 
 function EventCard({ event, onClick }: { event: CommunityEvent; onClick: () => void }) {
+  const ended = isEventEnded(event);
   return (
     <Box
       onClick={onClick}
@@ -172,6 +178,15 @@ function EventCard({ event, onClick }: { event: CommunityEvent; onClick: () => v
               🎁 {event.rewardXu} TubuXu
             </Text>
           )}
+          {ended && (
+            <Text
+              size="xSmall"
+              bold
+              style={{ color: 'var(--neutral-500)', background: 'var(--neutral-100)', borderRadius: 'var(--radius-full)', padding: '2px 8px' }}
+            >
+              {vi.community.eventEnded}
+            </Text>
+          )}
         </Box>
       </Box>
     </Box>
@@ -190,6 +205,7 @@ function EventEntries({
   onJoin: () => void;
 }) {
   const navigate = useNavigate();
+  const ended = isEventEnded(event);
   return (
     <Box>
       <Box px={3} pt={3}>
@@ -235,8 +251,17 @@ function EventEntries({
                   {vi.community.eventReward}: 🎁 {event.rewardXu} TubuXu
                 </Text>
               )}
+              {ended && (
+                <Text
+                  size="xSmall"
+                  bold
+                  style={{ color: 'var(--neutral-500)', background: 'var(--neutral-100)', borderRadius: 'var(--radius-full)', padding: '2px 8px' }}
+                >
+                  {vi.community.eventEnded}
+                </Text>
+              )}
             </Box>
-            <Button fullWidth style={{ marginTop: 14, background: 'var(--leaf-600)' }} onClick={onJoin}>
+            <Button fullWidth disabled={ended} style={{ marginTop: 14, background: 'var(--leaf-600)' }} onClick={onJoin}>
               {vi.community.joinEvent}
             </Button>
           </Box>
