@@ -58,7 +58,11 @@ export class RbacService {
     return { granted: role, applied };
   }
 
-  /** Thu hồi mọi grant STAFF/ADMIN theo SĐT + hạ user về CUSTOMER nếu đang STAFF/ADMIN. */
+  /**
+   * Thu hồi mọi grant STAFF/ADMIN theo SĐT. Nếu user đang STAFF/ADMIN thì hạ về role GỐC
+   * (DEALER nếu có đơn đại lý đã duyệt, ngược lại CUSTOMER) — tránh xoá nhầm quyền đại lý khi
+   * một đại lý từng được nâng tạm lên nhân viên.
+   */
   async revokeGrant(adminId: string, phone: string) {
     const normalized = phone.trim();
     const { count } = await this.prisma.roleGrant.updateMany({
@@ -68,11 +72,21 @@ export class RbacService {
     const user = await this.prisma.user.findUnique({ where: { phone: normalized } });
     let downgraded = false;
     if (user && (user.role === 'STAFF' || user.role === 'ADMIN')) {
-      await this.prisma.user.update({ where: { id: user.id }, data: { role: 'CUSTOMER' } });
+      const base = await this.resolveBaseRole(user.id);
+      await this.prisma.user.update({ where: { id: user.id }, data: { role: base } });
       downgraded = true;
-      this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${normalized}: ${user.role} → CUSTOMER`);
+      this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${normalized}: ${user.role} → ${base}`);
     }
     return { revoked: count, downgraded };
+  }
+
+  /** Role gốc khi bỏ quyền nhân viên: DEALER nếu có đơn đại lý đã duyệt, ngược lại CUSTOMER. */
+  private async resolveBaseRole(userId: string): Promise<'CUSTOMER' | 'DEALER'> {
+    const dealerApp = await this.prisma.dealerApplication.findFirst({
+      where: { userId, status: 'APPROVED' },
+      select: { id: true },
+    });
+    return dealerApp ? 'DEALER' : 'CUSTOMER';
   }
 
   /** Danh sách nhân sự (user STAFF/ADMIN) + lời mời chờ (grant chưa gắn user). */

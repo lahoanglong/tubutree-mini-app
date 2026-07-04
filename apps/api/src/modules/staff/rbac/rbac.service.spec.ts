@@ -14,6 +14,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       updateMany: jest.fn(),
     },
     user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
+    dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
   };
   return { ...base, ...over } as unknown as PrismaService;
 }
@@ -127,18 +128,35 @@ describe('RbacService.addGrant', () => {
 });
 
 describe('RbacService.revokeGrant', () => {
-  it('thu hồi grant + hạ user STAFF về CUSTOMER', async () => {
+  it('thu hồi grant + hạ user STAFF về CUSTOMER (không có đơn đại lý)', async () => {
     const prisma = makePrisma({
       roleGrant: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       user: {
         findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })),
         update: jest.fn().mockResolvedValue(mkUser({ role: 'CUSTOMER' })),
       },
+      dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
     });
     const out = await new RbacService(prisma).revokeGrant('admin1', '0900000001');
     expect(prisma.roleGrant.updateMany).toHaveBeenCalled();
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { role: 'CUSTOMER' } }),
+    );
+    expect(out.downgraded).toBe(true);
+  });
+
+  it('đại lý được nâng lên STAFF, thu hồi → khôi phục DEALER (không mất quyền đại lý)', async () => {
+    const prisma = makePrisma({
+      roleGrant: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })),
+        update: jest.fn().mockResolvedValue(mkUser({ role: 'DEALER' })),
+      },
+      dealerApplication: { findFirst: jest.fn().mockResolvedValue({ id: 'app1' }) },
+    });
+    const out = await new RbacService(prisma).revokeGrant('admin1', '0900000001');
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { role: 'DEALER' } }),
     );
     expect(out.downgraded).toBe(true);
   });
