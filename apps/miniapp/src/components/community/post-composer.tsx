@@ -1,11 +1,169 @@
-import { Box, Sheet, Text } from 'zmp-ui';
-import type { FeedCategory } from '../../services/feed-api';
+import { useState } from 'react';
+import { Box, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
+import { useMutation } from '@tanstack/react-query';
+import { createPost, type CreatePostInput, type FeedCategory } from '../../services/feed-api';
+import { getErrorMessage } from '../../services/api';
+import { MultiImageUpload } from '../image-upload';
+import { ProductPicker } from './product-picker';
+import type { ProductSuggestion } from '../../services/shop-api';
+import { haptic } from '../../utils/haptic';
+import { vi } from '../../i18n/vi';
 
-export default function PostComposer({ visible, onClose }: { visible: boolean; onClose: () => void; categories: FeedCategory[]; onPosted: () => void }) {
+type ComposeKind = Extract<CreatePostInput['kind'], 'QUESTION' | 'SHOWCASE' | 'TIP'>;
+
+const KINDS: { value: ComposeKind; label: string }[] = [
+  { value: 'QUESTION', label: '❓ ' + vi.community.kindQuestion },
+  { value: 'SHOWCASE', label: '🌿 ' + vi.community.kindShowcase },
+  { value: 'TIP', label: '💡 ' + vi.community.kindTip },
+];
+
+export default function PostComposer({
+  visible,
+  onClose,
+  categories,
+  onPosted,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  categories: FeedCategory[];
+  onPosted: () => void;
+}) {
+  const { openSnackbar } = useSnackbar();
+  const [kind, setKind] = useState<ComposeKind>('QUESTION');
+  const [category, setCategory] = useState<FeedCategory | null>(null);
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [images, setImages] = useState<string[]>([]);
+  const [products, setProducts] = useState<ProductSuggestion[]>([]);
+
+  const reset = () => {
+    setKind('QUESTION');
+    setCategory(null);
+    setTitle('');
+    setBody('');
+    setImages([]);
+    setProducts([]);
+  };
+
+  const needsTitle = kind === 'QUESTION' && title.trim().length === 0;
+  const canSubmit = body.trim().length > 0 && !needsTitle;
+
+  const submit = useMutation({
+    mutationFn: () =>
+      createPost({
+        kind,
+        categoryId: category?.id,
+        title: kind === 'QUESTION' ? title.trim() : undefined,
+        body: body.trim(),
+        images: images.length > 0 ? images : undefined,
+        productSlugs: products.map((p) => p.slug),
+      }),
+    onSuccess: () => {
+      haptic('medium');
+      openSnackbar({ text: vi.community.posted, type: 'success' });
+      reset();
+      onPosted();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
   return (
     <Sheet visible={visible} onClose={onClose} autoHeight>
       <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-        <Text>Trình soạn bài đang hoàn thiện…</Text>
+        <Text bold size="large">
+          {vi.community.compose}
+        </Text>
+
+        <Box flex style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          {KINDS.map((k) => (
+            <Text
+              key={k.value}
+              size="small"
+              onClick={() => {
+                haptic('light');
+                setKind(k.value);
+              }}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-full)',
+                border: `1px solid ${kind === k.value ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
+                color: kind === k.value ? 'var(--primary-700)' : 'var(--neutral-600)',
+                background: kind === k.value ? 'var(--primary-50)' : 'transparent',
+              }}
+            >
+              {k.label}
+            </Text>
+          ))}
+        </Box>
+
+        {categories.length > 0 && (
+          <Box mt={3}>
+            <Text size="xSmall" bold style={{ marginBottom: 4 }}>
+              {vi.community.pickCategory}
+            </Text>
+            <Box flex style={{ gap: 8, flexWrap: 'wrap' }}>
+              {categories.map((c) => (
+                <Text
+                  key={c.id}
+                  size="small"
+                  onClick={() => {
+                    haptic('light');
+                    setCategory((prev) => (prev?.id === c.id ? null : c));
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 'var(--radius-full)',
+                    border: `1px solid ${category?.id === c.id ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
+                    color: category?.id === c.id ? 'var(--primary-700)' : 'var(--neutral-600)',
+                    background: category?.id === c.id ? 'var(--primary-50)' : 'transparent',
+                  }}
+                >
+                  {c.icon ?? ''} {c.name}
+                </Text>
+              ))}
+            </Box>
+          </Box>
+        )}
+
+        {kind === 'QUESTION' && (
+          <Box mt={3}>
+            <Input
+              placeholder={vi.community.titlePlaceholder}
+              value={title}
+              maxLength={160}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+            {needsTitle && (
+              <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 4 }}>
+                {vi.community.needTitle}
+              </Text>
+            )}
+          </Box>
+        )}
+
+        <Box mt={3}>
+          <Input.TextArea
+            placeholder={vi.community.bodyPlaceholder}
+            value={body}
+            maxLength={5000}
+            rows={4}
+            onChange={(e) => setBody(e.target.value)}
+          />
+        </Box>
+
+        <MultiImageUpload value={images} onChange={setImages} max={6} />
+
+        <ProductPicker value={products} onChange={setProducts} max={5} />
+
+        <Button
+          fullWidth
+          loading={submit.isPending}
+          disabled={!canSubmit || submit.isPending}
+          onClick={() => submit.mutate()}
+          style={{ marginTop: 16, background: 'var(--primary-600)' }}
+        >
+          {vi.community.post}
+        </Button>
       </Box>
     </Sheet>
   );

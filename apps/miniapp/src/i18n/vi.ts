@@ -219,6 +219,7 @@ export const vi = {
     tagProducts: 'Gắn sản phẩm',
     searchProduct: 'Tìm sản phẩm để gắn…',
     maxProducts: 'Chỉ gắn tối đa 5 sản phẩm',
+    noProductsFound: 'Không tìm thấy sản phẩm phù hợp',
     post: 'Đăng',
     posted: 'Đã đăng bài 🌿',
     expert: 'Chuyên gia Tubu',
