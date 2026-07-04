@@ -50,6 +50,7 @@ export interface FeedComment {
   badge: 'EXPERT' | null;
   isAccepted: boolean;
   createdAt: string;
+  isOwner: boolean;
 }
 export interface FeedPage {
   posts: FeedItem[];
@@ -62,6 +63,7 @@ export interface CreatePostInput {
   body: string;
   images?: string[];
   productSlugs?: string[];
+  tagSlugs?: string[];
 }
 
 export const getCategories = () =>
@@ -143,3 +145,6 @@ export const adminResolveReport = (id: string) =>
 
 // Dùng DELETE (owner/ADMIN) để ẩn bài bị report — không có endpoint ẩn riêng cho admin.
 export const adminHidePost = (id: string) => api.delete<{ ok: boolean }>(`/feed/${id}`).then((r) => r.data);
+
+export const adminPin = (id: string, pinned: boolean) =>
+  api.post<{ ok: boolean }>(`/feed/admin/${id}/pin`, { pinned }).then((r) => r.data);

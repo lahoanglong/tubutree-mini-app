@@ -264,6 +264,13 @@ export const vi = {
     unanswered: 'Chưa trả lời',
     noResult: 'Không tìm thấy bài phù hợp',
     clearTag: 'Bỏ lọc thẻ',
+    tags: 'Thẻ (hashtag)',
+    tagsPlaceholder: 'vd: sen đá, tưới nước (cách nhau dấu phẩy)',
+    targetPost: 'Bài viết',
+    targetComment: 'Bình luận',
+    pin: 'Ghim',
+    unpin: 'Bỏ ghim',
+    pinned: 'Đã ghim',
   },
 } as const;
 

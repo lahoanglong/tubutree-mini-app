@@ -11,6 +11,7 @@ import {
   adminHidePost,
   type AdminPendingPost,
   type AdminReport,
+  type FeedPostKind,
 } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -18,6 +19,13 @@ import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { timeAgo } from '../utils/time-ago';
 import { vi } from '../i18n/vi';
+import { KIND_LABEL } from '../components/community/post-card';
+
+// report.targetType thô "POST"/"COMMENT" → nhãn vi.
+const TARGET_LABEL: Record<string, string> = {
+  POST: vi.community.targetPost,
+  COMMENT: vi.community.targetComment,
+};
 
 export default function CommunityModerationPage() {
   const role = useAuthStore((s) => s.user?.role);
@@ -117,7 +125,7 @@ function PendingCard({
   return (
     <Box style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
       <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-        {post.kind}{post.category ? ` · ${post.category}` : ''} · {post.author} · {timeAgo(post.createdAt)}
+        {KIND_LABEL[post.kind as FeedPostKind] ?? post.kind}{post.category ? ` · ${post.category}` : ''} · {post.author} · {timeAgo(post.createdAt)}
       </Text>
       {post.title && <Text bold style={{ marginTop: 4 }}>{post.title}</Text>}
       <Text
@@ -227,7 +235,7 @@ function ReportCard({
   return (
     <Box style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
       <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-        {report.targetType} · {report.targetId} · {timeAgo(report.createdAt)}
+        {TARGET_LABEL[report.targetType] ?? report.targetType} · {report.targetId} · {timeAgo(report.createdAt)}
       </Text>
       <Text size="small" style={{ marginTop: 4 }}>{report.reason}</Text>
       <Box flex style={{ gap: 8, marginTop: 10 }}>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Box, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useMutation } from '@tanstack/react-query';
+import { Hash, X } from 'lucide-react';
 import { createPost, type CreatePostInput, type FeedCategory } from '../../services/feed-api';
 import { getErrorMessage } from '../../services/api';
 import { MultiImageUpload } from '../image-upload';
@@ -16,6 +17,17 @@ const KINDS: { value: ComposeKind; label: string }[] = [
   { value: 'SHOWCASE', label: '🌿 ' + vi.community.kindShowcase },
   { value: 'TIP', label: '💡 ' + vi.community.kindTip },
 ];
+
+const MAX_TAGS = 5;
+
+// Tách theo dấu phẩy/khoảng trắng, bỏ '#' đầu, trim, bỏ rỗng, khử trùng, cap MAX_TAGS.
+function parseTags(raw: string): string[] {
+  const parts = raw
+    .split(/[,\s]+/)
+    .map((s) => s.trim().replace(/^#+/, '').trim())
+    .filter((s) => s.length > 0);
+  return Array.from(new Set(parts)).slice(0, MAX_TAGS);
+}
 
 export default function PostComposer({
   visible,
@@ -35,6 +47,10 @@ export default function PostComposer({
   const [body, setBody] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [products, setProducts] = useState<ProductSuggestion[]>([]);
+  const [tagsRaw, setTagsRaw] = useState('');
+
+  const tags = parseTags(tagsRaw);
+  const removeTag = (t: string) => setTagsRaw(tags.filter((x) => x !== t).join(', '));
 
   const reset = () => {
     setKind('QUESTION');
@@ -43,6 +59,7 @@ export default function PostComposer({
     setBody('');
     setImages([]);
     setProducts([]);
+    setTagsRaw('');
   };
 
   const needsTitle = kind === 'QUESTION' && title.trim().length === 0;
@@ -57,6 +74,7 @@ export default function PostComposer({
         body: body.trim(),
         images: images.length > 0 ? images : undefined,
         productSlugs: products.map((p) => p.slug),
+        tagSlugs: tags.length > 0 ? tags : undefined,
       }),
     onSuccess: (res) => {
       haptic('medium');
@@ -158,6 +176,51 @@ export default function PostComposer({
         <MultiImageUpload value={images} onChange={setImages} max={6} />
 
         <ProductPicker value={products} onChange={setProducts} max={5} />
+
+        <Box mt={3}>
+          <Text size="xSmall" bold style={{ marginBottom: 4 }}>
+            {vi.community.tags}
+          </Text>
+          <Input
+            placeholder={vi.community.tagsPlaceholder}
+            value={tagsRaw}
+            onChange={(e) => setTagsRaw(e.target.value)}
+          />
+          {tags.length > 0 && (
+            <Box flex style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              {tags.map((t) => (
+                <Box
+                  key={t}
+                  flex
+                  alignItems="center"
+                  style={{
+                    gap: 4,
+                    padding: '4px 8px',
+                    borderRadius: 'var(--radius-full)',
+                    background: 'var(--leaf-100, var(--neutral-100))',
+                    color: 'var(--leaf-700)',
+                  }}
+                >
+                  <Hash size={11} />
+                  <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                    {t}
+                  </Text>
+                  <Box
+                    role="button"
+                    aria-label={vi.common.cancel}
+                    className="tubu-press"
+                    onClick={() => {
+                      haptic('light');
+                      removeTag(t);
+                    }}
+                  >
+                    <X size={11} />
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Box>
 
         <Button
           fullWidth

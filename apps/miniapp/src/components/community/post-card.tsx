@@ -5,7 +5,8 @@ import { timeAgo } from '../../utils/time-ago';
 import { formatVnd } from '../../utils/format';
 import { vi } from '../../i18n/vi';
 
-const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
+// Xuất để dùng lại ở community-moderation.tsx (localize post.kind thô "QUESTION"/"TIP"...).
+export const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
   QUESTION: '❓ ' + vi.community.kindQuestion,
   SHOWCASE: '🌿 ' + vi.community.kindShowcase,
   TIP: '💡 ' + vi.community.kindTip,

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, Spinner, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Trash2, Flag } from 'lucide-react';
+import { Pencil, Trash2, Flag, Pin } from 'lucide-react';
 import {
   getPost,
   getComments,
@@ -11,6 +11,7 @@ import {
   editPost,
   reactPost,
   reportContent,
+  adminPin,
   type FeedItem,
   type FeedComment,
 } from '../services/feed-api';
@@ -112,6 +113,15 @@ export default function PostDetailPage() {
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  const pinMut = useMutation({
+    mutationFn: () => adminPin(id!, !(post.data?.isPinned ?? false)),
+    onSuccess: () => {
+      haptic('medium');
+      void invalidateCommunity();
+    },
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
   const deleteMut = useMutation({
     mutationFn: () => deletePost(id!),
     onSuccess: () => {
@@ -199,6 +209,36 @@ export default function PostDetailPage() {
               {vi.community.pendingBadge}
             </Text>
           </Box>
+        )}
+        {p.isPinned && (
+          <Box
+            style={{
+              padding: '8px 12px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--leaf-50)',
+              color: 'var(--leaf-700)',
+              marginBottom: 10,
+            }}
+          >
+            <Text size="small" bold>
+              📌 {vi.community.pinned}
+            </Text>
+          </Box>
+        )}
+        {role === 'ADMIN' && (
+          <Button
+            size="small"
+            variant="secondary"
+            loading={pinMut.isPending}
+            prefixIcon={<Pin size={14} />}
+            onClick={() => {
+              haptic('light');
+              pinMut.mutate();
+            }}
+            style={{ marginBottom: 10 }}
+          >
+            {p.isPinned ? vi.community.unpin : vi.community.pin}
+          </Button>
         )}
         <Box flex alignItems="center" justifyContent="space-between">
           <Box flex alignItems="center" style={{ gap: 8 }}>
@@ -590,9 +630,11 @@ function CommentRow({
             </Text>
           </Box>
         </Box>
-        <Box role="button" aria-label={vi.community.report} className="tubu-press" onClick={onReport}>
-          <Flag size={14} color="var(--neutral-300)" strokeWidth={1.8} />
-        </Box>
+        {!comment.isOwner && (
+          <Box role="button" aria-label={vi.community.report} className="tubu-press" onClick={onReport}>
+            <Flag size={14} color="var(--neutral-300)" strokeWidth={1.8} />
+          </Box>
+        )}
       </Box>
       <Text size="small" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
         {comment.body}
