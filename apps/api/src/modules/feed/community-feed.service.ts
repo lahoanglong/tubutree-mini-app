@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CommunityRewardService } from './community-reward.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -25,6 +26,23 @@ export function levelFromReputation(rep: number, thresholds: number[] = DEFAULT_
 /** Tên hạng hiển thị FE — fallback 'Mầm' nếu level không hợp lệ. */
 export function levelName(level: number): string {
   return LEVEL_NAMES[level] ?? 'Mầm';
+}
+
+/**
+ * Chuẩn hoá slug tag về ASCII thuần (bỏ dấu tiếng Việt) — pure fn, dễ test.
+ * "Sen Đá" → "sen-da". Tên gốc (name) KHÔNG bị đổi, chỉ slug.
+ */
+export function slugifyTag(label: string): string {
+  return label
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-');
 }
 
 type FeedPostKind = 'MANUAL' | 'HARVEST' | 'MILESTONE' | 'SPECIES' | 'QUESTION' | 'SHOWCASE' | 'TIP';
@@ -63,6 +81,11 @@ const FEED_INCLUDE = {
   tags: { include: { tag: { select: { slug: true, name: true } } } },
   _count: { select: { reactions: true, comments: true } },
 } as const;
+
+/** Hình dạng FeedPost sau khi include FEED_INCLUDE + reactions (dùng chung getFeed/getPost/eventPosts). */
+type FeedPostRow = Prisma.FeedPostGetPayload<{
+  include: typeof FEED_INCLUDE & { reactions: { select: { id: true } } };
+}>;
 
 /**
  * Community Feed (§6.14.12) — bảng tin cộng đồng Vườn Xanh.
@@ -176,8 +199,13 @@ export class CommunityFeedService {
     if (opts.tag) where.tags = { some: { tag: { slug: opts.tag } } };
     const orderBy =
       opts.sort === 'popular'
-        ? [{ isPinned: 'desc' as const }, { reactions: { _count: 'desc' as const } }, { createdAt: 'desc' as const }]
-        : [{ isPinned: 'desc' as const }, { createdAt: 'desc' as const }];
+        ? [
+            { isPinned: 'desc' as const },
+            { reactions: { _count: 'desc' as const } },
+            { createdAt: 'desc' as const },
+            { id: 'desc' as const },
+          ]
+        : [{ isPinned: 'desc' as const }, { createdAt: 'desc' as const }, { id: 'desc' as const }];
     const posts = await this.prisma.feedPost.findMany({
       where,
       orderBy,
@@ -214,7 +242,7 @@ export class CommunityFeedService {
     });
   }
 
-  private toItem(p: any, userId: string) {
+  private toItem(p: FeedPostRow, userId: string) {
     return {
       id: p.id,
       kind: p.kind,
@@ -229,11 +257,11 @@ export class CommunityFeedService {
       badge: authorBadge(p.user.role),
       authorLevel: p.user.communityProfile?.level ?? 1,
       category: p.category ? { slug: p.category.slug, name: p.category.name, icon: p.category.icon } : null,
-      productTags: (p.productTags ?? []).map((t: any) => ({
+      productTags: (p.productTags ?? []).map((t) => ({
         slug: t.product.slug, name: t.product.name, thumbnail: t.product.thumbnail,
         salePrice: t.product.salePrice, basePrice: t.product.basePrice,
       })),
-      tags: (p.tags ?? []).map((t: any) => ({ slug: t.tag.slug, name: t.tag.name })),
+      tags: (p.tags ?? []).map((t) => ({ slug: t.tag.slug, name: t.tag.name })),
       likeCount: p._count.reactions,
       commentCount: p._count.comments,
       liked: p.reactions.length > 0,
@@ -254,6 +282,25 @@ export class CommunityFeedService {
     const images = (input.images ?? []).filter((u) => typeof u === 'string' && u.trim()).slice(0, MAX_IMAGES);
     const slugs = input.productSlugs ?? [];
     if (slugs.length > MAX_PRODUCT_TAGS) throw new BadRequestException('Chỉ gắn tối đa 5 sản phẩm.');
+
+    if (input.eventId) {
+      const event = await this.prisma.communityEvent.findUnique({
+        where: { id: input.eventId },
+        select: { id: true, status: true },
+      });
+      if (!event || event.status !== 'OPEN') {
+        throw new BadRequestException('Sự kiện không hợp lệ hoặc đã đóng.');
+      }
+    }
+    if (input.categoryId) {
+      const category = await this.prisma.communityCategory.findUnique({
+        where: { id: input.categoryId },
+        select: { id: true, isActive: true },
+      });
+      if (!category || !category.isActive) {
+        throw new BadRequestException('Danh mục không hợp lệ.');
+      }
+    }
 
     const trusted = await this.isTrusted(userId, role);
     const status = trusted ? 'PUBLISHED' : 'PENDING';
@@ -285,7 +332,7 @@ export class CommunityFeedService {
       try {
         const tags = await Promise.all(
           tagLabels.map((label) => {
-            const slug = label.toLowerCase().replace(/\s+/g, '-');
+            const slug = slugifyTag(label);
             return this.prisma.tag.upsert({ where: { slug }, create: { slug, name: label }, update: {} });
           }),
         );
@@ -442,9 +489,13 @@ export class CommunityFeedService {
     if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Chỉ chủ bài mới chọn được.');
     const comment = await this.prisma.feedComment.findUnique({ where: { id: commentId }, select: { id: true, postId: true, userId: true } });
     if (!comment || comment.postId !== postId) throw new NotFoundException('Câu trả lời không tồn tại.');
-    await this.prisma.feedComment.updateMany({ where: { postId }, data: { isAccepted: false } });
-    await this.prisma.feedComment.update({ where: { id: commentId }, data: { isAccepted: true } });
-    await this.prisma.feedPost.update({ where: { id: postId }, data: { bestCommentId: commentId } });
+    // 3 ghi cùng lúc phải atomic — tránh trạng thái nửa vời nếu 1 write giữa chừng lỗi
+    // (vd đã bỏ cờ isAccepted cũ nhưng chưa set cờ mới/bestCommentId).
+    await this.prisma.$transaction([
+      this.prisma.feedComment.updateMany({ where: { postId }, data: { isAccepted: false } }),
+      this.prisma.feedComment.update({ where: { id: commentId }, data: { isAccepted: true } }),
+      this.prisma.feedPost.update({ where: { id: postId }, data: { bestCommentId: commentId } }),
+    ]);
     try {
       await this.reward.rewardBestAnswer(comment.userId, post.userId, commentId);
     } catch (err) {
@@ -575,6 +626,9 @@ export class CommunityFeedService {
 
   /** Tạo sự kiện mới (admin). */
   async createEvent(dto: CreateEventInput) {
+    if (new Date(dto.startAt) >= new Date(dto.endAt)) {
+      throw new BadRequestException('Thời gian kết thúc phải sau thời gian bắt đầu.');
+    }
     return this.prisma.communityEvent.create({ data: dto });
   }
 

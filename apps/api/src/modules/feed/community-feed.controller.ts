@@ -34,8 +34,8 @@ class PinDto {
   @IsOptional() @IsBoolean() pinned?: boolean;
 }
 class CreateEventDto {
-  @IsString() title!: string;
-  @IsOptional() @IsString() description?: string;
+  @IsString() @MaxLength(160) title!: string;
+  @IsOptional() @IsString() @MaxLength(2000) description?: string;
   @IsOptional() @IsString() coverUrl?: string;
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
