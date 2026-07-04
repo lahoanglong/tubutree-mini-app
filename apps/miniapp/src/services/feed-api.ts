@@ -67,7 +67,7 @@ export const getFeed = (params: { category?: string; kind?: string; sort?: FeedS
 export const getPost = (id: string) => api.get<FeedItem>(`/feed/${id}`).then((r) => r.data);
 
 export const createPost = (input: CreatePostInput) =>
-  api.post<{ id: string }>('/feed', input).then((r) => r.data);
+  api.post<{ id: string; status?: string }>('/feed', input).then((r) => r.data);
 
 export const editPost = (id: string, patch: { title?: string; body?: string; images?: string[] }) =>
   api.patch<{ ok: boolean }>(`/feed/${id}`, patch).then((r) => r.data);
@@ -85,3 +85,8 @@ export const addComment = (id: string, body: string) =>
 
 export const setBestAnswer = (id: string, commentId: string) =>
   api.post<{ ok: boolean }>(`/feed/${id}/best-answer/${commentId}`).then((r) => r.data);
+
+export const reportContent = (
+  postId: string,
+  body: { targetType: 'POST' | 'COMMENT'; targetId?: string; reason: string },
+) => api.post<{ ok: boolean }>(`/feed/${postId}/report`, body).then((r) => r.data);

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, Spinner, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, Flag } from 'lucide-react';
 import {
   getPost,
   getComments,
@@ -10,6 +10,7 @@ import {
   deletePost,
   editPost,
   reactPost,
+  reportContent,
   type FeedItem,
   type FeedComment,
 } from '../services/feed-api';
@@ -45,6 +46,8 @@ export default function PostDetailPage() {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
+  const [reportTarget, setReportTarget] = useState<{ targetType: 'POST' | 'COMMENT'; targetId?: string } | null>(null);
+  const [reportReason, setReportReason] = useState('');
 
   const post = useQuery({
     queryKey: ['community', id],
@@ -93,6 +96,18 @@ export default function PostDetailPage() {
       setEditing(false);
       openSnackbar({ text: vi.common.save, type: 'success' });
       void invalidateCommunity();
+    },
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const reportMut = useMutation({
+    mutationFn: (target: { targetType: 'POST' | 'COMMENT'; targetId?: string }) =>
+      reportContent(id!, { ...target, reason: reportReason.trim() || vi.community.report }),
+    onSuccess: () => {
+      haptic('light');
+      setReportTarget(null);
+      setReportReason('');
+      openSnackbar({ text: vi.community.reported, type: 'success' });
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -170,6 +185,21 @@ export default function PostDetailPage() {
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 100 }}>
       <Box p={4} style={{ background: 'var(--neutral-0)' }}>
+        {p.status === 'PENDING' && p.isOwner && (
+          <Box
+            style={{
+              padding: '8px 12px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--leaf-50)',
+              color: 'var(--leaf-700)',
+              marginBottom: 10,
+            }}
+          >
+            <Text size="small" bold>
+              {vi.community.pendingBadge}
+            </Text>
+          </Box>
+        )}
         <Box flex alignItems="center" justifyContent="space-between">
           <Box flex alignItems="center" style={{ gap: 8 }}>
             {p.avatar ? (
@@ -204,7 +234,7 @@ export default function PostDetailPage() {
               </Text>
             </Box>
           </Box>
-          {p.isOwner && (
+          {p.isOwner ? (
             <Box flex style={{ gap: 14 }}>
               <Box
                 role="button"
@@ -228,6 +258,18 @@ export default function PostDetailPage() {
               >
                 <Trash2 size={18} color="var(--danger)" strokeWidth={1.8} />
               </Box>
+            </Box>
+          ) : (
+            <Box
+              role="button"
+              aria-label={vi.community.report}
+              className="tubu-press"
+              onClick={() => {
+                haptic('light');
+                setReportTarget({ targetType: 'POST' });
+              }}
+            >
+              <Flag size={18} color="var(--neutral-400)" strokeWidth={1.8} />
             </Box>
           )}
         </Box>
@@ -347,6 +389,10 @@ export default function PostDetailPage() {
               canMarkBest={canMarkBest}
               onMarkBest={() => markBest.mutate(c.id)}
               markingPending={markBest.isPending && markBest.variables === c.id}
+              onReport={() => {
+                haptic('light');
+                setReportTarget({ targetType: 'COMMENT', targetId: c.id });
+              }}
             />
           ))
         )}
@@ -443,6 +489,40 @@ export default function PostDetailPage() {
           </Box>
         </Box>
       </Sheet>
+
+      {/* Sheet báo cáo bài/bình luận vi phạm */}
+      <Sheet
+        visible={!!reportTarget}
+        onClose={() => {
+          setReportTarget(null);
+          setReportReason('');
+        }}
+        autoHeight
+      >
+        <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
+          <Text bold size="large">
+            {vi.community.report}
+          </Text>
+          <Box mt={3}>
+            <Input.TextArea
+              placeholder={vi.community.reportReason}
+              value={reportReason}
+              maxLength={500}
+              rows={3}
+              onChange={(e) => setReportReason(e.target.value)}
+            />
+          </Box>
+          <Button
+            fullWidth
+            loading={reportMut.isPending}
+            disabled={reportMut.isPending}
+            onClick={() => reportTarget && reportMut.mutate(reportTarget)}
+            style={{ marginTop: 16, background: 'var(--danger)' }}
+          >
+            {vi.community.report}
+          </Button>
+        </Box>
+      </Sheet>
     </Page>
   );
 }
@@ -452,11 +532,13 @@ function CommentRow({
   canMarkBest,
   onMarkBest,
   markingPending,
+  onReport,
 }: {
   comment: FeedComment;
   canMarkBest: boolean;
   onMarkBest: () => void;
   markingPending: boolean;
+  onReport: () => void;
 }) {
   return (
     <Box
@@ -473,38 +555,43 @@ function CommentRow({
           ✅ {vi.community.bestAnswer}
         </Text>
       )}
-      <Box flex alignItems="center" style={{ gap: 8 }}>
-        {comment.avatar ? (
-          <img src={comment.avatar} alt="" width={28} height={28} style={{ borderRadius: '50%', objectFit: 'cover' }} />
-        ) : (
-          <Box
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              background: 'var(--leaf-200)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Text size="xSmall">🌱</Text>
-          </Box>
-        )}
-        <Box style={{ flex: 1 }}>
-          <Box flex alignItems="center" style={{ gap: 6 }}>
-            <Text size="small" bold>
-              {comment.author}
-            </Text>
-            {comment.badge === 'EXPERT' && (
-              <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                🌿 {vi.community.expert}
+      <Box flex alignItems="center" justifyContent="space-between">
+        <Box flex alignItems="center" style={{ gap: 8 }}>
+          {comment.avatar ? (
+            <img src={comment.avatar} alt="" width={28} height={28} style={{ borderRadius: '50%', objectFit: 'cover' }} />
+          ) : (
+            <Box
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                background: 'var(--leaf-200)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text size="xSmall">🌱</Text>
+            </Box>
+          )}
+          <Box style={{ flex: 1 }}>
+            <Box flex alignItems="center" style={{ gap: 6 }}>
+              <Text size="small" bold>
+                {comment.author}
               </Text>
-            )}
+              {comment.badge === 'EXPERT' && (
+                <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
+                  🌿 {vi.community.expert}
+                </Text>
+              )}
+            </Box>
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+              {timeAgo(comment.createdAt)}
+            </Text>
           </Box>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-            {timeAgo(comment.createdAt)}
-          </Text>
+        </Box>
+        <Box role="button" aria-label={vi.community.report} className="tubu-press" onClick={onReport}>
+          <Flag size={14} color="var(--neutral-300)" strokeWidth={1.8} />
         </Box>
       </Box>
       <Text size="small" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>

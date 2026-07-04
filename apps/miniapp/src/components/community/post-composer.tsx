@@ -58,9 +58,13 @@ export default function PostComposer({
         images: images.length > 0 ? images : undefined,
         productSlugs: products.map((p) => p.slug),
       }),
-    onSuccess: () => {
+    onSuccess: (res) => {
       haptic('medium');
-      openSnackbar({ text: vi.community.posted, type: 'success' });
+      if (res.status === 'PENDING') {
+        openSnackbar({ text: vi.community.pendingNotice, type: 'info' });
+      } else {
+        openSnackbar({ text: vi.community.posted, type: 'success' });
+      }
       reset();
       onPosted();
     },

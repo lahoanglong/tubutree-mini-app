@@ -241,6 +241,11 @@ export const vi = {
     confirmDelete: 'Xoá bài viết này?',
     needTitle: 'Câu hỏi cần có tiêu đề',
     loginToView: 'Đăng nhập để xem cộng đồng',
+    report: 'Báo cáo',
+    reportReason: 'Lý do báo cáo…',
+    reported: 'Đã gửi báo cáo, cảm ơn bạn 🌿',
+    pendingNotice: 'Bài đang chờ duyệt, sẽ hiện sau khi được duyệt 🌱',
+    pendingBadge: '⏳ Chờ duyệt',
   },
 } as const;
 
