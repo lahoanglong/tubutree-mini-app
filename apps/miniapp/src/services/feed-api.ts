@@ -90,3 +90,41 @@ export const reportContent = (
   postId: string,
   body: { targetType: 'POST' | 'COMMENT'; targetId?: string; reason: string },
 ) => api.post<{ ok: boolean }>(`/feed/${postId}/report`, body).then((r) => r.data);
+
+// Admin — kiểm duyệt cộng đồng (duyệt bài PENDING + xử lý report).
+export interface AdminPendingPost {
+  id: string;
+  kind: string;
+  title: string | null;
+  body: string;
+  images: string[];
+  author: string;
+  category: string | null;
+  createdAt: string;
+}
+export interface AdminReport {
+  id: string;
+  reporterId: string;
+  targetType: string;
+  targetId: string;
+  reason: string;
+  status: string;
+  createdAt: string;
+}
+
+export const adminPendingPosts = () =>
+  api.get<AdminPendingPost[]>('/feed/admin/pending').then((r) => r.data);
+
+export const adminApprovePost = (id: string) =>
+  api.post<{ ok: boolean }>(`/feed/admin/${id}/approve`).then((r) => r.data);
+
+export const adminRejectPost = (id: string) =>
+  api.post<{ ok: boolean }>(`/feed/admin/${id}/reject`).then((r) => r.data);
+
+export const adminReports = () => api.get<AdminReport[]>('/feed/admin/reports').then((r) => r.data);
+
+export const adminResolveReport = (id: string) =>
+  api.post<{ ok: boolean }>(`/feed/admin/reports/${id}/resolve`).then((r) => r.data);
+
+// Dùng DELETE (owner/ADMIN) để ẩn bài bị report — không có endpoint ẩn riêng cho admin.
+export const adminHidePost = (id: string) => api.delete<{ ok: boolean }>(`/feed/${id}`).then((r) => r.data);

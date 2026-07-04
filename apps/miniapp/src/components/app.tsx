@@ -62,6 +62,7 @@ const StorefrontViewPage = lazy(() => import('../pages/storefront-view'));
 const BrandViewPage = lazy(() => import('../pages/brand-view'));
 const BrandOwnerPage = lazy(() => import('../pages/brand-owner'));
 const AdminPage = lazy(() => import('../pages/admin'));
+const CommunityModerationPage = lazy(() => import('../pages/community-moderation'));
 const StaffPage = lazy(() => import('../pages/staff'));
 const MyPayrollPage = lazy(() => import('../pages/my-payroll'));
 const NotFoundPage = lazy(() => import('../pages/not-found'));
@@ -175,6 +176,7 @@ export default function MyApp() {
                 <Route path="/brand/:slug" element={<BrandViewPage />} />
                 <Route path="/brand-owner" element={<BrandOwnerPage />} />
                 <Route path="/admin" element={<AdminPage />} />
+                <Route path="/admin/community" element={<CommunityModerationPage />} />
                 <Route path="/staff" element={<StaffPage />} />
                 <Route path="/my-payroll" element={<MyPayrollPage />} />
                 <Route path="*" element={<NotFoundPage />} />

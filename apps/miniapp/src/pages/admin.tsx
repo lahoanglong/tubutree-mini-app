@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   UserPlus,
@@ -11,6 +11,7 @@ import {
   X,
   Clock,
   Plus,
+  MessagesSquare,
 } from 'lucide-react';
 import { listStaff, grantStaff, revokeStaff, type StaffRole } from '../services/staff-api';
 import {
@@ -35,6 +36,7 @@ import {
 import { adminEditSession } from '../services/attendance-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { vi } from '../i18n/vi';
 import { Skeleton } from '../components/ui/skeleton';
 import { TimeInput } from '../components/ui/time-input';
 import { ImageUpload } from '../components/image-upload';
@@ -73,6 +75,7 @@ export default function AdminPage() {
 type Tab = 'staff' | 'shifts' | 'payroll';
 
 function AdminHub() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('staff');
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
@@ -85,6 +88,14 @@ function AdminHub() {
         </Button>
         <Button size="small" variant={tab === 'payroll' ? undefined : 'secondary'} onClick={() => setTab('payroll')}>
           Lương
+        </Button>
+        <Button
+          size="small"
+          variant="secondary"
+          prefixIcon={<MessagesSquare size={16} />}
+          onClick={() => navigate('/admin/community')}
+        >
+          {vi.community.moderation}
         </Button>
       </Box>
       {tab === 'staff' ? <StaffSection /> : tab === 'shifts' ? <ShiftsSection /> : <PayrollSection />}
