@@ -102,7 +102,7 @@ export default function PostDetailPage() {
 
   const reportMut = useMutation({
     mutationFn: (target: { targetType: 'POST' | 'COMMENT'; targetId?: string }) =>
-      reportContent(id!, { ...target, reason: reportReason.trim() || vi.community.report }),
+      reportContent(id!, { ...target, reason: reportReason.trim() }),
     onSuccess: () => {
       haptic('light');
       setReportTarget(null);

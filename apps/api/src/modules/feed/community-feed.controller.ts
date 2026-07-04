@@ -25,7 +25,7 @@ class CommentDto {
 }
 class ReportDto {
   @IsIn(REPORT_TARGET_TYPES as unknown as string[]) targetType!: (typeof REPORT_TARGET_TYPES)[number];
-  @IsString() targetId!: string;
+  @IsOptional() @IsString() targetId?: string;
   @IsString() @MaxLength(500) reason!: string;
 }
 class PinDto {
@@ -113,7 +113,7 @@ export class CommunityFeedController {
   report(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() dto: ReportDto) {
     return this.feed.report(userId, {
       targetType: dto.targetType,
-      targetId: dto.targetType === 'COMMENT' ? dto.targetId : id,
+      targetId: dto.targetType === 'COMMENT' ? (dto.targetId ?? id) : id,
       reason: dto.reason,
     });
   }
