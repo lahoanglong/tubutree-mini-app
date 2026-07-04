@@ -259,6 +259,11 @@ export const vi = {
     noPending: 'Không có bài nào chờ duyệt',
     noReports: 'Không có báo cáo nào',
     notAdmin: 'Chỉ quản trị viên mới truy cập được trang này.',
+    search: 'Tìm kiếm',
+    searchPlaceholder: 'Tìm câu hỏi, mẹo, bài viết…',
+    unanswered: 'Chưa trả lời',
+    noResult: 'Không tìm thấy bài phù hợp',
+    clearTag: 'Bỏ lọc thẻ',
   },
 } as const;
 

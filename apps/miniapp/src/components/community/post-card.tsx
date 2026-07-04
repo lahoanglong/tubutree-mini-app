@@ -1,4 +1,5 @@
 import { Box, Text, useNavigate } from 'zmp-ui';
+import { Hash } from 'lucide-react';
 import type { FeedItem } from '../../services/feed-api';
 import { timeAgo } from '../../utils/time-ago';
 import { formatVnd } from '../../utils/format';
@@ -46,6 +47,34 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
               {p.thumbnail && <img src={p.thumbnail} alt="" width={28} height={28} style={{ borderRadius: 6, objectFit: 'cover' }} />}
               <Box><Text size="xSmall" style={{ display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.name}</Text>
               <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>{formatVnd(p.salePrice ?? p.basePrice)}</Text></Box>
+            </Box>
+          ))}
+        </Box>
+      )}
+      {post.tags.length > 0 && (
+        <Box flex style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+          {post.tags.map((t) => (
+            <Box
+              key={t.slug}
+              role="button"
+              className="tubu-press"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/feed?tag=${encodeURIComponent(t.slug)}`);
+              }}
+              flex
+              alignItems="center"
+              style={{
+                gap: 2,
+                padding: '4px 8px',
+                borderRadius: 'var(--radius-full)',
+                background: 'var(--leaf-100, var(--neutral-100))',
+                color: 'var(--leaf-700)',
+                fontSize: 12,
+              }}
+            >
+              <Hash size={11} />
+              <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>{t.name}</Text>
             </Box>
           ))}
         </Box>

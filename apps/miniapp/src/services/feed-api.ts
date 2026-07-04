@@ -16,6 +16,10 @@ export interface FeedCategory {
   name: string;
   icon: string | null;
 }
+export interface FeedTag {
+  slug: string;
+  name: string;
+}
 export interface FeedItem {
   id: string;
   kind: FeedPostKind;
@@ -30,6 +34,8 @@ export interface FeedItem {
   badge: 'EXPERT' | null;
   category: FeedCategory | null;
   productTags: ProductTag[];
+  tags: FeedTag[];
+  isPinned: boolean;
   likeCount: number;
   commentCount: number;
   liked: boolean;
@@ -61,8 +67,17 @@ export interface CreatePostInput {
 export const getCategories = () =>
   api.get<FeedCategory[]>('/feed/categories').then((r) => r.data);
 
-export const getFeed = (params: { category?: string; kind?: string; sort?: FeedSort; cursor?: string } = {}) =>
-  api.get<FeedPage>('/feed', { params }).then((r) => r.data);
+export const getFeed = (
+  params: {
+    category?: string;
+    kind?: string;
+    sort?: FeedSort;
+    cursor?: string;
+    q?: string;
+    unanswered?: boolean;
+    tag?: string;
+  } = {},
+) => api.get<FeedPage>('/feed', { params }).then((r) => r.data);
 
 export const getPost = (id: string) => api.get<FeedItem>(`/feed/${id}`).then((r) => r.data);
 

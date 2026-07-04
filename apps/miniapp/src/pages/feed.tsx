@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Box, Page, Text, Button, Spinner, useNavigate } from 'zmp-ui';
+import { useEffect, useMemo, useState } from 'react';
+import { Box, Page, Text, Button, Input, Spinner, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Plus, HelpCircle, Hash } from 'lucide-react';
 import { getFeed, getCategories, type FeedSort } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -11,6 +11,7 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import PostCard from '../components/community/post-card';
 import PostComposer from '../components/community/post-composer';
 import { haptic } from '../utils/haptic';
+import { useDebounced } from '../utils/use-debounced';
 
 const SORTS: { key: FeedSort; label: string }[] = [
   { key: 'new', label: vi.community.sortNew },
@@ -22,19 +23,42 @@ export default function FeedPage() {
   const login = useAuthStore((s) => s.login);
   const authed = status === 'authenticated';
   const navigate = useNavigate();
+  const location = useLocation();
   const [category, setCategory] = useState<string | undefined>(undefined);
   const [sort, setSort] = useState<FeedSort>('new');
   const [composing, setComposing] = useState(false);
+  const [q, setQ] = useState('');
+  const [unanswered, setUnanswered] = useState(false);
+  const initialTag = useMemo(
+    () => new URLSearchParams(location.search).get('tag') ?? undefined,
+    [location.search],
+  );
+  const [tag, setTag] = useState<string | undefined>(initialTag);
+  const dq = useDebounced(q, 300);
+
+  // Tag-nav từ post-card (điều hướng /feed?tag=slug) khi trang đã mounted → đồng bộ lại state.
+  useEffect(() => {
+    setTag(initialTag);
+  }, [initialTag]);
 
   const cats = useQuery({ queryKey: ['community', 'categories'], queryFn: getCategories, enabled: authed, staleTime: 60_000 });
   const feed = useInfiniteQuery({
-    queryKey: ['community', category, sort],
-    queryFn: ({ pageParam }) => getFeed({ category, sort, cursor: pageParam as string | undefined }),
+    queryKey: ['community', category, sort, dq, unanswered, tag],
+    queryFn: ({ pageParam }) =>
+      getFeed({
+        category,
+        sort,
+        cursor: pageParam as string | undefined,
+        q: dq || undefined,
+        unanswered: unanswered || undefined,
+        tag,
+      }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: authed,
   });
   const posts = feed.data?.pages.flatMap((p) => p.posts) ?? [];
+  const filtering = Boolean(dq || unanswered || tag);
 
   // Đang silent-login lúc mở app (restore chưa xong) → spinner thay vì chớp cổng đăng nhập.
   if (status === 'loading') {
@@ -97,7 +121,17 @@ export default function FeedPage() {
         </Box>
       </Box>
 
-      <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingTop: 10, paddingBottom: 8, background: 'var(--neutral-0)' }}>
+      <Box p={3} pt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Input.Search
+          aria-label={vi.community.search}
+          placeholder={vi.community.searchPlaceholder}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          clearable
+        />
+      </Box>
+
+      <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, background: 'var(--neutral-0)' }}>
         <Chip label={vi.community.tabAll} active={!category} onClick={() => setCategory(undefined)} />
         {cats.data?.map((c) => (
           <Chip
@@ -113,7 +147,49 @@ export default function FeedPage() {
         {SORTS.map((s) => (
           <Chip key={s.key} label={s.label} active={sort === s.key} onClick={() => setSort(s.key)} />
         ))}
+        <Chip
+          label={
+            <Box flex alignItems="center" style={{ gap: 4 }}>
+              <HelpCircle size={14} />
+              {vi.community.unanswered}
+            </Box>
+          }
+          active={unanswered}
+          onClick={() => {
+            haptic('light');
+            setUnanswered((v) => !v);
+          }}
+        />
       </Box>
+
+      {tag && (
+        <Box px={3} pb={2} style={{ background: 'var(--neutral-0)' }}>
+          <Box
+            role="button"
+            aria-label={vi.community.clearTag}
+            className="tubu-press"
+            onClick={() => {
+              haptic('light');
+              setTag(undefined);
+              navigate('/feed', { replace: true });
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'var(--leaf-600)',
+              color: '#fff',
+              borderRadius: 'var(--radius-full)',
+              padding: '6px 12px',
+              fontSize: 12.5,
+              fontWeight: 600,
+            }}
+          >
+            <Hash size={12} />
+            {tag} ✕
+          </Box>
+        </Box>
+      )}
 
       {feed.isLoading ? (
         <Box flex justifyContent="center" p={6}>
@@ -122,7 +198,11 @@ export default function FeedPage() {
       ) : feed.isError ? (
         <ErrorState message={getErrorMessage(feed.error)} onRetry={() => void feed.refetch()} />
       ) : posts.length === 0 ? (
-        <EmptyState art="leaf" heading={vi.community.emptyHeading} body={vi.community.emptyBody} />
+        filtering ? (
+          <EmptyState art="search" heading={vi.community.noResult} />
+        ) : (
+          <EmptyState art="leaf" heading={vi.community.emptyHeading} body={vi.community.emptyBody} />
+        )
       ) : (
         <>
           {posts.map((post) => (
@@ -156,7 +236,7 @@ export default function FeedPage() {
   );
 }
 
-function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function Chip({ label, active, onClick }: { label: React.ReactNode; active: boolean; onClick: () => void }) {
   return (
     <Box
       role="button"
