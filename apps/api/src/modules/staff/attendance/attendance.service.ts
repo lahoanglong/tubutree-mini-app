@@ -96,15 +96,26 @@ export class AttendanceService {
     return { sessionId: session.id, isLate };
   }
 
-  async checkout(staffId: string) {
+  /**
+   * Checkout. `at` (tuỳ chọn) = giờ lùi về quá khứ cho trường hợp quên checkout (VD nghỉ trưa):
+   * phải nằm trong (checkinAt, now] — chỉ GIẢM được giờ, không thể khai khống tăng.
+   */
+  async checkout(staffId: string, at?: Date) {
     const open = await this.prisma.attendanceSession.findFirst({
       where: { staffId, checkoutAt: null },
       orderBy: { checkinAt: 'desc' },
     });
     if (!open) throw new BadRequestException('Không có phiên đang mở để checkout.');
+    let checkoutAt = new Date();
+    if (at) {
+      if (at.getTime() > Date.now()) throw new BadRequestException('Giờ checkout không được ở tương lai.');
+      if (at.getTime() <= open.checkinAt.getTime())
+        throw new BadRequestException('Giờ checkout phải sau giờ checkin.');
+      checkoutAt = at;
+    }
     await this.prisma.attendanceSession.update({
       where: { id: open.id },
-      data: { checkoutAt: new Date(), closeReason: 'MANUAL' },
+      data: { checkoutAt, closeReason: 'MANUAL' },
     });
     return { checkedOut: true };
   }
@@ -153,5 +164,63 @@ export class AttendanceService {
       data: { checkoutAt: new Date(), closeReason: 'ADMIN' },
     });
     return { checkedOut: true };
+  }
+
+  /** Lịch sử phiên trong khoảng (theo giờ checkin). Dùng cho màn lương/lịch sử chấm công. */
+  history(staffId: string, from: Date, to: Date) {
+    return this.prisma.attendanceSession.findMany({
+      where: { staffId, checkinAt: { gte: from, lte: to } },
+      orderBy: { checkinAt: 'asc' },
+      select: {
+        id: true,
+        shiftId: true,
+        checkinAt: true,
+        checkoutAt: true,
+        isLate: true,
+        closeReason: true,
+      },
+    });
+  }
+
+  /** QL sửa giờ phiên (điều chỉnh giờ làm). Trả {staffId, workDate} để controller recompute lương. */
+  async adminEditSession(sessionId: string, patch: { checkinAt?: Date; checkoutAt?: Date | null }) {
+    const s = await this.prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
+      include: { shift: { select: { workDate: true } } },
+    });
+    if (!s) throw new NotFoundException('Không tìm thấy phiên.');
+    const checkinAt = patch.checkinAt ?? s.checkinAt;
+    const checkoutAt = patch.checkoutAt === undefined ? s.checkoutAt : patch.checkoutAt;
+    if (checkoutAt && checkoutAt.getTime() <= checkinAt.getTime())
+      throw new BadRequestException('Giờ checkout phải sau giờ checkin.');
+    await this.prisma.attendanceSession.update({
+      where: { id: sessionId },
+      data: { checkinAt, checkoutAt, closeReason: checkoutAt ? 'ADMIN' : null },
+    });
+    return { staffId: s.staffId, workDate: s.shift.workDate };
+  }
+
+  /** QL thêm phiên thủ công cho ca (NV quên chấm hẳn). Trả {staffId, workDate} để recompute. */
+  async adminAddSession(shiftId: string, checkinAt: Date, checkoutAt: Date) {
+    if (checkoutAt.getTime() <= checkinAt.getTime())
+      throw new BadRequestException('Giờ checkout phải sau giờ checkin.');
+    const shift = await this.prisma.shift.findUnique({
+      where: { id: shiftId },
+      select: { id: true, staffId: true, workDate: true },
+    });
+    if (!shift) throw new NotFoundException('Không tìm thấy ca.');
+    await this.prisma.attendanceSession.create({
+      data: {
+        shiftId,
+        staffId: shift.staffId,
+        checkinAt,
+        checkoutAt,
+        checkinLat: 0,
+        checkinLng: 0,
+        checkinIp: 'admin',
+        closeReason: 'ADMIN',
+      },
+    });
+    return { staffId: shift.staffId, workDate: shift.workDate };
   }
 }

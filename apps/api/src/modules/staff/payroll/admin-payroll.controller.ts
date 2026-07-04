@@ -3,13 +3,17 @@ import { ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { PayrollService } from './payroll.service';
+import { AttendanceService } from '../attendance/attendance.service';
 import { AdjustDto, FinalizeDto, MarkPaidDto, SetRateDto } from './payroll.dto';
 
 @ApiTags('admin-payroll')
 @Roles('ADMIN')
 @Controller('admin')
 export class AdminPayrollController {
-  constructor(private readonly payroll: PayrollService) {}
+  constructor(
+    private readonly payroll: PayrollService,
+    private readonly attendance: AttendanceService,
+  ) {}
 
   @Get('payroll')
   month(@Query('year') year: string, @Query('month') month: string) {
@@ -19,6 +23,21 @@ export class AdminPayrollController {
       throw new BadRequestException('Thiếu hoặc sai year/month.');
     }
     return this.payroll.adminMonth(y, m);
+  }
+
+  /** Chi tiết 1 NV trong tháng: giờ theo ngày + lịch sử phiên (để QL rà & sửa trước khi duyệt). */
+  @Get('payroll/:staffId/detail')
+  async detail(@Param('staffId') staffId: string, @Query('year') year: string, @Query('month') month: string) {
+    const y = Number(year);
+    const m = Number(month);
+    if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) {
+      throw new BadRequestException('Thiếu hoặc sai year/month.');
+    }
+    const base = await this.payroll.getMyPayroll(staffId, y, m);
+    const start = new Date(Date.UTC(y, m - 1, 1));
+    const end = new Date(Date.UTC(y, m, 1) - 1);
+    const sessions = await this.attendance.history(staffId, start, end);
+    return { ...base, sessions };
   }
 
   @Put('staff/:userId/rate')

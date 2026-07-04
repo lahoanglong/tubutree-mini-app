@@ -125,6 +125,39 @@ describe('AttendanceService.checkout / heartbeat', () => {
     await expect(mk(prisma).checkout('u1')).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('checkout lùi giờ hợp lệ (quá khứ, sau checkin) → dùng giờ đó', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const checkinAt = new Date(Date.now() - 4 * 3600 * 1000); // 4h trước
+    const at = new Date(Date.now() - 1 * 3600 * 1000); // 1h trước
+    const prisma = makePrisma({
+      attendanceSession: { findFirst: jest.fn().mockResolvedValue({ id: 'open1', checkinAt }), update },
+    });
+    await mk(prisma).checkout('u1', at);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ checkoutAt: at, closeReason: 'MANUAL' }) }),
+    );
+  });
+
+  it('checkout lùi giờ tương lai → BadRequest', async () => {
+    const checkinAt = new Date(Date.now() - 4 * 3600 * 1000);
+    const prisma = makePrisma({
+      attendanceSession: { findFirst: jest.fn().mockResolvedValue({ id: 'open1', checkinAt }), update: jest.fn() },
+    });
+    await expect(mk(prisma).checkout('u1', new Date(Date.now() + 3600 * 1000))).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('checkout lùi giờ trước/bằng checkin → BadRequest', async () => {
+    const checkinAt = new Date(Date.now() - 2 * 3600 * 1000);
+    const prisma = makePrisma({
+      attendanceSession: { findFirst: jest.fn().mockResolvedValue({ id: 'open1', checkinAt }), update: jest.fn() },
+    });
+    await expect(
+      mk(prisma).checkout('u1', new Date(checkinAt.getTime() - 60000)),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('heartbeat không phiên → {open:false}', async () => {
     const prisma = makePrisma({
       attendanceSession: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -154,5 +187,53 @@ describe('AttendanceService.checkout / heartbeat', () => {
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ lastHeartbeatAt: expect.any(Date) }) }),
     );
+  });
+});
+
+describe('AttendanceService.adminEditSession / adminAddSession', () => {
+  it('sửa checkout ≤ checkin → BadRequest', async () => {
+    const checkinAt = new Date('2026-07-03T02:00:00Z');
+    const prisma = makePrisma({
+      attendanceSession: {
+        findUnique: jest.fn().mockResolvedValue({ id: 's1', staffId: 'u1', checkinAt, checkoutAt: null, shift: { workDate: new Date('2026-07-03') } }),
+        update: jest.fn(),
+      },
+    });
+    await expect(
+      mk(prisma).adminEditSession('s1', { checkoutAt: new Date('2026-07-03T01:00:00Z') }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('sửa hợp lệ → update + trả {staffId, workDate}', async () => {
+    const checkinAt = new Date('2026-07-03T02:00:00Z');
+    const workDate = new Date('2026-07-03');
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      attendanceSession: {
+        findUnique: jest.fn().mockResolvedValue({ id: 's1', staffId: 'u1', checkinAt, checkoutAt: null, shift: { workDate } }),
+        update,
+      },
+    });
+    const out = await mk(prisma).adminEditSession('s1', { checkoutAt: new Date('2026-07-03T05:00:00Z') });
+    expect(out).toEqual({ staffId: 'u1', workDate });
+    expect(update).toHaveBeenCalled();
+  });
+
+  it('thêm phiên checkout ≤ checkin → BadRequest', async () => {
+    await expect(
+      mk(makePrisma()).adminAddSession('sh1', new Date('2026-07-03T05:00:00Z'), new Date('2026-07-03T05:00:00Z')),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('thêm phiên hợp lệ → create + trả {staffId, workDate}', async () => {
+    const workDate = new Date('2026-07-03');
+    const create = jest.fn().mockResolvedValue({ id: 'new1' });
+    const prisma = makePrisma({
+      shift: { findUnique: jest.fn().mockResolvedValue({ id: 'sh1', staffId: 'u1', workDate }) },
+      attendanceSession: { create },
+    });
+    const out = await mk(prisma).adminAddSession('sh1', new Date('2026-07-03T01:00:00Z'), new Date('2026-07-03T05:00:00Z'));
+    expect(out).toEqual({ staffId: 'u1', workDate });
+    expect(create).toHaveBeenCalled();
   });
 });

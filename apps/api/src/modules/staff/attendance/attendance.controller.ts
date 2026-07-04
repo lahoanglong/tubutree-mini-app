@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
@@ -7,7 +7,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { Env } from '../../../config/env.validation';
 import { AttendanceService, type Coords } from './attendance.service';
 import { resolveZaloLocation } from './zalo-location';
-import { CheckinDto, HeartbeatDto } from './attendance.dto';
+import { CheckinDto, CheckoutDto, HeartbeatDto } from './attendance.dto';
 
 @ApiTags('staff-attendance')
 @Roles('STAFF', 'ADMIN')
@@ -34,8 +34,18 @@ export class AttendanceController {
   }
 
   @Post('checkout')
-  checkout(@CurrentUser('sub') staffId: string) {
-    return this.attendance.checkout(staffId);
+  checkout(@CurrentUser('sub') staffId: string, @Body() dto: CheckoutDto) {
+    return this.attendance.checkout(staffId, dto.at ? new Date(dto.at) : undefined);
+  }
+
+  @Get('history')
+  history(
+    @CurrentUser('sub') staffId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    if (!from || !to) throw new BadRequestException('Thiếu khoảng thời gian (from/to).');
+    return this.attendance.history(staffId, new Date(from), new Date(to));
   }
 
   @Post('heartbeat')
