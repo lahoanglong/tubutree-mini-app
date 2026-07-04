@@ -38,6 +38,7 @@ const OrdersPage = lazy(() => import('../pages/orders'));
 const OrderDetailPage = lazy(() => import('../pages/order-detail'));
 const GamePage = lazy(() => import('../pages/game'));
 const FeedPage = lazy(() => import('../pages/feed'));
+const PostDetailPage = lazy(() => import('../pages/post-detail'));
 const AiAdvisorPage = lazy(() => import('../pages/ai-advisor'));
 const GroupBuyPage = lazy(() => import('../pages/group-buy'));
 const RefillPage = lazy(() => import('../pages/refill'));
@@ -147,6 +148,7 @@ export default function MyApp() {
                 <Route path="/order/:code" element={<OrderDetailPage />} />
                 <Route path="/game" element={<GamePage />} />
                 <Route path="/feed" element={<FeedPage />} />
+                <Route path="/feed/:id" element={<PostDetailPage />} />
                 <Route path="/ai-advisor" element={<AiAdvisorPage />} />
                 <Route path="/group-buy" element={<GroupBuyPage />} />
                 <Route path="/refill" element={<RefillPage />} />
