@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Page, Text, Button, Input, Spinner, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Plus, HelpCircle, Hash, Trophy } from 'lucide-react';
+import { Plus, HelpCircle, Hash, Trophy, PartyPopper } from 'lucide-react';
 import { getFeed, getCategories, type FeedSort } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -116,6 +116,27 @@ export default function FeedPage() {
             }}
           >
             <Trophy size={18} color="var(--leaf-700)" strokeWidth={1.8} />
+          </Box>
+          <Box
+            role="button"
+            aria-label={vi.community.events}
+            className="tubu-press"
+            onClick={() => {
+              haptic('light');
+              navigate('/feed/events');
+            }}
+            flex
+            alignItems="center"
+            justifyContent="center"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              background: 'var(--leaf-50)',
+              boxSizing: 'border-box',
+            }}
+          >
+            <PartyPopper size={18} color="var(--leaf-700)" strokeWidth={1.8} />
           </Box>
           <Box
             role="button"

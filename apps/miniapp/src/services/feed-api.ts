@@ -73,6 +73,29 @@ export interface CreatePostInput {
   images?: string[];
   productSlugs?: string[];
   tagSlugs?: string[];
+  eventId?: string;
+}
+
+// Sự kiện cộng đồng (Pha 4 Task 4) — thử thách có hạn + thưởng TubuXu cho người thắng.
+export interface CommunityEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  coverUrl: string | null;
+  startAt: string;
+  endAt: string;
+  rewardXu: number;
+  status: string;
+  winnerUserId: string | null;
+  createdAt: string;
+}
+export interface CreateEventInput {
+  title: string;
+  description?: string;
+  coverUrl?: string;
+  startAt: string;
+  endAt: string;
+  rewardXu?: number;
 }
 
 export const getCategories = () =>
@@ -159,3 +182,19 @@ export const adminHidePost = (id: string) => api.delete<{ ok: boolean }>(`/feed/
 
 export const adminPin = (id: string, pinned: boolean) =>
   api.post<{ ok: boolean }>(`/feed/admin/${id}/pin`, { pinned }).then((r) => r.data);
+
+// Sự kiện cộng đồng — danh sách/chi tiết công khai (authed) + quản lý (ADMIN).
+export const listEvents = () => api.get<CommunityEvent[]>('/feed/events').then((r) => r.data);
+
+export const getEvent = (id: string) => api.get<CommunityEvent>(`/feed/events/${id}`).then((r) => r.data);
+
+export const eventPosts = (id: string) => api.get<FeedItem[]>(`/feed/events/${id}/posts`).then((r) => r.data);
+
+export const createEvent = (dto: CreateEventInput) =>
+  api.post<CommunityEvent>('/feed/events', dto).then((r) => r.data);
+
+export const closeEvent = (id: string) =>
+  api.post<{ ok: boolean }>(`/feed/events/${id}/close`).then((r) => r.data);
+
+export const pickEventWinner = (id: string, userId: string) =>
+  api.post<{ ok: boolean }>(`/feed/events/${id}/winner`, { userId }).then((r) => r.data);

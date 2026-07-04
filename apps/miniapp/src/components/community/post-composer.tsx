@@ -42,14 +42,19 @@ export default function PostComposer({
   onClose,
   categories,
   onPosted,
+  eventId,
+  eventTitle,
 }: {
   visible: boolean;
   onClose: () => void;
   categories: FeedCategory[];
   onPosted: () => void;
+  eventId?: string;
+  eventTitle?: string;
 }) {
   const { openSnackbar } = useSnackbar();
-  const [kind, setKind] = useState<ComposeKind>('QUESTION');
+  // Mở từ 1 sự kiện → mặc định "Khoe vườn" (khoe thành quả dự thi) thay vì "Hỏi đáp".
+  const [kind, setKind] = useState<ComposeKind>(eventId ? 'SHOWCASE' : 'QUESTION');
   const [category, setCategory] = useState<FeedCategory | null>(null);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -61,7 +66,7 @@ export default function PostComposer({
   const removeTag = (t: string) => setTagsRaw(tags.filter((x) => x !== t).join(', '));
 
   const reset = () => {
-    setKind('QUESTION');
+    setKind(eventId ? 'SHOWCASE' : 'QUESTION');
     setCategory(null);
     setTitle('');
     setBody('');
@@ -83,6 +88,7 @@ export default function PostComposer({
         images: images.length > 0 ? images : undefined,
         productSlugs: products.map((p) => p.slug),
         tagSlugs: tags.length > 0 ? tags : undefined,
+        eventId,
       }),
     onSuccess: (res) => {
       haptic('medium');
@@ -103,6 +109,21 @@ export default function PostComposer({
         <Text bold size="large">
           {vi.community.compose}
         </Text>
+
+        {eventId && (
+          <Box
+            mt={2}
+            style={{
+              background: 'var(--leaf-50)',
+              borderRadius: 'var(--radius-md)',
+              padding: '8px 12px',
+            }}
+          >
+            <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
+              {vi.community.entryFor}: {eventTitle}
+            </Text>
+          </Box>
+        )}
 
         <Box flex style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
           {KINDS.map((k) => (

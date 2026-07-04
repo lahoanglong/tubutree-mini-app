@@ -39,6 +39,7 @@ const OrderDetailPage = lazy(() => import('../pages/order-detail'));
 const GamePage = lazy(() => import('../pages/game'));
 const FeedPage = lazy(() => import('../pages/feed'));
 const CommunityLeaderboardPage = lazy(() => import('../pages/community-leaderboard'));
+const CommunityEventsPage = lazy(() => import('../pages/community-events'));
 const PostDetailPage = lazy(() => import('../pages/post-detail'));
 const AiAdvisorPage = lazy(() => import('../pages/ai-advisor'));
 const GroupBuyPage = lazy(() => import('../pages/group-buy'));
@@ -154,6 +155,7 @@ export default function MyApp() {
                 <Route path="/game" element={<GamePage />} />
                 <Route path="/feed" element={<FeedPage />} />
                 <Route path="/feed/leaderboard" element={<CommunityLeaderboardPage />} />
+                <Route path="/feed/events" element={<CommunityEventsPage />} />
                 <Route path="/feed/:id" element={<PostDetailPage />} />
                 <Route path="/ai-advisor" element={<AiAdvisorPage />} />
                 <Route path="/group-buy" element={<GroupBuyPage />} />

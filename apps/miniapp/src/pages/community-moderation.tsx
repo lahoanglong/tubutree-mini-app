@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ShieldCheck, Check, X, EyeOff } from 'lucide-react';
 import {
@@ -9,9 +9,15 @@ import {
   adminReports,
   adminResolveReport,
   adminHidePost,
+  listEvents,
+  createEvent,
+  closeEvent,
+  pickEventWinner,
   type AdminPendingPost,
   type AdminReport,
   type FeedPostKind,
+  type CommunityEvent,
+  type CreateEventInput,
 } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -20,11 +26,23 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { timeAgo } from '../utils/time-ago';
 import { vi } from '../i18n/vi';
 import { KIND_LABEL } from '../components/community/post-card';
+import { ImageUpload } from '../components/image-upload';
 
 // report.targetType thô "POST"/"COMMENT" → nhãn vi.
 const TARGET_LABEL: Record<string, string> = {
   POST: vi.community.targetPost,
   COMMENT: vi.community.targetComment,
+};
+
+// input[type=datetime-local] thô — zmp-ui Input chỉ hỗ trợ type text/password/number.
+const NATIVE_INPUT_STYLE: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  border: '1px solid var(--neutral-200)',
+  borderRadius: 'var(--radius-md)',
+  fontSize: 14,
+  fontFamily: 'inherit',
+  boxSizing: 'border-box',
 };
 
 export default function CommunityModerationPage() {
@@ -41,7 +59,7 @@ export default function CommunityModerationPage() {
   return <ModerationHub />;
 }
 
-type Tab = 'pending' | 'reports';
+type Tab = 'pending' | 'reports' | 'events';
 
 function ModerationHub() {
   const [tab, setTab] = useState<Tab>('pending');
@@ -58,8 +76,13 @@ function ModerationHub() {
         <Button size="small" variant={tab === 'reports' ? undefined : 'secondary'} onClick={() => setTab('reports')}>
           {vi.community.tabReports}
         </Button>
+        <Button size="small" variant={tab === 'events' ? undefined : 'secondary'} onClick={() => setTab('events')}>
+          {vi.community.events}
+        </Button>
       </Box>
-      <Box p={4}>{tab === 'pending' ? <PendingSection /> : <ReportsSection />}</Box>
+      <Box p={4}>
+        {tab === 'pending' ? <PendingSection /> : tab === 'reports' ? <ReportsSection /> : <EventsSection />}
+      </Box>
     </Page>
   );
 }
@@ -255,6 +278,178 @@ function ReportCard({
           {vi.community.resolve}
         </Button>
       </Box>
+    </Box>
+  );
+}
+
+function EventsSection() {
+  const qc = useQueryClient();
+  const { openSnackbar } = useSnackbar();
+  const eventsQ = useQuery({ queryKey: ['admin-community-events'], queryFn: listEvents });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['admin-community-events'] });
+
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [coverUrl, setCoverUrl] = useState('');
+  const [startAt, setStartAt] = useState('');
+  const [endAt, setEndAt] = useState('');
+  const [rewardXu, setRewardXu] = useState('0');
+
+  const createM = useMutation({
+    mutationFn: (dto: CreateEventInput) => createEvent(dto),
+    onSuccess: () => {
+      openSnackbar({ text: vi.community.eventCreated, type: 'success' });
+      setTitle('');
+      setDescription('');
+      setCoverUrl('');
+      setStartAt('');
+      setEndAt('');
+      setRewardXu('0');
+      invalidate();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const canCreate = title.trim().length > 0 && startAt.length > 0 && endAt.length > 0 && !createM.isPending;
+
+  const submitCreate = () => {
+    if (!canCreate) return;
+    createM.mutate({
+      title: title.trim(),
+      description: description.trim() || undefined,
+      coverUrl: coverUrl || undefined,
+      startAt: new Date(startAt).toISOString(),
+      endAt: new Date(endAt).toISOString(),
+      rewardXu: Number(rewardXu) || 0,
+    });
+  };
+
+  return (
+    <Box flex flexDirection="column" style={{ gap: 16 }}>
+      <Box flex flexDirection="column" style={{ gap: 10, background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
+        <Text bold>{vi.community.createEvent}</Text>
+        <Input
+          placeholder={vi.community.eventTitlePlaceholder}
+          value={title}
+          maxLength={160}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        <Input.TextArea
+          placeholder={vi.community.eventDescPlaceholder}
+          value={description}
+          rows={2}
+          maxLength={2000}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+        <ImageUpload label={vi.community.eventCoverLabel} value={coverUrl} onChange={setCoverUrl} />
+        <Box>
+          <Text size="xSmall" bold style={{ marginBottom: 4 }}>
+            {vi.community.eventStartLabel}
+          </Text>
+          <input
+            type="datetime-local"
+            value={startAt}
+            onChange={(e) => setStartAt(e.target.value)}
+            style={NATIVE_INPUT_STYLE}
+          />
+        </Box>
+        <Box>
+          <Text size="xSmall" bold style={{ marginBottom: 4 }}>
+            {vi.community.eventEnds}
+          </Text>
+          <input
+            type="datetime-local"
+            value={endAt}
+            onChange={(e) => setEndAt(e.target.value)}
+            style={NATIVE_INPUT_STYLE}
+          />
+        </Box>
+        <Input
+          type="number"
+          placeholder={vi.community.eventRewardLabel}
+          value={rewardXu}
+          onChange={(e) => setRewardXu(e.target.value)}
+        />
+        <Button fullWidth loading={createM.isPending} disabled={!canCreate} onClick={submitCreate}>
+          {vi.community.createEvent}
+        </Button>
+      </Box>
+
+      {eventsQ.isLoading ? (
+        <Skeleton style={{ height: 120, borderRadius: 12 }} />
+      ) : eventsQ.isError ? (
+        <ErrorState message={getErrorMessage(eventsQ.error)} onRetry={() => void eventsQ.refetch()} />
+      ) : !eventsQ.data || eventsQ.data.length === 0 ? (
+        <EmptyState art="leaf" heading={vi.community.noEvents} />
+      ) : (
+        <Box flex flexDirection="column" style={{ gap: 12 }}>
+          {eventsQ.data.map((event) => (
+            <AdminEventCard key={event.id} event={event} onDone={invalidate} />
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+function AdminEventCard({ event, onDone }: { event: CommunityEvent; onDone: () => void }) {
+  const { openSnackbar } = useSnackbar();
+  const [winnerUserId, setWinnerUserId] = useState('');
+
+  const closeM = useMutation({
+    mutationFn: () => closeEvent(event.id),
+    onSuccess: () => {
+      openSnackbar({ text: vi.community.eventClosed, type: 'success' });
+      onDone();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+  const winnerM = useMutation({
+    mutationFn: () => pickEventWinner(event.id, winnerUserId.trim()),
+    onSuccess: () => {
+      openSnackbar({ text: vi.community.winnerPicked, type: 'success' });
+      onDone();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  return (
+    <Box style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
+      <Text bold>{event.title}</Text>
+      {event.description && (
+        <Text size="small" style={{ marginTop: 4, color: 'var(--neutral-600)' }}>
+          {event.description}
+        </Text>
+      )}
+      <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+        {vi.community.eventEnds}: {new Date(event.endAt).toLocaleDateString('vi-VN')} · 🎁 {event.rewardXu} TubuXu
+      </Text>
+      <Box flex style={{ gap: 8, marginTop: 10 }}>
+        <Input
+          placeholder={vi.community.winnerUserIdPlaceholder}
+          value={winnerUserId}
+          onChange={(e) => setWinnerUserId(e.target.value)}
+          style={{ flex: 1 }}
+        />
+        <Button
+          size="small"
+          loading={winnerM.isPending}
+          disabled={!winnerUserId.trim() || winnerM.isPending}
+          onClick={() => winnerM.mutate()}
+        >
+          {vi.community.pickWinner}
+        </Button>
+      </Box>
+      <Button
+        size="small"
+        variant="secondary"
+        fullWidth
+        loading={closeM.isPending}
+        style={{ marginTop: 8, color: 'var(--danger, #d64545)' }}
+        onClick={() => closeM.mutate()}
+      >
+        {vi.community.closeEvent}
+      </Button>
     </Box>
   );
 }
