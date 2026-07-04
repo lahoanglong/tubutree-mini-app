@@ -50,4 +50,10 @@ export class CommunityRewardService {
     const amount = await this.config.get<number>('community.best_answer_reward', 500);
     await this.coins.grantCoins(answererId, amount, `COMMUNITY_BEST:${commentId}`, 'COMMUNITY', commentId);
   }
+
+  /** Thưởng người thắng sự kiện cộng đồng (Pha 4). Idempotent qua reason (partial unique index refType='COMMUNITY'). */
+  async rewardEventWinner(userId: string, eventId: string, amount: number): Promise<void> {
+    if (amount <= 0) return;
+    await this.coins.grantCoins(userId, amount, `COMMUNITY_EVENT_WIN:${eventId}:${userId}`, 'COMMUNITY', eventId);
+  }
 }

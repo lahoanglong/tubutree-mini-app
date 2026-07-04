@@ -1392,6 +1392,23 @@ model PostTag {
   @@map("post_tags")
 }
 
+// Sự kiện cộng đồng (Pha 4 Task 2) — bài tham gia dùng FeedPost.meta.eventId (không cần
+// bảng join riêng, MVP). status OPEN đang diễn ra; CLOSED khi admin chốt/chọn người thắng.
+model CommunityEvent {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  coverUrl     String?
+  startAt      DateTime
+  endAt        DateTime
+  rewardXu     Int      @default(0)
+  status       String   @default("OPEN") // OPEN | CLOSED
+  winnerUserId String?
+  createdAt    DateTime @default(now())
+  @@index([status, endAt])
+  @@map("community_events")
+}
+
 // Mua chung / Group Buy (§6.14.8). Đủ targetSize người trước expiresAt → SUCCESS,
 // mỗi thành viên nhận coupon = (basePrice − unitPrice) để mua với giá nhóm. Hết hạn → FAILED.
 model GroupBuy {

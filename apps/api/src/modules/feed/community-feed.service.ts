@@ -44,6 +44,16 @@ export interface CreatePostInput {
   images?: string[];
   productSlugs?: string[];
   tagSlugs?: string[];
+  eventId?: string;
+}
+
+export interface CreateEventInput {
+  title: string;
+  description?: string;
+  coverUrl?: string;
+  startAt: Date;
+  endAt: Date;
+  rewardXu?: number;
 }
 
 const FEED_INCLUDE = {
@@ -249,7 +259,10 @@ export class CommunityFeedService {
     const status = trusted ? 'PUBLISHED' : 'PENDING';
 
     const post = await this.prisma.feedPost.create({
-      data: { userId, kind, status, body, title, images, categoryId: input.categoryId ?? null },
+      data: {
+        userId, kind, status, body, title, images, categoryId: input.categoryId ?? null,
+        ...(input.eventId ? { meta: { eventId: input.eventId } } : {}),
+      },
     });
 
     if (slugs.length) {
@@ -525,6 +538,68 @@ export class CommunityFeedService {
   /** Ghim/bỏ ghim bài lên đầu bảng tin. */
   async pinPost(postId: string, pinned: boolean) {
     await this.prisma.feedPost.update({ where: { id: postId }, data: { isPinned: pinned } });
+    return { ok: true };
+  }
+
+  // -------------------------------------------------------------------
+  // Pha 4 Task 2 — Sự kiện cộng đồng (CommunityEvent). Bài tham gia dùng
+  // FeedPost.meta.eventId (không bảng join riêng — MVP, xem createPost).
+  // -------------------------------------------------------------------
+
+  /** Sự kiện đang mở, sắp theo hạn chót gần nhất trước — dùng cho danh sách FE. */
+  async listEvents(take = 20) {
+    return this.prisma.communityEvent.findMany({
+      where: { status: 'OPEN' },
+      orderBy: { endAt: 'asc' },
+      take,
+    });
+  }
+
+  /** Chi tiết 1 sự kiện. */
+  async getEvent(id: string) {
+    const event = await this.prisma.communityEvent.findUnique({ where: { id } });
+    if (!event) throw new NotFoundException('Sự kiện không tồn tại.');
+    return event;
+  }
+
+  /** Bài tham gia sự kiện — lọc FeedPost PUBLISHED có meta.eventId khớp. */
+  async eventPosts(eventId: string, viewerId: string, take = 20) {
+    const posts = await this.prisma.feedPost.findMany({
+      where: { status: 'PUBLISHED', meta: { path: ['eventId'], equals: eventId } },
+      orderBy: { createdAt: 'desc' },
+      take,
+      include: { ...FEED_INCLUDE, reactions: { where: { userId: viewerId }, select: { id: true } } },
+    });
+    return posts.map((p) => this.toItem(p, viewerId));
+  }
+
+  /** Tạo sự kiện mới (admin). */
+  async createEvent(dto: CreateEventInput) {
+    return this.prisma.communityEvent.create({ data: dto });
+  }
+
+  /** Đóng sự kiện thủ công (admin) — không chọn người thắng. */
+  async closeEvent(id: string) {
+    await this.prisma.communityEvent.update({ where: { id }, data: { status: 'CLOSED' } });
+    return { ok: true };
+  }
+
+  /**
+   * Chọn người thắng sự kiện (admin) — đóng sự kiện + thưởng TubuXu. Thưởng NON-FATAL:
+   * lỗi thưởng (vd trùng idempotency) không chặn việc chốt người thắng.
+   */
+  async pickWinner(eventId: string, userId: string) {
+    const event = await this.prisma.communityEvent.findUnique({ where: { id: eventId } });
+    if (!event) throw new NotFoundException('Sự kiện không tồn tại.');
+    await this.prisma.communityEvent.update({
+      where: { id: eventId },
+      data: { winnerUserId: userId, status: 'CLOSED' },
+    });
+    try {
+      await this.reward.rewardEventWinner(userId, eventId, event.rewardXu);
+    } catch (err) {
+      this.logger.warn(`rewardEventWinner failed for event ${eventId}/user ${userId}: ${(err as Error).message}`);
+    }
     return { ok: true };
   }
 }

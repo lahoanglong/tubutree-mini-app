@@ -42,6 +42,12 @@ function makePrisma(over: Record<string, unknown> = {}) {
     user: {
       findUnique: jest.fn().mockResolvedValue({ fullName: 'Người dùng' }),
     },
+    communityEvent: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'ev1', ...data })),
+      update: jest.fn().mockResolvedValue({}),
+    },
   };
   return { ...base, ...over } as unknown as PrismaService;
 }
@@ -56,7 +62,7 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
 
 function makeSvc(
   prisma: PrismaService,
-  reward: any = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() },
+  reward: any = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() },
   notify?: { notify: jest.Mock },
   config: any = makeConfig(),
 ) {
@@ -1172,5 +1178,144 @@ describe('CommunityFeedService authorLevel trong DTO (getFeed/getPost/getComment
     const r = await makeSvc(prisma).getComments('p1');
     expect(r[0]).toMatchObject({ authorLevel: 2 });
     expect(r[1]).toMatchObject({ authorLevel: 1 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pha 4 Task 2 — CommunityEvent: sự kiện cộng đồng + thưởng người thắng
+// ---------------------------------------------------------------------------
+
+describe('CommunityFeedService.listEvents', () => {
+  it('lấy sự kiện OPEN, sắp endAt tăng dần, take mặc định 20', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).listEvents();
+    expect(prisma.communityEvent.findMany).toHaveBeenCalledWith({
+      where: { status: 'OPEN' },
+      orderBy: { endAt: 'asc' },
+      take: 20,
+    });
+  });
+
+  it('truyền take tuỳ biến → dùng take đó', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).listEvents(5);
+    expect((prisma.communityEvent.findMany as jest.Mock).mock.calls[0][0].take).toBe(5);
+  });
+});
+
+describe('CommunityFeedService.getEvent', () => {
+  it('sự kiện tồn tại → trả về', async () => {
+    const prisma = makePrisma();
+    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', title: 'Thi khoe vườn' });
+    const r = await makeSvc(prisma).getEvent('ev1');
+    expect(r).toMatchObject({ id: 'ev1', title: 'Thi khoe vườn' });
+    expect(prisma.communityEvent.findUnique).toHaveBeenCalledWith({ where: { id: 'ev1' } });
+  });
+
+  it('không tồn tại → NotFound', async () => {
+    const prisma = makePrisma();
+    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue(null);
+    await expect(makeSvc(prisma).getEvent('evX')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('CommunityFeedService.createEvent (admin)', () => {
+  it('tạo sự kiện mới từ dto', async () => {
+    const prisma = makePrisma();
+    const dto = { title: 'Thi khoe vườn', description: 'Mô tả', startAt: new Date('2026-08-01'), endAt: new Date('2026-08-10'), rewardXu: 5000 };
+    const r = await makeSvc(prisma).createEvent(dto);
+    expect(prisma.communityEvent.create).toHaveBeenCalledWith({ data: dto });
+    expect(r).toMatchObject({ id: 'ev1', title: 'Thi khoe vườn' });
+  });
+});
+
+describe('CommunityFeedService.closeEvent (admin)', () => {
+  it('set status CLOSED', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).closeEvent('ev1');
+    expect(prisma.communityEvent.update).toHaveBeenCalledWith({ where: { id: 'ev1' }, data: { status: 'CLOSED' } });
+  });
+});
+
+describe('CommunityFeedService.pickWinner (admin)', () => {
+  it('sự kiện không tồn tại → NotFound', async () => {
+    const prisma = makePrisma();
+    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue(null);
+    await expect(makeSvc(prisma).pickWinner('evX', 'u1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('set winnerUserId + CLOSED, thưởng rewardXu của sự kiện', async () => {
+    const prisma = makePrisma();
+    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000 });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() };
+    const r = await makeSvc(prisma, reward).pickWinner('ev1', 'u1');
+    expect(prisma.communityEvent.update).toHaveBeenCalledWith({
+      where: { id: 'ev1' },
+      data: { winnerUserId: 'u1', status: 'CLOSED' },
+    });
+    expect(reward.rewardEventWinner).toHaveBeenCalledWith('u1', 'ev1', 5000);
+    expect(r).toEqual({ ok: true });
+  });
+
+  it('rewardEventWinner ném lỗi → pickWinner vẫn trả ok (non-fatal)', async () => {
+    const prisma = makePrisma();
+    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000 });
+    const reward = {
+      rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(),
+      rewardEventWinner: jest.fn().mockRejectedValue(new Error('boom')),
+    };
+    const r = await makeSvc(prisma, reward).pickWinner('ev1', 'u1');
+    expect(r).toEqual({ ok: true });
+    expect(prisma.communityEvent.update).toHaveBeenCalledWith({
+      where: { id: 'ev1' },
+      data: { winnerUserId: 'u1', status: 'CLOSED' },
+    });
+  });
+});
+
+describe('CommunityFeedService.eventPosts', () => {
+  it('lọc bài PUBLISHED có meta.eventId khớp, take mặc định 20', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ meta: { eventId: 'ev1' } })]);
+    const r = await makeSvc(prisma).eventPosts('ev1', 'u1');
+    const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
+    expect(args.where).toMatchObject({
+      status: 'PUBLISHED',
+      meta: { path: ['eventId'], equals: 'ev1' },
+    });
+    expect(args.take).toBe(20);
+    expect(r[0]).toMatchObject({ id: 'p1' });
+  });
+
+  it('truyền take tuỳ biến → dùng take đó', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([]);
+    await makeSvc(prisma).eventPosts('ev1', 'u1', 5);
+    expect((prisma.feedPost.findMany as jest.Mock).mock.calls[0][0].take).toBe(5);
+  });
+
+  it('viewerId trùng chủ bài → isOwner true trong kết quả', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ userId: 'u1', meta: { eventId: 'ev1' } })]);
+    const r = await makeSvc(prisma).eventPosts('ev1', 'u1');
+    expect(r[0]).toMatchObject({ isOwner: true });
+  });
+});
+
+describe('CommunityFeedService.createPost (eventId → meta)', () => {
+  it('có eventId → set meta.eventId trên bài tạo', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'newpost' });
+    await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'SHOWCASE', body: 'Tham gia sự kiện', eventId: 'ev1' });
+    const data = (prisma.feedPost.create as jest.Mock).mock.calls[0][0].data;
+    expect(data).toMatchObject({ meta: { eventId: 'ev1' } });
+  });
+
+  it('không có eventId → không set meta', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'newpost' });
+    await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay' });
+    const data = (prisma.feedPost.create as jest.Mock).mock.calls[0][0].data;
+    expect(data.meta).toBeUndefined();
   });
 });

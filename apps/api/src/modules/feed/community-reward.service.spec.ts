@@ -53,6 +53,26 @@ describe('CommunityRewardService.rewardAnswer', () => {
   });
 });
 
+describe('CommunityRewardService.rewardEventWinner', () => {
+  it('amount > 0 → thưởng qua grantCoins reason COMMUNITY_EVENT_WIN:<eventId>:<userId>, refType COMMUNITY', async () => {
+    const d = deps();
+    await make(d).rewardEventWinner('u1', 'ev1', 1000);
+    expect(d.coins.grantCoins).toHaveBeenCalledWith('u1', 1000, 'COMMUNITY_EVENT_WIN:ev1:u1', 'COMMUNITY', 'ev1');
+  });
+
+  it('amount <= 0 → KHÔNG thưởng', async () => {
+    const d = deps();
+    await make(d).rewardEventWinner('u1', 'ev1', 0);
+    expect(d.coins.grantCoins).not.toHaveBeenCalled();
+  });
+
+  it('amount âm → KHÔNG thưởng', async () => {
+    const d = deps();
+    await make(d).rewardEventWinner('u1', 'ev1', -100);
+    expect(d.coins.grantCoins).not.toHaveBeenCalled();
+  });
+});
+
 describe('CommunityRewardService.rewardBestAnswer', () => {
   it('best-answer của người khác → thưởng best_answer_reward', async () => {
     const d = deps();

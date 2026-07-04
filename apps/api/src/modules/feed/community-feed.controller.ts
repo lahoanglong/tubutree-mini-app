@@ -1,8 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { IsArray, IsBoolean, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { CommunityFeedService, type CreatePostInput } from './community-feed.service';
+import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 
 const KINDS = ['MANUAL', 'QUESTION', 'SHOWCASE', 'TIP'] as const;
 const REPORT_TARGET_TYPES = ['POST', 'COMMENT'] as const;
@@ -15,6 +15,7 @@ class CreatePostDto {
   @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) productSlugs?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) tagSlugs?: string[];
+  @IsOptional() @IsString() eventId?: string;
 }
 class EditPostDto {
   @IsOptional() @IsString() @MaxLength(160) title?: string;
@@ -31,6 +32,17 @@ class ReportDto {
 }
 class PinDto {
   @IsOptional() @IsBoolean() pinned?: boolean;
+}
+class CreateEventDto {
+  @IsString() title!: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() coverUrl?: string;
+  @IsDateString() startAt!: string;
+  @IsDateString() endAt!: string;
+  @IsOptional() @IsInt() @Min(0) rewardXu?: number;
+}
+class PickWinnerDto {
+  @IsString() userId!: string;
 }
 
 @Controller('feed')
@@ -81,6 +93,47 @@ export class CommunityFeedController {
   @Get('admin/reports')
   adminReports() {
     return this.feed.adminReports();
+  }
+
+  // Sự kiện cộng đồng (Pha 4 Task 2) — literal path 'events' phải khai TRƯỚC @Get(':id').
+  @Get('events')
+  listEvents() {
+    return this.feed.listEvents();
+  }
+
+  @Get('events/:id')
+  getEvent(@Param('id') id: string) {
+    return this.feed.getEvent(id);
+  }
+
+  @Get('events/:id/posts')
+  eventPosts(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+    return this.feed.eventPosts(id, userId);
+  }
+
+  @Roles('ADMIN')
+  @Post('events')
+  createEvent(@Body() dto: CreateEventDto) {
+    return this.feed.createEvent({
+      title: dto.title,
+      description: dto.description,
+      coverUrl: dto.coverUrl,
+      startAt: new Date(dto.startAt),
+      endAt: new Date(dto.endAt),
+      rewardXu: dto.rewardXu,
+    } as CreateEventInput);
+  }
+
+  @Roles('ADMIN')
+  @Post('events/:id/close')
+  closeEvent(@Param('id') id: string) {
+    return this.feed.closeEvent(id);
+  }
+
+  @Roles('ADMIN')
+  @Post('events/:id/winner')
+  pickWinner(@Param('id') id: string, @Body() dto: PickWinnerDto) {
+    return this.feed.pickWinner(id, dto.userId);
   }
 
   @Get(':id')
