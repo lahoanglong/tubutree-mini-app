@@ -437,13 +437,15 @@ export class CommunityFeedService {
     } catch (err) {
       this.logger.warn(`rewardBestAnswer failed for comment ${commentId}: ${(err as Error).message}`);
     }
-    try {
-      const amount = await this.config.get<number>('community.rep_best', 10);
-      await this.bumpReputation(comment.userId, amount);
-    } catch (err) {
-      this.logger.warn(`bumpReputation(best-answer) failed for ${comment.userId}: ${(err as Error).message}`);
-    }
+    // Chỉ cộng rep + notify khi câu trả lời KHÔNG phải của chính chủ bài — chống farm hạng
+    // (chủ bài tự trả lời rồi tự chọn best sẽ không được +rep_best), nhất quán với rewardBestAnswer/notify.
     if (comment.userId !== post.userId) {
+      try {
+        const amount = await this.config.get<number>('community.rep_best', 10);
+        await this.bumpReputation(comment.userId, amount);
+      } catch (err) {
+        this.logger.warn(`bumpReputation(best-answer) failed for ${comment.userId}: ${(err as Error).message}`);
+      }
       try {
         await this.notifications?.notify(comment.userId, 'COMMUNITY_BEST_ANSWER', {});
       } catch (err) {

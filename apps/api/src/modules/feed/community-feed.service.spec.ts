@@ -1092,6 +1092,14 @@ describe('CommunityFeedService.setBestAnswer (cộng reputation — non-fatal)',
     });
   });
 
+  it('chủ bài tự trả lời + tự chọn best (self-pick) → KHÔNG cộng reputation (chống farm hạng)', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION' });
+    (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue({ id: 'c1', postId: 'p1', userId: 'author' });
+    await makeSvc(prisma).setBestAnswer('author', 'CUSTOMER', 'p1', 'c1');
+    expect(prisma.communityProfile.upsert).not.toHaveBeenCalled();
+  });
+
   it('bumpReputation lỗi → setBestAnswer vẫn trả ok (non-fatal)', async () => {
     const prisma = makePrisma({
       communityProfile: {
