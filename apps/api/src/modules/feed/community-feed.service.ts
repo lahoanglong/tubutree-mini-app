@@ -65,7 +65,7 @@ export class CommunityFeedService {
     const hasMore = posts.length > take;
     const page = hasMore ? posts.slice(0, take) : posts;
     return {
-      posts: page.map((p) => this.toItem(p)),
+      posts: page.map((p) => this.toItem(p, userId)),
       nextCursor: hasMore ? page[page.length - 1]!.id : null,
     };
   }
@@ -77,10 +77,19 @@ export class CommunityFeedService {
     });
     if (!p || p.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
     await this.prisma.feedPost.update({ where: { id: postId }, data: { viewCount: { increment: 1 } } });
-    return this.toItem(p);
+    return this.toItem(p, userId);
   }
 
-  private toItem(p: any) {
+  /** Danh mục cộng đồng đang hiển thị, sắp theo order — dùng cho tabs FE. */
+  async getCategories() {
+    return this.prisma.communityCategory.findMany({
+      where: { isActive: true },
+      orderBy: { order: 'asc' },
+      select: { id: true, slug: true, name: true, icon: true },
+    });
+  }
+
+  private toItem(p: any, userId: string) {
     return {
       id: p.id,
       kind: p.kind,
@@ -102,6 +111,7 @@ export class CommunityFeedService {
       commentCount: p._count.comments,
       liked: p.reactions.length > 0,
       bestCommentId: p.bestCommentId ?? null,
+      isOwner: p.userId === userId,
     };
   }
 

@@ -37,6 +37,11 @@ export class CommunityFeedController {
     return this.feed.getFeed(userId, { category, kind, sort, cursor });
   }
 
+  @Get('categories')
+  categories() {
+    return this.feed.getCategories();
+  }
+
   @Get(':id')
   getPost(@CurrentUser('sub') userId: string, @Param('id') id: string) {
     return this.feed.getPost(userId, id);
