@@ -20,13 +20,21 @@ const KINDS: { value: ComposeKind; label: string }[] = [
 
 const MAX_TAGS = 5;
 
-// Tách theo dấu phẩy/khoảng trắng, bỏ '#' đầu, trim, bỏ rỗng, khử trùng, cap MAX_TAGS.
+// Tách CHỈ theo dấu phẩy (giữ thẻ nhiều từ — vd "sen đá"), bỏ '#' đầu, trim, bỏ rỗng,
+// khử trùng KHÔNG phân biệt hoa/thường (BE slugify về chữ thường), cap MAX_TAGS.
 function parseTags(raw: string): string[] {
-  const parts = raw
-    .split(/[,\s]+/)
-    .map((s) => s.trim().replace(/^#+/, '').trim())
-    .filter((s) => s.length > 0);
-  return Array.from(new Set(parts)).slice(0, MAX_TAGS);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const piece of raw.split(',')) {
+    const label = piece.trim().replace(/^#+/, '').trim();
+    if (!label) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(label);
+    if (out.length >= MAX_TAGS) break;
+  }
+  return out;
 }
 
 export default function PostComposer({
