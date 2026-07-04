@@ -491,6 +491,15 @@ describe('CommunityFeedService.approvePost', () => {
     await makeSvc(prisma, reward).approvePost('p1');
     expect(reward.rewardPost).not.toHaveBeenCalled();
   });
+  it('bài REMOVED → không hồi sinh (không update, không thưởng)', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', status: 'REMOVED' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    const r = await makeSvc(prisma, reward).approvePost('p1');
+    expect(r).toEqual({ ok: true });
+    expect(prisma.feedPost.update).not.toHaveBeenCalled();
+    expect(reward.rewardPost).not.toHaveBeenCalled();
+  });
 });
 
 describe('CommunityFeedService.report', () => {

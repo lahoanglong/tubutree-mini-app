@@ -185,13 +185,17 @@ export class CommunityFeedService {
       select: { id: true, userId: true, status: true },
     });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
-    if (post.status === 'PUBLISHED') return { ok: true }; // idempotent, không thưởng lại
+    if (post.status !== 'PENDING') return { ok: true }; // idempotent, không hồi sinh bài REMOVED/đã duyệt
     await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'PUBLISHED' } });
-    await this.prisma.communityProfile.upsert({
-      where: { userId: post.userId },
-      create: { userId: post.userId, isTrusted: true },
-      update: { isTrusted: true },
-    });
+    try {
+      await this.prisma.communityProfile.upsert({
+        where: { userId: post.userId },
+        create: { userId: post.userId, isTrusted: true },
+        update: { isTrusted: true },
+      });
+    } catch (err) {
+      this.logger.warn(`approve upsert profile failed ${post.userId}: ${(err as Error).message}`);
+    }
     try {
       await this.reward.rewardPost(post.userId, post.id);
     } catch (err) {
