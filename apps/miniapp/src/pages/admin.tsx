@@ -25,15 +25,18 @@ import {
 } from '../services/shifts-api';
 import {
   adminGetPayroll,
+  adminGetDetail,
   setRate,
   finalizePayroll,
   markPaid,
   type AdminPayrollRow,
   type PayrollStatus,
 } from '../services/payroll-api';
+import { adminEditSession } from '../services/attendance-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { Skeleton } from '../components/ui/skeleton';
+import { TimeInput } from '../components/ui/time-input';
 import { ImageUpload } from '../components/image-upload';
 import { formatVnd } from '../utils/format';
 import {
@@ -104,6 +107,7 @@ function PayrollSection() {
   const [payRow, setPayRow] = useState<AdminPayrollRow | null>(null);
   const [proof, setProof] = useState('');
   const [note, setNote] = useState('');
+  const [detailRow, setDetailRow] = useState<AdminPayrollRow | null>(null);
 
   const rateM = useMutation({
     mutationFn: () => setRate(rateRow!.staff.id, Number(rateVal)),
@@ -164,6 +168,7 @@ function PayrollSection() {
             </Box>
           </Box>
           <Box flex style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            <Button size="small" variant="secondary" onClick={() => setDetailRow(row)}>Xem giờ</Button>
             <Button size="small" variant="secondary" onClick={() => { setRateRow(row); setRateVal(String(row.profile?.hourlyRate ?? 0)); }}>Đơn giá</Button>
             {(row.qrImageUrl || row.profile?.qrImageUrl) && (
               <Button size="small" variant="secondary" onClick={() => setQrRow(row)}>QR chuyển</Button>
@@ -215,7 +220,112 @@ function PayrollSection() {
           <Button fullWidth loading={paidM.isPending} disabled={!proof} onClick={() => paidM.mutate()}>Đánh dấu đã trả</Button>
         </Box>
       </Sheet>
+
+      {/* Sheet xem giờ + sửa phiên */}
+      <DetailSheet row={detailRow} year={ym.year} month={ym.month} onClose={() => setDetailRow(null)} onChanged={invalidate} />
     </Box>
+  );
+}
+
+function DetailSheet({
+  row,
+  year,
+  month,
+  onClose,
+  onChanged,
+}: {
+  row: AdminPayrollRow | null;
+  year: number;
+  month: number;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const { openSnackbar } = useSnackbar();
+  const qc = useQueryClient();
+  const staffId = row?.staff.id ?? '';
+  const detailQ = useQuery({
+    queryKey: ['admin-payroll-detail', staffId, year, month],
+    queryFn: () => adminGetDetail(staffId, year, month),
+    enabled: !!row,
+  });
+
+  const [editId, setEditId] = useState<string | null>(null);
+  const [ci, setCi] = useState('08:00');
+  const [co, setCo] = useState('17:00');
+
+  const editM = useMutation({
+    mutationFn: (dayKey: string) =>
+      adminEditSession(editId as string, {
+        checkinAt: vnDateTimeISO(dayKey, ci),
+        checkoutAt: vnDateTimeISO(dayKey, co),
+      }),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã sửa giờ & tính lại.', type: 'success' });
+      setEditId(null);
+      qc.invalidateQueries({ queryKey: ['admin-payroll-detail', staffId, year, month] });
+      onChanged();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  return (
+    <Sheet visible={!!row} onClose={onClose} autoHeight>
+      <Box p={4} flex flexDirection="column" style={{ gap: 10, maxHeight: '70vh', overflowY: 'auto' }}>
+        <Text.Title size="small">Giờ công · {row?.staff.fullName ?? ''} · T{month}/{year}</Text.Title>
+        {detailQ.isLoading && <Skeleton style={{ height: 100, borderRadius: 10 }} />}
+        {detailQ.data && (
+          <>
+            <Text size="small">
+              Tổng: <b>{fmtHM(detailQ.data.month.totalMinutes)}</b> · Thực nhận <b>{formatVnd(detailQ.data.month.net)}</b>
+            </Text>
+            {detailQ.data.days.map((d) => {
+              const dayKey = d.workDate.slice(0, 10);
+              const sess = detailQ.data!.sessions.filter((s) => s.checkinAt.slice(0, 10) === dayKey);
+              return (
+                <Box key={d.id} style={{ borderTop: '1px solid var(--neutral-100)', paddingTop: 6 }}>
+                  <Box flex justifyContent="space-between">
+                    <Text size="small" bold>{dowLabel(dayKey)} {shortDayLabel(dayKey)} · {fmtHM(d.workedMinutes)}</Text>
+                    <Text size="small">{formatVnd(d.net)}</Text>
+                  </Box>
+                  {sess.map((s) => (
+                    <Box key={s.id} flex justifyContent="space-between" alignItems="center" style={{ paddingLeft: 8, marginTop: 2 }}>
+                      <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                        {isoToVnHHMM(s.checkinAt)} → {s.checkoutAt ? isoToVnHHMM(s.checkoutAt) : 'đang mở'}{s.isLate ? ' · trễ' : ''}
+                      </Text>
+                      <Button
+                        size="small"
+                        variant="tertiary"
+                        onClick={() => {
+                          setEditId(s.id);
+                          setCi(isoToVnHHMM(s.checkinAt));
+                          setCo(s.checkoutAt ? isoToVnHHMM(s.checkoutAt) : isoToVnHHMM(s.checkinAt));
+                        }}
+                      >
+                        Sửa giờ
+                      </Button>
+                    </Box>
+                  ))}
+                  {sess.length === 0 && <Text size="xSmall" style={{ color: 'var(--neutral-400)', paddingLeft: 8 }}>Không có phiên.</Text>}
+
+                  {editId && sess.some((s) => s.id === editId) && (
+                    <Box style={{ paddingLeft: 8, marginTop: 6 }} flex flexDirection="column">
+                      <Box flex style={{ gap: 8 }}>
+                        <TimeInput value={ci} onChange={setCi} style={{ flex: 1 }} />
+                        <TimeInput value={co} onChange={setCo} style={{ flex: 1 }} />
+                      </Box>
+                      <Button size="small" style={{ marginTop: 6 }} loading={editM.isPending} onClick={() => editM.mutate(dayKey)}>
+                        Lưu giờ
+                      </Button>
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
+            {detailQ.data.days.length === 0 && <Text size="small" style={{ color: 'var(--neutral-500)' }}>Chưa có công tháng này.</Text>}
+          </>
+        )}
+      </Box>
+    </Sheet>
   );
 }
 

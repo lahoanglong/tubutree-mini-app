@@ -1,14 +1,24 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Wallet, Landmark } from 'lucide-react';
-import { getMyPayroll, updateBank, type PayrollStatus } from '../services/payroll-api';
+import { ChevronLeft, ChevronRight, Wallet, Landmark, ChevronDown } from 'lucide-react';
+import { getMyPayroll, updateBank, type PayrollStatus, type PayrollDay } from '../services/payroll-api';
+import { getHistory, type SessionHistory } from '../services/attendance-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { Skeleton } from '../components/ui/skeleton';
 import { ImageUpload } from '../components/image-upload';
 import { formatVnd } from '../utils/format';
-import { currentVnYearMonth, shiftYearMonth, dowLabel, dayOfMonth } from '../utils/week';
+import {
+  currentVnYearMonth,
+  shiftYearMonth,
+  dowLabel,
+  dayOfMonth,
+  mondayKeyOf,
+  shortDayLabel,
+  isoToVnHHMM,
+  keyToUtcMidnightISO,
+} from '../utils/week';
 
 const STATUS_LABEL: Record<PayrollStatus, string> = {
   OPEN: 'Đang tính',
@@ -37,6 +47,37 @@ function MyPayrollHub() {
   const { openSnackbar } = useSnackbar();
   const [ym, setYm] = useState(() => currentVnYearMonth());
   const payQ = useQuery({ queryKey: ['my-payroll', ym.year, ym.month], queryFn: () => getMyPayroll(ym.year, ym.month) });
+  const monFrom = keyToUtcMidnightISO(`${ym.year}-${String(ym.month).padStart(2, '0')}-01`);
+  const monTo = `${ym.year}-${String(ym.month).padStart(2, '0')}-31T23:59:59.999Z`;
+  const histQ = useQuery({ queryKey: ['my-attn-history', ym.year, ym.month], queryFn: () => getHistory(monFrom, monTo) });
+  const [openDay, setOpenDay] = useState<string | null>(null);
+
+  // Gom phiên theo ngày (date-key VN) để xổ chi tiết checkin/out.
+  const sessionsByDay = useMemo(() => {
+    const map: Record<string, SessionHistory[]> = {};
+    for (const s of histQ.data ?? []) {
+      const key = (s.checkinAt.slice(0, 10)); // xấp xỉ theo UTC; đủ để nhóm hiển thị
+      (map[key] ??= []).push(s);
+    }
+    return map;
+  }, [histQ.data]);
+
+  // Gom ngày theo TUẦN (T2–CN) + subtotal.
+  const weeks = useMemo(() => {
+    const byWeek: Record<string, PayrollDay[]> = {};
+    for (const d of payQ.data?.days ?? []) {
+      const wk = mondayKeyOf(new Date(d.workDate));
+      (byWeek[wk] ??= []).push(d);
+    }
+    return Object.entries(byWeek)
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([wk, days]) => ({
+        wk,
+        days,
+        minutes: days.reduce((s, d) => s + d.workedMinutes, 0),
+        net: days.reduce((s, d) => s + d.net, 0),
+      }));
+  }, [payQ.data]);
 
   const [bankOpen, setBankOpen] = useState(false);
   const [bin, setBin] = useState('');
@@ -115,21 +156,51 @@ function MyPayrollHub() {
           Thông tin nhận lương
         </Button>
 
-        {/* Chi tiết ngày */}
-        {payQ.data && payQ.data.days.length > 0 && (
-          <Box style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
-            <Text bold style={{ marginBottom: 6 }}>Chi tiết theo ngày</Text>
-            {payQ.data.days.map((d) => (
-              <Box key={d.id} flex justifyContent="space-between" alignItems="center" style={{ padding: '6px 0', borderTop: '1px solid var(--neutral-100)' }}>
-                <Text size="small">{dowLabel(d.workDate.slice(0, 10))} {dayOfMonth(d.workDate.slice(0, 10))} · {fmtH(d.workedMinutes)}</Text>
-                <Box style={{ textAlign: 'right' }}>
-                  <Text size="small" bold>{formatVnd(d.net)}</Text>
-                  {d.fines > 0 && <Text size="xSmall" style={{ color: 'var(--danger, #d64545)' }}>−{formatVnd(d.fines)} phạt</Text>}
+        {/* Chi tiết theo TUẦN → xổ ngày → xổ phiên checkin/out */}
+        {weeks.map((w, i) => (
+          <Box key={w.wk} style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
+            <Box flex justifyContent="space-between" alignItems="center" style={{ marginBottom: 4 }}>
+              <Text bold>Tuần {i + 1} ({shortDayLabel(w.wk)}–{shortDayLabel(new Date(new Date(`${w.wk}T00:00:00Z`).getTime() + 6 * 86400000).toISOString().slice(0, 10))})</Text>
+              <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>{fmtH(w.minutes)} · {formatVnd(w.net)}</Text>
+            </Box>
+            {w.days.map((d) => {
+              const key = d.workDate.slice(0, 10);
+              const sess = sessionsByDay[key] ?? [];
+              const isOpen = openDay === key;
+              return (
+                <Box key={d.id} style={{ borderTop: '1px solid var(--neutral-100)' }}>
+                  <Box
+                    flex
+                    justifyContent="space-between"
+                    alignItems="center"
+                    style={{ padding: '6px 0' }}
+                    onClick={() => setOpenDay(isOpen ? null : key)}
+                  >
+                    <Box flex alignItems="center" style={{ gap: 4 }}>
+                      <ChevronDown size={14} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+                      <Text size="small">{dowLabel(key)} {dayOfMonth(key)} · {fmtH(d.workedMinutes)}</Text>
+                    </Box>
+                    <Box style={{ textAlign: 'right' }}>
+                      <Text size="small" bold>{formatVnd(d.net)}</Text>
+                      {d.fines > 0 && <Text size="xSmall" style={{ color: 'var(--danger, #d64545)' }}>−{formatVnd(d.fines)} phạt</Text>}
+                    </Box>
+                  </Box>
+                  {isOpen && (
+                    <Box style={{ paddingLeft: 18, paddingBottom: 6 }}>
+                      {sess.length === 0 && <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>Không có phiên chấm công.</Text>}
+                      {sess.map((s) => (
+                        <Text key={s.id} size="xSmall" style={{ color: 'var(--neutral-500)', display: 'block' }}>
+                          {isoToVnHHMM(s.checkinAt)} → {s.checkoutAt ? isoToVnHHMM(s.checkoutAt) : 'đang mở'}
+                          {s.isLate ? ' · trễ' : ''}
+                        </Text>
+                      ))}
+                    </Box>
+                  )}
                 </Box>
-              </Box>
-            ))}
+              );
+            })}
           </Box>
-        )}
+        ))}
         {payQ.data && payQ.data.days.length === 0 && (
           <Text size="small" style={{ color: 'var(--neutral-500)' }}>Chưa có dữ liệu công tháng này.</Text>
         )}

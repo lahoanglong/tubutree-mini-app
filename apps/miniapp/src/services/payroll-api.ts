@@ -61,9 +61,28 @@ export const getMyPayroll = (year: number, month: number) =>
 export const updateBank = (dto: BankInput) =>
   api.put<StaffProfile>('/staff/bank', dto).then((r) => r.data);
 
+export interface SessionHistoryRow {
+  id: string;
+  shiftId: string;
+  checkinAt: string;
+  checkoutAt: string | null;
+  isLate: boolean;
+  closeReason: string | null;
+}
+
+export interface StaffMonthDetail {
+  month: PayrollMonth;
+  days: PayrollDay[];
+  profile: StaffProfile | null;
+  sessions: SessionHistoryRow[];
+}
+
 // ── Admin ──
 export const adminGetPayroll = (year: number, month: number) =>
   api.get<AdminPayrollRow[]>('/admin/payroll', { params: { year, month } }).then((r) => r.data);
+
+export const adminGetDetail = (staffId: string, year: number, month: number) =>
+  api.get<StaffMonthDetail>(`/admin/payroll/${staffId}/detail`, { params: { year, month } }).then((r) => r.data);
 
 export const setRate = (userId: string, hourlyRate: number) =>
   api.put<StaffProfile>(`/admin/staff/${userId}/rate`, { hourlyRate }).then((r) => r.data);

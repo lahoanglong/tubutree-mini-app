@@ -34,6 +34,7 @@ import {
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { Skeleton } from '../components/ui/skeleton';
+import { TimeInput } from '../components/ui/time-input';
 import { ImageUpload } from '../components/image-upload';
 import {
   mondayKeyOf,
@@ -41,6 +42,7 @@ import {
   weekDayKeys,
   keyToUtcMidnightISO,
   vnDateTimeISO,
+  vnDateKey,
   isoToVnHHMM,
   minToHHMM,
   shortDayLabel,
@@ -95,13 +97,18 @@ function TodayCard() {
   });
 
   const checkoutM = useMutation({
-    mutationFn: () => attnCheckout(),
+    mutationFn: (at?: string) => attnCheckout(at),
     onSuccess: () => {
       openSnackbar({ text: 'Đã checkout.', type: 'success' });
+      setBackOpen(false);
       invalidate();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+
+  // Checkout lùi giờ (quên checkout khi nghỉ trưa/về sớm)
+  const [backOpen, setBackOpen] = useState(false);
+  const [backTime, setBackTime] = useState('12:00');
 
   // Heartbeat mỗi 3 phút khi đang trong ca — rớt vùng thì backend tự checkout.
   const openId = open?.id ?? null;
@@ -157,12 +164,22 @@ function TodayCard() {
             prefixIcon={<LogOut size={16} />}
             style={{ marginTop: 10 }}
             loading={checkoutM.isPending}
-            onClick={() => checkoutM.mutate()}
+            onClick={() => checkoutM.mutate(undefined)}
           >
             Checkout
           </Button>
+          <Text
+            size="xSmall"
+            style={{ color: '#fff', marginTop: 8, textDecoration: 'underline' }}
+            onClick={() => {
+              setBackTime(isoToVnHHMM(open.checkinAt));
+              setBackOpen(true);
+            }}
+          >
+            Quên checkout? Chọn giờ đã về →
+          </Text>
           <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.8)', marginTop: 6 }}>
-            Nghỉ giữa ca? Bấm Checkout rồi Checkin lại khi quay lại.
+            Nghỉ giữa ca? Checkout rồi Checkin lại khi quay lại.
           </Text>
         </>
       ) : todayShifts.length === 0 ? (
@@ -195,6 +212,24 @@ function TodayCard() {
       <Text size="xSmall" style={{ color: open ? 'rgba(255,255,255,0.8)' : 'var(--neutral-400)', marginTop: 8 }}>
         Cần ở đúng mạng WiFi công ty & trong vùng để chấm công.
       </Text>
+
+      <Sheet visible={backOpen} onClose={() => setBackOpen(false)} autoHeight>
+        <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
+          <Text.Title size="small">Checkout lùi giờ</Text.Title>
+          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+            Chọn giờ bạn đã thực sự rời đi (chỉ được chọn giờ trong quá khứ, sau giờ checkin).
+          </Text>
+          <TimeInput value={backTime} onChange={setBackTime} />
+          <Button
+            fullWidth
+            loading={checkoutM.isPending}
+            disabled={!/^\d{1,2}:\d{2}$/.test(backTime)}
+            onClick={() => checkoutM.mutate(vnDateTimeISO(vnDateKey(new Date()), backTime))}
+          >
+            Xác nhận checkout
+          </Button>
+        </Box>
+      </Sheet>
     </Box>
   );
 }
@@ -285,6 +320,53 @@ function StaffHub() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  // ── Đăng ký nhanh: 1 khung giờ áp cho nhiều ngày trong tuần ──
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickTplId, setQuickTplId] = useState<string | null>(null);
+  const [quickStart, setQuickStart] = useState('08:00');
+  const [quickEnd, setQuickEnd] = useState('17:00');
+  const [quickDays, setQuickDays] = useState<Set<string>>(new Set());
+
+  const openQuick = () => {
+    setQuickTplId(null);
+    setQuickStart('08:00');
+    setQuickEnd('17:00');
+    setQuickDays(new Set(dayKeys.slice(0, 5))); // mặc định T2–T6
+    setQuickOpen(true);
+  };
+  const toggleQuickDay = (dk: string) =>
+    setQuickDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(dk)) next.delete(dk);
+      else next.add(dk);
+      return next;
+    });
+  const quickTimes = () => {
+    if (quickTplId) {
+      const t = tplQ.data?.find((x) => x.id === quickTplId);
+      if (t) return { start: minToHHMM(t.startMin), end: minToHHMM(t.endMin), templateId: t.id };
+    }
+    return { start: quickStart, end: quickEnd, templateId: undefined as string | undefined };
+  };
+  const quickM = useMutation({
+    mutationFn: () => {
+      const { start, end, templateId } = quickTimes();
+      const items = [...quickDays].sort().map((dk) => ({
+        workDate: dk,
+        startAt: vnDateTimeISO(dk, start),
+        endAt: vnDateTimeISO(dk, end),
+        templateId,
+      }));
+      return createShifts(items);
+    },
+    onSuccess: (r) => {
+      openSnackbar({ text: `Đã đăng ký ${r.created} ca chờ duyệt.`, type: 'success' });
+      setQuickOpen(false);
+      invalidate();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
   const copyM = useMutation({
     mutationFn: () =>
       copyWeek(keyToUtcMidnightISO(addDaysKey(mondayKey, -7)), keyToUtcMidnightISO(mondayKey)),
@@ -353,15 +435,26 @@ function StaffHub() {
           </Button>
         </Box>
 
-        <Button
-          size="small"
-          variant="secondary"
-          prefixIcon={<Copy size={15} />}
-          loading={copyM.isPending}
-          onClick={() => copyM.mutate()}
-        >
-          Copy ca tuần trước
-        </Button>
+        <Box flex style={{ gap: 8 }}>
+          <Button
+            size="small"
+            prefixIcon={<Plus size={15} />}
+            style={{ flex: 1 }}
+            onClick={openQuick}
+          >
+            Đăng ký nhanh
+          </Button>
+          <Button
+            size="small"
+            variant="secondary"
+            prefixIcon={<Copy size={15} />}
+            style={{ flex: 1 }}
+            loading={copyM.isPending}
+            onClick={() => copyM.mutate()}
+          >
+            Copy tuần trước
+          </Button>
+        </Box>
 
         {(tplQ.isLoading || shiftsQ.isLoading) && <Skeleton style={{ height: 120, borderRadius: 12 }} />}
         {shiftsQ.isError && (
@@ -497,13 +590,13 @@ function StaffHub() {
                 <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
                   Bắt đầu
                 </Text>
-                <Input type="text" placeholder="08:00" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+                <TimeInput value={customStart} onChange={setCustomStart} />
               </Box>
               <Box style={{ flex: 1 }}>
                 <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
                   Kết thúc
                 </Text>
-                <Input type="text" placeholder="12:00" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+                <TimeInput value={customEnd} onChange={setCustomEnd} />
               </Box>
             </Box>
           )}
@@ -515,6 +608,64 @@ function StaffHub() {
             onClick={() => saveM.mutate()}
           >
             {editId ? 'Lưu' : 'Gửi duyệt'}
+          </Button>
+        </Box>
+      </Sheet>
+
+      {/* Sheet đăng ký nhanh nhiều ngày */}
+      <Sheet visible={quickOpen} onClose={() => setQuickOpen(false)} autoHeight>
+        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
+          <Text.Title size="small">Đăng ký nhanh cả tuần</Text.Title>
+
+          {(tplQ.data?.length ?? 0) > 0 && (
+            <Box flex style={{ gap: 8, flexWrap: 'wrap' }}>
+              {tplQ.data!.map((t) => (
+                <Button
+                  key={t.id}
+                  size="small"
+                  variant={quickTplId === t.id ? undefined : 'secondary'}
+                  onClick={() => setQuickTplId(quickTplId === t.id ? null : t.id)}
+                >
+                  {t.name} ({minToHHMM(t.startMin)}–{minToHHMM(t.endMin)})
+                </Button>
+              ))}
+            </Box>
+          )}
+
+          {!quickTplId && (
+            <Box flex style={{ gap: 8 }}>
+              <Box style={{ flex: 1 }}>
+                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Bắt đầu</Text>
+                <TimeInput value={quickStart} onChange={setQuickStart} />
+              </Box>
+              <Box style={{ flex: 1 }}>
+                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Kết thúc</Text>
+                <TimeInput value={quickEnd} onChange={setQuickEnd} />
+              </Box>
+            </Box>
+          )}
+
+          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Chọn ngày áp dụng</Text>
+          <Box flex style={{ gap: 6, flexWrap: 'wrap' }}>
+            {dayKeys.map((dk) => (
+              <Button
+                key={dk}
+                size="small"
+                variant={quickDays.has(dk) ? undefined : 'secondary'}
+                onClick={() => toggleQuickDay(dk)}
+              >
+                {dowLabel(dk)} {shortDayLabel(dk)}
+              </Button>
+            ))}
+          </Box>
+
+          <Button
+            fullWidth
+            loading={quickM.isPending}
+            disabled={quickDays.size === 0 || (!quickTplId && (!/^\d{1,2}:\d{2}$/.test(quickStart) || !/^\d{1,2}:\d{2}$/.test(quickEnd)))}
+            onClick={() => quickM.mutate()}
+          >
+            Gửi duyệt {quickDays.size > 0 ? `(${quickDays.size} ngày)` : ''}
           </Button>
         </Box>
       </Sheet>

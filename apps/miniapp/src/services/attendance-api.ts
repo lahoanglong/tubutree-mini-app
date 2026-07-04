@@ -54,10 +54,29 @@ export const getAttendanceStatus = () =>
 export const checkin = (payload: LocationPayload & { shiftId: string }) =>
   api.post<{ sessionId: string; isLate: boolean }>('/staff/attendance/checkin', payload).then((r) => r.data);
 
-export const checkout = () =>
-  api.post<{ checkedOut: boolean }>('/staff/attendance/checkout', {}).then((r) => r.data);
+export const checkout = (at?: string) =>
+  api.post<{ checkedOut: boolean }>('/staff/attendance/checkout', at ? { at } : {}).then((r) => r.data);
 
 export const heartbeat = (payload: LocationPayload) =>
   api
     .post<{ open: boolean; closed?: boolean; reason?: string }>('/staff/attendance/heartbeat', payload)
     .then((r) => r.data);
+
+export interface SessionHistory {
+  id: string;
+  shiftId: string;
+  checkinAt: string;
+  checkoutAt: string | null;
+  isLate: boolean;
+  closeReason: string | null;
+}
+
+export const getHistory = (fromISO: string, toISO: string) =>
+  api.get<SessionHistory[]>('/staff/attendance/history', { params: { from: fromISO, to: toISO } }).then((r) => r.data);
+
+// ── Admin sửa/thêm phiên ──
+export const adminEditSession = (id: string, patch: { checkinAt?: string; checkoutAt?: string }) =>
+  api.post<{ updated: boolean }>(`/admin/attendance/session/${id}/edit`, patch).then((r) => r.data);
+
+export const adminAddSession = (body: { shiftId: string; checkinAt: string; checkoutAt: string }) =>
+  api.post<{ added: boolean }>('/admin/attendance/session', body).then((r) => r.data);
