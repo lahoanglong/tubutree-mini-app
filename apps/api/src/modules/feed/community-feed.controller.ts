@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Min, MaxLength, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
@@ -39,7 +39,7 @@ class CreateEventDto {
   @IsOptional() @IsString() coverUrl?: string;
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
-  @IsOptional() @IsInt() @Min(0) rewardXu?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(1000000) rewardXu?: number;
 }
 class PickWinnerDto {
   @IsString() userId!: string;

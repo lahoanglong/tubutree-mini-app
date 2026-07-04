@@ -591,18 +591,24 @@ export class CommunityFeedService {
    * Money-critical: CHỈ chốt được khi sự kiện còn OPEN. Vì reason thưởng nhúng userId
    * (COMMUNITY_EVENT_WIN:<eventId>:<userId>), gọi pickWinner 2 lần với 2 userId KHÁC nhau
    * trên cùng sự kiện sẽ trả thưởng CẢ HAI (unique index chỉ dedup theo từng user) → trả
-   * đôi. Guard OPEN đảm bảo chỉ chốt được 1 lần (double-submit/retry/sửa của admin sẽ bị chặn).
+   * đôi. Đóng sự kiện bằng updateMany có điều kiện status='OPEN' + gate count===1: chỉ MỘT
+   * request đua chốt được (kẻ thua nhận count 0 → BadRequest, KHÔNG thưởng). Giữ cả check
+   * status!=='OPEN' sớm để fail nhanh cho trường hợp phổ biến (double-submit tuần tự).
    */
   async pickWinner(eventId: string, userId: string) {
-    const event = await this.prisma.communityEvent.findUnique({ where: { id: eventId } });
+    const event = await this.prisma.communityEvent.findUnique({
+      where: { id: eventId },
+      select: { id: true, status: true, rewardXu: true },
+    });
     if (!event) throw new NotFoundException('Sự kiện không tồn tại.');
     if (event.status !== 'OPEN') throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
     const winner = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!winner) throw new NotFoundException('Người dùng không tồn tại.');
-    await this.prisma.communityEvent.update({
-      where: { id: eventId },
+    const { count } = await this.prisma.communityEvent.updateMany({
+      where: { id: eventId, status: 'OPEN' },
       data: { winnerUserId: userId, status: 'CLOSED' },
     });
+    if (count !== 1) throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
     try {
       await this.reward.rewardEventWinner(userId, eventId, event.rewardXu);
     } catch (err) {
