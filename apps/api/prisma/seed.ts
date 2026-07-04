@@ -559,6 +559,10 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-game-gift', code: 'GAME_WATER_GIFT', channel: 'INAPP', bodyTemplate: '🎁 Một người bạn vừa tặng bạn {{amount}}💧 cho Vườn Xanh! Vào tưới cây ngay nhé 🌿' },
   { id: 'nt-groupbuy-ok', code: 'GROUP_BUY_SUCCESS', channel: 'INAPP', bodyTemplate: '🎉 Nhóm mua chung đã đủ người! Bạn nhận mã giảm {{discount}}đ để mua với giá nhóm. Đặt hàng ngay nhé 🛒' },
   { id: 'nt-dealer-bonus', code: 'DEALER_BONUS_PAID', channel: 'INAPP', bodyTemplate: '🎁 Thưởng doanh số {{quarter}}: bạn được cộng {{amount}}đ vào công nợ đại lý (doanh số {{revenue}}đ). Cảm ơn bạn đã đồng hành cùng Tubu Tree 🌿' },
+  { id: 'nt-comm-answer', code: 'COMMUNITY_NEW_ANSWER', channel: 'INAPP', bodyTemplate: '💬 {{author}} vừa trả lời câu hỏi "{{title}}" của bạn.' },
+  { id: 'nt-comm-expert', code: 'COMMUNITY_EXPERT_REPLIED', channel: 'INAPP', bodyTemplate: '🌿 Chuyên gia Tubu vừa trả lời câu hỏi "{{title}}" của bạn.' },
+  { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm TubuXu thưởng.' },
+  { id: 'nt-comm-approved', code: 'COMMUNITY_POST_APPROVED', channel: 'INAPP', bodyTemplate: '🌱 Bài viết của bạn đã được duyệt và hiển thị trong cộng đồng.' },
 ];
 
 const QUIZZES = [

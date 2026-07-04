@@ -1,6 +1,7 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CommunityRewardService } from './community-reward.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { authorBadge } from './author-badge';
 
 type FeedPostKind = 'MANUAL' | 'HARVEST' | 'MILESTONE' | 'SPECIES' | 'QUESTION' | 'SHOWCASE' | 'TIP';
@@ -45,6 +46,8 @@ export class CommunityFeedService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly reward: CommunityRewardService,
+    // Optional: thông báo trả lời/best-answer/duyệt bài — không chặn hành động chính nếu thiếu/lỗi.
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   /**
@@ -247,6 +250,11 @@ export class CommunityFeedService {
     } catch (err) {
       this.logger.warn(`rewardPost(approve) failed ${post.id}: ${(err as Error).message}`);
     }
+    try {
+      await this.notifications?.notify(post.userId, 'COMMUNITY_POST_APPROVED', {});
+    } catch (err) {
+      this.logger.warn(`notify(approve) failed ${post.id}: ${(err as Error).message}`);
+    }
     return { ok: true };
   }
 
@@ -278,11 +286,11 @@ export class CommunityFeedService {
     return { liked: true };
   }
 
-  async addComment(userId: string, postId: string, body: string) {
+  async addComment(userId: string, role: string, postId: string, body: string) {
     const text = (body ?? '').trim();
     if (!text) throw new BadRequestException('Nội dung bình luận trống.');
     if (text.length > MAX_COMMENT) throw new BadRequestException('Bình luận quá dài.');
-    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true, status: true } });
+    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true, status: true, title: true } });
     if (!post || post.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
     const comment = await this.prisma.feedComment.create({ data: { userId, postId, body: text } });
     if (post.kind === 'QUESTION') {
@@ -291,11 +299,23 @@ export class CommunityFeedService {
       } catch (err) {
         this.logger.warn(`rewardAnswer failed for comment ${comment.id}: ${(err as Error).message}`);
       }
+      if (userId !== post.userId) {
+        try {
+          const answerer = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
+          const template = role === 'STAFF' || role === 'ADMIN' ? 'COMMUNITY_EXPERT_REPLIED' : 'COMMUNITY_NEW_ANSWER';
+          await this.notifications?.notify(post.userId, template, {
+            author: answerer?.fullName ?? 'Thành viên',
+            title: post.title ?? 'câu hỏi của bạn',
+          });
+        } catch (err) {
+          this.logger.warn(`notify(answer) failed for comment ${comment.id}: ${(err as Error).message}`);
+        }
+      }
     }
     return { id: comment.id };
   }
 
-  async getComments(postId: string, take = 50) {
+  async getComments(postId: string, viewerId?: string, take = 50) {
     const comments = await this.prisma.feedComment.findMany({
       where: { postId },
       orderBy: [{ isAccepted: 'desc' }, { createdAt: 'asc' }],
@@ -310,6 +330,7 @@ export class CommunityFeedService {
       badge: authorBadge(c.user.role),
       isAccepted: c.isAccepted,
       createdAt: c.createdAt,
+      isOwner: c.userId === viewerId,
     }));
   }
 
@@ -328,6 +349,13 @@ export class CommunityFeedService {
       await this.reward.rewardBestAnswer(comment.userId, post.userId, commentId);
     } catch (err) {
       this.logger.warn(`rewardBestAnswer failed for comment ${commentId}: ${(err as Error).message}`);
+    }
+    if (comment.userId !== post.userId) {
+      try {
+        await this.notifications?.notify(comment.userId, 'COMMUNITY_BEST_ANSWER', {});
+      } catch (err) {
+        this.logger.warn(`notify(best-answer) failed for comment ${commentId}: ${(err as Error).message}`);
+      }
     }
     return { ok: true };
   }

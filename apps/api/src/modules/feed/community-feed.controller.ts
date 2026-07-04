@@ -14,6 +14,7 @@ class CreatePostDto {
   @IsString() @MinLength(1) @MaxLength(5000) body!: string;
   @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) productSlugs?: string[];
+  @IsOptional() @IsArray() @IsString({ each: true }) tagSlugs?: string[];
 }
 class EditPostDto {
   @IsOptional() @IsString() @MaxLength(160) title?: string;
@@ -43,8 +44,19 @@ export class CommunityFeedController {
     @Query('kind') kind?: string,
     @Query('sort') sort?: 'new' | 'popular',
     @Query('cursor') cursor?: string,
+    @Query('q') q?: string,
+    @Query('unanswered') unanswered?: string,
+    @Query('tag') tag?: string,
   ) {
-    return this.feed.getFeed(userId, { category, kind, sort, cursor });
+    return this.feed.getFeed(userId, {
+      category,
+      kind,
+      sort,
+      cursor,
+      q,
+      unanswered: unanswered === '1' || unanswered === 'true',
+      tag,
+    });
   }
 
   @Get('categories')
@@ -91,13 +103,13 @@ export class CommunityFeedController {
   }
 
   @Get(':id/comments')
-  comments(@Param('id') id: string) {
-    return this.feed.getComments(id);
+  comments(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+    return this.feed.getComments(id, userId);
   }
 
   @Post(':id/comments')
-  addComment(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() dto: CommentDto) {
-    return this.feed.addComment(userId, id, dto.body);
+  addComment(@CurrentUser() user: { sub: string; role: string }, @Param('id') id: string, @Body() dto: CommentDto) {
+    return this.feed.addComment(user.sub, user.role, id, dto.body);
   }
 
   @Post(':id/best-answer/:commentId')
