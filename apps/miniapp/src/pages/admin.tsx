@@ -51,6 +51,7 @@ import {
   dowLabel,
   currentVnYearMonth,
   shiftYearMonth,
+  vnDateKey,
 } from '../utils/week';
 
 export default function AdminPage() {
@@ -280,7 +281,7 @@ function DetailSheet({
             </Text>
             {detailQ.data.days.map((d) => {
               const dayKey = d.workDate.slice(0, 10);
-              const sess = detailQ.data!.sessions.filter((s) => s.checkinAt.slice(0, 10) === dayKey);
+              const sess = detailQ.data!.sessions.filter((s) => vnDateKey(new Date(s.checkinAt)) === dayKey);
               return (
                 <Box key={d.id} style={{ borderTop: '1px solid var(--neutral-100)', paddingTop: 6 }}>
                   <Box flex justifyContent="space-between">

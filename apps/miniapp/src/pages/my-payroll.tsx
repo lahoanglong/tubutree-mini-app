@@ -18,6 +18,7 @@ import {
   shortDayLabel,
   isoToVnHHMM,
   keyToUtcMidnightISO,
+  vnDateKey,
 } from '../utils/week';
 
 const STATUS_LABEL: Record<PayrollStatus, string> = {
@@ -48,15 +49,16 @@ function MyPayrollHub() {
   const [ym, setYm] = useState(() => currentVnYearMonth());
   const payQ = useQuery({ queryKey: ['my-payroll', ym.year, ym.month], queryFn: () => getMyPayroll(ym.year, ym.month) });
   const monFrom = keyToUtcMidnightISO(`${ym.year}-${String(ym.month).padStart(2, '0')}-01`);
-  const monTo = `${ym.year}-${String(ym.month).padStart(2, '0')}-31T23:59:59.999Z`;
+  const nextM = shiftYearMonth(ym.year, ym.month, 1);
+  const monTo = keyToUtcMidnightISO(`${nextM.year}-${String(nextM.month).padStart(2, '0')}-01`);
   const histQ = useQuery({ queryKey: ['my-attn-history', ym.year, ym.month], queryFn: () => getHistory(monFrom, monTo) });
   const [openDay, setOpenDay] = useState<string | null>(null);
 
-  // Gom phiên theo ngày (date-key VN) để xổ chi tiết checkin/out.
+  // Gom phiên theo ngày VN (checkinAt là mốc UTC → đổi sang ngày VN để khớp workDate).
   const sessionsByDay = useMemo(() => {
     const map: Record<string, SessionHistory[]> = {};
     for (const s of histQ.data ?? []) {
-      const key = (s.checkinAt.slice(0, 10)); // xấp xỉ theo UTC; đủ để nhóm hiển thị
+      const key = vnDateKey(new Date(s.checkinAt));
       (map[key] ??= []).push(s);
     }
     return map;
@@ -137,6 +139,7 @@ function MyPayrollHub() {
             <Text bold style={{ color: '#fff', fontSize: 28, marginTop: 2 }}>{formatVnd(m.net)}</Text>
             <Box flex style={{ gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
               <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>Giờ công: {fmtH(m.totalMinutes)}</Text>
+              <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>Đơn giá: {formatVnd(payQ.data?.profile?.hourlyRate ?? 0)}/h</Text>
               <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>Lương gộp: {formatVnd(m.gross)}</Text>
               <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>Phạt: {formatVnd(m.totalFines)}</Text>
             </Box>

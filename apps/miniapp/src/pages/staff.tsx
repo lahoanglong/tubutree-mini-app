@@ -239,6 +239,7 @@ function StaffHub() {
   const { openSnackbar } = useSnackbar();
   const [mondayKey, setMondayKey] = useState(() => mondayKeyOf(new Date()));
   const dayKeys = useMemo(() => weekDayKeys(mondayKey), [mondayKey]);
+  const todayKey = vnDateKey(new Date());
   const fromISO = keyToUtcMidnightISO(mondayKey);
   const toISO = `${addDaysKey(mondayKey, 6)}T23:59:59.999Z`;
 
@@ -331,7 +332,7 @@ function StaffHub() {
     setQuickTplId(null);
     setQuickStart('08:00');
     setQuickEnd('17:00');
-    setQuickDays(new Set(dayKeys.slice(0, 5))); // mặc định T2–T6
+    setQuickDays(new Set(dayKeys.slice(0, 5).filter((dk) => dk >= todayKey))); // mặc định T2–T6 (từ hôm nay)
     setQuickOpen(true);
   };
   const toggleQuickDay = (dk: string) =>
@@ -468,9 +469,11 @@ function StaffHub() {
                 <Text bold>
                   {dowLabel(dk)} · {shortDayLabel(dk)}
                 </Text>
-                <Button size="small" variant="tertiary" prefixIcon={<Plus size={15} />} onClick={() => openAdd(dk)}>
-                  Thêm
-                </Button>
+                {dk >= todayKey && (
+                  <Button size="small" variant="tertiary" prefixIcon={<Plus size={15} />} onClick={() => openAdd(dk)}>
+                    Thêm
+                  </Button>
+                )}
               </Box>
               {(byDay[dk] ?? []).length === 0 && (
                 <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
@@ -514,6 +517,11 @@ function StaffHub() {
                           {s.status === 'CANCELLED' && s.cancelPenalty ? ' · phạt 1h' : ''}
                         </Text>
                       </Box>
+                      {s.status === 'REJECTED' && s.rejectReason && (
+                        <Text size="xSmall" style={{ color: 'var(--neutral-500)', display: 'block', marginTop: 2 }}>
+                          Lý do: {s.rejectReason}
+                        </Text>
+                      )}
                     </Box>
                     {s.status === 'PENDING' && (
                       <Box flex style={{ gap: 4 }}>
@@ -651,6 +659,7 @@ function StaffHub() {
               <Button
                 key={dk}
                 size="small"
+                disabled={dk < todayKey}
                 variant={quickDays.has(dk) ? undefined : 'secondary'}
                 onClick={() => toggleQuickDay(dk)}
               >
