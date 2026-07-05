@@ -92,3 +92,21 @@ export const getProductBreakdown = () =>
 /** Ghi "chạm" giới thiệu để attribution sống 3 ngày (fallback khi phiên mất). Fire-and-forget. */
 export const recordReferralTouch = (dto: { referralCode: string; storefrontSlug?: string; kind?: 'ctv' | 'brand' }) =>
   api.post('/affiliate/touch', dto).then((r) => r.data as { ok: boolean });
+
+// ── Content Kit (bộ nội dung bán hàng theo từng sản phẩm) ──
+export interface ContentKitFaq {
+  q: string;
+  a: string;
+}
+export interface ContentKit {
+  productName: string;
+  images: string[];
+  /** Đã tự chèn tên CTV + link giới thiệu (thay {ten_ctv}/{link}) — copy là dùng luôn. */
+  captions: string[];
+  usps: string[];
+  faqs: ContentKitFaq[];
+  videoUrls: string[];
+  shareLink: string;
+}
+export const fetchContentKit = (slug: string) =>
+  api.get<ContentKit>(`/affiliate/content-kit/${slug}`).then((r) => r.data);

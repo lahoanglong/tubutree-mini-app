@@ -229,6 +229,20 @@ export const vi = {
     copied: 'Đã sao chép',
   },
 
+  contentKit: {
+    entryLabel: 'Nội dung',
+    sheetTitle: 'Nội dung bán hàng',
+    loading: 'Đang tải nội dung…',
+    captionsHeading: 'Bài mẫu (chạm để sao chép)',
+    uspsHeading: 'Điểm bán hàng',
+    faqHeading: 'Câu hỏi thường gặp',
+    videosHeading: 'Video tham khảo',
+    shareZalo: 'Chia sẻ Zalo',
+    copyLink: 'Sao chép link',
+    copied: 'Đã sao chép',
+    empty: 'Sản phẩm này chưa có nội dung mẫu.',
+  },
+
   community: {
     title: 'Cộng đồng Vườn Tubu',
     subtitle: 'Hỏi đáp chăm cây, khoe vườn, cổ vũ nhau 🌿',

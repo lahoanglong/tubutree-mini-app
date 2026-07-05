@@ -41,6 +41,7 @@ import { StorefrontModule } from './modules/storefront/storefront.module';
 import { BrandModule } from './modules/brand/brand.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { FlashSaleModule } from './modules/flash-sale/flash-sale.module';
+import { ContentKitModule } from './modules/content-kit/content-kit.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -88,6 +89,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     BrandModule,
     StaffModule,
     FlashSaleModule,
+    ContentKitModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

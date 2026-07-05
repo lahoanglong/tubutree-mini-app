@@ -13,6 +13,7 @@ import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { ContentKitSheet } from '../components/content-kit-sheet';
 
 export default function StorefrontBuilderPage() {
   const qc = useQueryClient();
@@ -56,6 +57,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const [pickerCol, setPickerCol] = useState<string | null>(null);
+  const [contentKitSlug, setContentKitSlug] = useState<string | null>(null);
   const refresh = () => {
     // Cập nhật cả tiến trình "Hành trình gian hàng" sau khi thêm SP/đăng (quest đọc từ cùng dữ liệu).
     void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
@@ -99,6 +101,15 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
                 <Text size="small" style={{ opacity: it.isHidden ? 0.5 : 1 }}>{it.product.name}</Text>
                 <Text size="xSmall" style={{ color: 'var(--primary-700)' }}>{formatVnd(it.product.salePrice ?? it.product.basePrice)}</Text>
               </Box>
+              <Text
+                size="xSmall"
+                bold
+                className="tubu-press"
+                style={{ color: 'var(--primary-700)' }}
+                onClick={() => setContentKitSlug(it.product.slug)}
+              >
+                {vi.contentKit.entryLabel}
+              </Text>
               <Text size="xSmall" className="tubu-press" onClick={() => itemMut.mutate({ id: it.id, dto: { isPinned: !it.isPinned } })}>⤒</Text>
               <Text size="xSmall" className="tubu-press" onClick={() => itemMut.mutate({ id: it.id, dto: { isHidden: !it.isHidden } })}>{it.isHidden ? '🙈' : '👁'}</Text>
               <Text size="xSmall" className="tubu-press" style={{ color: 'var(--danger)' }} onClick={() => delItemMut.mutate(it.id)}>✕</Text>
@@ -123,6 +134,12 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       <Sheet visible={!!pickerCol} onClose={() => setPickerCol(null)} autoHeight>
         {pickerCol && <PickerSheet collectionId={pickerCol} onAdded={() => { void refresh(); }} onClose={() => setPickerCol(null)} />}
       </Sheet>
+
+      <ContentKitSheet
+        visible={!!contentKitSlug}
+        onClose={() => setContentKitSlug(null)}
+        productSlug={contentKitSlug ?? ''}
+      />
     </Page>
   );
 }
