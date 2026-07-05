@@ -83,6 +83,86 @@ describe('CatalogService.brands cache 60s', () => {
   });
 });
 
+describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
+  function setup(prismaOverrides: Record<string, unknown>) {
+    const prisma = {
+      orderItem: { findMany: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      brandFollow: { findMany: jest.fn().mockResolvedValue([]) },
+      product: { findMany: jest.fn().mockResolvedValue([]) },
+      ...prismaOverrides,
+    } as unknown as PrismaService;
+    return { prisma, svc: new CatalogService(prisma) };
+  }
+
+  it('có lịch sử mua ở danh mục C → gợi ý sản phẩm active cùng danh mục, LOẠI sản phẩm đã mua, sắp theo đã bán giảm dần', async () => {
+    const orderItemFindMany = jest.fn().mockResolvedValue([{ variationId: 'v1' }]);
+    const variationFindMany = jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }]);
+    // Lần 1: lấy categoryIds của sản phẩm đã mua. Lần 2: query gợi ý (matched).
+    const productFindMany = jest
+      .fn()
+      .mockResolvedValueOnce([{ categoryIds: ['C'] }])
+      .mockResolvedValueOnce([
+        { ...card('p2'), soldExternal: 5, soldApp: 0 }, // sold = 5
+        { ...card('p3'), soldExternal: 10, soldApp: 20 }, // sold = 30
+      ]);
+    const { prisma, svc } = setup({
+      orderItem: { findMany: orderItemFindMany },
+      variation: { findMany: variationFindMany },
+      product: { findMany: productFindMany },
+    });
+
+    const r = await svc.getForYou('u1');
+
+    expect(r.map((c) => c.id)).toEqual(['p3', 'p2']); // p3 (sold 30) trước p2 (sold 5)
+    expect(r.map((c) => c.id)).not.toContain('p1'); // không gợi ý lại sản phẩm đã mua
+    // Query gợi ý phải loại trừ sản phẩm đã mua ngay ở DB, không chỉ lọc ở JS.
+    const candidateWhere = (prisma as any).product.findMany.mock.calls[1][0].where;
+    expect(candidateWhere.id).toEqual({ notIn: ['p1'] });
+    expect(candidateWhere.OR).toEqual(expect.arrayContaining([{ categoryIds: { hasSome: ['C'] } }]));
+  });
+
+  it('user chưa có lịch sử mua & chưa theo dõi nhãn nào → fallback sản phẩm nổi bật (isFeatured)', async () => {
+    const productFindMany = jest.fn().mockResolvedValue([
+      { ...card('pf1'), isFeatured: true, soldExternal: 1, soldApp: 1 },
+    ]);
+    const { svc } = setup({ product: { findMany: productFindMany } });
+
+    const r = await svc.getForYou('u-moi');
+
+    expect(r.map((c) => c.id)).toEqual(['pf1']);
+    expect(productFindMany).toHaveBeenCalledTimes(1);
+    expect(productFindMany.mock.calls[0][0].where).toMatchObject({ isActive: true, isFeatured: true });
+  });
+
+  it('theo dõi nhãn (chưa từng mua) → gợi ý sản phẩm của nhãn đó thay vì fallback', async () => {
+    const productFindMany = jest.fn().mockResolvedValue([{ ...card('pb1'), soldExternal: 2, soldApp: 0 }]);
+    const { prisma, svc } = setup({
+      brandFollow: { findMany: jest.fn().mockResolvedValue([{ brandId: 'b1' }]) },
+      product: { findMany: productFindMany },
+    });
+
+    const r = await svc.getForYou('u2');
+
+    expect(r.map((c) => c.id)).toEqual(['pb1']);
+    const candidateWhere = (prisma as any).product.findMany.mock.calls[0][0].where;
+    expect(candidateWhere.OR).toEqual(expect.arrayContaining([{ brandId: { in: ['b1'] } }]));
+  });
+
+  it('lấy tối đa 10 sản phẩm dù matched nhiều hơn', async () => {
+    const many = Array.from({ length: 15 }, (_, i) => ({ ...card(`p${i}`), soldExternal: i, soldApp: 0 }));
+    const { svc } = setup({
+      brandFollow: { findMany: jest.fn().mockResolvedValue([{ brandId: 'b1' }]) },
+      product: { findMany: jest.fn().mockResolvedValue(many) },
+    });
+
+    const r = await svc.getForYou('u3');
+
+    expect(r).toHaveLength(10);
+    expect(r[0]?.id).toBe('p14'); // sold cao nhất trước
+  });
+});
+
 describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
   it('recomputeSoldCounts: gom đơn DELIVERED theo product (reset 0 rồi set)', async () => {
     const tx = jest.fn().mockResolvedValue([]);

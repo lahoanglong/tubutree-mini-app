@@ -1,7 +1,7 @@
 import { Box, Page, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { Bell, ShoppingCart, Search, ChevronRight, Baby, SprayCan, Droplets, Recycle, Map, Sparkles, Users, MessagesSquare, type LucideIcon } from 'lucide-react';
-import { fetchProducts, fetchBrands, getCart } from '../services/shop-api';
+import { fetchProducts, fetchBrands, fetchForYou, getCart } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import ProductCard from '../components/product-card';
@@ -46,6 +46,14 @@ export default function HomePage() {
   });
   // Brand/category chậm đổi (sync Pancake ~15p/lần) → cache 60s, override default 10s.
   const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands, staleTime: 60_000 });
+  // Feed "Dành cho bạn" — cá nhân hoá theo lịch sử mua + nhãn theo dõi, cần đăng nhập.
+  // select() bọc lại thành { data } để tái dùng HomeSection/ProductCard chung với các mục khác.
+  const forYou = useQuery({
+    queryKey: ['for-you'],
+    queryFn: fetchForYou,
+    enabled: authed,
+    select: (data) => ({ data }),
+  });
 
   const goBrand = (brand?: string) => {
     haptic('light');
@@ -367,6 +375,11 @@ export default function HomePage() {
 
       {/* ── Flash Sale hôm nay ── */}
       <FlashSale />
+
+      {/* ── Dành cho bạn (cá nhân hoá — chỉ hiện khi đã đăng nhập & có gợi ý) ── */}
+      {authed && (
+        <HomeSection title={vi.home.forYou} query={forYou} onRetry={() => void forYou.refetch()} />
+      )}
 
       {/* ── Tubu chọn cho bạn ── */}
       <HomeSection

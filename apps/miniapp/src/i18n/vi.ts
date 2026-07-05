@@ -38,6 +38,7 @@ export const vi = {
     pointsChip: (n: number) => `${n} điểm Xanh`,
     searchPlaceholder: 'Bạn đang tìm gì hôm nay?',
     featured: 'Tubu chọn cho bạn',
+    forYou: 'Dành cho bạn',
     newArrivals: 'Mới về vườn',
     brandsTitle: 'Thương hiệu Việt',
     allBrands: 'Tất cả',

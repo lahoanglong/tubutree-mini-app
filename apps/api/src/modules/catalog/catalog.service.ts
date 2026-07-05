@@ -101,6 +101,73 @@ export class CatalogService {
     return ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)).map((p) => this.toCard(p));
   }
 
+  /**
+   * Feed "Dành cho bạn" — gợi ý cá nhân hoá rule-based (không ML):
+   * 1) Lấy danh mục từ lịch sử mua gần đây (20 order item cuối) + nhãn đang theo dõi.
+   * 2) Gợi ý sản phẩm active trùng danh mục HOẶC thuộc nhãn theo dõi, loại sản phẩm đã mua,
+   *    sắp theo tổng đã bán (soldApp + soldExternal) giảm dần.
+   * 3) Không có lịch sử/không match → fallback sản phẩm isFeatured (sắp theo đã bán).
+   */
+  async getForYou(userId: string) {
+    const TAKE = 10;
+    const RECENT_ITEMS = 20;
+
+    const orderItems = await this.prisma.orderItem.findMany({
+      where: { order: { userId } },
+      orderBy: { order: { createdAt: 'desc' } },
+      take: RECENT_ITEMS,
+      select: { variationId: true },
+    });
+
+    const variationIds = [...new Set(orderItems.map((oi) => oi.variationId))];
+    const variations = variationIds.length
+      ? await this.prisma.variation.findMany({
+          where: { id: { in: variationIds } },
+          select: { id: true, productId: true },
+        })
+      : [];
+    const purchasedProductIds = [...new Set(variations.map((v) => v.productId))];
+
+    const purchasedProducts = purchasedProductIds.length
+      ? await this.prisma.product.findMany({
+          where: { id: { in: purchasedProductIds } },
+          select: { categoryIds: true },
+        })
+      : [];
+    const categorySet = [...new Set(purchasedProducts.flatMap((p) => p.categoryIds))];
+
+    const follows = await this.prisma.brandFollow.findMany({
+      where: { userId },
+      select: { brandId: true },
+    });
+    const followedBrandIds = follows.map((f) => f.brandId);
+
+    let items: Parameters<typeof this.toCard>[0][] = [];
+    if (categorySet.length > 0 || followedBrandIds.length > 0) {
+      const or: Prisma.ProductWhereInput[] = [];
+      if (categorySet.length > 0) or.push({ categoryIds: { hasSome: categorySet } });
+      if (followedBrandIds.length > 0) or.push({ brandId: { in: followedBrandIds } });
+      const where: Prisma.ProductWhereInput = { isActive: true, OR: or };
+      if (purchasedProductIds.length) where.id = { notIn: purchasedProductIds };
+      items = await this.prisma.product.findMany({
+        where,
+        include: { variations: { where: { isActive: true } } },
+      });
+    }
+
+    if (items.length === 0) {
+      items = await this.prisma.product.findMany({
+        where: { isActive: true, isFeatured: true },
+        include: { variations: { where: { isActive: true } } },
+      });
+    }
+
+    const sorted = [...items].sort(
+      (a, b) => b.soldExternal + b.soldApp - (a.soldExternal + a.soldApp),
+    );
+    return sorted.slice(0, TAKE).map((p) => this.toCard(p));
+  }
+
   async brands() {
     if (this.brandsCache && this.brandsCache.expiresAt > Date.now()) {
       return this.brandsCache.value;
