@@ -4,11 +4,13 @@ import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { CartService } from '../cart/cart.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 
 const loyalty = { reverseOrderPoints: jest.fn().mockResolvedValue(undefined) } as unknown as LoyaltyService;
 const cart = {} as unknown as CartService;
 const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
+const flash = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
 
 function makeService(
   order: Record<string, unknown>,
@@ -41,7 +43,7 @@ function makeService(
     $transaction,
   } as unknown as PrismaService;
   return {
-    svc: new OrdersService(prisma, loyalty, cart, notifications, config),
+    svc: new OrdersService(prisma, loyalty, cart, notifications, config, flash),
     updateMany,
     userUpdate,
     variationUpdate,
@@ -238,5 +240,30 @@ describe('OrdersService.cancel — B5 restock', () => {
     );
     await svc.cancel('u1', 'TUBU1');
     expect(variationUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrdersService.cancel — flash sale quota restore', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('cancel THẮNG → gọi flash.restore(tx, itemId, userId, qty) cho item có flashSaleItemId', async () => {
+    const items = [
+      { variationId: 'v1', quantity: 2, flashSaleItemId: 'fi1' },
+      { variationId: 'v2', quantity: 5, flashSaleItemId: null },
+    ];
+    const { svc } = makeService({ ...baseOrder, items });
+    await svc.cancel('u1', 'TUBU1');
+    expect(flash.restore).toHaveBeenCalledTimes(1);
+    expect(flash.restore).toHaveBeenCalledWith(expect.anything(), 'fi1', 'u1', 2);
+  });
+
+  it('cancel THUA race (count=0) → KHÔNG gọi flash.restore', async () => {
+    const items = [{ variationId: 'v1', quantity: 2, flashSaleItemId: 'fi1' }];
+    const { svc } = makeService(
+      { ...baseOrder, items },
+      { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    );
+    await svc.cancel('u1', 'TUBU1');
+    expect(flash.restore).not.toHaveBeenCalled();
   });
 });

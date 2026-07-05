@@ -5,6 +5,7 @@ import type { SystemConfigService } from '../system-config/system-config.service
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 
 const config = {} as unknown as SystemConfigService;
 const loyalty = { reverseOrderPoints: jest.fn().mockResolvedValue(undefined) } as unknown as LoyaltyService;
@@ -12,7 +13,9 @@ const affiliate = {
   reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
 } as unknown as AffiliateService;
 const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
-const mkAdmin = (prisma: PrismaService) => new AdminService(prisma, config, loyalty, affiliate, notifications);
+const flash = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
+const mkAdmin = (prisma: PrismaService) =>
+  new AdminService(prisma, config, loyalty, affiliate, notifications, flash);
 
 function makePrisma(over: Record<string, unknown> = {}) {
   const base = {
@@ -133,7 +136,7 @@ type Order = {
   total: number;
   paymentMethod: 'COD' | 'WALLET' | 'ZALOPAY' | 'XU';
   paymentStatus: 'PAID' | 'UNPAID';
-  items: Array<{ variationId: string; quantity: number }>;
+  items: Array<{ variationId: string; quantity: number; flashSaleItemId?: string | null }>;
 };
 type ReturnReq = { id: string; orderId: string; status: 'REQUESTED' | 'APPROVED' | 'REJECTED' } | null;
 
@@ -186,6 +189,7 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
   beforeEach(() => {
     (loyalty.reverseOrderPoints as jest.Mock).mockClear();
     (affiliate.reverseCommissionsForOrder as jest.Mock).mockClear();
+    (flash.restore as jest.Mock).mockClear();
   });
 
   it('yêu cầu không tồn tại → NotFound', async () => {
@@ -234,6 +238,39 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     });
     expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
+  });
+
+  it('APPROVE với item có flashSaleItemId → gọi flash.restore(tx, itemId, order.userId, qty)', async () => {
+    const { prisma } = makeReturnPrisma({
+      order: {
+        id: 'o1',
+        code: 'TUBU1',
+        userId: 'u1',
+        total: 300000,
+        paymentMethod: 'COD',
+        paymentStatus: 'UNPAID',
+        items: [{ variationId: 'v1', quantity: 3, flashSaleItemId: 'fi1' }],
+      },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(flash.restore).toHaveBeenCalledTimes(1);
+    expect(flash.restore).toHaveBeenCalledWith(expect.anything(), 'fi1', 'u1', 3);
+  });
+
+  it('APPROVE với item KHÔNG có flashSaleItemId → KHÔNG gọi flash.restore', async () => {
+    const { prisma } = makeReturnPrisma({
+      order: {
+        id: 'o1',
+        code: 'TUBU1',
+        userId: 'u1',
+        total: 300000,
+        paymentMethod: 'COD',
+        paymentStatus: 'UNPAID',
+        items: [{ variationId: 'v1', quantity: 3 }],
+      },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(flash.restore).not.toHaveBeenCalled();
   });
 
   it('APPROVE với WALLET PAID → hoàn walletBalance + restock', async () => {

@@ -5,6 +5,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
+import { FlashSaleService } from '../flash-sale/flash-sale.service';
 
 @Injectable()
 export class AdminService {
@@ -16,6 +17,7 @@ export class AdminService {
     private readonly loyalty: LoyaltyService,
     private readonly affiliate: AffiliateService,
     private readonly notifications: NotificationsService,
+    private readonly flashSale: FlashSaleService,
   ) {}
 
   // ── Đổi/trả (§6.4) ──
@@ -123,6 +125,9 @@ export class AdminService {
           where: { id: item.variationId },
           data: { stock: { increment: item.quantity } },
         });
+        if (item.flashSaleItemId) {
+          await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, item.quantity);
+        }
       }
     });
     // Reverse điểm Xanh + commission CTV + notify (idempotent — để ngoài tx an toàn).
