@@ -70,6 +70,12 @@ export const vi = {
 
   subscriptions: {
     discountLine: (pct: number) => `Đang giảm ${pct}% cho đơn định kỳ`,
+    saveTitle: 'Giữ lại lịch định kỳ?',
+    saveBody: 'Tạm dừng hoặc bỏ qua kỳ này, thay vì hủy hẳn nhé.',
+    pauseCta: 'Tạm dừng',
+    skipCta: 'Bỏ qua kỳ này',
+    confirmCancelCta: 'Vẫn hủy',
+    skipOk: 'Đã bỏ qua kỳ này, hẹn kỳ sau nhé 🌿',
   },
 
   cart: {
