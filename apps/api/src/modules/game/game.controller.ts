@@ -10,11 +10,16 @@ import { GameCollectionService } from './game-collection.service';
 import { GameSeasonService } from './game-season.service';
 import { GameGiftService } from './game-gift.service';
 import { GameGardenService } from './game-garden.service';
+import { SeasonPassService } from './season-pass.service';
 
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
 class BuySeedsDto { @IsInt() @Min(1) seeds!: number; }
 class UnlockPlotDto { @IsIn(['SEEDS', 'XU']) currency!: 'SEEDS' | 'XU'; }
+class SeasonPassClaimDto {
+  @IsInt() @Min(0) tier!: number;
+  @IsIn(['free', 'premium']) track!: 'free' | 'premium';
+}
 
 @Controller('game')
 export class GameController {
@@ -27,6 +32,7 @@ export class GameController {
     private readonly season: GameSeasonService,
     private readonly gift: GameGiftService,
     private readonly garden: GameGardenService,
+    private readonly seasonPass: SeasonPassService,
   ) {}
 
   @Get('profile')
@@ -83,6 +89,14 @@ export class GameController {
   @Public()
   @Get('season/leaderboard')
   seasonLeaderboard() { return this.season.getSeasonLeaderboard(); }
+
+  @Get('season-pass')
+  getSeasonPass(@CurrentUser('sub') userId: string) { return this.seasonPass.getState(userId); }
+
+  @Post('season-pass/claim')
+  claimSeasonPass(@CurrentUser('sub') userId: string, @Body() dto: SeasonPassClaimDto) {
+    return this.seasonPass.claim(userId, dto.tier, dto.track);
+  }
 
   @Get('garden')
   getGarden(@CurrentUser('sub') userId: string) { return this.garden.getGarden(userId); }

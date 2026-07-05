@@ -339,6 +339,21 @@ export const vi = {
       cta: (cost: number) => `Hồi sinh (${cost} 💧)`,
       ok: 'Đã hồi sinh chuỗi! 🌿',
     },
+    seasonPass: {
+      title: '🎟️ Chặng Mùa (Season Pass)',
+      subtitle: (title: string) => `Điểm danh mỗi ngày để lên bậc mùa "${title}"`,
+      xp: (n: number) => `${n} XP`,
+      tier: (n: number) => `Bậc ${n}`,
+      free: 'Miễn phí',
+      premium: 'Premium',
+      claim: 'Nhận',
+      claimed: '✓ Đã nhận',
+      locked: '🔒 Chưa mở',
+      premiumHint: '🔒 Cần đăng ký định kỳ để mở phần thưởng Premium.',
+      reward: (r: { type: 'SEEDS' | 'XU'; amount: number }) =>
+        r.type === 'SEEDS' ? `${r.amount} 💧` : `${r.amount.toLocaleString('vi-VN')} xu`,
+      claimOk: 'Đã nhận thưởng chặng mùa! 🎉',
+    },
   },
 } as const;
 

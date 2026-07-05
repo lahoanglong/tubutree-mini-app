@@ -194,6 +194,33 @@ export const waterPlot = (plotId: string, drops: number) =>
     }>(`/game/garden/plot/${plotId}/water`, { drops })
     .then((r) => r.data);
 
+export interface SeasonPassReward {
+  type: 'SEEDS' | 'XU';
+  amount: number;
+}
+export interface SeasonPassTier {
+  tier: number;
+  xpRequired: number;
+  free: SeasonPassReward;
+  premium: SeasonPassReward;
+  unlocked: boolean;
+  claimedFree: boolean;
+  claimedPremium: boolean;
+}
+export interface SeasonPassState {
+  active: boolean;
+  seasonTitle?: string;
+  xp?: number;
+  premiumEligible?: boolean;
+  tiers?: SeasonPassTier[];
+}
+export const fetchSeasonPass = () =>
+  api.get<SeasonPassState>('/game/season-pass').then((r) => r.data);
+export const claimSeasonPass = (tier: number, track: 'free' | 'premium') =>
+  api
+    .post<{ claimed: boolean; reward: SeasonPassReward }>('/game/season-pass/claim', { tier, track })
+    .then((r) => r.data);
+
 export interface Friend {
   id: string;
   nickname: string;

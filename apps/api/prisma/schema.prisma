@@ -1231,6 +1231,22 @@ model Season {
   @@map("seasons")
 }
 
+// Vườn Xanh — Season Pass (chặng mùa): ladder bậc tích XP theo điểm danh mỗi ngày.
+// Mỗi bậc có phần thưởng free + premium (premium mở khi có gói đăng ký định kỳ ACTIVE).
+// claimedFree/claimedPremium giữ chỉ số bậc đã nhận (chống nhận trùng, idempotent).
+model UserSeasonPass {
+  id             String   @id @default(cuid())
+  userId         String
+  seasonId       String
+  xp             Int      @default(0)
+  claimedFree    Int[]    @default([])
+  claimedPremium Int[]    @default([])
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, seasonId])
+  @@map("user_season_passes")
+}
+
 // Vườn Xanh 2.0 (social) — tặng nước cho bạn bè trong mạng giới thiệu.
 // unique [sender, recipient, dayKey] chống tặng 2 lần/ngày/người.
 model WaterGift {

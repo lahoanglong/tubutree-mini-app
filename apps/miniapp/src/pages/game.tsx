@@ -25,10 +25,13 @@ import {
   getGarden,
   unlockPlot,
   waterPlot,
+  fetchSeasonPass,
+  claimSeasonPass,
   type MissionItem,
   type AnswerResult,
   type HarvestSpecies,
   type CodexEntry,
+  type SeasonPassTier,
 } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
 import { WheelOfFortune } from '../components/wheel';
@@ -68,6 +71,7 @@ export default function GamePage() {
   const { data: seasonBoard } = useQuery({ queryKey: ['game', 'seasonBoard'], queryFn: getSeasonLeaderboard });
   const { data: friends } = useQuery({ queryKey: ['game', 'friends'], queryFn: getFriends, enabled: authed });
   const { data: garden } = useQuery({ queryKey: ['game', 'garden'], queryFn: getGarden, enabled: authed });
+  const { data: seasonPass } = useQuery({ queryKey: ['game', 'seasonPass'], queryFn: fetchSeasonPass, enabled: authed });
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
@@ -202,6 +206,18 @@ export default function GamePage() {
   const waterPlotM = useMutation({
     mutationFn: (plotId: string) => waterPlot(plotId, 20),
     onSuccess: onPlotHarvest,
+    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+  });
+  const claimPassM = useMutation({
+    mutationFn: ({ tier, track }: { tier: number; track: 'free' | 'premium' }) => claimSeasonPass(tier, track),
+    onSuccess: () => {
+      haptic('medium');
+      openSnackbar({ text: vi.game.seasonPass.claimOk, type: 'success' });
+      void queryClient.invalidateQueries({ queryKey: ['game', 'seasonPass'] });
+      void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
+      void queryClient.invalidateQueries({ queryKey: ['coins'] });
+      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+    },
     onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
   });
   const answerM = useMutation({
@@ -512,6 +528,125 @@ export default function GamePage() {
               Bạn đã mở tối đa số lô đất 🌳
             </Text>
           )}
+        </Card>
+      )}
+
+      {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
+      {seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
+        <Card title={vi.game.seasonPass.title}>
+          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+            {vi.game.seasonPass.subtitle(seasonPass.seasonTitle ?? '')}
+          </Text>
+          {(() => {
+            const xp = seasonPass.xp ?? 0;
+            const maxXp = seasonPass.tiers![seasonPass.tiers!.length - 1]?.xpRequired ?? 1;
+            const ppct = maxXp > 0 ? Math.min(100, Math.round((xp / maxXp) * 100)) : 0;
+            return (
+              <>
+                <Box flex justifyContent="space-between" style={{ margin: '10px 0 4px' }}>
+                  <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
+                    {vi.game.seasonPass.xp(xp)}
+                  </Text>
+                  <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                    {vi.game.seasonPass.xp(maxXp)}
+                  </Text>
+                </Box>
+                <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 8, overflow: 'hidden' }}>
+                  <Box style={{ width: `${ppct}%`, height: 8, background: 'linear-gradient(90deg, var(--leaf-400), var(--leaf-600))', borderRadius: 99, transition: 'width var(--dur-slow) var(--ease-out)' }} />
+                </Box>
+              </>
+            );
+          })()}
+
+          {!seasonPass.premiumEligible && (
+            <Text size="xSmall" style={{ color: 'var(--clay-700, #92400e)', marginTop: 8 }}>
+              {vi.game.seasonPass.premiumHint}
+            </Text>
+          )}
+
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+            {seasonPass.tiers.map((t: SeasonPassTier) => {
+              const busy = (track: 'free' | 'premium') =>
+                claimPassM.isPending && claimPassM.variables?.tier === t.tier && claimPassM.variables?.track === track;
+              return (
+                <Box
+                  key={t.tier}
+                  p={2}
+                  style={{
+                    background: t.unlocked ? 'var(--leaf-50, #eef7ee)' : 'var(--neutral-100)',
+                    borderRadius: 'var(--radius-md)',
+                    opacity: t.unlocked ? 1 : 0.7,
+                  }}
+                >
+                  <Box flex alignItems="center" justifyContent="space-between" mb={1}>
+                    <Text size="xSmall" bold>
+                      {vi.game.seasonPass.tier(t.tier + 1)}
+                    </Text>
+                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                      {vi.game.seasonPass.xp(t.xpRequired)}
+                    </Text>
+                  </Box>
+                  <Box flex style={{ gap: 8 }}>
+                    {/* Nhánh miễn phí */}
+                    <Box style={{ flex: 1, textAlign: 'center' }}>
+                      <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                        {vi.game.seasonPass.free}
+                      </Text>
+                      <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
+                        {vi.game.seasonPass.reward(t.free)}
+                      </Text>
+                      {t.claimedFree ? (
+                        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                          {vi.game.seasonPass.claimed}
+                        </Text>
+                      ) : (
+                        <Button
+                          size="small"
+                          fullWidth
+                          disabled={!t.unlocked || busy('free')}
+                          loading={busy('free')}
+                          onClick={() => claimPassM.mutate({ tier: t.tier, track: 'free' })}
+                          style={{ marginTop: 2, background: 'var(--leaf-600)' }}
+                        >
+                          {t.unlocked ? vi.game.seasonPass.claim : vi.game.seasonPass.locked}
+                        </Button>
+                      )}
+                    </Box>
+                    {/* Nhánh premium */}
+                    <Box style={{ flex: 1, textAlign: 'center' }}>
+                      <Text size="xSmall" style={{ color: 'var(--sun-700, #b8860b)' }}>
+                        ⭐ {vi.game.seasonPass.premium}
+                      </Text>
+                      <Text size="xSmall" bold style={{ color: 'var(--sun-700, #b8860b)' }}>
+                        {vi.game.seasonPass.reward(t.premium)}
+                      </Text>
+                      {t.claimedPremium ? (
+                        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                          {vi.game.seasonPass.claimed}
+                        </Text>
+                      ) : (
+                        <Button
+                          size="small"
+                          fullWidth
+                          variant="secondary"
+                          disabled={!t.unlocked || !seasonPass.premiumEligible || busy('premium')}
+                          loading={busy('premium')}
+                          onClick={() => claimPassM.mutate({ tier: t.tier, track: 'premium' })}
+                          style={{ marginTop: 2 }}
+                        >
+                          {!t.unlocked
+                            ? vi.game.seasonPass.locked
+                            : !seasonPass.premiumEligible
+                              ? vi.game.seasonPass.locked
+                              : vi.game.seasonPass.claim}
+                        </Button>
+                      )}
+                    </Box>
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
         </Card>
       )}
 

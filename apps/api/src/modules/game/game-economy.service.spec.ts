@@ -2,10 +2,15 @@ import { BadRequestException } from '@nestjs/common';
 import { GameEconomyService } from './game-economy.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import type { SeasonPassService } from './season-pass.service';
 
 const DAY = 24 * 3600 * 1000;
 function cfg(over: Record<string, unknown> = {}): SystemConfigService {
   return { get: async <T>(k: string, fb?: T): Promise<T> => (k in over ? (over[k] as T) : (fb as T)) } as unknown as SystemConfigService;
+}
+/** Stub SeasonPassService — addXp là side-effect, luôn trả promise resolved. */
+function sp(): SeasonPassService {
+  return { addXp: jest.fn().mockResolvedValue(undefined) } as unknown as SeasonPassService;
 }
 function prisma(profile: Record<string, unknown> | null, over: Record<string, unknown> = {}) {
   const base = {
@@ -27,7 +32,7 @@ function prof(extra: Record<string, unknown> = {}) {
 describe('GameEconomyService.checkIn', () => {
   it('chuỗi liên tiếp +1 và thưởng 💧, KHÔNG cộng điểm Xanh', async () => {
     const p = prisma(prof());
-    const svc = new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 10 }));
+    const svc = new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 10 }), sp());
     const r = await svc.checkIn('u1');
     expect(r.streakDays).toBe(2);
     expect(r.seedsEarned).toBe(10);
@@ -37,13 +42,13 @@ describe('GameEconomyService.checkIn', () => {
   });
 
   it('chặn điểm danh 2 lần/ngày', async () => {
-    const svc = new GameEconomyService(prisma(prof({ lastCheckInAt: new Date() })), cfg());
+    const svc = new GameEconomyService(prisma(prof({ lastCheckInAt: new Date() })), cfg(), sp());
     await expect(svc.checkIn('u1')).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('lỡ 1 ngày + có vé giữ lửa → tiêu 1 vé, streak vẫn +1', async () => {
     const p = prisma(prof({ streakDays: 4, streakFreezes: 1, lastCheckInAt: new Date(Date.now() - 2 * DAY) }));
-    const svc = new GameEconomyService(p, cfg());
+    const svc = new GameEconomyService(p, cfg(), sp());
     const r = await svc.checkIn('u1');
     expect(r.streakDays).toBe(5);
     expect(r.streakFrozeUsed).toBe(true);
@@ -53,23 +58,46 @@ describe('GameEconomyService.checkIn', () => {
 
   it('lỡ 1 ngày + hết vé → reset streak = 1', async () => {
     const p = prisma(prof({ streakDays: 4, streakFreezes: 0, lastCheckInAt: new Date(Date.now() - 2 * DAY) }));
-    const r = await new GameEconomyService(p, cfg()).checkIn('u1');
+    const r = await new GameEconomyService(p, cfg(), sp()).checkIn('u1');
     expect(r.streakDays).toBe(1);
     expect(r.streakFrozeUsed).toBe(false);
   });
 
   it('lỡ NHIỀU ngày + có vé → KHÔNG dùng vé, reset = 1', async () => {
     const p = prisma(prof({ streakDays: 4, streakFreezes: 1, lastCheckInAt: new Date(Date.now() - 5 * DAY) }));
-    const r = await new GameEconomyService(p, cfg()).checkIn('u1');
+    const r = await new GameEconomyService(p, cfg(), sp()).checkIn('u1');
     expect(r.streakDays).toBe(1);
     expect(r.streakFrozeUsed).toBe(false);
+  });
+});
+
+describe('GameEconomyService.checkIn — hook Season Pass', () => {
+  it('điểm danh thành công → gọi seasonPass.addXp với xp cấu hình', async () => {
+    const p = prisma(prof());
+    const pass = sp();
+    await new GameEconomyService(p, cfg({ 'seasonpass.checkin_xp': 25 }), pass).checkIn('u1');
+    expect(pass.addXp as unknown as jest.Mock).toHaveBeenCalledWith('u1', 25);
+  });
+
+  it('mặc định 10 XP khi chưa cấu hình', async () => {
+    const p = prisma(prof());
+    const pass = sp();
+    await new GameEconomyService(p, cfg(), pass).checkIn('u1');
+    expect(pass.addXp as unknown as jest.Mock).toHaveBeenCalledWith('u1', 10);
+  });
+
+  it('điểm danh thất bại (đã điểm danh hôm nay) → KHÔNG gọi addXp', async () => {
+    const p = prisma(prof({ lastCheckInAt: new Date() }));
+    const pass = sp();
+    await expect(new GameEconomyService(p, cfg(), pass).checkIn('u1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(pass.addXp as unknown as jest.Mock).not.toHaveBeenCalled();
   });
 });
 
 describe('GameEconomyService.checkIn — ghi nhận chuỗi đã mất (streak repair)', () => {
   it('reset streak (streakDays>1 trước đó) → ghi brokenStreakDays + brokenStreakAt', async () => {
     const p = prisma(prof({ streakDays: 5, streakFreezes: 0, lastCheckInAt: new Date(Date.now() - 5 * DAY) }));
-    await new GameEconomyService(p, cfg()).checkIn('u1');
+    await new GameEconomyService(p, cfg(), sp()).checkIn('u1');
     const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
     expect(upd.brokenStreakDays).toBe(5);
     expect(upd.brokenStreakAt).toBeInstanceOf(Date);
@@ -77,7 +105,7 @@ describe('GameEconomyService.checkIn — ghi nhận chuỗi đã mất (streak r
 
   it('reset khi streakDays trước đó = 1 (chưa từng có chuỗi thật) → KHÔNG ghi broken streak', async () => {
     const p = prisma(prof({ streakDays: 1, streakFreezes: 0, lastCheckInAt: new Date(Date.now() - 5 * DAY) }));
-    await new GameEconomyService(p, cfg()).checkIn('u1');
+    await new GameEconomyService(p, cfg(), sp()).checkIn('u1');
     const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
     expect(upd.brokenStreakDays).toBe(0);
     expect(upd.brokenStreakAt).toBeNull();
@@ -88,7 +116,7 @@ describe('GameEconomyService.checkIn — ghi nhận chuỗi đã mất (streak r
       streakDays: 3, streakFreezes: 0, lastCheckInAt: new Date(Date.now() - DAY),
       brokenStreakDays: 7, brokenStreakAt: new Date(),
     }));
-    await new GameEconomyService(p, cfg()).checkIn('u1');
+    await new GameEconomyService(p, cfg(), sp()).checkIn('u1');
     const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
     expect(upd.brokenStreakDays).toBe(0);
     expect(upd.brokenStreakAt).toBeNull();
@@ -99,7 +127,7 @@ describe('GameEconomyService.checkIn — ghi nhận chuỗi đã mất (streak r
       streakDays: 3, streakFreezes: 1, lastCheckInAt: new Date(Date.now() - 2 * DAY),
       brokenStreakDays: 7, brokenStreakAt: new Date(),
     }));
-    await new GameEconomyService(p, cfg()).checkIn('u1');
+    await new GameEconomyService(p, cfg(), sp()).checkIn('u1');
     const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
     expect(upd.brokenStreakDays).toBe(0);
     expect(upd.brokenStreakAt).toBeNull();
@@ -109,7 +137,7 @@ describe('GameEconomyService.checkIn — ghi nhận chuỗi đã mất (streak r
 describe('GameEconomyService.repairStreak', () => {
   it('không có chuỗi đã mất → BadRequest', async () => {
     const p = prisma(prof({ brokenStreakDays: 0, brokenStreakAt: null }));
-    await expect(new GameEconomyService(p, cfg()).repairStreak('u1'))
+    await expect(new GameEconomyService(p, cfg(), sp()).repairStreak('u1'))
       .rejects.toMatchObject({ message: 'Không có chuỗi nào để hồi sinh.' });
   });
 
@@ -117,7 +145,7 @@ describe('GameEconomyService.repairStreak', () => {
     const p = prisma(prof({
       brokenStreakDays: 5, brokenStreakAt: new Date(Date.now() - 49 * 3600 * 1000),
     }));
-    await expect(new GameEconomyService(p, cfg({ 'game.streak_repair_window_hours': 48 })).repairStreak('u1'))
+    await expect(new GameEconomyService(p, cfg({ 'game.streak_repair_window_hours': 48 }), sp()).repairStreak('u1'))
       .rejects.toMatchObject({ message: 'Đã quá hạn hồi sinh chuỗi 🔥' });
   });
 
@@ -126,14 +154,14 @@ describe('GameEconomyService.repairStreak', () => {
       brokenStreakDays: 5, brokenStreakAt: new Date(Date.now() - DAY),
       lastStreakRepairAt: new Date(Date.now() - 10 * DAY),
     }));
-    await expect(new GameEconomyService(p, cfg({ 'game.streak_repair_cooldown_days': 30 })).repairStreak('u1'))
+    await expect(new GameEconomyService(p, cfg({ 'game.streak_repair_cooldown_days': 30 }), sp()).repairStreak('u1'))
       .rejects.toMatchObject({ message: 'Bạn đã hồi sinh chuỗi gần đây, hãy thử lại sau 🌿' });
   });
 
   it('không đủ 💧 (updateMany count=0) → BadRequest kèm giá tiền', async () => {
     const p = prisma(prof({ brokenStreakDays: 5, brokenStreakAt: new Date(Date.now() - DAY), totalSeeds: 10 }));
     (p.gameProfile.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
-    await expect(new GameEconomyService(p, cfg({ 'game.streak_repair_cost': 150 })).repairStreak('u1'))
+    await expect(new GameEconomyService(p, cfg({ 'game.streak_repair_cost': 150 }), sp()).repairStreak('u1'))
       .rejects.toMatchObject({ message: 'Cần 150 💧 để hồi sinh chuỗi.' });
   });
 
@@ -144,7 +172,7 @@ describe('GameEconomyService.repairStreak', () => {
     (p.gameProfile.findUnique as jest.Mock)
       .mockResolvedValueOnce(prof({ brokenStreakDays: 5, brokenStreakAt: brokenAt, totalSeeds: 200, longestStreak: 5 })) // ensure()
       .mockResolvedValueOnce({ ...prof(), streakDays: 6, totalSeeds: 50, brokenStreakDays: 0, brokenStreakAt: null }); // post-update
-    const r = await new GameEconomyService(p, cfg({ 'game.streak_repair_cost': 150 })).repairStreak('u1');
+    const r = await new GameEconomyService(p, cfg({ 'game.streak_repair_cost': 150 }), sp()).repairStreak('u1');
     expect(r).toEqual({ repaired: true, streakDays: 6, totalSeeds: 50 });
     const call = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0];
     expect(call.where).toMatchObject({ userId: 'u1', totalSeeds: { gte: 150 }, brokenStreakAt: { not: null } });
@@ -162,12 +190,12 @@ describe('GameEconomyService.repairStreak', () => {
 describe('GameEconomyService.collectDew', () => {
   it('lần đầu trong ngày → +💧 và set lastDewAt', async () => {
     const p = prisma(prof({ lastDewAt: null }));
-    const r = await new GameEconomyService(p, cfg({ 'game.dew_seeds': 15 })).collectDew('u1');
+    const r = await new GameEconomyService(p, cfg({ 'game.dew_seeds': 15 }), sp()).collectDew('u1');
     expect(r.seedsEarned).toBe(15);
   });
   it('lần 2 trong ngày → BadRequest', async () => {
     const p = prisma(prof({ lastDewAt: new Date() }));
-    await expect(new GameEconomyService(p, cfg()).collectDew('u1')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(new GameEconomyService(p, cfg(), sp()).collectDew('u1')).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 
@@ -180,13 +208,13 @@ describe('GameEconomyService.buyStreakFreeze', () => {
     (p.gameProfile.findUnique as jest.Mock)
       .mockResolvedValueOnce(profile)   // ensure()
       .mockResolvedValueOnce({ ...profile, streakFreezes: 1, totalSeeds: 120 }); // post-update
-    const r = await new GameEconomyService(p, cfg({ 'game.streak_freeze_cost': 80 })).buyStreakFreeze('u1');
+    const r = await new GameEconomyService(p, cfg({ 'game.streak_freeze_cost': 80 }), sp()).buyStreakFreeze('u1');
     expect(r.streakFreezes).toBeGreaterThanOrEqual(1);
   });
   it('không đủ 💧 → BadRequest', async () => {
     const p = prisma(prof({ totalSeeds: 10 }));
     (p.gameProfile.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
-    await expect(new GameEconomyService(p, cfg({ 'game.streak_freeze_cost': 80 })).buyStreakFreeze('u1'))
+    await expect(new GameEconomyService(p, cfg({ 'game.streak_freeze_cost': 80 }), sp()).buyStreakFreeze('u1'))
       .rejects.toBeInstanceOf(BadRequestException);
   });
 });
