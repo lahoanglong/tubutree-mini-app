@@ -135,4 +135,68 @@ export class FlashSaleService {
       data: { quantity: { decrement: qty } },
     });
   }
+
+  /** Tạo đợt flash sale mới (admin). */
+  async createSale(adminId: string, dto: { title: string; startAt: string; endAt: string }) {
+    const startAt = new Date(dto.startAt),
+      endAt = new Date(dto.endAt);
+    if (!(startAt < endAt)) throw new BadRequestException('startAt phải trước endAt.');
+    return this.prisma.flashSale.create({ data: { title: dto.title, startAt, endAt, createdBy: adminId } });
+  }
+
+  /** Cập nhật đợt flash sale (admin). */
+  async updateSale(id: string, dto: { title?: string; startAt?: string; endAt?: string; isActive?: boolean }) {
+    return this.prisma.flashSale.update({
+      where: { id },
+      data: {
+        title: dto.title,
+        startAt: dto.startAt ? new Date(dto.startAt) : undefined,
+        endAt: dto.endAt ? new Date(dto.endAt) : undefined,
+        isActive: dto.isActive,
+      },
+    });
+  }
+
+  /** Danh sách toàn bộ đợt flash sale kèm item (admin). */
+  async listSales() {
+    return this.prisma.flashSale.findMany({
+      orderBy: { startAt: 'desc' },
+      include: {
+        items: {
+          select: { id: true, variationId: true, flashPrice: true, quota: true, soldCount: true, perUserLimit: true },
+        },
+      },
+    });
+  }
+
+  /**
+   * Thêm variation vào đợt flash sale (admin). Validate:
+   *  - variation tồn tại; flashPrice < retailPrice (kèm % giảm tối thiểu theo config).
+   *  - quota không vượt tồn kho.
+   *  - variation chưa tham gia đợt flash active/tương lai khác.
+   */
+  async addItem(saleId: string, dto: { variationId: string; flashPrice: number; quota: number; perUserLimit?: number }) {
+    const variation = await this.prisma.variation.findUnique({ where: { id: dto.variationId } });
+    if (!variation) throw new BadRequestException('Variation không tồn tại.');
+    if (dto.flashPrice >= variation.retailPrice) throw new BadRequestException('Giá flash phải thấp hơn giá bán lẻ.');
+    const minPct = await this.config.get<number>('flashsale.min_discount_pct', 0);
+    if (minPct > 0 && dto.flashPrice > variation.retailPrice * (1 - minPct)) {
+      throw new BadRequestException(`Mức giảm phải ≥ ${Math.round(minPct * 100)}%.`);
+    }
+    if (dto.quota > variation.stock) throw new BadRequestException('Quota vượt tồn kho.');
+    const clash = await this.prisma.flashSaleItem.findFirst({
+      where: { variationId: dto.variationId, flashSale: { endAt: { gt: new Date() } } },
+    });
+    if (clash) throw new BadRequestException('Sản phẩm đã có trong đợt flash khác.');
+    const perUserLimit = dto.perUserLimit ?? (await this.config.get<number>('flashsale.default_per_user_limit', 5));
+    return this.prisma.flashSaleItem.create({
+      data: { flashSaleId: saleId, variationId: dto.variationId, flashPrice: dto.flashPrice, quota: dto.quota, perUserLimit },
+    });
+  }
+
+  /** Xoá item khỏi đợt flash sale (admin). */
+  async removeItem(itemId: string) {
+    await this.prisma.flashSaleItem.delete({ where: { id: itemId } });
+    return { ok: true };
+  }
 }

@@ -121,3 +121,32 @@ describe('FlashSaleService.restore', () => {
     );
   });
 });
+
+describe('FlashSaleService.addItem (validate)', () => {
+  const base = () => ({
+    variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', retailPrice: 100000, stock: 10 }) },
+    flashSaleItem: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'fi1' }) },
+  });
+  it('flashPrice >= retailPrice → reject', async () => {
+    const prisma = base() as any;
+    await expect(new FlashSaleService(prisma, config).addItem('s1', { variationId: 'v1', flashPrice: 120000, quota: 5 }))
+      .rejects.toThrow('Giá flash phải thấp hơn giá bán lẻ.');
+  });
+  it('quota > stock → reject', async () => {
+    const prisma = base() as any;
+    await expect(new FlashSaleService(prisma, config).addItem('s1', { variationId: 'v1', flashPrice: 80000, quota: 999 }))
+      .rejects.toThrow('Quota vượt tồn kho.');
+  });
+  it('variation đã có flash active khác → reject', async () => {
+    const prisma = base() as any;
+    prisma.flashSaleItem.findFirst.mockResolvedValue({ id: 'other' });
+    await expect(new FlashSaleService(prisma, config).addItem('s1', { variationId: 'v1', flashPrice: 80000, quota: 5 }))
+      .rejects.toThrow('Sản phẩm đã có trong đợt flash khác.');
+  });
+  it('hợp lệ → tạo item với perUserLimit default', async () => {
+    const prisma = base() as any;
+    const r = await new FlashSaleService(prisma, config).addItem('s1', { variationId: 'v1', flashPrice: 80000, quota: 5 });
+    expect(r).toEqual({ id: 'fi1' });
+    expect(prisma.flashSaleItem.create).toHaveBeenCalled();
+  });
+});
