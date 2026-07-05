@@ -632,13 +632,16 @@ function FlashSalesTab() {
 function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-flash-sales'] });
+  const [rowErr, setRowErr] = useState<string | null>(null);
   const toggleActive = useMutation({
     mutationFn: () => updateFlashSale(sale.id, { isActive: !sale.isActive }),
-    onSuccess: refresh,
+    onSuccess: () => { setRowErr(null); refresh(); },
+    onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
   });
   const delItem = useMutation({
     mutationFn: (itemId: string) => deleteFlashSaleItem(itemId),
-    onSuccess: refresh,
+    onSuccess: () => { setRowErr(null); refresh(); },
+    onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
   });
   const [item, setItem] = useState({ variationId: '', flashPrice: 0, quota: 0, perUserLimit: '' });
   const [itemErr, setItemErr] = useState<string | null>(null);
@@ -676,6 +679,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
           {sale.isActive ? 'Tắt' : 'Bật'}
         </button>
       </div>
+      {rowErr && <p className="mt-1 text-sm text-red-600">{rowErr}</p>}
 
       <div className="mt-3 border-t border-neutral-100 pt-3">
         <div className="mb-1 text-sm font-medium">Sản phẩm trong đợt ({sale.items.length})</div>

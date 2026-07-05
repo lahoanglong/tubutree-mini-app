@@ -30,27 +30,10 @@ import { formatVnd, formatSold } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
+import { useCountdown } from '../hooks/use-countdown';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
-
-/** Đếm ngược tới `target` (ISO string), tick mỗi 30s — đủ mượt cho badge giờ vàng, không tốn pin. */
-function useTimeTo(target: string | null): string {
-  const compute = () => {
-    if (!target) return '';
-    const ms = Math.max(0, new Date(target).getTime() - Date.now());
-    const h = Math.floor(ms / 3_600_000);
-    const m = Math.floor((ms % 3_600_000) / 60_000);
-    return `${h}h ${m.toString().padStart(2, '0')}m`;
-  };
-  const [label, setLabel] = useState(compute);
-  useEffect(() => {
-    const id = setInterval(() => setLabel(compute()), 30_000);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target]);
-  return label;
-}
 
 /** Nhãn ngắn cho voucher hiển thị ở PDP. */
 function couponLabel(c: CouponDTO): string {
@@ -107,7 +90,11 @@ export default function ProductDetailPage() {
     enabled: !!slug,
   });
   // Cùng queryKey với FlashSale (trang chủ) → React Query dedupe nếu đã cache sẵn.
-  const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales });
+  const flashQ = useQuery({
+    queryKey: ['flash-sales', 'active'],
+    queryFn: fetchActiveFlashSales,
+    refetchInterval: 60_000,
+  });
 
   // Mặc định chọn phân loại đầu tiên CÒN HÀNG (không phải đầu danh sách).
   const variations = product.data?.variations ?? [];
@@ -122,7 +109,7 @@ export default function ProductDetailPage() {
 
   // Flash sale đang chạy cho ĐÚNG phân loại đang chọn (BE re-resolve giá thật lúc thêm giỏ/checkout).
   const flashItem = selected ? (flashQ.data ?? []).find((f) => f.variationId === selected.id) : undefined;
-  const flashLeft = useTimeTo(flashItem?.endAt ?? null);
+  const flashLeft = useCountdown(flashItem?.endAt ?? null);
 
   // Đổi phân loại → kẹp lại số lượng theo tồn kho mới (chỉ phụ thuộc id/stock, không phải ref).
   useEffect(() => {
@@ -176,11 +163,13 @@ export default function ProductDetailPage() {
   }
 
   const p = product.data;
-  const flashPrice = flashItem?.flashPrice ?? null;
+  // Flash không bao giờ tính cao hơn giá đang niêm yết — khớp BE (min(flashPrice, giá chuẩn)).
   const baseSelectedPrice = selected?.salePrice ?? selected?.retailPrice ?? p.basePrice;
-  const price = flashPrice ?? baseSelectedPrice;
+  const price = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
   const originalPrice = selected ? selected.retailPrice : p.basePrice;
   const hasSale = price < originalPrice;
+  // % badge tính từ giá THỰC hiển thị (price/originalPrice) — không dùng flashItem.retailPrice (snapshot cũ).
+  const flashPct = originalPrice > 0 ? Math.round((1 - price / originalPrice) * 100) : 0;
   const inStock = (selected?.stock ?? 0) > 0;
   const lowStock = inStock && (selected?.stock ?? 0) <= LOW_STOCK_THRESHOLD;
   const cartCount = cart.data?.itemCount ?? 0;
@@ -293,7 +282,7 @@ export default function ProductDetailPage() {
                 borderRadius: 'var(--radius-full)',
               }}
             >
-              -{Math.round((1 - flashItem.flashPrice / flashItem.retailPrice) * 100)}%
+              -{flashPct}%
             </Text>
             <Text
               size="xSmall"

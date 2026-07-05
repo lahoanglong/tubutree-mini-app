@@ -387,7 +387,7 @@ function CartLineRow({
             >
               {vi.flashSale.badge}
             </span>
-            {line.soldPct != null && (
+            {line.soldPct != null && Number.isFinite(line.soldPct) && (
               <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
                 {vi.flashSale.soldPct(line.soldPct)}
               </Text>

@@ -1,33 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Box, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { fetchActiveFlashSales } from '../services/shop-api';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
-
-/**
- * Đếm ngược ÊM đến một mốc thời gian (giờ:phút) — thoả màn design #76 "đếm ngược realtime"
- * NHƯNG giữ tông calm theo Design Brief §3.2 (không nhấp nháy giây/FOMO).
- * Cập nhật mỗi 30s, hiển thị "Xh Ym".
- */
-function useTimeTo(target: Date): string {
-  const compute = () => {
-    const now = new Date();
-    const ms = Math.max(0, target.getTime() - now.getTime());
-    const h = Math.floor(ms / 3_600_000);
-    const m = Math.floor((ms % 3_600_000) / 60_000);
-    return `${h}h ${m.toString().padStart(2, '0')}m`;
-  };
-  const [label, setLabel] = useState(compute);
-  useEffect(() => {
-    setLabel(compute());
-    const id = setInterval(() => setLabel(compute()), 30_000);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.getTime()]);
-  return label;
-}
+import { useCountdown } from '../hooks/use-countdown';
 
 /**
  * Ưu đãi giờ vàng — flash sale thật từ backend. Countdown êm đến mốc kết thúc sớm nhất.
@@ -38,16 +16,18 @@ export function FlashSale() {
   const q = useQuery({
     queryKey: ['flash-sales', 'active'],
     queryFn: fetchActiveFlashSales,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 
   const items = q.data ?? [];
 
   const soonestEndAt = useMemo(() => {
-    if (items.length === 0) return new Date();
+    if (items.length === 0) return null;
     return new Date(Math.min(...items.map((it) => new Date(it.endAt).getTime())));
   }, [items]);
 
-  const timeLeft = useTimeTo(soonestEndAt);
+  const timeLeft = useCountdown(soonestEndAt);
 
   if (q.isLoading || items.length === 0) return null;
 
@@ -77,7 +57,7 @@ export function FlashSale() {
         style={{ display: 'flex', gap: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
       >
         {items.map((item) => {
-          const pct = Math.round((1 - item.flashPrice / item.retailPrice) * 100);
+          const pct = item.retailPrice > 0 ? Math.round((1 - item.flashPrice / item.retailPrice) * 100) : 0;
           const soldPct = item.quota > 0 ? Math.round((item.soldCount / item.quota) * 100) : 0;
           return (
             <Box
