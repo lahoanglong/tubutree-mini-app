@@ -18,9 +18,12 @@ export class CoinsService {
     private readonly config: SystemConfigService,
   ) {}
 
-  /** Tổng quan xu: số dư, lịch sử gần nhất, thống kê giới thiệu (số bạn thành công + xu kiếm được). */
+  /**
+   * Tổng quan xu: số dư, lịch sử gần nhất, thống kê giới thiệu (số bạn thành công + xu kiếm
+   * được) và tiến độ mốc thưởng thêm (referralMilestones + nextMilestone sắp tới).
+   */
   async getOverview(userId: string) {
-    const [user, transactions, referralAgg, referralCount] = await Promise.all([
+    const [user, transactions, referralAgg, referralCount, milestones] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({
         where: { id: userId },
         select: { coinsBalance: true, referralCode: true },
@@ -38,12 +41,17 @@ export class CoinsService {
       this.prisma.coinTransaction.count({
         where: { userId, reason: { startsWith: 'REFERRAL_CASHBACK:' } },
       }),
+      this.config.get<{ count: number; bonus: number }[]>('coins.referral_milestones', []),
     ]);
+    const sortedMilestones = [...milestones].sort((a, b) => a.count - b.count);
+    const nextMilestone = sortedMilestones.find((m) => m.count > referralCount) ?? null;
     return {
       coinsBalance: user.coinsBalance,
       referralCode: user.referralCode,
       referralEarned: referralAgg._sum.delta ?? 0,
       referralSuccessCount: referralCount,
+      referralMilestones: sortedMilestones,
+      nextMilestone,
       transactions,
     };
   }
@@ -116,5 +124,24 @@ export class CoinsService {
     const refereeReward = await this.config.get<number>('coins.referee_reward', 5000);
     await this.grantCoins(referrerId, referrerReward, `REFERRAL_CASHBACK:${refereeId}`, 'REFERRAL', refereeId);
     await this.grantCoins(refereeId, refereeReward, `REFERRED_CASHBACK:${refereeId}`, 'REFERRAL', refereeId);
+    await this.awardReferralMilestones(referrerId);
+  }
+
+  /**
+   * Thưởng thêm khi số bạn giới thiệu thành công (cộng dồn) của referrer chạm mốc cấu hình
+   * (coins.referral_milestones). Reason nhúng referrerId + số mốc → globally unique, cùng
+   * partial unique index (reason WHERE refType='REFERRAL') đảm bảo mỗi mốc chỉ thưởng 1 lần.
+   */
+  private async awardReferralMilestones(referrerId: string): Promise<void> {
+    const milestones = await this.config.get<{ count: number; bonus: number }[]>('coins.referral_milestones', []);
+    if (!milestones.length) return;
+    const successCount = await this.prisma.coinTransaction.count({
+      where: { userId: referrerId, reason: { startsWith: 'REFERRAL_CASHBACK:' } },
+    });
+    for (const m of milestones) {
+      if (successCount >= m.count && m.bonus > 0) {
+        await this.grantCoins(referrerId, m.bonus, `REFERRAL_MILESTONE:${referrerId}:${m.count}`, 'REFERRAL', referrerId);
+      }
+    }
   }
 }

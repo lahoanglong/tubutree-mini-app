@@ -52,6 +52,16 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'wallet.withdraw_fee', value: 3000, category: 'wallet', description: 'Phí chuyển khoản ngân hàng/lần' },
   { key: 'coins.referrer_reward', value: 5000, category: 'coins', description: 'Xu thưởng người giới thiệu (mỗi bạn có cashback đầu)' },
   { key: 'coins.referee_reward', value: 5000, category: 'coins', description: 'Xu thưởng người được mời' },
+  {
+    key: 'coins.referral_milestones',
+    value: [
+      { count: 3, bonus: 20000 },
+      { count: 5, bonus: 40000 },
+      { count: 10, bonus: 100000 },
+    ],
+    category: 'coins',
+    description: 'Mốc số bạn giới thiệu thành công → thưởng thêm xu (1 lần/mốc)',
+  },
   { key: 'game.xu_per_seed', value: 1, category: 'game', description: 'Giá mua nước: xu / 1 giọt' },
   { key: 'game.tree_xu_price', value: 50000, category: 'game', description: 'Giá mua 1 cây thật bằng xu' },
 
