@@ -51,6 +51,7 @@ const WalletPage = lazy(() => import('../pages/wallet'));
 const AddressesPage = lazy(() => import('../pages/addresses'));
 const NotificationsPage = lazy(() => import('../pages/notifications'));
 const AffiliatePage = lazy(() => import('../pages/affiliate'));
+const AcademyPage = lazy(() => import('../pages/academy'));
 const CashbackPage = lazy(() => import('../pages/cashback'));
 const DealerPage = lazy(() => import('../pages/dealer'));
 const AboutPage = lazy(() => import('../pages/about'));
@@ -167,6 +168,7 @@ export default function MyApp() {
                 <Route path="/addresses" element={<AddressesPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/affiliate" element={<AffiliatePage />} />
+                <Route path="/academy" element={<AcademyPage />} />
                 <Route path="/cashback" element={<CashbackPage />} />
                 <Route path="/dealer" element={<DealerPage />} />
                 <Route path="/about" element={<AboutPage />} />

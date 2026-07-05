@@ -39,15 +39,25 @@ import {
   deleteFaq,
   getContentKit,
   saveContentKit,
+  listAcademyCourses,
+  createAcademyCourse,
+  updateAcademyCourse,
+  deleteAcademyCourse,
+  addAcademyLesson,
+  updateAcademyLesson,
+  deleteAcademyLesson,
   type ConfigRow,
   type AdminBrand,
   type BrandCert,
   type AdminFlashSale,
   type AdminFaq,
   type ContentKitFaq,
+  type AdminCourse,
+  type AdminLesson,
+  type AcademyLessonContentType,
 } from '@/lib/admin-client';
 
-type Tab = 'dealers' | 'orders' | 'users' | 'config' | 'coupons' | 'brands' | 'flashSales' | 'faqs' | 'contentKit';
+type Tab = 'dealers' | 'orders' | 'users' | 'config' | 'coupons' | 'brands' | 'flashSales' | 'faqs' | 'contentKit' | 'academy';
 const TABS: { k: Tab; label: string }[] = [
   { k: 'dealers', label: 'Đại lý' },
   { k: 'orders', label: 'Đơn hàng' },
@@ -58,6 +68,7 @@ const TABS: { k: Tab; label: string }[] = [
   { k: 'flashSales', label: 'Flash Sale' },
   { k: 'faqs', label: 'Câu hỏi thường gặp' },
   { k: 'contentKit', label: 'Content Kit CTV' },
+  { k: 'academy', label: 'Academy' },
 ];
 
 export default function AdminPage() {
@@ -101,6 +112,7 @@ export default function AdminPage() {
         {tab === 'flashSales' && <FlashSalesTab />}
         {tab === 'faqs' && <FaqTab />}
         {tab === 'contentKit' && <ContentKitTab />}
+        {tab === 'academy' && <AcademyTab />}
       </div>
     </main>
   );
@@ -1015,6 +1027,299 @@ function ContentKitEditor({
         </button>
         {msg && <span className={`ml-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
       </div>
+    </div>
+  );
+}
+
+// ── CTV Academy (khoá học/bài học đào tạo CTV) ──
+function AcademyTab() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['admin-academy-courses'], queryFn: listAcademyCourses });
+  const [form, setForm] = useState({ title: '', description: '', coverUrl: '', sortOrder: 0 });
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const create = useMutation({
+    mutationFn: () =>
+      createAcademyCourse({
+        title: form.title.trim(),
+        description: form.description.trim() || undefined,
+        coverUrl: form.coverUrl.trim() || undefined,
+        sortOrder: Number(form.sortOrder) || 0,
+      }),
+    onSuccess: () => {
+      setForm({ title: '', description: '', coverUrl: '', sortOrder: 0 });
+      setMsg({ ok: true, text: 'Đã tạo khoá học!' });
+      void qc.invalidateQueries({ queryKey: ['admin-academy-courses'] });
+    },
+    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo khoá học' }),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-neutral-100 bg-white p-4">
+        <h3 className="mb-2 text-sm font-semibold">Tạo khoá học mới</h3>
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <input
+              placeholder="Tiêu đề khoá học"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm"
+            />
+            <input
+              type="number"
+              placeholder="Thứ tự"
+              value={form.sortOrder}
+              onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
+              className="w-28 rounded border border-neutral-200 px-3 py-2 text-sm"
+            />
+          </div>
+          <input
+            placeholder="Cover URL"
+            value={form.coverUrl}
+            onChange={(e) => setForm({ ...form, coverUrl: e.target.value })}
+            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+          />
+          <textarea
+            placeholder="Mô tả"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            rows={2}
+            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+          />
+          <button
+            onClick={() => { setMsg(null); create.mutate(); }}
+            disabled={!form.title.trim() || create.isPending}
+            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+          >
+            {create.isPending ? 'Đang tạo…' : 'Tạo khoá học'}
+          </button>
+        </div>
+        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+      </div>
+
+      <div className="space-y-3">
+        {q.data?.map((c) => <CourseRow key={c.id} course={c} />)}
+        {q.data?.length === 0 && <Empty>Chưa có khoá học nào. Tạo khoá đầu tiên ở trên.</Empty>}
+      </div>
+    </div>
+  );
+}
+
+function CourseRow({ course }: { course: AdminCourse }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-academy-courses'] });
+  const togglePublish = useMutation({
+    mutationFn: () => updateAcademyCourse(course.id, { isPublished: !course.isPublished }),
+    onSuccess: refresh,
+  });
+  const del = useMutation({
+    mutationFn: () => deleteAcademyCourse(course.id),
+    onSuccess: refresh,
+  });
+  const [f, setF] = useState({
+    title: course.title,
+    description: course.description ?? '',
+    coverUrl: course.coverUrl ?? '',
+    sortOrder: course.sortOrder,
+  });
+  const save = useMutation({
+    mutationFn: () =>
+      updateAcademyCourse(course.id, {
+        title: f.title.trim(),
+        description: f.description.trim() || undefined,
+        coverUrl: f.coverUrl.trim() || undefined,
+        sortOrder: Number(f.sortOrder) || 0,
+      }),
+    onSuccess: refresh,
+  });
+
+  const [lesson, setLesson] = useState<{
+    title: string;
+    contentType: AcademyLessonContentType;
+    videoUrl: string;
+    body: string;
+    sortOrder: number;
+  }>({ title: '', contentType: 'ARTICLE', videoUrl: '', body: '', sortOrder: 0 });
+  const addLesson = useMutation({
+    mutationFn: () =>
+      addAcademyLesson(course.id, {
+        title: lesson.title.trim(),
+        contentType: lesson.contentType,
+        videoUrl: lesson.contentType === 'VIDEO' ? lesson.videoUrl.trim() || undefined : undefined,
+        body: lesson.contentType === 'ARTICLE' ? lesson.body.trim() || undefined : undefined,
+        sortOrder: Number(lesson.sortOrder) || 0,
+      }),
+    onSuccess: () => {
+      setLesson({ title: '', contentType: 'ARTICLE', videoUrl: '', body: '', sortOrder: 0 });
+      refresh();
+    },
+  });
+
+  return (
+    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 font-medium">
+            {course.title}
+            <span className={`rounded-full px-2 py-0.5 text-xs text-white ${course.isPublished ? 'bg-green-600' : 'bg-neutral-400'}`}>
+              {course.isPublished ? 'Đã đăng' : 'Nháp'}
+            </span>
+          </div>
+          <div className="text-xs text-neutral-400">{course.lessons.length} bài học · thứ tự {course.sortOrder}</div>
+        </div>
+        <button onClick={() => setOpen((o) => !o)} className="text-sm text-green-700 underline">{open ? 'Thu gọn' : 'Quản lý'}</button>
+      </div>
+
+      {open && (
+        <div className="mt-3 space-y-4 border-t border-neutral-100 pt-3">
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => togglePublish.mutate()} disabled={togglePublish.isPending} className="rounded border border-neutral-200 px-3 py-1.5 text-sm">
+              {course.isPublished ? 'Chuyển về nháp' : 'Đăng (publish)'}
+            </button>
+            <button onClick={() => del.mutate()} disabled={del.isPending} className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600">
+              Xoá khoá học
+            </button>
+          </div>
+
+          <div className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-3">
+            <div className="mb-2 text-sm font-medium">Thông tin khoá học</div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
+              <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
+              <input placeholder="Cover URL" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm sm:col-span-2" />
+            </div>
+            <textarea placeholder="Mô tả" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} rows={2} className="mt-2 w-full rounded border border-neutral-200 px-2 py-1 text-sm" />
+            <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className="mt-2 rounded bg-green-600 px-4 py-1.5 text-sm text-white disabled:bg-neutral-300">
+              {save.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
+            </button>
+            {save.isSuccess && <span className="ml-2 text-sm text-green-700">Đã lưu ✓</span>}
+          </div>
+
+          <div>
+            <div className="mb-1 text-sm font-medium">Bài học ({course.lessons.length})</div>
+            <div className="space-y-1">
+              {course.lessons.map((l) => <LessonRow key={l.id} lesson={l} />)}
+              {course.lessons.length === 0 && <p className="text-xs text-neutral-400">Chưa có bài học nào.</p>}
+            </div>
+
+            <div className="mt-2 space-y-2 rounded border border-neutral-100 p-2">
+              <div className="flex flex-wrap gap-2">
+                <input
+                  placeholder="Tiêu đề bài học"
+                  value={lesson.title}
+                  onChange={(e) => setLesson({ ...lesson, title: e.target.value })}
+                  className="flex-1 rounded border border-neutral-200 px-2 py-1 text-sm"
+                />
+                <select
+                  value={lesson.contentType}
+                  onChange={(e) => setLesson({ ...lesson, contentType: e.target.value as AcademyLessonContentType })}
+                  className="rounded border border-neutral-200 px-2 py-1 text-sm"
+                >
+                  <option value="ARTICLE">Bài viết</option>
+                  <option value="VIDEO">Video</option>
+                </select>
+                <input
+                  type="number"
+                  placeholder="Thứ tự"
+                  value={lesson.sortOrder}
+                  onChange={(e) => setLesson({ ...lesson, sortOrder: Number(e.target.value) })}
+                  className="w-24 rounded border border-neutral-200 px-2 py-1 text-sm"
+                />
+              </div>
+              {lesson.contentType === 'VIDEO' ? (
+                <input
+                  placeholder="Video URL"
+                  value={lesson.videoUrl}
+                  onChange={(e) => setLesson({ ...lesson, videoUrl: e.target.value })}
+                  className="w-full rounded border border-neutral-200 px-2 py-1 text-sm"
+                />
+              ) : (
+                <textarea
+                  placeholder="Nội dung bài viết"
+                  value={lesson.body}
+                  onChange={(e) => setLesson({ ...lesson, body: e.target.value })}
+                  rows={3}
+                  className="w-full rounded border border-neutral-200 px-2 py-1 text-sm"
+                />
+              )}
+              <button
+                onClick={() => addLesson.mutate()}
+                disabled={!lesson.title.trim() || addLesson.isPending}
+                className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
+              >
+                Thêm bài học
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LessonRow({ lesson }: { lesson: AdminLesson }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-academy-courses'] });
+  const del = useMutation({
+    mutationFn: () => deleteAcademyLesson(lesson.id),
+    onSuccess: refresh,
+  });
+  const [f, setF] = useState({
+    title: lesson.title,
+    contentType: lesson.contentType,
+    videoUrl: lesson.videoUrl ?? '',
+    body: lesson.body ?? '',
+    sortOrder: lesson.sortOrder,
+  });
+  const save = useMutation({
+    mutationFn: () =>
+      updateAcademyLesson(lesson.id, {
+        title: f.title.trim(),
+        contentType: f.contentType,
+        videoUrl: f.contentType === 'VIDEO' ? f.videoUrl.trim() : undefined,
+        body: f.contentType === 'ARTICLE' ? f.body.trim() : undefined,
+        sortOrder: Number(f.sortOrder) || 0,
+      }),
+    onSuccess: () => { setOpen(false); refresh(); },
+  });
+
+  return (
+    <div className="rounded border border-neutral-100 px-2 py-1 text-sm">
+      <div className="flex items-center justify-between">
+        <span className="truncate">
+          [{lesson.contentType === 'VIDEO' ? 'Video' : 'Bài viết'}] {lesson.title} · thứ tự {lesson.sortOrder}
+        </span>
+        <div className="flex shrink-0 gap-2">
+          <button onClick={() => setOpen((o) => !o)} className="text-xs text-green-700 underline">{open ? 'Đóng' : 'Sửa'}</button>
+          <button onClick={() => del.mutate()} disabled={del.isPending} className="text-xs text-red-600 underline">Xoá</button>
+        </div>
+      </div>
+      {open && (
+        <div className="mt-2 space-y-2 border-t border-neutral-100 pt-2">
+          <div className="flex flex-wrap gap-2">
+            <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1" />
+            <select
+              value={f.contentType}
+              onChange={(e) => setF({ ...f, contentType: e.target.value as AcademyLessonContentType })}
+              className="rounded border border-neutral-200 px-2 py-1"
+            >
+              <option value="ARTICLE">Bài viết</option>
+              <option value="VIDEO">Video</option>
+            </select>
+            <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className="w-24 rounded border border-neutral-200 px-2 py-1" />
+          </div>
+          {f.contentType === 'VIDEO' ? (
+            <input placeholder="Video URL" value={f.videoUrl} onChange={(e) => setF({ ...f, videoUrl: e.target.value })} className="w-full rounded border border-neutral-200 px-2 py-1" />
+          ) : (
+            <textarea placeholder="Nội dung bài viết" value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} rows={3} className="w-full rounded border border-neutral-200 px-2 py-1" />
+          )}
+          <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className="rounded bg-green-600 px-3 py-1 text-white disabled:bg-neutral-300">
+            {save.isPending ? 'Đang lưu…' : 'Lưu'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
