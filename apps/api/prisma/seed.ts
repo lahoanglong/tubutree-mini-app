@@ -44,6 +44,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'cashback.min_withdraw_bank', value: 50000, category: 'cashback', description: 'Min rút STK (chung wallet với CTV)' },
   { key: 'cashback.tubu_wallet_multiplier', value: 1.5, category: 'cashback', description: 'x1.5 khi chuyển Ví Tubu' },
   { key: 'cashback.click_rate_limit_seconds', value: 30, category: 'cashback', description: '1 click/merchant/user/30s' },
+  { key: 'cashback.reconcile_lookback_days', value: 45, category: 'cashback', description: 'Reconcile cron kéo giao dịch từ provider trong N ngày gần nhất (phủ hold window + biên)' },
 
   // TubuXu (tiền tệ tiêu trong app) — Ví đổi sang xu ×1.2; rút Ví min 100k, phí 3k.
   { key: 'wallet.xu_convert_multiplier', value: 1.2, category: 'wallet', description: 'Đổi Ví → TubuXu nhận thêm 20%' },
@@ -582,9 +583,9 @@ const MISSIONS = [
 ];
 
 const CASHBACK_MERCHANTS = [
-  { id: 'cb-shopee', slug: 'shopee', name: 'Shopee', logoUrl: '', category: 'ecommerce', baseRate: new Prisma.Decimal(0.035), fullRate: new Prisma.Decimal(0.05), deeplinkTemplate: 'https://gostore.accesstrade.vn/deep_link/shopee?utm_content={{clickId}}' },
-  { id: 'cb-lazada', slug: 'lazada', name: 'Lazada', logoUrl: '', category: 'ecommerce', baseRate: new Prisma.Decimal(0.042), fullRate: new Prisma.Decimal(0.06), deeplinkTemplate: 'https://gostore.accesstrade.vn/deep_link/lazada?utm_content={{clickId}}' },
-  { id: 'cb-tiktok', slug: 'tiktokshop', name: 'TikTok Shop', logoUrl: '', category: 'ecommerce', baseRate: new Prisma.Decimal(0.049), fullRate: new Prisma.Decimal(0.07), deeplinkTemplate: 'https://gostore.accesstrade.vn/deep_link/tiktok?utm_content={{clickId}}' },
+  { id: 'cb-shopee', slug: 'shopee', provider: 'accesstrade', name: 'Shopee', logoUrl: '', category: 'ecommerce', baseRate: new Prisma.Decimal(0.035), fullRate: new Prisma.Decimal(0.05), deeplinkTemplate: 'https://gostore.accesstrade.vn/deep_link/shopee?utm_content={{clickId}}' },
+  { id: 'cb-lazada', slug: 'lazada', provider: 'accesstrade', name: 'Lazada', logoUrl: '', category: 'ecommerce', baseRate: new Prisma.Decimal(0.042), fullRate: new Prisma.Decimal(0.06), deeplinkTemplate: 'https://gostore.accesstrade.vn/deep_link/lazada?utm_content={{clickId}}' },
+  { id: 'cb-tiktok', slug: 'tiktokshop', provider: 'accesstrade', name: 'TikTok Shop', logoUrl: '', category: 'ecommerce', baseRate: new Prisma.Decimal(0.049), fullRate: new Prisma.Decimal(0.07), deeplinkTemplate: 'https://gostore.accesstrade.vn/deep_link/tiktok?utm_content={{clickId}}' },
 ];
 
 async function main() {

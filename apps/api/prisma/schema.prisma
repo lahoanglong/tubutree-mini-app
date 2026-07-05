@@ -879,6 +879,7 @@ model Payout {
 model CashbackMerchant {
   id               String          @id @default(cuid())
   slug             String          @unique
+  provider         String          @default("accesstrade")
   name             String
   logoUrl          String
   category         String
@@ -920,7 +921,8 @@ model CashbackTransaction {
   userId          String
   user            User           @relation(fields: [userId], references: [id])
   clickId         String?
-  merchantOrderId String         @unique
+  provider        String         @default("accesstrade")
+  merchantOrderId String
   orderAmount     Int
   commission      Int
   userReward      Int
@@ -929,6 +931,7 @@ model CashbackTransaction {
   confirmedAt     DateTime?
   paidAt          DateTime?
 
+  @@unique([provider, merchantOrderId])
   @@index([userId, status])
   @@map("cashback_transactions")
 }
