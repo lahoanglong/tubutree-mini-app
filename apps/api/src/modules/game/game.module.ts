@@ -9,6 +9,7 @@ import { GameCollectionService } from './game-collection.service';
 import { GameSeasonService } from './game-season.service';
 import { GameGiftService } from './game-gift.service';
 import { GameGardenService } from './game-garden.service';
+import { SeasonPassService } from './season-pass.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { FeedModule } from '../feed/feed.module';
@@ -26,6 +27,7 @@ import { FeedModule } from '../feed/feed.module';
     GameSeasonService,
     GameGiftService,
     GameGardenService,
+    SeasonPassService,
   ],
   exports: [GameService],
 })

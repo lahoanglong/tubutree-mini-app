@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { SeasonPassService } from './season-pass.service';
 import { DEFAULT_TREE_TYPE } from './game.constants';
 
 const DAY = 864e5;
@@ -10,6 +11,7 @@ export class GameEconomyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    private readonly seasonPass: SeasonPassService,
   ) {}
 
   private dayKey(d: Date): string {
@@ -110,6 +112,11 @@ export class GameEconomyService {
       },
     });
     if (res.count === 0) throw new BadRequestException('Hôm nay bạn đã điểm danh rồi 🌿');
+
+    // Hook Season Pass: cộng XP chặng mùa (side-effect an toàn, không ảnh hưởng streak math).
+    await this.seasonPass
+      .addXp(userId, await this.config.get<number>('seasonpass.checkin_xp', 10))
+      .catch(() => undefined);
 
     return { seedsEarned: seeds, pointsEarned: 0, streakDays, totalSeeds, streakFrozeUsed, bonusNote };
   }
