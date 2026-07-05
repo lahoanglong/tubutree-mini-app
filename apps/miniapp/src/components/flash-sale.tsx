@@ -1,65 +1,66 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { fetchProducts, type ProductCard as ProductCardType } from '../services/shop-api';
+import { fetchActiveFlashSales } from '../services/shop-api';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { vi } from '../i18n/vi';
 
 /**
- * Đếm ngược ÊM đến hết ngày (giờ:phút) — thoả màn design #76 "đếm ngược realtime"
+ * Đếm ngược ÊM đến một mốc thời gian (giờ:phút) — thoả màn design #76 "đếm ngược realtime"
  * NHƯNG giữ tông calm theo Design Brief §3.2 (không nhấp nháy giây/FOMO).
  * Cập nhật mỗi 30s, hiển thị "Xh Ym".
  */
-function useTimeToEndOfDay(): string {
+function useTimeTo(target: Date): string {
   const compute = () => {
     const now = new Date();
-    const end = new Date(now);
-    end.setHours(23, 59, 59, 999);
-    const ms = Math.max(0, end.getTime() - now.getTime());
+    const ms = Math.max(0, target.getTime() - now.getTime());
     const h = Math.floor(ms / 3_600_000);
     const m = Math.floor((ms % 3_600_000) / 60_000);
     return `${h}h ${m.toString().padStart(2, '0')}m`;
   };
   const [label, setLabel] = useState(compute);
   useEffect(() => {
+    setLabel(compute());
     const id = setInterval(() => setLabel(compute()), 30_000);
     return () => clearInterval(id);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.getTime()]);
   return label;
 }
 
 /**
- * Ưu đãi hôm nay — sản phẩm đang giảm giá thật. Countdown êm đến hết ngày.
+ * Ưu đãi giờ vàng — flash sale thật từ backend. Countdown êm đến mốc kết thúc sớm nhất.
  */
 export function FlashSale() {
   const navigate = useNavigate();
-  const timeLeft = useTimeToEndOfDay();
 
   const q = useQuery({
-    queryKey: ['products', 'flash-sale'],
-    queryFn: () => fetchProducts({ limit: 20 }),
+    queryKey: ['flash-sales', 'active'],
+    queryFn: fetchActiveFlashSales,
   });
 
-  const onSale = useMemo<ProductCardType[]>(
-    () =>
-      (q.data?.data ?? [])
-        .filter((p) => p.salePrice != null && p.salePrice < p.basePrice && p.inStock)
-        .slice(0, 10),
-    [q.data],
-  );
+  const items = q.data ?? [];
 
-  if (q.isLoading || onSale.length === 0) return null;
+  const soonestEndAt = useMemo(() => {
+    if (items.length === 0) return new Date();
+    return new Date(Math.min(...items.map((it) => new Date(it.endAt).getTime())));
+  }, [items]);
+
+  const timeLeft = useTimeTo(soonestEndAt);
+
+  if (q.isLoading || items.length === 0) return null;
 
   return (
     <Box mt={4}>
       <Box px={4} flex alignItems="center" justifyContent="space-between" mb={2}>
         <Text.Title className="t-h2" size="small" style={{ color: 'var(--clay-700)' }}>
-          🌿 Ưu đãi hôm nay
+          {vi.flashSale.sectionTitle}
         </Text.Title>
         <Text
           size="xSmall"
           bold
-          aria-label={`Kết thúc sau ${timeLeft}`}
+          aria-label={vi.flashSale.endsIn(timeLeft)}
           style={{
             color: 'var(--clay-700)',
             background: 'var(--clay-50)',
@@ -67,7 +68,7 @@ export function FlashSale() {
             borderRadius: 'var(--radius-full)',
           }}
         >
-          ⏳ Còn {timeLeft}
+          {vi.flashSale.endsIn(timeLeft)}
         </Text>
       </Box>
 
@@ -75,16 +76,16 @@ export function FlashSale() {
         px={4}
         style={{ display: 'flex', gap: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
       >
-        {onSale.map((p) => {
-          const price = p.salePrice!;
-          const pct = Math.round((1 - price / p.basePrice) * 100);
+        {items.map((item) => {
+          const pct = Math.round((1 - item.flashPrice / item.retailPrice) * 100);
+          const soldPct = item.quota > 0 ? Math.round((item.soldCount / item.quota) * 100) : 0;
           return (
             <Box
-              key={p.id}
+              key={item.itemId}
               className="tubu-press"
               onClick={() => {
                 haptic('light');
-                navigate(`/product/${p.slug}`);
+                navigate(`/product/${item.productSlug}`);
               }}
               style={{
                 flex: '0 0 132px',
@@ -95,10 +96,10 @@ export function FlashSale() {
               }}
             >
               <Box style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--neutral-100)' }}>
-                {p.thumbnail && (
+                {item.thumbnail && (
                   <img
-                    src={p.thumbnail}
-                    alt={p.name}
+                    src={item.thumbnail}
+                    alt={item.productName}
                     loading="lazy"
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                   />
@@ -130,13 +131,34 @@ export function FlashSale() {
                     minHeight: 32,
                   }}
                 >
-                  {p.name}
+                  {item.productName}
                 </Text>
-                <Text bold size="small" style={{ color: 'var(--clay-700)', marginTop: 2 }}>
-                  {formatVnd(price)}
+                <Text bold size="small" style={{ color: 'var(--primary-700)', marginTop: 2 }}>
+                  {formatVnd(item.flashPrice)}
                 </Text>
                 <Text size="xSmall" style={{ color: 'var(--neutral-400)', textDecoration: 'line-through' }}>
-                  {formatVnd(p.basePrice)}
+                  {formatVnd(item.retailPrice)}
+                </Text>
+                <Box
+                  mt={1}
+                  style={{
+                    height: 4,
+                    borderRadius: 'var(--radius-full)',
+                    background: 'var(--neutral-100)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Box
+                    style={{
+                      height: '100%',
+                      width: `${Math.min(100, soldPct)}%`,
+                      background: 'var(--clay-500)',
+                      borderRadius: 'var(--radius-full)',
+                    }}
+                  />
+                </Box>
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+                  {vi.flashSale.soldPct(soldPct)}
                 </Text>
               </Box>
             </Box>
