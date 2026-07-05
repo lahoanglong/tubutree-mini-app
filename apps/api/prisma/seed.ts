@@ -139,6 +139,11 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'eco.real_tree_cost_each', value: 50000, category: 'eco', description: 'Chi phí 1 cây thật (VND)' },
   { key: 'eco.real_tree_monthly_budget', value: 5000000, category: 'eco', description: 'Trần ngân sách trồng cây/tháng' },
 
+  // Remarketing — nhắc giỏ bỏ quên + voucher sắp hết hạn (cron RemarketingService).
+  { key: 'remarketing.cart_abandon_min_hours', value: 6, category: 'remarketing', description: 'Giỏ bỏ quên ít nhất N giờ mới nhắc' },
+  { key: 'remarketing.cart_abandon_max_hours', value: 72, category: 'remarketing', description: 'Không nhắc giỏ cũ quá N giờ' },
+  { key: 'remarketing.voucher_expiry_days', value: 3, category: 'remarketing', description: 'Nhắc voucher cá nhân sắp hết hạn trong N ngày tới' },
+
   // RBAC nhân sự (Phase A) — SĐT admin thật cấp qua hub/DB; giữ rỗng để không cấp nhầm.
   { key: 'rbac.admin_phones', value: [], category: 'rbac', description: 'Danh sách SĐT admin gán sẵn (tham chiếu; grant thực nằm ở role_grants)' },
 
@@ -581,6 +586,8 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-comm-expert', code: 'COMMUNITY_EXPERT_REPLIED', channel: 'INAPP', bodyTemplate: '🌿 Chuyên gia Tubu vừa trả lời câu hỏi "{{title}}" của bạn.' },
   { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm TubuXu thưởng.' },
   { id: 'nt-comm-approved', code: 'COMMUNITY_POST_APPROVED', channel: 'INAPP', bodyTemplate: '🌱 Bài viết của bạn đã được duyệt và hiển thị trong cộng đồng.' },
+  { id: 'nt-cart-abandon', code: 'CART_ABANDONED', channel: 'INAPP', bodyTemplate: '🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé.' },
+  { id: 'nt-voucher-expiring', code: 'VOUCHER_EXPIRING', channel: 'INAPP', bodyTemplate: '⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!' },
 ];
 
 const QUIZZES = [

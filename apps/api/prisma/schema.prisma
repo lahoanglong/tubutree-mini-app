@@ -615,12 +615,14 @@ model Category {
 // ============================================================
 
 model Cart {
-  id         String     @id @default(cuid())
-  userId     String     @unique
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items      CartItem[]
-  couponCode String?
-  updatedAt  DateTime   @updatedAt
+  id                String     @id @default(cuid())
+  userId            String     @unique
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items             CartItem[]
+  couponCode        String?
+  updatedAt         DateTime   @updatedAt
+  // Remarketing (nhắc giỏ bỏ quên): null/cũ hơn updatedAt = chưa nhắc cho lần bỏ quên này.
+  abandonRemindedAt DateTime?
 
   @@map("carts")
 }
@@ -798,6 +800,8 @@ model Coupon {
   scope        CouponScope
   scopeMeta    Json?
   redemptions  CouponRedemption[]
+  // Remarketing (nhắc voucher cá nhân sắp hết hạn): null = chưa nhắc.
+  remindedAt   DateTime?
 
   @@map("coupons")
 }
