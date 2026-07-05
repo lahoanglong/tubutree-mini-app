@@ -1,36 +1,22 @@
-import { Body, Controller, Get, Headers, Post, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Body, Controller, Get, Headers, Param, Post, UnauthorizedException } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
-import { timingSafeEqual } from 'node:crypto';
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CashbackService } from './cashback.service';
-import type { Env } from '../../config/env.validation';
+import { CashbackProviderRegistry } from './providers/cashback-provider.registry';
 
 class ClickDto {
   @IsString() merchantId!: string;
   @IsOptional() @IsString() productUrl?: string;
 }
 
-class PostbackDto {
-  @IsString() utm_content!: string;
-  @IsString() order_id!: string;
-  @IsInt() @Min(0) amount!: number;
-  @IsInt() @Min(0) commission!: number;
-  @IsString() status!: 'pending' | 'approved' | 'rejected';
-}
-
 @Controller()
 export class CashbackController {
-  private readonly webhookSecret: string;
-
   constructor(
     private readonly cashback: CashbackService,
-    config: ConfigService<Env, true>,
-  ) {
-    this.webhookSecret = config.get('ACCESSTRADE_WEBHOOK_SECRET', { infer: true });
-  }
+    private readonly registry: CashbackProviderRegistry,
+  ) {}
 
   @Public()
   @Get('cashback/merchants')
@@ -48,28 +34,32 @@ export class CashbackController {
     return this.cashback.listTransactions(userId);
   }
 
+  /** Webhook postback generic theo provider. Verify + parse do provider tự lo. */
+  @Public()
+  @SkipThrottle()
+  @Post('webhooks/cashback/:provider')
+  async webhook(
+    @Param('provider') providerKey: string,
+    @Body() body: Record<string, unknown>,
+    @Headers() headers: Record<string, string | undefined>,
+  ) {
+    const provider = this.registry.get(providerKey); // key lạ → NotFoundException
+    if (!provider.verifyWebhook(headers, body)) {
+      throw new UnauthorizedException('Webhook cashback không hợp lệ.');
+    }
+    const event = provider.parseWebhook(body);
+    if (!event) return { ok: false };
+    return this.cashback.ingest(event, provider.key);
+  }
+
+  /** Alias tương thích ngược (deprecated) — trỏ vào provider accesstrade. */
   @Public()
   @SkipThrottle()
   @Post('webhooks/accesstrade')
-  postback(@Body() dto: PostbackDto, @Headers('x-accesstrade-token') token?: string) {
-    // Verify shared-secret để chống tự forge postback (tự duyệt cashback giả).
-    // Fail-closed ở production: chưa cấu hình secret = từ chối ngay (không log secret).
-    if (!this.webhookSecret) {
-      if (process.env.NODE_ENV === 'production') {
-        throw new UnauthorizedException('Webhook chưa cấu hình bí mật ở production.');
-      }
-      // Dev/test: bỏ qua cho dễ thử nghiệm.
-    } else if (!this.tokenMatches(token)) {
-      throw new UnauthorizedException('Token webhook Accesstrade không hợp lệ.');
-    }
-    return this.cashback.handlePostback(dto);
-  }
-
-  /** So token chống timing-attack (độ dài khác → false ngay, không ném). */
-  private tokenMatches(token?: string): boolean {
-    if (!token) return false;
-    const a = Buffer.from(token, 'utf8');
-    const b = Buffer.from(this.webhookSecret, 'utf8');
-    return a.length === b.length && timingSafeEqual(a, b);
+  accesstradeWebhook(
+    @Body() body: Record<string, unknown>,
+    @Headers() headers: Record<string, string | undefined>,
+  ) {
+    return this.webhook('accesstrade', body, headers);
   }
 }
