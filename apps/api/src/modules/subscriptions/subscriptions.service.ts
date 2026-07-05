@@ -114,6 +114,18 @@ export class SubscriptionsService {
     return this.prisma.subscription.update({ where: { id }, data: { status, nextRunAt } });
   }
 
+  /**
+   * Save-flow: bỏ qua 1 kỳ giao kế tiếp mà KHÔNG hủy/tạm dừng lịch — đẩy
+   * nextRunAt thêm 1 chu kỳ tính từ nextRunAt hiện tại, giữ nguyên status ACTIVE.
+   */
+  async skipCycle(userId: string, id: string) {
+    const sub = await this.prisma.subscription.findUnique({ where: { id } });
+    if (!sub || sub.userId !== userId) throw new NotFoundException('Không tìm thấy lịch đặt định kỳ.');
+    if (sub.status !== 'ACTIVE') throw new BadRequestException('Chỉ bỏ qua kỳ khi lịch đang chạy.');
+    const nextRunAt = this.addWeeks(sub.nextRunAt, sub.intervalWeeks);
+    return this.prisma.subscription.update({ where: { id }, data: { nextRunAt } });
+  }
+
   /** Cron 3h sáng: xử lý các subscription đến hạn → tạo đơn COD + dời chu kỳ. */
   @Cron('0 3 * * *')
   async processDue(): Promise<void> {

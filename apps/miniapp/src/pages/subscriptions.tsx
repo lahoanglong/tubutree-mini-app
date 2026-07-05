@@ -1,8 +1,10 @@
-import { Box, Page, Text, Button, useNavigate, useSnackbar } from 'zmp-ui';
+import { useState } from 'react';
+import { Box, Page, Text, Button, Sheet, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getSubscriptions,
   setSubscriptionStatus,
+  skipSubscriptionCycle,
   type SubscriptionDTO,
 } from '../services/subscriptions-api';
 import { getErrorMessage } from '../services/api';
@@ -16,6 +18,7 @@ export default function SubscriptionsPage() {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const subsQ = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions });
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
 
   const statusMut = useMutation({
     mutationFn: ({ id, status }: { id: string; status: 'ACTIVE' | 'PAUSED' | 'CANCELLED' }) =>
@@ -26,6 +29,19 @@ export default function SubscriptionsPage() {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+
+  const skipMut = useMutation({
+    mutationFn: (id: string) => skipSubscriptionCycle(id),
+    onSuccess: () => {
+      haptic('light');
+      openSnackbar({ text: vi.subscriptions.skipOk, type: 'success' });
+      void qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      setCancelTarget(null);
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const targetSub = subsQ.data?.find((s) => s.id === cancelTarget) ?? null;
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
@@ -109,7 +125,7 @@ export default function SubscriptionsPage() {
                     bold
                     className="tubu-press"
                     style={{ color: 'var(--danger)' }}
-                    onClick={() => !statusMut.isPending && statusMut.mutate({ id: s.id, status: 'CANCELLED' })}
+                    onClick={() => !statusMut.isPending && setCancelTarget(s.id)}
                   >
                     Hủy
                   </Text>
@@ -130,6 +146,69 @@ export default function SubscriptionsPage() {
           </Button>
         </Box>
       )}
+
+      <Sheet visible={cancelTarget !== null} onClose={() => setCancelTarget(null)} autoHeight>
+        <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
+          <Text bold size="large">
+            {vi.subscriptions.saveTitle}
+          </Text>
+          <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
+            {vi.subscriptions.saveBody}
+          </Text>
+
+          <Button
+            fullWidth
+            loading={statusMut.isPending && statusMut.variables?.status === 'PAUSED'}
+            onClick={() =>
+              cancelTarget &&
+              statusMut.mutate(
+                { id: cancelTarget, status: 'PAUSED' },
+                { onSuccess: () => setCancelTarget(null) },
+              )
+            }
+            style={{ marginTop: 16, background: 'var(--leaf-600)' }}
+          >
+            {vi.subscriptions.pauseCta}
+          </Button>
+
+          {targetSub?.status === 'ACTIVE' ? (
+            <Button
+              fullWidth
+              variant="secondary"
+              loading={skipMut.isPending}
+              onClick={() => cancelTarget && skipMut.mutate(cancelTarget)}
+              style={{ marginTop: 10 }}
+            >
+              {vi.subscriptions.skipCta}
+            </Button>
+          ) : null}
+
+          <Text
+            size="small"
+            bold
+            className="tubu-press"
+            style={{ color: 'var(--danger)', textAlign: 'center', marginTop: 20 }}
+            onClick={() =>
+              cancelTarget &&
+              statusMut.mutate(
+                { id: cancelTarget, status: 'CANCELLED' },
+                { onSuccess: () => setCancelTarget(null) },
+              )
+            }
+          >
+            {vi.subscriptions.confirmCancelCta}
+          </Text>
+
+          <Text
+            size="small"
+            className="tubu-press"
+            style={{ color: 'var(--neutral-400)', textAlign: 'center', marginTop: 14 }}
+            onClick={() => setCancelTarget(null)}
+          >
+            {vi.common.close}
+          </Text>
+        </Box>
+      </Sheet>
     </Page>
   );
 }

@@ -31,4 +31,9 @@ export class SubscriptionsController {
   setStatus(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() dto: StatusDto) {
     return this.subs.setStatus(userId, id, dto.status);
   }
+
+  @Post(':id/skip')
+  skipCycle(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+    return this.subs.skipCycle(userId, id);
+  }
 }

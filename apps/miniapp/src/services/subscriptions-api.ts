@@ -26,3 +26,6 @@ export const createSubscription = (data: {
 
 export const setSubscriptionStatus = (id: string, status: 'ACTIVE' | 'PAUSED' | 'CANCELLED') =>
   api.post<SubscriptionDTO>(`/me/subscriptions/${id}/status`, { status }).then((r) => r.data);
+
+export const skipSubscriptionCycle = (id: string) =>
+  api.post<SubscriptionDTO>(`/me/subscriptions/${id}/skip`).then((r) => r.data);

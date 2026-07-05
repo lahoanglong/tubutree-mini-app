@@ -153,6 +153,44 @@ describe('SubscriptionsService.effectiveDiscountPct', () => {
   });
 });
 
+describe('SubscriptionsService.skipCycle', () => {
+  function makeSkip(sub: unknown, updateImpl?: jest.Mock) {
+    const update = updateImpl ?? jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data }));
+    const prisma = {
+      subscription: {
+        findUnique: jest.fn().mockResolvedValue(sub),
+        update,
+      },
+    } as unknown as PrismaService;
+    const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications);
+    return { svc, update };
+  }
+
+  it('sub ACTIVE → dời nextRunAt thêm 1 chu kỳ, giữ nguyên status', async () => {
+    const nextRunAt = new Date('2026-07-10T00:00:00.000Z');
+    const { svc, update } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt });
+    await svc.skipCycle('u1', 's1');
+    const data = update.mock.calls[0][0].data;
+    expect((data.nextRunAt as Date).getTime()).toBe(nextRunAt.getTime() + 4 * 7 * 864e5);
+    expect(data.status).toBeUndefined();
+  });
+
+  it('không tìm thấy lịch → NotFound', async () => {
+    const { svc } = makeSkip(null);
+    await expect(svc.skipCycle('u1', 's1')).rejects.toThrow('Không tìm thấy lịch đặt định kỳ.');
+  });
+
+  it('không phải chủ sở hữu → NotFound', async () => {
+    const { svc } = makeSkip({ id: 's1', userId: 'other', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: new Date() });
+    await expect(svc.skipCycle('u1', 's1')).rejects.toThrow('Không tìm thấy lịch đặt định kỳ.');
+  });
+
+  it.each(['PAUSED', 'CANCELLED'])('lịch đang %s (không ACTIVE) → BadRequest', async (status) => {
+    const { svc } = makeSkip({ id: 's1', userId: 'u1', status, intervalWeeks: 4, nextRunAt: new Date() });
+    await expect(svc.skipCycle('u1', 's1')).rejects.toThrow('Chỉ bỏ qua kỳ khi lịch đang chạy.');
+  });
+});
+
 describe('SubscriptionsService.list', () => {
   it('trả về effectiveDiscountPct theo số subscription ACTIVE của user', async () => {
     const tiers = [{ minActive: 1, pct: 0.12 }, { minActive: 3, pct: 0.14 }, { minActive: 5, pct: 0.15 }];
