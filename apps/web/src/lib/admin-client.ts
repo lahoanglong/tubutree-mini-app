@@ -225,3 +225,49 @@ export const updateFaq = (
   body: Partial<{ category: string; question: string; answer: string; sortOrder: number; isActive: boolean }>,
 ) => apiFetch<AdminFaq>(`/admin/faqs/${id}`, { method: 'PATCH', body });
 export const deleteFaq = (id: string) => apiFetch<{ ok: boolean }>(`/admin/faqs/${id}`, { method: 'DELETE' });
+
+// ── CTV Academy (khoá học/bài học đào tạo CTV) ──
+export type AcademyLessonContentType = 'VIDEO' | 'ARTICLE';
+export interface AdminLesson {
+  id: string;
+  courseId: string;
+  title: string;
+  contentType: AcademyLessonContentType;
+  videoUrl: string | null;
+  body: string | null;
+  sortOrder: number;
+}
+export interface AdminCourse {
+  id: string;
+  title: string;
+  description: string | null;
+  coverUrl: string | null;
+  sortOrder: number;
+  isPublished: boolean;
+  lessons: AdminLesson[];
+}
+
+export const listAcademyCourses = () => apiFetch<AdminCourse[]>('/admin/academy/courses');
+export const createAcademyCourse = (body: {
+  title: string;
+  description?: string;
+  coverUrl?: string;
+  sortOrder?: number;
+  isPublished?: boolean;
+}) => apiFetch<AdminCourse>('/admin/academy/courses', { method: 'POST', body });
+export const updateAcademyCourse = (
+  id: string,
+  body: Partial<{ title: string; description: string; coverUrl: string; sortOrder: number; isPublished: boolean }>,
+) => apiFetch<AdminCourse>(`/admin/academy/courses/${id}`, { method: 'PATCH', body });
+export const deleteAcademyCourse = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/admin/academy/courses/${id}`, { method: 'DELETE' });
+export const addAcademyLesson = (
+  courseId: string,
+  input: { title: string; contentType: AcademyLessonContentType; videoUrl?: string; body?: string; sortOrder?: number },
+) => apiFetch<AdminLesson>(`/admin/academy/courses/${courseId}/lessons`, { method: 'POST', body: input });
+export const updateAcademyLesson = (
+  id: string,
+  input: Partial<{ title: string; contentType: AcademyLessonContentType; videoUrl: string; body: string; sortOrder: number }>,
+) => apiFetch<AdminLesson>(`/admin/academy/lessons/${id}`, { method: 'PATCH', body: input });
+export const deleteAcademyLesson = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/admin/academy/lessons/${id}`, { method: 'DELETE' });

@@ -275,6 +275,15 @@ function Dashboard() {
         </Button>
       </Box>
 
+      <Box mx={4} mb={3}>
+        <Button fullWidth variant="secondary" onClick={() => navigate('/academy')}>
+          🎓 {vi.academy.entry}
+        </Button>
+        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4, textAlign: 'center' }}>
+          {vi.academy.entryHint}
+        </Text>
+      </Box>
+
       {/* Mã giới thiệu + chia sẻ */}
       <Section title="Mã giới thiệu của bạn">
         <Box

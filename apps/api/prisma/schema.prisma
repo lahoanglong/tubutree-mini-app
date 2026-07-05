@@ -1810,3 +1810,47 @@ model FaqEntry {
   @@index([isActive, sortOrder])
   @@map("faq_entries")
 }
+
+// ============================================================
+// 17. CTV Academy — khoá học/bài học đào tạo CTV + tiến độ học
+// ============================================================
+
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  coverUrl    String?
+  sortOrder   Int      @default(0)
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lessons     Lesson[]
+
+  @@index([isPublished, sortOrder])
+  @@map("courses")
+}
+
+model Lesson {
+  id          String   @id @default(cuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title       String
+  contentType String // VIDEO | ARTICLE
+  videoUrl    String?
+  body        String?  @db.Text
+  sortOrder   Int      @default(0)
+
+  @@index([courseId, sortOrder])
+  @@map("lessons")
+}
+
+model UserLessonProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  lessonId    String
+  completedAt DateTime @default(now())
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+  @@map("user_lesson_progress")
+}

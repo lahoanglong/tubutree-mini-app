@@ -404,6 +404,22 @@ export const vi = {
       claimOk: 'Đã nhận thưởng chặng mùa! 🎉',
     },
   },
+
+  academy: {
+    title: 'CTV Academy',
+    subtitle: 'Học kỹ năng bán hàng, làm CTV giỏi hơn mỗi ngày',
+    entry: 'CTV Academy',
+    entryHint: 'Khoá học đào tạo dành cho CTV',
+    empty: 'Chưa có khoá học nào',
+    emptyBody: 'Tubu sẽ sớm thêm khoá học đào tạo cho CTV.',
+    progress: (done: number, total: number) => `${done}/${total} bài đã học`,
+    completed: 'Đã hoàn thành ✓',
+    backToList: 'Danh sách khoá học',
+    openVideo: 'Mở video bài học',
+    markDone: 'Đánh dấu đã học',
+    markDoneOk: 'Đã đánh dấu hoàn thành bài học! 🎉',
+    alreadyDone: '✓ Đã học xong',
+  },
 } as const;
 
 export type ViStrings = typeof vi;
