@@ -311,6 +311,15 @@ export const vi = {
     entryFor: 'Dự thi',
     eventEnded: 'Đã kết thúc',
   },
+
+  game: {
+    streakRepair: {
+      title: (n: number) => `🔥 Bạn vừa mất chuỗi ${n} ngày`,
+      body: 'Hồi sinh ngay để giữ lại thành tích trước khi hết hạn.',
+      cta: (cost: number) => `Hồi sinh (${cost} 💧)`,
+      ok: 'Đã hồi sinh chuỗi! 🌿',
+    },
+  },
 } as const;
 
 export type ViStrings = typeof vi;
