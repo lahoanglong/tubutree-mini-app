@@ -9,6 +9,7 @@ import {
   getCart,
   addToCart,
   getPublicConfig,
+  fetchActiveFlashSales,
   type VariationDetail,
 } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
@@ -32,6 +33,24 @@ import { StorefrontContextBar } from '../components/storefront-context-bar';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
+
+/** Đếm ngược tới `target` (ISO string), tick mỗi 30s — đủ mượt cho badge giờ vàng, không tốn pin. */
+function useTimeTo(target: string | null): string {
+  const compute = () => {
+    if (!target) return '';
+    const ms = Math.max(0, new Date(target).getTime() - Date.now());
+    const h = Math.floor(ms / 3_600_000);
+    const m = Math.floor((ms % 3_600_000) / 60_000);
+    return `${h}h ${m.toString().padStart(2, '0')}m`;
+  };
+  const [label, setLabel] = useState(compute);
+  useEffect(() => {
+    const id = setInterval(() => setLabel(compute()), 30_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+  return label;
+}
 
 /** Nhãn ngắn cho voucher hiển thị ở PDP. */
 function couponLabel(c: CouponDTO): string {
@@ -87,6 +106,8 @@ export default function ProductDetailPage() {
     queryFn: () => fetchReviews(slug!),
     enabled: !!slug,
   });
+  // Cùng queryKey với FlashSale (trang chủ) → React Query dedupe nếu đã cache sẵn.
+  const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales });
 
   // Mặc định chọn phân loại đầu tiên CÒN HÀNG (không phải đầu danh sách).
   const variations = product.data?.variations ?? [];
@@ -98,6 +119,10 @@ export default function ProductDetailPage() {
       variations[0],
     [selectedId, variations],
   );
+
+  // Flash sale đang chạy cho ĐÚNG phân loại đang chọn (BE re-resolve giá thật lúc thêm giỏ/checkout).
+  const flashItem = selected ? (flashQ.data ?? []).find((f) => f.variationId === selected.id) : undefined;
+  const flashLeft = useTimeTo(flashItem?.endAt ?? null);
 
   // Đổi phân loại → kẹp lại số lượng theo tồn kho mới (chỉ phụ thuộc id/stock, không phải ref).
   useEffect(() => {
@@ -151,7 +176,9 @@ export default function ProductDetailPage() {
   }
 
   const p = product.data;
-  const price = selected?.salePrice ?? selected?.retailPrice ?? p.basePrice;
+  const flashPrice = flashItem?.flashPrice ?? null;
+  const baseSelectedPrice = selected?.salePrice ?? selected?.retailPrice ?? p.basePrice;
+  const price = flashPrice ?? baseSelectedPrice;
   const originalPrice = selected ? selected.retailPrice : p.basePrice;
   const hasSale = price < originalPrice;
   const inStock = (selected?.stock ?? 0) > 0;
@@ -252,6 +279,39 @@ export default function ProductDetailPage() {
             <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginLeft: 'auto' }}>{formatSold(p.sold)}</Text>
           )}
         </Box>
+
+        {/* Giờ vàng cho phân loại đang chọn — badge % + đếm ngược êm + đã bán bao nhiêu%. */}
+        {flashItem && (
+          <Box flex alignItems="center" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+            <Text
+              size="xSmall"
+              bold
+              style={{
+                background: 'var(--clay-500)',
+                color: '#fff',
+                padding: '2px 8px',
+                borderRadius: 'var(--radius-full)',
+              }}
+            >
+              -{Math.round((1 - flashItem.flashPrice / flashItem.retailPrice) * 100)}%
+            </Text>
+            <Text
+              size="xSmall"
+              bold
+              style={{
+                background: 'var(--clay-50)',
+                color: 'var(--clay-700)',
+                padding: '2px 10px',
+                borderRadius: 'var(--radius-full)',
+              }}
+            >
+              {vi.flashSale.endsIn(flashLeft)}
+            </Text>
+            <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+              {vi.flashSale.soldPct(flashItem.quota > 0 ? Math.round((flashItem.soldCount / flashItem.quota) * 100) : 0)}
+            </Text>
+          </Box>
+        )}
 
         {lowStock && (
           <Text size="xSmall" style={{ color: 'var(--clay-700)', marginTop: 4 }}>
