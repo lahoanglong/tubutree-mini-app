@@ -21,6 +21,7 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { GameModule } from './modules/game/game.module';
 import { FeedModule } from './modules/feed/feed.module';
 import { AiAdvisorModule } from './modules/ai-advisor/ai-advisor.module';
+import { FaqModule } from './modules/faq/faq.module';
 import { GroupBuyModule } from './modules/groupbuy/groupbuy.module';
 import { RefillModule } from './modules/refill/refill.module';
 import { BetaModule } from './modules/beta/beta.module';
@@ -66,6 +67,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     OrdersModule,
     GameModule,
     FeedModule,
+    FaqModule,
     AiAdvisorModule,
     GroupBuyModule,
     RefillModule,

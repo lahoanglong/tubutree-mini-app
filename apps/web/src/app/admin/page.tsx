@@ -33,13 +33,18 @@ import {
   updateFlashSale,
   addFlashSaleItem,
   deleteFlashSaleItem,
+  listFaqs,
+  createFaq,
+  updateFaq,
+  deleteFaq,
   type ConfigRow,
   type AdminBrand,
   type BrandCert,
   type AdminFlashSale,
+  type AdminFaq,
 } from '@/lib/admin-client';
 
-type Tab = 'dealers' | 'orders' | 'users' | 'config' | 'coupons' | 'brands' | 'flashSales';
+type Tab = 'dealers' | 'orders' | 'users' | 'config' | 'coupons' | 'brands' | 'flashSales' | 'faqs';
 const TABS: { k: Tab; label: string }[] = [
   { k: 'dealers', label: 'Đại lý' },
   { k: 'orders', label: 'Đơn hàng' },
@@ -48,6 +53,7 @@ const TABS: { k: Tab; label: string }[] = [
   { k: 'coupons', label: 'Voucher' },
   { k: 'brands', label: 'Nhãn hàng' },
   { k: 'flashSales', label: 'Flash Sale' },
+  { k: 'faqs', label: 'Câu hỏi thường gặp' },
 ];
 
 export default function AdminPage() {
@@ -89,6 +95,7 @@ export default function AdminPage() {
         {tab === 'coupons' && <CouponsTab />}
         {tab === 'brands' && <BrandsTab />}
         {tab === 'flashSales' && <FlashSalesTab />}
+        {tab === 'faqs' && <FaqTab />}
       </div>
     </main>
   );
@@ -707,6 +714,150 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
         <p className="mt-1 text-xs text-neutral-400">Variation ID là id của biến thể sản phẩm (lấy từ trang quản lý sản phẩm).</p>
         {itemErr && <p className="mt-1 text-sm text-red-600">{itemErr}</p>}
       </div>
+    </div>
+  );
+}
+
+// ── FAQ / câu trả lời nhanh (CSKH + nạp vào AI tư vấn) ──
+function FaqTab() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['admin-faqs'], queryFn: listFaqs });
+  const [form, setForm] = useState({ category: '', question: '', answer: '', sortOrder: 0 });
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const create = useMutation({
+    mutationFn: () =>
+      createFaq({
+        category: form.category.trim() || undefined,
+        question: form.question.trim(),
+        answer: form.answer.trim(),
+        sortOrder: Number(form.sortOrder) || 0,
+      }),
+    onSuccess: () => {
+      setForm({ category: '', question: '', answer: '', sortOrder: 0 });
+      setMsg({ ok: true, text: 'Đã thêm câu hỏi thường gặp!' });
+      void qc.invalidateQueries({ queryKey: ['admin-faqs'] });
+    },
+    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo câu hỏi thường gặp' }),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-neutral-100 bg-white p-4">
+        <h3 className="mb-2 text-sm font-semibold">Thêm câu hỏi thường gặp</h3>
+        <p className="mb-2 text-xs text-neutral-400">Nội dung này cũng được nạp vào ngữ cảnh của AI tư vấn để trả lời nhất quán.</p>
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <input
+              placeholder="Nhóm (vd Vận chuyển, Đổi trả)"
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              className="w-56 rounded border border-neutral-200 px-3 py-2 text-sm"
+            />
+            <input
+              type="number"
+              placeholder="Thứ tự hiển thị"
+              value={form.sortOrder}
+              onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
+              className="w-32 rounded border border-neutral-200 px-3 py-2 text-sm"
+            />
+          </div>
+          <input
+            placeholder="Câu hỏi"
+            value={form.question}
+            onChange={(e) => setForm({ ...form, question: e.target.value })}
+            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+          />
+          <textarea
+            placeholder="Câu trả lời"
+            value={form.answer}
+            onChange={(e) => setForm({ ...form, answer: e.target.value })}
+            rows={3}
+            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+          />
+          <button
+            onClick={() => { setMsg(null); create.mutate(); }}
+            disabled={!form.question.trim() || !form.answer.trim() || create.isPending}
+            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+          >
+            {create.isPending ? 'Đang thêm…' : 'Thêm câu hỏi'}
+          </button>
+        </div>
+        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+      </div>
+
+      <div className="space-y-2">
+        {q.data?.map((f) => <FaqRow key={f.id} faq={f} />)}
+        {q.data?.length === 0 && <Empty>Chưa có câu hỏi thường gặp nào. Thêm câu đầu tiên ở trên.</Empty>}
+      </div>
+    </div>
+  );
+}
+
+function FaqRow({ faq }: { faq: AdminFaq }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-faqs'] });
+  const toggleActive = useMutation({
+    mutationFn: () => updateFaq(faq.id, { isActive: !faq.isActive }),
+    onSuccess: refresh,
+  });
+  const del = useMutation({
+    mutationFn: () => deleteFaq(faq.id),
+    onSuccess: refresh,
+  });
+  const [f, setF] = useState({ category: faq.category ?? '', question: faq.question, answer: faq.answer, sortOrder: faq.sortOrder });
+  const save = useMutation({
+    mutationFn: () =>
+      updateFaq(faq.id, {
+        category: f.category.trim() || undefined,
+        question: f.question.trim(),
+        answer: f.answer.trim(),
+        sortOrder: Number(f.sortOrder) || 0,
+      }),
+    onSuccess: () => { setOpen(false); refresh(); },
+  });
+
+  return (
+    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            {faq.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">{faq.category}</span>}
+            <span className={`rounded-full px-2 py-0.5 text-xs text-white ${faq.isActive ? 'bg-green-600' : 'bg-neutral-400'}`}>
+              {faq.isActive ? 'Đang hiện' : 'Đang ẩn'}
+            </span>
+            <span className="text-xs text-neutral-400">thứ tự {faq.sortOrder}</span>
+          </div>
+          <div className="mt-1 font-medium">{faq.question}</div>
+          <div className="mt-0.5 whitespace-pre-line text-sm text-neutral-600">{faq.answer}</div>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <button onClick={() => setOpen((o) => !o)} className="text-sm text-green-700 underline">{open ? 'Đóng' : 'Sửa'}</button>
+          <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className="text-xs text-neutral-500 underline">
+            {faq.isActive ? 'Ẩn' : 'Hiện'}
+          </button>
+          <button onClick={() => del.mutate()} disabled={del.isPending} className="text-xs text-red-600 underline">Xoá</button>
+        </div>
+      </div>
+
+      {open && (
+        <div className="mt-3 space-y-2 border-t border-neutral-100 pt-3">
+          <div className="flex flex-wrap gap-2">
+            <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className="w-56 rounded border border-neutral-200 px-2 py-1 text-sm" />
+            <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className="w-32 rounded border border-neutral-200 px-2 py-1 text-sm" />
+          </div>
+          <input placeholder="Câu hỏi" value={f.question} onChange={(e) => setF({ ...f, question: e.target.value })} className="w-full rounded border border-neutral-200 px-2 py-1 text-sm" />
+          <textarea placeholder="Câu trả lời" value={f.answer} onChange={(e) => setF({ ...f, answer: e.target.value })} rows={3} className="w-full rounded border border-neutral-200 px-2 py-1 text-sm" />
+          <button
+            onClick={() => save.mutate()}
+            disabled={!f.question.trim() || !f.answer.trim() || save.isPending}
+            className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
+          >
+            {save.isPending ? 'Đang lưu…' : 'Lưu'}
+          </button>
+          {save.isError && <p className="text-sm text-red-600">{(save.error as Error).message}</p>}
+        </div>
+      )}
     </div>
   );
 }
