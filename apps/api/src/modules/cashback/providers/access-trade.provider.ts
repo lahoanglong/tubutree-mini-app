@@ -38,7 +38,7 @@ export class AccessTradeProvider implements CashbackProvider {
     return url;
   }
 
-  verifyWebhook(headers: Record<string, string | undefined>): boolean {
+  verifyWebhook(headers: Record<string, string | undefined>, _body?: unknown): boolean {
     // Chưa cấu hình secret: dev cho qua, production từ chối (env.validation cũng ép secret ở prod).
     if (!this.webhookSecret) return process.env.NODE_ENV !== 'production';
     return this.tokenMatches(headers['x-accesstrade-token']);
