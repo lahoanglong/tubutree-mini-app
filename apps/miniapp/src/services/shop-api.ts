@@ -118,6 +118,9 @@ export const fetchBrands = () =>
   api.get<{ brand: string; count: number }[]>('/brands').then((r) => r.data);
 export const fetchRelated = (slug: string) =>
   api.get<ProductCard[]>(`/products/${slug}/related`).then((r) => r.data);
+/** Feed "Dành cho bạn" — gợi ý cá nhân hoá (cần đăng nhập, xem home.tsx). */
+export const fetchForYou = () =>
+  api.get<ProductCard[]>('/products/for-you').then((r) => r.data);
 export const fetchBoughtTogether = (slug: string) =>
   api.get<ProductCard[]>(`/products/${slug}/bought-together`).then((r) => r.data);
 
