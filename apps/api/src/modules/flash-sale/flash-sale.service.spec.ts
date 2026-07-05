@@ -51,3 +51,73 @@ describe('FlashSaleService.listActive', () => {
     expect(list[0]).toMatchObject({ itemId: 'fi1', flashPrice: 80000, retailPrice: 100000, productSlug: 'a' });
   });
 });
+
+describe('FlashSaleService.consumeQuota', () => {
+  const now = new Date('2026-07-05T10:00:00Z');
+  const mkTx = (soldRaw: number, perUserLimit: number, existing: any, purchaseHit: number) => ({
+    $executeRaw: jest.fn().mockResolvedValue(soldRaw),
+    flashSaleItem: {
+      findUnique: jest.fn().mockResolvedValue({ perUserLimit }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    flashSalePurchase: {
+      findUnique: jest.fn().mockResolvedValue(existing),
+      updateMany: jest.fn().mockResolvedValue({ count: purchaseHit }),
+      create: jest.fn().mockResolvedValue({}),
+    },
+  });
+
+  it('còn quota + trong giới hạn (đã có purchase) → trừ soldCount (raw) + tăng purchase', async () => {
+    const tx = mkTx(1, 5, { quantity: 1 }, 1);
+    await new FlashSaleService({} as any, config).consumeQuota(tx as any, 'fi1', 'u1', 2, now);
+    expect(tx.$executeRaw).toHaveBeenCalled();
+    expect(tx.flashSalePurchase.updateMany).toHaveBeenCalled();
+    expect(tx.flashSalePurchase.create).not.toHaveBeenCalled();
+  });
+
+  it('chưa có purchase + qty<=limit → create purchase', async () => {
+    const tx = mkTx(1, 5, null, 0);
+    await new FlashSaleService({} as any, config).consumeQuota(tx as any, 'fi1', 'u1', 2, now);
+    expect(tx.flashSalePurchase.create).toHaveBeenCalled();
+  });
+
+  it('hết quota / flash hết giờ (rows=0) → throw "Hết suất ưu đãi."', async () => {
+    const tx = mkTx(0, 5, { quantity: 0 }, 1);
+    await expect(new FlashSaleService({} as any, config).consumeQuota(tx as any, 'fi1', 'u1', 2, now))
+      .rejects.toThrow('Hết suất ưu đãi.');
+  });
+
+  it('vượt perUserLimit (đã có purchase, updateMany count=0) → rollback soldCount + throw', async () => {
+    const tx = mkTx(1, 5, { quantity: 4 }, 0);
+    await expect(new FlashSaleService({} as any, config).consumeQuota(tx as any, 'fi1', 'u1', 2, now))
+      .rejects.toThrow('Vượt giới hạn mua ưu đãi.');
+    expect(tx.flashSaleItem.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { soldCount: { decrement: 2 } } }),
+    );
+  });
+
+  it('vượt perUserLimit (chưa có purchase, qty>limit) → rollback soldCount + throw', async () => {
+    const tx = mkTx(1, 1, null, 0);
+    await expect(new FlashSaleService({} as any, config).consumeQuota(tx as any, 'fi1', 'u1', 2, now))
+      .rejects.toThrow('Vượt giới hạn mua ưu đãi.');
+    expect(tx.flashSaleItem.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { soldCount: { decrement: 2 } } }),
+    );
+  });
+});
+
+describe('FlashSaleService.restore', () => {
+  it('hoàn soldCount + purchase.quantity (guard gte)', async () => {
+    const tx = {
+      flashSaleItem: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      flashSalePurchase: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    };
+    await new FlashSaleService({} as any, config).restore(tx as any, 'fi1', 'u1', 2);
+    expect(tx.flashSaleItem.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { soldCount: { decrement: 2 } } }),
+    );
+    expect(tx.flashSalePurchase.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { quantity: { decrement: 2 } } }),
+    );
+  });
+});
