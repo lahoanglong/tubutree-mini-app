@@ -196,6 +196,27 @@ export interface AdminFaq {
   createdAt: string;
   updatedAt: string;
 }
+// ── Content Kit (bộ nội dung bán hàng cho CTV) ──
+export interface ContentKitFaq {
+  q: string;
+  a: string;
+}
+export interface AdminContentKit {
+  id: string;
+  productId: string;
+  captions: string[];
+  usps: string[];
+  faqs: ContentKitFaq[] | null;
+  videoUrls: string[];
+  updatedAt: string;
+}
+export const getContentKit = (productId: string) =>
+  apiFetch<AdminContentKit | null>(`/admin/content-kits/${productId}`);
+export const saveContentKit = (
+  productId: string,
+  body: { captions?: string[]; usps?: string[]; faqs?: ContentKitFaq[]; videoUrls?: string[] },
+) => apiFetch<AdminContentKit>(`/admin/content-kits/${productId}`, { method: 'PUT', body });
+
 export const listFaqs = () => apiFetch<AdminFaq[]>('/admin/faqs');
 export const createFaq = (body: { category?: string; question: string; answer: string; sortOrder?: number; isActive?: boolean }) =>
   apiFetch<AdminFaq>('/admin/faqs', { method: 'POST', body });

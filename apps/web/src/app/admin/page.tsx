@@ -37,14 +37,17 @@ import {
   createFaq,
   updateFaq,
   deleteFaq,
+  getContentKit,
+  saveContentKit,
   type ConfigRow,
   type AdminBrand,
   type BrandCert,
   type AdminFlashSale,
   type AdminFaq,
+  type ContentKitFaq,
 } from '@/lib/admin-client';
 
-type Tab = 'dealers' | 'orders' | 'users' | 'config' | 'coupons' | 'brands' | 'flashSales' | 'faqs';
+type Tab = 'dealers' | 'orders' | 'users' | 'config' | 'coupons' | 'brands' | 'flashSales' | 'faqs' | 'contentKit';
 const TABS: { k: Tab; label: string }[] = [
   { k: 'dealers', label: 'Đại lý' },
   { k: 'orders', label: 'Đơn hàng' },
@@ -54,6 +57,7 @@ const TABS: { k: Tab; label: string }[] = [
   { k: 'brands', label: 'Nhãn hàng' },
   { k: 'flashSales', label: 'Flash Sale' },
   { k: 'faqs', label: 'Câu hỏi thường gặp' },
+  { k: 'contentKit', label: 'Content Kit CTV' },
 ];
 
 export default function AdminPage() {
@@ -96,6 +100,7 @@ export default function AdminPage() {
         {tab === 'brands' && <BrandsTab />}
         {tab === 'flashSales' && <FlashSalesTab />}
         {tab === 'faqs' && <FaqTab />}
+        {tab === 'contentKit' && <ContentKitTab />}
       </div>
     </main>
   );
@@ -858,6 +863,158 @@ function FaqRow({ faq }: { faq: AdminFaq }) {
           {save.isError && <p className="text-sm text-red-600">{(save.error as Error).message}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Content Kit CTV (bài mẫu/USP/FAQ/media per-sản phẩm) ──
+function ContentKitTab() {
+  const [productId, setProductId] = useState('');
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+  const q = useQuery({
+    queryKey: ['admin-content-kit', loadedId],
+    queryFn: () => getContentKit(loadedId as string),
+    enabled: !!loadedId,
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-neutral-100 bg-white p-4">
+        <h3 className="mb-2 text-sm font-semibold">Soạn Content Kit theo sản phẩm</h3>
+        <p className="mb-2 text-xs text-neutral-400">
+          Nhập Product ID (lấy từ trang quản lý nhãn hàng/sản phẩm). Trong caption dùng{' '}
+          <code>{'{ten_ctv}'}</code> và <code>{'{link}'}</code> — hệ thống sẽ tự chèn tên CTV + link giới thiệu khi CTV xem.
+        </p>
+        <div className="flex gap-2">
+          <input
+            placeholder="Product ID"
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+            className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm"
+          />
+          <button
+            onClick={() => setLoadedId(productId.trim())}
+            disabled={!productId.trim()}
+            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+          >
+            Tải
+          </button>
+        </div>
+      </div>
+
+      {loadedId && q.isLoading && <p className="text-sm text-neutral-400">Đang tải…</p>}
+      {loadedId && q.isError && <p className="text-sm text-red-600">{(q.error as Error).message}</p>}
+      {loadedId && q.isSuccess && (
+        <ContentKitEditor key={loadedId} productId={loadedId} initial={q.data} />
+      )}
+    </div>
+  );
+}
+
+function ContentKitEditor({
+  productId,
+  initial,
+}: {
+  productId: string;
+  initial: { captions: string[]; usps: string[]; faqs: ContentKitFaq[] | null; videoUrls: string[] } | null;
+}) {
+  const qc = useQueryClient();
+  const [captions, setCaptions] = useState((initial?.captions ?? []).join('\n'));
+  const [usps, setUsps] = useState((initial?.usps ?? []).join('\n'));
+  const [videoUrls, setVideoUrls] = useState((initial?.videoUrls ?? []).join('\n'));
+  const [faqs, setFaqs] = useState<ContentKitFaq[]>(initial?.faqs ?? []);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const toLines = (s: string) => s.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  const save = useMutation({
+    mutationFn: () =>
+      saveContentKit(productId, {
+        captions: toLines(captions),
+        usps: toLines(usps),
+        videoUrls: toLines(videoUrls),
+        faqs: faqs.filter((f) => f.q.trim() && f.a.trim()),
+      }),
+    onSuccess: () => {
+      setMsg({ ok: true, text: 'Đã lưu Content Kit!' });
+      void qc.invalidateQueries({ queryKey: ['admin-content-kit', productId] });
+    },
+    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi lưu Content Kit' }),
+  });
+
+  const setFaq = (i: number, patch: Partial<ContentKitFaq>) =>
+    setFaqs((fs) => fs.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+
+  return (
+    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+      <div className="mb-2 text-sm font-medium">Sản phẩm: {productId}</div>
+
+      <label className="mb-1 block text-xs font-medium text-neutral-500">Bài mẫu (mỗi dòng 1 caption)</label>
+      <textarea
+        value={captions}
+        onChange={(e) => setCaptions(e.target.value)}
+        rows={5}
+        placeholder={'Mình đang dùng sản phẩm này, ưng lắm! Mua qua {link} nhé {ten_ctv} 🌿'}
+        className="mb-3 w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+      />
+
+      <label className="mb-1 block text-xs font-medium text-neutral-500">USP / điểm bán hàng (mỗi dòng 1 ý)</label>
+      <textarea
+        value={usps}
+        onChange={(e) => setUsps(e.target.value)}
+        rows={3}
+        placeholder={'Nguyên liệu tự nhiên 100%'}
+        className="mb-3 w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+      />
+
+      <label className="mb-1 block text-xs font-medium text-neutral-500">Video URL (mỗi dòng 1 link)</label>
+      <textarea
+        value={videoUrls}
+        onChange={(e) => setVideoUrls(e.target.value)}
+        rows={2}
+        placeholder={'https://...'}
+        className="mb-3 w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+      />
+
+      <div className="mb-1 text-xs font-medium text-neutral-500">FAQ (câu hỏi thường gặp)</div>
+      <div className="space-y-1">
+        {faqs.map((f, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
+            <input
+              placeholder="Câu hỏi"
+              value={f.q}
+              onChange={(e) => setFaq(i, { q: e.target.value })}
+              className="flex-1 rounded border border-neutral-200 px-2 py-1"
+            />
+            <input
+              placeholder="Câu trả lời"
+              value={f.a}
+              onChange={(e) => setFaq(i, { a: e.target.value })}
+              className="flex-1 rounded border border-neutral-200 px-2 py-1"
+            />
+            <button onClick={() => setFaqs((fs) => fs.filter((_, idx) => idx !== i))} className="text-xs text-red-600">
+              Xoá
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        onClick={() => setFaqs((fs) => [...fs, { q: '', a: '' }])}
+        className="mt-1 text-sm text-green-700 underline"
+      >
+        + Thêm FAQ
+      </button>
+
+      <div className="mt-3">
+        <button
+          onClick={() => { setMsg(null); save.mutate(); }}
+          disabled={save.isPending}
+          className="rounded bg-green-600 px-4 py-1.5 text-sm text-white disabled:bg-neutral-300"
+        >
+          {save.isPending ? 'Đang lưu…' : 'Lưu Content Kit'}
+        </button>
+        {msg && <span className={`ml-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
+      </div>
     </div>
   );
 }

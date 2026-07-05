@@ -361,6 +361,7 @@ model Product {
   groupBuys        GroupBuy[]
   storefrontItems  StorefrontItem[]
   communityTags    PostProductTag[]
+  contentKit       ProductContentKit?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
@@ -623,6 +624,21 @@ model Category {
   sortOrder Int        @default(0)
 
   @@map("categories")
+}
+
+// CTV Content Kit (Bộ nội dung bán hàng) — thư viện bài mẫu/USP/FAQ/media theo từng sản phẩm,
+// CTV copy & chia sẻ, tự chèn tên CTV + link giới thiệu (placeholder {ten_ctv}/{link}).
+model ProductContentKit {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  captions  String[] @default([]) // bài mẫu, có thể chứa {ten_ctv} và {link}
+  usps      String[] @default([]) // điểm bán hàng
+  faqs      Json? // [{q,a}]
+  videoUrls String[] @default([])
+  updatedAt DateTime @updatedAt
+
+  @@map("product_content_kits")
 }
 
 // ============================================================
