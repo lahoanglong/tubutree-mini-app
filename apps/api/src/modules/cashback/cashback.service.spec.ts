@@ -246,3 +246,45 @@ describe('CashbackService.settleConfirmed', () => {
     expect(notifications.notify).not.toHaveBeenCalled();
   });
 });
+
+describe('CashbackService.reconcile', () => {
+  const provider = (key: string, enabled: boolean, events: unknown[] = []) => ({
+    key,
+    buildDeeplink: () => '',
+    verifyWebhook: () => true,
+    parseWebhook: () => null,
+    isReconcileEnabled: () => enabled,
+    fetchTransactions: jest.fn().mockResolvedValue(events),
+  });
+
+  it('provider disabled → KHÔNG fetch, KHÔNG ingest', async () => {
+    const p = provider('accesstrade', false);
+    const reg = { all: () => [p], get: jest.fn() } as unknown as CashbackProviderRegistry;
+    const prisma = {} as unknown as PrismaService;
+    const svc = new CashbackService(prisma, config, coins, notifications, reg);
+    const ingest = jest.spyOn(svc, 'ingest').mockResolvedValue({ ok: true });
+    await svc.reconcile();
+    expect(p.fetchTransactions).not.toHaveBeenCalled();
+    expect(ingest).not.toHaveBeenCalled();
+  });
+
+  it('provider enabled → feed từng event qua ingest với đúng providerKey', async () => {
+    const ev = event();
+    const p = provider('accesstrade', true, [ev]);
+    const reg = { all: () => [p], get: jest.fn() } as unknown as CashbackProviderRegistry;
+    const prisma = {} as unknown as PrismaService;
+    const svc = new CashbackService(prisma, config, coins, notifications, reg);
+    const ingest = jest.spyOn(svc, 'ingest').mockResolvedValue({ ok: true });
+    await svc.reconcile();
+    expect(p.fetchTransactions).toHaveBeenCalledTimes(1);
+    expect(ingest).toHaveBeenCalledWith(ev, 'accesstrade');
+  });
+
+  it('fetchTransactions lỗi → nuốt lỗi, không throw (cron không vỡ)', async () => {
+    const p = provider('accesstrade', true);
+    (p.fetchTransactions as jest.Mock).mockRejectedValue(new Error('AT 500'));
+    const reg = { all: () => [p], get: jest.fn() } as unknown as CashbackProviderRegistry;
+    const svc = new CashbackService({} as unknown as PrismaService, config, coins, notifications, reg);
+    await expect(svc.reconcile()).resolves.toBeUndefined();
+  });
+});
