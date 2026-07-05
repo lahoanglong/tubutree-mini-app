@@ -144,6 +144,24 @@ export interface FlashSaleActiveItem {
 export const fetchActiveFlashSales = () =>
   api.get<FlashSaleActiveItem[]>('/flash-sales/active').then((r) => r.data);
 
+export interface UpcomingFlashItem {
+  itemId: string;
+  variationId: string;
+  productSlug: string;
+  productName: string;
+  thumbnail: string | null;
+  flashPrice: number;
+  retailPrice: number;
+  startAt: string;
+  reminded: boolean;
+}
+export const fetchUpcomingFlashSales = () =>
+  api.get<UpcomingFlashItem[]>('/flash-sales/upcoming').then((r) => r.data);
+export const setFlashReminder = (itemId: string) =>
+  api.post(`/flash-sales/items/${itemId}/remind`).then((r) => r.data);
+export const cancelFlashReminder = (itemId: string) =>
+  api.delete(`/flash-sales/items/${itemId}/remind`).then((r) => r.data);
+
 // Cart
 export const getCart = () => api.get<CartSummary>('/cart').then((r) => r.data);
 export const addToCart = (variationId: string, quantity: number) =>

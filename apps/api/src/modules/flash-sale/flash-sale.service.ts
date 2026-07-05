@@ -1,10 +1,13 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
 export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
+export const FLASH_ALREADY_STARTED_MSG = 'Ưu đãi đã bắt đầu.';
 
 export interface EffectivePrice {
   flashPrice: number;
@@ -16,9 +19,12 @@ export interface EffectivePrice {
 
 @Injectable()
 export class FlashSaleService {
+  private readonly logger = new Logger(FlashSaleService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -220,5 +226,93 @@ export class FlashSaleService {
     }
     await this.prisma.flashSaleItem.delete({ where: { id: itemId } });
     return { ok: true };
+  }
+
+  /** Danh sách item flash SẮP diễn ra (chưa bắt đầu) — cho FE mục "Sắp diễn ra" + nút Nhắc tôi. */
+  async listUpcoming(userId: string, now: Date = new Date()) {
+    const items = await this.prisma.flashSaleItem.findMany({
+      where: {
+        flashSale: { isActive: true, startAt: { gt: now }, endAt: { gt: now } },
+      },
+      include: {
+        flashSale: { select: { startAt: true } },
+        variation: { include: { product: { select: { slug: true, name: true, thumbnail: true } } } },
+        reminders: { where: { userId }, select: { id: true } },
+      },
+      orderBy: { flashSale: { startAt: 'asc' } },
+    });
+    return items.map((it) => ({
+      itemId: it.id,
+      variationId: it.variationId,
+      productSlug: it.variation.product.slug,
+      productName: it.variation.product.name,
+      thumbnail: it.variation.product.thumbnail,
+      flashPrice: it.flashPrice,
+      retailPrice: it.variation.retailPrice,
+      startAt: it.flashSale.startAt,
+      reminded: it.reminders.length > 0,
+    }));
+  }
+
+  /** Đặt nhắc khi flash sale sắp mở bán. Chỉ cho phép khi sale CHƯA bắt đầu. */
+  async setReminder(userId: string, itemId: string, now: Date = new Date()) {
+    const item = await this.prisma.flashSaleItem.findUnique({
+      where: { id: itemId },
+      select: { flashSale: { select: { startAt: true } } },
+    });
+    if (!item) throw new BadRequestException('Không tìm thấy sản phẩm flash.');
+    if (item.flashSale.startAt <= now) throw new BadRequestException(FLASH_ALREADY_STARTED_MSG);
+    return this.prisma.flashSaleReminder.upsert({
+      where: { userId_flashSaleItemId: { userId, flashSaleItemId: itemId } },
+      update: {},
+      create: { userId, flashSaleItemId: itemId },
+    });
+  }
+
+  /** Huỷ nhắc flash sale. */
+  async cancelReminder(userId: string, itemId: string): Promise<{ ok: boolean }> {
+    await this.prisma.flashSaleReminder.deleteMany({ where: { userId, flashSaleItemId: itemId } });
+    return { ok: true };
+  }
+
+  /**
+   * Cron mỗi giờ: quét reminder chưa notify, item nào sale ĐÃ bắt đầu (startAt<=now<endAt, isActive)
+   * thì claim atomic (updateMany guard notifiedAt: null) rồi notify FLASH_STARTING. notify() nuốt lỗi
+   * để 1 lần gửi hỏng không chặn cả lô.
+   */
+  @Cron('0 * * * *')
+  async notifyStartedFlashSales(now: Date = new Date()): Promise<void> {
+    const reminders = await this.prisma.flashSaleReminder.findMany({
+      where: { notifiedAt: null },
+      include: {
+        item: {
+          include: {
+            flashSale: { select: { isActive: true, startAt: true, endAt: true } },
+            variation: { include: { product: { select: { name: true } } } },
+          },
+        },
+      },
+      take: 500,
+    });
+
+    let sent = 0;
+    for (const r of reminders) {
+      const sale = r.item.flashSale;
+      const started = sale.isActive && sale.startAt <= now && sale.endAt > now;
+      if (!started) continue;
+
+      // Atomic claim chống double-send khi cron chạy chồng.
+      const claimed = await this.prisma.flashSaleReminder.updateMany({
+        where: { id: r.id, notifiedAt: null },
+        data: { notifiedAt: now },
+      });
+      if (claimed.count === 0) continue;
+
+      await this.notifications
+        .notify(r.userId, 'FLASH_STARTING', { product: r.item.variation.product.name })
+        .catch(() => undefined);
+      sent++;
+    }
+    if (sent) this.logger.log(`Flash-starting reminders sent: ${sent}`);
   }
 }

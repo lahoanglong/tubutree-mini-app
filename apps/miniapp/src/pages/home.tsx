@@ -7,7 +7,7 @@ import { useAuthStore } from '../store/auth';
 import ProductCard from '../components/product-card';
 import { ProductGridSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
-import { FlashSale } from '../components/flash-sale';
+import { FlashSale, UpcomingFlashSales } from '../components/flash-sale';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { brandAccent } from '../utils/brands';
 import { vi } from '../i18n/vi';
@@ -375,6 +375,9 @@ export default function HomePage() {
 
       {/* ── Flash Sale hôm nay ── */}
       <FlashSale />
+
+      {/* ── Sắp diễn ra — đặt nhắc trước khi mở bán ── */}
+      <UpcomingFlashSales />
 
       {/* ── Dành cho bạn (cá nhân hoá — chỉ hiện khi đã đăng nhập & có gợi ý) ── */}
       {authed && (
