@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Page, Text, Button, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, Sheet, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { OrderDTO } from '@tubutree/shared-types';
 import { getAddresses, getCart, checkoutQuote, placeOrder } from '../services/shop-api';
@@ -31,6 +31,7 @@ export default function CheckoutPage() {
   const [usePoints, setUsePoints] = useState(false);
   const [note, setNote] = useState('');
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
+  const [priceChanged, setPriceChanged] = useState(false);
   // Khoá tap nhanh 2 lần: ensurePhone() mở native sheet, nếu không khoá thì
   // 2 sheet số điện thoại + 2 mutate song song (BE chống đơn đôi nhưng UX hỏng).
   const [submitting, setSubmitting] = useState(false);
@@ -135,7 +136,13 @@ export default function CheckoutPage() {
       }
       setPlaced(o);
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => {
+      if (getErrorMessage(e) === 'PRICE_CHANGED') {
+        setPriceChanged(true);
+        return;
+      }
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    },
   });
 
   // ── Success screen ──
@@ -454,6 +461,29 @@ export default function CheckoutPage() {
               : vi.checkout.placeOrder}
         </Button>
       </Box>
+
+      <Sheet visible={priceChanged} onClose={() => setPriceChanged(false)} autoHeight>
+        <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
+          <Text bold size="large">
+            {vi.flashSale.priceChangedTitle}
+          </Text>
+          <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 8 }}>
+            {vi.flashSale.priceChangedBody}
+          </Text>
+          <Button
+            fullWidth
+            style={{ marginTop: 16 }}
+            onClick={() => {
+              setPriceChanged(false);
+              void queryClient.invalidateQueries({ queryKey: ['cart'] });
+              void queryClient.invalidateQueries({ queryKey: ['quote'] });
+              navigate('/cart');
+            }}
+          >
+            {vi.flashSale.priceChangedCta}
+          </Button>
+        </Box>
+      </Sheet>
     </Page>
   );
 }

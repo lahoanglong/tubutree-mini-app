@@ -6,6 +6,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CartService } from '../cart/cart.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { FlashSaleService } from '../flash-sale/flash-sale.service';
 
 @Injectable()
 export class OrdersService {
@@ -15,6 +16,7 @@ export class OrdersService {
     private readonly cart: CartService,
     private readonly notifications: NotificationsService,
     private readonly config: SystemConfigService,
+    private readonly flashSale: FlashSaleService,
   ) {}
 
   async list(userId: string, status: OrderStatus | undefined, page: number, limit: number) {
@@ -109,6 +111,9 @@ export class OrdersService {
           where: { id: item.variationId },
           data: { stock: { increment: item.quantity } },
         });
+        if (item.flashSaleItemId) {
+          await this.flashSale.restore(tx, item.flashSaleItemId, userId, item.quantity);
+        }
       }
       return true;
     });

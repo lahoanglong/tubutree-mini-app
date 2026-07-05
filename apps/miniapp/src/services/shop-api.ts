@@ -60,6 +60,11 @@ export interface CartLine {
   quantity: number;
   stock: number;
   total: number;
+  /** Đang áp giá giờ vàng — dùng để cảnh báo khi giá/suất thay đổi trước khi đặt. */
+  isFlash?: boolean;
+  flashSaleItemId?: string | null;
+  flashEndAt?: string | null;
+  soldPct?: number | null;
 }
 
 export interface CartSummary {
@@ -119,6 +124,22 @@ export const fetchBoughtTogether = (slug: string) =>
 export interface ProductSuggestion { slug: string; name: string; thumbnail: string | null; basePrice: number; }
 export const suggestProducts = (q: string) =>
   api.get<ProductSuggestion[]>('/search/suggest', { params: { q } }).then((r) => r.data);
+
+// Flash sale (public)
+export interface FlashSaleActiveItem {
+  itemId: string;
+  variationId: string;
+  productSlug: string;
+  productName: string;
+  thumbnail: string | null;
+  flashPrice: number;
+  retailPrice: number;
+  soldCount: number;
+  quota: number;
+  endAt: string;
+}
+export const fetchActiveFlashSales = () =>
+  api.get<FlashSaleActiveItem[]>('/flash-sales/active').then((r) => r.data);
 
 // Cart
 export const getCart = () => api.get<CartSummary>('/cart').then((r) => r.data);

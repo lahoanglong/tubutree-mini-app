@@ -43,6 +43,16 @@ export const vi = {
     allBrands: 'Tất cả',
   },
 
+  flashSale: {
+    badge: '⚡ Giờ vàng',
+    sectionTitle: '🌿 Ưu đãi giờ vàng',
+    endsIn: (t: string) => `⏳ Còn ${t}`,
+    soldPct: (n: number) => `Đã bán ${n}%`,
+    priceChangedTitle: 'Giá ưu đãi đã thay đổi',
+    priceChangedBody: 'Một số sản phẩm giờ vàng đã hết suất hoặc hết giờ. Vui lòng xem lại giỏ hàng trước khi đặt.',
+    priceChangedCta: 'Xem lại giỏ hàng',
+  },
+
   product: {
     addToCart: 'Thêm vào giỏ',
     outOfStock: 'Tạm hết — sẽ về sớm',

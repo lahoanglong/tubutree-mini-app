@@ -157,3 +157,30 @@ export const createDealerReward = (body: { brandId?: string; type: 'TOUR' | 'GIF
   apiFetch<AdminDealerReward>('/admin/dealer-rewards', { method: 'POST', body });
 export const deleteDealerReward = (id: string) =>
   apiFetch(`/admin/dealer-rewards/${id}`, { method: 'DELETE' });
+
+// ── Flash Sale ──
+export interface AdminFlashSaleItem {
+  id: string;
+  variationId: string;
+  flashPrice: number;
+  quota: number;
+  soldCount: number;
+  perUserLimit: number;
+}
+export interface AdminFlashSale {
+  id: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  isActive: boolean;
+  items: AdminFlashSaleItem[];
+}
+export const listFlashSales = () => apiFetch<AdminFlashSale[]>('/admin/flash-sales');
+export const createFlashSale = (body: { title: string; startAt: string; endAt: string }) =>
+  apiFetch<AdminFlashSale>('/admin/flash-sales', { method: 'POST', body });
+export const updateFlashSale = (id: string, body: Partial<{ title: string; startAt: string; endAt: string; isActive: boolean }>) =>
+  apiFetch(`/admin/flash-sales/${id}`, { method: 'PATCH', body });
+export const addFlashSaleItem = (saleId: string, body: { variationId: string; flashPrice: number; quota: number; perUserLimit?: number }) =>
+  apiFetch(`/admin/flash-sales/${saleId}/items`, { method: 'POST', body });
+export const deleteFlashSaleItem = (itemId: string) =>
+  apiFetch(`/admin/flash-sales/items/${itemId}`, { method: 'DELETE' });
