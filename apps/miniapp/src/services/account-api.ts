@@ -46,11 +46,18 @@ export interface CoinTxn {
   createdAt: string;
 }
 
+export interface ReferralMilestone {
+  count: number;
+  bonus: number;
+}
+
 export interface CoinsOverview {
   coinsBalance: number;
   referralCode: string;
   referralEarned: number;
   referralSuccessCount: number;
+  referralMilestones?: ReferralMilestone[];
+  nextMilestone?: ReferralMilestone | null;
   transactions: CoinTxn[];
 }
 

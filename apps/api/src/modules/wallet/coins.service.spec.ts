@@ -117,3 +117,106 @@ describe('CoinsService.grantReferralCoins', () => {
     expect(create).not.toHaveBeenCalled();
   });
 });
+
+describe('CoinsService.grantReferralCoins → thưởng mốc giới thiệu', () => {
+  const milestones = [
+    { count: 3, bonus: 20000 },
+    { count: 5, bonus: 40000 },
+    { count: 10, bonus: 100000 },
+  ];
+
+  function milestoneConfig(value: unknown) {
+    return {
+      get: jest.fn().mockImplementation(async (key: string, fb?: unknown) => (key === 'coins.referral_milestones' ? value : fb)),
+    } as unknown as SystemConfigService;
+  }
+
+  function refPrismaWithCount(successCount: number) {
+    const create = jest.fn().mockResolvedValue({});
+    const count = jest.fn().mockResolvedValue(successCount);
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ referredById: 'referrer1' }), update: jest.fn().mockResolvedValue({}) },
+      coinTransaction: { create, count },
+      $transaction: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    return { prisma, create, count };
+  }
+
+  it('vừa chạm mốc 3 → thưởng thêm, reason nhúng referrerId + số mốc', async () => {
+    const { prisma, create } = refPrismaWithCount(3);
+    await new CoinsService(prisma, milestoneConfig(milestones)).grantReferralCoins('referee1');
+    const byReason = Object.fromEntries(create.mock.calls.map((c) => [c[0].data.reason, c[0].data]));
+    expect(byReason['REFERRAL_MILESTONE:referrer1:3']).toMatchObject({ userId: 'referrer1', delta: 20000, refType: 'REFERRAL' });
+  });
+
+  it('chưa chạm mốc nào (count 2) → không thưởng thêm', async () => {
+    const { prisma, create } = refPrismaWithCount(2);
+    await new CoinsService(prisma, milestoneConfig(milestones)).grantReferralCoins('referee1');
+    const reasons = create.mock.calls.map((c) => c[0].data.reason);
+    expect(reasons.some((r) => r.startsWith('REFERRAL_MILESTONE:'))).toBe(false);
+  });
+
+  it('vượt mọi mốc (count 15) → thử thưởng cả 3 mốc (idempotency ở grantCoins chặn lặp thực tế)', async () => {
+    const { prisma, create } = refPrismaWithCount(15);
+    await new CoinsService(prisma, milestoneConfig(milestones)).grantReferralCoins('referee1');
+    const reasons = create.mock.calls.map((c) => c[0].data.reason);
+    expect(reasons).toEqual(
+      expect.arrayContaining(['REFERRAL_MILESTONE:referrer1:3', 'REFERRAL_MILESTONE:referrer1:5', 'REFERRAL_MILESTONE:referrer1:10']),
+    );
+  });
+
+  it('không cấu hình mốc nào (config mặc định trả []) → không đếm, không thưởng thêm', async () => {
+    const { prisma, create, count } = refPrismaWithCount(3);
+    await new CoinsService(prisma, config).grantReferralCoins('referee1');
+    expect(count).not.toHaveBeenCalled();
+    const reasons = create.mock.calls.map((c) => c[0].data.reason);
+    expect(reasons.some((r) => r.startsWith('REFERRAL_MILESTONE:'))).toBe(false);
+  });
+});
+
+describe('CoinsService.getOverview → tiến độ mốc giới thiệu', () => {
+  const milestones = [
+    { count: 3, bonus: 20000 },
+    { count: 5, bonus: 40000 },
+    { count: 10, bonus: 100000 },
+  ];
+
+  function milestoneConfig(value: unknown) {
+    return {
+      get: jest.fn().mockImplementation(async (key: string, fb?: unknown) => (key === 'coins.referral_milestones' ? value : fb)),
+    } as unknown as SystemConfigService;
+  }
+
+  function overviewPrisma(successCount: number) {
+    return {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ coinsBalance: 1000, referralCode: 'ABC123' }) },
+      coinTransaction: {
+        findMany: jest.fn().mockResolvedValue([]),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }),
+        count: jest.fn().mockResolvedValue(successCount),
+      },
+    } as unknown as PrismaService;
+  }
+
+  it('chưa đạt mốc nào → nextMilestone là mốc nhỏ nhất', async () => {
+    const result = await new CoinsService(overviewPrisma(1), milestoneConfig(milestones)).getOverview('u1');
+    expect(result.referralMilestones).toEqual(milestones);
+    expect(result.nextMilestone).toEqual({ count: 3, bonus: 20000 });
+  });
+
+  it('đã đạt mốc 3 → nextMilestone là mốc 5', async () => {
+    const result = await new CoinsService(overviewPrisma(3), milestoneConfig(milestones)).getOverview('u1');
+    expect(result.nextMilestone).toEqual({ count: 5, bonus: 40000 });
+  });
+
+  it('vượt mọi mốc → nextMilestone null', async () => {
+    const result = await new CoinsService(overviewPrisma(10), milestoneConfig(milestones)).getOverview('u1');
+    expect(result.nextMilestone).toBeNull();
+  });
+
+  it('không cấu hình mốc (config mặc định) → referralMilestones rỗng, nextMilestone null', async () => {
+    const result = await new CoinsService(overviewPrisma(1), config).getOverview('u1');
+    expect(result.referralMilestones).toEqual([]);
+    expect(result.nextMilestone).toBeNull();
+  });
+});

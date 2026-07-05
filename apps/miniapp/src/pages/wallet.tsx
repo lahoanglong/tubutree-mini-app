@@ -11,6 +11,7 @@ import { newIdempotencyKey } from '../utils/idempotency';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
+import { vi } from '../i18n/vi';
 
 const formatXu = (n: number) => `${n.toLocaleString('vi-VN')} xu`;
 const formatPoints = (n: number) => `${n.toLocaleString('vi-VN')} điểm`;
@@ -248,6 +249,14 @@ export default function WalletPage() {
                     <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>đã nhận từ giới thiệu</Text>
                   </Box>
                 </Box>
+                {coins.nextMilestone && (
+                  <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginBottom: 12 }}>
+                    {vi.wallet.referralMilestoneProgress(
+                      coins.nextMilestone.count - coins.referralSuccessCount,
+                      formatXu(coins.nextMilestone.bonus),
+                    )}
+                  </Text>
+                )}
                 <Box flex style={{ alignItems: 'center', gap: 8 }}>
                   <Box p={2} style={{ flex: 1, background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', textAlign: 'center' }}>
                     <Text bold style={{ letterSpacing: 1.5, color: 'var(--neutral-900)' }}>{coins.referralCode}</Text>

@@ -186,6 +186,11 @@ export const vi = {
     logout: 'Đăng xuất',
   },
 
+  wallet: {
+    referralMilestoneProgress: (remaining: number, bonusFormatted: string) =>
+      `Mời thêm ${remaining} bạn để nhận ${bonusFormatted}`,
+  },
+
   storefront: {
     title: 'Gian hàng của tôi',
     empty: 'Tạo gian hàng để chia sẻ sản phẩm bạn tâm đắc.',
