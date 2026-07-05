@@ -23,6 +23,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'loyalty.vnd_per_point_redeem', value: 1000, category: 'loyalty', description: '1 điểm = 1.000đ khi áp' },
   { key: 'loyalty.max_redeem_pct', value: 0.2, category: 'loyalty', description: 'Tối đa 20% giá trị đơn được trừ điểm' },
   { key: 'loyalty.point_expire_months', value: 12, category: 'loyalty', description: 'Điểm hết hạn sau 12 tháng' },
+  { key: 'loyalty.point_expiry_reminder_days', value: 7, category: 'loyalty', description: 'Nhắc trước khi điểm hết hạn (số ngày)' },
   { key: 'loyalty.tier_grace_days', value: 30, category: 'loyalty', description: 'Grace period giữ hạng khi rớt' },
   { key: 'loyalty.welcome_voucher_amount', value: 30000, category: 'loyalty', description: 'Voucher đơn đầu' },
   { key: 'loyalty.welcome_voucher_min_order', value: 199000, category: 'loyalty', description: 'Min order để dùng welcome voucher' },
@@ -602,6 +603,7 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-cart-abandon', code: 'CART_ABANDONED', channel: 'INAPP', bodyTemplate: '🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé.' },
   { id: 'nt-voucher-expiring', code: 'VOUCHER_EXPIRING', channel: 'INAPP', bodyTemplate: '⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!' },
   { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },
+  { id: 'nt-points-expiring', code: 'POINTS_EXPIRING', channel: 'INAPP', bodyTemplate: '⏳ Bạn có {{points}} điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿' },
 ];
 
 const QUIZZES = [
