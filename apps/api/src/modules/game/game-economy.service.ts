@@ -62,6 +62,23 @@ export class GameEconomyService {
       streakDays = 1;
     }
 
+    // §streak-repair: ghi nhận chuỗi vừa mất (để cho phép hồi sinh), hoặc xoá record cũ khi chuỗi được giữ.
+    let brokenStreakDays = p.brokenStreakDays;
+    let brokenStreakAt = p.brokenStreakAt;
+    if (gapDays === 1) {
+      brokenStreakDays = 0;
+      brokenStreakAt = null; // chuỗi tiếp tục → xoá record cũ (nếu có)
+    } else if (gapDays === 2 && p.streakFreezes > 0) {
+      brokenStreakDays = 0;
+      brokenStreakAt = null; // vé giữ lửa cứu → xoá record
+    } else {
+      // reset: nếu vừa mất một chuỗi thực sự (>1) thì ghi lại để cho hồi sinh
+      if (p.streakDays > 1) {
+        brokenStreakDays = p.streakDays;
+        brokenStreakAt = new Date();
+      }
+    }
+
     const loginSeeds = await this.config.get<number>('game.daily_login_seeds', 10);
     const tankCap = await this.config.get<number>('game.tank_capacity', 500);
     let seeds = loginSeeds;
@@ -88,6 +105,8 @@ export class GameEconomyService {
         streakFreezes,
         longestStreak: Math.max(p.longestStreak, streakDays),
         lastCheckInAt: new Date(),
+        brokenStreakDays,
+        brokenStreakAt,
       },
     });
     if (res.count === 0) throw new BadRequestException('Hôm nay bạn đã điểm danh rồi 🌿');
@@ -115,6 +134,38 @@ export class GameEconomyService {
     if (res.count === 0) throw new BadRequestException('Hôm nay bạn đã hứng giọt sương rồi 🌿');
 
     return { seedsEarned: dew, totalSeeds };
+  }
+
+  /** §streak-repair: hồi sinh chuỗi vừa mất bằng 💧, trong cửa sổ 48h, tối đa 1 lần/30 ngày. */
+  async repairStreak(userId: string) {
+    const p = await this.ensure(userId);
+    if (!p.brokenStreakAt || p.brokenStreakDays <= 0) {
+      throw new BadRequestException('Không có chuỗi nào để hồi sinh.');
+    }
+    const windowH = await this.config.get<number>('game.streak_repair_window_hours', 48);
+    if (Date.now() - p.brokenStreakAt.getTime() > windowH * 3600 * 1000) {
+      throw new BadRequestException('Đã quá hạn hồi sinh chuỗi 🔥');
+    }
+    const cooldownD = await this.config.get<number>('game.streak_repair_cooldown_days', 30);
+    if (p.lastStreakRepairAt && Date.now() - p.lastStreakRepairAt.getTime() < cooldownD * 86400 * 1000) {
+      throw new BadRequestException('Bạn đã hồi sinh chuỗi gần đây, hãy thử lại sau 🌿');
+    }
+    const cost = await this.config.get<number>('game.streak_repair_cost', 150);
+    const newStreak = p.brokenStreakDays + 1;
+    const res = await this.prisma.gameProfile.updateMany({
+      where: { userId, totalSeeds: { gte: cost }, brokenStreakAt: { not: null } },
+      data: {
+        totalSeeds: { decrement: cost },
+        streakDays: newStreak,
+        longestStreak: Math.max(p.longestStreak, newStreak),
+        brokenStreakDays: 0,
+        brokenStreakAt: null,
+        lastStreakRepairAt: new Date(),
+      },
+    });
+    if (res.count === 0) throw new BadRequestException(`Cần ${cost} 💧 để hồi sinh chuỗi.`);
+    const after = await this.prisma.gameProfile.findUnique({ where: { userId } });
+    return { repaired: true, streakDays: newStreak, totalSeeds: after?.totalSeeds ?? 0 };
   }
 
   async buyStreakFreeze(userId: string) {

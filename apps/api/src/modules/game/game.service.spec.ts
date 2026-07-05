@@ -231,6 +231,52 @@ describe('GameService.treeHealth (§6.7.3 héo/chết)', () => {
   });
 });
 
+describe('GameService.getProfile — streak repair (hồi sinh chuỗi đã mất)', () => {
+  const DAYMS = 24 * 3600 * 1000;
+  it('có brokenStreakAt trong 48h, chưa hồi sinh gần đây → streakRepairable=true', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ brokenStreakDays: 5, brokenStreakAt: new Date(Date.now() - DAYMS), lastStreakRepairAt: null }),
+    );
+    const r = (await new GameService(prisma, makeConfig({ 'game.streak_repair_cost': 150 })).getProfile('u1')) as {
+      brokenStreakDays: number; streakRepairCost: number; streakRepairable: boolean;
+    };
+    expect(r.brokenStreakDays).toBe(5);
+    expect(r.streakRepairCost).toBe(150);
+    expect(r.streakRepairable).toBe(true);
+  });
+
+  it('không có brokenStreakAt → streakRepairable=false', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ brokenStreakDays: 0, brokenStreakAt: null }),
+    );
+    const r = (await new GameService(prisma, makeConfig()).getProfile('u1')) as { streakRepairable: boolean };
+    expect(r.streakRepairable).toBe(false);
+  });
+
+  it('brokenStreakAt quá 48h → streakRepairable=false', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ brokenStreakDays: 5, brokenStreakAt: new Date(Date.now() - 49 * 3600 * 1000) }),
+    );
+    const r = (await new GameService(prisma, makeConfig({ 'game.streak_repair_window_hours': 48 })).getProfile('u1')) as { streakRepairable: boolean };
+    expect(r.streakRepairable).toBe(false);
+  });
+
+  it('còn trong cooldown kể từ lần hồi sinh trước → streakRepairable=false', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({
+        brokenStreakDays: 5, brokenStreakAt: new Date(Date.now() - DAYMS),
+        lastStreakRepairAt: new Date(Date.now() - 10 * DAYMS),
+      }),
+    );
+    const r = (await new GameService(prisma, makeConfig({ 'game.streak_repair_cooldown_days': 30 })).getProfile('u1')) as { streakRepairable: boolean };
+    expect(r.streakRepairable).toBe(false);
+  });
+});
+
 describe('GameService.waterTree — cây chết mất tiến trình (§6.7.3)', () => {
   it('tưới cây CHẾT (8 ngày) → reset tiến trình rồi +drops, revivedFromDead', async () => {
     const prisma = makePrisma();

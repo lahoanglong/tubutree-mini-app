@@ -56,7 +56,21 @@ export class GameService {
     const profile = await this.ensureProfile(userId);
     const wiltDays = await this.config.get<number>('game.wilt_days', 3);
     const deathDays = await this.config.get<number>('game.death_days', 7);
-    return { ...profile, treeHealth: this.treeHealth(profile, wiltDays, deathDays) };
+    const streakRepairCost = await this.config.get<number>('game.streak_repair_cost', 150);
+    const windowH = await this.config.get<number>('game.streak_repair_window_hours', 48);
+    const cooldownD = await this.config.get<number>('game.streak_repair_cooldown_days', 30);
+    const streakRepairable =
+      !!profile.brokenStreakAt &&
+      profile.brokenStreakDays > 0 &&
+      Date.now() - new Date(profile.brokenStreakAt).getTime() <= windowH * 3600 * 1000 &&
+      (!profile.lastStreakRepairAt || Date.now() - new Date(profile.lastStreakRepairAt).getTime() >= cooldownD * 86400 * 1000);
+    return {
+      ...profile,
+      treeHealth: this.treeHealth(profile, wiltDays, deathDays),
+      brokenStreakDays: profile.brokenStreakDays,
+      streakRepairCost,
+      streakRepairable,
+    };
   }
 
   /** §6.7.3: trạng thái cây theo số ngày không tưới (chỉ tính khi đã có tiến trình). */

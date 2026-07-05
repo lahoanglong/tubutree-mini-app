@@ -1076,19 +1076,22 @@ model DealerOrderTemplate {
 // ============================================================
 
 model GameProfile {
-  id            String    @id @default(cuid())
-  userId        String    @unique
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  streakDays    Int       @default(0)
-  longestStreak Int       @default(0)
-  lastCheckInAt DateTime?
-  treeStage     Int       @default(1)
-  totalSeeds    Int       @default(0)
-  ecoImpact     Json?
-  badges        String[]  @default([])
-  lastWateredAt DateTime? // §6.7.3: tính héo (3 ngày)/chết (7 ngày)
-  streakFreezes Int       @default(0)
-  lastDewAt     DateTime?
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streakDays         Int       @default(0)
+  longestStreak      Int       @default(0)
+  lastCheckInAt      DateTime?
+  treeStage          Int       @default(1)
+  totalSeeds         Int       @default(0)
+  ecoImpact          Json?
+  badges             String[]  @default([])
+  lastWateredAt      DateTime? // §6.7.3: tính héo (3 ngày)/chết (7 ngày)
+  streakFreezes      Int       @default(0)
+  lastDewAt          DateTime?
+  brokenStreakDays   Int       @default(0) // §streak-repair: số ngày của chuỗi vừa bị mất, chờ hồi sinh
+  brokenStreakAt     DateTime? // thời điểm mất chuỗi (cửa sổ hồi sinh 48h tính từ đây)
+  lastStreakRepairAt DateTime? // lần hồi sinh gần nhất (cooldown 30 ngày)
 
   @@map("game_profiles")
 }

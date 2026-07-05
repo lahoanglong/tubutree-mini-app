@@ -41,6 +41,9 @@ export class GameController {
   @Post('streak-freeze/buy')
   buyFreeze(@CurrentUser('sub') userId: string) { return this.economy.buyStreakFreeze(userId); }
 
+  @Post('streak/repair')
+  repairStreak(@CurrentUser('sub') userId: string) { return this.economy.repairStreak(userId); }
+
   @Post('spin')
   spin(@CurrentUser('sub') userId: string) { return this.game.spin(userId); }
 
