@@ -184,3 +184,23 @@ export const addFlashSaleItem = (saleId: string, body: { variationId: string; fl
   apiFetch(`/admin/flash-sales/${saleId}/items`, { method: 'POST', body });
 export const deleteFlashSaleItem = (itemId: string) =>
   apiFetch(`/admin/flash-sales/items/${itemId}`, { method: 'DELETE' });
+
+// ── FAQ / câu trả lời nhanh (CSKH + nạp vào ngữ cảnh AI tư vấn) ──
+export interface AdminFaq {
+  id: string;
+  category: string | null;
+  question: string;
+  answer: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+export const listFaqs = () => apiFetch<AdminFaq[]>('/admin/faqs');
+export const createFaq = (body: { category?: string; question: string; answer: string; sortOrder?: number; isActive?: boolean }) =>
+  apiFetch<AdminFaq>('/admin/faqs', { method: 'POST', body });
+export const updateFaq = (
+  id: string,
+  body: Partial<{ category: string; question: string; answer: string; sortOrder: number; isActive: boolean }>,
+) => apiFetch<AdminFaq>(`/admin/faqs/${id}`, { method: 'PATCH', body });
+export const deleteFaq = (id: string) => apiFetch<{ ok: boolean }>(`/admin/faqs/${id}`, { method: 'DELETE' });

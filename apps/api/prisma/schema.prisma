@@ -1757,3 +1757,21 @@ model Subscription {
   @@index([userId])
   @@map("subscriptions")
 }
+
+// ============================================================
+// 16. FaqEntry — FAQ/câu trả lời nhanh CSKH (admin quản lý, nạp vào AI tư vấn)
+// ============================================================
+
+model FaqEntry {
+  id        String   @id @default(cuid())
+  category  String? // nhóm (vd "Vận chuyển", "Sản phẩm", "Đổi trả")
+  question  String
+  answer    String   @db.Text
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("faq_entries")
+}

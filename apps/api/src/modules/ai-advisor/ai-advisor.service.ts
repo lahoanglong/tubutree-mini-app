@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { FaqService } from '../faq/faq.service';
 import { LlmClient, type ChatMessage } from './llm.client';
 
 export interface ProductSuggestion {
@@ -13,7 +14,15 @@ export interface ProductSuggestion {
   salePrice: number | null;
 }
 
+interface FaqContext {
+  category: string | null;
+  question: string;
+  answer: string;
+}
+
 const MAX_HISTORY = 6;
+// Chặn phình token: chỉ nạp tối đa 20 FAQ (đã sắp theo sortOrder) vào system prompt.
+const MAX_FAQ_IN_PROMPT = 20;
 const OFFLINE_REPLY =
   'Trợ lý AI đang tạm nghỉ, bạn quay lại sau nhé! Trong lúc đó bạn có thể tham khảo vài sản phẩm gợi ý bên dưới 🌿';
 
@@ -27,6 +36,7 @@ export class AiAdvisorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly llm: LlmClient,
+    private readonly faq: FaqService,
   ) {}
 
   async chat(userId: string, message: string, history: ChatMessage[] = []) {
@@ -39,8 +49,11 @@ export class AiAdvisorService {
       return { reply: OFFLINE_REPLY, products };
     }
 
+    // Chỉ tốn round-trip DB lấy FAQ khi LLM thực sự được gọi (offline đã return ở trên).
+    const faqs = await this.faq.listActive();
+
     const messages: ChatMessage[] = [
-      { role: 'system', content: this.systemPrompt(products) },
+      { role: 'system', content: this.systemPrompt(products, faqs.slice(0, MAX_FAQ_IN_PROMPT)) },
       ...history.slice(-MAX_HISTORY),
       { role: 'user', content: text },
     ];
@@ -69,18 +82,31 @@ export class AiAdvisorService {
     return products;
   }
 
-  private systemPrompt(products: ProductSuggestion[]): string {
+  private systemPrompt(products: ProductSuggestion[], faqs: FaqContext[] = []): string {
     const catalog = products.length
       ? products
           .map((p) => `- ${p.name} (${p.brand}) — ${(p.salePrice ?? p.basePrice).toLocaleString('vi-VN')}đ${p.shortDesc ? ` · ${p.shortDesc}` : ''}`)
           .join('\n')
       : '(không tìm thấy sản phẩm khớp — gợi ý chung về tiêu dùng xanh)';
-    return [
+
+    const lines = [
       'Bạn là trợ lý tư vấn thân thiện của Tubu Tree — thương hiệu tiêu dùng xanh, sản phẩm sinh học an toàn cho gia đình và môi trường.',
       'Trả lời bằng tiếng Việt, ngắn gọn (2–4 câu), gần gũi, có thể dùng emoji nhẹ 🌿.',
       'CHỈ gợi ý sản phẩm trong danh sách dưới đây; nếu không phù hợp thì tư vấn chung và khuyên xem thêm ở mục Sản phẩm. Không bịa tên sản phẩm hay giá.',
       'Danh sách sản phẩm liên quan:',
       catalog,
-    ].join('\n');
+    ];
+
+    // Nạp FAQ (do admin quản lý) — ưu tiên trả lời nhất quán theo đây khi câu hỏi khớp chủ đề.
+    if (faqs.length) {
+      lines.push(
+        'Câu hỏi thường gặp (ưu tiên trả lời theo đây):',
+        faqs
+          .map((f) => `- ${f.category ? `[${f.category}] ` : ''}Hỏi: ${f.question}\n  Đáp: ${f.answer}`)
+          .join('\n'),
+      );
+    }
+
+    return lines.join('\n');
   }
 }
