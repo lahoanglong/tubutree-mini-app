@@ -44,6 +44,7 @@ export const vi = {
   },
 
   flashSale: {
+    badge: '⚡ Giờ vàng',
     sectionTitle: '🌿 Ưu đãi giờ vàng',
     endsIn: (t: string) => `⏳ Còn ${t}`,
     soldPct: (n: number) => `Đã bán ${n}%`,

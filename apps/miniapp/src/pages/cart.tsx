@@ -372,6 +372,28 @@ function CartLineRow({
         <Text bold style={{ color: 'var(--primary-700)', marginTop: 4 }}>
           {formatVnd(line.unitPrice)}
         </Text>
+        {line.isFlash && (
+          <Box flex alignItems="center" style={{ gap: 6, marginTop: 4 }}>
+            <span
+              style={{
+                display: 'inline-block',
+                background: 'var(--clay-50)',
+                color: 'var(--clay-700)',
+                borderRadius: 'var(--radius-full)',
+                padding: '2px 8px',
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
+              {vi.flashSale.badge}
+            </span>
+            {line.soldPct != null && (
+              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                {vi.flashSale.soldPct(line.soldPct)}
+              </Text>
+            )}
+          </Box>
+        )}
         {overStock && (
           <Text size="xSmall" style={{ color: 'var(--warning)', marginTop: 2 }}>
             ⚠ {vi.cart.stockLimited(line.stock)}
