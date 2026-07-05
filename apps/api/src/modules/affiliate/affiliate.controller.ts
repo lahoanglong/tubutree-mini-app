@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { IsIn, IsInt, IsObject, IsOptional, IsString, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AffiliateService } from './affiliate.service';
+import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 
 class CreateLinkDto {
   @IsIn(['PRODUCT', 'CATEGORY', 'HOMEPAGE', 'DEAL']) targetType!: string;
@@ -63,6 +64,12 @@ export class AffiliateController {
   @Post('payouts')
   payout(@CurrentUser('sub') userId: string, @Body() dto: PayoutDto) {
     return this.affiliate.requestPayout(userId, dto.amount, dto.method, dto.bankInfo);
+  }
+
+  // CTV lên đơn hộ khách (COD/chuyển khoản) → CTV hưởng hoa hồng (placedForCustomer).
+  @Post('orders')
+  placeOrderForCustomer(@CurrentUser('sub') userId: string, @Body() dto: PlaceOrderForCustomerDto) {
+    return this.affiliate.placeOrderForCustomer(userId, dto);
   }
 
   @Get('analytics/storefronts')

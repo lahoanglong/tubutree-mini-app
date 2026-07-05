@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { CommissionStatus } from '@prisma/client';
-import { randomBytes } from 'node:crypto';
+import { CommissionStatus, type Prisma } from '@prisma/client';
+import { randomBytes, randomInt } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { PricingService } from '../pricing/pricing.service';
+import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 
 /**
  * CTV nội bộ (Build Spec §6.x, §15 affiliate.*).
@@ -17,6 +19,7 @@ export class AffiliateService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    private readonly pricing: PricingService,
   ) {}
 
   async register(userId: string) {
@@ -174,13 +177,154 @@ export class AffiliateService {
     });
   }
 
+  /**
+   * CTV "lên đơn hộ khách": CTV đặt đơn giao cho khách cuối, CTV hưởng hoa hồng.
+   * MONEY-CRITICAL — trừ stock ATOMIC (mirror checkout.placeOrder) + tạo hoa hồng cho CTV.
+   * KHÔNG coupon/điểm, chỉ COD/chuyển khoản. Đơn đánh dấu placedForCustomer=true để
+   * createCommissionForOrder cho phép self-referral (userId==referrerUserId==CTV).
+   */
+  async placeOrderForCustomer(ctvId: string, dto: PlaceOrderForCustomerDto) {
+    if (!dto.items || dto.items.length === 0) {
+      throw new BadRequestException('Chưa chọn sản phẩm để lên đơn.');
+    }
+    // Chống tự-giao-dịch: chỉ CTV (AFFILIATE) hoặc ADMIN mới được lên đơn hộ hưởng hoa hồng.
+    const ctv = await this.prisma.user.findUniqueOrThrow({ where: { id: ctvId } });
+    if (ctv.role !== 'AFFILIATE' && ctv.role !== 'ADMIN') {
+      throw new BadRequestException('Chỉ CTV mới có thể lên đơn hộ khách.');
+    }
+
+    const variationIds = [...new Set(dto.items.map((i) => i.variationId))];
+    const variations = await this.prisma.variation.findMany({
+      where: { id: { in: variationIds } },
+      include: { product: { select: { name: true } } },
+    });
+    const vmap = new Map(variations.map((v) => [v.id, v]));
+
+    // Dựng line + validate (variation tồn tại + đang bán). unitPrice = salePrice ?? retailPrice.
+    const lines = dto.items.map((i) => {
+      const v = vmap.get(i.variationId);
+      if (!v || !v.isActive) {
+        throw new BadRequestException('Sản phẩm không còn khả dụng.');
+      }
+      const unitPrice = v.salePrice ?? v.retailPrice;
+      return {
+        variationId: v.id,
+        productName: v.product.name,
+        variationName: v.name,
+        unitPrice,
+        quantity: i.quantity,
+        total: unitPrice * i.quantity,
+      };
+    });
+
+    const goods = lines.reduce((s, l) => s + l.total, 0);
+    const shippingFee = await this.pricing.calcShippingFee({ subtotal: goods, tierId: null });
+    const total = goods + shippingFee;
+
+    // Gian hàng của CTV (nếu có) → gắn slug để analytics theo gian hàng.
+    const store = await this.prisma.storefront.findFirst({
+      where: { ownerUserId: ctvId },
+      select: { slug: true },
+    });
+    const storefrontSlug = store?.slug ?? null;
+
+    const status = dto.paymentMethod === 'COD' ? 'CONFIRMED' : 'PENDING_PAYMENT';
+    const code = await this.generateOrderCode();
+    const shippingAddress = this.customerSnapshot(dto.customer);
+
+    const order = await this.prisma.$transaction(async (tx) => {
+      // Trừ stock ATOMIC từng line (gte) — chống oversell; count 0 → throw rollback.
+      for (const line of lines) {
+        const hit = await tx.variation.updateMany({
+          where: { id: line.variationId, stock: { gte: line.quantity } },
+          data: { stock: { decrement: line.quantity } },
+        });
+        if (hit.count === 0) {
+          throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
+        }
+      }
+      return tx.order.create({
+        data: {
+          code,
+          userId: ctvId,
+          type: 'RETAIL',
+          status,
+          subtotal: goods,
+          discount: 0,
+          shippingFee,
+          total,
+          pointsEarned: 0,
+          pointsUsed: 0,
+          paymentMethod: dto.paymentMethod,
+          paymentStatus: 'UNPAID',
+          shippingAddress,
+          referrerUserId: ctvId,
+          storefrontSlug,
+          placedForCustomer: true,
+          note: dto.note,
+          items: {
+            create: lines.map((l) => ({
+              variationId: l.variationId,
+              productName: l.productName,
+              variationName: l.variationName,
+              unitPrice: l.unitPrice,
+              quantity: l.quantity,
+              total: l.total,
+            })),
+          },
+        },
+      });
+    });
+
+    // Ngoài tx: tạo hoa hồng cho CTV (placedForCustomer cho phép self-referral). Non-fatal.
+    await this.createCommissionForOrder(order.id).catch((err) =>
+      this.logger.error(`Tạo commission lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`),
+    );
+
+    return this.prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { items: true },
+    });
+  }
+
+  /** Sinh mã đơn TUBU<ymd><random5> duy nhất (mirror checkout.generateCode). */
+  private async generateOrderCode(): Promise<string> {
+    for (let i = 0; i < 6; i++) {
+      const d = new Date();
+      const ymd = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(
+        d.getUTCDate(),
+      ).padStart(2, '0')}`;
+      const code = `TUBU${ymd}${String(randomInt(0, 100000)).padStart(5, '0')}`;
+      const exists = await this.prisma.order.findUnique({ where: { code } });
+      if (!exists) return code;
+    }
+    return `TUBU${Date.now()}`;
+  }
+
+  /** Snapshot địa chỉ người nhận (khách của CTV) → lưu Order.shippingAddress. */
+  private customerSnapshot(c: PlaceOrderForCustomerDto['customer']): Prisma.InputJsonValue {
+    return {
+      recipient: c.recipient,
+      phone: c.phone,
+      province: c.province,
+      district: c.district ?? '',
+      ward: c.ward,
+      street: c.street,
+      provinceCode: c.provinceCode,
+      districtCode: c.districtCode ?? '',
+      wardCode: c.wardCode,
+    };
+  }
+
   /** Tạo commission PENDING cho đơn có người giới thiệu (gọi từ checkout). */
   async createCommissionForOrder(orderId: string): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({
       where: { id: orderId },
       include: { items: true },
     });
-    if (!order.referrerUserId || order.referrerUserId === order.userId) return;
+    // Chặn tự-giới-thiệu (referrer == buyer) TRỪ đơn CTV "lên đơn hộ khách"
+    // (placedForCustomer=true) — đó là nghiệp vụ hợp lệ: CTV hưởng hoa hồng cho đơn hộ.
+    if (!order.referrerUserId || (order.referrerUserId === order.userId && !order.placedForCustomer)) return;
 
     const variationIds = order.items.map((i) => i.variationId);
     const variations = await this.prisma.variation.findMany({
@@ -277,6 +421,15 @@ export class AffiliateService {
 
   /** Đơn hoàn/hủy trong cửa sổ → reject commission. */
   async reverseCommissionsForOrder(orderId: string): Promise<void> {
+    // Guard ĐỐI XỨNG với createCommissionForOrder: chỉ đảo khi đơn CÓ hoa hồng hợp lệ.
+    // Tự-giới-thiệu organic (referrer==buyer, placedForCustomer=false) không sinh hoa hồng
+    // → bỏ qua; đơn CTV lên-đơn-hộ (placedForCustomer=true) VẪN đảo bình thường.
+    const order = await this.prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
+      select: { referrerUserId: true, userId: true, placedForCustomer: true },
+    });
+    if (!order.referrerUserId || (order.referrerUserId === order.userId && !order.placedForCustomer)) return;
+
     await this.prisma.commission.updateMany({
       where: { orderId, status: { in: ['PENDING', 'LOCKED'] } },
       data: { status: 'REJECTED' },

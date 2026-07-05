@@ -2,8 +2,11 @@ import 'reflect-metadata';
 import { AffiliateService } from './affiliate.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import type { PricingService } from '../pricing/pricing.service';
 
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
+// Ship mặc định 0 cho test (override bằng mockResolvedValue trong test lên-đơn-hộ).
+const pricing = { calcShippingFee: jest.fn().mockResolvedValue(0) } as unknown as PricingService;
 
 function prismaWith(order: unknown, variations: unknown[], createSpy = jest.fn()) {
   return {
@@ -14,14 +17,33 @@ function prismaWith(order: unknown, variations: unknown[], createSpy = jest.fn()
 }
 
 describe('AffiliateService.createCommissionForOrder', () => {
-  it('bỏ qua khi tự giới thiệu (referrer === buyer)', async () => {
+  it('bỏ qua khi tự giới thiệu ORGANIC (referrer === buyer, placedForCustomer=false)', async () => {
     const create = jest.fn();
-    const prisma = prismaWith({ id: 'o1', userId: 'u1', referrerUserId: 'u1', items: [] }, [], create);
-    await new AffiliateService(prisma, config).createCommissionForOrder('o1');
+    const prisma = prismaWith({ id: 'o1', userId: 'u1', referrerUserId: 'u1', placedForCustomer: false, items: [] }, [], create);
+    await new AffiliateService(prisma, config, pricing).createCommissionForOrder('o1');
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('tính hoa hồng theo rate từng SKU (floor mỗi dòng)', async () => {
+  it('CTV lên đơn hộ (referrer === buyer NHƯNG placedForCustomer=true) → VẪN tạo hoa hồng', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const order = {
+      id: 'o1',
+      userId: 'ctv', // CTV vừa là người đặt (userId) vừa là người hưởng (referrerUserId)
+      referrerUserId: 'ctv',
+      placedForCustomer: true,
+      total: 200000,
+      items: [{ variationId: 'v1', total: 200000 }],
+    };
+    const prisma = prismaWith(order, [{ id: 'v1', affiliateRate: 10 }], create);
+    await new AffiliateService(prisma, config, pricing).createCommissionForOrder('o1');
+    expect(create).toHaveBeenCalledTimes(1);
+    const data = create.mock.calls[0][0].data;
+    expect(data.amount).toBe(20000); // 10% * 200k
+    expect(data.affiliateUserId).toBe('ctv');
+    expect(data.status).toBe('PENDING');
+  });
+
+  it('tính hoa hồng theo rate từng SKU (floor mỗi dòng) — referrer ≠ buyer không đổi', async () => {
     const create = jest.fn().mockResolvedValue({});
     const order = {
       id: 'o1',
@@ -37,7 +59,7 @@ describe('AffiliateService.createCommissionForOrder', () => {
       { id: 'v1', affiliateRate: 10 }, // 10% * 200k = 20000
       { id: 'v2', affiliateRate: 5 }, // 5% * 100k = 5000
     ], create);
-    await new AffiliateService(prisma, config).createCommissionForOrder('o1');
+    await new AffiliateService(prisma, config, pricing).createCommissionForOrder('o1');
     expect(create).toHaveBeenCalledTimes(1);
     const data = create.mock.calls[0][0].data;
     expect(data.amount).toBe(25000);
@@ -49,15 +71,200 @@ describe('AffiliateService.createCommissionForOrder', () => {
     const create = jest.fn();
     const order = { id: 'o1', userId: 'b', referrerUserId: 'ctv', total: 100000, items: [{ variationId: 'v1', total: 100000 }] };
     const prisma = prismaWith(order, [{ id: 'v1', affiliateRate: 0 }], create);
-    await new AffiliateService(prisma, config).createCommissionForOrder('o1');
+    await new AffiliateService(prisma, config, pricing).createCommissionForOrder('o1');
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('AffiliateService.reverseCommissionsForOrder (guard đối xứng cho lên-đơn-hộ)', () => {
+  function makePrisma(order: unknown) {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      commission: { updateMany },
+    } as unknown as PrismaService;
+    return { prisma, updateMany };
+  }
+
+  it('đơn thường (referrer ≠ buyer) → VẪN đảo hoa hồng (không đổi)', async () => {
+    const { prisma, updateMany } = makePrisma({ id: 'o1', userId: 'buyer', referrerUserId: 'ctv', placedForCustomer: false });
+    await new AffiliateService(prisma, config, pricing).reverseCommissionsForOrder('o1');
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { orderId: 'o1', status: { in: ['PENDING', 'LOCKED'] } } }),
+    );
+  });
+
+  it('CTV lên đơn hộ (referrer === buyer, placedForCustomer=true) → đảo hoa hồng', async () => {
+    const { prisma, updateMany } = makePrisma({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true });
+    await new AffiliateService(prisma, config, pricing).reverseCommissionsForOrder('o1');
+    expect(updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('tự giới thiệu ORGANIC (referrer === buyer, placedForCustomer=false) → KHÔNG đảo (không có hoa hồng)', async () => {
+    const { prisma, updateMany } = makePrisma({ id: 'o1', userId: 'u1', referrerUserId: 'u1', placedForCustomer: false });
+    await new AffiliateService(prisma, config, pricing).reverseCommissionsForOrder('o1');
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('không có người giới thiệu → KHÔNG đảo', async () => {
+    const { prisma, updateMany } = makePrisma({ id: 'o1', userId: 'u1', referrerUserId: null, placedForCustomer: false });
+    await new AffiliateService(prisma, config, pricing).reverseCommissionsForOrder('o1');
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-CRITICAL)', () => {
+  const CUSTOMER = {
+    recipient: 'Khách A',
+    phone: '0900000000',
+    province: 'Hà Nội',
+    district: '',
+    ward: 'Phường 1',
+    street: 'Số 1',
+    provinceCode: '84_VN01',
+    districtCode: '',
+    wardCode: '84_VN0101',
+  };
+
+  function build(
+    opts: {
+      variations?: Array<{ id: string; isActive?: boolean; salePrice?: number | null; retailPrice?: number; name?: string; product?: { name: string } }>;
+      stockCount?: number;
+      variationUpdateMany?: jest.Mock;
+      role?: string;
+      storefront?: { slug: string } | null;
+      shippingFee?: number;
+    } = {},
+  ) {
+    const variations =
+      opts.variations ?? [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'Mặc định', product: { name: 'Trà thảo mộc' } }];
+    const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
+    const variationUpdateMany = opts.variationUpdateMany ?? jest.fn().mockResolvedValue({ count: opts.stockCount ?? 1 });
+    const commissionCreate = jest.fn().mockResolvedValue({});
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv', role: opts.role ?? 'AFFILIATE' }) },
+      variation: { findMany: jest.fn().mockResolvedValue(variations), updateMany: variationUpdateMany },
+      storefront: { findFirst: jest.fn().mockResolvedValue(opts.storefront === undefined ? { slug: 'ctv-shop' } : opts.storefront) },
+      order: {
+        create: orderCreate,
+        findUnique: jest.fn().mockResolvedValue(null), // generateOrderCode: code chưa tồn tại
+        findUniqueOrThrow: jest
+          .fn()
+          // 1) createCommissionForOrder đọc order + items; 2) trả đơn cuối cùng
+          .mockResolvedValue({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 100000, items: [], code: 'TUBU1' }),
+      },
+      commission: { create: commissionCreate },
+    } as unknown as PrismaService;
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
+      .fn()
+      .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
+    const pricingLocal = { calcShippingFee: jest.fn().mockResolvedValue(opts.shippingFee ?? 0) } as unknown as PricingService;
+    const svc = new AffiliateService(prisma, config, pricingLocal);
+    return { svc, prisma, orderCreate, variationUpdateMany, commissionCreate, pricingLocal };
+  }
+
+  const DTO = (over: Record<string, unknown> = {}) => ({
+    items: [{ variationId: 'v1', quantity: 2 }],
+    customer: CUSTOMER,
+    paymentMethod: 'COD' as const,
+    ...over,
+  });
+
+  it('COD → đơn CONFIRMED, userId==referrerUserId==ctv, placedForCustomer=true', async () => {
+    const { svc, orderCreate } = build({ shippingFee: 19000 });
+    await svc.placeOrderForCustomer('ctv', DTO() as never);
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.status).toBe('CONFIRMED');
+    expect(data.userId).toBe('ctv');
+    expect(data.referrerUserId).toBe('ctv');
+    expect(data.placedForCustomer).toBe(true);
+    expect(data.paymentStatus).toBe('UNPAID');
+    // goods = 100000 * 2 = 200000; ship 19000 → total 219000
+    expect(data.subtotal).toBe(200000);
+    expect(data.shippingFee).toBe(19000);
+    expect(data.total).toBe(219000);
+    expect(data.discount).toBe(0);
+    expect(data.items.create[0]).toMatchObject({ variationId: 'v1', unitPrice: 100000, quantity: 2, total: 200000 });
+  });
+
+  it('BANK_TRANSFER → đơn PENDING_PAYMENT', async () => {
+    const { svc, orderCreate } = build();
+    await svc.placeOrderForCustomer('ctv', DTO({ paymentMethod: 'BANK_TRANSFER' }) as never);
+    expect(orderCreate.mock.calls[0][0].data.status).toBe('PENDING_PAYMENT');
+  });
+
+  it('dùng salePrice khi có (ưu tiên salePrice ?? retailPrice)', async () => {
+    const { svc, orderCreate } = build({
+      variations: [{ id: 'v1', isActive: true, salePrice: 80000, retailPrice: 100000, name: 'X', product: { name: 'P' } }],
+    });
+    await svc.placeOrderForCustomer('ctv', DTO() as never);
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.items.create[0].unitPrice).toBe(80000);
+    expect(data.subtotal).toBe(160000);
+  });
+
+  it('trừ stock ATOMIC từng line (where gte) trước khi tạo đơn', async () => {
+    const { svc, variationUpdateMany, orderCreate } = build();
+    await svc.placeOrderForCustomer('ctv', DTO() as never);
+    expect(variationUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'v1', stock: { gte: 2 } }, data: { stock: { decrement: 2 } } }),
+    );
+    expect(orderCreate).toHaveBeenCalled();
+  });
+
+  it('stock không đủ (count=0) → BadRequest, KHÔNG tạo đơn (rollback)', async () => {
+    const { svc, orderCreate } = build({ stockCount: 0 });
+    await expect(svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toThrow('không đủ tồn kho');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('tạo hoa hồng cho CTV sau khi đặt đơn (createCommissionForOrder)', async () => {
+    const { svc, commissionCreate, prisma } = build();
+    // order fetch trong createCommissionForOrder: đơn CTV placedForCustomer + 1 item có rate.
+    (prisma.order.findUniqueOrThrow as jest.Mock)
+      .mockResolvedValueOnce({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 200000, items: [{ variationId: 'v1', total: 200000 }] })
+      .mockResolvedValueOnce({ id: 'o1', code: 'TUBU1', total: 200000, items: [] });
+    (prisma.variation.findMany as jest.Mock).mockResolvedValueOnce([
+      { id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'X', product: { name: 'P' } },
+    ]).mockResolvedValueOnce([{ id: 'v1', affiliateRate: 10 }]);
+    await svc.placeOrderForCustomer('ctv', DTO() as never);
+    expect(commissionCreate).toHaveBeenCalledTimes(1);
+    expect(commissionCreate.mock.calls[0][0].data.affiliateUserId).toBe('ctv');
+  });
+
+  it('không có item → BadRequest', async () => {
+    const { svc } = build();
+    await expect(svc.placeOrderForCustomer('ctv', DTO({ items: [] }) as never)).rejects.toThrow();
+  });
+
+  it('variation ngừng bán (isActive=false) → BadRequest', async () => {
+    const { svc } = build({
+      variations: [{ id: 'v1', isActive: false, salePrice: null, retailPrice: 100000, name: 'X', product: { name: 'P' } }],
+    });
+    await expect(svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toThrow();
+  });
+
+  it('người dùng không phải CTV/ADMIN → BadRequest (chống tự-giao-dịch)', async () => {
+    const { svc, orderCreate } = build({ role: 'CUSTOMER' });
+    await expect(svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toThrow();
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('gắn storefrontSlug của CTV để attribution; null nếu chưa có gian hàng', async () => {
+    const withStore = build({ storefront: { slug: 'ctv-shop' } });
+    await withStore.svc.placeOrderForCustomer('ctv', DTO() as never);
+    expect(withStore.orderCreate.mock.calls[0][0].data.storefrontSlug).toBe('ctv-shop');
+
+    const noStore = build({ storefront: null });
+    await noStore.svc.placeOrderForCustomer('ctv', DTO() as never);
+    expect(noStore.orderCreate.mock.calls[0][0].data.storefrontSlug).toBeNull();
   });
 });
 
 describe('AffiliateService.monthlyTier (Build Spec §6.8.2)', () => {
   // monthlyTier là private + thuần — gọi qua cast để kiểm tra ranh giới bậc.
   const tier = (revenue: number) =>
-    (new AffiliateService({} as unknown as PrismaService, config) as unknown as {
+    (new AffiliateService({} as unknown as PrismaService, config, pricing) as unknown as {
       monthlyTier(r: number): {
         name: string;
         bonusPct: number;
@@ -128,7 +335,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
 
   it('số dư khả dụng = 0 → BadRequest', async () => {
     const { prisma } = makePrisma({ available: 0 });
-    await expect(new AffiliateService(prisma, config).requestPayout('u1', 0, 'WALLET_BALANCE')).rejects.toThrow(
+    await expect(new AffiliateService(prisma, config, pricing).requestPayout('u1', 0, 'WALLET_BALANCE')).rejects.toThrow(
       'khả dụng',
     );
   });
@@ -136,7 +343,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
   it('amount vượt khả dụng → BadRequest', async () => {
     const { prisma } = makePrisma({ available: 100_000 });
     await expect(
-      new AffiliateService(prisma, config).requestPayout('u1', 200_000, 'WALLET_BALANCE'),
+      new AffiliateService(prisma, config, pricing).requestPayout('u1', 200_000, 'WALLET_BALANCE'),
     ).rejects.toThrow('không đủ');
   });
 
@@ -148,7 +355,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
         { id: 'c2', amount: 40_000 },
       ],
     });
-    const r = await new AffiliateService(prisma, config).requestPayout('u1', 50_000, 'WALLET_BALANCE');
+    const r = await new AffiliateService(prisma, config, pricing).requestPayout('u1', 50_000, 'WALLET_BALANCE');
     // dù request 50k, credit theo tổng thực 100k ×1.5 = 150k (không mất 50k còn lại)
     expect(r.credited).toBe(150_000);
     expect(userUpdate.mock.calls[0][0].data.walletBalance).toEqual({ increment: 150_000 });
@@ -158,14 +365,14 @@ describe('AffiliateService.requestPayout (money safety)', () => {
   it('WALLET_BALANCE double-spend: updateMany count=0 → BadRequest, KHÔNG credit ví', async () => {
     const { prisma, userUpdate } = makePrisma({ available: 100_000, markCount: 0 });
     await expect(
-      new AffiliateService(prisma, config).requestPayout('u1', 100_000, 'WALLET_BALANCE'),
+      new AffiliateService(prisma, config, pricing).requestPayout('u1', 100_000, 'WALLET_BALANCE'),
     ).rejects.toThrow('đã được xử lý');
     expect(userUpdate).not.toHaveBeenCalled();
   });
 
   it('BANK dưới mức tối thiểu → BadRequest', async () => {
     const { prisma } = makePrisma({ available: 100_000 });
-    await expect(new AffiliateService(prisma, config).requestPayout('u1', 10_000, 'BANK', {})).rejects.toThrow(
+    await expect(new AffiliateService(prisma, config, pricing).requestPayout('u1', 10_000, 'BANK', {})).rejects.toThrow(
       'tối thiểu',
     );
   });
@@ -175,7 +382,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
       available: 100_000,
       rows: [{ id: 'c1', amount: 100_000 }],
     });
-    const r = await new AffiliateService(prisma, config).requestPayout('u1', 80_000, 'BANK', { bank: 'VCB' });
+    const r = await new AffiliateService(prisma, config, pricing).requestPayout('u1', 80_000, 'BANK', { bank: 'VCB' });
     expect(r.status).toBe('REQUESTED');
     expect(payoutCreate.mock.calls[0][0].data.amount).toBe(100_000); // tổng thực, không phải 80k
     expect(updateMany.mock.calls[0][0].data.payoutBatchId).toBe('payout-1');
@@ -195,7 +402,7 @@ describe('AffiliateService.grantReferralReward (refer-reward 1 lần, cộng d�
 
   it('đơn ≥200k có người giới thiệu → thưởng voucher 50k cho CẢ hai (§6.14.5)', async () => {
     const { prisma, couponCreate } = makePrisma({ id: 'o1', userId: 'referee', referrerUserId: 'referrer', total: 250000 });
-    await new AffiliateService(prisma, config).grantReferralReward('o1');
+    await new AffiliateService(prisma, config, pricing).grantReferralReward('o1');
     expect(couponCreate).toHaveBeenCalledTimes(2);
     const data = couponCreate.mock.calls.map((c) => c[0].data);
     const codes = data.map((d) => d.code);
@@ -208,19 +415,19 @@ describe('AffiliateService.grantReferralReward (refer-reward 1 lần, cộng d�
 
   it('đơn < 200k → KHÔNG thưởng (chưa đạt ngưỡng §6.14.5)', async () => {
     const { prisma, couponCreate } = makePrisma({ id: 'o1', userId: 'referee', referrerUserId: 'referrer', total: 150000 });
-    await new AffiliateService(prisma, config).grantReferralReward('o1');
+    await new AffiliateService(prisma, config, pricing).grantReferralReward('o1');
     expect(couponCreate).not.toHaveBeenCalled();
   });
 
   it('tự giới thiệu (referrer === buyer) → không thưởng', async () => {
     const { prisma, couponCreate } = makePrisma({ id: 'o1', userId: 'u1', referrerUserId: 'u1', total: 250000 });
-    await new AffiliateService(prisma, config).grantReferralReward('o1');
+    await new AffiliateService(prisma, config, pricing).grantReferralReward('o1');
     expect(couponCreate).not.toHaveBeenCalled();
   });
 
   it('không có người giới thiệu → không thưởng', async () => {
     const { prisma, couponCreate } = makePrisma({ id: 'o1', userId: 'u1', referrerUserId: null, total: 250000 });
-    await new AffiliateService(prisma, config).grantReferralReward('o1');
+    await new AffiliateService(prisma, config, pricing).grantReferralReward('o1');
     expect(couponCreate).not.toHaveBeenCalled();
   });
 
@@ -229,7 +436,7 @@ describe('AffiliateService.grantReferralReward (refer-reward 1 lần, cộng d�
       { id: 'o1', userId: 'referee', referrerUserId: 'referrer', total: 250000 },
       { id: 'existing' },
     );
-    await new AffiliateService(prisma, config).grantReferralReward('o1');
+    await new AffiliateService(prisma, config, pricing).grantReferralReward('o1');
     expect(couponCreate).not.toHaveBeenCalled();
   });
 });
@@ -243,7 +450,7 @@ describe('AffiliateService analytics', () => {
       order: { aggregate: orderAggregate },
       commission: { aggregate: commissionAggregate },
     } as unknown as PrismaService;
-    const svc = new AffiliateService(prisma, config);
+    const svc = new AffiliateService(prisma, config, pricing);
     const r = await svc.storefrontAnalytics('u1');
     expect(r.storefronts[0]).toMatchObject({ slug: 'linh', orders: 3, revenue: 900000, commission: 72000 });
     // Hardening: WHERE phải scope đúng theo slug + referrer (chống đếm chéo người dùng).
@@ -269,7 +476,7 @@ describe('AffiliateService analytics', () => {
         { id: 'v1', affiliateRate: '10' }, { id: 'v2', affiliateRate: '8' },
       ]) },
     } as unknown as PrismaService;
-    const svc = new AffiliateService(prisma, config);
+    const svc = new AffiliateService(prisma, config, pricing);
     const r = await svc.productCommissionBreakdown('u1');
     const dau = r.find((x) => x.productName === 'Dầu gội');
     expect(dau?.commission).toBe(10000); // floor(100000*10/100)
@@ -289,7 +496,7 @@ describe('AffiliateService analytics', () => {
         { id: 'v1', affiliateRate: '10' },
       ]) },
     } as unknown as PrismaService;
-    const svc = new AffiliateService(prisma, config);
+    const svc = new AffiliateService(prisma, config, pricing);
     const r = await svc.productCommissionBreakdown('u1');
     const dau = r.find((x) => x.productName === 'Dầu gội');
     expect(dau?.orders).toBe(1); // 2 item cùng đơn → 1 đơn
@@ -310,7 +517,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 3 ngày)', 
   it('recordTouch: resolve referralCode → upsert với expiresAt = now + 3 ngày', async () => {
     const prisma = makePrisma();
     (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1' });
-    await new AffiliateService(prisma, config).recordTouch('buyer1', { referralCode: 'LINH', storefrontSlug: 'LINH', kind: 'ctv' }, NOW);
+    await new AffiliateService(prisma, config, pricing).recordTouch('buyer1', { referralCode: 'LINH', storefrontSlug: 'LINH', kind: 'ctv' }, NOW);
     const call = (prisma as any).referralTouch.upsert.mock.calls[0][0];
     expect(call.where).toEqual({ userId: 'buyer1' });
     expect(call.create.referrerUserId).toBe('ctv1');
@@ -319,7 +526,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 3 ngày)', 
 
   it('recordTouch: bỏ qua nếu không có referralCode', async () => {
     const prisma = makePrisma();
-    const r = await new AffiliateService(prisma, config).recordTouch('buyer1', {}, NOW);
+    const r = await new AffiliateService(prisma, config, pricing).recordTouch('buyer1', {}, NOW);
     expect(r.ok).toBe(false);
     expect((prisma as any).referralTouch.upsert).not.toHaveBeenCalled();
   });
@@ -327,7 +534,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 3 ngày)', 
   it('recordTouch: bỏ qua tự giới thiệu (code trỏ chính mình)', async () => {
     const prisma = makePrisma();
     (prisma as any).user.findUnique.mockResolvedValue({ id: 'buyer1' });
-    const r = await new AffiliateService(prisma, config).recordTouch('buyer1', { referralCode: 'SELF' }, NOW);
+    const r = await new AffiliateService(prisma, config, pricing).recordTouch('buyer1', { referralCode: 'SELF' }, NOW);
     expect(r.ok).toBe(false);
     expect((prisma as any).referralTouch.upsert).not.toHaveBeenCalled();
   });
@@ -335,21 +542,21 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 3 ngày)', 
   it('recordTouch: bỏ qua code không tồn tại', async () => {
     const prisma = makePrisma();
     (prisma as any).user.findUnique.mockResolvedValue(null);
-    const r = await new AffiliateService(prisma, config).recordTouch('buyer1', { referralCode: 'NOPE' }, NOW);
+    const r = await new AffiliateService(prisma, config, pricing).recordTouch('buyer1', { referralCode: 'NOPE' }, NOW);
     expect(r.ok).toBe(false);
   });
 
   it('getActiveTouch: trả touch khi còn hạn', async () => {
     const prisma = makePrisma();
     (prisma as any).referralTouch.findUnique.mockResolvedValue({ referrerUserId: 'ctv1', storefrontSlug: 'LINH', kind: 'ctv', expiresAt: new Date(NOW.getTime() + 1000) });
-    const t = await new AffiliateService(prisma, config).getActiveTouch('buyer1', NOW);
+    const t = await new AffiliateService(prisma, config, pricing).getActiveTouch('buyer1', NOW);
     expect(t).toEqual({ referrerUserId: 'ctv1', storefrontSlug: 'LINH', kind: 'ctv' });
   });
 
   it('getActiveTouch: null khi hết hạn', async () => {
     const prisma = makePrisma();
     (prisma as any).referralTouch.findUnique.mockResolvedValue({ referrerUserId: 'ctv1', storefrontSlug: null, kind: 'ctv', expiresAt: new Date(NOW.getTime() - 1000) });
-    const t = await new AffiliateService(prisma, config).getActiveTouch('buyer1', NOW);
+    const t = await new AffiliateService(prisma, config, pricing).getActiveTouch('buyer1', NOW);
     expect(t).toBeNull();
   });
 });

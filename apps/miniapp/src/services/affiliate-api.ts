@@ -93,6 +93,43 @@ export const getProductBreakdown = () =>
 export const recordReferralTouch = (dto: { referralCode: string; storefrontSlug?: string; kind?: 'ctv' | 'brand' }) =>
   api.post('/affiliate/touch', dto).then((r) => r.data as { ok: boolean });
 
+// ── CTV lên đơn hộ khách (CTV đặt hộ, hưởng hoa hồng) ──
+export interface CtvOrderItemInput {
+  variationId: string;
+  quantity: number;
+}
+export interface CtvOrderCustomerInput {
+  recipient: string;
+  phone: string;
+  province: string;
+  district?: string;
+  ward: string;
+  street: string;
+  provinceCode: string;
+  districtCode?: string;
+  wardCode: string;
+}
+export interface CtvOrderItemResult {
+  productName: string;
+  variationName: string;
+  unitPrice: number;
+  quantity: number;
+  total: number;
+}
+export interface CtvOrderResult {
+  id: string;
+  code: string;
+  total: number;
+  status: string;
+  items: CtvOrderItemResult[];
+}
+export const createCtvOrder = (dto: {
+  items: CtvOrderItemInput[];
+  customer: CtvOrderCustomerInput;
+  paymentMethod: 'COD' | 'BANK_TRANSFER';
+  note?: string;
+}) => api.post<CtvOrderResult>('/affiliate/orders', dto).then((r) => r.data);
+
 // ── Content Kit (bộ nội dung bán hàng theo từng sản phẩm) ──
 export interface ContentKitFaq {
   q: string;
