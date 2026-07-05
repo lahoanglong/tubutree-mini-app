@@ -29,6 +29,7 @@ export class FlashSaleService {
     const items = await this.prisma.flashSaleItem.findMany({
       where: {
         variationId: { in: variationIds },
+        variation: { isActive: true },
         flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } },
       },
       include: { flashSale: { select: { endAt: true } } },
@@ -49,7 +50,10 @@ export class FlashSaleService {
   /** Danh sách item flash đang active còn quota — cho FE trang chủ. */
   async listActive(now: Date = new Date()) {
     const items = await this.prisma.flashSaleItem.findMany({
-      where: { flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
+      where: {
+        variation: { isActive: true },
+        flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } },
+      },
       include: {
         flashSale: { select: { endAt: true } },
         variation: { include: { product: { select: { slug: true, name: true, thumbnail: true } } } },
@@ -177,16 +181,20 @@ export class FlashSaleService {
 
   /**
    * Thêm variation vào đợt flash sale (admin). Validate:
-   *  - variation tồn tại; flashPrice < retailPrice (kèm % giảm tối thiểu theo config).
+   *  - đợt flash tồn tại; variation tồn tại; flashPrice < giá đang bán (salePrice ?? retailPrice)
+   *    (kèm % giảm tối thiểu theo config).
    *  - quota không vượt tồn kho.
    *  - variation chưa tham gia đợt flash active/tương lai khác.
    */
   async addItem(saleId: string, dto: { variationId: string; flashPrice: number; quota: number; perUserLimit?: number }) {
+    const sale = await this.prisma.flashSale.findUnique({ where: { id: saleId } });
+    if (!sale) throw new BadRequestException('Đợt flash không tồn tại.');
     const variation = await this.prisma.variation.findUnique({ where: { id: dto.variationId } });
     if (!variation) throw new BadRequestException('Variation không tồn tại.');
-    if (dto.flashPrice >= variation.retailPrice) throw new BadRequestException('Giá flash phải thấp hơn giá bán lẻ.');
+    const standing = variation.salePrice ?? variation.retailPrice;
+    if (dto.flashPrice >= standing) throw new BadRequestException('Giá flash phải thấp hơn giá đang bán.');
     const minPct = await this.config.get<number>('flashsale.min_discount_pct', 0);
-    if (minPct > 0 && dto.flashPrice > variation.retailPrice * (1 - minPct)) {
+    if (minPct > 0 && dto.flashPrice > standing * (1 - minPct)) {
       throw new BadRequestException(`Mức giảm phải ≥ ${Math.round(minPct * 100)}%.`);
     }
     if (dto.quota > variation.stock) throw new BadRequestException('Quota vượt tồn kho.');

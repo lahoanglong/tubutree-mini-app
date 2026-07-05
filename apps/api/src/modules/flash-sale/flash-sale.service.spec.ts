@@ -36,6 +36,15 @@ describe('FlashSaleService.resolveEffective', () => {
     expect(map.size).toBe(0);
     expect(findMany).not.toHaveBeenCalled();
   });
+
+  it('where CHỈ lấy variation active (variation: { isActive: true })', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { flashSaleItem: { findMany } } as unknown as PrismaService;
+    await new FlashSaleService(prisma, config).resolveEffective(['v1'], NOW);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ variation: { isActive: true } }) }),
+    );
+  });
 });
 
 describe('FlashSaleService.listActive', () => {
@@ -49,6 +58,15 @@ describe('FlashSaleService.listActive', () => {
     const list = await new FlashSaleService(prisma, config).listActive(NOW);
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ itemId: 'fi1', flashPrice: 80000, retailPrice: 100000, productSlug: 'a' });
+  });
+
+  it('where CHỈ lấy variation active (variation: { isActive: true })', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { flashSaleItem: { findMany } } as unknown as PrismaService;
+    await new FlashSaleService(prisma, config).listActive(NOW);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ variation: { isActive: true } }) }),
+    );
   });
 });
 
@@ -163,13 +181,27 @@ describe('FlashSaleService.updateSale', () => {
 
 describe('FlashSaleService.addItem (validate)', () => {
   const base = () => ({
-    variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', retailPrice: 100000, stock: 10 }) },
+    flashSale: { findUnique: jest.fn().mockResolvedValue({ id: 's1' }) },
+    variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', retailPrice: 100000, salePrice: null, stock: 10 }) },
     flashSaleItem: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'fi1' }) },
   });
-  it('flashPrice >= retailPrice → reject', async () => {
+  it('đợt flash không tồn tại → reject', async () => {
+    const prisma = base() as any;
+    prisma.flashSale.findUnique.mockResolvedValue(null);
+    await expect(new FlashSaleService(prisma, config).addItem('sX', { variationId: 'v1', flashPrice: 80000, quota: 5 }))
+      .rejects.toThrow('Đợt flash không tồn tại.');
+  });
+  it('flashPrice >= giá đang bán (retailPrice khi không có salePrice) → reject', async () => {
     const prisma = base() as any;
     await expect(new FlashSaleService(prisma, config).addItem('s1', { variationId: 'v1', flashPrice: 120000, quota: 5 }))
-      .rejects.toThrow('Giá flash phải thấp hơn giá bán lẻ.');
+      .rejects.toThrow('Giá flash phải thấp hơn giá đang bán.');
+  });
+  it('flashPrice >= salePrice (đang sale) → reject dù < retailPrice', async () => {
+    const prisma = base() as any;
+    prisma.variation.findUnique.mockResolvedValue({ id: 'v1', retailPrice: 100000, salePrice: 70000, stock: 10 });
+    // 80000 < retailPrice 100000 nhưng >= salePrice 70000 → phải reject
+    await expect(new FlashSaleService(prisma, config).addItem('s1', { variationId: 'v1', flashPrice: 80000, quota: 5 }))
+      .rejects.toThrow('Giá flash phải thấp hơn giá đang bán.');
   });
   it('quota > stock → reject', async () => {
     const prisma = base() as any;

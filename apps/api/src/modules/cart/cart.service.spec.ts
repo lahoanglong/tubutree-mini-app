@@ -130,4 +130,153 @@ describe('CartService guard tồn kho', () => {
     // coupon base = tổng line KHÔNG flash = v2 (2×50000)=100000, KHÔNG gồm v1
     expect(validateAndCompute).toHaveBeenCalledWith('SALE', 'u1', 100000);
   });
+
+  it('flash line: flashPrice > standing → charge theo standing (không cao hơn giá bán); soldPct quota=0 → 0', async () => {
+    const prisma = {
+      cart: {
+        upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: 'c1',
+          couponCode: null,
+          items: [
+            {
+              id: 'ci1',
+              variationId: 'v1',
+              quantity: 1,
+              variation: {
+                productId: 'p1',
+                salePrice: null,
+                retailPrice: 60000,
+                stock: 5,
+                name: 'A',
+                product: { name: 'A', slug: 'a', thumbnail: null },
+              },
+            },
+          ],
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    } as any;
+    const flashSvc = {
+      resolveEffective: jest
+        .fn()
+        .mockResolvedValue(new Map([['v1', { flashPrice: 80000, itemId: 'fi1', endAt: new Date(), soldCount: 0, quota: 0 }]])),
+    } as any;
+    const cart = await new CartService(prisma, coupons, config, flashSvc).getCart('u1');
+    const l1 = cart.items[0]!;
+    expect(l1.unitPrice).toBe(60000); // min(80000, 60000) → không charge cao hơn standing
+    expect(l1.total).toBe(60000);
+    expect(l1.isFlash).toBe(true); // vẫn là dòng flash (vẫn tiêu quota)
+    expect(l1.flashSaleItemId).toBe('fi1');
+    expect(l1.soldPct).toBe(0); // quota=0 → tránh chia 0
+  });
+
+  it('applyCoupon: validate trên base KHÔNG flash (không phải subtotal đầy đủ)', async () => {
+    const validateAndCompute = jest.fn().mockResolvedValue({ discount: 0, freeship: false });
+    const prisma = {
+      cart: {
+        upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: 'c1',
+          couponCode: null,
+          items: [
+            {
+              id: 'ci1',
+              variationId: 'v1',
+              quantity: 1,
+              variation: { productId: 'p1', salePrice: null, retailPrice: 100000, stock: 5, name: 'A', product: { name: 'A', slug: 'a', thumbnail: null } },
+            },
+            {
+              id: 'ci2',
+              variationId: 'v2',
+              quantity: 2,
+              variation: { productId: 'p2', salePrice: null, retailPrice: 50000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null } },
+            },
+          ],
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    } as any;
+    const flashSvc = {
+      resolveEffective: jest
+        .fn()
+        .mockResolvedValue(new Map([['v1', { flashPrice: 80000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])),
+    } as any;
+    const couponsSvc = { validateAndCompute } as any;
+    await new CartService(prisma, couponsSvc, config, flashSvc).applyCoupon('u1', 'SAVE');
+    // subtotal đầy đủ = v1(80000)+v2(100000)=180000; base KHÔNG flash = v2 = 100000
+    expect(validateAndCompute).toHaveBeenCalledWith('SAVE', 'u1', 100000);
+    expect(validateAndCompute).not.toHaveBeenCalledWith('SAVE', 'u1', 180000);
+    expect(prisma.cart.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { couponCode: 'SAVE' } });
+  });
+
+  it('getCart: coupon fail trên base-không-flash NHƯNG hợp lệ trên TOÀN giỏ → GIỮ mã, discount 0, KHÔNG null', async () => {
+    const validateAndCompute = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('minOrder')) // gọi với couponBase (loại flash)
+      .mockResolvedValueOnce({ discount: 0, freeship: false }); // gọi lại với subtotal đầy đủ
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = {
+      cart: {
+        upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: 'c1',
+          couponCode: 'SALE',
+          items: [
+            {
+              id: 'ci1',
+              variationId: 'v1',
+              quantity: 1,
+              variation: { productId: 'p1', salePrice: null, retailPrice: 100000, stock: 5, name: 'A', product: { name: 'A', slug: 'a', thumbnail: null } },
+            },
+            {
+              id: 'ci2',
+              variationId: 'v2',
+              quantity: 1,
+              variation: { productId: 'p2', salePrice: null, retailPrice: 30000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null } },
+            },
+          ],
+        }),
+        update,
+      },
+    } as any;
+    const flashSvc = {
+      resolveEffective: jest
+        .fn()
+        .mockResolvedValue(new Map([['v1', { flashPrice: 80000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])),
+    } as any;
+    const couponsSvc = { validateAndCompute } as any;
+    const cart = await new CartService(prisma, couponsSvc, config, flashSvc).getCart('u1');
+    expect(cart.couponCode).toBe('SALE'); // GIỮ mã (flash chỉ tạm thời kéo base xuống)
+    expect(cart.discount).toBe(0);
+    expect(update).not.toHaveBeenCalled(); // KHÔNG null hoá coupon
+  });
+
+  it('getCart: coupon fail cả trên TOÀN giỏ (hết hạn/hết lượt) → GỠ mã (null)', async () => {
+    const validateAndCompute = jest.fn().mockRejectedValue(new Error('expired'));
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = {
+      cart: {
+        upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: 'c1',
+          couponCode: 'SALE',
+          items: [
+            {
+              id: 'ci2',
+              variationId: 'v2',
+              quantity: 1,
+              variation: { productId: 'p2', salePrice: null, retailPrice: 30000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null } },
+            },
+          ],
+        }),
+        update,
+      },
+    } as any;
+    const flashSvc = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as any;
+    const couponsSvc = { validateAndCompute } as any;
+    const cart = await new CartService(prisma, couponsSvc, config, flashSvc).getCart('u1');
+    expect(cart.couponCode).toBeNull();
+    expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { couponCode: null } });
+  });
 });

@@ -37,7 +37,8 @@ export class CartService {
     );
     const lines = cart.items.map((it) => {
       const flash = flashMap.get(it.variationId);
-      const unitPrice = flash ? flash.flashPrice : (it.variation.salePrice ?? it.variation.retailPrice);
+      const standing = it.variation.salePrice ?? it.variation.retailPrice;
+      const unitPrice = flash ? Math.min(flash.flashPrice, standing) : standing;
       return {
         id: it.id,
         variationId: it.variationId,
@@ -53,7 +54,7 @@ export class CartService {
         isFlash: !!flash,
         flashSaleItemId: flash?.itemId ?? null,
         flashEndAt: flash?.endAt ?? null,
-        soldPct: flash ? Math.round((flash.soldCount / flash.quota) * 100) : null,
+        soldPct: flash ? (flash.quota > 0 ? Math.round((flash.soldCount / flash.quota) * 100) : 0) : null,
       };
     });
     const subtotal = lines.reduce((s, l) => s + l.total, 0);
@@ -69,9 +70,17 @@ export class CartService {
         discount = r.discount;
         freeship = r.freeship;
       } catch {
-        // coupon không còn hợp lệ với giỏ hiện tại → gỡ
-        await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
-        couponCode = null;
+        // Có thể flash tạm thời kéo couponBase xuống dưới minOrder. Nếu coupon vẫn hợp lệ trên
+        // TOÀN giỏ (gồm flash) → GIỮ mã (chờ flash kết thúc), tạm không giảm. Nếu hỏng cả trên
+        // toàn giỏ (hết hạn/hết lượt/không đạt minOrder thật) → gỡ như cũ.
+        try {
+          await this.coupons.validateAndCompute(couponCode, userId, subtotal);
+          discount = 0;
+          freeship = false;
+        } catch {
+          await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
+          couponCode = null;
+        }
       }
     }
 
@@ -144,8 +153,9 @@ export class CartService {
 
   async applyCoupon(userId: string, code: string) {
     const cart = await this.getCart(userId);
-    // validate với subtotal hiện tại (ném lỗi nếu không hợp lệ)
-    await this.coupons.validateAndCompute(code, userId, cart.subtotal);
+    // Validate trên base KHÔNG flash (khớp getCart) — tránh apply rồi bị strip ngay.
+    const couponBase = cart.items.filter((l) => !l.isFlash).reduce((s, l) => s + l.total, 0);
+    await this.coupons.validateAndCompute(code, userId, couponBase);
     await this.prisma.cart.update({ where: { userId }, data: { couponCode: code } });
     return this.getCart(userId);
   }
