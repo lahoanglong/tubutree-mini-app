@@ -68,6 +68,10 @@ export const vi = {
     viewCart: 'Xem giỏ hàng',
   },
 
+  subscriptions: {
+    discountLine: (pct: number) => `Đang giảm ${pct}% cho đơn định kỳ`,
+  },
+
   cart: {
     title: 'Giỏ hàng',
     emptyHeading: 'Giỏ còn trống đấy',

@@ -51,7 +51,11 @@ describe('SubscriptionsService.create', () => {
 });
 
 describe('SubscriptionsService.processDue (claim chống double-order)', () => {
-  function makeProcess(claimCount: number) {
+  type Tier = { minActive: number; pct: number };
+  function makeProcess(
+    claimCount: number,
+    opts: { activeCount?: number; tiers?: Tier[] } = {},
+  ) {
     const due = [{ id: 's1', userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4 }];
     const updateMany = jest.fn().mockResolvedValue({ count: claimCount });
     const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
@@ -60,13 +64,17 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         findMany: jest.fn().mockResolvedValue(due),
         updateMany,
         update: jest.fn().mockResolvedValue({}),
+        count: jest.fn().mockResolvedValue(opts.activeCount ?? 1),
       },
       variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P' } }) },
       address: { findUnique: jest.fn().mockResolvedValue({ id: 'a1', userId: 'u1', recipient: 'R', phone: '09', province: 'p', district: 'd', ward: 'w', street: 's', provinceCode: '1', districtCode: '2', wardCode: '3' }) },
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', tierId: null }) },
       order: { create: orderCreate, findUnique: jest.fn().mockResolvedValue(null) },
     } as unknown as PrismaService;
-    const cfg = { get: async <T>(_k: string, fb?: T) => fb as T } as unknown as SystemConfigService;
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> =>
+        k === 'subscribe.discount_tiers' && opts.tiers ? (opts.tiers as unknown as T) : (fb as T),
+    } as unknown as SystemConfigService;
     const pr = {
       calcShippingFee: jest.fn().mockResolvedValue(0),
       calcPointsEarned: jest.fn().mockResolvedValue(0),
@@ -88,5 +96,85 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     const { svc, orderCreate } = makeProcess(0);
     await svc.processDue();
     expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('user chỉ có 1 subscription ACTIVE → giảm bậc cơ bản 12%', async () => {
+    const { svc, orderCreate } = makeProcess(1, {
+      activeCount: 1,
+      tiers: [{ minActive: 1, pct: 0.12 }, { minActive: 3, pct: 0.14 }, { minActive: 5, pct: 0.15 }],
+    });
+    await svc.processDue();
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.discount).toBe(Math.floor(100000 * 0.12));
+    expect(data.total).toBe(data.subtotal - data.discount + data.shippingFee);
+  });
+
+  it('user có 5 subscription ACTIVE → giảm bậc cao nhất 15% cho đơn định kỳ', async () => {
+    const { svc, orderCreate } = makeProcess(1, {
+      activeCount: 5,
+      tiers: [{ minActive: 1, pct: 0.12 }, { minActive: 3, pct: 0.14 }, { minActive: 5, pct: 0.15 }],
+    });
+    await svc.processDue();
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.discount).toBe(Math.floor(100000 * 0.15));
+    expect(data.total).toBe(data.subtotal - data.discount + data.shippingFee);
+  });
+});
+
+describe('SubscriptionsService.effectiveDiscountPct', () => {
+  const tiers = [{ minActive: 1, pct: 0.12 }, { minActive: 3, pct: 0.14 }, { minActive: 5, pct: 0.15 }];
+
+  function makeSvc(activeCount: number) {
+    const prisma = {
+      subscription: { count: jest.fn().mockResolvedValue(activeCount) },
+    } as unknown as PrismaService;
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> =>
+        k === 'subscribe.discount_tiers' ? (tiers as unknown as T) : (fb as T),
+    } as unknown as SystemConfigService;
+    return new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications);
+  }
+
+  it.each([
+    [1, 0.12],
+    [2, 0.12],
+    [3, 0.14],
+    [4, 0.14],
+    [5, 0.15],
+    [10, 0.15],
+  ])('activeCount=%i → pct=%f (bậc cao nhất đạt được)', async (activeCount, expected) => {
+    const svc = makeSvc(activeCount);
+    await expect(svc.effectiveDiscountPct('u1')).resolves.toBe(expected);
+  });
+
+  it('activeCount=0 (không có subscription ACTIVE nào) → 0%', async () => {
+    const svc = makeSvc(0);
+    await expect(svc.effectiveDiscountPct('u1')).resolves.toBe(0);
+  });
+});
+
+describe('SubscriptionsService.list', () => {
+  it('trả về effectiveDiscountPct theo số subscription ACTIVE của user', async () => {
+    const tiers = [{ minActive: 1, pct: 0.12 }, { minActive: 3, pct: 0.14 }, { minActive: 5, pct: 0.15 }];
+    const prisma = {
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 's1', variationId: 'v1', quantity: 1, intervalWeeks: 4, status: 'ACTIVE', nextRunAt: new Date() },
+        ]),
+        count: jest.fn().mockResolvedValue(3),
+      },
+      variation: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', name: 'V', salePrice: null, retailPrice: 100000, product: { name: 'P', thumbnail: null, slug: 'p' } },
+        ]),
+      },
+    } as unknown as PrismaService;
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> =>
+        k === 'subscribe.discount_tiers' ? (tiers as unknown as T) : (fb as T),
+    } as unknown as SystemConfigService;
+    const svc = new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications);
+    const result = await svc.list('u1');
+    expect(result[0]?.effectiveDiscountPct).toBe(0.14);
   });
 });

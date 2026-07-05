@@ -16,7 +16,10 @@ interface CreateSubInput {
 }
 
 /**
- * Subscribe & Save (Build Spec §6.14.4): đặt định kỳ 4/6/8/10 tuần, giảm subscribe.discount_pct (12%).
+ * Subscribe & Save (Build Spec §6.14.4): đặt định kỳ 4/6/8/10 tuần.
+ * Chiết khấu theo THANG BẬC (subscribe.discount_tiers, kiểu Amazon): càng nhiều
+ * subscription ACTIVE, % giảm càng cao (chọn bậc minActive cao nhất user đạt được),
+ * cap 15%. subscribe.discount_pct giữ lại làm fallback cho bậc cơ bản (minActive:1).
  * Cron tạo đơn COD tự động khi đến hạn → user skip/pause/cancel bất kỳ lúc nào.
  */
 @Injectable()
@@ -58,10 +61,13 @@ export class SubscriptionsService {
       orderBy: { createdAt: 'desc' },
     });
     if (subs.length === 0) return [];
-    const variations = await this.prisma.variation.findMany({
-      where: { id: { in: subs.map((s) => s.variationId) } },
-      include: { product: { select: { name: true, thumbnail: true, slug: true } } },
-    });
+    const [variations, effectiveDiscountPct] = await Promise.all([
+      this.prisma.variation.findMany({
+        where: { id: { in: subs.map((s) => s.variationId) } },
+        include: { product: { select: { name: true, thumbnail: true, slug: true } } },
+      }),
+      this.effectiveDiscountPct(userId),
+    ]);
     const vmap = new Map(variations.map((v) => [v.id, v]));
     return subs.map((s) => {
       const v = vmap.get(s.variationId);
@@ -76,8 +82,25 @@ export class SubscriptionsService {
         thumbnail: v?.product.thumbnail ?? null,
         slug: v?.product.slug ?? null,
         unitPrice: v ? (v.salePrice ?? v.retailPrice) : 0,
+        effectiveDiscountPct,
       };
     });
+  }
+
+  /**
+   * % giảm hiệu lực cho đơn Subscribe & Save của userId, theo THANG BẬC
+   * subscribe.discount_tiers dựa trên số subscription đang ACTIVE — chọn bậc
+   * minActive cao nhất mà user đạt được. Subscription đang tạo đơn (đang ACTIVE)
+   * được TÍNH VÀO activeCount — user có 1 sub thì vẫn đạt bậc cơ bản.
+   */
+  async effectiveDiscountPct(userId: string): Promise<number> {
+    const basePct = await this.config.get<number>('subscribe.discount_pct', 0.12);
+    const tiers = await this.config.get<{ minActive: number; pct: number }[]>('subscribe.discount_tiers', [
+      { minActive: 1, pct: basePct },
+    ]);
+    const activeCount = await this.prisma.subscription.count({ where: { userId, status: 'ACTIVE' } });
+    const applicable = tiers.filter((t) => activeCount >= t.minActive).sort((a, b) => b.pct - a.pct);
+    return applicable[0]?.pct ?? 0;
   }
 
   async setStatus(userId: string, id: string, status: 'ACTIVE' | 'PAUSED' | 'CANCELLED') {
@@ -157,7 +180,7 @@ export class SubscriptionsService {
 
     const unitPrice = variation.salePrice ?? variation.retailPrice;
     const subtotal = unitPrice * sub.quantity;
-    const discountPct = await this.config.get<number>('subscribe.discount_pct', 0.12);
+    const discountPct = await this.effectiveDiscountPct(sub.userId);
     const discount = Math.floor(subtotal * discountPct);
     const goods = Math.max(0, subtotal - discount);
     const shippingFee = await this.pricing.calcShippingFee({ subtotal, tierId: user.tierId });

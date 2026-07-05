@@ -65,6 +65,19 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'game.xu_per_seed', value: 1, category: 'game', description: 'Giá mua nước: xu / 1 giọt' },
   { key: 'game.tree_xu_price', value: 50000, category: 'game', description: 'Giá mua 1 cây thật bằng xu' },
 
+  // Subscribe & Save — chiết khấu định kỳ theo thang bậc (kiểu Amazon).
+  { key: 'subscribe.discount_pct', value: 0.12, category: 'subscribe', description: 'Chiết khấu cơ bản Subscribe & Save (fallback bậc minActive:1)' },
+  {
+    key: 'subscribe.discount_tiers',
+    value: [
+      { minActive: 1, pct: 0.12 },
+      { minActive: 3, pct: 0.14 },
+      { minActive: 5, pct: 0.15 },
+    ],
+    category: 'subscribe',
+    description: 'Chiết khấu Subscribe&Save theo số subscription đang chạy (chọn bậc cao nhất đạt)',
+  },
+
   // Flash Sale
   { key: 'flashsale.default_per_user_limit', value: 5, category: 'flashsale', description: 'Giới hạn mua mặc định/user/item flash' },
   { key: 'flashsale.min_discount_pct', value: 0, category: 'flashsale', description: 'Mức giảm tối thiểu để tạo item flash (0 = tắt validate)' },

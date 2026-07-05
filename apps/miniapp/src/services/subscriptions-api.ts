@@ -11,6 +11,7 @@ export interface SubscriptionDTO {
   thumbnail: string | null;
   slug: string | null;
   unitPrice: number;
+  effectiveDiscountPct: number;
 }
 
 export const getSubscriptions = () =>

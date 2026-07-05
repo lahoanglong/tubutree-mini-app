@@ -9,6 +9,7 @@ import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { LineItemSkeleton } from '../components/ui/skeleton';
+import { vi } from '../i18n/vi';
 
 export default function SubscriptionsPage() {
   const navigate = useNavigate();
@@ -33,6 +34,11 @@ export default function SubscriptionsPage() {
         <Text size="small" style={{ color: 'var(--neutral-600)' }}>
           Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm <b>12%</b> mỗi đơn, hủy bất kỳ lúc nào.
         </Text>
+        {subsQ.data && subsQ.data[0] ? (
+          <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 4 }}>
+            {vi.subscriptions.discountLine(Math.round(subsQ.data[0].effectiveDiscountPct * 100))}
+          </Text>
+        ) : null}
       </Box>
 
       {subsQ.isLoading ? (
