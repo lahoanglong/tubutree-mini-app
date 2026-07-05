@@ -12,6 +12,7 @@ import { AffiliateService } from '../affiliate/affiliate.service';
 import { CoinsService } from '../wallet/coins.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { ComboService } from '../storefront/combo.service';
+import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 
 @Injectable()
@@ -30,6 +31,7 @@ export class CheckoutService {
     private readonly coins: CoinsService,
     private readonly config: SystemConfigService,
     private readonly combo: ComboService,
+    private readonly flashSale: FlashSaleService,
   ) {}
 
   /** Map mã giới thiệu → userId CTV (khác người mua). */
@@ -125,6 +127,15 @@ export class CheckoutService {
           if (stockHit.count === 0) {
             throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
           }
+          const fid = (line as any).flashSaleItemId as string | null;
+          if (fid) {
+            try {
+              await this.flashSale.consumeQuota(tx, fid, userId, line.quantity, new Date());
+            } catch {
+              // Flash hết giờ/hết suất giữa lúc checkout → KHÔNG âm thầm tính giá flash. Rollback toàn đơn.
+              throw new BadRequestException('PRICE_CHANGED');
+            }
+          }
         }
         const created = await tx.order.create({
           data: {
@@ -159,6 +170,7 @@ export class CheckoutService {
                 unitPrice: l.unitPrice,
                 quantity: l.quantity,
                 total: l.total - (computed.comboPerLine[l.variationId] ?? 0),
+                flashSaleItemId: (l as any).flashSaleItemId ?? null,
               })),
             },
           },
@@ -263,11 +275,18 @@ export class CheckoutService {
     //   1) Combo (shop tài trợ) — phân bổ vào từng dòng → cũng ghi vào OrderItem.total (§7.2, hoa hồng trên giá thực trả).
     //   2) Coupon (Tubu tài trợ) — tính lại trên base SAU combo (đơn không-combo: base = subtotal → y hệt cũ).
     //   3) Điểm Xanh — trên phần còn lại sau coupon.
+    const nonFlash = cart.items.filter((l: any) => !l.isFlash);
+    const flashSubtotal = cart.items
+      .filter((l: any) => l.isFlash)
+      .reduce((s: number, l: any) => s + l.total, 0);
+
+    // Combo CHỈ áp trên line KHÔNG flash (flash không gộp combo).
     const combo = await this.combo.computeForStorefront(
       storefrontSlug,
-      cart.items.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
+      nonFlash.map((l: any) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
     );
-    const goodsAfterCombo = Math.max(0, cart.subtotal - combo.total);
+    const nonFlashSubtotal = nonFlash.reduce((s: number, l: any) => s + l.total, 0);
+    const goodsAfterCombo = Math.max(0, nonFlashSubtotal - combo.total); // = coupon base (loại flash)
 
     let discount = 0; // coupon (sau combo)
     let freeship = false;
@@ -296,13 +315,14 @@ export class CheckoutService {
       }
     }
     const goodsAfterCoupon = Math.max(0, goodsAfterCombo - discount);
-
+    // Điểm áp trên TOÀN đơn (gồm flash): base = phần non-flash sau coupon + flashSubtotal.
+    const redeemBase = goodsAfterCoupon + flashSubtotal;
     const redemption = await this.pricing.resolvePointsRedemption(
       pointsToUse ?? 0,
       user.pointsBalance,
-      goodsAfterCoupon,
+      redeemBase,
     );
-    const goodsAfterAll = Math.max(0, goodsAfterCoupon - redemption.discount);
+    const goodsAfterAll = Math.max(0, redeemBase - redemption.discount);
 
     let shippingFee = await this.pricing.calcShippingFee({
       subtotal: cart.subtotal,
