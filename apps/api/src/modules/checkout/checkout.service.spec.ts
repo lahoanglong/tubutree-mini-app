@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { CheckoutService } from './checkout.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { CartService } from '../cart/cart.service';
@@ -425,6 +426,42 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
     await expect(
       svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
     ).rejects.toThrow('PRICE_CHANGED');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('consumeQuota throw BadRequestException hết suất → vẫn map PRICE_CHANGED, KHÔNG tạo đơn', async () => {
+    const FLASH_CART = {
+      items: [
+        { id: 'i1', variationId: 'v1', productId: 'p1', productName: 'F', variationName: 'VF', unitPrice: 80000, quantity: 1, total: 80000, isFlash: true, flashSaleItemId: 'fi1', flashEndAt: new Date(), soldPct: 90 },
+      ],
+      subtotal: 80000, discount: 0, freeship: false, couponCode: null,
+    };
+    const flashSale = {
+      consumeQuota: jest.fn().mockRejectedValue(new BadRequestException('Hết suất ưu đãi.')),
+      resolveEffective: jest.fn().mockResolvedValue(new Map()),
+    };
+    const { svc, orderCreate } = build({ cartData: FLASH_CART, stockCount: 1, flashSale });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
+    ).rejects.toThrow('PRICE_CHANGED');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('consumeQuota throw BadRequestException vượt giới hạn mua → GIỮ NGUYÊN message, KHÔNG map PRICE_CHANGED', async () => {
+    const FLASH_CART = {
+      items: [
+        { id: 'i1', variationId: 'v1', productId: 'p1', productName: 'F', variationName: 'VF', unitPrice: 80000, quantity: 1, total: 80000, isFlash: true, flashSaleItemId: 'fi1', flashEndAt: new Date(), soldPct: 10 },
+      ],
+      subtotal: 80000, discount: 0, freeship: false, couponCode: null,
+    };
+    const flashSale = {
+      consumeQuota: jest.fn().mockRejectedValue(new BadRequestException('Vượt giới hạn mua ưu đãi.')),
+      resolveEffective: jest.fn().mockResolvedValue(new Map()),
+    };
+    const { svc, orderCreate } = build({ cartData: FLASH_CART, stockCount: 1, flashSale });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
+    ).rejects.toThrow('Vượt giới hạn mua ưu đãi.');
     expect(orderCreate).not.toHaveBeenCalled();
   });
 });

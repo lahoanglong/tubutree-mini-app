@@ -131,8 +131,10 @@ export class CheckoutService {
           if (fid) {
             try {
               await this.flashSale.consumeQuota(tx, fid, userId, line.quantity, new Date());
-            } catch {
-              // Flash hết giờ/hết suất giữa lúc checkout → KHÔNG âm thầm tính giá flash. Rollback toàn đơn.
+            } catch (e) {
+              // Vượt giới hạn mua = lỗi hợp lệ, giữ nguyên message. Hết suất/hết giờ → PRICE_CHANGED
+              // để FE hỏi lại giá mới (không âm thầm tính giá flash đã hết).
+              if (e instanceof BadRequestException && e.message === 'Vượt giới hạn mua ưu đãi.') throw e;
               throw new BadRequestException('PRICE_CHANGED');
             }
           }

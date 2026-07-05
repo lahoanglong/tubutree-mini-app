@@ -122,6 +122,45 @@ describe('FlashSaleService.restore', () => {
   });
 });
 
+describe('FlashSaleService.updateSale', () => {
+  const mkPrisma = (current: Record<string, unknown>) => ({
+    flashSale: {
+      findUniqueOrThrow: jest.fn().mockResolvedValue(current),
+      update: jest.fn().mockResolvedValue({ id: 's1' }),
+    },
+  });
+
+  it('startAt sau endAt (cả 2 đều truyền) → reject, KHÔNG update', async () => {
+    const prisma = mkPrisma({ id: 's1', startAt: new Date('2026-07-01'), endAt: new Date('2026-07-02') }) as any;
+    await expect(
+      new FlashSaleService(prisma, config).updateSale('s1', { startAt: '2026-07-10', endAt: '2026-07-08' }),
+    ).rejects.toThrow('startAt phải trước endAt.');
+    expect(prisma.flashSale.update).not.toHaveBeenCalled();
+  });
+
+  it('chỉ truyền startAt mới, sau endAt hiện tại → reject', async () => {
+    const prisma = mkPrisma({ id: 's1', startAt: new Date('2026-07-01'), endAt: new Date('2026-07-05') }) as any;
+    await expect(
+      new FlashSaleService(prisma, config).updateSale('s1', { startAt: '2026-07-10' }),
+    ).rejects.toThrow('startAt phải trước endAt.');
+  });
+
+  it('window hợp lệ → update thành công', async () => {
+    const prisma = mkPrisma({ id: 's1', startAt: new Date('2026-07-01'), endAt: new Date('2026-07-05') }) as any;
+    const r = await new FlashSaleService(prisma, config).updateSale('s1', { startAt: '2026-07-02', endAt: '2026-07-08' });
+    expect(r).toEqual({ id: 's1' });
+    expect(prisma.flashSale.update).toHaveBeenCalled();
+  });
+
+  it('không đổi startAt/endAt (chỉ title/isActive) → KHÔNG cần validate, update thành công', async () => {
+    const prisma = mkPrisma({ id: 's1', startAt: new Date('2026-07-01'), endAt: new Date('2026-07-05') }) as any;
+    const r = await new FlashSaleService(prisma, config).updateSale('s1', { title: 'Mới', isActive: false });
+    expect(r).toEqual({ id: 's1' });
+    expect(prisma.flashSale.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(prisma.flashSale.update).toHaveBeenCalled();
+  });
+});
+
 describe('FlashSaleService.addItem (validate)', () => {
   const base = () => ({
     variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', retailPrice: 100000, stock: 10 }) },

@@ -146,6 +146,12 @@ export class FlashSaleService {
 
   /** Cập nhật đợt flash sale (admin). */
   async updateSale(id: string, dto: { title?: string; startAt?: string; endAt?: string; isActive?: boolean }) {
+    if (dto.startAt !== undefined || dto.endAt !== undefined) {
+      const current = await this.prisma.flashSale.findUniqueOrThrow({ where: { id } });
+      const start = dto.startAt ? new Date(dto.startAt) : current.startAt;
+      const end = dto.endAt ? new Date(dto.endAt) : current.endAt;
+      if (!(start < end)) throw new BadRequestException('startAt phải trước endAt.');
+    }
     return this.prisma.flashSale.update({
       where: { id },
       data: {
