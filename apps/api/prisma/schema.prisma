@@ -579,6 +579,7 @@ model FlashSaleItem {
   soldCount    Int                 @default(0)
   perUserLimit Int
   purchases    FlashSalePurchase[]
+  reminders    FlashSaleReminder[]
 
   @@unique([flashSaleId, variationId])
   @@index([variationId])
@@ -595,6 +596,20 @@ model FlashSalePurchase {
 
   @@unique([flashSaleItemId, userId])
   @@map("flash_sale_purchases")
+}
+
+/// Nhắc user khi flash sale sắp diễn ra bắt đầu bán (§ Nhắc tôi).
+model FlashSaleReminder {
+  id              String        @id @default(cuid())
+  userId          String
+  flashSaleItemId String
+  item            FlashSaleItem @relation(fields: [flashSaleItemId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+  notifiedAt      DateTime?
+
+  @@unique([userId, flashSaleItemId])
+  @@index([flashSaleItemId])
+  @@map("flash_sale_reminders")
 }
 
 model Category {

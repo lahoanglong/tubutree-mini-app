@@ -601,6 +601,7 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-comm-approved', code: 'COMMUNITY_POST_APPROVED', channel: 'INAPP', bodyTemplate: '🌱 Bài viết của bạn đã được duyệt và hiển thị trong cộng đồng.' },
   { id: 'nt-cart-abandon', code: 'CART_ABANDONED', channel: 'INAPP', bodyTemplate: '🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé.' },
   { id: 'nt-voucher-expiring', code: 'VOUCHER_EXPIRING', channel: 'INAPP', bodyTemplate: '⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!' },
+  { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },
 ];
 
 const QUIZZES = [
