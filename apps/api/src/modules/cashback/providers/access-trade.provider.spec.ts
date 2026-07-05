@@ -47,6 +47,11 @@ describe('AccessTradeProvider.parseWebhook', () => {
     expect(makeProvider().parseWebhook(post({ amount: 'x' }))).toBeNull();
     expect(makeProvider().parseWebhook(null)).toBeNull();
   });
+
+  it('amount/commission không phải số nguyên → null', () => {
+    expect(makeProvider().parseWebhook(post({ commission: 1.5 }))).toBeNull();
+    expect(makeProvider().parseWebhook(post({ amount: 99.9 }))).toBeNull();
+  });
 });
 
 describe('AccessTradeProvider.verifyWebhook', () => {

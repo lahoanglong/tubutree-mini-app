@@ -48,6 +48,7 @@ export class AccessTradeProvider implements CashbackProvider {
     const p = body as Partial<AccesstradePayload> | null;
     if (!p || typeof p.utm_content !== 'string' || typeof p.order_id !== 'string') return null;
     if (typeof p.amount !== 'number' || typeof p.commission !== 'number') return null;
+    if (!Number.isInteger(p.amount) || !Number.isInteger(p.commission)) return null;
     if (p.amount < 0 || p.commission < 0) return null; // chống cộng số dư âm (forge/bug)
     const status = p.status === 'approved' ? 'CONFIRMED' : p.status === 'rejected' ? 'REJECTED' : 'PENDING';
     return {

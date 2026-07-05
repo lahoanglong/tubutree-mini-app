@@ -33,6 +33,48 @@ const event = (over: Partial<Record<string, unknown>> = {}) => ({
   ...over,
 });
 
+describe('CashbackService.createClick', () => {
+  const provider = { buildDeeplink: jest.fn().mockReturnValue('https://dl/deep?utm_content=xyz') };
+  const reg = { get: jest.fn().mockReturnValue(provider) } as unknown as CashbackProviderRegistry;
+  beforeEach(() => {
+    provider.buildDeeplink.mockClear();
+    (reg.get as jest.Mock).mockClear().mockReturnValue(provider);
+  });
+
+  it('merchant hợp lệ → resolve provider qua registry, tạo click, trả deeplink', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const prisma = {
+      cashbackMerchant: { findUnique: jest.fn().mockResolvedValue({ id: 'm1', provider: 'accesstrade', isActive: true, deeplinkTemplate: 'https://dl/deep?utm_content={{clickId}}' }) },
+      cashbackClick: { findFirst: jest.fn().mockResolvedValue(null), create },
+    } as unknown as PrismaService;
+    const r = await new CashbackService(prisma, config, coins, notifications, reg).createClick('u1', 'm1');
+    expect(reg.get).toHaveBeenCalledWith('accesstrade');
+    expect(provider.buildDeeplink).toHaveBeenCalled();
+    expect(create).toHaveBeenCalled();
+    expect(r).toEqual({ deeplink: 'https://dl/deep?utm_content=xyz' });
+  });
+
+  it('merchant không tồn tại/không active → BadRequestException', async () => {
+    const prisma = {
+      cashbackMerchant: { findUnique: jest.fn().mockResolvedValue(null) },
+    } as unknown as PrismaService;
+    await expect(
+      new CashbackService(prisma, config, coins, notifications, reg).createClick('u1', 'mX'),
+    ).rejects.toThrow('Sàn không khả dụng.');
+  });
+
+  it('click gần đây trong rate-limit → tái dùng utmTraceId, KHÔNG tạo click mới', async () => {
+    const create = jest.fn();
+    const prisma = {
+      cashbackMerchant: { findUnique: jest.fn().mockResolvedValue({ id: 'm1', provider: 'accesstrade', isActive: true, deeplinkTemplate: 'tpl' }) },
+      cashbackClick: { findFirst: jest.fn().mockResolvedValue({ utmTraceId: 'old-trace' }), create },
+    } as unknown as PrismaService;
+    await new CashbackService(prisma, config, coins, notifications, reg).createClick('u1', 'm1');
+    expect(provider.buildDeeplink).toHaveBeenCalledWith('tpl', 'old-trace', undefined);
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
 describe('CashbackService.ingest', () => {
   it('postback không khớp click → ok:false, không tạo giao dịch', async () => {
     const create = jest.fn();
