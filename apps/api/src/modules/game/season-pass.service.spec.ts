@@ -2,7 +2,6 @@ import { BadRequestException } from '@nestjs/common';
 import { SeasonPassService } from './season-pass.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
-import type { CoinsService } from '../wallet/coins.service';
 
 const TIERS = [
   { xp: 30, free: { type: 'SEEDS', amount: 20 }, premium: { type: 'XU', amount: 5000 } },
@@ -15,12 +14,6 @@ function makeConfig(overrides: Record<string, unknown> = {}): SystemConfigServic
   return {
     get: async <T>(k: string, fb?: T): Promise<T> => (k in overrides ? (overrides[k] as T) : (fb as T)),
   } as unknown as SystemConfigService;
-}
-
-function makeCoins() {
-  return { grantCoins: jest.fn().mockResolvedValue(undefined) } as unknown as CoinsService & {
-    grantCoins: jest.Mock;
-  };
 }
 
 /** Prisma stub — chỉ bảng SeasonPassService dùng. $transaction chạy callback thật với chính db (đã merge override). */
@@ -37,6 +30,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
       findUnique: jest.fn().mockResolvedValue({ userId: 'u1', totalSeeds: 10 }),
       update: jest.fn().mockResolvedValue({}),
     },
+    coinTransaction: { create: jest.fn().mockResolvedValue({}) },
+    user: { update: jest.fn().mockResolvedValue({}) },
     ...over,
   };
   db.$transaction = jest
@@ -47,8 +42,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
   return db as unknown as PrismaService;
 }
 
-function svcWith(prisma: PrismaService, cfg = makeConfig({ 'seasonpass.tiers': TIERS }), coins = makeCoins()) {
-  return { svc: new SeasonPassService(prisma, cfg, coins), prisma, coins };
+function svcWith(prisma: PrismaService, cfg = makeConfig({ 'seasonpass.tiers': TIERS })) {
+  return { svc: new SeasonPassService(prisma, cfg), prisma };
 }
 
 describe('SeasonPassService.addXp', () => {
@@ -187,7 +182,7 @@ describe('SeasonPassService.claim', () => {
     expect(upd.data).toEqual({ claimedFree: { push: 0 } });
   });
 
-  it('thành công PREMIUM (XU) → grantCoins + đánh dấu claimedPremium', async () => {
+  it('thành công PREMIUM (XU) → ghi CoinTransaction + cộng coinsBalance TRÊN tx (atomic) + đánh dấu claimedPremium', async () => {
     const p = makePrisma({
       userSeasonPass: {
         findUnique: jest.fn().mockResolvedValue({ xp: 300, claimedFree: [], claimedPremium: [] }),
@@ -195,16 +190,27 @@ describe('SeasonPassService.claim', () => {
       },
       subscription: { count: jest.fn().mockResolvedValue(1) },
     });
-    const { svc, coins } = svcWith(p, makeConfig({ 'seasonpass.tiers': TIERS }));
+    const { svc } = svcWith(p, makeConfig({ 'seasonpass.tiers': TIERS }));
     const r = await svc.claim('u1', 0, 'premium');
     expect(r).toEqual({ claimed: true, reward: { type: 'XU', amount: 5000 } });
-    expect((coins as unknown as { grantCoins: jest.Mock }).grantCoins).toHaveBeenCalledWith(
-      'u1',
-      5000,
-      'SEASONPASS:s1:0:premium',
-      'SEASONPASS',
-      's1',
-    );
+    // Ghi xu TRỰC TIẾP trên tx (không qua coins.grantCoins mở transaction riêng ở root client).
+    const pAny = p as unknown as {
+      coinTransaction: { create: jest.Mock };
+      user: { update: jest.Mock };
+    };
+    expect(pAny.coinTransaction.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'u1',
+        delta: 5000,
+        reason: 'SEASONPASS:s1:0:premium',
+        refType: 'SEASONPASS',
+        refId: 's1',
+      },
+    });
+    expect(pAny.user.update).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { coinsBalance: { increment: 5000 } },
+    });
     expect((p.userSeasonPass.update as jest.Mock).mock.calls[0][0].data).toEqual({ claimedPremium: { push: 0 } });
   });
 

@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { CoinsService } from '../wallet/coins.service';
 
 /** Phần thưởng 1 bậc: 💧 (SEEDS) hoặc TubuXu (XU). */
 export interface SeasonPassReward {
@@ -28,7 +27,6 @@ export class SeasonPassService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
-    private readonly coins: CoinsService,
   ) {}
 
   /** Mùa đang diễn ra theo cửa sổ thời gian (khớp GameSeasonService.getActiveSeason). */
@@ -137,13 +135,21 @@ export class SeasonPassService {
         const next = Math.min(cap, (gp?.totalSeeds ?? 0) + reward.amount);
         await tx.gameProfile.update({ where: { userId }, data: { totalSeeds: next } });
       } else {
-        await this.coins.grantCoins(
-          userId,
-          reward.amount,
-          `SEASONPASS:${season.id}:${tier}:${track}`,
-          'SEASONPASS',
-          season.id,
-        );
+        // XU thưởng: ghi TRỰC TIẾP trên tx (atomic với việc đánh dấu đã nhận) thay vì
+        // coins.grantCoins (mở $transaction riêng ở root client → không rollback cùng claim).
+        await tx.coinTransaction.create({
+          data: {
+            userId,
+            delta: reward.amount,
+            reason: `SEASONPASS:${season.id}:${tier}:${track}`,
+            refType: 'SEASONPASS',
+            refId: season.id,
+          },
+        });
+        await tx.user.update({
+          where: { id: userId },
+          data: { coinsBalance: { increment: reward.amount } },
+        });
       }
     });
 
