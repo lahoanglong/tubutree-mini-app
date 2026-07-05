@@ -737,6 +737,9 @@ model Order {
   invoiceStatus   InvoiceStatus? @default(NOT_REQUESTED)
   referrerUserId  String?
   storefrontSlug  String?
+  // Đơn CTV "lên đơn hộ khách": userId==referrerUserId (CTV) nhưng VẪN được hưởng hoa hồng
+  // (cho phép self-referral có kiểm soát — xem affiliate.createCommissionForOrder).
+  placedForCustomer Boolean      @default(false)
   commission      Int            @default(0)
   couponCode      String?
   note            String?

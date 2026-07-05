@@ -20,6 +20,8 @@ import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
+import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
+import { vi } from '../i18n/vi';
 
 const COMMISSION_META: Record<CommissionStatus, { label: string; color: string; bg: string }> = {
   PENDING: { label: 'Chờ (đơn chưa giao)', color: 'var(--clay-700)', bg: 'var(--clay-50)' },
@@ -132,6 +134,7 @@ function Dashboard() {
   const sfQ = useQuery({ queryKey: ['affiliate-sf-analytics'], queryFn: getStorefrontAnalytics });
   const pbQ = useQuery({ queryKey: ['affiliate-product-breakdown'], queryFn: getProductBreakdown });
   const [withdrawing, setWithdrawing] = useState(false);
+  const [ctvOrdering, setCtvOrdering] = useState(false);
 
   const createLink = useMutation({
     mutationFn: () => createAffiliateLink('HOMEPAGE'),
@@ -248,6 +251,22 @@ function Dashboard() {
         >
           Rút hoa hồng
         </Button>
+      </Box>
+
+      <Box mx={4} mb={3}>
+        <Button
+          fullWidth
+          onClick={() => {
+            haptic('light');
+            setCtvOrdering(true);
+          }}
+          style={{ background: 'var(--primary-600)' }}
+        >
+          🧾 {vi.ctvOrder.entry}
+        </Button>
+        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4, textAlign: 'center' }}>
+          {vi.ctvOrder.entryHint}
+        </Text>
       </Box>
 
       <Box mx={4} mb={3}>
@@ -500,6 +519,11 @@ function Dashboard() {
             }}
           />
         )}
+      </Sheet>
+
+      <Sheet visible={ctvOrdering} onClose={() => setCtvOrdering(false)} autoHeight>
+        {/* Mount khi mở để reset state form mỗi lần lên đơn mới. */}
+        {ctvOrdering && <CtvOrderSheet onClose={() => setCtvOrdering(false)} />}
       </Sheet>
     </Page>
   );
