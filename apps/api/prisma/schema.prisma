@@ -547,9 +547,54 @@ model Variation {
   cartItems          CartItem[]
   dealerPriceHistory DealerPriceHistory[]
   subscriptions      Subscription[]
+  flashSaleItems     FlashSaleItem[]
 
   @@index([productId])
   @@map("variations")
+}
+
+model FlashSale {
+  id        String          @id @default(cuid())
+  title     String
+  startAt   DateTime
+  endAt     DateTime
+  isActive  Boolean         @default(true)
+  createdBy String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  items     FlashSaleItem[]
+
+  @@index([isActive, startAt, endAt])
+  @@map("flash_sales")
+}
+
+model FlashSaleItem {
+  id           String              @id @default(cuid())
+  flashSaleId  String
+  flashSale    FlashSale           @relation(fields: [flashSaleId], references: [id], onDelete: Cascade)
+  variationId  String
+  variation    Variation           @relation(fields: [variationId], references: [id])
+  flashPrice   Int
+  quota        Int
+  soldCount    Int                 @default(0)
+  perUserLimit Int
+  purchases    FlashSalePurchase[]
+
+  @@unique([flashSaleId, variationId])
+  @@index([variationId])
+  @@map("flash_sale_items")
+}
+
+model FlashSalePurchase {
+  id              String        @id @default(cuid())
+  flashSaleItemId String
+  item            FlashSaleItem @relation(fields: [flashSaleItemId], references: [id], onDelete: Cascade)
+  userId          String
+  quantity        Int           @default(0)
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([flashSaleItemId, userId])
+  @@map("flash_sale_purchases")
 }
 
 model Category {
@@ -674,15 +719,16 @@ model Order {
 }
 
 model OrderItem {
-  id            String @id @default(cuid())
-  orderId       String
-  order         Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variationId   String
-  productName   String
-  variationName String
-  unitPrice     Int
-  quantity      Int
-  total         Int
+  id              String  @id @default(cuid())
+  orderId         String
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variationId     String
+  productName     String
+  variationName   String
+  unitPrice       Int
+  quantity        Int
+  total           Int
+  flashSaleItemId String?
 
   @@index([orderId])
   @@map("order_items")
