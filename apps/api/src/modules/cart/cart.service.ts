@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../prisma/prisma.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { AddItemDto } from './dto/cart.dto';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class CartService {
     private readonly prisma: PrismaService,
     private readonly coupons: CouponsService,
     private readonly config: SystemConfigService,
+    private readonly flashSale: FlashSaleService,
   ) {}
 
   private async ensureCart(userId: string): Promise<string> {
@@ -28,8 +30,14 @@ export class CartService {
       include: { items: { include: { variation: { include: { product: true } } } } },
     });
 
+    const now = new Date();
+    const flashMap = await this.flashSale.resolveEffective(
+      cart.items.map((it) => it.variationId),
+      now,
+    );
     const lines = cart.items.map((it) => {
-      const unitPrice = it.variation.salePrice ?? it.variation.retailPrice;
+      const flash = flashMap.get(it.variationId);
+      const unitPrice = flash ? flash.flashPrice : (it.variation.salePrice ?? it.variation.retailPrice);
       return {
         id: it.id,
         variationId: it.variationId,
@@ -42,16 +50,22 @@ export class CartService {
         quantity: it.quantity,
         stock: it.variation.stock,
         total: unitPrice * it.quantity,
+        isFlash: !!flash,
+        flashSaleItemId: flash?.itemId ?? null,
+        flashEndAt: flash?.endAt ?? null,
+        soldPct: flash ? Math.round((flash.soldCount / flash.quota) * 100) : null,
       };
     });
     const subtotal = lines.reduce((s, l) => s + l.total, 0);
+    // Coupon base LOẠI flash item (giá flash là giá cuối, không stack coupon) → giảm hiển thị khớp checkout.
+    const couponBase = lines.filter((l) => !l.isFlash).reduce((s, l) => s + l.total, 0);
 
     let discount = 0;
     let freeship = false;
     let couponCode = cart.couponCode;
     if (couponCode) {
       try {
-        const r = await this.coupons.validateAndCompute(couponCode, userId, subtotal);
+        const r = await this.coupons.validateAndCompute(couponCode, userId, couponBase);
         discount = r.discount;
         freeship = r.freeship;
       } catch {
