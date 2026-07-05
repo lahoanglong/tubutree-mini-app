@@ -3,6 +3,9 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 
+export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
+export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
+
 export interface EffectivePrice {
   flashPrice: number;
   itemId: string;
@@ -102,7 +105,7 @@ export class FlashSaleService {
             AND fs."startAt" <= ${now}
             AND fs."endAt" > ${now}
         )`;
-    if (sold === 0) throw new BadRequestException('Hết suất ưu đãi.');
+    if (sold === 0) throw new BadRequestException(FLASH_SOLD_OUT_MSG);
 
     // (b) perUserLimit
     const item = await tx.flashSaleItem.findUnique({ where: { id: itemId }, select: { perUserLimit: true } });
@@ -117,12 +120,12 @@ export class FlashSaleService {
       });
       if (bumped.count === 0) {
         await tx.flashSaleItem.updateMany({ where: { id: itemId }, data: { soldCount: { decrement: qty } } });
-        throw new BadRequestException('Vượt giới hạn mua ưu đãi.');
+        throw new BadRequestException(FLASH_OVER_LIMIT_MSG);
       }
     } else {
       if (qty > limit) {
         await tx.flashSaleItem.updateMany({ where: { id: itemId }, data: { soldCount: { decrement: qty } } });
-        throw new BadRequestException('Vượt giới hạn mua ưu đãi.');
+        throw new BadRequestException(FLASH_OVER_LIMIT_MSG);
       }
       await tx.flashSalePurchase.create({ data: { flashSaleItemId: itemId, userId, quantity: qty } });
     }
@@ -208,8 +211,13 @@ export class FlashSaleService {
     });
   }
 
-  /** Xoá item khỏi đợt flash sale (admin). */
+  /** Xoá item khỏi đợt flash sale (admin). Chặn xoá nếu đã phát sinh đơn (soldCount>0). */
   async removeItem(itemId: string) {
+    const item = await this.prisma.flashSaleItem.findUnique({ where: { id: itemId }, select: { soldCount: true } });
+    if (!item) throw new BadRequestException('Không tìm thấy sản phẩm flash.');
+    if (item.soldCount > 0) {
+      throw new BadRequestException('Không thể xoá sản phẩm đã phát sinh đơn giờ vàng. Hãy tắt đợt flash thay vì xoá.');
+    }
     await this.prisma.flashSaleItem.delete({ where: { id: itemId } });
     return { ok: true };
   }
