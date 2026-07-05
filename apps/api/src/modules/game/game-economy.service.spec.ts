@@ -20,7 +20,8 @@ function prisma(profile: Record<string, unknown> | null, over: Record<string, un
 }
 function prof(extra: Record<string, unknown> = {}) {
   return { userId: 'u1', totalSeeds: 100, streakDays: 1, longestStreak: 5, streakFreezes: 0,
-    lastCheckInAt: new Date(Date.now() - DAY), lastDewAt: null, ecoImpact: {}, ...extra };
+    lastCheckInAt: new Date(Date.now() - DAY), lastDewAt: null, ecoImpact: {},
+    brokenStreakDays: 0, brokenStreakAt: null, lastStreakRepairAt: null, ...extra };
 }
 
 describe('GameEconomyService.checkIn', () => {
@@ -62,6 +63,99 @@ describe('GameEconomyService.checkIn', () => {
     const r = await new GameEconomyService(p, cfg()).checkIn('u1');
     expect(r.streakDays).toBe(1);
     expect(r.streakFrozeUsed).toBe(false);
+  });
+});
+
+describe('GameEconomyService.checkIn — ghi nhận chuỗi đã mất (streak repair)', () => {
+  it('reset streak (streakDays>1 trước đó) → ghi brokenStreakDays + brokenStreakAt', async () => {
+    const p = prisma(prof({ streakDays: 5, streakFreezes: 0, lastCheckInAt: new Date(Date.now() - 5 * DAY) }));
+    await new GameEconomyService(p, cfg()).checkIn('u1');
+    const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
+    expect(upd.brokenStreakDays).toBe(5);
+    expect(upd.brokenStreakAt).toBeInstanceOf(Date);
+  });
+
+  it('reset khi streakDays trước đó = 1 (chưa từng có chuỗi thật) → KHÔNG ghi broken streak', async () => {
+    const p = prisma(prof({ streakDays: 1, streakFreezes: 0, lastCheckInAt: new Date(Date.now() - 5 * DAY) }));
+    await new GameEconomyService(p, cfg()).checkIn('u1');
+    const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
+    expect(upd.brokenStreakDays).toBe(0);
+    expect(upd.brokenStreakAt).toBeNull();
+  });
+
+  it('chuỗi tiếp tục (gapDays=1) → xoá broken streak cũ nếu có', async () => {
+    const p = prisma(prof({
+      streakDays: 3, streakFreezes: 0, lastCheckInAt: new Date(Date.now() - DAY),
+      brokenStreakDays: 7, brokenStreakAt: new Date(),
+    }));
+    await new GameEconomyService(p, cfg()).checkIn('u1');
+    const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
+    expect(upd.brokenStreakDays).toBe(0);
+    expect(upd.brokenStreakAt).toBeNull();
+  });
+
+  it('lỡ 1 ngày + có vé giữ lửa (cứu chuỗi) → xoá broken streak cũ nếu có', async () => {
+    const p = prisma(prof({
+      streakDays: 3, streakFreezes: 1, lastCheckInAt: new Date(Date.now() - 2 * DAY),
+      brokenStreakDays: 7, brokenStreakAt: new Date(),
+    }));
+    await new GameEconomyService(p, cfg()).checkIn('u1');
+    const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
+    expect(upd.brokenStreakDays).toBe(0);
+    expect(upd.brokenStreakAt).toBeNull();
+  });
+});
+
+describe('GameEconomyService.repairStreak', () => {
+  it('không có chuỗi đã mất → BadRequest', async () => {
+    const p = prisma(prof({ brokenStreakDays: 0, brokenStreakAt: null }));
+    await expect(new GameEconomyService(p, cfg()).repairStreak('u1'))
+      .rejects.toMatchObject({ message: 'Không có chuỗi nào để hồi sinh.' });
+  });
+
+  it('quá cửa sổ hồi sinh (48h) → BadRequest', async () => {
+    const p = prisma(prof({
+      brokenStreakDays: 5, brokenStreakAt: new Date(Date.now() - 49 * 3600 * 1000),
+    }));
+    await expect(new GameEconomyService(p, cfg({ 'game.streak_repair_window_hours': 48 })).repairStreak('u1'))
+      .rejects.toMatchObject({ message: 'Đã quá hạn hồi sinh chuỗi 🔥' });
+  });
+
+  it('còn trong cooldown 30 ngày kể từ lần hồi sinh trước → BadRequest', async () => {
+    const p = prisma(prof({
+      brokenStreakDays: 5, brokenStreakAt: new Date(Date.now() - DAY),
+      lastStreakRepairAt: new Date(Date.now() - 10 * DAY),
+    }));
+    await expect(new GameEconomyService(p, cfg({ 'game.streak_repair_cooldown_days': 30 })).repairStreak('u1'))
+      .rejects.toMatchObject({ message: 'Bạn đã hồi sinh chuỗi gần đây, hãy thử lại sau 🌿' });
+  });
+
+  it('không đủ 💧 (updateMany count=0) → BadRequest kèm giá tiền', async () => {
+    const p = prisma(prof({ brokenStreakDays: 5, brokenStreakAt: new Date(Date.now() - DAY), totalSeeds: 10 }));
+    (p.gameProfile.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    await expect(new GameEconomyService(p, cfg({ 'game.streak_repair_cost': 150 })).repairStreak('u1'))
+      .rejects.toMatchObject({ message: 'Cần 150 💧 để hồi sinh chuỗi.' });
+  });
+
+  it('thành công → hồi sinh streakDays = brokenStreakDays+1, trừ 💧, xoá broken, set lastStreakRepairAt', async () => {
+    const brokenAt = new Date(Date.now() - DAY);
+    const p = prisma(prof({ brokenStreakDays: 5, brokenStreakAt: brokenAt, totalSeeds: 200, longestStreak: 5 }));
+    (p.gameProfile.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+    (p.gameProfile.findUnique as jest.Mock)
+      .mockResolvedValueOnce(prof({ brokenStreakDays: 5, brokenStreakAt: brokenAt, totalSeeds: 200, longestStreak: 5 })) // ensure()
+      .mockResolvedValueOnce({ ...prof(), streakDays: 6, totalSeeds: 50, brokenStreakDays: 0, brokenStreakAt: null }); // post-update
+    const r = await new GameEconomyService(p, cfg({ 'game.streak_repair_cost': 150 })).repairStreak('u1');
+    expect(r).toEqual({ repaired: true, streakDays: 6, totalSeeds: 50 });
+    const call = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0];
+    expect(call.where).toMatchObject({ userId: 'u1', totalSeeds: { gte: 150 }, brokenStreakAt: { not: null } });
+    expect(call.data).toMatchObject({
+      totalSeeds: { decrement: 150 },
+      streakDays: 6,
+      longestStreak: 6,
+      brokenStreakDays: 0,
+      brokenStreakAt: null,
+    });
+    expect(call.data.lastStreakRepairAt).toBeInstanceOf(Date);
   });
 });
 

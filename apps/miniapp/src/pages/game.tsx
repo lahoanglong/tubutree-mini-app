@@ -6,6 +6,7 @@ import {
   checkIn,
   collectDew,
   buyStreakFreeze,
+  repairStreak,
   spin,
   getTodayQuiz,
   answerQuiz,
@@ -31,6 +32,9 @@ import {
 } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
 import { WheelOfFortune } from '../components/wheel';
+import { haptic } from '../utils/haptic';
+import { getErrorMessage } from '../services/api';
+import { vi } from '../i18n/vi';
 
 const FREEZE_COST = 80; // khớp default game.streak_freeze_cost (BE là nguồn chân lý)
 const BUY_SEEDS_PACK = 50; // gói mua nước bằng TubuXu (chi phí thực do BE quyết theo game.xu_per_seed)
@@ -108,6 +112,15 @@ export default function GamePage() {
       refresh();
     },
     onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+  });
+  const repairM = useMutation({
+    mutationFn: repairStreak,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
+      haptic('medium');
+      openSnackbar({ text: vi.game.streakRepair.ok, type: 'success' });
+    },
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const giftM = useMutation({
     mutationFn: (recipientId: string) => giftWater(recipientId),
@@ -372,6 +385,33 @@ export default function GamePage() {
           Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng 💧 mỗi ngày.
         </Text>
       </Box>
+
+      {/* Hồi sinh chuỗi vừa mất (§streak-repair) — chỉ hiện trong cửa sổ hồi sinh */}
+      {profile?.streakRepairable && (
+        <Box
+          mx={3}
+          mt={2}
+          p={3}
+          style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--clay-500)' }}
+        >
+          <Text size="small" bold style={{ color: 'var(--clay-700)' }}>
+            {vi.game.streakRepair.title(profile.brokenStreakDays ?? 0)}
+          </Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 2 }}>
+            {vi.game.streakRepair.body}
+          </Text>
+          <Button
+            fullWidth
+            size="small"
+            loading={repairM.isPending}
+            disabled={repairM.isPending}
+            onClick={() => repairM.mutate()}
+            style={{ marginTop: 10, background: 'var(--clay-500)' }}
+          >
+            {vi.game.streakRepair.cta(profile.streakRepairCost ?? 0)}
+          </Button>
+        </Box>
+      )}
 
       {/* Cảnh báo héo/chết (§6.7.3) */}
       {profile?.treeHealth === 'WILTED' && (

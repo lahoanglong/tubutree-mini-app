@@ -8,6 +8,10 @@ export interface GameProfile {
   streakFreezes: number;
   lastDewAt: string | null;
   ecoImpact: { progress: number; target: number; treeType: string; treesPlanted: number } | null;
+  /** §streak-repair: chuỗi vừa mất, còn trong cửa sổ hồi sinh (xem streakRepairable). */
+  brokenStreakDays?: number;
+  streakRepairCost?: number;
+  streakRepairable?: boolean;
 }
 export interface CheckInResult {
   seedsEarned: number;
@@ -39,6 +43,11 @@ export interface StreakFreezeResult {
   streakFreezes: number;
   totalSeeds: number;
 }
+export interface StreakRepairResult {
+  repaired: boolean;
+  streakDays: number;
+  totalSeeds: number;
+}
 export interface SpinResult {
   prize: { id: string; name: string; rewardType: string; value: number };
 }
@@ -63,6 +72,8 @@ export const checkIn = () => api.post<CheckInResult>('/game/check-in').then((r) 
 export const collectDew = () => api.post<DewResult>('/game/dew/collect').then((r) => r.data);
 export const buyStreakFreeze = () =>
   api.post<StreakFreezeResult>('/game/streak-freeze/buy').then((r) => r.data);
+export const repairStreak = () =>
+  api.post<StreakRepairResult>('/game/streak/repair').then((r) => r.data);
 export const spin = () => api.post<SpinResult>('/game/spin').then((r) => r.data);
 export const getTodayQuiz = () => api.get<QuizItem[]>('/game/quiz/today').then((r) => r.data);
 export const answerQuiz = (id: string, choice: number) =>
