@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Page, Text, Button, Input, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight } from 'lucide-react';
 import {
@@ -7,8 +7,6 @@ import {
   updateCartItem,
   removeCartItem,
   addToCart,
-  applyCoupon,
-  removeCoupon,
   type CartSummary,
   type CartLine,
 } from '../services/shop-api';

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Sheet, Text, Input, Button, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Ticket, Check, X } from 'lucide-react';
+import { Ticket, X } from 'lucide-react';
 import { getCoupons, type CouponDTO } from '../../services/account-api';
 import { applyCoupon, removeCoupon } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';

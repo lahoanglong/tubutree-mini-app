@@ -1,4 +1,4 @@
-import { Box, Page, Text, Button, Spinner, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Button, Spinner } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { Trophy } from 'lucide-react';
 import { getLeaderboard, type LeaderboardEntry } from '../services/feed-api';

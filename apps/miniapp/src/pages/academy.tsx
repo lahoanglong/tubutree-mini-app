@@ -91,7 +91,6 @@ function CourseCard({ course, onOpen }: { course: AcademyCourseSummary; onOpen: 
           }}
         >
           {course.coverUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={course.coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             <Box flex alignItems="center" justifyContent="center" style={{ width: '100%', height: '100%' }}>

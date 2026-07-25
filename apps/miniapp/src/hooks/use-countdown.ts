@@ -14,7 +14,6 @@ export function useCountdown(target: Date | string | null): string {
     setLabel(compute()); // recompute NGAY khi target đổi (chống nhãn rỗng tới 30s)
     const id = setInterval(() => setLabel(compute()), 30_000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typeof target === 'string' ? target : target?.getTime()]);
   return label;
 }

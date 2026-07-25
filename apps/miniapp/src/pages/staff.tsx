@@ -131,7 +131,6 @@ function TodayCard() {
     return () => {
       if (hbRef.current) clearInterval(hbRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openId]);
 
   return (
