@@ -90,8 +90,10 @@ function RegisterGate() {
             textAlign: 'center',
           }}
         >
-          <Text style={{ fontSize: 48 }}>🤝</Text>
-          <Text bold size="xLarge" style={{ color: '#fff', marginTop: 4 }}>
+          <Box style={{ marginBottom: 14 }}>
+            <Text style={{ fontSize: 48, lineHeight: '1.2', display: 'inline-block' }}>🤝</Text>
+          </Box>
+          <Text bold size="xLarge" style={{ color: '#fff' }}>
             Trở thành CTV Tubu
           </Text>
           <Text size="small" style={{ color: 'rgba(255,255,255,0.9)', marginTop: 6 }}>

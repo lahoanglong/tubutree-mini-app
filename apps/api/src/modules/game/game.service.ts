@@ -298,19 +298,52 @@ export class GameService {
 
   // ── Missions & leaderboard ─────────────────────────
   async getMissions(userId: string) {
-    const missions = await this.prisma.mission.findMany();
-    const progress = await this.prisma.missionProgress.findMany({ where: { userId } });
-    const byMission = new Map(progress.map((p) => [p.missionId, p]));
+    const [missions, profile, ordersCount, reviewsCount, referralsCount] = await Promise.all([
+      this.prisma.mission.findMany(),
+      this.prisma.gameProfile.findUnique({ where: { userId } }),
+      this.prisma.order.count({
+        where: { userId, status: { in: ['DELIVERED', 'CONFIRMED', 'SHIPPING', 'PACKED'] } },
+      }),
+      this.prisma.review.count({
+        where: { userId },
+      }),
+      this.prisma.user.count({
+        where: { referredById: userId },
+      }),
+    ]);
+
+    const streakDays = profile?.streakDays ?? 0;
+
     return missions.map((m) => {
-      const p = byMission.get(m.id);
+      let currentProgress = 0;
+      const targetGoal = m.goal > 0 ? m.goal : 1;
+
+      switch (m.code) {
+        case 'CHECKIN_7':
+          currentProgress = Math.min(targetGoal, streakDays);
+          break;
+        case 'FIRST_ORDER':
+          currentProgress = Math.min(targetGoal, ordersCount);
+          break;
+        case 'REVIEW_3':
+          currentProgress = Math.min(targetGoal, reviewsCount);
+          break;
+        case 'INVITE_3':
+          currentProgress = Math.min(targetGoal, referralsCount);
+          break;
+        default:
+          currentProgress = 0;
+          break;
+      }
+
       return {
         code: m.code,
         title: m.title,
         description: m.description,
         rewardPoints: m.rewardPoints,
-        progress: p?.progress ?? 0,
-        goal: p?.goal ?? 1,
-        completed: !!p?.completedAt,
+        progress: currentProgress,
+        goal: targetGoal,
+        completed: currentProgress >= targetGoal,
       };
     });
   }

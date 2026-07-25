@@ -10,6 +10,10 @@ export class UpdateMeDto {
   @IsEmail()
   email?: string;
 
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
+
   /** Ngày sinh (ISO) — dùng cho voucher sinh nhật. */
   @IsOptional()
   @IsDateString()

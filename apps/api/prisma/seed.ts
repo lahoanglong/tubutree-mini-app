@@ -629,10 +629,10 @@ const QUIZZES = [
 ];
 
 const MISSIONS = [
-  { id: 'm1', code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', description: 'Hoàn tất đơn hàng đầu tiên', rewardPoints: 20, isRepeatable: false },
-  { id: 'm2', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: 'Check-in 7 ngày liên tiếp', rewardPoints: 30, isRepeatable: true },
-  { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', description: 'Viết 3 đánh giá có ảnh', rewardPoints: 15, isRepeatable: false },
-  { id: 'm4', code: 'INVITE_3', title: 'Lan tỏa sống xanh', description: 'Mời 3 bạn đăng ký', rewardPoints: 50, isRepeatable: false },
+  { id: 'm1', code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', description: 'Hoàn tất đơn hàng đầu tiên', rewardPoints: 20, goal: 1, isRepeatable: false },
+  { id: 'm2', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: 'Check-in 7 ngày liên tiếp', rewardPoints: 30, goal: 7, isRepeatable: true },
+  { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', description: 'Viết 3 đánh giá có ảnh', rewardPoints: 15, goal: 3, isRepeatable: false },
+  { id: 'm4', code: 'INVITE_3', title: 'Lan tỏa sống xanh', description: 'Mời 3 bạn đăng ký', rewardPoints: 50, goal: 3, isRepeatable: false },
 ];
 
 const CASHBACK_MERCHANTS = [

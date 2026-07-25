@@ -1,8 +1,9 @@
-import { Box, Page, Text, useNavigate } from 'zmp-ui';
+import { useState, useEffect } from 'react';
+import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
-  ShoppingBag, Gift, Leaf, Zap, Bell, type LucideIcon,
+  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, type LucideIcon,
 } from 'lucide-react';
 import {
   getNotifications,
@@ -43,6 +44,8 @@ function relativeTime(iso: string): string {
 export default function NotificationsPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [selectedNotif, setSelectedNotif] = useState<NotificationDTO | null>(null);
+
   const notifQ = useQuery({ queryKey: ['notifications'], queryFn: getNotifications });
 
   const readMut = useMutation({
@@ -50,11 +53,32 @@ export default function NotificationsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
 
+  // Sync với popstate (nút back cứng / vuốt back của Zalo) để đóng detail overlay khi back
+  useEffect(() => {
+    if (!selectedNotif) return;
+    const handlePopState = () => {
+      setSelectedNotif(null);
+    };
+    window.history.pushState({ notifDetail: true }, '');
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [selectedNotif]);
+
+  const handleCloseDetail = () => {
+    haptic('light');
+    if (window.history.state?.notifDetail) {
+      window.history.back();
+    } else {
+      setSelectedNotif(null);
+    }
+  };
+
   const onTap = (n: NotificationDTO) => {
     haptic('light');
     if (n.status !== 'READ') readMut.mutate(n.id);
-    const code = n.payload.data?.order_code;
-    if (code && n.templateCode.startsWith('ORDER')) navigate(`/order/${code}`);
+    setSelectedNotif(n);
   };
 
   return (
@@ -86,6 +110,7 @@ export default function NotificationsPage() {
                   background: unread ? 'var(--primary-50)' : 'var(--neutral-0)',
                   borderRadius: 'var(--radius-lg)',
                   boxShadow: 'var(--shadow-xs)',
+                  cursor: 'pointer',
                 }}
               >
                 <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
@@ -125,6 +150,161 @@ export default function NotificationsPage() {
           </Text>
         </Box>
       )}
+
+      {/* ── Detail View Overlay ── */}
+      {selectedNotif && (
+        <Box
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 500,
+            background: 'var(--neutral-50)',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {/* Top Bar with Left Back Button */}
+          <Box
+            flex
+            alignItems="center"
+            style={{
+              padding: 'calc(var(--safe-top) + 12px) 16px 12px 16px',
+              background: 'var(--neutral-0)',
+              borderBottom: '1px solid var(--neutral-100)',
+              gap: 12,
+            }}
+          >
+            <button
+              type="button"
+              aria-label="Quay lại"
+              className="tubu-press"
+              onClick={handleCloseDetail}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                border: 'none',
+                background: 'var(--neutral-100)',
+                display: 'grid',
+                placeItems: 'center',
+                padding: 0,
+                cursor: 'pointer',
+                flex: '0 0 auto',
+              }}
+            >
+              <ChevronLeft size={22} color="var(--neutral-800)" strokeWidth={2.2} />
+            </button>
+            <Text bold size="normal" style={{ color: 'var(--neutral-900)' }}>
+              Chi tiết thông báo
+            </Text>
+          </Box>
+
+          {/* Detail Content */}
+          <Box p={4} style={{ flex: 1 }}>
+            {(() => {
+              const m = meta(selectedNotif.templateCode);
+              const bodyText = selectedNotif.payload.body || '';
+              const orderCode = selectedNotif.payload.data?.order_code ?? selectedNotif.payload.data?.orderCode;
+              const isOrder = selectedNotif.templateCode.startsWith('ORDER') || !!orderCode;
+              const isGame = selectedNotif.templateCode.includes('GAME') || /cây|vườn|tưới|khát|chuỗi/i.test(bodyText);
+              const isCart = selectedNotif.templateCode.includes('CART') || /giỏ/i.test(bodyText);
+              const isLoyalty = selectedNotif.templateCode.includes('VOUCHER') || selectedNotif.templateCode.includes('POINTS');
+
+              return (
+                <Box
+                  p={4}
+                  style={{
+                    background: 'var(--neutral-0)',
+                    borderRadius: 'var(--radius-lg)',
+                    boxShadow: 'var(--shadow-sm)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 16,
+                  }}
+                >
+                  <Box flex alignItems="center" style={{ gap: 12 }}>
+                    <Box style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                      <m.Icon size={24} color="var(--leaf-700)" strokeWidth={2} />
+                    </Box>
+                    <Box style={{ flex: 1 }}>
+                      <Text bold size="normal" style={{ color: 'var(--neutral-900)' }}>
+                        {m.title}
+                      </Text>
+                      <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+                        {new Date(selectedNotif.sentAt).toLocaleString('vi-VN')} ({relativeTime(selectedNotif.sentAt)})
+                      </Text>
+                    </Box>
+                  </Box>
+
+                  <div style={{ height: 1, background: 'var(--neutral-100)' }} />
+
+                  <Text size="small" style={{ color: 'var(--neutral-700)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
+                    {bodyText}
+                  </Text>
+
+                  {isOrder && (
+                    <Button
+                      fullWidth
+                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
+                      onClick={() => {
+                        haptic('light');
+                        setSelectedNotif(null);
+                        navigate(orderCode ? `/order/${orderCode}` : '/orders');
+                      }}
+                    >
+                      Xem chi tiết đơn hàng
+                    </Button>
+                  )}
+                  {isGame && !isOrder && (
+                    <Button
+                      fullWidth
+                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
+                      onClick={() => {
+                        haptic('light');
+                        setSelectedNotif(null);
+                        navigate('/game');
+                      }}
+                    >
+                      Đến Vườn Xanh 🌿
+                    </Button>
+                  )}
+                  {isCart && !isOrder && !isGame && (
+                    <Button
+                      fullWidth
+                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
+                      onClick={() => {
+                        haptic('light');
+                        setSelectedNotif(null);
+                        navigate('/cart');
+                      }}
+                    >
+                      Xem giỏ hàng 🛒
+                    </Button>
+                  )}
+                  {isLoyalty && !isOrder && !isGame && !isCart && (
+                    <Button
+                      fullWidth
+                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
+                      onClick={() => {
+                        haptic('light');
+                        setSelectedNotif(null);
+                        navigate('/loyalty');
+                      }}
+                    >
+                      Xem ưu đãi 🎁
+                    </Button>
+                  )}
+                </Box>
+              );
+            })()}
+          </Box>
+        </Box>
+      )}
     </Page>
   );
 }
+

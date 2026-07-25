@@ -110,8 +110,56 @@ export interface PublicConfig {
 }
 export const getPublicConfig = () =>
   api.get<PublicConfig>('/config/public').then((r) => r.data);
-export const fetchProducts = (params: Record<string, string | number> = {}) =>
-  api.get<PageResponse<ProductCard>>('/products', { params }).then((r) => r.data);
+export const fetchProducts = async (params: Record<string, string | number> = {}): Promise<PageResponse<ProductCard>> => {
+  const brandParam = params.brand ? String(params.brand) : '';
+  const brandList = brandParam ? brandParam.split(',').map((b) => b.trim()).filter(Boolean) : [];
+
+  if (brandList.length <= 1) {
+    return api.get<PageResponse<ProductCard>>('/products', { params }).then((r) => r.data);
+  }
+
+  const primaryRes = await api.get<PageResponse<ProductCard>>('/products', { params }).then((r) => r.data);
+  if (primaryRes.data && primaryRes.data.length > 0) {
+    return primaryRes;
+  }
+
+  const page = Number(params.page ?? 1);
+  const limit = Number(params.limit ?? 30);
+
+  const responses: PageResponse<ProductCard>[] = await Promise.all(
+    brandList.map((b) =>
+      api
+        .get<PageResponse<ProductCard>>('/products', { params: { ...params, brand: b } })
+        .then((r) => r.data)
+        .catch((): PageResponse<ProductCard> => ({ data: [], meta: { page: 1, limit, total: 0 } })),
+    ),
+  );
+
+  const combinedMap = new Map<string, ProductCard>();
+  let combinedTotal = 0;
+
+  for (const resp of responses) {
+    combinedTotal += resp.meta.total;
+    for (const item of resp.data) {
+      if (!combinedMap.has(item.id)) {
+        combinedMap.set(item.id, item);
+      }
+    }
+  }
+
+  const combinedList = Array.from(combinedMap.values());
+  const startIndex = (page - 1) * limit;
+  const pagedList = combinedList.slice(startIndex, startIndex + limit);
+
+  return {
+    data: pagedList,
+    meta: {
+      page,
+      limit,
+      total: combinedList.length > 0 ? combinedList.length : combinedTotal,
+    },
+  };
+};
 export const fetchProduct = (slug: string) =>
   api.get<ProductDetail>(`/products/${slug}`).then((r) => r.data);
 export const fetchBrands = () =>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Page, Text, Button, Input, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Ticket, ChevronRight } from 'lucide-react';
 import {
   getCart,
   updateCartItem,
@@ -22,6 +22,7 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
+import { VoucherSheet } from '../components/checkout/voucher-sheet';
 
 const UNDO_WINDOW_MS = 3500;
 const CART_KEY = ['cart'] as const;
@@ -366,9 +367,13 @@ function CartLineRow({
         <Text size="small" bold onClick={onOpen} style={{ cursor: 'pointer' }}>
           {line.productName}
         </Text>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-          {line.variationName}
-        </Text>
+        {line.variationName && (
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+            {typeof line.variationName === 'object' && line.variationName !== null
+              ? (line.variationName as { name?: string }).name ?? ''
+              : String(line.variationName)}
+          </Text>
+        )}
         <Text bold style={{ color: 'var(--primary-700)', marginTop: 4 }}>
           {formatVnd(line.unitPrice)}
         </Text>
@@ -429,81 +434,90 @@ function CartLineRow({
 }
 
 function CouponBlock({ summary }: { summary: CartSummary }) {
-  const queryClient = useQueryClient();
-  const { openSnackbar } = useSnackbar();
-  const [code, setCode] = useState('');
-
-  const apply = useMutation({
-    mutationFn: (c: string) => applyCoupon(c.trim().toUpperCase()),
-    onSuccess: (c) => {
-      queryClient.setQueryData(CART_KEY, c);
-      haptic('medium');
-      setCode('');
-      openSnackbar({ text: vi.cart.couponApplied(c.couponCode ?? ''), type: 'success', duration: 2000 });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const removeMut = useMutation({
-    mutationFn: removeCoupon,
-    onSuccess: (c) => queryClient.setQueryData(CART_KEY, c),
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   return (
-    <Box p={3} mx={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-      {summary.couponCode ? (
-        <Box flex alignItems="center" justifyContent="space-between">
-          <Box flex alignItems="center" style={{ gap: 8 }}>
-            <span
-              aria-hidden
-              style={{
-                background: 'var(--clay-50)',
-                border: '1px dashed var(--clay-500)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '3px 8px',
-                color: 'var(--clay-700)',
-                fontSize: 12,
-                fontWeight: 700,
-              }}
-            >
-              {summary.couponCode}
-            </span>
-            {summary.discount > 0 && (
-              <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-                -{formatVnd(summary.discount)}
+    <>
+      <Box
+        p={3}
+        mx={3}
+        className="tubu-press"
+        onClick={() => {
+          haptic('light');
+          setSheetOpen(true);
+        }}
+        style={{
+          background: 'var(--neutral-0)',
+          borderRadius: 'var(--radius-lg)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+          boxShadow: 'var(--shadow-xs)',
+        }}
+      >
+        <Box flex alignItems="center" style={{ gap: 10 }}>
+          <Box
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--clay-50)',
+              display: 'grid',
+              placeItems: 'center',
+              flex: '0 0 auto',
+            }}
+          >
+            <Ticket size={20} color="var(--clay-700)" />
+          </Box>
+          <Box>
+            <Text size="small" bold style={{ color: 'var(--neutral-900)' }}>
+              Mã giảm giá
+            </Text>
+            {summary.couponCode ? (
+              <Box flex alignItems="center" style={{ gap: 8, marginTop: 2 }}>
+                <span
+                  style={{
+                    background: 'var(--clay-50)',
+                    border: '1px dashed var(--clay-500)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '2px 6px',
+                    color: 'var(--clay-700)',
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                >
+                  {summary.couponCode}
+                </span>
+                {summary.discount > 0 && (
+                  <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                    -{formatVnd(summary.discount)}
+                  </Text>
+                )}
+              </Box>
+            ) : (
+              <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+                Chọn hoặc nhập mã ưu đãi
               </Text>
             )}
           </Box>
-          <Text
-            role="button"
-            size="xSmall"
-            onClick={() => removeMut.mutate()}
-            style={{ color: 'var(--neutral-400)', padding: '10px 6px' }}
-          >
-            {vi.cart.couponRemove}
+        </Box>
+
+        <Box flex alignItems="center" style={{ gap: 4, color: 'var(--primary-700)' }}>
+          <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
+            {summary.couponCode ? 'Thay đổi' : 'Chọn mã'}
           </Text>
+          <ChevronRight size={16} color="var(--primary-700)" />
         </Box>
-      ) : (
-        <Box flex style={{ gap: 8 }}>
-          <Box style={{ flex: 1 }}>
-            <Input
-              placeholder={vi.cart.couponPlaceholder}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
-          </Box>
-          <Button
-            size="small"
-            disabled={!code.trim()}
-            loading={apply.isPending}
-            onClick={() => apply.mutate(code)}
-            style={{ background: code.trim() ? 'var(--primary-600)' : undefined, minHeight: 44 }}
-          >
-            {vi.cart.couponApply}
-          </Button>
-        </Box>
-      )}
-    </Box>
+      </Box>
+
+      <VoucherSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        currentCode={summary.couponCode}
+        subtotal={summary.subtotal}
+      />
+    </>
   );
 }
 

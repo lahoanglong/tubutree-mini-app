@@ -30,8 +30,10 @@ export default function WishlistPage() {
           </Box>
         ) : (
           <Box style={{ textAlign: 'center', padding: '48px 24px' }}>
-            <Text style={{ fontSize: 48 }}>🤍</Text>
-            <Text style={{ color: 'var(--neutral-600)', marginTop: 8 }}>
+            <Box style={{ marginBottom: 14 }}>
+              <Text style={{ fontSize: 48, lineHeight: '1.2', display: 'inline-block' }}>🤍</Text>
+            </Box>
+            <Text style={{ color: 'var(--neutral-600)' }}>
               Chưa có sản phẩm yêu thích
             </Text>
             <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>

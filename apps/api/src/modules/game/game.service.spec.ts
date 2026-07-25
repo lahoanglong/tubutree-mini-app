@@ -357,6 +357,33 @@ describe('GameService.buySeeds / buyTree (mua bằng TubuXu)', () => {
   });
 });
 
+describe('GameService.getMissions', () => {
+  it('tính toán tiến trình real-time cho từng nhiệm vụ', async () => {
+    const prisma = makePrisma({
+      gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 3 }) },
+      order: { count: jest.fn().mockResolvedValue(1) },
+      review: { count: jest.fn().mockResolvedValue(2) },
+      user: { count: jest.fn().mockResolvedValue(0) },
+      mission: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'm1', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', goal: 7, rewardPoints: 30 },
+          { id: 'm2', code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', goal: 1, rewardPoints: 20 },
+          { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', goal: 3, rewardPoints: 15 },
+          { id: 'm4', code: 'INVITE_3', title: 'Lan tỏa sống xanh', goal: 3, rewardPoints: 50 },
+        ]),
+      },
+    });
+    const svc = new GameService(prisma, makeConfig());
+    const res = await svc.getMissions('u1');
+    expect(res).toEqual([
+      { code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: undefined, rewardPoints: 30, progress: 3, goal: 7, completed: false },
+      { code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', description: undefined, rewardPoints: 20, progress: 1, goal: 1, completed: true },
+      { code: 'REVIEW_3', title: 'Nhà phê bình', description: undefined, rewardPoints: 15, progress: 2, goal: 3, completed: false },
+      { code: 'INVITE_3', title: 'Lan tỏa sống xanh', description: undefined, rewardPoints: 50, progress: 0, goal: 3, completed: false },
+    ]);
+  });
+});
+
 describe('GameService.pickWeighted (phân phối theo trọng số)', () => {
   type Prize = { id: string; name: string; weight: number; rewardType: string; value: number };
   const pick = (prizes: Prize[], rand: number) => {

@@ -104,7 +104,28 @@ export async function getZaloUserInfo() {
 
 /** Mở URL ngoài (deeplink sàn cashback) trong webview Zalo. */
 export async function openExternal(url: string) {
-  await openWebview({ url });
+  try {
+    await openWebview({ url });
+  } catch {
+    window.location.href = url;
+  }
+}
+
+/** Mở link hoàn tiền sàn ngoài (Shopee, Lazada...) trực tiếp sang native app / trình duyệt ngoài. */
+export async function openAffiliateLink(url: string) {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(url).catch(() => {});
+    }
+  } catch {
+    /* bỏ qua lỗi clipboard */
+  }
+
+  try {
+    window.location.href = url;
+  } catch {
+    await openWebview({ url }).catch(() => {});
+  }
 }
 
 /** OA Tubu đã cấu hình chưa (để hiện nút "Nhắn hỗ trợ"). */

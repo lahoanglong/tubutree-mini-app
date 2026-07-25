@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { IsInt, Max, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RefillService } from './refill.service';
@@ -17,9 +17,27 @@ export class RefillController {
     return this.refill.getSummary(userId);
   }
 
-  // Đổi N vỏ chai rỗng → thưởng 💧.
+  // Đổi N vỏ chai rỗng → tạo đơn PENDING chờ duyệt.
   @Post('return')
   returnBottles(@CurrentUser('sub') userId: string, @Body() dto: ReturnBottlesDto) {
     return this.refill.returnBottles(userId, dto.quantity);
+  }
+
+  // Admin/Staff: Lấy danh sách đổi vỏ chờ duyệt
+  @Get('admin/pending')
+  listPending() {
+    return this.refill.listPending();
+  }
+
+  // Admin/Staff: Duyệt đơn đổi vỏ chai
+  @Post('admin/:id/approve')
+  approve(@Param('id') id: string) {
+    return this.refill.approveReturn(id);
+  }
+
+  // Admin/Staff: Từ chối đơn đổi vỏ chai
+  @Post('admin/:id/reject')
+  reject(@Param('id') id: string) {
+    return this.refill.rejectReturn(id);
   }
 }

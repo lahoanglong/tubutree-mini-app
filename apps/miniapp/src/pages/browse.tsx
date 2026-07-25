@@ -46,17 +46,17 @@ function pushRecent(term: string): string[] {
 export default function BrowsePage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const initialBrand = useMemo(
-    () => new URLSearchParams(location.search).get('brand') ?? undefined,
-    [location.search],
-  );
+  const initialBrands = useMemo(() => {
+    const raw = new URLSearchParams(location.search).get('brand');
+    return raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  }, [location.search]);
   const initialSegment = useMemo(
     () => new URLSearchParams(location.search).get('segment') ?? undefined,
     [location.search],
   );
 
   const [q, setQ] = useState('');
-  const [brand, setBrand] = useState<string | undefined>(initialBrand);
+  const [selectedBrands, setSelectedBrands] = useState<string[]>(initialBrands);
   const [segment, setSegment] = useState<string | undefined>(initialSegment);
   const [sort, setSort] = useState<string | undefined>(undefined);
   const [recent, setRecent] = useState<string[]>(() => readRecent());
@@ -69,15 +69,17 @@ export default function BrowsePage() {
 
   // Brand/category chậm đổi (sync Pancake ~15p/lần) → cache 60s, override default 10s.
   const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands, staleTime: 60_000 });
+
+  const brandParam = selectedBrands.join(',');
   // Infinite scroll (trước đây chỉ lấy 30 SP/1 lần → catalog >30 trong 1 bộ lọc bị giấu mất).
   const products = useInfiniteQuery({
-    queryKey: ['products', 'browse', debouncedQ, brand, segment, sort],
+    queryKey: ['products', 'browse', debouncedQ, brandParam, segment, sort],
     queryFn: ({ pageParam }) =>
       fetchProducts({
         page: pageParam,
         limit: PAGE_LIMIT,
         ...(debouncedQ ? { q: debouncedQ } : {}),
-        ...(brand ? { brand } : {}),
+        ...(brandParam ? { brand: brandParam } : {}),
         ...(segment ? { segment } : {}),
         ...(sort ? { sort } : {}),
       }),
@@ -97,17 +99,36 @@ export default function BrowsePage() {
 
   // Deeplink từ Home (?brand= / ?segment=) thay đổi khi trang còn mounted → sync vào state.
   useEffect(() => {
-    if (initialBrand) setBrand(initialBrand);
-  }, [initialBrand]);
+    if (selectedBrands.join(',') !== initialBrands.join(',')) {
+      setSelectedBrands(initialBrands);
+    }
+  }, [initialBrands, selectedBrands]);
   useEffect(() => {
     setSegment(initialSegment);
   }, [initialSegment]);
 
-  const pick = (b?: string) => {
+  const toggleBrand = (b?: string) => {
     haptic('light');
-    setBrand(b);
-    // User tự đổi filter → trả URL về sạch để query param cũ không dính lại.
-    if (initialBrand && b !== initialBrand) navigate('/browse', { replace: true });
+    let next: string[] = [];
+    if (b) {
+      if (selectedBrands.includes(b)) {
+        next = selectedBrands.filter((x) => x !== b);
+      } else {
+        next = [...selectedBrands, b];
+      }
+    } else {
+      next = [];
+    }
+    setSelectedBrands(next);
+
+    const params = new URLSearchParams(location.search);
+    if (next.length > 0) {
+      params.set('brand', next.join(','));
+    } else {
+      params.delete('brand');
+    }
+    const searchStr = params.toString();
+    navigate(searchStr ? `/browse?${searchStr}` : '/browse', { replace: true });
   };
 
   const list = products.data?.pages.flatMap((pg) => pg.data) ?? [];
@@ -126,7 +147,7 @@ export default function BrowsePage() {
 
       {/* Lưới Danh mục — hiện khi ở trạng thái duyệt gốc (chưa gõ/chưa lọc). Trước đây tab
           "Danh mục" chỉ là ô tìm kiếm, không có lối duyệt theo nhóm → thêm grid phân khúc. */}
-      {!q.trim() && !segment && !brand && (
+      {!q.trim() && !segment && selectedBrands.length === 0 && (
         <Box px={3} pb={2}>
           <Text size="xSmall" bold style={{ color: 'var(--neutral-600)', display: 'block', marginBottom: 8 }}>
             Danh mục
@@ -204,8 +225,8 @@ export default function BrowsePage() {
                     key={b.brand}
                     label={`🔥 ${b.brand}`}
                     dotColor={brandAccent(b.brand)}
-                    active={false}
-                    onClick={() => setQ(b.brand)}
+                    active={selectedBrands.includes(b.brand)}
+                    onClick={() => toggleBrand(b.brand)}
                   />
                 ))}
               </Box>
@@ -244,14 +265,14 @@ export default function BrowsePage() {
           đứng trơ 1 dòng, phí diện tích). "Tất cả" đi cùng danh sách brand để reset. */}
       {(brands.data?.length ?? 0) > 0 && (
         <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10 }}>
-          <Chip label={vi.home.allBrands} active={!brand} onClick={() => pick(undefined)} />
+          <Chip label={vi.home.allBrands} active={selectedBrands.length === 0} onClick={() => toggleBrand(undefined)} />
           {brands.data?.map((b) => (
             <Chip
               key={b.brand}
               label={b.brand}
               dotColor={brandAccent(b.brand)}
-              active={brand === b.brand}
-              onClick={() => pick(b.brand)}
+              active={selectedBrands.includes(b.brand)}
+              onClick={() => toggleBrand(b.brand)}
             />
           ))}
         </Box>
@@ -286,7 +307,7 @@ export default function BrowsePage() {
               ctaLabel={vi.home.allBrands}
               onCta={() => {
                 setQ('');
-                pick(undefined);
+                toggleBrand(undefined);
               }}
             />
           ) : (

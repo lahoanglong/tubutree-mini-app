@@ -25,7 +25,46 @@ export default function BankPaymentPage() {
     haptic('light');
     if (navigator.clipboard) {
       void navigator.clipboard.writeText(text);
-      openSnackbar({ text: `Đã copy ${label}`, type: 'success' });
+      openSnackbar({ text: `Đã copy ${label}`, type: 'success', position: 'top' });
+    }
+  };
+
+  const handleCheckPayment = async () => {
+    haptic('medium');
+    try {
+      const res = await refetch();
+      const status = res.data?.paymentStatus;
+      if (status === 'PAID') {
+        openSnackbar({
+          text: '🎉 Đã nhận được thanh toán thành công! Đơn hàng của bạn đã được xác nhận.',
+          type: 'success',
+          position: 'top',
+        });
+      } else if (status === 'UNPAID') {
+        openSnackbar({
+          text: '⏳ Hệ thống chưa thấy tiền về. Ngân hàng thường xử lý từ 30s - 1 phút sau khi chuyển. Vui lòng kiểm tra lại sau ít phút nhé!',
+          type: 'warning',
+          position: 'top',
+        });
+      } else if (status === 'FAILED' || status === 'REFUNDED') {
+        openSnackbar({
+          text: '⚠️ Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.',
+          type: 'error',
+          position: 'top',
+        });
+      } else {
+        openSnackbar({
+          text: '🔄 Đã làm mới trạng thái. Đang chờ hệ thống ngân hàng xác nhận.',
+          type: 'info',
+          position: 'top',
+        });
+      }
+    } catch {
+      openSnackbar({
+        text: '❌ Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
+        type: 'error',
+        position: 'top',
+      });
     }
   };
 
@@ -100,7 +139,7 @@ export default function BankPaymentPage() {
           <Text size="small">Đang chờ thanh toán… tự cập nhật khi nhận được tiền</Text>
         </Box>
 
-        <Button fullWidth loading={isFetching} onClick={() => refetch()} style={{ marginTop: 12, background: 'var(--leaf-600)' }}>
+        <Button fullWidth loading={isFetching} onClick={handleCheckPayment} style={{ marginTop: 12, background: 'var(--leaf-600)' }}>
           Tôi đã chuyển khoản — Kiểm tra
         </Button>
         <Button fullWidth variant="secondary" onClick={() => navigate(`/order/${data.orderCode}`, { replace: true })} style={{ marginTop: 8 }}>

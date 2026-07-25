@@ -28,8 +28,8 @@ export default function RefillPage() {
 
   const returnM = useMutation({
     mutationFn: () => returnBottles(qty),
-    onSuccess: (r) => {
-      openSnackbar({ text: `🌿 Cảm ơn! +${r.seedsAwarded}💧 đã vào bình tưới của bạn.`, type: 'success' });
+    onSuccess: () => {
+      openSnackbar({ text: '📋 Đã gửi yêu cầu đổi vỏ chai! Vui lòng chờ quản lý duyệt.', type: 'success' });
       setQty(1);
       void queryClient.invalidateQueries({ queryKey: ['refill'] });
       void queryClient.invalidateQueries({ queryKey: ['garden'] });
@@ -107,7 +107,7 @@ export default function RefillPage() {
               onClick={() => returnM.mutate()}
               style={{ marginTop: 14, background: canSubmit ? 'var(--leaf-600)' : 'var(--neutral-300)' }}
             >
-              {remaining > 0 ? 'Xác nhận đổi vỏ' : 'Đã hết lượt đổi tháng này'}
+              {remaining > 0 ? 'Gửi yêu cầu đổi vỏ' : 'Đã hết lượt đổi tháng này'}
             </Button>
             {!authed && (
               <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8, textAlign: 'center' }}>
@@ -120,12 +120,32 @@ export default function RefillPage() {
           {data && data.history.length > 0 && (
             <Box mt={2} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
               <Text size="small" bold style={{ marginBottom: 8 }}>Lịch sử đổi vỏ</Text>
-              {data.history.map((h) => (
-                <Box key={h.id} flex justifyContent="space-between" alignItems="center" style={{ padding: '6px 0' }}>
-                  <Text size="small" style={{ color: 'var(--neutral-600)' }}>{h.quantity} vỏ · {fmtDate(h.createdAt)}</Text>
-                  <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>+{h.seedsAwarded}💧</Text>
-                </Box>
-              ))}
+              {data.history.map((h) => {
+                const statusKey = h.status ?? 'PENDING';
+                const statusMeta = {
+                  PENDING: { label: 'Chờ duyệt', color: '#e65100', bg: '#fff3e0' },
+                  APPROVED: { label: `+${h.seedsAwarded}💧`, color: 'var(--leaf-700)', bg: '#e8f5e9' },
+                  REJECTED: { label: 'Từ chối', color: '#c62828', bg: '#ffebee' },
+                }[statusKey];
+
+                return (
+                  <Box key={h.id} flex justifyContent="space-between" alignItems="center" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
+                    <Text size="small" style={{ color: 'var(--neutral-600)' }}>{h.quantity} vỏ · {fmtDate(h.createdAt)}</Text>
+                    <Text
+                      size="xSmall"
+                      bold
+                      style={{
+                        color: statusMeta.color,
+                        background: statusMeta.bg,
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                      }}
+                    >
+                      {statusMeta.label}
+                    </Text>
+                  </Box>
+                );
+              })}
             </Box>
           )}
         </Box>

@@ -231,7 +231,7 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
   }
 
   it('user có điểm sắp hết hạn + chưa nhắc gần đây → notify POINTS_EXPIRING', async () => {
-    const soon = new Date(NOW.getTime() + 3 * DAY);
+    const soon = new Date(Date.now() + 3 * DAY);
     const { svc, notify } = setup({
       candidates: [{ userId: 'u1' }],
       userTxns: [tx('a', 40, '2025-08-01', soon.toISOString())],
@@ -247,7 +247,7 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
   });
 
   it('đã nhắc trong kỳ (NotificationLog gần đây) → bỏ qua, KHÔNG notify (dedup)', async () => {
-    const soon = new Date(NOW.getTime() + 3 * DAY);
+    const soon = new Date(Date.now() + 3 * DAY);
     const { svc, notify } = setup({
       candidates: [{ userId: 'u1' }],
       userTxns: [tx('a', 40, '2025-08-01', soon.toISOString())],

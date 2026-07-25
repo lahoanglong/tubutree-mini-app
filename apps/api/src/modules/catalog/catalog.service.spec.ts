@@ -206,3 +206,42 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
     expect(r.updated).toBe(0);
   });
 });
+
+describe('CatalogService.list (Multi-brand filtering)', () => {
+  it('truyền 1 brand → query where.brand = "Pơ Lang"', async () => {
+    const findMany = jest.fn().mockResolvedValue([card('p1')]);
+    const count = jest.fn().mockResolvedValue(1);
+    const prisma = {
+      product: { findMany, count },
+      $transaction: jest.fn().mockResolvedValue([[card('p1')], 1]),
+    } as unknown as PrismaService;
+
+    const svc = new CatalogService(prisma);
+    await svc.list({ page: 1, limit: 10, brand: 'Pơ Lang' });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ brand: 'Pơ Lang' }),
+      }),
+    );
+  });
+
+  it('truyền nhiều brand phân cách dấu phẩy → query where.brand = { in: ["Pơ Lang", "Visante"] }', async () => {
+    const findMany = jest.fn().mockResolvedValue([card('p1'), card('p2')]);
+    const count = jest.fn().mockResolvedValue(2);
+    const prisma = {
+      product: { findMany, count },
+      $transaction: jest.fn().mockResolvedValue([[card('p1'), card('p2')], 2]),
+    } as unknown as PrismaService;
+
+    const svc = new CatalogService(prisma);
+    await svc.list({ page: 1, limit: 10, brand: 'Pơ Lang, Visante' });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ brand: { in: ['Pơ Lang', 'Visante'] } }),
+      }),
+    );
+  });
+});
+

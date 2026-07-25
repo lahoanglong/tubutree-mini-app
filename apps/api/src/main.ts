@@ -4,6 +4,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 
@@ -43,8 +44,8 @@ async function bootstrap() {
   // Trust proxy: ZaloPay/Nginx/Cloudflare phía trước → req.ip = IP proxy nếu KHÔNG set,
   // mọi request share 1 counter trong ThrottlerGuard → 60req/min cho toàn site, dễ DOS lẫn nhau.
   // Set trust proxy=1 để Express lấy IP thật từ X-Forwarded-For (1 hop = reverse proxy chuẩn).
-  if (isProd) app.set('trust proxy', 1);
-
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ limit: '10mb', extended: true }));
   app.use(helmet());
   app.setGlobalPrefix('api');
   app.useGlobalPipes(

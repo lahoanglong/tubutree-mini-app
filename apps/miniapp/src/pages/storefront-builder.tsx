@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -58,6 +58,18 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const { openSnackbar } = useSnackbar();
   const [pickerCol, setPickerCol] = useState<string | null>(null);
   const [contentKitSlug, setContentKitSlug] = useState<string | null>(null);
+
+  const pickerQ = useQuery({
+    queryKey: ['picker', ''],
+    queryFn: () => pickerProducts(''),
+    staleTime: 5 * 60 * 1000,
+  });
+  const productMap = useMemo(() => {
+    const map = new Map<string, PickerProduct>();
+    (pickerQ.data ?? []).forEach((p) => map.set(p.id, p));
+    return map;
+  }, [pickerQ.data]);
+
   const refresh = () => {
     // Cập nhật cả tiến trình "Hành trình gian hàng" sau khi thêm SP/đăng (quest đọc từ cùng dữ liệu).
     void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
@@ -95,26 +107,35 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       {sf.collections.map((col) => (
         <Box key={col.id} mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
           <Text bold style={{ marginBottom: 8 }}>{col.title}</Text>
-          {col.items.map((it) => (
-            <Box key={it.id} flex alignItems="center" style={{ gap: 8, padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
-              <Box style={{ flex: 1 }}>
-                <Text size="small" style={{ opacity: it.isHidden ? 0.5 : 1 }}>{it.product.name}</Text>
-                <Text size="xSmall" style={{ color: 'var(--primary-700)' }}>{formatVnd(it.product.salePrice ?? it.product.basePrice)}</Text>
+          {col.items.map((it) => {
+            const prod = it.product ?? productMap.get(it.productId);
+            const name = prod?.name ?? 'Sản phẩm';
+            const price = prod?.salePrice ?? prod?.basePrice ?? 0;
+            const slug = prod?.slug;
+
+            return (
+              <Box key={it.id} flex alignItems="center" style={{ gap: 8, padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
+                <Box style={{ flex: 1 }}>
+                  <Text size="small" style={{ opacity: it.isHidden ? 0.5 : 1 }}>{name}</Text>
+                  <Text size="xSmall" style={{ color: 'var(--primary-700)' }}>{formatVnd(price)}</Text>
+                </Box>
+                {slug && (
+                  <Text
+                    size="xSmall"
+                    bold
+                    className="tubu-press"
+                    style={{ color: 'var(--primary-700)' }}
+                    onClick={() => setContentKitSlug(slug)}
+                  >
+                    {vi.contentKit.entryLabel}
+                  </Text>
+                )}
+                <Text size="xSmall" className="tubu-press" onClick={() => itemMut.mutate({ id: it.id, dto: { isPinned: !it.isPinned } })}>⤒</Text>
+                <Text size="xSmall" className="tubu-press" onClick={() => itemMut.mutate({ id: it.id, dto: { isHidden: !it.isHidden } })}>{it.isHidden ? '🙈' : '👁'}</Text>
+                <Text size="xSmall" className="tubu-press" style={{ color: 'var(--danger)' }} onClick={() => delItemMut.mutate(it.id)}>✕</Text>
               </Box>
-              <Text
-                size="xSmall"
-                bold
-                className="tubu-press"
-                style={{ color: 'var(--primary-700)' }}
-                onClick={() => setContentKitSlug(it.product.slug)}
-              >
-                {vi.contentKit.entryLabel}
-              </Text>
-              <Text size="xSmall" className="tubu-press" onClick={() => itemMut.mutate({ id: it.id, dto: { isPinned: !it.isPinned } })}>⤒</Text>
-              <Text size="xSmall" className="tubu-press" onClick={() => itemMut.mutate({ id: it.id, dto: { isHidden: !it.isHidden } })}>{it.isHidden ? '🙈' : '👁'}</Text>
-              <Text size="xSmall" className="tubu-press" style={{ color: 'var(--danger)' }} onClick={() => delItemMut.mutate(it.id)}>✕</Text>
-            </Box>
-          ))}
+            );
+          })}
           <Button size="small" variant="secondary" style={{ marginTop: 8 }} onClick={() => setPickerCol(col.id)}>+ {vi.storefront.addProduct}</Button>
         </Box>
       ))}

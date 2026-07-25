@@ -46,7 +46,7 @@ export default function StorefrontViewPage() {
         <Box key={col.id} mt={4} px={4}>
           <Text bold style={{ marginBottom: 8 }}>{col.title}</Text>
           <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {col.items.map((it) => {
+            {col.items.filter((it) => Boolean(it?.product)).map((it) => {
               const price = it.product.salePrice ?? it.product.basePrice;
               return (
                 <Box key={it.id} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>

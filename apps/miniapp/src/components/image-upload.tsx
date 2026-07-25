@@ -7,8 +7,46 @@ const PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string | undefin
 const CONFIGURED = Boolean(CLOUD && PRESET);
 
 /**
- * Upload 1 ảnh lên Cloudinary (unsigned preset) → trả secure_url qua onChange.
- * Khi chưa cấu hình env → fallback ô dán URL (vẫn hoạt động, BE nhận URL string).
+ * Nén ảnh client-side bằng HTMLCanvasElement + FileReader.
+ * Chuyển đổi tệp ảnh bất kỳ sang chuỗi Base64 Data URL JPEG dung lượng nhẹ (~150-250KB).
+ */
+export function readAndCompressImage(file: File, maxDim = 1200, quality = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Không đọc được tệp ảnh'));
+    reader.onload = (e) => {
+      const src = e.target?.result as string;
+      if (!src) return reject(new Error('Tệp rỗng'));
+      const img = new Image();
+      img.onerror = () => reject(new Error('Không tải được ảnh'));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(src);
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Upload 1 ảnh lên Cloudinary (unsigned preset) → fallback sang FileReader Data URL nếu lỗi/chưa cấu hình.
  */
 export function ImageUpload({
   label,
@@ -34,46 +72,56 @@ export function ImageUpload({
     setError(null);
     setUploading(true);
     try {
-      const form = new FormData();
-      form.append('file', file);
-      form.append('upload_preset', PRESET!);
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
-        method: 'POST',
-        body: form,
-      });
-      if (!res.ok) throw new Error('upload failed');
-      const data = (await res.json()) as { secure_url?: string };
-      if (!data.secure_url) throw new Error('no url');
+      // 1. Thử Cloudinary nếu được cấu hình
+      if (CONFIGURED) {
+        try {
+          const form = new FormData();
+          form.append('file', file);
+          form.append('upload_preset', PRESET!);
+          const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
+            method: 'POST',
+            body: form,
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { secure_url?: string };
+            if (data.secure_url) {
+              haptic('medium');
+              onChange(data.secure_url);
+              setUploading(false);
+              if (inputRef.current) inputRef.current.value = '';
+              return;
+            }
+          }
+        } catch {
+          // Cloudinary fail -> fallback to local FileReader compression
+        }
+      }
+
+      // 2. Client-side Smart Compression Fallback
+      const dataUrl = await readAndCompressImage(file);
       haptic('medium');
-      onChange(data.secure_url);
+      onChange(dataUrl);
     } catch {
-      setError('Tải ảnh thất bại, thử lại.');
+      setError('Tải ảnh thất bại. Hãy chọn lại tệp ảnh khác.');
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
     }
   };
 
-  // Fallback: chưa cấu hình Cloudinary → dán URL.
-  if (!CONFIGURED) {
-    return (
-      <Box>
-        <Input label={label} placeholder="Dán URL ảnh" value={value} onChange={(e) => onChange(e.target.value)} />
-      </Box>
-    );
-  }
-
   return (
-    <Box>
-      <Text size="xSmall" bold style={{ marginBottom: 4 }}>
-        {label}
-      </Text>
+    <Box style={{ marginBottom: 12 }}>
+      {label && (
+        <Text size="xSmall" bold style={{ marginBottom: 4 }}>
+          {label}
+        </Text>
+      )}
       <input ref={inputRef} type="file" accept="image/*" hidden onChange={onFile} />
       <Box
         className="tubu-press"
         onClick={pick}
         style={{
-          border: '1.5px dashed var(--neutral-200)',
+          border: '1.5px dashed var(--neutral-300)',
           borderRadius: 'var(--radius-md)',
           padding: value ? 0 : 16,
           textAlign: 'center',
@@ -82,23 +130,25 @@ export function ImageUpload({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          background: 'var(--neutral-50)',
+          cursor: 'pointer',
         }}
       >
         {uploading ? (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            Đang tải ảnh…
+          <Text size="small" style={{ color: 'var(--neutral-500)' }}>
+            ⏳ Đang tải ảnh…
           </Text>
         ) : value ? (
-          <img src={value} alt={label} style={{ width: '100%', maxHeight: 160, objectFit: 'cover', display: 'block' }} />
+          <img src={value} alt={label || 'preview'} style={{ width: '100%', maxHeight: 180, objectFit: 'cover', display: 'block' }} />
         ) : (
-          <Text size="small" style={{ color: 'var(--primary-700)' }}>
+          <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
             📷 Chạm để tải ảnh lên
           </Text>
         )}
       </Box>
       {value && !uploading && (
-        <Text size="xSmall" onClick={pick} style={{ color: 'var(--primary-700)', marginTop: 4 }}>
-          Đổi ảnh khác
+        <Text size="xSmall" onClick={pick} style={{ color: 'var(--leaf-700)', marginTop: 4, cursor: 'pointer' }}>
+          🔄 Đổi ảnh khác
         </Text>
       )}
       {error && (
@@ -111,8 +161,7 @@ export function ImageUpload({
 }
 
 /**
- * Upload 1 video review (UGC §6.14.9) lên Cloudinary (resource_type=video).
- * Chưa cấu hình Cloudinary → fallback ô dán URL video.
+ * Upload 1 video review lên Cloudinary → fallback dán URL nếu chưa cấu hình.
  */
 export function VideoUpload({
   value,
@@ -136,7 +185,6 @@ export function VideoUpload({
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
-    // Chặn file quá lớn ngay phía client (≈ <50MB) để đỡ tốn data; BE chỉ nhận URL.
     if (file.size > 50 * 1024 * 1024) {
       setError('Video quá lớn (tối đa 50MB). Hãy quay ngắn hơn nhé.');
       if (inputRef.current) inputRef.current.value = '';
@@ -201,47 +249,153 @@ export function VideoUpload({
   );
 }
 
-/** Upload nhiều ảnh (cho review). */
+/** Upload nhiều ảnh (cho bài viết cộng đồng / đánh giá sản phẩm). */
 export function MultiImageUpload({
-  value,
+  value = [],
   onChange,
-  max = 5,
+  max = 6,
+  label = 'Ảnh đính kèm',
 }: {
-  value: string[];
+  value?: string[];
   onChange: (urls: string[]) => void;
   max?: number;
+  label?: string;
 }) {
-  if (!CONFIGURED) return null; // review ảnh chỉ bật khi có Cloudinary
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const pick = () => {
+    haptic('light');
+    inputRef.current?.click();
+  };
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setError(null);
+    setUploading(true);
+    try {
+      const newUrls: string[] = [];
+      for (const file of files) {
+        if (value.length + newUrls.length >= max) break;
+        let uploadedUrl = '';
+        if (CONFIGURED) {
+          try {
+            const form = new FormData();
+            form.append('file', file);
+            form.append('upload_preset', PRESET!);
+            const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
+              method: 'POST',
+              body: form,
+            });
+            if (res.ok) {
+              const data = (await res.json()) as { secure_url?: string };
+              if (data.secure_url) uploadedUrl = data.secure_url;
+            }
+          } catch {
+            // fallback
+          }
+        }
+        if (!uploadedUrl) {
+          uploadedUrl = await readAndCompressImage(file);
+        }
+        if (uploadedUrl) newUrls.push(uploadedUrl);
+      }
+      if (newUrls.length > 0) {
+        haptic('medium');
+        onChange([...value, ...newUrls]);
+      }
+    } catch {
+      setError('Tải ảnh thất bại. Hãy chọn tệp ảnh khác.');
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
   return (
-    <Box flex style={{ gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-      {value.map((url) => (
-        <Box key={url} style={{ position: 'relative' }}>
-          <img src={url} alt="review" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 'var(--radius-sm)' }} />
-          <span
-            onClick={() => onChange(value.filter((u) => u !== url))}
+    <Box style={{ marginTop: 14, marginBottom: 14 }}>
+      {label && (
+        <Text size="xSmall" bold style={{ color: 'var(--neutral-700)', marginBottom: 6 }}>
+          {label} ({value.length}/{max})
+        </Text>
+      )}
+      <input ref={inputRef} type="file" accept="image/*" multiple hidden onChange={onFile} />
+
+      <Box flex style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        {value.map((url, idx) => (
+          <Box
+            key={idx}
             style={{
-              position: 'absolute',
-              top: -6,
-              right: -6,
-              width: 18,
-              height: 18,
-              borderRadius: '50%',
-              background: 'var(--danger)',
-              color: '#fff',
-              fontSize: 12,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              position: 'relative',
+              width: 72,
+              height: 72,
+              borderRadius: 'var(--radius-md)',
+              overflow: 'hidden',
+              boxShadow: 'var(--shadow-xs)',
+              border: '1px solid var(--neutral-200)',
             }}
           >
-            ×
-          </span>
-        </Box>
-      ))}
-      {value.length < max && (
-        <Box style={{ width: 64, height: 64 }}>
-          <ImageUpload label="" value="" onChange={(url) => onChange([...value, url])} />
-        </Box>
+            <img src={url} alt={`upload-${idx}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <Box
+              role="button"
+              aria-label="Xóa ảnh"
+              onClick={() => {
+                haptic('light');
+                onChange(value.filter((_, i) => i !== idx));
+              }}
+              style={{
+                position: 'absolute',
+                top: 3,
+                right: 3,
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                background: 'rgba(0,0,0,0.65)',
+                color: '#fff',
+                fontSize: 12,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+            >
+              ✕
+            </Box>
+          </Box>
+        ))}
+
+        {value.length < max && (
+          <Box
+            className="tubu-press"
+            onClick={pick}
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: 'var(--radius-md)',
+              border: '1.5px dashed var(--leaf-400, #4da492)',
+              background: 'var(--leaf-50, #f4f9f7)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              gap: 2,
+            }}
+          >
+            <Text style={{ fontSize: 20, lineHeight: 1 }}>📷</Text>
+            <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', fontSize: 9.5 }}>
+              {uploading ? 'Đang tải…' : 'Chạm để tải'}
+            </Text>
+          </Box>
+        )}
+      </Box>
+
+      {error && (
+        <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 4 }}>
+          {error}
+        </Text>
       )}
     </Box>
   );

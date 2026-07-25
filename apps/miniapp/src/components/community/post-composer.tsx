@@ -105,161 +105,176 @@ export default function PostComposer({
 
   return (
     <Sheet visible={visible} onClose={onClose} autoHeight>
-      <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-        <Text bold size="large">
-          {vi.community.compose}
-        </Text>
+      <Box style={{ display: 'flex', flexDirection: 'column', maxHeight: '82vh', overflow: 'hidden' }}>
+        {/* 1. Form Header & Scrollable Body */}
+        <Box p={4} pb={2} style={{ overflowY: 'auto', flex: 1, WebkitOverflowScrolling: 'touch' }}>
+          <Text bold size="large">
+            {vi.community.compose}
+          </Text>
 
-        {eventId && (
-          <Box
-            mt={2}
-            style={{
-              background: 'var(--leaf-50)',
-              borderRadius: 'var(--radius-md)',
-              padding: '8px 12px',
-            }}
-          >
-            <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
-              {vi.community.entryFor}: {eventTitle}
-            </Text>
-          </Box>
-        )}
-
-        <Box flex style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-          {KINDS.map((k) => (
-            <Text
-              key={k.value}
-              size="small"
-              onClick={() => {
-                haptic('light');
-                setKind(k.value);
-              }}
+          {eventId && (
+            <Box
+              mt={2}
               style={{
-                padding: '6px 12px',
-                borderRadius: 'var(--radius-full)',
-                border: `1px solid ${kind === k.value ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
-                color: kind === k.value ? 'var(--primary-700)' : 'var(--neutral-600)',
-                background: kind === k.value ? 'var(--primary-50)' : 'transparent',
+                background: 'var(--leaf-50)',
+                borderRadius: 'var(--radius-md)',
+                padding: '8px 12px',
               }}
             >
-              {k.label}
-            </Text>
-          ))}
-        </Box>
-
-        {categories.length > 0 && (
-          <Box mt={3}>
-            <Text size="xSmall" bold style={{ marginBottom: 4 }}>
-              {vi.community.pickCategory}
-            </Text>
-            <Box flex style={{ gap: 8, flexWrap: 'wrap' }}>
-              {categories.map((c) => (
-                <Text
-                  key={c.id}
-                  size="small"
-                  onClick={() => {
-                    haptic('light');
-                    setCategory((prev) => (prev?.id === c.id ? null : c));
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 'var(--radius-full)',
-                    border: `1px solid ${category?.id === c.id ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
-                    color: category?.id === c.id ? 'var(--primary-700)' : 'var(--neutral-600)',
-                    background: category?.id === c.id ? 'var(--primary-50)' : 'transparent',
-                  }}
-                >
-                  {c.icon ?? ''} {c.name}
-                </Text>
-              ))}
-            </Box>
-          </Box>
-        )}
-
-        {kind === 'QUESTION' && (
-          <Box mt={3}>
-            <Input
-              placeholder={vi.community.titlePlaceholder}
-              value={title}
-              maxLength={160}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-            {needsTitle && (
-              <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 4 }}>
-                {vi.community.needTitle}
+              <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
+                {vi.community.entryFor}: {eventTitle}
               </Text>
-            )}
-          </Box>
-        )}
-
-        <Box mt={3}>
-          <Input.TextArea
-            placeholder={vi.community.bodyPlaceholder}
-            value={body}
-            maxLength={5000}
-            rows={4}
-            onChange={(e) => setBody(e.target.value)}
-          />
-        </Box>
-
-        <MultiImageUpload value={images} onChange={setImages} max={6} />
-
-        <ProductPicker value={products} onChange={setProducts} max={5} />
-
-        <Box mt={3}>
-          <Text size="xSmall" bold style={{ marginBottom: 4 }}>
-            {vi.community.tags}
-          </Text>
-          <Input
-            placeholder={vi.community.tagsPlaceholder}
-            value={tagsRaw}
-            onChange={(e) => setTagsRaw(e.target.value)}
-          />
-          {tags.length > 0 && (
-            <Box flex style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-              {tags.map((t) => (
-                <Box
-                  key={t}
-                  flex
-                  alignItems="center"
-                  style={{
-                    gap: 4,
-                    padding: '4px 8px',
-                    borderRadius: 'var(--radius-full)',
-                    background: 'var(--leaf-100, var(--neutral-100))',
-                    color: 'var(--leaf-700)',
-                  }}
-                >
-                  <Hash size={11} />
-                  <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-                    {t}
-                  </Text>
-                  <Box
-                    role="button"
-                    aria-label={vi.common.cancel}
-                    className="tubu-press"
-                    onClick={() => {
-                      haptic('light');
-                      removeTag(t);
-                    }}
-                  >
-                    <X size={11} />
-                  </Box>
-                </Box>
-              ))}
             </Box>
           )}
+
+          <Box flex style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            {KINDS.map((k) => (
+              <Text
+                key={k.value}
+                size="small"
+                onClick={() => {
+                  haptic('light');
+                  setKind(k.value);
+                }}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 'var(--radius-full)',
+                  border: `1px solid ${kind === k.value ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
+                  color: kind === k.value ? 'var(--primary-700)' : 'var(--neutral-600)',
+                  background: kind === k.value ? 'var(--primary-50)' : 'transparent',
+                }}
+              >
+                {k.label}
+              </Text>
+            ))}
+          </Box>
+
+          {categories.length > 0 && (
+            <Box mt={3}>
+              <Text size="xSmall" bold style={{ marginBottom: 4 }}>
+                {vi.community.pickCategory}
+              </Text>
+              <Box flex style={{ gap: 8, flexWrap: 'wrap' }}>
+                {categories.map((c) => (
+                  <Text
+                    key={c.id}
+                    size="small"
+                    onClick={() => {
+                      haptic('light');
+                      setCategory((prev) => (prev?.id === c.id ? null : c));
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 'var(--radius-full)',
+                      border: `1px solid ${category?.id === c.id ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
+                      color: category?.id === c.id ? 'var(--primary-700)' : 'var(--neutral-600)',
+                      background: category?.id === c.id ? 'var(--primary-50)' : 'transparent',
+                    }}
+                  >
+                    {c.icon ?? ''} {c.name}
+                  </Text>
+                ))}
+              </Box>
+            </Box>
+          )}
+
+          {kind === 'QUESTION' && (
+            <Box mt={3}>
+              <Input
+                placeholder={vi.community.titlePlaceholder}
+                value={title}
+                maxLength={160}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              {needsTitle && (
+                <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 4 }}>
+                  {vi.community.needTitle}
+                </Text>
+              )}
+            </Box>
+          )}
+
+          <Box mt={3}>
+            <Input.TextArea
+              placeholder={vi.community.bodyPlaceholder}
+              value={body}
+              maxLength={5000}
+              rows={4}
+              onChange={(e) => setBody(e.target.value)}
+            />
+          </Box>
+
+          <MultiImageUpload value={images} onChange={setImages} max={6} label="Ảnh đính kèm bài viết" />
+
+          <ProductPicker value={products} onChange={setProducts} max={5} />
+
+          <Box mt={3} mb={3}>
+            <Text size="xSmall" bold style={{ marginBottom: 4 }}>
+              {vi.community.tags}
+            </Text>
+            <Input
+              placeholder={vi.community.tagsPlaceholder}
+              value={tagsRaw}
+              onChange={(e) => setTagsRaw(e.target.value)}
+            />
+            {tags.length > 0 && (
+              <Box flex style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                {tags.map((t) => (
+                  <Box
+                    key={t}
+                    flex
+                    alignItems="center"
+                    style={{
+                      gap: 4,
+                      padding: '4px 8px',
+                      borderRadius: 'var(--radius-full)',
+                      background: 'var(--leaf-100, var(--neutral-100))',
+                      color: 'var(--leaf-700)',
+                    }}
+                  >
+                    <Hash size={11} />
+                    <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                      {t}
+                    </Text>
+                    <Box
+                      role="button"
+                      aria-label={vi.common.cancel}
+                      className="tubu-press"
+                      onClick={() => {
+                        haptic('light');
+                        removeTag(t);
+                      }}
+                    >
+                      <X size={11} />
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
         </Box>
 
-        <Button
-          fullWidth
-          loading={submit.isPending}
-          disabled={!canSubmit || submit.isPending}
-          onClick={() => submit.mutate()}
-          style={{ marginTop: 16, background: 'var(--primary-600)' }}
+        {/* 2. Sticky Footer Button (Always visible 100% on iPhone 12 Pro) */}
+        <Box
+          px={4}
+          pt={2}
+          style={{
+            background: '#ffffff',
+            borderTop: '1px solid var(--neutral-100)',
+            paddingBottom: 'calc(14px + var(--safe-bottom))',
+            boxShadow: '0 -4px 12px rgba(0,0,0,0.05)',
+          }}
         >
-          {vi.community.post}
-        </Button>
+          <Button
+            fullWidth
+            loading={submit.isPending}
+            disabled={!canSubmit || submit.isPending}
+            onClick={() => submit.mutate()}
+            style={{ background: 'var(--primary-600)' }}
+          >
+            {vi.community.post}
+          </Button>
+        </Box>
       </Box>
     </Sheet>
   );

@@ -8,5 +8,16 @@ export default defineConfig({
   root: '.',
   base: '',
   plugins: [zaloMiniApp(), react()],
-  server: { port: 3113, host: '0.0.0.0' },
+  server: {
+    port: 3113,
+    host: '0.0.0.0',
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_TARGET || 'https://api.tubutree.com',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 });
+

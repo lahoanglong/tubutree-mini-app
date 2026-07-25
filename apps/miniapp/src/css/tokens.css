@@ -95,6 +95,20 @@
   --safe-top: env(safe-area-inset-top, 0px);
 }
 
+/* Dynamic Font Scale (Accessibility) */
+html[data-font-scale='small'] {
+  zoom: 0.92;
+  font-size: 14px !important;
+}
+html[data-font-scale='normal'] {
+  zoom: 1;
+  font-size: 16px !important;
+}
+html[data-font-scale='large'] {
+  zoom: 1.1;
+  font-size: 18px !important;
+}
+
 body {
   margin: 0;
   font-family: var(--font-ui);

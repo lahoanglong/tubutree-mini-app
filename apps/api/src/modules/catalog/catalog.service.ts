@@ -26,7 +26,14 @@ export class CatalogService {
   async list(query: ProductQuery) {
     const { page, limit, brand, category, segment, q, sort } = query;
     const where: Prisma.ProductWhereInput = { isActive: true };
-    if (brand) where.brand = brand;
+    if (brand) {
+      const brandList = brand.split(',').map((b) => b.trim()).filter(Boolean);
+      if (brandList.length === 1) {
+        where.brand = brandList[0];
+      } else if (brandList.length > 1) {
+        where.brand = { in: brandList };
+      }
+    }
     if (category) where.categoryIds = { has: category };
     if (segment) where.forSegment = { has: segment };
     if (q) {

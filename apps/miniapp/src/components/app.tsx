@@ -12,6 +12,8 @@ import { useAuthStore } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch } from '../services/affiliate-api';
 
+import { applyFontScale } from '../pages/settings';
+
 const FONT_PX: Record<string, string> = { small: '15px', normal: '16px', large: '18px' };
 /** Áp cỡ chữ đã lưu (Cài đặt) ngay khi mở app để giữ a11y qua các phiên. */
 function applySavedFontScale(): void {
@@ -19,8 +21,8 @@ function applySavedFontScale(): void {
     const raw = (res as Record<string, unknown>)['tubu_prefs'];
     if (typeof raw === 'string') {
       try {
-        const scale = (JSON.parse(raw) as { fontScale?: string }).fontScale;
-        if (scale && FONT_PX[scale]) document.documentElement.style.fontSize = FONT_PX[scale];
+        const scale = (JSON.parse(raw) as { fontScale?: 'small' | 'normal' | 'large' }).fontScale;
+        if (scale && FONT_PX[scale]) applyFontScale(scale);
       } catch {
         /* ignore */
       }

@@ -130,19 +130,17 @@ export default function WalletPage() {
                 <Button
                   variant="secondary"
                   size="small"
-                  style={{ flex: 1, background: 'rgba(255,255,255,0.95)', color: 'var(--leaf-700)' }}
+                  style={{ flex: 1, background: 'rgba(255,255,255,0.95)', color: 'var(--leaf-700)', fontSize: 13, padding: '0 8px' }}
                   prefixIcon={<ArrowRightLeft size={15} strokeWidth={2} />}
-                  disabled={w.walletBalance <= 0}
                   onClick={() => setConvertOpen(true)}
                 >
-                  Đổi sang TubuXu
+                  Đổi TubuXu
                 </Button>
                 <Button
                   variant="secondary"
                   size="small"
-                  style={{ flex: 1, background: 'rgba(255,255,255,0.18)', color: '#fff' }}
+                  style={{ flex: 1, background: 'rgba(255,255,255,0.18)', color: '#fff', fontSize: 13, padding: '0 8px' }}
                   prefixIcon={<Landmark size={15} strokeWidth={2} />}
-                  disabled={w.walletBalance < min}
                   onClick={() => {
                     // Mỗi lần MỞ Sheet = 1 lệnh rút mới → key mới (double-tap trong cùng phiên giữ
                     // nguyên key = idempotent; mở lại với số khác = key khác, không bị BE trả payout cũ).
@@ -290,17 +288,27 @@ export default function WalletPage() {
       ) : null}
 
       {/* Sheet đổi Ví → TubuXu */}
-      <Sheet visible={convertOpen} onClose={() => setConvertOpen(false)} autoHeight>
+      <Sheet visible={convertOpen} onClose={() => { setConvertOpen(false); setConvertAmount(''); }} autoHeight>
         <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
           <Text bold size="large" style={{ marginBottom: 4 }}>Đổi Ví → TubuXu</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginBottom: 16 }}>
-            Nhận thêm {Math.round((multiplier - 1) * 100)}% — hoàn toàn miễn phí.
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginBottom: 12 }}>
+            Nhận thêm {Math.round((multiplier - 1) * 100)}% giá trị quy đổi — hoàn toàn miễn phí.
           </Text>
+
+          {(w?.walletBalance ?? 0) <= 0 && (
+            <Box mb={3} p={3} style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--clay-200)' }}>
+              <Text size="xSmall" style={{ color: 'var(--clay-700, #b46a1f)' }}>
+                🌱 Bạn chưa có số dư khả dụng trong Ví Tubu (0đ). Hãy tích lũy hoa hồng từ Đơn hàng/CTV hoặc Hoàn tiền sàn ngoài để đổi sang TubuXu (×{multiplier})!
+              </Text>
+            </Box>
+          )}
+
           <Input
-            label="Số tiền muốn đổi (đ)"
+            label={`Số tiền muốn đổi (Khả dụng: ${formatVnd(w?.walletBalance ?? 0)})`}
             type="number"
             placeholder="VD: 100.000"
             value={convertAmount}
+            disabled={(w?.walletBalance ?? 0) <= 0}
             onChange={(e) => setConvertAmount(e.target.value)}
           />
           {convertNum > 0 && (
@@ -322,20 +330,33 @@ export default function WalletPage() {
       </Sheet>
 
       {/* Sheet rút tiền */}
-      <Sheet visible={withdrawOpen} onClose={() => setWithdrawOpen(false)} autoHeight>
+      <Sheet visible={withdrawOpen} onClose={() => { setWithdrawOpen(false); setAmount(''); }} autoHeight>
         <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-          <Text bold size="large" style={{ marginBottom: 16 }}>Rút tiền về ngân hàng</Text>
+          <Text bold size="large" style={{ marginBottom: 4 }}>Rút tiền về ngân hàng</Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginBottom: 12 }}>
+            Khả dụng: <b>{formatVnd(w?.walletBalance ?? 0)}</b> • Tối thiểu: <b>{formatVnd(min)}</b>
+          </Text>
+
+          {(w?.walletBalance ?? 0) < min && (
+            <Box mb={3} p={3} style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--clay-200)' }}>
+              <Text size="xSmall" style={{ color: 'var(--clay-700, #b46a1f)' }}>
+                ⚠️ Số dư Ví Tubu của bạn ({formatVnd(w?.walletBalance ?? 0)}) chưa đủ mốc tối thiểu {formatVnd(min)} để rút về ngân hàng.
+              </Text>
+            </Box>
+          )}
+
           <Box flex flexDirection="column" style={{ gap: 12 }}>
             <Input
               label="Số tiền rút"
               type="number"
               placeholder={`Tối thiểu ${formatVnd(min)}`}
               value={amount}
+              disabled={(w?.walletBalance ?? 0) < min}
               onChange={(e) => setAmount(e.target.value)}
             />
-            <Input label="Tên ngân hàng" placeholder="VD: Techcombank" value={bank.bankName} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} />
-            <Input label="Số tài khoản" value={bank.accountNumber} onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))} />
-            <Input label="Chủ tài khoản" placeholder="Tên in trên thẻ" value={bank.accountName} onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))} />
+            <Input label="Tên ngân hàng" placeholder="VD: Techcombank" value={bank.bankName} disabled={(w?.walletBalance ?? 0) < min} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} />
+            <Input label="Số tài khoản" value={bank.accountNumber} disabled={(w?.walletBalance ?? 0) < min} onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))} />
+            <Input label="Chủ tài khoản" placeholder="Tên in trên thẻ" value={bank.accountName} disabled={(w?.walletBalance ?? 0) < min} onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))} />
           </Box>
           {amountNum >= min && (
             <Box mt={2} p={3} style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)' }}>

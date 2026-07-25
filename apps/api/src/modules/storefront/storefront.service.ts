@@ -28,7 +28,28 @@ export class StorefrontService {
       include: {
         collections: {
           orderBy: { sortOrder: 'asc' },
-          include: { items: { orderBy: [{ isPinned: 'desc' }, { sortOrder: 'asc' }] } },
+          include: {
+            items: {
+              orderBy: [{ isPinned: 'desc' }, { sortOrder: 'asc' }],
+              include: {
+                product: {
+                  select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                    thumbnail: true,
+                    brand: true,
+                    basePrice: true,
+                    salePrice: true,
+                    ratingAvg: true,
+                    reviewCount: true,
+                    isActive: true,
+                    affiliateBlocked: true,
+                  },
+                },
+              },
+            },
+          },
         },
       },
     });
@@ -208,6 +229,23 @@ export class StorefrontService {
     const count = await this.prisma.storefrontItem.count({ where: { collectionId } });
     return this.prisma.storefrontItem.create({
       data: { collectionId, productId: dto.productId, variationId: dto.variationId ?? null, note: dto.note ?? null, sortOrder: count },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            thumbnail: true,
+            brand: true,
+            basePrice: true,
+            salePrice: true,
+            ratingAvg: true,
+            reviewCount: true,
+            isActive: true,
+            affiliateBlocked: true,
+          },
+        },
+      },
     });
   }
 

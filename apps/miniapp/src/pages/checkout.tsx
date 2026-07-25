@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Ticket, ChevronRight, X } from 'lucide-react';
 import type { OrderDTO } from '@tubutree/shared-types';
 import { getAddresses, getCart, checkoutQuote, placeOrder } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
@@ -8,6 +9,7 @@ import { useAuthStore } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
+import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd } from '../utils/format';
@@ -30,6 +32,8 @@ export default function CheckoutPage() {
   const [payment, setPayment] = useState('COD');
   const [usePoints, setUsePoints] = useState(false);
   const [note, setNote] = useState('');
+  const [voucherSheetOpen, setVoucherSheetOpen] = useState(false);
+  const [summarySheetOpen, setSummarySheetOpen] = useState(false);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
   const [priceChanged, setPriceChanged] = useState(false);
   // Khoá tap nhanh 2 lần: ensurePhone() mở native sheet, nếu không khoá thì
@@ -210,6 +214,12 @@ export default function CheckoutPage() {
     },
   ];
 
+  const shownItems = itemIds
+    ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
+    : (cart.data?.items ?? []);
+  const previewSubtotal = shownItems.reduce((s, it) => s + it.total, 0);
+  const previewDiscount = cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;
+
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 110 }}>
 
@@ -241,7 +251,11 @@ export default function CheckoutPage() {
                 <Box style={{ flex: 1, minWidth: 0 }}>
                   <Text size="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.productName}</Text>
                   {it.variationName && (
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{it.variationName}</Text>
+                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                      {typeof it.variationName === 'object' && it.variationName !== null
+                        ? (it.variationName as { name?: string }).name ?? ''
+                        : String(it.variationName)}
+                    </Text>
                   )}
                   <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
                     {formatVnd(it.unitPrice)} × {it.quantity}
@@ -254,6 +268,75 @@ export default function CheckoutPage() {
         </Box>
         ) : null;
       })()}
+
+      {/* ── Mã giảm giá ── */}
+      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Box
+          className="tubu-press"
+          onClick={() => {
+            haptic('light');
+            setVoucherSheetOpen(true);
+          }}
+          flex
+          alignItems="center"
+          justifyContent="space-between"
+          style={{ cursor: 'pointer' }}
+        >
+          <Box flex alignItems="center" style={{ gap: 10 }}>
+            <Box
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--clay-50)',
+                display: 'grid',
+                placeItems: 'center',
+                flex: '0 0 auto',
+              }}
+            >
+              <Ticket size={20} color="var(--clay-700)" />
+            </Box>
+            <Box>
+              <Text bold size="small" style={{ color: 'var(--neutral-900)' }}>
+                Mã giảm giá
+              </Text>
+              {cart.data?.couponCode ? (
+                <Box flex alignItems="center" style={{ gap: 8, marginTop: 2 }}>
+                  <span
+                    style={{
+                      background: 'var(--clay-50)',
+                      border: '1px dashed var(--clay-500)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '2px 6px',
+                      color: 'var(--clay-700)',
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {cart.data.couponCode}
+                  </span>
+                  {quote.data && quote.data.discount > 0 && (
+                    <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                      -{formatVnd(quote.data.discount)}
+                    </Text>
+                  )}
+                </Box>
+              ) : (
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+                  Chọn hoặc nhập mã ưu đãi
+                </Text>
+              )}
+            </Box>
+          </Box>
+
+          <Box flex alignItems="center" style={{ gap: 4, color: 'var(--primary-700)' }}>
+            <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
+              {cart.data?.couponCode ? 'Thay đổi' : 'Xem mã'}
+            </Text>
+            <ChevronRight size={16} color="var(--primary-700)" />
+          </Box>
+        </Box>
+      </Box>
 
       {/* ── Thanh toán ── */}
       <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
@@ -377,28 +460,44 @@ export default function CheckoutPage() {
       </Box>
 
       {/* ── Tóm tắt ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
-        <Text bold size="small" style={{ marginBottom: 8 }}>
-          {vi.checkout.summary}
-        </Text>
-        {quote.isLoading && (
+      <Box
+        p={4}
+        mt={2}
+        className="tubu-press"
+        onClick={() => {
+          haptic('light');
+          setSummarySheetOpen(true);
+        }}
+        style={{ background: 'var(--neutral-0)', cursor: 'pointer' }}
+      >
+        <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 10 }}>
+          <Text bold size="small" style={{ color: 'var(--neutral-900)' }}>
+            {vi.checkout.summary}
+          </Text>
+          <Box flex alignItems="center" style={{ gap: 4, color: 'var(--primary-700)' }}>
+            <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
+              Chi tiết
+            </Text>
+            <ChevronRight size={16} color="var(--primary-700)" />
+          </Box>
+        </Box>
+
+        {quote.isLoading ? (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <Skeleton height={14} />
             <Skeleton height={14} width="80%" />
             <Skeleton height={18} width="60%" />
           </Box>
-        )}
-        {quote.isError && (
+        ) : quote.isError ? (
           <Box flex alignItems="center" justifyContent="space-between">
             <Text size="xSmall" style={{ color: 'var(--danger)' }}>
               ⚠ {getErrorMessage(quote.error)}
             </Text>
-            <Text role="button" size="xSmall" bold onClick={() => void quote.refetch()} style={{ color: 'var(--primary-700)', padding: 8 }}>
+            <Text role="button" size="xSmall" bold onClick={(e) => { e.stopPropagation(); void quote.refetch(); }} style={{ color: 'var(--primary-700)', padding: 8 }}>
               {vi.common.retry}
             </Text>
           </Box>
-        )}
-        {quote.data && (
+        ) : quote.data ? (
           <>
             <Row label={vi.cart.subtotal} value={formatVnd(quote.data.subtotal)} />
             {quote.data.discount > 0 && (
@@ -421,6 +520,19 @@ export default function CheckoutPage() {
                 🌱 {vi.checkout.pointsEarn(quote.data.pointsEarned)}
               </Text>
             )}
+          </>
+        ) : (
+          /* Fallback preview summary when addressId is missing/unselected */
+          <>
+            <Row label={vi.cart.subtotal} value={formatVnd(previewSubtotal)} />
+            {previewDiscount > 0 && (
+              <Row label={vi.cart.discount} value={`-${formatVnd(previewDiscount)}`} accent="leaf" />
+            )}
+            <Row
+              label={vi.checkout.shippingFee}
+              value={addressId ? 'Đang tính...' : 'Cần chọn địa chỉ giao hàng'}
+            />
+            <Row label={vi.checkout.total} value={formatVnd(Math.max(0, previewSubtotal - previewDiscount))} bold />
           </>
         )}
       </Box>
@@ -481,6 +593,97 @@ export default function CheckoutPage() {
             }}
           >
             {vi.flashSale.priceChangedCta}
+          </Button>
+        </Box>
+      </Sheet>
+
+      <VoucherSheet
+        visible={voucherSheetOpen}
+        onClose={() => setVoucherSheetOpen(false)}
+        currentCode={cart.data?.couponCode}
+        subtotal={quote.data?.subtotal ?? cart.data?.subtotal ?? 0}
+        onCouponApplied={() => {
+          void cart.refetch();
+          void quote.refetch();
+        }}
+      />
+
+      <Sheet visible={summarySheetOpen} onClose={() => setSummarySheetOpen(false)} autoHeight mask style={{ zIndex: 1000 }}>
+        <Box p={4} style={{ paddingBottom: 'calc(20px + var(--safe-bottom))' }}>
+          <Box flex alignItems="center" justifyContent="space-between" mb={3}>
+            <Text bold size="normal" style={{ color: 'var(--neutral-900)' }}>
+              Chi tiết tính tiền đơn hàng
+            </Text>
+            <button
+              type="button"
+              aria-label="Đóng"
+              className="tubu-press"
+              onClick={() => setSummarySheetOpen(false)}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                border: 'none',
+                background: 'var(--neutral-100)',
+                display: 'grid',
+                placeItems: 'center',
+                cursor: 'pointer',
+              }}
+            >
+              <X size={18} color="var(--neutral-600)" />
+            </button>
+          </Box>
+
+          <Box p={3} style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-lg)' }}>
+            <Row label="Tạm tính tiền hàng" value={formatVnd(quote.data?.subtotal ?? previewSubtotal)} />
+
+            {(quote.data?.discount ?? previewDiscount) > 0 && (
+              <Row label="Giảm giá voucher" value={`-${formatVnd(quote.data?.discount ?? previewDiscount)}`} accent="leaf" />
+            )}
+
+            {quote.data && quote.data.comboDiscount > 0 && (
+              <Row label="Giảm giá combo" value={`-${formatVnd(quote.data.comboDiscount)}`} accent="leaf" />
+            )}
+
+            {quote.data && quote.data.pointsDiscount > 0 && (
+              <Row label="Giảm giá điểm Xanh" value={`-${formatVnd(quote.data.pointsDiscount)}`} accent="leaf" />
+            )}
+
+            <Row
+              label="Phí vận chuyển"
+              value={
+                quote.data
+                  ? quote.data.shippingFee === 0
+                    ? vi.common.freeShip
+                    : formatVnd(quote.data.shippingFee)
+                  : addressId
+                    ? 'Đang tính...'
+                    : 'Cần chọn địa chỉ giao hàng'
+              }
+              accent={quote.data?.shippingFee === 0 ? 'leaf' : undefined}
+            />
+
+            <div style={{ height: 1, background: 'var(--neutral-200)', margin: '8px 0' }} />
+
+            <Row
+              label="Tổng thanh toán"
+              value={formatVnd(quote.data?.total ?? Math.max(0, previewSubtotal - previewDiscount))}
+              bold
+            />
+
+            {(quote.data?.pointsEarned ?? 0) > 0 && (
+              <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 6, textAlign: 'right', display: 'block' }}>
+                🌱 Tích lũy +{quote.data!.pointsEarned} điểm Xanh khi giao thành công
+              </Text>
+            )}
+          </Box>
+
+          <Button
+            fullWidth
+            onClick={() => setSummarySheetOpen(false)}
+            style={{ background: 'var(--primary-600)', marginTop: 16, minHeight: 44, fontWeight: 600 }}
+          >
+            Đã hiểu
           </Button>
         </Box>
       </Sheet>

@@ -1304,16 +1304,24 @@ model GardenPlot {
   @@map("garden_plots")
 }
 
+enum RefillStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // Refill / đổi vỏ chai (§6.14.6) — mỗi lần khách đổi vỏ chai rỗng lấy thưởng 💧.
 model BottleReturn {
-  id           String   @id @default(cuid())
+  id           String       @id @default(cuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   quantity     Int // số vỏ chai đổi lần này
-  seedsAwarded Int // 💧 đã thưởng
-  createdAt    DateTime @default(now())
+  seedsAwarded Int // 💧 đã thưởng (khi APPROVED)
+  status       RefillStatus @default(PENDING)
+  createdAt    DateTime     @default(now())
 
   @@index([userId, createdAt])
+  @@index([status])
   @@map("bottle_returns")
 }
 
@@ -1646,6 +1654,7 @@ model Mission {
   description  String
   rewardPoints Int
   rewardCoupon String?
+  goal         Int     @default(1)
   isRepeatable Boolean @default(false)
 
   @@map("missions")

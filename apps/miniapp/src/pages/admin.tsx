@@ -56,6 +56,13 @@ import {
   vnDateKey,
 } from '../utils/week';
 
+import {
+  getPendingRefillReturns,
+  approveRefillReturn,
+  rejectRefillReturn,
+  type PendingRefillItem,
+} from '../services/refill-api';
+
 export default function AdminPage() {
   const role = useAuthStore((s) => s.user?.role);
   if (role !== 'ADMIN') {
@@ -72,7 +79,7 @@ export default function AdminPage() {
   return <AdminHub />;
 }
 
-type Tab = 'staff' | 'shifts' | 'payroll';
+type Tab = 'staff' | 'shifts' | 'payroll' | 'refill';
 
 function AdminHub() {
   const navigate = useNavigate();
@@ -89,6 +96,9 @@ function AdminHub() {
         <Button size="small" variant={tab === 'payroll' ? undefined : 'secondary'} onClick={() => setTab('payroll')}>
           Lương
         </Button>
+        <Button size="small" variant={tab === 'refill' ? undefined : 'secondary'} onClick={() => setTab('refill')}>
+          Duyệt đổi vỏ
+        </Button>
         <Button
           size="small"
           variant="secondary"
@@ -98,7 +108,15 @@ function AdminHub() {
           {vi.community.moderation}
         </Button>
       </Box>
-      {tab === 'staff' ? <StaffSection /> : tab === 'shifts' ? <ShiftsSection /> : <PayrollSection />}
+      {tab === 'staff' ? (
+        <StaffSection />
+      ) : tab === 'shifts' ? (
+        <ShiftsSection />
+      ) : tab === 'payroll' ? (
+        <PayrollSection />
+      ) : (
+        <RefillAdminSection />
+      )}
     </Page>
   );
 }
@@ -778,5 +796,79 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
         </Box>
       </Box>
     </Sheet>
+  );
+}
+
+function RefillAdminSection() {
+  const qc = useQueryClient();
+  const { openSnackbar } = useSnackbar();
+  const pendingQ = useQuery({ queryKey: ['admin-refill-pending'], queryFn: getPendingRefillReturns });
+
+  const approveM = useMutation({
+    mutationFn: (id: string) => approveRefillReturn(id),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã duyệt yêu cầu đổi vỏ chai.', type: 'success' });
+      qc.invalidateQueries({ queryKey: ['admin-refill-pending'] });
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const rejectM = useMutation({
+    mutationFn: (id: string) => rejectRefillReturn(id),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã từ chối yêu cầu.', type: 'info' });
+      qc.invalidateQueries({ queryKey: ['admin-refill-pending'] });
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  return (
+    <Box px={4} pb={4} flex flexDirection="column" style={{ gap: 12 }}>
+      <Box flex justifyContent="space-between" alignItems="center">
+        <Text.Title size="small">Duyệt đổi vỏ chai</Text.Title>
+      </Box>
+
+      {pendingQ.isLoading && <Skeleton style={{ height: 100, borderRadius: 12 }} />}
+      {pendingQ.isError && <Text style={{ color: 'var(--danger, #d64545)' }}>{getErrorMessage(pendingQ.error)}</Text>}
+
+      {pendingQ.data && pendingQ.data.length === 0 && (
+        <Text size="small" style={{ color: 'var(--neutral-500)' }}>
+          Không có yêu cầu đổi vỏ chai nào đang chờ duyệt.
+        </Text>
+      )}
+
+      {pendingQ.data?.map((r: PendingRefillItem) => (
+        <Box key={r.id} style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
+          <Box flex justifyContent="space-between" alignItems="center">
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Text bold>{r.user.fullName ?? r.user.phone ?? 'Khách hàng'}</Text>
+              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                {r.user.phone ?? '—'} · Đổi <b>{r.quantity} vỏ</b> (+{r.seedsAwarded}💧)
+              </Text>
+            </Box>
+            <Box flex style={{ gap: 6 }}>
+              <Button
+                size="small"
+                variant="tertiary"
+                style={{ color: 'var(--leaf-700)' }}
+                loading={approveM.isPending}
+                onClick={() => approveM.mutate(r.id)}
+              >
+                <Check size={16} /> Duyệt
+              </Button>
+              <Button
+                size="small"
+                variant="tertiary"
+                style={{ color: 'var(--danger, #d64545)' }}
+                loading={rejectM.isPending}
+                onClick={() => rejectM.mutate(r.id)}
+              >
+                <X size={16} /> Từ chối
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      ))}
+    </Box>
   );
 }

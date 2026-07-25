@@ -1,17 +1,18 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
- * Refill / đổi vỏ chai (§6.14.6). Khách mang vỏ chai rỗng đến đổi → thưởng 💧 (nước tưới Vườn Xanh)
- * tức thì, có TRẦN theo tháng chống lạm dụng. Phần thưởng là 💧 (không phải tiền) nên rủi ro thấp;
- * gắn với chủ đề eco: tái chế vỏ → nuôi cây thật. Tổng vỏ đã tái chế hiển thị như "dấu chân xanh".
+ * Refill / đổi vỏ chai (§6.14.6). Khách mang vỏ chai rỗng đến đổi → gửi yêu cầu (PENDING).
+ * Quản lý (Admin/Staff) xem & duyệt đơn trên trang Quản trị → tự động thưởng 💧 vào Vườn Xanh.
  */
 @Injectable()
 export class RefillService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async returnBottles(userId: string, quantity: number) {
@@ -29,18 +30,19 @@ export class RefillService {
     }
 
     const seedsAwarded = quantity * perBottle;
-    await this.prisma.$transaction(async (tx) => {
-      // Cộng 💧 vào bình chung của vườn (tạo hồ sơ game nếu user chưa từng chơi).
-      await tx.gameProfile.upsert({
-        where: { userId },
-        create: { userId, totalSeeds: seedsAwarded },
-        update: { totalSeeds: { increment: seedsAwarded } },
-      });
-      await tx.bottleReturn.create({ data: { userId, quantity, seedsAwarded } });
+    const item = await this.prisma.bottleReturn.create({
+      data: { userId, quantity, seedsAwarded, status: 'PENDING' },
     });
 
     const totalRecycled = await this.totalRecycled(userId);
-    return { quantity, seedsAwarded, monthlyRemaining: remaining - quantity, totalRecycled };
+    return {
+      id: item.id,
+      quantity,
+      seedsAwarded,
+      status: 'PENDING',
+      monthlyRemaining: remaining - quantity,
+      totalRecycled,
+    };
   }
 
   async getSummary(userId: string) {
@@ -57,22 +59,108 @@ export class RefillService {
       monthlyUsed,
       monthlyRemaining: Math.max(0, monthlyCap - monthlyUsed),
       totalRecycled,
-      history: recent.map((r) => ({ id: r.id, quantity: r.quantity, seedsAwarded: r.seedsAwarded, createdAt: r.createdAt })),
+      history: recent.map((r) => ({
+        id: r.id,
+        quantity: r.quantity,
+        seedsAwarded: r.seedsAwarded,
+        status: r.status,
+        createdAt: r.createdAt,
+      })),
     };
+  }
+
+  async listPending() {
+    return this.prisma.bottleReturn.findMany({
+      where: { status: 'PENDING' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            phone: true,
+            avatarUrl: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async approveReturn(id: string) {
+    const item = await this.prisma.bottleReturn.findUnique({ where: { id } });
+    if (!item) throw new NotFoundException('Không tìm thấy yêu cầu đổi vỏ.');
+    if (item.status !== 'PENDING') throw new BadRequestException('Yêu cầu này đã được xử lý.');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.bottleReturn.update({
+        where: { id },
+        data: { status: 'APPROVED' },
+      });
+      await tx.gameProfile.upsert({
+        where: { userId: item.userId },
+        create: { userId: item.userId, totalSeeds: item.seedsAwarded },
+        update: { totalSeeds: { increment: item.seedsAwarded } },
+      });
+      await tx.notificationLog.create({
+        data: {
+          userId: item.userId,
+          templateCode: 'REFILL_APPROVED',
+          channel: 'INAPP',
+          payload: {
+            title: 'Đổi vỏ chai thành công!',
+            body: `Yêu cầu đổi ${item.quantity} vỏ chai của bạn đã được duyệt (+${item.seedsAwarded} 💧 tưới cây).`,
+          },
+          status: 'SENT',
+        },
+      });
+    });
+
+    return { ok: true, status: 'APPROVED' };
+  }
+
+  async rejectReturn(id: string) {
+    const item = await this.prisma.bottleReturn.findUnique({ where: { id } });
+    if (!item) throw new NotFoundException('Không tìm thấy yêu cầu đổi vỏ.');
+    if (item.status !== 'PENDING') throw new BadRequestException('Yêu cầu này đã được xử lý.');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.bottleReturn.update({
+        where: { id },
+        data: { status: 'REJECTED' },
+      });
+      await tx.notificationLog.create({
+        data: {
+          userId: item.userId,
+          templateCode: 'REFILL_REJECTED',
+          channel: 'INAPP',
+          payload: {
+            title: 'Yêu cầu đổi vỏ chai từ chối',
+            body: `Yêu cầu đổi ${item.quantity} vỏ chai của bạn chưa hợp lệ hoặc bị từ chối.`,
+          },
+          status: 'SENT',
+        },
+      });
+    });
+
+    return { ok: true, status: 'REJECTED' };
   }
 
   private async usedThisMonth(userId: string): Promise<number> {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const agg = await this.prisma.bottleReturn.aggregate({
-      where: { userId, createdAt: { gte: start } },
+      where: { userId, status: { in: ['APPROVED', 'PENDING'] }, createdAt: { gte: start } },
       _sum: { quantity: true },
     });
     return agg._sum.quantity ?? 0;
   }
 
   private async totalRecycled(userId: string): Promise<number> {
-    const agg = await this.prisma.bottleReturn.aggregate({ where: { userId }, _sum: { quantity: true } });
+    const agg = await this.prisma.bottleReturn.aggregate({
+      where: { userId, status: 'APPROVED' },
+      _sum: { quantity: true },
+    });
     return agg._sum.quantity ?? 0;
   }
 }

@@ -19,7 +19,9 @@ export default function BackButton() {
   const location = useLocation();
   const sfSlug = useStorefrontContext((s) => s.slug);
   const sfKind = useStorefrontContext((s) => s.kind);
-  const show = !ROOTS.includes(location.pathname);
+  const rawFrom = (location.state as { from?: string } | null)?.from;
+  const fromPath = typeof rawFrom === 'string' && rawFrom !== location.pathname ? rawFrom : undefined;
+  const show = !ROOTS.includes(location.pathname) || Boolean(fromPath);
 
   useEffect(() => {
     document.body.classList.toggle('with-back-btn', show);
@@ -34,10 +36,14 @@ export default function BackButton() {
       aria-label="Quay lại"
       className="tubu-press"
       onClick={() => {
-        // Mở thẳng trang con (share-link/thông báo) → history rỗng, navigate(-1) kẹt.
-        const idx = (window.history.state?.idx as number | undefined) ?? 0;
-        if (idx > 0) navigate(-1);
-        else navigate(sfSlug ? (sfKind === 'brand' ? `/brand/${sfSlug}` : `/s/${sfSlug}`) : '/');
+        if (fromPath) {
+          navigate(fromPath);
+        } else {
+          // Mở thẳng trang con (share-link/thông báo) → history rỗng, navigate(-1) kẹt.
+          const idx = (window.history.state?.idx as number | undefined) ?? 0;
+          if (idx > 0) navigate(-1);
+          else navigate(sfSlug ? (sfKind === 'brand' ? `/brand/${sfSlug}` : `/s/${sfSlug}`) : '/');
+        }
       }}
       style={{
         position: 'fixed',

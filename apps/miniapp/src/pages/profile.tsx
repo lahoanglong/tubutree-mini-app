@@ -1,7 +1,7 @@
 import { Box, Page, Text, Button, Avatar, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Package, Repeat, Heart, MapPin, Leaf, Wallet, Users, BadgePercent,
+  Package, Repeat, Heart, MapPin, Leaf, Wallet, Users, BadgePercent, Pencil,
   Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, ShieldCheck, CalendarClock, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
@@ -131,12 +131,20 @@ export default function ProfilePage() {
         <Box flex flexDirection="column" justifyContent="center" alignItems="center" style={{ minHeight: '60vh', gap: 14, padding: '0 32px', textAlign: 'center' }}>
           {status === 'loading' ? (
             <Spinner />
+          ) : status === 'idle' ? (
+            <>
+              <Text style={{ fontSize: 48 }}>🌿</Text>
+              <Text bold size="large" style={{ color: 'var(--neutral-800)' }}>Đã đăng xuất</Text>
+              <Text size="small" style={{ color: 'var(--neutral-500)' }}>
+                Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn.
+              </Text>
+              <Button onClick={() => void useAuthStore.getState().login()} style={{ background: 'var(--leaf-600)', minWidth: 180, marginTop: 8 }}>
+                Đăng nhập ngay
+              </Button>
+            </>
           ) : (
             <>
               <Text style={{ fontSize: 48 }}>🌿</Text>
-              {/* Thông điệp theo lỗi thật (mạng/server) — không mặc định đổ cho "tài khoản Zalo"
-                  vì app luôn fallback guest, lỗi thường là kết nối. Retry gọi restore() (thử
-                  refresh-token → Zalo → guest) thay vì chỉ login(). */}
               <Text style={{ color: 'var(--neutral-600)' }}>{error ?? 'Chưa kết nối được, vui lòng thử lại.'}</Text>
               <Button onClick={() => void restore()} style={{ background: 'var(--leaf-600)', minWidth: 180 }}>
                 Thử lại
@@ -159,7 +167,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 100 }}>
 
       {/* Header card */}
       <Box
@@ -169,36 +177,54 @@ export default function ProfilePage() {
           color: '#fff',
         }}
       >
-        <Box flex alignItems="center" style={{ gap: 12 }}>
+        <Box
+          flex
+          alignItems="center"
+          className="tubu-press"
+          onClick={() => {
+            haptic('light');
+            navigate('/edit-profile');
+          }}
+          style={{ gap: 12, cursor: 'pointer' }}
+        >
           <Avatar size={56} src={user.avatarUrl ?? undefined} />
           <Box style={{ flex: 1 }}>
-            <Box flex alignItems="center" justifyContent="space-between">
-              <Text bold style={{ color: '#fff' }}>
-                {user.fullName ?? 'Khách Tubu'}
-              </Text>
-              <Text
-                size="xSmall"
-                onClick={() => navigate('/edit-profile')}
-                style={{ color: 'rgba(255,255,255,0.9)' }}
+            <Text bold size="large" style={{ color: '#fff', lineHeight: '1.2' }}>
+              {user.fullName ?? 'Khách Tubu'}
+            </Text>
+            <Box flex alignItems="center" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              <Box
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  background: 'rgba(255,255,255,0.2)',
+                  padding: '3px 10px',
+                  borderRadius: 'var(--radius-full)',
+                }}
               >
-                Sửa ›
-              </Text>
-            </Box>
-            <Box
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                marginTop: 4,
-                background: 'rgba(255,255,255,0.2)',
-                padding: '3px 10px',
-                borderRadius: 'var(--radius-full)',
-              }}
-            >
-              <Leaf size={13} color="#fff" strokeWidth={2} />
-              <Text size="xSmall" style={{ color: '#fff' }}>
-                {tierName}
-              </Text>
+                <Leaf size={12} color="#fff" strokeWidth={2} />
+                <Text size="xSmall" style={{ color: '#fff' }}>
+                  {tierName}
+                </Text>
+              </Box>
+
+              <Box
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  background: 'rgba(255,255,255,0.3)',
+                  padding: '3px 10px',
+                  borderRadius: 'var(--radius-full)',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                }}
+              >
+                <Pencil size={11} color="#fff" strokeWidth={2} />
+                <Text size="xSmall" bold style={{ color: '#fff' }}>
+                  Sửa hồ sơ ›
+                </Text>
+              </Box>
             </Box>
           </Box>
         </Box>
@@ -233,7 +259,7 @@ export default function ProfilePage() {
           value={String(loyaltyQ.data?.pointsBalance ?? user.pointsBalance)}
           onClick={() => navigate('/loyalty')}
         />
-        <Stat label="Ví Tubu" value={formatVnd(user.walletBalance)} onClick={() => navigate('/wallet')} />
+        <Stat label="Ví Tubu" value={formatVnd(user.walletBalance)} onClick={() => navigate('/wallet', { state: { from: '/profile' } })} />
       </Box>
 
       {/* Menu */}
@@ -257,7 +283,7 @@ export default function ProfilePage() {
                 }}
                 onClick={() => {
                   haptic('light');
-                  if (READY.has(item.to)) navigate(item.to);
+                  if (READY.has(item.to)) navigate(item.to, item.to === '/wallet' ? { state: { from: '/profile' } } : undefined);
                   else openSnackbar({ text: 'Tính năng đang được hoàn thiện 🌱', type: 'info' });
                 }}
               >
