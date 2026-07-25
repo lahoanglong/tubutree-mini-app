@@ -5,6 +5,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRefillSummary, returnBottles } from '../services/refill-api';
 import { useAuthStore } from '../store/auth';
 
+import { haptic } from '../utils/haptic';
+
 function msg(e: unknown): string {
   const ax = e as { response?: { data?: { message?: string } }; message?: string };
   return ax?.response?.data?.message ?? ax?.message ?? 'Có lỗi xảy ra';
@@ -29,6 +31,7 @@ export default function RefillPage() {
   const returnM = useMutation({
     mutationFn: () => returnBottles(qty),
     onSuccess: () => {
+      haptic('heavy');
       openSnackbar({ text: '📋 Đã gửi yêu cầu đổi vỏ chai! Vui lòng chờ quản lý duyệt.', type: 'success' });
       setQty(1);
       void queryClient.invalidateQueries({ queryKey: ['refill'] });

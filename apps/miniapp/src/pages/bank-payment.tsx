@@ -17,8 +17,8 @@ export default function BankPaymentPage() {
     queryKey: ['bank-qr', code],
     queryFn: () => getBankQr(code!),
     enabled: !!code,
-    // Tự dò trạng thái: Pancake đối soát chuyển khoản → webhook lật PAID; FE poll mỗi 8s.
-    refetchInterval: (q) => (q.state.data?.paymentStatus === 'PAID' ? false : 8000),
+    // Tự dò trạng thái: Pancake/Bank đối soát chuyển khoản → webhook lật PAID; FE poll mỗi 4s.
+    refetchInterval: (q) => (q.state.data?.paymentStatus === 'PAID' ? false : 4000),
   });
 
   const copy = (text: string, label: string) => {

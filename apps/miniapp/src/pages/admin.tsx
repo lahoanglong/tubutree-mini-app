@@ -12,6 +12,7 @@ import {
   Clock,
   Plus,
   MessagesSquare,
+  Download,
 } from 'lucide-react';
 import { listStaff, grantStaff, revokeStaff, type StaffRole } from '../services/staff-api';
 import {
@@ -802,6 +803,7 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
 function RefillAdminSection() {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
+  const [filterText, setFilterText] = useState('');
   const pendingQ = useQuery({ queryKey: ['admin-refill-pending'], queryFn: getPendingRefillReturns });
 
   const approveM = useMutation({
@@ -822,22 +824,65 @@ function RefillAdminSection() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  const filteredItems = pendingQ.data?.filter((r: PendingRefillItem) => {
+    if (!filterText.trim()) return true;
+    const q = filterText.toLowerCase();
+    const name = (r.user.fullName ?? '').toLowerCase();
+    const phone = (r.user.phone ?? '').toLowerCase();
+    return name.includes(q) || phone.includes(q);
+  }) ?? [];
+
+  const exportCsv = () => {
+    if (!pendingQ.data || pendingQ.data.length === 0) {
+      openSnackbar({ text: 'Không có dữ liệu để xuất CSV', type: 'info' });
+      return;
+    }
+    const headers = ['ID', 'Khách hàng', 'SĐT', 'Số vỏ chai', 'Số nước (💧)', 'Thời gian'];
+    const rows = pendingQ.data.map((r: PendingRefillItem) => [
+      r.id,
+      `"${r.user.fullName ?? ''}"`,
+      `"${r.user.phone ?? ''}"`,
+      r.quantity,
+      r.seedsAwarded,
+      `"${new Date(r.createdAt).toLocaleString('vi-VN')}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `bao_cao_doi_vo_chai_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    openSnackbar({ text: 'Đã xuất file báo cáo CSV!', type: 'success' });
+  };
+
   return (
     <Box px={4} pb={4} flex flexDirection="column" style={{ gap: 12 }}>
       <Box flex justifyContent="space-between" alignItems="center">
-        <Text.Title size="small">Duyệt đổi vỏ chai</Text.Title>
+        <Text.Title size="small">Duyệt đổi vỏ chai ({filteredItems.length})</Text.Title>
+        <Button size="small" variant="secondary" onClick={exportCsv}>
+          <Download size={14} /> Xuất CSV
+        </Button>
       </Box>
+
+      <Input
+        placeholder="Tìm theo tên hoặc SĐT..."
+        value={filterText}
+        onChange={(e) => setFilterText(e.target.value)}
+        clearable
+      />
 
       {pendingQ.isLoading && <Skeleton style={{ height: 100, borderRadius: 12 }} />}
       {pendingQ.isError && <Text style={{ color: 'var(--danger, #d64545)' }}>{getErrorMessage(pendingQ.error)}</Text>}
 
-      {pendingQ.data && pendingQ.data.length === 0 && (
+      {pendingQ.data && filteredItems.length === 0 && (
         <Text size="small" style={{ color: 'var(--neutral-500)' }}>
-          Không có yêu cầu đổi vỏ chai nào đang chờ duyệt.
+          {filterText ? 'Không tìm thấy yêu cầu phù hợp.' : 'Không có yêu cầu đổi vỏ chai nào đang chờ duyệt.'}
         </Text>
       )}
 
-      {pendingQ.data?.map((r: PendingRefillItem) => (
+      {filteredItems.map((r: PendingRefillItem) => (
         <Box key={r.id} style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
           <Box flex justifyContent="space-between" alignItems="center">
             <Box style={{ flex: 1, minWidth: 0 }}>
