@@ -203,7 +203,7 @@ export class AuthService {
     return { accessToken, refreshToken, user: this.toAuthUser(user) };
   }
 
-  private toAuthUser(user: User): AuthUser {
+  toAuthUser(user: User): AuthUser {
     return {
       id: user.id,
       zaloId: user.zaloId,

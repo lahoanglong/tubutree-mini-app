@@ -65,19 +65,6 @@ export class AuthController {
   @Get('me')
   async me(@CurrentUser() user: JwtPayload) {
     const dbUser = await this.prisma.user.findUniqueOrThrow({ where: { id: user.sub } });
-    return {
-      id: dbUser.id,
-      zaloId: dbUser.zaloId,
-      phone: dbUser.phone,
-      email: dbUser.email,
-      fullName: dbUser.fullName,
-      avatarUrl: dbUser.avatarUrl,
-      role: dbUser.role,
-      tierId: dbUser.tierId,
-      referralCode: dbUser.referralCode,
-      pointsBalance: dbUser.pointsBalance,
-      walletBalance: dbUser.walletBalance,
-      coinsBalance: dbUser.coinsBalance,
-    };
+    return this.auth.toAuthUser(dbUser);
   }
 }

@@ -29,9 +29,13 @@ function makePrisma(over: Record<string, unknown> = {}) {
     plantedTree: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
     mission: { findMany: jest.fn().mockResolvedValue([]) },
     missionProgress: { findMany: jest.fn().mockResolvedValue([]) },
-    $transaction: jest.fn().mockResolvedValue([]),
+    $transaction: jest.fn(async (cbOrArr: unknown) => {
+      if (typeof cbOrArr === 'function') return (cbOrArr as (tx: unknown) => unknown)(res);
+      return [];
+    }),
   };
-  return { ...base, ...over } as unknown as PrismaService;
+  const res = { ...base, ...over } as unknown as PrismaService;
+  return res;
 }
 
 function profile(extra: Record<string, unknown> = {}) {

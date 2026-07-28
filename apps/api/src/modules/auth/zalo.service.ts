@@ -127,8 +127,10 @@ export class ZaloService {
     if (!raw) return null;
     const digits = raw.replace(/[^0-9]/g, '');
     if (!digits) return null;
-    if (digits.startsWith('84')) return `0${digits.slice(2)}`;
-    if (digits.startsWith('0')) return digits;
-    return `0${digits}`;
+    let formatted = digits;
+    if (digits.startsWith('84')) formatted = `0${digits.slice(2)}`;
+    else if (!digits.startsWith('0')) formatted = `0${digits}`;
+    if (!/^0[0-9]{9}$/.test(formatted)) return null;
+    return formatted;
   }
 }

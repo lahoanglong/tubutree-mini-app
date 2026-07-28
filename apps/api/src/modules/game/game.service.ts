@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Optional } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { GameCommunityService } from './game-community.service';
@@ -96,79 +97,106 @@ export class GameService {
     const prizes = await this.config.get<SpinPrize[]>('game.spin_prizes', []);
     if (prizes.length === 0) throw new BadRequestException('Vòng quay chưa cấu hình.');
 
-    // Trừ điểm ATOMIC (gte) — chống quay đồng thời làm âm điểm (TOCTOU).
-    const dec = await this.prisma.user.updateMany({
-      where: { id: userId, pointsBalance: { gte: cost } },
-      data: { pointsBalance: { decrement: cost } },
-    });
-    if (dec.count === 0) throw new BadRequestException(`Cần ${cost} điểm Xanh để quay.`);
-    await this.prisma.pointsTransaction.create({
-      data: { userId, delta: -cost, reason: 'GAME_SPIN_COST', refType: 'GAME' },
-    });
     const prize = this.pickWeighted(prizes);
 
-    let rewardRefId: string | null = null;
-    if (prize.rewardType === 'POINTS') {
-      await this.creditPoints(userId, prize.value, `GAME_SPIN_WIN:${prize.id}`);
-    } else if (prize.rewardType === 'SEEDS') {
-      const tankCap = await this.config.get<number>('game.tank_capacity', 200);
-      const p = await this.ensureProfile(userId);
-      await this.prisma.gameProfile.update({
-        where: { userId },
-        data: { totalSeeds: Math.min(tankCap, p.totalSeeds + prize.value) },
+    return this.prisma.$transaction(async (tx) => {
+      // Trừ điểm ATOMIC (gte) trong transaction — chống quay đồng thời làm âm điểm (TOCTOU).
+      const dec = await tx.user.updateMany({
+        where: { id: userId, pointsBalance: { gte: cost } },
+        data: { pointsBalance: { decrement: cost } },
       });
-    } else if (prize.rewardType === 'COUPON') {
-      rewardRefId = await this.grantCoupon(userId, prize.value);
-    }
+      if (dec.count === 0) throw new BadRequestException(`Cần ${cost} điểm Xanh để quay.`);
+      await tx.pointsTransaction.create({
+        data: { userId, delta: -cost, reason: 'GAME_SPIN_COST', refType: 'GAME' },
+      });
 
-    await this.prisma.gameSpin.create({
-      data: {
-        userId,
-        prizeId: prize.id,
-        prizeName: prize.name,
-        prizeValue: prize.value,
-        rewardType: prize.rewardType,
-        rewardRefId,
-      },
+      let rewardRefId: string | null = null;
+      if (prize.rewardType === 'POINTS') {
+        await this.creditPoints(userId, prize.value, `GAME_SPIN_WIN:${prize.id}`, tx);
+      } else if (prize.rewardType === 'SEEDS') {
+        const tankCap = await this.config.get<number>('game.tank_capacity', 200);
+        const p = await tx.gameProfile.findUnique({ where: { userId } });
+        const currentSeeds = p?.totalSeeds ?? 0;
+        await tx.gameProfile.update({
+          where: { userId },
+          data: { totalSeeds: Math.min(tankCap, currentSeeds + prize.value) },
+        });
+      } else if (prize.rewardType === 'COUPON') {
+        rewardRefId = await this.grantCoupon(userId, prize.value, tx);
+      }
+
+      await tx.gameSpin.create({
+        data: {
+          userId,
+          prizeId: prize.id,
+          prizeName: prize.name,
+          prizeValue: prize.value,
+          rewardType: prize.rewardType,
+          rewardRefId,
+        },
+      });
+
+      return { prize: { id: prize.id, name: prize.name, rewardType: prize.rewardType, value: prize.value } };
     });
-    return { prize: { id: prize.id, name: prize.name, rewardType: prize.rewardType, value: prize.value } };
   }
 
   // ── Tree water + harvest ───────────────────────────
   async waterTree(userId: string, drops: number) {
     if (drops <= 0) throw new BadRequestException('Số giọt nước không hợp lệ.');
-    const profile = await this.ensureProfile(userId);
-    if (profile.totalSeeds < drops) throw new BadRequestException('Không đủ giọt nước.');
 
-    const eco = this.eco(profile.ecoImpact);
-
-    // §6.7.3: cây CHẾT (≥ death_days không tưới) → mất tiến trình, trồng lại từ đầu.
-    const deathDays = await this.config.get<number>('game.death_days', 7);
-    let revivedFromDead = false;
-    if (
-      profile.lastWateredAt &&
-      eco.progress > 0 &&
-      (Date.now() - new Date(profile.lastWateredAt).getTime()) / 864e5 >= deathDays
-    ) {
-      eco.progress = 0;
-      revivedFromDead = true;
-    }
-    eco.progress += drops;
-
-    // Thu hoạch khi đủ target; phần dư được CARRY-OVER sang cây mới (không mất nước).
-    // Dùng vòng lặp phòng trường hợp target cấu hình nhỏ → một lần tưới đủ nhiều cây.
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
+    const deathDays = await this.config.get<number>('game.death_days', 7);
+
     let harvestCount = 0;
     let couponCode: string | undefined;
     let certificateCode: string | undefined;
-    while (eco.progress >= eco.target) {
-      eco.progress -= eco.target;
-      eco.treesPlanted += 1;
-      harvestCount += 1;
-      couponCode = await this.grantCoupon(userId, harvestAmount);
-      // Cam kết 1 cây thật + chứng nhận (§6.7.7). PanNature push thật để sau (gate).
-      certificateCode = await this.plantTree(userId, eco.treeType);
-    }
+    let revivedFromDead = false;
+    let eco: EcoImpact = { progress: 0, target: 600, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 };
+
+    await this.prisma.$transaction(async (tx) => {
+      const profile = await tx.gameProfile.findUnique({ where: { userId } });
+      if (!profile || profile.totalSeeds < drops) {
+        throw new BadRequestException('Không đủ giọt nước.');
+      }
+
+      eco = this.eco(profile.ecoImpact);
+
+      // §6.7.3: cây CHẾT (≥ death_days không tưới) → mất tiến trình, trồng lại từ đầu.
+      if (
+        profile.lastWateredAt &&
+        eco.progress > 0 &&
+        (Date.now() - new Date(profile.lastWateredAt).getTime()) / 864e5 >= deathDays
+      ) {
+        eco.progress = 0;
+        revivedFromDead = true;
+      }
+      eco.progress += drops;
+
+      // Thu hoạch khi đủ target; phần dư được CARRY-OVER sang cây mới (không mất nước).
+      while (eco.progress >= eco.target) {
+        eco.progress -= eco.target;
+        eco.treesPlanted += 1;
+        harvestCount += 1;
+        couponCode = await this.grantCoupon(userId, harvestAmount, tx);
+        certificateCode = await this.plantTree(userId, eco.treeType, tx);
+      }
+
+      const stage = Math.min(4, Math.max(1, Math.ceil((eco.progress / eco.target) * 4)));
+
+      const dec = await tx.gameProfile.updateMany({
+        where: { userId, totalSeeds: { gte: drops } },
+        data: {
+          totalSeeds: { decrement: drops },
+          treeStage: stage,
+          ecoImpact: eco as object,
+          lastWateredAt: new Date(),
+        },
+      });
+      if (dec.count === 0) {
+        throw new BadRequestException('Không đủ giọt nước.');
+      }
+    });
+
     const harvested = harvestCount > 0;
 
     // Phase 3: thu hoạch → sưu tập 1 loài (weighted theo rarity). Lấy loài cuối để hiện.
@@ -187,18 +215,6 @@ export class GameService {
       ...(certificateCode ? { certificate: certificateCode } : {}),
       ...(species ? { species } : {}),
     };
-
-    // Giai đoạn cây theo tiến độ hiện tại (sau carry-over). progress=0 → mầm mới (stage 1).
-    const stage = Math.min(4, Math.max(1, Math.ceil((eco.progress / eco.target) * 4)));
-    await this.prisma.gameProfile.update({
-      where: { userId },
-      data: {
-        totalSeeds: profile.totalSeeds - drops,
-        treeStage: stage,
-        ecoImpact: eco as object,
-        lastWateredAt: new Date(),
-      },
-    });
 
     // Phase 2: thu hoạch → 💧 đã nuôi cây góp vào hồ cộng đồng (Ant Forest gom batch).
     // Lỗi góp hồ không được chặn thu hoạch của user.
@@ -226,9 +242,10 @@ export class GameService {
   }
 
   /** Tạo bản ghi cây thật đã cam kết + mã chứng nhận. Trả mã. */
-  private async plantTree(userId: string, treeType: string): Promise<string> {
+  private async plantTree(userId: string, treeType: string, tx?: Prisma.TransactionClient): Promise<string> {
     const certificateCode = `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
-    await this.prisma.plantedTree.create({ data: { userId, treeType, certificateCode } });
+    const db = tx ?? this.prisma;
+    await db.plantedTree.create({ data: { userId, treeType, certificateCode } });
     return certificateCode;
   }
 
@@ -363,19 +380,29 @@ export class GameService {
   }
 
   // ── Helpers ────────────────────────────────────────
-  private async creditPoints(userId: string, delta: number, reason: string) {
-    await this.prisma.$transaction([
-      this.prisma.pointsTransaction.create({ data: { userId, delta, reason, refType: 'GAME' } }),
-      this.prisma.user.update({ where: { id: userId }, data: { pointsBalance: { increment: delta } } }),
-    ]);
+  private async creditPoints(userId: string, delta: number, reason: string, tx?: Prisma.TransactionClient) {
+    const db = tx ?? this.prisma;
+    if (delta < 0) {
+      const abs = Math.abs(delta);
+      const dec = await db.user.updateMany({
+        where: { id: userId, pointsBalance: { gte: abs } },
+        data: { pointsBalance: { decrement: abs } },
+      });
+      if (dec.count === 0) throw new BadRequestException('Số điểm Xanh không đủ.');
+      await db.pointsTransaction.create({ data: { userId, delta, reason, refType: 'GAME' } });
+    } else {
+      await db.pointsTransaction.create({ data: { userId, delta, reason, refType: 'GAME' } });
+      await db.user.update({ where: { id: userId }, data: { pointsBalance: { increment: delta } } });
+    }
   }
 
   /** Tạo coupon cá nhân AMOUNT cho user (thưởng game). Trả về code. */
-  private async grantCoupon(userId: string, amount: number): Promise<string> {
+  private async grantCoupon(userId: string, amount: number, tx?: Prisma.TransactionClient): Promise<string> {
     const code = `GAME${amount}-${userId.slice(-5)}-${Math.floor(Math.random() * 9000 + 1000)}`.toUpperCase();
     const end = new Date();
     end.setDate(end.getDate() + 30);
-    await this.prisma.coupon.create({
+    const db = tx ?? this.prisma;
+    await db.coupon.create({
       data: {
         code,
         type: 'AMOUNT',
