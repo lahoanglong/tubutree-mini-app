@@ -24,6 +24,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue({ id: 'br1', userId: 'u1', quantity: 3, seedsAwarded: 150, status: 'PENDING' }),
       update: jest.fn().mockResolvedValue({ id: 'br1', status: 'APPROVED' }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       aggregate: jest.fn().mockResolvedValue({ _sum: { quantity: 0 } }),
     },
     notificationLog: {

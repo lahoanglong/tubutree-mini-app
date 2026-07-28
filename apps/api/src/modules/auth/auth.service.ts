@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { AuthUser, JwtPayload, LoginResponse } from '@tubutree/shared-types';
-import type { User } from '@prisma/client';
+import { Prisma, type User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Env } from '../../config/env.validation';
 import { ZaloService } from './zalo.service';
@@ -78,18 +78,35 @@ export class AuthService {
     }
 
     if (!user) {
-      return this.issueTokens(
-        await this.prisma.user.create({
+      const checkedPhone = await this.phoneIfFree(phone);
+      try {
+        user = await this.prisma.user.create({
           data: {
             zaloId: info.zaloId,
             fullName: info.name,
             avatarUrl: info.avatar,
-            phone: await this.phoneIfFree(phone),
+            phone: checkedPhone,
             referralCode: await this.generateReferralCode(),
             referredById: await this.resolveReferrerId(referralCode),
           },
-        }),
-      );
+        });
+      } catch (err) {
+        // Phòng thủ race condition: 2 request đăng nhập đồng thời cùng SĐT → P2002. Fallback bỏ phone để không crash 409.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && checkedPhone) {
+          user = await this.prisma.user.create({
+            data: {
+              zaloId: info.zaloId,
+              fullName: info.name,
+              avatarUrl: info.avatar,
+              referralCode: await this.generateReferralCode(),
+              referredById: await this.resolveReferrerId(referralCode),
+            },
+          });
+        } else {
+          throw err;
+        }
+      }
+      return this.issueTokens(user);
     }
 
     // User Zalo đã tồn tại → đồng bộ tên/avatar + lưu SĐT lần đầu (nếu có).

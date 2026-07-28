@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -23,26 +24,29 @@ export class RefillService {
       this.config.get<number>('refill.seeds_per_bottle', 50),
       this.config.get<number>('refill.monthly_cap_bottles', 20),
     ]);
-    const used = await this.usedThisMonth(userId);
-    const remaining = Math.max(0, monthlyCap - used);
-    if (quantity > remaining) {
-      throw new BadRequestException(`Tháng này bạn chỉ còn đổi được ${remaining} vỏ chai (trần ${monthlyCap}/tháng).`);
-    }
 
-    const seedsAwarded = quantity * perBottle;
-    const item = await this.prisma.bottleReturn.create({
-      data: { userId, quantity, seedsAwarded, status: 'PENDING' },
+    return this.prisma.$transaction(async (tx) => {
+      const used = await this.usedThisMonthTx(tx, userId);
+      const remaining = Math.max(0, monthlyCap - used);
+      if (quantity > remaining) {
+        throw new BadRequestException(`Tháng này bạn chỉ còn đổi được ${remaining} vỏ chai (trần ${monthlyCap}/tháng).`);
+      }
+
+      const seedsAwarded = quantity * perBottle;
+      const item = await tx.bottleReturn.create({
+        data: { userId, quantity, seedsAwarded, status: 'PENDING' },
+      });
+
+      const totalRecycled = await this.totalRecycledTx(tx, userId);
+      return {
+        id: item.id,
+        quantity,
+        seedsAwarded,
+        status: 'PENDING',
+        monthlyRemaining: remaining - quantity,
+        totalRecycled,
+      };
     });
-
-    const totalRecycled = await this.totalRecycled(userId);
-    return {
-      id: item.id,
-      quantity,
-      seedsAwarded,
-      status: 'PENDING',
-      monthlyRemaining: remaining - quantity,
-      totalRecycled,
-    };
   }
 
   async getSummary(userId: string) {
@@ -93,10 +97,13 @@ export class RefillService {
     if (item.status !== 'PENDING') throw new BadRequestException('Yêu cầu này đã được xử lý.');
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.bottleReturn.update({
-        where: { id },
+      const updated = await tx.bottleReturn.updateMany({
+        where: { id, status: 'PENDING' },
         data: { status: 'APPROVED' },
       });
+      if (updated.count === 0) {
+        throw new BadRequestException('Yêu cầu này đã được xử lý hoặc không hợp lệ.');
+      }
       await tx.gameProfile.upsert({
         where: { userId: item.userId },
         create: { userId: item.userId, totalSeeds: item.seedsAwarded },
@@ -125,10 +132,13 @@ export class RefillService {
     if (item.status !== 'PENDING') throw new BadRequestException('Yêu cầu này đã được xử lý.');
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.bottleReturn.update({
-        where: { id },
+      const updated = await tx.bottleReturn.updateMany({
+        where: { id, status: 'PENDING' },
         data: { status: 'REJECTED' },
       });
+      if (updated.count === 0) {
+        throw new BadRequestException('Yêu cầu này đã được xử lý hoặc không hợp lệ.');
+      }
       await tx.notificationLog.create({
         data: {
           userId: item.userId,
@@ -147,9 +157,13 @@ export class RefillService {
   }
 
   private async usedThisMonth(userId: string): Promise<number> {
+    return this.usedThisMonthTx(this.prisma, userId);
+  }
+
+  private async usedThisMonthTx(client: Prisma.TransactionClient | PrismaService, userId: string): Promise<number> {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const agg = await this.prisma.bottleReturn.aggregate({
+    const agg = await client.bottleReturn.aggregate({
       where: { userId, status: { in: ['APPROVED', 'PENDING'] }, createdAt: { gte: start } },
       _sum: { quantity: true },
     });
@@ -157,7 +171,11 @@ export class RefillService {
   }
 
   private async totalRecycled(userId: string): Promise<number> {
-    const agg = await this.prisma.bottleReturn.aggregate({
+    return this.totalRecycledTx(this.prisma, userId);
+  }
+
+  private async totalRecycledTx(client: Prisma.TransactionClient | PrismaService, userId: string): Promise<number> {
+    const agg = await client.bottleReturn.aggregate({
       where: { userId, status: 'APPROVED' },
       _sum: { quantity: true },
     });
