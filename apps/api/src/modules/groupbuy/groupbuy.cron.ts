@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import type { GroupBuyService } from './groupbuy.service';
+import { GroupBuyService } from './groupbuy.service';
 
 /** Quét nhóm mua chung quá hạn → FAILED (mỗi 15 phút). */
 @Injectable()

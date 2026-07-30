@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Put } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
-import type { ContentKitService } from './content-kit.service';
-import type { UpsertContentKitDto } from './dto/content-kit.dto';
+import { ContentKitService } from './content-kit.service';
+import { UpsertContentKitDto } from './dto/content-kit.dto';
 
 /** Admin: quản lý bộ nội dung bán hàng theo từng sản phẩm (bài mẫu/USP/FAQ/media). */
 @Roles('ADMIN')

@@ -3,8 +3,8 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { IsOptional, IsString } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { CashbackService } from './cashback.service';
-import type { CashbackProviderRegistry } from './providers/cashback-provider.registry';
+import { CashbackService } from './cashback.service';
+import { CashbackProviderRegistry } from './providers/cashback-provider.registry';
 
 class ClickDto {
   @IsString() merchantId!: string;

@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import type { PrismaService } from '../../prisma/prisma.service';
-import type { SystemConfigService } from '../system-config/system-config.service';
-import type { NotificationsService } from '../notifications/notifications.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Voucher tự động (Build Spec §6.6): welcome / birthday / win-back / milestone.

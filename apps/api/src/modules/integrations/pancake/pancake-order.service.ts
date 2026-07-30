@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { PrismaService } from '../../../prisma/prisma.service';
-import type { PancakeClient } from './pancake.client';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
 
 interface ShippingSnapshot {

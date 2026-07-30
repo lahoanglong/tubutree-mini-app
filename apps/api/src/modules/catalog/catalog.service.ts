@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Prisma } from '@prisma/client';
-import type { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
-import type { ProductQuery } from './dto/product-query.dto';
+import { ProductQuery } from './dto/product-query.dto';
 
 @Injectable()
 export class CatalogService {

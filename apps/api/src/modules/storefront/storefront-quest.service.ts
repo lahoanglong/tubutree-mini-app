@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { PrismaService } from '../../prisma/prisma.service';
-import type { CoinsService } from '../wallet/coins.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CoinsService } from '../wallet/coins.service';
 
 interface QuestStats {
   itemsTotal: number;

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import type { PrismaService } from '../../prisma/prisma.service';
-import type { CoinsService } from '../wallet/coins.service';
-import type { SystemConfigService } from '../system-config/system-config.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CoinsService } from '../wallet/coins.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 
 /**
  * Thưởng TubuXu cho hoạt động cộng đồng. Idempotent qua reason + partial unique index

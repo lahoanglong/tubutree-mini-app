@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { User, UserRole } from '@prisma/client';
-import type { PrismaService } from '../../../prisma/prisma.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 
 const RANK: Record<UserRole, number> = {
   CUSTOMER: 0,

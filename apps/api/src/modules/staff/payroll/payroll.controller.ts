@@ -2,8 +2,8 @@ import { BadRequestException, Body, Controller, Get, Put, Query } from '@nestjs/
 import { ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
-import type { PayrollService } from './payroll.service';
-import type { UpdateBankDto } from './payroll.dto';
+import { PayrollService } from './payroll.service';
+import { UpdateBankDto } from './payroll.dto';
 
 @ApiTags('staff-payroll')
 @Roles('STAFF', 'ADMIN')

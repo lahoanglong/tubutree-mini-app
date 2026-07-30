@@ -3,7 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { AiAdvisorService } from './ai-advisor.service';
+import { AiAdvisorService } from './ai-advisor.service';
 
 class ChatTurnDto {
   @IsIn(['user', 'assistant']) role!: 'user' | 'assistant';

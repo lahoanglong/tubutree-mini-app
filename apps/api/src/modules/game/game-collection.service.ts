@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 type Rarity = 'COMMON' | 'RARE' | 'LEGENDARY';
 const RARITY_WEIGHT: Record<Rarity, number> = { COMMON: 70, RARE: 25, LEGENDARY: 5 };

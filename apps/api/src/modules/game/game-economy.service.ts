@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import type { PrismaService } from '../../prisma/prisma.service';
-import type { SystemConfigService } from '../system-config/system-config.service';
-import type { SeasonPassService } from './season-pass.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { SeasonPassService } from './season-pass.service';
 import { DEFAULT_TREE_TYPE } from './game.constants';
 
 const DAY = 864e5;

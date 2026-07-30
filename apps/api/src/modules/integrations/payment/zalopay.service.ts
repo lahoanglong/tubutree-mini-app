@@ -5,11 +5,11 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { PrismaService } from '../../../prisma/prisma.service';
-import type { NotificationsService } from '../../notifications/notifications.service';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import type { Env } from '../../../config/env.validation';
 
 /**

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import type { PrismaService } from '../../prisma/prisma.service';
-import type { SystemConfigService } from '../system-config/system-config.service';
-import type { NotificationsService } from '../notifications/notifications.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Vườn Xanh 2.0 (social) — tặng nước cho bạn bè trong mạng giới thiệu.

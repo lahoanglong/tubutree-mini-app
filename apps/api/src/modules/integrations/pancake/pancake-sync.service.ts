@@ -1,8 +1,8 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import type { PrismaService } from '../../../prisma/prisma.service';
-import type { PancakeClient } from './pancake.client';
-import type { LifecycleService } from '../../lifecycle/lifecycle.service';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { PancakeClient } from './pancake.client';
+import { LifecycleService } from '../../lifecycle/lifecycle.service';
 import type { PancakeProductDTO } from './pancake.types';
 
 /**

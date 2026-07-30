@@ -1,8 +1,8 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { IsIn, IsInt, IsObject, IsOptional, IsString, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { AffiliateService } from './affiliate.service';
-import type { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
+import { AffiliateService } from './affiliate.service';
+import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 
 class CreateLinkDto {
   @IsIn(['PRODUCT', 'CATEGORY', 'HOMEPAGE', 'DEAL']) targetType!: string;

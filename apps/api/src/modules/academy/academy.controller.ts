@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Post } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { AcademyService } from './academy.service';
+import { AcademyService } from './academy.service';
 
 /** CTV Academy: khoá học/bài học đào tạo CTV — xem danh sách, chi tiết, đánh dấu đã học. */
 @Controller('academy')

@@ -6,7 +6,6 @@ export default [
     rules: {
       // NestJS dùng decorator + DI nặng; nới một số rule cho thực dụng.
       '@typescript-eslint/no-extraneous-class': 'off',
-      '@typescript-eslint/consistent-type-imports': 'off',
     },
   },
 ];

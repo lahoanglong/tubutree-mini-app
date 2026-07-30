@@ -4,8 +4,8 @@ import type { JwtPayload } from '@tubutree/shared-types';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { ReviewsService } from './reviews.service';
-import type { CreateReviewDto } from './dto/review.dto';
+import { ReviewsService } from './reviews.service';
+import { CreateReviewDto } from './dto/review.dto';
 
 class VisibilityDto {
   @IsBoolean() isVisible!: boolean;

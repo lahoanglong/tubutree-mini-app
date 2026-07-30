@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { PrismaService } from '../../prisma/prisma.service';
-import type { SystemConfigService } from '../system-config/system-config.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible } from '../coupons/coupon-scope';
 import { decideTier } from './tier-policy';
 

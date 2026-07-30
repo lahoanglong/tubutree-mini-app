@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import type { Env } from '../../../config/env.validation';
-import type { ZaloOaTokenService } from './zalo-oa-token.service';
+import { ZaloOaTokenService } from './zalo-oa-token.service';
 
 /**
  * Client ZNS (Zalo Notification Service) — Build Spec §11.

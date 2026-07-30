@@ -1,8 +1,8 @@
 import { Body, Controller, Headers, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { CheckoutService } from './checkout.service';
-import type { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
+import { CheckoutService } from './checkout.service';
+import { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 
 @Controller('checkout')
 export class CheckoutController {

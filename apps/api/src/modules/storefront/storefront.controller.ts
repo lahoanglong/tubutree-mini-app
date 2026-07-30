@@ -3,8 +3,8 @@ import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 
 import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import type { StorefrontService } from './storefront.service';
-import type { StorefrontQuestService } from './storefront-quest.service';
+import { StorefrontService } from './storefront.service';
+import { StorefrontQuestService } from './storefront-quest.service';
 
 class UpdateStorefrontDto {
   @IsOptional() @IsString() title?: string;

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import type { PrismaService } from '../../../prisma/prisma.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 import type { Env } from '../../../config/env.validation';
 import { needsRefresh, computeExpiresAt } from './zalo-oa-token.util';
 

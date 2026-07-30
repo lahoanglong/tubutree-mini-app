@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import type { PrismaService } from '../../prisma/prisma.service';
-import type { SystemConfigService } from '../system-config/system-config.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 
 export interface BetaFeature {
   key: string;

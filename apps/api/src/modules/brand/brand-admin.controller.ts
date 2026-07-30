@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
-import type { BrandService } from './brand.service';
-import type {
+import { BrandService } from './brand.service';
+import {
   CreateBrandDto,
   DealerRewardDto,
   ProductIdsDto,

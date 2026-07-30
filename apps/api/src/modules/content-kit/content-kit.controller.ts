@@ -1,6 +1,6 @@
 import { Controller, Get, Param } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { ContentKitService } from './content-kit.service';
+import { ContentKitService } from './content-kit.service';
 
 /** CTV: xem bộ nội dung bán hàng (bài mẫu/USP/FAQ/media) đã tự chèn tên mình + link giới thiệu. */
 @Controller('affiliate/content-kit')

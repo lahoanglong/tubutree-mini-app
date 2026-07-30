@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/commo
 import { IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { FlashSaleService } from './flash-sale.service';
+import { FlashSaleService } from './flash-sale.service';
 
 class CreateSaleDto {
   @IsString() title!: string;

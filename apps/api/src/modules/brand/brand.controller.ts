@@ -1,8 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import type { BrandService } from './brand.service';
-import type { PromotionDto, UpdateOwnedBrandDto, UpdatePromotionDto } from './dto/brand.dto';
+import { BrandService } from './brand.service';
+import { PromotionDto, UpdateOwnedBrandDto, UpdatePromotionDto } from './dto/brand.dto';
 
 @Controller('brand')
 export class BrandController {

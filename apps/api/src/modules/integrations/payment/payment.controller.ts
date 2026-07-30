@@ -2,8 +2,8 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { IsString } from 'class-validator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
-import type { ZalopayService } from './zalopay.service';
-import type { BankTransferService } from './bank-transfer.service';
+import { ZalopayService } from './zalopay.service';
+import { BankTransferService } from './bank-transfer.service';
 
 class CreatePaymentDto {
   @IsString() orderCode!: string;

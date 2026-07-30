@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { IsString, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { BetaService } from './beta.service';
+import { BetaService } from './beta.service';
 
 class FeedbackDto {
   @IsString() @MinLength(1) @MaxLength(2000) message!: string;

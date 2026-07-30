@@ -12,8 +12,8 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { ShiftsService } from './shifts/shifts.service';
-import type {
+import { ShiftsService } from './shifts/shifts.service';
+import {
   ApproveShiftDto,
   BulkApproveDto,
   RejectShiftDto,

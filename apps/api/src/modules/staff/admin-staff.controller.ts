@@ -2,9 +2,9 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { RbacService } from './rbac/rbac.service';
-import type { GrantRoleDto } from './dto/grant-role.dto';
-import type { RevokeRoleDto } from './dto/revoke-role.dto';
+import { RbacService } from './rbac/rbac.service';
+import { GrantRoleDto } from './dto/grant-role.dto';
+import { RevokeRoleDto } from './dto/revoke-role.dto';
 
 @ApiTags('admin-staff')
 @Roles('ADMIN')

@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
-import type { FaqService } from './faq.service';
-import type { CreateFaqDto, UpdateFaqDto } from './dto/faq.dto';
+import { FaqService } from './faq.service';
+import { CreateFaqDto, UpdateFaqDto } from './dto/faq.dto';
 
 @Roles('ADMIN')
 @Controller('admin/faqs')

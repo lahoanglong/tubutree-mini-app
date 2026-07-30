@@ -1,8 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import type { PrismaService } from '../../prisma/prisma.service';
-import type { FaqService } from '../faq/faq.service';
-import type { LlmClient} from './llm.client';
-import { type ChatMessage } from './llm.client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { FaqService } from '../faq/faq.service';
+import { LlmClient, type ChatMessage } from './llm.client';
 
 export interface ProductSuggestion {
   id: string;

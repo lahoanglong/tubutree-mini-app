@@ -1,6 +1,5 @@
-import type { CanActivate, ExecutionContext} from '@nestjs/common';
-import { Injectable, ForbiddenException } from '@nestjs/common';
-import type { Reflector } from '@nestjs/core';
+import { CanActivate, ExecutionContext, Injectable, ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import type { JwtPayload, UserRole } from '@tubutree/shared-types';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 

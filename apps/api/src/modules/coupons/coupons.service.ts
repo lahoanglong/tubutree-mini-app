@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { isCouponEligible } from './coupon-scope';
 
 export interface CouponResult {

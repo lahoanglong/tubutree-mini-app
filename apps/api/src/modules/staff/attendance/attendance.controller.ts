@@ -1,14 +1,13 @@
 import { BadRequestException, Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { Env } from '../../../config/env.validation';
-import type { AttendanceService} from './attendance.service';
-import { type Coords } from './attendance.service';
+import { AttendanceService, type Coords } from './attendance.service';
 import { resolveZaloLocation } from './zalo-location';
-import type { CheckinDto, CheckoutDto, HeartbeatDto } from './attendance.dto';
+import { CheckinDto, CheckoutDto, HeartbeatDto } from './attendance.dto';
 
 @ApiTags('staff-attendance')
 @Roles('STAFF', 'ADMIN')

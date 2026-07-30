@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { CartService } from './cart.service';
-import type { AddItemDto, ApplyCouponDto, UpdateItemDto } from './dto/cart.dto';
+import { CartService } from './cart.service';
+import { AddItemDto, ApplyCouponDto, UpdateItemDto } from './dto/cart.dto';
 
 @Controller('cart')
 export class CartController {

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { SystemConfigService } from '../system-config/system-config.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 
 export interface ShippingInput {
   subtotal: number; // sau giảm giá hàng (chưa gồm ship)

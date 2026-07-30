@@ -1,8 +1,8 @@
 import { Body, Controller, Get, Headers, Post } from '@nestjs/common';
 import { IsInt, IsObject, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { WalletService } from './wallet.service';
-import type { CoinsService } from './coins.service';
+import { WalletService } from './wallet.service';
+import { CoinsService } from './coins.service';
 
 class WithdrawDto {
   @IsInt() @Min(1) amount!: number;

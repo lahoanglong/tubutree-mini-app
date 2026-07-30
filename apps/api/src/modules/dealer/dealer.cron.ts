@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import type { DealerService } from './dealer.service';
+import { DealerService } from './dealer.service';
 
 /** Trả thưởng doanh số quý cho đại lý vào đầu mỗi quý (01/01, 01/04, 01/07, 01/10). */
 @Injectable()

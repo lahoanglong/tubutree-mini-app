@@ -2,10 +2,10 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CommissionStatus, type Prisma } from '@prisma/client';
 import { randomBytes, randomInt } from 'node:crypto';
-import type { PrismaService } from '../../prisma/prisma.service';
-import type { SystemConfigService } from '../system-config/system-config.service';
-import type { PricingService } from '../pricing/pricing.service';
-import type { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
+import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { PricingService } from '../pricing/pricing.service';
+import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 
 /**
  * CTV nội bộ (Build Spec §6.x, §15 affiliate.*).

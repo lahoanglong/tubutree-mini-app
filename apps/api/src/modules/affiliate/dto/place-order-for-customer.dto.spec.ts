@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { validate, type ValidationError } from 'class-validator';
+import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { PlaceOrderForCustomerDto } from './place-order-for-customer.dto';
 
@@ -7,7 +7,7 @@ async function errorKeys(plain: Record<string, unknown>): Promise<string[]> {
   const dto = plainToInstance(PlaceOrderForCustomerDto, plain);
   const errs = await validate(dto, { whitelist: true });
   // Gộp cả constraint cấp cha lẫn con (nested) để test dễ khẳng định.
-  const walk = (e: ValidationError[]): string[] =>
+  const walk = (e: import('class-validator').ValidationError[]): string[] =>
     e.flatMap((x) => [...Object.keys(x.constraints ?? {}), ...walk(x.children ?? [])]);
   return walk(errs);
 }

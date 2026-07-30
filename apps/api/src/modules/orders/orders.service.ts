@@ -1,12 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { OrderStatus } from '@tubutree/shared-types';
-import type { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
-import type { LoyaltyService } from '../loyalty/loyalty.service';
-import type { CartService } from '../cart/cart.service';
-import type { NotificationsService } from '../notifications/notifications.service';
-import type { SystemConfigService } from '../system-config/system-config.service';
-import type { FlashSaleService } from '../flash-sale/flash-sale.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { CartService } from '../cart/cart.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { FlashSaleService } from '../flash-sale/flash-sale.service';
 
 @Injectable()
 export class OrdersService {

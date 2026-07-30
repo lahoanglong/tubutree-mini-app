@@ -1,9 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ArrayMaxSize, IsArray, IsString } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { UsersService } from './users.service';
-import type { UpdateMeDto } from './dto/update-me.dto';
-import type { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
+import { UsersService } from './users.service';
+import { UpdateMeDto } from './dto/update-me.dto';
+import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
 
 class OnboardingDto {
   @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) segments!: string[];

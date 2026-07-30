@@ -2,8 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestj
 import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import type { CommunityFeedService} from './community-feed.service';
-import { type CreateEventInput, type CreatePostInput } from './community-feed.service';
+import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 
 const KINDS = ['MANUAL', 'QUESTION', 'SHOWCASE', 'TIP'] as const;
 const REPORT_TARGET_TYPES = ['POST', 'COMMENT'] as const;
