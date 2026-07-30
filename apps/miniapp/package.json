@@ -9,6 +9,7 @@
     "start": "zmp start",
     "deploy": "zmp deploy -M production",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

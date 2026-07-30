@@ -1,9 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { CouponsService } from '../coupons/coupons.service';
-import { SystemConfigService } from '../system-config/system-config.service';
-import { FlashSaleService } from '../flash-sale/flash-sale.service';
-import { AddItemDto } from './dto/cart.dto';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { CouponsService } from '../coupons/coupons.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+import type { FlashSaleService } from '../flash-sale/flash-sale.service';
+import type { AddItemDto } from './dto/cart.dto';
 
 @Injectable()
 export class CartService {

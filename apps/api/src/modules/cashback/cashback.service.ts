@@ -2,11 +2,11 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { PrismaService } from '../../prisma/prisma.service';
-import { SystemConfigService } from '../system-config/system-config.service';
-import { CoinsService } from '../wallet/coins.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { CashbackProviderRegistry } from './providers/cashback-provider.registry';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+import type { CoinsService } from '../wallet/coins.service';
+import type { NotificationsService } from '../notifications/notifications.service';
+import type { CashbackProviderRegistry } from './providers/cashback-provider.registry';
 import type { NormalizedCashbackEvent } from './providers/cashback-provider.interface';
 
 /**

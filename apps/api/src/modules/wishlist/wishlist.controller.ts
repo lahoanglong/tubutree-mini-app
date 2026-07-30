@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { IsString } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { WishlistService } from './wishlist.service';
+import type { WishlistService } from './wishlist.service';
 
 class AddWishlistDto {
   @IsString() productId!: string;

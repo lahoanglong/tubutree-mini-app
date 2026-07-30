@@ -1,4 +1,4 @@
-import { ConfigService } from '@nestjs/config';
+import type { ConfigService } from '@nestjs/config';
 import { AccessTradeProvider } from './access-trade.provider';
 
 const makeProvider = (over: Record<string, string> = {}) => {

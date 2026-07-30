@@ -1,6 +1,7 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import axios, { AxiosError } from 'axios';
+import type { ConfigService } from '@nestjs/config';
+import type { AxiosError } from 'axios';
+import axios from 'axios';
 import type { Env } from '../../config/env.validation';
 
 export interface ZaloUserInfo {

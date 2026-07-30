@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { ZnsClient } from '../integrations/zns/zns.client';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { ZnsClient } from '../integrations/zns/zns.client';
 
 /**
  * Gửi thông báo theo template code (Build Spec §4.10, §11).

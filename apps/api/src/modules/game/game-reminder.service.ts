@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { PrismaService } from '../../prisma/prisma.service';
-import { SystemConfigService } from '../system-config/system-config.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+import type { NotificationsService } from '../notifications/notifications.service';
 
 const DAY = 864e5;
 

@@ -1,9 +1,9 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { PrismaService } from '../../prisma/prisma.service';
-import { CommunityRewardService } from './community-reward.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { SystemConfigService } from '../system-config/system-config.service';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { CommunityRewardService } from './community-reward.service';
+import type { NotificationsService } from '../notifications/notifications.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
 import { authorBadge } from './author-badge';
 
 const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];

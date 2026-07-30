@@ -1,12 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { PrismaService } from '../../prisma/prisma.service';
-import { SystemConfigService } from '../system-config/system-config.service';
-import { GameCommunityService } from './game-community.service';
-import { GameCollectionService } from './game-collection.service';
-import { CoinsService } from '../wallet/coins.service';
-import { CommunityFeedService } from '../feed/community-feed.service';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+import type { GameCommunityService } from './game-community.service';
+import type { GameCollectionService } from './game-collection.service';
+import type { CoinsService } from '../wallet/coins.service';
+import type { CommunityFeedService } from '../feed/community-feed.service';
 import { DEFAULT_TREE_TYPE } from './game.constants';
 
 type TreeHealth = 'HEALTHY' | 'WILTED' | 'DEAD';

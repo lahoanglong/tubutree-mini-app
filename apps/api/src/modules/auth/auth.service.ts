@@ -1,13 +1,13 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
+import type { ConfigService } from '@nestjs/config';
+import type { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { AuthUser, JwtPayload, LoginResponse } from '@tubutree/shared-types';
 import { Prisma, type User } from '@prisma/client';
-import { PrismaService } from '../../prisma/prisma.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import type { Env } from '../../config/env.validation';
-import { ZaloService } from './zalo.service';
-import { RbacService } from '../staff/rbac/rbac.service';
+import type { ZaloService } from './zalo.service';
+import type { RbacService } from '../staff/rbac/rbac.service';
 
 @Injectable()
 export class AuthService {

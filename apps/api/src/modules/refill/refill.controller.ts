@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { IsInt, Max, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { RefillService } from './refill.service';
+import type { RefillService } from './refill.service';
 
 class ReturnBottlesDto {
   @IsInt() @Min(1) @Max(100) quantity!: number;

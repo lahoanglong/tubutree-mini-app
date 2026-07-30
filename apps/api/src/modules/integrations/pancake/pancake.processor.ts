@@ -1,10 +1,10 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
-import { PrismaService } from '../../../prisma/prisma.service';
-import { NotificationsService } from '../../notifications/notifications.service';
-import { LoyaltyService } from '../../loyalty/loyalty.service';
-import { AffiliateService } from '../../affiliate/affiliate.service';
+import type { PrismaService } from '../../../prisma/prisma.service';
+import type { NotificationsService } from '../../notifications/notifications.service';
+import type { LoyaltyService } from '../../loyalty/loyalty.service';
+import type { AffiliateService } from '../../affiliate/affiliate.service';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { mapPancakeStatus } from './pancake-status.map';
 import { isPancakeOrderPaid } from './pancake-payment.util';

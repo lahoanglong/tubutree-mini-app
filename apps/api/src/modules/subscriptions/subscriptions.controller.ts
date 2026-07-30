@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { IsIn, IsInt, IsString, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { SubscriptionsService } from './subscriptions.service';
+import type { SubscriptionsService } from './subscriptions.service';
 
 class CreateSubDto {
   @IsString() variationId!: string;

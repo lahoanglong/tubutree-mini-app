@@ -1,6 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
-import { SystemConfigService } from './system-config.service';
+import type { SystemConfigService } from './system-config.service';
 
 /**
  * Config hiển thị an toàn cho client (public) — WHITELIST rõ ràng, KHÔNG dùng getByCategory

@@ -4,11 +4,11 @@ import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import type { JwtPayload, LoginResponse } from '@tubutree/shared-types';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { PrismaService } from '../../prisma/prisma.service';
-import { AuthService } from './auth.service';
-import { ZaloMiniAppLoginDto } from './dto/zalo-login.dto';
-import { ZaloOAuthDto } from './dto/zalo-oauth.dto';
-import { RefreshTokenDto } from './dto/refresh.dto';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { AuthService } from './auth.service';
+import type { ZaloMiniAppLoginDto } from './dto/zalo-login.dto';
+import type { ZaloOAuthDto } from './dto/zalo-oauth.dto';
+import type { RefreshTokenDto } from './dto/refresh.dto';
 
 class GuestLoginDto {
   @IsString() @IsNotEmpty() deviceId!: string;

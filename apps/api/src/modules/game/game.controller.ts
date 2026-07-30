@@ -2,15 +2,15 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { IsIn, IsInt, Min } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { GameService } from './game.service';
-import { GameEconomyService } from './game-economy.service';
-import { GameQuizService } from './game-quiz.service';
-import { GameCommunityService } from './game-community.service';
-import { GameCollectionService } from './game-collection.service';
-import { GameSeasonService } from './game-season.service';
-import { GameGiftService } from './game-gift.service';
-import { GameGardenService } from './game-garden.service';
-import { SeasonPassService } from './season-pass.service';
+import type { GameService } from './game.service';
+import type { GameEconomyService } from './game-economy.service';
+import type { GameQuizService } from './game-quiz.service';
+import type { GameCommunityService } from './game-community.service';
+import type { GameCollectionService } from './game-collection.service';
+import type { GameSeasonService } from './game-season.service';
+import type { GameGiftService } from './game-gift.service';
+import type { GameGardenService } from './game-garden.service';
+import type { SeasonPassService } from './season-pass.service';
 
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }

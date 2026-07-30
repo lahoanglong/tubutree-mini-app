@@ -1,9 +1,9 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../../common/decorators/roles.decorator';
-import { AttendanceService } from './attendance.service';
-import { PayrollService } from '../payroll/payroll.service';
-import { AddSessionDto, EditSessionDto, ManualCheckoutDto } from './attendance.dto';
+import type { AttendanceService } from './attendance.service';
+import type { PayrollService } from '../payroll/payroll.service';
+import type { AddSessionDto, EditSessionDto, ManualCheckoutDto } from './attendance.dto';
 
 @ApiTags('admin-attendance')
 @Roles('ADMIN')

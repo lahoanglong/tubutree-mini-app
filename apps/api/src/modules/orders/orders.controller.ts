@@ -3,7 +3,7 @@ import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength
 import type { OrderStatus } from '@tubutree/shared-types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
-import { OrdersService } from './orders.service';
+import type { OrdersService } from './orders.service';
 
 class OrderListQuery extends PaginationQuery {
   @IsOptional()

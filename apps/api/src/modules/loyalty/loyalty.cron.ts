@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { LoyaltyService } from './loyalty.service';
+import type { LoyaltyService } from './loyalty.service';
 
 /** Tính lại hạng thành viên hằng đêm (áp rớt hạng sau khi hết ân hạn §6.6). */
 @Injectable()

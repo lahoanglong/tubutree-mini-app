@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { IsString, MinLength } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { GroupBuyService } from './groupbuy.service';
+import type { GroupBuyService } from './groupbuy.service';
 
 class CreateGroupDto {
   @IsString() @MinLength(1) productId!: string;

@@ -11,9 +11,9 @@ import {
 } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { PaginationQuery } from '../../common/pagination';
-import { AdminService } from './admin.service';
-import { CatalogService } from '../catalog/catalog.service';
+import type { PaginationQuery } from '../../common/pagination';
+import type { AdminService } from './admin.service';
+import type { CatalogService } from '../catalog/catalog.service';
 
 class ReviewDto {
   @IsBoolean() approve!: boolean;

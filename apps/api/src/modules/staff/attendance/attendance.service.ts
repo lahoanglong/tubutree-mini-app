@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../prisma/prisma.service';
-import { SystemConfigService } from '../../system-config/system-config.service';
+import type { PrismaService } from '../../../prisma/prisma.service';
+import type { SystemConfigService } from '../../system-config/system-config.service';
 import { verifyPresence, type AttnConfig, type VerifyReason } from './verify';
 import { vnDateKey } from '../shifts/time.util';
 

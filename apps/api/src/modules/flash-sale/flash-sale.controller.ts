@@ -1,7 +1,7 @@
 import { Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { FlashSaleService } from './flash-sale.service';
+import type { FlashSaleService } from './flash-sale.service';
 
 // Không còn @Public() ở class — /upcoming + /remind cần userId từ JWT, chỉ /active public.
 @Controller('flash-sales')

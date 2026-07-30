@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from '../../../prisma/prisma.service';
+import type { PrismaService } from '../../../prisma/prisma.service';
 
 export interface OpenSessionLike {
   shift: { approvedEnd: Date | null; endAt: Date };

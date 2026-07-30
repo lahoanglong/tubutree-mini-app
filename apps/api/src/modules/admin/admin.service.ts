@@ -1,11 +1,11 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { SystemConfigService } from '../system-config/system-config.service';
-import { LoyaltyService } from '../loyalty/loyalty.service';
-import { AffiliateService } from '../affiliate/affiliate.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+import type { LoyaltyService } from '../loyalty/loyalty.service';
+import type { AffiliateService } from '../affiliate/affiliate.service';
+import type { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
-import { FlashSaleService } from '../flash-sale/flash-sale.service';
+import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 
 @Injectable()
 export class AdminService {

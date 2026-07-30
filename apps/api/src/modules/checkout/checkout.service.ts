@@ -1,19 +1,20 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
-import { PrismaService } from '../../prisma/prisma.service';
-import { CartService } from '../cart/cart.service';
-import { CouponsService } from '../coupons/coupons.service';
-import { PricingService } from '../pricing/pricing.service';
-import { LoyaltyService } from '../loyalty/loyalty.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
-import { AffiliateService } from '../affiliate/affiliate.service';
-import { CoinsService } from '../wallet/coins.service';
-import { SystemConfigService } from '../system-config/system-config.service';
-import { ComboService } from '../storefront/combo.service';
-import { FlashSaleService, FLASH_OVER_LIMIT_MSG } from '../flash-sale/flash-sale.service';
-import { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { CartService } from '../cart/cart.service';
+import type { CouponsService } from '../coupons/coupons.service';
+import type { PricingService } from '../pricing/pricing.service';
+import type { LoyaltyService } from '../loyalty/loyalty.service';
+import type { NotificationsService } from '../notifications/notifications.service';
+import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
+import type { AffiliateService } from '../affiliate/affiliate.service';
+import type { CoinsService } from '../wallet/coins.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+import type { ComboService } from '../storefront/combo.service';
+import type { FlashSaleService} from '../flash-sale/flash-sale.service';
+import { FLASH_OVER_LIMIT_MSG } from '../flash-sale/flash-sale.service';
+import type { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 
 @Injectable()
 export class CheckoutService {

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { PrismaService } from '../../../prisma/prisma.service';
-import { PayrollService } from './payroll.service';
+import type { PrismaService } from '../../../prisma/prisma.service';
+import type { PayrollService } from './payroll.service';
 
 @Injectable()
 export class PayrollJob {

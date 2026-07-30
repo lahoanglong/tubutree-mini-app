@@ -10,8 +10,8 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { DealerService } from './dealer.service';
-import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
+import type { DealerService } from './dealer.service';
+import type { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
 
 class CreditPaymentDto {
   @IsInt() @Min(1) amount!: number;

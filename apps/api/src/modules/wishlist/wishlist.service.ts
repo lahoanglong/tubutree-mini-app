@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 
 /** Wishlist / Yêu thích (Build Spec §6.14.10). Lưu cặp user↔product. */
 @Injectable()

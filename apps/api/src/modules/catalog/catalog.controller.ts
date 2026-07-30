@@ -1,8 +1,8 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { CatalogService } from './catalog.service';
-import { ProductQuery } from './dto/product-query.dto';
+import type { CatalogService } from './catalog.service';
+import type { ProductQuery } from './dto/product-query.dto';
 
 // Không còn @Public() ở class — mỗi route public tự khai báo, để route
 // /products/for-you (cá nhân hoá) bắt buộc JWT theo JwtAuthGuard mặc định.

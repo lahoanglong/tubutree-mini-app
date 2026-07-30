@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 
 /**
  * Vườn Xanh 2.0 Phase 2 — hồ giọt nước cộng đồng (mô hình Ant Forest gom batch).

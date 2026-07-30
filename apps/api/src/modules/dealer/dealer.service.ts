@@ -1,9 +1,9 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, Optional } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
-import { PrismaService } from '../../prisma/prisma.service';
-import { SystemConfigService } from '../system-config/system-config.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+import type { NotificationsService } from '../notifications/notifications.service';
+import type { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
 
 interface BonusTier {
   min: number;

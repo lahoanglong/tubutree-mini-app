@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { ZaloOaTokenService } from './zalo-oa-token.service';
+import type { ZaloOaTokenService } from './zalo-oa-token.service';
 
 /** Làm mới OA access token Zalo định kỳ (token sống ~25h) → ZNS không chết giữa chừng. */
 @Injectable()

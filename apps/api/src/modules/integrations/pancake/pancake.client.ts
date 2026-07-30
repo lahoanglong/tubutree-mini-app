@@ -1,5 +1,5 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import type { ConfigService } from '@nestjs/config';
 import axios, { type AxiosInstance } from 'axios';
 import type { Env } from '../../../config/env.validation';
 import type {

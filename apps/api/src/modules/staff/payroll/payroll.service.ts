@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../../prisma/prisma.service';
-import { SystemConfigService } from '../../system-config/system-config.service';
+import type { PrismaService } from '../../../prisma/prisma.service';
+import type { SystemConfigService } from '../../system-config/system-config.service';
 import { buildVietQrPayload } from '../../integrations/payment/vietqr';
 import { computeDayPay, sumWorkedMinutes, type ShiftWindow } from './payroll.calc';
 

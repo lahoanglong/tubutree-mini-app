@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PancakeClient } from './pancake.client';
+import type { PancakeClient } from './pancake.client';
 
 /** DTO địa giới rút gọn cho FE. `code` = mã gửi Pancake khi đặt đơn. */
 export interface GeoOption {

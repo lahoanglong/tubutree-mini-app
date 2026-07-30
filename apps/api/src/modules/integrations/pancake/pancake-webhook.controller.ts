@@ -7,13 +7,13 @@ import {
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import type { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { timingSafeEqual } from 'node:crypto';
 import { Public } from '../../../common/decorators/public.decorator';
-import { PrismaService } from '../../../prisma/prisma.service';
+import type { PrismaService } from '../../../prisma/prisma.service';
 import type { Env } from '../../../config/env.validation';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 

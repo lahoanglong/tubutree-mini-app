@@ -1,6 +1,6 @@
 import { Controller, Post } from '@nestjs/common';
 import { Roles } from '../../../common/decorators/roles.decorator';
-import { PancakeSyncService } from './pancake-sync.service';
+import type { PancakeSyncService } from './pancake-sync.service';
 
 @Controller('admin/pancake')
 export class PancakeController {

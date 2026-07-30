@@ -1,8 +1,8 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { IsInt, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { SystemConfigService } from '../system-config/system-config.service';
-import { LoyaltyService } from './loyalty.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+import type { LoyaltyService } from './loyalty.service';
 
 class RedeemPreviewDto {
   @IsInt() @Min(1) points!: number;
