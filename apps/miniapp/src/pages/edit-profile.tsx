@@ -9,6 +9,7 @@ import { haptic } from '../utils/haptic';
 import { readAndCompressImage } from '../components/image-upload';
 import { AvatarCropModal } from '../components/avatar-crop-modal';
 import { Skeleton } from '../components/ui/skeleton';
+import { ErrorState } from '../components/ui/empty-state';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -122,6 +123,8 @@ export default function EditProfilePage() {
           <Skeleton style={{ height: 56 }} />
           <Skeleton style={{ height: 56 }} />
         </Box>
+      ) : meQ.isError ? (
+        <ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
       ) : (
         <Box p={4} flex flexDirection="column" style={{ gap: 16 }}>
           {/* Avatar Upload Section */}
@@ -140,7 +143,7 @@ export default function EditProfilePage() {
                 size={88}
                 src={avatarUrl ?? undefined}
                 style={{
-                  border: '3px solid #ffffff',
+                  border: '3px solid var(--neutral-0)',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
                   background: 'var(--leaf-100)',
                 }}
@@ -154,11 +157,11 @@ export default function EditProfilePage() {
                   height: 28,
                   borderRadius: '50%',
                   background: 'var(--leaf-600)',
-                  color: '#ffffff',
+                  color: 'var(--neutral-0)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  border: '2px solid #ffffff',
+                  border: '2px solid var(--neutral-0)',
                   boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
                 }}
               >

@@ -12,6 +12,7 @@ import {
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { LineItemSkeleton } from '../components/ui/skeleton';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
 
 /** Icon + nhãn nhóm theo templateCode (§4.10). */
@@ -90,9 +91,7 @@ export default function NotificationsPage() {
           <LineItemSkeleton />
         </Box>
       ) : notifQ.isError ? (
-        <Box p={6} style={{ textAlign: 'center' }}>
-          <Text style={{ color: 'var(--danger)' }}>{getErrorMessage(notifQ.error)}</Text>
-        </Box>
+        <ErrorState message={getErrorMessage(notifQ.error)} onRetry={() => void notifQ.refetch()} />
       ) : notifQ.data && notifQ.data.length > 0 ? (
         <Box p={4} flex flexDirection="column" style={{ gap: 8 }}>
           {notifQ.data.map((n) => {
@@ -142,13 +141,11 @@ export default function NotificationsPage() {
           })}
         </Box>
       ) : (
-        <Box style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <Text style={{ fontSize: 44 }}>🔔</Text>
-          <Text style={{ color: 'var(--neutral-600)', marginTop: 8 }}>Chưa có thông báo nào</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-            Cập nhật đơn hàng và ưu đãi sẽ hiện ở đây.
-          </Text>
-        </Box>
+        <EmptyState
+          art="leaf"
+          heading="Chưa có thông báo nào"
+          body="Cập nhật đơn hàng và ưu đãi sẽ hiện ở đây."
+        />
       )}
 
       {/* ── Detail View Overlay ── */}

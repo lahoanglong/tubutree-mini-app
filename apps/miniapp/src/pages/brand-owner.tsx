@@ -11,7 +11,7 @@ import {
 } from '../services/brand-owner-api';
 import { getErrorMessage } from '../services/api';
 import { Skeleton } from '../components/ui/skeleton';
-import { EmptyState } from '../components/ui/empty-state';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { ImageUpload } from '../components/image-upload';
 import { haptic } from '../utils/haptic';
 
@@ -25,13 +25,17 @@ export default function BrandOwnerPage() {
     const status = (q.error as { response?: { status?: number } })?.response?.status;
     return (
       <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Box p={6}>
-          <EmptyState
-            art="sprout"
-            heading="Quản lý nhãn hàng"
-            body={status === 404 ? 'Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn.' : getErrorMessage(q.error)}
-          />
-        </Box>
+        {status === 404 ? (
+          <Box p={6}>
+            <EmptyState
+              art="sprout"
+              heading="Quản lý nhãn hàng"
+              body="Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn."
+            />
+          </Box>
+        ) : (
+          <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        )}
       </Page>
     );
   }

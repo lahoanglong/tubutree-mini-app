@@ -7,6 +7,7 @@ import { getErrorMessage } from '../services/api';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { useAuthStore } from '../store/auth';
 import { addressLine } from '../utils/format';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '../components/geo-picker';
@@ -77,18 +78,11 @@ export default function AddressesPage() {
           <Skeleton style={{ height: 84, borderRadius: 12 }} />
         </Box>
       ) : addrQ.isError ? (
-        <Box p={6} style={{ textAlign: 'center' }}>
-          <Text style={{ color: 'var(--danger)' }}>{getErrorMessage(addrQ.error)}</Text>
-        </Box>
+        <ErrorState message={getErrorMessage(addrQ.error)} onRetry={() => void addrQ.refetch()} />
       ) : (
         <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
           {addrQ.data && addrQ.data.length === 0 && (
-            <Box style={{ textAlign: 'center', padding: '32px 0' }}>
-              <Text style={{ fontSize: 40 }}>📍</Text>
-              <Text style={{ color: 'var(--neutral-600)', marginTop: 8 }}>
-                Bạn chưa có địa chỉ giao hàng nào.
-              </Text>
-            </Box>
+            <EmptyState art="leaf" heading="Bạn chưa có địa chỉ giao hàng nào" />
           )}
 
           {addrQ.data?.map((a) => (

@@ -7,6 +7,7 @@ import { getHistory, type SessionHistory } from '../services/attendance-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { Skeleton } from '../components/ui/skeleton';
+import { ErrorState } from '../components/ui/empty-state';
 import { ImageUpload } from '../components/image-upload';
 import { formatVnd } from '../utils/format';
 import {
@@ -131,12 +132,12 @@ function MyPayrollHub() {
         </Box>
 
         {payQ.isLoading && <Skeleton style={{ height: 120, borderRadius: 12 }} />}
-        {payQ.isError && <Text style={{ color: 'var(--danger, #d64545)' }}>{getErrorMessage(payQ.error)}</Text>}
+        {payQ.isError && <ErrorState message={getErrorMessage(payQ.error)} onRetry={() => void payQ.refetch()} />}
 
         {m && (
-          <Box style={{ background: 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))', color: '#fff', borderRadius: 14, padding: 16 }}>
+          <Box style={{ background: 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))', color: 'var(--neutral-0)', borderRadius: 14, padding: 16 }}>
             <Text size="small" style={{ color: 'rgba(255,255,255,0.9)' }}>Thực nhận tháng {m.month}/{m.year}</Text>
-            <Text bold style={{ color: '#fff', fontSize: 28, marginTop: 2 }}>{formatVnd(m.net)}</Text>
+            <Text bold style={{ color: 'var(--neutral-0)', fontSize: 28, marginTop: 2 }}>{formatVnd(m.net)}</Text>
             <Box flex style={{ gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
               <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>Giờ công: {fmtH(m.totalMinutes)}</Text>
               <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>Đơn giá: {formatVnd(payQ.data?.profile?.hourlyRate ?? 0)}/h</Text>
@@ -144,7 +145,7 @@ function MyPayrollHub() {
               <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>Phạt: {formatVnd(m.totalFines)}</Text>
             </Box>
             <Box style={{ display: 'inline-block', marginTop: 8, padding: '2px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.2)' }}>
-              <Text size="xSmall" style={{ color: '#fff' }}>{STATUS_LABEL[m.status]}</Text>
+              <Text size="xSmall" style={{ color: 'var(--neutral-0)' }}>{STATUS_LABEL[m.status]}</Text>
             </Box>
             {m.status === 'PAID' && m.proofImageUrl && (
               <Box style={{ marginTop: 10 }}>
@@ -185,7 +186,7 @@ function MyPayrollHub() {
                     </Box>
                     <Box style={{ textAlign: 'right' }}>
                       <Text size="small" bold>{formatVnd(d.net)}</Text>
-                      {d.fines > 0 && <Text size="xSmall" style={{ color: 'var(--danger, #d64545)' }}>−{formatVnd(d.fines)} phạt</Text>}
+                      {d.fines > 0 && <Text size="xSmall" style={{ color: 'var(--danger)' }}>−{formatVnd(d.fines)} phạt</Text>}
                     </Box>
                   </Box>
                   {isOpen && (

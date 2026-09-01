@@ -39,6 +39,7 @@ import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { Skeleton } from '../components/ui/skeleton';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { TimeInput } from '../components/ui/time-input';
 import { ImageUpload } from '../components/image-upload';
 import { formatVnd } from '../utils/format';
@@ -182,7 +183,7 @@ function PayrollSection() {
       </Box>
 
       {payQ.isLoading && <Skeleton style={{ height: 120, borderRadius: 12 }} />}
-      {payQ.isError && <Text style={{ color: 'var(--danger, #d64545)' }}>{getErrorMessage(payQ.error)}</Text>}
+      {payQ.isError && <ErrorState message={getErrorMessage(payQ.error)} onRetry={() => void payQ.refetch()} />}
 
       {payQ.data?.map((row) => (
         <Box key={row.staff.id} style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
@@ -195,7 +196,7 @@ function PayrollSection() {
             </Box>
             <Box style={{ textAlign: 'right' }}>
               <Text bold style={{ color: 'var(--leaf-700)' }}>{formatVnd(row.month.net)}</Text>
-              {row.month.totalFines > 0 && <Text size="xSmall" style={{ color: 'var(--danger, #d64545)' }}>−{formatVnd(row.month.totalFines)}</Text>}
+              {row.month.totalFines > 0 && <Text size="xSmall" style={{ color: 'var(--danger)' }}>−{formatVnd(row.month.totalFines)}</Text>}
             </Box>
           </Box>
           <Box flex style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
@@ -213,9 +214,7 @@ function PayrollSection() {
           </Box>
         </Box>
       ))}
-      {payQ.data && payQ.data.length === 0 && (
-        <Text size="small" style={{ color: 'var(--neutral-500)' }}>Chưa có nhân sự.</Text>
-      )}
+      {payQ.data && payQ.data.length === 0 && <EmptyState art="box" heading="Chưa có nhân sự" />}
 
       {/* Sheet QR */}
       <Sheet visible={!!qrRow} onClose={() => setQrRow(null)} autoHeight>
@@ -403,7 +402,7 @@ function StaffSection() {
       </Box>
 
       {staffQ.isLoading && <Skeleton style={{ height: 80, borderRadius: 12 }} />}
-      {staffQ.isError && <Text style={{ color: 'var(--danger, #d64545)' }}>{getErrorMessage(staffQ.error)}</Text>}
+      {staffQ.isError && <ErrorState message={getErrorMessage(staffQ.error)} onRetry={() => void staffQ.refetch()} />}
 
       {staffQ.data && (
         <>
@@ -426,7 +425,7 @@ function StaffSection() {
                   size="small"
                   variant="tertiary"
                   prefixIcon={<Trash2 size={15} />}
-                  style={{ color: 'var(--danger, #d64545)' }}
+                  style={{ color: 'var(--danger)' }}
                   onClick={() => revokeM.mutate(m.phone as string)}
                 >
                   Thu hồi
@@ -436,9 +435,7 @@ function StaffSection() {
           ))}
 
           {staffQ.data.members.length === 0 && (
-            <Text size="small" style={{ color: 'var(--neutral-500)' }}>
-              Chưa có nhân sự. Bấm “Thêm” để cấp quyền theo số điện thoại.
-            </Text>
+            <EmptyState art="box" heading="Chưa có nhân sự" body="Bấm “Thêm” để cấp quyền theo số điện thoại." />
           )}
 
           {staffQ.data.pendingInvites.length > 0 && (
@@ -614,11 +611,9 @@ function ShiftsSection() {
       )}
 
       {shiftsQ.isLoading && <Skeleton style={{ height: 120, borderRadius: 12 }} />}
-      {shiftsQ.isError && <Text style={{ color: 'var(--danger, #d64545)' }}>{getErrorMessage(shiftsQ.error)}</Text>}
+      {shiftsQ.isError && <ErrorState message={getErrorMessage(shiftsQ.error)} onRetry={() => void shiftsQ.refetch()} />}
       {shiftsQ.data && grouped.length === 0 && (
-        <Text size="small" style={{ color: 'var(--neutral-500)' }}>
-          Không có ca nào trong tuần này.
-        </Text>
+        <EmptyState art="box" heading="Không có ca nào trong tuần này" />
       )}
 
       {grouped.map((g) => (
@@ -667,7 +662,7 @@ function ShiftsSection() {
                     <Button
                       size="small"
                       variant="tertiary"
-                      style={{ color: 'var(--danger, #d64545)' }}
+                      style={{ color: 'var(--danger)' }}
                       onClick={() => setRejectId(s.id)}
                     >
                       <X size={16} />
@@ -773,7 +768,7 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
             <Text size="small">
               {t.name} · {minToHHMM(t.startMin)}–{minToHHMM(t.endMin)}
             </Text>
-            <Button size="small" variant="tertiary" style={{ color: 'var(--danger, #d64545)' }} onClick={() => delM.mutate(t.id)}>
+            <Button size="small" variant="tertiary" style={{ color: 'var(--danger)' }} onClick={() => delM.mutate(t.id)}>
               <Trash2 size={15} />
             </Button>
           </Box>
@@ -837,7 +832,7 @@ function RefillAdminSection() {
       openSnackbar({ text: 'Không có dữ liệu để xuất CSV', type: 'info' });
       return;
     }
-    const headers = ['ID', 'Khách hàng', 'SĐT', 'Số vỏ chai', 'Số nước (💧)', 'Thời gian'];
+    const headers = ['ID', 'Khách hàng', 'SĐT', 'Số vỏ chai', 'Số nước', 'Thời gian'];
     const rows = pendingQ.data.map((r: PendingRefillItem) => [
       r.id,
       `"${r.user.fullName ?? ''}"`,
@@ -874,12 +869,13 @@ function RefillAdminSection() {
       />
 
       {pendingQ.isLoading && <Skeleton style={{ height: 100, borderRadius: 12 }} />}
-      {pendingQ.isError && <Text style={{ color: 'var(--danger, #d64545)' }}>{getErrorMessage(pendingQ.error)}</Text>}
+      {pendingQ.isError && <ErrorState message={getErrorMessage(pendingQ.error)} onRetry={() => void pendingQ.refetch()} />}
 
       {pendingQ.data && filteredItems.length === 0 && (
-        <Text size="small" style={{ color: 'var(--neutral-500)' }}>
-          {filterText ? 'Không tìm thấy yêu cầu phù hợp.' : 'Không có yêu cầu đổi vỏ chai nào đang chờ duyệt.'}
-        </Text>
+        <EmptyState
+          art={filterText ? 'search' : 'box'}
+          heading={filterText ? 'Không tìm thấy yêu cầu phù hợp' : 'Không có yêu cầu đổi vỏ chai nào đang chờ duyệt'}
+        />
       )}
 
       {filteredItems.map((r: PendingRefillItem) => (
@@ -888,7 +884,7 @@ function RefillAdminSection() {
             <Box style={{ flex: 1, minWidth: 0 }}>
               <Text bold>{r.user.fullName ?? r.user.phone ?? 'Khách hàng'}</Text>
               <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                {r.user.phone ?? '—'} · Đổi <b>{r.quantity} vỏ</b> (+{r.seedsAwarded}💧)
+                {r.user.phone ?? '—'} · Đổi <b>{r.quantity} vỏ</b> (+{r.seedsAwarded})
               </Text>
             </Box>
             <Box flex style={{ gap: 6 }}>
@@ -904,7 +900,7 @@ function RefillAdminSection() {
               <Button
                 size="small"
                 variant="tertiary"
-                style={{ color: 'var(--danger, #d64545)' }}
+                style={{ color: 'var(--danger)' }}
                 loading={rejectM.isPending}
                 onClick={() => rejectM.mutate(r.id)}
               >

@@ -1,10 +1,11 @@
-import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
+import { Box, Page, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { getWishlist } from '../services/wishlist-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import ProductCard from '../components/product-card';
 import { ProductGridSkeleton } from '../components/ui/skeleton';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
 
 export default function WishlistPage() {
   const navigate = useNavigate();
@@ -19,9 +20,7 @@ export default function WishlistPage() {
         {status === 'loading' || wishQ.isLoading ? (
           <ProductGridSkeleton count={4} />
         ) : wishQ.isError ? (
-          <Box style={{ textAlign: 'center', padding: '24px 0' }}>
-            <Text style={{ color: 'var(--danger)' }}>{getErrorMessage(wishQ.error)}</Text>
-          </Box>
+          <ErrorState message={getErrorMessage(wishQ.error)} onRetry={() => void wishQ.refetch()} />
         ) : wishQ.data && wishQ.data.length > 0 ? (
           <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {wishQ.data.map((p) => (
@@ -29,23 +28,13 @@ export default function WishlistPage() {
             ))}
           </Box>
         ) : (
-          <Box style={{ textAlign: 'center', padding: '48px 24px' }}>
-            <Box style={{ marginBottom: 14 }}>
-              <Text style={{ fontSize: 48, lineHeight: '1.2', display: 'inline-block' }}>🤍</Text>
-            </Box>
-            <Text style={{ color: 'var(--neutral-600)' }}>
-              Chưa có sản phẩm yêu thích
-            </Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-              Chạm ♡ trên sản phẩm để lưu lại xem sau.
-            </Text>
-            <Button
-              onClick={() => navigate('/browse')}
-              style={{ marginTop: 16, background: 'var(--leaf-600)' }}
-            >
-              Khám phá sản phẩm
-            </Button>
-          </Box>
+          <EmptyState
+            art="sprout"
+            heading="Chưa có sản phẩm yêu thích"
+            body="Chạm ♡ trên sản phẩm để lưu lại xem sau."
+            ctaLabel="Khám phá sản phẩm"
+            onCta={() => navigate('/browse')}
+          />
         )}
       </Box>
     </Page>

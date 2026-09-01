@@ -11,6 +11,7 @@ import {
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
+import { ErrorState } from '../components/ui/empty-state';
 
 /** Biểu tượng + màu theo hạng (4 hạng §6.6). */
 const TIER_STYLE: Record<string, { emoji: string; color: string; bg: string }> = {
@@ -75,9 +76,7 @@ export default function LoyaltyPage() {
           <Skeleton style={{ height: 80, borderRadius: 16 }} />
         </Box>
       ) : loyaltyQ.isError ? (
-        <Box p={6} style={{ textAlign: 'center' }}>
-          <Text style={{ color: 'var(--danger)' }}>{getErrorMessage(loyaltyQ.error)}</Text>
-        </Box>
+        <ErrorState message={getErrorMessage(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
       ) : data ? (
         <>
           {/* Medallion hạng */}

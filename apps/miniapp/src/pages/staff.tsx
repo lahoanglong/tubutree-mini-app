@@ -34,6 +34,7 @@ import {
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { Skeleton } from '../components/ui/skeleton';
+import { ErrorState } from '../components/ui/empty-state';
 import { TimeInput } from '../components/ui/time-input';
 import { ImageUpload } from '../components/image-upload';
 import {
@@ -50,9 +51,9 @@ import {
 } from '../utils/week';
 
 const STATUS: Record<Shift['status'], { label: string; bg: string; fg: string }> = {
-  PENDING: { label: 'Chờ duyệt', bg: 'rgba(201,123,74,0.14)', fg: '#b5652f' },
-  APPROVED: { label: 'Đã duyệt', bg: 'rgba(80,144,24,0.14)', fg: '#3f7314' },
-  REJECTED: { label: 'Từ chối', bg: 'rgba(214,69,69,0.12)', fg: '#c0392b' },
+  PENDING: { label: 'Chờ duyệt', bg: 'var(--warning-bg)', fg: 'var(--warning)' },
+  APPROVED: { label: 'Đã duyệt', bg: 'var(--success-bg)', fg: 'var(--leaf-700)' },
+  REJECTED: { label: 'Từ chối', bg: 'var(--danger-bg)', fg: 'var(--danger)' },
   CANCELLED: { label: 'Đã huỷ', bg: 'var(--neutral-100)', fg: 'var(--neutral-500)' },
 };
 
@@ -137,14 +138,14 @@ function TodayCard() {
     <Box
       style={{
         background: open ? 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))' : 'var(--neutral-0)',
-        color: open ? '#fff' : 'inherit',
+        color: open ? 'var(--neutral-0)' : 'inherit',
         borderRadius: 14,
         padding: 16,
       }}
     >
       <Box flex alignItems="center" style={{ gap: 8, marginBottom: 8 }}>
-        <MapPin size={18} color={open ? '#fff' : 'var(--leaf-700)'} />
-        <Text bold style={{ color: open ? '#fff' : 'inherit' }}>
+        <MapPin size={18} color={open ? 'var(--neutral-0)' : 'var(--leaf-700)'} />
+        <Text bold style={{ color: open ? 'var(--neutral-0)' : 'inherit' }}>
           Chấm công hôm nay
         </Text>
       </Box>
@@ -169,7 +170,7 @@ function TodayCard() {
           </Button>
           <Text
             size="xSmall"
-            style={{ color: '#fff', marginTop: 8, textDecoration: 'underline' }}
+            style={{ color: 'var(--neutral-0)', marginTop: 8, textDecoration: 'underline' }}
             onClick={() => {
               setBackTime(isoToVnHHMM(open.checkinAt));
               setBackOpen(true);
@@ -458,7 +459,7 @@ function StaffHub() {
 
         {(tplQ.isLoading || shiftsQ.isLoading) && <Skeleton style={{ height: 120, borderRadius: 12 }} />}
         {shiftsQ.isError && (
-          <Text style={{ color: 'var(--danger, #d64545)' }}>{getErrorMessage(shiftsQ.error)}</Text>
+          <ErrorState message={getErrorMessage(shiftsQ.error)} onRetry={() => void shiftsQ.refetch()} />
         )}
 
         {shiftsQ.data &&
@@ -530,7 +531,7 @@ function StaffHub() {
                         <Button
                           size="small"
                           variant="tertiary"
-                          style={{ color: 'var(--danger, #d64545)' }}
+                          style={{ color: 'var(--danger)' }}
                           onClick={() => delM.mutate(s.id)}
                         >
                           <Trash2 size={15} />
@@ -541,7 +542,7 @@ function StaffHub() {
                       <Button
                         size="small"
                         variant="tertiary"
-                        style={{ color: 'var(--danger, #d64545)' }}
+                        style={{ color: 'var(--danger)' }}
                         onClick={() => setCancelId(s.id)}
                       >
                         Huỷ ca
@@ -713,7 +714,7 @@ function StaffHub() {
                   width: 22,
                   height: 22,
                   borderRadius: 999,
-                  background: '#fff',
+                  background: 'var(--neutral-0)',
                   position: 'absolute',
                   top: 2,
                   left: cancelEmergency ? 20 : 2,
