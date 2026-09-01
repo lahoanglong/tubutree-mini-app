@@ -9,6 +9,7 @@ import { ZaloOaTokenCron } from '../integrations/zns/zalo-oa-token.cron';
 @Module({
   controllers: [NotificationsController],
   providers: [NotificationsService, ZnsClient, ZaloOaTokenService, ZaloOaTokenCron],
-  exports: [NotificationsService],
+  // ZaloOaTokenService cũng cần cho ZaloOaMessageClient (module zalo-oa, CSKH quick-reply/auto-reply).
+  exports: [NotificationsService, ZaloOaTokenService],
 })
 export class NotificationsModule {}

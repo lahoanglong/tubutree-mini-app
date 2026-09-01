@@ -87,7 +87,7 @@ model Shift {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
-  sessions      AttendanceSession[]
+  sessions AttendanceSession[]
 
   @@index([staffId, workDate])
   @@index([workDate, status])
@@ -164,7 +164,7 @@ model PayrollAdjustment {
   createdAt DateTime       @default(now())
 
   @@index([staffId, workDate])
-  @@index([shiftId, type])
+  @@unique([shiftId, type])
   @@map("payroll_adjustments")
 }
 
@@ -328,27 +328,27 @@ model Address {
 // ============================================================
 
 model Product {
-  id               String           @id @default(cuid())
-  pancakeId        String           @unique
+  id               String             @id @default(cuid())
+  pancakeId        String             @unique
   brand            String
   brandId          String?
-  brandRef         Brand?           @relation(fields: [brandId], references: [id])
-  affiliateBlocked Boolean          @default(false)
-  slug             String           @unique
+  brandRef         Brand?             @relation(fields: [brandId], references: [id])
+  affiliateBlocked Boolean            @default(false)
+  slug             String             @unique
   name             String
-  description      String           @db.Text
+  description      String             @db.Text
   shortDesc        String?
   images           String[]
   thumbnail        String?
   categoryIds      String[]
   tags             String[]
-  isActive         Boolean          @default(true)
-  isFeatured       Boolean          @default(false)
-  isCombo          Boolean          @default(false)
-  ratingAvg        Float            @default(0) // denormalized từ reviews (cập nhật khi tạo review)
-  reviewCount      Int              @default(0)
-  soldExternal     Int              @default(0) // admin nhập — tổng đã bán gom từ các sàn TMĐT ngoài
-  soldApp          Int              @default(0) // system — đơn DELIVERED trong app (cron recompute). Hiển thị = soldExternal + soldApp
+  isActive         Boolean            @default(true)
+  isFeatured       Boolean            @default(false)
+  isCombo          Boolean            @default(false)
+  ratingAvg        Float              @default(0) // denormalized từ reviews (cập nhật khi tạo review)
+  reviewCount      Int                @default(0)
+  soldExternal     Int                @default(0) // admin nhập — tổng đã bán gom từ các sàn TMĐT ngoài
+  soldApp          Int                @default(0) // system — đơn DELIVERED trong app (cron recompute). Hiển thị = soldExternal + soldApp
   basePrice        Int
   salePrice        Int?
   metaTitle        String?
@@ -362,8 +362,8 @@ model Product {
   storefrontItems  StorefrontItem[]
   communityTags    PostProductTag[]
   contentKit       ProductContentKit?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   @@index([brand])
   @@index([brandId])
@@ -709,44 +709,44 @@ enum InvoiceStatus {
 }
 
 model Order {
-  id              String         @id @default(cuid())
-  code            String         @unique
-  idempotencyKey  String?        @unique // chống double-submit place-order (§12.1)
-  pancakeOrderId  String?        @unique
-  userId          String
-  user            User           @relation(fields: [userId], references: [id])
-  type            OrderType
-  status          OrderStatus
-  subtotal        Int
-  discount        Int            @default(0)
-  shippingFee     Int            @default(0)
-  total           Int
-  pointsEarned    Int            @default(0)
-  pointsUsed      Int            @default(0)
-  paymentMethod   PaymentMethod
-  paymentStatus   PaymentStatus
-  paymentTxnId    String?
-  shippingAddress Json
-  shippingPartner String?
-  shippingCode    String?
-  shippingStatus  String?
-  trackingLink    String?
-  shippingHistory Json?
-  invoiceRequest  Json?
-  invoiceUrl      String?
-  invoiceStatus   InvoiceStatus? @default(NOT_REQUESTED)
-  referrerUserId  String?
-  storefrontSlug  String?
+  id                String         @id @default(cuid())
+  code              String         @unique
+  idempotencyKey    String?        @unique // chống double-submit place-order (§12.1)
+  pancakeOrderId    String?        @unique
+  userId            String
+  user              User           @relation(fields: [userId], references: [id])
+  type              OrderType
+  status            OrderStatus
+  subtotal          Int
+  discount          Int            @default(0)
+  shippingFee       Int            @default(0)
+  total             Int
+  pointsEarned      Int            @default(0)
+  pointsUsed        Int            @default(0)
+  paymentMethod     PaymentMethod
+  paymentStatus     PaymentStatus
+  paymentTxnId      String?
+  shippingAddress   Json
+  shippingPartner   String?
+  shippingCode      String?
+  shippingStatus    String?
+  trackingLink      String?
+  shippingHistory   Json?
+  invoiceRequest    Json?
+  invoiceUrl        String?
+  invoiceStatus     InvoiceStatus? @default(NOT_REQUESTED)
+  referrerUserId    String?
+  storefrontSlug    String?
   // Đơn CTV "lên đơn hộ khách": userId==referrerUserId (CTV) nhưng VẪN được hưởng hoa hồng
   // (cho phép self-referral có kiểm soát — xem affiliate.createCommissionForOrder).
-  placedForCustomer Boolean      @default(false)
-  commission      Int            @default(0)
-  couponCode      String?
-  note            String?
-  items           OrderItem[]
-  commissions     Commission[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  placedForCustomer Boolean        @default(false)
+  commission        Int            @default(0)
+  couponCode        String?
+  note              String?
+  items             OrderItem[]
+  commissions       Commission[]
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   @@index([userId, status])
   @@index([referrerUserId])
@@ -1460,11 +1460,12 @@ model CommunityReport {
   id         String   @id @default(cuid())
   reporterId String
   reporter   User     @relation("CommunityReports", fields: [reporterId], references: [id], onDelete: Cascade)
-  targetType String   // POST | COMMENT
+  targetType String // POST | COMMENT
   targetId   String
   reason     String
   status     String   @default("OPEN") // OPEN | RESOLVED
   createdAt  DateTime @default(now())
+
   @@index([status, createdAt])
   @@index([targetType, targetId])
   @@map("community_reports")
@@ -1481,6 +1482,7 @@ model CommunityProfile {
   postCount       Int      @default(0)
   bestAnswerCount Int      @default(0)
   updatedAt       DateTime @updatedAt
+
   @@map("community_profiles")
 }
 
@@ -1519,6 +1521,7 @@ model CommunityEvent {
   status       String   @default("OPEN") // OPEN | CLOSED
   winnerUserId String?
   createdAt    DateTime @default(now())
+
   @@index([status, endAt])
   @@map("community_events")
 }
@@ -1840,14 +1843,14 @@ model Course {
 }
 
 model Lesson {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   courseId    String
-  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course      Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
   title       String
   contentType String // VIDEO | ARTICLE
   videoUrl    String?
-  body        String?  @db.Text
-  sortOrder   Int      @default(0)
+  body        String? @db.Text
+  sortOrder   Int     @default(0)
 
   @@index([courseId, sortOrder])
   @@map("lessons")
@@ -1862,4 +1865,39 @@ model UserLessonProgress {
   @@unique([userId, lessonId])
   @@index([userId])
   @@map("user_lesson_progress")
+}
+
+// ============================================================
+// 18. CSKH Quick-reply — mẫu tin nhanh + auto-reply qua Zalo OA
+// ============================================================
+
+model QuickReplyTemplate {
+  id         String   @id @default(cuid())
+  category   String? // nhóm (vd "Vận chuyển", "Đổi trả", "Thanh toán")
+  keywords   String[] // từ khoá kích hoạt, so khớp case-insensitive substring
+  title      String // tên nội bộ để admin dễ nhận diện trong danh sách
+  content    String   @db.Text // nội dung tin trả lời
+  isGreeting Boolean  @default(false) // dùng làm lời chào tự động (tin đầu/im lặng lâu)
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("quick_reply_templates")
+}
+
+// Log tin nhắn khách gửi vào OA + kết quả auto-reply (audit/replay, mirror PancakeWebhookEvent).
+model OaInboundMessage {
+  id                String   @id @default(cuid())
+  zaloUserId        String // OA follower id (user_id_by_app) — KHÔNG map cứng vào User
+  messageText       String?  @db.Text
+  rawPayload        Json
+  matchedTemplateId String?
+  status            String   @default("RECEIVED") // RECEIVED | REPLIED | SKIPPED | FAILED
+  createdAt         DateTime @default(now())
+
+  @@index([zaloUserId])
+  @@index([status])
+  @@map("oa_inbound_messages")
 }

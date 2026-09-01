@@ -2,7 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env.validation';
-import { QUEUE_PANCAKE_EVENTS, QUEUE_NOTIFICATIONS } from './queues';
+import { QUEUE_PANCAKE_EVENTS, QUEUE_NOTIFICATIONS, QUEUE_ZALO_OA_EVENTS } from './queues';
 
 /**
  * Cấu hình BullMQ root (kết nối Redis qua REDIS_URL) + đăng ký các queue.
@@ -23,7 +23,11 @@ import { QUEUE_PANCAKE_EVENTS, QUEUE_NOTIFICATIONS } from './queues';
         },
       }),
     }),
-    BullModule.registerQueue({ name: QUEUE_PANCAKE_EVENTS }, { name: QUEUE_NOTIFICATIONS }),
+    BullModule.registerQueue(
+      { name: QUEUE_PANCAKE_EVENTS },
+      { name: QUEUE_NOTIFICATIONS },
+      { name: QUEUE_ZALO_OA_EVENTS },
+    ),
   ],
   exports: [BullModule],
 })

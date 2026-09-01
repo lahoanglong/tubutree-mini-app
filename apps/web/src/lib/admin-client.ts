@@ -271,3 +271,42 @@ export const updateAcademyLesson = (
 ) => apiFetch<AdminLesson>(`/admin/academy/lessons/${id}`, { method: 'PATCH', body: input });
 export const deleteAcademyLesson = (id: string) =>
   apiFetch<{ ok: boolean }>(`/admin/academy/lessons/${id}`, { method: 'DELETE' });
+
+// ── CSKH Quick-reply (mẫu tin nhanh + auto-reply Zalo OA) ──
+export interface AdminQuickReply {
+  id: string;
+  category: string | null;
+  keywords: string[];
+  title: string;
+  content: string;
+  isGreeting: boolean;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const listQuickReplies = () => apiFetch<AdminQuickReply[]>('/admin/quick-replies');
+export const createQuickReply = (body: {
+  category?: string;
+  keywords: string[];
+  title: string;
+  content: string;
+  isGreeting?: boolean;
+  sortOrder?: number;
+  isActive?: boolean;
+}) => apiFetch<AdminQuickReply>('/admin/quick-replies', { method: 'POST', body });
+export const updateQuickReply = (
+  id: string,
+  body: Partial<{
+    category: string;
+    keywords: string[];
+    title: string;
+    content: string;
+    isGreeting: boolean;
+    sortOrder: number;
+    isActive: boolean;
+  }>,
+) => apiFetch<AdminQuickReply>(`/admin/quick-replies/${id}`, { method: 'PATCH', body });
+export const deleteQuickReply = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/admin/quick-replies/${id}`, { method: 'DELETE' });

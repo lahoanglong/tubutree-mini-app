@@ -43,6 +43,8 @@ import { StaffModule } from './modules/staff/staff.module';
 import { FlashSaleModule } from './modules/flash-sale/flash-sale.module';
 import { ContentKitModule } from './modules/content-kit/content-kit.module';
 import { AcademyModule } from './modules/academy/academy.module';
+import { CskhModule } from './modules/cskh/cskh.module';
+import { ZaloOaModule } from './modules/integrations/zalo-oa/zalo-oa.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -92,6 +94,8 @@ import { RolesGuard } from './common/guards/roles.guard';
     FlashSaleModule,
     ContentKitModule,
     AcademyModule,
+    CskhModule,
+    ZaloOaModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

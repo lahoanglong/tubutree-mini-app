@@ -20,6 +20,9 @@ export const envSchema = z.object({
   ZALO_OA_REFRESH_TOKEN: z.string().default(''), // bootstrap; sau đó token mới lưu DB (xoay vòng)
   ZALO_OA_ID: z.string().default(''),
   ZALO_OAUTH_BASE: z.string().default('https://oauth.zaloapp.com'),
+  // CSKH quick-reply/auto-reply: token tĩnh verify webhook OA (Zalo không ký HMAC, giống Pancake).
+  // Không bắt buộc ở production (tính năng optional, tự tắt êm nếu chưa đăng ký webhook).
+  ZALO_OA_WEBHOOK_SECRET: z.string().default(''),
 
   // Pancake POS
   PANCAKE_BASE_URL: z.string().default('https://pos.pages.fm/api/v1'),

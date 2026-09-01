@@ -46,6 +46,10 @@ import {
   addAcademyLesson,
   updateAcademyLesson,
   deleteAcademyLesson,
+  listQuickReplies,
+  createQuickReply,
+  updateQuickReply,
+  deleteQuickReply,
   type ConfigRow,
   type AdminBrand,
   type BrandCert,
@@ -55,9 +59,10 @@ import {
   type AdminCourse,
   type AdminLesson,
   type AcademyLessonContentType,
+  type AdminQuickReply,
 } from '@/lib/admin-client';
 
-type Tab = 'dealers' | 'orders' | 'users' | 'config' | 'coupons' | 'brands' | 'flashSales' | 'faqs' | 'contentKit' | 'academy';
+type Tab = 'dealers' | 'orders' | 'users' | 'config' | 'coupons' | 'brands' | 'flashSales' | 'faqs' | 'contentKit' | 'academy' | 'quickReplies';
 const TABS: { k: Tab; label: string }[] = [
   { k: 'dealers', label: 'Đại lý' },
   { k: 'orders', label: 'Đơn hàng' },
@@ -69,6 +74,7 @@ const TABS: { k: Tab; label: string }[] = [
   { k: 'faqs', label: 'Câu hỏi thường gặp' },
   { k: 'contentKit', label: 'Content Kit CTV' },
   { k: 'academy', label: 'Academy' },
+  { k: 'quickReplies', label: 'CSKH mẫu tin nhanh' },
 ];
 
 export default function AdminPage() {
@@ -113,6 +119,7 @@ export default function AdminPage() {
         {tab === 'faqs' && <FaqTab />}
         {tab === 'contentKit' && <ContentKitTab />}
         {tab === 'academy' && <AcademyTab />}
+        {tab === 'quickReplies' && <QuickReplyTab />}
       </div>
     </main>
   );
@@ -868,6 +875,186 @@ function FaqRow({ faq }: { faq: AdminFaq }) {
           <button
             onClick={() => save.mutate()}
             disabled={!f.question.trim() || !f.answer.trim() || save.isPending}
+            className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
+          >
+            {save.isPending ? 'Đang lưu…' : 'Lưu'}
+          </button>
+          {save.isError && <p className="text-sm text-red-600">{(save.error as Error).message}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CSKH Quick-reply (mẫu tin nhanh + auto-reply Zalo OA) ──
+function parseKeywords(raw: string): string[] {
+  return raw.split(',').map((k) => k.trim()).filter(Boolean);
+}
+
+function QuickReplyTab() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['admin-quick-replies'], queryFn: listQuickReplies });
+  const [form, setForm] = useState({ category: '', keywords: '', title: '', content: '', isGreeting: false });
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const create = useMutation({
+    mutationFn: () =>
+      createQuickReply({
+        category: form.category.trim() || undefined,
+        keywords: parseKeywords(form.keywords),
+        title: form.title.trim(),
+        content: form.content.trim(),
+        isGreeting: form.isGreeting,
+      }),
+    onSuccess: () => {
+      setForm({ category: '', keywords: '', title: '', content: '', isGreeting: false });
+      setMsg({ ok: true, text: 'Đã thêm mẫu tin nhanh!' });
+      void qc.invalidateQueries({ queryKey: ['admin-quick-replies'] });
+    },
+    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo mẫu tin nhanh' }),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-neutral-100 bg-white p-4">
+        <h3 className="mb-2 text-sm font-semibold">Thêm mẫu tin nhanh</h3>
+        <p className="mb-2 text-xs text-neutral-400">
+          Dùng để auto-reply khi khách nhắn vào Zalo OA — so khớp từ khoá (cách nhau bằng dấu phẩy),
+          hoặc bật &quot;Lời chào tự động&quot; để gửi cho tin nhắn đầu tiên của khách.
+        </p>
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <input
+              placeholder="Nhóm (vd Vận chuyển, Đổi trả)"
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              className="w-56 rounded border border-neutral-200 px-3 py-2 text-sm"
+            />
+            <input
+              placeholder="Tên nội bộ"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="w-56 rounded border border-neutral-200 px-3 py-2 text-sm"
+            />
+          </div>
+          <input
+            placeholder="Từ khoá kích hoạt, cách nhau bằng dấu phẩy (vd ship, phí vận chuyển)"
+            value={form.keywords}
+            onChange={(e) => setForm({ ...form, keywords: e.target.value })}
+            disabled={form.isGreeting}
+            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm disabled:bg-neutral-50 disabled:text-neutral-400"
+          />
+          <textarea
+            placeholder="Nội dung tin trả lời"
+            value={form.content}
+            onChange={(e) => setForm({ ...form, content: e.target.value })}
+            rows={3}
+            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+          />
+          <label className="flex items-center gap-2 text-sm text-neutral-600">
+            <input
+              type="checkbox"
+              checked={form.isGreeting}
+              onChange={(e) => setForm({ ...form, isGreeting: e.target.checked })}
+            />
+            Dùng làm lời chào tự động (tin nhắn đầu tiên của khách)
+          </label>
+          <button
+            onClick={() => { setMsg(null); create.mutate(); }}
+            disabled={!form.title.trim() || !form.content.trim() || create.isPending}
+            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+          >
+            {create.isPending ? 'Đang thêm…' : 'Thêm mẫu tin'}
+          </button>
+        </div>
+        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+      </div>
+
+      <div className="space-y-2">
+        {q.data?.map((r) => <QuickReplyRow key={r.id} item={r} />)}
+        {q.data?.length === 0 && <Empty>Chưa có mẫu tin nhanh nào. Thêm mẫu đầu tiên ở trên.</Empty>}
+      </div>
+    </div>
+  );
+}
+
+function QuickReplyRow({ item }: { item: AdminQuickReply }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-quick-replies'] });
+  const toggleActive = useMutation({
+    mutationFn: () => updateQuickReply(item.id, { isActive: !item.isActive }),
+    onSuccess: refresh,
+  });
+  const del = useMutation({
+    mutationFn: () => deleteQuickReply(item.id),
+    onSuccess: refresh,
+  });
+  const [f, setF] = useState({
+    category: item.category ?? '',
+    keywords: item.keywords.join(', '),
+    title: item.title,
+    content: item.content,
+    isGreeting: item.isGreeting,
+  });
+  const save = useMutation({
+    mutationFn: () =>
+      updateQuickReply(item.id, {
+        category: f.category.trim() || undefined,
+        keywords: parseKeywords(f.keywords),
+        title: f.title.trim(),
+        content: f.content.trim(),
+        isGreeting: f.isGreeting,
+      }),
+    onSuccess: () => { setOpen(false); refresh(); },
+  });
+
+  return (
+    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            {item.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">{item.category}</span>}
+            {item.isGreeting && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">Lời chào</span>}
+            <span className={`rounded-full px-2 py-0.5 text-xs text-white ${item.isActive ? 'bg-green-600' : 'bg-neutral-400'}`}>
+              {item.isActive ? 'Đang bật' : 'Đang tắt'}
+            </span>
+          </div>
+          <div className="mt-1 font-medium">{item.title}</div>
+          {item.keywords.length > 0 && (
+            <div className="mt-0.5 text-xs text-neutral-400">Từ khoá: {item.keywords.join(', ')}</div>
+          )}
+          <div className="mt-0.5 whitespace-pre-line text-sm text-neutral-600">{item.content}</div>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <button onClick={() => setOpen((o) => !o)} className="text-sm text-green-700 underline">{open ? 'Đóng' : 'Sửa'}</button>
+          <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className="text-xs text-neutral-500 underline">
+            {item.isActive ? 'Tắt' : 'Bật'}
+          </button>
+          <button onClick={() => del.mutate()} disabled={del.isPending} className="text-xs text-red-600 underline">Xoá</button>
+        </div>
+      </div>
+
+      {open && (
+        <div className="mt-3 space-y-2 border-t border-neutral-100 pt-3">
+          <div className="flex flex-wrap gap-2">
+            <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className="w-56 rounded border border-neutral-200 px-2 py-1 text-sm" />
+            <input placeholder="Tên nội bộ" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="w-56 rounded border border-neutral-200 px-2 py-1 text-sm" />
+          </div>
+          <input
+            placeholder="Từ khoá, cách nhau bằng dấu phẩy"
+            value={f.keywords}
+            onChange={(e) => setF({ ...f, keywords: e.target.value })}
+            disabled={f.isGreeting}
+            className="w-full rounded border border-neutral-200 px-2 py-1 text-sm disabled:bg-neutral-50 disabled:text-neutral-400"
+          />
+          <textarea placeholder="Nội dung" value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} rows={3} className="w-full rounded border border-neutral-200 px-2 py-1 text-sm" />
+          <label className="flex items-center gap-2 text-sm text-neutral-600">
+            <input type="checkbox" checked={f.isGreeting} onChange={(e) => setF({ ...f, isGreeting: e.target.checked })} />
+            Dùng làm lời chào tự động
+          </label>
+          <button
+            onClick={() => save.mutate()}
+            disabled={!f.title.trim() || !f.content.trim() || save.isPending}
             className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
           >
             {save.isPending ? 'Đang lưu…' : 'Lưu'}

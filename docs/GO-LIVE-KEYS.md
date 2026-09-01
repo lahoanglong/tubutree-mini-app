@@ -144,9 +144,37 @@ Key đi qua **2 lớp**, không bao giờ nằm trong git:
 
 ---
 
+## 5) CSKH Quick-reply/Auto-reply (webhook tin nhắn Zalo OA)
+
+**Mục tiêu:** lấy `ZALO_OA_WEBHOOK_SECRET` (tự đặt, không phải Zalo cấp) + đăng ký webhook +
+quyền gửi tin "Tư vấn/CSKH" — **khác** quyền gửi ZNS đã đăng ký ở mục 2.
+
+1. Trong Zalo OA (đã tạo ở mục 2) → xin quyền gửi **tin nhắn tư vấn/CSKH** (Message API,
+   khác ZNS) nếu OA app hiện chưa có sẵn quyền này.
+2. Khai báo **Webhook URL** nhận tin khách nhắn vào OA trong Zalo OA dashboard:
+   - URL: `https://api.tubutree.com/api/webhooks/zalo-oa`
+   - Token xác thực: tự đặt 1 giá trị bí mật, khai báo trùng 2 phía (Zalo OA dashboard +
+     env `ZALO_OA_WEBHOOK_SECRET`) — hệ thống dùng để verify webhook (chống giả mạo),
+     tương tự cơ chế `PANCAKE_WEBHOOK_SECRET`.
+3. Vào Admin → "CSKH mẫu tin nhanh" tạo các template (từ khoá + nội dung trả lời) và 1
+   template "Lời chào tự động" — nội dung biên tập, seed không tạo sẵn.
+
+**Không bắt buộc để go-live** (khác ZaloPay/OA-ZNS/Accesstrade): thiếu key/webhook chưa
+đăng ký → tính năng tự tắt êm (endpoint từ chối request chưa xác thực), không ảnh hưởng
+phần còn lại của app. Có thể bật sau.
+
+### Đặt vào hệ thống
+```bash
+gh secret set ZALO_OA_WEBHOOK_SECRET --body "<secret_tu_dat>"   # khớp với Zalo OA dashboard
+gh workflow run ops.yml -f action=set-env
+```
+
+---
+
 ## Thứ tự khuyến nghị go-live
 1. **Zalo OA + ZNS** trước (lead time template lâu nhất ~2 tuần) — đăng ký sớm.
 2. **ZaloPay** (cần cho thanh toán online; trước mắt COD/Ví/TubuXu đã đủ bán hàng).
 3. **Accesstrade** (cashback — tính năng tăng trưởng, có thể bật sau).
+4. **CSKH Quick-reply webhook** (tính năng tăng trưởng, không bắt buộc — bật khi rảnh).
 
 Sau mỗi lần go-live 1 dịch vụ: chạy `ops.yml action=audit` để xác nhận, rồi test 1 giao dịch thật nhỏ.
