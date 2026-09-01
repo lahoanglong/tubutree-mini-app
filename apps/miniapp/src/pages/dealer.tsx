@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
+import { Store, Hourglass, Save, AlertTriangle, ClipboardList, Plane, Gift, Award, X } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getDealerMe,
@@ -23,14 +24,15 @@ import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
 import { ImageUpload } from '../components/image-upload';
 import { Skeleton } from '../components/ui/skeleton';
-import { ErrorState } from '../components/ui/empty-state';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { QuantitySelector } from '../components/ui/quantity-selector';
 
 export default function DealerPage() {
   const meQ = useQuery({ queryKey: ['dealer-me'], queryFn: getDealerMe });
 
   if (meQ.isLoading) {
     return (
-      <Page className="page" style={{ background: 'var(--dealer-bg, #f4f6f9)' }}>
+      <Page className="page" style={{ background: 'var(--dealer-bg)' }}>
         <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
           <Skeleton style={{ height: 100, borderRadius: 12 }} />
           <Skeleton style={{ height: 60, borderRadius: 12 }} />
@@ -87,11 +89,11 @@ function DealerApply({ rejected }: { rejected: boolean }) {
     form.cccdBackUrl.trim();
 
   return (
-    <Page className="page" style={{ background: '#f4f6f9' }}>
+    <Page className="page" style={{ background: 'var(--dealer-bg)' }}>
       <Box p={4}>
-        <Box p={4} style={{ background: '#1f2a44', borderRadius: 'var(--radius-xl)', color: '#fff' }}>
-          <Text style={{ fontSize: 36 }}>🏪</Text>
-          <Text bold size="large" style={{ color: '#fff', marginTop: 4 }}>
+        <Box p={4} style={{ background: 'var(--dealer-ink)', borderRadius: 'var(--radius-xl)', color: 'var(--neutral-0)' }}>
+          <Store size={32} color="var(--neutral-0)" strokeWidth={1.75} />
+          <Text bold size="large" style={{ color: 'var(--neutral-0)', marginTop: 4 }}>
             Trở thành đại lý Tubu
           </Text>
           <Text size="small" style={{ color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>
@@ -100,7 +102,7 @@ function DealerApply({ rejected }: { rejected: boolean }) {
         </Box>
 
         {rejected && (
-          <Box mt={3} p={3} style={{ background: '#fbe9e9', borderRadius: 'var(--radius-md)' }}>
+          <Box mt={3} p={3} style={{ background: 'var(--danger-bg)', borderRadius: 'var(--radius-md)' }}>
             <Text size="small" style={{ color: 'var(--danger)' }}>
               Hồ sơ trước bị từ chối. Vui lòng kiểm tra lại thông tin và nộp lại.
             </Text>
@@ -130,7 +132,7 @@ function DealerApply({ rejected }: { rejected: boolean }) {
           loading={mut.isPending}
           disabled={!valid}
           onClick={() => mut.mutate()}
-          style={{ marginTop: 20, background: '#1f2a44' }}
+          style={{ marginTop: 20, background: 'var(--dealer-ink)' }}
         >
           Gửi hồ sơ đăng ký
         </Button>
@@ -141,9 +143,9 @@ function DealerApply({ rejected }: { rejected: boolean }) {
 
 function DealerPending() {
   return (
-    <Page className="page" style={{ background: '#f4f6f9' }}>
+    <Page className="page" style={{ background: 'var(--dealer-bg)' }}>
       <Box style={{ textAlign: 'center', padding: '64px 24px' }}>
-        <Text style={{ fontSize: 56 }}>⏳</Text>
+        <Hourglass size={48} color="var(--dealer-ink)" strokeWidth={1.5} />
         <Text bold size="large" style={{ marginTop: 12 }}>
           Hồ sơ đang được duyệt
         </Text>
@@ -164,17 +166,17 @@ function DealerHub() {
   const me = meQ.data;
 
   return (
-    <Page className="page" style={{ background: '#f4f6f9' }}>
+    <Page className="page" style={{ background: 'var(--dealer-bg)' }}>
 
       {/* Thẻ tổng quan */}
       <Box p={4}>
-        <Box p={4} style={{ background: '#1f2a44', borderRadius: 'var(--radius-lg)', color: '#fff' }}>
+        <Box p={4} style={{ background: 'var(--dealer-ink)', borderRadius: 'var(--radius-lg)', color: 'var(--neutral-0)' }}>
           <Box flex justifyContent="space-between" alignItems="center">
             <Box>
               <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.7)' }}>
                 Bậc đại lý
               </Text>
-              <Text bold size="large" style={{ color: '#fff' }}>
+              <Text bold size="large" style={{ color: 'var(--neutral-0)' }}>
                 {me?.tier?.name ?? 'Đang gán bậc'}
               </Text>
             </Box>
@@ -182,7 +184,7 @@ function DealerHub() {
               <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.7)' }}>
                 Công nợ hiện tại
               </Text>
-              <Text bold size="large" style={{ color: '#fff' }}>
+              <Text bold size="large" style={{ color: 'var(--neutral-0)' }}>
                 {formatVnd(me?.currentDebt ?? 0)}
               </Text>
             </Box>
@@ -221,11 +223,11 @@ function TabChip({ label, active, onClick }: { label: string; active: boolean; o
         textAlign: 'center',
         padding: '8px 0',
         borderRadius: 'var(--radius-md)',
-        background: active ? '#1f2a44' : 'var(--neutral-0)',
-        border: '1px solid #1f2a44',
+        background: active ? 'var(--dealer-ink)' : 'var(--neutral-0)',
+        border: '1px solid var(--dealer-ink)',
       }}
     >
-      <Text size="small" bold style={{ color: active ? '#fff' : '#1f2a44' }}>
+      <Text size="small" bold style={{ color: active ? 'var(--neutral-0)' : 'var(--dealer-ink)' }}>
         {label}
       </Text>
     </Box>
@@ -363,7 +365,7 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
           }}
           style={{ flex: '0 0 auto' }}
         >
-          📋 Dán đơn
+          Dán đơn
         </Button>
       </Box>
 
@@ -378,23 +380,25 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
                 flex: '0 0 auto',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 8,
+                gap: 6,
                 background: 'var(--neutral-0)',
-                border: '1px solid #1f2a44',
+                border: '1px solid var(--dealer-ink)',
                 borderRadius: 'var(--radius-full)',
-                padding: '6px 10px 6px 14px',
+                padding: '6px 10px',
               }}
             >
-              <Text size="xSmall" bold style={{ color: '#1f2a44' }} onClick={() => loadTemplate(t.items)}>
-                📋 {t.name} ({t.items.length})
+              <ClipboardList size={14} color="var(--dealer-ink)" style={{ flexShrink: 0 }} />
+              <Text size="xSmall" bold style={{ color: 'var(--dealer-ink)' }} onClick={() => loadTemplate(t.items)}>
+                {t.name} ({t.items.length})
               </Text>
-              <Text
-                size="xSmall"
+              <Box
+                role="button"
+                aria-label="Xoá mẫu đơn"
                 onClick={() => delTpl.mutate(t.id)}
-                style={{ color: 'var(--danger)', fontWeight: 700 }}
+                style={{ display: 'flex', alignItems: 'center' }}
               >
-                ✕
-              </Text>
+                <X size={13} color="var(--danger)" strokeWidth={2.5} />
+              </Box>
             </Box>
           ))}
         </Box>
@@ -411,7 +415,7 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
             loading={saveTpl.isPending}
             disabled={!tplName.trim()}
             onClick={() => saveTpl.mutate()}
-            style={{ marginTop: 14, background: '#1f2a44' }}
+            style={{ marginTop: 14, background: 'var(--dealer-ink)' }}
           >
             Lưu mẫu
           </Button>
@@ -447,7 +451,7 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
             <Button
               disabled={!pasteText.trim()}
               onClick={applyPaste}
-              style={{ flex: 1, background: '#1f2a44' }}
+              style={{ flex: 1, background: 'var(--dealer-ink)' }}
             >
               Thêm vào đơn
             </Button>
@@ -497,23 +501,29 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
           }}
         >
           <Box flex justifyContent="space-between" alignItems="center" mb={2}>
-            <Text
-              size="xSmall"
-              bold
+            <Box
+              flex
+              alignItems="center"
               className="tubu-press"
               onClick={() => setSaveOpen(true)}
-              style={{ color: '#1f2a44' }}
+              style={{ gap: 4 }}
             >
-              💾 Lưu mẫu
-            </Text>
-            <Text bold size="large" style={{ color: '#1f2a44' }}>
+              <Save size={14} color="var(--dealer-ink)" />
+              <Text size="xSmall" bold style={{ color: 'var(--dealer-ink)' }}>
+                Lưu mẫu
+              </Text>
+            </Box>
+            <Text bold size="large" style={{ color: 'var(--dealer-ink)' }}>
               {formatVnd(total)}
             </Text>
           </Box>
           {overLimit && (
-            <Text size="xSmall" style={{ color: 'var(--danger)', marginBottom: 6 }}>
-              ⚠ Vượt hạn mức công nợ — chọn Trả trước hoặc giảm số lượng.
-            </Text>
+            <Box flex alignItems="center" style={{ gap: 4, marginBottom: 6 }}>
+              <AlertTriangle size={13} color="var(--danger)" style={{ flexShrink: 0 }} />
+              <Text size="xSmall" style={{ color: 'var(--danger)' }}>
+                Vượt hạn mức công nợ — chọn Trả trước hoặc giảm số lượng.
+              </Text>
+            </Box>
           )}
           <Box flex style={{ gap: 8 }}>
             <Button
@@ -528,7 +538,7 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
               loading={place.isPending}
               disabled={overLimit}
               onClick={() => place.mutate('CREDIT')}
-              style={{ flex: 1, background: '#1f2a44' }}
+              style={{ flex: 1, background: 'var(--dealer-ink)' }}
             >
               Ghi công nợ
             </Button>
@@ -565,7 +575,7 @@ function PriceRow({
           {row.sku} · tồn {row.stock}
         </Text>
         <Box flex alignItems="baseline" style={{ gap: 6 }}>
-          <Text size="small" bold style={{ color: '#1f2a44' }}>
+          <Text size="small" bold style={{ color: 'var(--dealer-ink)' }}>
             {formatVnd(row.dealerPrice)}
           </Text>
           <Text size="xSmall" style={{ color: 'var(--neutral-400)', textDecoration: 'line-through' }}>
@@ -576,41 +586,10 @@ function PriceRow({
           </Text>
         </Box>
       </Box>
-      <Box flex alignItems="center" style={{ gap: 4, flex: '0 0 auto' }}>
-        <Stepper value={qty} onChange={onQty} max={row.stock} />
+      <Box style={{ flex: '0 0 auto' }}>
+        <QuantitySelector value={qty} min={0} max={row.stock} size="sm" onChange={onQty} />
       </Box>
     </Box>
-  );
-}
-
-function Stepper({ value, onChange, max }: { value: number; onChange: (n: number) => void; max: number }) {
-  const btn = (label: string, fn: () => void, disabled?: boolean) => (
-    <Box
-      className="tubu-press"
-      onClick={disabled ? undefined : fn}
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 'var(--radius-sm)',
-        border: '1px solid var(--neutral-200)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        opacity: disabled ? 0.4 : 1,
-        background: 'var(--neutral-0)',
-      }}
-    >
-      <Text bold>{label}</Text>
-    </Box>
-  );
-  return (
-    <>
-      {btn('−', () => onChange(Math.max(0, value - 1)), value <= 0)}
-      <Text size="small" bold style={{ minWidth: 22, textAlign: 'center' }}>
-        {value}
-      </Text>
-      {btn('+', () => onChange(Math.min(max, value + 1)), value >= max)}
-    </>
   );
 }
 
@@ -640,18 +619,14 @@ function DealerOrders() {
               <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
                 {o.items?.length ?? 0} mặt hàng · {new Date(o.createdAt).toLocaleDateString('vi-VN')}
               </Text>
-              <Text bold style={{ color: '#1f2a44', marginTop: 4 }}>
+              <Text bold style={{ color: 'var(--dealer-ink)', marginTop: 4 }}>
                 {formatVnd(o.total)}
               </Text>
             </Box>
           ))}
         </Box>
       ) : (
-        <Box style={{ textAlign: 'center', padding: '40px 0' }}>
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            Chưa có đơn đại lý nào.
-          </Text>
-        </Box>
+        <EmptyState art="box" heading="Chưa có đơn đại lý nào" />
       )}
     </Box>
   );
@@ -712,15 +687,18 @@ function DealerCredit() {
             disabled={!Number.isFinite(Number(amount)) || Number(amount) <= 0 || Number(amount) > balance || pay.isPending}
             loading={pay.isPending}
             onClick={() => pay.mutate()}
-            style={{ background: '#1f2a44', flex: '0 0 auto' }}
+            style={{ background: 'var(--dealer-ink)', flex: '0 0 auto' }}
           >
             Báo đã CK
           </Button>
         </Box>
         {Number(amount) > balance && (
-          <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 6 }}>
-            ⚠ Số tiền vượt dư nợ hiện tại ({formatVnd(balance)}).
-          </Text>
+          <Box flex alignItems="center" style={{ gap: 4, marginTop: 6 }}>
+            <AlertTriangle size={13} color="var(--danger)" style={{ flexShrink: 0 }} />
+            <Text size="xSmall" style={{ color: 'var(--danger)' }}>
+              Số tiền vượt dư nợ hiện tại ({formatVnd(balance)}).
+            </Text>
+          </Box>
         )}
       </Box>
 
@@ -785,11 +763,11 @@ function DealerReport() {
   return (
     <Box mx={4} flex flexDirection="column" style={{ paddingBottom: 24, gap: 12 }}>
       {/* Card doanh số quý */}
-      <Box p={4} style={{ background: 'linear-gradient(135deg, #1f2a44, #2e3b5e)', borderRadius: 'var(--radius-lg)', color: '#fff' }}>
+      <Box p={4} style={{ background: 'linear-gradient(135deg, var(--dealer-ink), var(--dealer-ink-soft))', borderRadius: 'var(--radius-lg)', color: 'var(--neutral-0)' }}>
         <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.7)' }}>
           Doanh số {d.quarter}
         </Text>
-        <Text bold style={{ color: '#fff', fontSize: 26, marginTop: 2 }}>
+        <Text bold style={{ color: 'var(--neutral-0)', fontSize: 26, marginTop: 2 }}>
           {formatVnd(d.revenue)}
         </Text>
         <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
@@ -840,11 +818,14 @@ function DealerRewardsCard() {
   const q = useQuery({ queryKey: ['dealer-rewards'], queryFn: getDealerRewards });
   const rewards = q.data?.rewards ?? [];
   if (!rewards.length) return null;
-  const icon = (t: string) => (t === 'TOUR' ? '🏝️' : t === 'GIFT' ? '🎁' : '🏆');
+  const RewardIcon = ({ type }: { type: string }) => {
+    const Icon = type === 'TOUR' ? Plane : type === 'GIFT' ? Gift : Award;
+    return <Icon size={14} color="var(--dealer-ink)" style={{ flexShrink: 0 }} />;
+  };
   return (
     <Box p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
       <Text size="small" bold style={{ marginBottom: 8 }}>
-        🏪 Phần thưởng đại lý
+        Phần thưởng đại lý
       </Text>
       {rewards.map((r) => {
         // Guard chia-0: threshold=0 (admin cho phép @Min(0)) → 0/0=NaN → width:'NaN%'. Đạt ngay = 100%.
@@ -852,9 +833,12 @@ function DealerRewardsCard() {
         return (
           <Box key={r.id} py={2} style={{ borderBottom: '1px solid var(--neutral-100)' }}>
             <Box flex justifyContent="space-between" alignItems="center" style={{ gap: 8 }}>
-              <Text size="small" style={{ color: r.achieved ? 'var(--leaf-700)' : 'var(--neutral-800)' }}>
-                {r.achieved ? '✓ ' : ''}{icon(r.type)} {r.title}
-              </Text>
+              <Box flex alignItems="center" style={{ gap: 6, minWidth: 0 }}>
+                <RewardIcon type={r.type} />
+                <Text size="small" style={{ color: r.achieved ? 'var(--leaf-700)' : 'var(--neutral-800)' }}>
+                  {r.achieved ? '✓ ' : ''}{r.title}
+                </Text>
+              </Box>
               <Text size="xSmall" style={{ color: 'var(--neutral-500)', whiteSpace: 'nowrap' }}>
                 {formatVnd(r.threshold)}/{r.period === 'YEAR' ? 'năm' : 'quý'}
               </Text>

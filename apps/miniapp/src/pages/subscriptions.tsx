@@ -11,7 +11,7 @@ import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { LineItemSkeleton } from '../components/ui/skeleton';
-import { ErrorState } from '../components/ui/empty-state';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { vi } from '../i18n/vi';
 
 export default function SubscriptionsPage() {
@@ -138,16 +138,13 @@ export default function SubscriptionsPage() {
           ))}
         </Box>
       ) : (
-        <Box style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <Text style={{ fontSize: 44 }}>🔁</Text>
-          <Text style={{ color: 'var(--neutral-600)', marginTop: 8 }}>Chưa có lịch đặt định kỳ</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-            Mở một sản phẩm và chọn “Đặt định kỳ” để bắt đầu.
-          </Text>
-          <Button onClick={() => navigate('/browse')} style={{ marginTop: 16, background: 'var(--leaf-600)' }}>
-            Khám phá sản phẩm
-          </Button>
-        </Box>
+        <EmptyState
+          art="box"
+          heading="Chưa có lịch đặt định kỳ"
+          body='Mở một sản phẩm và chọn "Đặt định kỳ" để bắt đầu.'
+          ctaLabel="Khám phá sản phẩm"
+          onCta={() => navigate('/browse')}
+        />
       )}
 
       <Sheet visible={cancelTarget !== null} onClose={() => setCancelTarget(null)} autoHeight>

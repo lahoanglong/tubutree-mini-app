@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Input, Spinner, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, useSnackbar } from 'zmp-ui';
 import { FlaskConical, MessageSquare, Sparkles } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBetaStatus, joinBeta, leaveBeta, sendBetaFeedback } from '../services/beta-api';
 import { useAuthStore } from '../store/auth';
 import { ErrorState } from '../components/ui/empty-state';
+import { Skeleton } from '../components/ui/skeleton';
 
 function msg(e: unknown): string {
   const ax = e as { response?: { data?: { message?: string } }; message?: string };
@@ -65,7 +66,10 @@ export default function BetaPage() {
       </Box>
 
       {isLoading ? (
-        <Box flex justifyContent="center" p={6}><Spinner /></Box>
+        <Box p={2} flex flexDirection="column" style={{ gap: 10 }}>
+          <Skeleton height={90} />
+          <Skeleton height={70} />
+        </Box>
       ) : isError ? (
         <ErrorState message={msg(error)} onRetry={() => void refetch()} />
       ) : (
@@ -121,7 +125,10 @@ export default function BetaPage() {
               {data && data.features.length > 0 ? (
                 data.features.map((f) => (
                   <Box key={f.key} style={{ padding: '8px 0', borderTop: '1px solid var(--neutral-100)' }}>
-                    <Text size="small" bold>🧪 {f.title}</Text>
+                    <Box flex alignItems="center" style={{ gap: 6 }}>
+                      <FlaskConical size={14} color="var(--leaf-600)" />
+                      <Text size="small" bold>{f.title}</Text>
+                    </Box>
                     <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{f.desc}</Text>
                   </Box>
                 ))

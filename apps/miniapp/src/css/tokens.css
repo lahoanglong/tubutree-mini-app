@@ -57,6 +57,19 @@
   --danger: #c73e3e;
   --info: #3d7bb8;
 
+  /* Semantic — nền nhạt (tint) cho badge/chip trạng thái (pending/success/error/info).
+   * Dùng token này thay vì mỗi trang tự chế 1 hex riêng cho cùng ý nghĩa. */
+  --success-bg: var(--leaf-50);
+  --warning-bg: #fff3e0;
+  --danger-bg: #fbe9e9;
+  --info-bg: #e8f1f8;
+
+  /* Dealer (B2B) theme — Persona C (Anh Hùng): tông xám-xanh navy, tách biệt khỏi
+   * xanh lá tươi B2C theo Design Brief §2.5. Dùng thay hex lặp lại trong dealer.tsx. */
+  --dealer-ink: #1f2a44;
+  --dealer-ink-soft: #2e3b5e;
+  --dealer-bg: #f4f6f9;
+
   /*
    * Alias cũ (--green-*) cho các trang chưa migrate (game/profile).
    * Trỏ về scale lá mới để toàn app cùng tông — xóa khi migrate xong.

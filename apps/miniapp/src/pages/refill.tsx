@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Spinner, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, useSnackbar } from 'zmp-ui';
 import { Recycle, Droplets, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRefillSummary, returnBottles } from '../services/refill-api';
 import { useAuthStore } from '../store/auth';
 import { ErrorState } from '../components/ui/empty-state';
+import { Skeleton } from '../components/ui/skeleton';
 import { haptic } from '../utils/haptic';
 
 function msg(e: unknown): string {
@@ -62,7 +63,13 @@ export default function RefillPage() {
       </Box>
 
       {isLoading ? (
-        <Box flex justifyContent="center" p={6}><Spinner /></Box>
+        <Box p={2} flex flexDirection="column" style={{ gap: 8 }}>
+          <Box flex style={{ gap: 8 }}>
+            <Skeleton height={70} style={{ flex: 1 }} />
+            <Skeleton height={70} style={{ flex: 1 }} />
+          </Box>
+          <Skeleton height={160} />
+        </Box>
       ) : isError ? (
         <ErrorState message={msg(error)} onRetry={() => void refetch()} />
       ) : (
@@ -104,7 +111,7 @@ export default function RefillPage() {
               </Button>
             </Box>
             <Box flex alignItems="center" justifyContent="center" style={{ gap: 6 }}>
-              <Droplets size={16} color="var(--sky-600, #0284c7)" />
+              <Droplets size={16} color="var(--info)" />
               <Text size="small" style={{ color: 'var(--neutral-600)' }}>
                 Nhận <b>{qty * (data?.perBottle ?? 0)}💧</b> ({data?.perBottle ?? 0}💧 / vỏ)
               </Text>
@@ -132,9 +139,9 @@ export default function RefillPage() {
               {data.history.map((h) => {
                 const statusKey = h.status ?? 'PENDING';
                 const statusMeta = {
-                  PENDING: { label: 'Chờ duyệt', color: '#e65100', bg: '#fff3e0' },
-                  APPROVED: { label: `+${h.seedsAwarded}💧`, color: 'var(--leaf-700)', bg: '#e8f5e9' },
-                  REJECTED: { label: 'Từ chối', color: '#c62828', bg: '#ffebee' },
+                  PENDING: { label: 'Chờ duyệt', color: 'var(--warning)', bg: 'var(--warning-bg)' },
+                  APPROVED: { label: `+${h.seedsAwarded}💧`, color: 'var(--leaf-700)', bg: 'var(--success-bg)' },
+                  REJECTED: { label: 'Từ chối', color: 'var(--danger)', bg: 'var(--danger-bg)' },
                 }[statusKey];
 
                 return (

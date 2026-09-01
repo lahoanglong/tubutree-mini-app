@@ -1,8 +1,9 @@
-import { Box, Page, Text, Button, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
 import { useAuthStore } from '../store/auth';
-import { ErrorState } from '../components/ui/empty-state';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { LineItemSkeleton } from '../components/ui/skeleton';
 
 function timeLeft(iso: string): string {
   const diff = (new Date(iso).getTime() - Date.now()) / 1000;
@@ -53,7 +54,10 @@ export default function GroupBuyPage() {
       </Box>
 
       {isLoading ? (
-        <Box flex justifyContent="center" p={6}><Spinner /></Box>
+        <Box p={2} flex flexDirection="column" style={{ gap: 10 }}>
+          <LineItemSkeleton />
+          <LineItemSkeleton />
+        </Box>
       ) : isError ? (
         <ErrorState message={msg(error)} onRetry={() => void refetch()} />
       ) : groups && groups.length > 0 ? (
@@ -70,16 +74,13 @@ export default function GroupBuyPage() {
           ))}
         </Box>
       ) : (
-        <Box style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <Text style={{ fontSize: 48 }}>🛒</Text>
-          <Text style={{ color: 'var(--neutral-600)', marginTop: 8 }}>Chưa có nhóm mua chung nào</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-            Mở nhóm từ trang sản phẩm để rủ bạn bè mua chung giá tốt!
-          </Text>
-          <Button onClick={() => navigate('/browse')} style={{ marginTop: 16, background: 'var(--leaf-600)' }}>
-            Khám phá sản phẩm
-          </Button>
-        </Box>
+        <EmptyState
+          art="basket"
+          heading="Chưa có nhóm mua chung nào"
+          body="Mở nhóm từ trang sản phẩm để rủ bạn bè mua chung giá tốt!"
+          ctaLabel="Khám phá sản phẩm"
+          onCta={() => navigate('/browse')}
+        />
       )}
     </Page>
   );
@@ -114,7 +115,7 @@ function GroupCard({
           <Box flex alignItems="center" style={{ gap: 6 }}>
             <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>{g.unitPrice.toLocaleString('vi-VN')}đ</Text>
             <Text size="xSmall" style={{ color: 'var(--neutral-400)', textDecoration: 'line-through' }}>{g.basePrice.toLocaleString('vi-VN')}đ</Text>
-            <Text size="xSmall" bold style={{ color: 'var(--danger, #b91c1c)' }}>−{g.discountPct}%</Text>
+            <Text size="xSmall" bold style={{ color: 'var(--clay-700)' }}>−{g.discountPct}%</Text>
           </Box>
           <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
             {g.currentSize}/{g.targetSize} người · {timeLeft(g.expiresAt)}

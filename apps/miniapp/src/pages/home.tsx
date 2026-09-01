@@ -143,7 +143,7 @@ export default function HomePage() {
           onClick={() => { haptic('light'); navigate('/ai-advisor'); }}
           style={{
             flex: 1,
-            background: 'linear-gradient(120deg, var(--leaf-50), var(--primary-50, #eef7ff))',
+            background: 'linear-gradient(120deg, var(--leaf-50), var(--primary-50, #fdf3e3))',
             border: '1px solid var(--leaf-400)',
             borderRadius: 'var(--radius-lg)',
             padding: '10px 12px',
@@ -192,7 +192,7 @@ export default function HomePage() {
             overflow: 'hidden',
           }}
         >
-          <Text size="xSmall" bold style={{ color: '#d7eec2', letterSpacing: 1 }}>
+          <Text size="xSmall" bold style={{ color: 'var(--leaf-100)', letterSpacing: 1 }}>
             SỐNG XANH AN LÀNH
           </Text>
           <Text.Title className="t-h1" style={{ color: '#fff', marginTop: 6, maxWidth: '80%' }}>
