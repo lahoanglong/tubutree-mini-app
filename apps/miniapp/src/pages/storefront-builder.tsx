@@ -91,9 +91,10 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     onSuccess: () => { haptic('light'); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<string | null>(null);
   const delItemMut = useMutation({
     mutationFn: removeItem,
-    onSuccess: () => void refresh(),
+    onSuccess: () => { setConfirmDeleteItemId(null); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
@@ -132,7 +133,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
                 )}
                 <Text size="xSmall" className="tubu-press" onClick={() => itemMut.mutate({ id: it.id, dto: { isPinned: !it.isPinned } })}>⤒</Text>
                 <Text size="xSmall" className="tubu-press" onClick={() => itemMut.mutate({ id: it.id, dto: { isHidden: !it.isHidden } })}>{it.isHidden ? '🙈' : '👁'}</Text>
-                <Text size="xSmall" className="tubu-press" style={{ color: 'var(--danger)' }} onClick={() => delItemMut.mutate(it.id)}>✕</Text>
+                <Text size="xSmall" className="tubu-press" style={{ color: 'var(--danger)' }} onClick={() => setConfirmDeleteItemId(it.id)}>✕</Text>
               </Box>
             );
           })}
@@ -161,6 +162,26 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         onClose={() => setContentKitSlug(null)}
         productSlug={contentKitSlug ?? ''}
       />
+
+      {/* Xác nhận xoá sản phẩm khỏi gian hàng (thao tác không hoàn tác) */}
+      <Sheet visible={!!confirmDeleteItemId} onClose={() => setConfirmDeleteItemId(null)} autoHeight>
+        <Box p={5} style={{ textAlign: 'center' }}>
+          <Text.Title size="small">Xoá sản phẩm này khỏi gian hàng?</Text.Title>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
+            <Button fullWidth variant="secondary" onClick={() => setConfirmDeleteItemId(null)}>
+              Huỷ
+            </Button>
+            <Button
+              fullWidth
+              loading={delItemMut.isPending}
+              onClick={() => delItemMut.mutate(confirmDeleteItemId!)}
+              style={{ background: 'var(--danger)' }}
+            >
+              Xoá
+            </Button>
+          </Box>
+        </Box>
+      </Sheet>
     </Page>
   );
 }

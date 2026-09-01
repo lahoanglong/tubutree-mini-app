@@ -4,7 +4,7 @@ import { Recycle, Droplets, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRefillSummary, returnBottles } from '../services/refill-api';
 import { useAuthStore } from '../store/auth';
-
+import { ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
 
 function msg(e: unknown): string {
@@ -26,7 +26,11 @@ export default function RefillPage() {
   const authed = useAuthStore((s) => s.status) === 'authenticated';
   const [qty, setQty] = useState(1);
 
-  const { data, isLoading } = useQuery({ queryKey: ['refill'], queryFn: getRefillSummary, enabled: authed });
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['refill'],
+    queryFn: getRefillSummary,
+    enabled: authed,
+  });
 
   const returnM = useMutation({
     mutationFn: () => returnBottles(qty),
@@ -59,6 +63,8 @@ export default function RefillPage() {
 
       {isLoading ? (
         <Box flex justifyContent="center" p={6}><Spinner /></Box>
+      ) : isError ? (
+        <ErrorState message={msg(error)} onRetry={() => void refetch()} />
       ) : (
         <Box p={2}>
           {/* Tổng quan dấu chân xanh */}

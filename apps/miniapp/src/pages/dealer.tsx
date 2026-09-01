@@ -23,6 +23,7 @@ import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
 import { ImageUpload } from '../components/image-upload';
 import { Skeleton } from '../components/ui/skeleton';
+import { ErrorState } from '../components/ui/empty-state';
 
 export default function DealerPage() {
   const meQ = useQuery({ queryKey: ['dealer-me'], queryFn: getDealerMe });
@@ -40,9 +41,7 @@ export default function DealerPage() {
   if (meQ.isError) {
     return (
       <Page className="page">
-        <Box p={6} style={{ textAlign: 'center' }}>
-          <Text style={{ color: 'var(--danger)' }}>{getErrorMessage(meQ.error)}</Text>
-        </Box>
+        <ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
       </Page>
     );
   }
@@ -463,6 +462,8 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
               <Skeleton key={i} style={{ height: 40 }} />
             ))}
           </Box>
+        ) : priceQ.isError ? (
+          <ErrorState message={getErrorMessage(priceQ.error)} onRetry={() => void priceQ.refetch()} />
         ) : rows.length > 0 ? (
           rows.map((r, i) => (
             <PriceRow
@@ -622,6 +623,8 @@ function DealerOrders() {
           <Skeleton style={{ height: 80, borderRadius: 12 }} />
           <Skeleton style={{ height: 80, borderRadius: 12 }} />
         </Box>
+      ) : ordersQ.isError ? (
+        <ErrorState message={getErrorMessage(ordersQ.error)} onRetry={() => void ordersQ.refetch()} />
       ) : ordersQ.data && ordersQ.data.length > 0 ? (
         <Box flex flexDirection="column" style={{ gap: 10 }}>
           {ordersQ.data.map((o) => (
@@ -673,6 +676,21 @@ function DealerCredit() {
   });
 
   const balance = ledgerQ.data?.balance ?? 0;
+
+  if (ledgerQ.isLoading) {
+    return (
+      <Box mx={4} style={{ paddingBottom: 24 }}>
+        <Skeleton style={{ height: 140, borderRadius: 12 }} />
+      </Box>
+    );
+  }
+  if (ledgerQ.isError) {
+    return (
+      <Box mx={4} style={{ paddingBottom: 24 }}>
+        <ErrorState message={getErrorMessage(ledgerQ.error)} onRetry={() => void ledgerQ.refetch()} />
+      </Box>
+    );
+  }
 
   return (
     <Box mx={4} style={{ paddingBottom: 24 }}>
@@ -755,8 +773,8 @@ function DealerReport() {
   }
   if (q.isError || !q.data) {
     return (
-      <Box mx={4} p={6} style={{ textAlign: 'center' }}>
-        <Text style={{ color: 'var(--danger)' }}>{getErrorMessage(q.error)}</Text>
+      <Box mx={4}>
+        <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       </Box>
     );
   }

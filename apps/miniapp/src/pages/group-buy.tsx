@@ -2,6 +2,7 @@ import { Box, Page, Text, Button, Spinner, useNavigate, useSnackbar } from 'zmp-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
 import { useAuthStore } from '../store/auth';
+import { ErrorState } from '../components/ui/empty-state';
 
 function timeLeft(iso: string): string {
   const diff = (new Date(iso).getTime() - Date.now()) / 1000;
@@ -22,7 +23,13 @@ export default function GroupBuyPage() {
   const queryClient = useQueryClient();
   const authed = useAuthStore((s) => s.status) === 'authenticated';
 
-  const { data: groups, isLoading } = useQuery({ queryKey: ['group-buy'], queryFn: listGroupBuys });
+  const {
+    data: groups,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({ queryKey: ['group-buy'], queryFn: listGroupBuys });
 
   const joinM = useMutation({
     mutationFn: (id: string) => joinGroupBuy(id),
@@ -47,6 +54,8 @@ export default function GroupBuyPage() {
 
       {isLoading ? (
         <Box flex justifyContent="center" p={6}><Spinner /></Box>
+      ) : isError ? (
+        <ErrorState message={msg(error)} onRetry={() => void refetch()} />
       ) : groups && groups.length > 0 ? (
         <Box p={2}>
           {groups.map((g) => (

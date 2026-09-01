@@ -11,6 +11,7 @@ import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { LineItemSkeleton } from '../components/ui/skeleton';
+import { ErrorState } from '../components/ui/empty-state';
 import { vi } from '../i18n/vi';
 
 export default function SubscriptionsPage() {
@@ -62,6 +63,8 @@ export default function SubscriptionsPage() {
           <LineItemSkeleton />
           <LineItemSkeleton />
         </Box>
+      ) : subsQ.isError ? (
+        <ErrorState message={getErrorMessage(subsQ.error)} onRetry={() => void subsQ.refetch()} />
       ) : subsQ.data && subsQ.data.length > 0 ? (
         <Box px={4} flex flexDirection="column" style={{ gap: 10, paddingBottom: 24 }}>
           {subsQ.data.map((s: SubscriptionDTO) => (

@@ -19,6 +19,16 @@ export default function CartPage() {
     onSuccess: (data) => qc.setQueryData(['cart'], data),
   });
 
+  if (status === 'idle' || status === 'loading') {
+    return (
+      <Shell>
+        <div className="py-20 text-center">
+          <p className="text-neutral-400">Đang tải…</p>
+        </div>
+      </Shell>
+    );
+  }
+
   if (status !== 'authenticated') {
     return (
       <Shell>

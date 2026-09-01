@@ -19,6 +19,14 @@ export default function AccountPage() {
   const { user, status, logout } = useAuth();
   const ordersQ = useQuery({ queryKey: ['orders'], queryFn: fetchOrders, enabled: status === 'authenticated' });
 
+  if (status === 'idle' || status === 'loading') {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-20 text-center">
+        <p className="text-neutral-400">Đang tải…</p>
+      </main>
+    );
+  }
+
   if (status !== 'authenticated' || !user) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-20 text-center">

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Input, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getOwnedBrand,
@@ -81,9 +81,10 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã cập nhật khuyến mãi', type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const delPromo = useMutation({
     mutationFn: (id: string) => deleteOwnedPromotion(id),
-    onSuccess: () => { if (editingId) resetPromoForm(); void refresh(); },
+    onSuccess: () => { if (editingId) resetPromoForm(); setConfirmDeleteId(null); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const startEdit = (p: OwnedBrand['promotions'][number]) => {
@@ -138,7 +139,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
             </Box>
             <Box flex style={{ gap: 12 }}>
               <Text size="xSmall" className="tubu-press" style={{ color: 'var(--primary-600)' }} onClick={() => startEdit(p)}>Sửa</Text>
-              <Text size="xSmall" className="tubu-press" style={{ color: 'var(--danger)' }} onClick={() => delPromo.mutate(p.id)}>Xoá</Text>
+              <Text size="xSmall" className="tubu-press" style={{ color: 'var(--danger)' }} onClick={() => setConfirmDeleteId(p.id)}>Xoá</Text>
             </Box>
           </Box>
         ))}
@@ -171,6 +172,26 @@ function Editor({ brand }: { brand: OwnedBrand }) {
           )}
         </Box>
       </Box>
+
+      {/* Xác nhận xoá khuyến mãi (thao tác không hoàn tác) */}
+      <Sheet visible={!!confirmDeleteId} onClose={() => setConfirmDeleteId(null)} autoHeight>
+        <Box p={5} style={{ textAlign: 'center' }}>
+          <Text.Title size="small">Xoá khuyến mãi này?</Text.Title>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
+            <Button fullWidth variant="secondary" onClick={() => setConfirmDeleteId(null)}>
+              Huỷ
+            </Button>
+            <Button
+              fullWidth
+              loading={delPromo.isPending}
+              onClick={() => delPromo.mutate(confirmDeleteId!)}
+              style={{ background: 'var(--danger)' }}
+            >
+              Xoá
+            </Button>
+          </Box>
+        </Box>
+      </Sheet>
     </Page>
   );
 }

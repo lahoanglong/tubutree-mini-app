@@ -4,6 +4,7 @@ import { FlaskConical, MessageSquare, Sparkles } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBetaStatus, joinBeta, leaveBeta, sendBetaFeedback } from '../services/beta-api';
 import { useAuthStore } from '../store/auth';
+import { ErrorState } from '../components/ui/empty-state';
 
 function msg(e: unknown): string {
   const ax = e as { response?: { data?: { message?: string } }; message?: string };
@@ -16,7 +17,11 @@ export default function BetaPage() {
   const authed = useAuthStore((s) => s.status) === 'authenticated';
   const [feedback, setFeedback] = useState('');
 
-  const { data, isLoading } = useQuery({ queryKey: ['beta'], queryFn: getBetaStatus, enabled: authed });
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['beta'],
+    queryFn: getBetaStatus,
+    enabled: authed,
+  });
 
   const joinM = useMutation({
     mutationFn: joinBeta,
@@ -61,6 +66,8 @@ export default function BetaPage() {
 
       {isLoading ? (
         <Box flex justifyContent="center" p={6}><Spinner /></Box>
+      ) : isError ? (
+        <ErrorState message={msg(error)} onRetry={() => void refetch()} />
       ) : (
         <Box p={2}>
           {/* Trạng thái tham gia */}
