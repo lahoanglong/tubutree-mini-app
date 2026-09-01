@@ -220,7 +220,7 @@ export function VoucherSheet({
                           <span
                             style={{
                               background: 'var(--clay-500)',
-                              color: '#fff',
+                              color: 'var(--neutral-0)',
                               borderRadius: 'var(--radius-full)',
                               padding: '1px 6px',
                               fontSize: 10,

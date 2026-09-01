@@ -228,7 +228,7 @@ export default function PostComposer({
                       gap: 4,
                       padding: '4px 8px',
                       borderRadius: 'var(--radius-full)',
-                      background: 'var(--leaf-100, var(--neutral-100))',
+                      background: 'var(--leaf-100)',
                       color: 'var(--leaf-700)',
                     }}
                   >
@@ -259,7 +259,7 @@ export default function PostComposer({
           px={4}
           pt={2}
           style={{
-            background: '#ffffff',
+            background: 'var(--neutral-0)',
             borderTop: '1px solid var(--neutral-100)',
             paddingBottom: 'calc(14px + var(--safe-bottom))',
             boxShadow: '0 -4px 12px rgba(0,0,0,0.05)',

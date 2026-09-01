@@ -76,7 +76,15 @@ export function ProductPicker({
               <Text size="xSmall" style={{ maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {p.name}
               </Text>
-              <X size={14} onClick={() => remove(p.slug)} style={{ cursor: 'pointer', color: 'var(--neutral-400)', flex: '0 0 auto' }} />
+              <Box
+                role="button"
+                aria-label={vi.common.cancel}
+                className="tubu-press"
+                onClick={() => remove(p.slug)}
+                style={{ display: 'flex', alignItems: 'center', flex: '0 0 auto' }}
+              >
+                <X size={14} color="var(--neutral-400)" />
+              </Box>
             </Box>
           ))}
         </Box>

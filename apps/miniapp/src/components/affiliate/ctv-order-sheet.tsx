@@ -204,18 +204,28 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
             </Text>
           </Box>
           <Box flex alignItems="center" style={{ gap: 6 }}>
-            <Stepper icon={<Minus size={14} />} onClick={() => setQty(l.variationId, -1)} />
+            <Stepper icon={<Minus size={14} />} label="Giảm số lượng" onClick={() => setQty(l.variationId, -1)} />
             <Text size="small" bold style={{ minWidth: 20, textAlign: 'center' }}>
               {l.quantity}
             </Text>
-            <Stepper icon={<Plus size={14} />} onClick={() => setQty(l.variationId, 1)} />
+            <Stepper icon={<Plus size={14} />} label="Tăng số lượng" onClick={() => setQty(l.variationId, 1)} />
           </Box>
-          <Trash2
-            size={16}
-            onClick={() => removeLine(l.variationId)}
+          <Box
+            role="button"
             aria-label={t.removeItem}
-            style={{ cursor: 'pointer', color: 'var(--neutral-400)', flex: '0 0 auto' }}
-          />
+            className="tubu-press"
+            onClick={() => removeLine(l.variationId)}
+            style={{
+              width: 36,
+              height: 36,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: '0 0 auto',
+            }}
+          >
+            <Trash2 size={16} color="var(--neutral-400)" />
+          </Box>
         </Box>
       ))}
       {showErrors && !itemsOk && (
@@ -407,17 +417,19 @@ function FieldInput({
   );
 }
 
-function Stepper({ icon, onClick }: { icon: React.ReactNode; onClick: () => void }) {
+function Stepper({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
     <Box
+      role="button"
+      aria-label={label}
       className="tubu-press"
       onClick={onClick}
       flex
       alignItems="center"
       justifyContent="center"
       style={{
-        width: 28,
-        height: 28,
+        width: 36,
+        height: 36,
         borderRadius: '50%',
         border: '1px solid var(--neutral-200)',
         color: 'var(--primary-700)',

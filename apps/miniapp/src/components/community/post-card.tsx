@@ -72,7 +72,7 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
                 gap: 2,
                 padding: '4px 8px',
                 borderRadius: 'var(--radius-full)',
-                background: 'var(--leaf-100, var(--neutral-100))',
+                background: 'var(--leaf-100)',
                 color: 'var(--leaf-700)',
                 fontSize: 12,
               }}
