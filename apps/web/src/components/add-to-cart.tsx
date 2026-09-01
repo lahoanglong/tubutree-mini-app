@@ -58,7 +58,7 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
                   key={v.id}
                   onClick={() => setSelectedId(v.id)}
                   className={`rounded-md border px-3 py-1.5 text-sm transition ${
-                    active ? 'border-green-600 bg-green-50 text-green-700' : 'border-neutral-200'
+                    active ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-neutral-200'
                   } ${out ? 'opacity-50 line-through' : ''}`}
                 >
                   {v.name} · {formatVnd(v.salePrice ?? v.retailPrice)}
@@ -90,14 +90,14 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
         <button
           onClick={onAdd}
           disabled={busy || !available}
-          className="flex-1 rounded-md bg-green-600 px-6 py-3 font-medium text-white transition hover:bg-green-700 disabled:bg-neutral-300"
+          className="flex-1 rounded-md bg-primary-600 px-6 py-3 font-medium text-white transition hover:bg-primary-700 disabled:bg-neutral-300"
         >
           {!available ? 'Hết hàng' : busy ? 'Đang thêm…' : `Thêm vào giỏ · ${formatVnd(price * qty)}`}
         </button>
       </div>
 
       {msg && (
-        <p className="mt-3 text-sm text-green-700">
+        <p className="mt-3 text-sm text-leaf-700">
           {msg}{' '}
           {msg.includes('giỏ') && (
             <a href="/gio-hang" className="font-semibold underline">

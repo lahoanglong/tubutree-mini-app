@@ -8,7 +8,7 @@ export default function Error({ reset }: { error: Error & { digest?: string }; r
       <p className="mt-2 text-neutral-600">Đã có lỗi xảy ra khi tải trang. Vui lòng thử lại.</p>
       <button
         onClick={() => reset()}
-        className="mt-6 rounded-full bg-green-600 px-6 py-2.5 font-semibold text-white"
+        className="mt-6 rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white"
       >
         Thử lại
       </button>

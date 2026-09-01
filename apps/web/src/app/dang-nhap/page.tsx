@@ -28,7 +28,7 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
       <div className="text-6xl">🌳</div>
-      <h1 className="mt-4 text-2xl font-bold text-green-700">Tubu Tree</h1>
+      <h1 className="mt-4 text-2xl font-bold text-primary-700">Tubu Tree</h1>
       <p className="mt-2 text-neutral-600">
         Đăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.
       </p>
@@ -36,7 +36,7 @@ export default function LoginPage() {
       <button
         onClick={onLogin}
         disabled={busy}
-        className="mt-8 w-full rounded-full bg-green-600 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:opacity-60"
+        className="mt-8 w-full rounded-full bg-primary-600 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:opacity-60"
       >
         {busy ? 'Đang chuyển tới Zalo…' : 'Đăng nhập với Zalo'}
       </button>

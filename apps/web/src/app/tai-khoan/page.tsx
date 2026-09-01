@@ -31,7 +31,7 @@ export default function AccountPage() {
     return (
       <main className="mx-auto max-w-3xl px-4 py-20 text-center">
         <p className="text-neutral-600">Vui lòng đăng nhập để xem tài khoản.</p>
-        <Link href="/dang-nhap" className="mt-4 inline-block rounded-full bg-green-600 px-6 py-2.5 font-semibold text-white">
+        <Link href="/dang-nhap" className="mt-4 inline-block rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white">
           Đăng nhập với Zalo
         </Link>
       </main>
@@ -40,19 +40,19 @@ export default function AccountPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
-      <Link href="/" className="text-sm text-green-600">← Trang chủ</Link>
+      <Link href="/" className="text-sm text-primary-600">← Trang chủ</Link>
 
-      <section className="mt-3 rounded-xl bg-gradient-to-br from-green-600 to-green-700 p-5 text-white">
+      <section className="mt-3 rounded-xl bg-gradient-to-br from-primary-600 to-primary-700 p-5 text-white">
         <div className="text-lg font-bold">{user.fullName ?? 'Khách Tubu'}</div>
-        <div className="mt-1 text-sm text-green-100">Mã giới thiệu: {user.referralCode}</div>
+        <div className="mt-1 text-sm text-primary-100">Mã giới thiệu: {user.referralCode}</div>
         <div className="mt-3 flex gap-6">
           <div>
             <div className="text-xl font-bold">{user.pointsBalance}</div>
-            <div className="text-xs text-green-100">Điểm Xanh</div>
+            <div className="text-xs text-primary-100">Điểm Xanh</div>
           </div>
           <div>
             <div className="text-xl font-bold">{formatVnd(user.walletBalance)}</div>
-            <div className="text-xs text-green-100">Ví Tubu</div>
+            <div className="text-xs text-primary-100">Ví Tubu</div>
           </div>
         </div>
       </section>
@@ -67,7 +67,7 @@ export default function AccountPage() {
               <div key={o.code} className="rounded-lg border border-neutral-100 bg-white p-4">
                 <div className="flex items-center justify-between">
                   <span className="font-medium">#{o.code}</span>
-                  <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700">
+                  <span className="rounded-full bg-leaf-50 px-2 py-0.5 text-xs text-leaf-700">
                     {STATUS_LABEL[o.status] ?? o.status}
                   </span>
                 </div>

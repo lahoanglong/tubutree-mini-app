@@ -17,15 +17,15 @@ export default async function HomePage({
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6">
-      <section className="mb-8 rounded-xl bg-gradient-to-br from-green-600 to-green-700 p-8 text-white">
+      <section className="mb-8 rounded-xl bg-gradient-to-br from-primary-600 to-primary-700 p-8 text-white">
         <h1 className="text-3xl font-bold">🌿 Tubu Tree</h1>
-        <p className="mt-1 text-green-100">Sống xanh An Lành — Mỹ phẩm & đồ tiêu dùng thiên nhiên</p>
+        <p className="mt-1 text-primary-100">Sống xanh An Lành — Mỹ phẩm & đồ tiêu dùng thiên nhiên</p>
       </section>
 
       <div className="mb-5 flex flex-wrap gap-2">
         <Link
           href="/"
-          className={`rounded-full px-4 py-1.5 text-sm ${!brand ? 'bg-green-600 text-white' : 'bg-neutral-100 text-neutral-600'}`}
+          className={`rounded-full px-4 py-1.5 text-sm ${!brand ? 'bg-primary-600 text-white' : 'bg-neutral-100 text-neutral-600'}`}
         >
           Tất cả
         </Link>
@@ -33,7 +33,7 @@ export default async function HomePage({
           <Link
             key={b.brand}
             href={`/?brand=${encodeURIComponent(b.brand)}`}
-            className={`rounded-full px-4 py-1.5 text-sm ${brand === b.brand ? 'bg-green-600 text-white' : 'bg-neutral-100 text-neutral-600'}`}
+            className={`rounded-full px-4 py-1.5 text-sm ${brand === b.brand ? 'bg-primary-600 text-white' : 'bg-neutral-100 text-neutral-600'}`}
           >
             {b.brand} ({b.count})
           </Link>

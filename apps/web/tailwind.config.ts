@@ -6,14 +6,26 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        green: {
-          50: '#F1F8F2',
-          100: '#DDEDE0',
-          200: '#B5D6BD',
-          400: '#5FA376',
-          600: '#2E7D4F',
-          700: '#235F3D',
-          900: '#0F2D1C',
+        // Primary — Cam logo (hex chuẩn M2, khớp apps/miniapp/src/css/tokens.css).
+        // Spec §7.1: brand green cũ (#2E7D4F) đã lỗi thời, đã bỏ hẳn — không giữ alias.
+        primary: {
+          50: '#FDF3E3',
+          100: '#FBE4C4',
+          200: '#F4C98A',
+          400: '#EBA94A',
+          600: '#E08C1C',
+          700: '#B86A10',
+          900: '#5C3505',
+        },
+        // Secondary — Lá logo (hex chuẩn M2).
+        leaf: {
+          50: '#EEF7D9',
+          100: '#DCEFBE',
+          200: '#BBD98A',
+          400: '#95D222',
+          600: '#509018',
+          700: '#3C6D12',
+          900: '#1F3A09',
         },
         clay: { 50: '#FBF4ED', 200: '#EDD4BD', 500: '#C97B4A', 700: '#8C4F2A' },
         sun: { 300: '#FDD96E', 500: '#F4B400' },

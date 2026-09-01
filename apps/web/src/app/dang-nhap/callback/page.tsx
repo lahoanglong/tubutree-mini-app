@@ -30,13 +30,13 @@ function CallbackInner() {
         <>
           <div className="text-5xl">😕</div>
           <p className="mt-4 text-red-600">{error}</p>
-          <a href="/dang-nhap" className="mt-6 rounded-full bg-green-600 px-6 py-2.5 font-semibold text-white">
+          <a href="/dang-nhap" className="mt-6 rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white">
             Thử lại
           </a>
         </>
       ) : (
         <>
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-green-200 border-t-green-600" />
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
           <p className="mt-4 text-neutral-600">Đang đăng nhập…</p>
         </>
       )}

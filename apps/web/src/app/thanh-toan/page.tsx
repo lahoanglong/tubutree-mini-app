@@ -69,7 +69,7 @@ export default function CheckoutPage() {
       <Shell>
         <div className="py-20 text-center">
           <p className="text-neutral-600">Vui lòng đăng nhập để thanh toán.</p>
-          <Link href="/dang-nhap" className="mt-4 inline-block rounded-full bg-green-600 px-6 py-2.5 font-semibold text-white">
+          <Link href="/dang-nhap" className="mt-4 inline-block rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white">
             Đăng nhập với Zalo
           </Link>
         </div>
@@ -84,10 +84,10 @@ export default function CheckoutPage() {
           <div className="text-6xl">🎉</div>
           <h2 className="mt-4 text-xl font-bold">Đặt hàng thành công!</h2>
           <p className="mt-2 text-neutral-600">
-            Mã đơn <span className="font-semibold text-green-700">{placed.code}</span> · {formatVnd(placed.total)}
+            Mã đơn <span className="font-semibold text-leaf-700">{placed.code}</span> · {formatVnd(placed.total)}
           </p>
           <div className="mt-6 flex justify-center gap-3">
-            <Link href="/tai-khoan" className="rounded-md bg-green-600 px-5 py-2.5 font-medium text-white">
+            <Link href="/tai-khoan" className="rounded-md bg-primary-600 px-5 py-2.5 font-medium text-white">
               Xem đơn của tôi
             </Link>
             <Link href="/" className="rounded-md border border-neutral-200 px-5 py-2.5">
@@ -153,13 +153,13 @@ export default function CheckoutPage() {
             <span className="text-clay-700">{formatVnd(quote?.total ?? 0)}</span>
           </div>
           {quote && quote.pointsEarned > 0 && (
-            <p className="mt-1 text-xs text-green-700">+{quote.pointsEarned} Điểm Xanh sau khi giao</p>
+            <p className="mt-1 text-xs text-leaf-700">+{quote.pointsEarned} Điểm Xanh sau khi giao</p>
           )}
 
           <button
             onClick={() => place.mutate()}
             disabled={!addressId || !quote || place.isPending}
-            className="mt-4 w-full rounded-md bg-green-600 px-6 py-3 font-medium text-white hover:bg-green-700 disabled:bg-neutral-300"
+            className="mt-4 w-full rounded-md bg-primary-600 px-6 py-3 font-medium text-white hover:bg-primary-700 disabled:bg-neutral-300"
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
           </button>
@@ -176,7 +176,7 @@ export default function CheckoutPage() {
 
 function Row({ label, value, green }: { label: string; value: string; green?: boolean }) {
   return (
-    <div className={`mt-1 flex justify-between text-sm ${green ? 'text-green-700' : ''}`}>
+    <div className={`mt-1 flex justify-between text-sm ${green ? 'text-leaf-700' : ''}`}>
       <span className={green ? '' : 'text-neutral-600'}>{label}</span>
       <span>{value}</span>
     </div>
@@ -236,7 +236,7 @@ function AddressPicker({
         <label
           key={a.id}
           className={`flex cursor-pointer gap-3 rounded-md border p-3 text-sm ${
-            selectedId === a.id ? 'border-green-600 bg-green-50' : 'border-neutral-200'
+            selectedId === a.id ? 'border-primary-600 bg-primary-50' : 'border-neutral-200'
           }`}
         >
           <input type="radio" name="addr" checked={selectedId === a.id} onChange={() => onSelect(a.id)} className="mt-1" />
@@ -275,14 +275,14 @@ function AddressPicker({
             <button
               onClick={() => create.mutate()}
               disabled={!valid || create.isPending}
-              className="flex-1 rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+              className="flex-1 rounded bg-primary-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
             >
               Lưu địa chỉ
             </button>
           </div>
         </div>
       ) : (
-        <button onClick={() => setAdding(true)} className="text-sm font-semibold text-green-700">
+        <button onClick={() => setAdding(true)} className="text-sm font-semibold text-primary-700">
           + Thêm địa chỉ mới
         </button>
       )}
@@ -299,7 +299,7 @@ const LABEL: Record<keyof Form, string> = {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/gio-hang" className="text-sm text-green-600">← Về giỏ hàng</Link>
+      <Link href="/gio-hang" className="text-sm text-primary-600">← Về giỏ hàng</Link>
       <h1 className="mt-3 text-xl font-bold">Thanh toán</h1>
       <div className="mt-4">{children}</div>
     </main>

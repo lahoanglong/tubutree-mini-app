@@ -32,11 +32,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/" className="text-sm text-green-600">
+      <Link href="/" className="text-sm text-primary-600">
         ← Về trang chủ
       </Link>
       <div className="mt-4 grid gap-8 md:grid-cols-2">
-        <div className="flex aspect-square items-center justify-center rounded-xl bg-green-50 text-7xl">
+        <div className="flex aspect-square items-center justify-center rounded-xl bg-leaf-50 text-7xl">
           {product.thumbnail ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={product.thumbnail} alt={product.name} className="h-full w-full rounded-xl object-cover" />
@@ -45,7 +45,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           )}
         </div>
         <div>
-          <div className="text-sm font-semibold text-green-600">{product.brand}</div>
+          <div className="text-sm font-semibold text-primary-600">{product.brand}</div>
           <h1 className="text-2xl font-bold text-neutral-900">{product.name}</h1>
           <div className="mt-2 text-2xl font-bold text-clay-700">{formatVnd(price)}</div>
           {product.shortDesc && <p className="mt-3 text-neutral-600">{product.shortDesc}</p>}
@@ -53,7 +53,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           {product.certifications.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {product.certifications.map((c) => (
-                <span key={c} className="rounded bg-green-50 px-2 py-0.5 text-xs text-green-700">
+                <span key={c} className="rounded bg-leaf-50 px-2 py-0.5 text-xs text-leaf-700">
                   ✓ {c}
                 </span>
               ))}

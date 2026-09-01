@@ -69,7 +69,7 @@ export default async function StorefrontPage({
                     loading="lazy"
                   />
                 ) : (
-                  <div className="flex aspect-square w-full items-center justify-center bg-green-50 text-4xl">
+                  <div className="flex aspect-square w-full items-center justify-center bg-leaf-50 text-4xl">
                     🌿
                   </div>
                 )}

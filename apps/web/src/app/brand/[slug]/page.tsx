@@ -46,7 +46,7 @@ export default async function BrandPage({
           <h1 className="flex items-center gap-2 text-2xl font-bold text-neutral-900">
             {b.name}
             {b.isVerified && (
-              <span className="rounded-full bg-green-600 px-2 py-0.5 text-xs font-medium text-white">
+              <span className="rounded-full bg-leaf-600 px-2 py-0.5 text-xs font-medium text-white">
                 ✓ Chính hãng
               </span>
             )}
@@ -62,7 +62,7 @@ export default async function BrandPage({
             {b.certifications.map((c) => (
               <span
                 key={c.code}
-                className="whitespace-nowrap rounded-lg bg-green-50 px-3 py-1.5 text-sm text-green-800"
+                className="whitespace-nowrap rounded-lg bg-leaf-50 px-3 py-1.5 text-sm text-leaf-700"
               >
                 🌿 {c.label}
               </span>
@@ -108,7 +108,7 @@ export default async function BrandPage({
                     loading="lazy"
                   />
                 ) : (
-                  <div className="flex aspect-square w-full items-center justify-center bg-green-50 text-4xl">
+                  <div className="flex aspect-square w-full items-center justify-center bg-leaf-50 text-4xl">
                     🌿
                   </div>
                 )}
