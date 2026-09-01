@@ -5,6 +5,7 @@ import { randomBytes, randomInt } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { PricingService } from '../pricing/pricing.service';
+import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 
 /**
@@ -20,6 +21,7 @@ export class AffiliateService {
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
     private readonly pricing: PricingService,
+    private readonly pancakeOrder: PancakeOrderService,
   ) {}
 
   async register(userId: string) {
@@ -276,7 +278,14 @@ export class AffiliateService {
       });
     });
 
-    // Ngoài tx: tạo hoa hồng cho CTV (placedForCustomer cho phép self-referral). Non-fatal.
+    // Ngoài tx: đẩy Pancake để đơn vào pipeline giao vận (mirror checkout.placeOrder). Non-fatal —
+    // Pancake lỗi/chưa cấu hình không được chặn đơn CTV đã tạo; đơn giữ trạng thái chờ đồng bộ.
+    try {
+      await this.pancakeOrder.pushOrder(order.id);
+    } catch (err) {
+      this.logger.error(`Đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
+    }
+    // Tạo hoa hồng cho CTV (placedForCustomer cho phép self-referral). Non-fatal.
     await this.createCommissionForOrder(order.id).catch((err) =>
       this.logger.error(`Tạo commission lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`),
     );
