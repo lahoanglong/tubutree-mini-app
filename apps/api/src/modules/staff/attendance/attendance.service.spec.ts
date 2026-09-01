@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AttendanceService } from './attendance.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { SystemConfigService } from '../../system-config/system-config.service';
@@ -65,6 +66,25 @@ describe('AttendanceService.checkin', () => {
     await expect(mk(prisma).checkin('u1', GOOD_IP, { shiftId: 's1', ...IN })).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+
+  it('race: 2 checkin() song song — pre-check đọc "chưa có phiên mở" nhưng create() đụng unique index partial → BadRequest (không tạo 2 phiên mở, không khai khống giờ payroll)', async () => {
+    const create = jest.fn().mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' }),
+    );
+    const prisma = makePrisma({
+      shift: { findFirst: jest.fn().mockResolvedValue({ id: 's1', staffId: 'u1', status: 'APPROVED', startAt: new Date(), approvedStart: null }) },
+      attendanceSession: {
+        findFirst: jest.fn().mockResolvedValue(null), // pre-check: chưa thấy phiên mở (thua race)
+        count: jest.fn().mockResolvedValue(0),
+        create,
+        update: jest.fn(),
+      },
+    });
+    await expect(mk(prisma).checkin('u1', GOOD_IP, { shiftId: 's1', ...IN })).rejects.toThrow(
+      'Bạn đang trong ca, hãy checkout trước.',
+    );
+    expect(create).toHaveBeenCalledTimes(1);
   });
 
   it('checkin đúng, đúng giờ → tạo phiên, isLate=false', async () => {

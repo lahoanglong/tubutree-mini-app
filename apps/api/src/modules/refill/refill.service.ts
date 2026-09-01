@@ -25,28 +25,42 @@ export class RefillService {
       this.config.get<number>('refill.monthly_cap_bottles', 20),
     ]);
 
-    return this.prisma.$transaction(async (tx) => {
-      const used = await this.usedThisMonthTx(tx, userId);
-      const remaining = Math.max(0, monthlyCap - used);
-      if (quantity > remaining) {
-        throw new BadRequestException(`Tháng này bạn chỉ còn đổi được ${remaining} vỏ chai (trần ${monthlyCap}/tháng).`);
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const used = await this.usedThisMonthTx(tx, userId);
+          const remaining = Math.max(0, monthlyCap - used);
+          if (quantity > remaining) {
+            throw new BadRequestException(`Tháng này bạn chỉ còn đổi được ${remaining} vỏ chai (trần ${monthlyCap}/tháng).`);
+          }
+
+          const seedsAwarded = quantity * perBottle;
+          const item = await tx.bottleReturn.create({
+            data: { userId, quantity, seedsAwarded, status: 'PENDING' },
+          });
+
+          const totalRecycled = await this.totalRecycledTx(tx, userId);
+          return {
+            id: item.id,
+            quantity,
+            seedsAwarded,
+            status: 'PENDING',
+            monthlyRemaining: remaining - quantity,
+            totalRecycled,
+          };
+        },
+        // Serializable: đọc SUM tháng rồi INSERT không phải 1 phép atomic (không có cột đếm
+        // để updateMany+gte như stock/wallet) — 2 request đổi vỏ song song đọc CÙNG "used" rồi
+        // đều pass trần → vượt monthly_cap_bottles. Serializable buộc 1 trong 2 tx fail (P2034)
+        // thay vì âm thầm double-count (mirror dealer.service.ts credit-limit check).
+        { isolationLevel: 'Serializable' },
+      );
+    } catch (err) {
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+        throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
       }
-
-      const seedsAwarded = quantity * perBottle;
-      const item = await tx.bottleReturn.create({
-        data: { userId, quantity, seedsAwarded, status: 'PENDING' },
-      });
-
-      const totalRecycled = await this.totalRecycledTx(tx, userId);
-      return {
-        id: item.id,
-        quantity,
-        seedsAwarded,
-        status: 'PENDING',
-        monthlyRemaining: remaining - quantity,
-        totalRecycled,
-      };
-    });
+      throw err;
+    }
   }
 
   async getSummary(userId: string) {

@@ -497,7 +497,7 @@ export class CommunityFeedService {
       this.prisma.feedPost.update({ where: { id: postId }, data: { bestCommentId: commentId } }),
     ]);
     try {
-      await this.reward.rewardBestAnswer(comment.userId, post.userId, commentId);
+      await this.reward.rewardBestAnswer(comment.userId, post.userId, postId);
     } catch (err) {
       this.logger.warn(`rewardBestAnswer failed for comment ${commentId}: ${(err as Error).message}`);
     }

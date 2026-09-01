@@ -19,9 +19,18 @@ function makePrisma(over: Record<string, unknown> = {}) {
       count: jest.fn().mockResolvedValue(0),
     },
     shiftTemplate: { findMany: jest.fn(), create: jest.fn(), updateMany: jest.fn(), delete: jest.fn() },
-    $transaction: jest.fn((ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
   };
-  return { ...base, ...over } as unknown as PrismaService;
+  const merged = { ...base, ...over } as Record<string, unknown>;
+  // Dual-mode mặc định: copyWeek() gọi $transaction([...ops]) (mảng promise), cancelShift()
+  // gọi $transaction(async tx => {...}, {isolationLevel}) (callback) — tx nhận CHÍNH prisma
+  // mock này nên tx.shift.count/updateMany dùng chung mock đã set ở `over`. Test tự truyền
+  // `over.$transaction` (vd để giả lập P2034) thì giữ nguyên, không ghi đè.
+  if (!('$transaction' in over)) {
+    merged.$transaction = jest.fn((arg: unknown) =>
+      typeof arg === 'function' ? (arg as (tx: unknown) => unknown)(merged) : Promise.all(arg as Promise<unknown>[]),
+    );
+  }
+  return merged as unknown as PrismaService;
 }
 
 const mk = (prisma: PrismaService) => new ShiftsService(prisma, cfg);
@@ -150,6 +159,41 @@ describe('ShiftsService.cancelShift', () => {
     });
     const out = await mk(prisma).cancelShift('u1', 's1', { reason: 'kế hoạch' });
     expect(out).toEqual({ cancelled: true, penalty: false });
+  });
+
+  it('dùng $transaction isolationLevel Serializable (chống 2 huỷ ca khẩn cấp cùng lúc cùng vượt trần)', async () => {
+    const soon = new Date(Date.now() + 24 * 3600 * 1000);
+    const prisma = makePrisma({
+      shift: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 's1', staffId: 'u1', status: 'APPROVED', startAt: soon, approvedStart: null,
+          workDate: new Date('2026-07-10'),
+        }),
+        count: jest.fn().mockResolvedValue(0),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    });
+    await mk(prisma).cancelShift('u1', 's1', { reason: 'bận', isEmergency: true });
+    expect((prisma as unknown as { $transaction: jest.Mock }).$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      { isolationLevel: 'Serializable' },
+    );
+  });
+
+  it('race P2034 (serialization failure giữa 2 huỷ ca) → báo thử lại, không phải 500', async () => {
+    const soon = new Date(Date.now() + 24 * 3600 * 1000);
+    const prisma = makePrisma({
+      shift: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 's1', staffId: 'u1', status: 'APPROVED', startAt: soon, approvedStart: null,
+          workDate: new Date('2026-07-10'),
+        }),
+      },
+      $transaction: jest.fn().mockRejectedValue({ code: 'P2034', message: 'serialization failure' }),
+    });
+    await expect(mk(prisma).cancelShift('u1', 's1', { reason: 'bận' })).rejects.toThrow(
+      'Hệ thống đang bận xử lý, vui lòng thử lại.',
+    );
   });
 });
 

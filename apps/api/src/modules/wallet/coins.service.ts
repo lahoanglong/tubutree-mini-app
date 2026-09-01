@@ -57,8 +57,10 @@ export class CoinsService {
   }
 
   /**
-   * Cộng xu (thưởng/đổi-vào). Idempotent: partial unique index (reason WHERE refType='REFERRAL')
-   * → caller thua race / gọi lại ăn P2002 → bail no-op. Atomic create + increment.
+   * Cộng xu (thưởng/đổi-vào). Idempotent: partial unique index (reason WHERE refType='REFERRAL'
+   * hoặc 'COMMUNITY') → caller thua race / gọi lại ăn P2002 → bail no-op. Atomic create +
+   * increment. Nhận `tx?` để chạy TRONG transaction của caller (vd cap/ngày cần đọc-rồi-quyết
+   * cùng 1 tx Serializable với việc cấp xu, xem CommunityRewardService.rewardPost/rewardAnswer).
    */
   async grantCoins(
     userId: string,
@@ -66,9 +68,15 @@ export class CoinsService {
     reason: string,
     refType?: string,
     refId?: string,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     if (amount <= 0) return;
     try {
+      if (tx) {
+        await tx.coinTransaction.create({ data: { userId, delta: amount, reason, refType, refId } });
+        await tx.user.update({ where: { id: userId }, data: { coinsBalance: { increment: amount } } });
+        return;
+      }
       await this.prisma.$transaction([
         this.prisma.coinTransaction.create({ data: { userId, delta: amount, reason, refType, refId } }),
         this.prisma.user.update({ where: { id: userId }, data: { coinsBalance: { increment: amount } } }),

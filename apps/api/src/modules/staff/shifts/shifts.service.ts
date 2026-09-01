@@ -150,38 +150,55 @@ export class ShiftsService {
     const workStart = shift.approvedStart ?? shift.startAt;
     const monthStart = new Date(Date.UTC(shift.workDate.getUTCFullYear(), shift.workDate.getUTCMonth(), 1));
     const monthEnd = new Date(Date.UTC(shift.workDate.getUTCFullYear(), shift.workDate.getUTCMonth() + 1, 1));
-    // Đếm ca đột xuất đã ĐƯỢC MIỄN (penalty=false) trong tháng → áp cap.
-    const emergencyCount = await this.prisma.shift.count({
-      where: {
-        staffId,
-        status: 'CANCELLED',
-        isEmergency: true,
-        cancelPenalty: false,
-        workDate: { gte: monthStart, lt: monthEnd },
-      },
-    });
-    const decision = decideCancel({
-      now: new Date(),
-      workStart,
-      isEmergency: !!body.isEmergency,
-      hasEvidence: !!body.evidenceUrl,
-      emergencyCountThisMonth: emergencyCount,
-      noticeDays,
-      emergencyCap: cap,
-    });
-    const updated = await this.prisma.shift.updateMany({
-      where: { id, status: 'APPROVED' },
-      data: {
-        status: 'CANCELLED',
-        cancelReason: body.reason,
-        isEmergency: !!body.isEmergency,
-        evidenceUrl: body.evidenceUrl,
-        cancelledAt: new Date(),
-        cancelPenalty: decision.penalty,
-      },
-    });
-    if (updated.count === 0) throw new BadRequestException('Ca đã đổi trạng thái, thử lại.');
-    return { cancelled: true, penalty: decision.penalty };
+
+    let penalty: boolean;
+    try {
+      penalty = await this.prisma.$transaction(
+        async (tx) => {
+          // Đếm ca đột xuất đã ĐƯỢC MIỄN (penalty=false) trong tháng → áp cap. Đọc-rồi-quyết
+          // TRONG transaction Serializable: huỷ 2 ca khác nhau cùng lúc sát trần không thể
+          // cùng đọc chung 1 emergencyCount rồi cùng được miễn phạt (1 trong 2 sẽ P2034).
+          const emergencyCount = await tx.shift.count({
+            where: {
+              staffId,
+              status: 'CANCELLED',
+              isEmergency: true,
+              cancelPenalty: false,
+              workDate: { gte: monthStart, lt: monthEnd },
+            },
+          });
+          const decision = decideCancel({
+            now: new Date(),
+            workStart,
+            isEmergency: !!body.isEmergency,
+            hasEvidence: !!body.evidenceUrl,
+            emergencyCountThisMonth: emergencyCount,
+            noticeDays,
+            emergencyCap: cap,
+          });
+          const updated = await tx.shift.updateMany({
+            where: { id, status: 'APPROVED' },
+            data: {
+              status: 'CANCELLED',
+              cancelReason: body.reason,
+              isEmergency: !!body.isEmergency,
+              evidenceUrl: body.evidenceUrl,
+              cancelledAt: new Date(),
+              cancelPenalty: decision.penalty,
+            },
+          });
+          if (updated.count === 0) throw new BadRequestException('Ca đã đổi trạng thái, thử lại.');
+          return decision.penalty;
+        },
+        { isolationLevel: 'Serializable' },
+      );
+    } catch (err) {
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+        throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
+      }
+      throw err;
+    }
+    return { cancelled: true, penalty };
   }
 
   // ─────────────── Admin ───────────────

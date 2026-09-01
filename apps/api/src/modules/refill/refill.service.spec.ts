@@ -54,6 +54,21 @@ describe('RefillService.returnBottles', () => {
     await expect(svc.returnBottles('u1', 5)).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('race 2 đổi vỏ song song đụng Serializable (P2034) → báo thử lại, không phải 500', async () => {
+    const prisma = makePrisma({
+      $transaction: jest.fn().mockRejectedValue({ code: 'P2034', message: 'serialization failure' }),
+    });
+    const svc = new RefillService(prisma, makeConfig(), makeNotifications());
+    await expect(svc.returnBottles('u1', 3)).rejects.toThrow('Hệ thống đang bận xử lý, vui lòng thử lại.');
+  });
+
+  it('gọi $transaction với isolationLevel Serializable (chống TOCTOU đọc SUM tháng rồi insert)', async () => {
+    const prisma = makePrisma();
+    const svc = new RefillService(prisma, makeConfig(), makeNotifications());
+    await svc.returnBottles('u1', 3);
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'Serializable' });
+  });
+
   it('gửi đổi vỏ hợp lệ → tạo đơn PENDING (chưa cộng 💧 ngay)', async () => {
     const prisma = makePrisma();
     const svc = new RefillService(prisma, makeConfig({ 'refill.seeds_per_bottle': 50, 'refill.monthly_cap_bottles': 20 }), makeNotifications());

@@ -466,7 +466,7 @@ describe('CommunityFeedService.setBestAnswer', () => {
     expect(prisma.feedComment.updateMany).toHaveBeenCalledWith({ where: { postId: 'p1' }, data: { isAccepted: false } });
     expect(prisma.feedComment.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { isAccepted: true } });
     expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { bestCommentId: 'c1' } });
-    expect(reward.rewardBestAnswer).toHaveBeenCalledWith('answerer', 'author', 'c1');
+    expect(reward.rewardBestAnswer).toHaveBeenCalledWith('answerer', 'author', 'p1');
   });
 });
 

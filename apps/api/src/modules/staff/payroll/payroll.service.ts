@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { buildVietQrPayload } from '../../integrations/payment/vietqr';
@@ -51,9 +52,17 @@ export class PayrollService {
     amount: number,
     reason: string,
   ) {
+    // Pre-check nhanh + guard thật là unique index (shiftId, type) — 2 request recompute
+    // song song (vd 2 tab mở /staff/payroll) đều có thể đọc "chưa có phạt" trước khi request
+    // đầu commit; P2002 chặn tạo trùng, tránh trừ phạt 2 lần.
     const existing = await this.prisma.payrollAdjustment.findFirst({ where: { shiftId, type } });
     if (existing) return;
-    await this.prisma.payrollAdjustment.create({ data: { staffId, workDate, type, amount, reason, shiftId } });
+    try {
+      await this.prisma.payrollAdjustment.create({ data: { staffId, workDate, type, amount, reason, shiftId } });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return;
+      throw err;
+    }
   }
 
   /** Tính lại lương 1 ngày (workDate = midnight UTC của date-key VN). */

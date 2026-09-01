@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
@@ -162,14 +163,25 @@ export class OrdersService {
     if (Date.now() - new Date(deliveredAt).getTime() > windowDays * 864e5) {
       throw new BadRequestException(`Quá hạn đổi/trả (${windowDays} ngày từ khi nhận hàng).`);
     }
+    // Pre-check nhanh + guard thật là unique index partial (orderId WHERE status='REQUESTED')
+    // — 2 request gửi đổi/trả song song (double-tap/2 tab) đều có thể đọc "chưa có" trước khi
+    // request đầu commit; P2002 chặn tạo trùng.
     const existing = await this.prisma.returnRequest.findFirst({
       where: { orderId: order.id, status: 'REQUESTED' },
     });
     if (existing) throw new BadRequestException('Đơn đang có yêu cầu đổi/trả chờ xử lý.');
 
-    const req = await this.prisma.returnRequest.create({
-      data: { orderId: order.id, userId, reason: dto.reason, images: dto.images ?? [] },
-    });
+    let req: Awaited<ReturnType<typeof this.prisma.returnRequest.create>>;
+    try {
+      req = await this.prisma.returnRequest.create({
+        data: { orderId: order.id, userId, reason: dto.reason, images: dto.images ?? [] },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new BadRequestException('Đơn đang có yêu cầu đổi/trả chờ xử lý.');
+      }
+      throw err;
+    }
     await this.notifications.notify(userId, 'RETURN_REQUESTED', { order_code: code }).catch(() => undefined);
     return req;
   }

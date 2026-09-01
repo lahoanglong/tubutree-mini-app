@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PayrollService } from './payroll.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { SystemConfigService } from '../../system-config/system-config.service';
@@ -53,6 +54,18 @@ describe('PayrollService.ensureFines', () => {
     });
     await mk(prisma).ensureFines('u1', new Date('2026-07-03'), 30000);
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('race: 2 recompute song song — pre-check đọc "chưa có phạt" nhưng create() đụng unique index (shiftId,type) → nuốt lỗi, KHÔNG throw, KHÔNG trừ lương 2 lần', async () => {
+    const create = jest.fn().mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' }),
+    );
+    const prisma = makePrisma({
+      shift: { findMany: jest.fn().mockResolvedValue([{ id: 's1', cancelPenalty: false, sessions: [{ isLate: true }] }]) },
+      payrollAdjustment: { findFirst: jest.fn().mockResolvedValue(null), create }, // pre-check thua race
+    });
+    await expect(mk(prisma).ensureFines('u1', new Date('2026-07-03'), 30000)).resolves.toBeUndefined();
+    expect(create).toHaveBeenCalledTimes(1);
   });
 });
 

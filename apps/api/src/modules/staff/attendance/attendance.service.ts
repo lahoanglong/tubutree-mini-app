@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { verifyPresence, type AttnConfig, type VerifyReason } from './verify';
@@ -71,6 +72,10 @@ export class AttendanceService {
     const v = verifyPresence(cfg, ip, body.lat, body.lng);
     if (!v.ok) throw new BadRequestException(REASON_MSG[v.reason]);
 
+    // Pre-check nhanh cho UX (thông báo sớm) — KHÔNG phải guard chính: 2 request checkin()
+    // song song đều có thể đọc "chưa có phiên mở" trước khi phiên đầu commit. Guard thật là
+    // unique index partial `attendance_sessions_open_staff_key` (staffId WHERE checkoutAt
+    // IS NULL) bắt bằng P2002 bên dưới — chống double-checkin khai khống giờ công payroll.
     const open = await this.prisma.attendanceSession.findFirst({
       where: { staffId, checkoutAt: null },
       select: { id: true },
@@ -82,16 +87,24 @@ export class AttendanceService {
     const isLate =
       priorCount === 0 && Date.now() > effectiveStart.getTime() + cfg.graceMin * 60000;
 
-    const session = await this.prisma.attendanceSession.create({
-      data: {
-        shiftId: shift.id,
-        staffId,
-        checkinLat: body.lat,
-        checkinLng: body.lng,
-        checkinIp: ip,
-        isLate,
-      },
-    });
+    let session: { id: string };
+    try {
+      session = await this.prisma.attendanceSession.create({
+        data: {
+          shiftId: shift.id,
+          staffId,
+          checkinLat: body.lat,
+          checkinLng: body.lng,
+          checkinIp: ip,
+          isLate,
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new BadRequestException('Bạn đang trong ca, hãy checkout trước.');
+      }
+      throw err;
+    }
     if (isLate) this.logger.warn(`Checkin TRỄ: staff ${staffId} ca ${shift.id}`);
     return { sessionId: session.id, isLate };
   }

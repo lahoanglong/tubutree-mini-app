@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { OrdersService } from './orders.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
@@ -265,5 +266,36 @@ describe('OrdersService.cancel — flash sale quota restore', () => {
     );
     await svc.cancel('u1', 'TUBU1');
     expect(flash.restore).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrdersService.requestReturn', () => {
+  const deliveredOrder = { ...baseOrder, status: 'DELIVERED', updatedAt: new Date(), createdAt: new Date() };
+
+  function makeReturnService(over: { create?: jest.Mock; findFirst?: jest.Mock } = {}) {
+    const create = over.create ?? jest.fn().mockResolvedValue({ id: 'r1' });
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(deliveredOrder) },
+      returnRequest: { findFirst: over.findFirst ?? jest.fn().mockResolvedValue(null), create },
+    } as unknown as PrismaService;
+    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, flash), create };
+  }
+
+  it('race: 2 request đổi/trả song song — pre-check đọc "chưa có" nhưng create() đụng unique index partial (orderId, status=REQUESTED) → BadRequest, KHÔNG tạo 2 dòng', async () => {
+    const create = jest
+      .fn()
+      .mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' }));
+    const { svc } = makeReturnService({ create });
+    await expect(svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi' })).rejects.toThrow(
+      'Đơn đang có yêu cầu đổi/trả chờ xử lý.',
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('gửi hợp lệ (chưa có yêu cầu chờ xử lý) → tạo return request', async () => {
+    const { svc, create } = makeReturnService();
+    const r = await svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi sản phẩm' });
+    expect(r).toEqual({ id: 'r1' });
+    expect(create).toHaveBeenCalledTimes(1);
   });
 });
