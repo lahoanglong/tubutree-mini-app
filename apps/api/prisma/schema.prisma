@@ -1891,6 +1891,7 @@ model QuickReplyTemplate {
 model OaInboundMessage {
   id                String   @id @default(cuid())
   zaloUserId        String // OA follower id (user_id_by_app) — KHÔNG map cứng vào User
+  msgId             String?  @unique // Zalo message id — dedup khi webhook gửi trùng/retry (null = không có, không dedup)
   messageText       String?  @db.Text
   rawPayload        Json
   matchedTemplateId String?
@@ -1900,4 +1901,14 @@ model OaInboundMessage {
   @@index([zaloUserId])
   @@index([status])
   @@map("oa_inbound_messages")
+}
+
+// Đánh dấu đã gửi lời chào tự động cho zaloUserId này — @id là guard atomic (create + catch P2002)
+// chống 2 webhook đồng thời (tin đầu tiên trùng lúc) cùng đọc "chưa có tin nào trước đó" và
+// cùng gửi lời chào. Thay cho việc đếm OaInboundMessage trước đó (không atomic, có race).
+model OaGreetedUser {
+  zaloUserId String   @id
+  greetedAt  DateTime @default(now())
+
+  @@map("oa_greeted_users")
 }

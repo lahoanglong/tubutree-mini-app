@@ -1,6 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CskhService } from '../../cskh/cskh.service';
 import { ZaloOaMessageClient } from './zalo-oa-message.client';
@@ -31,7 +32,7 @@ export class ZaloOaEventsProcessor extends WorkerHost {
     if (!event || event.status !== 'RECEIVED') return;
 
     try {
-      const template = (await this.cskh.matchTemplate(event.messageText ?? '')) ?? (await this.greetingIfFirstMessage(event.zaloUserId, event.id));
+      const template = (await this.cskh.matchTemplate(event.messageText ?? '')) ?? (await this.greetingIfFirstMessage(event.zaloUserId));
 
       if (!template) {
         await this.prisma.oaInboundMessage.update({ where: { id: event.id }, data: { status: 'SKIPPED' } });
@@ -51,12 +52,21 @@ export class ZaloOaEventsProcessor extends WorkerHost {
     }
   }
 
-  /** Lời chào chỉ gửi cho tin ĐẦU TIÊN từ zaloUserId này (chưa có OaInboundMessage nào khác trước đó). */
-  private async greetingIfFirstMessage(zaloUserId: string, currentEventId: string) {
-    const priorCount = await this.prisma.oaInboundMessage.count({
-      where: { zaloUserId, id: { not: currentEventId } },
-    });
-    if (priorCount > 0) return null;
+  /**
+   * Lời chào chỉ gửi 1 lần cho mỗi zaloUserId. Guard thật là unique constraint trên
+   * OaGreetedUser.zaloUserId (create() ở đây là compare-and-swap: thắng race → gửi chào,
+   * thua race → P2002 → bỏ qua) — KHÔNG đếm OaInboundMessage trước đó (không atomic, 2
+   * webhook đồng thời của cùng tin đầu tiên sẽ cùng đọc "chưa có tin nào" và cùng gửi chào).
+   */
+  private async greetingIfFirstMessage(zaloUserId: string) {
+    try {
+      await this.prisma.oaGreetedUser.create({ data: { zaloUserId } });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        return null; // đã gửi (hoặc đang gửi) lời chào cho user này rồi
+      }
+      throw err;
+    }
     return this.cskh.getGreetingTemplate();
   }
 }

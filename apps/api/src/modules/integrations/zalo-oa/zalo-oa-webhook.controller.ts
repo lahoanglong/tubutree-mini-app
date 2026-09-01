@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
+import { Prisma } from '@prisma/client';
 import { timingSafeEqual } from 'node:crypto';
 import { Public } from '../../../common/decorators/public.decorator';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -63,9 +64,21 @@ export class ZaloOaWebhookController {
     const zaloUserId = body.sender?.id;
     if (!zaloUserId) return { received: true }; // event không phải tin nhắn của user (vd follow/unfollow) → bỏ qua êm
 
-    const event = await this.prisma.oaInboundMessage.create({
-      data: { zaloUserId, messageText: body.message?.text ?? null, rawPayload: body as object },
-    });
+    // msgId dedup: Zalo có thể gửi lại cùng 1 tin (retry/at-least-once) → unique index chặn
+    // tạo trùng row + enqueue trùng job (nếu không, "tin đầu tiên" có thể bị coi là 2 tin
+    // khác nhau → gửi lời chào 2 lần). Tin không có msg_id (hiếm) thì không dedup được, chấp nhận.
+    const msgId = body.message?.msg_id ?? null;
+    let event: { id: string };
+    try {
+      event = await this.prisma.oaInboundMessage.create({
+        data: { zaloUserId, msgId, messageText: body.message?.text ?? null, rawPayload: body as object },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        return { received: true }; // đã xử lý tin này rồi (webhook gửi trùng)
+      }
+      throw err;
+    }
     await this.queue.add('process', { eventId: event.id }, { jobId: event.id });
     return { received: true };
   }

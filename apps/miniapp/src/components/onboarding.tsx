@@ -110,20 +110,20 @@ function Onboarding({ onDone }: { onDone: () => void }) {
         display: 'flex',
         flexDirection: 'column',
         padding: '24px 20px calc(20px + var(--safe-bottom))',
-        color: '#fff',
+        color: 'var(--neutral-0)',
         overflowY: 'auto',
       }}
     >
       {step === 0 && (
         <Box flex flexDirection="column" alignItems="center" justifyContent="center" style={{ flex: 1, textAlign: 'center', gap: 12 }}>
           <Text style={{ fontSize: 72 }}>🌱</Text>
-          <Text bold style={{ color: '#fff', fontSize: 24 }}>
+          <Text bold style={{ color: 'var(--neutral-0)', fontSize: 24 }}>
             Chào mừng đến Tubu Tree!
           </Text>
           <Text style={{ color: 'rgba(255,255,255,0.9)' }}>
             Trả lời vài câu hỏi nhanh để chúng mình gợi ý sản phẩm hợp với bạn — và nhận quà chào mừng.
           </Text>
-          <Button onClick={() => setStep(1)} style={{ marginTop: 16, background: '#fff', color: 'var(--leaf-700)', minWidth: 200 }}>
+          <Button onClick={() => setStep(1)} style={{ marginTop: 16, background: 'var(--neutral-0)', color: 'var(--leaf-700)', minWidth: 200 }}>
             Bắt đầu
           </Button>
           <Text size="xSmall" onClick={onDone} style={{ color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>
@@ -146,13 +146,13 @@ function Onboarding({ onDone }: { onDone: () => void }) {
                     flex: 1,
                     height: 4,
                     borderRadius: 99,
-                    background: i < step ? '#fff' : 'rgba(255,255,255,0.3)',
+                    background: i < step ? 'var(--neutral-0)' : 'rgba(255,255,255,0.3)',
                   }}
                 />
               ))}
             </Box>
 
-            <Text bold style={{ color: '#fff', fontSize: 22, marginBottom: 4 }}>
+            <Text bold style={{ color: 'var(--neutral-0)', fontSize: 22, marginBottom: 4 }}>
               {q.title}
             </Text>
             <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.8)', marginBottom: 20 }}>
@@ -173,12 +173,12 @@ function Onboarding({ onDone }: { onDone: () => void }) {
                       gap: 12,
                       padding: '14px 16px',
                       borderRadius: 'var(--radius-lg)',
-                      background: active ? '#fff' : 'rgba(255,255,255,0.15)',
-                      border: `2px solid ${active ? '#fff' : 'rgba(255,255,255,0.3)'}`,
+                      background: active ? 'var(--neutral-0)' : 'rgba(255,255,255,0.15)',
+                      border: `2px solid ${active ? 'var(--neutral-0)' : 'rgba(255,255,255,0.3)'}`,
                     }}
                   >
                     <Text style={{ fontSize: 24 }}>{o.emoji}</Text>
-                    <Text bold style={{ flex: 1, color: active ? 'var(--leaf-700)' : '#fff' }}>
+                    <Text bold style={{ flex: 1, color: active ? 'var(--leaf-700)' : 'var(--neutral-0)' }}>
                       {o.label}
                     </Text>
                     {active && <Text style={{ color: 'var(--leaf-700)' }}>✓</Text>}
@@ -196,7 +196,7 @@ function Onboarding({ onDone }: { onDone: () => void }) {
                   if (step < total) setStep(step + 1);
                   else submit.mutate();
                 }}
-                style={{ background: '#fff', color: 'var(--leaf-700)' }}
+                style={{ background: 'var(--neutral-0)', color: 'var(--leaf-700)' }}
               >
                 {step < total ? 'Tiếp tục' : 'Hoàn tất'}
               </Button>
@@ -217,14 +217,14 @@ function Onboarding({ onDone }: { onDone: () => void }) {
       {step === finishStep && (
         <Box flex flexDirection="column" alignItems="center" justifyContent="center" style={{ flex: 1, textAlign: 'center', gap: 12 }}>
           <Text style={{ fontSize: 72 }}>🎁</Text>
-          <Text bold style={{ color: '#fff', fontSize: 24 }}>
+          <Text bold style={{ color: 'var(--neutral-0)', fontSize: 24 }}>
             Tuyệt vời!
           </Text>
           <Text style={{ color: 'rgba(255,255,255,0.9)' }}>
             Chúng mình đã ghi nhận sở thích của bạn và sẽ gợi ý sản phẩm phù hợp hơn. Chúc bạn mua sắm
             sống xanh thật vui! 🌿
           </Text>
-          <Button onClick={onDone} style={{ marginTop: 16, background: '#fff', color: 'var(--leaf-700)', minWidth: 200 }}>
+          <Button onClick={onDone} style={{ marginTop: 16, background: 'var(--neutral-0)', color: 'var(--leaf-700)', minWidth: 200 }}>
             Khám phá ngay
           </Button>
         </Box>

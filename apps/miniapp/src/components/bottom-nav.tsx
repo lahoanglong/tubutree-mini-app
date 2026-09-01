@@ -77,7 +77,7 @@ export default function BottomNav() {
                   border: '3px solid var(--neutral-0)',
                 }}
               >
-                <t.Icon size={26} color="#fff" strokeWidth={2} absoluteStrokeWidth />
+                <t.Icon size={26} color="var(--neutral-0)" strokeWidth={2} absoluteStrokeWidth />
               </div>
               <span style={{ fontSize: 10.5, color, fontWeight: active ? 700 : 500 }}>
                 {t.label}

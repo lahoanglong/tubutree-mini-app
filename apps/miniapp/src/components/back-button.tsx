@@ -62,7 +62,7 @@ export default function BackButton() {
         cursor: 'pointer',
       }}
     >
-      <ChevronLeft size={24} color="var(--neutral-800, #2b2b2b)" strokeWidth={2.2} />
+      <ChevronLeft size={24} color="var(--neutral-900)" strokeWidth={2.2} />
     </button>
   );
 }

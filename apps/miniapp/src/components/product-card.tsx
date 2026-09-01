@@ -68,7 +68,7 @@ export default function ProductCard({ product }: { product: ProductCardType }) {
               top: 8,
               left: 8,
               background: 'var(--clay-500)',
-              color: 'white',
+              color: 'var(--neutral-0)',
               padding: '2px 8px',
               borderRadius: 'var(--radius-full)',
             }}

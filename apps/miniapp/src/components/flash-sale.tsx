@@ -99,7 +99,7 @@ export function FlashSale() {
                     top: 6,
                     left: 6,
                     background: 'var(--clay-500)',
-                    color: '#fff',
+                    color: 'var(--neutral-0)',
                     padding: '1px 6px',
                     borderRadius: 'var(--radius-full)',
                   }}
@@ -200,7 +200,7 @@ function UpcomingFlashCard({
             top: 6,
             left: 6,
             background: 'var(--clay-500)',
-            color: '#fff',
+            color: 'var(--neutral-0)',
             padding: '1px 6px',
             borderRadius: 'var(--radius-full)',
           }}
@@ -243,7 +243,7 @@ function UpcomingFlashCard({
             fontWeight: 600,
             opacity: pending ? 0.6 : 1,
             background: item.reminded ? 'var(--leaf-50)' : 'var(--primary-600)',
-            color: item.reminded ? 'var(--leaf-700)' : '#fff',
+            color: item.reminded ? 'var(--leaf-700)' : 'var(--neutral-0)',
           }}
         >
           {item.reminded ? vi.flashSale.reminded : vi.flashSale.remindMe}

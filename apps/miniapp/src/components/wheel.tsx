@@ -124,7 +124,7 @@ export function WheelOfFortune({
             zIndex: 2,
           }}
         >
-          <Text bold style={{ color: '#fff', fontSize: 11 }}>
+          <Text bold style={{ color: 'var(--neutral-0)', fontSize: 11 }}>
             QUAY
           </Text>
         </Box>
