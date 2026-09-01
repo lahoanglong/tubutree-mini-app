@@ -1,10 +1,14 @@
 name: CI
 
+# Trigger tự động (push/pull_request) TẮT TẠM THỜI 2026-09-01 — VM prod đang down, đang
+# test cục bộ trước khi bật lại CI/CD. Vẫn chạy tay được qua workflow_dispatch (tab Actions
+# → CI → Run workflow). Bật lại tự động: bỏ comment 2 mục push/pull_request bên dưới.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch: {}
+  # push:
+  #   branches: [main]
+  # pull_request:
+  #   branches: [main]
 
 jobs:
   verify:

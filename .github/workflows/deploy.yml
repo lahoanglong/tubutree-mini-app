@@ -9,12 +9,17 @@ name: Deploy API to VM
 # Gate bằng workflow_run: chỉ deploy SAU KHI workflow "CI" trên main pass.
 # Lý do chọn workflow_run thay vì `needs: ci`: ci.yml và deploy.yml là 2 workflow
 # riêng (path filter của deploy khác CI), không thể `needs:` cross-workflow.
+#
+# Trigger tự động (workflow_run) TẮT TẠM THỜI 2026-09-01 — VM prod đang down (đã tắt),
+# push lên main lúc này sẽ chỉ khiến job SSH-deploy fail vô ích. Đang test cục bộ trước.
+# Chỉ chạy tay qua workflow_dispatch (tab Actions → Deploy API to VM → Run workflow) khi
+# VM đã sống lại và sẵn sàng deploy thật. Bật lại tự động: bỏ comment khối workflow_run.
 on:
-  workflow_run:
-    workflows: ["CI"]
-    branches: [main]
-    types: [completed]
   workflow_dispatch: {}
+  # workflow_run:
+  #   workflows: ["CI"]
+  #   branches: [main]
+  #   types: [completed]
 
 jobs:
   deploy:
