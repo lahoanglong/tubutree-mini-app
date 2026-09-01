@@ -35,6 +35,7 @@ import {
 } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
 import { Skeleton } from '../components/ui/skeleton';
+import { ErrorState } from '../components/ui/empty-state';
 import { WheelOfFortune } from '../components/wheel';
 import { haptic } from '../utils/haptic';
 import { getErrorMessage } from '../services/api';
@@ -57,7 +58,7 @@ export default function GamePage() {
   const navigate = useNavigate();
   const authed = status === 'authenticated';
 
-  const { data: profile, isLoading } = useQuery({
+  const { data: profile, isLoading, isError, error: profileError, refetch } = useQuery({
     queryKey: ['game', 'profile'],
     queryFn: getGameProfile,
     enabled: authed,
@@ -245,6 +246,16 @@ export default function GamePage() {
           <Skeleton style={{ height: 56, borderRadius: 'var(--radius-lg)' }} />
           <Skeleton style={{ height: 140, borderRadius: 'var(--radius-lg)' }} />
         </Box>
+      </Page>
+    );
+  }
+
+  // Profile là dữ liệu chủ đạo của trang (streak/xu/eco-impact) — lỗi thì phải báo rõ,
+  // không để rơi xuống render với optional-chaining trông như "mất hết tiến độ".
+  if (isError) {
+    return (
+      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+        <ErrorState message={getErrorMessage(profileError)} onRetry={() => void refetch()} />
       </Page>
     );
   }

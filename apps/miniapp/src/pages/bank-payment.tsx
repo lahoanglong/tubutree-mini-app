@@ -96,7 +96,12 @@ export default function BankPaymentPage() {
       <Page className="page" style={{ background: 'var(--neutral-50)' }}>
         <Box style={{ textAlign: 'center', padding: '48px 24px' }}>
           <Text style={{ color: 'var(--neutral-600)' }}>Không tải được thông tin thanh toán.</Text>
-          <Button onClick={() => navigate(`/order/${code}`, { replace: true })} style={{ marginTop: 16 }}>Xem đơn hàng</Button>
+          <Button loading={isFetching} onClick={() => void refetch()} style={{ marginTop: 16, background: 'var(--leaf-600)' }}>
+            Thử lại
+          </Button>
+          <Button variant="secondary" onClick={() => navigate(`/order/${code}`, { replace: true })} style={{ marginTop: 8 }}>
+            Xem đơn hàng
+          </Button>
         </Box>
       </Page>
     );
