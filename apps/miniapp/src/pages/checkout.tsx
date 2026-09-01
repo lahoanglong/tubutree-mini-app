@@ -14,6 +14,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd } from '../utils/format';
 import { newIdempotencyKey } from '../utils/idempotency';
+import { isInvoiceValid, shouldFallbackToCod } from '../utils/checkout-rules';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 
@@ -80,16 +81,14 @@ export default function CheckoutPage() {
     enabled: !!addressId && authed,
   });
 
-  const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const invoiceValid =
-    !wantInvoice ||
-    (invoice.taxCode.trim() && invoice.companyName.trim() && invoice.address.trim() && EMAIL.test(invoice.email.trim()));
+  const invoiceValid = isInvoiceValid(wantInvoice, invoice);
 
   // Đang chọn Ví/TubuXu mà tổng đơn vượt số dư → tự trả về COD, tránh đặt fail.
   useEffect(() => {
     if (!quote.data) return;
-    if (payment === 'WALLET' && (user?.walletBalance ?? 0) < quote.data.total) setPayment('COD');
-    if (payment === 'XU' && (user?.coinsBalance ?? 0) < quote.data.total) setPayment('COD');
+    if (shouldFallbackToCod(payment, user?.walletBalance ?? 0, user?.coinsBalance ?? 0, quote.data.total)) {
+      setPayment('COD');
+    }
   }, [payment, quote.data, user?.walletBalance, user?.coinsBalance]);
 
   const order = useMutation({

@@ -19,22 +19,12 @@ import { formatVnd } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
+import { recompute } from '../utils/cart-rules';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 
 const UNDO_WINDOW_MS = 3500;
 const CART_KEY = ['cart'] as const;
-
-/** Tính lại tổng giỏ phía client cho optimistic update (discount để server tính lại sau). */
-function recompute(cart: CartSummary, items: CartLine[]): CartSummary {
-  const lines = items.map((l) => ({ ...l, total: l.unitPrice * l.quantity }));
-  return {
-    ...cart,
-    items: lines,
-    subtotal: lines.reduce((s, l) => s + l.total, 0),
-    itemCount: lines.reduce((s, l) => s + l.quantity, 0),
-  };
-}
 
 /**
  * Mutation giỏ hàng kiểu optimistic (AD-005):

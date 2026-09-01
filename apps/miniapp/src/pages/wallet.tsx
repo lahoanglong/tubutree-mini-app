@@ -8,6 +8,7 @@ import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
 import { useAuthStore } from '../store/auth';
 import { newIdempotencyKey } from '../utils/idempotency';
+import { canWithdraw as canWithdrawRule, canConvertToXu } from '../utils/wallet-rules';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -73,14 +74,8 @@ export default function WalletPage() {
   const min = w?.withdrawMin ?? 100000;
   const multiplier = w?.xuConvertMultiplier ?? 1.2;
 
-  const canWithdraw =
-    amountNum >= min &&
-    w != null &&
-    amountNum <= w.walletBalance &&
-    bank.bankName.trim().length > 0 &&
-    bank.accountNumber.trim().length >= 6 &&
-    bank.accountName.trim().length > 0;
-  const canConvert = w != null && convertNum > 0 && convertNum <= w.walletBalance;
+  const canWithdraw = canWithdrawRule(amountNum, w, min, bank);
+  const canConvert = canConvertToXu(convertNum, w);
 
   const shareReferral = async () => {
     if (!coins) return;
