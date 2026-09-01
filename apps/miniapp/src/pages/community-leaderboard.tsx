@@ -1,4 +1,4 @@
-import { Box, Page, Text, Button, Spinner } from 'zmp-ui';
+import { Box, Page, Text, Button } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { Trophy } from 'lucide-react';
 import { getLeaderboard, type LeaderboardEntry } from '../services/feed-api';
@@ -22,12 +22,14 @@ export default function CommunityLeaderboardPage() {
     enabled: authed,
   });
 
-  // Đang silent-login lúc mở app (restore chưa xong) → spinner thay vì chớp cổng đăng nhập.
+  // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
   if (status === 'loading') {
     return (
-      <Page className="page">
-        <Box flex justifyContent="center" p={6}>
-          <Spinner />
+      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+        <Box p={3} flex flexDirection="column" style={{ gap: 8 }}>
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} height={56} radius="var(--radius-md)" />
+          ))}
         </Box>
       </Page>
     );

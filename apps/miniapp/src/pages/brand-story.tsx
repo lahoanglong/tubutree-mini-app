@@ -110,7 +110,7 @@ export default function BrandStoryPage() {
   const [selected, setSelected] = useState<BrandLocation | null>(null);
 
   return (
-    <Page className="page" style={{ background: '#f5f3ee', paddingBottom: 32 }}>
+    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 32 }}>
       <Box p={4} pb={2}>
         <Text style={{ color: 'var(--neutral-700)', lineHeight: 1.5 }}>
           Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Chạm mốc trên bản đồ gỗ 3D để khám phá xuất xứ 🌿
@@ -146,7 +146,7 @@ export default function BrandStoryPage() {
               boxShadow: 'var(--shadow-sm)',
               minHeight: 135,
               background: loc.gradient,
-              color: '#fff',
+              color: 'var(--neutral-0)',
               padding: 14,
               display: 'flex',
               flexDirection: 'column',
@@ -155,7 +155,7 @@ export default function BrandStoryPage() {
           >
             <Text style={{ fontSize: 34 }}>{loc.emoji}</Text>
             <Box>
-              <Text bold style={{ color: '#fff' }}>
+              <Text bold style={{ color: 'var(--neutral-0)' }}>
                 {loc.brand}
               </Text>
               <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.92)' }}>
@@ -169,9 +169,9 @@ export default function BrandStoryPage() {
       <Sheet visible={selected != null} onClose={() => setSelected(null)} autoHeight>
         {selected && (
           <Box style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-            <Box style={{ background: selected.gradient, padding: 24, color: '#fff', textAlign: 'center' }}>
+            <Box style={{ background: selected.gradient, padding: 24, color: 'var(--neutral-0)', textAlign: 'center' }}>
               <Text style={{ fontSize: 56 }}>{selected.emoji}</Text>
-              <Text bold size="xLarge" style={{ color: '#fff', marginTop: 4 }}>
+              <Text bold size="xLarge" style={{ color: 'var(--neutral-0)', marginTop: 4 }}>
                 {selected.brand}
               </Text>
               <Text size="small" style={{ color: 'rgba(255,255,255,0.92)' }}>
@@ -202,7 +202,7 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandLocation) => void }) {
           maxWidth: 370,
           margin: '0 auto',
           aspectRatio: '3 / 4.6',
-          background: '#eae6df',
+          background: 'var(--neutral-200)',
           borderRadius: 'var(--radius-xl)',
           border: '1px solid #d4ceb8',
           overflow: 'hidden',
@@ -500,7 +500,7 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandLocation) => void }) {
                 placeItems: 'center',
                 fontSize: 15,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
-                border: '2px solid #ffffff',
+                border: '2px solid var(--neutral-0)',
               }}
             >
               {loc.emoji}

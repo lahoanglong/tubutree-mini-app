@@ -174,7 +174,7 @@ export default function ProfilePage() {
         p={4}
         style={{
           background: 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))',
-          color: '#fff',
+          color: 'var(--neutral-0)',
         }}
       >
         <Box
@@ -189,7 +189,7 @@ export default function ProfilePage() {
         >
           <Avatar size={56} src={user.avatarUrl ?? undefined} />
           <Box style={{ flex: 1 }}>
-            <Text bold size="large" style={{ color: '#fff', lineHeight: '1.2' }}>
+            <Text bold size="large" style={{ color: 'var(--neutral-0)', lineHeight: '1.2' }}>
               {user.fullName ?? 'Khách Tubu'}
             </Text>
             <Box flex alignItems="center" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
@@ -203,8 +203,8 @@ export default function ProfilePage() {
                   borderRadius: 'var(--radius-full)',
                 }}
               >
-                <Leaf size={12} color="#fff" strokeWidth={2} />
-                <Text size="xSmall" style={{ color: '#fff' }}>
+                <Leaf size={12} color="var(--neutral-0)" strokeWidth={2} />
+                <Text size="xSmall" style={{ color: 'var(--neutral-0)' }}>
                   {tierName}
                 </Text>
               </Box>
@@ -220,8 +220,8 @@ export default function ProfilePage() {
                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                 }}
               >
-                <Pencil size={11} color="#fff" strokeWidth={2} />
-                <Text size="xSmall" bold style={{ color: '#fff' }}>
+                <Pencil size={11} color="var(--neutral-0)" strokeWidth={2} />
+                <Text size="xSmall" bold style={{ color: 'var(--neutral-0)' }}>
                   Sửa hồ sơ ›
                 </Text>
               </Box>
@@ -243,8 +243,8 @@ export default function ProfilePage() {
               Mã giới thiệu: <b>{user.referralCode}</b>
             </Text>
             <Box flex alignItems="center" style={{ gap: 4 }}>
-              <Copy size={13} color="#fff" strokeWidth={2} />
-              <Text size="xSmall" style={{ color: '#fff' }}>
+              <Copy size={13} color="var(--neutral-0)" strokeWidth={2} />
+              <Text size="xSmall" style={{ color: 'var(--neutral-0)' }}>
                 Sao chép
               </Text>
             </Box>
@@ -306,7 +306,7 @@ export default function ProfilePage() {
                       padding: '0 5px',
                       borderRadius: 'var(--radius-full)',
                       background: 'var(--primary-600)',
-                      color: '#fff',
+                      color: 'var(--neutral-0)',
                       fontSize: 11,
                       fontWeight: 700,
                       display: 'flex',

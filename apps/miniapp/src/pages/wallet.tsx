@@ -118,7 +118,7 @@ export default function WalletPage() {
               <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
                 Ví Tubu (số dư khả dụng)
               </Text>
-              <Text bold style={{ fontSize: 32, lineHeight: '40px', color: '#fff', marginTop: 4 }}>
+              <Text bold style={{ fontSize: 32, lineHeight: '40px', color: 'var(--neutral-0)', marginTop: 4 }}>
                 {formatVnd(w.walletBalance)}
               </Text>
               <Box flex style={{ gap: 8, marginTop: 16 }}>
@@ -134,7 +134,7 @@ export default function WalletPage() {
                 <Button
                   variant="secondary"
                   size="small"
-                  style={{ flex: 1, background: 'rgba(255,255,255,0.18)', color: '#fff', fontSize: 13, padding: '0 8px' }}
+                  style={{ flex: 1, background: 'rgba(255,255,255,0.18)', color: 'var(--neutral-0)', fontSize: 13, padding: '0 8px' }}
                   prefixIcon={<Landmark size={15} strokeWidth={2} />}
                   onClick={() => {
                     // Mỗi lần MỞ Sheet = 1 lệnh rút mới → key mới (double-tap trong cùng phiên giữ
@@ -160,20 +160,20 @@ export default function WalletPage() {
               style={{
                 alignItems: 'center',
                 gap: 12,
-                background: 'linear-gradient(135deg, var(--clay-500, #d98b3a), var(--clay-700, #b46a1f))',
+                background: 'linear-gradient(135deg, var(--clay-500), var(--clay-700))',
                 borderRadius: 'var(--radius-xl)',
-                color: '#fff',
+                color: 'var(--neutral-0)',
                 boxShadow: 'var(--shadow-sm)',
               }}
             >
               <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                <Coins size={24} color="#fff" strokeWidth={2} />
+                <Coins size={24} color="var(--neutral-0)" strokeWidth={2} />
               </Box>
               <Box style={{ flex: 1 }}>
                 <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
                   TubuXu (tiêu trong app)
                 </Text>
-                <Text bold style={{ fontSize: 24, color: '#fff', lineHeight: '30px' }}>
+                <Text bold style={{ fontSize: 24, color: 'var(--neutral-0)', lineHeight: '30px' }}>
                   {formatXu(coins?.coinsBalance ?? w.coinsBalance)}
                 </Text>
               </Box>
@@ -238,7 +238,7 @@ export default function WalletPage() {
                     <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>bạn thành công</Text>
                   </Box>
                   <Box>
-                    <Text bold size="large" style={{ color: 'var(--clay-700, #b46a1f)' }}>{formatXu(coins.referralEarned)}</Text>
+                    <Text bold size="large" style={{ color: 'var(--clay-700)' }}>{formatXu(coins.referralEarned)}</Text>
                     <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>đã nhận từ giới thiệu</Text>
                   </Box>
                 </Box>
@@ -272,8 +272,8 @@ export default function WalletPage() {
           </Box>
 
           <Box mx={4} mb={4} p={4} flex style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-lg)', gap: 8 }}>
-            <Coins size={18} color="var(--clay-700, #b46a1f)" strokeWidth={1.9} style={{ flex: '0 0 auto', marginTop: 1 }} />
-            <Text size="xSmall" style={{ color: 'var(--clay-700, #b46a1f)' }}>
+            <Coins size={18} color="var(--clay-700)" strokeWidth={1.9} style={{ flex: '0 0 auto', marginTop: 1 }} />
+            <Text size="xSmall" style={{ color: 'var(--clay-700)' }}>
               Mẹo: đổi tiền Ví sang <b>TubuXu (×{multiplier})</b> để được thêm{' '}
               {Math.round((multiplier - 1) * 100)}% giá trị mua sắm — và <b>miễn phí</b>, thay vì rút về
               ngân hàng (phí chuyển khoản {formatVnd(fee)}/lần).
@@ -292,7 +292,7 @@ export default function WalletPage() {
 
           {(w?.walletBalance ?? 0) <= 0 && (
             <Box mb={3} p={3} style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--clay-200)' }}>
-              <Text size="xSmall" style={{ color: 'var(--clay-700, #b46a1f)' }}>
+              <Text size="xSmall" style={{ color: 'var(--clay-700)' }}>
                 🌱 Bạn chưa có số dư khả dụng trong Ví Tubu (0đ). Hãy tích lũy hoa hồng từ Đơn hàng/CTV hoặc Hoàn tiền sàn ngoài để đổi sang TubuXu (×{multiplier})!
               </Text>
             </Box>
@@ -308,7 +308,7 @@ export default function WalletPage() {
           />
           {convertNum > 0 && (
             <Box mt={2} p={3} style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)' }}>
-              <Text size="small" style={{ color: 'var(--clay-700, #b46a1f)' }}>
+              <Text size="small" style={{ color: 'var(--clay-700)' }}>
                 Nhận ≈ <b>{formatXu(Math.floor(convertNum * multiplier))}</b>
               </Text>
             </Box>
@@ -334,7 +334,7 @@ export default function WalletPage() {
 
           {(w?.walletBalance ?? 0) < min && (
             <Box mb={3} p={3} style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--clay-200)' }}>
-              <Text size="xSmall" style={{ color: 'var(--clay-700, #b46a1f)' }}>
+              <Text size="xSmall" style={{ color: 'var(--clay-700)' }}>
                 ⚠️ Số dư Ví Tubu của bạn ({formatVnd(w?.walletBalance ?? 0)}) chưa đủ mốc tối thiểu {formatVnd(min)} để rút về ngân hàng.
               </Text>
             </Box>

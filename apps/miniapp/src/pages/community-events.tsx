@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Spinner, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { PartyPopper, ChevronLeft } from 'lucide-react';
 import { listEvents, eventPosts, getCategories, type CommunityEvent, type FeedItem } from '../services/feed-api';
@@ -37,12 +37,14 @@ export default function CommunityEventsPage() {
     enabled: authed && Boolean(selected),
   });
 
-  // Đang silent-login lúc mở app (restore chưa xong) → spinner thay vì chớp cổng đăng nhập.
+  // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
   if (status === 'loading') {
     return (
-      <Page className="page">
-        <Box flex justifyContent="center" p={6}>
-          <Spinner />
+      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+        <Box p={3} flex flexDirection="column" style={{ gap: 12 }}>
+          {Array.from({ length: 3 }, (_, i) => (
+            <Skeleton key={i} height={140} radius="var(--radius-lg)" />
+          ))}
         </Box>
       </Page>
     );

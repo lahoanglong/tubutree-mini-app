@@ -21,7 +21,7 @@ const TXN_META: Record<CashbackStatus, { label: string; color: string; bg: strin
   PENDING: { label: 'Chờ duyệt', color: 'var(--clay-700)', bg: 'var(--clay-50)' },
   CONFIRMED: { label: 'Đã duyệt', color: 'var(--leaf-700)', bg: 'var(--leaf-50)' },
   PAID: { label: 'Đã hoàn vào Ví', color: 'var(--neutral-600)', bg: 'var(--neutral-100)' },
-  REJECTED: { label: 'Từ chối', color: 'var(--danger)', bg: '#fbe9e9' },
+  REJECTED: { label: 'Từ chối', color: 'var(--danger)', bg: 'var(--danger-bg)' },
 };
 
 export default function CashbackPage() {

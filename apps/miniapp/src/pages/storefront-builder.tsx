@@ -131,9 +131,33 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
                     {vi.contentKit.entryLabel}
                   </Text>
                 )}
-                <Text size="xSmall" className="tubu-press" onClick={() => itemMut.mutate({ id: it.id, dto: { isPinned: !it.isPinned } })}>⤒</Text>
-                <Text size="xSmall" className="tubu-press" onClick={() => itemMut.mutate({ id: it.id, dto: { isHidden: !it.isHidden } })}>{it.isHidden ? '🙈' : '👁'}</Text>
-                <Text size="xSmall" className="tubu-press" style={{ color: 'var(--danger)' }} onClick={() => setConfirmDeleteItemId(it.id)}>✕</Text>
+                <Box
+                  role="button"
+                  aria-label={it.isPinned ? 'Bỏ ghim' : 'Ghim lên đầu'}
+                  className="tubu-press"
+                  style={{ minWidth: 36, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                  onClick={() => itemMut.mutate({ id: it.id, dto: { isPinned: !it.isPinned } })}
+                >
+                  <Text size="xSmall">⤒</Text>
+                </Box>
+                <Box
+                  role="button"
+                  aria-label={it.isHidden ? 'Hiện sản phẩm' : 'Ẩn sản phẩm'}
+                  className="tubu-press"
+                  style={{ minWidth: 36, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                  onClick={() => itemMut.mutate({ id: it.id, dto: { isHidden: !it.isHidden } })}
+                >
+                  <Text size="xSmall">{it.isHidden ? '🙈' : '👁'}</Text>
+                </Box>
+                <Box
+                  role="button"
+                  aria-label="Xoá khỏi bộ sưu tập"
+                  className="tubu-press"
+                  style={{ minWidth: 36, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                  onClick={() => setConfirmDeleteItemId(it.id)}
+                >
+                  <Text size="xSmall" style={{ color: 'var(--danger)' }}>✕</Text>
+                </Box>
               </Box>
             );
           })}

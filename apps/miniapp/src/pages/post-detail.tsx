@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, Spinner, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Trash2, Flag, Pin } from 'lucide-react';
 import {
@@ -19,6 +19,7 @@ import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { timeAgo } from '../utils/time-ago';
 import { formatVnd } from '../utils/format';
+import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
@@ -137,15 +138,9 @@ export default function PostDetailPage() {
     },
   });
 
-  // Đang silent-login lúc mở app (restore chưa xong) → spinner thay vì chớp cổng đăng nhập.
+  // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
   if (status === 'loading') {
-    return (
-      <Page className="page">
-        <Box flex justifyContent="center" p={6}>
-          <Spinner />
-        </Box>
-      </Page>
-    );
+    return <PostSkeleton />;
   }
 
   // BE yêu cầu JWT cho mọi route /feed/:id (kể cả GET) — chưa đăng nhập thì không có gì để xem.
@@ -164,13 +159,7 @@ export default function PostDetailPage() {
   }
 
   if (post.isLoading) {
-    return (
-      <Page className="page">
-        <Box flex justifyContent="center" p={6}>
-          <Spinner />
-        </Box>
-      </Page>
-    );
+    return <PostSkeleton />;
   }
 
   if (post.isError || !post.data) {
@@ -414,8 +403,21 @@ export default function PostDetailPage() {
         </Text>
 
         {comments.isLoading ? (
-          <Box flex justifyContent="center" p={4}>
-            <Spinner />
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[0, 1].map((i) => (
+              <Box
+                key={i}
+                p={3}
+                style={{ borderRadius: 'var(--radius-md)', background: 'var(--neutral-50)', display: 'flex', flexDirection: 'column', gap: 8 }}
+              >
+                <Box flex alignItems="center" style={{ gap: 8 }}>
+                  <Skeleton width={28} height={28} radius="50%" />
+                  <Skeleton width="30%" height={12} />
+                </Box>
+                <Skeleton width="90%" height={12} />
+                <Skeleton width="60%" height={12} />
+              </Box>
+            ))}
           </Box>
         ) : comments.isError ? (
           <ErrorState message={getErrorMessage(comments.error)} onRetry={() => void comments.refetch()} />
@@ -565,6 +567,27 @@ export default function PostDetailPage() {
           </Button>
         </Box>
       </Sheet>
+    </Page>
+  );
+}
+
+/** Skeleton match layout bài viết (avatar+tên, tiêu đề, vài dòng thân bài, ảnh) — dùng cho cả 2 trạng thái loading trước khi có dữ liệu bài viết. */
+function PostSkeleton() {
+  return (
+    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+      <Box p={4} style={{ background: 'var(--neutral-0)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Box flex alignItems="center" style={{ gap: 10 }}>
+          <Skeleton width={40} height={40} radius="50%" />
+          <Box style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <Skeleton width="40%" height={13} />
+            <Skeleton width="25%" height={11} />
+          </Box>
+        </Box>
+        <Skeleton width="90%" height={16} />
+        <Skeleton width="100%" height={13} />
+        <Skeleton width="80%" height={13} />
+        <Skeleton height={180} radius="var(--radius-lg)" />
+      </Box>
     </Page>
   );
 }

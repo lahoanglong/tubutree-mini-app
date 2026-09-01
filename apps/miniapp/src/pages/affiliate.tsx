@@ -25,10 +25,10 @@ import { vi } from '../i18n/vi';
 
 const COMMISSION_META: Record<CommissionStatus, { label: string; color: string; bg: string }> = {
   PENDING: { label: 'Chờ (đơn chưa giao)', color: 'var(--clay-700)', bg: 'var(--clay-50)' },
-  LOCKED: { label: 'Đang giữ', color: 'var(--info)', bg: '#e8f0f8' },
+  LOCKED: { label: 'Đang giữ', color: 'var(--info)', bg: 'var(--info-bg)' },
   APPROVED: { label: 'Có thể rút', color: 'var(--leaf-700)', bg: 'var(--leaf-50)' },
   PAID: { label: 'Đã trả', color: 'var(--neutral-600)', bg: 'var(--neutral-100)' },
-  REJECTED: { label: 'Từ chối', color: 'var(--danger)', bg: '#fbe9e9' },
+  REJECTED: { label: 'Từ chối', color: 'var(--danger)', bg: 'var(--danger-bg)' },
 };
 
 export default function AffiliatePage() {
@@ -86,14 +86,14 @@ function RegisterGate() {
           style={{
             background: 'linear-gradient(135deg, var(--primary-600), var(--primary-700))',
             borderRadius: 'var(--radius-xl)',
-            color: '#fff',
+            color: 'var(--neutral-0)',
             textAlign: 'center',
           }}
         >
           <Box style={{ marginBottom: 14 }}>
             <Text style={{ fontSize: 48, lineHeight: '1.2', display: 'inline-block' }}>🤝</Text>
           </Box>
-          <Text bold size="xLarge" style={{ color: '#fff' }}>
+          <Text bold size="xLarge" style={{ color: 'var(--neutral-0)' }}>
             Trở thành CTV Tubu
           </Text>
           <Text size="small" style={{ color: 'rgba(255,255,255,0.9)', marginTop: 6 }}>
@@ -174,14 +174,14 @@ function Dashboard() {
             style={{
               background: 'linear-gradient(135deg, var(--primary-600), var(--primary-700))',
               borderRadius: 'var(--radius-xl)',
-              color: '#fff',
+              color: 'var(--neutral-0)',
               boxShadow: 'var(--shadow-md)',
             }}
           >
             <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
               Hoa hồng tháng này
             </Text>
-            <Text bold style={{ fontSize: 32, lineHeight: '40px', color: '#fff', marginTop: 4 }}>
+            <Text bold style={{ fontSize: 32, lineHeight: '40px', color: 'var(--neutral-0)', marginTop: 4 }}>
               {formatVnd(d?.monthCommission ?? 0)}
             </Text>
             <Box flex style={{ gap: 16, marginTop: 12 }}>
@@ -665,7 +665,7 @@ function MethodChip({
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <Box>
-      <Text bold style={{ color: '#fff' }}>
+      <Text bold style={{ color: 'var(--neutral-0)' }}>
         {value}
       </Text>
       <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.8)' }}>

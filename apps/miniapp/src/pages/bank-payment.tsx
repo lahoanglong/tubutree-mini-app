@@ -1,8 +1,9 @@
-import { Box, Page, Text, Button, Spinner, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { Copy, CheckCircle2, Clock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getBankQr } from '../services/payment-api';
 import { haptic } from '../utils/haptic';
+import { Skeleton } from '../components/ui/skeleton';
 
 function fmtVnd(n: number): string {
   return n.toLocaleString('vi-VN') + 'đ';
@@ -68,7 +69,27 @@ export default function BankPaymentPage() {
     }
   };
 
-  if (isLoading) return <Page className="page"><Box flex justifyContent="center" p={6}><Spinner /></Box></Page>;
+  if (isLoading) {
+    return (
+      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+        <Box p={3} style={{ background: 'var(--neutral-0)' }}>
+          <Skeleton width={200} height={20} />
+          <Skeleton width={240} height={13} style={{ marginTop: 8 }} />
+        </Box>
+        <Box p={2}>
+          <Box p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
+            <Skeleton width={240} height={240} style={{ margin: '0 auto' }} />
+            <Skeleton width={140} height={24} style={{ margin: '10px auto 0' }} />
+            <Box mt={3} flex flexDirection="column" style={{ gap: 8 }}>
+              <Skeleton height={16} />
+              <Skeleton height={16} />
+              <Skeleton height={16} />
+            </Box>
+          </Box>
+        </Box>
+      </Page>
+    );
+  }
 
   if (isError || !data) {
     return (
@@ -129,7 +150,7 @@ export default function BankPaymentPage() {
             <Row label="Số tiền" value={fmtVnd(data.amount)} onCopy={() => copy(String(data.amount), 'số tiền')} />
             <Row label="Nội dung CK" value={data.memo} highlight onCopy={() => copy(data.memo, 'nội dung')} />
           </Box>
-          <Text size="xSmall" style={{ color: 'var(--danger, #b91c1c)', marginTop: 8 }}>
+          <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 8 }}>
             ⚠️ Giữ nguyên nội dung <b>{data.memo}</b> để hệ thống tự xác nhận.
           </Text>
         </Box>

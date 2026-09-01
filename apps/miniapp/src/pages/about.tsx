@@ -73,11 +73,11 @@ export default function AboutPage() {
           style={{
             background: 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))',
             borderRadius: 'var(--radius-xl)',
-            color: '#fff',
+            color: 'var(--neutral-0)',
           }}
         >
           <Text style={{ fontSize: 40 }}>🌳</Text>
-          <Text bold size="xLarge" style={{ color: '#fff', marginTop: 4 }}>
+          <Text bold size="xLarge" style={{ color: 'var(--neutral-0)', marginTop: 4 }}>
             Sống Xanh An Lành
           </Text>
           <Text size="small" style={{ color: 'rgba(255,255,255,0.9)', marginTop: 8 }}>
@@ -194,7 +194,7 @@ export default function AboutPage() {
             Xóa tài khoản
           </Text>
         ) : (
-          <Box p={4} style={{ background: '#fbe9e9', borderRadius: 'var(--radius-lg)' }}>
+          <Box p={4} style={{ background: 'var(--danger-bg)', borderRadius: 'var(--radius-lg)' }}>
             <Text size="small" bold style={{ color: 'var(--danger)' }}>
               Xóa tài khoản vĩnh viễn?
             </Text>

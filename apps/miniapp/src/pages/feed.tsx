@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Page, Text, Button, Input, Spinner, useLocation, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Plus, HelpCircle, Hash, Trophy, PartyPopper } from 'lucide-react';
 import { getFeed, getCategories, type FeedSort } from '../services/feed-api';
@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { Skeleton } from '../components/ui/skeleton';
 import PostCard from '../components/community/post-card';
 import PostComposer from '../components/community/post-composer';
 import { haptic } from '../utils/haptic';
@@ -66,12 +67,14 @@ export default function FeedPage() {
   const posts = feed.data?.pages.flatMap((p) => p.posts) ?? [];
   const filtering = Boolean(dq || unanswered || tag);
 
-  // Đang silent-login lúc mở app (restore chưa xong) → spinner thay vì chớp cổng đăng nhập.
+  // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
   if (status === 'loading') {
     return (
-      <Page className="page">
-        <Box flex justifyContent="center" p={6}>
-          <Spinner />
+      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+        <Box p={3} flex flexDirection="column" style={{ gap: 12 }}>
+          {Array.from({ length: 3 }, (_, i) => (
+            <Skeleton key={i} height={140} radius="var(--radius-lg)" />
+          ))}
         </Box>
       </Page>
     );
@@ -156,7 +159,7 @@ export default function FeedPage() {
             style={{
               gap: 4,
               background: 'var(--leaf-600)',
-              color: '#fff',
+              color: 'var(--neutral-0)',
               borderRadius: 'var(--radius-full)',
               padding: '8px 14px',
               fontSize: 13,
@@ -229,7 +232,7 @@ export default function FeedPage() {
               alignItems: 'center',
               gap: 6,
               background: 'var(--leaf-600)',
-              color: '#fff',
+              color: 'var(--neutral-0)',
               borderRadius: 'var(--radius-full)',
               padding: '6px 12px',
               fontSize: 12.5,
@@ -243,8 +246,10 @@ export default function FeedPage() {
       )}
 
       {feed.isLoading ? (
-        <Box flex justifyContent="center" p={6}>
-          <Spinner />
+        <Box p={3} flex flexDirection="column" style={{ gap: 12 }}>
+          {Array.from({ length: 4 }, (_, i) => (
+            <Skeleton key={i} height={110} radius="var(--radius-lg)" />
+          ))}
         </Box>
       ) : feed.isError ? (
         <ErrorState message={getErrorMessage(feed.error)} onRetry={() => void feed.refetch()} />

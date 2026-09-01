@@ -90,10 +90,10 @@ export default function AiAdvisorPage() {
                 padding: '8px 12px',
                 borderRadius: 'var(--radius-lg)',
                 background: m.role === 'user' ? 'var(--leaf-600)' : 'var(--neutral-0)',
-                color: m.role === 'user' ? '#fff' : 'var(--neutral-900)',
+                color: m.role === 'user' ? 'var(--neutral-0)' : 'var(--neutral-900)',
               }}
             >
-              <Text size="small" style={{ color: m.role === 'user' ? '#fff' : 'var(--neutral-900)', whiteSpace: 'pre-wrap' }}>
+              <Text size="small" style={{ color: m.role === 'user' ? 'var(--neutral-0)' : 'var(--neutral-900)', whiteSpace: 'pre-wrap' }}>
                 {m.content}
               </Text>
             </Box>

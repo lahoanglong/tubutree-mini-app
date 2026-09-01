@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Spinner, useSnackbar, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Button, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getGameProfile,
@@ -34,6 +34,7 @@ import {
   type SeasonPassTier,
 } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
+import { Skeleton } from '../components/ui/skeleton';
 import { WheelOfFortune } from '../components/wheel';
 import { haptic } from '../utils/haptic';
 import { getErrorMessage } from '../services/api';
@@ -237,9 +238,12 @@ export default function GamePage() {
 
   if (isLoading || !authed) {
     return (
-      <Page>
-        <Box flex justifyContent="center" p={6}>
-          <Spinner />
+      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
+          <Skeleton style={{ height: 180, borderRadius: 'var(--radius-lg)' }} />
+          <Skeleton style={{ height: 56, borderRadius: 'var(--radius-lg)' }} />
+          <Skeleton style={{ height: 56, borderRadius: 'var(--radius-lg)' }} />
+          <Skeleton style={{ height: 140, borderRadius: 'var(--radius-lg)' }} />
         </Box>
       </Page>
     );
@@ -310,7 +314,7 @@ export default function GamePage() {
 
       {/* Banner mùa/sự kiện (Phase 4) */}
       {season && (
-        <Box mx={3} mt={2} p={3} style={{ background: 'linear-gradient(120deg, var(--leaf-50, #eef7ee), var(--sun-50, #fdf6e3))', borderRadius: 'var(--radius-lg)', border: '1px solid var(--leaf-400)' }}>
+        <Box mx={3} mt={2} p={3} style={{ background: 'linear-gradient(120deg, var(--leaf-50), var(--primary-50))', borderRadius: 'var(--radius-lg)', border: '1px solid var(--leaf-400)' }}>
           <Box flex alignItems="center" justifyContent="space-between">
             <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
               🍃 {season.name}
@@ -357,7 +361,7 @@ export default function GamePage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: done ? '#fff' : 'var(--neutral-400)',
+                    color: done ? 'var(--neutral-0)' : 'var(--neutral-400)',
                     fontSize: 13,
                   }}
                 >
@@ -431,15 +435,15 @@ export default function GamePage() {
 
       {/* Cảnh báo héo/chết (§6.7.3) */}
       {profile?.treeHealth === 'WILTED' && (
-        <Box mx={3} mt={2} p={3} style={{ background: 'var(--sun-50, #fdf6e3)', borderRadius: 'var(--radius-md)' }}>
-          <Text size="xSmall" style={{ color: 'var(--clay-700, #92400e)' }}>
+        <Box mx={3} mt={2} p={3} style={{ background: 'var(--warning-bg)', borderRadius: 'var(--radius-md)' }}>
+          <Text size="xSmall" style={{ color: 'var(--warning)' }}>
             🥀 Cây đang héo vì lâu chưa tưới — tưới ngay để hồi phục nhé!
           </Text>
         </Box>
       )}
       {profile?.treeHealth === 'DEAD' && (
-        <Box mx={3} mt={2} p={3} style={{ background: 'var(--danger-50, #fee2e2)', borderRadius: 'var(--radius-md)' }}>
-          <Text size="xSmall" style={{ color: 'var(--danger, #b91c1c)' }}>
+        <Box mx={3} mt={2} p={3} style={{ background: 'var(--danger-bg)', borderRadius: 'var(--radius-md)' }}>
+          <Text size="xSmall" style={{ color: 'var(--danger)' }}>
             🍂 Cây đã héo úa do quá 7 ngày không tưới. Tưới lại sẽ trồng cây mới từ đầu.
           </Text>
         </Box>
@@ -476,7 +480,7 @@ export default function GamePage() {
               const ppct = p.target > 0 ? Math.min(100, Math.round((p.progress / p.target) * 100)) : 0;
               const stageEmoji = ppct >= 100 ? '🌳' : ppct > 50 ? '🌿' : '🌱';
               return (
-                <Box key={p.id} p={2} mt={1} style={{ background: 'var(--leaf-50, #eef7ee)', borderRadius: 'var(--radius-md)' }}>
+                <Box key={p.id} p={2} mt={1} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)' }}>
                   <Box flex alignItems="center" justifyContent="space-between">
                     <Box flex alignItems="center" style={{ gap: 8 }}>
                       <Text style={{ fontSize: 26, filter: p.treeHealth === 'DEAD' ? 'grayscale(1)' : 'none' }}>{stageEmoji}</Text>
@@ -559,7 +563,7 @@ export default function GamePage() {
           })()}
 
           {!seasonPass.premiumEligible && (
-            <Text size="xSmall" style={{ color: 'var(--clay-700, #92400e)', marginTop: 8 }}>
+            <Text size="xSmall" style={{ color: 'var(--clay-700)', marginTop: 8 }}>
               {vi.game.seasonPass.premiumHint}
             </Text>
           )}
@@ -573,7 +577,7 @@ export default function GamePage() {
                   key={t.tier}
                   p={2}
                   style={{
-                    background: t.unlocked ? 'var(--leaf-50, #eef7ee)' : 'var(--neutral-100)',
+                    background: t.unlocked ? 'var(--leaf-50)' : 'var(--neutral-100)',
                     borderRadius: 'var(--radius-md)',
                     opacity: t.unlocked ? 1 : 0.7,
                   }}
@@ -614,10 +618,10 @@ export default function GamePage() {
                     </Box>
                     {/* Nhánh premium */}
                     <Box style={{ flex: 1, textAlign: 'center' }}>
-                      <Text size="xSmall" style={{ color: 'var(--sun-700, #b8860b)' }}>
+                      <Text size="xSmall" style={{ color: 'var(--sun-700)' }}>
                         ⭐ {vi.game.seasonPass.premium}
                       </Text>
-                      <Text size="xSmall" bold style={{ color: 'var(--sun-700, #b8860b)' }}>
+                      <Text size="xSmall" bold style={{ color: 'var(--sun-700)' }}>
                         {vi.game.seasonPass.reward(t.premium)}
                       </Text>
                       {t.claimedPremium ? (
@@ -694,7 +698,7 @@ export default function GamePage() {
                 p={2}
                 style={{
                   textAlign: 'center',
-                  background: c.owned ? 'var(--leaf-50, #eef7ee)' : 'var(--neutral-100)',
+                  background: c.owned ? 'var(--leaf-50)' : 'var(--neutral-100)',
                   borderRadius: 'var(--radius-md)',
                   border: c.owned ? `1px solid ${rarityColor(c.rarity)}` : '1px solid transparent',
                   opacity: c.owned ? 1 : 0.55,
@@ -763,7 +767,7 @@ export default function GamePage() {
                   alignItems="center"
                   justifyContent="space-between"
                   p={2}
-                  style={{ background: 'var(--leaf-50, #eef7ee)', borderRadius: 'var(--radius-sm)' }}
+                  style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-sm)' }}
                 >
                   <Box>
                     <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', letterSpacing: 0.5 }}>
@@ -815,11 +819,11 @@ export default function GamePage() {
                 mt={3}
                 p={3}
                 style={{
-                  background: reveal.isCorrect ? 'var(--leaf-50, #eef7ee)' : 'var(--sun-50, #fdf6e3)',
+                  background: reveal.isCorrect ? 'var(--leaf-50)' : 'var(--warning-bg)',
                   borderRadius: 'var(--radius-md)',
                 }}
               >
-                <Text size="small" bold style={{ color: reveal.isCorrect ? 'var(--leaf-700)' : 'var(--clay-700, #92400e)' }}>
+                <Text size="small" bold style={{ color: reveal.isCorrect ? 'var(--leaf-700)' : 'var(--warning)' }}>
                   {reveal.isCorrect ? `Chính xác! +${reveal.waterEarned}💧` : 'Chưa đúng — cùng học nhé 🌿'}
                 </Text>
                 {reveal.explanation && (
@@ -928,7 +932,7 @@ export default function GamePage() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#fff',
+                        color: 'var(--neutral-0)',
                         fontSize: 11,
                         fontWeight: 700,
                       }}
@@ -987,7 +991,7 @@ export default function GamePage() {
                     openSnackbar({ text: 'Đã sao chép mã giảm giá', type: 'success' });
                   }
                 }}
-                style={{ background: 'var(--leaf-50, #eef7ee)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--leaf-600)' }}
+                style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--leaf-600)' }}
               >
                 <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
                   Quà thu hoạch — mã giảm giá (chạm để sao chép)
@@ -998,7 +1002,7 @@ export default function GamePage() {
               </Box>
             )}
             {harvestCert && (
-              <Box mt={2} p={3} style={{ background: 'var(--leaf-50, #eef7ee)', borderRadius: 'var(--radius-md)' }}>
+              <Box mt={2} p={3} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)' }}>
                 <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
                   Mã chứng nhận cây thật
                 </Text>
@@ -1008,7 +1012,7 @@ export default function GamePage() {
               </Box>
             )}
             {harvestSpecies && (
-              <Box mt={3} p={3} style={{ background: 'var(--leaf-50, #eef7ee)', borderRadius: 'var(--radius-md)', border: `1px solid ${rarityColor(harvestSpecies.rarity)}` }}>
+              <Box mt={3} p={3} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', border: `1px solid ${rarityColor(harvestSpecies.rarity)}` }}>
                 <Text size="xSmall" style={{ color: rarityColor(harvestSpecies.rarity), fontWeight: 700 }}>
                   {rarityLabel(harvestSpecies.rarity)} · Sưu tập mới!
                 </Text>
@@ -1084,10 +1088,10 @@ function QuizBlock({
           if (reveal) {
             if (i === reveal.correct) {
               bg = 'var(--leaf-600)';
-              color = '#fff';
+              color = 'var(--neutral-0)';
             } else if (i === reveal.choice) {
-              bg = 'var(--danger-50, #fee2e2)';
-              color = 'var(--danger, #b91c1c)';
+              bg = 'var(--danger-bg)';
+              color = 'var(--danger)';
             }
           }
           return (
@@ -1127,7 +1131,7 @@ function difficultyLabel(d: number): string {
 }
 
 function rarityColor(r: 'COMMON' | 'RARE' | 'LEGENDARY'): string {
-  return r === 'LEGENDARY' ? '#b8860b' : r === 'RARE' ? 'var(--leaf-600)' : 'var(--neutral-400)';
+  return r === 'LEGENDARY' ? 'var(--sun-700)' : r === 'RARE' ? 'var(--leaf-600)' : 'var(--neutral-400)';
 }
 
 function rarityLabel(r: 'COMMON' | 'RARE' | 'LEGENDARY'): string {

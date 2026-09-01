@@ -153,7 +153,7 @@ function Toggle({ label, on, onToggle, last }: { label: string; on: boolean; onT
             width: 20,
             height: 20,
             borderRadius: '50%',
-            background: '#fff',
+            background: 'var(--neutral-0)',
             boxShadow: 'var(--shadow-sm)',
             transition: 'left var(--dur-base) var(--ease-out)',
           }}

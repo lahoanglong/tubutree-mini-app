@@ -187,7 +187,7 @@ function PendingCard({
           variant="secondary"
           prefixIcon={<X size={15} />}
           loading={loading}
-          style={{ flex: 1, color: 'var(--danger, #d64545)' }}
+          style={{ flex: 1, color: 'var(--danger)' }}
           onClick={onReject}
         >
           {vi.community.reject}
@@ -268,7 +268,7 @@ function ReportCard({
             variant="secondary"
             prefixIcon={<EyeOff size={15} />}
             loading={hideLoading}
-            style={{ flex: 1, color: 'var(--danger, #d64545)' }}
+            style={{ flex: 1, color: 'var(--danger)' }}
             onClick={onHide}
           >
             {vi.community.hideContent}
@@ -445,7 +445,7 @@ function AdminEventCard({ event, onDone }: { event: CommunityEvent; onDone: () =
         variant="secondary"
         fullWidth
         loading={closeM.isPending}
-        style={{ marginTop: 8, color: 'var(--danger, #d64545)' }}
+        style={{ marginTop: 8, color: 'var(--danger)' }}
         onClick={() => closeM.mutate()}
       >
         {vi.community.closeEvent}

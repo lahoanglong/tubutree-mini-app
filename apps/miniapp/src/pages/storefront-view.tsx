@@ -32,13 +32,13 @@ export default function StorefrontViewPage() {
       <Box style={{ height: 84, background: sf.coverUrl ? `url(${sf.coverUrl}) center/cover` : (THEME[sf.theme] ?? THEME['leaf-orange']) }} />
       <Box px={4} style={{ marginTop: -28 }}>
         <Box style={{ width: 58, height: 58, borderRadius: '50%', background: 'var(--primary-600)', border: '3px solid var(--neutral-0)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, color: '#fff', overflow: 'hidden' }}>
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, color: 'var(--neutral-0)', overflow: 'hidden' }}>
           {sf.avatarUrl ? <img src={sf.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '🌿'}
         </Box>
         <Text bold size="xLarge" style={{ marginTop: 8 }}>{sf.title}</Text>
         {sf.headerNote && <Text size="small" style={{ color: 'var(--neutral-600)' }}>{sf.headerNote}</Text>}
         <Box flex style={{ gap: 6, marginTop: 8 }}>
-          <Text size="xSmall" style={{ background: 'var(--leaf-600)', color: '#fff', padding: '3px 9px', borderRadius: 'var(--radius-full)' }}>✓ CTV chính thức Tubu</Text>
+          <Text size="xSmall" style={{ background: 'var(--leaf-600)', color: 'var(--neutral-0)', padding: '3px 9px', borderRadius: 'var(--radius-full)' }}>✓ CTV chính thức Tubu</Text>
         </Box>
       </Box>
 

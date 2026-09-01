@@ -10,7 +10,7 @@ import {
   type AcademyCourseDetail,
 } from '../services/academy-api';
 import { getErrorMessage } from '../services/api';
-import { ErrorState } from '../components/ui/empty-state';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
@@ -55,15 +55,7 @@ function CourseList({ onOpen }: { onOpen: (id: string) => void }) {
           ))}
         </Box>
       ) : (
-        <Box style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <Box style={{ marginBottom: 14 }}>
-            <Text style={{ fontSize: 48, lineHeight: '1.2', display: 'inline-block' }}>🎓</Text>
-          </Box>
-          <Text style={{ color: 'var(--neutral-600)' }}>{vi.academy.empty}</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-            {vi.academy.emptyBody}
-          </Text>
-        </Box>
+        <EmptyState art="sprout" heading={vi.academy.empty} body={vi.academy.emptyBody} />
       )}
     </Box>
   );
