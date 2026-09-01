@@ -61,5 +61,5 @@
 
 ## Ghi chú kỹ thuật cho người demo
 - Ảnh sản phẩm hiện là ảnh demo (picsum theo slug) cho **dữ liệu mẫu**; khi sync Pancake thật, ảnh/giá/tồn lấy từ Pancake.
-- Thanh toán ZaloPay/ZNS/Accesstrade bật khi có key thật (xem `docs/SESSION-HANDOFF.md`); demo dùng **COD + Ví** đầy đủ.
+- Thanh toán ZaloPay/ZNS/Accesstrade bật khi có key thật (xem `docs/GO-LIVE-KEYS.md`); demo dùng **COD + Ví** đầy đủ.
 - Nếu mạng Zalo chập chờn, app tự đăng nhập **khách** để vẫn dùng full chức năng.

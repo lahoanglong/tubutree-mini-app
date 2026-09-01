@@ -37,40 +37,21 @@ pnpm --filter @tubutree/web dev   # chạy web    → http://localhost:3000
 pnpm --filter @tubutree/miniapp dev  # chạy mini app (cần zmp-cli login)
 ```
 
-## Tiến độ tổng quan (cập nhật 2026-06-21)
+## Tiến độ tổng quan (cập nhật 2026-09-01, verify trực tiếp trên code)
 
-> **Prod LIVE tại `api.tubutree.com` + `app.tubutree.com`** — 9 brand, 139 SP (44 demo có ảnh + 95 từ Pancake), 245 unit test xanh, E2E 19/19 pass.
+> **Backend: 36 module** (catalog, checkout, orders, loyalty, game/Vườn Xanh, affiliate, cashback (provider-agnostic), dealer B2B, flash-sale, groupbuy, subscriptions, storefront CTV, brand, staff (RBAC/ca làm/chấm công/lương), academy, content-kit, community feed, refill, wishlist, reviews, ai-advisor, notifications, vouchers, wallet, beta, faq, lifecycle, v.v.) — **typecheck sạch, 80/80 test suite · 1043/1043 unit test PASS** (verify lại trực tiếp, không chỉ dựa tài liệu cũ).
+> Miniapp (36 trang) + Web đều typecheck sạch. Commit gần nhất trên `main`: 2026-07-30.
+> Toàn bộ blocker bảo mật/money-path từng ghi nhận (webhook fail-open, thiếu rate-limit, oversell, hoàn ví 2 lần…) đã xác nhận **FIX trong code hiện tại** (fail-closed theo `NODE_ENV`, `@nestjs/throttler` global, trừ stock atomic `updateMany+gte`, exception filter, healthcheck compose).
 
-### Lịch sử cập nhật
+### Việc còn tồn đọng (thực tế, không phải backlog cũ)
 
-**2026-06-15→16 — Catalog đa thương hiệu + hotfix:**
-- Catalog demo nâng từ 6 SP/3 brand → **44 SP/8 brand có ảnh** (Visante, Pơ Lang, Fuwa3e, Cobote, Le Plateau Coffee, BH.Nong, Sokfram, Hector). Migration idempotent, không đụng SP Pancake.
-- Fix loyalty: user mới mặc định hạng nền Mầm Xanh thay vì `tier=null`.
-- Fix bảo mật: hủy đơn atomic (`updateMany` với guard status) chống hoàn ví 2 lần khi double-tap.
-- Fix auth: timeout 3s cho `zmpLogin`/`getAccessToken` chống treo màn loading ngoài Zalo.
+1. **Ngoài-code — chờ cấp/duyệt:** key **ZaloPay**, **Zalo OA + Template ID ZNS** (lead time ~7–14 ngày), **Accesstrade** — xem `docs/GO-LIVE-KEYS.md`. Thiếu key thì hệ thống tự fallback an toàn (COD/Ví/TubuXu vẫn chạy đủ), không sập.
+2. **`zmp deploy`** lên Zalo Mini App Studio — cần phiên đăng nhập Zalo dev thủ công, xem `DEPLOY_ZALO.md`.
+3. **Tích hợp PanNature** (trồng cây thật khi đủ mốc cộng đồng) — chưa có đầu mối.
+4. **Gap tính năng tăng trưởng** (nghiên cứu `docs/2026-07-05-growth-features-research-roadmap.md`): Quỹ/CLB gây quỹ qua cashback (mô hình WeShare/FlipGive), live commerce/video ngắn, chat/CSKH trong app, cổng thanh toán VNPAY — đều **chưa có trong code**, là hướng mở rộng chứ không phải nợ kỹ thuật.
+5. Vài gap nhỏ đã biết: CTV "lên đơn hộ" chưa đẩy sang Pancake fulfillment; remarketing/point-expiry/flash-reminder mới chỉ gửi kênh INAPP (chưa ZNS).
 
-**2026-06-10 — Tier S polish (miniapp):** Foundation (token palette đúng logo cam #E08C1C, i18n vi.ts, error normalization, Skeleton/EmptyState/haptic) + 5 feature core (Home, PDP, Cart, Checkout, Orders) nâng từ skeleton lên production-grade: optimistic updates, idempotency key, inline validation, timeline đơn hàng, empty/error states có illustration, code-split (initial 438KB / gzip 138KB). Chi tiết: `EXECUTION_PLAN.md`, `ARCHITECTURE_DECISIONS.md`, `DESIGN_IMPROVEMENTS.md`.
-
-### Bảng phase (cập nhật 2026-06-21)
-
-| Phase | Backend | Frontend | Verified |
-|-------|---------|----------|----------|
-| 0 Khởi tạo | ✅ monorepo, Prisma, auth Zalo, RBAC | — | ✅ |
-| 1 MVP B2C | ✅ catalog/cart/checkout/orders/Pancake/ZaloPay/ZNS | ✅ miniapp: home/browse/PDP/cart/checkout/orders/profile | ✅ e2e |
-| 2 Loyalty+Game | ✅ points/tier/coupons + check-in/spin/quiz/tree/missions/leaderboard + reviews | ✅ miniapp Game page (Vườn Xanh 2.0 đủ 4 phase) | ✅ e2e |
-| 3 Affiliate+Cashback | ✅ CTV link/commission/payout + Accesstrade cashback + Ví Tubu | ⏳ FE chưa có (API sẵn sàng) | ✅ e2e |
-| 4 Dealer+Admin | ✅ apply/duyệt/bảng giá/đơn/công nợ + admin config CRUD/dealer review | ⏳ FE chưa có (API sẵn sàng) | ✅ e2e |
-| 5 Web shop | ✅ catalog SSR + PDP (SEO generateMetadata) | ✅ Next.js (cart/checkout cần auth web) | ✅ e2e |
-| 6 Deploy Mini App | — | ✅ Bundle sẵn (`apps/miniapp/www/`, 937KB) | ⏳ Cần `zmp login` + `zmp deploy` |
-
-Mọi tham số nghiệp vụ trong bảng `SystemConfig` (sửa qua `PUT /api/admin/config`). Swagger: `/api/docs`.
-
-**Việc còn lại theo độ ưu tiên:**
-1. **`zmp deploy`** — đẩy Mini App lên Zalo (bundle đã build sẵn, xem `DEPLOY_ZALO.md`).
-2. FE miniapp cho affiliate/cashback/dealer (API đã xong).
-3. Web cart/checkout (cần auth web OTP/Zalo OAuth).
-4. Tích hợp key thật: Pancake/ZaloPay/Accesstrade/ZNS (xem `docs/SESSION-HANDOFF.md` mục 5).
-5. Upload ảnh KYC/review.
+Mọi tham số nghiệp vụ đọc từ bảng `SystemConfig` (sửa qua `PUT /api/admin/config`). Swagger: `/api/docs`.
 
 Dev: `apps/api/scripts/dev-token.ts` mint JWT test (`DEV_ROLE=ADMIN` cho admin).
 
