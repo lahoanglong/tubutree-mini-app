@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
+import { GeoPicker, EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
 import {
   getCart,
   getAddresses,
@@ -16,7 +17,9 @@ import {
 } from '@/lib/shop-client';
 
 const VN_PHONE = /^(0|\+84)\d{9}$/;
-const EMPTY = { recipient: '', phone: '', province: '', district: '', ward: '', street: '' };
+// Tỉnh/phường chọn qua GeoPicker (mã Pancake thật, hệ 2 cấp — không còn quận/huyện);
+// chỉ 3 field text còn lại (mirror miniapp address-section.tsx).
+const EMPTY = { recipient: '', phone: '', street: '' };
 type Form = typeof EMPTY;
 
 export default function CheckoutPage() {
@@ -183,22 +186,38 @@ function AddressPicker({
 }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState<Form>(EMPTY);
+  const [geo, setGeo] = useState<GeoValue>(EMPTY_GEO);
   const [err, setErr] = useState<string | null>(null);
 
   const create = useMutation({
     mutationFn: () =>
-      createAddress({ ...form, phone: form.phone.replace(/\s/g, ''), provinceCode: '00', districtCode: '00', wardCode: '00' }),
+      createAddress({
+        recipient: form.recipient.trim(),
+        phone: form.phone.replace(/\s/g, ''),
+        street: form.street.trim(),
+        province: geo.province,
+        ward: geo.ward,
+        district: '', // hệ 2 cấp (Pancake) — không còn quận/huyện
+        provinceCode: geo.provinceCode,
+        wardCode: geo.wardCode,
+        districtCode: '',
+      }),
     onSuccess: (a) => {
       setAdding(false);
       setForm(EMPTY);
+      setGeo(EMPTY_GEO);
       onCreated(a);
     },
     onError: (e) => setErr(e instanceof Error ? e.message : 'Lỗi'),
   });
 
   const valid = useMemo(
-    () => Object.values(form).every((v) => v.trim()) && VN_PHONE.test(form.phone.replace(/\s/g, '')),
-    [form],
+    () =>
+      Object.values(form).every((v) => v.trim()) &&
+      VN_PHONE.test(form.phone.replace(/\s/g, '')) &&
+      !!geo.provinceCode &&
+      !!geo.wardCode,
+    [form, geo],
   );
 
   return (
@@ -221,15 +240,25 @@ function AddressPicker({
 
       {adding ? (
         <div className="space-y-2 rounded-md border border-neutral-200 p-3">
-          {(Object.keys(EMPTY) as (keyof Form)[]).map((k) => (
-            <input
-              key={k}
-              placeholder={LABEL[k]}
-              value={form[k]}
-              onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))}
-              className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
-            />
-          ))}
+          <input
+            placeholder={LABEL.recipient}
+            value={form.recipient}
+            onChange={(e) => setForm((f) => ({ ...f, recipient: e.target.value }))}
+            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+          />
+          <input
+            placeholder={LABEL.phone}
+            value={form.phone}
+            onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+          />
+          <GeoPicker value={geo} onChange={setGeo} />
+          <input
+            placeholder={LABEL.street}
+            value={form.street}
+            onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))}
+            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+          />
           {err && <p className="text-xs text-red-600">{err}</p>}
           <div className="flex gap-2">
             <button onClick={() => setAdding(false)} className="rounded border border-neutral-200 px-4 py-2 text-sm">Hủy</button>
@@ -254,9 +283,6 @@ function AddressPicker({
 const LABEL: Record<keyof Form, string> = {
   recipient: 'Người nhận',
   phone: 'Số điện thoại',
-  province: 'Tỉnh/Thành',
-  district: 'Quận/Huyện',
-  ward: 'Phường/Xã',
   street: 'Số nhà, đường',
 };
 
