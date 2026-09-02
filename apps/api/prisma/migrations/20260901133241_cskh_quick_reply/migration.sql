@@ -21,6 +21,7 @@ CREATE TABLE "quick_reply_templates" (
 CREATE TABLE "oa_inbound_messages" (
     "id" TEXT NOT NULL,
     "zaloUserId" TEXT NOT NULL,
+    "msgId" TEXT,
     "messageText" TEXT,
     "rawPayload" JSONB NOT NULL,
     "matchedTemplateId" TEXT,
@@ -30,8 +31,19 @@ CREATE TABLE "oa_inbound_messages" (
     CONSTRAINT "oa_inbound_messages_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "oa_greeted_users" (
+    "zaloUserId" TEXT NOT NULL,
+    "greetedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "oa_greeted_users_pkey" PRIMARY KEY ("zaloUserId")
+);
+
 -- CreateIndex
 CREATE INDEX "quick_reply_templates_isActive_sortOrder_idx" ON "quick_reply_templates"("isActive", "sortOrder");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "oa_inbound_messages_msgId_key" ON "oa_inbound_messages"("msgId");
 
 -- CreateIndex
 CREATE INDEX "oa_inbound_messages_zaloUserId_idx" ON "oa_inbound_messages"("zaloUserId");
