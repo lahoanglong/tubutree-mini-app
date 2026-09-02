@@ -137,6 +137,64 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
     const where = (prisma.dealerCreditLedger.findFirst as jest.Mock).mock.calls[0][0].where;
     expect(where).toMatchObject({ userId: 'd1', refType: 'QUARTER_BONUS', refId: 'Q1/2026' });
   });
+
+  // Việc 4 (audit round 2): findFirst rồi create không transaction — 2 lượt chạy cron/manual
+  // chồng nhau có thể cùng qua check "chưa trả thưởng" trước khi lượt đầu commit. Unique
+  // (userId,refType,refId) chặn ở DB, lượt thua ăn P2002 → phải coi như ĐÃ trả thưởng (bỏ qua,
+  // KHÔNG throw để không chặn các dealer khác trong cùng lượt chạy).
+  it('race double-pay (P2002 khi create) → bỏ qua dealer đó, không throw, không đếm paid/notify trùng', async () => {
+    const { Prisma } = jest.requireActual('@prisma/client');
+    const p2002 = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' });
+    const prisma = prismaForPayout({
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
+      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 120_000_000 }, _count: 5 }) },
+      // findFirst vẫn trả null (pre-check chưa thấy — lượt kia chưa commit lúc pre-check chạy),
+      // nhưng create() đụng unique constraint do lượt kia đã thắng race.
+      dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockRejectedValue(p2002) },
+    });
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const r = await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS }), notifications as never).payoutQuarterlyBonuses(NOW);
+    expect(r).toEqual({ paid: 0, quarter: 'Q1/2026' });
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('DealerService.apply (Việc 3 — TOCTOU khi đăng ký đại lý)', () => {
+  it('race 2 request apply() đồng thời (P2002 khi create) → message thân thiện, không lộ lỗi DB thô', async () => {
+    const { Prisma } = jest.requireActual('@prisma/client');
+    const p2002 = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' });
+    const prisma = {
+      dealerApplication: {
+        // findFirst pre-check chưa thấy đơn PENDING (request kia chưa commit lúc check chạy),
+        // nhưng create() đụng partial unique index dealer_applications_pending_user_key.
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockRejectedValue(p2002),
+      },
+    } as unknown as PrismaService;
+    const dto = {
+      businessName: 'Cty A', ownerName: 'A', phone: '0900000000', address: 'HN',
+      cccdFrontUrl: 'f.jpg', cccdBackUrl: 'b.jpg',
+    };
+    await expect(new DealerService(prisma, makeConfig()).apply('u1', dto as never)).rejects.toThrow(
+      'Bạn đã có đơn đăng ký đang chờ duyệt.',
+    );
+  });
+
+  it('không có đơn PENDING, create() thành công bình thường → trả đơn mới tạo', async () => {
+    const created = { id: 'app1', userId: 'u1', status: 'PENDING' };
+    const prisma = {
+      dealerApplication: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue(created),
+      },
+    } as unknown as PrismaService;
+    const dto = {
+      businessName: 'Cty A', ownerName: 'A', phone: '0900000000', address: 'HN',
+      cccdFrontUrl: 'f.jpg', cccdBackUrl: 'b.jpg',
+    };
+    const out = await new DealerService(prisma, makeConfig()).apply('u1', dto as never);
+    expect(out).toEqual(created);
+  });
 });
 
 describe('DealerService.creditPayment (an authenticated non-dealer must not be able to fabricate a paid-down debt)', () => {

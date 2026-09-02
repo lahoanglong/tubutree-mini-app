@@ -55,3 +55,60 @@ describe('CreateCouponDto validation (Phase 1 findings)', () => {
     expect(errors.some((e) => e.property === 'value')).toBe(true);
   });
 });
+
+// Việc 9 (audit round 2): CreateCouponDto thiếu scopeMeta cho scope TIER/USER_GROUP → coupon tạo
+// ra fail-closed ở MỌI user trong isCouponEligible (coupon-scope.ts), không lỗi khi tạo — bug
+// chức năng im lặng. RequiredScopeMeta() bắt buộc đúng field theo scope.
+describe('CreateCouponDto.scopeMeta validation (Việc 9)', () => {
+  const base = {
+    code: 'SALE10',
+    type: 'PERCENT',
+    value: 10,
+    startAt: '2026-01-01T00:00:00.000Z',
+    endAt: '2026-12-31T00:00:00.000Z',
+  };
+
+  function makeDto(overrides: Record<string, unknown>) {
+    return plainToInstance(CreateCouponDto, { ...base, ...overrides });
+  }
+
+  it('scope=PUBLIC, không truyền scopeMeta → hợp lệ (không bắt buộc)', async () => {
+    const errors = await validate(makeDto({ scope: 'PUBLIC' }));
+    expect(errors.some((e) => e.property === 'scopeMeta')).toBe(false);
+  });
+
+  it('scope=TIER, thiếu scopeMeta hoàn toàn → lỗi validate (tránh coupon fail-closed im lặng)', async () => {
+    const errors = await validate(makeDto({ scope: 'TIER' }));
+    expect(errors.some((e) => e.property === 'scopeMeta')).toBe(true);
+  });
+
+  it('scope=TIER, scopeMeta.tierId rỗng → lỗi validate', async () => {
+    const errors = await validate(makeDto({ scope: 'TIER', scopeMeta: { tierId: '   ' } }));
+    expect(errors.some((e) => e.property === 'scopeMeta')).toBe(true);
+  });
+
+  it('scope=TIER, scopeMeta.tierId hợp lệ → PASS', async () => {
+    const errors = await validate(makeDto({ scope: 'TIER', scopeMeta: { tierId: 'GOLD' } }));
+    expect(errors.some((e) => e.property === 'scopeMeta')).toBe(false);
+  });
+
+  it('scope=USER_GROUP, thiếu scopeMeta hoàn toàn → lỗi validate', async () => {
+    const errors = await validate(makeDto({ scope: 'USER_GROUP' }));
+    expect(errors.some((e) => e.property === 'scopeMeta')).toBe(true);
+  });
+
+  it('scope=USER_GROUP, scopeMeta.userId rỗng → lỗi validate', async () => {
+    const errors = await validate(makeDto({ scope: 'USER_GROUP', scopeMeta: { userId: '' } }));
+    expect(errors.some((e) => e.property === 'scopeMeta')).toBe(true);
+  });
+
+  it('scope=USER_GROUP, scopeMeta.userId hợp lệ → PASS', async () => {
+    const errors = await validate(makeDto({ scope: 'USER_GROUP', scopeMeta: { userId: 'u1' } }));
+    expect(errors.some((e) => e.property === 'scopeMeta')).toBe(false);
+  });
+
+  it('scope=USER_GROUP nhưng gửi nhầm scopeMeta.tierId (thiếu userId) → lỗi validate', async () => {
+    const errors = await validate(makeDto({ scope: 'USER_GROUP', scopeMeta: { tierId: 'GOLD' } }));
+    expect(errors.some((e) => e.property === 'scopeMeta')).toBe(true);
+  });
+});

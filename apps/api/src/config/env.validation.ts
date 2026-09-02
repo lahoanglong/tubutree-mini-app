@@ -9,7 +9,12 @@ export const envSchema = z.object({
   // app lặng lẽ listen ở port 0 (OS cấp ngẫu nhiên) rồi vỡ reverse-proxy/health-check.
   PORT: z.coerce.number().int().positive().default(3001),
   DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().default('redis://localhost:6379'),
+  // .url(): REDIS_URL='' (set nhưng rỗng, vd interpolation lỗi trong docker-compose/.env) trước
+  // đây qua được z.string() thô → default() KHÔNG áp dụng (chỉ áp cho undefined) → BullMQ/ioredis
+  // nhận connection string rỗng, hàng đợi webhook/notification/OA events ngừng xử lý ÂM THẦM (queue
+  // module vẫn boot "thành công" nhưng job không bao giờ chạy). .url() chặn ngay ở validate (fail-fast
+  // mọi env, không riêng production) — mirror DATABASE_URL.
+  REDIS_URL: z.string().url().default('redis://localhost:6379'),
 
   // JWT
   JWT_ACCESS_SECRET: z.string().min(16),
@@ -100,6 +105,16 @@ export const envSchema = z.object({
         code: z.ZodIssueCode.custom,
         path: ['CORS_ORIGINS'],
         message: 'CORS_ORIGINS không được rỗng ở production (CSV danh sách origin được phép).',
+      });
+    }
+    // REDIS_URL đã có .url() nên chuỗi rỗng bị chặn ở MỌI env (không tới được đây); check này là
+    // phòng thủ thêm cho production (đề phòng .url() bị nới lỏng sau này) + nhất quán với các field
+    // bắt buộc khác — bắt buộc khai báo rõ, không im lặng rơi về default localhost trên VM prod.
+    if (!env.REDIS_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['REDIS_URL'],
+        message: 'REDIS_URL không được rỗng ở production.',
       });
     }
   }

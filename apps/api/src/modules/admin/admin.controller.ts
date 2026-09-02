@@ -6,9 +6,11 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsObject,
   IsOptional,
   IsString,
   Min,
+  ValidateIf,
   registerDecorator,
 } from 'class-validator';
 import type { ValidationArguments, ValidationOptions } from 'class-validator';
@@ -45,6 +47,44 @@ function MaxIfPercent(max: number, validationOptions?: ValidationOptions) {
   };
 }
 
+/**
+ * scopeMeta đúng field theo scope — PHẢI khớp isCouponEligible (coupon-scope.ts), nguồn sự thật
+ * duy nhất cho điều kiện eligible: TIER cần meta.tierId (string không rỗng), USER_GROUP cần
+ * meta.userId (string không rỗng). Trước đây DTO không có field scopeMeta → coupon tạo với scope
+ * TIER/USER_GROUP luôn thiếu scopeMeta → isCouponEligible fail-closed ở MỌI user (không khớp
+ * tierId/userId nào) → coupon KHÔNG AI DÙNG ĐƯỢC, không lỗi khi tạo nên bug lọt qua admin UI mà
+ * không ai biết tới khi có khách báo "mã không dùng được".
+ */
+function RequiredScopeMeta(validationOptions?: ValidationOptions) {
+  return (object: object, propertyName: string) => {
+    registerDecorator({
+      name: 'requiredScopeMeta',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: unknown, args: ValidationArguments) {
+          const dto = args.object as { scope?: string };
+          const meta = value as { tierId?: unknown; userId?: unknown } | null | undefined;
+          if (dto.scope === 'TIER') {
+            return typeof meta?.tierId === 'string' && meta.tierId.trim().length > 0;
+          }
+          if (dto.scope === 'USER_GROUP') {
+            return typeof meta?.userId === 'string' && meta.userId.trim().length > 0;
+          }
+          return true; // scope khác (PUBLIC/BIRTHDAY/INVITE): không bắt buộc scopeMeta.
+        },
+        defaultMessage(args: ValidationArguments) {
+          const dto = args.object as { scope?: string };
+          if (dto.scope === 'TIER') return 'scopeMeta.tierId bắt buộc (không rỗng) khi scope=TIER.';
+          if (dto.scope === 'USER_GROUP') return 'scopeMeta.userId bắt buộc (không rỗng) khi scope=USER_GROUP.';
+          return 'scopeMeta không hợp lệ.';
+        },
+      },
+    });
+  };
+}
+
 class ReviewDto {
   @IsBoolean() approve!: boolean;
   @IsOptional() @IsString() tierId?: string;
@@ -75,6 +115,13 @@ export class CreateCouponDto {
   @IsOptional() @IsInt() @Min(0) perUserLimit?: number;
   @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE'])
   scope!: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE';
+  // Chỉ bắt buộc khi scope=TIER (cần tierId) hoặc USER_GROUP (cần userId) — xem RequiredScopeMeta().
+  // Bỏ trống cho PUBLIC/BIRTHDAY/INVITE (BIRTHDAY/INVITE hiện DENY mọi user ở isCouponEligible,
+  // chưa có logic chính thức — tạo được nhưng chưa dùng được, không phải lỗi của scopeMeta).
+  @ValidateIf((o: CreateCouponDto) => o.scope === 'TIER' || o.scope === 'USER_GROUP')
+  @IsObject()
+  @RequiredScopeMeta()
+  scopeMeta?: { tierId?: string; userId?: string };
 }
 class ImportDealerPricesDto {
   @IsString() tierId!: string;

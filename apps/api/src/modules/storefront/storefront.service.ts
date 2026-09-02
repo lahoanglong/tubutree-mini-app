@@ -176,17 +176,33 @@ export class StorefrontService {
     dto: { title: string; kind?: 'NORMAL' | 'COMBO'; layout?: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct?: number },
   ) {
     const sf = await this.assertOwnedStorefront(userId);
-    const count = await this.prisma.storefrontCollection.count({ where: { storefrontId: sf.id } });
-    return this.prisma.storefrontCollection.create({
-      data: {
-        storefrontId: sf.id,
-        title: dto.title,
-        kind: dto.kind ?? 'NORMAL',
-        layout: dto.layout ?? 'CAROUSEL',
-        comboDiscountPct: dto.kind === 'COMBO' ? dto.comboDiscountPct ?? 0 : null,
-        sortOrder: count,
-      },
-    });
+    try {
+      // count() rồi create() không atomic — 2 request tạo collection đồng thời (2 tab) có thể
+      // cùng đọc count=N rồi cùng tạo sortOrder=N → 2 collection trùng sortOrder, thứ tự hiển thị
+      // lộn xộn (không sai dữ liệu nghiêm trọng nhưng UX gian hàng bị xáo). Serializable buộc 1
+      // trong 2 tx fail (P2034) thay vì âm thầm trùng (mirror users.service.ts createAddress).
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const count = await tx.storefrontCollection.count({ where: { storefrontId: sf.id } });
+          return tx.storefrontCollection.create({
+            data: {
+              storefrontId: sf.id,
+              title: dto.title,
+              kind: dto.kind ?? 'NORMAL',
+              layout: dto.layout ?? 'CAROUSEL',
+              comboDiscountPct: dto.kind === 'COMBO' ? dto.comboDiscountPct ?? 0 : null,
+              sortOrder: count,
+            },
+          });
+        },
+        { isolationLevel: 'Serializable' },
+      );
+    } catch (err) {
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+        throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
+      }
+      throw err;
+    }
   }
 
   async updateCollection(
@@ -253,27 +269,42 @@ export class StorefrontService {
         throw new BadRequestException('Biến thể không thuộc sản phẩm đã chọn.');
       }
     }
-    const count = await this.prisma.storefrontItem.count({ where: { collectionId } });
-    return this.prisma.storefrontItem.create({
-      data: { collectionId, productId: dto.productId, variationId: dto.variationId ?? null, note: dto.note ?? null, sortOrder: count },
-      include: {
-        product: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            thumbnail: true,
-            brand: true,
-            basePrice: true,
-            salePrice: true,
-            ratingAvg: true,
-            reviewCount: true,
-            isActive: true,
-            affiliateBlocked: true,
-          },
+    try {
+      // count() rồi create() không atomic — 2 request thêm item đồng thời vào CÙNG collection
+      // (2 tab) có thể cùng đọc count=N rồi cùng tạo sortOrder=N → 2 item trùng sortOrder.
+      // Serializable buộc 1 trong 2 tx fail (P2034) thay vì âm thầm trùng (mirror createCollection).
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const count = await tx.storefrontItem.count({ where: { collectionId } });
+          return tx.storefrontItem.create({
+            data: { collectionId, productId: dto.productId, variationId: dto.variationId ?? null, note: dto.note ?? null, sortOrder: count },
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                  thumbnail: true,
+                  brand: true,
+                  basePrice: true,
+                  salePrice: true,
+                  ratingAvg: true,
+                  reviewCount: true,
+                  isActive: true,
+                  affiliateBlocked: true,
+                },
+              },
+            },
+          });
         },
-      },
-    });
+        { isolationLevel: 'Serializable' },
+      );
+    } catch (err) {
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+        throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
+      }
+      throw err;
+    }
   }
 
   async updateItem(

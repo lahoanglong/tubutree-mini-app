@@ -75,6 +75,12 @@ export class CouponsService {
    * B4: nhận tx? để chạy ATOMIC cùng transaction đặt đơn — chống race usageLimit.
    *  - updateMany với guard `usedCount < usageLimit` → bộ đếm atomic, count=0 nghĩa là hết lượt.
    *  - bắt P2002 (couponId+orderId trùng) → coi như đã redeem (idempotent cho retry).
+   *
+   * Nếu KHÔNG được gọi trong 1 transaction có sẵn (tx=undefined — checkout.service.ts luôn
+   * truyền tx, nhưng hàm này vẫn hỗ trợ gọi standalone), tự mở transaction riêng: advisory lock
+   * bên dưới chỉ tồn tại trong phạm vi 1 transaction, KHÔNG có tx bao ngoài thì lock nhả ngay sau
+   * câu lệnh raw đầu tiên (Postgres tự nhả pg_advisory_xact_lock khi transaction đó kết thúc) và
+   * không bảo vệ được count()+create() phía sau.
    */
   async redeem(
     code: string,
@@ -82,7 +88,25 @@ export class CouponsService {
     orderId: string,
     tx?: Prisma.TransactionClient,
   ): Promise<void> {
-    const db = tx ?? this.prisma;
+    if (tx) return this.redeemInTx(tx, code, userId, orderId);
+    try {
+      return await this.prisma.$transaction((innerTx) => this.redeemInTx(innerTx, code, userId, orderId));
+    } catch (err) {
+      // P2034: chỉ có thể xảy ra nếu Postgres tự nâng cấp deadlock-detection trên advisory lock
+      // (hiếm) — vẫn map thân thiện thay vì 500, nhất quán với các nơi khác dùng $transaction.
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+        throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
+      }
+      throw err;
+    }
+  }
+
+  private async redeemInTx(
+    db: Prisma.TransactionClient,
+    code: string,
+    userId: string,
+    orderId: string,
+  ): Promise<void> {
     const coupon = await db.coupon.findUnique({ where: { code } });
     if (!coupon) return;
     await this.assertScopeOwnership(coupon, userId, db);
@@ -97,12 +121,19 @@ export class CouponsService {
       }
     }
 
-    // perUserLimit race: validateAndCompute() check pre-flight nhưng KHÔNG atomic.
-    // 2 checkout song song cùng user → cùng đọc usedByUser < limit → cùng tạo
-    // CouponRedemption với orderId khác → UNIQUE(couponId,orderId) KHÔNG chặn.
-    // Re-check trong tx để thu hẹp window (vẫn còn race nếu cùng 1 tx isolation = READ COMMITTED,
-    // nhưng đáng kể nhỏ hơn). Long-term: cần counter atomic per (couponId, userId).
     if (coupon.perUserLimit != null && coupon.perUserLimit > 0) {
+      // Race cũ: validateAndCompute() check pre-flight KHÔNG atomic, và count()+create() ở đây
+      // cũng không atomic với nhau → 2 checkout song song cùng user (2 đơn khác nhau) cùng đọc
+      // usedByUser < limit rồi cùng tạo CouponRedemption với orderId khác nhau → UNIQUE(couponId,
+      // orderId) KHÔNG chặn (thiếu userId trong constraint) → vượt perUserLimit.
+      // Khoá advisory theo (couponId, userId), giữ tới khi TRANSACTION HIỆN TẠI (tx checkout hoặc
+      // tx riêng ở redeem() phía trên) commit/rollback → 2 redeem() đồng thời cho CÙNG cặp
+      // coupon+user bị serialize hoá (chờ nhau) tại đúng điểm này, count() sau lock luôn đọc được
+      // kết quả create() của giao dịch đã đi trước. Chọn advisory lock thay vì nâng isolationLevel
+      // của CẢ transaction lên Serializable: transaction checkout còn làm nhiều việc khác (trừ
+      // stock, ví, điểm...) — nâng Serializable toàn bộ sẽ mở rộng rủi ro serialization-failure ra
+      // ngoài phạm vi coupon, trong khi advisory lock chỉ khoá đúng cặp (couponId,userId) liên quan.
+      await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${coupon.id}), hashtext(${userId}))`;
       const usedByUser = await db.couponRedemption.count({
         where: { couponId: coupon.id, userId },
       });

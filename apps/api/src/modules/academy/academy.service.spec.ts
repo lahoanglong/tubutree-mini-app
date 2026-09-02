@@ -99,7 +99,7 @@ describe('AcademyService.getCourse', () => {
     expect((prisma as any).course.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'c1' },
-        include: { lessons: { orderBy: { sortOrder: 'asc' } } },
+        include: { lessons: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] } },
       }),
     );
     expect(out.id).toBe('c1');
@@ -179,7 +179,7 @@ describe('AcademyService.adminListCourses', () => {
 
     expect((prisma as any).course.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        include: { lessons: { orderBy: { sortOrder: 'asc' } } },
+        include: { lessons: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] } },
       }),
     );
     const call = (prisma as any).course.findMany.mock.calls[0][0];

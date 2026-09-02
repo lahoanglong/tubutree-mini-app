@@ -4,11 +4,22 @@ import { StorefrontService } from './storefront.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 function makePrisma(over: Record<string, any> = {}) {
-  return {
+  const merged: Record<string, any> = {
     user: { findUniqueOrThrow: jest.fn() },
     storefront: { findFirst: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
     ...over,
-  } as unknown as PrismaService;
+  };
+  // Việc 6: createCollection/addItem giờ bọc count()+create() trong $transaction (Serializable) —
+  // mock mặc định hỗ trợ CẢ 2 dạng $transaction Prisma dùng trong service: callback (chạy với
+  // chính `merged`, tức tx === prisma trong test, giữ nguyên mọi mock count/create đã set qua
+  // `over`) và mảng promise/thao tác (batch, dùng bởi reorderCollections/reorderItems). Test nào
+  // tự truyền `$transaction` riêng qua `over` (vd giả lập P2034) thì giữ nguyên override đó.
+  merged.$transaction =
+    over.$transaction ??
+    jest.fn((arg: unknown) =>
+      typeof arg === 'function' ? (arg as (tx: unknown) => unknown)(merged) : Promise.all(arg as unknown[]),
+    );
+  return merged as unknown as PrismaService;
 }
 
 describe('StorefrontService.getOrCreateMine', () => {
@@ -115,6 +126,20 @@ describe('StorefrontService collections', () => {
     expect(c.storefrontId).toBe('s1');
     expect(c.sortOrder).toBe(2);
     expect(c.kind).toBe('NORMAL');
+    // Việc 6: count()+create() phải chạy TRONG $transaction Serializable (chống 2 request tạo
+    // collection đồng thời trùng sortOrder), không còn gọi count()/create() trực tiếp trên prisma.
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'Serializable' });
+  });
+
+  it('createCollection: race sortOrder đụng Serializable (P2034) → báo thân thiện, không phải lỗi thô', async () => {
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', ownerUserId: 'u1' }) },
+      $transaction: jest.fn().mockRejectedValue({ code: 'P2034', message: 'serialization failure' }),
+    });
+    const svc = new StorefrontService(prisma);
+    await expect(svc.createCollection('u1', { title: 'Skincare' })).rejects.toThrow(
+      'Hệ thống đang bận xử lý, vui lòng thử lại.',
+    );
   });
 
   it('reorderCollections cập nhật sortOrder theo thứ tự mảng', async () => {
@@ -192,6 +217,21 @@ describe('StorefrontService items', () => {
     expect(it.collectionId).toBe('c1');
     expect(it.productId).toBe('p1');
     expect(it.sortOrder).toBe(1);
+    // Việc 6: count()+create() phải chạy TRONG $transaction Serializable (chống 2 request thêm
+    // item đồng thời vào cùng collection trùng sortOrder).
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'Serializable' });
+  });
+
+  it('addItem: race sortOrder đụng Serializable (P2034) → báo thân thiện, không phải lỗi thô', async () => {
+    const prisma = makePrisma({
+      storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'u1' } }) },
+      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true, affiliateBlocked: false }) },
+      $transaction: jest.fn().mockRejectedValue({ code: 'P2034', message: 'serialization failure' }),
+    });
+    const svc = new StorefrontService(prisma);
+    await expect(svc.addItem('u1', 'c1', { productId: 'p1' })).rejects.toThrow(
+      'Hệ thống đang bận xử lý, vui lòng thử lại.',
+    );
   });
 
   it('addItem chặn SP affiliateBlocked=true, không tạo item', async () => {

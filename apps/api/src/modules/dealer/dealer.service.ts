@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, Optional } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -38,7 +39,18 @@ export class DealerService {
       where: { userId, status: 'PENDING' },
     });
     if (pending) throw new BadRequestException('Bạn đã có đơn đăng ký đang chờ duyệt.');
-    return this.prisma.dealerApplication.create({ data: { ...dto, userId } });
+    try {
+      return await this.prisma.dealerApplication.create({ data: { ...dto, userId } });
+    } catch (err) {
+      // TOCTOU: findFirst rồi create không transaction — 2 request apply() đồng thời có thể cùng
+      // qua check "chưa có đơn PENDING" trước khi request đầu commit. Partial unique index
+      // dealer_applications_pending_user_key (userId WHERE status='PENDING') chặn ở DB, request
+      // thua ăn P2002 → trả đúng message nghiệp vụ thay vì lộ lỗi DB thô.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new BadRequestException('Bạn đã có đơn đăng ký đang chờ duyệt.');
+      }
+      throw err;
+    }
   }
 
   async getMe(userId: string) {
@@ -368,16 +380,29 @@ export class DealerService {
       const { bonusAmount } = bonusForRevenue(revenue, sorted);
       if (bonusAmount <= 0) continue;
 
-      // Idempotent: đã trả thưởng quý này cho đại lý này thì bỏ qua.
+      // Idempotent (pre-check, KHÔNG atomic — vẫn còn race nếu 2 lượt chạy cron/manual chồng
+      // nhau đúng lúc): đã trả thưởng quý này cho đại lý này thì bỏ qua, tránh 1 lần create() thừa
+      // ở đường thường. Bảo vệ THẬT SỰ nằm ở unique (userId,refType,refId) + catch P2002 bên dưới.
       const existed = await this.prisma.dealerCreditLedger.findFirst({
         where: { userId: d.id, refType: 'QUARTER_BONUS', refId: quarter },
         select: { id: true },
       });
       if (existed) continue;
 
-      await this.prisma.dealerCreditLedger.create({
-        data: { userId: d.id, delta: -bonusAmount, refType: 'QUARTER_BONUS', refId: quarter, note: `Thưởng doanh số ${quarter}` },
-      });
+      try {
+        await this.prisma.dealerCreditLedger.create({
+          data: { userId: d.id, delta: -bonusAmount, refType: 'QUARTER_BONUS', refId: quarter, note: `Thưởng doanh số ${quarter}` },
+        });
+      } catch (err) {
+        // findFirst rồi create không transaction — 2 lần chạy cron/manual chồng nhau (double-pay)
+        // có thể cùng qua check "chưa trả thưởng" ở trên. Unique(userId,refType,refId) chặn ở DB,
+        // lượt thua ăn P2002 → coi như ĐÃ trả thưởng (bỏ qua dealer này, KHÔNG throw để không chặn
+        // các dealer còn lại trong cùng lượt chạy).
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          continue;
+        }
+        throw err;
+      }
       if (this.notifications) {
         await this.notifications
           .notify(d.id, 'DEALER_BONUS_PAID', {

@@ -523,3 +523,44 @@ describe('AdminService.setUserRole', () => {
     expect(out.role).toBe('ADMIN');
   });
 });
+
+// Việc 9 (audit round 2): createCoupon() trước đây KHÔNG ghi scopeMeta → coupon scope TIER/
+// USER_GROUP tạo ra fail-closed ở MỌI user (isCouponEligible luôn false), KHÔNG AI DÙNG ĐƯỢC.
+// DTO (RequiredScopeMeta) đã bắt buộc đúng field trước khi tới service — test này chỉ xác nhận
+// service GHI ĐÚNG scopeMeta vào prisma.coupon.create.
+describe('AdminService.createCoupon — ghi scopeMeta (Việc 9)', () => {
+  const couponBase = {
+    code: 'SALE10',
+    type: 'PERCENT' as const,
+    value: 10,
+    startAt: '2026-01-01T00:00:00.000Z',
+    endAt: '2026-12-31T00:00:00.000Z',
+  };
+
+  it('scope=TIER + scopeMeta.tierId → ghi scopeMeta vào coupon.create', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'c1' });
+    const prisma = makePrisma({ coupon: { create } });
+    await mkAdmin(prisma).createCoupon({ ...couponBase, scope: 'TIER', scopeMeta: { tierId: 'GOLD' } });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ scope: 'TIER', scopeMeta: { tierId: 'GOLD' } }) }),
+    );
+  });
+
+  it('scope=USER_GROUP + scopeMeta.userId → ghi scopeMeta vào coupon.create', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'c2' });
+    const prisma = makePrisma({ coupon: { create } });
+    await mkAdmin(prisma).createCoupon({ ...couponBase, scope: 'USER_GROUP', scopeMeta: { userId: 'u1' } });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ scope: 'USER_GROUP', scopeMeta: { userId: 'u1' } }) }),
+    );
+  });
+
+  it('scope=PUBLIC, không truyền scopeMeta → coupon.create nhận scopeMeta=undefined (không lỗi)', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'c3' });
+    const prisma = makePrisma({ coupon: { create } });
+    await mkAdmin(prisma).createCoupon({ ...couponBase, scope: 'PUBLIC' });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ scope: 'PUBLIC', scopeMeta: undefined }) }),
+    );
+  });
+});

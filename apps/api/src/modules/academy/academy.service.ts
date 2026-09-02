@@ -60,7 +60,10 @@ export class AcademyService {
   async getCourse(userId: string, courseId: string, isAdmin = false) {
     const course = await this.prisma.course.findUnique({
       where: { id: courseId },
-      include: { lessons: { orderBy: { sortOrder: 'asc' } } },
+      // Tiebreaker createdAt: nhiều lesson cùng sortOrder=0 (mặc định addLesson không truyền
+      // sortOrder) trước đây không có thứ tự phụ ổn định giữa các lần load — chỉ sort theo
+      // sortOrder, hàng cùng giá trị phụ thuộc thứ tự vật lý/kế hoạch truy vấn (không đảm bảo).
+      include: { lessons: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] } },
     });
     if (!course) throw new NotFoundException('Không tìm thấy khoá học.');
     if (!course.isPublished && !isAdmin) throw new NotFoundException('Không tìm thấy khoá học.');
@@ -96,7 +99,10 @@ export class AcademyService {
   adminListCourses() {
     return this.prisma.course.findMany({
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-      include: { lessons: { orderBy: { sortOrder: 'asc' } } },
+      // Tiebreaker createdAt: nhiều lesson cùng sortOrder=0 (mặc định addLesson không truyền
+      // sortOrder) trước đây không có thứ tự phụ ổn định giữa các lần load — chỉ sort theo
+      // sortOrder, hàng cùng giá trị phụ thuộc thứ tự vật lý/kế hoạch truy vấn (không đảm bảo).
+      include: { lessons: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] } },
     });
   }
 

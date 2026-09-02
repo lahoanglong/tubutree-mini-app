@@ -1,5 +1,6 @@
 import { CouponsService } from './coupons.service';
 import type { PrismaService } from '../../prisma/prisma.service';
+import type { Prisma } from '@prisma/client';
 
 const past = new Date(Date.now() - 864e5);
 const future = new Date(Date.now() + 864e5);
@@ -123,24 +124,34 @@ function makeRedeemService(opts: {
   coupon: unknown;
   updateManyCount?: number;
   createImpl?: jest.Mock;
-  perUserCount?: number;
+  perUserCount?: number | number[];
 }) {
   const updateMany = jest
     .fn()
     .mockResolvedValue({ count: opts.updateManyCount ?? 1 });
   const create = opts.createImpl ?? jest.fn().mockResolvedValue({ id: 'r1' });
-  // perUserLimit re-check trong redeem (in-tx) gọi couponRedemption.count.
-  // Mặc định 0 → chưa dùng lần nào → pass.
-  const count = jest.fn().mockResolvedValue(opts.perUserCount ?? 0);
-  const prisma = {
+  // perUserLimit re-check trong redeem (in-tx) gọi couponRedemption.count. Mặc định 0 → chưa
+  // dùng lần nào → pass. Cho phép truyền mảng để mô phỏng giá trị đổi giữa các lần gọi (race).
+  const countValues = Array.isArray(opts.perUserCount) ? opts.perUserCount : [opts.perUserCount ?? 0];
+  let countCallIdx = 0;
+  const count = jest.fn().mockImplementation(() =>
+    Promise.resolve(countValues[Math.min(countCallIdx++, countValues.length - 1)]),
+  );
+  const executeRaw = jest.fn().mockResolvedValue(0);
+  const base: Record<string, unknown> = {
     coupon: {
       findUnique: jest.fn().mockResolvedValue(opts.coupon),
       updateMany,
     },
     couponRedemption: { create, count },
-  } as unknown as PrismaService;
+    $executeRaw: executeRaw,
+  };
+  // redeem() không tx → tự mở $transaction(cb) — mock chạy cb với chính client này (mirror
+  // refill.service.spec.ts / rbac.service.spec.ts) để logic bên trong dùng CHUNG mock ở trên.
+  base.$transaction = jest.fn().mockImplementation((cb: (tx: unknown) => unknown) => cb(base));
+  const prisma = base as unknown as PrismaService;
   const svc = new CouponsService(prisma);
-  return { svc, updateMany, create, count };
+  return { svc, updateMany, create, count, executeRaw, transaction: base.$transaction as jest.Mock };
 }
 
 describe('CouponsService.redeem atomic (B4)', () => {
@@ -193,5 +204,89 @@ describe('CouponsService.redeem atomic (B4)', () => {
     await svc.redeem('SALE', 'u1', 'o1');
     expect(updateMany).not.toHaveBeenCalled();
     expect(create).toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Việc 2 (audit round 2): perUserLimit race — count()+create() không atomic trước đây.
+// Khoá advisory pg_advisory_xact_lock(couponId,userId) đóng race mà KHÔNG cần nâng isolation
+// của cả transaction checkout lên Serializable.
+// ─────────────────────────────────────────────────────────────
+
+describe('CouponsService.redeem — perUserLimit race (advisory lock)', () => {
+  it('khoá advisory theo (couponId,userId) được gọi TRƯỚC count() và TRƯỚC create() — đúng thứ tự chống race', async () => {
+    const order: string[] = [];
+    const { svc, executeRaw, count, create } = makeRedeemService({
+      coupon: coupon({ usageLimit: null, perUserLimit: 1 }),
+      perUserCount: 0,
+    });
+    executeRaw.mockImplementation(() => {
+      order.push('lock');
+      return Promise.resolve(0);
+    });
+    (count as jest.Mock).mockImplementation(() => {
+      order.push('count');
+      return Promise.resolve(0);
+    });
+    (create as jest.Mock).mockImplementation(() => {
+      order.push('create');
+      return Promise.resolve({ id: 'r1' });
+    });
+    await svc.redeem('SALE', 'u1', 'o1');
+    // Nếu count()/create() chạy TRƯỚC khi khoá được giữ, request thứ 2 chạy song song có thể
+    // xen giữa (đọc count cũ) — đúng race đã được audit xác nhận. Thứ tự lock→count→create đảm
+    // bảo mọi request khác cho CÙNG (couponId,userId) phải đợi tới khi request này commit/rollback.
+    expect(order).toEqual(['lock', 'count', 'create']);
+    // Tham số truyền vào $executeRaw (sau mảng template strings) đúng là couponId rồi userId —
+    // sai thứ tự/tham số sẽ khoá nhầm cặp, không còn chống race đúng chỗ.
+    expect(executeRaw.mock.calls[0].slice(1)).toEqual(['c1', 'u1']);
+  });
+
+  it('count() đọc được kết quả của request đi trước SAU khi qua khoá → vượt perUserLimit bị chặn, KHÔNG tạo thêm redemption', async () => {
+    // Mô phỏng: request A đã redeem xong (đã có 1 CouponRedemption), request B tới sau, xếp hàng
+    // ở advisory lock, khi qua được lock thì count() đọc lại thấy đã đủ perUserLimit.
+    const { svc, create } = makeRedeemService({
+      coupon: coupon({ usageLimit: null, perUserLimit: 1 }),
+      perUserCount: 1, // đã dùng đúng 1 lần — hết lượt cho perUserLimit=1
+    });
+    await expect(svc.redeem('SALE', 'u1', 'o1')).rejects.toThrow('hết lượt cho mã này');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('perUserLimit <= 0 (không giới hạn) → KHÔNG khoá advisory, KHÔNG check count', async () => {
+    const { svc, executeRaw, count, create } = makeRedeemService({
+      coupon: coupon({ usageLimit: null, perUserLimit: 0 }),
+    });
+    await svc.redeem('SALE', 'u1', 'o1');
+    expect(executeRaw).not.toHaveBeenCalled();
+    expect(count).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalled();
+  });
+
+  it('KHÔNG truyền tx (gọi standalone) → tự mở $transaction riêng để khoá advisory có phạm vi hợp lệ', async () => {
+    const { svc, transaction } = makeRedeemService({
+      coupon: coupon({ usageLimit: null, perUserLimit: 1 }),
+    });
+    await svc.redeem('SALE', 'u1', 'o1');
+    expect(transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('CÓ truyền tx (checkout.service.ts) → dùng thẳng tx đó, KHÔNG mở $transaction lồng mới', async () => {
+    const { svc, transaction } = makeRedeemService({
+      coupon: coupon({ usageLimit: null, perUserLimit: 1 }),
+    });
+    // Tái dùng chính prisma mock (đã có coupon/couponRedemption/$executeRaw) làm "tx" giả do
+    // checkout truyền vào — chỉ cần đúng shape Prisma.TransactionClient dùng trong redeemInTx.
+    const fakeTx = (svc as unknown as { prisma: PrismaService }).prisma as unknown as Prisma.TransactionClient;
+    await svc.redeem('SALE', 'u1', 'o1', fakeTx);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('standalone: transaction riêng đụng P2034 (serialization/deadlock hiếm trên advisory lock) → báo thân thiện, không phải lỗi thô', async () => {
+    const { svc, transaction } = makeRedeemService({ coupon: coupon({ usageLimit: null }) });
+    transaction.mockRejectedValue({ code: 'P2034', message: 'serialization failure' });
+    await expect(svc.redeem('SALE', 'u1', 'o1')).rejects.toThrow(
+      'Hệ thống đang bận xử lý, vui lòng thử lại.',
+    );
   });
 });

@@ -40,6 +40,11 @@ model RoleGrant {
   revokedAt DateTime? // null = còn hiệu lực
   createdAt DateTime      @default(now())
 
+  // Chống race ở RbacService.addGrant() (findFirst rồi create, 2 request cấp quyền đồng thời cho
+  // CÙNG SĐT+role có thể tạo 2 grant active trùng): partial unique index
+  // "role_grants_active_phone_role_key" ON (phone, role) WHERE "revokedAt" IS NULL — Prisma schema
+  // KHÔNG hỗ trợ cú pháp @@unique có điều kiện WHERE nên index này được thêm bằng migration SQL
+  // thủ công (xem migrations/*_role_grant_active_unique), không khai báo được @@unique chuẩn ở đây.
   @@index([phone, revokedAt])
   @@map("role_grants")
 }
@@ -1060,6 +1065,12 @@ model DealerApplication {
   rejectionReason       String?
   createdAt             DateTime     @default(now())
 
+  // Chống TOCTOU ở DealerService.apply() (findFirst rồi create không transaction, 2 request đăng
+  // ký đại lý đồng thời có thể tạo 2 đơn PENDING trùng): partial unique index
+  // "dealer_applications_pending_user_key" ON (userId) WHERE status='PENDING' — Prisma schema
+  // KHÔNG hỗ trợ cú pháp @@unique có điều kiện WHERE nên index này được thêm bằng migration SQL
+  // thủ công (xem migrations/*_dealer_application_pending_unique), không khai báo được @@unique
+  // chuẩn ở đây.
   @@index([userId])
   @@map("dealer_applications")
 }
@@ -1084,6 +1095,17 @@ model DealerCreditLedger {
   note      String?
   createdAt DateTime @default(now())
 
+  // Chống double-pay ở DealerService.payoutQuarterlyBonuses() (findFirst rồi create không
+  // transaction, 2 lần chạy cron/manual chồng nhau có thể trả thưởng trùng 1 quý): unique trên
+  // (userId, refType, refId). Đã rà soát TOÀN BỘ nơi tạo DealerCreditLedger trong dealer.service.ts
+  // (chỉ 3 chỗ, không có nơi nào khác trong repo) trước khi thêm — an toàn với dữ liệu hiện có:
+  //  - refType='ORDER': refId=order.id (globally unique per row) → không bao giờ trùng hợp lệ.
+  //  - refType='PAYMENT' (creditPayment): KHÔNG set refId → luôn NULL. Postgres coi mỗi NULL là
+  //    giá trị riêng biệt trong UNIQUE constraint (không tự đụng nhau) → nhiều lần thanh toán công
+  //    nợ của cùng 1 dealer vẫn tạo được nhiều dòng PAYMENT bình thường, KHÔNG bị chặn nhầm.
+  //  - refType='QUARTER_BONUS': refId=quarter (vd "Q3/2026") — ĐÚNG cặp cần chặn trùng, 1 dealer
+  //    chỉ nhận 1 dòng thưởng cho 1 quý.
+  @@unique([userId, refType, refId])
   @@index([userId])
   @@map("dealer_credit_ledgers")
 }
@@ -1859,14 +1881,18 @@ model Course {
 }
 
 model Lesson {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   courseId    String
-  course      Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   title       String
   contentType String // VIDEO | ARTICLE
   videoUrl    String?
-  body        String? @db.Text
-  sortOrder   Int     @default(0)
+  body        String?  @db.Text
+  sortOrder   Int      @default(0)
+  // Tiebreaker cho orderBy khi nhiều lesson cùng sortOrder=0 (mặc định addLesson không truyền
+  // sortOrder) — thiếu cột này trước đây khiến thứ tự phụ thuộc thứ tự vật lý trên đĩa (không ổn
+  // định giữa các lần load). Cột mới, backfill CURRENT_TIMESTAMP cho lesson cũ (xem migration).
+  createdAt   DateTime @default(now())
 
   @@index([courseId, sortOrder])
   @@map("lessons")

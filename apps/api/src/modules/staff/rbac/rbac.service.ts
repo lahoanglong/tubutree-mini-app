@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { Prisma, User, UserRole } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { User, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 
 const RANK: Record<UserRole, number> = {
@@ -53,8 +54,17 @@ export class RbacService {
         select: { id: true },
       });
       if (!existing) {
-        await tx.roleGrant.create({ data: { phone: normalized, role, grantedBy: adminId } });
-        this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${normalized}`);
+        try {
+          await tx.roleGrant.create({ data: { phone: normalized, role, grantedBy: adminId } });
+          this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${normalized}`);
+        } catch (err) {
+          // findFirst rồi create trong 1 $transaction READ COMMITTED (mặc định) vẫn không atomic —
+          // 2 request addGrant() đồng thời cho CÙNG phone+role có thể cùng qua check "chưa có
+          // grant" trước khi tx đầu commit. Partial unique index role_grants_active_phone_role_key
+          // (phone,role WHERE revokedAt IS NULL) chặn ở DB, request thua ăn P2002 → coi như ĐÃ cấp
+          // (idempotent), tiếp tục áp role cho user thay vì rollback/throw lỗi DB thô.
+          if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+        }
       }
       // Áp ngay nếu user đã tồn tại
       const user = await tx.user.findUnique({ where: { phone: normalized } });

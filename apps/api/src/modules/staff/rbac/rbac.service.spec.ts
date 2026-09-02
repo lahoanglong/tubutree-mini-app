@@ -129,6 +129,40 @@ describe('RbacService.addGrant', () => {
     const out = await new RbacService(prisma).addGrant('admin1', '0900000002', 'STAFF');
     expect(out.applied).toBe(false);
   });
+
+  // Việc 5 (audit round 2): findFirst rồi create trong 1 $transaction READ COMMITTED vẫn không
+  // atomic — 2 request addGrant() đồng thời cho CÙNG phone+role có thể cùng qua check "chưa có
+  // grant". Partial unique index role_grants_active_phone_role_key chặn ở DB, request thua ăn
+  // P2002 → phải coi như ĐÃ cấp (idempotent), KHÔNG throw/rollback, vẫn tiếp tục áp role cho user.
+  it('race 2 request đồng thời (P2002 khi create) → coi như đã cấp, vẫn áp role cho user, không throw', async () => {
+    const { Prisma } = jest.requireActual('@prisma/client');
+    const p2002 = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' });
+    const prisma = makePrisma({
+      roleGrant: {
+        findFirst: jest.fn().mockResolvedValue(null), // pre-check chưa thấy — request kia chưa commit lúc check chạy
+        create: jest.fn().mockRejectedValue(p2002),
+        findMany: jest.fn().mockResolvedValue([{ role: 'STAFF' }]),
+      },
+      user: {
+        findUnique: jest.fn().mockResolvedValue(mkUser()),
+        update: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })),
+      },
+    });
+    const out = await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF');
+    expect(out.applied).toBe(true);
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'STAFF' } }));
+  });
+
+  it('lỗi KHÔNG phải P2002 khi create → vẫn throw (không nuốt lỗi hạ tầng khác)', async () => {
+    const prisma = makePrisma({
+      roleGrant: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockRejectedValue(new Error('DB down')),
+      },
+      user: { findUnique: jest.fn().mockResolvedValue(null) },
+    });
+    await expect(new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF')).rejects.toThrow('DB down');
+  });
 });
 
 describe('RbacService.revokeGrant', () => {

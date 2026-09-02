@@ -275,6 +275,8 @@ export class AdminService {
     usageLimit?: number;
     perUserLimit?: number;
     scope: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE';
+    // DTO (RequiredScopeMeta) đã bắt buộc đúng field khi scope=TIER/USER_GROUP trước khi tới đây.
+    scopeMeta?: { tierId?: string; userId?: string };
   }) {
     return this.prisma.coupon.create({
       data: {
@@ -288,6 +290,9 @@ export class AdminService {
         usageLimit: data.usageLimit,
         perUserLimit: data.perUserLimit ?? 1,
         scope: data.scope,
+        // Trước đây KHÔNG ghi scopeMeta → coupon scope TIER/USER_GROUP tạo ra fail-closed ở MỌI
+        // user trong isCouponEligible (coupon-scope.ts) — KHÔNG AI DÙNG ĐƯỢC, không lỗi khi tạo.
+        scopeMeta: data.scopeMeta ? (data.scopeMeta as object) : undefined,
       },
     });
   }
