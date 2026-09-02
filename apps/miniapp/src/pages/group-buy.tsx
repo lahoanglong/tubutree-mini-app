@@ -1,6 +1,7 @@
 import { Box, Page, Text, Button, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
+import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { LineItemSkeleton } from '../components/ui/skeleton';
@@ -11,11 +12,6 @@ function timeLeft(iso: string): string {
   if (diff < 3600) return `còn ${Math.floor(diff / 60)} phút`;
   if (diff < 86400) return `còn ${Math.floor(diff / 3600)} giờ`;
   return `còn ${Math.floor(diff / 86400)} ngày`;
-}
-
-function msg(e: unknown): string {
-  const ax = e as { response?: { data?: { message?: string } }; message?: string };
-  return ax?.response?.data?.message ?? ax?.message ?? 'Có lỗi xảy ra';
 }
 
 export default function GroupBuyPage() {
@@ -41,7 +37,7 @@ export default function GroupBuyPage() {
       });
       void queryClient.invalidateQueries({ queryKey: ['group-buy'] });
     },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
   return (
@@ -59,7 +55,7 @@ export default function GroupBuyPage() {
           <LineItemSkeleton />
         </Box>
       ) : isError ? (
-        <ErrorState message={msg(error)} onRetry={() => void refetch()} />
+        <ErrorState message={getErrorMessage(error)} onRetry={() => void refetch()} />
       ) : groups && groups.length > 0 ? (
         <Box p={2}>
           {groups.map((g) => (

@@ -63,6 +63,10 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [promo, setPromo] = useState({ title: '', subtitle: '', startAt: '', endAt: '' });
   const resetPromoForm = () => { setEditingId(null); setPromo({ title: '', subtitle: '', startAt: '', endAt: '' }); };
+  // Chỉ chặn khi CẢ HAI ngày do người dùng tự nhập và endAt < startAt — không tự hoán đổi,
+  // chỉ chặn submit + báo lỗi (an toàn hơn tự sửa hộ dữ liệu người dùng nhập).
+  const dateRangeInvalid =
+    !!promo.startAt && !!promo.endAt && new Date(promo.endAt).getTime() < new Date(promo.startAt).getTime();
   // startAt/endAt (yyyy-mm-dd từ input date) → ISO. endAt mặc định = startAt + 30 ngày
   // (KHÔNG phải now+30d — nếu chiến dịch bắt đầu >30 ngày sau thì endAt<startAt, KM không bao giờ hiện).
   const promoIso = () => {
@@ -168,13 +172,16 @@ function Editor({ brand }: { brand: OwnedBrand }) {
               style={{ flex: 1, padding: 8, borderRadius: 8, border: '1px solid var(--neutral-200)' }}
             />
           </Box>
+          {dateRangeInvalid && (
+            <Text size="xSmall" style={{ color: 'var(--danger)' }}>Ngày kết thúc phải sau ngày bắt đầu.</Text>
+          )}
           {editingId ? (
             <Box flex style={{ gap: 6 }}>
-              <Button variant="secondary" style={{ flex: 1 }} disabled={!promo.title.trim()} loading={updPromo.isPending} onClick={() => updPromo.mutate()}>Lưu thay đổi</Button>
+              <Button variant="secondary" style={{ flex: 1 }} disabled={!promo.title.trim() || dateRangeInvalid} loading={updPromo.isPending} onClick={() => updPromo.mutate()}>Lưu thay đổi</Button>
               <Button variant="tertiary" onClick={resetPromoForm}>Huỷ</Button>
             </Box>
           ) : (
-            <Button variant="secondary" disabled={!promo.title.trim()} loading={addPromo.isPending} onClick={() => addPromo.mutate()}>+ Thêm khuyến mãi</Button>
+            <Button variant="secondary" disabled={!promo.title.trim() || dateRangeInvalid} loading={addPromo.isPending} onClick={() => addPromo.mutate()}>+ Thêm khuyến mãi</Button>
           )}
         </Box>
       </Box>

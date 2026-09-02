@@ -250,7 +250,7 @@ export default function NotificationsPage() {
                       onClick={() => {
                         haptic('light');
                         setSelectedNotif(null);
-                        navigate(orderCode ? `/order/${orderCode}` : '/orders');
+                        navigate(orderCode ? `/order/${encodeURIComponent(orderCode)}` : '/orders');
                       }}
                     >
                       Xem chi tiết đơn hàng

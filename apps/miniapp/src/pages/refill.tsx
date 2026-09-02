@@ -3,15 +3,11 @@ import { Box, Page, Text, Button, useSnackbar } from 'zmp-ui';
 import { Recycle, Droplets, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRefillSummary, returnBottles } from '../services/refill-api';
+import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
 import { haptic } from '../utils/haptic';
-
-function msg(e: unknown): string {
-  const ax = e as { response?: { data?: { message?: string } }; message?: string };
-  return ax?.response?.data?.message ?? ax?.message ?? 'Có lỗi xảy ra';
-}
 
 function fmtDate(iso: string): string {
   try {
@@ -43,7 +39,7 @@ export default function RefillPage() {
       void queryClient.invalidateQueries({ queryKey: ['garden'] });
       void queryClient.invalidateQueries({ queryKey: ['game'] });
     },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
   const remaining = data?.monthlyRemaining ?? 0;
@@ -71,7 +67,7 @@ export default function RefillPage() {
           <Skeleton height={160} />
         </Box>
       ) : isError ? (
-        <ErrorState message={msg(error)} onRetry={() => void refetch()} />
+        <ErrorState message={getErrorMessage(error)} onRetry={() => void refetch()} />
       ) : (
         <Box p={2}>
           {/* Tổng quan dấu chân xanh */}

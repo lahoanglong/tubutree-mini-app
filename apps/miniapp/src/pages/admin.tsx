@@ -392,6 +392,15 @@ function StaffSection() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  // Cấp ADMIN là privilege-escalation rủi ro cao hơn hẳn cấp STAFF — thêm bước xác nhận phụ
+  // (mirror pattern window.confirm trong apps/web/src/app/admin/page.tsx's GrantRoleForm).
+  const submitGrant = () => {
+    if (role === 'ADMIN' && !window.confirm(`Xác nhận cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`)) {
+      return;
+    }
+    grantM.mutate();
+  };
+
   return (
     <Box px={4} pb={4} flex flexDirection="column" style={{ gap: 12 }}>
       <Box flex justifyContent="space-between" alignItems="center">
@@ -496,7 +505,7 @@ function StaffSection() {
             fullWidth
             loading={grantM.isPending}
             disabled={!PHONE_RE.test(phone.trim())}
-            onClick={() => grantM.mutate()}
+            onClick={submitGrant}
           >
             Lưu quyền
           </Button>
