@@ -37,11 +37,12 @@ pnpm --filter @tubutree/web dev   # chạy web    → http://localhost:3000
 pnpm --filter @tubutree/miniapp dev  # chạy mini app (cần zmp-cli login)
 ```
 
-## Tiến độ tổng quan (cập nhật 2026-09-01, verify trực tiếp trên code)
+## Tiến độ tổng quan (cập nhật 2026-09-02, verify trực tiếp trên code)
 
-> **Backend: 38 module** (catalog, checkout, orders, loyalty, game/Vườn Xanh, affiliate, cashback (provider-agnostic), dealer B2B, flash-sale, groupbuy, subscriptions, storefront CTV, brand, staff (RBAC/ca làm/chấm công/lương), academy, content-kit, cskh (quick-reply/auto-reply Zalo OA), community feed, refill, wishlist, reviews, ai-advisor, notifications, vouchers, wallet, beta, faq, lifecycle, v.v.) — **typecheck sạch, 83/83 test suite · 1076/1076 unit test PASS** (verify lại trực tiếp, không chỉ dựa tài liệu cũ).
-> Miniapp (36 trang) + Web đều typecheck sạch. Commit gần nhất trên `main`: 2026-09-01.
+> **Backend: 38 module** (catalog, checkout, orders, loyalty, game/Vườn Xanh, affiliate, cashback (provider-agnostic), dealer B2B, flash-sale, groupbuy, subscriptions, storefront CTV, brand, staff (RBAC/ca làm/chấm công/lương), academy, content-kit, cskh (quick-reply/auto-reply Zalo OA), community feed, refill, wishlist, reviews, ai-advisor, notifications, vouchers, wallet, beta, faq, lifecycle, v.v.) — **typecheck sạch, 85/85 test suite · 1132/1132 unit test PASS** (verify lại trực tiếp, không chỉ dựa tài liệu cũ).
+> Miniapp (36 trang) + Web đều typecheck sạch.
 > Toàn bộ blocker bảo mật/money-path từng ghi nhận (webhook fail-open, thiếu rate-limit, oversell, hoàn ví 2 lần…) đã xác nhận **FIX trong code hiện tại** (fail-closed theo `NODE_ENV`, `@nestjs/throttler` global, trừ stock atomic `updateMany+gte`, exception filter, healthcheck compose).
+> Đêm 2026-09-01→02: deep-review trước release, đã fix thêm — 2 race condition ở CSKH webhook/auto-reply (msg_id dedup + claim lời chào atomic, verify concurrency thật trên Postgres), 1 migration trùng lặp sẽ vỡ khi deploy fresh (đã gỡ), 1 bug data-integrity ở admin (`DealersTab` dùng chung state `tierId` giữa các dòng → có thể gán nhầm tier khi duyệt), form cấp quyền admin mặc định chọn sẵn ADMIN (đổi về least-privilege + thêm confirm), và bổ sung error-state còn thiếu ở hầu hết tab admin web + trang thanh toán/giỏ hàng/đơn hàng.
 
 ### Việc còn tồn đọng (thực tế, không phải backlog cũ)
 
