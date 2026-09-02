@@ -18,6 +18,12 @@ export default function CartPage() {
     mutationFn: (id: string) => removeCartItem(id),
     onSuccess: (data) => qc.setQueryData(['cart'], data),
   });
+  // Chặn double-click/race trên cùng 1 dòng: trong lúc đang cập nhật/xóa 1 item, khóa các
+  // nút của đúng item đó (item khác vẫn thao tác được bình thường).
+  const busyItemId =
+    (update.isPending ? update.variables?.id : null) ?? (remove.isPending ? remove.variables : null);
+  const failedItemId =
+    (update.isError ? update.variables?.id : null) ?? (remove.isError ? remove.variables : null);
 
   if (status === 'idle' || status === 'loading') {
     return (
@@ -92,12 +98,37 @@ export default function CartPage() {
                     <div className="mt-1 font-semibold text-clay-700">{formatVnd(it.unitPrice)}</div>
                     <div className="mt-2 flex items-center gap-3">
                       <div className="flex items-center rounded border border-neutral-200 text-sm">
-                        <button onClick={() => update.mutate({ id: it.id, q: Math.max(1, it.quantity - 1) })} className="px-2 py-1">−</button>
+                        <button
+                          onClick={() => update.mutate({ id: it.id, q: Math.max(1, it.quantity - 1) })}
+                          disabled={busyItemId === it.id}
+                          className="px-2 py-1 disabled:opacity-40"
+                        >
+                          −
+                        </button>
                         <span className="w-7 text-center">{it.quantity}</span>
-                        <button onClick={() => update.mutate({ id: it.id, q: Math.min(it.stock, it.quantity + 1) })} className="px-2 py-1">+</button>
+                        <button
+                          onClick={() => update.mutate({ id: it.id, q: Math.min(it.stock, it.quantity + 1) })}
+                          disabled={busyItemId === it.id}
+                          className="px-2 py-1 disabled:opacity-40"
+                        >
+                          +
+                        </button>
                       </div>
-                      <button onClick={() => remove.mutate(it.id)} className="text-xs text-red-500">Xóa</button>
+                      <button
+                        onClick={() => remove.mutate(it.id)}
+                        disabled={busyItemId === it.id}
+                        className="text-xs text-red-500 disabled:opacity-40"
+                      >
+                        Xóa
+                      </button>
                     </div>
+                    {failedItemId === it.id && (
+                      <p className="mt-1 text-xs text-red-600">
+                        {(update.error ?? remove.error) instanceof Error
+                          ? (update.error ?? remove.error)?.message
+                          : 'Cập nhật giỏ hàng thất bại.'}
+                      </p>
+                    )}
                   </div>
                   <div className="flex-none font-semibold">{formatVnd(it.total)}</div>
                 </div>

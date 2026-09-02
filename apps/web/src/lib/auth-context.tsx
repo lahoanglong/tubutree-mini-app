@@ -29,7 +29,7 @@ interface AuthState {
   user: WebUser | null;
   status: 'idle' | 'loading' | 'authenticated';
   startZaloLogin: () => Promise<void>;
-  handleCallback: (code: string) => Promise<void>;
+  handleCallback: (code: string, state: string | null) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -37,6 +37,11 @@ const AuthContext = createContext<AuthState | null>(null);
 
 const ZALO_APP_ID = process.env.NEXT_PUBLIC_ZALO_APP_ID ?? '';
 const PKCE_KEY = 'tubu_pkce_verifier';
+// CSRF/replay guard cho luồng OAuth: state ngẫu nhiên theo phiên, đối chiếu lại ở callback
+// (trước đây hard-code "state=tubu" và callback không đọc lại — không chặn được login CSRF:
+// kẻ tấn công dùng code Zalo của chính họ dụ nạn nhân mở link callback để bị đăng nhập
+// nhầm vào tài khoản kẻ tấn công).
+const STATE_KEY = 'tubu_oauth_state';
 
 function randomString(len: number): string {
   const arr = new Uint8Array(len);
@@ -85,28 +90,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     const verifier = randomString(48);
     sessionStorage.setItem(PKCE_KEY, verifier);
+    const state = randomString(16);
+    sessionStorage.setItem(STATE_KEY, state);
     const challenge = await sha256Base64Url(verifier);
     const redirectUri = `${window.location.origin}/dang-nhap/callback`;
     const url =
       `https://oauth.zaloapp.com/v4/permission?app_id=${encodeURIComponent(ZALO_APP_ID)}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&code_challenge=${encodeURIComponent(challenge)}&state=tubu`;
+      `&code_challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}`;
     window.location.href = url;
   }, []);
 
-  const handleCallback = useCallback(async (code: string) => {
+  const handleCallback = useCallback(async (code: string, state: string | null) => {
     setStatus('loading');
-    const codeVerifier = sessionStorage.getItem(PKCE_KEY) ?? undefined;
-    const res = await apiFetch<LoginResponse>('/auth/zalo-oauth', {
-      method: 'POST',
-      body: { code, codeVerifier },
-      auth: false,
-    });
-    setAccessToken(res.accessToken);
-    setRefreshToken(res.refreshToken);
-    setUser(res.user);
-    setStatus('authenticated');
-    sessionStorage.removeItem(PKCE_KEY);
+    const expectedState = sessionStorage.getItem(STATE_KEY);
+    sessionStorage.removeItem(STATE_KEY);
+    if (!expectedState || state !== expectedState) {
+      setStatus('idle');
+      throw new Error('Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.');
+    }
+    try {
+      const codeVerifier = sessionStorage.getItem(PKCE_KEY) ?? undefined;
+      const res = await apiFetch<LoginResponse>('/auth/zalo-oauth', {
+        method: 'POST',
+        body: { code, codeVerifier },
+        auth: false,
+      });
+      setAccessToken(res.accessToken);
+      setRefreshToken(res.refreshToken);
+      setUser(res.user);
+      setStatus('authenticated');
+    } catch (e) {
+      // Không để `status` kẹt ở 'loading' khi trao đổi code thất bại — các trang khác
+      // (giỏ hàng, thanh toán, admin) coi 'loading' là "đang kiểm tra phiên" nên sẽ
+      // hiện loading vô hạn thay vì màn hình "cần đăng nhập".
+      setStatus('idle');
+      throw e;
+    } finally {
+      sessionStorage.removeItem(PKCE_KEY);
+    }
   }, []);
 
   const logout = useCallback(async () => {

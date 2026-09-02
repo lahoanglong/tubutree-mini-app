@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { addToCart, formatVnd } from '@/lib/shop-client';
@@ -21,10 +21,20 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
   const [qty, setQty] = useState(1);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   const selected = variations.find((v) => v.id === selectedId);
   const price = selected?.salePrice ?? selected?.retailPrice ?? 0;
   const available = (selected?.stock ?? 0) > 0;
+  // Số lượng luôn giới hạn theo tồn kho của phân loại đang chọn (tối thiểu 1) — tránh
+  // trường hợp chuyển sang phân loại còn ít/hết hàng nhưng vẫn giữ số lượng của phân loại cũ,
+  // dẫn đến gửi lên giỏ hàng số lượng vượt tồn kho (hoặc bằng 0 nếu hết hàng).
+  const maxQty = Math.max(selected?.stock ?? 1, 1);
+
+  // Đổi phân loại → reset số lượng về 1 thay vì giữ số lượng cũ (có thể vượt tồn kho mới).
+  useEffect(() => {
+    setQty(1);
+  }, [selectedId]);
 
   const onAdd = async () => {
     if (status !== 'authenticated') {
@@ -37,8 +47,10 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
     try {
       await addToCart(selected.id, qty);
       setMsg('Đã thêm vào giỏ!');
+      setSuccess(true);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Không thêm được vào giỏ.');
+      setSuccess(false);
     } finally {
       setBusy(false);
     }
@@ -80,7 +92,7 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
           </button>
           <span className="w-8 text-center">{qty}</span>
           <button
-            onClick={() => setQty((q) => Math.min(selected?.stock ?? 1, q + 1))}
+            onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
             className="px-3 py-2 text-lg"
             aria-label="Tăng"
           >
@@ -99,7 +111,7 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
       {msg && (
         <p className="mt-3 text-sm text-leaf-700">
           {msg}{' '}
-          {msg.includes('giỏ') && (
+          {success && (
             <a href="/gio-hang" className="font-semibold underline">
               Xem giỏ hàng →
             </a>

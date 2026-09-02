@@ -151,7 +151,7 @@ function DealerRow({ app: a }: { app: DealerApp }) {
   const [tierId, setTierId] = useState('');
   const review = useMutation({
     mutationFn: (approve: boolean) =>
-      reviewDealerApp(a.id, approve, approve ? tierId || undefined : undefined, approve ? undefined : 'Không đạt yêu cầu'),
+      reviewDealerApp(a.id, approve, approve ? tierId.trim() || undefined : undefined, approve ? undefined : 'Không đạt yêu cầu'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-dealers'] }),
   });
 
@@ -172,12 +172,19 @@ function DealerRow({ app: a }: { app: DealerApp }) {
       {a.status === 'PENDING' && (
         <div className="mt-3 flex items-center gap-2">
           <input
-            placeholder="Tier ID (vd dealer_l3)"
+            placeholder="Tier ID (bắt buộc, vd dealer_l3)"
             value={tierId}
             onChange={(e) => setTierId(e.target.value)}
             className="rounded border border-neutral-200 px-2 py-1 text-sm"
           />
-          <button onClick={() => review.mutate(true)} disabled={review.isPending} className="rounded bg-green-600 px-3 py-1.5 text-sm text-white">Duyệt</button>
+          <button
+            onClick={() => review.mutate(true)}
+            disabled={review.isPending || !tierId.trim()}
+            title={!tierId.trim() ? 'Cần nhập Tier ID để duyệt' : undefined}
+            className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
+          >
+            Duyệt
+          </button>
           <button onClick={() => review.mutate(false)} disabled={review.isPending} className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600">Từ chối</button>
         </div>
       )}
@@ -395,13 +402,17 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refreshBrands = () => qc.invalidateQueries({ queryKey: ['admin-brands'] });
+  const [rowErr, setRowErr] = useState<string | null>(null);
+  const onRowError = (e: unknown) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra, vui lòng thử lại.');
   const patch = useMutation({
     mutationFn: (body: Partial<{ isPublished: boolean }>) => updateBrand(brand.id, body),
-    onSuccess: refreshBrands,
+    onSuccess: () => { setRowErr(null); refreshBrands(); },
+    onError: onRowError,
   });
   const verify = useMutation({
     mutationFn: (v: boolean) => verifyBrand(brand.id, v),
-    onSuccess: refreshBrands,
+    onSuccess: () => { setRowErr(null); refreshBrands(); },
+    onError: onRowError,
   });
   const [ownerInput, setOwnerInput] = useState('');
   const assignOwner = useMutation({
@@ -412,11 +423,13 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
   const promos = useQuery({ queryKey: ['admin-brand-promos', brand.id], queryFn: () => listPromotions(brand.id), enabled: open });
   const link = useMutation({
     mutationFn: () => linkBrandByName(brand.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-brand-products', brand.id] }),
+    onSuccess: () => { setRowErr(null); qc.invalidateQueries({ queryKey: ['admin-brand-products', brand.id] }); },
+    onError: onRowError,
   });
   const detach = useMutation({
     mutationFn: (pid: string) => detachBrandProducts(brand.id, [pid]),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-brand-products', brand.id] }),
+    onSuccess: () => { setRowErr(null); qc.invalidateQueries({ queryKey: ['admin-brand-products', brand.id] }); },
+    onError: onRowError,
   });
   const [promo, setPromo] = useState({ title: '', subtitle: '', startAt: '', endAt: '' });
   const addPromo = useMutation({
@@ -429,7 +442,8 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
   });
   const delPromo = useMutation({
     mutationFn: (pid: string) => deletePromotion(pid),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-brand-promos', brand.id] }),
+    onSuccess: () => { setRowErr(null); qc.invalidateQueries({ queryKey: ['admin-brand-promos', brand.id] }); },
+    onError: onRowError,
   });
 
   return (
@@ -460,6 +474,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
             </button>
             {link.data && <span className="self-center text-sm text-green-700">Đã gán {link.data.linked} SP</span>}
           </div>
+          {rowErr && <p className="text-xs text-red-600">{rowErr}</p>}
 
           {/* Gán chủ nhãn (lộ trình B) — đối tác tự quản nhãn trong Mini App */}
           <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -474,6 +489,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
               Gán chủ nhãn
             </button>
             {assignOwner.isSuccess && <span className="text-green-700">Đã gán ✓</span>}
+            {assignOwner.isError && <span className="text-red-600">{(assignOwner.error as Error).message}</span>}
           </div>
 
           <BrandInfoForm brand={brand} />
@@ -508,6 +524,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
               <input type="date" value={promo.endAt} onChange={(e) => setPromo({ ...promo, endAt: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
               <button onClick={() => addPromo.mutate()} disabled={!promo.title.trim()} className="rounded bg-green-600 px-3 py-1 text-sm text-white disabled:bg-neutral-300">Thêm KM</button>
             </div>
+            {addPromo.isError && <p className="mt-1 text-xs text-red-600">{(addPromo.error as Error).message}</p>}
           </div>
         </div>
       )}
@@ -605,6 +622,7 @@ function DealerRewardsSection() {
           </div>
         ))}
         {q.data?.length === 0 && <p className="text-xs text-neutral-400">Chưa có chương trình.</p>}
+        {del.isError && <p className="text-xs text-red-600">{(del.error as Error).message}</p>}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
         <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm">
@@ -850,13 +868,17 @@ function FaqRow({ faq }: { faq: AdminFaq }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-faqs'] });
+  const [rowErr, setRowErr] = useState<string | null>(null);
+  const onRowError = (e: unknown) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra, vui lòng thử lại.');
   const toggleActive = useMutation({
     mutationFn: () => updateFaq(faq.id, { isActive: !faq.isActive }),
-    onSuccess: refresh,
+    onSuccess: () => { setRowErr(null); refresh(); },
+    onError: onRowError,
   });
   const del = useMutation({
     mutationFn: () => deleteFaq(faq.id),
-    onSuccess: refresh,
+    onSuccess: () => { setRowErr(null); refresh(); },
+    onError: onRowError,
   });
   const [f, setF] = useState({ category: faq.category ?? '', question: faq.question, answer: faq.answer, sortOrder: faq.sortOrder });
   const save = useMutation({
@@ -892,6 +914,7 @@ function FaqRow({ faq }: { faq: AdminFaq }) {
           <button onClick={() => del.mutate()} disabled={del.isPending} className="text-xs text-red-600 underline">Xoá</button>
         </div>
       </div>
+      {rowErr && <p className="mt-1 text-xs text-red-600">{rowErr}</p>}
 
       {open && (
         <div className="mt-3 space-y-2 border-t border-neutral-100 pt-3">
@@ -1011,13 +1034,17 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-quick-replies'] });
+  const [rowErr, setRowErr] = useState<string | null>(null);
+  const onRowError = (e: unknown) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra, vui lòng thử lại.');
   const toggleActive = useMutation({
     mutationFn: () => updateQuickReply(item.id, { isActive: !item.isActive }),
-    onSuccess: refresh,
+    onSuccess: () => { setRowErr(null); refresh(); },
+    onError: onRowError,
   });
   const del = useMutation({
     mutationFn: () => deleteQuickReply(item.id),
-    onSuccess: refresh,
+    onSuccess: () => { setRowErr(null); refresh(); },
+    onError: onRowError,
   });
   const [f, setF] = useState({
     category: item.category ?? '',
@@ -1063,6 +1090,7 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
           <button onClick={() => del.mutate()} disabled={del.isPending} className="text-xs text-red-600 underline">Xoá</button>
         </div>
       </div>
+      {rowErr && <p className="mt-1 text-xs text-red-600">{rowErr}</p>}
 
       {open && (
         <div className="mt-3 space-y-2 border-t border-neutral-100 pt-3">
@@ -1327,13 +1355,17 @@ function CourseRow({ course }: { course: AdminCourse }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-academy-courses'] });
+  const [rowErr, setRowErr] = useState<string | null>(null);
+  const onRowError = (e: unknown) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra, vui lòng thử lại.');
   const togglePublish = useMutation({
     mutationFn: () => updateAcademyCourse(course.id, { isPublished: !course.isPublished }),
-    onSuccess: refresh,
+    onSuccess: () => { setRowErr(null); refresh(); },
+    onError: onRowError,
   });
   const del = useMutation({
     mutationFn: () => deleteAcademyCourse(course.id),
-    onSuccess: refresh,
+    onSuccess: () => { setRowErr(null); refresh(); },
+    onError: onRowError,
   });
   const [f, setF] = useState({
     title: course.title,
@@ -1399,6 +1431,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
               Xoá khoá học
             </button>
           </div>
+          {rowErr && <p className="text-xs text-red-600">{rowErr}</p>}
 
           <div className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-3">
             <div className="mb-2 text-sm font-medium">Thông tin khoá học</div>
@@ -1412,6 +1445,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
               {save.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
             </button>
             {save.isSuccess && <span className="ml-2 text-sm text-green-700">Đã lưu ✓</span>}
+            {save.isError && <span className="ml-2 text-sm text-red-600">{(save.error as Error).message}</span>}
           </div>
 
           <div>
@@ -1468,6 +1502,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
               >
                 Thêm bài học
               </button>
+              {addLesson.isError && <p className="text-xs text-red-600">{(addLesson.error as Error).message}</p>}
             </div>
           </div>
         </div>
@@ -1514,6 +1549,7 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
           <button onClick={() => del.mutate()} disabled={del.isPending} className="text-xs text-red-600 underline">Xoá</button>
         </div>
       </div>
+      {del.isError && <p className="mt-1 text-xs text-red-600">{(del.error as Error).message}</p>}
       {open && (
         <div className="mt-2 space-y-2 border-t border-neutral-100 pt-2">
           <div className="flex flex-wrap gap-2">
@@ -1536,6 +1572,7 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
           <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className="rounded bg-green-600 px-3 py-1 text-white disabled:bg-neutral-300">
             {save.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
+          {save.isError && <p className="text-xs text-red-600">{(save.error as Error).message}</p>}
         </div>
       )}
     </div>

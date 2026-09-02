@@ -14,12 +14,17 @@ function CallbackInner() {
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
+    const oauthError = params.get('error');
+    if (oauthError) {
+      setError(params.get('error_description') || `Zalo từ chối đăng nhập (${oauthError}).`);
+      return;
+    }
     const code = params.get('code');
     if (!code) {
       setError('Thiếu mã đăng nhập từ Zalo.');
       return;
     }
-    handleCallback(code)
+    handleCallback(code, params.get('state'))
       .then(() => router.replace('/'))
       .catch((e) => setError(e instanceof Error ? e.message : 'Đăng nhập thất bại.'));
   }, [params, handleCallback, router]);

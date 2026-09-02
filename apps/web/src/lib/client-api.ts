@@ -77,7 +77,11 @@ export async function apiFetch<T>(
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
 
-  if (res.status === 401 && !_retried && getRefreshToken()) {
+  // opts.auth === false đánh dấu endpoint không cần Authorization (login/refresh/logout) —
+  // bỏ qua guard này thì một 401 từ chính /auth/refresh hay /auth/zalo-oauth (vd code đã
+  // dùng, hết hạn) sẽ vô tình refresh + retry bằng access token của phiên khác đang lưu
+  // trong localStorage, âm thầm đổi session hiện tại thay vì trả lỗi 401 gốc.
+  if (res.status === 401 && !_retried && opts.auth !== false && getRefreshToken()) {
     refreshPromise ??= rawRefresh().finally(() => {
       refreshPromise = null;
     });
