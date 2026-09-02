@@ -751,6 +751,9 @@ model Order {
   @@index([userId, status])
   @@index([referrerUserId])
   @@index([storefrontSlug])
+  // Admin order listing lọc theo status, sort createdAt desc (admin.service.ts listOrders) —
+  // không trùng prefix với [userId, status] ở trên (userId không có trong where của admin).
+  @@index([status, createdAt])
   @@map("orders")
 }
 
@@ -786,6 +789,9 @@ model PointsTransaction {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+  // Cron loyalty-expiry.service.ts (expirePoints/remindExpiringPoints) quét
+  // WHERE delta>0 AND expiresAt <=/BETWEEN now — không có index này sẽ full-scan bảng lớn mỗi đêm.
+  @@index([expiresAt])
   @@map("points_transactions")
 }
 
@@ -929,6 +935,9 @@ model Commission {
   createdAt       DateTime         @default(now())
 
   @@index([affiliateUserId, status])
+  // lockCommissionsForOrder/reverseCommissionsForOrder (affiliate.service.ts) updateMany theo
+  // orderId trên mỗi chuyển trạng thái đơn — không có index riêng cho orderId trước đây.
+  @@index([orderId])
   @@map("commissions")
 }
 
@@ -1645,8 +1654,15 @@ model GameQuizAttempt {
   quizId      String
   isCorrect   Boolean
   attemptedAt DateTime @default(now())
+  // Ngày (UTC+7, "YYYY-MM-DD") lúc trả lời — khoá chặn trả lời trùng/ngày bằng unique index
+  // DB-level (race-safe), thay cho check đọc-rồi-tạo (TOCTOU) trước đây trong answerQuiz().
+  // Nullable: bản ghi cũ trước migration này giữ NULL, không bị chặn (Postgres coi mỗi NULL
+  // là 1 giá trị riêng biệt trong unique index) — chỉ áp dụng cho các lần trả lời MỚI.
+  dayKey      String?
 
-  @@index([userId])
+  // @@unique([userId, quizId, dayKey]) đã phủ mọi query lọc theo userId (leftmost prefix) —
+  // @@index([userId]) cũ bị xoá (redundant, mỗi insert phải ghi thêm 1 btree index vô ích).
+  @@unique([userId, quizId, dayKey])
   @@map("game_quiz_attempts")
 }
 

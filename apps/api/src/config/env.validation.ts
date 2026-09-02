@@ -3,15 +3,24 @@ import { z } from 'zod';
 /** Validate biến môi trường khi app khởi động (fail-fast). */
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().default(3001),
+  // .int().positive(): PORT='' (set nhưng rỗng, vd interpolation lỗi trong docker-compose) khiến
+  // z.coerce.number() ra 0 (Number('')===0, không phải NaN) — default() chỉ áp dụng khi input là
+  // undefined nên KHÔNG cứu được trường hợp này; thêm .positive() để 0 bị chặn ở validate thay vì
+  // app lặng lẽ listen ở port 0 (OS cấp ngẫu nhiên) rồi vỡ reverse-proxy/health-check.
+  PORT: z.coerce.number().int().positive().default(3001),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().default('redis://localhost:6379'),
 
   // JWT
   JWT_ACCESS_SECRET: z.string().min(16),
   JWT_REFRESH_SECRET: z.string().min(16),
-  JWT_ACCESS_TTL: z.string().default('15m'),
-  JWT_REFRESH_TTL_DAYS: z.coerce.number().default(30),
+  // Format `ms` (zeit/ms) mà jsonwebtoken.sign() dùng cho expiresIn — validate ở đây để sai định
+  // dạng (vd 'abc', '15 minutes') fail ở boot thay vì throw ở request login/refresh đầu tiên.
+  JWT_ACCESS_TTL: z
+    .string()
+    .regex(/^\d+(ms|s|m|h|d|w|y)$/, "JWT_ACCESS_TTL phải dạng số+đơn vị (vd: 15m, 1h, 30d).")
+    .default('15m'),
+  JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
 
   // Zalo Mini App / OA
   ZALO_APP_ID: z.string().default(''),
@@ -21,7 +30,10 @@ export const envSchema = z.object({
   ZALO_OA_ID: z.string().default(''),
   ZALO_OAUTH_BASE: z.string().default('https://oauth.zaloapp.com'),
   // CSKH quick-reply/auto-reply: token tĩnh verify webhook OA (Zalo không ký HMAC, giống Pancake).
-  // Không bắt buộc ở production (tính năng optional, tự tắt êm nếu chưa đăng ký webhook).
+  // Không bắt buộc ở production qua superRefine (tính năng optional, chưa đăng ký webhook thì
+  // không set). LƯU Ý: khác PANCAKE_WEBHOOK_SECRET — nếu rỗng, ZaloOaWebhookController vẫn từ
+  // chối MỌI request bằng 401 khi NODE_ENV=production (không silently no-op) — xem
+  // zalo-oa-webhook.controller.ts. Chỉ để trống khi CHƯA đăng ký webhook này trên Zalo OA dashboard.
   ZALO_OA_WEBHOOK_SECRET: z.string().default(''),
 
   // Pancake POS
@@ -77,7 +89,13 @@ export const envSchema = z.object({
     }
     // Tránh fallback CORS hard-code ở main.ts (chỉ allow tubutree.com + app.tubutree.com
     // — admin/staging subdomain sẽ bị chặn). Bắt buộc khai báo rõ origin allowlist.
-    if (!env.CORS_ORIGINS || env.CORS_ORIGINS.trim().length === 0) {
+    // Parse CSV giống hệt main.ts (split → trim → filter rỗng): check .trim().length===0 thôi
+    // không đủ — CORS_ORIGINS="," (rác CSV, dấu phẩy lẻ) qua được check này nhưng vẫn parse ra
+    // mảng rỗng ở main.ts, âm thầm rơi về fallback trong khi validate tưởng đã "cấu hình rõ".
+    const corsOriginList = env.CORS_ORIGINS.split(',')
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0);
+    if (corsOriginList.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['CORS_ORIGINS'],
