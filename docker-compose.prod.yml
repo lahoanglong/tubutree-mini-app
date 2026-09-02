@@ -73,6 +73,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      # Server-runtime override (xem apps/web/src/lib/api.ts) — SSR/ISR fetch (getProducts,
+      # getBrand, getStorefront...) gọi thẳng qua Docker network nội bộ thay vì đi vòng ra
+      # domain công khai qua Caddy. Không set thì các hàm đó fallback NEXT_PUBLIC_API_BASE_URL
+      # (đã inline lúc build = domain public) — vẫn chạy được, chỉ tốn 1 hop mạng ngoài.
+      API_BASE_URL: http://api:3001/api
     depends_on:
       api:
         condition: service_healthy

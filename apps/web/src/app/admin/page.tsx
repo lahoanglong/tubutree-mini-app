@@ -8,6 +8,7 @@ import { formatVnd } from '@/lib/shop-client';
 import {
   listDealerApps,
   reviewDealerApp,
+  type DealerApp,
   listUsers,
   setUserRole,
   type UserRole,
@@ -126,16 +127,8 @@ export default function AdminPage() {
 }
 
 function DealersTab() {
-  const qc = useQueryClient();
   const [filter, setFilter] = useState('PENDING');
   const q = useQuery({ queryKey: ['admin-dealers', filter], queryFn: () => listDealerApps(filter || undefined) });
-  const [tierId, setTierId] = useState('');
-
-  const review = useMutation({
-    mutationFn: ({ id, approve }: { id: string; approve: boolean }) =>
-      reviewDealerApp(id, approve, approve ? tierId || undefined : undefined, approve ? undefined : 'Không đạt yêu cầu'),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-dealers'] }),
-  });
 
   return (
     <div>
@@ -145,42 +138,57 @@ function DealersTab() {
         ))}
       </select>
       <div className="mt-3 space-y-3">
-        {q.data?.map((a) => (
-          <div key={a.id} className="rounded-lg border border-neutral-100 bg-white p-4">
-            <div className="flex justify-between">
-              <span className="font-medium">{a.businessName}</span>
-              <span className="text-xs text-neutral-400">{a.status}</span>
-            </div>
-            <div className="text-sm text-neutral-600">{a.ownerName} · {a.phone}</div>
-            <div className="text-sm text-neutral-600">{a.address}</div>
-            <div className="mt-2 flex gap-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {a.cccdFrontUrl && <img src={a.cccdFrontUrl} alt="CCCD trước" className="h-16 rounded border" />}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {a.cccdBackUrl && <img src={a.cccdBackUrl} alt="CCCD sau" className="h-16 rounded border" />}
-            </div>
-            {a.status === 'PENDING' && (
-              <div className="mt-3 flex items-center gap-2">
-                <input
-                  placeholder="Tier ID (vd dealer_l3)"
-                  value={tierId}
-                  onChange={(e) => setTierId(e.target.value)}
-                  className="rounded border border-neutral-200 px-2 py-1 text-sm"
-                />
-                <button onClick={() => review.mutate({ id: a.id, approve: true })} className="rounded bg-green-600 px-3 py-1.5 text-sm text-white">Duyệt</button>
-                <button onClick={() => review.mutate({ id: a.id, approve: false })} className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600">Từ chối</button>
-              </div>
-            )}
-          </div>
-        ))}
+        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách hồ sơ đại lý.</p>}
+        {q.data?.map((a) => <DealerRow key={a.id} app={a} />)}
         {q.data?.length === 0 && <Empty>Không có hồ sơ.</Empty>}
       </div>
     </div>
   );
 }
 
+function DealerRow({ app: a }: { app: DealerApp }) {
+  const qc = useQueryClient();
+  const [tierId, setTierId] = useState('');
+  const review = useMutation({
+    mutationFn: (approve: boolean) =>
+      reviewDealerApp(a.id, approve, approve ? tierId || undefined : undefined, approve ? undefined : 'Không đạt yêu cầu'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-dealers'] }),
+  });
+
+  return (
+    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+      <div className="flex justify-between">
+        <span className="font-medium">{a.businessName}</span>
+        <span className="text-xs text-neutral-400">{a.status}</span>
+      </div>
+      <div className="text-sm text-neutral-600">{a.ownerName} · {a.phone}</div>
+      <div className="text-sm text-neutral-600">{a.address}</div>
+      <div className="mt-2 flex gap-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {a.cccdFrontUrl && <img src={a.cccdFrontUrl} alt="CCCD trước" className="h-16 rounded border" />}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {a.cccdBackUrl && <img src={a.cccdBackUrl} alt="CCCD sau" className="h-16 rounded border" />}
+      </div>
+      {a.status === 'PENDING' && (
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            placeholder="Tier ID (vd dealer_l3)"
+            value={tierId}
+            onChange={(e) => setTierId(e.target.value)}
+            className="rounded border border-neutral-200 px-2 py-1 text-sm"
+          />
+          <button onClick={() => review.mutate(true)} disabled={review.isPending} className="rounded bg-green-600 px-3 py-1.5 text-sm text-white">Duyệt</button>
+          <button onClick={() => review.mutate(false)} disabled={review.isPending} className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600">Từ chối</button>
+        </div>
+      )}
+      {review.isError && <p className="mt-1 text-xs text-red-600">{(review.error as Error).message}</p>}
+    </div>
+  );
+}
+
 function OrdersTab() {
   const q = useQuery({ queryKey: ['admin-orders'], queryFn: () => listOrders(1) });
+  if (q.isError) return <p className="text-sm text-red-600">Không tải được danh sách đơn hàng.</p>;
   return (
     <Table head={['Mã', 'Trạng thái', 'Thanh toán', 'Tổng', 'Ngày']}>
       {q.data?.data.map((o) => (
@@ -203,17 +211,21 @@ function UsersTab() {
   return (
     <div className="space-y-4">
       <GrantRoleForm onDone={() => q.refetch()} />
-      <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày']}>
-        {q.data?.data.map((u) => (
-          <tr key={u.id} className="border-t border-neutral-100">
-            <td className="py-2 font-medium">{u.fullName ?? '—'}</td>
-            <td>{u.phone ?? '—'}</td>
-            <td>{u.role}</td>
-            <td>{u.pointsBalance}</td>
-            <td className="text-neutral-400">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
-          </tr>
-        ))}
-      </Table>
+      {q.isError ? (
+        <p className="text-sm text-red-600">Không tải được danh sách người dùng.</p>
+      ) : (
+        <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày']}>
+          {q.data?.data.map((u) => (
+            <tr key={u.id} className="border-t border-neutral-100">
+              <td className="py-2 font-medium">{u.fullName ?? '—'}</td>
+              <td>{u.phone ?? '—'}</td>
+              <td>{u.role}</td>
+              <td>{u.pointsBalance}</td>
+              <td className="text-neutral-400">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
+            </tr>
+          ))}
+        </Table>
+      )}
     </div>
   );
 }
@@ -221,7 +233,9 @@ function UsersTab() {
 /** Cấp/đổi vai trò theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi). */
 function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const [phone, setPhone] = useState('');
-  const [role, setRole] = useState<UserRole>('ADMIN');
+  // Mặc định vai trò ít quyền nhất (KHÔNG phải ADMIN) — tránh lỡ tay cấp full-quyền cho
+  // SĐT chưa kiểm kỹ khi form chỉ dùng để tra cứu/đổi vai trò khác.
+  const [role, setRole] = useState<UserRole>('CUSTOMER');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const mut = useMutation({
     mutationFn: () => setUserRole(phone.trim(), role),
@@ -232,6 +246,11 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
     },
     onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi cấp quyền' }),
   });
+  const submit = () => {
+    setMsg(null);
+    if (role === 'ADMIN' && !window.confirm(`Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`)) return;
+    mut.mutate();
+  };
   return (
     <div className="rounded-lg border border-neutral-200 p-4">
       <h3 className="mb-2 text-sm font-semibold">Cấp / đổi vai trò theo SĐT</h3>
@@ -254,7 +273,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
         <button
           className="rounded bg-green-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
           disabled={!phone.trim() || mut.isPending}
-          onClick={() => { setMsg(null); mut.mutate(); }}
+          onClick={submit}
         >
           {mut.isPending ? 'Đang lưu…' : 'Cấp quyền'}
         </button>
@@ -269,6 +288,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
 function ConfigTab() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-config'], queryFn: () => getConfig() });
+  if (q.isError) return <p className="text-sm text-red-600">Không tải được danh sách cấu hình.</p>;
   return (
     <div className="space-y-2">
       {q.data?.map((c) => <ConfigItem key={c.key} row={c} onSaved={() => qc.invalidateQueries({ queryKey: ['admin-config'] })} />)}
@@ -361,6 +381,7 @@ function BrandsTab() {
       {create.isError && <p className="text-sm text-red-600">{(create.error as Error).message}</p>}
 
       <div className="space-y-3">
+        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách nhãn hàng.</p>}
         {q.data?.map((b) => <BrandRow key={b.id} brand={b} />)}
         {q.data?.length === 0 && <Empty>Chưa có nhãn hàng. Tạo nhãn đầu tiên ở trên.</Empty>}
       </div>
@@ -559,13 +580,13 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
 function DealerRewardsSection() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-dealer-rewards'], queryFn: listDealerRewards });
-  const [f, setF] = useState({ type: 'TOUR', title: '', description: '', threshold: 50000000 });
+  const [f, setF] = useState({ type: 'TOUR', title: '', description: '', threshold: 50000000, period: 'QUARTER' });
   const create = useMutation({
     mutationFn: () => createDealerReward({
       type: f.type as 'TOUR' | 'GIFT' | 'OTHER', title: f.title.trim(),
-      description: f.description.trim() || undefined, threshold: Number(f.threshold),
+      description: f.description.trim() || undefined, threshold: Number(f.threshold), period: f.period,
     }),
-    onSuccess: () => { setF({ type: 'TOUR', title: '', description: '', threshold: 50000000 }); void qc.invalidateQueries({ queryKey: ['admin-dealer-rewards'] }); },
+    onSuccess: () => { setF({ type: 'TOUR', title: '', description: '', threshold: 50000000, period: 'QUARTER' }); void qc.invalidateQueries({ queryKey: ['admin-dealer-rewards'] }); },
   });
   const del = useMutation({
     mutationFn: (id: string) => deleteDealerReward(id),
@@ -576,6 +597,7 @@ function DealerRewardsSection() {
     <div className="rounded-lg border border-neutral-100 bg-white p-4">
       <div className="mb-2 font-medium">🏪 Chương trình đại lý (thưởng doanh số)</div>
       <div className="space-y-1">
+        {q.isError && <p className="text-xs text-red-600">Không tải được danh sách chương trình.</p>}
         {q.data?.map((d) => (
           <div key={d.id} className="flex items-center justify-between rounded border border-neutral-100 px-2 py-1 text-sm">
             <span>[{d.type}] {d.title} · mốc {formatVnd(d.threshold)}/{d.period === 'YEAR' ? 'năm' : 'quý'}{d.brandId ? '' : ' · toàn shop'}</span>
@@ -590,10 +612,15 @@ function DealerRewardsSection() {
           <option value="GIFT">Quà</option>
           <option value="OTHER">Khác</option>
         </select>
+        <select value={f.period} onChange={(e) => setF({ ...f, period: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm">
+          <option value="QUARTER">Theo quý</option>
+          <option value="YEAR">Theo năm</option>
+        </select>
         <input placeholder="Tiêu đề (Tour Phú Quốc)" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1 text-sm" />
         <input type="number" placeholder="Mốc doanh số" value={f.threshold} onChange={(e) => setF({ ...f, threshold: Number(e.target.value) })} className="w-36 rounded border border-neutral-200 px-2 py-1 text-sm" />
         <button onClick={() => create.mutate()} disabled={!f.title.trim()} className="rounded bg-green-600 px-3 py-1 text-sm text-white disabled:bg-neutral-300">Thêm</button>
       </div>
+      {create.isError && <p className="mt-1 text-xs text-red-600">{(create.error as Error).message}</p>}
     </div>
   );
 }
@@ -653,6 +680,7 @@ function FlashSalesTab() {
       </div>
 
       <div className="space-y-3">
+        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách flash sale.</p>}
         {q.data?.map((s) => <FlashSaleRow key={s.id} sale={s} />)}
         {q.data?.length === 0 && <Empty>Chưa có đợt flash sale nào. Tạo đợt đầu tiên ở trên.</Empty>}
       </div>
@@ -810,6 +838,7 @@ function FaqTab() {
       </div>
 
       <div className="space-y-2">
+        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách câu hỏi thường gặp.</p>}
         {q.data?.map((f) => <FaqRow key={f.id} faq={f} />)}
         {q.data?.length === 0 && <Empty>Chưa có câu hỏi thường gặp nào. Thêm câu đầu tiên ở trên.</Empty>}
       </div>
@@ -970,6 +999,7 @@ function QuickReplyTab() {
       </div>
 
       <div className="space-y-2">
+        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách mẫu tin nhanh.</p>}
         {q.data?.map((r) => <QuickReplyRow key={r.id} item={r} />)}
         {q.data?.length === 0 && <Empty>Chưa có mẫu tin nhanh nào. Thêm mẫu đầu tiên ở trên.</Empty>}
       </div>
@@ -1285,6 +1315,7 @@ function AcademyTab() {
       </div>
 
       <div className="space-y-3">
+        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách khoá học.</p>}
         {q.data?.map((c) => <CourseRow key={c.id} course={c} />)}
         {q.data?.length === 0 && <Empty>Chưa có khoá học nào. Tạo khoá đầu tiên ở trên.</Empty>}
       </div>

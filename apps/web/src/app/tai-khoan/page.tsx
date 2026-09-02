@@ -61,6 +61,13 @@ export default function AccountPage() {
         <h2 className="font-semibold">Đơn hàng của tôi</h2>
         {ordersQ.isLoading ? (
           <p className="py-6 text-center text-neutral-400">Đang tải…</p>
+        ) : ordersQ.isError ? (
+          <div className="mt-3 rounded-lg border border-neutral-100 bg-white p-6 text-center">
+            <p className="text-sm text-red-600">Không tải được danh sách đơn hàng.</p>
+            <button onClick={() => void ordersQ.refetch()} className="mt-2 text-sm font-medium text-primary-600 underline">
+              Thử lại
+            </button>
+          </div>
         ) : ordersQ.data && ordersQ.data.length > 0 ? (
           <div className="mt-3 space-y-3">
             {ordersQ.data.map((o) => (

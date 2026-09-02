@@ -49,6 +49,16 @@ export default function CartPage() {
     <Shell>
       {cartQ.isLoading ? (
         <p className="py-10 text-center text-neutral-400">Đang tải giỏ hàng…</p>
+      ) : cartQ.isError ? (
+        <div className="py-20 text-center">
+          <p className="text-neutral-600">Không tải được giỏ hàng.</p>
+          <button
+            onClick={() => void cartQ.refetch()}
+            className="mt-4 inline-block rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white"
+          >
+            Thử lại
+          </button>
+        </div>
       ) : !cart || cart.items.length === 0 ? (
         <div className="py-20 text-center">
           <div className="text-5xl">🛒</div>

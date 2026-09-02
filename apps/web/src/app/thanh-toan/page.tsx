@@ -108,6 +108,12 @@ export default function CheckoutPage() {
         <div className="space-y-4 md:col-span-2">
           <section className="rounded-lg border border-neutral-100 bg-white p-4">
             <h2 className="font-semibold">Địa chỉ giao hàng</h2>
+            {addrQ.isError && (
+              <p className="mt-2 text-sm text-red-600">
+                Không tải được danh sách địa chỉ.{' '}
+                <button onClick={() => void addrQ.refetch()} className="font-medium underline">Thử lại</button>
+              </p>
+            )}
             <AddressPicker
               addresses={addrQ.data ?? []}
               selectedId={addressId}
@@ -154,6 +160,18 @@ export default function CheckoutPage() {
           </div>
           {quote && quote.pointsEarned > 0 && (
             <p className="mt-1 text-xs text-leaf-700">+{quote.pointsEarned} Điểm Xanh sau khi giao</p>
+          )}
+          {quoteQ.isError && (
+            <p className="mt-2 text-sm text-red-600">
+              Không tính được phí ship/tổng tiền.{' '}
+              <button onClick={() => void quoteQ.refetch()} className="font-medium underline">Thử lại</button>
+            </p>
+          )}
+          {cartQ.isError && (
+            <p className="mt-2 text-sm text-red-600">
+              Không tải được giỏ hàng.{' '}
+              <button onClick={() => void cartQ.refetch()} className="font-medium underline">Thử lại</button>
+            </p>
           )}
 
           <button
