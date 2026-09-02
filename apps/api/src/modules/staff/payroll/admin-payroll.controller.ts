@@ -6,6 +6,17 @@ import { PayrollService } from './payroll.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { AdjustDto, FinalizeDto, MarkPaidDto, SetRateDto } from './payroll.dto';
 
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+function parseYearMonth(year: string, month: string): { y: number; m: number } {
+  const y = Number(year);
+  const m = Number(month);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) {
+    throw new BadRequestException('Thiếu hoặc sai year/month.');
+  }
+  return { y, m };
+}
+
 @ApiTags('admin-payroll')
 @Roles('ADMIN')
 @Controller('admin')
@@ -17,25 +28,20 @@ export class AdminPayrollController {
 
   @Get('payroll')
   month(@Query('year') year: string, @Query('month') month: string) {
-    const y = Number(year);
-    const m = Number(month);
-    if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) {
-      throw new BadRequestException('Thiếu hoặc sai year/month.');
-    }
+    const { y, m } = parseYearMonth(year, month);
     return this.payroll.adminMonth(y, m);
   }
 
   /** Chi tiết 1 NV trong tháng: giờ theo ngày + lịch sử phiên (để QL rà & sửa trước khi duyệt). */
   @Get('payroll/:staffId/detail')
   async detail(@Param('staffId') staffId: string, @Query('year') year: string, @Query('month') month: string) {
-    const y = Number(year);
-    const m = Number(month);
-    if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) {
-      throw new BadRequestException('Thiếu hoặc sai year/month.');
-    }
+    const { y, m } = parseYearMonth(year, month);
     const base = await this.payroll.getMyPayroll(staffId, y, m);
-    const start = new Date(Date.UTC(y, m - 1, 1));
-    const end = new Date(Date.UTC(y, m, 1) - 1);
+    // Biên tháng theo giờ VN quy đổi sang UTC — attendance.history() lọc theo checkinAt (mốc
+    // thời gian thật), khác với workDate (@db.Date, đã là date-key VN) dùng cho payroll ngày/tháng.
+    // Biên UTC "trần" (Date.UTC(y, m-1, 1)) lệch tới 7h, làm rơi/nhiễu phiên ở đầu-cuối tháng.
+    const start = new Date(Date.UTC(y, m - 1, 1) - VN_OFFSET_MS);
+    const end = new Date(Date.UTC(y, m, 1) - VN_OFFSET_MS - 1);
     const sessions = await this.attendance.history(staffId, start, end);
     return { ...base, sessions };
   }
@@ -51,7 +57,8 @@ export class AdminPayrollController {
     @Query('year') year: string,
     @Query('month') month: string,
   ) {
-    return this.payroll.recomputeStaffMonth(staffId, Number(year), Number(month));
+    const { y, m } = parseYearMonth(year, month);
+    return this.payroll.recomputeStaffMonth(staffId, y, m);
   }
 
   @Post('payroll/:staffId/finalize')

@@ -172,21 +172,27 @@ export class AdminService {
         ...((user?.metadata as Record<string, unknown> | null) ?? {}),
         dealerTierId: tierId,
       };
-      await this.prisma.$transaction([
-        this.prisma.dealerApplication.update({
-          where: { id },
+      // Atomic guard status='PENDING' TRONG transaction — chống 2 admin duyệt cùng đơn
+      // (check status ở ngoài chỉ để trả lỗi rõ ràng, không đủ chống race: cả 2 request có thể
+      // đọc PENDING trước khi bên nào ghi xong). Không guard → user.update DEALER chạy 2 lần
+      // (idempotent nhưng có thể ghi đè dealerTierId của admin thắng race sau).
+      await this.prisma.$transaction(async (tx) => {
+        const flipped = await tx.dealerApplication.updateMany({
+          where: { id, status: 'PENDING' },
           data: { status: 'APPROVED', reviewedBy: adminId, reviewedAt: new Date() },
-        }),
-        this.prisma.user.update({
+        });
+        if (flipped.count === 0) throw new BadRequestException('Đơn đã được xử lý.');
+        await tx.user.update({
           where: { id: app.userId },
           data: { role: 'DEALER', metadata: mergedMeta },
-        }),
-      ]);
+        });
+      });
     } else {
-      await this.prisma.dealerApplication.update({
-        where: { id },
+      const flipped = await this.prisma.dealerApplication.updateMany({
+        where: { id, status: 'PENDING' },
         data: { status: 'REJECTED', reviewedBy: adminId, reviewedAt: new Date(), rejectionReason: reason },
       });
+      if (flipped.count === 0) throw new BadRequestException('Đơn đã được xử lý.');
     }
     return this.prisma.dealerApplication.findUnique({ where: { id } });
   }

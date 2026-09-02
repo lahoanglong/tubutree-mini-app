@@ -206,9 +206,13 @@ export class AttendanceService {
     const checkoutAt = patch.checkoutAt === undefined ? s.checkoutAt : patch.checkoutAt;
     if (checkoutAt && checkoutAt.getTime() <= checkinAt.getTime())
       throw new BadRequestException('Giờ checkout phải sau giờ checkin.');
+    // closeReason chỉ đổi khi CALL NÀY thực sự thay đổi checkoutAt — sửa riêng checkinAt không
+    // được ghi đè lý do đóng phiên gốc (MANUAL/SHIFT_END/OUT_OF_RANGE), phá mất audit trail.
+    const closeReason =
+      patch.checkoutAt === undefined ? s.closeReason : checkoutAt ? 'ADMIN' : null;
     await this.prisma.attendanceSession.update({
       where: { id: sessionId },
-      data: { checkinAt, checkoutAt, closeReason: checkoutAt ? 'ADMIN' : null },
+      data: { checkinAt, checkoutAt, closeReason },
     });
     return { staffId: s.staffId, workDate: s.shift.workDate };
   }

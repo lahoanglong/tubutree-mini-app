@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
@@ -19,7 +19,20 @@ export class UsersService {
     // dob đến dạng "YYYY-MM-DD" → ép về Date (Prisma DateTime không nhận date-only string).
     const { dob, ...rest } = dto;
     const data: { fullName?: string; email?: string; avatarUrl?: string; dob?: Date } = { ...rest };
-    if (dob !== undefined) data.dob = new Date(dob);
+    if (dob !== undefined) {
+      const parsed = new Date(dob);
+      // DTO chỉ khớp SHAPE "YYYY-MM-DD" bằng regex, KHÔNG kiểm tra ngày có thật tồn tại.
+      // 2 kiểu input vô lý cùng khớp regex nhưng cần chặn khác nhau:
+      //  - Tháng ngoài 01-12 (vd "2024-13-01") → new Date() trả Invalid Date; nếu lọt xuống
+      //    Prisma, .toISOString() nội bộ throw RangeError → 500 thô.
+      //  - Ngày ngoài số ngày thực của tháng (vd "2024-02-30") → new Date() KHÔNG báo lỗi mà
+      //    ÂM THẦM lăn sang tháng sau (2024-02-30 → 2024-03-01) → lưu sai ngày sinh mà
+      //    không ai biết (ảnh hưởng voucher sinh nhật). Round-trip qua ISO string để bắt cả 2.
+      if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dob) {
+        throw new BadRequestException('dob không phải một ngày hợp lệ.');
+      }
+      data.dob = parsed;
+    }
 
     const user = await this.prisma.user.update({
       where: { id: userId },
@@ -37,24 +50,36 @@ export class UsersService {
   }
 
   async createAddress(userId: string, dto: CreateAddressDto) {
-    return this.prisma.$transaction(async (tx) => {
-      const count = await tx.address.count({ where: { userId } });
-      const makeDefault = dto.isDefault ?? count === 0;
-      if (makeDefault) {
-        await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });
-      }
-      return tx.address.create({ data: { ...dto, isDefault: makeDefault, userId } });
-    });
+    return this.prisma.$transaction(
+      async (tx) => {
+        const count = await tx.address.count({ where: { userId } });
+        const makeDefault = dto.isDefault ?? count === 0;
+        if (makeDefault) {
+          await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });
+        }
+        return tx.address.create({ data: { ...dto, isDefault: makeDefault, userId } });
+      },
+      // Serializable: count-rồi-write không atomic — 2 request tạo địa chỉ đầu tiên
+      // đồng thời có thể cùng đọc count=0 rồi cùng tạo isDefault:true. Serializable
+      // buộc 1 trong 2 tx fail (P2034, map 409 bởi PrismaExceptionFilter) thay vì
+      // để user có 2 địa chỉ mặc định.
+      { isolationLevel: 'Serializable' },
+    );
   }
 
   async updateAddress(userId: string, id: string, dto: UpdateAddressDto) {
     await this.assertOwner(userId, id);
-    return this.prisma.$transaction(async (tx) => {
-      if (dto.isDefault) {
-        await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });
-      }
-      return tx.address.update({ where: { id }, data: dto });
-    });
+    return this.prisma.$transaction(
+      async (tx) => {
+        if (dto.isDefault) {
+          await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });
+        }
+        return tx.address.update({ where: { id }, data: dto });
+      },
+      // Serializable: 2 update isDefault:true đồng thời cho 2 địa chỉ khác nhau có thể
+      // đan xen và để lại 0 hoặc 2 địa chỉ mặc định (mirror createAddress ở trên).
+      { isolationLevel: 'Serializable' },
+    );
   }
 
   async deleteAddress(userId: string, id: string) {

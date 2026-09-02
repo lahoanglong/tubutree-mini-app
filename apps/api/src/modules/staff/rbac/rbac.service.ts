@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { User, UserRole } from '@prisma/client';
+import type { Prisma, User, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 
 const RANK: Record<UserRole, number> = {
@@ -9,6 +9,9 @@ const RANK: Record<UserRole, number> = {
   STAFF: 3,
   ADMIN: 4,
 };
+
+/** PrismaService hoặc client trong 1 $transaction — cho phép gộp nhiều bước vào 1 tx atomically. */
+type Db = PrismaService | Prisma.TransactionClient;
 
 @Injectable()
 export class RbacService {
@@ -20,9 +23,9 @@ export class RbacService {
    * Áp grant theo SĐT khi login/refresh. CHỈ NÂNG role (không tự hạ — hạ qua revoke).
    * Trả user đã update (hoặc user gốc nếu không đổi).
    */
-  async applyGrants(user: User): Promise<User> {
+  async applyGrants(user: User, db: Db = this.prisma): Promise<User> {
     if (!user.phone) return user;
-    const grants = await this.prisma.roleGrant.findMany({
+    const grants = await db.roleGrant.findMany({
       where: { phone: user.phone, revokedAt: null },
       select: { role: true },
     });
@@ -34,55 +37,65 @@ export class RbacService {
     );
     if (RANK[best] <= RANK[user.role]) return user; // không nâng / không hạ
     this.logger.warn(`applyGrants: nâng user ${user.id} (${user.phone}) ${user.role} → ${best}`);
-    return this.prisma.user.update({ where: { id: user.id }, data: { role: best } });
+    return db.user.update({ where: { id: user.id }, data: { role: best } });
   }
 
-  /** Admin thêm quyền theo SĐT. Không tạo grant trùng (cùng phone+role còn hiệu lực). */
+  /**
+   * Admin thêm quyền theo SĐT. Không tạo grant trùng (cùng phone+role còn hiệu lực).
+   * Bọc trong $transaction: tạo grant + áp role ngay là 1 thao tác atomic — tránh trạng thái
+   * nửa vời (grant đã tạo nhưng role chưa nâng, hoặc ngược lại) nếu 1 bước lỗi giữa chừng.
+   */
   async addGrant(adminId: string, phone: string, role: 'STAFF' | 'ADMIN') {
     const normalized = phone.trim();
-    const existing = await this.prisma.roleGrant.findFirst({
-      where: { phone: normalized, role, revokedAt: null },
-      select: { id: true },
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.roleGrant.findFirst({
+        where: { phone: normalized, role, revokedAt: null },
+        select: { id: true },
+      });
+      if (!existing) {
+        await tx.roleGrant.create({ data: { phone: normalized, role, grantedBy: adminId } });
+        this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${normalized}`);
+      }
+      // Áp ngay nếu user đã tồn tại
+      const user = await tx.user.findUnique({ where: { phone: normalized } });
+      let applied = false;
+      if (user) {
+        const updated = await this.applyGrants(user, tx);
+        applied = updated.role !== user.role;
+      }
+      return { granted: role, applied };
     });
-    if (!existing) {
-      await this.prisma.roleGrant.create({ data: { phone: normalized, role, grantedBy: adminId } });
-      this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${normalized}`);
-    }
-    // Áp ngay nếu user đã tồn tại
-    const user = await this.prisma.user.findUnique({ where: { phone: normalized } });
-    let applied = false;
-    if (user) {
-      const updated = await this.applyGrants(user);
-      applied = updated.role !== user.role;
-    }
-    return { granted: role, applied };
   }
 
   /**
    * Thu hồi mọi grant STAFF/ADMIN theo SĐT. Nếu user đang STAFF/ADMIN thì hạ về role GỐC
    * (DEALER nếu có đơn đại lý đã duyệt, ngược lại CUSTOMER) — tránh xoá nhầm quyền đại lý khi
    * một đại lý từng được nâng tạm lên nhân viên.
+   * Bọc trong $transaction: revoke grant + hạ role là 1 thao tác atomic — tránh trạng thái nửa
+   * vời (grant đã revoke nhưng role chưa hạ) nếu lỗi giữa chừng.
    */
   async revokeGrant(adminId: string, phone: string) {
     const normalized = phone.trim();
-    const { count } = await this.prisma.roleGrant.updateMany({
-      where: { phone: normalized, revokedAt: null },
-      data: { revokedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.roleGrant.updateMany({
+        where: { phone: normalized, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      const user = await tx.user.findUnique({ where: { phone: normalized } });
+      let downgraded = false;
+      if (user && (user.role === 'STAFF' || user.role === 'ADMIN')) {
+        const base = await this.resolveBaseRole(user.id, tx);
+        await tx.user.update({ where: { id: user.id }, data: { role: base } });
+        downgraded = true;
+        this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${normalized}: ${user.role} → ${base}`);
+      }
+      return { revoked: count, downgraded };
     });
-    const user = await this.prisma.user.findUnique({ where: { phone: normalized } });
-    let downgraded = false;
-    if (user && (user.role === 'STAFF' || user.role === 'ADMIN')) {
-      const base = await this.resolveBaseRole(user.id);
-      await this.prisma.user.update({ where: { id: user.id }, data: { role: base } });
-      downgraded = true;
-      this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${normalized}: ${user.role} → ${base}`);
-    }
-    return { revoked: count, downgraded };
   }
 
   /** Role gốc khi bỏ quyền nhân viên: DEALER nếu có đơn đại lý đã duyệt, ngược lại CUSTOMER. */
-  private async resolveBaseRole(userId: string): Promise<'CUSTOMER' | 'DEALER'> {
-    const dealerApp = await this.prisma.dealerApplication.findFirst({
+  private async resolveBaseRole(userId: string, db: Db = this.prisma): Promise<'CUSTOMER' | 'DEALER'> {
+    const dealerApp = await db.dealerApplication.findFirst({
       where: { userId, status: 'APPROVED' },
       select: { id: true },
     });

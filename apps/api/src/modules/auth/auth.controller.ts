@@ -40,6 +40,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post('zalo-oauth')
   @HttpCode(HttpStatus.OK)
   loginZaloOAuth(@Body() dto: ZaloOAuthDto): Promise<LoginResponse> {

@@ -28,14 +28,20 @@ export class AuthService {
     const guestKey = `guest_${deviceId}`;
     let user = await this.prisma.user.findUnique({ where: { zaloId: guestKey } });
     if (!user) {
-      user = await this.prisma.user.create({
-        data: {
-          zaloId: guestKey,
-          fullName: 'Khách',
-          referralCode: await this.generateReferralCode(),
-          referredById: await this.resolveReferrerId(referralCode),
-        },
-      });
+      try {
+        user = await this.prisma.user.create({
+          data: {
+            zaloId: guestKey,
+            fullName: 'Khách',
+            referralCode: await this.generateReferralCode(),
+            referredById: await this.resolveReferrerId(referralCode),
+          },
+        });
+      } catch (err) {
+        // 2 request guest-login đồng thời cùng deviceId → P2002 trên zaloId; dùng lại
+        // user vừa được request kia tạo thay vì làm rớt phiên đăng nhập hợp lệ.
+        user = await this.recoverFromZaloIdConflict(err, guestKey);
+      }
     }
     return this.issueTokens(user);
   }
@@ -93,17 +99,25 @@ export class AuthService {
       } catch (err) {
         // Phòng thủ race condition: 2 request đăng nhập đồng thời cùng SĐT → P2002. Fallback bỏ phone để không crash 409.
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && checkedPhone) {
-          user = await this.prisma.user.create({
-            data: {
-              zaloId: info.zaloId,
-              fullName: info.name,
-              avatarUrl: info.avatar,
-              referralCode: await this.generateReferralCode(),
-              referredById: await this.resolveReferrerId(referralCode),
-            },
-          });
+          try {
+            user = await this.prisma.user.create({
+              data: {
+                zaloId: info.zaloId,
+                fullName: info.name,
+                avatarUrl: info.avatar,
+                referralCode: await this.generateReferralCode(),
+                referredById: await this.resolveReferrerId(referralCode),
+              },
+            });
+          } catch (retryErr) {
+            // Retry vẫn đụng — lần này chỉ có thể là zaloId (đã bỏ phone) do 2 request
+            // đăng nhập đồng thời cùng tài khoản Zalo mới → dùng lại user vừa được tạo.
+            user = await this.recoverFromZaloIdConflict(retryErr, info.zaloId);
+          }
         } else {
-          throw err;
+          // P2002 không phải do phone (hoặc không có phone) → chỉ có thể là zaloId
+          // (2 request đăng nhập đồng thời cùng tài khoản Zalo mới).
+          user = await this.recoverFromZaloIdConflict(err, info.zaloId);
         }
       }
       return this.issueTokens(user);
@@ -126,6 +140,20 @@ export class AuthService {
     return this.issueTokens(user);
   }
 
+  /**
+   * Khi create() văng lỗi do đụng zaloId (2 request đăng nhập đồng thời cùng tài khoản
+   * Zalo/guest mới) → lấy user vừa được request kia tạo để đăng nhập bình thường,
+   * thay vì làm rớt phiên đăng nhập hợp lệ bằng 409. Nếu lỗi không phải P2002 hoặc
+   * user vẫn không tồn tại (lỗi do nguyên nhân khác) → ném lại lỗi gốc.
+   */
+  private async recoverFromZaloIdConflict(err: unknown, zaloId: string): Promise<User> {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const existing = await this.prisma.user.findUnique({ where: { zaloId } });
+      if (existing) return existing;
+    }
+    throw err;
+  }
+
   /** Trả phone nếu chưa bị tài khoản khác chiếm (phone là @unique) — tránh P2002. */
   private async phoneIfFree(phone: string | null, selfId?: string): Promise<string | undefined> {
     if (!phone) return undefined;
@@ -145,15 +173,21 @@ export class AuthService {
 
     let user = await this.prisma.user.findUnique({ where: { zaloId: info.zaloId } });
     if (!user) {
-      user = await this.prisma.user.create({
-        data: {
-          zaloId: info.zaloId,
-          fullName: info.name,
-          avatarUrl: info.avatar,
-          referralCode: await this.generateReferralCode(),
-          referredById: await this.resolveReferrerId(referralCode),
-        },
-      });
+      try {
+        user = await this.prisma.user.create({
+          data: {
+            zaloId: info.zaloId,
+            fullName: info.name,
+            avatarUrl: info.avatar,
+            referralCode: await this.generateReferralCode(),
+            referredById: await this.resolveReferrerId(referralCode),
+          },
+        });
+      } catch (err) {
+        // 2 request OAuth login đồng thời cùng tài khoản Zalo mới → P2002 trên zaloId;
+        // dùng lại user vừa được request kia tạo thay vì làm rớt phiên đăng nhập hợp lệ.
+        user = await this.recoverFromZaloIdConflict(err, info.zaloId);
+      }
     } else if (info.name && user.fullName !== info.name) {
       user = await this.prisma.user.update({
         where: { id: user.id },
@@ -173,6 +207,9 @@ export class AuthService {
     if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
     }
+    // isBlocked được chặn tập trung trong issueTokens() (dùng chung cho login + refresh) —
+    // không check riêng ở đây để tránh 1 user bị khoá đăng nhập lại (guest/zalo-mini-app/
+    // zalo-oauth) lấy token mới, né hoàn toàn chặn refresh.
     // Rotation ATOMIC: chỉ thu hồi được nếu CHƯA revoke. count=0 nghĩa là token đã
     // bị dùng (double-submit / reuse) → từ chối, tránh 1 token cũ sinh 2 session.
     const revoked = await this.prisma.refreshToken.updateMany({
@@ -193,6 +230,13 @@ export class AuthService {
   }
 
   private async issueTokens(user: User): Promise<LoginResponse> {
+    // Chặn TẬP TRUNG ở đây (dùng chung cho login guest/zalo-mini-app/zalo-oauth VÀ refresh):
+    // nếu chỉ chặn ở refresh(), user bị khoá có thể đăng nhập lại để lấy token mới, bỏ qua
+    // hoàn toàn việc khoá. Access token đang có (TTL ngắn) vẫn còn hiệu lực tới khi hết hạn —
+    // đây là giới hạn chấp nhận được của JWT stateless, không phải bug.
+    if (user.isBlocked) {
+      throw new UnauthorizedException('Tài khoản đã bị khoá.');
+    }
     // Áp quyền theo SĐT (allowlist) — chạy cho cả login lẫn refresh ⇒ đổi role có hiệu lực
     // ở lần refresh kế. Không có phone / không có grant → trả nguyên user.
     user = await this.rbac.applyGrants(user);

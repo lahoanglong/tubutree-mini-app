@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
@@ -20,7 +20,13 @@ export class SystemConfigService {
     }
     const row = await this.prisma.systemConfig.findUnique({ where: { key } });
     if (!row) {
-      if (fallback !== undefined) return fallback;
+      if (fallback !== undefined) {
+        // Cache fallback value too — nếu không, key chưa tồn tại (DB mới/seed chưa chạy) khiến
+        // MỌI lần get() (kể cả từ route @Public như /config/public) đều bỏ qua cache, query
+        // thẳng DB. set() vẫn xoá đúng entry này khi config được tạo thật.
+        this.cache.set(key, { value: fallback, at: Date.now() });
+        return fallback;
+      }
       throw new NotFoundException(`SystemConfig "${key}" chưa được cấu hình.`);
     }
     this.cache.set(key, { value: row.value, at: Date.now() });
@@ -32,10 +38,34 @@ export class SystemConfigService {
     return Object.fromEntries(rows.map((r) => [r.key, r.value]));
   }
 
+  /**
+   * Ghi 1 config. Nhiều module dùng `get<T>(key, fallback)` và TIN TƯỞNG runtime type khớp T mà
+   * KHÔNG validate lại (xem vd. wallet.service.ts, cashback.service.ts, vouchers.service.ts —
+   * dùng thẳng trong phép toán số học, không guard). Nếu set() cho phép ghi null/kiểu khác với
+   * giá trị hiện tại, lần đọc tiếp theo ở module khác có thể NaN/throw giữa business logic tài
+   * chính (ví dụ ví, cashback, voucher). Chặn ngay tại đây — điểm ghi DUY NHẤT — rẻ hơn nhiều so
+   * với việc bắt từng call site tự guard.
+   */
   async set(key: string, value: object | string | number | boolean, changedBy: string): Promise<void> {
-    const existing = await this.prisma.systemConfig.findUnique({ where: { key } });
+    if (value === null || value === undefined) {
+      throw new BadRequestException(`Giá trị cho SystemConfig "${key}" không được null/undefined.`);
+    }
+    const dotIndex = key.indexOf('.');
+    const category = dotIndex > 0 ? key.slice(0, dotIndex) : 'misc';
     await this.prisma.$transaction(async (tx) => {
+      // Đọc `existing` TRONG transaction (thay vì trước đó) để thu hẹp cửa sổ race: 2 admin sửa
+      // cùng key gần như đồng thời trước đây có thể tạo 2 dòng history cùng oldValue (v1→v2 và
+      // v1→v3), làm mất bản ghi v1→v2 thật sự đã xảy ra trong audit trail.
+      const existing = await tx.systemConfig.findUnique({ where: { key } });
       if (existing) {
+        const oldType = Array.isArray(existing.value) ? 'array' : typeof existing.value;
+        const newType = Array.isArray(value) ? 'array' : typeof value;
+        if (oldType !== newType) {
+          throw new BadRequestException(
+            `Kiểu dữ liệu mới ("${newType}") khác kiểu hiện tại ("${oldType}") của "${key}". ` +
+              'Đổi kiểu có thể làm crash nơi khác đang dùng get<T>() với kiểu cũ. Nếu chắc chắn muốn đổi, xoá config này trước rồi tạo lại.',
+          );
+        }
         await tx.systemConfigHistory.create({
           data: {
             key,
@@ -48,7 +78,7 @@ export class SystemConfigService {
       await tx.systemConfig.upsert({
         where: { key },
         update: { value: value as object, updatedBy: changedBy },
-        create: { key, value: value as object, category: key.split('.')[0] ?? 'misc', updatedBy: changedBy },
+        create: { key, value: value as object, category, updatedBy: changedBy },
       });
     });
     this.cache.delete(key);

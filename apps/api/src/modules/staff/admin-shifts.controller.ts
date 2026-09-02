@@ -30,7 +30,12 @@ export class AdminShiftsController {
   @Get('shifts')
   listAll(@Query('from') from: string, @Query('to') to: string, @Query('staffId') staffId?: string) {
     if (!from || !to) throw new BadRequestException('Thiếu khoảng thời gian (from/to).');
-    return this.shifts.listAll(new Date(from), new Date(to), staffId);
+    const f = new Date(from);
+    const t = new Date(to);
+    if (Number.isNaN(f.getTime()) || Number.isNaN(t.getTime())) {
+      throw new BadRequestException('from/to không hợp lệ.');
+    }
+    return this.shifts.listAll(f, t, staffId);
   }
 
   @Post('shifts/:id/approve')

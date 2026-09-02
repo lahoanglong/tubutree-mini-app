@@ -6,7 +6,7 @@ const mkUser = (over: Partial<User> = {}): User =>
   ({ id: 'u1', phone: '0900000001', role: 'CUSTOMER', ...over }) as unknown as User;
 
 function makePrisma(over: Record<string, unknown> = {}) {
-  const base = {
+  const base: Record<string, unknown> = {
     roleGrant: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn(),
@@ -16,7 +16,11 @@ function makePrisma(over: Record<string, unknown> = {}) {
     user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
     dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
   };
-  return { ...base, ...over } as unknown as PrismaService;
+  const merged = { ...base, ...over };
+  // addGrant/revokeGrant chạy trong $transaction(tx => ...) — mock tx = chính client này để
+  // dùng lại các jest.fn() (roleGrant/user/dealerApplication) đã override ở trên.
+  merged.$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(merged));
+  return merged as unknown as PrismaService;
 }
 
 describe('RbacService.applyGrants', () => {

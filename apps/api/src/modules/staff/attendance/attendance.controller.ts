@@ -45,7 +45,12 @@ export class AttendanceController {
     @Query('to') to: string,
   ) {
     if (!from || !to) throw new BadRequestException('Thiếu khoảng thời gian (from/to).');
-    return this.attendance.history(staffId, new Date(from), new Date(to));
+    const f = new Date(from);
+    const t = new Date(to);
+    if (Number.isNaN(f.getTime()) || Number.isNaN(t.getTime())) {
+      throw new BadRequestException('from/to không hợp lệ.');
+    }
+    return this.attendance.history(staffId, f, t);
   }
 
   @Post('heartbeat')

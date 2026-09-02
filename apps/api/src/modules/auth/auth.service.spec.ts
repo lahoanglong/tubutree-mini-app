@@ -186,3 +186,53 @@ describe('AuthService — ghi nhận người giới thiệu lúc đăng ký (re
     expect(create).not.toHaveBeenCalled();
   });
 });
+
+describe('AuthService — chặn user bị khoá (isBlocked) lấy token', () => {
+  it('refresh(): user.isBlocked=true → Unauthorized, KHÔNG cấp refresh token mới (dù token cũ đã bị revoke)', async () => {
+    const { svc, prisma, create, updateMany } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+      id: 't1',
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 1e6),
+      user: { ...USER, isBlocked: true },
+    });
+    await expect(svc.refresh('tok')).rejects.toThrow('bị khoá');
+    expect(updateMany).toHaveBeenCalledTimes(1); // token cũ vẫn bị revoke (đúng ý — không để tái sử dụng)
+    expect(create).not.toHaveBeenCalled(); // nhưng KHÔNG cấp refresh token mới
+  });
+
+  it('login guest ĐÃ tồn tại + isBlocked=true → Unauthorized, KHÔNG né chặn refresh bằng cách đăng nhập lại', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ ...USER, isBlocked: true });
+    const create = jest.fn();
+    const prisma = {
+      refreshToken: { create: jest.fn() },
+      user: { findUnique, create },
+    } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('jwt') } as unknown as JwtService;
+    const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
+    const svc = new AuthService(prisma, jwt, config, {} as unknown as ZaloService, mkRbac());
+    await expect(svc.loginAsGuest('dev1')).rejects.toThrow('bị khoá');
+    expect(create).not.toHaveBeenCalled();
+    expect((prisma.refreshToken.create as jest.Mock)).not.toHaveBeenCalled();
+  });
+
+  it('loginWithZaloMiniApp: user Zalo đã tồn tại + isBlocked=true → Unauthorized, không cấp token', async () => {
+    // fullName khớp info.name để không rẽ vào nhánh update() đồng bộ tên/avatar — test tập
+    // trung vào việc issueTokens() chặn user bị khoá ngay ở luồng login, không phải luồng sync.
+    const findUnique = jest.fn().mockResolvedValue({ ...USER, isBlocked: true, fullName: 'Y Nguyên' });
+    const update = jest.fn();
+    const prisma = {
+      refreshToken: { create: jest.fn() },
+      user: { findUnique, update },
+    } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('jwt') } as unknown as JwtService;
+    const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
+    const zalo = {
+      getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z1', name: 'Y Nguyên' }),
+    } as unknown as ZaloService;
+    const svc = new AuthService(prisma, jwt, config, zalo, mkRbac());
+    await expect(svc.loginWithZaloMiniApp('code', 'at')).rejects.toThrow('bị khoá');
+    expect(update).not.toHaveBeenCalled();
+    expect((prisma.refreshToken.create as jest.Mock)).not.toHaveBeenCalled();
+  });
+});

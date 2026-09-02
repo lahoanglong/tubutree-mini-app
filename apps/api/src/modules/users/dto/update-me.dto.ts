@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
 export class UpdateMeDto {
   @IsOptional()
@@ -14,8 +14,12 @@ export class UpdateMeDto {
   @IsString()
   avatarUrl?: string;
 
-  /** Ngày sinh (ISO) — dùng cho voucher sinh nhật. */
+  /**
+   * Ngày sinh — dùng cho voucher sinh nhật. Bắt buộc đúng dạng date-only "YYYY-MM-DD"
+   * (không dùng @IsDateString vì nó chấp nhận cả datetime kèm offset; service ép
+   * thẳng qua `new Date(dob)` nên offset lệch múi giờ có thể đổi ngày lưu xuống DB).
+   */
   @IsOptional()
-  @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'dob phải theo định dạng YYYY-MM-DD.' })
   dob?: string;
 }

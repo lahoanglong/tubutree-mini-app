@@ -5,15 +5,45 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   Min,
+  registerDecorator,
 } from 'class-validator';
+import type { ValidationArguments, ValidationOptions } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AdminService } from './admin.service';
 import { CatalogService } from '../catalog/catalog.service';
+
+/**
+ * value <= max CHỈ khi type=PERCENT (chặn admin nhập % vô lý, vd 500%).
+ * Không dùng @ValidateIf ở đây vì nó sẽ tắt LUÔN @IsInt/@Min(0) của cùng field khi
+ * type khác PERCENT — đây là constraint riêng, cộng thêm chứ không thay thế.
+ */
+function MaxIfPercent(max: number, validationOptions?: ValidationOptions) {
+  return (object: object, propertyName: string) => {
+    registerDecorator({
+      name: 'maxIfPercent',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      constraints: [max],
+      validator: {
+        validate(value: unknown, args: ValidationArguments) {
+          const dto = args.object as { type?: string };
+          if (dto.type !== 'PERCENT') return true;
+          return typeof value === 'number' && value <= max;
+        },
+        defaultMessage(args: ValidationArguments) {
+          return `value phải <= ${args.constraints[0]} khi type=PERCENT.`;
+        },
+      },
+    });
+  };
+}
 
 class ReviewDto {
   @IsBoolean() approve!: boolean;
@@ -25,20 +55,24 @@ class ReviewReturnDto {
   @IsOptional() @IsString() note?: string;
 }
 class SetConfigDto {
-  @IsString() key!: string;
+  @IsString() @IsNotEmpty() key!: string;
   // value tự do (object/số/chuỗi/boolean) — @Allow để ValidationPipe không loại bỏ.
+  // null/undefined bị chặn ở SystemConfigService.set() (không chặn ở DTO vì @Allow không hỗ trợ).
   @Allow() value!: object | string | number | boolean;
 }
-class CreateCouponDto {
+// Export để test DTO validation trực tiếp (xem admin.controller.spec.ts).
+export class CreateCouponDto {
   @IsString() code!: string;
   @IsIn(['PERCENT', 'AMOUNT', 'FREESHIP']) type!: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
-  @IsInt() @Min(0) value!: number;
+  @IsInt() @Min(0) @MaxIfPercent(100) value!: number;
   @IsOptional() @IsInt() minOrder?: number;
   @IsOptional() @IsInt() maxDiscount?: number;
   @IsString() startAt!: string;
   @IsString() endAt!: string;
   @IsOptional() @IsInt() usageLimit?: number;
-  @IsOptional() @IsInt() perUserLimit?: number;
+  // perUserLimit <= 0 = "không giới hạn" (nhất quán với coupons.service.ts / loyalty.service.ts —
+  // grep `perUserLimit > 0`). @Min(0) chỉ chặn số âm vô nghĩa, KHÔNG cấm 0.
+  @IsOptional() @IsInt() @Min(0) perUserLimit?: number;
   @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE'])
   scope!: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE';
 }

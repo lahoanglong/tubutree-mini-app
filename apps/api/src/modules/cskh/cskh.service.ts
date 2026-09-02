@@ -72,8 +72,9 @@ export class CskhService {
       orderBy: { sortOrder: 'asc' },
     });
     return (
-      candidates.find((t) => t.keywords.some((k) => k.trim() && needle.includes(k.toLowerCase()))) ??
-      null
+      candidates.find((t) =>
+        t.keywords.some((k) => k.trim() && needle.includes(k.trim().toLowerCase())),
+      ) ?? null
     );
   }
 

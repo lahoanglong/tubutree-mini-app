@@ -86,6 +86,17 @@ describe('CskhService.matchTemplate', () => {
     expect(out).toBeNull();
   });
 
+  it('keyword có khoảng trắng thừa (vd " ship") vẫn khớp bình thường (trim trước khi so khớp)', async () => {
+    const prisma = makePrisma({
+      quickReplyTemplate: {
+        findMany: jest.fn().mockResolvedValue([{ id: 't3', isGreeting: false, sortOrder: 0, keywords: [' ship '] }]),
+      },
+    });
+    const svc = new CskhService(prisma);
+    const out = await svc.matchTemplate('Ship bao lâu?');
+    expect(out?.id).toBe('t3');
+  });
+
   it('text rỗng → null, không query DB', async () => {
     const prisma = makePrisma();
     const svc = new CskhService(prisma);
