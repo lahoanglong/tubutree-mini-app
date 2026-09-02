@@ -114,12 +114,19 @@ export class GameService {
       if (prize.rewardType === 'POINTS') {
         await this.creditPoints(userId, prize.value, `GAME_SPIN_WIN:${prize.id}`, tx);
       } else if (prize.rewardType === 'SEEDS') {
-        const tankCap = await this.config.get<number>('game.tank_capacity', 200);
-        const p = await tx.gameProfile.findUnique({ where: { userId } });
-        const currentSeeds = p?.totalSeeds ?? 0;
+        // Mặc định khớp với các call site khác (buySeeds/checkIn/collectDew/quiz/gift) và giá
+        // trị SystemConfig thật (500) — tránh clamp sai xuống 200 khi config bị thiếu.
+        const tankCap = await this.config.get<number>('game.tank_capacity', 500);
+        // Cộng totalSeeds ATOMIC bằng increment + guard cap (updateMany) trong CÙNG tx — chống
+        // lost-update khi trúng SEEDS đồng thời với spin/checkin/quiz/gift khác đang đổi
+        // totalSeeds (pattern cũ đọc-rồi-ghi-tuyệt-đối sẽ đè mất phần cộng của thao tác kia).
         await tx.gameProfile.update({
           where: { userId },
-          data: { totalSeeds: Math.min(tankCap, currentSeeds + prize.value) },
+          data: { totalSeeds: { increment: prize.value } },
+        });
+        await tx.gameProfile.updateMany({
+          where: { userId, totalSeeds: { gt: tankCap } },
+          data: { totalSeeds: tankCap },
         });
       } else if (prize.rewardType === 'COUPON') {
         rewardRefId = await this.grantCoupon(userId, prize.value, tx);

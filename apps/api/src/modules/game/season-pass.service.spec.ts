@@ -24,11 +24,14 @@ function makePrisma(over: Record<string, unknown> = {}) {
       findUnique: jest.fn().mockResolvedValue(null),
       upsert: jest.fn().mockResolvedValue({}),
       update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     subscription: { count: jest.fn().mockResolvedValue(0) },
     gameProfile: {
       findUnique: jest.fn().mockResolvedValue({ userId: 'u1', totalSeeds: 10 }),
       update: jest.fn().mockResolvedValue({}),
+      upsert: jest.fn().mockResolvedValue({ totalSeeds: 10 }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     coinTransaction: { create: jest.fn().mockResolvedValue({}) },
     user: { update: jest.fn().mockResolvedValue({}) },
@@ -162,31 +165,40 @@ describe('SeasonPassService.claim', () => {
     });
   });
 
-  it('thành công FREE (SEEDS) → cộng 💧 có cap + đánh dấu claimedFree', async () => {
+  it('thành công FREE (SEEDS) → cộng 💧 ATOMIC có cap + đánh dấu claimedFree (guard atomic)', async () => {
     const p = makePrisma({
       userSeasonPass: {
         findUnique: jest.fn().mockResolvedValue({ xp: 100, claimedFree: [], claimedPremium: [] }),
-        update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       gameProfile: {
-        findUnique: jest.fn().mockResolvedValue({ userId: 'u1', totalSeeds: 490 }),
-        update: jest.fn().mockResolvedValue({}),
+        // Mô phỏng increment atomic thật trong DB: 490 + 20 = 510 (vượt cap 500).
+        upsert: jest.fn().mockResolvedValue({ totalSeeds: 510 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     });
     const { svc } = svcWith(p, makeConfig({ 'seasonpass.tiers': TIERS, 'game.tank_capacity': 500 }));
     const r = await svc.claim('u1', 0, 'free');
     expect(r).toEqual({ claimed: true, reward: { type: 'SEEDS', amount: 20 } });
-    // 490 + 20 = 510 → cap 500
-    expect((p.gameProfile.update as jest.Mock).mock.calls[0][0].data).toEqual({ totalSeeds: 500 });
-    const upd = (p.userSeasonPass.update as jest.Mock).mock.calls[0][0];
-    expect(upd.data).toEqual({ claimedFree: { push: 0 } });
+    // Cộng ATOMIC qua upsert increment (không phải absolute value đọc-ngoài-tx).
+    const upsertArg = (p.gameProfile.upsert as jest.Mock).mock.calls[0][0];
+    expect(upsertArg.update).toEqual({ totalSeeds: { increment: 20 } });
+    // Vượt cap → clamp guarded (totalSeeds > cap), không set tuyệt đối không điều kiện.
+    expect((p.gameProfile.updateMany as jest.Mock).mock.calls[0][0]).toMatchObject({
+      where: { userId: 'u1', totalSeeds: { gt: 500 } },
+      data: { totalSeeds: 500 },
+    });
+    // Guard double-claim atomic: updateMany với filter "chưa có tier" (NOT has), rồi push.
+    const guardArg = (p.userSeasonPass.updateMany as jest.Mock).mock.calls[0][0];
+    expect(guardArg.where).toEqual({ userId: 'u1', seasonId: 's1', NOT: { claimedFree: { has: 0 } } });
+    expect(guardArg.data).toEqual({ claimedFree: { push: 0 } });
   });
 
   it('thành công PREMIUM (XU) → ghi CoinTransaction + cộng coinsBalance TRÊN tx (atomic) + đánh dấu claimedPremium', async () => {
     const p = makePrisma({
       userSeasonPass: {
         findUnique: jest.fn().mockResolvedValue({ xp: 300, claimedFree: [], claimedPremium: [] }),
-        update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       subscription: { count: jest.fn().mockResolvedValue(1) },
     });
@@ -211,20 +223,21 @@ describe('SeasonPassService.claim', () => {
       where: { id: 'u1' },
       data: { coinsBalance: { increment: 5000 } },
     });
-    expect((p.userSeasonPass.update as jest.Mock).mock.calls[0][0].data).toEqual({ claimedPremium: { push: 0 } });
+    expect((p.userSeasonPass.updateMany as jest.Mock).mock.calls[0][0].data).toEqual({ claimedPremium: { push: 0 } });
   });
 
-  it('double-claim race: re-read trong tx đã có bậc → BadRequest, không cấp thưởng', async () => {
-    const findUnique = jest
-      .fn()
-      .mockResolvedValueOnce({ xp: 100, claimedFree: [], claimedPremium: [] }) // pre-check ngoài tx
-      .mockResolvedValueOnce({ xp: 100, claimedFree: [0], claimedPremium: [] }); // re-read trong tx
+  it('double-claim race: guard updateMany count=0 (bậc vừa bị claim bởi request song song) → BadRequest, không cấp thưởng', async () => {
     const p = makePrisma({
-      userSeasonPass: { findUnique, update: jest.fn().mockResolvedValue({}) },
+      userSeasonPass: {
+        findUnique: jest.fn().mockResolvedValue({ xp: 100, claimedFree: [], claimedPremium: [] }), // pre-check ngoài tx
+        // Guard atomic trong tx: request song song đã push tier trước → count=0 (race-safe,
+        // thay cho re-read-rồi-check cũ vốn vẫn có thể bị 2 request cùng vượt qua).
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
     });
     const { svc } = svcWith(p);
     await expect(svc.claim('u1', 0, 'free')).rejects.toMatchObject({ message: 'Đã nhận rồi.' });
-    expect(p.userSeasonPass.update).not.toHaveBeenCalled();
     expect(p.gameProfile.update).not.toHaveBeenCalled();
+    expect(p.gameProfile.upsert).not.toHaveBeenCalled();
   });
 });

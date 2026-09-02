@@ -7,17 +7,18 @@ const config = {
   get: async <T>(_k: string, fb?: T): Promise<T> => fb as T,
 } as unknown as SystemConfigService;
 
-function setup(rows: unknown[], existing: unknown = null) {
+function setup(rows: unknown[], existing: unknown = null, claimedCount = 1) {
   const queryRaw = jest.fn().mockResolvedValue(rows);
-  const upsert = jest.fn().mockResolvedValue({});
   const findUnique = jest.fn().mockResolvedValue(existing);
+  const create = jest.fn().mockResolvedValue({});
+  const updateMany = jest.fn().mockResolvedValue({ count: claimedCount });
   const prisma = {
     $queryRaw: queryRaw,
-    reorderReminder: { findUnique, upsert },
+    reorderReminder: { findUnique, create, updateMany },
   } as unknown as PrismaService;
   const notify = jest.fn().mockResolvedValue(undefined);
   const notifications = { notify } as unknown as NotificationsService;
-  return { svc: new LifecycleService(prisma, config, notifications), upsert, notify, findUnique };
+  return { svc: new LifecycleService(prisma, config, notifications), create, updateMany, notify, findUnique };
 }
 
 const row = (over: Record<string, unknown> = {}) => ({
@@ -29,36 +30,56 @@ const row = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('LifecycleService.sendReorderReminders (§6.14.7)', () => {
-  it('sản phẩm tới hạn, chưa từng nhắc → notify + upsert remindedAt', async () => {
-    const { svc, upsert, notify } = setup([row()], null);
+  it('sản phẩm tới hạn, chưa từng nhắc → notify + create remindedAt', async () => {
+    const { svc, create, notify } = setup([row()], null);
     await svc.sendReorderReminders();
     expect(notify).toHaveBeenCalledWith('u1', 'REORDER_REMINDER', { product: 'Dầu gội Visante 500ml' });
-    expect(upsert).toHaveBeenCalledTimes(1);
-    expect(upsert.mock.calls[0][0].create.remindedAt).toBeInstanceOf(Date);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0].data.remindedAt).toBeInstanceOf(Date);
   });
 
   it('đã nhắc sau đơn cuối (remindedAt >= lastOrderAt) → KHÔNG nhắc lại (chống spam)', async () => {
-    const { svc, notify, upsert } = setup([row({ lastOrderAt: new Date('2026-04-01') })], {
+    const { svc, notify, create, updateMany } = setup([row({ lastOrderAt: new Date('2026-04-01') })], {
       remindedAt: new Date('2026-04-20'), // đã nhắc sau đơn cuối
     });
     await svc.sendReorderReminders();
     expect(notify).not.toHaveBeenCalled();
-    expect(upsert).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
-  it('có đơn MỚI hơn lần nhắc trước (remindedAt < lastOrderAt) → nhắc lại', async () => {
-    const { svc, notify } = setup([row({ lastOrderAt: new Date('2026-06-01') })], {
+  it('có đơn MỚI hơn lần nhắc trước (remindedAt < lastOrderAt) → nhắc lại (claim qua updateMany)', async () => {
+    const { svc, notify, updateMany } = setup([row({ lastOrderAt: new Date('2026-06-01') })], {
       remindedAt: new Date('2026-04-20'), // nhắc cũ, đã có đơn mới 06-01
     });
     await svc.sendReorderReminders();
+    expect(updateMany).toHaveBeenCalledTimes(1);
     expect(notify).toHaveBeenCalledTimes(1);
   });
 
   it('không có sản phẩm tới hạn → không làm gì', async () => {
-    const { svc, notify, upsert } = setup([]);
+    const { svc, notify, create } = setup([]);
     await svc.sendReorderReminders();
     expect(notify).not.toHaveBeenCalled();
-    expect(upsert).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('2 cron instance chạy chồng, đã có bản ghi: claim updateMany count=0 → bỏ qua, không notify (chống double-send)', async () => {
+    const { svc, notify, updateMany } = setup(
+      [row({ lastOrderAt: new Date('2026-06-01') })],
+      { remindedAt: new Date('2026-04-20') },
+      0,
+    );
+    await svc.sendReorderReminders();
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('2 cron instance chạy chồng, lần đầu nhắc: create race → P2002 → bỏ qua, không notify (chống double-send)', async () => {
+    const { svc, notify, create } = setup([row()], null);
+    create.mockRejectedValueOnce(Object.assign(new Error('unique'), { code: 'P2002' }));
+    await svc.sendReorderReminders();
+    expect(notify).not.toHaveBeenCalled();
   });
 });
 

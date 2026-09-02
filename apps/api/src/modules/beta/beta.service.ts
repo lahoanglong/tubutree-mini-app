@@ -34,12 +34,17 @@ export class BetaService {
   }
 
   async join(userId: string) {
+    const existing = await this.prisma.betaTester.findUnique({ where: { userId } });
+    // Đã ACTIVE rồi (double-submit / retry) → không đụng vào joinedAt gốc, chỉ trả trạng thái hiện tại.
+    if (existing?.status === 'ACTIVE') {
+      const features = await this.config.get<BetaFeature[]>('beta.features', []);
+      return { enrolled: true, joinedAt: existing.joinedAt, features };
+    }
     const tester = await this.prisma.betaTester.upsert({
       where: { userId },
       create: { userId, status: 'ACTIVE' },
       update: { status: 'ACTIVE', joinedAt: new Date() },
     });
-    // Dựng status trực tiếp từ kết quả upsert (đã chắc chắn ACTIVE) — đỡ 1 query.
     const features = await this.config.get<BetaFeature[]>('beta.features', []);
     return { enrolled: true, joinedAt: tester.joinedAt, features };
   }

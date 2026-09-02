@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { GameQuizService } from './game-quiz.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -49,8 +50,15 @@ describe('GameQuizService', () => {
     expect(r.correct).toBe(1);
   });
 
-  it('trả lời lại trong ngày → BadRequest', async () => {
-    const p = prisma({ gameQuizAttempt: { findFirst: jest.fn().mockResolvedValue({ id: 'a1' }), create: jest.fn() } });
+  it('trả lời lại trong ngày → BadRequest (unique constraint DB-level, race-safe)', async () => {
+    const p = prisma({
+      gameQuizAttempt: {
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' }),
+        ),
+      },
+    });
     await expect(new GameQuizService(p, cfg()).answerQuiz('u1', 'q1', 1)).rejects.toBeInstanceOf(BadRequestException);
   });
 });

@@ -154,10 +154,17 @@ export class BrandService {
   ) {
     await this.prisma.brand.findUniqueOrThrow({ where: { id } });
     const data: Record<string, unknown> = { ...dto };
-    if (typeof dto.slug === 'string' && dto.slug.trim()) {
+    if (typeof dto.slug === 'string') {
+      // Chặn slug rỗng tường minh (dto.slug='') — trước đây bị guard `&& dto.slug.trim()` bỏ qua
+      // nên '' vẫn lọt vào `data = {...dto}` và ghi đè cột slug @unique thành rỗng.
+      if (!dto.slug.trim()) throw new BadRequestException('Slug không được để trống.');
       const slug = slugifyVi(dto.slug);
       if (!slug) throw new BadRequestException('Slug không hợp lệ (rỗng sau khi chuẩn hoá).');
       data.slug = slug;
+    }
+    if (typeof dto.name === 'string' && !dto.name.trim()) {
+      // Cùng lỗi như slug: name cũng @unique, name='' tường minh phải bị chặn.
+      throw new BadRequestException('Tên nhãn không được để trống.');
     }
     // Gán chủ nhãn: Brand.ownerUserId không có FK tới User (nullable, gán tay) → tự kiểm tra
     // user tồn tại, tránh admin gõ sai id → gán "chủ ma" mà không ai được cảnh báo.

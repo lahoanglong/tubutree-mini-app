@@ -30,9 +30,13 @@ export class ContentKitService {
   async getForCtv(userId: string, productSlug: string) {
     const product = await this.prisma.product.findUnique({
       where: { slug: productSlug },
-      select: { id: true, name: true, images: true },
+      select: { id: true, name: true, images: true, isActive: true, affiliateBlocked: true },
     });
-    if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
+    // Nhất quán với storefront/brand: SP ngừng bán hoặc bị chặn affiliate thì KHÔNG được tạo
+    // nội dung quảng bá (kèm link giới thiệu) cho nó — coi như không tồn tại với CTV.
+    if (!product || !product.isActive || product.affiliateBlocked) {
+      throw new NotFoundException('Không tìm thấy sản phẩm.');
+    }
 
     const [kit, user] = await Promise.all([
       this.prisma.productContentKit.findUnique({ where: { productId: product.id } }),
@@ -45,8 +49,12 @@ export class ContentKitService {
     const baseUrl = await this.config.get<string>('app.miniapp_base_url', '');
     const link = `${baseUrl}/product/${productSlug}?ref=${user.referralCode}`;
     const ctvName = user.fullName?.trim() || 'Shop';
+    // 1 lần quét duy nhất bằng regex + hàm thay thế (KHÔNG dùng 2 lần .replaceAll string nối
+    // tiếp): tránh (a) lượt thay thế sau khớp nhầm vào text vừa được chèn bởi lượt trước (vd
+    // fullName chứa chuỗi "{link}"), và (b) $-pattern đặc biệt của replace() (vd fullName="$&")
+    // làm sai lệch nội dung khi dùng replacement dạng string.
     const substitute = (text: string) =>
-      text.replaceAll('{ten_ctv}', ctvName).replaceAll('{link}', link);
+      text.replace(/\{ten_ctv\}|\{link\}/g, (m) => (m === '{ten_ctv}' ? ctvName : link));
 
     return {
       productName: product.name,

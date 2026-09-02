@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ReviewsService } from './reviews.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
@@ -118,6 +118,72 @@ describe('ReviewsService.listByProduct (video UGC §6.14.9)', () => {
     expect(r.videoCount).toBe(1);
     expect(r.items[0]!.videoUrl).toBe('https://x/v.mp4');
     expect(r.items[1]!.videoUrl).toBeNull();
+  });
+});
+
+describe('ReviewsService.remove (chống farm điểm qua tạo→xóa→tạo lại)', () => {
+  it('chủ review tự xóa → hoàn tác điểm đã thưởng + xóa review + recompute rating', async () => {
+    const prisma = makePrisma({
+      review: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'r1', userId: 'u1', productId: 'p1', pointsEarned: 10 }),
+        delete: jest.fn(),
+        aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 }, _count: 0 }),
+      },
+    });
+    const out = await new ReviewsService(prisma).remove('u1', 'USER', 'r1');
+    const p = prisma as unknown as {
+      review: { delete: jest.Mock };
+      pointsTransaction: { create: jest.Mock };
+      user: { update: jest.Mock };
+      product: { update: jest.Mock };
+    };
+    expect(out).toEqual({ ok: true });
+    expect(p.review.delete).toHaveBeenCalledWith({ where: { id: 'r1' } });
+    expect(p.pointsTransaction.create.mock.calls[0][0].data.delta).toBe(-10);
+    expect(p.user.update.mock.calls[0][0].data.pointsBalance).toEqual({ increment: -10 });
+    expect(p.product.update.mock.calls[0][0].data).toEqual({ ratingAvg: 0, reviewCount: 0 });
+  });
+
+  it('review chưa từng được thưởng điểm (pointsEarned=0) → không tạo pointsTransaction hoàn tác', async () => {
+    const prisma = makePrisma({
+      review: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'r1', userId: 'u1', productId: 'p1', pointsEarned: 0 }),
+        delete: jest.fn(),
+        aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 }, _count: 0 }),
+      },
+    });
+    await new ReviewsService(prisma).remove('u1', 'USER', 'r1');
+    const p = prisma as unknown as { pointsTransaction: { create: jest.Mock }; user: { update: jest.Mock } };
+    expect(p.pointsTransaction.create).not.toHaveBeenCalled();
+    expect(p.user.update).not.toHaveBeenCalled();
+  });
+
+  it('không phải chủ review + không phải ADMIN → Forbidden, không xóa', async () => {
+    const deleteFn = jest.fn();
+    const prisma = makePrisma({
+      review: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'r1', userId: 'u2', productId: 'p1', pointsEarned: 5 }),
+        delete: deleteFn,
+      },
+    });
+    await expect(new ReviewsService(prisma).remove('u1', 'USER', 'r1')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(deleteFn).not.toHaveBeenCalled();
+  });
+
+  it('ADMIN xóa review của người khác → cho phép', async () => {
+    const prisma = makePrisma({
+      review: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'r1', userId: 'u2', productId: 'p1', pointsEarned: 5 }),
+        delete: jest.fn(),
+        aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 }, _count: 0 }),
+      },
+    });
+    await expect(new ReviewsService(prisma).remove('admin1', 'ADMIN', 'r1')).resolves.toEqual({ ok: true });
+  });
+
+  it('review không tồn tại → NotFound', async () => {
+    const prisma = makePrisma({ review: { findUnique: jest.fn().mockResolvedValue(null) } });
+    await expect(new ReviewsService(prisma).remove('u1', 'USER', 'x')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 

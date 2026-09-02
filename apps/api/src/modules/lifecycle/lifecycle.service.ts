@@ -56,11 +56,37 @@ export class LifecycleService {
       // Đã nhắc cho chu kỳ này (remindedAt sau đơn cuối) → bỏ qua (chống spam).
       if (existing?.remindedAt && existing.remindedAt >= lastOrderAt) continue;
 
-      await this.prisma.reorderReminder.upsert({
-        where: { userId_variationId: { userId: r.userId, variationId: r.variationId } },
-        create: { userId: r.userId, variationId: r.variationId, productName: r.productName, lastOrderAt, remindedAt: new Date() },
-        update: { productName: r.productName, lastOrderAt, remindedAt: new Date() },
-      });
+      // Claim atomic chống double-send khi 2 cron instance chạy chồng (mirror RemarketingService):
+      // - đã có bản ghi → chỉ update nếu remindedAt vẫn còn cũ hơn lastOrderAt tại thời điểm ghi
+      //   (updateMany guard — nếu instance khác đã claim trước, count=0).
+      // - chưa có bản ghi → create; unique(userId,variationId) tự chặn instance thứ hai (P2002).
+      let claimed: boolean;
+      if (existing) {
+        const res = await this.prisma.reorderReminder.updateMany({
+          where: {
+            userId: r.userId,
+            variationId: r.variationId,
+            OR: [{ remindedAt: null }, { remindedAt: { lt: lastOrderAt } }],
+          },
+          data: { productName: r.productName, lastOrderAt, remindedAt: new Date() },
+        });
+        claimed = res.count > 0;
+      } else {
+        try {
+          await this.prisma.reorderReminder.create({
+            data: { userId: r.userId, variationId: r.variationId, productName: r.productName, lastOrderAt, remindedAt: new Date() },
+          });
+          claimed = true;
+        } catch (err) {
+          if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
+            claimed = false;
+          } else {
+            throw err;
+          }
+        }
+      }
+      if (!claimed) continue;
+
       await this.notifications
         .notify(r.userId, 'REORDER_REMINDER', { product: r.productName })
         .catch(() => undefined);

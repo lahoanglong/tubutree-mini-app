@@ -23,7 +23,7 @@ function makePrisma(overrides: Record<string, unknown> = {}) {
 describe('ContentKitService.getForCtv', () => {
   it('thay {ten_ctv} bằng tên CTV và {link} bằng link chia sẻ trong mọi caption', async () => {
     const prisma = makePrisma();
-    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: ['img1.jpg'] });
+    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: ['img1.jpg'], isActive: true, affiliateBlocked: false });
     (prisma as any).productContentKit.findUnique.mockResolvedValue({
       captions: ['Xin chào {ten_ctv}, mua ngay {link}', 'Ưu đãi hôm nay {link} nhé {ten_ctv} ơi'],
       usps: ['Sạch, an toàn'],
@@ -49,7 +49,7 @@ describe('ContentKitService.getForCtv', () => {
 
   it('dùng base URL từ config app.miniapp_base_url khi có cấu hình', async () => {
     const prisma = makePrisma();
-    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: [] });
+    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: [], isActive: true, affiliateBlocked: false });
     (prisma as any).productContentKit.findUnique.mockResolvedValue(null);
     (prisma as any).user.findUniqueOrThrow.mockResolvedValue({ fullName: 'A', referralCode: 'CODE1' });
 
@@ -61,7 +61,7 @@ describe('ContentKitService.getForCtv', () => {
 
   it('kit null → trả mảng rỗng nhưng vẫn dựng đúng shareLink', async () => {
     const prisma = makePrisma();
-    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: ['img1.jpg'] });
+    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: ['img1.jpg'], isActive: true, affiliateBlocked: false });
     (prisma as any).productContentKit.findUnique.mockResolvedValue(null);
     (prisma as any).user.findUniqueOrThrow.mockResolvedValue({ fullName: 'Nguyễn Văn A', referralCode: 'ABC123' });
 
@@ -78,7 +78,7 @@ describe('ContentKitService.getForCtv', () => {
 
   it('user chưa có tên → dùng "Shop" thay cho {ten_ctv}', async () => {
     const prisma = makePrisma();
-    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: [] });
+    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: [], isActive: true, affiliateBlocked: false });
     (prisma as any).productContentKit.findUnique.mockResolvedValue({
       captions: ['Chào từ {ten_ctv}!'],
       usps: [],
@@ -93,12 +93,58 @@ describe('ContentKitService.getForCtv', () => {
     expect(out.captions).toEqual(['Chào từ Shop!']);
   });
 
+  it('fullName trùng literal "{link}" không làm hỏng caption (không double-substitute)', async () => {
+    const prisma = makePrisma();
+    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: [], isActive: true, affiliateBlocked: false });
+    (prisma as any).productContentKit.findUnique.mockResolvedValue({
+      captions: ['Chào từ {ten_ctv}, xem {link}'],
+      usps: [], faqs: null, videoUrls: [],
+    });
+    (prisma as any).user.findUniqueOrThrow.mockResolvedValue({ fullName: '{link} Shop', referralCode: 'XYZ' });
+
+    const svc = new ContentKitService(prisma, makeConfig());
+    const out = await svc.getForCtv('u1', 'tra-xanh');
+
+    expect(out.captions).toEqual(['Chào từ {link} Shop, xem /product/tra-xanh?ref=XYZ']);
+  });
+
+  it('fullName là chuỗi $-pattern đặc biệt ("$&") không làm sai lệch caption', async () => {
+    const prisma = makePrisma();
+    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: [], isActive: true, affiliateBlocked: false });
+    (prisma as any).productContentKit.findUnique.mockResolvedValue({
+      captions: ['Chào từ {ten_ctv}!'],
+      usps: [], faqs: null, videoUrls: [],
+    });
+    (prisma as any).user.findUniqueOrThrow.mockResolvedValue({ fullName: '$&', referralCode: 'XYZ' });
+
+    const svc = new ContentKitService(prisma, makeConfig());
+    const out = await svc.getForCtv('u1', 'tra-xanh');
+
+    expect(out.captions).toEqual(['Chào từ $&!']);
+  });
+
   it('sản phẩm không tồn tại → NotFoundException', async () => {
     const prisma = makePrisma();
     (prisma as any).product.findUnique.mockResolvedValue(null);
 
     const svc = new ContentKitService(prisma, makeConfig());
     await expect(svc.getForCtv('u1', 'khong-ton-tai')).rejects.toThrow(NotFoundException);
+  });
+
+  it('sản phẩm isActive=false → NotFoundException (không tạo nội dung quảng bá cho SP ngừng bán)', async () => {
+    const prisma = makePrisma();
+    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: [], isActive: false, affiliateBlocked: false });
+
+    const svc = new ContentKitService(prisma, makeConfig());
+    await expect(svc.getForCtv('u1', 'tra-xanh')).rejects.toThrow(NotFoundException);
+  });
+
+  it('sản phẩm affiliateBlocked=true → NotFoundException (không lộ link chia sẻ cho SP bị chặn affiliate)', async () => {
+    const prisma = makePrisma();
+    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: [], isActive: true, affiliateBlocked: true });
+
+    const svc = new ContentKitService(prisma, makeConfig());
+    await expect(svc.getForCtv('u1', 'tra-xanh')).rejects.toThrow(NotFoundException);
   });
 });
 

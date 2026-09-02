@@ -93,16 +93,18 @@ export class GameEconomyService {
       seeds += 5;
       bonusNote = '+5 💧 chuỗi 3 ngày!';
     }
-    const totalSeeds = Math.min(tankCap, p.totalSeeds + seeds);
-
-    // Idempotent write: only one concurrent call wins (race-safe backstop)
+    // Idempotent write: only one concurrent call wins (race-safe backstop).
+    // totalSeeds ghi ATOMIC bằng increment (không phải absolute value đọc-ngoài-tx) — chống
+    // lost-update khi checkIn đụng độ với spin/buySeeds/quiz/gift khác đang đổi totalSeeds cùng
+    // lúc; clamp cap bằng updateMany guard riêng bên dưới (không unconditional-overwrite giá trị
+    // vừa được thao tác khác cộng thêm).
     const res = await this.prisma.gameProfile.updateMany({
       where: {
         userId,
         OR: [{ lastCheckInAt: null }, { lastCheckInAt: { lt: this.startOfDay(new Date()) } }],
       },
       data: {
-        totalSeeds,
+        totalSeeds: { increment: seeds },
         streakDays,
         streakFreezes,
         longestStreak: Math.max(p.longestStreak, streakDays),
@@ -112,12 +114,18 @@ export class GameEconomyService {
       },
     });
     if (res.count === 0) throw new BadRequestException('Hôm nay bạn đã điểm danh rồi 🌿');
+    await this.prisma.gameProfile.updateMany({
+      where: { userId, totalSeeds: { gt: tankCap } },
+      data: { totalSeeds: tankCap },
+    });
 
     // Hook Season Pass: cộng XP chặng mùa (side-effect an toàn, không ảnh hưởng streak math).
     await this.seasonPass
       .addXp(userId, await this.config.get<number>('seasonpass.checkin_xp', 10))
       .catch(() => undefined);
 
+    const after = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { totalSeeds: true } });
+    const totalSeeds = after?.totalSeeds ?? Math.min(tankCap, p.totalSeeds + seeds);
     return { seedsEarned: seeds, pointsEarned: 0, streakDays, totalSeeds, streakFrozeUsed, bonusNote };
   }
 
@@ -128,18 +136,25 @@ export class GameEconomyService {
     }
     const dew = await this.config.get<number>('game.dew_seeds', 15);
     const tankCap = await this.config.get<number>('game.tank_capacity', 500);
-    const totalSeeds = Math.min(tankCap, p.totalSeeds + dew);
 
-    // Idempotent write: only one concurrent call wins (race-safe backstop)
+    // Idempotent write: only one concurrent call wins (race-safe backstop).
+    // totalSeeds ghi ATOMIC bằng increment (không phải absolute value đọc-ngoài-tx) — chống
+    // lost-update khi collectDew đụng độ với spin/checkin/quiz/gift khác đang đổi totalSeeds.
     const res = await this.prisma.gameProfile.updateMany({
       where: {
         userId,
         OR: [{ lastDewAt: null }, { lastDewAt: { lt: this.startOfDay(new Date()) } }],
       },
-      data: { totalSeeds, lastDewAt: new Date() },
+      data: { totalSeeds: { increment: dew }, lastDewAt: new Date() },
     });
     if (res.count === 0) throw new BadRequestException('Hôm nay bạn đã hứng giọt sương rồi 🌿');
+    await this.prisma.gameProfile.updateMany({
+      where: { userId, totalSeeds: { gt: tankCap } },
+      data: { totalSeeds: tankCap },
+    });
 
+    const after = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { totalSeeds: true } });
+    const totalSeeds = after?.totalSeeds ?? Math.min(tankCap, p.totalSeeds + dew);
     return { seedsEarned: dew, totalSeeds };
   }
 

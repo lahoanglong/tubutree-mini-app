@@ -117,23 +117,32 @@ export class SeasonPassService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      // Guard double-claim race: đọc lại trong tx, kiểm tra lại mảng đã nhận trước khi ghi.
-      const fresh = await tx.userSeasonPass.findUnique({
-        where: { userId_seasonId: { userId, seasonId: season.id } },
-      });
-      const freshArr = (track === 'free' ? fresh?.claimedFree : fresh?.claimedPremium) ?? [];
-      if (freshArr.includes(tier)) throw new BadRequestException('Đã nhận rồi.');
-
-      await tx.userSeasonPass.update({
-        where: { userId_seasonId: { userId, seasonId: season.id } },
+      // Guard double-claim ATOMIC bằng updateMany + filter mảng "chưa có tier" (Postgres list
+      // filter `has`) — thay cho đọc-rồi-kiểm-tra-rồi-push cũ: 2 request claim() song song đều
+      // có thể đọc mảng CHƯA có tier trước khi request đầu commit → array_append áp dụng trên
+      // giá trị committed mới nhất ở mỗi statement (READ COMMITTED) nên cả 2 vẫn cùng push được
+      // → double reward dù pre-check trong tx tưởng đã chặn.
+      const guard = await tx.userSeasonPass.updateMany({
+        where: { userId, seasonId: season.id, NOT: { [arrField]: { has: tier } } },
         data: { [arrField]: { push: tier } },
       });
+      if (guard.count === 0) throw new BadRequestException('Đã nhận rồi.');
 
       if (reward.type === 'SEEDS') {
         const cap = await this.config.get<number>('game.tank_capacity', 500);
-        const gp = await tx.gameProfile.findUnique({ where: { userId } });
-        const next = Math.min(cap, (gp?.totalSeeds ?? 0) + reward.amount);
-        await tx.gameProfile.update({ where: { userId }, data: { totalSeeds: next } });
+        // Cộng totalSeeds ATOMIC (increment) + clamp cap guarded trong CÙNG tx — chống
+        // lost-update khi user vừa claim vừa spin/checkin/quiz/gift khác đổi totalSeeds cùng lúc.
+        const gp = await tx.gameProfile.upsert({
+          where: { userId },
+          update: { totalSeeds: { increment: reward.amount } },
+          create: { userId, totalSeeds: Math.min(cap, reward.amount) },
+        });
+        if (gp.totalSeeds > cap) {
+          await tx.gameProfile.updateMany({
+            where: { userId, totalSeeds: { gt: cap } },
+            data: { totalSeeds: cap },
+          });
+        }
       } else {
         // XU thưởng: ghi TRỰC TIẾP trên tx (atomic với việc đánh dấu đã nhận) thay vì
         // coins.grantCoins (mở $transaction riêng ở root client → không rollback cùng claim).

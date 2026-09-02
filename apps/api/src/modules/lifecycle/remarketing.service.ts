@@ -49,12 +49,17 @@ export class RemarketingService {
 
       // Atomic guard chống double-send khi cron chạy chồng: chỉ set nếu vẫn
       // chưa nhắc cho updatedAt này (count 0 nghĩa là instance khác đã nhắc).
+      // Set CẢ HAI field cùng 1 timestamp: Cart.updatedAt có @updatedAt nên Prisma
+      // sẽ tự bump nó ở mọi write — nếu không set tường minh, nó lấy 1 mốc `now()`
+      // khác (có thể trễ hơn) so với abandonRemindedAt, làm guard bên trên
+      // (`abandonRemindedAt >= updatedAt`) sai lệch và gửi lặp mỗi giờ vô thời hạn.
+      const claimedAt = new Date();
       const claimed = await this.prisma.cart.updateMany({
         where: {
           id: cart.id,
           OR: [{ abandonRemindedAt: null }, { abandonRemindedAt: { lt: cart.updatedAt } }],
         },
-        data: { abandonRemindedAt: new Date() },
+        data: { abandonRemindedAt: claimedAt, updatedAt: claimedAt },
       });
       if (claimed.count === 0) continue;
 

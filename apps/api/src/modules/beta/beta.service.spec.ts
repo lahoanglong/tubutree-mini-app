@@ -60,6 +60,20 @@ describe('BetaService.join / leave', () => {
     expect(up.create).toMatchObject({ userId: 'u1', status: 'ACTIVE' });
   });
 
+  it('join khi đã ACTIVE (double-submit/retry) → giữ nguyên joinedAt gốc, không upsert lại', async () => {
+    const originalJoinedAt = new Date('2026-01-01T00:00:00Z');
+    const prisma = makePrisma({
+      betaTester: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE', joinedAt: originalJoinedAt }),
+        upsert: jest.fn(),
+      },
+    });
+    const r = await new BetaService(prisma, makeConfig({ 'beta.features': FEATURES })).join('u1');
+    expect(r.enrolled).toBe(true);
+    expect(r.joinedAt).toBe(originalJoinedAt);
+    expect(prisma.betaTester.upsert).not.toHaveBeenCalled();
+  });
+
   it('leave → set LEFT (updateMany idempotent theo userId), enrolled false', async () => {
     const prisma = makePrisma();
     const r = await new BetaService(prisma, makeConfig()).leave('u1');

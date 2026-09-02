@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -12,14 +13,24 @@ export class StorefrontService {
     }
     const existing = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId, type: 'CTV' } });
     if (existing) return existing;
-    return this.prisma.storefront.create({
-      data: {
-        type: 'CTV',
-        slug: user.referralCode,
-        ownerUserId: userId,
-        title: `Cửa hàng của ${user.fullName ?? 'bạn'}`,
-      },
-    });
+    try {
+      return await this.prisma.storefront.create({
+        data: {
+          type: 'CTV',
+          slug: user.referralCode,
+          ownerUserId: userId,
+          title: `Cửa hàng của ${user.fullName ?? 'bạn'}`,
+        },
+      });
+    } catch (err) {
+      // Race: 2 request tạo gian hàng đồng thời → request thua unique constraint (slug/ownerUserId)
+      // thay vì trả 500 thô, trả lại gian hàng vừa được tạo bởi request thắng.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const raced = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId, type: 'CTV' } });
+        if (raced) return raced;
+      }
+      throw err;
+    }
   }
 
   async getMine(userId: string) {
@@ -94,7 +105,9 @@ export class StorefrontService {
       select: {
         id: true, name: true, slug: true, thumbnail: true, brand: true,
         basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true,
-        variations: { select: { affiliateRate: true } },
+        // CHỈ tính maxAffiliateRate trên variation đang bán (isActive) — variation ngừng bán
+        // không được tính vào, tránh hiện %HH cao hơn thực tế CTV có thể đạt được.
+        variations: { where: { isActive: true }, select: { affiliateRate: true } },
       },
     });
     return products.map((p) => {
@@ -194,12 +207,17 @@ export class StorefrontService {
   async reorderCollections(userId: string, orderedIds: string[]) {
     const sf = await this.assertOwnedStorefront(userId);
     const owned = await this.prisma.storefrontCollection.findMany({
-      where: { storefrontId: sf.id }, select: { id: true },
+      where: { storefrontId: sf.id }, select: { id: true }, orderBy: { sortOrder: 'asc' },
     });
-    const ownedSet = new Set(owned.map((c) => c.id));
-    const ops = orderedIds
-      .filter((id) => ownedSet.has(id))
-      .map((id, i) => this.prisma.storefrontCollection.update({ where: { id }, data: { sortOrder: i } }));
+    const ownedIds = owned.map((c) => c.id);
+    const ownedSet = new Set(ownedIds);
+    const included = orderedIds.filter((id) => ownedSet.has(id));
+    const includedSet = new Set(included);
+    // Collection sở hữu nhưng KHÔNG có trong orderedIds (payload thiếu) → nối vào cuối theo
+    // đúng thứ tự sortOrder cũ, để KHÔNG bị bỏ sót và KHÔNG trùng sortOrder với phần vừa sắp lại.
+    const remaining = ownedIds.filter((id) => !includedSet.has(id));
+    const finalOrder = [...included, ...remaining];
+    const ops = finalOrder.map((id, i) => this.prisma.storefrontCollection.update({ where: { id }, data: { sortOrder: i } }));
     await this.prisma.$transaction(ops);
     return { ok: true };
   }
@@ -225,6 +243,15 @@ export class StorefrontService {
     });
     if (!product || !product.isActive || product.affiliateBlocked) {
       throw new BadRequestException('Sản phẩm không khả dụng để thêm vào gian hàng.');
+    }
+    if (dto.variationId) {
+      const variation = await this.prisma.variation.findUnique({
+        where: { id: dto.variationId },
+        select: { productId: true },
+      });
+      if (!variation || variation.productId !== dto.productId) {
+        throw new BadRequestException('Biến thể không thuộc sản phẩm đã chọn.');
+      }
     }
     const count = await this.prisma.storefrontItem.count({ where: { collectionId } });
     return this.prisma.storefrontItem.create({
@@ -266,11 +293,17 @@ export class StorefrontService {
 
   async reorderItems(userId: string, collectionId: string, orderedItemIds: string[]) {
     await this.assertOwnedCollection(userId, collectionId);
-    const owned = await this.prisma.storefrontItem.findMany({ where: { collectionId }, select: { id: true } });
-    const ownedSet = new Set(owned.map((i) => i.id));
-    const ops = orderedItemIds
-      .filter((id) => ownedSet.has(id))
-      .map((id, i) => this.prisma.storefrontItem.update({ where: { id }, data: { sortOrder: i } }));
+    const owned = await this.prisma.storefrontItem.findMany({
+      where: { collectionId }, select: { id: true }, orderBy: { sortOrder: 'asc' },
+    });
+    const ownedIds = owned.map((i) => i.id);
+    const ownedSet = new Set(ownedIds);
+    const included = orderedItemIds.filter((id) => ownedSet.has(id));
+    const includedSet = new Set(included);
+    // Item sở hữu nhưng thiếu trong payload → nối cuối theo sortOrder cũ (tránh trùng sortOrder).
+    const remaining = ownedIds.filter((id) => !includedSet.has(id));
+    const finalOrder = [...included, ...remaining];
+    const ops = finalOrder.map((id, i) => this.prisma.storefrontItem.update({ where: { id }, data: { sortOrder: i } }));
     await this.prisma.$transaction(ops);
     return { ok: true };
   }

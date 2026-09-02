@@ -1,6 +1,9 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateReviewDto } from './dto/review.dto';
+
+type Db = PrismaService | Prisma.TransactionClient;
 
 @Injectable()
 export class ReviewsService {
@@ -55,6 +58,9 @@ export class ReviewsService {
           data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id },
         });
         await tx.user.update({ where: { id: userId }, data: { pointsBalance: { increment: pointsEarned } } });
+        // Cập nhật rating denormalized cho Product (hiển thị sao trên card/PDP) — trong
+        // cùng transaction để tránh lệch dữ liệu nếu bước này lỗi sau khi review đã tạo.
+        await this.recomputeRating(product.id, tx);
         return r;
       });
     } catch (err) {
@@ -65,19 +71,17 @@ export class ReviewsService {
       throw err;
     }
 
-    // Cập nhật rating denormalized cho Product (hiển thị sao trên card/PDP).
-    await this.recomputeRating(product.id);
     return review;
   }
 
   /** Tính lại ratingAvg + reviewCount cho 1 sản phẩm từ review hiển thị. */
-  private async recomputeRating(productId: string): Promise<void> {
-    const agg = await this.prisma.review.aggregate({
+  private async recomputeRating(productId: string, db: Db = this.prisma): Promise<void> {
+    const agg = await db.review.aggregate({
       where: { productId, isVisible: true },
       _avg: { rating: true },
       _count: true,
     });
-    await this.prisma.product.update({
+    await db.product.update({
       where: { id: productId },
       data: {
         ratingAvg: Math.round((agg._avg.rating ?? 0) * 10) / 10,
@@ -126,8 +130,27 @@ export class ReviewsService {
     if (review.userId !== userId && role !== 'ADMIN') {
       throw new ForbiddenException('Không có quyền xóa đánh giá này.');
     }
-    await this.prisma.review.delete({ where: { id } });
-    await this.recomputeRating(review.productId);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.review.delete({ where: { id } });
+      // Hoàn tác điểm đã thưởng lúc tạo review — nếu không, user có thể farm điểm vô hạn
+      // bằng cách tạo review (+điểm) rồi xóa (unique(userId,productId) mở lại) rồi tạo lại.
+      if (review.pointsEarned > 0) {
+        await tx.pointsTransaction.create({
+          data: {
+            userId: review.userId,
+            delta: -review.pointsEarned,
+            reason: `REVIEW_DELETE:${review.productId}`,
+            refType: 'REVIEW',
+            refId: id,
+          },
+        });
+        await tx.user.update({
+          where: { id: review.userId },
+          data: { pointsBalance: { increment: -review.pointsEarned } },
+        });
+      }
+      await this.recomputeRating(review.productId, tx);
+    });
     return { ok: true };
   }
 

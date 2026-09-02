@@ -16,25 +16,28 @@ export class CommunityRewardService {
   ) {}
 
   /**
-   * Thưởng khi bài được đăng công khai. Trần số lần/ngày để chống spam.
-   * Đếm-rồi-quyết TRONG transaction Serializable: đăng nhiều bài dồn dập (concurrent requests)
-   * không thể cùng đọc chung 1 todayCount rồi cùng lọt qua trần — 1 trong các tx sẽ P2034,
-   * nuốt lỗi (bỏ qua thưởng lần đó) thay vì throw, vì thưởng cộng đồng là best-effort.
+   * Đếm-rồi-cấp thưởng với trần số lần/ngày, dùng chung cho rewardPost/rewardAnswer.
+   * Đếm-rồi-quyết TRONG transaction Serializable: nhiều request dồn dập (vd đăng/trả lời
+   * liên tục) không thể cùng đọc chung 1 todayCount rồi cùng lọt qua trần — 1 trong các tx
+   * sẽ P2034, nuốt lỗi (bỏ qua thưởng lần đó) thay vì throw, vì thưởng cộng đồng là best-effort.
    */
-  async rewardPost(userId: string, postId: string): Promise<void> {
-    const amount = await this.config.get<number>('community.post_reward', 200);
-    if (amount <= 0) return;
-    const cap = await this.config.get<number>('community.daily_post_reward_cap', 3);
+  private async rewardWithDailyCap(
+    userId: string,
+    reasonPrefix: string,
+    refId: string,
+    amount: number,
+    cap: number,
+  ): Promise<void> {
     const since = new Date();
     since.setHours(0, 0, 0, 0);
     try {
       await this.prisma.$transaction(
         async (tx) => {
           const todayCount = await tx.coinTransaction.count({
-            where: { userId, refType: 'COMMUNITY', reason: { startsWith: 'COMMUNITY_POST:' }, createdAt: { gte: since } },
+            where: { userId, refType: 'COMMUNITY', reason: { startsWith: `${reasonPrefix}:` }, createdAt: { gte: since } },
           });
           if (todayCount >= cap) return;
-          await this.coins.grantCoins(userId, amount, `COMMUNITY_POST:${postId}`, 'COMMUNITY', postId, tx);
+          await this.coins.grantCoins(userId, amount, `${reasonPrefix}:${refId}`, 'COMMUNITY', refId, tx);
         },
         { isolationLevel: 'Serializable' },
       );
@@ -43,31 +46,24 @@ export class CommunityRewardService {
     }
   }
 
+  /** Thưởng khi bài được đăng công khai. Trần số lần/ngày để chống spam (xem rewardWithDailyCap). */
+  async rewardPost(userId: string, postId: string): Promise<void> {
+    const amount = await this.config.get<number>('community.post_reward', 200);
+    if (amount <= 0) return;
+    const cap = await this.config.get<number>('community.daily_post_reward_cap', 3);
+    await this.rewardWithDailyCap(userId, 'COMMUNITY_POST', postId, amount, cap);
+  }
+
   /**
    * Thưởng người trả lời (không thưởng khi tự trả lời bài của chính mình). Trần số lần/ngày
-   * để chống farm xu — cùng cơ chế Serializable + nuốt P2034 như rewardPost (xem ghi chú trên).
+   * để chống farm xu (xem rewardWithDailyCap).
    */
   async rewardAnswer(answererId: string, postAuthorId: string, commentId: string): Promise<void> {
     if (answererId === postAuthorId) return;
     const amount = await this.config.get<number>('community.answer_reward', 100);
     if (amount <= 0) return;
     const cap = await this.config.get<number>('community.daily_answer_reward_cap', 10);
-    const since = new Date();
-    since.setHours(0, 0, 0, 0);
-    try {
-      await this.prisma.$transaction(
-        async (tx) => {
-          const todayCount = await tx.coinTransaction.count({
-            where: { userId: answererId, refType: 'COMMUNITY', reason: { startsWith: 'COMMUNITY_ANSWER:' }, createdAt: { gte: since } },
-          });
-          if (todayCount >= cap) return;
-          await this.coins.grantCoins(answererId, amount, `COMMUNITY_ANSWER:${commentId}`, 'COMMUNITY', commentId, tx);
-        },
-        { isolationLevel: 'Serializable' },
-      );
-    } catch (err) {
-      if (!(typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034')) throw err;
-    }
+    await this.rewardWithDailyCap(answererId, 'COMMUNITY_ANSWER', commentId, amount, cap);
   }
 
   /**

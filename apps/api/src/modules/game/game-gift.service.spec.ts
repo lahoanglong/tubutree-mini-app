@@ -46,7 +46,7 @@ describe('GameGiftService.giftWater', () => {
     await expect(svc.giftWater('u1', 'stranger')).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('bạn bè + đủ 💧 → tạo gift, trừ tank người gửi, cộng tank người nhận', async () => {
+  it('bạn bè + đủ 💧 → tạo gift, trừ tank người gửi, cộng tank người nhận ATOMIC (increment)', async () => {
     const { svc, waterGift, gameProfile, notify } = setup();
     const r = await svc.giftWater('u1', 'friend1');
     expect(r).toEqual({ amount: 10, recipientId: 'friend1' });
@@ -54,8 +54,10 @@ describe('GameGiftService.giftWater', () => {
     expect(gameProfile.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { userId: 'u1', totalSeeds: { gte: 10 } } }),
     );
+    // Cộng ATOMIC qua upsert increment (chống lost-update khi 2 người tặng cùng lúc),
+    // KHÔNG set giá trị tuyệt đối đọc-ngoài-tx như trước.
     const upsertArg = gameProfile.upsert.mock.calls[0][0];
-    expect(upsertArg.update.totalSeeds).toBe(60); // 50 + 10
+    expect(upsertArg.update.totalSeeds).toEqual({ increment: 10 });
     expect(notify).toHaveBeenCalledWith('friend1', 'GAME_WATER_GIFT', expect.any(Object));
   });
 
@@ -80,10 +82,21 @@ describe('GameGiftService.giftWater', () => {
     expect(waterGift.deleteMany).toHaveBeenCalled(); // đã rollback bản ghi gift
   });
 
-  it('cộng tank người nhận có cap tank_capacity', async () => {
+  it('cộng tank người nhận có cap tank_capacity (increment vượt cap → clamp qua updateMany guard)', async () => {
     const { svc, gameProfile } = setup({ recipient: { totalSeeds: 495 } });
+    // Mô phỏng increment atomic thật trong DB: 495 + 10 = 505 (vượt cap 500).
+    (gameProfile.upsert as jest.Mock).mockResolvedValue({ totalSeeds: 505 });
     await svc.giftWater('u1', 'friend1');
-    expect(gameProfile.upsert.mock.calls[0][0].update.totalSeeds).toBe(500); // min(500, 505)
+    expect(gameProfile.upsert.mock.calls[0][0].update.totalSeeds).toEqual({ increment: 10 });
+    // Clamp guarded (totalSeeds > cap) thay vì set tuyệt đối không điều kiện — không đè mất phần
+    // cộng của thao tác khác diễn ra giữa lúc đọc `upserted` và lúc clamp.
+    const clampCall = (gameProfile.updateMany as jest.Mock).mock.calls.find(
+      (c) => c[0].where.userId === 'friend1',
+    );
+    expect(clampCall![0]).toMatchObject({
+      where: { userId: 'friend1', totalSeeds: { gt: 500 } },
+      data: { totalSeeds: 500 },
+    });
   });
 });
 

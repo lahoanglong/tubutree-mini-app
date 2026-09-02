@@ -99,15 +99,21 @@ export class GameGiftService {
       throw new BadRequestException(`Cần ${amount}💧 để tặng nước.`);
     }
 
-    // Cộng tank người nhận (cap tank_capacity).
+    // Cộng tank người nhận ATOMIC (upsert increment) + clamp cap guarded — chống lost-update khi
+    // 2 người tặng cùng lúc / người nhận đồng thời tự cộng nước qua spin/checkin/quiz (pattern cũ
+    // đọc-rồi-ghi-tuyệt-đối sẽ đè mất phần cộng của thao tác kia dù bên gửi đã bị trừ xu thật).
     const cap = await this.config.get<number>('game.tank_capacity', 500);
-    const rp = await this.prisma.gameProfile.findUnique({ where: { userId: recipientId } });
-    const newTotal = Math.min(cap, (rp?.totalSeeds ?? 0) + amount);
-    await this.prisma.gameProfile.upsert({
+    const upserted = await this.prisma.gameProfile.upsert({
       where: { userId: recipientId },
-      create: { userId: recipientId, totalSeeds: amount },
-      update: { totalSeeds: newTotal },
+      create: { userId: recipientId, totalSeeds: Math.min(cap, amount) },
+      update: { totalSeeds: { increment: amount } },
     });
+    if (upserted.totalSeeds > cap) {
+      await this.prisma.gameProfile.updateMany({
+        where: { userId: recipientId, totalSeeds: { gt: cap } },
+        data: { totalSeeds: cap },
+      });
+    }
 
     await this.notifications
       .notify(recipientId, 'GAME_WATER_GIFT', { amount: String(amount) })

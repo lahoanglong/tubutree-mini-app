@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { DEFAULT_TREE_TYPE } from './game.constants';
@@ -14,6 +15,10 @@ export class GameQuizService {
     const utc7 = new Date(d.getTime() + 7 * 3600 * 1000);
     utc7.setUTCHours(0, 0, 0, 0);
     return new Date(utc7.getTime() - 7 * 3600 * 1000);
+  }
+
+  private dayKey(d: Date): string {
+    return new Date(d.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10);
   }
 
   // User mới đăng nhập nhưng chưa vào Vườn Xanh → chưa có gameProfile.
@@ -53,14 +58,21 @@ export class GameQuizService {
     await this.ensure(userId);
     const quiz = await this.prisma.gameQuiz.findUnique({ where: { id: quizId } });
     if (!quiz) throw new BadRequestException('Câu hỏi không tồn tại.');
-    const since = this.startOfDay(new Date());
-    const already = await this.prisma.gameQuizAttempt.findFirst({
-      where: { userId, quizId, attemptedAt: { gte: since } },
-    });
-    if (already) throw new BadRequestException('Bạn đã trả lời câu này hôm nay.');
 
     const isCorrect = quiz.correct === choice;
-    await this.prisma.gameQuizAttempt.create({ data: { userId, quizId, isCorrect } });
+    // Chặn trả lời trùng/ngày bằng unique DB constraint (userId, quizId, dayKey) — race-safe,
+    // thay cho pattern đọc-rồi-tạo (TOCTOU) cũ: 2 request answerQuiz() song song đều có thể đọc
+    // "chưa trả lời hôm nay" trước khi request đầu commit → cả 2 cùng được cộng waterReward.
+    try {
+      await this.prisma.gameQuizAttempt.create({
+        data: { userId, quizId, isCorrect, dayKey: this.dayKey(new Date()) },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new BadRequestException('Bạn đã trả lời câu này hôm nay.');
+      }
+      throw err;
+    }
 
     let waterEarned = 0;
     if (isCorrect) {
@@ -81,10 +93,12 @@ export class GameQuizService {
         },
       });
       // Clamp về tankCap nếu increment vượt — chấp nhận đôi khi mất nước thừa khi đã đầy bình,
-      // nhưng không bao giờ mất tích luỹ vì lost-update.
+      // nhưng không bao giờ mất tích luỹ vì lost-update. Guard bằng updateMany (totalSeeds > cap)
+      // thay vì update() tuyệt đối — nếu 1 quiz khác trả lời song song vừa cộng thêm nước sau khi
+      // ta đọc `upserted`, unconditional update sẽ đè mất phần cộng đó dù vẫn > cap.
       if (upserted.totalSeeds > tankCap) {
-        await this.prisma.gameProfile.update({
-          where: { userId },
+        await this.prisma.gameProfile.updateMany({
+          where: { userId, totalSeeds: { gt: tankCap } },
           data: { totalSeeds: tankCap },
         });
       }

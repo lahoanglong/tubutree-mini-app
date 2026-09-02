@@ -462,6 +462,12 @@ export class CommunityFeedService {
   }
 
   async getComments(postId: string, viewerId?: string, take = 50) {
+    // Cùng quy tắc hiển thị với getPost — thiếu check này cho phép đọc bình luận của bài
+    // REMOVED (đã gỡ vì vi phạm) hoặc PENDING (chưa duyệt, không phải bài của mình) dù
+    // chính bài viết đã bị chặn xem qua getPost (IDOR: rò rỉ nội dung qua đường vòng).
+    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { status: true, userId: true } });
+    if (!post || post.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
+    if (post.status === 'PENDING' && post.userId !== viewerId) throw new NotFoundException('Bài viết không tồn tại.');
     const comments = await this.prisma.feedComment.findMany({
       where: { postId },
       orderBy: [{ isAccepted: 'desc' }, { createdAt: 'asc' }],
@@ -483,12 +489,19 @@ export class CommunityFeedService {
 
   /** Chọn câu trả lời hay nhất — chủ bài QUESTION hoặc ADMIN. */
   async setBestAnswer(userId: string, role: string, postId: string, commentId: string) {
-    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true } });
+    const post = await this.prisma.feedPost.findUnique({
+      where: { id: postId },
+      select: { id: true, userId: true, kind: true, bestCommentId: true },
+    });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.kind !== 'QUESTION') throw new BadRequestException('Chỉ câu hỏi mới có câu trả lời hay nhất.');
     if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Chỉ chủ bài mới chọn được.');
     const comment = await this.prisma.feedComment.findUnique({ where: { id: commentId }, select: { id: true, postId: true, userId: true } });
     if (!comment || comment.postId !== postId) throw new NotFoundException('Câu trả lời không tồn tại.');
+    // Lần chọn ĐẦU TIÊN cho bài này (bestCommentId hiện đang null) — chỉ lần này mới được
+    // cộng rep/notify (xem chống-farm bên dưới). Đọc trước transaction: nhất quán với
+    // rewardBestAnswer (idempotent theo postId, không theo commentId).
+    const isFirstSelection = post.bestCommentId == null;
     // 3 ghi cùng lúc phải atomic — tránh trạng thái nửa vời nếu 1 write giữa chừng lỗi
     // (vd đã bỏ cờ isAccepted cũ nhưng chưa set cờ mới/bestCommentId).
     await this.prisma.$transaction([
@@ -501,9 +514,13 @@ export class CommunityFeedService {
     } catch (err) {
       this.logger.warn(`rewardBestAnswer failed for comment ${commentId}: ${(err as Error).message}`);
     }
-    // Chỉ cộng rep + notify khi câu trả lời KHÔNG phải của chính chủ bài — chống farm hạng
-    // (chủ bài tự trả lời rồi tự chọn best sẽ không được +rep_best), nhất quán với rewardBestAnswer/notify.
-    if (comment.userId !== post.userId) {
+    // Chỉ cộng rep + notify khi (a) câu trả lời KHÔNG phải của chính chủ bài — chống farm hạng
+    // (chủ bài tự trả lời rồi tự chọn best sẽ không được +rep_best) — VÀ (b) đây là lần chọn
+    // best-answer ĐẦU TIÊN cho bài này. Thiếu điều kiện (b) trước đây cho phép chủ bài đổi
+    // qua đổi lại best-answer giữa 2 comment (kể cả tự tạo bằng tài khoản phụ) để +rep_best
+    // KHÔNG GIỚI HẠN mỗi lần đổi — cùng lớp lỗi farm-thưởng mà rewardBestAnswer (idempotent
+    // theo postId) đã chặn ở phía coin, nhưng phía reputation lại bỏ sót.
+    if (comment.userId !== post.userId && isFirstSelection) {
       try {
         const amount = await this.config.get<number>('community.rep_best', 10);
         await this.bumpReputation(comment.userId, amount);

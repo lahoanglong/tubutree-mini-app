@@ -576,6 +576,32 @@ describe('CommunityFeedService.getComments', () => {
     const r = await makeSvc(prisma).getComments('p1');
     expect(r[0]).toMatchObject({ isOwner: false });
   });
+
+  it('bài REMOVED → NotFound (chặn đọc bình luận vòng qua bài đã gỡ, IDOR)', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ status: 'REMOVED', userId: 'author' });
+    await expect(makeSvc(prisma).getComments('p1', 'someone')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.feedComment.findMany).not.toHaveBeenCalled();
+  });
+
+  it('bài PENDING, viewer không phải chủ bài → NotFound', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ status: 'PENDING', userId: 'author' });
+    await expect(makeSvc(prisma).getComments('p1', 'someone-else')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('bài PENDING, viewer là chủ bài → vẫn đọc được bình luận', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ status: 'PENDING', userId: 'author' });
+    (prisma.feedComment.findMany as jest.Mock).mockResolvedValue([]);
+    await expect(makeSvc(prisma).getComments('p1', 'author')).resolves.toEqual([]);
+  });
+
+  it('bài không tồn tại → NotFound', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue(null);
+    await expect(makeSvc(prisma).getComments('p1', 'someone')).rejects.toBeInstanceOf(NotFoundException);
+  });
 });
 
 describe('CommunityFeedService.getCategories', () => {
@@ -1141,6 +1167,17 @@ describe('CommunityFeedService.setBestAnswer (cộng reputation — non-fatal)',
     (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue({ id: 'c1', postId: 'p1', userId: 'answerer' });
     const r = await makeSvc(prisma).setBestAnswer('author', 'CUSTOMER', 'p1', 'c1');
     expect(r).toEqual({ ok: true });
+  });
+
+  it('bài ĐÃ có best-answer, chủ bài đổi sang comment khác → KHÔNG cộng rep lần 2 (chặn farm hạng bằng đổi qua đổi lại)', async () => {
+    const prisma = makePrisma();
+    // bestCommentId khác null → không phải lần chọn đầu tiên cho bài này.
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION', bestCommentId: 'c-old' });
+    (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue({ id: 'c2', postId: 'p1', userId: 'answerer2' });
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+    await makeSvc(prisma, undefined, notify).setBestAnswer('author', 'CUSTOMER', 'p1', 'c2');
+    expect(prisma.communityProfile.upsert).not.toHaveBeenCalled();
+    expect(notify.notify).not.toHaveBeenCalled();
   });
 });
 
