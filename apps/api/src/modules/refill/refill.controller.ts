@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { IsInt, Max, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { RefillService } from './refill.service';
 
 class ReturnBottlesDto {
@@ -24,18 +25,21 @@ export class RefillController {
   }
 
   // Admin/Staff: Lấy danh sách đổi vỏ chờ duyệt
+  @Roles('STAFF', 'ADMIN')
   @Get('admin/pending')
   listPending() {
     return this.refill.listPending();
   }
 
   // Admin/Staff: Duyệt đơn đổi vỏ chai
+  @Roles('STAFF', 'ADMIN')
   @Post('admin/:id/approve')
   approve(@Param('id') id: string) {
     return this.refill.approveReturn(id);
   }
 
   // Admin/Staff: Từ chối đơn đổi vỏ chai
+  @Roles('STAFF', 'ADMIN')
   @Post('admin/:id/reject')
   reject(@Param('id') id: string) {
     return this.refill.rejectReturn(id);

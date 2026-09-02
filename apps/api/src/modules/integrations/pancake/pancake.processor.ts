@@ -118,8 +118,24 @@ export class PancakeProcessor extends WorkerHost {
     const status = mapPancakeStatus(data['status'] ?? data['status_name']);
     if (!status || status === order.status) return;
 
-    await this.prisma.order.update({ where: { id: order.id }, data: { status } });
+    // Queue KHÔNG đảm bảo thứ tự per-order khi có retry/backoff (BullMQ) — webhook CANCELLED
+    // có thể chạy TRƯỚC rồi webhook DELIVERED cũ hơn (bị delay/redelivery) chạy SAU. Chặn regression
+    // DELIVERED sau khi đơn đã ở trạng thái cuối CANCELLED/RETURNED: không credit điểm nhầm cho
+    // đơn đã hủy/trả, và không đè lại status DELIVERED lên trên trạng thái cuối đã đúng.
+    if (status === 'DELIVERED' && (order.status === 'CANCELLED' || order.status === 'RETURNED')) {
+      this.logger.warn(
+        `Bỏ qua webhook DELIVERED trễ cho đơn ${order.code} — đã ở trạng thái cuối ${order.status}.`,
+      );
+      return;
+    }
 
+    // THỨ TỰ QUAN TRỌNG: chạy side-effect (idempotent, tự guard qua bảng pointsTransaction/
+    // affiliate) TRƯỚC, flip order.status SAU CÙNG. Trước đây update status trước rồi mới
+    // credit/reverse — nếu process crash NGAY SAU update nhưng TRƯỚC KHI side-effect chạy
+    // xong, retry (BullMQ) sẽ đọc lại order.status đã bằng `status` rồi bail ở guard phía trên
+    // → mất credit/reverse VĨNH VIỄN cho đơn đó. Đảo thứ tự: nếu crash giữa chừng, retry vẫn
+    // thấy order.status CŨ (chưa flip) nên chạy lại side-effect (bản thân đã idempotent) rồi
+    // mới flip status.
     if (status === 'DELIVERED') {
       await this.loyalty.creditOrderPoints(order.id);
       await this.affiliate.lockCommissionsForOrder(order.id);
@@ -128,6 +144,9 @@ export class PancakeProcessor extends WorkerHost {
       await this.loyalty.reverseOrderPoints(order.id);
       await this.affiliate.reverseCommissionsForOrder(order.id);
     }
+
+    await this.prisma.order.update({ where: { id: order.id }, data: { status } });
+
     await this.notifications.notify(order.userId, `ORDER_${status}`, {
       order_code: order.code,
     });
@@ -195,9 +214,11 @@ export class PancakeProcessor extends WorkerHost {
   private async onCancelled(data: Record<string, unknown>): Promise<void> {
     const order = await this.findOrder(data);
     if (!order || order.status === 'CANCELLED') return;
-    await this.prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
+    // Cùng lý do với onStatusUpdated: side-effect trước, flip status sau cùng — tránh mất
+    // reversal vĩnh viễn nếu crash giữa update và reverseOrderPoints rồi bị guard trên chặn retry.
     await this.loyalty.reverseOrderPoints(order.id);
     await this.affiliate.reverseCommissionsForOrder(order.id);
+    await this.prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
     await this.notifications.notify(order.userId, 'ORDER_CANCELLED', { order_code: order.code });
   }
 

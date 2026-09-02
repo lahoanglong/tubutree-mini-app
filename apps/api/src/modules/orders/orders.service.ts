@@ -64,11 +64,13 @@ export class OrdersService {
       // có thể đã stale nếu webhook ZaloPay/Pancake chuyển REFUNDED giữa detail() và tx.
       // Dùng updateMany guard `paymentStatus: 'PAID'` để hoàn ví chỉ khi DB còn PAID — count=1
       // bảo đảm increment thực sự chạy trên đơn còn nợ tiền user.
-      // Hoàn về Ví Tubu cho kênh prepaid (WALLET + ZALOPAY) đã PAID — nhất quán với
-      // admin.reviewReturn (wasPaid gồm WALLET/ZALOPAY/COD). Trước đây chỉ WALLET → đơn
-      // ZaloPay đã trả tiền thật mà user hủy thì KHÔNG được hoàn. COD lúc hủy luôn UNPAID
-      // (chỉ PAID khi đã giao, mà đơn DELIVERED không hủy được) nên guard paymentStatus:'PAID'
-      // tự loại COD; count=1 bảo đảm increment chỉ chạy đúng 1 lần ở nhánh thắng race.
+      // Hoàn về Ví Tubu cho MỌI kênh prepaid đã PAID (WALLET/ZALOPAY/BANK_TRANSFER/VNPAY/XU) —
+      // nhất quán với admin.reviewReturn (wasPaid gồm WALLET/ZALOPAY/COD). Trước đây chỉ
+      // WALLET/ZALOPAY/XU → đơn BANK_TRANSFER đã đối soát PAID (pancake.processor.ts
+      // onPaymentReconcile lật UNPAID→PAID trước khi giao) mà user hủy thì tiền chuyển khoản
+      // thật KHÔNG được hoàn, paymentStatus kẹt mãi ở PAID. COD lúc hủy luôn UNPAID (chỉ PAID
+      // khi đã giao, mà đơn DELIVERED không hủy được) nên guard paymentStatus:'PAID' tự loại
+      // COD; count=1 bảo đảm increment chỉ chạy đúng 1 lần ở nhánh thắng race.
       // XU: đơn trả bằng TubuXu → hoàn lại XU (coinsBalance) + ghi CoinTransaction(+total),
       // KHÔNG hoàn ví tiền thật (xu không rút được; hoàn vào ví = biến xu thành tiền rút được).
       // ⚠️ ZALOPAY hoàn vào Ví NỘI BỘ (không refund cổng) — nếu sau này thêm refund cổng phải
@@ -76,6 +78,8 @@ export class OrdersService {
       if (
         order.paymentMethod === 'WALLET' ||
         order.paymentMethod === 'ZALOPAY' ||
+        order.paymentMethod === 'BANK_TRANSFER' ||
+        order.paymentMethod === 'VNPAY' ||
         order.paymentMethod === 'XU'
       ) {
         const refunded = await tx.order.updateMany({
@@ -121,7 +125,11 @@ export class OrdersService {
     if (!won) return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
     // reverseOrderPoints idempotent (guard ORDER_REVERSED + $transaction nội bộ) nên để ngoài tx được.
     await this.loyalty.reverseOrderPoints(order.id);
-    await this.notifications.notify(userId, 'ORDER_CANCELLED', { order_code: code });
+    // Không để lỗi gửi thông báo (best-effort) làm 500 hoá cả response — đơn đã CANCELLED +
+    // hoàn ví/điểm/stock xong xuôi ở trên; guard đầu hàm (status !== PENDING_PAYMENT/CONFIRMED)
+    // chặn mọi lần gọi lại cancel() sau đó nên nếu để throw ở đây, client sẽ nhận 500 vĩnh viễn
+    // cho một thao tác thực ra đã thành công. Nhất quán với requestReturn() bên dưới.
+    await this.notifications.notify(userId, 'ORDER_CANCELLED', { order_code: code }).catch(() => undefined);
     return this.detail(userId, code);
   }
 
@@ -143,6 +151,15 @@ export class OrdersService {
     const order = await this.detail(userId, code);
     if (!order.invoiceRequest) {
       throw new BadRequestException('Đơn này chưa có yêu cầu xuất hóa đơn VAT.');
+    }
+    // Guard theo invoiceStatus hiện tại — trước đây set 'REQUESTED' vô điều kiện nên double-tap,
+    // hoặc gọi lại sau khi webhook ISSUED (pancake.processor.ts onInvoiceIssued) đã phát hành
+    // hóa đơn thật, sẽ âm thầm lật ngược invoiceStatus đã ISSUED về REQUESTED.
+    if (order.invoiceStatus === 'ISSUED') {
+      throw new BadRequestException('Hóa đơn đã được phát hành.');
+    }
+    if (order.invoiceStatus === 'REQUESTED') {
+      return { ok: true, message: 'Yêu cầu phát hành hóa đơn đang được xử lý.' };
     }
     await this.prisma.order.update({
       where: { id: order.id },

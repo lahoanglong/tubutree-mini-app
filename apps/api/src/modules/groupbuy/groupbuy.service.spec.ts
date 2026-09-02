@@ -65,6 +65,21 @@ describe('GroupBuyService.create', () => {
     expect(data).toMatchObject({ productId: 'prod1', initiatorId: 'u1', targetSize: 3, currentSize: 1, unitPrice: 85000, basePrice: 100000, status: 'OPEN' });
     expect(data.members.create).toMatchObject({ userId: 'u1' }); // người tạo là thành viên đầu tiên
     expect(r.unitPrice).toBe(85000);
+    expect(r.status).toBe('OPEN');
+  });
+
+  it('targetSize (config) = 1: nhóm đủ người NGAY khi tạo → SUCCESS + initiator nhận coupon ngay (không kẹt OPEN mãi)', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u1' }]);
+    const svc = new GroupBuyService(prisma, makeConfig({ 'groupbuy.discount_pct': 15, 'groupbuy.target_size': 1 }));
+    const r = await svc.create('u1', 'prod1');
+    expect(r.status).toBe('SUCCESS');
+    // Lật OPEN→SUCCESS đúng 1 lần (guard count=1) rồi cấp coupon cho initiator.
+    const flip = (prisma.groupBuy.updateMany as jest.Mock).mock.calls.find((c) => c[0]?.data?.status === 'SUCCESS');
+    expect(flip).toBeTruthy();
+    expect(prisma.coupon.create).toHaveBeenCalledTimes(1);
+    const markedGranted = (prisma.groupBuy.update as jest.Mock).mock.calls.find((c) => c[0]?.data?.couponsGrantedAt);
+    expect(markedGranted).toBeTruthy();
   });
 });
 
@@ -169,6 +184,13 @@ describe('GroupBuyService.join', () => {
     const prisma = makePrisma();
     (prisma.groupBuy.findUnique as jest.Mock).mockResolvedValue(group({ currentSize: 2, targetSize: 3 }));
     (prisma.groupBuy.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    await expect(new GroupBuyService(prisma, makeConfig()).join('u1', 'gb1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('race: 2 request tham gia đồng thời CÙNG user (double-click/retry) đều qua check `existing` → P2002 trên @@unique([groupBuyId,userId]) → BadRequest thân thiện (không rơi vào lỗi 409 chung)', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findUnique as jest.Mock).mockResolvedValue(group());
+    (prisma.groupBuyMember.create as jest.Mock).mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' }));
     await expect(new GroupBuyService(prisma, makeConfig()).join('u1', 'gb1')).rejects.toBeInstanceOf(BadRequestException);
   });
 });

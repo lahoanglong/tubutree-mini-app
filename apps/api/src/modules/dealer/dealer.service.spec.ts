@@ -139,6 +139,70 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
   });
 });
 
+describe('DealerService.creditPayment (an authenticated non-dealer must not be able to fabricate a paid-down debt)', () => {
+  it('chặn user không phải DEALER (trước đây thiếu check, cho phép tự ghi delta âm vào ledger của mình)', async () => {
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER', metadata: null }) },
+      dealerCreditLedger: { create: jest.fn() },
+    } as unknown as PrismaService;
+    await expect(new DealerService(prisma, makeConfig()).creditPayment('u1', 50_000, 'note')).rejects.toThrow();
+    expect((prisma as unknown as { dealerCreditLedger: { create: jest.Mock } }).dealerCreditLedger.create).not.toHaveBeenCalled();
+  });
+
+  it('đại lý hợp lệ → ghi delta âm bình thường', async () => {
+    const ledgerCreate = jest.fn().mockResolvedValue({});
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
+      dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
+      dealerCreditLedger: { create: ledgerCreate, findMany: jest.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    await new DealerService(prisma, makeConfig()).creditPayment('d1', 50_000, 'note');
+    expect(ledgerCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ userId: 'd1', delta: -50_000 }) }));
+  });
+});
+
+describe('DealerService.placeOrder idempotency (chống double-submit đơn CREDIT)', () => {
+  function prismaForOrder() {
+    const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
+    const base: Record<string, unknown> = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
+      dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', retailPrice: 100000, dealerPrices: null, name: '500ml', product: { name: 'SP' } }]) },
+      order: {
+        create: orderCreate,
+        findUnique: jest.fn().mockResolvedValue(null),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }),
+      },
+      dealerCreditLedger: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }), create: jest.fn().mockResolvedValue({}) },
+    };
+    base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
+    return { prisma: base as unknown as PrismaService, orderCreate };
+  }
+
+  it('key đã tồn tại (đơn đã tạo trước đó) → trả lại đơn cũ, KHÔNG tạo đơn/ghi công nợ lần 2', async () => {
+    const { prisma, orderCreate } = prismaForOrder();
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'o-existing', userId: 'd1' });
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'o-existing', items: [] });
+    const r = await new DealerService(prisma, makeConfig()).placeOrder(
+      'd1',
+      { items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'PREPAID' } as never,
+      'idem-key-1',
+    );
+    expect((r as { id: string }).id).toBe('o-existing');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('key mới → tạo đơn bình thường + ghi idempotencyKey', async () => {
+    const { prisma, orderCreate } = prismaForOrder();
+    await new DealerService(prisma, makeConfig()).placeOrder(
+      'd1',
+      { items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'PREPAID' } as never,
+      'idem-key-2',
+    );
+    expect(orderCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ idempotencyKey: 'idem-key-2' }) }));
+  });
+});
+
 describe('DealerService.rewardsProgress (hiển thị điều kiện + tiến trình)', () => {
   const NOW = new Date('2026-08-15T00:00:00Z'); // Q3/2026
 

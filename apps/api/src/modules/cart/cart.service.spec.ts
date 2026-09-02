@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { CartService } from './cart.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { CouponsService } from '../coupons/coupons.service';
@@ -213,7 +214,10 @@ describe('CartService guard tồn kho', () => {
   it('getCart: coupon fail trên base-không-flash NHƯNG hợp lệ trên TOÀN giỏ → GIỮ mã, discount 0, KHÔNG null', async () => {
     const validateAndCompute = jest
       .fn()
-      .mockRejectedValueOnce(new Error('minOrder')) // gọi với couponBase (loại flash)
+      // CouponsService.validateAndCompute LUÔN ném BadRequestException cho lỗi business rule
+      // (coupons.service.ts) — mock đúng loại lỗi này để khớp catch mới trong getCart(), vốn chỉ
+      // coi BadRequestException là "coupon invalid" và rethrow mọi lỗi khác (hạ tầng).
+      .mockRejectedValueOnce(new BadRequestException('minOrder')) // gọi với couponBase (loại flash)
       .mockResolvedValueOnce({ discount: 0, freeship: false }); // gọi lại với subtotal đầy đủ
     const update = jest.fn().mockResolvedValue({});
     const prisma = {
@@ -253,7 +257,7 @@ describe('CartService guard tồn kho', () => {
   });
 
   it('getCart: coupon fail cả trên TOÀN giỏ (hết hạn/hết lượt) → GỠ mã (null)', async () => {
-    const validateAndCompute = jest.fn().mockRejectedValue(new Error('expired'));
+    const validateAndCompute = jest.fn().mockRejectedValue(new BadRequestException('expired'));
     const update = jest.fn().mockResolvedValue({});
     const prisma = {
       cart: {
@@ -278,5 +282,35 @@ describe('CartService guard tồn kho', () => {
     const cart = await new CartService(prisma, couponsSvc, config, flashSvc).getCart('u1');
     expect(cart.couponCode).toBeNull();
     expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { couponCode: null } });
+  });
+
+  it('getCart: lỗi hạ tầng (không phải BadRequestException) khi validate coupon → KHÔNG bị nuốt, KHÔNG gỡ mã', async () => {
+    // Lỗi transient (DB timeout/connection blip) khác hẳn "coupon invalid" — trước đây bị catch{}
+    // rỗng nuốt luôn và xoá coupon hợp lệ khỏi giỏ. Giờ phải rethrow, không đụng tới couponCode.
+    const infraError = new Error('ECONNRESET');
+    const validateAndCompute = jest.fn().mockRejectedValue(infraError);
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = {
+      cart: {
+        upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: 'c1',
+          couponCode: 'SALE',
+          items: [
+            {
+              id: 'ci2',
+              variationId: 'v2',
+              quantity: 1,
+              variation: { productId: 'p2', salePrice: null, retailPrice: 30000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null } },
+            },
+          ],
+        }),
+        update,
+      },
+    } as any;
+    const flashSvc = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as any;
+    const couponsSvc = { validateAndCompute } as any;
+    await expect(new CartService(prisma, couponsSvc, config, flashSvc).getCart('u1')).rejects.toBe(infraError);
+    expect(update).not.toHaveBeenCalled();
   });
 });

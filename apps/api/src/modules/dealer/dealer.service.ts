@@ -87,8 +87,19 @@ export class DealerService {
     });
   }
 
-  async placeOrder(userId: string, dto: DealerOrderDto) {
+  async placeOrder(userId: string, dto: DealerOrderDto, idempotencyKey?: string) {
     const { discountPct, tier } = await this.dealerContext(userId);
+    // Chuẩn hoá key rỗng/khoảng trắng → undefined (mirror wallet.withdraw / checkout.placeOrder):
+    // tránh ghi '' vào Order.idempotencyKey (unique) rồi request tiếp theo cũng '' đụng P2002.
+    const key = idempotencyKey?.trim() || undefined;
+    // Double-tap/retry cùng key → trả lại đơn đã tạo, KHÔNG tạo đơn/ghi công nợ lần 2.
+    if (key) {
+      const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
+      if (existing && existing.userId === userId) {
+        return this.prisma.order.findUniqueOrThrow({ where: { id: existing.id }, include: { items: true } });
+      }
+      if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
+    }
     if (dto.items.length === 0) throw new BadRequestException('Đơn trống.');
 
     const variations = await this.prisma.variation.findMany({
@@ -150,6 +161,7 @@ export class DealerService {
               paymentStatus: 'UNPAID',
               shippingAddress: { note: 'Giao theo hợp đồng đại lý' },
               note: dto.note,
+              idempotencyKey: key ?? null,
               items: { create: items },
             },
           });
@@ -166,6 +178,12 @@ export class DealerService {
       // P2034: serialization failure — 2 đơn CREDIT chạm nhau. Báo thử lại thay vì 500.
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
         throw new BadRequestException('Hệ thống đang bận xử lý đơn công nợ, vui lòng thử lại.');
+      }
+      // Race idempotency: 2 request cùng key chạy đồng thời — request thua ăn unique-violation
+      // (P2002) trên idempotencyKey. Trả lại đơn mà request thắng đã tạo (mirror checkout.placeOrder).
+      if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
+        const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
+        if (existing) return this.prisma.order.findUniqueOrThrow({ where: { id: existing.id }, include: { items: true } });
       }
       throw err;
     }
@@ -192,6 +210,10 @@ export class DealerService {
   }
 
   async creditPayment(userId: string, amount: number, note?: string) {
+    // Chặn nếu chưa phải đại lý (mirror mọi method công nợ/đơn hàng khác) — thiếu check này
+    // trước đây cho phép BẤT KỲ user đã đăng nhập nào tự ghi "đã thanh toán" (delta âm) vào
+    // DealerCreditLedger của chính mình, tạo công nợ ảo âm nếu sau này họ được duyệt làm đại lý.
+    await this.dealerContext(userId);
     if (amount <= 0) throw new BadRequestException('Số tiền không hợp lệ.');
     await this.prisma.dealerCreditLedger.create({
       data: { userId, delta: -amount, refType: 'PAYMENT', note: note ?? 'Thanh toán công nợ' },

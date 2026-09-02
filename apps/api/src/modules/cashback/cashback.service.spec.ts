@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { CashbackService } from './cashback.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -154,6 +155,23 @@ describe('CashbackService.ingest', () => {
     );
   });
 
+  it('PENDING → CONFIRMED với commission sửa lại → cập nhật userReward mới, cộng đúng số mới (không dùng số cũ đã lưu)', async () => {
+    const { prisma, updateMany, userUpdate } = updateBranchPrisma({
+      id: 'tx1', status: 'PENDING', confirmedAt: null, userId: 'u1', userReward: 35000, orderAmount: 500000, commission: 50000,
+    });
+    // Postback CONFIRMED sau gửi commission cuối cùng thấp hơn tạm tính ban đầu (50000 → 40000).
+    await new CashbackService(prisma, config, coins, notifications, registry).ingest(
+      event({ status: 'CONFIRMED', commission: 40000 }),
+      'accesstrade',
+    );
+    const data = updateMany.mock.calls[0][0].data;
+    expect(data.commission).toBe(40000);
+    expect(data.userReward).toBe(28000); // floor(40000 * 0.7), KHÔNG phải 35000 cũ
+    expect(userUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { cashbackPending: { increment: 28000 } } }),
+    );
+  });
+
   it('CONFIRMED → REJECTED → TRỪ cashbackPending', async () => {
     const { prisma, userUpdate } = updateBranchPrisma({
       id: 'tx1', status: 'CONFIRMED', confirmedAt: new Date(), userId: 'u1', userReward: 35000,
@@ -195,6 +213,34 @@ describe('CashbackService.ingest', () => {
     expect(userUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: { cashbackPending: { increment: 35000 } } }),
     );
+  });
+
+  it('race tạo mới: create ăn P2002 (kẻ thắng đã tạo trước) → đọc lại & áp dụng update, KHÔNG mất credit CONFIRMED', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const userUpdate = jest.fn().mockResolvedValue({});
+    const create = jest
+      .fn()
+      .mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: '5' }));
+    const winner = { id: 'tx1', status: 'PENDING', confirmedAt: null, userId: 'u1', userReward: 35000 };
+    const findFirst = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(winner);
+    const prisma = {
+      cashbackClick: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', userId: 'u1' }) },
+      cashbackTransaction: { findFirst, create, updateMany },
+      user: { update: userUpdate },
+    } as unknown as PrismaService;
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn().mockImplementation((arg: unknown) =>
+      Array.isArray(arg) ? Promise.all(arg) : (arg as (t: unknown) => unknown)(prisma),
+    );
+    const r = await new CashbackService(prisma, config, coins, notifications, registry).ingest(
+      event({ status: 'CONFIRMED' }),
+      'accesstrade',
+    );
+    expect(r).toEqual({ ok: true });
+    // Không bỏ qua sự kiện thua race: vẫn cộng cashbackPending + thưởng xu giới thiệu như update bình thường.
+    expect(userUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { cashbackPending: { increment: 35000 } } }),
+    );
+    expect(coins.grantReferralCoins).toHaveBeenCalledWith('u1');
   });
 
   it('grantReferralCoins lỗi → postback VẪN ok (side-effect không làm vỡ webhook)', async () => {

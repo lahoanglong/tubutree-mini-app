@@ -135,6 +135,11 @@ export class CheckoutService {
               // Vượt giới hạn mua = lỗi hợp lệ, giữ nguyên message. Hết suất/hết giờ → PRICE_CHANGED
               // để FE hỏi lại giá mới (không âm thầm tính giá flash đã hết).
               if (e instanceof BadRequestException && e.message === FLASH_OVER_LIMIT_MSG) throw e;
+              // Log trước khi remap: lỗi hạ tầng (DB timeout, bug) bị che dưới thông báo
+              // "giá đã đổi" cho khách — vẫn cần log để vận hành chẩn đoán được nguyên nhân thật.
+              this.logger.error(
+                `consumeQuota lỗi cho đơn ${code}, flashSaleItemId=${fid}: ${e instanceof Error ? e.message : e}`,
+              );
               throw new BadRequestException('PRICE_CHANGED');
             }
           }
@@ -227,10 +232,16 @@ export class CheckoutService {
 
     // Dọn giỏ + đẩy Pancake (ngoài transaction chính). Coupon redeem đã chạy trong tx ở trên.
     // Checkout TẬP CON: chỉ xoá món ĐÃ mua, giữ phần còn lại (không clear coupon toàn giỏ).
-    if (Array.isArray(dto.itemIds) && dto.itemIds.length > 0) {
-      await this.cart.removeItems(userId, cart.items.map((l) => l.id));
-    } else {
-      await this.cart.clear(userId);
+    // Đơn + thanh toán đã commit ở tx trên — lỗi dọn giỏ (DB blip) không được làm hỏng response
+    // (nhất quán với Pancake/affiliate/notification bên dưới).
+    try {
+      if (Array.isArray(dto.itemIds) && dto.itemIds.length > 0) {
+        await this.cart.removeItems(userId, cart.items.map((l) => l.id));
+      } else {
+        await this.cart.clear(userId);
+      }
+    } catch (err) {
+      this.logger.error(`Dọn giỏ lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
     }
     try {
       await this.pancakeOrder.pushOrder(order.id);

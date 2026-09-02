@@ -77,6 +77,28 @@ describe('AffiliateService.createCommissionForOrder', () => {
     await new AffiliateService(prisma, config, pricing, pancakeOrder).createCommissionForOrder('o1');
     expect(create).not.toHaveBeenCalled();
   });
+
+  it('sản phẩm bị affiliateBlocked → KHÔNG tính hoa hồng cho dòng đó dù rate > 0 (chặn gian lận qua link chia sẻ trước khi bị chặn)', async () => {
+    const create = jest.fn();
+    const order = {
+      id: 'o1',
+      userId: 'buyer',
+      referrerUserId: 'ctv',
+      total: 300000,
+      items: [
+        { variationId: 'v1', total: 200000 }, // bị chặn
+        { variationId: 'v2', total: 100000 }, // bình thường
+      ],
+    };
+    const prisma = prismaWith(order, [
+      { id: 'v1', affiliateRate: 10, product: { affiliateBlocked: true } },
+      { id: 'v2', affiliateRate: 5, product: { affiliateBlocked: false } },
+    ], create);
+    await new AffiliateService(prisma, config, pricing, pancakeOrder).createCommissionForOrder('o1');
+    expect(create).toHaveBeenCalledTimes(1);
+    // Chỉ v2 (5% * 100k = 5000) được tính, v1 bị loại hoàn toàn dù rate=10%.
+    expect(create.mock.calls[0][0].data.amount).toBe(5000);
+  });
 });
 
 describe('AffiliateService.reverseCommissionsForOrder (guard đối xứng cho lên-đơn-hộ)', () => {
@@ -275,6 +297,37 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const noStore = build({ storefront: null });
     await noStore.svc.placeOrderForCustomer('ctv', DTO() as never);
     expect(noStore.orderCreate.mock.calls[0][0].data.storefrontSlug).toBeNull();
+  });
+
+  it('idempotency-key double-tap/retry → trả lại đơn đã tạo trước đó, KHÔNG trừ kho/tạo đơn/commission lần 2', async () => {
+    const { svc, prisma, orderCreate, variationUpdateMany, commissionCreate } = build();
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'o-existing', userId: 'ctv' });
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'o-existing', items: [] });
+    const r = (await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-1')) as { id: string };
+    expect(r.id).toBe('o-existing');
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(variationUpdateMany).not.toHaveBeenCalled();
+    expect(commissionCreate).not.toHaveBeenCalled();
+  });
+
+  it('idempotency-key mới (chưa có đơn nào) → tạo đơn bình thường + ghi idempotencyKey', async () => {
+    const { svc, orderCreate } = build();
+    await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-2');
+    expect(orderCreate.mock.calls[0][0].data.idempotencyKey).toBe('idem-2');
+  });
+});
+
+describe('AffiliateService.dashboard (monthRevenue loại đơn REJECTED khỏi bậc bonus)', () => {
+  it('monthRevenue aggregate loại trừ commission REJECTED (đơn hoàn/hủy đã bị đảo)', async () => {
+    const commissionAggregate = jest.fn().mockResolvedValue({ _sum: { amount: 0, orderTotal: 0 } });
+    const prisma = {
+      commission: { aggregate: commissionAggregate },
+      affiliateLink: { aggregate: jest.fn().mockResolvedValue({ _sum: { clicks: 0, conversions: 0 } }) },
+    } as unknown as PrismaService;
+    await new AffiliateService(prisma, config, pricing, pancakeOrder).dashboard('u1');
+    const monthRevenueCall = commissionAggregate.mock.calls.find((c) => c[0]?.where?.createdAt && '_sum' in c[0] && c[0]._sum?.orderTotal);
+    expect(monthRevenueCall).toBeTruthy();
+    expect(monthRevenueCall![0].where.status).toEqual({ not: 'REJECTED' });
   });
 });
 

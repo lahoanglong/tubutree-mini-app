@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { Prisma } from '@prisma/client';
+import { CashbackStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -55,7 +55,9 @@ export class CashbackService {
   listTransactions(userId: string) {
     return this.prisma.cashbackTransaction.findMany({
       where: { userId },
-      orderBy: { confirmedAt: 'desc' },
+      // nulls: 'last' — không có createdAt trên model; mặc định Postgres DESC đặt NULL
+      // (giao dịch PENDING chưa confirm) lên ĐẦU, đẩy giao dịch mới CONFIRMED xuống dưới.
+      orderBy: { confirmedAt: { sort: 'desc', nulls: 'last' } },
       take: 100,
     });
   }
@@ -83,97 +85,139 @@ export class CashbackService {
       where: { provider, merchantOrderId: event.merchantOrderId },
     });
 
-    let becameConfirmed = false;
-    let confirmedUserId: string | null = null;
-
+    let result: { becameConfirmed: boolean; confirmedUserId: string | null };
     if (existing) {
-      // Đã settle về Ví (PAID) → BỎ QUA postback đến sau: không ghi đè status, không đụng số dư
-      // (không claw-back được tiền đã về Ví).
-      if (existing.status === 'PAID') return { ok: true };
-
-      // Chuyển trạng thái ATOMIC bằng optimistic CAS theo status đã đọc + điều chỉnh pending trong
-      // CÙNG tx → chống 2 sự kiện 'approved' song song cùng cộng pending 2 lần. Racer thua thấy
-      // count=0 → bỏ qua.
-      const wasConfirmed = existing.status === 'CONFIRMED';
-      const nowConfirmed = status === 'CONFIRMED';
-      const applied = await this.prisma.$transaction(async (tx) => {
-        const moved = await tx.cashbackTransaction.updateMany({
-          where: { id: existing.id, status: existing.status },
-          data: {
-            // confirmedAt set MỚI khi chuyển từ chưa-confirmed sang confirmed (reset đồng hồ hold);
-            // giữ nguyên khi đã confirmed. Tránh REJECTED→CONFIRMED giữ confirmedAt cũ → settle ngay.
-            status,
-            confirmedAt: nowConfirmed && !wasConfirmed ? new Date() : existing.confirmedAt,
-          },
-        });
-        if (moved.count === 0) return false;
-        if (nowConfirmed && !wasConfirmed) {
-          await tx.user.update({
-            where: { id: existing.userId },
-            data: { cashbackPending: { increment: existing.userReward } },
-          });
-        } else if (wasConfirmed && !nowConfirmed) {
-          await tx.user.update({
-            where: { id: existing.userId },
-            data: { cashbackPending: { decrement: existing.userReward } },
-          });
-        }
-        return true;
-      });
-      if (applied && nowConfirmed && !wasConfirmed) {
-        becameConfirmed = true;
-        confirmedUserId = existing.userId;
-      }
+      result = await this.applyToExisting(existing, event, status, userReward);
     } else {
       // Atomic create + cộng pending. @@unique([provider, merchantOrderId]) → sự kiện thứ 2 song
-      // song ném P2002 → bỏ qua để KHÔNG double-credit.
+      // song ném P2002.
       try {
-        const ops: Prisma.PrismaPromise<unknown>[] = [
-          this.prisma.cashbackTransaction.create({
-            data: {
-              userId: click.userId,
-              clickId: click.id,
-              provider,
-              merchantOrderId: event.merchantOrderId,
-              orderAmount: event.orderAmount,
-              commission: event.commission,
-              userReward,
-              status,
-              postbackPayload: event.raw as object,
-              confirmedAt: status === 'CONFIRMED' ? new Date() : null,
-            },
-          }),
-        ];
-        if (status === 'CONFIRMED') {
-          ops.push(
-            this.prisma.user.update({
-              where: { id: click.userId },
-              data: { cashbackPending: { increment: userReward } },
-            }),
-          );
-          becameConfirmed = true;
-          confirmedUserId = click.userId;
-        }
-        await this.prisma.$transaction(ops);
+        result = await this.createTransaction(click, provider, event, status, userReward);
       } catch (err) {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-          this.logger.warn(`Ingest trùng (${provider}, ${event.merchantOrderId}) (race) — bỏ qua.`);
-          return { ok: true };
+          // Kẻ thua race: KHÔNG bỏ qua sự kiện (sẽ mất credit nếu event này là CONFIRMED) — đọc
+          // lại giao dịch mà kẻ thắng vừa tạo (đã commit, vì P2002 chỉ xảy ra SAU khi transaction
+          // kia commit) rồi áp dụng transition y hệt nhánh "existing" (idempotent, CAS theo status
+          // chống cộng pending 2 lần).
+          const winner = await this.prisma.cashbackTransaction.findFirst({
+            where: { provider, merchantOrderId: event.merchantOrderId },
+          });
+          if (!winner) {
+            this.logger.error(
+              `Ingest P2002 (${provider}, ${event.merchantOrderId}) nhưng không đọc lại được giao dịch — bỏ qua.`,
+            );
+            return { ok: false };
+          }
+          this.logger.warn(`Ingest trùng (${provider}, ${event.merchantOrderId}) (race) — áp dụng như update.`);
+          result = await this.applyToExisting(winner, event, status, userReward);
+        } else {
+          throw err;
         }
-        throw err;
       }
     }
 
     // Thưởng xu giới thiệu khi referee có cashback CONFIRMED (ngoài tx tài chính; idempotent qua
     // unique index). Lỗi thưởng KHÔNG làm hỏng ingest (.catch).
-    if (becameConfirmed && confirmedUserId) {
-      await this.coins.grantReferralCoins(confirmedUserId).catch((err) =>
+    if (result.becameConfirmed && result.confirmedUserId) {
+      await this.coins.grantReferralCoins(result.confirmedUserId).catch((err) =>
         this.logger.error(
-          `Thưởng xu giới thiệu lỗi (referee=${confirmedUserId}): ${err instanceof Error ? err.message : err}`,
+          `Thưởng xu giới thiệu lỗi (referee=${result.confirmedUserId}): ${err instanceof Error ? err.message : err}`,
         ),
       );
     }
     return { ok: true };
+  }
+
+  /** Chuyển trạng thái 1 giao dịch cashback đã tồn tại theo sự kiện mới (idempotent, atomic). */
+  private async applyToExisting(
+    existing: { id: string; userId: string; status: CashbackStatus; confirmedAt: Date | null; userReward: number },
+    event: NormalizedCashbackEvent,
+    status: NormalizedCashbackEvent['status'],
+    userReward: number,
+  ): Promise<{ becameConfirmed: boolean; confirmedUserId: string | null }> {
+    // Đã settle về Ví (PAID) → BỎ QUA postback đến sau: không ghi đè status, không đụng số dư
+    // (không claw-back được tiền đã về Ví).
+    if (existing.status === 'PAID') return { becameConfirmed: false, confirmedUserId: null };
+
+    // Chuyển trạng thái ATOMIC bằng optimistic CAS theo status đã đọc + điều chỉnh pending trong
+    // CÙNG tx → chống 2 sự kiện 'approved' song song cùng cộng pending 2 lần. Racer thua thấy
+    // count=0 → bỏ qua.
+    const wasConfirmed = existing.status === 'CONFIRMED';
+    const nowConfirmed = status === 'CONFIRMED';
+    const applied = await this.prisma.$transaction(async (tx) => {
+      const moved = await tx.cashbackTransaction.updateMany({
+        where: { id: existing.id, status: existing.status },
+        data: {
+          // confirmedAt set MỚI khi chuyển từ chưa-confirmed sang confirmed (reset đồng hồ hold);
+          // giữ nguyên khi đã confirmed. Tránh REJECTED→CONFIRMED giữ confirmedAt cũ → settle ngay.
+          status,
+          confirmedAt: nowConfirmed && !wasConfirmed ? new Date() : existing.confirmedAt,
+          // Postback sau có thể sửa số tiền (VD PENDING gửi tạm tính rồi CONFIRMED gửi số cuối
+          // cùng chính xác hơn) — chỉ ghi đè khi CHƯA từng confirm (chưa cộng cashbackPending
+          // theo số cũ); đã confirm rồi thì giữ nguyên để tránh lệch sổ cashbackPending/Ví.
+          ...(wasConfirmed
+            ? {}
+            : { orderAmount: event.orderAmount, commission: event.commission, userReward }),
+        },
+      });
+      if (moved.count === 0) return false;
+      if (nowConfirmed && !wasConfirmed) {
+        await tx.user.update({
+          where: { id: existing.userId },
+          data: { cashbackPending: { increment: userReward } },
+        });
+      } else if (wasConfirmed && !nowConfirmed) {
+        await tx.user.update({
+          where: { id: existing.userId },
+          data: { cashbackPending: { decrement: existing.userReward } },
+        });
+      }
+      return true;
+    });
+    if (applied && nowConfirmed && !wasConfirmed) {
+      return { becameConfirmed: true, confirmedUserId: existing.userId };
+    }
+    return { becameConfirmed: false, confirmedUserId: null };
+  }
+
+  /** Tạo mới 1 giao dịch cashback từ sự kiện đầu tiên nhận được cho (provider, merchantOrderId). */
+  private async createTransaction(
+    click: { id: string; userId: string },
+    provider: string,
+    event: NormalizedCashbackEvent,
+    status: NormalizedCashbackEvent['status'],
+    userReward: number,
+  ): Promise<{ becameConfirmed: boolean; confirmedUserId: string | null }> {
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      this.prisma.cashbackTransaction.create({
+        data: {
+          userId: click.userId,
+          clickId: click.id,
+          provider,
+          merchantOrderId: event.merchantOrderId,
+          orderAmount: event.orderAmount,
+          commission: event.commission,
+          userReward,
+          status,
+          postbackPayload: event.raw as object,
+          confirmedAt: status === 'CONFIRMED' ? new Date() : null,
+        },
+      }),
+    ];
+    let becameConfirmed = false;
+    let confirmedUserId: string | null = null;
+    if (status === 'CONFIRMED') {
+      ops.push(
+        this.prisma.user.update({
+          where: { id: click.userId },
+          data: { cashbackPending: { increment: userReward } },
+        }),
+      );
+      becameConfirmed = true;
+      confirmedUserId = click.userId;
+    }
+    await this.prisma.$transaction(ops);
+    return { becameConfirmed, confirmedUserId };
   }
 
   /** Cron mỗi giờ: cashback CONFIRMED quá hold_days → chuyển pending→Ví (PAID). */

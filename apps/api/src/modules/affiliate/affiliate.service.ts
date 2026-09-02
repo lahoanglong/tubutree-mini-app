@@ -128,9 +128,11 @@ export class AffiliateService {
         where: { userId },
         _sum: { clicks: true, conversions: true },
       }),
-      // Doanh số tháng = tổng giá trị đơn giới thiệu (để tính bậc bonus §6.8.2).
+      // Doanh số tháng = tổng giá trị đơn giới thiệu (để tính bậc bonus §6.8.2). Loại REJECTED
+      // (đơn hoàn/hủy đã bị reverseCommissionsForOrder đảo) — nếu không, doanh số đã hoàn vẫn
+      // được tính vào bậc thưởng, khiến CTV được xếp bậc cao hơn doanh số THỰC của họ.
       this.prisma.commission.aggregate({
-        where: { affiliateUserId: userId, createdAt: { gte: startOfMonth } },
+        where: { affiliateUserId: userId, createdAt: { gte: startOfMonth }, status: { not: CommissionStatus.REJECTED } },
         _sum: { orderTotal: true },
       }),
     ]);
@@ -185,7 +187,19 @@ export class AffiliateService {
    * KHÔNG coupon/điểm, chỉ COD/chuyển khoản. Đơn đánh dấu placedForCustomer=true để
    * createCommissionForOrder cho phép self-referral (userId==referrerUserId==CTV).
    */
-  async placeOrderForCustomer(ctvId: string, dto: PlaceOrderForCustomerDto) {
+  async placeOrderForCustomer(ctvId: string, dto: PlaceOrderForCustomerDto, idempotencyKey?: string) {
+    // Chuẩn hoá key rỗng/khoảng trắng → undefined (mirror wallet.withdraw / checkout.placeOrder):
+    // tránh ghi '' vào Order.idempotencyKey (unique) rồi lần đặt hộ tiếp theo cũng '' đụng P2002.
+    const key = idempotencyKey?.trim() || undefined;
+    // Double-tap/retry cùng key → trả lại đơn đã tạo, KHÔNG trừ kho / tạo commission lần 2
+    // (trước đây endpoint này — khác placeOrder thường — không có bảo vệ double-submit).
+    if (key) {
+      const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
+      if (existing && existing.userId === ctvId) {
+        return this.prisma.order.findUniqueOrThrow({ where: { id: existing.id }, include: { items: true } });
+      }
+      if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
+    }
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('Chưa chọn sản phẩm để lên đơn.');
     }
@@ -234,49 +248,61 @@ export class AffiliateService {
     const code = await this.generateOrderCode();
     const shippingAddress = this.customerSnapshot(dto.customer);
 
-    const order = await this.prisma.$transaction(async (tx) => {
-      // Trừ stock ATOMIC từng line (gte) — chống oversell; count 0 → throw rollback.
-      for (const line of lines) {
-        const hit = await tx.variation.updateMany({
-          where: { id: line.variationId, stock: { gte: line.quantity } },
-          data: { stock: { decrement: line.quantity } },
-        });
-        if (hit.count === 0) {
-          throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
+    let order: { id: string };
+    try {
+      order = await this.prisma.$transaction(async (tx) => {
+        // Trừ stock ATOMIC từng line (gte) — chống oversell; count 0 → throw rollback.
+        for (const line of lines) {
+          const hit = await tx.variation.updateMany({
+            where: { id: line.variationId, stock: { gte: line.quantity } },
+            data: { stock: { decrement: line.quantity } },
+          });
+          if (hit.count === 0) {
+            throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
+          }
         }
-      }
-      return tx.order.create({
-        data: {
-          code,
-          userId: ctvId,
-          type: 'RETAIL',
-          status,
-          subtotal: goods,
-          discount: 0,
-          shippingFee,
-          total,
-          pointsEarned: 0,
-          pointsUsed: 0,
-          paymentMethod: dto.paymentMethod,
-          paymentStatus: 'UNPAID',
-          shippingAddress,
-          referrerUserId: ctvId,
-          storefrontSlug,
-          placedForCustomer: true,
-          note: dto.note,
-          items: {
-            create: lines.map((l) => ({
-              variationId: l.variationId,
-              productName: l.productName,
-              variationName: l.variationName,
-              unitPrice: l.unitPrice,
-              quantity: l.quantity,
-              total: l.total,
-            })),
+        return tx.order.create({
+          data: {
+            code,
+            userId: ctvId,
+            type: 'RETAIL',
+            status,
+            subtotal: goods,
+            discount: 0,
+            shippingFee,
+            total,
+            pointsEarned: 0,
+            pointsUsed: 0,
+            paymentMethod: dto.paymentMethod,
+            paymentStatus: 'UNPAID',
+            shippingAddress,
+            referrerUserId: ctvId,
+            storefrontSlug,
+            placedForCustomer: true,
+            note: dto.note,
+            idempotencyKey: key ?? null,
+            items: {
+              create: lines.map((l) => ({
+                variationId: l.variationId,
+                productName: l.productName,
+                variationName: l.variationName,
+                unitPrice: l.unitPrice,
+                quantity: l.quantity,
+                total: l.total,
+              })),
+            },
           },
-        },
+        });
       });
-    });
+    } catch (err) {
+      // Race idempotency: 2 request cùng key chạy đồng thời — request thua ăn unique-violation
+      // (P2002) trên idempotencyKey. Trả lại đơn mà request thắng đã tạo (mirror checkout.placeOrder).
+      if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
+        const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
+        if (existing) return this.prisma.order.findUniqueOrThrow({ where: { id: existing.id }, include: { items: true } });
+      }
+      throw err;
+    }
 
     // Ngoài tx: đẩy Pancake để đơn vào pipeline giao vận (mirror checkout.placeOrder). Non-fatal —
     // Pancake lỗi/chưa cấu hình không được chặn đơn CTV đã tạo; đơn giữ trạng thái chờ đồng bộ.
@@ -338,9 +364,14 @@ export class AffiliateService {
     const variationIds = order.items.map((i) => i.variationId);
     const variations = await this.prisma.variation.findMany({
       where: { id: { in: variationIds } },
-      select: { id: true, affiliateRate: true },
+      select: { id: true, affiliateRate: true, product: { select: { affiliateBlocked: true } } },
     });
-    const rateMap = new Map(variations.map((v) => [v.id, v.affiliateRate ? Number(v.affiliateRate) : 0]));
+    // Sản phẩm bị chặn affiliate (product.affiliateBlocked) → rate=0, KHÔNG tính hoa hồng cho
+    // dòng hàng đó, dù link/CTV nào đã trót chia sẻ trước khi bị chặn (mirror storefront/brand
+    // đã lọc affiliateBlocked ở bước hiển thị — chỗ này chặn ở chính điểm phát sinh tiền thật).
+    const rateMap = new Map(
+      variations.map((v) => [v.id, v.product?.affiliateBlocked ? 0 : v.affiliateRate ? Number(v.affiliateRate) : 0]),
+    );
 
     let amount = 0;
     let weightedRate = 0;

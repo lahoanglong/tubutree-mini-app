@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { MembershipTier, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible } from '../coupons/coupon-scope';
@@ -32,13 +32,24 @@ export class LoyaltyService {
    */
   async creditOrderPoints(orderId: string): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
-    if (order.pointsEarned <= 0) return;
+    if (order.pointsEarned <= 0) {
+      // 0 điểm vẫn phải recalc: đơn DELIVERED đầu tiên (dù 0 điểm) là lúc DUY NHẤT user được
+      // gán hạng lần đầu (recalcAllTiers chỉ quét user ĐÃ có tierId). Bail sớm mà không recalc
+      // sẽ khiến user kẹt vĩnh viễn không có tier — xem candidate 2 trong audit loyalty.
+      await this.recalcTier(order.userId);
+      return;
+    }
     const reason = `ORDER_DELIVERED:${order.code}`;
 
     const existed = await this.prisma.pointsTransaction.findFirst({
       where: { userId: order.userId, reason },
     });
-    if (existed) return; // đã cộng rồi (pre-check; unique index là guard cứng cho race)
+    if (existed) {
+      // Đã cộng điểm ở lần gọi trước nhưng có thể đã crash TRƯỚC KHI recalcTier (dòng cuối
+      // hàm này) kịp chạy — recalc lại ở đây để không kẹt vĩnh viễn không có tier.
+      await this.recalcTier(order.userId);
+      return;
+    }
 
     const expireMonths = await this.config.get<number>('loyalty.point_expire_months', 12);
     const expiresAt = new Date();
@@ -73,6 +84,9 @@ export class LoyaltyService {
         });
         if (already) {
           this.logger.debug(`creditOrderPoints idempotent skip order=${order.code}`);
+          // Kẻ thắng race đã commit điểm nhưng có thể chưa/không kịp recalcTier — recalc ở
+          // đây để bail idempotent không kéo theo mất tier vĩnh viễn.
+          await this.recalcTier(order.userId);
           return;
         }
         this.logger.error(
@@ -166,10 +180,17 @@ export class LoyaltyService {
     }
   }
 
-  /** Tính lại hạng theo điểm tích lũy HOẶC chi tiêu 12 tháng (chọn hạng cao nhất đạt). */
-  async recalcTier(userId: string): Promise<void> {
+  /**
+   * Tính lại hạng theo điểm tích lũy HOẶC chi tiêu 12 tháng (chọn hạng cao nhất đạt).
+   *
+   * `preloadedTiers` cho phép caller chạy batch (vd recalcAllTiers) truyền sẵn danh sách hạng
+   * đã load 1 lần thay vì để mỗi lần gọi tự findMany lại — tránh N+1 query khi quét N user.
+   * Bỏ trống thì tự load (giữ hành vi cũ cho caller đơn lẻ như creditOrderPoints).
+   */
+  async recalcTier(userId: string, preloadedTiers?: MembershipTier[]): Promise<void> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const tiers = await this.prisma.membershipTier.findMany({ orderBy: { sortOrder: 'asc' } });
+    const tiers =
+      preloadedTiers ?? (await this.prisma.membershipTier.findMany({ orderBy: { sortOrder: 'asc' } }));
 
     const since = new Date();
     since.setMonth(since.getMonth() - 12);
@@ -223,8 +244,11 @@ export class LoyaltyService {
    */
   async recalcAllTiers(): Promise<number> {
     const users = await this.prisma.user.findMany({ where: { tierId: { not: null } }, select: { id: true } });
+    // Load tiers 1 LẦN cho cả batch — trước đây mỗi recalcTier tự findMany lại → N+1 query
+    // thật sự khi quét hàng nghìn user/đêm. Danh sách hạng gần như tĩnh, không cần fresh mỗi user.
+    const tiers = await this.prisma.membershipTier.findMany({ orderBy: { sortOrder: 'asc' } });
     for (const u of users) {
-      await this.recalcTier(u.id).catch((e) => this.logger.warn(`recalcTier lỗi user=${u.id}: ${(e as Error).message}`));
+      await this.recalcTier(u.id, tiers).catch((e) => this.logger.warn(`recalcTier lỗi user=${u.id}: ${(e as Error).message}`));
     }
     return users.length;
   }
@@ -311,7 +335,9 @@ export class LoyaltyService {
     const result = [];
     for (const c of filtered) {
       const used = usedMap.get(c.id) ?? 0;
-      if (used >= c.perUserLimit) continue;
+      // perUserLimit <= 0 = không giới hạn (nhất quán với coupons.service.ts validateAndCompute
+      // và redeem()) — thiếu guard này trước đây ẩn vĩnh viễn coupon perUserLimit=0 khỏi danh sách.
+      if (c.perUserLimit > 0 && used >= c.perUserLimit) continue;
       result.push({
         code: c.code,
         type: c.type,

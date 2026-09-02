@@ -43,7 +43,7 @@ export class GroupBuyService {
     const unitPrice = Math.round((basePrice * (100 - pct)) / 100);
     const expiresAt = new Date(Date.now() + windowHours * 3600 * 1000);
 
-    const created = await this.prisma.groupBuy.create({
+    const created = (await this.prisma.groupBuy.create({
       data: {
         productId,
         initiatorId: userId,
@@ -55,8 +55,25 @@ export class GroupBuyService {
         expiresAt,
         members: { create: { userId } },
       },
-    });
-    return this.toView(created as unknown as GroupRow, { name: product.name, slug: product.slug, thumbnail: product.thumbnail }, 1, true);
+    })) as unknown as GroupRow;
+
+    // Cạnh biên: targetSize (config) = 1 → nhóm đã đủ người NGAY khi tạo (chỉ có initiator).
+    // Không xử lý thì nhóm kẹt OPEN mãi vì join()'s guard `currentSize < targetSize` không bao
+    // giờ đúng nữa (không còn ai join được) → initiator không bao giờ nhận coupon.
+    let status = created.status;
+    if (created.currentSize >= created.targetSize) {
+      const flip = await this.prisma.groupBuy.updateMany({ where: { id: created.id, status: 'OPEN' }, data: { status: 'SUCCESS' } });
+      if (flip.count === 1) {
+        status = 'SUCCESS';
+        await this.onSuccess({ ...created, status: 'SUCCESS' });
+      }
+    }
+    return this.toView(
+      { ...created, status },
+      { name: product.name, slug: product.slug, thumbnail: product.thumbnail },
+      1,
+      true,
+    );
   }
 
   async join(userId: string, groupBuyId: string) {
@@ -71,7 +88,15 @@ export class GroupBuyService {
     if (existing) throw new BadRequestException('Bạn đã tham gia nhóm này rồi.');
 
     const result = await this.prisma.$transaction(async (tx) => {
-      await tx.groupBuyMember.create({ data: { groupBuyId, userId } });
+      try {
+        await tx.groupBuyMember.create({ data: { groupBuyId, userId } });
+      } catch (e) {
+        // Race: 2 request tham gia đồng thời của CÙNG user (double-click/retry) đều qua được
+        // check `existing` phía trên (chưa commit) rồi đụng @@unique([groupBuyId,userId]) ở đây.
+        // Trả lại thông báo thân thiện thay vì để lộ lỗi 409 chung của Prisma filter.
+        if (this.isAlreadyGranted(e)) throw new BadRequestException('Bạn đã tham gia nhóm này rồi.');
+        throw e;
+      }
       // Tăng currentSize ATOMIC + guard (OPEN, chưa đủ, chưa hết hạn) — chống vượt target/đóng khi đua.
       const inc = await tx.groupBuy.updateMany({
         where: { id: groupBuyId, status: 'OPEN', currentSize: { lt: group.targetSize }, expiresAt: { gt: new Date() } },

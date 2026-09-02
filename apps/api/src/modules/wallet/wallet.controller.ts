@@ -1,12 +1,19 @@
 import { Body, Controller, Get, Headers, Post } from '@nestjs/common';
-import { IsInt, IsObject, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsInt, IsNotEmpty, IsObject, IsString, Min, ValidateNested } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { WalletService } from './wallet.service';
 import { CoinsService } from './coins.service';
 
+class BankInfoDto {
+  @IsString() @IsNotEmpty() bankName!: string;
+  @IsString() @IsNotEmpty() accountNumber!: string;
+  @IsString() @IsNotEmpty() accountName!: string;
+}
+
 class WithdrawDto {
   @IsInt() @Min(1) amount!: number;
-  @IsObject() bankInfo!: object;
+  @IsObject() @ValidateNested() @Type(() => BankInfoDto) bankInfo!: BankInfoDto;
 }
 
 class ConvertXuDto {

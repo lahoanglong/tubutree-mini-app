@@ -88,6 +88,21 @@ describe('PancakeProcessor.onStatusUpdated', () => {
     await proc.onStatusUpdated({ id: 'p1', status: 'delivered' });
     expect(prisma.order.update).not.toHaveBeenCalled();
   });
+
+  it('DELIVERED trễ SAU khi đơn đã CANCELLED (queue không FIFO per-order) → KHÔNG credit, KHÔNG đè status', async () => {
+    const { proc, prisma, loyalty, affiliate } = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CANCELLED' });
+    await proc.onStatusUpdated({ id: 'p1', status: 'delivered' });
+    expect(prisma.order.update).not.toHaveBeenCalled();
+    expect(loyalty.creditOrderPoints).not.toHaveBeenCalled();
+    expect(affiliate.lockCommissionsForOrder).not.toHaveBeenCalled();
+  });
+
+  it('DELIVERED trễ SAU khi đơn đã RETURNED → KHÔNG credit, KHÔNG đè status', async () => {
+    const { proc, prisma, loyalty } = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'RETURNED' });
+    await proc.onStatusUpdated({ id: 'p1', status: 'delivered' });
+    expect(prisma.order.update).not.toHaveBeenCalled();
+    expect(loyalty.creditOrderPoints).not.toHaveBeenCalled();
+  });
 });
 
 describe('PancakeProcessor.onCancelled', () => {

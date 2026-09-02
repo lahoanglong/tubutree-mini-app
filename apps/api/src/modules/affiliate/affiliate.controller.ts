@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post } from '@nestjs/common';
 import { IsIn, IsInt, IsObject, IsOptional, IsString, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AffiliateService } from './affiliate.service';
@@ -68,8 +68,12 @@ export class AffiliateController {
 
   // CTV lên đơn hộ khách (COD/chuyển khoản) → CTV hưởng hoa hồng (placedForCustomer).
   @Post('orders')
-  placeOrderForCustomer(@CurrentUser('sub') userId: string, @Body() dto: PlaceOrderForCustomerDto) {
-    return this.affiliate.placeOrderForCustomer(userId, dto);
+  placeOrderForCustomer(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: PlaceOrderForCustomerDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.affiliate.placeOrderForCustomer(userId, dto, idempotencyKey);
   }
 
   @Get('analytics/storefronts')

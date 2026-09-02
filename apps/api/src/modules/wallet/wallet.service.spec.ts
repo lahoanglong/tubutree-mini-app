@@ -71,7 +71,7 @@ describe('WalletService.withdraw (Ví → ngân hàng, min 100k, phí 3k)', () =
 
   it('idempotency: key đã có payout → trả lại payout cũ, KHÔNG trừ ví / tạo payout mới', async () => {
     const { prisma, updateMany, payoutCreate, payoutFindUnique } = makePrisma(200_000);
-    payoutFindUnique.mockResolvedValue({ id: 'payout-old', status: 'REQUESTED', amount: 97_000, fee: 3000 });
+    payoutFindUnique.mockResolvedValue({ id: 'payout-old', userId: 'u1', status: 'REQUESTED', amount: 97_000, fee: 3000 });
     const r = await new WalletService(prisma, config).withdraw('u1', 100_000, {}, 'idk-1');
     expect(r).toMatchObject({ payoutId: 'payout-old', net: 97_000, fee: 3000, withdrawn: 100_000 });
     expect(updateMany).not.toHaveBeenCalled();
@@ -89,13 +89,23 @@ describe('WalletService.withdraw (Ví → ngân hàng, min 100k, phí 3k)', () =
     const { prisma, payoutCreate, payoutFindUnique } = makePrisma(200_000);
     // lần đầu findUnique (pre-check) = null → đi tiếp; create ném P2002; findUnique lần 2 thấy payout kẻ thắng.
     payoutFindUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({
-      id: 'payout-winner', status: 'REQUESTED', amount: 97_000, fee: 3000,
+      id: 'payout-winner', userId: 'u1', status: 'REQUESTED', amount: 97_000, fee: 3000,
     });
     payoutCreate.mockRejectedValueOnce(
       new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: '5' }),
     );
     const r = await new WalletService(prisma, config).withdraw('u1', 100_000, {}, 'idk-2');
     expect(r).toMatchObject({ payoutId: 'payout-winner', net: 97_000 });
+  });
+
+  it('idempotency key trùng nhưng thuộc user khác → BadRequest, KHÔNG trả payout của người khác', async () => {
+    const { prisma, updateMany, payoutCreate, payoutFindUnique } = makePrisma(200_000);
+    payoutFindUnique.mockResolvedValue({ id: 'payout-other', userId: 'u2', status: 'REQUESTED', amount: 97_000, fee: 3000 });
+    await expect(new WalletService(prisma, config).withdraw('u1', 100_000, {}, 'idk-3')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(payoutCreate).not.toHaveBeenCalled();
   });
 });
 

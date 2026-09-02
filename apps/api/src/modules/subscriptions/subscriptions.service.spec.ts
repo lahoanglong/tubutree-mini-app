@@ -54,11 +54,14 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
   type Tier = { minActive: number; pct: number };
   function makeProcess(
     claimCount: number,
-    opts: { activeCount?: number; tiers?: Tier[] } = {},
+    opts: { activeCount?: number; tiers?: Tier[]; stockCount?: number } = {},
   ) {
     const due = [{ id: 's1', userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4 }];
     const updateMany = jest.fn().mockResolvedValue({ count: claimCount });
     const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
+    const stockUpdateMany = opts.stockCount != null
+      ? jest.fn().mockResolvedValue({ count: opts.stockCount })
+      : jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
       subscription: {
         findMany: jest.fn().mockResolvedValue(due),
@@ -66,10 +69,16 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         update: jest.fn().mockResolvedValue({}),
         count: jest.fn().mockResolvedValue(opts.activeCount ?? 1),
       },
-      variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P' } }) },
+      variation: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P' } }),
+        updateMany: stockUpdateMany,
+      },
       address: { findUnique: jest.fn().mockResolvedValue({ id: 'a1', userId: 'u1', recipient: 'R', phone: '09', province: 'p', district: 'd', ward: 'w', street: 's', provinceCode: '1', districtCode: '2', wardCode: '3' }) },
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', tierId: null }) },
       order: { create: orderCreate, findUnique: jest.fn().mockResolvedValue(null) },
+      // Tạo đơn định kỳ giờ chạy trong $transaction (trừ stock atomic + order.create) — mock
+      // chạy callback với chính prisma mock (đủ variation.updateMany + order.create cho test).
+      $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     } as unknown as PrismaService;
     const cfg = {
       get: async <T>(k: string, fb?: T): Promise<T> =>
@@ -80,8 +89,9 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       calcPointsEarned: jest.fn().mockResolvedValue(0),
     } as unknown as PricingService;
     const ly = { getTierMultiplier: jest.fn().mockResolvedValue(1) } as unknown as LoyaltyService;
-    const nt = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
-    return { svc: new SubscriptionsService(prisma, cfg, pr, ly, nt), updateMany, orderCreate };
+    const notify = jest.fn().mockResolvedValue(undefined);
+    const nt = { notify } as unknown as NotificationsService;
+    return { svc: new SubscriptionsService(prisma, cfg, pr, ly, nt), updateMany, orderCreate, stockUpdateMany, notify };
   }
 
   it('claim thành công (count=1) → tạo đơn định kỳ', async () => {
@@ -96,6 +106,30 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     const { svc, orderCreate } = makeProcess(0);
     await svc.processDue();
     expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('trừ stock ATOMIC (gte) trước khi tạo đơn — chống oversell đơn định kỳ', async () => {
+    const { svc, stockUpdateMany, orderCreate } = makeProcess(1);
+    await svc.processDue();
+    expect(stockUpdateMany.mock.calls[0][0]).toMatchObject({
+      where: { id: 'v1', stock: { gte: 1 } },
+      data: { stock: { decrement: 1 } },
+    });
+    // Order chỉ tạo SAU khi trừ stock thành công.
+    expect(orderCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('hết stock (updateMany count=0) → KHÔNG tạo đơn, chu kỳ bị bỏ qua (không double-charge)', async () => {
+    const { svc, orderCreate } = makeProcess(1, { stockCount: 0 });
+    // claim đã advance nextRunAt nên lỗi ở createOrderFor chỉ bị log, không throw ra ngoài.
+    await expect(svc.processDue()).resolves.toBeUndefined();
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('hết stock → báo user (KHÔNG pause lịch, khác nhánh isActive=false/địa chỉ hỏng)', async () => {
+    const { svc, notify } = makeProcess(1, { stockCount: 0 });
+    await svc.processDue();
+    expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.any(Object));
   });
 
   it('user chỉ có 1 subscription ACTIVE → giảm bậc cơ bản 12%', async () => {

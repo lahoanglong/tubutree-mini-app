@@ -76,7 +76,10 @@ export class VouchersService {
   async welcomeVouchers(): Promise<void> {
     const since = new Date(Date.now() - 24 * 3600 * 1000);
     const users = await this.prisma.user.findMany({
-      where: { createdAt: { gte: since }, role: 'CUSTOMER' },
+      // "chưa có đơn" (đúng như doc-comment) — trước đây thiếu filter `orders: { none: {} }`
+      // nên user đã đặt đơn trong 24h đầu vẫn bị cấp voucher chào mừng, sai business rule.
+      where: { createdAt: { gte: since }, role: 'CUSTOMER', orders: { none: {} } },
+      orderBy: { createdAt: 'asc' }, // ưu tiên user cũ nhất trong cửa sổ 24h trước khi rớt khỏi `since`
       take: 200,
     });
     const value = await this.config.get<number>('voucher.welcome_amount', 30000);

@@ -36,7 +36,10 @@ export class CouponsService {
     const usedByUser = await this.prisma.couponRedemption.count({
       where: { couponId: coupon.id, userId },
     });
-    if (usedByUser >= coupon.perUserLimit) {
+    // perUserLimit <= 0 = không giới hạn (nhất quán với guard trong redeem() bên dưới).
+    // Trước đây thiếu guard này → coupon perUserLimit=0 bị validateAndCompute từ chối
+    // NGAY LẦN ĐẦU (0 >= 0), dù redeem() coi 0 là "không giới hạn" → không ai dùng được mã.
+    if (coupon.perUserLimit > 0 && usedByUser >= coupon.perUserLimit) {
       throw new BadRequestException('Bạn đã dùng hết lượt cho mã này.');
     }
     if (coupon.usageLimit != null) {
@@ -51,7 +54,10 @@ export class CouponsService {
     let freeship = false;
     switch (coupon.type) {
       case 'PERCENT':
-        discount = Math.floor((subtotal * coupon.value) / 100);
+        // value có thể >100 nếu admin nhập sai và không set maxDiscount (DTO chỉ @Min(0), không
+        // @Max) — clamp về subtotal như nhánh AMOUNT bên dưới để discount không bao giờ vượt
+        // giá trị đơn hàng, bất kể caller nào gọi hàm này (cart preview, checkout...).
+        discount = Math.min(Math.floor((subtotal * coupon.value) / 100), subtotal);
         if (coupon.maxDiscount) discount = Math.min(discount, coupon.maxDiscount);
         break;
       case 'AMOUNT':

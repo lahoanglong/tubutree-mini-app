@@ -33,8 +33,8 @@ export class AccessTradeProvider implements CashbackProvider {
   }
 
   buildDeeplink(template: string, clickId: string, productUrl?: string): string {
-    let url = template.replace('{{clickId}}', clickId);
-    if (productUrl) url += `&url=${encodeURIComponent(productUrl)}`;
+    let url = template.replaceAll('{{clickId}}', clickId);
+    if (productUrl) url += `${url.includes('?') ? '&' : '?'}url=${encodeURIComponent(productUrl)}`;
     return url;
   }
 

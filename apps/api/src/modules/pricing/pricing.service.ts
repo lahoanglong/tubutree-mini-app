@@ -19,16 +19,20 @@ export class PricingService {
   constructor(private readonly config: SystemConfigService) {}
 
   async calcShippingFee(input: ShippingInput): Promise<number> {
-    const freeThreshold = await this.config.get<number>('shipping.free_threshold', 200000);
-    const flatFee = await this.config.get<number>('shipping.flat_fee_below_threshold', 19000);
+    const [freeThreshold, flatFee] = await Promise.all([
+      this.config.get<number>('shipping.free_threshold', 200000),
+      this.config.get<number>('shipping.flat_fee_below_threshold', 19000),
+    ]);
 
     // Override theo hạng (id tier viết hoa: LOC_BIEC / DAI_THU / CO_THU).
     if (input.tierId) {
-      const overrides = await this.config.get<Record<string, number>>(
+      const overrides = await this.config.get<Record<string, number> | null>(
         'shipping.tier_freeship_overrides',
         {},
       );
-      const tierThreshold = overrides[input.tierId];
+      // Guard `?? {}`: SystemConfigService.get() chỉ áp fallback khi CHƯA có row; nếu admin
+      // lỡ lưu value=null cho key này, get() trả về null (không phải {}) → indexing throw.
+      const tierThreshold = (overrides ?? {})[input.tierId];
       if (tierThreshold !== undefined && input.subtotal >= tierThreshold) {
         return 0;
       }
@@ -56,8 +60,13 @@ export class PricingService {
     pointsBalance: number,
     orderValue: number,
   ): Promise<{ pointsUsed: number; discount: number }> {
-    const vndPerPointRedeem = await this.config.get<number>('loyalty.vnd_per_point_redeem', 1000);
-    const maxValue = await this.calcMaxRedeemableValue(orderValue);
+    const [vndPerPointRedeem, maxValue] = await Promise.all([
+      this.config.get<number>('loyalty.vnd_per_point_redeem', 1000),
+      this.calcMaxRedeemableValue(orderValue),
+    ]);
+    // Guard chia 0/âm (mirror calcPointsEarned's vndPerPoint guard): misconfig hoặc orderValue=0
+    // → tránh NaN lan vào pointsUsed/discount rồi vào tx tạo đơn (Prisma nhận NaN có thể lỗi khó hiểu).
+    if (vndPerPointRedeem <= 0) return { pointsUsed: 0, discount: 0 };
     const maxPointsByValue = Math.floor(maxValue / vndPerPointRedeem);
     const pointsUsed = Math.max(0, Math.min(pointsToUse, pointsBalance, maxPointsByValue));
     return { pointsUsed, discount: pointsUsed * vndPerPointRedeem };

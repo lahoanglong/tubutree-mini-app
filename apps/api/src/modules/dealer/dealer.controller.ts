@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Post } from '@nestjs/common';
 import {
   ArrayNotEmpty,
   IsArray,
@@ -48,8 +48,12 @@ export class DealerController {
   }
 
   @Post('orders')
-  placeOrder(@CurrentUser('sub') userId: string, @Body() dto: DealerOrderDto) {
-    return this.dealer.placeOrder(userId, dto);
+  placeOrder(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: DealerOrderDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.dealer.placeOrder(userId, dto, idempotencyKey);
   }
 
   @Get('orders')

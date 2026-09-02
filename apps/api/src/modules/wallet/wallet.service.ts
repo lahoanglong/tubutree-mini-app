@@ -78,7 +78,10 @@ export class WalletService {
     // KHÔNG trừ ví lần 2 (mirror place-order). Unique index payouts.idempotencyKey là guard cứng.
     if (key) {
       const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey: key } });
-      if (existing) {
+      // idempotencyKey unique toàn cục (không compound theo userId) — nếu key trùng nhưng
+      // thuộc user khác (đụng độ hiếm/keygen yếu ở client cũ) thì KHÔNG trả payout của người
+      // khác ra ngoài; coi như đụng key, bắt buộc client thử lại với key mới.
+      if (existing && existing.userId === userId) {
         return {
           ok: true,
           payoutId: existing.id,
@@ -87,6 +90,9 @@ export class WalletService {
           fee: existing.fee,
           net: existing.amount,
         };
+      }
+      if (existing) {
+        throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
       }
     }
 
@@ -122,7 +128,7 @@ export class WalletService {
       // mà kẻ thắng đã tạo (đã trừ ví đúng 1 lần), KHÔNG để lỗi ra ngoài.
       if (key && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey: key } });
-        if (existing) {
+        if (existing && existing.userId === userId) {
           return {
             ok: true,
             payoutId: existing.id,

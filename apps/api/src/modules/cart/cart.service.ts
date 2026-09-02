@@ -67,9 +67,17 @@ export class CartService {
     if (couponCode) {
       try {
         const r = await this.coupons.validateAndCompute(couponCode, userId, couponBase);
-        discount = r.discount;
+        // Coupon PERCENT không tự giới hạn ở subtotal khi value>100% và không set maxDiscount
+        // (coupons.service.ts) — checkout đã clamp bằng Math.min(..., goodsAfterCombo), cart
+        // trước đây thiếu clamp này nên có thể hiển thị discount > couponBase.
+        discount = Math.min(r.discount, couponBase);
         freeship = r.freeship;
-      } catch {
+      } catch (err) {
+        // Chỉ coi là "coupon không hợp lệ" khi CouponsService từ chối bằng business rule
+        // (luôn ném BadRequestException — coupons.service.ts). Lỗi hạ tầng khác (DB timeout,
+        // connection blip...) KHÔNG được nuốt ở đây — nếu không, một trục trặc tạm thời sẽ bị
+        // hiểu nhầm thành "coupon invalid" và xoá mã hợp lệ khỏi giỏ hàng của khách.
+        if (!(err instanceof BadRequestException)) throw err;
         // Có thể flash tạm thời kéo couponBase xuống dưới minOrder. Nếu coupon vẫn hợp lệ trên
         // TOÀN giỏ (gồm flash) → GIỮ mã (chờ flash kết thúc), tạm không giảm. Nếu hỏng cả trên
         // toàn giỏ (hết hạn/hết lượt/không đạt minOrder thật) → gỡ như cũ.
@@ -77,7 +85,8 @@ export class CartService {
           await this.coupons.validateAndCompute(couponCode, userId, subtotal);
           discount = 0;
           freeship = false;
-        } catch {
+        } catch (err2) {
+          if (!(err2 instanceof BadRequestException)) throw err2;
           await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
           couponCode = null;
         }
@@ -111,9 +120,13 @@ export class CartService {
       throw new BadRequestException(`Chỉ còn ${variation.stock} sản phẩm trong kho.`);
     }
 
+    // Tăng ATOMIC bằng increment (không set giá trị tuyệt đối newQty) — 2 request add-to-cart
+    // đồng thời (double-tap/2 tab) cho cùng variation đều đọc `existing` trước khi request kia
+    // ghi xong sẽ mất 1 lần cộng dồn nếu dùng `update: { quantity: newQty }`. Cùng pattern với
+    // refill.service.ts / flash-sale.service.ts.
     await this.prisma.cartItem.upsert({
       where: { cartId_variationId: { cartId, variationId: dto.variationId } },
-      update: { quantity: newQty },
+      update: { quantity: { increment: dto.quantity } },
       create: { cartId, variationId: dto.variationId, quantity: dto.quantity },
     });
     return this.getCart(userId);
@@ -161,7 +174,10 @@ export class CartService {
   }
 
   async removeCoupon(userId: string) {
-    await this.prisma.cart.update({ where: { userId }, data: { couponCode: null } });
+    // updateMany (không phải update) — user chưa từng thao tác giỏ hàng thì chưa có row Cart,
+    // `update({ where: { userId } })` sẽ ném P2025 (record not found) và trả 500 cho một thao
+    // tác lẽ ra vô hại (không có coupon nào để gỡ). updateMany no-op an toàn khi 0 dòng khớp.
+    await this.prisma.cart.updateMany({ where: { userId }, data: { couponCode: null } });
     return this.getCart(userId);
   }
 

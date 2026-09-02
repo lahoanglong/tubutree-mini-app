@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { MembershipTier, Prisma } from '@prisma/client';
 import { LoyaltyService } from './loyalty.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -99,30 +99,33 @@ describe('LoyaltyService.creditOrderPoints', () => {
     expect(txn).toHaveBeenCalledTimes(1);
   });
 
-  it('race: webhook DELIVERED thứ 2 ăn P2002 từ unique index → idempotent (KHÔNG throw, KHÔNG recalc)', async () => {
+  it('race: webhook DELIVERED thứ 2 ăn P2002 từ unique index → idempotent (KHÔNG throw, VẪN recalc tier)', async () => {
     // pre-check findFirst=null (cả 2 caller chưa thấy bản ghi), $transaction reject P2002 do partial
     // unique index (reason, refId). Catch RE-QUERY thấy bản ghi reason kẻ-thắng đã commit → bail im lặng.
     const p2002 = new Prisma.PrismaClientKnownRequestError('dup', {
       code: 'P2002',
       clientVersion: 'test',
     });
-    const userFind = jest.fn();
+    const userFind = jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null });
     // findFirst: lần 1 (pre-check)=null → đi tiếp; lần 2 (re-query trong catch)=có bản ghi → skip.
     const findFirst = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'tx-winner' });
     const prisma = {
       order: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 }),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 } }), // recalcTier
       },
       pointsTransaction: { findFirst, create: jest.fn() },
       user: { findUniqueOrThrow: userFind, update: jest.fn() },
+      membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn().mockRejectedValue(p2002),
     } as unknown as PrismaService;
 
     await expect(
       new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1'),
     ).resolves.toBeUndefined();
-    // recalcTier (gọi user.findUniqueOrThrow) KHÔNG chạy vì đã bail ở catch P2002.
-    expect(userFind).not.toHaveBeenCalled();
+    // Bail idempotent ở nhánh P2002/already VẪN phải recalcTier (gọi user.findUniqueOrThrow) —
+    // nếu không, user có thể kẹt vĩnh viễn không có tier (candidate 2, audit loyalty).
+    expect(userFind).toHaveBeenCalled();
   });
 
   it('P2002 từ constraint KHÁC (re-query KHÔNG thấy bản ghi reason) → re-throw, KHÔNG nuốt lỗi', async () => {
@@ -321,5 +324,33 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     const { prisma, aggregate } = prismaFor({ pointsBalance: 0, tierId: 'mam' }, 0);
     await new LoyaltyService(prisma, cfg).recalcTier('u1');
     expect(aggregate.mock.calls[0][0].where.paymentMethod).toBeUndefined();
+  });
+
+  it('preloadedTiers truyền vào → KHÔNG tự findMany lại (dùng cho batch recalcAllTiers)', async () => {
+    const { prisma, update } = prismaFor({ pointsBalance: 5000, tierId: 'mam' }, 0);
+    const findMany = (prisma as unknown as { membershipTier: { findMany: jest.Mock } }).membershipTier.findMany;
+    await new LoyaltyService(prisma, makeConfig()).recalcTier('u1', TIERS as unknown as MembershipTier[]);
+    expect(findMany).not.toHaveBeenCalled();
+    expect(update.mock.calls[0][0].data.tierId).toBe('dai');
+  });
+});
+
+describe('LoyaltyService.recalcAllTiers (tránh N+1)', () => {
+  it('load membershipTier.findMany ĐÚNG 1 LẦN cho cả batch, không phải mỗi user 1 lần', async () => {
+    const users = [{ id: 'u1' }, { id: 'u2' }, { id: 'u3' }];
+    const findMany = jest.fn().mockResolvedValue([{ id: 'mam', sortOrder: 0, minPoints: 0, minSpending: null }]);
+    const prisma = {
+      user: {
+        findMany: jest.fn().mockResolvedValue(users),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: 'mam' }),
+        update: jest.fn(),
+      },
+      membershipTier: { findMany },
+      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 } }) },
+    } as unknown as PrismaService;
+
+    const n = await new LoyaltyService(prisma, makeConfig()).recalcAllTiers();
+    expect(n).toBe(3);
+    expect(findMany).toHaveBeenCalledTimes(1);
   });
 });

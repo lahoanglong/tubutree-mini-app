@@ -16,6 +16,13 @@ interface CreateSubInput {
 }
 
 /**
+ * Đánh dấu riêng lỗi hết hàng khi tạo đơn định kỳ (khác BadRequestException chung) để
+ * createOrderFor phân biệt được và báo user — hết hàng CÓ THỂ là tạm thời nên KHÔNG pause
+ * lịch như nhánh isActive=false/địa chỉ hỏng, chỉ báo rồi để cron thử lại chu kỳ sau.
+ */
+class SubscriptionOutOfStockError extends Error {}
+
+/**
  * Subscribe & Save (Build Spec §6.14.4): đặt định kỳ 4/6/8/10 tuần.
  * Chiết khấu theo THANG BẬC (subscribe.discount_tiers, kiểu Amazon): càng nhiều
  * subscription ACTIVE, % giảm càng cao (chọn bậc minActive cao nhất user đạt được),
@@ -201,35 +208,64 @@ export class SubscriptionsService {
     const total = goods + shippingFee;
     const code = await this.generateCode();
 
-    const order = await this.prisma.order.create({
-      data: {
-        code,
-        userId: sub.userId,
-        type: 'RETAIL',
-        status: 'CONFIRMED',
-        subtotal,
-        discount,
-        shippingFee,
-        total,
-        pointsEarned,
-        paymentMethod: 'COD',
-        paymentStatus: 'UNPAID',
-        shippingAddress: address,
-        note: 'Đơn đặt định kỳ (Subscribe & Save)',
-        items: {
-          create: [
-            {
-              variationId: variation.id,
-              productName: variation.product.name,
-              variationName: variation.name,
-              unitPrice,
-              quantity: sub.quantity,
-              total: subtotal,
+    // Trừ stock ATOMIC (mirror checkout.placeOrder/affiliate.processGroupOrder) TRONG cùng
+    // transaction với tạo đơn — trước đây hàm này tạo đơn định kỳ mà KHÔNG hề đụng tới stock,
+    // khác mọi đường tạo đơn khác trong hệ thống (đều trừ stock có guard gte chống oversell).
+    // Hệ quả cũ: subscription cron có thể tạo đơn cho variation đã hết hàng vô thời hạn.
+    // Không đủ stock → throw để processDue() bắt, log và bỏ qua chu kỳ này; nextRunAt đã
+    // advance ở claim trước đó nên không double-charge, chu kỳ sau sẽ thử lại.
+    let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
+    try {
+      order = await this.prisma.$transaction(async (tx) => {
+        const stockHit = await tx.variation.updateMany({
+          where: { id: variation.id, stock: { gte: sub.quantity } },
+          data: { stock: { decrement: sub.quantity } },
+        });
+        if (stockHit.count === 0) {
+          throw new SubscriptionOutOfStockError(
+            `Sản phẩm "${variation.product.name}" không đủ tồn kho cho đơn định kỳ.`,
+          );
+        }
+        return tx.order.create({
+          data: {
+            code,
+            userId: sub.userId,
+            type: 'RETAIL',
+            status: 'CONFIRMED',
+            subtotal,
+            discount,
+            shippingFee,
+            total,
+            pointsEarned,
+            paymentMethod: 'COD',
+            paymentStatus: 'UNPAID',
+            shippingAddress: address,
+            note: 'Đơn đặt định kỳ (Subscribe & Save)',
+            items: {
+              create: [
+                {
+                  variationId: variation.id,
+                  productName: variation.product.name,
+                  variationName: variation.name,
+                  unitPrice,
+                  quantity: sub.quantity,
+                  total: subtotal,
+                },
+              ],
             },
-          ],
-        },
-      },
-    });
+          },
+        });
+      });
+    } catch (err) {
+      if (err instanceof SubscriptionOutOfStockError) {
+        // Khác nhánh isActive/địa chỉ ở trên (pause hẳn): hết hàng báo cho khách biết kỳ này
+        // không có đơn, KHÔNG pause lịch — cron sẽ tự thử lại ở chu kỳ kế (nextRunAt đã advance).
+        await this.notifications
+          .notify(sub.userId, 'SUBSCRIPTION_ORDER_FAILED', { reason: 'Hết hàng tạm thời' })
+          .catch(() => undefined);
+      }
+      throw err; // giữ nguyên hành vi cũ: processDue() log lỗi + đếm là chu kỳ bị bỏ qua.
+    }
     await this.prisma.subscription.update({ where: { id: sub.id }, data: { lastOrderId: order.id } });
     await this.notifications.notify(sub.userId, 'SUBSCRIPTION_ORDER', { order_code: code }).catch(() => undefined);
   }
