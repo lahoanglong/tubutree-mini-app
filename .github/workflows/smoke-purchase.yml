@@ -5,6 +5,10 @@ name: Smoke purchase flow (VM)
 on:
   workflow_dispatch: {}
 
+# Least-privilege GITHUB_TOKEN: workflow chỉ SSH ra VM bằng secrets riêng.
+permissions:
+  contents: read
+
 jobs:
   purchase:
     runs-on: ubuntu-latest

@@ -5,6 +5,10 @@ on:
   pull_request:
     branches: [ main, master ]
 
+# Least-privilege GITHUB_TOKEN: chỉ checkout + upload-artifact (không cần quyền ghi repo/PR).
+permissions:
+  contents: read
+
 jobs:
   test:
     timeout-minutes: 60

@@ -10,6 +10,10 @@ on:
   # pull_request:
   #   branches: [main]
 
+# Least-privilege GITHUB_TOKEN: workflow chỉ checkout + build/test, không push/comment/release.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest

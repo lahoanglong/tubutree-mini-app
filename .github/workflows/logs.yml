@@ -4,6 +4,10 @@ name: Dump API logs (VM)
 on:
   workflow_dispatch: {}
 
+# Least-privilege GITHUB_TOKEN: workflow chỉ SSH ra VM bằng secrets riêng.
+permissions:
+  contents: read
+
 jobs:
   logs:
     runs-on: ubuntu-latest

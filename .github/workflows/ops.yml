@@ -19,6 +19,10 @@ on:
         type: choice
         options: [audit, backup, gin, set-env, crontab, grant-admin]
 
+# Least-privilege GITHUB_TOKEN: workflow chỉ SSH ra VM bằng secrets riêng.
+permissions:
+  contents: read
+
 jobs:
   ops:
     runs-on: ubuntu-latest
