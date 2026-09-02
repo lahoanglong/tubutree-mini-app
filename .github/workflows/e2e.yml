@@ -18,7 +18,7 @@ jobs:
     - uses: actions/checkout@v4
     
     # 1. Cài đặt pnpm
-    - uses: pnpm/action-setup@v3
+    - uses: pnpm/action-setup@v4
       with:
         version: 9.15.9
 
@@ -36,9 +36,12 @@ jobs:
     - name: Install Playwright Browsers
       run: pnpm --filter @tubutree/e2e exec playwright install --with-deps
 
-    # 5. Khởi chạy Database (Postgres :5434) + Redis (:6381) qua Docker Compose
+    # 5. Khởi chạy Database (Postgres :5434) + Redis (:6381) qua Docker Compose.
+    #    --wait: chờ container đạt trạng thái healthy (postgres có healthcheck pg_isready
+    #    trong docker-compose.dev.yml) trước khi bước tiếp — tránh `prisma migrate deploy`
+    #    chạy khi Postgres còn đang khởi động (CI flaky ngẫu nhiên).
     - name: Start Database
-      run: docker compose -f docker-compose.dev.yml up -d
+      run: docker compose -f docker-compose.dev.yml up -d --wait --wait-timeout 90
 
     # 6. Tạo apps/api/.env cho CI (.env bị gitignore). Chỉ DATABASE_URL + JWT bắt buộc lúc boot
     #    (env.validation.ts: webhook fail-closed CHỈ khi NODE_ENV=production → dùng test).

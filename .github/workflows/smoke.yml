@@ -24,7 +24,6 @@ jobs:
             cd ~/tubutree
             DC="docker compose -f docker-compose.prod.yml"
             TOKEN=$($DC exec -T api sh -c "cd /app/apps/api && DEV_ROLE=CUSTOMER pnpm exec tsx scripts/dev-token.ts" | tail -1 | tr -d '\r\n')
-            ADMIN=$($DC exec -T api sh -c "cd /app/apps/api && DEV_ROLE=ADMIN pnpm exec tsx scripts/dev-token.ts" | tail -1 | tr -d '\r\n')
             echo "token len: ${#TOKEN}"
             BASE="https://api.tubutree.com/api"
             check() {

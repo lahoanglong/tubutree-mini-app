@@ -21,6 +21,14 @@ on:
   #   branches: [main]
   #   types: [completed]
 
+# 2 lần trigger workflow_dispatch chồng nhau (vd bấm Run workflow 2 lần liên tiếp) không được
+# chạy song song trên cùng VM — pg_dump/git pull/docker compose up --build race nhau có thể
+# tạo backup hỏng hoặc deploy nửa vời. cancel-in-progress: false → xếp hàng, KHÔNG huỷ deploy
+# đang chạy dở (huỷ giữa chừng git pull/docker build còn nguy hiểm hơn).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 # Least-privilege GITHUB_TOKEN: deploy chỉ SSH ra VM bằng secrets riêng, không dùng GITHUB_TOKEN để ghi.
 permissions:
   contents: read

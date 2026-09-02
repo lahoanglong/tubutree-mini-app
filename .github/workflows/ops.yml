@@ -56,7 +56,12 @@ jobs:
           command_timeout: 15m
           envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE
           script: |
-            set -uo pipefail
+            # -e: một lệnh con trong action (grant-admin.js, backup-db.sh,
+            # create-gin-indexes-concurrently.sh...) lỗi phải làm JOB FAIL, không được
+            # âm thầm trôi qua rồi báo xanh. 2 chỗ CỐ Ý best-effort (audit: git fetch/docker
+            # ps có thể lỗi nhưng vẫn muốn in tiếp phần còn lại; crontab: grep -v có thể khớp
+            # 0 dòng — bình thường, không phải lỗi) đã được guard tường minh bằng `|| true`.
+            set -euo pipefail
             ACTION="${{ github.event.inputs.action }}"
             cd ~/tubutree
             COMPOSE="docker compose -f docker-compose.prod.yml"
@@ -90,9 +95,9 @@ jobs:
                 echo "=== GIT ==="
                 echo "HEAD: $(git rev-parse --short HEAD)  ($(git log -1 --format=%s))"
                 echo "last-deployed-sha: $(cat .last-deployed-sha 2>/dev/null || echo n/a)"
-                git fetch origin -q && echo "origin/main: $(git rev-parse --short origin/main)"
+                git fetch origin -q && echo "origin/main: $(git rev-parse --short origin/main)" || true
                 echo "=== DOCKER ==="
-                $COMPOSE ps
+                $COMPOSE ps || true
                 echo "=== ENV (required-in-prod) ==="
                 envstate CORS_ORIGINS
                 envstate ACCESSTRADE_WEBHOOK_SECRET
@@ -199,7 +204,9 @@ jobs:
                 echo "=== Cài cron backup hằng ngày 02:00 ==="
                 SCRIPT="$HOME/tubutree/tools/backup/backup-db.sh"
                 LINE="0 2 * * * $SCRIPT >> /var/log/tubutree-backup.log 2>&1"
-                ( crontab -l 2>/dev/null | grep -v 'tools/backup/backup-db.sh'; echo "$LINE" ) | crontab -
+                # grep -v khớp 0 dòng là BÌNH THƯỜNG (crontab trống, hoặc dòng cũ y hệt bị lọc ra
+                # trước khi echo dòng mới) → không phải lỗi, || true để không cắt ngang trước `echo "$LINE"`.
+                ( crontab -l 2>/dev/null | grep -v 'tools/backup/backup-db.sh' || true; echo "$LINE" ) | crontab -
                 echo "=== crontab hiện tại ==="
                 crontab -l | grep backup
                 sudo touch /var/log/tubutree-backup.log 2>/dev/null || true

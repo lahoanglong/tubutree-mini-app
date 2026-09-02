@@ -27,7 +27,11 @@ jobs:
             B="https://api.tubutree.com/api"
             H_AUTH="Authorization: Bearer $T"
             H_JSON="Content-Type: application/json"
-            VAR=$(curl -s "$B/products/serum-duong-am-visante" | grep -oE 'cm[a-z0-9]{20,}' | head -1)
+            # Product response: top-level "id" (Product) đứng TRƯỚC "variations[].id" trong JSON
+            # (Prisma include đẩy relation ra sau field scalar) → regex "first cuid-looking string"
+            # luôn khớp nhầm id của Product. Dùng jq lấy đúng field thay vì mù quét text.
+            command -v jq >/dev/null 2>&1 || sudo apt-get install -y jq >/dev/null 2>&1 || true
+            VAR=$(curl -s "$B/products/serum-duong-am-visante" | jq -r '.variations[0].id // empty')
             echo "variation: $VAR"
             step() { printf "%-26s %s\n" "$1" "$2"; }
             C=$(curl -s -o /tmp/b -w "%{http_code}" -X POST "$B/cart/items" -H "$H_AUTH" -H "$H_JSON" -d "{\"variationId\":\"$VAR\",\"quantity\":2}"); step "POST /cart/items" "$C"; head -c 150 /tmp/b; echo
