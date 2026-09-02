@@ -47,11 +47,20 @@ export const getDealerMe = () => api.get<DealerMe>('/dealer/me').then((r) => r.d
 export const applyDealer = (data: DealerApplyInput) =>
   api.post('/dealer/apply', data).then((r) => r.data);
 export const getPricelist = () => api.get<PricelistRow[]>('/dealer/pricelist').then((r) => r.data);
+/** Đặt đơn đại lý kèm Idempotency-Key (mirror checkout.placeOrder/wallet.withdraw) — double-tap/retry mạng không tạo đơn công nợ đôi. */
 export const placeDealerOrder = (
   items: { variationId: string; quantity: number }[],
   paymentMethod: 'CREDIT' | 'PREPAID',
   note?: string,
-) => api.post<OrderDTO>('/dealer/orders', { items, paymentMethod, note }).then((r) => r.data);
+  idempotencyKey?: string,
+) =>
+  api
+    .post<OrderDTO>(
+      '/dealer/orders',
+      { items, paymentMethod, note },
+      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined,
+    )
+    .then((r) => r.data);
 export const getDealerOrders = () => api.get<OrderDTO[]>('/dealer/orders').then((r) => r.data);
 export const getCreditLedger = () =>
   api.get<{ balance: number; entries: CreditEntry[] }>('/dealer/credit-ledger').then((r) => r.data);

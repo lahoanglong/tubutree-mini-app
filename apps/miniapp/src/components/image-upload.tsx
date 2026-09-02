@@ -6,6 +6,10 @@ const CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string | undefined;
 const PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string | undefined;
 const CONFIGURED = Boolean(CLOUD && PRESET);
 
+/** Chặn ảnh gốc quá lớn TRƯỚC khi đưa vào canvas nén — ảnh vài chục MB (panorama, RAW export...)
+ * có thể treo/crash webview khi drawImage/toDataURL. VideoUpload đã có guard tương tự (50MB). */
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
 /**
  * Nén ảnh client-side bằng HTMLCanvasElement + FileReader.
  * Chuyển đổi tệp ảnh bất kỳ sang chuỗi Base64 Data URL JPEG dung lượng nhẹ (~150-250KB).
@@ -46,6 +50,28 @@ export function readAndCompressImage(file: File, maxDim = 1200, quality = 0.82):
 }
 
 /**
+ * Upload 1 file ảnh lên Cloudinary (unsigned preset) → secure_url, hoặc null nếu
+ * chưa cấu hình VITE_CLOUDINARY_* hoặc request lỗi (caller tự fallback, VD base64 local).
+ */
+export async function uploadToCloudinary(file: File | Blob): Promise<string | null> {
+  if (!CONFIGURED) return null;
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('upload_preset', PRESET!);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
+      method: 'POST',
+      body: form,
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { secure_url?: string };
+    return data.secure_url ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Upload 1 ảnh lên Cloudinary (unsigned preset) → fallback sang FileReader Data URL nếu lỗi/chưa cấu hình.
  */
 export function ImageUpload({
@@ -70,31 +96,19 @@ export function ImageUpload({
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError('Ảnh quá lớn (tối đa 20MB). Hãy chọn ảnh khác nhé.');
+      if (inputRef.current) inputRef.current.value = '';
+      return;
+    }
     setUploading(true);
     try {
       // 1. Thử Cloudinary nếu được cấu hình
-      if (CONFIGURED) {
-        try {
-          const form = new FormData();
-          form.append('file', file);
-          form.append('upload_preset', PRESET!);
-          const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
-            method: 'POST',
-            body: form,
-          });
-          if (res.ok) {
-            const data = (await res.json()) as { secure_url?: string };
-            if (data.secure_url) {
-              haptic('medium');
-              onChange(data.secure_url);
-              setUploading(false);
-              if (inputRef.current) inputRef.current.value = '';
-              return;
-            }
-          }
-        } catch {
-          // Cloudinary fail -> fallback to local FileReader compression
-        }
+      const secureUrl = await uploadToCloudinary(file);
+      if (secureUrl) {
+        haptic('medium');
+        onChange(secureUrl);
+        return;
       }
 
       // 2. Client-side Smart Compression Fallback
@@ -277,8 +291,13 @@ export function MultiImageUpload({
     setUploading(true);
     try {
       const newUrls: string[] = [];
+      let oversizedCount = 0;
       for (const file of files) {
         if (value.length + newUrls.length >= max) break;
+        if (file.size > MAX_IMAGE_BYTES) {
+          oversizedCount += 1;
+          continue;
+        }
         let uploadedUrl = '';
         if (CONFIGURED) {
           try {
@@ -305,6 +324,9 @@ export function MultiImageUpload({
       if (newUrls.length > 0) {
         haptic('medium');
         onChange([...value, ...newUrls]);
+      }
+      if (oversizedCount > 0) {
+        setError(`Đã bỏ qua ${oversizedCount} ảnh quá lớn (tối đa 20MB/ảnh).`);
       }
     } catch {
       setError('Tải ảnh thất bại. Hãy chọn tệp ảnh khác.');

@@ -25,6 +25,8 @@ interface OrderLine {
   variationName: string;
   unitPrice: number;
   quantity: number;
+  /** Tồn kho tại thời điểm thêm — chặn tăng số lượng vượt tồn ngay trên form (BE vẫn chặn thật). */
+  stock: number;
 }
 
 const t = vi.ctvOrder;
@@ -50,7 +52,8 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       const idx = prev.findIndex((l) => l.variationId === v.id);
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = { ...next[idx]!, quantity: next[idx]!.quantity + 1 };
+        const cur = next[idx]!;
+        next[idx] = { ...cur, quantity: Math.min(cur.quantity + 1, Math.max(v.stock, 1)) };
         return next;
       }
       return [
@@ -61,15 +64,22 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
           variationName: v.name,
           unitPrice: v.salePrice ?? v.retailPrice,
           quantity: 1,
+          stock: v.stock,
         },
       ];
     });
   };
 
+  // Giới hạn số lượng theo tồn kho của variation đã chọn — tránh CTV tăng vượt tồn ngay trên
+  // form rồi mới bị BE chặn khi gửi (giữ cùng cách làm với add-to-cart.tsx bên apps/web).
   const setQty = (variationId: string, delta: number) => {
     setLines((prev) =>
       prev
-        .map((l) => (l.variationId === variationId ? { ...l, quantity: l.quantity + delta } : l))
+        .map((l) =>
+          l.variationId === variationId
+            ? { ...l, quantity: Math.min(Math.max(l.quantity + delta, 0), Math.max(l.stock, 1)) }
+            : l,
+        )
         .filter((l) => l.quantity > 0),
     );
   };
@@ -321,6 +331,14 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
           <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
             {vi.common.loading}
           </Text>
+        ) : detailQ.isError ? (
+          <Text
+            size="xSmall"
+            onClick={() => void detailQ.refetch()}
+            style={{ color: 'var(--danger)', cursor: 'pointer' }}
+          >
+            ⚠ {vi.errors.loadFailed} · {vi.common.retry}
+          </Text>
         ) : (
           (p?.variations ?? []).map((v) => {
             const out = v.stock <= 0;
@@ -361,32 +379,44 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
       />
       {dq.trim().length >= 1 && (
         <Box mt={1}>
-          {results.map((p) => (
-            <Box
-              key={p.slug}
-              className="tubu-press"
-              onClick={() => setSlug(p.slug)}
-              flex
-              alignItems="center"
-              style={{ gap: 8, padding: '6px 0', cursor: 'pointer' }}
+          {suggestQ.isError ? (
+            <Text
+              size="xSmall"
+              onClick={() => void suggestQ.refetch()}
+              style={{ color: 'var(--danger)', padding: '6px 0', cursor: 'pointer' }}
             >
-              {p.thumbnail && (
-                <img src={p.thumbnail} alt="" width={32} height={32} style={{ borderRadius: 6, objectFit: 'cover', flex: '0 0 auto' }} />
-              )}
-              <Box style={{ flex: 1, overflow: 'hidden' }}>
-                <Text size="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {p.name}
-                </Text>
-                <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
-                  {formatVnd(p.basePrice)}
-                </Text>
-              </Box>
-            </Box>
-          ))}
-          {results.length === 0 && !suggestQ.isFetching && (
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', padding: '6px 0' }}>
-              {t.noProductsFound}
+              ⚠ {vi.errors.loadFailed} · {vi.common.retry}
             </Text>
+          ) : (
+            <>
+              {results.map((p) => (
+                <Box
+                  key={p.slug}
+                  className="tubu-press"
+                  onClick={() => setSlug(p.slug)}
+                  flex
+                  alignItems="center"
+                  style={{ gap: 8, padding: '6px 0', cursor: 'pointer' }}
+                >
+                  {p.thumbnail && (
+                    <img src={p.thumbnail} alt="" width={32} height={32} style={{ borderRadius: 6, objectFit: 'cover', flex: '0 0 auto' }} />
+                  )}
+                  <Box style={{ flex: 1, overflow: 'hidden' }}>
+                    <Text size="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {p.name}
+                    </Text>
+                    <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
+                      {formatVnd(p.basePrice)}
+                    </Text>
+                  </Box>
+                </Box>
+              ))}
+              {results.length === 0 && !suggestQ.isFetching && (
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)', padding: '6px 0' }}>
+                  {t.noProductsFound}
+                </Text>
+              )}
+            </>
           )}
         </Box>
       )}

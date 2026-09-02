@@ -12,6 +12,7 @@ import {
 import { getWallet } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { openAffiliateLink } from '../services/zmp-bridge';
+import { useAuthStore } from '../store/auth';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
@@ -26,9 +27,13 @@ const TXN_META: Record<CashbackStatus, { label: string; color: string; bg: strin
 
 export default function CashbackPage() {
   const { openSnackbar } = useSnackbar();
+  // /cashback/transactions & /me/wallet cần auth — fetch trước khi restore() xong sẽ 401 và kẹt
+  // vĩnh viễn (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (như wallet.tsx).
+  // /cashback/merchants là @Public() nên KHÔNG cần chờ authed.
+  const authed = useAuthStore((s) => s.status === 'authenticated');
   const merchantsQ = useQuery({ queryKey: ['cashback-merchants'], queryFn: getMerchants });
-  const txnQ = useQuery({ queryKey: ['cashback-txn'], queryFn: getCashbackTransactions });
-  const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet });
+  const txnQ = useQuery({ queryKey: ['cashback-txn'], queryFn: getCashbackTransactions, enabled: authed });
+  const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   const [selected, setSelected] = useState<CashbackMerchant | null>(null);
 
   const clickMut = useMutation({

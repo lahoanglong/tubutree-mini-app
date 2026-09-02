@@ -199,7 +199,7 @@ export default function CartPage() {
             ))}
           </Box>
 
-          <CouponBlock summary={summary} />
+          <CouponBlock summary={summary} selectedSubtotal={selectedSubtotal} />
         </>
       )}
 
@@ -421,7 +421,7 @@ function CartLineRow({
   );
 }
 
-function CouponBlock({ summary }: { summary: CartSummary }) {
+function CouponBlock({ summary, selectedSubtotal }: { summary: CartSummary; selectedSubtotal: number }) {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   return (
@@ -503,7 +503,10 @@ function CouponBlock({ summary }: { summary: CartSummary }) {
         visible={sheetOpen}
         onClose={() => setSheetOpen(false)}
         currentCode={summary.couponCode}
-        subtotal={summary.subtotal}
+        // Điều kiện tối thiểu voucher phải tính trên tổng ĐANG CHỌN (checkout tập con) — dùng
+        // summary.subtotal (toàn giỏ) ở đây từng khiến voucher hiện "đủ điều kiện" sai khi user
+        // đã bỏ chọn bớt món (BE re-check khi apply nên không lọt số tiền, nhưng UI gây hiểu lầm).
+        subtotal={selectedSubtotal}
       />
     </>
   );

@@ -3,6 +3,7 @@ import { Box, Page, Text, Button, Sheet, useParams, useNavigate, useSnackbar } f
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchOrder, cancelOrder, repurchaseOrder, requestReturn, fetchMyReturns } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
+import { useAuthStore } from '../store/auth';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { MultiImageUpload } from '../components/image-upload';
@@ -21,11 +22,14 @@ export default function OrderDetailPage() {
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
   const [returnImages, setReturnImages] = useState<string[]>([]);
+  const authStatus = useAuthStore((s) => s.status);
 
+  // Guard auth: tránh gọi /orders/:code khi chưa silent-login xong (deeplink từ thông báo
+  // đơn hàng ngay lúc app vừa mở → 401 hiện lỗi trong khi chỉ cần chờ vài trăm ms là có phiên).
   const order = useQuery({
     queryKey: ['order', code],
     queryFn: () => fetchOrder(code!),
-    enabled: !!code,
+    enabled: !!code && authStatus === 'authenticated',
   });
   const myReturns = useQuery({
     queryKey: ['my-returns'],
@@ -71,7 +75,7 @@ export default function OrderDetailPage() {
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  if (order.isLoading) {
+  if (authStatus === 'loading' || order.isLoading) {
     return (
       <Page style={{ background: 'var(--neutral-50)' }}>
         <Box p={4} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -185,8 +189,14 @@ export default function OrderDetailPage() {
                 variant="secondary"
                 onClick={() => {
                   haptic('light');
-                  if (navigator.clipboard) void navigator.clipboard.writeText(o.shippingCode!);
-                  openSnackbar({ text: 'Đã sao chép mã vận đơn', type: 'success' });
+                  if (!navigator.clipboard) {
+                    openSnackbar({ text: 'Trình duyệt không hỗ trợ sao chép.', type: 'error' });
+                    return;
+                  }
+                  navigator.clipboard
+                    .writeText(o.shippingCode!)
+                    .then(() => openSnackbar({ text: 'Đã sao chép mã vận đơn', type: 'success' }))
+                    .catch(() => openSnackbar({ text: 'Không thể sao chép. Vui lòng thử lại.', type: 'error' }));
                 }}
               >
                 Sao chép

@@ -19,6 +19,12 @@ export function PullToRefresh({ onRefresh }: { onRefresh: () => Promise<unknown>
   const anchorRef = useRef<HTMLDivElement>(null);
   const st = useRef({ startY: 0, active: false, el: null as HTMLElement | null, pull: 0, refreshing: false });
   st.current.refreshing = refreshing;
+  // Giữ tham chiếu mới nhất của onRefresh để KHÔNG đưa vào dependency array của effect bên
+  // dưới — home.tsx/browse.tsx/feed.tsx truyền onRefresh là 1 arrow function mới mỗi render,
+  // nếu để trong deps thì effect sẽ tháo/gắn lại native listener liên tục và có thể rớt gesture
+  // đang kéo dở giữa chừng.
+  const onRefreshRef = useRef(onRefresh);
+  onRefreshRef.current = onRefresh;
 
   useEffect(() => {
     const scroller = anchorRef.current?.closest('.zaui-page') as HTMLElement | null;
@@ -48,7 +54,7 @@ export function PullToRefresh({ onRefresh }: { onRefresh: () => Promise<unknown>
       if (st.current.pull >= THRESHOLD && !st.current.refreshing) {
         setRefreshing(true);
         setPull(THRESHOLD);
-        Promise.resolve(onRefresh()).finally(() => {
+        Promise.resolve(onRefreshRef.current()).finally(() => {
           setRefreshing(false);
           setPull(0);
           st.current.pull = 0;
@@ -69,7 +75,8 @@ export function PullToRefresh({ onRefresh }: { onRefresh: () => Promise<unknown>
       scroller.removeEventListener('touchend', onEnd);
       scroller.removeEventListener('touchcancel', onEnd);
     };
-  }, [onRefresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ gắn listener 1 lần, dùng onRefreshRef để luôn gọi bản mới nhất
+  }, []);
 
   const visible = pull > 0 || refreshing;
   return (

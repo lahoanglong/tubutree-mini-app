@@ -6,7 +6,7 @@ import { getMe, updateMe } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
-import { readAndCompressImage } from '../components/image-upload';
+import { readAndCompressImage, uploadToCloudinary } from '../components/image-upload';
 import { AvatarCropModal } from '../components/avatar-crop-modal';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -65,11 +65,24 @@ export default function EditProfilePage() {
     }
   };
 
-  const handleConfirmCrop = (croppedUrl: string) => {
+  const handleConfirmCrop = async (croppedUrl: string) => {
+    // Preview ngay bằng data URL đã cắt (không đợi mạng). Sau đó thử tải lên Cloudinary —
+    // giống mọi ảnh khác trong app (ImageUpload) — để lưu 1 URL gọn nhẹ thay vì base64 thô
+    // trực tiếp vào avatarUrl; lỗi/mạng chậm/chưa cấu hình → tự fallback về data URL đã cắt.
     setAvatarUrl(croppedUrl);
     setCropModalVisible(false);
     setRawImageForCrop(null);
     openSnackbar({ text: 'Đã cắt và chọn ảnh đại diện 🌿', type: 'success', position: 'top' });
+    setUploadingAvatar(true);
+    try {
+      const blob = await (await fetch(croppedUrl)).blob();
+      const secureUrl = await uploadToCloudinary(blob);
+      if (secureUrl) setAvatarUrl(secureUrl);
+    } catch {
+      /* Cloudinary lỗi → giữ nguyên data URL đã cắt ở trên */
+    } finally {
+      setUploadingAvatar(false);
+    }
   };
 
   const save = useMutation({

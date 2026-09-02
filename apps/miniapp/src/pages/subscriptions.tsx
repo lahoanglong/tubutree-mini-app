@@ -8,6 +8,7 @@ import {
   type SubscriptionDTO,
 } from '../services/subscriptions-api';
 import { getErrorMessage } from '../services/api';
+import { useAuthStore } from '../store/auth';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { LineItemSkeleton } from '../components/ui/skeleton';
@@ -18,7 +19,10 @@ export default function SubscriptionsPage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
-  const subsQ = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions });
+  // /me/subscriptions cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
+  // (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (cùng bug đã fix ở wallet.tsx).
+  const authed = useAuthStore((s) => s.status === 'authenticated');
+  const subsQ = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions, enabled: authed });
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
 
   const statusMut = useMutation({
@@ -58,7 +62,7 @@ export default function SubscriptionsPage() {
         ) : null}
       </Box>
 
-      {subsQ.isLoading ? (
+      {!authed || subsQ.isLoading ? (
         <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
           <LineItemSkeleton />
           <LineItemSkeleton />
@@ -159,8 +163,10 @@ export default function SubscriptionsPage() {
           <Button
             fullWidth
             loading={statusMut.isPending && statusMut.variables?.status === 'PAUSED'}
+            disabled={statusMut.isPending}
             onClick={() =>
               cancelTarget &&
+              !statusMut.isPending &&
               statusMut.mutate(
                 { id: cancelTarget, status: 'PAUSED' },
                 { onSuccess: () => setCancelTarget(null) },
@@ -176,7 +182,8 @@ export default function SubscriptionsPage() {
               fullWidth
               variant="secondary"
               loading={skipMut.isPending}
-              onClick={() => cancelTarget && skipMut.mutate(cancelTarget)}
+              disabled={skipMut.isPending}
+              onClick={() => cancelTarget && !skipMut.isPending && skipMut.mutate(cancelTarget)}
               style={{ marginTop: 10 }}
             >
               {vi.subscriptions.skipCta}
@@ -190,6 +197,7 @@ export default function SubscriptionsPage() {
             style={{ color: 'var(--danger)', textAlign: 'center', marginTop: 20 }}
             onClick={() =>
               cancelTarget &&
+              !statusMut.isPending &&
               statusMut.mutate(
                 { id: cancelTarget, status: 'CANCELLED' },
                 { onSuccess: () => setCancelTarget(null) },

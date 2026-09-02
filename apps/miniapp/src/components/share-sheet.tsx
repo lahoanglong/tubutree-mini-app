@@ -36,10 +36,14 @@ export function ShareSheet({
       `Đồ thiên nhiên lành cho da & nhẹ với đất 🌱 ${url}`,
     ]
   ).map((c) => (c.includes(url) ? c : `${c} ${url}`)); // luôn đảm bảo có link để dán
-  const copy = (t: string) => {
-    if (navigator.clipboard) {
-      void navigator.clipboard.writeText(t);
+  const copy = async (t: string) => {
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(t);
       openSnackbar({ text: vi.storefront.copied, type: 'success' });
+    } catch {
+      // Quyền clipboard bị từ chối hoặc lỗi khác — báo cho user thay vì hiện toast thành công giả.
+      openSnackbar({ text: vi.errors.generic, type: 'error' });
     }
   };
   return (

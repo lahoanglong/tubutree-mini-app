@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Box, Page, Text, Button, Input, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation } from '@tanstack/react-query';
 import { aiChat, type AiChatTurn, type AiProduct } from '../services/ai-api';
+import { getErrorMessage } from '../services/api';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -15,10 +16,10 @@ const SUGGESTIONS = [
   'Gợi ý quà tặng sống xanh',
 ];
 
-function msg(e: unknown): string {
-  const ax = e as { response?: { data?: { message?: string } }; message?: string };
-  return ax?.response?.data?.message ?? ax?.message ?? 'Có lỗi xảy ra';
-}
+// BE (ChatDto.history) chỉ cho tối đa 200 lượt và chỉ thực dùng 6 lượt gần nhất (AiAdvisorService
+// MAX_HISTORY) — gửi cả lịch sử chat vừa tốn băng thông vừa có thể vượt cap sau phiên chat dài,
+// khiến MỌI tin nhắn sau đó bị 400 và tính năng hỏng hẳn cho tới khi reload. Cắt còn cửa sổ gần nhất.
+const MAX_HISTORY_TURNS = 20;
 
 export default function AiAdvisorPage() {
   const navigate = useNavigate();
@@ -28,14 +29,16 @@ export default function AiAdvisorPage() {
 
   const chatM = useMutation({
     mutationFn: (text: string) => {
-      const history: AiChatTurn[] = messages.map((m) => ({ role: m.role, content: m.content }));
+      const history: AiChatTurn[] = messages
+        .slice(-MAX_HISTORY_TURNS)
+        .map((m) => ({ role: m.role, content: m.content }));
       return aiChat(text, history);
     },
     onSuccess: (r) => {
       setMessages((prev) => [...prev, { role: 'assistant', content: r.reply, products: r.products }]);
     },
     onError: (e: unknown) => {
-      openSnackbar({ text: msg(e), type: 'error' });
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
       setMessages((prev) => [...prev, { role: 'assistant', content: 'Xin lỗi, mình chưa trả lời được lúc này 🌿' }]);
     },
   });

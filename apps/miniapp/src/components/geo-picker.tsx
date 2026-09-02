@@ -1,6 +1,7 @@
 import { Box, Select, Text } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { getProvinces, getCommunes } from '../services/geo-api';
+import { vi } from '../i18n/vi';
 
 /** Giá trị địa giới: tên hiển thị + mã Pancake (gửi khi đặt đơn). */
 export interface GeoValue {
@@ -42,7 +43,9 @@ export function GeoPicker({
       <Box>
         <Select
           label="Tỉnh/Thành phố"
-          placeholder={provincesQ.isLoading ? 'Đang tải…' : 'Chọn tỉnh/thành'}
+          placeholder={
+            provincesQ.isLoading ? 'Đang tải…' : provincesQ.isError ? vi.errors.loadFailed : 'Chọn tỉnh/thành'
+          }
           value={value.provinceCode || undefined}
           closeOnSelect
           status={errorProvince ? 'error' : undefined}
@@ -57,13 +60,29 @@ export function GeoPicker({
           ))}
         </Select>
         {errorProvince && <ErrText>{errorProvince}</ErrText>}
+        {/* API lỗi thì Select sẽ im lặng mãi ở placeholder nếu không có dòng này — cho user biết + retry */}
+        {provincesQ.isError && !errorProvince && (
+          <Text
+            size="xSmall"
+            onClick={() => void provincesQ.refetch()}
+            style={{ color: 'var(--danger)', marginTop: 2, cursor: 'pointer' }}
+          >
+            ⚠ {vi.errors.loadFailed} · {vi.common.retry}
+          </Text>
+        )}
       </Box>
 
       <Box>
         <Select
           label="Phường/Xã"
           placeholder={
-            !value.provinceCode ? 'Chọn tỉnh/thành trước' : communesQ.isLoading ? 'Đang tải…' : 'Chọn phường/xã'
+            !value.provinceCode
+              ? 'Chọn tỉnh/thành trước'
+              : communesQ.isLoading
+                ? 'Đang tải…'
+                : communesQ.isError
+                  ? vi.errors.loadFailed
+                  : 'Chọn phường/xã'
           }
           value={value.wardCode || undefined}
           closeOnSelect
@@ -79,6 +98,15 @@ export function GeoPicker({
           ))}
         </Select>
         {errorWard && <ErrText>{errorWard}</ErrText>}
+        {communesQ.isError && !errorWard && (
+          <Text
+            size="xSmall"
+            onClick={() => void communesQ.refetch()}
+            style={{ color: 'var(--danger)', marginTop: 2, cursor: 'pointer' }}
+          >
+            ⚠ {vi.errors.loadFailed} · {vi.common.retry}
+          </Text>
+        )}
       </Box>
     </>
   );

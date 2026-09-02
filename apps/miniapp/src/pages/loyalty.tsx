@@ -9,6 +9,7 @@ import {
   type PointsTxn,
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
+import { useAuthStore } from '../store/auth';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -30,9 +31,12 @@ function couponLabel(c: CouponDTO): string {
 
 export default function LoyaltyPage() {
   const navigate = useNavigate();
-  const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty });
-  const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons });
-  const txnQ = useQuery({ queryKey: ['points-txn'], queryFn: getPointsTransactions });
+  // Các endpoint /me/* cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
+  // (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (cùng bug đã fix ở wallet.tsx).
+  const authed = useAuthStore((s) => s.status === 'authenticated');
+  const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
+  const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
+  const txnQ = useQuery({ queryKey: ['points-txn'], queryFn: getPointsTransactions, enabled: authed });
 
   const data = loyaltyQ.data;
   const style = data?.tier ? (TIER_STYLE[data.tier.name] ?? DEFAULT_STYLE) : DEFAULT_STYLE;
@@ -70,7 +74,7 @@ export default function LoyaltyPage() {
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
 
-      {loyaltyQ.isLoading ? (
+      {!authed || loyaltyQ.isLoading ? (
         <Box p={4} style={{ gap: 12 }} flex flexDirection="column">
           <Skeleton style={{ height: 180, borderRadius: 16 }} />
           <Skeleton style={{ height: 80, borderRadius: 16 }} />

@@ -207,6 +207,7 @@ export default function BrandViewPage() {
         <Button
           variant="secondary"
           style={{ flex: 1 }}
+          disabled={followMut.isPending}
           loading={followMut.isPending}
           onClick={() => followMut.mutate()}
         >

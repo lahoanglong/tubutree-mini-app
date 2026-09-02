@@ -134,11 +134,21 @@ export default function ProductDetailPage() {
   const buyNowMutation = useMutation({
     mutationFn: (input: { variation: VariationDetail; qty: number }) =>
       addToCart(input.variation.id, input.qty).then((updatedCart) => ({ updatedCart, variationId: input.variation.id })),
-    onSuccess: ({ updatedCart, variationId }) => {
+    onSuccess: ({ updatedCart, variationId }, variables) => {
       queryClient.setQueryData(['cart'], updatedCart);
       haptic('medium');
       // Chỉ chọn đúng dòng vừa "Mua ngay" — tránh charge nhầm các món khác đã có sẵn trong giỏ.
       const line = updatedCart.items.find((l) => l.variationId === variationId);
+      // BE gộp theo variationId (increment atomic) — nếu variation này đã có sẵn trong giỏ,
+      // dòng vừa chọn sẽ nhiều hơn `qty` vừa bấm "Mua ngay". Báo rõ để tránh hiểu lầm thanh
+      // toán ít hơn/khác số lượng đã thấy trên PDP.
+      if (line && line.quantity > variables.qty) {
+        openSnackbar({
+          text: `Sản phẩm này đã có ${line.quantity - variables.qty} trong giỏ — thanh toán gộp ${line.quantity} sản phẩm`,
+          type: 'info',
+          duration: 3200,
+        });
+      }
       navigate('/checkout', line ? { state: { itemIds: [line.id] } } : undefined);
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -355,8 +365,16 @@ export default function ProductDetailPage() {
                 className="tubu-press"
                 onClick={() => {
                   haptic('light');
-                  if (navigator.clipboard) void navigator.clipboard.writeText(c.code);
-                  openSnackbar({ text: `Đã chép mã ${c.code} — dán ở giỏ hàng để áp dụng`, type: 'success', duration: 2200 });
+                  if (!navigator.clipboard) {
+                    openSnackbar({ text: 'Trình duyệt không hỗ trợ sao chép.', type: 'error', duration: 2200 });
+                    return;
+                  }
+                  navigator.clipboard
+                    .writeText(c.code)
+                    .then(() =>
+                      openSnackbar({ text: `Đã chép mã ${c.code} — dán ở giỏ hàng để áp dụng`, type: 'success', duration: 2200 }),
+                    )
+                    .catch(() => openSnackbar({ text: 'Không thể sao chép mã. Vui lòng thử lại.', type: 'error', duration: 2200 }));
                 }}
                 style={{
                   flex: '0 0 auto',

@@ -176,6 +176,7 @@ function PendingCard({
         <Button
           size="small"
           prefixIcon={<Check size={15} />}
+          disabled={loading}
           loading={loading}
           onClick={onApprove}
           style={{ flex: 1 }}
@@ -186,6 +187,7 @@ function PendingCard({
           size="small"
           variant="secondary"
           prefixIcon={<X size={15} />}
+          disabled={loading}
           loading={loading}
           style={{ flex: 1, color: 'var(--danger)' }}
           onClick={onReject}
@@ -267,6 +269,7 @@ function ReportCard({
             size="small"
             variant="secondary"
             prefixIcon={<EyeOff size={15} />}
+            disabled={hideLoading}
             loading={hideLoading}
             style={{ flex: 1, color: 'var(--danger)' }}
             onClick={onHide}
@@ -274,7 +277,7 @@ function ReportCard({
             {vi.community.hideContent}
           </Button>
         )}
-        <Button size="small" prefixIcon={<Check size={15} />} loading={resolveLoading} style={{ flex: 1 }} onClick={onResolve}>
+        <Button size="small" prefixIcon={<Check size={15} />} disabled={resolveLoading} loading={resolveLoading} style={{ flex: 1 }} onClick={onResolve}>
           {vi.community.resolve}
         </Button>
       </Box>
@@ -444,6 +447,7 @@ function AdminEventCard({ event, onDone }: { event: CommunityEvent; onDone: () =
         size="small"
         variant="secondary"
         fullWidth
+        disabled={closeM.isPending}
         loading={closeM.isPending}
         style={{ marginTop: 8, color: 'var(--danger)' }}
         onClick={() => closeM.mutate()}

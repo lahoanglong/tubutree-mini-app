@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { Store, Hourglass, Save, AlertTriangle, ClipboardList, Plane, Gift, Award, X } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -22,6 +22,7 @@ import { getErrorMessage } from '../services/api';
 import { formatVnd, ORDER_STATUS_LABEL } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
+import { newIdempotencyKey } from '../utils/idempotency';
 import { ImageUpload } from '../components/image-upload';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -277,6 +278,8 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
 
   /** Đặt nhanh: dán "SKU<sep>SốLượng" mỗi dòng (sep = tab/phẩy/khoảng trắng) → khớp bảng giá. */
   const applyPaste = () => {
+    // Bảng giá chưa tải xong → bySku rỗng, mọi SKU hợp lệ sẽ bị báo nhầm "không khớp". Chặn sớm.
+    if (priceQ.isLoading) return;
     const list = priceQ.data ?? [];
     const bySku = new Map(list.map((r) => [r.sku.toUpperCase(), r.variationId]));
     const next: Record<string, number> = { ...qty };
@@ -322,15 +325,21 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
     return cart.reduce((s, [id, n]) => s + (map.get(id) ?? 0) * n, 0);
   }, [cart, priceQ.data]);
 
+  // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lần đặt đơn (double-tap/timeout mạng) →
+  // BE không tạo đơn công nợ đôi; regenerate sau khi đặt thành công (đơn sau là đơn mới, mirror wallet.withdraw).
+  const orderKey = useRef(newIdempotencyKey());
   const place = useMutation({
     mutationFn: (method: 'CREDIT' | 'PREPAID') =>
       placeDealerOrder(
         cart.map(([variationId, quantity]) => ({ variationId, quantity })),
         method,
+        undefined,
+        orderKey.current,
       ),
     onSuccess: () => {
       haptic('medium');
       openSnackbar({ text: 'Đã tạo đơn đại lý!', type: 'success' });
+      orderKey.current = newIdempotencyKey();
       setQty({});
       void qc.invalidateQueries({ queryKey: ['dealer-orders'] });
       void qc.invalidateQueries({ queryKey: ['dealer-me'] });
@@ -394,8 +403,9 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
               <Box
                 role="button"
                 aria-label="Xoá mẫu đơn"
-                onClick={() => delTpl.mutate(t.id)}
-                style={{ display: 'flex', alignItems: 'center' }}
+                aria-disabled={delTpl.isPending}
+                onClick={() => { if (!delTpl.isPending) delTpl.mutate(t.id); }}
+                style={{ display: 'flex', alignItems: 'center', opacity: delTpl.isPending ? 0.5 : 1 }}
               >
                 <X size={13} color="var(--danger)" strokeWidth={2.5} />
               </Box>
@@ -438,6 +448,11 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
             onChange={(e) => setPasteText(e.target.value)}
             rows={5}
           />
+          {priceQ.isLoading && (
+            <Text size="xSmall" style={{ marginTop: 8, color: 'var(--neutral-400)' }}>
+              Đang tải bảng giá, vui lòng đợi trước khi dán đơn…
+            </Text>
+          )}
           {pasteResult && (
             <Text size="xSmall" style={{ marginTop: 8, color: pasteResult.unmatched.length ? 'var(--clay-700)' : 'var(--leaf-700)' }}>
               ✓ Khớp {pasteResult.matched} dòng
@@ -449,7 +464,7 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
               Đóng
             </Button>
             <Button
-              disabled={!pasteText.trim()}
+              disabled={!pasteText.trim() || priceQ.isLoading}
               onClick={applyPaste}
               style={{ flex: 1, background: 'var(--dealer-ink)' }}
             >

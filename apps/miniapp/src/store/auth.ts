@@ -156,8 +156,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     setAccessToken(null);
     await clearRefresh();
     set({ user: null, status: 'idle' });
+    // Xoá sạch cache React Query (ví, lương, hoa hồng...) — không để lộ dữ liệu tài
+    // chính của user vừa đăng xuất cho user kế tiếp trên cùng thiết bị dùng chung
+    // (VD tablet chấm công cửa hàng). Đăng ký qua setLogoutCleanup() ở app.tsx để
+    // tránh import vòng (store/auth.ts <-> components/app.tsx).
+    onLogoutCleanup?.();
   },
 }));
+
+let onLogoutCleanup: (() => void) | null = null;
+/** Đăng ký hàm dọn dẹp (vd queryClient.clear()) chạy sau khi logout thành công. */
+export function setLogoutCleanup(fn: () => void): void {
+  onLogoutCleanup = fn;
+}
 
 // Khi API gặp 401 → tự refresh bằng token đã lưu, trả access token mới cho interceptor.
 setUnauthorizedHandler(async () => {

@@ -219,6 +219,7 @@ export default function PostDetailPage() {
           <Button
             size="small"
             variant="secondary"
+            disabled={pinMut.isPending}
             loading={pinMut.isPending}
             prefixIcon={<Pin size={14} />}
             onClick={() => {
@@ -380,14 +381,18 @@ export default function PostDetailPage() {
         <Box flex alignItems="center" style={{ gap: 20, marginTop: 14 }}>
           <Box
             role="button"
+            aria-disabled={react.isPending}
             className="tubu-press"
             onClick={() => {
+              // react.mutate() không có ô "loading"/"disabled" như Button — chặn double-tap thủ công,
+              // nếu không mỗi lần chạm nhanh sẽ bắn nhiều request toggle like/unlike chồng nhau.
+              if (react.isPending) return;
               haptic('light');
               react.mutate();
             }}
             flex
             alignItems="center"
-            style={{ gap: 6 }}
+            style={{ gap: 6, opacity: react.isPending ? 0.6 : 1 }}
           >
             <Text style={{ color: p.liked ? 'var(--leaf-700)' : 'var(--neutral-500)' }}>
               {p.liked ? '💚' : '🤍'} {p.likeCount}
@@ -527,7 +532,7 @@ export default function PostDetailPage() {
             <Button fullWidth variant="secondary" onClick={() => setConfirmDelete(false)}>
               {vi.common.cancel}
             </Button>
-            <Button fullWidth loading={deleteMut.isPending} onClick={() => deleteMut.mutate()} style={{ background: 'var(--danger)' }}>
+            <Button fullWidth disabled={deleteMut.isPending} loading={deleteMut.isPending} onClick={() => deleteMut.mutate()} style={{ background: 'var(--danger)' }}>
               {vi.community.delete}
             </Button>
           </Box>
@@ -666,7 +671,7 @@ function CommentRow({
         {comment.body}
       </Text>
       {canMarkBest && !comment.isAccepted && (
-        <Button size="small" variant="secondary" loading={markingPending} onClick={onMarkBest} style={{ marginTop: 8, minHeight: 36 }}>
+        <Button size="small" variant="secondary" disabled={markingPending} loading={markingPending} onClick={onMarkBest} style={{ marginTop: 8, minHeight: 36 }}>
           {vi.community.markBest}
         </Button>
       )}

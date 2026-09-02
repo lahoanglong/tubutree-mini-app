@@ -237,7 +237,10 @@ function QuestSection() {
       <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginBottom: 10 }}>
         Đã nhận {data.totalEarnedXu.toLocaleString('vi-VN')} TubuXu
       </Text>
-      {data.quests.map((q) => (
+      {data.quests.map((q) => {
+        // Guard chia-0: goal=0 (nhiệm vụ đã đạt sẵn) → 0/0=NaN hoặc x/0=Infinity → width lỗi. Đạt ngay = 100%.
+        const pct = q.goal > 0 ? Math.min(100, Math.round((q.progress / q.goal) * 100)) : 100;
+        return (
         <Box key={q.code} style={{ padding: '8px 0', borderTop: '1px solid var(--neutral-100)' }}>
           <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8 }}>
             <Box style={{ flex: 1 }}>
@@ -263,10 +266,11 @@ function QuestSection() {
           </Box>
           {/* thanh tiến trình mảnh */}
           <Box style={{ height: 4, background: 'var(--neutral-100)', borderRadius: 'var(--radius-full)', marginTop: 6, overflow: 'hidden' }}>
-            <Box style={{ height: '100%', width: `${Math.round((q.progress / q.goal) * 100)}%`, background: q.done ? 'var(--leaf-600)' : 'var(--primary-400)' }} />
+            <Box style={{ height: '100%', width: `${pct}%`, background: q.done ? 'var(--leaf-600)' : 'var(--primary-400)' }} />
           </Box>
         </Box>
-      ))}
+        );
+      })}
     </Box>
   );
 }

@@ -53,6 +53,7 @@ function isSameVNDay(iso: string | null): boolean {
 
 export default function GamePage() {
   const status = useAuthStore((s) => s.status);
+  const login = useAuthStore((s) => s.login);
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -101,7 +102,7 @@ export default function GamePage() {
       openSnackbar({ text: parts.join(' · '), type: 'success' });
       refresh();
     },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const dewM = useMutation({
     mutationFn: collectDew,
@@ -109,7 +110,7 @@ export default function GamePage() {
       openSnackbar({ text: `Hứng được +${r.seedsEarned}💧 từ giọt sương sáng 💦`, type: 'success' });
       refresh();
     },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const freezeM = useMutation({
     mutationFn: buyStreakFreeze,
@@ -117,7 +118,7 @@ export default function GamePage() {
       openSnackbar({ text: `Đã mua vé giữ lửa 🧊 (còn ${r.streakFreezes} vé)`, type: 'success' });
       refresh();
     },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const repairM = useMutation({
     mutationFn: repairStreak,
@@ -134,7 +135,7 @@ export default function GamePage() {
       openSnackbar({ text: `Đã tặng ${r.amount}💧 cho bạn 🎁`, type: 'success' });
       refresh();
     },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const handleSpin = async () => {
     try {
@@ -142,7 +143,7 @@ export default function GamePage() {
       refresh();
       return r;
     } catch (e) {
-      openSnackbar({ text: msg(e), type: 'error' });
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
       throw e;
     }
   };
@@ -160,7 +161,7 @@ export default function GamePage() {
       refresh();
       void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
     },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const buySeedsM = useMutation({
     mutationFn: () => buySeeds(BUY_SEEDS_PACK),
@@ -170,7 +171,7 @@ export default function GamePage() {
       void queryClient.invalidateQueries({ queryKey: ['coins'] });
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
     },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const buyTreeM = useMutation({
     mutationFn: buyTree,
@@ -181,7 +182,7 @@ export default function GamePage() {
       void queryClient.invalidateQueries({ queryKey: ['coins'] });
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
     },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const onPlotHarvest = (r: { harvested: boolean; progress: number; target: number; reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies } }) => {
     if (r.harvested) {
@@ -203,12 +204,12 @@ export default function GamePage() {
       void queryClient.invalidateQueries({ queryKey: ['coins'] });
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
     },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const waterPlotM = useMutation({
     mutationFn: (plotId: string) => waterPlot(plotId, 20),
     onSuccess: onPlotHarvest,
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const claimPassM = useMutation({
     mutationFn: ({ tier, track }: { tier: number; track: 'free' | 'premium' }) => claimSeasonPass(tier, track),
@@ -220,7 +221,7 @@ export default function GamePage() {
       void queryClient.invalidateQueries({ queryKey: ['coins'] });
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
     },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const answerM = useMutation({
     mutationFn: ({ id, choice }: { id: string; choice: number }) => answerQuiz(id, choice),
@@ -230,14 +231,15 @@ export default function GamePage() {
       void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
       void queryClient.invalidateQueries({ queryKey: ['me'] });
     },
-    onError: (e: unknown) => openSnackbar({ text: msg(e), type: 'error' }),
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const nextQuiz = () => {
     if (reveal) setAnsweredIds((prev) => new Set(prev).add(reveal.quizId));
     setReveal(null);
   };
 
-  if (isLoading || !authed) {
+  // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
+  if (status === 'loading' || (authed && isLoading)) {
     return (
       <Page className="page" style={{ background: 'var(--neutral-50)' }}>
         <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
@@ -245,6 +247,22 @@ export default function GamePage() {
           <Skeleton style={{ height: 56, borderRadius: 'var(--radius-lg)' }} />
           <Skeleton style={{ height: 56, borderRadius: 'var(--radius-lg)' }} />
           <Skeleton style={{ height: 140, borderRadius: 'var(--radius-lg)' }} />
+        </Box>
+      </Page>
+    );
+  }
+
+  // Chỉ hiện cổng đăng nhập khi đã chắc chắn user chưa đăng nhập (status settled, không authenticated)
+  // — trước đây gộp chung với nhánh loading khiến user đã logout/login lỗi bị kẹt mãi ở skeleton.
+  if (!authed) {
+    return (
+      <Page className="page">
+        <Box style={{ textAlign: 'center', padding: 48 }}>
+          <Text style={{ fontSize: 48 }}>🌱</Text>
+          <Text style={{ marginTop: 8 }}>{vi.community.loginToView}</Text>
+          <Button style={{ marginTop: 12, background: 'var(--leaf-600)' }} onClick={() => void login()}>
+            {vi.auth.loginCta}
+          </Button>
         </Box>
       </Page>
     );
@@ -353,7 +371,7 @@ export default function GamePage() {
           <Text size="small" bold>
             🔥 Điểm danh chuỗi {profile?.streakDays ?? 0} ngày
           </Text>
-          <Button size="small" loading={checkInM.isPending} onClick={() => checkInM.mutate()} style={{ background: 'var(--leaf-600)' }}>
+          <Button size="small" disabled={checkInM.isPending} loading={checkInM.isPending} onClick={() => checkInM.mutate()} style={{ background: 'var(--leaf-600)' }}>
             Điểm danh
           </Button>
         </Box>
@@ -395,6 +413,7 @@ export default function GamePage() {
             <Button
               size="small"
               variant="tertiary"
+              disabled={freezeM.isPending}
               loading={freezeM.isPending}
               onClick={() => freezeM.mutate()}
               style={{ color: 'var(--leaf-700)' }}
@@ -405,7 +424,7 @@ export default function GamePage() {
           <Button
             size="small"
             variant="secondary"
-            disabled={dewCollectedToday}
+            disabled={dewCollectedToday || dewM.isPending}
             loading={dewM.isPending}
             onClick={() => dewM.mutate()}
           >
@@ -461,14 +480,14 @@ export default function GamePage() {
       )}
 
       <Box p={3}>
-        <Button fullWidth loading={waterM.isPending} variant="secondary" onClick={() => waterM.mutate()}>
+        <Button fullWidth disabled={waterM.isPending} loading={waterM.isPending} variant="secondary" onClick={() => waterM.mutate()}>
           🚿 Tưới cây (20💧)
         </Button>
         <Box flex style={{ gap: 8, marginTop: 8 }}>
-          <Button style={{ flex: 1 }} size="small" loading={buySeedsM.isPending} onClick={() => buySeedsM.mutate()}>
+          <Button style={{ flex: 1 }} size="small" disabled={buySeedsM.isPending} loading={buySeedsM.isPending} onClick={() => buySeedsM.mutate()}>
             💧 Mua {BUY_SEEDS_PACK} nước
           </Button>
-          <Button style={{ flex: 1 }} size="small" loading={buyTreeM.isPending} onClick={() => buyTreeM.mutate()}>
+          <Button style={{ flex: 1 }} size="small" disabled={buyTreeM.isPending} loading={buyTreeM.isPending} onClick={() => buyTreeM.mutate()}>
             🌳 Mua cây thật
           </Button>
         </Box>
@@ -506,6 +525,7 @@ export default function GamePage() {
                     <Button
                       size="small"
                       variant="secondary"
+                      disabled={waterPlotM.isPending && waterPlotM.variables === p.id}
                       loading={waterPlotM.isPending && waterPlotM.variables === p.id}
                       onClick={() => p.id && waterPlotM.mutate(p.id)}
                     >
@@ -523,6 +543,7 @@ export default function GamePage() {
               <Button
                 style={{ flex: 1 }}
                 size="small"
+                disabled={unlockM.isPending}
                 loading={unlockM.isPending && unlockM.variables === 'SEEDS'}
                 onClick={() => unlockM.mutate('SEEDS')}
               >
@@ -532,6 +553,7 @@ export default function GamePage() {
                 style={{ flex: 1 }}
                 size="small"
                 variant="secondary"
+                disabled={unlockM.isPending}
                 loading={unlockM.isPending && unlockM.variables === 'XU'}
                 onClick={() => unlockM.mutate('XU')}
               >
@@ -859,7 +881,9 @@ export default function GamePage() {
         {missions && missions.length > 0 ? (
           missions.map((m: MissionItem) => {
             const defaultGoal = { CHECKIN_7: 7, REVIEW_3: 3, INVITE_3: 3, FIRST_ORDER: 1 }[m.code] ?? 1;
-            const goal = m.goal && m.goal > 1 ? m.goal : defaultGoal;
+            // BE Mission.goal mặc định = 1 (schema @default(1)) — "> 1" từng loại bỏ nhầm mọi
+            // mission cấu hình goal=1 hợp lệ và âm thầm thay bằng default cứng của FE.
+            const goal = m.goal && m.goal > 0 ? m.goal : defaultGoal;
             const rawProgress = m.code === 'CHECKIN_7'
               ? Math.min(goal, profile?.streakDays ?? m.progress ?? 0)
               : (m.progress ?? 0);
@@ -1147,9 +1171,4 @@ function rarityColor(r: 'COMMON' | 'RARE' | 'LEGENDARY'): string {
 
 function rarityLabel(r: 'COMMON' | 'RARE' | 'LEGENDARY'): string {
   return r === 'LEGENDARY' ? '🌟 Huyền thoại' : r === 'RARE' ? '💎 Hiếm' : '🍃 Thường';
-}
-
-function msg(e: unknown): string {
-  const ax = e as { response?: { data?: { message?: string } }; message?: string };
-  return ax?.response?.data?.message ?? ax?.message ?? 'Có lỗi xảy ra';
 }

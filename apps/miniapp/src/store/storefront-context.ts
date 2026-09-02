@@ -5,12 +5,16 @@ const KEY = 'tubu_sf_ctx';
  *  'brand' = trang nhãn (/brand/:slug, chỉ điều hướng — KHÔNG gửi storefrontSlug để tránh ô nhiễm analytics CTV). */
 type Ctx = { slug: string | null; referralCode: string | null; kind: 'ctv' | 'brand' };
 
+const DEFAULT_CTX: Ctx = { slug: null, referralCode: null, kind: 'ctv' };
+
 function load(): Ctx {
   try {
     const raw = sessionStorage.getItem(KEY);
-    if (raw) return { kind: 'ctv', ...(JSON.parse(raw) as Partial<Ctx>) } as Ctx;
+    // Merge trên DEFAULT_CTX đầy đủ (không chỉ `kind`) — nếu JSON lưu là {} / thiếu field /
+    // null (payload cũ/hỏng), slug/referralCode phải rơi về null theo đúng kiểu Ctx, không phải undefined.
+    if (raw) return { ...DEFAULT_CTX, ...(JSON.parse(raw) as Partial<Ctx>) };
   } catch { /* ignore */ }
-  return { slug: null, referralCode: null, kind: 'ctv' };
+  return { ...DEFAULT_CTX };
 }
 
 interface StorefrontCtxState extends Ctx {

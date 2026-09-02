@@ -206,7 +206,7 @@ function PayrollSection() {
               <Button size="small" variant="secondary" onClick={() => setQrRow(row)}>QR chuyển</Button>
             )}
             {row.month.status === 'OPEN' && (
-              <Button size="small" variant="secondary" loading={finalizeM.isPending} onClick={() => finalizeM.mutate(row)}>Chốt</Button>
+              <Button size="small" variant="secondary" loading={finalizeM.isPending} disabled={finalizeM.isPending} onClick={() => finalizeM.mutate(row)}>Chốt</Button>
             )}
             {row.month.status !== 'PAID' && (
               <Button size="small" onClick={() => { setPayRow(row); setProof(''); setNote(''); }}>Đã chuyển</Button>
@@ -426,6 +426,7 @@ function StaffSection() {
                   variant="tertiary"
                   prefixIcon={<Trash2 size={15} />}
                   style={{ color: 'var(--danger)' }}
+                  disabled={revokeM.isPending}
                   onClick={() => revokeM.mutate(m.phone as string)}
                 >
                   Thu hồi
@@ -454,7 +455,7 @@ function StaffSection() {
                   <Text size="small">
                     {p.phone} · {p.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
                   </Text>
-                  <Button size="small" variant="tertiary" onClick={() => revokeM.mutate(p.phone)}>
+                  <Button size="small" variant="tertiary" disabled={revokeM.isPending} onClick={() => revokeM.mutate(p.phone)}>
                     Huỷ
                   </Button>
                 </Box>
@@ -768,7 +769,7 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
             <Text size="small">
               {t.name} · {minToHHMM(t.startMin)}–{minToHHMM(t.endMin)}
             </Text>
-            <Button size="small" variant="tertiary" style={{ color: 'var(--danger)' }} onClick={() => delM.mutate(t.id)}>
+            <Button size="small" variant="tertiary" style={{ color: 'var(--danger)' }} disabled={delM.isPending} onClick={() => delM.mutate(t.id)}>
               <Trash2 size={15} />
             </Button>
           </Box>
@@ -793,6 +794,17 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
       </Box>
     </Sheet>
   );
+}
+
+/**
+ * Escape 1 field CSV chứa dữ liệu do người dùng nhập (tên, SĐT...):
+ * - Nhân đôi dấu " để không vỡ cấu trúc cột (VD tên có dấu ngoặc kép).
+ * - Nếu bắt đầu bằng =, +, -, @ thì thêm ' phía trước để Excel/Sheets
+ *   không hiểu nhầm là công thức (CSV/formula injection).
+ */
+function csvField(value: string): string {
+  const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  return `"${safe.replace(/"/g, '""')}"`;
 }
 
 function RefillAdminSection() {
@@ -828,18 +840,20 @@ function RefillAdminSection() {
   }) ?? [];
 
   const exportCsv = () => {
-    if (!pendingQ.data || pendingQ.data.length === 0) {
+    // Xuất đúng những gì admin đang thấy trên màn hình (đã lọc theo ô tìm kiếm),
+    // KHÔNG xuất toàn bộ pendingQ.data — kẻo CSV lệch với danh sách đang lọc.
+    if (filteredItems.length === 0) {
       openSnackbar({ text: 'Không có dữ liệu để xuất CSV', type: 'info' });
       return;
     }
     const headers = ['ID', 'Khách hàng', 'SĐT', 'Số vỏ chai', 'Số nước', 'Thời gian'];
-    const rows = pendingQ.data.map((r: PendingRefillItem) => [
+    const rows = filteredItems.map((r: PendingRefillItem) => [
       r.id,
-      `"${r.user.fullName ?? ''}"`,
-      `"${r.user.phone ?? ''}"`,
+      csvField(r.user.fullName ?? ''),
+      csvField(r.user.phone ?? ''),
       r.quantity,
       r.seedsAwarded,
-      `"${new Date(r.createdAt).toLocaleString('vi-VN')}"`,
+      csvField(new Date(r.createdAt).toLocaleString('vi-VN')),
     ]);
     const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -893,6 +907,7 @@ function RefillAdminSection() {
                 variant="tertiary"
                 style={{ color: 'var(--leaf-700)' }}
                 loading={approveM.isPending}
+                disabled={approveM.isPending || rejectM.isPending}
                 onClick={() => approveM.mutate(r.id)}
               >
                 <Check size={16} /> Duyệt
@@ -902,6 +917,7 @@ function RefillAdminSection() {
                 variant="tertiary"
                 style={{ color: 'var(--danger)' }}
                 loading={rejectM.isPending}
+                disabled={approveM.isPending || rejectM.isPending}
                 onClick={() => rejectM.mutate(r.id)}
               >
                 <X size={16} /> Từ chối

@@ -8,7 +8,7 @@ import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
 import BackButton from './back-button';
 import { OnboardingGate } from './onboarding';
-import { useAuthStore } from '../store/auth';
+import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch } from '../services/affiliate-api';
 
@@ -92,6 +92,9 @@ const queryClient = new QueryClient({
     },
   },
 });
+// Xoá sạch cache (ví, lương, hoa hồng...) khi logout — tránh lộ dữ liệu tài chính của
+// user vừa đăng xuất cho user kế tiếp trên cùng thiết bị dùng chung (VD tablet chấm công).
+setLogoutCleanup(() => queryClient.clear());
 
 function RouteFallback() {
   return (

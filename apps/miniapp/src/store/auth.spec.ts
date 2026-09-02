@@ -22,7 +22,7 @@ import { getStorage, setStorage, removeStorage } from 'zmp-sdk/apis';
 import { loginGuest, loginZaloMiniApp, refreshTokens, setUnauthorizedHandler } from '../services/api';
 import { getZaloAccessToken } from '../services/zmp-bridge';
 import type { LoginResponse, AuthUser } from '@tubutree/shared-types';
-import { useAuthStore } from './auth';
+import { useAuthStore, setLogoutCleanup } from './auth';
 
 const mockedGetStorage = vi.mocked(getStorage);
 const mockedSetStorage = vi.mocked(setStorage);
@@ -144,5 +144,19 @@ describe('401 handler đăng ký lúc module load — dùng chung cơ chế refr
     const token2 = await handler();
     expect(token2).toBeNull();
     expect(useAuthStore.getState().status).toBe('idle');
+  });
+});
+
+describe('logout() — dọn sạch dữ liệu user cũ trên thiết bị dùng chung', () => {
+  it('gọi cleanup đã đăng ký qua setLogoutCleanup (vd queryClient.clear()) sau khi logout', async () => {
+    const cleanup = vi.fn();
+    setLogoutCleanup(cleanup);
+    useAuthStore.setState({ user: { id: 'u1' } as AuthUser, status: 'authenticated' });
+
+    await useAuthStore.getState().logout();
+
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(cleanup).toHaveBeenCalledTimes(1);
   });
 });

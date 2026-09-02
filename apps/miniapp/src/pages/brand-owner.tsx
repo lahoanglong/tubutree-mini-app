@@ -88,7 +88,9 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const delPromo = useMutation({
     mutationFn: (id: string) => deleteOwnedPromotion(id),
-    onSuccess: () => { if (editingId) resetPromoForm(); setConfirmDeleteId(null); void refresh(); },
+    // So khớp đúng promo VỪA XOÁ (biến mutate) với promo đang sửa dở — không phải "có đang sửa gì đó
+    // hay không" — kẻo xoá promo B trong lúc đang sửa dở promo A lại làm mất luôn form đang sửa của A.
+    onSuccess: (_data, deletedId) => { if (editingId === deletedId) resetPromoForm(); setConfirmDeleteId(null); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const startEdit = (p: OwnedBrand['promotions'][number]) => {

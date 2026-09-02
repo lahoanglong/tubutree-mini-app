@@ -111,6 +111,25 @@ function TodayCard() {
   const [backOpen, setBackOpen] = useState(false);
   const [backTime, setBackTime] = useState('12:00');
 
+  // Neo theo ngày CHECKIN thật (không phải "hôm nay") — ca qua đêm (checkin 23:30 hôm trước,
+  // sửa giờ sau nửa đêm) nếu neo theo hôm nay sẽ ra checkout trước cả checkin. Ưu tiên thử
+  // CÙNG ngày checkin trước; nếu giờ chọn <= giờ checkin (VD checkin 23:30, chọn 00:15 — ý người
+  // dùng là NGÀY HÔM SAU) thì tự chuyển sang ngày kế tiếp. Sau đó validate checkout > checkin
+  // và checkout <= hiện tại.
+  const backoutCandidateISO = (() => {
+    if (!open || !/^\d{1,2}:\d{2}$/.test(backTime)) return null;
+    const checkinMs = new Date(open.checkinAt).getTime();
+    const checkinDay = vnDateKey(new Date(open.checkinAt));
+    const sameDayISO = vnDateTimeISO(checkinDay, backTime);
+    if (new Date(sameDayISO).getTime() > checkinMs) return sameDayISO;
+    return vnDateTimeISO(addDaysKey(checkinDay, 1), backTime);
+  })();
+  const backoutInvalid =
+    !open ||
+    !backoutCandidateISO ||
+    new Date(backoutCandidateISO).getTime() <= new Date(open.checkinAt).getTime() ||
+    new Date(backoutCandidateISO).getTime() > Date.now();
+
   // Heartbeat mỗi 3 phút khi đang trong ca — rớt vùng thì backend tự checkout.
   const openId = open?.id ?? null;
   const hbRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -220,11 +239,16 @@ function TodayCard() {
             Chọn giờ bạn đã thực sự rời đi (chỉ được chọn giờ trong quá khứ, sau giờ checkin).
           </Text>
           <TimeInput value={backTime} onChange={setBackTime} />
+          {backoutInvalid && open && /^\d{1,2}:\d{2}$/.test(backTime) && (
+            <Text size="xSmall" style={{ color: 'var(--danger)' }}>
+              Giờ đã chọn phải sau giờ checkin ({isoToVnHHMM(open.checkinAt)}) và không được ở tương lai.
+            </Text>
+          )}
           <Button
             fullWidth
             loading={checkoutM.isPending}
-            disabled={!/^\d{1,2}:\d{2}$/.test(backTime)}
-            onClick={() => checkoutM.mutate(vnDateTimeISO(vnDateKey(new Date()), backTime))}
+            disabled={backoutInvalid}
+            onClick={() => backoutCandidateISO && checkoutM.mutate(backoutCandidateISO)}
           >
             Xác nhận checkout
           </Button>
@@ -532,6 +556,7 @@ function StaffHub() {
                           size="small"
                           variant="tertiary"
                           style={{ color: 'var(--danger)' }}
+                          disabled={delM.isPending}
                           onClick={() => delM.mutate(s.id)}
                         >
                           <Trash2 size={15} />

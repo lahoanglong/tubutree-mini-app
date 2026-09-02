@@ -16,6 +16,7 @@ import {
 } from '../services/affiliate-api';
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
+import { useAuthStore } from '../store/auth';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
@@ -32,9 +33,12 @@ const COMMISSION_META: Record<CommissionStatus, { label: string; color: string; 
 };
 
 export default function AffiliatePage() {
-  const meQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe });
+  // /affiliate/me cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
+  // (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (cùng bug đã fix ở wallet.tsx).
+  const authed = useAuthStore((s) => s.status === 'authenticated');
+  const meQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe, enabled: authed });
 
-  if (meQ.isLoading) {
+  if (!authed || meQ.isLoading) {
     return (
       <Page className="page" style={{ background: 'var(--neutral-50)' }}>
         <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
@@ -115,6 +119,7 @@ function RegisterGate() {
         <Button
           fullWidth
           loading={reg.isPending}
+          disabled={reg.isPending}
           onClick={() => reg.mutate()}
           style={{ marginTop: 24, background: 'var(--primary-600)' }}
         >
@@ -339,7 +344,7 @@ function Dashboard() {
             size="small"
             bold
             style={{ color: 'var(--primary-700)' }}
-            onClick={() => createLink.mutate()}
+            onClick={() => !createLink.isPending && createLink.mutate()}
           >
             + Tạo link
           </Text>
@@ -523,10 +528,16 @@ function Dashboard() {
         {withdrawing && (
           <WithdrawForm
             max={d?.withdrawableCommission ?? 0}
+            // dashQ lỗi → max tạm =0 (không phải số dư thật) — đừng chặn theo max chưa xác thực,
+            // để BE tự validate số dư (đồng bộ với nút "Rút hoa hồng" phía trên vẫn cho mở sheet).
+            knownMax={!dashQ.isError}
             onDone={() => {
               setWithdrawing(false);
               void qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-commissions'] });
+              // Rút về WALLET_BALANCE cộng thẳng vào Ví Tubu — invalidate để trang Ví không
+              // hiển thị số dư cũ (cache stale) nếu user chuyển sang đó ngay sau khi rút.
+              void qc.invalidateQueries({ queryKey: ['wallet'] });
             }}
           />
         )}
@@ -540,7 +551,15 @@ function Dashboard() {
   );
 }
 
-function WithdrawForm({ max, onDone }: { max: number; onDone: () => void }) {
+function WithdrawForm({
+  max,
+  knownMax,
+  onDone,
+}: {
+  max: number;
+  knownMax: boolean;
+  onDone: () => void;
+}) {
   const { openSnackbar } = useSnackbar();
   const [method, setMethod] = useState<'BANK' | 'WALLET_BALANCE'>('WALLET_BALANCE');
   const [amount, setAmount] = useState(String(max));
@@ -561,7 +580,15 @@ function WithdrawForm({ max, onDone }: { max: number; onDone: () => void }) {
   const bankValid =
     method !== 'BANK' ||
     (bank.bankName.trim() && bank.accountNumber.trim().length >= 6 && bank.accountName.trim());
-  const valid = amountNum > 0 && amountNum <= max && (method !== 'BANK' || amountNum >= 50_000) && bankValid;
+  // knownMax=false khi dashboard lỗi (max truyền vào tạm =0, KHÔNG phải số dư thật) — bỏ qua so
+  // sánh với max để không khoá chết nút Gửi; BE vẫn tự validate số dư thật khi submit.
+  // !mut.isPending chặn double-submit (Button.loading của zmp-ui KHÔNG tự set thuộc tính disabled).
+  const valid =
+    amountNum > 0 &&
+    (!knownMax || amountNum <= max) &&
+    (method !== 'BANK' || amountNum >= 50_000) &&
+    bankValid &&
+    !mut.isPending;
 
   return (
     <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
@@ -591,7 +618,7 @@ function WithdrawForm({ max, onDone }: { max: number; onDone: () => void }) {
         onChange={(e) => setAmount(e.target.value)}
       />
       <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-        Tối đa {formatVnd(max)}
+        {knownMax ? `Tối đa ${formatVnd(max)}` : 'Số dư sẽ được máy chủ xác thực khi gửi yêu cầu.'}
       </Text>
 
       {method === 'BANK' && (

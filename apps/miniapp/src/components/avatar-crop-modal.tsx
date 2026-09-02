@@ -35,6 +35,13 @@ export function AvatarCropModal({
 
   // Touch & Mouse Drag handlers
   const handlePointerDown = (e: React.PointerEvent) => {
+    // Bắt pointer để tiếp tục nhận move/up ngay cả khi ngón tay kéo ra khỏi khung tròn 240px —
+    // nếu không, onPointerLeave sẽ bắn ra giữa chừng và dừng theo dõi kéo sớm.
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // một số môi trường/loại pointer không hỗ trợ — bỏ qua, vẫn còn fallback onPointerLeave
+    }
     setDragging(true);
     setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
   };
@@ -158,8 +165,12 @@ export function AvatarCropModal({
               transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
               maxWidth: 'none',
               maxHeight: 'none',
+              // width/height 100% + cover: khớp với công thức "cover" dùng khi cắt bằng Canvas
+              // bên dưới (handleConfirm) — trước đây height:'auto' khiến ảnh ngang (aspect>1)
+              // không phủ kín chiều cao khung tròn, làm vùng cắt xuất ra khác vùng user thấy.
               width: '100%',
-              height: 'auto',
+              height: '100%',
+              objectFit: 'cover',
               pointerEvents: 'none',
             }}
           />

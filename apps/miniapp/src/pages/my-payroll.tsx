@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Wallet, Landmark, ChevronDown } from 'lucide-react';
-import { getMyPayroll, updateBank, type PayrollStatus, type PayrollDay } from '../services/payroll-api';
+import { getMyPayroll, updateBank, type PayrollStatus, type PayrollDay, type StaffProfile } from '../services/payroll-api';
 import { getHistory, type SessionHistory } from '../services/attendance-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -82,6 +82,15 @@ function MyPayrollHub() {
       }));
   }, [payQ.data]);
 
+  // Hồ sơ ngân hàng không đổi theo tháng — giữ lại giá trị lần fetch THÀNH CÔNG gần nhất.
+  // Tránh: đổi tháng → payQ.data tạm về undefined trong lúc refetch → nếu bấm "Thông tin nhận
+  // lương" đúng lúc đó, openBank() sẽ nạp field RỖNG vào form; bấm "Lưu" sẽ gửi chuỗi rỗng và
+  // updateBank() ở BE (prisma upsert `update: dto`) ĐÈ mất bankBin/accountNo/accountName đã lưu.
+  const [profileCache, setProfileCache] = useState<StaffProfile | null>(null);
+  useEffect(() => {
+    if (payQ.data) setProfileCache(payQ.data.profile);
+  }, [payQ.data]);
+
   const [bankOpen, setBankOpen] = useState(false);
   const [bin, setBin] = useState('');
   const [accNo, setAccNo] = useState('');
@@ -89,11 +98,10 @@ function MyPayrollHub() {
   const [qr, setQr] = useState('');
 
   const openBank = () => {
-    const p = payQ.data?.profile;
-    setBin(p?.bankBin ?? '');
-    setAccNo(p?.bankAccountNo ?? '');
-    setAccName(p?.bankAccountName ?? '');
-    setQr(p?.qrImageUrl ?? '');
+    setBin(profileCache?.bankBin ?? '');
+    setAccNo(profileCache?.bankAccountNo ?? '');
+    setAccName(profileCache?.bankAccountName ?? '');
+    setQr(profileCache?.qrImageUrl ?? '');
     setBankOpen(true);
   };
 
@@ -219,7 +227,7 @@ function MyPayrollHub() {
           <Input label="Tên chủ tài khoản" value={accName} onChange={(e) => setAccName(e.target.value)} />
           <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Hoặc tải ảnh QR nhận tiền (ưu tiên nếu có):</Text>
           <ImageUpload label="QR nhận lương" value={qr} onChange={setQr} />
-          <Button fullWidth loading={bankM.isPending} onClick={() => bankM.mutate()}>Lưu</Button>
+          <Button fullWidth loading={bankM.isPending} disabled={bankM.isPending} onClick={() => bankM.mutate()}>Lưu</Button>
         </Box>
       </Sheet>
     </Page>

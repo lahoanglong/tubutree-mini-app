@@ -24,10 +24,19 @@ export default function BankPaymentPage() {
 
   const copy = (text: string, label: string) => {
     haptic('light');
-    if (navigator.clipboard) {
-      void navigator.clipboard.writeText(text);
-      openSnackbar({ text: `Đã copy ${label}`, type: 'success', position: 'top' });
+    if (!navigator.clipboard) {
+      openSnackbar({ text: 'Trình duyệt không hỗ trợ sao chép.', type: 'error', position: 'top' });
+      return;
     }
+    // Chỉ báo "Đã copy" SAU KHI writeText() thật sự thành công — trước đây báo thành công
+    // ngay lập tức không chờ Promise, nếu ghi clipboard thất bại (thiếu quyền trong webview
+    // Zalo) user vẫn thấy "Đã copy" rồi dán nhầm nội dung cũ khi chuyển khoản.
+    navigator.clipboard
+      .writeText(text)
+      .then(() => openSnackbar({ text: `Đã copy ${label}`, type: 'success', position: 'top' }))
+      .catch(() =>
+        openSnackbar({ text: `Không thể copy ${label}. Vui lòng copy thủ công.`, type: 'error', position: 'top' }),
+      );
   };
 
   const handleCheckPayment = async () => {

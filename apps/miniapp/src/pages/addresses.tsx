@@ -45,7 +45,14 @@ function validateGeo(g: GeoValue): { province?: string; ward?: string } {
 export default function AddressesPage() {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
-  const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses });
+  const authStatus = useAuthStore((s) => s.status);
+  // Guard auth: tránh gọi /me/addresses khi chưa silent-login xong (mở nhanh từ Hồ sơ ngay
+  // lúc app vừa mở → 401 hiện lỗi trong khi chỉ cần chờ vài trăm ms là có phiên).
+  const addrQ = useQuery({
+    queryKey: ['addresses'],
+    queryFn: getAddresses,
+    enabled: authStatus === 'authenticated',
+  });
 
   const [editing, setEditing] = useState<AddressDTO | 'new' | null>(null);
   const [confirmDel, setConfirmDel] = useState<AddressDTO | null>(null);
@@ -72,7 +79,7 @@ export default function AddressesPage() {
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
 
-      {addrQ.isLoading ? (
+      {authStatus === 'loading' || addrQ.isLoading ? (
         <Box p={4} style={{ gap: 10 }} flex flexDirection="column">
           <Skeleton style={{ height: 84, borderRadius: 12 }} />
           <Skeleton style={{ height: 84, borderRadius: 12 }} />

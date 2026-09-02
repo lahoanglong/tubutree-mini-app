@@ -28,11 +28,15 @@ export function ContentKitSheet({
     enabled: visible,
   });
 
-  const copy = (text: string) => {
-    if (navigator.clipboard) {
-      void navigator.clipboard.writeText(text);
+  const copy = async (text: string) => {
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(text);
       haptic('light');
       openSnackbar({ text: vi.contentKit.copied, type: 'success' });
+    } catch {
+      // Quyền clipboard bị từ chối hoặc lỗi khác — báo cho user thay vì hiện toast thành công giả.
+      openSnackbar({ text: vi.errors.generic, type: 'error' });
     }
   };
 
