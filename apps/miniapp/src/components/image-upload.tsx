@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Box, Text, Input } from 'zmp-ui';
+import { Camera } from 'lucide-react';
 import { haptic } from '../utils/haptic';
 
 const CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string | undefined;
@@ -406,7 +407,7 @@ export function MultiImageUpload({
               gap: 2,
             }}
           >
-            <Text style={{ fontSize: 20, lineHeight: 1 }}>📷</Text>
+            <Camera size={22} color="var(--leaf-700)" strokeWidth={1.8} />
             <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', fontSize: 9.5 }}>
               {uploading ? 'Đang tải…' : 'Chạm để tải'}
             </Text>

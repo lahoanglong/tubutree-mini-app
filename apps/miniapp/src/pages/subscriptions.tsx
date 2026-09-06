@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Sheet, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Sprout } from 'lucide-react';
 import {
   getSubscriptions,
   setSubscriptionStatus,
@@ -80,7 +81,7 @@ export default function SubscriptionsPage() {
                   {s.thumbnail ? (
                     <img src={s.thumbnail} alt={s.productName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <Text style={{ fontSize: 24 }}>🌿</Text>
+                    <Sprout size={24} color="var(--leaf-600)" strokeWidth={1.8} />
                   )}
                 </Box>
                 <Box style={{ flex: 1 }}>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Page, Text, Button, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Repeat, ChevronRight, ShoppingCart, Share2 } from 'lucide-react';
+import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck } from 'lucide-react';
 import {
   fetchProduct,
   fetchRelated,
@@ -327,7 +327,7 @@ export default function ProductDetailPage() {
         {/* Badge freeship — tín hiệu vận chuyển ở nơi ra quyết định mua (trước đây chỉ có ở giỏ). */}
         {configQ.data && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
-            <span aria-hidden style={{ fontSize: 14 }}>🚚</span>
+            <Truck size={15} color="var(--leaf-700)" strokeWidth={2} aria-hidden />
             <Text size="xSmall" style={{ color: 'var(--leaf-700)', fontWeight: 600 }}>
               Miễn phí vận chuyển cho đơn từ {formatVnd(configQ.data.freeshipThreshold)}
             </Text>
@@ -356,7 +356,7 @@ export default function ProductDetailPage() {
 
         {/* Voucher khả dụng — chạm để COPY mã (áp ở giỏ). Discovery ưu đãi ngay tại PDP. */}
         {(couponsQ.data?.length ?? 0) > 0 && (
-          <Box style={{ display: 'flex', gap: 8, marginTop: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <Box className="scroll-x" style={{ gap: 8, marginTop: 12 }}>
             {couponsQ.data!.slice(0, 6).map((c) => (
               <Box
                 key={c.code}
@@ -476,7 +476,9 @@ export default function ProductDetailPage() {
         onClick={() => groupBuyMutation.mutate(p.id)}
         style={{ background: 'var(--neutral-0)', display: 'flex', alignItems: 'center', gap: 12 }}
       >
-        <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', fontSize: 20 }}>🛒</Box>
+        <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
+          <Users size={20} color="var(--leaf-700)" strokeWidth={2} />
+        </Box>
         <Box style={{ flex: 1 }}>
           <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>Mở nhóm mua chung — giá tốt hơn</Text>
           <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
@@ -563,7 +565,8 @@ export default function ProductDetailPage() {
           <Box
             px={4}
             pb={4}
-            style={{ display: 'flex', gap: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+            className="scroll-x"
+            style={{ gap: 12 }}
           >
             {boughtTogether.data?.map((bp) => (
               <Box key={bp.id} style={{ flex: '0 0 150px' }}>
@@ -583,7 +586,8 @@ export default function ProductDetailPage() {
           <Box
             px={4}
             pb={4}
-            style={{ display: 'flex', gap: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+            className="scroll-x"
+            style={{ gap: 12 }}
           >
             {related.data?.map((rp) => (
               <Box key={rp.id} style={{ flex: '0 0 150px' }}>

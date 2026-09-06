@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import { Leaf, Check } from 'lucide-react';
 import { getProduct, formatVnd } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
 
@@ -36,12 +37,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         ← Về trang chủ
       </Link>
       <div className="mt-4 grid gap-8 md:grid-cols-2">
-        <div className="flex aspect-square items-center justify-center rounded-xl bg-leaf-50 text-7xl">
+        <div className="flex aspect-square items-center justify-center rounded-2xl bg-leaf-50 text-leaf-600 overflow-hidden shadow-sm border border-neutral-100">
           {product.thumbnail ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.thumbnail} alt={product.name} className="h-full w-full rounded-xl object-cover" />
+            <img src={product.thumbnail} alt={product.name} className="h-full w-full rounded-2xl object-cover" />
           ) : (
-            '🌿'
+            <Leaf className="h-20 w-20 text-leaf-600 stroke-[1.5]" />
           )}
         </div>
         <div>
@@ -53,8 +54,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           {product.certifications.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {product.certifications.map((c) => (
-                <span key={c} className="rounded bg-leaf-50 px-2 py-0.5 text-xs text-leaf-700">
-                  ✓ {c}
+                <span key={c} className="rounded-lg bg-leaf-50 px-2.5 py-1 text-xs text-leaf-800 border border-leaf-200 flex items-center gap-1 font-medium">
+                  <Check className="h-3.5 w-3.5 text-leaf-600" />
+                  <span>{c}</span>
                 </span>
               ))}
             </div>

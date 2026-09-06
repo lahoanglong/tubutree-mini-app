@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 function CallbackInner() {
@@ -33,9 +34,11 @@ function CallbackInner() {
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
       {error ? (
         <>
-          <div className="text-5xl">😕</div>
-          <p className="mt-4 text-red-600">{error}</p>
-          <a href="/dang-nhap" className="mt-6 rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-600 shadow-sm ring-8 ring-red-50/50">
+            <AlertCircle className="h-8 w-8 text-red-600" />
+          </div>
+          <p className="mt-4 text-red-600 font-medium">{error}</p>
+          <a href="/dang-nhap" className="mt-6 rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white shadow-sm hover:bg-primary-700 transition">
             Thử lại
           </a>
         </>

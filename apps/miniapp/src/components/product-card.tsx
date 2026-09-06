@@ -38,7 +38,7 @@ export default function ProductCard({ product }: { product: ProductCardType }) {
       style={{
         background: 'var(--neutral-0)',
         borderRadius: 'var(--radius-lg)',
-        boxShadow: 'var(--shadow-sm)',
+        boxShadow: 'var(--shadow-card)',
         overflow: 'hidden',
       }}
     >
@@ -159,7 +159,7 @@ export default function ProductCard({ product }: { product: ProductCardType }) {
           )}
         </Box>
         <Box flex alignItems="baseline" style={{ gap: 6, marginTop: 4 }}>
-          <Text bold style={{ color: 'var(--primary-700)', fontSize: 15 }}>
+          <Text bold style={{ color: 'var(--primary-700)', fontSize: 15, fontFamily: 'var(--font-display)' }}>
             {formatVnd(price)}
           </Text>
           {hasSale && (

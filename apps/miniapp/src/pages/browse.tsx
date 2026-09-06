@@ -264,7 +264,7 @@ export default function BrowsePage() {
       {/* Lọc thương hiệu — CHỈ hiện khi có ≥1 brand (trước đây rỗng vẫn hiện mỗi chip "Tất cả"
           đứng trơ 1 dòng, phí diện tích). "Tất cả" đi cùng danh sách brand để reset. */}
       {(brands.data?.length ?? 0) > 0 && (
-        <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10 }}>
+        <Box px={3} className="scroll-x" style={{ gap: 8, paddingBottom: 10, minWidth: 0, maxWidth: '100%' }}>
           <Chip label={vi.home.allBrands} active={selectedBrands.length === 0} onClick={() => toggleBrand(undefined)} />
           {brands.data?.map((b) => (
             <Chip
@@ -279,7 +279,7 @@ export default function BrowsePage() {
       )}
 
       {/* Sắp xếp (backend orderBy: newest/price_asc/price_desc/featured) */}
-      <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10 }}>
+      <Box px={3} className="scroll-x" style={{ gap: 8, paddingBottom: 10, minWidth: 0, maxWidth: '100%' }}>
         {SORTS.map((s) => (
           <Chip
             key={s.label}

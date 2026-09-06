@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
+import { Award, Tag, Sparkles, Building2, Leaf } from 'lucide-react';
 import { getBrand, formatVnd, formatSold } from '@/lib/api';
 
 export const revalidate = 300;
@@ -57,14 +58,18 @@ export default async function BrandPage({
 
       {b.certifications.length > 0 && (
         <section className="mt-5">
-          <h2 className="mb-2 font-semibold text-neutral-900">Chứng nhận</h2>
+          <h2 className="mb-2 font-semibold text-neutral-900 flex items-center gap-1.5">
+            <Award className="h-4 w-4 text-primary-600" />
+            <span>Chứng nhận</span>
+          </h2>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {b.certifications.map((c) => (
               <span
                 key={c.code}
-                className="whitespace-nowrap rounded-lg bg-leaf-50 px-3 py-1.5 text-sm text-leaf-700"
+                className="whitespace-nowrap rounded-lg bg-leaf-50 px-3 py-1.5 text-sm text-leaf-800 border border-leaf-200 flex items-center gap-1"
               >
-                🌿 {c.label}
+                <Leaf className="h-3.5 w-3.5 text-leaf-600" />
+                <span>{c.label}</span>
               </span>
             ))}
           </div>
@@ -73,7 +78,10 @@ export default async function BrandPage({
 
       {b.promotions.length > 0 && (
         <section className="mt-5">
-          <h2 className="mb-2 font-semibold text-neutral-900">🎉 Khuyến mãi</h2>
+          <h2 className="mb-2 font-semibold text-neutral-900 flex items-center gap-1.5">
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            <span>Khuyến mãi</span>
+          </h2>
           <div className="space-y-2">
             {b.promotions.map((p) => (
               <div
@@ -97,7 +105,7 @@ export default async function BrandPage({
               <a
                 key={p.id}
                 href={`/san-pham/${p.slug}`}
-                className="block overflow-hidden rounded-2xl bg-white shadow-sm"
+                className="block overflow-hidden rounded-2xl bg-white shadow-sm hover:shadow-md transition"
               >
                 {p.thumbnail ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -108,8 +116,8 @@ export default async function BrandPage({
                     loading="lazy"
                   />
                 ) : (
-                  <div className="flex aspect-square w-full items-center justify-center bg-leaf-50 text-4xl">
-                    🌿
+                  <div className="flex aspect-square w-full items-center justify-center bg-leaf-50 text-leaf-600">
+                    <Leaf className="h-10 w-10 text-leaf-600" />
                   </div>
                 )}
                 <div className="p-2">
@@ -127,7 +135,10 @@ export default async function BrandPage({
 
       {b.dealerRewards.length > 0 && (
         <section className="mt-6">
-          <h2 className="mb-2 font-semibold text-neutral-900">🏪 Chương trình đại lý</h2>
+          <h2 className="mb-2 font-semibold text-neutral-900 flex items-center gap-1.5">
+            <Building2 className="h-4 w-4 text-primary-700" />
+            <span>Chương trình đại lý</span>
+          </h2>
           <div className="space-y-2">
             {b.dealerRewards.map((d) => (
               <div key={d.id} className="rounded-xl border border-neutral-200 bg-white p-3">

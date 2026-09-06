@@ -37,7 +37,7 @@ export default function OrdersPage() {
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 72 }}>
 
-      <Box px={3} pb={2} style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
+      <Box px={3} pb={2} className="scroll-x" style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
         {TABS.map((t) => {
           const active = tab === t.key;
           return (

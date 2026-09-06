@@ -2,7 +2,7 @@ import { Box, Page, Text, Button, Avatar, Spinner, useNavigate, useSnackbar } fr
 import { useQuery } from '@tanstack/react-query';
 import {
   Package, Repeat, Heart, MapPin, Leaf, Wallet, Users, BadgePercent, Pencil,
-  Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, ShieldCheck, CalendarClock, type LucideIcon,
+  Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, ShieldCheck, CalendarClock, Sprout, Recycle, Sparkles, BookOpen, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { getLoyalty, getNotifications } from '../services/account-api';
@@ -41,6 +41,10 @@ const READY = new Set([
   '/admin',
   '/staff',
   '/my-payroll',
+  '/refill',
+  '/ai-advisor',
+  '/group-buy',
+  '/brand-story',
 ]);
 
 const MENU: { group: string; items: MenuItem[] }[] = [
@@ -49,6 +53,9 @@ const MENU: { group: string; items: MenuItem[] }[] = [
     items: [
       { Icon: Package, label: 'Đơn hàng của tôi', to: '/orders' },
       { Icon: Repeat, label: 'Đặt định kỳ', to: '/subscriptions' },
+      { Icon: Users, label: 'Mua chung nhóm', to: '/group-buy', hint: 'Tiết kiệm đến 30%' },
+      { Icon: Recycle, label: 'Trạm Refill & Đổi vỏ', to: '/refill', hint: 'Tích giọt nước xanh' },
+      { Icon: Sparkles, label: 'Trợ lý AI 24/7', to: '/ai-advisor', hint: 'Tư vấn sản phẩm' },
       { Icon: Heart, label: 'Sản phẩm yêu thích', to: '/wishlist' },
       { Icon: MapPin, label: 'Sổ địa chỉ', to: '/addresses' },
       { Icon: MessagesSquare, label: 'Cộng đồng hỏi đáp', to: '/feed', hint: 'Hỏi chăm cây · khoe vườn' },
@@ -72,6 +79,7 @@ const MENU: { group: string; items: MenuItem[] }[] = [
     group: 'Khác',
     items: [
       { Icon: Bell, label: 'Thông báo', to: '/notifications' },
+      { Icon: BookOpen, label: 'Câu chuyện thương hiệu', to: '/brand-story' },
       { Icon: Store, label: 'Đăng ký đại lý', to: '/dealer' },
       { Icon: Settings, label: 'Cài đặt', to: '/settings' },
       { Icon: Info, label: 'Về Tubu Tree & Hỗ trợ', to: '/about' },
@@ -133,20 +141,24 @@ export default function ProfilePage() {
             <Spinner />
           ) : status === 'idle' ? (
             <>
-              <Text style={{ fontSize: 48 }}>🌿</Text>
+              <Box style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--leaf-50)', border: '1px solid var(--leaf-200)', display: 'grid', placeItems: 'center', boxShadow: 'var(--shadow-card)' }}>
+                <Sprout size={32} color="var(--leaf-700)" strokeWidth={2} />
+              </Box>
               <Text bold size="large" style={{ color: 'var(--neutral-800)' }}>Đã đăng xuất</Text>
               <Text size="small" style={{ color: 'var(--neutral-500)' }}>
                 Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn.
               </Text>
-              <Button onClick={() => void useAuthStore.getState().login()} style={{ background: 'var(--leaf-600)', minWidth: 180, marginTop: 8 }}>
+              <Button onClick={() => void useAuthStore.getState().login()} style={{ background: 'var(--leaf-600)', minWidth: 180, marginTop: 8, borderRadius: 'var(--radius-full)' }}>
                 Đăng nhập ngay
               </Button>
             </>
           ) : (
             <>
-              <Text style={{ fontSize: 48 }}>🌿</Text>
+              <Box style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--danger-bg)', border: '1px solid rgba(199,62,62,0.2)', display: 'grid', placeItems: 'center', boxShadow: 'var(--shadow-card)' }}>
+                <Leaf size={32} color="var(--danger)" strokeWidth={2} />
+              </Box>
               <Text style={{ color: 'var(--neutral-600)' }}>{error ?? 'Chưa kết nối được, vui lòng thử lại.'}</Text>
-              <Button onClick={() => void restore()} style={{ background: 'var(--leaf-600)', minWidth: 180 }}>
+              <Button onClick={() => void restore()} style={{ background: 'var(--leaf-600)', minWidth: 180, borderRadius: 'var(--radius-full)' }}>
                 Thử lại
               </Button>
             </>
@@ -268,7 +280,7 @@ export default function ProfilePage() {
           <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginBottom: 6, marginLeft: 4 }}>
             {section.group.toUpperCase()}
           </Text>
-          <Box style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+          <Box style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}>
             {section.items.map((item, i) => (
               <Box
                 key={item.to}
@@ -344,10 +356,10 @@ function Stat({ label, value, onClick }: { label: string; value: string; onClick
         background: 'var(--neutral-0)',
         borderRadius: 'var(--radius-lg)',
         textAlign: 'center',
-        boxShadow: 'var(--shadow-sm)',
+        boxShadow: 'var(--shadow-card)',
       }}
     >
-      <Text bold style={{ color: 'var(--leaf-700)' }}>
+      <Text bold style={{ color: 'var(--leaf-700)', fontSize: 16, fontFamily: 'var(--font-display)' }}>
         {value}
       </Text>
       <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>

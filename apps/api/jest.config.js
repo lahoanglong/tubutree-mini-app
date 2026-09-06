@@ -9,6 +9,6 @@ module.exports = {
     '^@tubutree/shared-types$': '<rootDir>/../../../packages/shared-types/src/index.ts',
   },
   transform: {
-    '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/../tsconfig.json', isolatedModules: true }],
+    '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/../tsconfig.json' }],
   },
 };

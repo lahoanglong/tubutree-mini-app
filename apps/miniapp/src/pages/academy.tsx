@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PlayCircle, FileText, ChevronLeft, CheckCircle2 } from 'lucide-react';
+import { PlayCircle, FileText, ChevronLeft, CheckCircle2, BookOpen } from 'lucide-react';
 import {
   fetchCourses,
   fetchCourse,
@@ -86,7 +86,7 @@ function CourseCard({ course, onOpen }: { course: AcademyCourseSummary; onOpen: 
             <img src={course.coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             <Box flex alignItems="center" justifyContent="center" style={{ width: '100%', height: '100%' }}>
-              <Text style={{ fontSize: 28 }}>📘</Text>
+              <BookOpen size={28} color="var(--primary-600)" strokeWidth={1.8} />
             </Box>
           )}
         </Box>

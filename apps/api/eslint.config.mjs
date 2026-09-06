@@ -4,7 +4,7 @@ export default [
   ...config,
   {
     rules: {
-      // NestJS dùng decorator + DI nặng; nới một số rule cho thực dụng.
+      // NestJS dùng decorator + DI nặng; constructor injection cần class value cho reflection metadata
       '@typescript-eslint/no-extraneous-class': 'off',
       '@typescript-eslint/consistent-type-imports': 'off',
     },

@@ -94,6 +94,10 @@ class ReviewReturnDto {
   @IsBoolean() approve!: boolean;
   @IsOptional() @IsString() note?: string;
 }
+export class ReviewMerchantProductDto {
+  @IsBoolean() approve!: boolean;
+  @IsOptional() @IsString() rejectReason?: string;
+}
 class SetConfigDto {
   @IsString() @IsNotEmpty() key!: string;
   // value tự do (object/số/chuỗi/boolean) — @Allow để ValidationPipe không loại bỏ.
@@ -134,6 +138,15 @@ class ImportSoldExternalDto {
   @IsOptional() @IsString() csv?: string;
   @IsOptional() @IsArray() rows?: { sku: string; count: number }[];
 }
+class UpdateOrderStatusDto {
+  @IsIn(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'RETURNED', 'CANCELLED'])
+  status!: 'PENDING_PAYMENT' | 'CONFIRMED' | 'PACKED' | 'SHIPPING' | 'DELIVERED' | 'RETURNED' | 'CANCELLED';
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
 class SetUserRoleDto {
   @IsString() phone!: string;
   @IsIn(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'])
@@ -160,6 +173,11 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly catalog: CatalogService,
   ) {}
+
+  @Get('dashboard/stats')
+  dashboardStats() {
+    return this.admin.getDashboardStats();
+  }
 
   @Get('dealer-applications')
   dealerApps(@Query('status') status?: string) {
@@ -193,8 +211,21 @@ export class AdminController {
   }
 
   @Get('orders')
-  orders(@Query() q: PaginationQuery, @Query('status') status?: string) {
-    return this.admin.listOrders(q.page, q.limit, status);
+  orders(
+    @Query() q: PaginationQuery,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.admin.listOrders(q.page, q.limit, status, search);
+  }
+
+  @Put('orders/:id/status')
+  updateOrderStatus(
+    @CurrentUser('sub') adminId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateOrderStatusDto,
+  ) {
+    return this.admin.updateOrderStatus(adminId, id, dto.status, dto.note);
   }
 
   @Get('config')
@@ -237,5 +268,20 @@ export class AdminController {
   @Post('products/recompute-sold')
   recomputeSold() {
     return this.catalog.recomputeSoldCounts();
+  }
+
+  // ── Duyệt sản phẩm do đối tác đăng ──
+  @Get('merchant-products/pending')
+  listPendingMerchantProducts() {
+    return this.admin.listPendingMerchantProducts();
+  }
+
+  @Post('merchant-products/:id/review')
+  reviewMerchantProduct(
+    @CurrentUser('sub') adminId: string,
+    @Param('id') productId: string,
+    @Body() dto: ReviewMerchantProductDto,
+  ) {
+    return this.admin.reviewMerchantProduct(adminId, productId, dto.approve, dto.rejectReason);
   }
 }

@@ -307,6 +307,7 @@ function AddressForm({
         value={form[k]}
         onChange={setField(k)}
         onBlur={blurField(k)}
+        inputMode={k === 'phone' ? 'numeric' : undefined}
         status={touched[k] && errors[k] ? 'error' : undefined}
       />
       {touched[k] && errors[k] && (

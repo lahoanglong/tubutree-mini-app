@@ -8,8 +8,13 @@ import type { NotificationsService } from '../notifications/notifications.servic
 import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 
 const config = {} as unknown as SystemConfigService;
-const loyalty = { reverseOrderPoints: jest.fn().mockResolvedValue(undefined) } as unknown as LoyaltyService;
+const loyalty = {
+  creditOrderPoints: jest.fn().mockResolvedValue(undefined),
+  reverseOrderPoints: jest.fn().mockResolvedValue(undefined),
+} as unknown as LoyaltyService;
 const affiliate = {
+  lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+  grantReferralReward: jest.fn().mockResolvedValue(undefined),
   reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
 } as unknown as AffiliateService;
 const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
@@ -564,3 +569,139 @@ describe('AdminService.createCoupon — ghi scopeMeta (Việc 9)', () => {
     );
   });
 });
+
+describe('AdminService.getDashboardStats', () => {
+  it('tổng hợp đúng số lượng đơn, doanh thu và cây trồng', async () => {
+    const prisma = makePrisma({
+      order: {
+        count: jest.fn().mockResolvedValue(15),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { total: 1500000 } }),
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'o1', code: 'TB1', total: 100000, status: 'DELIVERED', paymentMethod: 'COD', createdAt: new Date() },
+        ]),
+      },
+      user: {
+        count: jest.fn().mockResolvedValue(50),
+      },
+      product: {
+        count: jest.fn().mockResolvedValue(20),
+      },
+      plantedTree: {
+        count: jest.fn().mockResolvedValue(8),
+      },
+    });
+
+    const stats = await mkAdmin(prisma).getDashboardStats();
+    expect(stats.totalRevenue).toBe(1500000);
+    expect(stats.totalOrders).toBe(15);
+    expect(stats.totalUsers).toBe(50);
+    expect(stats.plantedTreesCount).toBe(8);
+    expect(stats.recentOrders).toHaveLength(1);
+  });
+});
+
+describe('AdminService.updateOrderStatus', () => {
+  it('chuyển DELIVERED → credit điểm và lock hoa hồng', async () => {
+    const order = { id: 'o1', code: 'TB-100', userId: 'u1', status: 'SHIPPING', total: 200000 };
+    const prisma = makePrisma({
+      order: {
+        findFirst: jest.fn().mockResolvedValue(order),
+        update: jest.fn().mockResolvedValue({ ...order, status: 'DELIVERED' }),
+      },
+    });
+
+    const res = await mkAdmin(prisma).updateOrderStatus('admin-1', 'o1', 'DELIVERED', 'Giao thành công');
+    expect(res.status).toBe('DELIVERED');
+    expect(loyalty.creditOrderPoints).toHaveBeenCalledWith('o1');
+    expect(affiliate.lockCommissionsForOrder).toHaveBeenCalledWith('o1');
+  });
+
+  it('chuyển CANCELLED → reverse điểm và reverse hoa hồng', async () => {
+    const order = { id: 'o2', code: 'TB-101', userId: 'u2', status: 'CONFIRMED', total: 300000 };
+    const prisma = makePrisma({
+      order: {
+        findFirst: jest.fn().mockResolvedValue(order),
+        update: jest.fn().mockResolvedValue({ ...order, status: 'CANCELLED' }),
+      },
+    });
+
+    const res = await mkAdmin(prisma).updateOrderStatus('admin-1', 'o2', 'CANCELLED', 'Khách đổi ý');
+    expect(res.status).toBe('CANCELLED');
+    expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o2');
+    expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o2');
+  });
+
+  it('đơn không tồn tại → throw NotFoundException', async () => {
+    const prisma = makePrisma({
+      order: { findFirst: jest.fn().mockResolvedValue(null) },
+    });
+    await expect(mkAdmin(prisma).updateOrderStatus('admin-1', 'non-existent', 'CANCELLED')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+});
+
+describe('AdminService.listOrders with search', () => {
+  it('tìm kiếm theo mã đơn hoặc SĐT truyền OR filter vào Prisma', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = makePrisma({
+      order: { findMany, count },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+
+    await mkAdmin(prisma).listOrders(1, 20, undefined, '0901234567');
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            expect.objectContaining({ code: { contains: '0901234567', mode: 'insensitive' } }),
+            expect.objectContaining({ user: { phone: { contains: '0901234567' } } }),
+          ]),
+        }),
+      }),
+    );
+  });
+});
+
+describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () => {
+  it('listPendingMerchantProducts chỉ lấy sản phẩm có approvalStatus=PENDING_REVIEW', async () => {
+    const findMany = jest.fn().mockResolvedValue([
+      { id: 'p1', name: 'Nước giặt sinh học', approvalStatus: 'PENDING_REVIEW' },
+    ]);
+    const prisma = makePrisma({ product: { findMany } });
+    const res = await mkAdmin(prisma).listPendingMerchantProducts();
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { approvalStatus: 'PENDING_REVIEW' },
+      }),
+    );
+    expect(res).toHaveLength(1);
+  });
+
+  it('reviewMerchantProduct duyệt APPROVED', async () => {
+    const product = { id: 'p1', name: 'Nước giặt', approvalStatus: 'PENDING_REVIEW' };
+    const prisma = makePrisma({
+      product: {
+        findUnique: jest.fn().mockResolvedValue(product),
+        update: jest.fn().mockResolvedValue({ ...product, approvalStatus: 'APPROVED' }),
+      },
+    });
+    const res = await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true);
+    expect(res.approvalStatus).toBe('APPROVED');
+  });
+
+  it('reviewMerchantProduct từ chối REJECTED kèm lý do', async () => {
+    const product = { id: 'p1', name: 'Kem chống nắng', approvalStatus: 'PENDING_REVIEW' };
+    const prisma = makePrisma({
+      product: {
+        findUnique: jest.fn().mockResolvedValue(product),
+        update: jest.fn().mockResolvedValue({ ...product, approvalStatus: 'REJECTED', rejectReason: 'Chưa đủ chứng nhận' }),
+      },
+    });
+    const res = await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'Chưa đủ chứng nhận');
+    expect(res.approvalStatus).toBe('REJECTED');
+    expect(res.rejectReason).toBe('Chưa đủ chứng nhận');
+  });
+});
+

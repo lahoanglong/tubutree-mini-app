@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, useSnackbar } from 'zmp-ui';
-import { Recycle, Droplets, Minus, Plus } from 'lucide-react';
+import { Box, Page, Text, Button, useSnackbar, useNavigate } from 'zmp-ui';
+import { Recycle, Droplets, Minus, Plus, Sprout, ChevronRight } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRefillSummary, returnBottles } from '../services/refill-api';
 import { getErrorMessage } from '../services/api';
@@ -18,6 +18,7 @@ function fmtDate(iso: string): string {
 }
 
 export default function RefillPage() {
+  const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const authed = useAuthStore((s) => s.status) === 'authenticated';
@@ -33,7 +34,7 @@ export default function RefillPage() {
     mutationFn: () => returnBottles(qty),
     onSuccess: () => {
       haptic('heavy');
-      openSnackbar({ text: '📋 Đã gửi yêu cầu đổi vỏ chai! Vui lòng chờ quản lý duyệt.', type: 'success' });
+      openSnackbar({ text: 'Đã gửi yêu cầu đổi vỏ chai! Vui lòng chờ quản lý duyệt.', type: 'success' });
       setQty(1);
       void queryClient.invalidateQueries({ queryKey: ['refill'] });
       void queryClient.invalidateQueries({ queryKey: ['garden'] });
@@ -160,6 +161,47 @@ export default function RefillPage() {
               })}
             </Box>
           )}
+
+          {/* Liên kết sang Vườn Cây Tubu */}
+          <Box
+            className="tubu-press"
+            onClick={() => navigate('/game')}
+            mt={2}
+            p={3}
+            flex
+            alignItems="center"
+            justifyContent="space-between"
+            style={{
+              background: 'var(--neutral-0)',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--leaf-200)',
+              cursor: 'pointer',
+            }}
+          >
+            <Box flex alignItems="center" style={{ gap: 10 }}>
+              <Box
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 8,
+                  background: 'var(--leaf-50)',
+                  display: 'grid',
+                  placeItems: 'center',
+                }}
+              >
+                <Sprout size={20} color="var(--leaf-600)" />
+              </Box>
+              <Box>
+                <Text size="small" bold style={{ color: 'var(--leaf-800)' }}>
+                  Vườn Cây Tubu
+                </Text>
+                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                  Dùng giọt nước tích luỹ để chăm cây và đổi quà thật
+                </Text>
+              </Box>
+            </Box>
+            <ChevronRight size={18} color="var(--neutral-400)" />
+          </Box>
         </Box>
       )}
     </Page>

@@ -3,6 +3,7 @@ import { Box, Page, Text, Button, Input, Spinner, useNavigate, useSnackbar } fro
 import { useMutation } from '@tanstack/react-query';
 import { aiChat, type AiChatTurn, type AiProduct } from '../services/ai-api';
 import { getErrorMessage } from '../services/api';
+import { Sparkles, Sprout, ChevronRight } from 'lucide-react';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -53,30 +54,46 @@ export default function AiAdvisorPage() {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', display: 'flex', flexDirection: 'column', paddingBottom: 0 }}>
-      <Box p={3} style={{ background: 'var(--neutral-0)' }}>
-        <Text bold size="large">✨ Trợ lý Tubu</Text>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-          Tư vấn sản phẩm tiêu dùng xanh 24/7
-        </Text>
+      <Box p={3} flex alignItems="center" style={{ background: 'var(--neutral-0)', gap: 10, borderBottom: '1px solid var(--neutral-100)' }}>
+        <Box style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--primary-50)', display: 'grid', placeItems: 'center' }}>
+          <Sparkles size={18} color="var(--primary-600)" strokeWidth={2} />
+        </Box>
+        <Box>
+          <Text bold size="normal">Trợ lý AI Tubu</Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+            Tư vấn sản phẩm tiêu dùng xanh 24/7
+          </Text>
+        </Box>
       </Box>
 
       <Box style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
         {messages.length === 0 && (
-          <Box style={{ textAlign: 'center', padding: '24px 12px' }}>
-            <Text style={{ fontSize: 48 }}>🌿</Text>
-            <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 8 }}>
-              Chào bạn! Mình là trợ lý của Tubu Tree. Bạn cần tư vấn gì nào?
+          <Box style={{ textAlign: 'center', padding: '32px 12px' }}>
+            <Box style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, var(--leaf-50), var(--primary-50))', border: '1px solid var(--leaf-200)', display: 'grid', placeItems: 'center', margin: '0 auto 12px', boxShadow: 'var(--shadow-card)' }}>
+              <Sparkles size={32} color="var(--leaf-700)" strokeWidth={1.9} />
+            </Box>
+            <Text bold size="normal" style={{ color: 'var(--neutral-800)' }}>
+              Chào bạn! Mình là Trợ lý Tubu
             </Text>
-            <Box mt={3} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Text size="small" style={{ color: 'var(--neutral-500)', marginTop: 4 }}>
+              Bạn đang tìm giải pháp hay sản phẩm sinh học an lành nào cho gia đình?
+            </Text>
+            <Box mt={4} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {SUGGESTIONS.map((s) => (
                 <Box
                   key={s}
                   className="tubu-press"
                   onClick={() => send(s)}
-                  p={2}
-                  style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--leaf-400)' }}
+                  p={3}
+                  style={{
+                    background: 'var(--neutral-0)',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--leaf-200)',
+                    boxShadow: 'var(--shadow-card)',
+                    textAlign: 'left',
+                  }}
                 >
-                  <Text size="small" style={{ color: 'var(--leaf-700)' }}>{s}</Text>
+                  <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>{s}</Text>
                 </Box>
               ))}
             </Box>
@@ -114,7 +131,9 @@ export default function AiAdvisorPage() {
                     {p.thumbnail ? (
                       <img src={p.thumbnail} alt={p.name} style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover' }} />
                     ) : (
-                      <Box style={{ width: 44, height: 44, borderRadius: 8, background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>🌿</Box>
+                      <Box style={{ width: 44, height: 44, borderRadius: 8, background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
+                        <Sprout size={20} color="var(--leaf-600)" />
+                      </Box>
                     )}
                     <Box style={{ flex: 1, minWidth: 0 }}>
                       <Text size="xSmall" bold style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</Text>
@@ -122,7 +141,7 @@ export default function AiAdvisorPage() {
                         {(p.salePrice ?? p.basePrice).toLocaleString('vi-VN')}đ
                       </Text>
                     </Box>
-                    <Text style={{ color: 'var(--neutral-400)' }}>›</Text>
+                    <ChevronRight size={16} color="var(--neutral-400)" />
                   </Box>
                 ))}
               </Box>

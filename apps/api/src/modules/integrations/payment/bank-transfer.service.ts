@@ -23,12 +23,34 @@ export class BankTransferService {
       throw new BadRequestException('Đơn này không thanh toán bằng chuyển khoản.');
     }
 
-    const [bin, accountNo, accountName, bankName] = await Promise.all([
-      this.config.get<string>('payment.bank_bin', ''),
-      this.config.get<string>('payment.bank_account_no', ''),
-      this.config.get<string>('payment.bank_account_name', ''),
-      this.config.get<string>('payment.bank_name', ''),
-    ]);
+    let bin = '';
+    let accountNo = '';
+    let accountName = '';
+    let bankName = '';
+
+    if (order.storefrontSlug) {
+      const store = await this.prisma.storefront?.findFirst({
+        where: {
+          OR: [{ slug: order.storefrontSlug }, { subdomain: order.storefrontSlug }],
+        },
+        select: { bankBin: true, bankAccountNo: true, bankAccountName: true, bankName: true },
+      });
+      if (store?.bankBin && store?.bankAccountNo) {
+        bin = store.bankBin;
+        accountNo = store.bankAccountNo;
+        accountName = store.bankAccountName ?? '';
+        bankName = store.bankName ?? '';
+      }
+    }
+
+    if (!bin || !accountNo) {
+      [bin, accountNo, accountName, bankName] = await Promise.all([
+        this.config.get<string>('payment.bank_bin', ''),
+        this.config.get<string>('payment.bank_account_no', ''),
+        this.config.get<string>('payment.bank_account_name', ''),
+        this.config.get<string>('payment.bank_name', ''),
+      ]);
+    }
     if (!bin || !accountNo) {
       throw new BadRequestException('Chưa cấu hình tài khoản ngân hàng nhận chuyển khoản.');
     }

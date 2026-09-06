@@ -16,8 +16,12 @@ export interface StorefrontCollection {
 }
 export interface StorefrontCollectionEdit extends Omit<StorefrontCollection, 'items'> { sortOrder: number; items: StorefrontItemEdit[]; }
 export interface Storefront {
-  id: string; slug: string; type: 'CTV' | 'BRAND'; title: string; headerNote: string | null;
-  avatarUrl: string | null; coverUrl: string | null; theme: string; collections: StorefrontCollection[];
+  id: string; slug: string; subdomain?: string | null; customDomain?: string | null;
+  type: 'CTV' | 'BRAND' | 'MERCHANT'; title: string; headerNote: string | null;
+  avatarUrl: string | null; coverUrl: string | null; theme: string; themeColor?: string | null;
+  bankName?: string | null; bankBin?: string | null; bankAccountNo?: string | null; bankAccountName?: string | null;
+  warehouseAddress?: string | null; warehouseCity?: string | null; warehouseDistrict?: string | null; warehouseWard?: string | null; warehousePhone?: string | null;
+  collections: StorefrontCollection[];
 }
 export interface StorefrontEdit extends Omit<Storefront, 'collections'> { isPublished: boolean; collections: StorefrontCollectionEdit[]; }
 export interface PickerProduct {
@@ -28,8 +32,29 @@ export interface PickerProduct {
 export const createStorefront = () => api.post('/storefront').then((r) => r.data as StorefrontEdit);
 export const getMyStorefront = () => api.get('/storefront/me').then((r) => r.data as StorefrontEdit);
 export const getPublicStorefront = (slug: string) => api.get(`/storefront/public/${slug}`).then((r) => r.data as Storefront);
-export const updateStorefront = (dto: Partial<Pick<Storefront, 'title' | 'headerNote' | 'avatarUrl' | 'coverUrl' | 'theme'>>) =>
-  api.patch('/storefront/me', dto).then((r) => r.data as StorefrontEdit);
+export const updateStorefront = (
+  dto: Partial<
+    Pick<
+      Storefront,
+      | 'title'
+      | 'headerNote'
+      | 'avatarUrl'
+      | 'coverUrl'
+      | 'theme'
+      | 'themeColor'
+      | 'subdomain'
+      | 'bankName'
+      | 'bankBin'
+      | 'bankAccountNo'
+      | 'bankAccountName'
+      | 'warehouseAddress'
+      | 'warehouseCity'
+      | 'warehouseDistrict'
+      | 'warehouseWard'
+      | 'warehousePhone'
+    >
+  >,
+) => api.patch('/storefront/me', dto).then((r) => r.data as StorefrontEdit);
 export const publishStorefront = (isPublished: boolean) =>
   api.post('/storefront/me/publish', { isPublished }).then((r) => r.data as StorefrontEdit);
 

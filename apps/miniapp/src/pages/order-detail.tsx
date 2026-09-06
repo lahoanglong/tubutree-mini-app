@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { RotateCcw, MessageSquare } from 'lucide-react';
 import { fetchOrder, cancelOrder, repurchaseOrder, requestReturn, fetchMyReturns } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -328,8 +329,13 @@ export default function OrderDetailPage() {
           }
           return (
             <Box px={4} mt={2} style={{ textAlign: 'center' }}>
-              <Button variant="tertiary" onClick={() => setReturnOpen(true)} style={{ color: 'var(--neutral-600)' }}>
-                ↩️ Yêu cầu đổi/trả (lỗi nhà sản xuất)
+              <Button
+                variant="tertiary"
+                onClick={() => setReturnOpen(true)}
+                style={{ color: 'var(--neutral-600)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <RotateCcw size={15} strokeWidth={2} aria-hidden />
+                Yêu cầu đổi/trả (lỗi nhà sản xuất)
               </Button>
             </Box>
           );
@@ -340,9 +346,10 @@ export default function OrderDetailPage() {
           <Button
             variant="tertiary"
             onClick={() => void openOAChat(`Hỗ trợ đơn ${o.code}`)}
-            style={{ color: 'var(--primary-700)' }}
+            style={{ color: 'var(--primary-700)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
-            💬 Yêu cầu hỗ trợ qua Zalo OA
+            <MessageSquare size={16} strokeWidth={2} aria-hidden />
+            Yêu cầu hỗ trợ qua Zalo OA
           </Button>
         ) : (
           <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>

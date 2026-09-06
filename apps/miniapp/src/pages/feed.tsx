@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Page, Text, Button, Input, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Plus, HelpCircle, Hash, Trophy, PartyPopper } from 'lucide-react';
+import { Plus, HelpCircle, Hash, Trophy, PartyPopper, Sprout } from 'lucide-react';
 import { getFeed, getCategories, type FeedSort } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -83,11 +83,14 @@ export default function FeedPage() {
   // Chỉ hiện cổng đăng nhập khi đã chắc chắn user chưa đăng nhập (status settled, không authenticated).
   if (!authed) {
     return (
-      <Page className="page">
-        <Box style={{ textAlign: 'center', padding: 48 }}>
-          <Text style={{ fontSize: 48 }}>🌿</Text>
-          <Text style={{ marginTop: 8 }}>{vi.community.loginToView}</Text>
-          <Button style={{ marginTop: 12, background: 'var(--leaf-600)' }} onClick={() => void login()}>
+      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+        <Box style={{ textAlign: 'center', padding: '60px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Box style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--leaf-50)', border: '1px solid var(--leaf-200)', display: 'grid', placeItems: 'center', marginBottom: 12, boxShadow: 'var(--shadow-card)' }}>
+            <Sprout size={32} color="var(--leaf-700)" strokeWidth={2} />
+          </Box>
+          <Text size="normal" bold style={{ color: 'var(--neutral-800)' }}>{vi.community.title}</Text>
+          <Text size="small" style={{ marginTop: 6, color: 'var(--neutral-500)', maxWidth: 280 }}>{vi.community.loginToView}</Text>
+          <Button style={{ marginTop: 16, background: 'var(--leaf-600)', borderRadius: 'var(--radius-full)', minWidth: 180 }} onClick={() => void login()}>
             {vi.auth.loginCta}
           </Button>
         </Box>
@@ -184,7 +187,7 @@ export default function FeedPage() {
         />
       </Box>
 
-      <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, background: 'var(--neutral-0)' }}>
+      <Box px={3} className="scroll-x" style={{ gap: 8, paddingBottom: 8, background: 'var(--neutral-0)', minWidth: 0, maxWidth: '100%' }}>
         <Chip label={vi.community.tabAll} active={!category} onClick={() => setCategory(undefined)} />
         {cats.data?.map((c) => (
           <Chip
@@ -196,7 +199,7 @@ export default function FeedPage() {
         ))}
       </Box>
 
-      <Box px={3} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, background: 'var(--neutral-0)' }}>
+      <Box px={3} className="scroll-x" style={{ gap: 8, paddingBottom: 10, background: 'var(--neutral-0)', minWidth: 0, maxWidth: '100%' }}>
         {SORTS.map((s) => (
           <Chip key={s.key} label={s.label} active={sort === s.key} onClick={() => setSort(s.key)} />
         ))}

@@ -22,6 +22,7 @@ import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
+import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap } from 'lucide-react';
 import { vi } from '../i18n/vi';
 
 const COMMISSION_META: Record<CommissionStatus, { label: string; color: string; bg: string }> = {
@@ -76,10 +77,10 @@ function RegisterGate() {
   });
 
   const benefits = [
-    { icon: '💸', text: 'Hoa hồng theo từng sản phẩm + thưởng bậc doanh số tháng' },
-    { icon: '🔗', text: 'Tạo link chia sẻ riêng, theo dõi click & chuyển đổi' },
-    { icon: '🏦', text: 'Rút về ngân hàng (tối thiểu 50k) hoặc Ví Tubu ×1.5' },
-    { icon: '📈', text: 'Dashboard hoa hồng realtime, minh bạch' },
+    { Icon: BadgePercent, text: 'Hoa hồng theo từng sản phẩm + thưởng bậc doanh số tháng' },
+    { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi click & chuyển đổi' },
+    { Icon: Landmark, text: 'Rút về ngân hàng (tối thiểu 50k) hoặc Ví Tubu ×1.5' },
+    { Icon: TrendingUp, text: 'Dashboard hoa hồng realtime, minh bạch' },
   ];
 
   return (
@@ -92,10 +93,13 @@ function RegisterGate() {
             borderRadius: 'var(--radius-xl)',
             color: 'var(--neutral-0)',
             textAlign: 'center',
+            boxShadow: '0 8px 24px rgba(224, 140, 28, 0.25)',
           }}
         >
           <Box style={{ marginBottom: 14 }}>
-            <Text style={{ fontSize: 48, lineHeight: '1.2', display: 'inline-block' }}>🤝</Text>
+            <Box style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center', margin: '0 auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+              <Handshake size={34} color="#fff" strokeWidth={2} />
+            </Box>
           </Box>
           <Text bold size="xLarge" style={{ color: 'var(--neutral-0)' }}>
             Trở thành CTV Tubu
@@ -107,9 +111,11 @@ function RegisterGate() {
 
         <Box mt={4} flex flexDirection="column" style={{ gap: 12 }}>
           {benefits.map((b, i) => (
-            <Box key={i} flex alignItems="center" style={{ gap: 12 }}>
-              <Text style={{ fontSize: 24 }}>{b.icon}</Text>
-              <Text size="small" style={{ flex: 1 }}>
+            <Box key={i} flex alignItems="center" style={{ gap: 12, padding: '8px 12px', background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }}>
+              <Box style={{ width: 40, height: 40, borderRadius: 'var(--radius-md)', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                <b.Icon size={20} color="var(--leaf-700)" strokeWidth={1.8} />
+              </Box>
+              <Text size="small" style={{ flex: 1, color: 'var(--neutral-700)' }}>
                 {b.text}
               </Text>
             </Box>
@@ -186,7 +192,7 @@ function Dashboard() {
             <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
               Hoa hồng tháng này
             </Text>
-            <Text bold style={{ fontSize: 32, lineHeight: '40px', color: 'var(--neutral-0)', marginTop: 4 }}>
+            <Text bold style={{ fontSize: 32, lineHeight: '40px', color: 'var(--neutral-0)', marginTop: 4, fontFamily: 'var(--font-display)' }}>
               {formatVnd(d?.monthCommission ?? 0)}
             </Text>
             <Box flex style={{ gap: 16, marginTop: 12 }}>
@@ -200,7 +206,7 @@ function Dashboard() {
 
       {/* Bậc doanh số tháng (§6.8.2) */}
       {d?.tier && (
-        <Box mx={4} mb={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xs)' }}>
+        <Box mx={4} mb={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }}>
           <Box flex alignItems="center" justifyContent="space-between">
             <Box flex alignItems="center" style={{ gap: 8 }}>
               <Text style={{ fontSize: 28 }}>{d.tier.emoji}</Text>
@@ -263,13 +269,14 @@ function Dashboard() {
       <Box mx={4} mb={3}>
         <Button
           fullWidth
+          prefixIcon={<Receipt size={16} />}
           onClick={() => {
             haptic('light');
             setCtvOrdering(true);
           }}
           style={{ background: 'var(--primary-600)' }}
         >
-          🧾 {vi.ctvOrder.entry}
+          {vi.ctvOrder.entry}
         </Button>
         <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4, textAlign: 'center' }}>
           {vi.ctvOrder.entryHint}
@@ -277,14 +284,14 @@ function Dashboard() {
       </Box>
 
       <Box mx={4} mb={3}>
-        <Button fullWidth variant="secondary" onClick={() => navigate('/storefront')}>
-          🏪 Gian hàng của tôi
+        <Button fullWidth variant="secondary" prefixIcon={<Store size={16} />} onClick={() => navigate('/storefront')}>
+          Gian hàng của tôi
         </Button>
       </Box>
 
       <Box mx={4} mb={3}>
-        <Button fullWidth variant="secondary" onClick={() => navigate('/academy')}>
-          🎓 {vi.academy.entry}
+        <Button fullWidth variant="secondary" prefixIcon={<GraduationCap size={16} />} onClick={() => navigate('/academy')}>
+          {vi.academy.entry}
         </Button>
         <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4, textAlign: 'center' }}>
           {vi.academy.entryHint}

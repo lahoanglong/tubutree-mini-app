@@ -12,7 +12,7 @@ import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch } from '../services/affiliate-api';
 
-import { applyFontScale } from '../pages/settings';
+import { applyFontScale } from '../utils/font-scale';
 
 const FONT_PX: Record<string, string> = { small: '15px', normal: '16px', large: '18px' };
 /** Áp cỡ chữ đã lưu (Cài đặt) ngay khi mở app để giữ a11y qua các phiên. */

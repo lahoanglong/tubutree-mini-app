@@ -151,6 +151,7 @@ export default function HomePage() {
             alignItems: 'center',
             gap: 8,
             minHeight: 44,
+            boxShadow: 'var(--shadow-card)',
             boxSizing: 'border-box',
           }}
         >
@@ -173,6 +174,7 @@ export default function HomePage() {
             alignItems: 'center',
             gap: 8,
             minHeight: 44,
+            boxShadow: 'var(--shadow-card)',
             boxSizing: 'border-box',
           }}
         >
@@ -189,6 +191,7 @@ export default function HomePage() {
             borderRadius: 'var(--radius-xl)',
             padding: '20px 18px',
             color: '#fff',
+            boxShadow: '0 10px 24px rgba(224, 140, 28, 0.22)',
             overflow: 'hidden',
           }}
         >
@@ -230,7 +233,8 @@ export default function HomePage() {
       <Box
         px={4}
         pt={3}
-        style={{ display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+        className="scroll-x"
+        style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}
       >
         {SEGMENTS.map((s) => (
           <Box
@@ -270,7 +274,8 @@ export default function HomePage() {
       <Box
         px={4}
         pb={2}
-        style={{ display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+        className="scroll-x"
+        style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}
       >
         {brands.isLoading &&
           Array.from({ length: 5 }, (_, i) => (
@@ -322,6 +327,7 @@ export default function HomePage() {
             padding: 14,
             borderRadius: 'var(--radius-lg)',
             background: 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))',
+            boxShadow: '0 6px 18px rgba(80, 144, 24, 0.22)',
             color: '#fff',
           }}
         >
@@ -358,6 +364,7 @@ export default function HomePage() {
             borderRadius: 'var(--radius-lg)',
             background: 'var(--neutral-0)',
             border: '1px solid var(--leaf-200)',
+            boxShadow: 'var(--shadow-card)',
           }}
         >
           <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>

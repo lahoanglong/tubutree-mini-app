@@ -22,15 +22,18 @@
   --primary-400: #eba94a;
   --primary-600: #e08c1c; /* CTA chính ⭐ */
   --primary-700: #b86a10; /* hover/pressed */
+  --primary-800: #8a4e0a;
   --primary-900: #5c3505;
 
   /* Secondary — Lá logo (hex chuẩn M2) */
   --leaf-50: #eef7d9;
   --leaf-100: #dcefbe;
   --leaf-200: #bbd98a;
+  --leaf-300: #a7ce5c;
   --leaf-400: #95d222;
   --leaf-600: #509018; /* secondary, success ⭐ */
   --leaf-700: #3c6d12;
+  --leaf-800: #2d520e;
   --leaf-900: #1f3a09;
 
   /* Accent — Đất sét (giữ cho voucher/hạng) + Nắng (rating) */
@@ -38,6 +41,7 @@
   --clay-200: #edd4bd;
   --clay-500: #c97b4a;
   --clay-700: #8c4f2a;
+  --clay-800: #6b3a1d;
   --sun-300: #fdd96e;
   --sun-500: #f4b408;
   --sun-700: #b8860b; /* vàng đậm — hạng "Huyền thoại" trong Game/Vườn Xanh */
@@ -48,8 +52,12 @@
   --neutral-50: #fafaf8;
   --neutral-100: #f2f2ef;
   --neutral-200: #e5e5e0;
+  --neutral-300: #d5d5ce;
   --neutral-400: #a8a8a0;
+  --neutral-500: #7e7e75;
   --neutral-600: #5f5f58;
+  --neutral-700: #42423d;
+  --neutral-800: #2a2a26;
   --neutral-900: #1a1a17;
 
   /* Semantic */
@@ -96,6 +104,17 @@
   --shadow-md: 0 4px 12px rgba(92, 52, 10, 0.08);
   --shadow-lg: 0 12px 32px rgba(92, 52, 10, 0.12);
   --shadow-focus: 0 0 0 3px rgba(224, 140, 28, 0.25);
+  --shadow-card: 0 2px 8px rgba(92, 52, 10, 0.06), 0 1px 2px rgba(92, 52, 10, 0.04);
+  --shadow-clay: 0 8px 20px rgba(92, 52, 10, 0.08), inset 0 2px 4px rgba(255, 255, 255, 0.8), inset 0 -2px 4px rgba(92, 52, 10, 0.04);
+
+  /* Spacing rhythm (4/8dp scale) — UI/UX Pro Max */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
 
   /* Motion — "lá rơi": ease-out, ngắn */
   --dur-fast: 150ms;
@@ -198,6 +217,33 @@ body.with-back-btn .page.page-bleed {
 .tubu-press:active {
   transform: scale(0.97);
   opacity: 0.9;
+}
+
+/* ── Card tiêu chuẩn & Claymorphism — UI/UX Pro Max ── */
+.tubu-card {
+  background: var(--neutral-0);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--dur-base) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.tubu-card:active {
+  transform: scale(0.99);
+}
+
+.tubu-card-clay {
+  background: var(--neutral-0);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-clay);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+/* ── Vùng chạm tối thiểu (>=44x44pt) cho a11y & mobile ergonomics ── */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ── Skeleton shimmer ── */
@@ -349,3 +395,13 @@ body.with-back-btn .page.page-bleed {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Container cuộn ngang an toàn trong flex cha (Rule 9b.2) */
+.scroll-x {
+  display: flex;
+  overflow-x: auto;
+  min-width: 0;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+

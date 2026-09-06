@@ -40,6 +40,7 @@ import { WheelOfFortune } from '../components/wheel';
 import { haptic } from '../utils/haptic';
 import { getErrorMessage } from '../services/api';
 import { vi } from '../i18n/vi';
+import { ChevronRight, MessagesSquare, Recycle } from 'lucide-react';
 
 const FREEZE_COST = 80; // khớp default game.streak_freeze_cost (BE là nguồn chân lý)
 const BUY_SEEDS_PACK = 50; // gói mua nước bằng TubuXu (chi phí thực do BE quyết theo game.xu_per_seed)
@@ -288,13 +289,15 @@ export default function GamePage() {
       <Box
         p={5}
         style={{
-          background: 'linear-gradient(160deg, var(--green-400), var(--green-700))',
+          background: 'linear-gradient(160deg, var(--leaf-600), var(--leaf-700))',
           color: 'white',
           textAlign: 'center',
+          borderRadius: '0 0 var(--radius-xl) var(--radius-xl)',
+          boxShadow: 'var(--shadow-md)',
         }}
       >
         <Text style={{ fontSize: 72 }} className="tubu-sway">{pct >= 100 ? '🌳' : pct > 50 ? '🌿' : '🌱'}</Text>
-        <Text style={{ color: 'white' }} bold>
+        <Text style={{ color: 'white', fontFamily: 'var(--font-display)', fontSize: 19 }} bold>
           {eco?.treeType ?? 'Vườn của bạn'}
         </Text>
         <Box style={{ background: 'rgba(255,255,255,0.3)', borderRadius: 99, height: 8, margin: '10px 24px' }}>
@@ -312,15 +315,37 @@ export default function GamePage() {
         mt={2}
         p={3}
         onClick={() => navigate('/feed')}
-        style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        style={{
+          background: 'var(--neutral-0)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--leaf-100)',
+          boxShadow: 'var(--shadow-card)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
       >
-        <Box>
-          <Text size="small" bold>🌿 Bảng tin cộng đồng</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-            Khoe thành tích xanh & cổ vũ nhau trồng cây
-          </Text>
+        <Box flex alignItems="center" style={{ gap: 8 }}>
+          <Box
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: 'var(--leaf-50)',
+              display: 'grid',
+              placeItems: 'center',
+            }}
+          >
+            <MessagesSquare size={18} color="var(--leaf-600)" />
+          </Box>
+          <Box>
+            <Text size="small" bold>Bảng tin cộng đồng</Text>
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+              Khoe thành tích xanh & cổ vũ nhau trồng cây
+            </Text>
+          </Box>
         </Box>
-        <Text style={{ color: 'var(--leaf-700)' }}>›</Text>
+        <ChevronRight size={18} color="var(--leaf-700)" />
       </Box>
 
       {/* Đổi vỏ chai lấy nước (§6.14.6) */}
@@ -330,15 +355,37 @@ export default function GamePage() {
         mt={2}
         p={3}
         onClick={() => navigate('/refill')}
-        style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        style={{
+          background: 'var(--neutral-0)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--leaf-100)',
+          boxShadow: 'var(--shadow-card)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
       >
-        <Box>
-          <Text size="small" bold>♻️ Đổi vỏ chai lấy nước</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-            Mang vỏ rỗng đến cửa hàng → nhận 💧 tưới vườn
-          </Text>
+        <Box flex alignItems="center" style={{ gap: 8 }}>
+          <Box
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: 'var(--leaf-50)',
+              display: 'grid',
+              placeItems: 'center',
+            }}
+          >
+            <Recycle size={18} color="var(--leaf-600)" />
+          </Box>
+          <Box>
+            <Text size="small" bold>Đổi vỏ chai lấy nước</Text>
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+              Mang vỏ rỗng đến cửa hàng → nhận 💧 tưới vườn
+            </Text>
+          </Box>
         </Box>
-        <Text style={{ color: 'var(--leaf-700)' }}>›</Text>
+        <ChevronRight size={18} color="var(--leaf-700)" />
       </Box>
 
       {/* Banner mùa/sự kiện (Phase 4) */}
@@ -1061,7 +1108,24 @@ export default function GamePage() {
                 )}
               </Box>
             )}
-            <Button fullWidth onClick={() => setHarvested(false)} style={{ marginTop: 20, background: 'var(--leaf-600)' }}>
+            {harvestCoupon && (
+              <Button
+                fullWidth
+                variant="secondary"
+                onClick={() => {
+                  setHarvested(false);
+                  navigate('/browse');
+                }}
+                style={{ marginTop: 12 }}
+              >
+                Dùng voucher mua sắm ngay
+              </Button>
+            )}
+            <Button
+              fullWidth
+              onClick={() => setHarvested(false)}
+              style={{ marginTop: harvestCoupon ? 8 : 20, background: 'var(--leaf-600)' }}
+            >
               Tuyệt vời!
             </Button>
           </Box>

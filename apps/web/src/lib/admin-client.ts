@@ -22,12 +22,54 @@ export interface AdminUser {
   pointsBalance: number;
   createdAt: string;
 }
+export interface AdminOrderItem {
+  id: string;
+  productTitle: string;
+  variationTitle?: string | null;
+  sku?: string | null;
+  price: number;
+  quantity: number;
+  total: number;
+}
 export interface AdminOrder {
+  id: string;
   code: string;
   status: string;
   total: number;
   paymentMethod: string;
+  paymentStatus?: string;
+  shippingFee?: number;
+  discountTotal?: number;
+  note?: string | null;
   createdAt: string;
+  updatedAt?: string;
+  user?: {
+    id: string;
+    phone: string | null;
+    fullName: string | null;
+  } | null;
+  items?: AdminOrderItem[];
+}
+export interface DashboardStats {
+  totalRevenue: number;
+  totalOrders: number;
+  pendingOrders: number;
+  shippingOrders: number;
+  deliveredOrders: number;
+  cancelledOrders: number;
+  totalUsers: number;
+  totalAffiliates: number;
+  totalProducts: number;
+  plantedTreesCount: number;
+  recentOrders: {
+    id: string;
+    code: string;
+    total: number;
+    status: string;
+    paymentMethod: string;
+    createdAt: string;
+    user?: { fullName: string | null; phone: string | null } | null;
+  }[];
 }
 export interface ConfigRow {
   key: string;
@@ -44,6 +86,53 @@ export const listDealerApps = (status?: string) =>
   apiFetch<DealerApp[]>(`/admin/dealer-applications${status ? `?status=${status}` : ''}`);
 export const reviewDealerApp = (id: string, approve: boolean, tierId?: string, reason?: string) =>
   apiFetch(`/admin/dealer-applications/${id}/review`, { method: 'POST', body: { approve, tierId, reason } });
+
+// ── Đổi / Trả (§6.4) ──
+export interface AdminReturnRequest {
+  id: string;
+  orderId: string;
+  userId: string;
+  reason: string;
+  images: string[];
+  status: 'REQUESTED' | 'APPROVED' | 'REJECTED';
+  refundMethod: string;
+  adminNote: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  order?: {
+    id: string;
+    code: string;
+    total: number;
+    status: string;
+    paymentMethod: string;
+  } | null;
+  user?: {
+    id: string;
+    fullName: string | null;
+    phone: string | null;
+  } | null;
+}
+export const listReturnRequests = (status?: string) =>
+  apiFetch<AdminReturnRequest[]>(`/admin/return-requests${status ? `?status=${status}` : ''}`);
+export const reviewReturnRequest = (id: string, approve: boolean, note?: string) =>
+  apiFetch<AdminReturnRequest>(`/admin/return-requests/${id}/review`, {
+    method: 'POST',
+    body: { approve, note },
+  });
+
+// ── Nhập giá đại lý B2B & số lượng bán ngoài ──
+export const importDealerPrices = (tierId: string, csv: string) =>
+  apiFetch<{ updated: number; skipped: number; notFound: string[] }>('/admin/dealer-prices/import', {
+    method: 'POST',
+    body: { tierId, csv },
+  });
+export const importSoldExternal = (csv: string) =>
+  apiFetch<{ ok: boolean; updatedCount: number }>('/admin/products/sold-external', {
+    method: 'POST',
+    body: { csv },
+  });
+
 export const listUsers = (page = 1) =>
   apiFetch<Page<AdminUser>>(`/admin/users?page=${page}&limit=20`);
 export type UserRole = 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
@@ -52,8 +141,17 @@ export const setUserRole = (phone: string, role: UserRole) =>
     '/admin/users/role',
     { method: 'POST', body: { phone, role } },
   );
-export const listOrders = (page = 1, status?: string) =>
-  apiFetch<Page<AdminOrder>>(`/admin/orders?page=${page}&limit=20${status ? `&status=${status}` : ''}`);
+export const getDashboardStats = () =>
+  apiFetch<DashboardStats>('/admin/dashboard/stats');
+export const listOrders = (page = 1, status?: string, search?: string) =>
+  apiFetch<Page<AdminOrder>>(
+    `/admin/orders?page=${page}&limit=20${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`,
+  );
+export const updateOrderStatus = (id: string, status: string, note?: string) =>
+  apiFetch<AdminOrder>(`/admin/orders/${id}/status`, {
+    method: 'PUT',
+    body: { status, note },
+  });
 export const getConfig = (category?: string) =>
   apiFetch<ConfigRow[]>(`/admin/config${category ? `?category=${category}` : ''}`);
 export const setConfig = (key: string, value: unknown) =>
@@ -310,3 +408,52 @@ export const updateQuickReply = (
 ) => apiFetch<AdminQuickReply>(`/admin/quick-replies/${id}`, { method: 'PATCH', body });
 export const deleteQuickReply = (id: string) =>
   apiFetch<{ ok: boolean }>(`/admin/quick-replies/${id}`, { method: 'DELETE' });
+
+// ── Duyệt sản phẩm đăng bởi đối tác (Multi-tenancy Storefront) ──
+export interface AdminPendingProduct {
+  id: string;
+  name: string;
+  slug: string;
+  basePrice: number;
+  salePrice: number | null;
+  thumbnail: string | null;
+  brand: string;
+  category: string;
+  description: string | null;
+  ingredients: string | null;
+  certifications: string[];
+  ecoBadges: string[];
+  approvalStatus: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED';
+  rejectReason?: string | null;
+  createdAt: string;
+  storefront?: {
+    id: string;
+    title: string;
+    subdomain: string | null;
+    ownerUserId: string;
+  } | null;
+  variations?: {
+    id: string;
+    name: string;
+    sku: string;
+    price: number;
+    stock: number;
+  }[];
+}
+
+export const listPendingMerchantProducts = () =>
+  apiFetch<AdminPendingProduct[]>('/admin/merchant-products/pending');
+
+export const reviewMerchantProduct = (
+  productId: string,
+  approve: boolean,
+  rejectReason?: string,
+) =>
+  apiFetch<{ id: string; approvalStatus: string }>(
+    `/admin/merchant-products/${productId}/review`,
+    {
+      method: 'POST',
+      body: { approve, rejectReason },
+    },
+  );
+

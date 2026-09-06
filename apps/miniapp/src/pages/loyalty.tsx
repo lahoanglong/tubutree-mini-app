@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
+import { Sprout, Recycle, Check, ChevronRight } from 'lucide-react';
 import {
   getLoyalty,
   getCoupons,
@@ -134,13 +135,92 @@ export default function LoyaltyPage() {
             </Box>
           </Box>
 
+          {/* Lối tắt tích Điểm & Giọt nước */}
+          <Box px={4} pb={2}>
+            <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Box
+                className="tubu-press"
+                onClick={() => navigate('/game')}
+                p={3}
+                style={{
+                  background: 'var(--neutral-0)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--leaf-200)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}
+              >
+                <Box flex alignItems="center" justifyContent="space-between">
+                  <Box
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      background: 'var(--leaf-50)',
+                      display: 'grid',
+                      placeItems: 'center',
+                    }}
+                  >
+                    <Sprout size={18} color="var(--leaf-600)" />
+                  </Box>
+                  <ChevronRight size={16} color="var(--neutral-400)" />
+                </Box>
+                <Text size="small" bold style={{ color: 'var(--leaf-800)', marginTop: 4 }}>
+                  Vườn Cây Tubu
+                </Text>
+                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                  Chăm cây nhận quà
+                </Text>
+              </Box>
+
+              <Box
+                className="tubu-press"
+                onClick={() => navigate('/refill')}
+                p={3}
+                style={{
+                  background: 'var(--neutral-0)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--primary-200)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}
+              >
+                <Box flex alignItems="center" justifyContent="space-between">
+                  <Box
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      background: 'var(--primary-50)',
+                      display: 'grid',
+                      placeItems: 'center',
+                    }}
+                  >
+                    <Recycle size={18} color="var(--primary-700)" />
+                  </Box>
+                  <ChevronRight size={16} color="var(--neutral-400)" />
+                </Box>
+                <Text size="small" bold style={{ color: 'var(--primary-800)', marginTop: 4 }}>
+                  Trạm Refill
+                </Text>
+                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                  Đổi vỏ tích nước
+                </Text>
+              </Box>
+            </Box>
+          </Box>
+
           {/* Quyền lợi hạng */}
           {perks.length > 0 && (
             <Section title="Quyền lợi của bạn">
               <Box flex flexDirection="column" style={{ gap: 8 }}>
                 {perks.map((p, i) => (
                   <Box key={i} flex alignItems="center" style={{ gap: 8 }}>
-                    <Text style={{ color: 'var(--leaf-600)' }}>✓</Text>
+                    <Check size={16} color="var(--leaf-600)" />
                     <Text size="small">{p}</Text>
                   </Box>
                 ))}
@@ -265,14 +345,16 @@ export default function LoyaltyPage() {
             )}
           </Section>
 
-          <Box p={4}>
-            <Text
-              size="xSmall"
-              style={{ color: 'var(--neutral-400)', textAlign: 'center' }}
+          <Box p={4} flex justifyContent="center">
+            <Box
+              className="tubu-press"
               onClick={() => navigate('/browse')}
+              style={{ cursor: 'pointer', padding: '8px 16px', background: 'var(--leaf-50)', borderRadius: 'var(--radius-full)', border: '1px solid var(--leaf-200)' }}
             >
-              Mua sắm để tích thêm Điểm Xanh →
-            </Text>
+              <Text size="small" bold style={{ color: 'var(--leaf-700)', textAlign: 'center' }}>
+                Mua sắm để tích thêm Điểm Xanh →
+              </Text>
+            </Box>
           </Box>
         </>
       ) : null}

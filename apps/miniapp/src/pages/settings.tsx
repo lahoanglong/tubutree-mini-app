@@ -18,12 +18,7 @@ const DEFAULT_PREFS: Prefs = {
   notifyGarden: true,
   fontScale: 'normal',
 };
-const FONT_PX: Record<Prefs['fontScale'], string> = { small: '15px', normal: '16px', large: '18px' };
-
-export function applyFontScale(scale: Prefs['fontScale']) {
-  document.documentElement.dataset.fontScale = scale;
-  document.documentElement.style.fontSize = FONT_PX[scale] ?? '16px';
-}
+import { applyFontScale } from '../utils/font-scale';
 
 export default function SettingsPage() {
   const navigate = useNavigate();

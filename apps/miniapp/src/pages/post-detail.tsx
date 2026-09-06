@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Trash2, Flag, Pin } from 'lucide-react';
+import { Pencil, Trash2, Flag, Pin, Sprout } from 'lucide-react';
 import {
   getPost,
   getComments,
@@ -146,11 +146,14 @@ export default function PostDetailPage() {
   // BE yêu cầu JWT cho mọi route /feed/:id (kể cả GET) — chưa đăng nhập thì không có gì để xem.
   if (!authed) {
     return (
-      <Page className="page">
-        <Box style={{ textAlign: 'center', padding: 48 }}>
-          <Text style={{ fontSize: 48 }}>🌿</Text>
-          <Text style={{ marginTop: 8 }}>{vi.community.loginToView}</Text>
-          <Button style={{ marginTop: 12, background: 'var(--leaf-600)' }} onClick={() => void login()}>
+      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+        <Box style={{ textAlign: 'center', padding: '60px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Box style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--leaf-50)', border: '1px solid var(--leaf-200)', display: 'grid', placeItems: 'center', marginBottom: 12, boxShadow: 'var(--shadow-card)' }}>
+            <Sprout size={32} color="var(--leaf-700)" strokeWidth={2} />
+          </Box>
+          <Text size="normal" bold style={{ color: 'var(--neutral-800)' }}>Cộng đồng Sống Xanh</Text>
+          <Text size="small" style={{ marginTop: 6, color: 'var(--neutral-500)', maxWidth: 280 }}>{vi.community.loginToView}</Text>
+          <Button style={{ marginTop: 16, background: 'var(--leaf-600)', borderRadius: 'var(--radius-full)', minWidth: 180 }} onClick={() => void login()}>
             {vi.auth.loginCta}
           </Button>
         </Box>

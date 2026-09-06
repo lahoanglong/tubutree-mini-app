@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Box, Page, Text, Button, useParams } from 'zmp-ui';
+import { Box, Page, Text, Button, useParams, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
+import { Share2, Sprout, MessageSquare, MapPin, CreditCard, CheckCircle2 } from 'lucide-react';
 import { getPublicStorefront } from '../services/storefront-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd, formatSold } from '../utils/format';
@@ -15,6 +16,7 @@ const THEME: Record<string, string> = {
 
 export default function StorefrontViewPage() {
   const { slug = '' } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
   const q = useQuery({ queryKey: ['public-storefront', slug], queryFn: () => getPublicStorefront(slug), staleTime: 60_000 });
   const setSfContext = useStorefrontContext((s) => s.setContext);
   const [shareOpen, setShareOpen] = useState(false);
@@ -32,15 +34,31 @@ export default function StorefrontViewPage() {
       <Box style={{ height: 84, background: sf.coverUrl ? `url(${sf.coverUrl}) center/cover` : (THEME[sf.theme] ?? THEME['leaf-orange']) }} />
       <Box px={4} style={{ marginTop: -28 }}>
         <Box style={{ width: 58, height: 58, borderRadius: '50%', background: 'var(--primary-600)', border: '3px solid var(--neutral-0)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, color: 'var(--neutral-0)', overflow: 'hidden' }}>
-          {sf.avatarUrl ? <img src={sf.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '🌿'}
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--neutral-0)', overflow: 'hidden' }}>
+          {sf.avatarUrl ? <img src={sf.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Sprout size={28} color="var(--neutral-0)" />}
         </Box>
         <Text bold size="xLarge" style={{ marginTop: 8 }}>{sf.title}</Text>
         {sf.headerNote && <Text size="small" style={{ color: 'var(--neutral-600)' }}>{sf.headerNote}</Text>}
-        <Box flex style={{ gap: 6, marginTop: 8 }}>
-          <Text size="xSmall" style={{ background: 'var(--leaf-600)', color: 'var(--neutral-0)', padding: '3px 9px', borderRadius: 'var(--radius-full)' }}>✓ CTV chính thức Tubu</Text>
+        <Box flex style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+          <Text size="xSmall" style={{ background: 'var(--leaf-600)', color: 'var(--neutral-0)', padding: '3px 9px', borderRadius: 'var(--radius-full)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <CheckCircle2 size={12} />
+            {sf.type === 'MERCHANT' ? 'Đối tác chính hãng Tubu' : 'CTV tuyển chọn Tubu'}
+          </Text>
+          {sf.warehouseCity && (
+            <Text size="xSmall" style={{ background: 'var(--neutral-200)', color: 'var(--neutral-800)', padding: '3px 9px', borderRadius: 'var(--radius-full)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <MapPin size={12} />
+              Kho: {sf.warehouseCity}
+            </Text>
+          )}
+          {sf.bankBin && sf.bankAccountNo && (
+            <Text size="xSmall" style={{ background: 'var(--primary-100)', color: 'var(--primary-900)', padding: '3px 9px', borderRadius: 'var(--radius-full)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <CreditCard size={12} />
+              VietQR trực tiếp
+            </Text>
+          )}
         </Box>
       </Box>
+
 
       {sf.collections.map((col) => (
         <Box key={col.id} mt={4} px={4}>
@@ -49,7 +67,14 @@ export default function StorefrontViewPage() {
             {col.items.filter((it) => Boolean(it?.product)).map((it) => {
               const price = it.product.salePrice ?? it.product.basePrice;
               return (
-                <Box key={it.id} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
+                <Box
+                  key={it.id}
+                  role="button"
+                  aria-label={`Xem ${it.product.name}`}
+                  className="tubu-press"
+                  onClick={() => navigate(`/product/${it.product.slug}`)}
+                  style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden', cursor: 'pointer' }}
+                >
                   <Box style={{ aspectRatio: '1/1', background: 'var(--neutral-100)' }}>
                     {it.product.thumbnail && <img src={it.product.thumbnail} alt={it.product.name} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                   </Box>
@@ -63,7 +88,12 @@ export default function StorefrontViewPage() {
                       <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{formatSold(it.product.sold)}</Text>
                     )}
                     <Text bold style={{ color: 'var(--primary-700)', fontSize: 15 }}>{formatVnd(price)}</Text>
-                    {it.note && <Text size="xSmall" style={{ color: 'var(--leaf-700)', background: 'var(--leaf-50)', padding: '4px 8px', borderRadius: 10, marginTop: 4 }}>💬 {it.note}</Text>}
+                    {it.note && (
+                      <Box flex alignItems="center" style={{ gap: 4, marginTop: 4, background: 'var(--leaf-50)', padding: '4px 8px', borderRadius: 10 }}>
+                        <MessageSquare size={12} color="var(--leaf-700)" />
+                        <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>{it.note}</Text>
+                      </Box>
+                    )}
                   </Box>
                 </Box>
               );
@@ -73,8 +103,13 @@ export default function StorefrontViewPage() {
       ))}
 
       <Box style={{ position: 'fixed', left: 0, right: 0, bottom: 0, padding: 12, display: 'flex', gap: 8 }}>
-        <Button fullWidth style={{ background: 'var(--primary-600)' }} onClick={() => setShareOpen(true)}>
-          ↗ Chia sẻ gian hàng
+        <Button
+          fullWidth
+          prefixIcon={<Share2 size={16} />}
+          style={{ background: 'var(--primary-600)' }}
+          onClick={() => setShareOpen(true)}
+        >
+          Chia sẻ gian hàng
         </Button>
       </Box>
 

@@ -38,6 +38,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { PancakeModule } from './modules/integrations/pancake/pancake.module';
 import { PaymentModule } from './modules/integrations/payment/payment.module';
 import { StorefrontModule } from './modules/storefront/storefront.module';
+import { MerchantModule } from './modules/merchant/merchant.module';
 import { BrandModule } from './modules/brand/brand.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { FlashSaleModule } from './modules/flash-sale/flash-sale.module';
@@ -89,6 +90,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     PancakeModule,
     PaymentModule,
     StorefrontModule,
+    MerchantModule,
     BrandModule,
     StaffModule,
     FlashSaleModule,

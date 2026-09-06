@@ -108,7 +108,8 @@ export default function NotificationsPage() {
                   gap: 12,
                   background: unread ? 'var(--primary-50)' : 'var(--neutral-0)',
                   borderRadius: 'var(--radius-lg)',
-                  boxShadow: 'var(--shadow-xs)',
+                  border: `1px solid ${unread ? 'var(--primary-200)' : 'var(--neutral-200)'}`,
+                  boxShadow: 'var(--shadow-card)',
                   cursor: 'pointer',
                 }}
               >

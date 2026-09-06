@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { ShoppingBag, Truck, Leaf } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { getCart, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-client';
@@ -67,9 +68,12 @@ export default function CartPage() {
         </div>
       ) : !cart || cart.items.length === 0 ? (
         <div className="py-20 text-center">
-          <div className="text-5xl">🛒</div>
-          <p className="mt-4 text-neutral-600">Giỏ hàng trống</p>
-          <Link href="/" className="mt-4 inline-block rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-leaf-50 text-leaf-600 shadow-sm ring-8 ring-leaf-50/50">
+            <ShoppingBag className="h-8 w-8 text-primary-600 stroke-[1.5]" />
+          </div>
+          <p className="mt-4 font-semibold text-neutral-800">Giỏ hàng đang trống</p>
+          <p className="mt-1 text-sm text-neutral-500">Khám phá các sản phẩm xanh và bảo vệ môi trường cùng Tubu Tree</p>
+          <Link href="/" className="mt-5 inline-block rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white shadow-sm hover:bg-primary-700 transition">
             Khám phá sản phẩm
           </Link>
         </div>
@@ -77,19 +81,20 @@ export default function CartPage() {
         <div className="grid gap-6 md:grid-cols-3">
           <div className="md:col-span-2">
             {!cart.freeship && remainingFreeship > 0 && (
-              <p className="mb-3 rounded-md bg-leaf-50 px-3 py-2 text-sm text-leaf-700">
-                Mua thêm {formatVnd(remainingFreeship)} để được miễn phí vận chuyển 🚚
-              </p>
+              <div className="mb-3 flex items-center gap-2 rounded-xl bg-leaf-50 px-3.5 py-2.5 text-sm text-leaf-800 border border-leaf-200">
+                <Truck className="h-4 w-4 text-leaf-600 shrink-0" />
+                <span>Mua thêm <strong className="font-bold">{formatVnd(remainingFreeship)}</strong> để được miễn phí vận chuyển</span>
+              </div>
             )}
             <div className="divide-y rounded-lg border border-neutral-100 bg-white">
               {cart.items.map((it) => (
                 <div key={it.id} className="flex gap-3 p-3">
-                  <div className="flex h-16 w-16 flex-none items-center justify-center rounded bg-leaf-50 text-2xl">
+                  <div className="flex h-16 w-16 flex-none items-center justify-center rounded bg-leaf-50 text-2xl overflow-hidden">
                     {it.thumbnail ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={it.thumbnail} alt={it.productName} className="h-full w-full rounded object-cover" />
                     ) : (
-                      '🌿'
+                      <Leaf className="h-6 w-6 text-leaf-600" />
                     )}
                   </div>
                   <div className="flex-1">

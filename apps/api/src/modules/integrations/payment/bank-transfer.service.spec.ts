@@ -54,4 +54,32 @@ describe('BankTransferService.getBankQr', () => {
     const r = await new BankTransferService(makePrisma({ ...ORDER, paymentStatus: 'PAID' }), makeConfig()).getBankQr('TUBU250625001', 'u1');
     expect(r.paymentStatus).toBe('PAID');
   });
+
+  it('đơn có storefrontSlug với TK ngân hàng đối tác → ưu tiên sinh VietQR về tài khoản đối tác', async () => {
+    const merchantPrisma = {
+      order: {
+        findUnique: jest.fn().mockResolvedValue({
+          ...ORDER,
+          storefrontSlug: 'organic-store',
+        }),
+      },
+      storefront: {
+        findFirst: jest.fn().mockResolvedValue({
+          bankBin: '970436',
+          bankAccountNo: '001122334455',
+          bankAccountName: 'NGUYEN VAN A',
+          bankName: 'Vietcombank',
+        }),
+      },
+    } as unknown as PrismaService;
+
+    const r = await new BankTransferService(merchantPrisma, makeConfig()).getBankQr('TUBU250625001', 'u1');
+    expect(r.bank).toMatchObject({
+      bin: '970436',
+      accountNo: '001122334455',
+      name: 'Vietcombank',
+      accountName: 'NGUYEN VAN A',
+    });
+    expect(r.qrString).toContain('001122334455');
+  });
 });

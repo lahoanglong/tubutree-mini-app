@@ -37,12 +37,15 @@ pnpm --filter @tubutree/web dev   # chạy web    → http://localhost:3000
 pnpm --filter @tubutree/miniapp dev  # chạy mini app (cần zmp-cli login)
 ```
 
-## Tiến độ tổng quan (cập nhật 2026-09-02, verify trực tiếp trên code)
+## Tiến độ tổng quan (cập nhật 2026-09-05, verify trực tiếp trên code)
 
-> **Backend: 38 module** (catalog, checkout, orders, loyalty, game/Vườn Xanh, affiliate, cashback (provider-agnostic), dealer B2B, flash-sale, groupbuy, subscriptions, storefront CTV, brand, staff (RBAC/ca làm/chấm công/lương), academy, content-kit, cskh (quick-reply/auto-reply Zalo OA), community feed, refill, wishlist, reviews, ai-advisor, notifications, vouchers, wallet, beta, faq, lifecycle, v.v.) — **typecheck sạch, 85/85 test suite · 1132/1132 unit test PASS** (verify lại trực tiếp, không chỉ dựa tài liệu cũ).
-> Miniapp (36 trang) + Web đều typecheck sạch.
+> **Backend: 38 module** (catalog, checkout, orders, loyalty, game/Vườn Xanh, affiliate, cashback (provider-agnostic), dealer B2B, flash-sale, groupbuy, subscriptions, storefront CTV, brand, staff (RBAC/ca làm/chấm công/lương), academy, content-kit, cskh (quick-reply/auto-reply Zalo OA), community feed, refill, wishlist, reviews, ai-advisor, notifications, vouchers, wallet, beta, faq, lifecycle, v.v.) — **typecheck sạch, 85/85 test suite · 1183/1183 unit test PASS** (verify trực tiếp).
+> **Miniapp (36 trang): typecheck sạch, 6/6 test file · 36/36 unit test PASS** (Vitest).
+> **Web (Next.js 14): typecheck sạch, 1/1 test file · 9/9 unit test PASS** (Vitest).
+> **Tổng monorepo: 1228/1228 unit test PASS**, 0 lỗi lint/typecheck trên toàn bộ workspace.
+> Đã hoàn thiện toàn diện giao diện Quản lý Đổi/Trả (`Return Requests`) trên Web Admin (kết nối endpoint `GET /api/admin/return-requests` và `POST /api/admin/return-requests/:id/review`, lọc trạng thái, xem lý do + ảnh minh chứng, duyệt hoàn tiền / từ chối kèm ghi chú admin).
 > Toàn bộ blocker bảo mật/money-path từng ghi nhận (webhook fail-open, thiếu rate-limit, oversell, hoàn ví 2 lần…) đã xác nhận **FIX trong code hiện tại** (fail-closed theo `NODE_ENV`, `@nestjs/throttler` global, trừ stock atomic `updateMany+gte`, exception filter, healthcheck compose).
-> Đêm 2026-09-01→02: deep-review trước release, đã fix thêm — 2 race condition ở CSKH webhook/auto-reply (msg_id dedup + claim lời chào atomic, verify concurrency thật trên Postgres), 1 migration trùng lặp sẽ vỡ khi deploy fresh (đã gỡ), 1 bug data-integrity ở admin (`DealersTab` dùng chung state `tierId` giữa các dòng → có thể gán nhầm tier khi duyệt), form cấp quyền admin mặc định chọn sẵn ADMIN (đổi về least-privilege + thêm confirm), và bổ sung error-state còn thiếu ở hầu hết tab admin web + trang thanh toán/giỏ hàng/đơn hàng.
+> Đợt audit & harden hoàn tất (commit `7dab6ee`): bịt kín race condition & authz hole tại checkout/wallet/loyalty/dealer/affiliate, chặn `isBlocked` ngay khi login, atomic role grants & duyệt đại lý, chống exploit farm điểm/nước game quiz (dayKey unique index), thêm index Phase 5 cho bảng nóng kèm script chạy CONCURRENTLY, bổ sung HTTP security headers trên Web, sửa CSRF OAuth login, và validate ngày khuyến mãi / encode mã đơn hàng trên Miniapp.
 
 ### Việc còn tồn đọng (thực tế, không phải backlog cũ)
 

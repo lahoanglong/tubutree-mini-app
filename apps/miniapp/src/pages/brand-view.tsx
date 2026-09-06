@@ -11,6 +11,7 @@ import { formatVnd, formatSold } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { ShareSheet } from '../components/share-sheet';
+import { BadgePercent, Sparkles, Store } from 'lucide-react';
 
 const HEADER_BG = 'linear-gradient(120deg, var(--leaf-600), var(--primary-600))';
 
@@ -104,9 +105,12 @@ export default function BrandViewPage() {
             onClick={() => setShareOpen(true)}
             style={{ background: 'var(--leaf-50)', border: '1px solid var(--leaf-200)', borderRadius: 'var(--radius-lg)', padding: 12 }}
           >
-            <Text bold size="small" style={{ color: 'var(--leaf-800)' }}>
-              💰 Chia sẻ nhãn này — nhận tới {ste.maxAffiliateRate}% hoa hồng
-            </Text>
+            <Box flex alignItems="center" style={{ gap: 6 }}>
+              <BadgePercent size={18} color="var(--leaf-800)" />
+              <Text bold size="small" style={{ color: 'var(--leaf-800)' }}>
+                Chia sẻ nhãn này — nhận tới {ste.maxAffiliateRate}% hoa hồng
+              </Text>
+            </Box>
             <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 2 }}>
               Bấm để lấy link + caption gắn mã giới thiệu của bạn.
             </Text>
@@ -117,7 +121,7 @@ export default function BrandViewPage() {
       {b.certifications.length > 0 && (
         <Box mt={4} px={4}>
           <Text bold style={{ marginBottom: 8 }}>Chứng nhận</Text>
-          <Box flex style={{ gap: 8, overflowX: 'auto' }}>
+          <Box className="scroll-x" style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
             {b.certifications.map((c) => (
               <Text
                 key={c.code}
@@ -133,7 +137,10 @@ export default function BrandViewPage() {
 
       {b.promotions.length > 0 && (
         <Box mt={4} px={4}>
-          <Text bold style={{ marginBottom: 8 }}>🎉 Khuyến mãi</Text>
+          <Box flex alignItems="center" style={{ gap: 6, marginBottom: 8 }}>
+            <Sparkles size={16} color="var(--clay-700)" />
+            <Text bold>Khuyến mãi</Text>
+          </Box>
           {b.promotions.map((p) => (
             <Box
               key={p.id}
@@ -182,7 +189,10 @@ export default function BrandViewPage() {
 
       {b.dealerRewards.length > 0 && (
         <Box mt={4} px={4}>
-          <Text bold style={{ marginBottom: 8 }}>🏪 Chương trình đại lý</Text>
+          <Box flex alignItems="center" style={{ gap: 6, marginBottom: 8 }}>
+            <Store size={16} color="var(--leaf-700)" />
+            <Text bold>Chương trình đại lý</Text>
+          </Box>
           {b.dealerRewards.map((d) => (
             <Box key={d.id} mb={2} style={{ background: 'var(--neutral-0)', border: '1px solid var(--neutral-200)', borderRadius: 'var(--radius-lg)', padding: 12 }}>
               <Text bold size="small">{d.title}</Text>

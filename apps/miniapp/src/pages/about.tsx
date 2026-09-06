@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Sheet, useSnackbar } from 'zmp-ui';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
 
@@ -139,9 +140,15 @@ export default function AboutPage() {
               <Text size="small" bold style={{ flex: 1 }}>
                 {item.q}
               </Text>
-              <Text style={{ color: 'var(--neutral-400)', transform: open === i ? 'rotate(180deg)' : 'none' }}>
-                ⌄
-              </Text>
+              <ChevronDown
+                size={16}
+                style={{
+                  color: 'var(--neutral-400)',
+                  transform: open === i ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.2s',
+                  flexShrink: 0,
+                }}
+              />
             </Box>
             {open === i && (
               <Text size="small" style={{ color: 'var(--neutral-600)', paddingBottom: 12 }}>
@@ -270,7 +277,7 @@ function LinkRow({ label, onClick }: { label: string; onClick: () => void }) {
       style={{ borderBottom: '1px solid var(--neutral-100)' }}
     >
       <Text size="small">{label}</Text>
-      <Text style={{ color: 'var(--neutral-400)' }}>›</Text>
+      <ChevronRight size={16} style={{ color: 'var(--neutral-400)', flexShrink: 0 }} />
     </Box>
   );
 }

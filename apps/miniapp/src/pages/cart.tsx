@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Page, Text, Button, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Ticket, ChevronRight } from 'lucide-react';
+import { Trash2, Ticket, ChevronRight, AlertTriangle } from 'lucide-react';
 import {
   getCart,
   updateCartItem,
@@ -317,7 +317,7 @@ function CartLineRow({
         display: 'flex',
         gap: 12,
         alignItems: 'center',
-        boxShadow: 'var(--shadow-xs)',
+        boxShadow: 'var(--shadow-card)',
       }}
     >
       <Checkbox checked={selected} onToggle={onToggleSelect} ariaLabel={`Chọn ${line.productName}`} />
@@ -388,9 +388,12 @@ function CartLineRow({
           </Box>
         )}
         {overStock && (
-          <Text size="xSmall" style={{ color: 'var(--warning)', marginTop: 2 }}>
-            ⚠ {vi.cart.stockLimited(line.stock)}
-          </Text>
+          <Box flex alignItems="center" style={{ gap: 4, marginTop: 2 }}>
+            <AlertTriangle size={13} color="var(--warning)" aria-hidden />
+            <Text size="xSmall" style={{ color: 'var(--warning)' }}>
+              {vi.cart.stockLimited(line.stock)}
+            </Text>
+          </Box>
         )}
         <Box flex alignItems="center" style={{ marginTop: 8 }}>
           <QuantitySelector
@@ -589,7 +592,7 @@ function StickySummary({
         <Text size="small" style={{ color: 'var(--neutral-600)' }}>
           {vi.cart.subtotal}
         </Text>
-        <Text bold style={{ fontSize: 18, color: 'var(--primary-700)' }}>
+        <Text bold style={{ fontSize: 18, color: 'var(--primary-700)', fontFamily: 'var(--font-display)' }}>
           {formatVnd(Math.max(0, selectedSubtotal - discount))}
         </Text>
       </Box>
@@ -597,7 +600,7 @@ function StickySummary({
         fullWidth
         disabled={selectedCount === 0}
         onClick={onCheckout}
-        style={{ background: 'var(--primary-600)', marginTop: 8, minHeight: 48, fontWeight: 600 }}
+        style={{ background: 'var(--primary-600)', marginTop: 8, minHeight: 48, fontWeight: 600, borderRadius: 'var(--radius-full)' }}
       >
         {vi.cart.checkout(selectedCount)}
       </Button>

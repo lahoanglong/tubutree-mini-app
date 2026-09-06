@@ -115,12 +115,24 @@ export interface StorefrontCollection {
 export interface StorefrontDetail {
   id: string;
   slug: string;
+  subdomain?: string | null;
+  customDomain?: string | null;
   type?: string | null;
   title: string;
   headerNote?: string | null;
   avatarUrl?: string | null;
   coverUrl?: string | null;
   theme?: string | null;
+  themeColor?: string | null;
+  bankName?: string | null;
+  bankBin?: string | null;
+  bankAccountNo?: string | null;
+  bankAccountName?: string | null;
+  warehouseAddress?: string | null;
+  warehouseCity?: string | null;
+  warehouseDistrict?: string | null;
+  warehouseWard?: string | null;
+  warehousePhone?: string | null;
   collections: StorefrontCollection[];
 }
 

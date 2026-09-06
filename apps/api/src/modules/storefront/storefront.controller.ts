@@ -12,6 +12,17 @@ class UpdateStorefrontDto {
   @IsOptional() @IsString() avatarUrl?: string;
   @IsOptional() @IsString() coverUrl?: string;
   @IsOptional() @IsString() theme?: string;
+  @IsOptional() @IsString() themeColor?: string;
+  @IsOptional() @IsString() subdomain?: string;
+  @IsOptional() @IsString() bankName?: string;
+  @IsOptional() @IsString() bankBin?: string;
+  @IsOptional() @IsString() bankAccountNo?: string;
+  @IsOptional() @IsString() bankAccountName?: string;
+  @IsOptional() @IsString() warehouseAddress?: string;
+  @IsOptional() @IsString() warehouseCity?: string;
+  @IsOptional() @IsString() warehouseDistrict?: string;
+  @IsOptional() @IsString() warehouseWard?: string;
+  @IsOptional() @IsString() warehousePhone?: string;
 }
 class PublishDto { @IsBoolean() isPublished!: boolean; }
 class CreateCollectionDto {
@@ -70,4 +81,5 @@ export class StorefrontController {
   @Post('me/quests/:code/claim') claimQuest(@CurrentUser('sub') uid: string, @Param('code') code: string) { return this.quests.claimQuest(uid, code); }
 
   @Public() @Get('public/:slug') publicView(@Param('slug') slug: string) { return this.svc.getPublicBySlug(slug); }
+  @Public() @Get('by-host') byHost(@Query('host') host: string) { return this.svc.getPublicByHost(host); }
 }

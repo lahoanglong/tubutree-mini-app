@@ -11,9 +11,11 @@ const standalone = process.env.NEXT_STANDALONE === '1';
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false, // ẩn header X-Powered-By: Next.js (info-disclosure nhỏ, không cần thiết)
-  ...(standalone
-    ? { output: 'standalone', experimental: { outputFileTracingRoot: path.join(dirname, '../../') } }
-    : {}),
+  experimental: {
+    webpackBuildWorker: false,
+    ...(standalone ? { outputFileTracingRoot: path.join(dirname, '../../') } : {}),
+  },
+  ...(standalone ? { output: 'standalone' } : {}),
   transpilePackages: ['@tubutree/shared-types'],
   env: {
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api',

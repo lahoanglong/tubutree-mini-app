@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'zmp-ui';
 import { Home, LayoutGrid, Sprout, Wallet, User, type LucideIcon } from 'lucide-react';
+import { haptic } from '../utils/haptic';
 
 /**
  * Bottom tab bar tuỳ biến theo design M1 (§ TabBar): 5 tab, Vườn Xanh là nút TRÒN
@@ -58,7 +59,12 @@ export default function BottomNav() {
               role="button"
               aria-label={t.label}
               className="tubu-press"
-              onClick={() => navigate(t.key)}
+              onClick={() => {
+                if (path !== t.key) {
+                  haptic('light');
+                  navigate(t.key);
+                }
+              }}
               style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 6 }}
             >
               <div
@@ -91,7 +97,12 @@ export default function BottomNav() {
             role="button"
             aria-label={t.label}
             className="tubu-press"
-            onClick={() => navigate(t.key)}
+            onClick={() => {
+              if (path !== t.key) {
+                haptic('light');
+                navigate(t.key);
+              }
+            }}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3 }}
           >
             <t.Icon size={23} color={color} strokeWidth={active ? 2.2 : 1.8} absoluteStrokeWidth />

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Trees } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 export default function LoginPage() {
@@ -27,8 +28,10 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
-      <div className="text-6xl">🌳</div>
-      <h1 className="mt-4 text-2xl font-bold text-primary-700">Tubu Tree</h1>
+      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-primary-50 text-primary-700 shadow-sm ring-8 ring-primary-50/50">
+        <Trees className="h-10 w-10 text-primary-600" />
+      </div>
+      <h1 className="mt-5 text-2xl font-bold text-primary-800">Tubu Tree</h1>
       <p className="mt-2 text-neutral-600">
         Đăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.
       </p>

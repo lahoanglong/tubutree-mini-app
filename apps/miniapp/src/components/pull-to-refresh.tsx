@@ -75,7 +75,7 @@ export function PullToRefresh({ onRefresh }: { onRefresh: () => Promise<unknown>
       scroller.removeEventListener('touchend', onEnd);
       scroller.removeEventListener('touchcancel', onEnd);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ gắn listener 1 lần, dùng onRefreshRef để luôn gọi bản mới nhất
+    // Note: chỉ gắn listener 1 lần, dùng onRefreshRef để luôn gọi bản mới nhất
   }, []);
 
   const visible = pull > 0 || refreshing;

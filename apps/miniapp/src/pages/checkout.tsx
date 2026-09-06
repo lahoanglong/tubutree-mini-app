@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Ticket, ChevronRight, X } from 'lucide-react';
+import { Ticket, ChevronRight, X, Sprout, AlertCircle } from 'lucide-react';
 import type { OrderDTO } from '@tubutree/shared-types';
 import { getAddresses, getCart, checkoutQuote, placeOrder } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
@@ -450,9 +450,12 @@ export default function CheckoutPage() {
               onChange={(e) => setInvoice((f) => ({ ...f, email: e.target.value }))}
             />
             {!invoiceValid && (
-              <Text size="xSmall" style={{ color: 'var(--danger)' }}>
-                ⚠ Vui lòng điền đủ MST, tên công ty, địa chỉ và email hợp lệ.
-              </Text>
+              <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
+                <AlertCircle size={13} color="var(--danger)" aria-hidden />
+                <Text size="xSmall" style={{ color: 'var(--danger)' }}>
+                  Vui lòng điền đủ MST, tên công ty, địa chỉ và email hợp lệ.
+                </Text>
+              </Box>
             )}
           </Box>
         )}
@@ -489,9 +492,12 @@ export default function CheckoutPage() {
           </Box>
         ) : quote.isError ? (
           <Box flex alignItems="center" justifyContent="space-between">
-            <Text size="xSmall" style={{ color: 'var(--danger)' }}>
-              ⚠ {getErrorMessage(quote.error)}
-            </Text>
+            <Box flex alignItems="center" style={{ gap: 4 }}>
+              <AlertCircle size={13} color="var(--danger)" aria-hidden />
+              <Text size="xSmall" style={{ color: 'var(--danger)' }}>
+                {getErrorMessage(quote.error)}
+              </Text>
+            </Box>
             <Text role="button" size="xSmall" bold onClick={(e) => { e.stopPropagation(); void quote.refetch(); }} style={{ color: 'var(--primary-700)', padding: 8 }}>
               {vi.common.retry}
             </Text>
@@ -515,9 +521,12 @@ export default function CheckoutPage() {
             />
             <Row label={vi.checkout.total} value={formatVnd(quote.data.total)} bold />
             {quote.data.pointsEarned > 0 && (
-              <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 4 }}>
-                🌱 {vi.checkout.pointsEarn(quote.data.pointsEarned)}
-              </Text>
+              <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
+                <Sprout size={13} color="var(--leaf-700)" aria-hidden />
+                <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                  {vi.checkout.pointsEarn(quote.data.pointsEarned)}
+                </Text>
+              </Box>
             )}
           </>
         ) : (
@@ -671,9 +680,12 @@ export default function CheckoutPage() {
             />
 
             {(quote.data?.pointsEarned ?? 0) > 0 && (
-              <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 6, textAlign: 'right', display: 'block' }}>
-                🌱 Tích lũy +{quote.data!.pointsEarned} điểm Xanh khi giao thành công
-              </Text>
+              <Box flex alignItems="center" justifyContent="flex-end" style={{ gap: 4, marginTop: 6 }}>
+                <Sprout size={13} color="var(--leaf-700)" aria-hidden />
+                <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                  Tích lũy +{quote.data!.pointsEarned} điểm Xanh khi giao thành công
+                </Text>
+              </Box>
             )}
           </Box>
 

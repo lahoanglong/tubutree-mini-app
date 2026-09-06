@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Pin, Eye, EyeOff, Trash2, Target, Settings } from 'lucide-react';
 import {
-  getMyStorefront, createStorefront, publishStorefront,
+  getMyStorefront, createStorefront, publishStorefront, updateStorefront,
   createCollection, addItem, updateItem, removeItem, pickerProducts,
   getQuests, claimQuest,
   type StorefrontEdit, type PickerProduct,
@@ -58,6 +59,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const { openSnackbar } = useSnackbar();
   const [pickerCol, setPickerCol] = useState<string | null>(null);
   const [contentKitSlug, setContentKitSlug] = useState<string | null>(null);
+  const [configOpen, setConfigOpen] = useState(false);
 
   const pickerQ = useQuery({
     queryKey: ['picker', ''],
@@ -100,9 +102,21 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
-      <Box p={4}>
-        <Text bold size="large">{sf.title}</Text>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>/{sf.slug}</Text>
+      <Box p={4} flex alignItems="center" justifyContent="space-between">
+        <Box>
+          <Text bold size="large">{sf.title}</Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+            {sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/${sf.slug}`}
+          </Text>
+        </Box>
+        <Button
+          size="small"
+          variant="secondary"
+          onClick={() => setConfigOpen(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+        >
+          <Settings size={14} /> Cấu hình
+        </Button>
       </Box>
 
       {sf.collections.map((col) => (
@@ -138,7 +152,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
                   style={{ minWidth: 36, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                   onClick={() => itemMut.mutate({ id: it.id, dto: { isPinned: !it.isPinned } })}
                 >
-                  <Text size="xSmall">⤒</Text>
+                  <Pin size={15} color={it.isPinned ? 'var(--primary-700)' : 'var(--neutral-400)'} strokeWidth={2} />
                 </Box>
                 <Box
                   role="button"
@@ -147,7 +161,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
                   style={{ minWidth: 36, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                   onClick={() => itemMut.mutate({ id: it.id, dto: { isHidden: !it.isHidden } })}
                 >
-                  <Text size="xSmall">{it.isHidden ? '🙈' : '👁'}</Text>
+                  {it.isHidden ? <EyeOff size={16} color="var(--neutral-400)" /> : <Eye size={16} color="var(--leaf-700)" />}
                 </Box>
                 <Box
                   role="button"
@@ -156,7 +170,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
                   style={{ minWidth: 36, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                   onClick={() => setConfirmDeleteItemId(it.id)}
                 >
-                  <Text size="xSmall" style={{ color: 'var(--danger)' }}>✕</Text>
+                  <Trash2 size={15} color="var(--danger)" />
                 </Box>
               </Box>
             );
@@ -179,6 +193,10 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
 
       <Sheet visible={!!pickerCol} onClose={() => setPickerCol(null)} autoHeight>
         {pickerCol && <PickerSheet collectionId={pickerCol} onAdded={() => { void refresh(); }} onClose={() => setPickerCol(null)} />}
+      </Sheet>
+
+      <Sheet visible={configOpen} onClose={() => setConfigOpen(false)} autoHeight>
+        <MerchantConfigSheet sf={sf} onClose={() => setConfigOpen(false)} onSaved={() => void refresh()} />
       </Sheet>
 
       <ContentKitSheet
@@ -231,7 +249,10 @@ function QuestSection() {
   return (
     <Box mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
       <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 4 }}>
-        <Text bold>🎯 Hành trình gian hàng</Text>
+        <Box flex alignItems="center" style={{ gap: 6 }}>
+          <Target size={18} color="var(--primary-700)" strokeWidth={2} />
+          <Text bold>Hành trình gian hàng</Text>
+        </Box>
         <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>{data.level}/{data.levelMax}</Text>
       </Box>
       <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginBottom: 10 }}>
@@ -312,3 +333,163 @@ function PickerSheet({ collectionId, onAdded, onClose }: { collectionId: string;
     </Box>
   );
 }
+
+function MerchantConfigSheet({
+  sf,
+  onClose,
+  onSaved,
+}: {
+  sf: StorefrontEdit;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { openSnackbar } = useSnackbar();
+  const [form, setForm] = useState({
+    title: sf.title ?? '',
+    subdomain: sf.subdomain ?? '',
+    themeColor: sf.themeColor ?? '#16a34a',
+    bankName: sf.bankName ?? '',
+    bankBin: sf.bankBin ?? '',
+    bankAccountNo: sf.bankAccountNo ?? '',
+    bankAccountName: sf.bankAccountName ?? '',
+    warehouseAddress: sf.warehouseAddress ?? '',
+    warehouseCity: sf.warehouseCity ?? '',
+    warehousePhone: sf.warehousePhone ?? '',
+  });
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      updateStorefront({
+        title: form.title.trim() || undefined,
+        subdomain: form.subdomain.trim() ? form.subdomain.trim().toLowerCase() : undefined,
+        themeColor: form.themeColor,
+        bankName: form.bankName.trim() || undefined,
+        bankBin: form.bankBin.trim() || undefined,
+        bankAccountNo: form.bankAccountNo.trim() || undefined,
+        bankAccountName: form.bankAccountName.trim() || undefined,
+        warehouseAddress: form.warehouseAddress.trim() || undefined,
+        warehouseCity: form.warehouseCity.trim() || undefined,
+        warehousePhone: form.warehousePhone.trim() || undefined,
+      }),
+    onSuccess: () => {
+      haptic('medium');
+      openSnackbar({ text: 'Đã lưu cấu hình gian hàng!', type: 'success' });
+      onSaved();
+      onClose();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const PRESET_COLORS = [
+    { code: '#16a34a', label: 'Xanh lá' },
+    { code: '#0d9488', label: 'Ngọc' },
+    { code: '#2563eb', label: 'Xanh dương' },
+    { code: '#7c3aed', label: 'Tím' },
+    { code: '#ea580c', label: 'Đất nung' },
+  ];
+
+  return (
+    <Box p={4} style={{ maxHeight: '80vh', overflowY: 'auto', paddingBottom: 'calc(24px + var(--safe-bottom))' }}>
+      <Text.Title size="small" style={{ marginBottom: 16 }}>
+        Cấu hình Subdomain, Kho & VietQR
+      </Text.Title>
+
+      <Box style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Box>
+          <Text size="xSmall" bold style={{ marginBottom: 4 }}>Tên gian hàng</Text>
+          <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        </Box>
+
+        <Box>
+          <Text size="xSmall" bold style={{ marginBottom: 4 }}>Subdomain riêng</Text>
+          <Input
+            placeholder="vd: brand1"
+            value={form.subdomain}
+            onChange={(e) => setForm({ ...form, subdomain: e.target.value })}
+          />
+          <Text size="xxxxSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+            URL: {form.subdomain ? `${form.subdomain}.tubutree.com` : 'ten-ban.tubutree.com'}
+          </Text>
+        </Box>
+
+        <Box>
+          <Text size="xSmall" bold style={{ marginBottom: 6 }}>Màu sắc thương hiệu</Text>
+          <Box flex style={{ gap: 8 }}>
+            {PRESET_COLORS.map((c) => (
+              <Box
+                key={c.code}
+                onClick={() => setForm({ ...form, themeColor: c.code })}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  backgroundColor: c.code,
+                  cursor: 'pointer',
+                  border: form.themeColor === c.code ? '3px solid #000' : '2px solid #fff',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
+
+        <Box style={{ borderTop: '1px solid var(--neutral-100)', paddingTop: 12 }}>
+          <Text bold size="small" style={{ marginBottom: 8 }}>Tài khoản nhận tiền (VietQR 0đ phí)</Text>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Input
+              placeholder="Mã BIN ngân hàng (vd: 970436 - VCB)"
+              value={form.bankBin}
+              onChange={(e) => setForm({ ...form, bankBin: e.target.value })}
+            />
+            <Input
+              placeholder="Tên ngân hàng (vd: Vietcombank)"
+              value={form.bankName}
+              onChange={(e) => setForm({ ...form, bankName: e.target.value })}
+            />
+            <Input
+              placeholder="Số tài khoản ngân hàng"
+              value={form.bankAccountNo}
+              onChange={(e) => setForm({ ...form, bankAccountNo: e.target.value })}
+            />
+            <Input
+              placeholder="Tên chủ tài khoản (in hoa)"
+              value={form.bankAccountName}
+              onChange={(e) => setForm({ ...form, bankAccountName: e.target.value })}
+            />
+          </Box>
+        </Box>
+
+        <Box style={{ borderTop: '1px solid var(--neutral-100)', paddingTop: 12 }}>
+          <Text bold size="small" style={{ marginBottom: 8 }}>Địa chỉ kho hàng & Hotline</Text>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Input
+              placeholder="Địa chỉ kho xuất hàng"
+              value={form.warehouseAddress}
+              onChange={(e) => setForm({ ...form, warehouseAddress: e.target.value })}
+            />
+            <Input
+              placeholder="Tỉnh / Thành phố"
+              value={form.warehouseCity}
+              onChange={(e) => setForm({ ...form, warehouseCity: e.target.value })}
+            />
+            <Input
+              placeholder="Hotline kho liên hệ"
+              value={form.warehousePhone}
+              onChange={(e) => setForm({ ...form, warehousePhone: e.target.value })}
+            />
+          </Box>
+        </Box>
+
+        <Button
+          fullWidth
+          style={{ marginTop: 12, background: 'var(--primary-600)' }}
+          loading={saveMut.isPending}
+          onClick={() => saveMut.mutate()}
+        >
+          Lưu cấu hình gian hàng
+        </Button>
+      </Box>
+    </Box>
+  );
+}
+

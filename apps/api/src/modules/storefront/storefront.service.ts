@@ -70,9 +70,45 @@ export class StorefrontService {
 
   async updateMine(
     userId: string,
-    dto: { title?: string; headerNote?: string; avatarUrl?: string; coverUrl?: string; theme?: string },
+    dto: {
+      title?: string;
+      headerNote?: string;
+      avatarUrl?: string;
+      coverUrl?: string;
+      theme?: string;
+      themeColor?: string;
+      subdomain?: string;
+      bankName?: string;
+      bankBin?: string;
+      bankAccountNo?: string;
+      bankAccountName?: string;
+      warehouseAddress?: string;
+      warehouseCity?: string;
+      warehouseDistrict?: string;
+      warehouseWard?: string;
+      warehousePhone?: string;
+    },
   ) {
     const sf = await this.assertOwnedStorefront(userId);
+    if (dto.subdomain) {
+      const sub = dto.subdomain.trim().toLowerCase();
+      const RESERVED = ['admin', 'api', 'app', 'staging', 'mail', 'auth', 'tubutree', 'dashboard', 'static', 'cdn', 'demo'];
+      if (RESERVED.includes(sub)) {
+        throw new BadRequestException(`Subdomain "${sub}" đã được hệ thống giữ trước.`);
+      }
+      if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(sub)) {
+        throw new BadRequestException(
+          'Subdomain phải từ 3-30 ký tự (chữ thường, số, gạch ngang, không bắt đầu/kết thúc bằng gạch ngang).',
+        );
+      }
+      const existing = await this.prisma.storefront.findFirst({
+        where: { subdomain: sub, NOT: { id: sf.id } },
+      });
+      if (existing) {
+        throw new BadRequestException(`Subdomain "${sub}" đã có người đăng ký.`);
+      }
+      dto.subdomain = sub;
+    }
     return this.prisma.storefront.update({ where: { id: sf.id }, data: dto });
   }
 
@@ -121,9 +157,17 @@ export class StorefrontService {
     });
   }
 
-  async getPublicBySlug(slug: string) {
+  async getPublicBySlug(identifier: string) {
+    const clean = identifier.trim().toLowerCase();
     const sf = await this.prisma.storefront.findFirst({
-      where: { slug, isPublished: true },
+      where: {
+        OR: [
+          { slug: clean },
+          { subdomain: clean },
+          { customDomain: clean },
+        ],
+        isPublished: true,
+      },
       include: {
         collections: {
           orderBy: { sortOrder: 'asc' },
@@ -135,7 +179,7 @@ export class StorefrontService {
                   select: {
                     id: true, name: true, slug: true, thumbnail: true, brand: true,
                     basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, isActive: true,
-                    affiliateBlocked: true, soldExternal: true, soldApp: true,
+                    affiliateBlocked: true, soldExternal: true, soldApp: true, approvalStatus: true,
                   },
                 },
               },
@@ -146,12 +190,36 @@ export class StorefrontService {
     });
     if (!sf) throw new NotFoundException('Gian hàng không tồn tại hoặc chưa đăng.');
     return {
-      id: sf.id, slug: sf.slug, type: sf.type, title: sf.title, headerNote: sf.headerNote,
-      avatarUrl: sf.avatarUrl, coverUrl: sf.coverUrl, theme: sf.theme,
+      id: sf.id,
+      slug: sf.slug,
+      subdomain: sf.subdomain,
+      customDomain: sf.customDomain,
+      type: sf.type,
+      title: sf.title,
+      headerNote: sf.headerNote,
+      avatarUrl: sf.avatarUrl,
+      coverUrl: sf.coverUrl,
+      theme: sf.theme,
+      themeColor: sf.themeColor ?? '#16a34a',
+      bankName: sf.bankName,
+      bankBin: sf.bankBin,
+      bankAccountNo: sf.bankAccountNo,
+      bankAccountName: sf.bankAccountName,
+      warehouseAddress: sf.warehouseAddress,
+      warehouseCity: sf.warehouseCity,
+      warehouseDistrict: sf.warehouseDistrict,
+      warehouseWard: sf.warehouseWard,
+      warehousePhone: sf.warehousePhone,
       collections: sf.collections.map((c) => ({
         id: c.id, title: c.title, kind: c.kind, layout: c.layout, comboDiscountPct: c.comboDiscountPct,
         items: c.items
-          .filter((i) => !i.isHidden && i.product.isActive && !i.product.affiliateBlocked)
+          .filter(
+            (i) =>
+              !i.isHidden &&
+              i.product.isActive &&
+              !i.product.affiliateBlocked &&
+              (!i.product.approvalStatus || i.product.approvalStatus === 'APPROVED'),
+          )
           .map((i) => ({
             id: i.id, note: i.note, variationId: i.variationId,
             product: {
@@ -163,6 +231,25 @@ export class StorefrontService {
           })),
       })),
     };
+  }
+
+  async getPublicByHost(host: string) {
+    if (!host) throw new BadRequestException('Host không hợp lệ.');
+    const hostname = host.split(':')[0]!.toLowerCase();
+    const parts = hostname.split('.');
+    if (parts.length >= 2) {
+      const sub = parts[0]!;
+      if (sub !== 'www' && sub !== 'admin' && sub !== 'api') {
+        const bySub = await this.prisma.storefront.findFirst({
+          where: {
+            OR: [{ subdomain: sub }, { slug: sub }, { customDomain: hostname }],
+            isPublished: true,
+          },
+        });
+        if (bySub) return this.getPublicBySlug(bySub.slug);
+      }
+    }
+    return this.getPublicBySlug(hostname);
   }
 
   private async assertOwnedStorefront(userId: string) {

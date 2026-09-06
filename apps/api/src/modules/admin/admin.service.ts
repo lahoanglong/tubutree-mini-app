@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
@@ -237,18 +239,121 @@ export class AdminService {
     return { ok: true, ...updated, previousRole };
   }
 
-  async listOrders(page: number, limit: number, status?: string) {
-    const where = status ? { status: status as never } : {};
+  async getDashboardStats() {
+    const [
+      totalOrders,
+      pendingOrders,
+      shippingOrders,
+      deliveredOrders,
+      cancelledOrders,
+      revenueResult,
+      totalUsers,
+      totalAffiliates,
+      totalProducts,
+      plantedTreesCount,
+      recentOrders,
+    ] = await Promise.all([
+      this.prisma.order.count(),
+      this.prisma.order.count({ where: { status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] } } }),
+      this.prisma.order.count({ where: { status: { in: ['PACKED', 'SHIPPING'] } } }),
+      this.prisma.order.count({ where: { status: 'DELIVERED' } }),
+      this.prisma.order.count({ where: { status: 'CANCELLED' } }),
+      this.prisma.order.aggregate({
+        _sum: { total: true },
+        where: { status: { in: ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'] } },
+      }),
+      this.prisma.user.count(),
+      this.prisma.user.count({ where: { role: 'AFFILIATE' } }),
+      this.prisma.product.count(),
+      this.prisma.plantedTree.count(),
+      this.prisma.order.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 6,
+        select: {
+          id: true,
+          code: true,
+          total: true,
+          status: true,
+          paymentMethod: true,
+          createdAt: true,
+          user: { select: { fullName: true, phone: true } },
+        },
+      }),
+    ]);
+
+    return {
+      totalRevenue: revenueResult._sum.total ?? 0,
+      totalOrders,
+      pendingOrders,
+      shippingOrders,
+      deliveredOrders,
+      cancelledOrders,
+      totalUsers,
+      totalAffiliates,
+      totalProducts,
+      plantedTreesCount,
+      recentOrders,
+    };
+  }
+
+  async listOrders(page: number, limit: number, status?: string, search?: string) {
+    const where: Prisma.OrderWhereInput = {};
+    if (status) where.status = status as never;
+    if (search && search.trim()) {
+      const s = search.trim();
+      where.OR = [
+        { code: { contains: s, mode: 'insensitive' } },
+        { user: { phone: { contains: s } } },
+        { user: { fullName: { contains: s, mode: 'insensitive' } } },
+      ];
+    }
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         ...skipTake(page, limit),
-        include: { items: true },
+        include: {
+          items: true,
+          user: { select: { id: true, phone: true, fullName: true } },
+        },
       }),
       this.prisma.order.count({ where }),
     ]);
     return paginated(items, page, limit, total);
+  }
+
+  async updateOrderStatus(adminId: string, id: string, status: OrderStatus, note?: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id }, { code: id }] },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (order.status === status) return order;
+
+    if (status === 'DELIVERED') {
+      await this.loyalty.creditOrderPoints(order.id);
+      await this.affiliate.lockCommissionsForOrder(order.id);
+      await this.affiliate.grantReferralReward(order.id);
+    } else if (status === 'CANCELLED' || status === 'RETURNED') {
+      await this.loyalty.reverseOrderPoints(order.id);
+      await this.affiliate.reverseCommissionsForOrder(order.id);
+    }
+
+    const updated = await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        status: status as never,
+        ...(status === 'DELIVERED' ? { paymentStatus: 'PAID' } : {}),
+        ...(note ? { note: order.note ? `${order.note} | Admin: ${note}` : `Admin: ${note}` } : {}),
+      },
+      include: {
+        items: true,
+        user: { select: { id: true, phone: true, fullName: true } },
+      },
+    });
+
+    this.logger.warn(`Admin ${adminId} cập nhật đơn ${order.code}: ${order.status} → ${status}`);
+    await this.notifications.notify(order.userId, `ORDER_${status}`, { order_code: order.code }).catch(() => {});
+    return updated;
   }
 
   // ── SystemConfig ──
@@ -344,5 +449,38 @@ export class AdminService {
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
+  }
+
+  // ── Kiểm duyệt sản phẩm của đối tác ──
+  listPendingMerchantProducts() {
+    return this.prisma.product.findMany({
+      where: { approvalStatus: 'PENDING_REVIEW' },
+      include: {
+        storefront: {
+          select: { id: true, title: true, subdomain: true, ownerUserId: true },
+        },
+        variations: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async reviewMerchantProduct(adminId: string, productId: string, approve: boolean, rejectReason?: string) {
+    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
+
+    const updated = await this.prisma.product.update({
+      where: { id: productId },
+      data: {
+        approvalStatus: approve ? 'APPROVED' : 'REJECTED',
+        rejectReason: approve ? null : (rejectReason ?? 'Không đạt tiêu chuẩn xanh của Tubu Tree'),
+      },
+    });
+
+    this.logger.warn(
+      `Admin ${adminId} đã ${approve ? 'DUYỆT' : 'TỪ CHỐI'} sản phẩm đối tác ${productId} (${product.name})`,
+    );
+
+    return updated;
   }
 }

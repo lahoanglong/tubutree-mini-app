@@ -28,10 +28,13 @@ async function bootstrap() {
   // phụ thuộc env). Nếu thiếu → trình duyệt Zalo chặn MỌI response API: không load được sản phẩm,
   // không login, Ví/Cá nhân trắng (đúng lỗi gặp trên thiết bị). Bao gồm h5.zdn.vn, *.zadn.vn, zalo.me.
   const zaloOriginRe = /^https:\/\/([a-z0-9-]+\.)*(zdn\.vn|zadn\.vn|zalo\.me)$/i;
+  // Cho phép domain chính và TẤT CẢ subdomain đối tác (*.tubutree.com) phục vụ Multi-tenancy Storefront.
+  const tubuOriginRe = /^https?:\/\/([a-z0-9-]+\.)*tubutree\.com(:[0-9]+)?$/i;
   const corsOrigin = (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
     // Không có Origin (app native/WebView không gửi, health check, server-to-server, curl) → cho qua.
     if (!origin) return cb(null, true);
     if (zaloOriginRe.test(origin)) return cb(null, true);
+    if (tubuOriginRe.test(origin)) return cb(null, true);
     if (staticAllow.includes(origin)) return cb(null, true);
     if (!isProd) return cb(null, true); // dev: mở hết cho tiện test local
     return cb(null, false); // prod + origin lạ → chặn (không set Allow-Origin)
@@ -40,6 +43,9 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     cors: { origin: corsOrigin, credentials: true },
   });
+
+  // Graceful shutdown: dọn dẹp kết nối Prisma và queue khi container nhận SIGTERM/SIGINT.
+  app.enableShutdownHooks();
 
   // Trust proxy: ZaloPay/Nginx/Cloudflare phía trước → req.ip = IP proxy nếu KHÔNG set,
   // mọi request share 1 counter trong ThrottlerGuard → 60req/min cho toàn site, dễ DOS lẫn nhau.

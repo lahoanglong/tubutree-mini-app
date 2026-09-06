@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { CheckCircle2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
@@ -81,8 +82,10 @@ export default function CheckoutPage() {
     return (
       <Shell>
         <div className="py-16 text-center">
-          <div className="text-6xl">🎉</div>
-          <h2 className="mt-4 text-xl font-bold">Đặt hàng thành công!</h2>
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-leaf-50 text-leaf-600 shadow-sm ring-8 ring-leaf-50/50">
+            <CheckCircle2 className="h-9 w-9 text-leaf-600" />
+          </div>
+          <h2 className="mt-5 text-2xl font-bold text-neutral-900">Đặt hàng thành công!</h2>
           <p className="mt-2 text-neutral-600">
             Mã đơn <span className="font-semibold text-leaf-700">{placed.code}</span> · {formatVnd(placed.total)}
           </p>

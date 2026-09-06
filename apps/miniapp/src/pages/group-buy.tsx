@@ -1,5 +1,6 @@
 import { Box, Page, Text, Button, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Sprout, Users } from 'lucide-react';
 import { listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -43,8 +44,11 @@ export default function GroupBuyPage() {
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 80 }}>
       <Box p={3} style={{ background: 'var(--neutral-0)' }}>
-        <Text bold size="large">🛒 Mua chung giá tốt</Text>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+        <Box flex alignItems="center" style={{ gap: 8 }}>
+          <Users size={20} color="var(--leaf-700)" strokeWidth={2} aria-hidden />
+          <Text bold size="large">Mua chung giá tốt</Text>
+        </Box>
+        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
           Rủ thêm bạn cho đủ nhóm — cả nhóm cùng được giá ưu đãi!
         </Text>
       </Box>
@@ -103,7 +107,9 @@ function GroupCard({
           {g.product.thumbnail ? (
             <img src={g.product.thumbnail} alt={g.product.name} style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover' }} />
           ) : (
-            <Box style={{ width: 56, height: 56, borderRadius: 10, background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', fontSize: 24 }}>🌿</Box>
+            <Box style={{ width: 56, height: 56, borderRadius: 10, background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
+              <Sprout size={28} color="var(--leaf-600)" strokeWidth={1.8} />
+            </Box>
           )}
         </Box>
         <Box style={{ flex: 1, minWidth: 0 }}>
