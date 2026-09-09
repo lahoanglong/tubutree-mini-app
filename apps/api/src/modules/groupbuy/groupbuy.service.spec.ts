@@ -26,6 +26,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     },
     coupon: { create: jest.fn().mockResolvedValue({}) },
   };
+  (base.groupBuy as { count?: jest.Mock }).count = jest.fn().mockResolvedValue(0);
   base.$transaction = jest
     .fn()
     .mockImplementation(async (arg: unknown) =>
@@ -80,6 +81,36 @@ describe('GroupBuyService.create', () => {
     expect(prisma.coupon.create).toHaveBeenCalledTimes(1);
     const markedGranted = (prisma.groupBuy.update as jest.Mock).mock.calls.find((c) => c[0]?.data?.couponsGrantedAt);
     expect(markedGranted).toBeTruthy();
+  });
+
+  // P0-2 (docs/2026-09-08-review-progress.md): coupon thu được không có minOrder/product
+  // restriction → bất kỳ đơn nào cũng dùng được, không cần mua gì cả (discount = min(value,
+  // subtotal) trên MỌI giỏ hàng). Bắt buộc minOrder = unitPrice để coupon chỉ đổi được khi
+  // đơn thật ≥ đúng giá trị nhóm mua chung (không còn là "tiền miễn phí").
+  it('coupon cấp cho thành viên PHẢI có minOrder = unitPrice của nhóm (không phải tiền miễn phí)', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u1' }]);
+    const svc = new GroupBuyService(prisma, makeConfig({ 'groupbuy.discount_pct': 15, 'groupbuy.target_size': 1 }));
+    await svc.create('u1', 'prod1');
+    expect(prisma.coupon.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ minOrder: 85000, value: 15000 }) }),
+    );
+  });
+
+  it('user đã có đủ số nhóm OPEN tối đa (chống spam mở nhóm hàng loạt) → BadRequest, KHÔNG tạo nhóm mới', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.count as jest.Mock).mockResolvedValue(2);
+    const svc = new GroupBuyService(prisma, makeConfig({ 'groupbuy.max_open_per_user': 2 }));
+    await expect(svc.create('u1', 'prod1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.groupBuy.create).not.toHaveBeenCalled();
+  });
+
+  it('còn dưới trần số nhóm OPEN → vẫn tạo được bình thường', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.count as jest.Mock).mockResolvedValue(1);
+    const svc = new GroupBuyService(prisma, makeConfig({ 'groupbuy.max_open_per_user': 2 }));
+    await expect(svc.create('u1', 'prod1')).resolves.toBeDefined();
+    expect(prisma.groupBuy.create).toHaveBeenCalled();
   });
 });
 

@@ -153,6 +153,14 @@ export class GameService {
 
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
     const deathDays = await this.config.get<number>('game.death_days', 7);
+    // Trần cứng số coupon thu hoạch/ngày — ĐỘC LẬP với giá xu/giọt nước trong config.
+    // Xu mua nước (mặc định 1 xu/giọt ≈ 0,83đ quy đổi) rẻ hơn nhiều lần giá trị coupon
+    // (mặc định 30.000đ): không có trần thì vòng mua-nước→tưới→thu-hoạch in coupon vô hạn
+    // (P0-1, docs/2026-09-08-review-progress.md). Đặt trần bằng CODE thay vì chỉ dựa vào
+    // admin cấu hình đúng giá — admin sửa nhầm config không được vô tình tắt lưới an toàn.
+    const dailyCap = await this.config.get<number>('game.harvest_coupon_daily_cap', 3);
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
 
     let harvestCount = 0;
     let couponCode: string | undefined;
@@ -160,49 +168,88 @@ export class GameService {
     let revivedFromDead = false;
     let eco: EcoImpact = { progress: 0, target: 600, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 };
 
-    await this.prisma.$transaction(async (tx) => {
-      const profile = await tx.gameProfile.findUnique({ where: { userId } });
-      if (!profile || profile.totalSeeds < drops) {
-        throw new BadRequestException('Không đủ giọt nước.');
-      }
+    try {
+      await this.prisma.$transaction(
+        async (tx) => {
+          const profile = await tx.gameProfile.findUnique({ where: { userId } });
+          if (!profile || profile.totalSeeds < drops) {
+            throw new BadRequestException('Không đủ giọt nước.');
+          }
 
-      eco = this.eco(profile.ecoImpact);
+          // Đếm TRONG cùng transaction Serializable (không phải this.prisma ngoài tx) — 2 request
+          // waterTree song song của CÙNG user đọc couponsToday trước khi bên kia commit sẽ khiến
+          // Postgres abort 1 bên (P2034, bắt bên dưới) thay vì cả hai cùng lọt qua trần.
+          // Coupon không có createdAt — grantCoupon() luôn set startAt=new Date() lúc cấp
+          // (game.service.ts grantCoupon), nên startAt chính là mốc "được cấp lúc nào" cho
+          // đúng loại coupon GAME* này.
+          let couponsToday = await tx.coupon.count({
+            where: {
+              code: { startsWith: 'GAME' },
+              scopeMeta: { path: ['userId'], equals: userId },
+              startAt: { gte: dayStart },
+            },
+          });
 
-      // §6.7.3: cây CHẾT (≥ death_days không tưới) → mất tiến trình, trồng lại từ đầu.
-      if (
-        profile.lastWateredAt &&
-        eco.progress > 0 &&
-        (Date.now() - new Date(profile.lastWateredAt).getTime()) / 864e5 >= deathDays
-      ) {
-        eco.progress = 0;
-        revivedFromDead = true;
-      }
-      eco.progress += drops;
+          eco = this.eco(profile.ecoImpact);
 
-      // Thu hoạch khi đủ target; phần dư được CARRY-OVER sang cây mới (không mất nước).
-      while (eco.progress >= eco.target) {
-        eco.progress -= eco.target;
-        eco.treesPlanted += 1;
-        harvestCount += 1;
-        couponCode = await this.grantCoupon(userId, harvestAmount, tx);
-        certificateCode = await this.plantTree(userId, eco.treeType, tx);
-      }
+          // §6.7.3: cây CHẾT (≥ death_days không tưới) → mất tiến trình, trồng lại từ đầu.
+          if (
+            profile.lastWateredAt &&
+            eco.progress > 0 &&
+            (Date.now() - new Date(profile.lastWateredAt).getTime()) / 864e5 >= deathDays
+          ) {
+            eco.progress = 0;
+            revivedFromDead = true;
+          }
+          eco.progress += drops;
 
-      const stage = Math.min(4, Math.max(1, Math.ceil((eco.progress / eco.target) * 4)));
+          // Chặn target<=0 (config game.tree_default_target sai, hoặc dữ liệu cũ hỏng) TRƯỚC
+          // vòng lặp thu hoạch — nếu không, while (progress>=target) không bao giờ thoát, giữ
+          // lock trong transaction Serializable tới khi pool timeout (P2-4, mirror guard đã có
+          // ở game-garden.service.ts).
+          if (!Number.isInteger(eco.target) || eco.target <= 0) {
+            throw new BadRequestException('Cây chưa cấu hình mục tiêu hợp lệ.');
+          }
 
-      const dec = await tx.gameProfile.updateMany({
-        where: { userId, totalSeeds: { gte: drops } },
-        data: {
-          totalSeeds: { decrement: drops },
-          treeStage: stage,
-          ecoImpact: eco as object,
-          lastWateredAt: new Date(),
+          // Thu hoạch khi đủ target; phần dư được CARRY-OVER sang cây mới (không mất nước).
+          while (eco.progress >= eco.target) {
+            eco.progress -= eco.target;
+            eco.treesPlanted += 1;
+            harvestCount += 1;
+            // Cây thật + chứng nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn/ngày.
+            certificateCode = await this.plantTree(userId, eco.treeType, tx);
+            if (couponsToday < dailyCap) {
+              couponCode = await this.grantCoupon(userId, harvestAmount, tx);
+              couponsToday += 1;
+            }
+          }
+
+          const stage = Math.min(4, Math.max(1, Math.ceil((eco.progress / eco.target) * 4)));
+
+          const dec = await tx.gameProfile.updateMany({
+            where: { userId, totalSeeds: { gte: drops } },
+            data: {
+              totalSeeds: { decrement: drops },
+              treeStage: stage,
+              ecoImpact: eco as object,
+              lastWateredAt: new Date(),
+            },
+          });
+          if (dec.count === 0) {
+            throw new BadRequestException('Không đủ giọt nước.');
+          }
         },
-      });
-      if (dec.count === 0) {
-        throw new BadRequestException('Không đủ giọt nước.');
+        { isolationLevel: 'Serializable' },
+      );
+    } catch (err) {
+      // P2034 = Postgres serialization failure (2 request song song đụng trần coupon/tồn kho
+      // nước) — KHÔNG nuốt lỗi như rewardWithDailyCap (đó là bonus best-effort, còn ở đây nước/
+      // xu là tài nguyên thật): báo lỗi rõ để client thử lại, giao dịch đã tự rollback nguyên vẹn.
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+        throw new BadRequestException('Hệ thống đang bận, vui lòng thử tưới lại.');
       }
-    });
+      throw err;
+    }
 
     const harvested = harvestCount > 0;
 

@@ -34,6 +34,15 @@ export class GroupBuyService {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product || !product.isActive) throw new NotFoundException('Sản phẩm không khả dụng.');
 
+    // Chống spam mở nhóm hàng loạt (mỗi nhóm tự làm đủ member bằng tài khoản phụ để lấy coupon
+    // — xem grantCoupon() ở dưới về vì sao minOrder đã chặn phần "tiền miễn phí"; trần này chặn
+    // thêm việc rác hoá danh sách mua chung / tốn tài nguyên tạo nhóm vô tội vạ).
+    const maxOpenPerUser = await this.config.get<number>('groupbuy.max_open_per_user', 3);
+    const openCount = await this.prisma.groupBuy.count({ where: { initiatorId: userId, status: 'OPEN' } });
+    if (openCount >= maxOpenPerUser) {
+      throw new BadRequestException(`Bạn đang có ${openCount} nhóm mua chung chưa đóng, hãy chờ nhóm cũ hoàn tất.`);
+    }
+
     const [pct, targetSize, windowHours] = await Promise.all([
       this.config.get<number>('groupbuy.discount_pct', 15),
       this.config.get<number>('groupbuy.target_size', 3),
@@ -137,7 +146,7 @@ export class GroupBuyService {
     for (const m of members) {
       let newlyGranted = false;
       try {
-        await this.grantCoupon(group.id, m.userId, discount);
+        await this.grantCoupon(group.id, m.userId, discount, group.unitPrice);
         newlyGranted = true;
       } catch (e) {
         if (this.isAlreadyGranted(e)) {
@@ -247,7 +256,16 @@ export class GroupBuyService {
   }
 
   /** Mã TẤT ĐỊNH theo (nhóm, user) → cấp lại an toàn: coupon.code @unique chặn trùng (P2002). */
-  private async grantCoupon(groupBuyId: string, userId: string, amount: number): Promise<string> {
+  /**
+   * @param minOrder Giá của chính nhóm mua chung (unitPrice) — BẮT BUỘC, không phải tuỳ chọn.
+   *   Thiếu ràng buộc này, coupon AMOUNT không có product/minOrder restriction dùng được trên
+   *   BẤT KỲ đơn nào (CouponsService.validateAndCompute chỉ trừ min(value, subtotal), không
+   *   xét sản phẩm) → mở nhóm rồi tự làm đủ member (sockpuppet) là in coupon miễn phí, không
+   *   cần mua gì (P0-2, docs/2026-09-08-review-progress.md). minOrder buộc phải có đơn thật
+   *   ≥ đúng giá nhóm mua chung mới đổi được — coupon còn lại đúng nghĩa "giảm giá", không
+   *   còn là tiền free.
+   */
+  private async grantCoupon(groupBuyId: string, userId: string, amount: number, minOrder: number): Promise<string> {
     const code = `GBUY-${groupBuyId.slice(-8)}-${userId.slice(-8)}`.toUpperCase();
     const end = new Date();
     end.setDate(end.getDate() + 30);
@@ -256,6 +274,7 @@ export class GroupBuyService {
         code,
         type: 'AMOUNT',
         value: amount,
+        minOrder,
         startAt: new Date(),
         endAt: end,
         perUserLimit: 1,

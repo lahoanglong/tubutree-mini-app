@@ -51,7 +51,8 @@ theo lô, ưu tiên lô doanh thu.
 - [x] 4 audit song song xong: tiền/giá (đang verify) · đơn hàng/tồn kho (xong, verify) · quyền/danh tính (đang chạy) · xã hội/nội dung (xong, verify).
 - Đơn hàng/tồn kho — 4 P0 + 4 P1 + 5 P2 + 3 P3 đã xác nhận bằng đọc code thật (không phải suy đoán).
 - Xã hội/nội dung — 2 P0 + 5 P1 + 6 P2 + 6 P3 đã xác nhận.
-- Tiền/giá và quyền/danh tính: agent bị mất khi phiên trước restart, cần chạy lại hoặc resume.
+- Tiền/giá: chạy lại thành công, đang chờ kết quả.
+- Quyền/danh tính: chạy lại 1 lần bị stall (600s không tiến triển, agent tự stop) — cần chạy lại lần 2.
 
 ### Phase 2 — Audit mạch lạc & liên kết
 - [ ] Chưa bắt đầu — làm sau khi P0 đơn hàng đã sạch.
@@ -103,7 +104,30 @@ theo lô, ưu tiên lô doanh thu.
 - [ ] P0-3 (Pancake sync ghi đè tuyệt đối `stock`, có thể xóa mất số đã trừ cục bộ) — chưa sửa,
   cần quyết định kiến trúc (reservedStock riêng hay Pancake-là-nguồn-chân-lý) trước khi làm,
   không phải fix 1 dòng — để lại cho phiên có nhiều thời gian hơn thay vì làm vội.
-- [ ] P0 còn lại (tiền/giá, quyền/danh tính — chờ audit) + P0/P1/P2 xã hội-nội dung chưa sửa.
+- [x] **P0-1 (xã hội/game) — xu→coupon arbitrage** — `waterTree` không giới hạn số coupon
+  thu hoạch/ngày trong khi xu mua nước rẻ hơn giá trị coupon hàng chục lần → in coupon vô hạn.
+  - Trần cứng `game.harvest_coupon_daily_cap` (mặc định 3/ngày) BẰNG CODE, không chỉ dựa vào
+    admin cấu hình đúng giá xu/coupon — cây vẫn trồng đủ (cosmetic), chỉ coupon (tiền) bị chặn.
+  - Đếm-rồi-quyết chuyển vào TRONG transaction + nâng `isolationLevel: 'Serializable'` (dùng
+    lại đúng pattern đã có ở `community-reward.service.ts` cho race đếm-trần) — 2 request song
+    song không thể cùng lọt qua trần; P2034 → BadRequest rõ ràng cho client thử lại.
+  - Bonus cùng file: mirror guard `eco.target<=0` từ `game-garden.service.ts` sang `waterTree`
+    (P2-4) — chặn vòng lặp vô hạn nếu config `game.tree_default_target` bị set sai.
+  - 4 test mới, full suite game 35/35.
+- [x] **P0-2 (xã hội/nội dung) — group buy mint coupon miễn phí** — coupon cấp khi nhóm mua
+  chung đủ người KHÔNG có `minOrder`/product restriction → dùng được trên bất kỳ đơn nào,
+  không cần mua gì (tự làm đủ member bằng tài khoản phụ).
+  - `grantCoupon` bắt buộc nhận `minOrder = unitPrice` của nhóm — coupon chỉ đổi được trên đơn
+    thật ≥ đúng giá nhóm mua chung, không còn là tiền miễn phí.
+  - Thêm trần `groupbuy.max_open_per_user` (mặc định 3) chống spam mở nhóm hàng loạt.
+  - 4 test mới, full suite groupbuy 21/21.
+  - Verify chung 2 mục trên: typecheck/lint sạch, **92 suite / 1251 test pass** (tăng từ
+    92/1244 — soát lại đúng 1248 sau P0-2 game rồi 1251 sau groupbuy).
+- [ ] P0 còn lại xã hội/nội dung (P1 reputation farming, P1 best-answer farming, P1 comment
+  moderation gap, P1 edit-after-approval, P1 quiz daily count không enforce) — chưa sửa,
+  để lại cho lượt tiếp vì đã hết các P0 tiền-mất-thật của domain này.
+- [ ] P0 đơn hàng còn lại: P0-3 (Pancake sync ghi đè stock — cần quyết định kiến trúc).
+- [ ] P0 tiền/giá + quyền/danh tính: chờ audit xong.
 
 ### Phase 4 — Design system
 - [x] Bước 1 audit hiện trạng (số liệu ở trên).

@@ -25,7 +25,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     gameSpin: { create: jest.fn().mockResolvedValue({}) },
     gameQuiz: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     gameQuizAttempt: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), create: jest.fn().mockResolvedValue({}) },
-    coupon: { create: jest.fn().mockResolvedValue({}) },
+    coupon: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
     plantedTree: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
     mission: { findMany: jest.fn().mockResolvedValue([]) },
     missionProgress: { findMany: jest.fn().mockResolvedValue([]) },
@@ -153,6 +153,63 @@ describe('GameService.waterTree', () => {
     expect(r.progress).toBe(10);
     expect(prisma.coupon.create).toHaveBeenCalledTimes(2);
     expect(prisma.plantedTree.create).toHaveBeenCalledTimes(2); // 2 cây thật cam kết
+  });
+
+  // P0-1 (docs/2026-09-08-review-progress.md): xu mua nước rẻ hơn NHIỀU giá trị coupon thu
+  // hoạch (harvest_coupon_amount mặc định 30.000đ, nước chỉ 1 xu/giọt ≈ 0,83đ) → không giới
+  // hạn số coupon/ngày thì cứ vòng mua-tưới là in tiền vô hạn. Cap cứng bằng CODE, không phụ
+  // thuộc giá trị config (admin đổi config không được vô tình tắt lưới an toàn này).
+  it('đã đạt trần coupon thu hoạch/ngày → vẫn thu hoạch (cây + chứng nhận) nhưng KHÔNG cấp thêm coupon', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, ecoImpact: { progress: 0, target: 30, treeType: 't', treesPlanted: 0 } }),
+    );
+    (prisma.coupon.count as jest.Mock).mockResolvedValue(3); // đã đủ trần mặc định (3/ngày)
+    const r = await new GameService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 })).waterTree('u1', 70); // vẫn đủ 2 lần harvest
+    expect(r.harvested).toBe(true);
+    expect(r.treesPlanted).toBe(2);
+    expect(prisma.plantedTree.create).toHaveBeenCalledTimes(2);
+    expect(prisma.coupon.create).not.toHaveBeenCalled();
+    expect(r.reward.coupon).toBeUndefined();
+  });
+
+  it('còn dưới trần → cấp coupon tới khi CHẠM trần trong CÙNG 1 lần tưới, phần sau đó thì thôi', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, ecoImpact: { progress: 0, target: 30, treeType: 't', treesPlanted: 0 } }),
+    );
+    (prisma.coupon.count as jest.Mock).mockResolvedValue(2); // còn đúng 1 suất trước khi chạm trần 3
+    const r = await new GameService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 })).waterTree('u1', 70); // 2 lần harvest trong lần gọi này
+    expect(r.treesPlanted).toBe(2);
+    expect(prisma.plantedTree.create).toHaveBeenCalledTimes(2); // cây vẫn trồng đủ cả 2
+    expect(prisma.coupon.create).toHaveBeenCalledTimes(1); // chỉ 1 coupon (suất còn lại) — lần 2 chạm trần
+  });
+
+  // P2-4 (docs/2026-09-08-review-progress.md): eco.target=0 (config game.tree_default_target
+  // bị set sai) → while(progress>=target) không bao giờ thoát — vòng lặp vô hạn TRONG
+  // transaction Serializable, giữ lock/connection tới khi pool timeout. game-garden.service.ts
+  // đã có guard này (sibling), waterTree() thì chưa — mirror lại.
+  it('eco.target <= 0 (config sai) → BadRequest ngay, KHÔNG rơi vào vòng lặp vô hạn', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, ecoImpact: { progress: 0, target: 0, treeType: 't', treesPlanted: 0 } }),
+    );
+    await expect(new GameService(prisma, makeConfig()).waterTree('u1', 20)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('race Serializable (P2034 — 2 request song song đụng trần) → BadRequest rõ ràng, không nuốt lỗi', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, ecoImpact: { progress: 590, target: 600, treeType: 't', treesPlanted: 0 } }),
+    );
+    (prisma.$transaction as jest.Mock).mockRejectedValue(
+      Object.assign(new Error('could not serialize access'), { code: 'P2034' }),
+    );
+    await expect(new GameService(prisma, makeConfig()).waterTree('u1', 20)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 });
 
