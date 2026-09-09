@@ -70,7 +70,7 @@ function build(
   } as unknown as PricingService;
   const loyalty = { getTierMultiplier: jest.fn().mockResolvedValue(1) } as unknown as LoyaltyService;
   const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
-  const pancake = { pushOrder: jest.fn().mockResolvedValue(null) } as unknown as PancakeOrderService;
+  const pancake = { enqueuePush: jest.fn().mockResolvedValue(undefined) } as unknown as PancakeOrderService;
   const affiliate = {
     createCommissionForOrder: jest.fn().mockResolvedValue(undefined),
     getActiveTouch: opts.getActiveTouch ?? jest.fn().mockResolvedValue(null),

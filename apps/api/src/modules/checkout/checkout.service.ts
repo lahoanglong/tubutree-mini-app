@@ -243,10 +243,15 @@ export class CheckoutService {
     } catch (err) {
       this.logger.error(`Dọn giỏ lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
     }
+    // Qua queue (retry+backoff, xem PancakePushProcessor) thay vì gọi pushOrder() trực tiếp —
+    // trước đây Pancake lỗi/timeout 1 lần là log rồi MẤT VĨNH VIỄN: đơn vẫn CONFIRMED, đã trừ
+    // kho + trừ tiền khách, nhưng kho vật lý không bao giờ thấy đơn (P0-2,
+    // docs/2026-09-08-review-progress.md). enqueuePush() chỉ thêm job vào Redis — nếu việc
+    // ĐÓ cũng lỗi (Redis blip), cron PancakePushReconcileService quét lại sau.
     try {
-      await this.pancakeOrder.pushOrder(order.id);
+      await this.pancakeOrder.enqueuePush(order.id);
     } catch (err) {
-      this.logger.error(`Đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
+      this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
     }
     if (referrerUserId) {
       await this.affiliate.createCommissionForOrder(order.id).catch((err) =>

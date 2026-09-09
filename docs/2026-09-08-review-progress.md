@@ -81,6 +81,28 @@ theo lô, ưu tiên lô doanh thu.
     sau restart phiên, không phải lỗi wiring.
   - Việc cần người: khởi động lại Docker Desktop + `docker compose -f docker-compose.dev.yml
     up -d` trước khi verify UI/luồng thật.
+- [x] **P0-2 (đơn hàng)** — đẩy đơn → Pancake fire-and-forget, lỗi chỉ log rồi mất vĩnh viễn.
+  - `jobs/queues.ts` + `jobs/queue.module.ts`: queue mới `QUEUE_PANCAKE_PUSH` (retry 5 lần,
+    exponential backoff — dùng chung defaultJobOptions đã có sẵn cho mọi queue).
+  - `pancake-order.service.ts`: thêm `enqueuePush()` (jobId=orderId, dedupe); `pushOrder()`
+    giữ nguyên (đã idempotent qua guard `pancakeOrderId`).
+  - `pancake-push.processor.ts` (mới): worker gọi `pushOrder`, ném lỗi tiếp để BullMQ retry.
+  - `pancake-push-reconcile.service.ts` (mới): cron 15 phút quét đơn `pancakeOrderId=null`
+    (trừ CANCELLED) cũ hơn 15 phút → re-enqueue — lưới an toàn nếu enqueue-lúc-checkout cũng
+    lỗi (Redis blip) hoặc job hết cả 5 lần retry.
+  - `checkout.service.ts` + `affiliate.service.ts` (CTV lên đơn hộ): đổi `pushOrder()` trực
+    tiếp → `enqueuePush()`.
+  - 26 test mới (pancake-order/push-processor/push-reconcile + cập nhật mock checkout/affiliate).
+  - Verify: typecheck/lint sạch, **92 suite / 1244 test pass** (tăng từ 89/1232), `nest build`
+    sạch, tự boot `nest start` xác nhận DI graph resolve đúng (dừng ở Postgres/Redis
+    ECONNREFUSED vì Docker Desktop chưa chạy lại sau restart phiên — không phải lỗi wiring).
+  - Chưa làm trong lượt này (P1-4, ghi nhận để phiên sau): `subscriptions.service.ts` và
+    `dealer.service.ts` vẫn KHÔNG đẩy Pancake ở bất kỳ đường nào — đây là tính năng còn thiếu,
+    không phải regression của lượt sửa này.
+
+- [ ] P0-3 (Pancake sync ghi đè tuyệt đối `stock`, có thể xóa mất số đã trừ cục bộ) — chưa sửa,
+  cần quyết định kiến trúc (reservedStock riêng hay Pancake-là-nguồn-chân-lý) trước khi làm,
+  không phải fix 1 dòng — để lại cho phiên có nhiều thời gian hơn thay vì làm vội.
 - [ ] P0 còn lại (tiền/giá, quyền/danh tính — chờ audit) + P0/P1/P2 xã hội-nội dung chưa sửa.
 
 ### Phase 4 — Design system

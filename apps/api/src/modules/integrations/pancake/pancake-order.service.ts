@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
+import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 
 interface ShippingSnapshot {
   recipient: string;
@@ -27,7 +30,20 @@ export class PancakeOrderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly client: PancakeClient,
+    @InjectQueue(QUEUE_PANCAKE_PUSH) private readonly pushQueue: Queue,
   ) {}
+
+  /**
+   * Xếp hàng đẩy đơn → Pancake, có retry+backoff (5 lần, xem jobs/queue.module.ts) qua
+   * PancakePushProcessor — thay cho gọi pushOrder() trực tiếp rồi log-nuốt lỗi (P0-2,
+   * docs/2026-09-08-review-progress.md): trước đây Pancake lỗi/timeout 1 lần là đơn mất
+   * vĩnh viễn, kho vật lý không bao giờ thấy dù đã trừ kho + trừ tiền khách.
+   * jobId=orderId → BullMQ tự chặn trùng job cho cùng 1 đơn (dedupe) khi enqueue nhiều lần
+   * (checkout gọi + cron reconcile gọi lại) trong lúc job cũ còn active/waiting.
+   */
+  async enqueuePush(orderId: string): Promise<void> {
+    await this.pushQueue.add('push', { orderId }, { jobId: orderId });
+  }
 
   async pushOrder(orderId: string): Promise<string | null> {
     const order = await this.prisma.order.findUniqueOrThrow({

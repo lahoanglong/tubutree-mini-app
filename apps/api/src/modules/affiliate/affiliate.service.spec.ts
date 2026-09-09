@@ -9,7 +9,7 @@ const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as 
 // Ship mặc định 0 cho test (override bằng mockResolvedValue trong test lên-đơn-hộ).
 const pricing = { calcShippingFee: jest.fn().mockResolvedValue(0) } as unknown as PricingService;
 // Không dùng ở đa số test (chỉ placeOrderForCustomer gọi) — no-op mặc định.
-const pancakeOrder = { pushOrder: jest.fn().mockResolvedValue(null) } as unknown as PancakeOrderService;
+const pancakeOrder = { enqueuePush: jest.fn().mockResolvedValue(undefined) } as unknown as PancakeOrderService;
 
 function prismaWith(order: unknown, variations: unknown[], createSpy = jest.fn()) {
   return {
@@ -184,7 +184,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       .fn()
       .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
     const pricingLocal = { calcShippingFee: jest.fn().mockResolvedValue(opts.shippingFee ?? 0) } as unknown as PricingService;
-    const pancakeOrderLocal = { pushOrder: jest.fn().mockResolvedValue('pk1') } as unknown as PancakeOrderService;
+    const pancakeOrderLocal = { enqueuePush: jest.fn().mockResolvedValue(undefined) } as unknown as PancakeOrderService;
     const svc = new AffiliateService(prisma, config, pricingLocal, pancakeOrderLocal);
     return { svc, prisma, orderCreate, variationUpdateMany, commissionCreate, pricingLocal, pancakeOrderLocal };
   }
@@ -276,15 +276,15 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
-  it('đẩy đơn sang Pancake sau khi tạo (đơn hộ phải vào pipeline giao vận như đơn thường)', async () => {
+  it('xếp hàng đẩy đơn sang Pancake sau khi tạo (đơn hộ phải vào pipeline giao vận như đơn thường)', async () => {
     const { svc, pancakeOrderLocal } = build();
     await svc.placeOrderForCustomer('ctv', DTO() as never);
-    expect(pancakeOrderLocal.pushOrder).toHaveBeenCalledWith('o1');
+    expect(pancakeOrderLocal.enqueuePush).toHaveBeenCalledWith('o1');
   });
 
   it('Pancake lỗi/chưa cấu hình → KHÔNG chặn đơn CTV đã tạo (non-fatal, mirror checkout)', async () => {
     const { svc, orderCreate, pancakeOrderLocal } = build();
-    (pancakeOrderLocal.pushOrder as jest.Mock).mockRejectedValue(new Error('Pancake down'));
+    (pancakeOrderLocal.enqueuePush as jest.Mock).mockRejectedValue(new Error('Pancake down'));
     await expect(svc.placeOrderForCustomer('ctv', DTO() as never)).resolves.toBeDefined();
     expect(orderCreate).toHaveBeenCalled();
   });

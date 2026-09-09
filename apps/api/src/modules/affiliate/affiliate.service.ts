@@ -304,12 +304,13 @@ export class AffiliateService {
       throw err;
     }
 
-    // Ngoài tx: đẩy Pancake để đơn vào pipeline giao vận (mirror checkout.placeOrder). Non-fatal —
-    // Pancake lỗi/chưa cấu hình không được chặn đơn CTV đã tạo; đơn giữ trạng thái chờ đồng bộ.
+    // Ngoài tx: xếp hàng đẩy Pancake (retry+backoff qua PancakePushProcessor, mirror
+    // checkout.placeOrder — xem P0-2 trong docs/2026-09-08-review-progress.md). Non-fatal —
+    // Pancake lỗi/chưa cấu hình không được chặn đơn CTV đã tạo; cron reconcile quét lại sau.
     try {
-      await this.pancakeOrder.pushOrder(order.id);
+      await this.pancakeOrder.enqueuePush(order.id);
     } catch (err) {
-      this.logger.error(`Đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
+      this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
     }
     // Tạo hoa hồng cho CTV (placedForCustomer cho phép self-referral). Non-fatal.
     await this.createCommissionForOrder(order.id).catch((err) =>
