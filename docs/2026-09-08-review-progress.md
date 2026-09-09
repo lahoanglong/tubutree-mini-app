@@ -47,12 +47,12 @@ theo lô, ưu tiên lô doanh thu.
 - [x] `docs/2026-09-08-feature-map.md`: bảng module, đối chiếu route FE↔API, audit hard-code UI.
 - [x] Môi trường dev chạy được để verify thật (API + miniapp).
 
-### Phase 1 — Audit chức năng
-- [x] 4 audit song song xong: tiền/giá (đang verify) · đơn hàng/tồn kho (xong, verify) · quyền/danh tính (đang chạy) · xã hội/nội dung (xong, verify).
-- Đơn hàng/tồn kho — 4 P0 + 4 P1 + 5 P2 + 3 P3 đã xác nhận bằng đọc code thật (không phải suy đoán).
-- Xã hội/nội dung — 2 P0 + 5 P1 + 6 P2 + 6 P3 đã xác nhận.
-- Tiền/giá: chạy lại thành công, đang chờ kết quả.
-- Quyền/danh tính: chạy lại 1 lần bị stall (600s không tiến triển, agent tự stop) — cần chạy lại lần 2.
+### Phase 1 — Audit chức năng — HOÀN THÀNH CẢ 4 MẢNG
+- [x] Đơn hàng/tồn kho — 4 P0 + 4 P1 + 5 P2 + 3 P3 đã xác nhận bằng đọc code thật.
+- [x] Xã hội/nội dung — 2 P0 + 5 P1 + 6 P2 + 6 P3 đã xác nhận (46 file đọc).
+- [x] Tiền/giá — 1 P0 + 1 P1 + 4 P2 + 2 P3 đã xác nhận (53 file đọc).
+- [x] Quyền/danh tính — 3 P0 + 3 P1 + 4 P2 đã xác nhận (52 file đọc, 301 route soát; lần chạy
+  đầu bị stall 600s, chạy lại lần 2 thành công).
 
 ### Phase 2 — Audit mạch lạc & liên kết
 - [ ] Chưa bắt đầu — làm sau khi P0 đơn hàng đã sạch.
@@ -257,4 +257,12 @@ sửa, để lại phiên sau.
 - [ ] Chưa bắt đầu.
 
 ### Phase 8 — Chốt phiên
-- [ ] Chưa bắt đầu.
+- [x] Verify cuối cùng toàn workspace: `pnpm typecheck` (5/5) + `pnpm lint` (5/5) +
+  `pnpm test:ci` (api 93/1309, web 1/14) + `pnpm --filter @tubutree/miniapp test` (6/6, 36/36)
+  — TẤT CẢ SẠCH.
+  - Tổng kết: 8 commit, đã push `origin/main`. 13 lỗi P0/P1 đã sửa (7 P0, 6 P1) trên cả 4
+    domain, mỗi lỗi có test đỏ→xanh. Chi tiết đầy đủ + việc cần người + hướng tiếp tục:
+    `docs/2026-09-08-overnight-session-report.md`.
+- Phase 2 (coherence UX), Phase 4 bước 2+ (design system), Phase 5-7: KHÔNG kịp làm trong
+  phiên này — ưu tiên "chất lượng > số lượng" dồn hết cho audit + sửa lỗi P0/P1 bảo mật/tiền
+  thật đã tìm thấy, thay vì dàn mỏng sang UI/tính năng mới. Lý do đầy đủ trong overnight report.
