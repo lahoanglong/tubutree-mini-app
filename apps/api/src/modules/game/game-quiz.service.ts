@@ -59,6 +59,22 @@ export class GameQuizService {
     const quiz = await this.prisma.gameQuiz.findUnique({ where: { id: quizId } });
     if (!quiz) throw new BadRequestException('Câu hỏi không tồn tại.');
 
+    // Trần số CÂU KHÁC NHAU/ngày (P1-5, docs/2026-09-08-review-progress.md) — trước đây chỉ có
+    // unique (userId,quizId,dayKey) chặn trả lời TRÙNG 1 câu, không chặn trả lời hết ngân hàng
+    // câu hỏi trong 1 ngày (getTodayQuiz chỉ là gợi ý hiển thị `take` N câu, gọi thẳng
+    // answerQuiz() cho quizId bất kỳ vẫn qua). Đếm attempt hôm nay TRƯỚC khi tạo mới.
+    // Đếm-rồi-quyết KHÔNG atomic (không dùng Serializable như game.service.waterTree) — 2
+    // request song song cho 2 quizId khác nhau về lý thuyết có thể cùng lọt qua, vượt trần 1-2
+    // câu. Chấp nhận: phần thưởng mỗi câu chỉ vài giọt nước (đã bị chặn quy đổi ra tiền bởi
+    // trần coupon thu hoạch/ngày ở game.service.ts), khác hẳn mức rủi ro của coupon 30k/lần.
+    const dailyCap = await this.config.get<number>('game.quiz_daily_count', 5);
+    const answeredToday = await this.prisma.gameQuizAttempt.count({
+      where: { userId, attemptedAt: { gte: this.startOfDay(new Date()) } },
+    });
+    if (answeredToday >= dailyCap) {
+      throw new BadRequestException(`Bạn đã trả lời đủ ${dailyCap} câu hôm nay, quay lại vào ngày mai nhé.`);
+    }
+
     const isCorrect = quiz.correct === choice;
     // Chặn trả lời trùng/ngày bằng unique DB constraint (userId, quizId, dayKey) — race-safe,
     // thay cho pattern đọc-rồi-tạo (TOCTOU) cũ: 2 request answerQuiz() song song đều có thể đọc

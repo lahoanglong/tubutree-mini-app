@@ -19,7 +19,12 @@ function prisma(over: Record<string, unknown> = {}) {
       create: jest.fn().mockResolvedValue({ userId: 'u1', totalSeeds: 0 }),
     },
     gameQuiz: { findUnique: jest.fn().mockResolvedValue(QUIZ), findMany: jest.fn().mockResolvedValue([QUIZ]) },
-    gameQuizAttempt: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    gameQuizAttempt: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({}),
+      count: jest.fn().mockResolvedValue(0),
+    },
   };
   return { ...base, ...over } as unknown as PrismaService;
 }
@@ -57,9 +62,30 @@ describe('GameQuizService', () => {
         create: jest.fn().mockRejectedValue(
           new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' }),
         ),
+        count: jest.fn().mockResolvedValue(0),
       },
     });
     await expect(new GameQuizService(p, cfg()).answerQuiz('u1', 'q1', 1)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  // P1-5 (docs/2026-09-08-review-progress.md): answerQuiz() chỉ chặn TRẢ LỜI TRÙNG 1 câu/ngày
+  // (unique userId+quizId+dayKey) — không chặn số CÂU KHÁC NHAU trả lời/ngày. getTodayQuiz()
+  // chỉ là gợi ý hiển thị (take N câu chưa làm); gọi thẳng answerQuiz() cho quizId bất kỳ vẫn
+  // qua được, nên có thể trả lời HẾT ngân hàng câu hỏi trong 1 ngày thay vì đúng
+  // game.quiz_daily_count câu như thiết kế → nhân N lần nước thưởng.
+  it('đã đạt trần số câu/ngày (game.quiz_daily_count) → BadRequest, KHÔNG cộng nước, KHÔNG tạo attempt', async () => {
+    const p = prisma({ gameQuizAttempt: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), count: jest.fn().mockResolvedValue(5) } });
+    await expect(new GameQuizService(p, cfg({ 'game.quiz_daily_count': 5 })).answerQuiz('u1', 'q1', 1)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect((p.gameQuizAttempt.create as jest.Mock)).not.toHaveBeenCalled();
+    expect((p.gameProfile.upsert as jest.Mock)).not.toHaveBeenCalled();
+  });
+
+  it('còn dưới trần → vẫn trả lời được bình thường', async () => {
+    const p = prisma({ gameQuizAttempt: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(4) } });
+    const r = await new GameQuizService(p, cfg({ 'game.quiz_daily_count': 5 })).answerQuiz('u1', 'q1', 1);
+    expect(r.isCorrect).toBe(true);
   });
 });
 
@@ -81,6 +107,7 @@ describe('GameQuizService.ensureProfile (C1)', () => {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({}),
+        count: jest.fn().mockResolvedValue(0),
       },
     } as unknown as PrismaService;
   }

@@ -123,9 +123,20 @@ theo lô, ưu tiên lô doanh thu.
   - 4 test mới, full suite groupbuy 21/21.
   - Verify chung 2 mục trên: typecheck/lint sạch, **92 suite / 1251 test pass** (tăng từ
     92/1244 — soát lại đúng 1248 sau P0-2 game rồi 1251 sau groupbuy).
-- [ ] P0 còn lại xã hội/nội dung (P1 reputation farming, P1 best-answer farming, P1 comment
-  moderation gap, P1 edit-after-approval, P1 quiz daily count không enforce) — chưa sửa,
-  để lại cho lượt tiếp vì đã hết các P0 tiền-mất-thật của domain này.
+- [x] **P1-5 (game quiz) — trần số câu/ngày không được thực thi thật.** `answerQuiz()` chỉ
+  chặn trả lời TRÙNG 1 câu/ngày (unique `userId+quizId+dayKey`) — không chặn số CÂU KHÁC NHAU
+  trả lời/ngày; `getTodayQuiz()` chỉ là gợi ý hiển thị (`take` N câu), gọi thẳng
+  `POST /game/quiz/:id/answer` cho quizId bất kỳ vẫn qua, nên có thể trả lời hết ngân hàng câu
+  hỏi trong 1 ngày thay vì đúng `game.quiz_daily_count` câu như thiết kế.
+  - Đếm attempt hôm nay TRƯỚC khi tạo mới, chặn nếu đã đạt trần. KHÔNG dùng Serializable
+    transaction như `game.service.waterTree` (chấp nhận 1 khe hở đua hẹp giữa 2 request song
+    song cho 2 quizId khác nhau) — phần thưởng mỗi câu chỉ vài giọt nước, giá trị thấp hơn
+    nhiều so với coupon 30k/lần đã được xử lý kỹ hơn; ghi rõ đánh đổi này trong code.
+  - 2 test mới + sửa 2 fixture cũ thiếu `gameQuizAttempt.count` (lộ ra ngay khi thêm lệnh gọi
+    mới). Verify: typecheck/lint/`nest build` sạch, **93 suite / 1309 test pass** (từ 93/1307).
+- [ ] Còn lại xã hội/nội dung chưa sửa (P1 reputation farming không trần, P1 best-answer
+  farming không trần, P1 comment không có endpoint ẩn/kiểm duyệt, P1 edit sau duyệt không
+  reset về PENDING) — để lại cho lượt tiếp, đã hết các mục nhanh/rẻ của domain này.
 - [ ] P0 đơn hàng còn lại: P0-3 (Pancake sync ghi đè stock — cần quyết định kiến trúc).
 
 ### Audit tiền/giá — XONG (53 file đọc)
