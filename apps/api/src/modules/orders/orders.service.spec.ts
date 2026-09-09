@@ -8,6 +8,7 @@ import type { NotificationsService } from '../notifications/notifications.servic
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
+import type { CouponsService } from '../coupons/coupons.service';
 
 const loyalty = { reverseOrderPoints: jest.fn().mockResolvedValue(undefined) } as unknown as LoyaltyService;
 const cart = {} as unknown as CartService;
@@ -15,9 +16,10 @@ const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unkn
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 const flash = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
 const affiliate = { reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined) } as unknown as AffiliateService;
+const coupons = { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService;
 // reverseFinancials dùng chung với admin.reviewReturn/OrderStatusService — dựng instance THẬT
 // (không mock) trên top of cùng `flash` mock để test vẫn xác minh hành vi qua spy ở tầng tx.
-const reversal = new OrderReversalService(flash);
+const reversal = new OrderReversalService(flash, coupons);
 
 function makeService(
   order: Record<string, unknown>,
@@ -85,6 +87,12 @@ describe('OrdersService.cancel', () => {
     expect((loyalty.reverseOrderPoints as jest.Mock)).toHaveBeenCalledWith('o1');
     expect((affiliate.reverseCommissionsForOrder as jest.Mock)).toHaveBeenCalledWith('o1');
     expect((notifications.notify as jest.Mock)).toHaveBeenCalled();
+  });
+
+  it('đơn dùng coupon → hoàn coupon (release) khi hủy, không bị đốt vĩnh viễn', async () => {
+    const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED', couponCode: 'BDAY50K' });
+    await svc.cancel('u1', 'TUBU1');
+    expect((coupons.release as jest.Mock)).toHaveBeenCalledWith('BDAY50K', 'o1', expect.anything());
   });
 
   it('KHÔNG hủy được đơn SHIPPING (đã vào giao)', async () => {

@@ -6,6 +6,7 @@ import type { NotificationsService } from '../../notifications/notifications.ser
 import type { LoyaltyService } from '../../loyalty/loyalty.service';
 import type { AffiliateService } from '../../affiliate/affiliate.service';
 import type { FlashSaleService } from '../../flash-sale/flash-sale.service';
+import type { CouponsService } from '../../coupons/coupons.service';
 
 /**
  * PancakeProcessor giờ ủy quyền toàn bộ việc ghi Order.status cho OrderStatusService
@@ -46,7 +47,8 @@ function setup(order: Record<string, unknown> | null) {
     grantReferralReward: jest.fn().mockResolvedValue(undefined),
   } as unknown as AffiliateService;
   const flashSale = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
-  const reversal = new OrderReversalService(flashSale);
+  const coupons = { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService;
+  const reversal = new OrderReversalService(flashSale, coupons);
   const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal);
   const proc = new PancakeProcessor(prisma, notifications, orderStatus) as unknown as {
     onStatusUpdated(d: Record<string, unknown>): Promise<void>;

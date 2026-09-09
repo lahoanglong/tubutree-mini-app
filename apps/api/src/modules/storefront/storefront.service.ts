@@ -1,10 +1,28 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 
 @Injectable()
 export class StorefrontService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: SystemConfigService,
+  ) {}
+
+  /**
+   * Trần % giảm combo — CTV tự đăng ký không cần duyệt (POST /affiliate/register), nên
+   * comboDiscountPct KHÔNG được chỉ tin DTO (@Max(100) chỉ chặn kiểu dữ liệu). Không có trần
+   * server-side, một CTV có thể đặt combo 100% trên gian hàng của chính mình → đơn thật 0đ,
+   * shop trả tiền (P0, docs/2026-09-08-review-progress.md). Clamp thay vì reject — thân thiện
+   * hơn cho CTV lỡ tay nhập nhầm, và combo.service.ts vẫn tự clamp lại lần 2 (defense in depth)
+   * phòng dữ liệu cũ/ghi thẳng DB từ trước khi có trần này.
+   */
+  private async clampComboPct(pct: number | undefined): Promise<number | undefined> {
+    if (pct == null) return pct;
+    const max = await this.config.get<number>('storefront.max_combo_pct', 30);
+    return Math.min(pct, max);
+  }
 
   async getOrCreateMine(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
@@ -263,6 +281,7 @@ export class StorefrontService {
     dto: { title: string; kind?: 'NORMAL' | 'COMBO'; layout?: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct?: number },
   ) {
     const sf = await this.assertOwnedStorefront(userId);
+    const comboDiscountPct = await this.clampComboPct(dto.comboDiscountPct);
     try {
       // count() rồi create() không atomic — 2 request tạo collection đồng thời (2 tab) có thể
       // cùng đọc count=N rồi cùng tạo sortOrder=N → 2 collection trùng sortOrder, thứ tự hiển thị
@@ -277,7 +296,7 @@ export class StorefrontService {
               title: dto.title,
               kind: dto.kind ?? 'NORMAL',
               layout: dto.layout ?? 'CAROUSEL',
-              comboDiscountPct: dto.kind === 'COMBO' ? dto.comboDiscountPct ?? 0 : null,
+              comboDiscountPct: dto.kind === 'COMBO' ? comboDiscountPct ?? 0 : null,
               sortOrder: count,
             },
           });
@@ -298,7 +317,11 @@ export class StorefrontService {
     dto: { title?: string; layout?: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct?: number },
   ) {
     await this.assertOwnedCollection(userId, collectionId);
-    return this.prisma.storefrontCollection.update({ where: { id: collectionId }, data: dto });
+    const comboDiscountPct = await this.clampComboPct(dto.comboDiscountPct);
+    return this.prisma.storefrontCollection.update({
+      where: { id: collectionId },
+      data: { ...dto, ...(comboDiscountPct !== undefined ? { comboDiscountPct } : {}) },
+    });
   }
 
   async deleteCollection(userId: string, collectionId: string) {

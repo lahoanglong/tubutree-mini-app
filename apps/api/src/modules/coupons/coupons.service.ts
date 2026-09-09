@@ -159,6 +159,34 @@ export class CouponsService {
   }
 
   /**
+   * Hoàn coupon khi đơn bị hủy/hoàn trước khi hoàn tất — đối xứng với redeem(). Trước đây
+   * không có hàm này: hủy/trả đơn hoàn ví/xu/điểm/hoa hồng/stock đầy đủ nhưng CouponRedemption
+   * + usedCount vẫn còn nguyên → voucher usageLimit=1 (birthday/welcome/referral...) bị đốt
+   * vĩnh viễn cho một đơn chưa từng thực sự hoàn tất (P1, docs/2026-09-08-review-progress.md).
+   * Idempotent: không có redemption nào bị xóa (đã release trước đó, hoặc đơn không thực sự
+   * redeem — vd race thua ở redeemInTx) → không đụng usedCount. Không throw nếu thiếu code
+   * hoặc coupon không còn tồn tại — đây là bước reversal best-effort, không được chặn luồng
+   * hủy/trả chính.
+   */
+  async release(
+    code: string | null | undefined,
+    orderId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    if (!code) return;
+    const db = tx ?? this.prisma;
+    const coupon = await db.coupon.findUnique({ where: { code } });
+    if (!coupon) return;
+    const released = await db.couponRedemption.deleteMany({ where: { couponId: coupon.id, orderId } });
+    if (released.count > 0 && coupon.usageLimit != null) {
+      await db.coupon.updateMany({
+        where: { id: coupon.id, usedCount: { gt: 0 } },
+        data: { usedCount: { decrement: 1 } },
+      });
+    }
+  }
+
+  /**
    * Đảm bảo user được phép dùng coupon theo scope (chặn validate/redeem nếu không).
    * Quy tắc eligible nằm ở isCouponEligible (coupon-scope.ts) — dùng CHUNG với
    * LoyaltyService.getAvailableCoupons để list & apply không lệch nhau.

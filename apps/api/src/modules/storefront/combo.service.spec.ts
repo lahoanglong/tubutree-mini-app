@@ -69,10 +69,12 @@ describe('ComboService.computeForStorefront', () => {
       },
     } as any;
   }
+  // Config mặc định trần 30% (fallback), test riêng override khi cần trần khác.
+  const config = { get: async (_k: string, fb?: unknown) => fb } as any;
 
   it('slug rỗng → không giảm (không query)', async () => {
     const prisma = makePrisma([]);
-    const svc = new ComboService(prisma);
+    const svc = new ComboService(prisma, config);
     const out = await svc.computeForStorefront(null, [{ variationId: 'v1', productId: 'p1', total: 100 }]);
     expect(out).toEqual({ total: 0, perLine: {} });
     expect(prisma.storefront.findFirst).not.toHaveBeenCalled();
@@ -80,14 +82,14 @@ describe('ComboService.computeForStorefront', () => {
 
   it('giỏ rỗng → không giảm', async () => {
     const prisma = makePrisma([]);
-    const svc = new ComboService(prisma);
+    const svc = new ComboService(prisma, config);
     const out = await svc.computeForStorefront('linh-shop', []);
     expect(out.total).toBe(0);
   });
 
   it('storefront không tồn tại/chưa publish → không giảm', async () => {
     const prisma = makePrisma(null);
-    const svc = new ComboService(prisma);
+    const svc = new ComboService(prisma, config);
     const out = await svc.computeForStorefront('x', [{ variationId: 'v1', productId: 'p1', total: 100 }]);
     expect(out.total).toBe(0);
   });
@@ -96,7 +98,7 @@ describe('ComboService.computeForStorefront', () => {
     const prisma = makePrisma([
       { comboDiscountPct: 10, items: [{ productId: 'p1', isHidden: false }, { productId: 'p2', isHidden: false }] },
     ]);
-    const svc = new ComboService(prisma);
+    const svc = new ComboService(prisma, config);
     const out = await svc.computeForStorefront('linh-shop', [
       { variationId: 'v1', productId: 'p1', total: 100 },
       { variationId: 'v2', productId: 'p2', total: 100 },
@@ -108,11 +110,24 @@ describe('ComboService.computeForStorefront', () => {
     );
   });
 
+  // P0 (docs/2026-09-08-review-progress.md), lớp phòng thủ thứ 2: dữ liệu collection có
+  // comboDiscountPct=100 (ghi từ trước khi có trần, hoặc ghi thẳng DB) — computeForStorefront
+  // vẫn PHẢI tự clamp theo config hiện hành, không tin nguyên giá trị lưu trong DB.
+  it('comboDiscountPct trong DB vượt trần cấu hình → clamp lại khi tính (defense in depth)', async () => {
+    const prisma = makePrisma([
+      { comboDiscountPct: 100, items: [{ productId: 'p1', isHidden: false }] },
+    ]);
+    const cappedConfig = { get: async (k: string, fb?: unknown) => (k === 'storefront.max_combo_pct' ? 20 : fb) } as any;
+    const svc = new ComboService(prisma, cappedConfig);
+    const out = await svc.computeForStorefront('linh-shop', [{ variationId: 'v1', productId: 'p1', total: 100 }]);
+    expect(out.perLine.v1).toBe(20); // KHÔNG phải 100
+  });
+
   it('item ẩn bị loại khỏi điều kiện combo', async () => {
     const prisma = makePrisma([
       { comboDiscountPct: 10, items: [{ productId: 'p1', isHidden: false }, { productId: 'p2', isHidden: true }] },
     ]);
-    const svc = new ComboService(prisma);
+    const svc = new ComboService(prisma, config);
     // combo giờ chỉ cần p1 (p2 ẩn) → giỏ có p1 là đủ
     const out = await svc.computeForStorefront('linh-shop', [{ variationId: 'v1', productId: 'p1', total: 100 }]);
     expect(out.perLine.v1).toBe(10);

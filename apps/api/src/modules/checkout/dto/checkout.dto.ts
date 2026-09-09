@@ -19,10 +19,19 @@ export class QuoteDto {
   @IsOptional() @IsArray() @IsString({ each: true }) itemIds?: string[];
 }
 
+/**
+ * Phương thức thanh toán CÓ settlement path thật ở checkout. `PaymentMethod` (shared-types)
+ * còn liệt kê VNPAY cho tương thích dữ liệu cũ/enum Prisma, nhưng KHÔNG có service/controller/
+ * webhook nào xử lý nó — nhận đơn VNPAY vẫn trừ kho + đứng PENDING_PAYMENT vĩnh viễn (không
+ * cron nào hết hạn đơn PENDING_PAYMENT), nên lặp đặt đơn VNPAY là cách rẻ tiền khóa chết tồn
+ * kho (P1-2, docs/2026-09-08-review-progress.md). Chỉ nới danh sách này khi đã nối cổng thật.
+ */
+const CHECKOUT_PAYMENT_METHODS = ['COD', 'BANK_TRANSFER', 'WALLET', 'XU', 'ZALOPAY'] as const;
+
 export class PlaceOrderDto {
   @IsString() addressId!: string;
 
-  @IsIn(Object.values(PaymentMethod))
+  @IsIn(CHECKOUT_PAYMENT_METHODS)
   paymentMethod!: PaymentMethod;
 
   @IsOptional() @IsInt() @Min(0) pointsToUse?: number;

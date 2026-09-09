@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 
 export interface ComboLine {
   variationId: string;
@@ -50,7 +51,10 @@ export function allocateComboDiscounts(
 /** Tính giảm giá combo cho giỏ theo gian hàng (slug). Combo = collection kind=COMBO + comboDiscountPct. */
 @Injectable()
 export class ComboService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: SystemConfigService,
+  ) {}
 
   async computeForStorefront(slug: string | null | undefined, lines: ComboLine[]): Promise<ComboResult> {
     if (!slug || lines.length === 0) return { total: 0, perLine: {} };
@@ -67,9 +71,14 @@ export class ComboService {
       },
     });
     if (!sf) return { total: 0, perLine: {} };
+    // Clamp LẦN 2 tại nơi đọc — phòng dữ liệu ghi từ trước khi StorefrontService có trần
+    // (hoặc ghi thẳng DB) vẫn không cho phép combo vượt trần hiện hành (P0,
+    // docs/2026-09-08-review-progress.md). StorefrontService.clampComboPct là lớp chính (chặn
+    // lúc ghi); đây là lớp phòng thủ thứ 2 (chặn lúc tính tiền — nơi tiền thật mất đi).
+    const maxPct = await this.config.get<number>('storefront.max_combo_pct', 30);
     const combos = sf.collections
       .map((c) => ({
-        pct: c.comboDiscountPct ?? 0,
+        pct: Math.min(c.comboDiscountPct ?? 0, maxPct),
         // SP ẩn không tính vào điều kiện combo (CTV ẩn tạm → vẫn render được combo phần còn lại).
         productIds: c.items.filter((i) => !i.isHidden).map((i) => i.productId),
       }))

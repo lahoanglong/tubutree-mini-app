@@ -8,6 +8,7 @@ import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { FlashSaleService } from '../flash-sale/flash-sale.service';
+import type { CouponsService } from '../coupons/coupons.service';
 
 const config = {} as unknown as SystemConfigService;
 const loyalty = {
@@ -21,11 +22,12 @@ const affiliate = {
 } as unknown as AffiliateService;
 const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
 const flash = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
+const coupons = { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService;
 // AdminService không còn tự viết khối restock/refund — ủy quyền cho OrderReversalService
 // (reviewReturn) và OrderStatusService (updateOrderStatus). Dựng instance THẬT (không mock)
 // của cả hai để test vẫn xác minh được hành vi thật qua các spy ở tầng tx bên dưới.
 const mkAdmin = (prisma: PrismaService) => {
-  const reversal = new OrderReversalService(flash);
+  const reversal = new OrderReversalService(flash, coupons);
   const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal);
   return new AdminService(prisma, config, loyalty, affiliate, notifications, reversal, orderStatus);
 };

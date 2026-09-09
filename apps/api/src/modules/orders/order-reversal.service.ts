@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Order, OrderItem, Prisma } from '@prisma/client';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
+import { CouponsService } from '../coupons/coupons.service';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
@@ -21,7 +22,10 @@ type OrderWithItems = Order & { items: OrderItem[] };
  */
 @Injectable()
 export class OrderReversalService {
-  constructor(private readonly flashSale: FlashSaleService) {}
+  constructor(
+    private readonly flashSale: FlashSaleService,
+    private readonly coupons: CouponsService,
+  ) {}
 
   async reverseFinancials(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<void> {
     // Hoàn tiền — guard paymentStatus:'PAID' bằng updateMany, count=1 mới thực sự chi tiền,
@@ -75,5 +79,9 @@ export class OrderReversalService {
         await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, item.quantity);
       }
     }
+
+    // Hoàn coupon — trước đây thiếu bước này: voucher usageLimit=1 (birthday/welcome/referral)
+    // bị đốt vĩnh viễn cho một đơn đã hủy/trả (P1, docs/2026-09-08-review-progress.md).
+    await this.coupons.release(order.couponCode, order.id, tx);
   }
 }

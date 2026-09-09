@@ -290,3 +290,75 @@ describe('CouponsService.redeem — perUserLimit race (advisory lock)', () => {
     );
   });
 });
+
+describe('CouponsService.release', () => {
+  // P1 (docs/2026-09-08-review-progress.md): hủy/trả đơn hoàn ví/xu/điểm/hoa hồng/stock đủ cả
+  // nhưng KHÔNG hoàn coupon — voucher usageLimit=1 (birthday/welcome/referral...) bị "đốt"
+  // vĩnh viễn cho một đơn chưa từng thực sự hoàn tất. release() đối xứng với redeem().
+  function makeReleaseService(over: Record<string, unknown> = {}) {
+    const findUnique = jest.fn().mockResolvedValue(coupon({ usageLimit: 1, usedCount: 1 }));
+    const deleteMany = jest.fn().mockResolvedValue({ count: 1 });
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      coupon: { findUnique, updateMany },
+      couponRedemption: { deleteMany },
+      ...over,
+    } as unknown as PrismaService;
+    return { svc: new CouponsService(prisma), prisma, findUnique, deleteMany, updateMany };
+  }
+
+  it('không có code (đơn không dùng coupon) → không làm gì, không query DB', async () => {
+    const { svc, findUnique } = makeReleaseService();
+    await svc.release(null, 'o1');
+    expect(findUnique).not.toHaveBeenCalled();
+    await svc.release(undefined, 'o1');
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
+  it('coupon không còn tồn tại → không throw, no-op', async () => {
+    const { svc, findUnique, deleteMany } = makeReleaseService();
+    findUnique.mockResolvedValue(null);
+    await expect(svc.release('GONE', 'o1')).resolves.toBeUndefined();
+    expect(deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('xóa CouponRedemption của đúng đơn + giảm usedCount (coupon có usageLimit)', async () => {
+    const { svc, deleteMany, updateMany } = makeReleaseService();
+    await svc.release('SALE', 'o1');
+    expect(deleteMany).toHaveBeenCalledWith({ where: { couponId: 'c1', orderId: 'o1' } });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'c1', usedCount: { gt: 0 } },
+      data: { usedCount: { decrement: 1 } },
+    });
+  });
+
+  it('coupon KHÔNG có usageLimit (unlimited) → chỉ xóa redemption, KHÔNG đụng usedCount', async () => {
+    const { svc, findUnique, deleteMany, updateMany } = makeReleaseService();
+    findUnique.mockResolvedValue(coupon({ usageLimit: null }));
+    await svc.release('SALE', 'o1');
+    expect(deleteMany).toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('idempotent: đơn KHÔNG có redemption nào để xóa (đã release trước đó / chưa từng redeem thật) → KHÔNG giảm usedCount', async () => {
+    const { svc, deleteMany, updateMany } = makeReleaseService();
+    deleteMany.mockResolvedValue({ count: 0 });
+    await svc.release('SALE', 'o1');
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('gọi trong transaction (tx truyền vào) → dùng tx đó thay vì this.prisma', async () => {
+    const { svc } = makeReleaseService();
+    const txDeleteMany = jest.fn().mockResolvedValue({ count: 1 });
+    const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const txFindUnique = jest.fn().mockResolvedValue(coupon({ usageLimit: 1 }));
+    const tx = {
+      coupon: { findUnique: txFindUnique, updateMany: txUpdateMany },
+      couponRedemption: { deleteMany: txDeleteMany },
+    } as unknown as Prisma.TransactionClient;
+    await svc.release('SALE', 'o1', tx);
+    expect(txFindUnique).toHaveBeenCalled();
+    expect(txDeleteMany).toHaveBeenCalled();
+    expect(txUpdateMany).toHaveBeenCalled();
+  });
+});

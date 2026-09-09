@@ -127,7 +127,49 @@ theo lô, ưu tiên lô doanh thu.
   moderation gap, P1 edit-after-approval, P1 quiz daily count không enforce) — chưa sửa,
   để lại cho lượt tiếp vì đã hết các P0 tiền-mất-thật của domain này.
 - [ ] P0 đơn hàng còn lại: P0-3 (Pancake sync ghi đè stock — cần quyết định kiến trúc).
-- [ ] P0 tiền/giá + quyền/danh tính: chờ audit xong.
+
+### Audit tiền/giá — XONG (53 file đọc)
+1 P0 + 1 P1 + 4 P2 + 2 P3. P0: CTV tự đăng ký (không cần duyệt) + tự đặt `comboDiscountPct`
+gian hàng của mình tới 100% → đơn thật 0đ, shop trả tiền. Đã sửa (xem dưới). P1: hủy đơn không
+hoàn coupon — đã sửa. P2/P3 còn lại (milestone voucher cấp 2 lần ở ranh giới tháng, cashback
+rate hiển thị ×100 sai ở FE, hạng thành viên tính theo điểm CÒN LẠI thay vì điểm đã tích lũy
+nên tiêu điểm bị tụt hạng, flash-sale line định giá lại cao hơn giá thường vẫn tính là flash,
+free-ship tính trên subtotal GỐC thay vì sau giảm giá, ví coin không có Idempotency-Key) — chưa
+sửa, để lại phiên sau.
+
+### Audit quyền/danh tính — XONG (52 file đọc, 301 route soát)
+3 P0 + 3 P1 + 4 P2. Không route nào thiếu guard — lỗ hổng nằm ở tầng authorization logic:
+- **P0-1**: `slug`/`subdomain`/`customDomain` của storefront mỗi cột unique riêng nhưng mọi
+  chỗ ĐỌC lại trộn cả 3 bằng `OR`, còn chỗ GHI chỉ check trùng trong CHÍNH cột đó → CTV có thể
+  chiếm `subdomain`/`customDomain` trùng `slug` của gian hàng khác, giả mạo QR ngân hàng/gian
+  hàng người khác.
+- **P0-2**: `GET/PUT /merchant/orders` xác định "đơn của tôi" bằng list slug string
+  (`[store.slug, store.subdomain]`), không phải khoá ngoại → cùng lỗ P0-1 lộ đơn/đổi trạng thái
+  đơn của merchant khác (thấy SĐT/tên khách, hủy/giao đơn đối thủ).
+- **P0-3**: `admin.setUserRole` hạ quyền không thu hồi `RoleGrant` — lần refresh token tiếp
+  theo, `applyGrants` (chỉ nâng không hạ) tự phục hồi quyền ADMIN đã bị thu hồi.
+- P1: IDOR `addResellProduct` (collectionId không check chủ sở hữu), refresh-token bị dùng lại
+  chỉ chặn đúng token đó chứ không revoke cả chuỗi, AFFILIATE tự cấp được nên `@Roles` không
+  còn là biên quyền thật.
+Chưa sửa (P0-1/P0-2/P0-3 và toàn bộ P1-P2) — quy mô sửa lớn (đổi mô hình dữ liệu storefront
+lookup + luồng revoke), để lại cho lượt tiếp, ưu tiên cao nhất đầu phiên sau.
+
+- [x] **P0 (combo mint tiền) + P1 (coupon không hoàn khi hủy)** — cả hai từ audit tiền/giá.
+  - `StorefrontService.clampComboPct` — trần `storefront.max_combo_pct` (mặc định 30%) áp ở
+    CẢ createCollection và updateCollection, clamp thay vì reject (thân thiện hơn cho CTV lỡ
+    tay). `ComboService.computeForStorefront` tự clamp LẦN 2 khi tính tiền (defense in depth,
+    phòng dữ liệu cũ/ghi thẳng DB).
+  - `CouponsService.release()` mới — đối xứng với `redeem()`: xóa `CouponRedemption` của đơn
+    + giảm `usedCount` (nếu có usageLimit), idempotent. Wired vào
+    `OrderReversalService.reverseFinancials` — tự động hoàn coupon ở CẢ 3 luồng hủy/trả
+    (khách tự hủy, admin duyệt trả, Pancake/merchant/admin đổi trạng thái) vì tất cả đã đi qua
+    class này từ đợt sửa P0-1/P0-4.
+  - **P1-2 (đơn hàng, dtrước đó bỏ sót)** — `PlaceOrderDto.paymentMethod` giờ chỉ chấp nhận
+    COD/BANK_TRANSFER/WALLET/XU/ZALOPAY (bỏ VNPAY — không có service/webhook nào xử lý, lặp
+    đặt đơn VNPAY khóa chết tồn kho vì không cron nào hết hạn PENDING_PAYMENT).
+  - 19 test mới (checkout DTO 6, storefront combo cap 4, combo.service defense-in-depth 1,
+    coupons.release 6, order-reversal 2). Verify: typecheck/lint/`nest build` sạch,
+    **92 suite / 1270 test pass** (từ 92/1251).
 
 ### Phase 4 — Design system
 - [x] Bước 1 audit hiện trạng (số liệu ở trên).

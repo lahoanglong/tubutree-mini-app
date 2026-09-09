@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { OrderReversalService } from './order-reversal.service';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
+import { CouponsService } from '../coupons/coupons.service';
 
 type MockTx = {
   order: { updateMany: jest.Mock };
@@ -26,6 +27,7 @@ function makeOrder(overrides: Record<string, unknown> = {}) {
     total: 150000,
     paymentMethod: 'WALLET',
     paymentStatus: 'PAID',
+    couponCode: null,
     items: [
       { id: 'i1', variationId: 'v1', quantity: 2, flashSaleItemId: null },
       { id: 'i2', variationId: 'v2', quantity: 1, flashSaleItemId: 'fs1' },
@@ -37,11 +39,17 @@ function makeOrder(overrides: Record<string, unknown> = {}) {
 describe('OrderReversalService', () => {
   let service: OrderReversalService;
   let flashSale: { restore: jest.Mock };
+  let coupons: { release: jest.Mock };
 
   beforeEach(async () => {
     flashSale = { restore: jest.fn().mockResolvedValue(undefined) };
+    coupons = { release: jest.fn().mockResolvedValue(undefined) };
     const module = await Test.createTestingModule({
-      providers: [OrderReversalService, { provide: FlashSaleService, useValue: flashSale }],
+      providers: [
+        OrderReversalService,
+        { provide: FlashSaleService, useValue: flashSale },
+        { provide: CouponsService, useValue: coupons },
+      ],
     }).compile();
     service = module.get(OrderReversalService);
   });
@@ -117,5 +125,19 @@ describe('OrderReversalService', () => {
     const order = makeOrder({ items: [{ id: 'i1', variationId: 'v1', quantity: 3, flashSaleItemId: null }] });
     await service.reverseFinancials(tx as never, order);
     expect(flashSale.restore).not.toHaveBeenCalled();
+  });
+
+  it('đơn có dùng coupon → gọi coupons.release(couponCode, orderId, tx) để hoàn voucher', async () => {
+    const tx = makeTx();
+    const order = makeOrder({ couponCode: 'BDAY50K' });
+    await service.reverseFinancials(tx as never, order);
+    expect(coupons.release).toHaveBeenCalledWith('BDAY50K', 'o1', tx);
+  });
+
+  it('đơn không dùng coupon → vẫn gọi release (couponCode=null, tự no-op bên trong CouponsService)', async () => {
+    const tx = makeTx();
+    const order = makeOrder({ couponCode: null });
+    await service.reverseFinancials(tx as never, order);
+    expect(coupons.release).toHaveBeenCalledWith(null, 'o1', tx);
   });
 });
