@@ -173,10 +173,22 @@ sửa, để lại phiên sau.
     rbac.service +4, admin.service +2, admin.module wiring). Verify: typecheck/lint/`nest
     build` sạch, **93 suite / 1295 test pass** (từ 92/1270). Tự boot `nest start` xác nhận DI
     graph resolve đúng sau khi AdminModule import thêm StaffModule (không tạo cycle).
-- [ ] Chưa sửa: P1 (IDOR addResellProduct, refresh-token reuse không revoke cả chuỗi,
-  AFFILIATE tự cấp được), toàn bộ P2 (guest login Math.random, refresh token trong
-  localStorage web, mảng không giới hạn kích thước, tiền không rate-limit riêng) — để lại
-  phiên sau.
+- [x] **P1-1 (IDOR addResellProduct)** — `collectionId` từ body giờ phải thuộc CHÍNH gian
+  hàng của caller (check qua `store.collections` đã include sẵn, không tốn query thêm).
+  2 test mới.
+- [x] **P1-2 (refresh-token reuse chỉ chặn 1 token, không revoke cả chuỗi)** —
+  `AuthService.refresh` phát hiện reuse (`revoked.count===0`) giờ thu hồi TOÀN BỘ refresh
+  token còn active của user đó, không chỉ token vừa bị replay — trước đây nếu kẻ trộm đã
+  rotate 1 lần trước khi nạn nhân refresh lại, chuỗi của kẻ trộm sống nguyên 30 ngày. 2 test
+  mới (thu hồi cả chuỗi khi reuse; KHÔNG thu hồi thừa khi rotation bình thường).
+  - Verify chung 2 mục trên: typecheck/lint/`nest build` sạch, **93 suite / 1299 test pass**.
+- [ ] Chưa sửa (quyết định nghiệp vụ, không phải bug — để nguyên): P1-3 AFFILIATE tự cấp được
+  không cần duyệt — audit tự nhận đây có thể là lựa chọn sản phẩm hợp lý (giảm ma sát đăng ký
+  CTV); rủi ro thực sự đã bị chặn ở nguồn tại bản vá combo-cap + storefront-identifier phía
+  trên. Nếu muốn siết, cần thêm cờ "đã duyệt" tách khỏi role tự cấp — để user quyết định.
+- [ ] Chưa sửa (P2, để lại phiên sau): guest login dùng `Math.random()` cho deviceId (nên đổi
+  `crypto.getRandomValues`), refresh token web lưu localStorage (nên chuyển httpOnly cookie),
+  vài DTO thiếu `@ArrayMaxSize`, tiền không có rate-limit riêng ngoài global 60/min.
 - [ ] **Việc cần người** (không tự làm được, cần quyết định/quyền hạn ngoài phạm vi code):
   chạy `SELECT count(*) FROM storefronts WHERE (subdomain IS NOT NULL AND subdomain NOT IN
   (SELECT slug FROM storefronts)) OR (custom_domain IS NOT NULL AND custom_domain IN (SELECT

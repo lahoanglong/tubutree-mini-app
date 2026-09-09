@@ -287,6 +287,13 @@ export class MerchantService {
     if (!targetColId) {
       throw new BadRequestException('Gian hàng chưa có bộ sưu tập sản phẩm.');
     }
+    // IDOR (P1-1, docs/2026-09-08-review-progress.md): collectionId đến từ body — trước đây
+    // KHÔNG kiểm nó thuộc CHÍNH gian hàng của caller. Id collection của gian hàng khác lộ qua
+    // trang public (GET /storefront/public/:slug trả collections[].id), đủ để chèn sản phẩm
+    // thẳng vào gian hàng người khác. store.collections đã include sẵn ở getOrCreateStore.
+    if (collectionId && !store.collections.some((c) => c.id === collectionId)) {
+      throw new BadRequestException('Bộ sưu tập không thuộc gian hàng của bạn.');
+    }
 
     const existing = await this.prisma.storefrontItem.findFirst({
       where: { collectionId: targetColId, productId },

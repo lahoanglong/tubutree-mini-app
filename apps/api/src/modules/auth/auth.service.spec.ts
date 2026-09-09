@@ -73,11 +73,42 @@ describe('AuthService.refresh (rotation atomic)', () => {
   it('reuse/double-submit: revoke-gate count=0 → Unauthorized "đã được sử dụng", không cấp token', async () => {
     const { svc, prisma, create, updateMany } = makeService();
     (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
-      id: 't1', revokedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER,
+      id: 't1', userId: 'u1', revokedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER,
     });
     (updateMany as jest.Mock).mockResolvedValue({ count: 0 }); // request khác đã revoke trước
     await expect(svc.refresh('tok')).rejects.toThrow('đã được sử dụng');
     expect(create).not.toHaveBeenCalled();
+  });
+
+  // P1-2 (docs/2026-09-08-review-progress.md): trước đây reuse chỉ chặn ĐÚNG token bị replay —
+  // nếu kẻ trộm đã rotate 1 lần trước khi nạn nhân refresh lại, chuỗi refresh token của kẻ
+  // trộm (đã cấp mới, chưa revoke) vẫn sống nguyên 30 ngày. Phát hiện reuse phải thu hồi CẢ
+  // CHUỖI (mọi refresh token còn active của user đó), không chỉ token vừa bị replay.
+  it('reuse phát hiện → thu hồi TOÀN BỘ refresh token còn active của user (không chỉ token bị replay)', async () => {
+    const { svc, prisma, updateMany } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+      id: 't1', userId: 'u1', revokedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER,
+    });
+    (updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    await expect(svc.refresh('tok')).rejects.toThrow('đã được sử dụng');
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+  });
+
+  it('rotation thành công bình thường (không reuse) → KHÔNG thu hồi cả chuỗi, chỉ token cũ', async () => {
+    const { svc, prisma, updateMany } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+      id: 't1', userId: 'u1', revokedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER,
+    });
+    await svc.refresh('tok');
+    // Chỉ 1 lệnh updateMany (revoke-gate theo id) — KHÔNG có lệnh revoke-cả-chuỗi theo userId.
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 't1', revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
   });
 });
 

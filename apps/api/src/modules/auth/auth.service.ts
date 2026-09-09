@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -11,6 +11,8 @@ import { RbacService } from '../staff/rbac/rbac.service';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -217,6 +219,16 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
     if (revoked.count === 0) {
+      // Reuse phát hiện (P1-2, docs/2026-09-08-review-progress.md): trước đây chỉ chặn ĐÚNG
+      // token bị replay lần này — nếu kẻ trộm đã rotate 1 lần TRƯỚC KHI nạn nhân refresh lại,
+      // chuỗi refresh token của kẻ trộm (đã cấp mới, chưa revoke) vẫn sống nguyên tới hết
+      // JWT_REFRESH_TTL_DAYS. Thu hồi TOÀN BỘ token còn active của user — buộc cả kẻ trộm lẫn
+      // nạn nhân phải đăng nhập lại, thay vì chỉ chặn 1 token rồi coi như xong.
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: stored.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      this.logger.warn(`Phát hiện refresh token bị dùng lại (reuse) — đã thu hồi toàn bộ phiên của user ${stored.userId}.`);
       throw new UnauthorizedException('Refresh token đã được sử dụng.');
     }
     return this.issueTokens(stored.user);

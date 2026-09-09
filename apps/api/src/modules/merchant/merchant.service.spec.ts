@@ -242,6 +242,38 @@ describe('MerchantService', () => {
       const res = await svc.addResellProduct('u1', 'p2');
       expect(res.productId).toBe('p2');
     });
+
+    // P1-1 (docs/2026-09-08-review-progress.md): collectionId đến từ body, trước đây KHÔNG
+    // check thuộc gian hàng của caller — id collection của gian hàng khác lộ qua trang public
+    // (GET /storefront/public/:slug trả collections[].id) đủ để chèn sản phẩm vào gian hàng
+    // NGƯỜI KHÁC.
+    it('IDOR: collectionId thuộc gian hàng KHÁC → BadRequest, KHÔNG chèn sản phẩm', async () => {
+      const store = { id: 's1', ownerUserId: 'u1', collections: [{ id: 'col-mine' }] };
+      const create = jest.fn();
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(store) },
+        product: { findUnique: jest.fn().mockResolvedValue({ id: 'p2', isActive: true, approvalStatus: 'APPROVED' }) },
+        storefrontItem: { findFirst: jest.fn(), count: jest.fn(), create },
+      });
+      const svc = new MerchantService(prisma, orderStatus);
+      await expect(svc.addResellProduct('u1', 'p2', 'col-victim')).rejects.toBeInstanceOf(BadRequestException);
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it('collectionId thuộc đúng gian hàng của mình → thêm được bình thường', async () => {
+      const store = { id: 's1', ownerUserId: 'u1', collections: [{ id: 'col-mine' }, { id: 'col-2' }] };
+      const create = jest.fn().mockResolvedValue({ id: 'item-2', productId: 'p2' });
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(store) },
+        product: { findUnique: jest.fn().mockResolvedValue({ id: 'p2', isActive: true, approvalStatus: 'APPROVED' }) },
+        storefrontItem: { findFirst: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0), create },
+      });
+      const svc = new MerchantService(prisma, orderStatus);
+      const res = await svc.addResellProduct('u1', 'p2', 'col-2');
+      expect(res.productId).toBe('p2');
+    });
   });
 
   describe('updateMerchantOrderStatus', () => {
