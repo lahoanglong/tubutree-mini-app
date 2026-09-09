@@ -145,6 +145,17 @@ export class PancakeProcessor extends WorkerHost {
     if (order.paymentMethod !== 'BANK_TRANSFER' || order.paymentStatus !== 'UNPAID') return;
     if (!isPancakeOrderPaid(data, order.total)) return;
 
+    // P1-3 (docs/2026-09-08-review-progress.md): đơn đã hủy/trả trước khi tiền chuyển khoản
+    // tới nơi (khách hủy xong tiền mới về, hoặc trả hàng) trước đây vẫn bị lật paymentStatus→
+    // PAID êm ru — order đứng CANCELLED/RETURNED + PAID, không cơ chế nào tự phát hiện cần
+    // hoàn tiền thật cho khách. Chặn lật + cảnh báo rõ để vận hành xử lý tay.
+    if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
+      this.logger.warn(
+        `Nhận tiền chuyển khoản cho đơn ${order.code} đã ${order.status} — CẦN HOÀN TIỀN THỦ CÔNG cho khách, không tự lật PAID.`,
+      );
+      return;
+    }
+
     // updateMany guard paymentStatus='UNPAID' → 2 webhook song song chỉ lật 1 lần.
     const flip = await this.prisma.order.updateMany({
       where: { id: order.id, paymentStatus: 'UNPAID' },

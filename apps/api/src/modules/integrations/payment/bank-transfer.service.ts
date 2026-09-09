@@ -22,6 +22,13 @@ export class BankTransferService {
     if (order.paymentMethod !== 'BANK_TRANSFER') {
       throw new BadRequestException('Đơn này không thanh toán bằng chuyển khoản.');
     }
+    // P1-3 (docs/2026-09-08-review-progress.md): trước đây không kiểm status — đơn đã hủy/trả
+    // vẫn sinh QR sống trỏ về TK ngân hàng thật. Khách lỡ quét (tab cũ, ảnh chụp màn hình lưu
+    // trước khi hủy) là tiền thật vào TK shop cho một đơn không còn tồn tại về nghiệp vụ, và
+    // không có cơ chế tự động hoàn lại khoản đó.
+    if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
+      throw new BadRequestException('Đơn đã hủy/trả, không thể thanh toán.');
+    }
 
     let bin = '';
     let accountNo = '';

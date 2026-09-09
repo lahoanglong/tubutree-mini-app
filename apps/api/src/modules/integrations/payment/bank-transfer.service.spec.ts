@@ -55,6 +55,24 @@ describe('BankTransferService.getBankQr', () => {
     expect(r.paymentStatus).toBe('PAID');
   });
 
+  // P1-3 (docs/2026-09-08-review-progress.md): trước đây KHÔNG kiểm status — đơn đã hủy vẫn
+  // sinh QR chuyển khoản sống, khách lỡ quét (tab cũ/ảnh chụp màn hình lưu trước khi hủy) là
+  // tiền thật vào TK shop cho một đơn không còn tồn tại về mặt nghiệp vụ, không ai tự động
+  // hoàn lại.
+  it('đơn ĐÃ HỦY → BadRequest, không sinh QR sống cho đơn không còn hiệu lực', async () => {
+    const prisma = makePrisma({ ...ORDER, status: 'CANCELLED' });
+    await expect(new BankTransferService(prisma, makeConfig()).getBankQr('TUBU250625001', 'u1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('đơn ĐÃ TRẢ HÀNG → BadRequest, không sinh QR sống', async () => {
+    const prisma = makePrisma({ ...ORDER, status: 'RETURNED' });
+    await expect(new BankTransferService(prisma, makeConfig()).getBankQr('TUBU250625001', 'u1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
   it('đơn có storefrontSlug với TK ngân hàng đối tác → ưu tiên sinh VietQR về tài khoản đối tác', async () => {
     const merchantPrisma = {
       order: {

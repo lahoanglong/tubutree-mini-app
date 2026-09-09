@@ -95,6 +95,17 @@ export class ZalopayService {
       where: { paymentTxnId: data.app_trans_id },
     });
     if (order && order.paymentStatus !== 'PAID') {
+      // P1-3 (docs/2026-09-08-review-progress.md): trước đây chỉ check paymentStatus, không
+      // check status — callback tới sau khi đơn đã hủy/trả vẫn bị lật PAID êm, đơn đứng
+      // CANCELLED/RETURNED + PAID mà không cơ chế nào tự phát hiện cần hoàn tiền thật cho
+      // khách. Vẫn trả return_code=1 (ZaloPay coi là đã nhận, không cần retry) — chỉ không
+      // ghi nhận PAID vào đơn đã chết.
+      if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
+        this.logger.warn(
+          `Nhận callback thanh toán ZaloPay cho đơn ${order.code} đã ${order.status} — CẦN HOÀN TIỀN THỦ CÔNG cho khách, không tự lật PAID.`,
+        );
+        return { return_code: 1, return_message: 'success' };
+      }
       await this.prisma.order.update({
         where: { id: order.id },
         data: { paymentStatus: 'PAID', status: order.status === 'PENDING_PAYMENT' ? 'CONFIRMED' : order.status },

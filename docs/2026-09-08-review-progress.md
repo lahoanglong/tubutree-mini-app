@@ -189,6 +189,24 @@ sửa, để lại phiên sau.
 - [ ] Chưa sửa (P2, để lại phiên sau): guest login dùng `Math.random()` cho deviceId (nên đổi
   `crypto.getRandomValues`), refresh token web lưu localStorage (nên chuyển httpOnly cookie),
   vài DTO thiếu `@ArrayMaxSize`, tiền không có rate-limit riêng ngoài global 60/min.
+
+- [x] **P1-3 (đơn hàng) — tiền chuyển khoản tới SAU khi đơn đã hủy/trả vẫn bị lật PAID êm.**
+  Cả 2 kênh chuyển khoản đều có cùng lỗi: chỉ check `paymentStatus !== 'PAID'`, không check
+  `status` — đơn CANCELLED/RETURNED vẫn bị ghi `paymentStatus: 'PAID'` khi tiền tới trễ, không
+  cơ chế nào tự phát hiện cần hoàn tiền thật cho khách.
+  - `pancake.processor.ts` (`onPaymentReconcile`) + `zalopay.service.ts` (`handleCallback`) —
+    thêm guard `status IN (CANCELLED, RETURNED)` → bỏ qua việc lật PAID, log cảnh báo RÕ RÀNG
+    "CẦN HOÀN TIỀN THỦ CÔNG" để vận hành biết mà xử lý tay (tiền đã về TK thật, hệ thống không
+    tự động hoàn được vì đơn không còn tồn tại về nghiệp vụ).
+  - `bank-transfer.service.ts` (`getBankQr`) — chặn TỪ GỐC: không sinh QR sống cho đơn đã
+    hủy/trả nữa (trước đây không kiểm status chút nào), giảm khả năng khách lỡ quét QR cũ.
+  - 7 test mới (bank-transfer 2, pancake onPaymentReconcile 4 — trước đây KHÔNG có test nào
+    cho hàm này, zalopay 2). Verify: typecheck/lint/`nest build` sạch, **93 suite / 1307 test
+    pass** (từ 93/1299).
+- [ ] Chưa làm (P2-4 gốc, cần schema mới — để lại phiên sau): `zalopay.paymentTxnId` bị ghi đè
+  giữa các lần thử thanh toán khác nhau của cùng đơn (cột không unique, chỉ giữ lần cuối) —
+  callback của lần thử TRƯỚC đó không khớp được `app_trans_id` nữa nếu khách thử lại. Cần bảng
+  `PaymentAttempt` riêng để không phá vỡ tương thích ngược trong 1 lượt sửa nhanh.
 - [ ] **Việc cần người** (không tự làm được, cần quyết định/quyền hạn ngoài phạm vi code):
   chạy `SELECT count(*) FROM storefronts WHERE (subdomain IS NOT NULL AND subdomain NOT IN
   (SELECT slug FROM storefronts)) OR (custom_domain IS NOT NULL AND custom_domain IN (SELECT

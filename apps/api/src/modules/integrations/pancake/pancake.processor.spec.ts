@@ -18,6 +18,7 @@ import type { CouponsService } from '../../coupons/coupons.service';
 function setup(order: Record<string, unknown> | null) {
   const orderFindFirst = jest.fn().mockResolvedValue(order);
   const orderFindUniqueOrThrow = jest.fn().mockResolvedValue(order);
+  const orderUpdateMany = jest.fn().mockResolvedValue({ count: 1 }); // onPaymentReconcile gọi TRỰC TIẾP, không qua $transaction
   const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const txUserUpdate = jest.fn().mockResolvedValue({});
   const txCoinCreate = jest.fn().mockResolvedValue({});
@@ -31,7 +32,7 @@ function setup(order: Record<string, unknown> | null) {
     }),
   );
   const prisma = {
-    order: { findFirst: orderFindFirst, findUniqueOrThrow: orderFindUniqueOrThrow },
+    order: { findFirst: orderFindFirst, findUniqueOrThrow: orderFindUniqueOrThrow, updateMany: orderUpdateMany },
     pancakeWebhookEvent: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
     variation: { updateMany: jest.fn().mockResolvedValue({}) },
     $transaction,
@@ -53,10 +54,11 @@ function setup(order: Record<string, unknown> | null) {
   const proc = new PancakeProcessor(prisma, notifications, orderStatus) as unknown as {
     onStatusUpdated(d: Record<string, unknown>): Promise<void>;
     onCancelled(d: Record<string, unknown>): Promise<void>;
+    onPaymentReconcile(d: Record<string, unknown>): Promise<void>;
     extractOrderCode(d: Record<string, unknown>): string | null;
     process(job: { data: { eventId: string } }): Promise<void>;
   };
-  return { proc, prisma, notifications, loyalty, affiliate, txUpdateMany, txUserUpdate, txVariationUpdate };
+  return { proc, prisma, notifications, loyalty, affiliate, txUpdateMany, txUserUpdate, txVariationUpdate, orderUpdateMany };
 }
 
 describe('PancakeProcessor.extractOrderCode', () => {
@@ -228,6 +230,54 @@ describe('PancakeProcessor.onCancelled', () => {
     expect(txVariationUpdate).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { stock: { increment: 1 } } });
     expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
+  });
+});
+
+describe('PancakeProcessor.onPaymentReconcile', () => {
+  const paidPayload = { id: 'p1', is_paid: true };
+
+  it('đơn BANK_TRANSFER UNPAID nhận xác nhận thanh toán → lật PAID + notify', async () => {
+    const { proc, orderUpdateMany, notifications } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
+    });
+    await proc.onPaymentReconcile(paidPayload);
+    expect(orderUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', paymentStatus: 'UNPAID' },
+      data: { paymentStatus: 'PAID', status: 'CONFIRMED' },
+    });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
+  });
+
+  // P1-3 (docs/2026-09-08-review-progress.md): tiền chuyển khoản tới SAU khi đơn đã hủy/trả
+  // trước đây vẫn bị lật PAID êm — đơn đứng CANCELLED/RETURNED + PAID, không ai tự hoàn tiền
+  // thật cho khách.
+  it('đơn ĐÃ HỦY nhận xác nhận thanh toán trễ → KHÔNG lật PAID, không notify', async () => {
+    const { proc, orderUpdateMany, notifications } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CANCELLED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
+    });
+    await proc.onPaymentReconcile(paidPayload);
+    expect(orderUpdateMany).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('đơn ĐÃ TRẢ HÀNG nhận xác nhận thanh toán trễ → KHÔNG lật PAID', async () => {
+    const { proc, orderUpdateMany } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'RETURNED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
+    });
+    await proc.onPaymentReconcile(paidPayload);
+    expect(orderUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('đơn không phải BANK_TRANSFER → bỏ qua', async () => {
+    const { proc, orderUpdateMany } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT',
+      paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 100000,
+    });
+    await proc.onPaymentReconcile(paidPayload);
+    expect(orderUpdateMany).not.toHaveBeenCalled();
   });
 });
 

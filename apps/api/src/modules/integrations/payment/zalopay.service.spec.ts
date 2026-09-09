@@ -76,6 +76,34 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
+  // P1-3 (docs/2026-09-08-review-progress.md): callback thanh toán tới SAU khi đơn đã hủy/trả
+  // trước đây vẫn bị lật PAID êm ru (chỉ check paymentStatus !== 'PAID', không check status) —
+  // đơn đứng CANCELLED + PAID, không cơ chế nào tự phát hiện cần hoàn tiền thật cho khách.
+  it('đơn ĐÃ HỦY nhận callback thanh toán trễ → KHÔNG lật PAID, không notify (vẫn trả return_code=1 cho ZaloPay biết đã nhận)', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const notify = jest.fn();
+    const prisma = {
+      order: { findFirst: jest.fn().mockResolvedValue({ ...order, status: 'CANCELLED' }), update },
+    } as unknown as PrismaService;
+    const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never);
+    const raw = JSON.stringify({ app_trans_id: '250101_TUBU1' });
+    const r = await svc.handleCallback(raw, sign(raw));
+    expect(r.return_code).toBe(1);
+    expect(update).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('đơn ĐÃ TRẢ HÀNG nhận callback thanh toán trễ → KHÔNG lật PAID', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = {
+      order: { findFirst: jest.fn().mockResolvedValue({ ...order, status: 'RETURNED' }), update },
+    } as unknown as PrismaService;
+    const svc = new ZalopayService(prisma, { notify: jest.fn() } as unknown as NotificationsService, makeConfig(true) as never);
+    const raw = JSON.stringify({ app_trans_id: '250101_TUBU1' });
+    await svc.handleCallback(raw, sign(raw));
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('MAC đúng độ dài khác (timingSafeEqual không ném) → -1', async () => {
     const { svc, update } = setup();
     const raw = JSON.stringify({ app_trans_id: 'x' });
