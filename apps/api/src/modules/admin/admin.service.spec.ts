@@ -1,5 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AdminService } from './admin.service';
+import { OrderReversalService } from '../orders/order-reversal.service';
+import { OrderStatusService } from '../orders/order-status.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
@@ -19,8 +21,14 @@ const affiliate = {
 } as unknown as AffiliateService;
 const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
 const flash = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
-const mkAdmin = (prisma: PrismaService) =>
-  new AdminService(prisma, config, loyalty, affiliate, notifications, flash);
+// AdminService không còn tự viết khối restock/refund — ủy quyền cho OrderReversalService
+// (reviewReturn) và OrderStatusService (updateOrderStatus). Dựng instance THẬT (không mock)
+// của cả hai để test vẫn xác minh được hành vi thật qua các spy ở tầng tx bên dưới.
+const mkAdmin = (prisma: PrismaService) => {
+  const reversal = new OrderReversalService(flash);
+  const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal);
+  return new AdminService(prisma, config, loyalty, affiliate, notifications, reversal, orderStatus);
+};
 
 function makePrisma(over: Record<string, unknown> = {}) {
   const base = {
@@ -600,15 +608,26 @@ describe('AdminService.getDashboardStats', () => {
   });
 });
 
+// updateOrderStatus giờ ủy quyền toàn bộ cho OrderStatusService (assertTransition + atomic
+// flip qua $transaction interactive) — cần mock $transaction thật sự GỌI callback với 1 tx
+// giả lập order.updateMany, khác với `makePrisma` mặc định (chỉ resolve [] không gọi callback).
+function makeStatusPrisma(order: Record<string, unknown>, finalOrder: Record<string, unknown>, flipCount = 1) {
+  const txUpdateMany = jest.fn().mockResolvedValue({ count: flipCount });
+  const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) => cb({ order: { updateMany: txUpdateMany } }));
+  const prisma = {
+    order: {
+      findFirst: jest.fn().mockResolvedValue(order),
+      findUniqueOrThrow: jest.fn().mockResolvedValue(finalOrder),
+    },
+    $transaction,
+  } as unknown as PrismaService;
+  return { prisma, txUpdateMany };
+}
+
 describe('AdminService.updateOrderStatus', () => {
   it('chuyển DELIVERED → credit điểm và lock hoa hồng', async () => {
-    const order = { id: 'o1', code: 'TB-100', userId: 'u1', status: 'SHIPPING', total: 200000 };
-    const prisma = makePrisma({
-      order: {
-        findFirst: jest.fn().mockResolvedValue(order),
-        update: jest.fn().mockResolvedValue({ ...order, status: 'DELIVERED' }),
-      },
-    });
+    const order = { id: 'o1', code: 'TB-100', userId: 'u1', status: 'SHIPPING', total: 200000, note: null, items: [] };
+    const { prisma } = makeStatusPrisma(order, { ...order, status: 'DELIVERED' });
 
     const res = await mkAdmin(prisma).updateOrderStatus('admin-1', 'o1', 'DELIVERED', 'Giao thành công');
     expect(res.status).toBe('DELIVERED');
@@ -616,19 +635,25 @@ describe('AdminService.updateOrderStatus', () => {
     expect(affiliate.lockCommissionsForOrder).toHaveBeenCalledWith('o1');
   });
 
-  it('chuyển CANCELLED → reverse điểm và reverse hoa hồng', async () => {
-    const order = { id: 'o2', code: 'TB-101', userId: 'u2', status: 'CONFIRMED', total: 300000 };
-    const prisma = makePrisma({
-      order: {
-        findFirst: jest.fn().mockResolvedValue(order),
-        update: jest.fn().mockResolvedValue({ ...order, status: 'CANCELLED' }),
-      },
-    });
+  it('chuyển CANCELLED → reverse điểm và reverse hoa hồng (kèm reversal restock — items rỗng)', async () => {
+    const order = { id: 'o2', code: 'TB-101', userId: 'u2', status: 'CONFIRMED', total: 300000, note: null, items: [], paymentMethod: 'COD', paymentStatus: 'UNPAID' };
+    const { prisma } = makeStatusPrisma(order, { ...order, status: 'CANCELLED' });
 
     const res = await mkAdmin(prisma).updateOrderStatus('admin-1', 'o2', 'CANCELLED', 'Khách đổi ý');
     expect(res.status).toBe('CANCELLED');
     expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o2');
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o2');
+  });
+
+  it('chuyển DELIVERED → CONFIRMED (regression) → BadRequest, không chạy side-effect', async () => {
+    const order = { id: 'o3', code: 'TB-102', userId: 'u3', status: 'DELIVERED', total: 100000, note: null, items: [] };
+    const { prisma } = makeStatusPrisma(order, order);
+
+    await expect(mkAdmin(prisma).updateOrderStatus('admin-1', 'o3', 'CONFIRMED')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(loyalty.reverseOrderPoints).not.toHaveBeenCalledWith('o3');
+    expect(loyalty.creditOrderPoints).not.toHaveBeenCalledWith('o3');
   });
 
   it('đơn không tồn tại → throw NotFoundException', async () => {

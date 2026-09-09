@@ -1,17 +1,23 @@
 import { Prisma } from '@prisma/client';
 import { OrdersService } from './orders.service';
+import { OrderReversalService } from './order-reversal.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { CartService } from '../cart/cart.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { FlashSaleService } from '../flash-sale/flash-sale.service';
+import type { AffiliateService } from '../affiliate/affiliate.service';
 
 const loyalty = { reverseOrderPoints: jest.fn().mockResolvedValue(undefined) } as unknown as LoyaltyService;
 const cart = {} as unknown as CartService;
 const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 const flash = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
+const affiliate = { reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined) } as unknown as AffiliateService;
+// reverseFinancials dùng chung với admin.reviewReturn/OrderStatusService — dựng instance THẬT
+// (không mock) trên top of cùng `flash` mock để test vẫn xác minh hành vi qua spy ở tầng tx.
+const reversal = new OrderReversalService(flash);
 
 function makeService(
   order: Record<string, unknown>,
@@ -44,7 +50,7 @@ function makeService(
     $transaction,
   } as unknown as PrismaService;
   return {
-    svc: new OrdersService(prisma, loyalty, cart, notifications, config, flash),
+    svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal),
     updateMany,
     userUpdate,
     variationUpdate,
@@ -77,6 +83,7 @@ describe('OrdersService.cancel', () => {
       }),
     );
     expect((loyalty.reverseOrderPoints as jest.Mock)).toHaveBeenCalledWith('o1');
+    expect((affiliate.reverseCommissionsForOrder as jest.Mock)).toHaveBeenCalledWith('o1');
     expect((notifications.notify as jest.Mock)).toHaveBeenCalled();
   });
 
@@ -209,6 +216,7 @@ describe('OrdersService.cancel — atomic flip+refund (B1)', () => {
     await svc.cancel('u1', 'TUBU1');
     expect(userUpdate).not.toHaveBeenCalled();
     expect((loyalty.reverseOrderPoints as jest.Mock)).not.toHaveBeenCalled();
+    expect((affiliate.reverseCommissionsForOrder as jest.Mock)).not.toHaveBeenCalled();
   });
 });
 
@@ -278,7 +286,7 @@ describe('OrdersService.requestReturn', () => {
       order: { findUnique: jest.fn().mockResolvedValue(deliveredOrder) },
       returnRequest: { findFirst: over.findFirst ?? jest.fn().mockResolvedValue(null), create },
     } as unknown as PrismaService;
-    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, flash), create };
+    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), create };
   }
 
   it('race: 2 request đổi/trả song song — pre-check đọc "chưa có" nhưng create() đụng unique index partial (orderId, status=REQUESTED) → BadRequest, KHÔNG tạo 2 dòng', async () => {

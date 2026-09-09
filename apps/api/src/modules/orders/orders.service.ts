@@ -7,7 +7,8 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CartService } from '../cart/cart.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { FlashSaleService } from '../flash-sale/flash-sale.service';
+import { AffiliateService } from '../affiliate/affiliate.service';
+import { OrderReversalService } from './order-reversal.service';
 
 @Injectable()
 export class OrdersService {
@@ -17,7 +18,8 @@ export class OrdersService {
     private readonly cart: CartService,
     private readonly notifications: NotificationsService,
     private readonly config: SystemConfigService,
-    private readonly flashSale: FlashSaleService,
+    private readonly affiliate: AffiliateService,
+    private readonly reversal: OrderReversalService,
   ) {}
 
   async list(userId: string, status: OrderStatus | undefined, page: number, limit: number) {
@@ -60,71 +62,22 @@ export class OrdersService {
         data: { status: 'CANCELLED' },
       });
       if (res.count === 0) return false;
-      // Refetch paymentStatus TRONG tx — snapshot `order.paymentStatus` (đọc ngoài tx ở detail())
-      // có thể đã stale nếu webhook ZaloPay/Pancake chuyển REFUNDED giữa detail() và tx.
-      // Dùng updateMany guard `paymentStatus: 'PAID'` để hoàn ví chỉ khi DB còn PAID — count=1
-      // bảo đảm increment thực sự chạy trên đơn còn nợ tiền user.
-      // Hoàn về Ví Tubu cho MỌI kênh prepaid đã PAID (WALLET/ZALOPAY/BANK_TRANSFER/VNPAY/XU) —
-      // nhất quán với admin.reviewReturn (wasPaid gồm WALLET/ZALOPAY/COD). Trước đây chỉ
-      // WALLET/ZALOPAY/XU → đơn BANK_TRANSFER đã đối soát PAID (pancake.processor.ts
-      // onPaymentReconcile lật UNPAID→PAID trước khi giao) mà user hủy thì tiền chuyển khoản
-      // thật KHÔNG được hoàn, paymentStatus kẹt mãi ở PAID. COD lúc hủy luôn UNPAID (chỉ PAID
-      // khi đã giao, mà đơn DELIVERED không hủy được) nên guard paymentStatus:'PAID' tự loại
-      // COD; count=1 bảo đảm increment chỉ chạy đúng 1 lần ở nhánh thắng race.
-      // XU: đơn trả bằng TubuXu → hoàn lại XU (coinsBalance) + ghi CoinTransaction(+total),
-      // KHÔNG hoàn ví tiền thật (xu không rút được; hoàn vào ví = biến xu thành tiền rút được).
-      // ⚠️ ZALOPAY hoàn vào Ví NỘI BỘ (không refund cổng) — nếu sau này thêm refund cổng phải
-      // tránh hoàn 2 lần. Xem docs/ZALOPAY-SETUP.md §5.
-      if (
-        order.paymentMethod === 'WALLET' ||
-        order.paymentMethod === 'ZALOPAY' ||
-        order.paymentMethod === 'BANK_TRANSFER' ||
-        order.paymentMethod === 'VNPAY' ||
-        order.paymentMethod === 'XU'
-      ) {
-        const refunded = await tx.order.updateMany({
-          where: { id: order.id, paymentStatus: 'PAID' },
-          data: { paymentStatus: 'REFUNDED' },
-        });
-        if (refunded.count === 1) {
-          if (order.paymentMethod === 'XU') {
-            await tx.user.update({
-              where: { id: userId },
-              data: { coinsBalance: { increment: order.total } },
-            });
-            await tx.coinTransaction.create({
-              data: {
-                userId,
-                delta: order.total,
-                reason: `ORDER_REFUND:${order.code}`,
-                refType: 'ORDER',
-                refId: order.id,
-              },
-            });
-          } else {
-            await tx.user.update({
-              where: { id: userId },
-              data: { walletBalance: { increment: order.total } },
-            });
-          }
-        }
-      }
-      // Hoàn stock atomic — chỉ chạy ở nhánh THẮNG race (count=1) để tránh restock 2 lần
-      // khi 2 request cancel song song. Dùng order.items đã include sẵn ở detail() phía trên.
-      for (const item of order.items) {
-        await tx.variation.update({
-          where: { id: item.variationId },
-          data: { stock: { increment: item.quantity } },
-        });
-        if (item.flashSaleItemId) {
-          await this.flashSale.restore(tx, item.flashSaleItemId, userId, item.quantity);
-        }
-      }
+      // Hoàn ví/xu + restock + release flash quota — logic dùng chung với admin.reviewReturn/
+      // OrderStatusService (xem order-reversal.service.ts), tránh chép tay lệch nhau (P0-4
+      // trong docs/2026-09-08-review-progress.md). Refetch paymentStatus TRONG tx qua guard
+      // updateMany bên trong reverseFinancials — snapshot `order.paymentStatus` (đọc ngoài tx
+      // ở detail()) có thể đã stale nếu webhook ZaloPay/Pancake chuyển REFUNDED giữa lúc đó.
+      await this.reversal.reverseFinancials(tx, order);
       return true;
     });
     if (!won) return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
-    // reverseOrderPoints idempotent (guard ORDER_REVERSED + $transaction nội bộ) nên để ngoài tx được.
+    // reverseOrderPoints/reverseCommissionsForOrder idempotent (guard riêng + $transaction nội
+    // bộ) nên để ngoài tx được. Trước đây THIẾU reverseCommissionsForOrder ở luồng khách tự hủy
+    // — CTV vẫn giữ hoa hồng PENDING cho đơn khách đã hủy trước khi giao (không tự dọn, dù
+    // không trả được vì payout chỉ rút từ status APPROVED — nhưng làm sai lệch số "chờ duyệt"
+    // hiển thị cho CTV vĩnh viễn). Nhất quán với admin/pancake — cả hai đều gọi cặp đôi này.
     await this.loyalty.reverseOrderPoints(order.id);
+    await this.affiliate.reverseCommissionsForOrder(order.id);
     // Không để lỗi gửi thông báo (best-effort) làm 500 hoá cả response — đơn đã CANCELLED +
     // hoàn ví/điểm/stock xong xuôi ở trên; guard đầu hàm (status !== PENDING_PAYMENT/CONFIRMED)
     // chặn mọi lần gọi lại cancel() sau đó nên nếu để throw ở đây, client sẽ nhận 500 vĩnh viễn

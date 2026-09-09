@@ -3,11 +3,10 @@ import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
-import { LoyaltyService } from '../../loyalty/loyalty.service';
-import { AffiliateService } from '../../affiliate/affiliate.service';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { mapPancakeStatus } from './pancake-status.map';
 import { isPancakeOrderPaid } from './pancake-payment.util';
+import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 
 interface EventData {
   event?: string;
@@ -26,8 +25,7 @@ export class PancakeProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
-    private readonly loyalty: LoyaltyService,
-    private readonly affiliate: AffiliateService,
+    private readonly orderStatus: OrderStatusService,
   ) {
     super();
   }
@@ -116,40 +114,28 @@ export class PancakeProcessor extends WorkerHost {
     const order = await this.findOrder(data);
     if (!order) return;
     const status = mapPancakeStatus(data['status'] ?? data['status_name']);
-    if (!status || status === order.status) return;
+    if (!status) return;
 
-    // Queue KHÔNG đảm bảo thứ tự per-order khi có retry/backoff (BullMQ) — webhook CANCELLED
-    // có thể chạy TRƯỚC rồi webhook DELIVERED cũ hơn (bị delay/redelivery) chạy SAU. Chặn regression
-    // DELIVERED sau khi đơn đã ở trạng thái cuối CANCELLED/RETURNED: không credit điểm nhầm cho
-    // đơn đã hủy/trả, và không đè lại status DELIVERED lên trên trạng thái cuối đã đúng.
-    if (status === 'DELIVERED' && (order.status === 'CANCELLED' || order.status === 'RETURNED')) {
-      this.logger.warn(
-        `Bỏ qua webhook DELIVERED trễ cho đơn ${order.code} — đã ở trạng thái cuối ${order.status}.`,
-      );
-      return;
+    // Ủy quyền cho OrderStatusService — nguồn ghi status DUY NHẤT, dùng chung với admin/
+    // merchant. Tự guard no-op (status===order.status), atomic race (updateMany), VÀ side-
+    // effect đầy đủ (credit/reverse điểm+hoa hồng, restock+refund khi CANCELLED/RETURNED —
+    // trước đây webhook hủy KHÔNG hoàn tiền/restock, P0-4 trong docs/2026-09-08-review-progress.md).
+    // Queue KHÔNG đảm bảo thứ tự per-order (BullMQ retry/backoff) — webhook CANCELLED có thể
+    // chạy TRƯỚC rồi webhook DELIVERED cũ hơn (redelivery) chạy SAU; assertTransition của
+    // OrderStatusService tự chặn DELIVERED sau khi đã ở CANCELLED/RETURNED (trạng thái cuối) —
+    // không cần tự kiểm tra ở đây nữa.
+    // CHỈ nuốt lỗi transition không hợp lệ (webhook trễ/không theo thứ tự — bỏ qua êm,
+    // KHÔNG phải lỗi thật). Lỗi khác (DB down, loyalty/affiliate throw thật) phải NÉM TIẾP
+    // để process() đánh dấu FAILED + BullMQ retry — nuốt hết ở đây sẽ mất event vĩnh viễn.
+    try {
+      await this.orderStatus.setStatus(order.id, status);
+    } catch (err) {
+      if (err instanceof InvalidOrderTransitionError) {
+        this.logger.warn(`Bỏ qua webhook status=${status} cho đơn ${order.code}: ${err.message}`);
+        return;
+      }
+      throw err;
     }
-
-    // THỨ TỰ QUAN TRỌNG: chạy side-effect (idempotent, tự guard qua bảng pointsTransaction/
-    // affiliate) TRƯỚC, flip order.status SAU CÙNG. Trước đây update status trước rồi mới
-    // credit/reverse — nếu process crash NGAY SAU update nhưng TRƯỚC KHI side-effect chạy
-    // xong, retry (BullMQ) sẽ đọc lại order.status đã bằng `status` rồi bail ở guard phía trên
-    // → mất credit/reverse VĨNH VIỄN cho đơn đó. Đảo thứ tự: nếu crash giữa chừng, retry vẫn
-    // thấy order.status CŨ (chưa flip) nên chạy lại side-effect (bản thân đã idempotent) rồi
-    // mới flip status.
-    if (status === 'DELIVERED') {
-      await this.loyalty.creditOrderPoints(order.id);
-      await this.affiliate.lockCommissionsForOrder(order.id);
-      await this.affiliate.grantReferralReward(order.id); // refer-reward 1 lần (§ giới thiệu)
-    } else if (status === 'CANCELLED' || status === 'RETURNED') {
-      await this.loyalty.reverseOrderPoints(order.id);
-      await this.affiliate.reverseCommissionsForOrder(order.id);
-    }
-
-    await this.prisma.order.update({ where: { id: order.id }, data: { status } });
-
-    await this.notifications.notify(order.userId, `ORDER_${status}`, {
-      order_code: order.code,
-    });
   }
 
   /** Đối soát thanh toán chuyển khoản: chỉ lật đơn BANK_TRANSFER còn UNPAID → PAID (idempotent). */
@@ -213,13 +199,18 @@ export class PancakeProcessor extends WorkerHost {
 
   private async onCancelled(data: Record<string, unknown>): Promise<void> {
     const order = await this.findOrder(data);
-    if (!order || order.status === 'CANCELLED') return;
-    // Cùng lý do với onStatusUpdated: side-effect trước, flip status sau cùng — tránh mất
-    // reversal vĩnh viễn nếu crash giữa update và reverseOrderPoints rồi bị guard trên chặn retry.
-    await this.loyalty.reverseOrderPoints(order.id);
-    await this.affiliate.reverseCommissionsForOrder(order.id);
-    await this.prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
-    await this.notifications.notify(order.userId, 'ORDER_CANCELLED', { order_code: order.code });
+    if (!order) return;
+    // Ủy quyền cho OrderStatusService — trước đây chỉ đảo điểm/hoa hồng mà KHÔNG hoàn tiền/
+    // restock/release flash quota khi POS hủy đơn (P0-4, docs/2026-09-08-review-progress.md).
+    try {
+      await this.orderStatus.setStatus(order.id, 'CANCELLED');
+    } catch (err) {
+      if (err instanceof InvalidOrderTransitionError) {
+        this.logger.warn(`Bỏ qua webhook cancelled cho đơn ${order.code}: ${err.message}`);
+        return;
+      }
+      throw err;
+    }
   }
 
   private async onInvoiceIssued(data: Record<string, unknown>): Promise<void> {

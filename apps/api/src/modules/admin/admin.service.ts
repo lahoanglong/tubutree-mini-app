@@ -7,7 +7,8 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
-import { FlashSaleService } from '../flash-sale/flash-sale.service';
+import { OrderReversalService } from '../orders/order-reversal.service';
+import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 
 @Injectable()
 export class AdminService {
@@ -19,7 +20,8 @@ export class AdminService {
     private readonly loyalty: LoyaltyService,
     private readonly affiliate: AffiliateService,
     private readonly notifications: NotificationsService,
-    private readonly flashSale: FlashSaleService,
+    private readonly reversal: OrderReversalService,
+    private readonly orderStatus: OrderStatusService,
   ) {}
 
   // ── Đổi/trả (§6.4) ──
@@ -68,20 +70,10 @@ export class AdminService {
         where: { id: orderForReturn.id },
         include: { items: true },
       });
-      // Hoàn đúng KÊNH thanh toán + restock trong CÙNG transaction.
-      // - WALLET/ZALOPAY + PAID: hoàn về Ví Tubu (instant) vì khách đã trả tiền thật.
-      // - COD UNPAID: KHÔNG hoàn ví (khách chưa trả gì cả → ví không tăng).
-      // - COD đã giao mà PAID (ship đã thu hộ): hoàn ví (instant) như kênh prepaid.
-      // - XU + PAID: hoàn lại XU (coinsBalance) + ghi CoinTransaction(+total), KHÔNG hoàn ví
-      //   (xu không rút được; hoàn vào ví = biến xu thành tiền rút được = leak giá trị).
-      // ⚠️ ZALOPAY hoàn vào Ví NỘI BỘ (không refund cổng) — xem docs/ZALOPAY-SETUP.md §5.
-      const wasPaidToWallet =
-        order.paymentStatus === 'PAID' &&
-        (order.paymentMethod === 'WALLET' || order.paymentMethod === 'ZALOPAY' || order.paymentMethod === 'COD');
-      const wasPaidWithXu = order.paymentStatus === 'PAID' && order.paymentMethod === 'XU';
-
       // Guard status='DELIVERED' để KHÔNG đè CANCELLED/RETURNED (đơn đã hủy đã hoàn
       // ví ở orders.cancel — nếu đè thêm RETURNED rồi hoàn ví nữa = DOUBLE refund).
+      // Khớp bảng chuyển trạng thái chung (order-transition.ts): DELIVERED→RETURNED
+      // là transition hợp lệ DUY NHẤT ra khỏi DELIVERED.
       const flipped = await tx.order.updateMany({
         where: { id: order.id, status: 'DELIVERED' },
         data: { status: 'RETURNED' },
@@ -89,48 +81,10 @@ export class AdminService {
       if (flipped.count === 0) {
         throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
       }
-      // Hoàn tiền gate trên paymentStatus PAID→REFUNDED (count=1) — NHẤT QUÁN với orders.cancel:
-      // cùng 1 đường flip một-chiều nên dù qua cancel hay reviewReturn cũng chỉ hoàn đúng 1 lần.
-      // Đồng thời tránh để đơn RETURNED còn paymentStatus='PAID' (landmine cho mọi job/refund sau
-      // này dựa trên paymentStatus=='PAID' → trả tiền lần 2).
-      let didRefund = false;
-      if (wasPaidToWallet || wasPaidWithXu) {
-        const refunded = await tx.order.updateMany({
-          where: { id: order.id, paymentStatus: 'PAID' },
-          data: { paymentStatus: 'REFUNDED' },
-        });
-        didRefund = refunded.count === 1;
-      }
-      if (didRefund && wasPaidToWallet) {
-        await tx.user.update({
-          where: { id: order.userId },
-          data: { walletBalance: { increment: order.total } },
-        });
-      } else if (didRefund && wasPaidWithXu) {
-        await tx.user.update({
-          where: { id: order.userId },
-          data: { coinsBalance: { increment: order.total } },
-        });
-        await tx.coinTransaction.create({
-          data: {
-            userId: order.userId,
-            delta: order.total,
-            reason: `ORDER_REFUND:${order.code}`,
-            refType: 'ORDER',
-            refId: order.id,
-          },
-        });
-      }
-      // Hoàn stock — chỉ ở nhánh THẮNG để tránh restock 2 lần.
-      for (const item of order.items) {
-        await tx.variation.update({
-          where: { id: item.variationId },
-          data: { stock: { increment: item.quantity } },
-        });
-        if (item.flashSaleItemId) {
-          await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, item.quantity);
-        }
-      }
+      // Hoàn đúng KÊNH thanh toán + restock + release flash quota — logic dùng chung với
+      // orders.service.cancel/OrderStatusService (xem order-reversal.service.ts), tránh
+      // 3 bản chép tay lệch nhau (P0-4 trong docs/2026-09-08-review-progress.md).
+      await this.reversal.reverseFinancials(tx, order);
     });
     // Reverse điểm Xanh + commission CTV + notify (idempotent — để ngoài tx an toàn).
     await this.loyalty.reverseOrderPoints(orderForReturn.id);
@@ -322,38 +276,33 @@ export class AdminService {
     return paginated(items, page, limit, total);
   }
 
+  /**
+   * Đổi trạng thái đơn qua OrderStatusService — nguồn ghi status DUY NHẤT dùng chung với
+   * merchant/pancake (order-status.service.ts). Trước đây hàm này tự ghi status không qua
+   * bảng chuyển trạng thái nào → DELIVERED có thể bị admin lùi về CONFIRMED rồi user tự
+   * "hủy" lại, hoàn ví/restock lần 2 trên đơn đã giao (P0-1, docs/2026-09-08-review-progress.md).
+   * Cũng bỏ luôn việc tự ý force paymentStatus:'PAID' khi DELIVERED (P2-3) — OrderStatusService/
+   * OrderReversalService chỉ đổi paymentStatus qua guard PAID→REFUNDED, không bao giờ ghi đè
+   * REFUNDED trở lại PAID.
+   */
   async updateOrderStatus(adminId: string, id: string, status: OrderStatus, note?: string) {
-    const order = await this.prisma.order.findFirst({
-      where: { OR: [{ id }, { code: id }] },
-    });
-    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
-    if (order.status === status) return order;
+    const before = await this.prisma.order.findFirst({ where: { OR: [{ id }, { code: id }] } });
+    if (!before) throw new NotFoundException('Không tìm thấy đơn hàng.');
 
-    if (status === 'DELIVERED') {
-      await this.loyalty.creditOrderPoints(order.id);
-      await this.affiliate.lockCommissionsForOrder(order.id);
-      await this.affiliate.grantReferralReward(order.id);
-    } else if (status === 'CANCELLED' || status === 'RETURNED') {
-      await this.loyalty.reverseOrderPoints(order.id);
-      await this.affiliate.reverseCommissionsForOrder(order.id);
+    let updated;
+    try {
+      updated = await this.orderStatus.setStatus(before.id, status, {
+        note: note ? `Admin: ${note}` : undefined,
+      });
+    } catch (err) {
+      toHttpBadRequest(err);
     }
 
-    const updated = await this.prisma.order.update({
-      where: { id: order.id },
-      data: {
-        status: status as never,
-        ...(status === 'DELIVERED' ? { paymentStatus: 'PAID' } : {}),
-        ...(note ? { note: order.note ? `${order.note} | Admin: ${note}` : `Admin: ${note}` } : {}),
-      },
-      include: {
-        items: true,
-        user: { select: { id: true, phone: true, fullName: true } },
-      },
+    this.logger.warn(`Admin ${adminId} cập nhật đơn ${before.code}: ${before.status} → ${status}`);
+    return this.prisma.order.findUniqueOrThrow({
+      where: { id: updated.id },
+      include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
     });
-
-    this.logger.warn(`Admin ${adminId} cập nhật đơn ${order.code}: ${order.status} → ${status}`);
-    await this.notifications.notify(order.userId, `ORDER_${status}`, { order_code: order.code }).catch(() => {});
-    return updated;
   }
 
   // ── SystemConfig ──

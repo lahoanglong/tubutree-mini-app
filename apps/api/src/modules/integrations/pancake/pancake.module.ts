@@ -10,9 +10,10 @@ import { GeoController } from './geo.controller';
 import { GeoService } from './geo.service';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { LifecycleModule } from '../../lifecycle/lifecycle.module';
+import { OrdersModule } from '../../orders/orders.module';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: QUEUE_PANCAKE_EVENTS }), LifecycleModule],
+  imports: [BullModule.registerQueue({ name: QUEUE_PANCAKE_EVENTS }), LifecycleModule, OrdersModule],
   controllers: [PancakeWebhookController, PancakeController, GeoController],
   providers: [PancakeClient, PancakeSyncService, PancakeOrderService, PancakeProcessor, GeoService],
   exports: [PancakeClient, PancakeSyncService, PancakeOrderService],

@@ -1,10 +1,15 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MerchantService } from './merchant.service';
 import type { PrismaService } from '../../prisma/prisma.service';
+import type { OrderStatusService } from '../orders/order-status.service';
 
 function makePrisma(overrides: Record<string, unknown> = {}): PrismaService {
   return overrides as unknown as PrismaService;
 }
+
+// updateMerchantOrderStatus giờ ủy quyền cho OrderStatusService (transition guard + side-effect
+// điểm/hoa hồng dùng chung với admin/pancake) thay vì tự ghi status — xem merchant.service.ts.
+const orderStatus = { setStatus: jest.fn() } as unknown as OrderStatusService;
 
 describe('MerchantService', () => {
   describe('getOrCreateStore', () => {
@@ -12,7 +17,7 @@ describe('MerchantService', () => {
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER' }) },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       await expect(svc.getOrCreateStore('u1')).rejects.toThrow(ForbiddenException);
     });
 
@@ -22,7 +27,7 @@ describe('MerchantService', () => {
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(existingStore) },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       const res = await svc.getOrCreateStore('u1');
       expect(res.id).toBe('s1');
     });
@@ -39,7 +44,7 @@ describe('MerchantService', () => {
           create: jest.fn().mockResolvedValue(createdStore),
         },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       const res = await svc.getOrCreateStore('u2');
       expect(res.id).toBe('s-new');
     });
@@ -52,7 +57,7 @@ describe('MerchantService', () => {
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       await expect(svc.updateStore('u1', { subdomain: 'ab' })).rejects.toThrow(BadRequestException);
       await expect(svc.updateStore('u1', { subdomain: 'brand_name!' })).rejects.toThrow(BadRequestException);
     });
@@ -63,7 +68,7 @@ describe('MerchantService', () => {
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       await expect(svc.updateStore('u1', { subdomain: 'admin' })).rejects.toThrow(BadRequestException);
       await expect(svc.updateStore('u1', { subdomain: 'api' })).rejects.toThrow(BadRequestException);
     });
@@ -79,7 +84,7 @@ describe('MerchantService', () => {
             .mockResolvedValueOnce({ id: 's-other', subdomain: 'organic-tea' }), // Lần 2: kiểm tra trùng
         },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       await expect(svc.updateStore('u1', { subdomain: 'organic-tea' })).rejects.toThrow(BadRequestException);
     });
 
@@ -99,7 +104,7 @@ describe('MerchantService', () => {
           update: jest.fn().mockResolvedValue(updatedStore),
         },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       const res = await svc.updateStore('u1', {
         subdomain: 'pure-green',
         bankName: 'Vietcombank',
@@ -125,7 +130,7 @@ describe('MerchantService', () => {
           })),
         },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       const res = await svc.createProduct('u1', {
         name: 'Trà Xanh Hữu Cơ',
         description: 'Trà búp tươi từ đồi chè Thái Nguyên',
@@ -146,7 +151,7 @@ describe('MerchantService', () => {
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
         product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true, approvalStatus: 'PENDING_REVIEW' }) },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       await expect(svc.addResellProduct('u1', 'p1')).rejects.toThrow(BadRequestException);
     });
 
@@ -162,7 +167,7 @@ describe('MerchantService', () => {
           create: jest.fn().mockResolvedValue({ id: 'item-1', productId: 'p2' }),
         },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       const res = await svc.addResellProduct('u1', 'p2');
       expect(res.productId).toBe('p2');
     });
@@ -177,7 +182,7 @@ describe('MerchantService', () => {
         product: { findMany: jest.fn().mockResolvedValue([{ variations: [{ id: 'var-1' }] }]) },
         order: { findFirst: jest.fn().mockResolvedValue(null) },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       await expect(svc.updateMerchantOrderStatus('u1', 'ord-99', 'PACKED')).rejects.toThrow(NotFoundException);
     });
 
@@ -187,14 +192,13 @@ describe('MerchantService', () => {
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
         product: { findMany: jest.fn().mockResolvedValue([{ variations: [{ id: 'var-1' }] }]) },
-        order: {
-          findFirst: jest.fn().mockResolvedValue({ id: 'ord-1' }),
-          update: jest.fn().mockResolvedValue({ id: 'ord-1', status: 'PACKED' }),
-        },
+        order: { findFirst: jest.fn().mockResolvedValue({ id: 'ord-1' }) },
       });
-      const svc = new MerchantService(prisma);
+      (orderStatus.setStatus as jest.Mock).mockResolvedValueOnce({ id: 'ord-1', status: 'PACKED' });
+      const svc = new MerchantService(prisma, orderStatus);
       const res = await svc.updateMerchantOrderStatus('u1', 'ord-1', 'PACKED');
       expect(res.status).toBe('PACKED');
+      expect(orderStatus.setStatus).toHaveBeenCalledWith('ord-1', 'PACKED');
     });
 
     it('ném BadRequestException nếu trạng thái đơn hàng không hợp lệ', async () => {
@@ -203,8 +207,22 @@ describe('MerchantService', () => {
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       await expect(svc.updateMerchantOrderStatus('u1', 'ord-1', 'INVALID_STATUS')).rejects.toThrow(BadRequestException);
+    });
+
+    it('chuyển transition không hợp lệ (guard dùng chung với admin/pancake) → BadRequestException, không phải 500', async () => {
+      const store = { id: 's1', ownerUserId: 'u1', collections: [] };
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(store) },
+        product: { findMany: jest.fn().mockResolvedValue([{ variations: [{ id: 'var-1' }] }]) },
+        order: { findFirst: jest.fn().mockResolvedValue({ id: 'ord-1' }) },
+      });
+      const { InvalidOrderTransitionError } = jest.requireActual('../orders/order-transition');
+      (orderStatus.setStatus as jest.Mock).mockRejectedValueOnce(new InvalidOrderTransitionError('DELIVERED', 'CONFIRMED'));
+      const svc = new MerchantService(prisma, orderStatus);
+      await expect(svc.updateMerchantOrderStatus('u1', 'ord-1', 'CONFIRMED')).rejects.toThrow(BadRequestException);
     });
 
     it('cập nhật trạng thái đơn hàng theo storefrontSlug thành công', async () => {
@@ -213,12 +231,10 @@ describe('MerchantService', () => {
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
         product: { findMany: jest.fn().mockResolvedValue([]) },
-        order: {
-          findFirst: jest.fn().mockResolvedValue({ id: 'ord-sf-1' }),
-          update: jest.fn().mockResolvedValue({ id: 'ord-sf-1', status: 'SHIPPING' }),
-        },
+        order: { findFirst: jest.fn().mockResolvedValue({ id: 'ord-sf-1' }) },
       });
-      const svc = new MerchantService(prisma);
+      (orderStatus.setStatus as jest.Mock).mockResolvedValueOnce({ id: 'ord-sf-1', status: 'SHIPPING' });
+      const svc = new MerchantService(prisma, orderStatus);
       const res = await svc.updateMerchantOrderStatus('u1', 'ord-sf-1', 'SHIPPING');
       expect(res.status).toBe('SHIPPING');
     });
@@ -234,7 +250,7 @@ describe('MerchantService', () => {
           update: jest.fn().mockImplementation(({ data }) => ({ ...store, ...data })),
         },
       });
-      const svc = new MerchantService(prisma);
+      const svc = new MerchantService(prisma, orderStatus);
       const published = await svc.publishStore('u1', true);
       expect(published.isPublished).toBe(true);
       expect(published.publishedAt).toBeInstanceOf(Date);

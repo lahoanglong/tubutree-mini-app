@@ -1,6 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 
 const RESERVED_SUBDOMAINS = new Set([
   'admin',
@@ -69,7 +71,10 @@ export interface CreateMerchantProductDto {
 
 @Injectable()
 export class MerchantService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly orderStatus: OrderStatusService,
+  ) {}
 
   async getOrCreateStore(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
@@ -408,9 +413,15 @@ export class MerchantService {
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng thuộc quyền quản lý của bạn.');
 
-    return this.prisma.order.update({
-      where: { id: order.id },
-      data: { status: status as never },
-    });
+    // Trước đây ghi status trực tiếp — không guard transition (DELIVERED có thể bị lùi về
+    // CONFIRMED rồi khách tự hủy lại, hoàn tiền/restock lần 2 trên đơn đã giao — P0-1) VÀ
+    // không cộng/đảo điểm Xanh + hoa hồng CTV (đơn CTV tự đổi DELIVERED/CANCELLED không bao
+    // giờ credit/reverse — mất vĩnh viễn, P1-1). Ủy quyền cho OrderStatusService — cùng nguồn
+    // ghi status với admin/pancake. Xem docs/2026-09-08-review-progress.md.
+    try {
+      return await this.orderStatus.setStatus(order.id, status as OrderStatus);
+    } catch (err) {
+      toHttpBadRequest(err);
+    }
   }
 }
