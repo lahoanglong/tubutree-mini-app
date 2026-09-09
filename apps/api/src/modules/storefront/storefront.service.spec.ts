@@ -109,6 +109,27 @@ describe('StorefrontService.updateMine/publishMine', () => {
     expect(prisma.storefront.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 's1' } }));
   });
 
+  // P0-1 (docs/2026-09-08-review-progress.md): trước đây chỉ kiểm trùng subdomain-với-subdomain
+  // — CTV có thể chiếm subdomain trùng SLUG của gian hàng khác.
+  it('chặn subdomain trùng SLUG (không phải subdomain) của gian hàng khác', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
+    (prisma.storefront.findFirst as jest.Mock)
+      .mockResolvedValueOnce({ id: 's1', ownerUserId: 'u1' }) // assertOwnedStorefront
+      .mockResolvedValueOnce({ id: 's-other', slug: 'organic-tea' }); // trùng SLUG
+    const svc = new StorefrontService(prisma, config);
+    await expect(svc.updateMine('u1', { subdomain: 'organic-tea' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.storefront.update).not.toHaveBeenCalled();
+  });
+
+  it('subdomain hợp lệ, không trùng ai → cập nhật thành công', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValueOnce({ id: 's1', ownerUserId: 'u1' }).mockResolvedValueOnce(null);
+    (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
+    const svc = new StorefrontService(prisma, config);
+    const r = await svc.updateMine('u1', { subdomain: 'Pure-Green' });
+    expect(r.subdomain).toBe('pure-green');
+  });
+
   it('publish set isPublished + publishedAt', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
     (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1' });

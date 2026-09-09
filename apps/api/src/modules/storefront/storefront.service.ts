@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { normalizeSubdomain, assertIdentifierAvailable } from './identifier-validation';
 
 @Injectable()
 export class StorefrontService {
@@ -109,22 +110,11 @@ export class StorefrontService {
   ) {
     const sf = await this.assertOwnedStorefront(userId);
     if (dto.subdomain) {
-      const sub = dto.subdomain.trim().toLowerCase();
-      const RESERVED = ['admin', 'api', 'app', 'staging', 'mail', 'auth', 'tubutree', 'dashboard', 'static', 'cdn', 'demo'];
-      if (RESERVED.includes(sub)) {
-        throw new BadRequestException(`Subdomain "${sub}" đã được hệ thống giữ trước.`);
-      }
-      if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(sub)) {
-        throw new BadRequestException(
-          'Subdomain phải từ 3-30 ký tự (chữ thường, số, gạch ngang, không bắt đầu/kết thúc bằng gạch ngang).',
-        );
-      }
-      const existing = await this.prisma.storefront.findFirst({
-        where: { subdomain: sub, NOT: { id: sf.id } },
-      });
-      if (existing) {
-        throw new BadRequestException(`Subdomain "${sub}" đã có người đăng ký.`);
-      }
+      const sub = normalizeSubdomain(dto.subdomain);
+      // Kiểm trùng CHÉO cả slug/subdomain/customDomain — trước đây chỉ kiểm trùng subdomain-
+      // với-subdomain, cho phép chiếm subdomain trùng SLUG của gian hàng khác (P0-1,
+      // docs/2026-09-08-review-progress.md).
+      await assertIdentifierAvailable(this.prisma, sub, sf.id);
       dto.subdomain = sub;
     }
     return this.prisma.storefront.update({ where: { id: sf.id }, data: dto });

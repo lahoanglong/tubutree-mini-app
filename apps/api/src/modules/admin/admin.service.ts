@@ -9,6 +9,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
+import { RbacService } from '../staff/rbac/rbac.service';
 
 @Injectable()
 export class AdminService {
@@ -22,6 +23,7 @@ export class AdminService {
     private readonly notifications: NotificationsService,
     private readonly reversal: OrderReversalService,
     private readonly orderStatus: OrderStatusService,
+    private readonly rbac: RbacService,
   ) {}
 
   // ── Đổi/trả (§6.4) ──
@@ -189,6 +191,19 @@ export class AdminService {
       data: { role },
       select: { id: true, phone: true, fullName: true, role: true },
     });
+    // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán — trước đây KHÔNG làm
+    // việc này: hạ quyền qua đường setUserRole trong khi grant từ /admin/staff/grant còn hiệu
+    // lực → lần refresh token tiếp theo, applyGrants (chỉ nâng không hạ) tự phục hồi quyền cũ
+    // (P0-3, docs/2026-09-08-review-progress.md). Chạy SAU khi user.update đã thành công —
+    // nếu lỗi ở bước này, role đã hạ vẫn đứng, chỉ còn nguy cơ tự phục hồi ở lần refresh sau
+    // (best-effort, không rollback role vì role change tự nó luôn đúng ý admin).
+    const revoked = await this.rbac.revokeGrantsAbove(normalized, role).catch((err) => {
+      this.logger.error(`revokeGrantsAbove lỗi cho SĐT ${normalized}: ${err instanceof Error ? err.message : err}`);
+      return 0;
+    });
+    if (revoked > 0) {
+      this.logger.warn(`Admin ${adminId} đổi role user ${user.id} (${normalized}) → thu hồi ${revoked} grant xếp hạng cao hơn ${role}.`);
+    }
     this.logger.warn(`Admin ${adminId} đổi role user ${user.id} (${normalized}): ${previousRole} → ${role}`);
     return { ok: true, ...updated, previousRole };
   }

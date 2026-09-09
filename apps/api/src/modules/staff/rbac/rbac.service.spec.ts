@@ -209,3 +209,48 @@ describe('RbacService.revokeGrant', () => {
     expect(out.downgraded).toBe(false);
   });
 });
+
+describe('RbacService.revokeGrantsAbove', () => {
+  // P0-3 (docs/2026-09-08-review-progress.md): admin.setUserRole hạ quyền qua User.role trực
+  // tiếp, KHÔNG đụng RoleGrant — lần refresh token tiếp theo, applyGrants (chỉ nâng không hạ)
+  // đọc thấy grant ADMIN còn active rồi tự phục hồi. setUserRole phải gọi hàm này để thu hồi
+  // MỌI grant xếp hạng CAO HƠN role admin vừa gán, nếu không cứ hạ xong lại tự nâng lại.
+  it('hạ role thấp hơn grant đang có → thu hồi grant xếp hạng cao hơn role mới', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = makePrisma({ roleGrant: { updateMany, findMany: jest.fn() } });
+    const count = await new RbacService(prisma).revokeGrantsAbove('0900000001', 'CUSTOMER');
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { phone: '0900000001', revokedAt: null, role: { in: ['STAFF', 'ADMIN'] } },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(count).toBe(1);
+  });
+
+  it('gán role ADMIN (cao nhất) → không có grant nào xếp hạng cao hơn, KHÔNG gọi updateMany', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const prisma = makePrisma({ roleGrant: { updateMany } });
+    const count = await new RbacService(prisma).revokeGrantsAbove('0900000001', 'ADMIN');
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(count).toBe(0);
+  });
+
+  it('gán DEALER (thấp hơn cả STAFF lẫn ADMIN) → thu hồi CẢ 2 loại grant', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = makePrisma({ roleGrant: { updateMany } });
+    await new RbacService(prisma).revokeGrantsAbove('0900000001', 'DEALER');
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { phone: '0900000001', revokedAt: null, role: { in: ['STAFF', 'ADMIN'] } },
+      data: { revokedAt: expect.any(Date) },
+    });
+  });
+
+  it('gán STAFF → chỉ thu hồi grant ADMIN (cao hơn STAFF), giữ nguyên grant STAFF cùng cấp', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const prisma = makePrisma({ roleGrant: { updateMany } });
+    await new RbacService(prisma).revokeGrantsAbove('0900000001', 'STAFF');
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { phone: '0900000001', revokedAt: null, role: { in: ['ADMIN'] } },
+      data: { revokedAt: expect.any(Date) },
+    });
+  });
+});

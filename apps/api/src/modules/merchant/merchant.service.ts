@@ -3,25 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
-
-const RESERVED_SUBDOMAINS = new Set([
-  'admin',
-  'api',
-  'www',
-  'app',
-  'mail',
-  'staging',
-  'dev',
-  'static',
-  'cdn',
-  'auth',
-  'shop',
-  'tubutree',
-  'tubu',
-  'root',
-  'system',
-  'dashboard',
-]);
+import { normalizeSubdomain, normalizeCustomDomain, assertIdentifierAvailable } from '../storefront/identifier-validation';
 
 function slugify(str: string): string {
   return str
@@ -144,7 +126,6 @@ export class MerchantService {
     const updateData: Prisma.StorefrontUpdateInput = {
       title: dto.title,
       headerNote: dto.headerNote,
-      customDomain: dto.customDomain,
       themeColor: dto.themeColor,
       bankName: dto.bankName,
       bankBin: dto.bankBin,
@@ -165,22 +146,25 @@ export class MerchantService {
     }
 
     if (dto.subdomain !== undefined) {
-      const cleanSub = dto.subdomain.trim().toLowerCase();
-      if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(cleanSub)) {
-        throw new BadRequestException(
-          'Subdomain không hợp lệ (độ dài 3-30 ký tự, chỉ chứa chữ thường a-z, số 0-9 và dấu gạch ngang, không bắt đầu/kết thúc bằng dấu gạch ngang).',
-        );
-      }
-      if (RESERVED_SUBDOMAINS.has(cleanSub)) {
-        throw new BadRequestException(`Subdomain "${cleanSub}" thuộc từ khóa hệ thống, vui lòng chọn tên khác.`);
-      }
-      const existing = await this.prisma.storefront.findFirst({
-        where: { subdomain: cleanSub, id: { not: store.id } },
-      });
-      if (existing) {
-        throw new BadRequestException('Subdomain này đã được sử dụng bởi đối tác khác.');
-      }
+      const cleanSub = normalizeSubdomain(dto.subdomain);
+      // Kiểm trùng CHÉO cả slug/subdomain/customDomain — trước đây chỉ kiểm trùng subdomain-
+      // với-subdomain, cho phép CTV chiếm subdomain trùng SLUG của gian hàng khác (P0-1,
+      // docs/2026-09-08-review-progress.md), từ đó lộ/giả mạo gian hàng qua các truy vấn OR
+      // ở tầng đọc (vd bank-transfer.service.ts tra QR ngân hàng theo storefrontSlug).
+      await assertIdentifierAvailable(this.prisma, cleanSub, store.id);
       updateData.subdomain = cleanSub;
+    }
+
+    if (dto.customDomain !== undefined) {
+      if (dto.customDomain.trim() === '') {
+        updateData.customDomain = null; // xoá tên miền riêng
+      } else {
+        // Trước đây KHÔNG có validate/kiểm trùng nào cho customDomain — ghi thẳng chuỗi bất kỳ,
+        // kể cả trùng subdomain/slug của gian hàng khác (P0-1).
+        const cleanDomain = normalizeCustomDomain(dto.customDomain);
+        await assertIdentifierAvailable(this.prisma, cleanDomain, store.id);
+        updateData.customDomain = cleanDomain;
+      }
     }
 
     return this.prisma.storefront.update({

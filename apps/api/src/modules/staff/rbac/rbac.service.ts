@@ -103,6 +103,26 @@ export class RbacService {
     });
   }
 
+  /**
+   * Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN `role`. Dùng khi admin.setUserRole
+   * hạ role của user trực tiếp qua User.role — trước đây KHÔNG gọi hàm này, nên hạ quyền qua
+   * đường đó bị applyGrants (chỉ nâng không hạ, gọi ở mỗi lần refresh token) âm thầm phục hồi
+   * ngay khi user đăng nhập lại, vì RoleGrant đang cấp vẫn còn hiệu lực (P0-3,
+   * docs/2026-09-08-review-progress.md). So sánh dùng RANK — nếu không có grant nào xếp hạng
+   * cao hơn (vd gán ADMIN), bỏ qua query, không tốn round-trip vô ích. Trả số grant đã thu hồi.
+   */
+  async revokeGrantsAbove(phone: string, role: UserRole): Promise<number> {
+    const above = (Object.keys(RANK) as UserRole[]).filter(
+      (r) => (r === 'STAFF' || r === 'ADMIN') && RANK[r] > RANK[role],
+    );
+    if (above.length === 0) return 0;
+    const { count } = await this.prisma.roleGrant.updateMany({
+      where: { phone, revokedAt: null, role: { in: above as ('STAFF' | 'ADMIN')[] } },
+      data: { revokedAt: new Date() },
+    });
+    return count;
+  }
+
   /** Role gốc khi bỏ quyền nhân viên: DEALER nếu có đơn đại lý đã duyệt, ngược lại CUSTOMER. */
   private async resolveBaseRole(userId: string, db: Db = this.prisma): Promise<'CUSTOMER' | 'DEALER'> {
     const dealerApp = await db.dealerApplication.findFirst({

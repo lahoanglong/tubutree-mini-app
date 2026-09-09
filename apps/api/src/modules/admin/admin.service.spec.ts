@@ -9,6 +9,7 @@ import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 import type { CouponsService } from '../coupons/coupons.service';
+import type { RbacService } from '../staff/rbac/rbac.service';
 
 const config = {} as unknown as SystemConfigService;
 const loyalty = {
@@ -23,13 +24,14 @@ const affiliate = {
 const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
 const flash = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
 const coupons = { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService;
+const rbac = { revokeGrantsAbove: jest.fn().mockResolvedValue(0) } as unknown as RbacService;
 // AdminService không còn tự viết khối restock/refund — ủy quyền cho OrderReversalService
 // (reviewReturn) và OrderStatusService (updateOrderStatus). Dựng instance THẬT (không mock)
 // của cả hai để test vẫn xác minh được hành vi thật qua các spy ở tầng tx bên dưới.
 const mkAdmin = (prisma: PrismaService) => {
   const reversal = new OrderReversalService(flash, coupons);
   const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal);
-  return new AdminService(prisma, config, loyalty, affiliate, notifications, reversal, orderStatus);
+  return new AdminService(prisma, config, loyalty, affiliate, notifications, reversal, orderStatus, rbac);
 };
 
 function makePrisma(over: Record<string, unknown> = {}) {
@@ -536,6 +538,28 @@ describe('AdminService.setUserRole', () => {
     });
     expect(out.previousRole).toBe('CUSTOMER');
     expect(out.role).toBe('ADMIN');
+  });
+
+  // P0-3 (docs/2026-09-08-review-progress.md): hạ role qua đường này trước đây KHÔNG đụng
+  // RoleGrant — applyGrants (chỉ nâng, gọi mỗi lần refresh token) đọc thấy grant ADMIN còn
+  // hiệu lực rồi tự phục hồi ngay sau khi admin vừa thu hồi quyền. Phải gọi revokeGrantsAbove.
+  it('hạ role → gọi rbac.revokeGrantsAbove(phone, role mới) để chặn applyGrants tự phục hồi', async () => {
+    const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'CUSTOMER', fullName: 'X' });
+    const prisma = makePrisma({
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'ADMIN' }), update },
+    });
+    await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
+    expect(rbac.revokeGrantsAbove).toHaveBeenCalledWith('0899625240', 'CUSTOMER');
+  });
+
+  it('rbac.revokeGrantsAbove lỗi → vẫn trả kết quả đổi role thành công (best-effort, không rollback role)', async () => {
+    const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'CUSTOMER', fullName: 'X' });
+    const prisma = makePrisma({
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'ADMIN' }), update },
+    });
+    (rbac.revokeGrantsAbove as jest.Mock).mockRejectedValueOnce(new Error('db down'));
+    const out = await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
+    expect(out.role).toBe('CUSTOMER');
   });
 });
 

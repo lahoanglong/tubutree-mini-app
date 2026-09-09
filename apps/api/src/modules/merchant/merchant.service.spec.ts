@@ -114,6 +114,77 @@ describe('MerchantService', () => {
       expect(res.subdomain).toBe('pure-green');
       expect(res.bankAccountNo).toBe('1234567890');
     });
+
+    // P0-1 (docs/2026-09-08-review-progress.md): trước đây chỉ kiểm trùng subdomain-với-
+    // subdomain — CTV có thể chiếm subdomain trùng SLUG (hay customDomain) của gian hàng khác,
+    // khiến các truy vấn OR ở tầng đọc (resolve theo host, tra QR ngân hàng...) trả về nhầm
+    // gian hàng. Kiểm trùng giờ phải CHÉO cả 3 cột.
+    it('chặn subdomain nếu trùng SLUG (không phải subdomain) của gian hàng khác', async () => {
+      const store = { id: 's1', ownerUserId: 'u1', collections: [] };
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        storefront: {
+          findFirst: jest
+            .fn()
+            .mockResolvedValueOnce(store)
+            .mockResolvedValueOnce({ id: 's-other', slug: 'organic-tea' }), // trùng SLUG, không phải subdomain
+        },
+      });
+      const svc = new MerchantService(prisma, orderStatus);
+      await expect(svc.updateStore('u1', { subdomain: 'organic-tea' })).rejects.toThrow(BadRequestException);
+    });
+
+    it('chặn customDomain sai định dạng (không phải tên miền thật)', async () => {
+      const store = { id: 's1', ownerUserId: 'u1', collections: [] };
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(store) },
+      });
+      const svc = new MerchantService(prisma, orderStatus);
+      await expect(svc.updateStore('u1', { customDomain: 'not-a-domain' })).rejects.toThrow(BadRequestException);
+    });
+
+    it('chặn customDomain trùng subdomain/slug của gian hàng khác', async () => {
+      const store = { id: 's1', ownerUserId: 'u1', collections: [] };
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        storefront: {
+          findFirst: jest
+            .fn()
+            .mockResolvedValueOnce(store)
+            .mockResolvedValueOnce({ id: 's-other', customDomain: 'shop.victim.vn' }),
+        },
+      });
+      const svc = new MerchantService(prisma, orderStatus);
+      await expect(svc.updateStore('u1', { customDomain: 'shop.victim.vn' })).rejects.toThrow(BadRequestException);
+    });
+
+    it('cập nhật customDomain hợp lệ, không trùng ai → thành công', async () => {
+      const store = { id: 's1', ownerUserId: 'u1', collections: [] };
+      const update = jest.fn().mockImplementation(({ data }) => ({ id: 's1', ...data }));
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        storefront: {
+          findFirst: jest.fn().mockResolvedValueOnce(store).mockResolvedValueOnce(null),
+          update,
+        },
+      });
+      const svc = new MerchantService(prisma, orderStatus);
+      const res = await svc.updateStore('u1', { customDomain: 'Shop.MyBrand.vn' });
+      expect(res.customDomain).toBe('shop.mybrand.vn');
+    });
+
+    it('customDomain rỗng → xóa tên miền riêng (set null), không validate format', async () => {
+      const store = { id: 's1', ownerUserId: 'u1', collections: [] };
+      const update = jest.fn().mockImplementation(({ data }) => ({ id: 's1', ...data }));
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(store), update },
+      });
+      const svc = new MerchantService(prisma, orderStatus);
+      const res = await svc.updateStore('u1', { customDomain: '' });
+      expect(res.customDomain).toBeNull();
+    });
   });
 
   describe('createProduct (Merchant tự đăng)', () => {

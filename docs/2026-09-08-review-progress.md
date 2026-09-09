@@ -151,8 +151,39 @@ sửa, để lại phiên sau.
 - P1: IDOR `addResellProduct` (collectionId không check chủ sở hữu), refresh-token bị dùng lại
   chỉ chặn đúng token đó chứ không revoke cả chuỗi, AFFILIATE tự cấp được nên `@Roles` không
   còn là biên quyền thật.
-Chưa sửa (P0-1/P0-2/P0-3 và toàn bộ P1-P2) — quy mô sửa lớn (đổi mô hình dữ liệu storefront
-lookup + luồng revoke), để lại cho lượt tiếp, ưu tiên cao nhất đầu phiên sau.
+- [x] **P0-1 + P0-2 (một phần) + P0-3 — đã sửa.**
+  - `storefront/identifier-validation.ts` (mới) — `normalizeSubdomain`/`normalizeCustomDomain`/
+    `assertIdentifierAvailable` DÙNG CHUNG cho cả `merchant.service.ts` (updateStore) và
+    `storefront.service.ts` (updateMine), thay 2 bản chép tay lệch nhau. Kiểm trùng giờ CHÉO
+    cả 3 cột slug/subdomain/customDomain (trước chỉ kiểm trùng trong chính cột đang ghi).
+    `customDomain` trước đây HOÀN TOÀN không validate/kiểm trùng — giờ bắt buộc đúng định dạng
+    tên miền (≥1 dấu chấm) + kiểm trùng chéo; subdomain bắt buộc KHÔNG dấu chấm — 2 quy tắc này
+    tự nhiên tách biệt 2 không gian tên (customDomain không bao giờ trùng ký tự với subdomain/
+    slug thuần chữ). Đóng nguồn gốc của P0-1 VÀ đường khai thác P0-2 đã mô tả (đơn hàng lộ qua
+    slug trùng) — vì P0-2 phụ thuộc vào việc tạo được collision ở P0-1 trước; ngăn collision mới
+    thì đường khai thác đó không còn tái tạo được. **CHƯA làm**: đổi model dữ liệu đơn hàng sang
+    khoá ngoại `Order.storefrontId` (khuyến nghị dài hạn của audit) — để lại follow-up, không
+    phải regression của lần sửa này (dữ liệu prod cũ có collision từ trước, nếu có, vẫn tồn tại
+    tới khi ai đó chạy soát + dọn — xem "Việc cần người" bên dưới).
+  - `RbacService.revokeGrantsAbove` (mới) — `AdminService.setUserRole` giờ gọi hàm này sau khi
+    hạ role, thu hồi mọi `RoleGrant` (STAFF/ADMIN) xếp hạng cao hơn role vừa gán. Trước đây hạ
+    quyền qua `POST /admin/users/role` không đụng `RoleGrant`, nên lần refresh token tiếp theo
+    `applyGrants` (chỉ nâng không hạ) tự phục hồi quyền đã bị thu hồi.
+  - 24 test mới (identifier-validation 12, merchant.service +5, storefront.service +2,
+    rbac.service +4, admin.service +2, admin.module wiring). Verify: typecheck/lint/`nest
+    build` sạch, **93 suite / 1295 test pass** (từ 92/1270). Tự boot `nest start` xác nhận DI
+    graph resolve đúng sau khi AdminModule import thêm StaffModule (không tạo cycle).
+- [ ] Chưa sửa: P1 (IDOR addResellProduct, refresh-token reuse không revoke cả chuỗi,
+  AFFILIATE tự cấp được), toàn bộ P2 (guest login Math.random, refresh token trong
+  localStorage web, mảng không giới hạn kích thước, tiền không rate-limit riêng) — để lại
+  phiên sau.
+- [ ] **Việc cần người** (không tự làm được, cần quyết định/quyền hạn ngoài phạm vi code):
+  chạy `SELECT count(*) FROM storefronts WHERE (subdomain IS NOT NULL AND subdomain NOT IN
+  (SELECT slug FROM storefronts)) OR (custom_domain IS NOT NULL AND custom_domain IN (SELECT
+  slug FROM storefronts UNION SELECT subdomain FROM storefronts))` (điều chỉnh tên cột theo
+  @@map thật) trên DB thật để biết có collision nào đã tồn tại TRƯỚC bản vá này không — nếu
+  có, cần xử lý thủ công (đổi tên 1 bên) vì code mới chỉ chặn collision MỚI, không tự dọn
+  collision cũ.
 
 - [x] **P0 (combo mint tiền) + P1 (coupon không hoàn khi hủy)** — cả hai từ audit tiền/giá.
   - `StorefrontService.clampComboPct` — trần `storefront.max_combo_pct` (mặc định 30%) áp ở
