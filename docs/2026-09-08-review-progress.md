@@ -548,3 +548,60 @@ link được; ô tìm kiếm ở Trang chủ mở thẳng bàn phím ở ô th�
 
 `pnpm typecheck` 5/5 · `pnpm lint` 5/5 · API **93 suite / 1360 test** · miniapp **11 file /
 83 test**. 7 commit đã push `origin/main`.
+
+## Lượt audit thứ hai (5 mảng chưa từng soi) — 2026-09-12
+
+Chạy 5 agent audit đọc-chỉ-đọc, mỗi phát hiện bắt buộc kèm file:dòng + trích đoạn: nhân sự/HRM,
+cộng đồng, cashback + quản trị, tác vụ nền + thông báo, và ứng dụng web Next.js. Mọi phát hiện
+dưới đây đã được TỰ KIỂM CHỨNG lại trong code trước khi sửa (agent có thể bịa; artifact máy
+kiểm được mới tin).
+
+### Tiền
+- **Chấm công ca chưa tới.** `checkin` nhận bất kỳ ca đã duyệt nào, không xét giờ → checkin vào
+  ca NGÀY MAI lúc 17:05 hôm nay, cron chỉ đóng phiên khi quá giờ hết ca ⇒ 9 giờ công cho một
+  ngày không đi làm. Nay phải nằm trong cửa sổ của chính ca (`attendance.checkin_early_min`).
+- **Đơn giá lương áp ngược quá khứ.** `recomputeDay` luôn đọc rate hiện tại, `recomputeStaffMonth`
+  tính lại mọi ngày ⇒ đổi đơn giá ngày 11 định giá lại cả 10 ngày đã làm. Nay khoá theo ngày;
+  định giá lại phải có chủ đích (`reprice=1`).
+- **Phạt huỷ ca chưa bao giờ bị trừ.** `net` kẹp ≥ 0 theo TỪNG NGÀY, ngày huỷ ca gross = 0 ⇒ phạt
+  bị nuốt; bảng lương hiện "Phạt: 30.000" cạnh "Thực nhận" không đổi. Nay kẹp ở mức THÁNG.
+- **Đơn vị config không có biên.** `cashback.merchant_user_share` là phân số 0.7 nhưng mô tả ghi
+  "70%" — gõ 80 là nhân payout ~114 lần, gõ số âm là trừ ngược ví. Nay có bảng biên theo từng khoá.
+- **Huỷ đơn đại lý không đảo sổ công nợ** (đã nêu ở phần trên).
+- **Postback cashback bị vứt im lặng** khi hoa hồng lẻ hoặc số gửi dạng chuỗi; **một event hỏng
+  giết cả lô đối soát**; **settleConfirmed nạp không giới hạn** kèm JSON payload.
+- **Farm xu cộng đồng trên bài chưa duyệt** (đã nêu ở phần trên).
+
+### Khoá cứng / ngõ cụt
+- Admin **tự hạ quyền chính mình** hoặc hạ **admin cuối cùng** → khôi phục chỉ bằng SQL.
+- Bảng lương **FINALIZED là ngõ cụt**: không có đường về OPEN, mà sửa giờ vẫn ghi đè PayrollDay
+  trong khi tổng tháng đứng yên. Nay có `reopen` + chặn ghi khi tháng đã khoá.
+- **Cashback kẹt PENDING vĩnh viễn**: không có endpoint admin nào, reconcile tắt khi thiếu API
+  key. Nay có `GET/POST /admin/cashback/transactions` + tab "Hoàn tiền sàn ngoài" ở portal web.
+- **Đơn đẩy Pancake hỏng không đẩy lại được**: `jobId=orderId` + BullMQ giữ job hash sau khi
+  xong/thất bại ⇒ `add()` là no-op, cron cứu hộ in log mãi mà không chạy gì.
+
+### Dữ liệu nói sai sự thật
+Thẻ sản phẩm web khoe ★5.0 cứng · trang chủ hứa "hoàn tiền nếu không hài lòng" rộng hơn chính
+sách thật · đếm bình luận tính cả bình luận đã gỡ · thông báo in nguyên văn mã template ·
+`heartbeat_stale_min` mô tả "auto checkout" nhưng không được dùng · admin duyệt hoàn tiền mà
+không thấy số tiền đang hoàn.
+
+### Lạm dụng
+Nộp bài sự kiện sau hạn · thả tim cho bài chưa duyệt · báo cáo vi phạm với id bịa (không kiểm
+tra, không chống trùng) · không có giới hạn tốc độ riêng cho đăng bài/bình luận · voucher tạo từ
+web luôn không giới hạn lượt và không trần giảm · CSV xuất đơn chạy công thức Excel từ ghi chú
+của khách · `/cashback/merchants` công khai lộ deeplink affiliate và fullRate.
+
+### Web
+Mở `/merchant` lúc đã đăng nhập gây đua refresh token ⇒ BE coi là reuse ⇒ **thu hồi toàn bộ phiên
+của user** (văng khỏi cả web lẫn Mini App) · web mất sạch attribution gian hàng CTV và không áp
+combo · robots/sitemap/noindex chưa có · ngày hiệu lực voucher lệch 7 tiếng do parse UTC.
+
+### Còn lại (chưa làm)
+Phân trang bình luận · `viewCount` ghi DB mỗi lượt xem · `eventPosts` giới hạn cứng 20 · nhắc
+game/price-drop/recalcAllTiers chưa phân trang · claim-rồi-gửi làm mất thông báo khi gửi lỗi ·
+admin thêm phiên chấm công chồng giờ · sửa phiên qua đêm ở màn admin · lịch sử chấm công của
+"Lương của tôi" lấy biên UTC · `copyWeek` copy cả ca đã bị từ chối · chưa có sổ ghi vết đổi
+trạng thái đơn · web chưa dùng được voucher/Điểm Xanh khi thanh toán · refresh token vẫn ở
+localStorage (cần httpOnly cookie).
