@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { newDeviceId } from '../utils/idempotency';
 import { setStorage, getStorage, removeStorage } from 'zmp-sdk/apis';
 import type { AuthUser, LoginResponse } from '@tubutree/shared-types';
 import {
@@ -18,7 +19,8 @@ async function getDeviceId(): Promise<string> {
   const res = await getStorage({ keys: [DEVICE_KEY] });
   const existing = (res as Record<string, unknown>)[DEVICE_KEY];
   if (typeof existing === 'string' && existing.length > 0) return existing;
-  const id = `d_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  // deviceId là thứ DUY NHẤT xác thực tài khoản khách — phải sinh bằng crypto (xem newDeviceId).
+  const id = newDeviceId();
   await setStorage({ data: { [DEVICE_KEY]: id } });
   return id;
 }
