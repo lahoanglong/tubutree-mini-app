@@ -1613,22 +1613,40 @@ describe('CommunityFeedService.eventPosts', () => {
       status: 'PUBLISHED',
       meta: { path: ['eventId'], equals: 'ev1' },
     });
-    expect(args.take).toBe(20);
-    expect(r[0]).toMatchObject({ id: 'p1' });
+    // take + 1 để biết còn trang sau mà không cần đếm riêng.
+    expect(args.take).toBe(21);
+    expect(r.posts[0]).toMatchObject({ id: 'p1' });
+    expect(r.nextCursor).toBeNull();
   });
 
   it('truyền take tuỳ biến → dùng take đó', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([]);
     await makeSvc(prisma).eventPosts('ev1', 'u1', 5);
-    expect((prisma.feedPost.findMany as jest.Mock).mock.calls[0][0].take).toBe(5);
+    expect((prisma.feedPost.findMany as jest.Mock).mock.calls[0][0].take).toBe(6);
   });
 
   it('viewerId trùng chủ bài → isOwner true trong kết quả', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ userId: 'u1', meta: { eventId: 'ev1' } })]);
     const r = await makeSvc(prisma).eventPosts('ev1', 'u1');
-    expect(r[0]).toMatchObject({ isOwner: true });
+    expect(r.posts[0]).toMatchObject({ isOwner: true });
+  });
+
+  /**
+   * Trần cứng 20 bài trước đây nghĩa là sự kiện 200 bài dự thi thì 180 bài không có đường nào
+   * xem tới — kể cả admin lúc chấm giải.
+   */
+  it('còn trang sau → trả nextCursor, cắt đúng số bài yêu cầu', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
+      row({ id: 'p1', meta: { eventId: 'ev1' } }),
+      row({ id: 'p2', meta: { eventId: 'ev1' } }),
+      row({ id: 'p3', meta: { eventId: 'ev1' } }),
+    ]);
+    const r = await makeSvc(prisma).eventPosts('ev1', 'u1', 2);
+    expect(r.posts).toHaveLength(2);
+    expect(r.nextCursor).toBe('p2');
   });
 });
 

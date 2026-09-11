@@ -206,7 +206,11 @@ export const adminPin = (id: string, pinned: boolean) =>
 // Sự kiện cộng đồng — danh sách/chi tiết công khai (authed) + quản lý (ADMIN).
 export const listEvents = () => api.get<CommunityEvent[]>('/feed/events').then((r) => r.data);
 
-export const eventPosts = (id: string) => api.get<FeedItem[]>(`/feed/events/${id}/posts`).then((r) => r.data);
+/** Phân trang: trước đây trần cứng 20 bài, sự kiện 200 bài dự thi thì 180 bài không ai xem tới. */
+export const eventPosts = (id: string, cursor?: string) =>
+  api
+    .get<FeedPage>(`/feed/events/${id}/posts`, { params: cursor ? { cursor } : undefined })
+    .then((r) => r.data);
 
 export const createEvent = (dto: CreateEventInput) =>
   api.post<CommunityEvent>('/feed/events', dto).then((r) => r.data);

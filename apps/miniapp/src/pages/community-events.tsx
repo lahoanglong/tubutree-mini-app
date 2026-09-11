@@ -1,8 +1,14 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useQuery,
+  useInfiniteQuery,
+  type UseQueryResult,
+  type UseInfiniteQueryResult,
+  type InfiniteData,
+} from '@tanstack/react-query';
 import { PartyPopper, ChevronLeft } from 'lucide-react';
-import { listEvents, eventPosts, getCategories, type CommunityEvent, type FeedItem } from '../services/feed-api';
+import { listEvents, eventPosts, getCategories, type CommunityEvent, type FeedPage } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
@@ -31,9 +37,11 @@ export default function CommunityEventsPage() {
 
   const cats = useQuery({ queryKey: ['community', 'categories'], queryFn: getCategories, enabled: authed, staleTime: 60_000 });
   const eventsQ = useQuery({ queryKey: ['community', 'events'], queryFn: listEvents, enabled: authed });
-  const entriesQ = useQuery({
+  const entriesQ = useInfiniteQuery({
     queryKey: ['community', 'event-posts', selected?.id],
-    queryFn: () => eventPosts(selected!.id),
+    queryFn: ({ pageParam }) => eventPosts(selected!.id, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: authed && Boolean(selected),
   });
 
@@ -202,12 +210,13 @@ function EventEntries({
   onJoin,
 }: {
   event: CommunityEvent;
-  entriesQ: UseQueryResult<FeedItem[]>;
+  entriesQ: UseInfiniteQueryResult<InfiniteData<FeedPage>>;
   onBack: () => void;
   onJoin: () => void;
 }) {
   const navigate = useNavigate();
   const ended = isEventEnded(event);
+  const entries = entriesQ.data?.pages.flatMap((pg) => pg.posts) ?? [];
   return (
     <Box>
       <Box px={3} pt={3}>
@@ -282,12 +291,27 @@ function EventEntries({
         </Box>
       ) : entriesQ.isError ? (
         <ErrorState message={getErrorMessage(entriesQ.error)} onRetry={() => void entriesQ.refetch()} />
-      ) : !entriesQ.data || entriesQ.data.length === 0 ? (
+      ) : entries.length === 0 ? (
         <EmptyState art="leaf" heading={vi.community.emptyHeading} body={vi.community.emptyBody} />
       ) : (
-        entriesQ.data.map((post) => (
-          <PostCard key={post.id} post={post} onClick={() => navigate(`/feed/${post.id}`)} />
-        ))
+        <>
+          {entries.map((post) => (
+            <PostCard key={post.id} post={post} onClick={() => navigate(`/feed/${post.id}`)} />
+          ))}
+          {entriesQ.hasNextPage && (
+            <Box p={3}>
+              <Button
+                fullWidth
+                variant="secondary"
+                loading={entriesQ.isFetchingNextPage}
+                disabled={entriesQ.isFetchingNextPage}
+                onClick={() => void entriesQ.fetchNextPage()}
+              >
+                Xem thêm bài dự thi
+              </Button>
+            </Box>
+          )}
+        </>
       )}
     </Box>
   );

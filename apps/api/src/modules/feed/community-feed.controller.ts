@@ -108,8 +108,13 @@ export class CommunityFeedController {
   }
 
   @Get('events/:id/posts')
-  eventPosts(@CurrentUser('sub') userId: string, @Param('id') id: string) {
-    return this.feed.eventPosts(id, userId);
+  eventPosts(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+    @Query('cursor') cursor?: string,
+    @Query('take') take?: string,
+  ) {
+    return this.feed.eventPosts(id, userId, take ? Number(take) : undefined, cursor);
   }
 
   @Roles('ADMIN')

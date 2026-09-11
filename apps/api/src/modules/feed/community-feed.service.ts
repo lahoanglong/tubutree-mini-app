@@ -905,14 +905,28 @@ export class CommunityFeedService {
   }
 
   /** Bài tham gia sự kiện — lọc FeedPost PUBLISHED có meta.eventId khớp. */
-  async eventPosts(eventId: string, viewerId: string, take = 20) {
-    const posts = await this.prisma.feedPost.findMany({
+  /**
+   * Bài dự thi của một sự kiện, có phân trang.
+   *
+   * Trần cứng 20 bài trước đây nghĩa là sự kiện 200 bài dự thi thì 180 bài không có đường nào
+   * xem tới — kể cả admin lúc chấm giải. (Lọc theo `meta` JSON vẫn phải quét bảng vì cột này
+   * không có index; nếu sự kiện trở thành tính năng thường xuyên thì nên tách cột `eventId`.)
+   */
+  async eventPosts(eventId: string, viewerId: string, take = 20, cursor?: string) {
+    const limit = Math.min(Math.max(take, 1), 50);
+    const rows = await this.prisma.feedPost.findMany({
       where: { status: 'PUBLISHED', meta: { path: ['eventId'], equals: eventId } },
-      orderBy: { createdAt: 'desc' },
-      take,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       include: { ...FEED_INCLUDE, reactions: { where: { userId: viewerId }, select: { id: true } } },
     });
-    return posts.map((p) => this.toItem(p, viewerId));
+    const hasMore = rows.length > limit;
+    const posts = hasMore ? rows.slice(0, limit) : rows;
+    return {
+      posts: posts.map((p) => this.toItem(p, viewerId)),
+      nextCursor: hasMore ? posts[posts.length - 1]!.id : null,
+    };
   }
 
   /** Tạo sự kiện mới (admin). */
