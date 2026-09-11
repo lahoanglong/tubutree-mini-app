@@ -65,14 +65,18 @@ export default function CashbackPage() {
               boxShadow: 'var(--shadow-md)',
             }}
           >
+            {/* `cashbackPending` chỉ CỘNG khi sàn đã CONFIRMED (cashback.service.ts) — tức là
+                tiền đã chắc chắn, đang chờ về Ví. Gọi nó là "đang chờ" khiến nó bị hiểu là
+                cùng nghĩa với các giao dịch nhãn "Chờ duyệt" ngay bên dưới, mà hai con số
+                không bao giờ khớp (P1-13 audit mạch lạc). */}
             <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
-              Hoàn tiền đang chờ
+              Đã duyệt, chờ về Ví
             </Text>
             <Text bold style={{ fontSize: 30, lineHeight: '38px', color: '#fff', marginTop: 4 }}>
               {formatVnd(walletQ.data?.cashbackPending ?? 0)}
             </Text>
             <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.85)', marginTop: 6 }}>
-              Mua qua Tubu — nhận hoàn tiền vào Ví sau khi sàn xác nhận đơn.
+              Sàn đã xác nhận đơn — khoản này sẽ vào Ví Tubu. Đơn sàn chưa duyệt xem ở danh sách bên dưới.
             </Text>
           </Box>
         )}

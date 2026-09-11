@@ -212,6 +212,13 @@ export const vi = {
   },
 
   storefront: {
+    renameCollection: 'Đổi tên bộ sưu tập',
+    deleteCollection: 'Xoá bộ sưu tập',
+    deleteCollectionConfirm: 'Xoá bộ sưu tập này?',
+    collectionNamePlaceholder: 'Tên bộ sưu tập (khách sẽ thấy)',
+    statusPublished: 'Đang hiển thị',
+    statusDraft: 'Nháp — chưa đăng',
+    previewNeedsPublish: 'Gian hàng đang là nháp — bấm "Lưu & Đăng" để khách xem được.',
     title: 'Gian hàng của tôi',
     empty: 'Tạo gian hàng để chia sẻ sản phẩm bạn tâm đắc.',
     create: 'Tạo gian hàng',

@@ -281,7 +281,9 @@ export default function WalletPage() {
             />
           </Box>
           <Box mx={4} mb={3}>
-            <SourceCard label="Hoàn tiền sàn ngoài đang chờ" value={w.cashbackPending} Icon={ShoppingBag} wide />
+            {/* Cùng lý do với màn Hoàn tiền: đây là khoản sàn ĐÃ duyệt, đang chờ về Ví —
+                không phải đơn đang chờ sàn duyệt. */}
+            <SourceCard label="Hoàn tiền đã duyệt, chờ về Ví" value={w.cashbackPending} Icon={ShoppingBag} wide />
           </Box>
 
           <Box mx={4} mb={4} p={4} flex style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-lg)', gap: 8 }}>

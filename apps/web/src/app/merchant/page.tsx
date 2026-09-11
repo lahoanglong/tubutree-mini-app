@@ -1113,6 +1113,24 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                     <td className="px-3 py-3">
                       <div className="font-medium text-neutral-900">{o.user?.fullName ?? 'Khách mua'}</div>
                       <div className="text-xs text-neutral-500">{o.user?.phone}</div>
+                      {/* Địa chỉ giao: BE vẫn trả `shippingAddress` trong đơn, nhưng bảng này
+                          chỉ hiện tên + SĐT → đối tác mở tab để ĐÓNG GÓI mà không có địa chỉ
+                          ghi vận đơn, phải hỏi lại Tubu từng đơn. */}
+                      {o.shippingAddress && (
+                        <div className="mt-1 text-xs text-neutral-600">
+                          <div>{o.shippingAddress.recipient} · {o.shippingAddress.phone}</div>
+                          <div>
+                            {[
+                              o.shippingAddress.street,
+                              o.shippingAddress.ward,
+                              o.shippingAddress.district,
+                              o.shippingAddress.province,
+                            ]
+                              .filter(Boolean)
+                              .join(', ')}
+                          </div>
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-3">
                       <div className="space-y-1">

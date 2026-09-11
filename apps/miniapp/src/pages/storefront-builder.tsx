@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pin, Eye, EyeOff, Trash2, Target, Settings } from 'lucide-react';
+import { Pin, Eye, EyeOff, Trash2, Target, Settings, Pencil } from 'lucide-react';
 import {
   getMyStorefront, createStorefront, publishStorefront, updateStorefront,
-  createCollection, addItem, updateItem, removeItem, pickerProducts,
+  createCollection, updateCollection, deleteCollection, addItem, updateItem, removeItem, pickerProducts,
   getQuests, claimQuest,
   type StorefrontEdit, type PickerProduct,
 } from '../services/storefront-api';
@@ -83,9 +83,35 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     onSuccess: () => { haptic('medium'); openSnackbar({ text: vi.storefront.published, type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  // Tạo bộ sưu tập phải có TÊN do CTV đặt: trước đây mọi bộ đều tên "Bộ sưu tập mới" và
+  // không sửa/xoá được (dù API đã có sẵn) — bấm nhầm 2-3 lần là gian hàng công khai có 3 mục
+  // trùng tên vĩnh viễn (P1-6 audit mạch lạc CTV).
+  const [newColTitle, setNewColTitle] = useState('');
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
+  const [confirmDeleteCol, setConfirmDeleteCol] = useState<string | null>(null);
+
   const newColMut = useMutation({
-    mutationFn: () => createCollection({ title: 'Bộ sưu tập mới' }),
-    onSuccess: () => void refresh(),
+    mutationFn: (title: string) => createCollection({ title }),
+    onSuccess: () => {
+      setNewColTitle('');
+      void refresh();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+  const renameColMut = useMutation({
+    mutationFn: (v: { id: string; title: string }) => updateCollection(v.id, { title: v.title }),
+    onSuccess: () => {
+      setRenaming(null);
+      void refresh();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+  const deleteColMut = useMutation({
+    mutationFn: (id: string) => deleteCollection(id),
+    onSuccess: () => {
+      setConfirmDeleteCol(null);
+      void refresh();
+    },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const itemMut = useMutation({
@@ -104,7 +130,23 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
       <Box p={4} flex alignItems="center" justifyContent="space-between">
         <Box>
-          <Text bold size="large">{sf.title}</Text>
+          <Box flex alignItems="center" style={{ gap: 6 }}>
+            <Text bold size="large">{sf.title}</Text>
+            {/* Không có badge này thì CTV không biết gian hàng đã đăng hay còn nháp — bấm
+                "Xem trước" ra trang lỗi mà không hiểu vì sao (P0-2 audit mạch lạc CTV). */}
+            <span
+              style={{
+                background: sf.isPublished ? 'var(--success-bg)' : 'var(--neutral-100)',
+                color: sf.isPublished ? 'var(--leaf-700)' : 'var(--neutral-600)',
+                fontSize: 11,
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: 'var(--radius-full)',
+              }}
+            >
+              {sf.isPublished ? vi.storefront.statusPublished : vi.storefront.statusDraft}
+            </span>
+          </Box>
           <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
             {sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/${sf.slug}`}
           </Text>
@@ -121,7 +163,25 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
 
       {sf.collections.map((col) => (
         <Box key={col.id} mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-          <Text bold style={{ marginBottom: 8 }}>{col.title}</Text>
+          <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 8, gap: 8 }}>
+            <Text bold style={{ flex: 1, minWidth: 0 }}>{col.title}</Text>
+            <Box
+              role="button"
+              aria-label={vi.storefront.renameCollection}
+              className="tubu-press touch-target"
+              onClick={() => setRenaming({ id: col.id, title: col.title })}
+            >
+              <Pencil size={15} color="var(--neutral-400)" />
+            </Box>
+            <Box
+              role="button"
+              aria-label={vi.storefront.deleteCollection}
+              className="tubu-press touch-target"
+              onClick={() => setConfirmDeleteCol(col.id)}
+            >
+              <Trash2 size={15} color="var(--danger)" />
+            </Box>
+          </Box>
           {col.items.map((it) => {
             const prod = it.product ?? productMap.get(it.productId);
             const name = prod?.name ?? 'Sản phẩm';
@@ -180,19 +240,87 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       ))}
 
       <Box mx={4} mb={3}>
-        <Button fullWidth variant="secondary" onClick={() => newColMut.mutate()}>+ {vi.storefront.addCollection}</Button>
+        <Box flex style={{ gap: 8 }}>
+          <Input
+            value={newColTitle}
+            placeholder={vi.storefront.collectionNamePlaceholder}
+            onChange={(e) => setNewColTitle(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <Button
+            variant="secondary"
+            disabled={!newColTitle.trim() || newColMut.isPending}
+            loading={newColMut.isPending}
+            onClick={() => newColMut.mutate(newColTitle.trim())}
+          >
+            + {vi.storefront.addCollection}
+          </Button>
+        </Box>
       </Box>
 
       <QuestSection />
 
 
       <Box style={{ position: 'fixed', left: 0, right: 0, bottom: 0, padding: 12, background: 'var(--neutral-50)', display: 'flex', gap: 8 }}>
-        <Button variant="secondary" style={{ flex: 1 }} onClick={() => navigate(`/s/${sf.slug}`)}>{vi.storefront.preview}</Button>
+        <Button
+          variant="secondary"
+          style={{ flex: 1 }}
+          onClick={() => {
+            // Trang /s/:slug chỉ trả gian hàng ĐÃ ĐĂNG. Trước đây bấm "Xem trước" lúc còn nháp
+            // là rơi thẳng vào màn lỗi "Gian hàng không tồn tại hoặc chưa đăng".
+            if (!sf.isPublished) {
+              openSnackbar({ text: vi.storefront.previewNeedsPublish, type: 'warning' });
+              return;
+            }
+            navigate(`/s/${sf.slug}`);
+          }}
+        >
+          {vi.storefront.preview}
+        </Button>
         <Button style={{ flex: 1, background: 'var(--primary-600)' }} loading={publishMut.isPending} onClick={() => publishMut.mutate()}>{vi.storefront.publish}</Button>
       </Box>
 
       <Sheet visible={!!pickerCol} onClose={() => setPickerCol(null)} autoHeight>
         {pickerCol && <PickerSheet collectionId={pickerCol} onAdded={() => { void refresh(); }} onClose={() => setPickerCol(null)} />}
+      </Sheet>
+
+      <Sheet visible={!!renaming} onClose={() => setRenaming(null)} autoHeight>
+        {renaming && (
+          <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
+            <Text bold size="large" style={{ marginBottom: 12 }}>{vi.storefront.renameCollection}</Text>
+            <Input
+              value={renaming.title}
+              onChange={(e) => setRenaming({ ...renaming, title: e.target.value })}
+            />
+            <Button
+              fullWidth
+              disabled={!renaming.title.trim() || renameColMut.isPending}
+              loading={renameColMut.isPending}
+              onClick={() => renameColMut.mutate({ id: renaming.id, title: renaming.title.trim() })}
+              style={{ marginTop: 12, background: 'var(--primary-600)' }}
+            >
+              {vi.common.save}
+            </Button>
+          </Box>
+        )}
+      </Sheet>
+
+      <Sheet visible={!!confirmDeleteCol} onClose={() => setConfirmDeleteCol(null)} autoHeight>
+        <Box p={5} style={{ textAlign: 'center', paddingBottom: 'calc(20px + var(--safe-bottom))' }}>
+          <Text bold size="large">{vi.storefront.deleteCollectionConfirm}</Text>
+          <Box flex style={{ gap: 8, marginTop: 16 }}>
+            <Button variant="secondary" style={{ flex: 1 }} onClick={() => setConfirmDeleteCol(null)}>
+              {vi.common.cancel}
+            </Button>
+            <Button
+              style={{ flex: 1, background: 'var(--danger)' }}
+              loading={deleteColMut.isPending}
+              onClick={() => confirmDeleteCol && deleteColMut.mutate(confirmDeleteCol)}
+            >
+              {vi.storefront.deleteCollection}
+            </Button>
+          </Box>
+        </Box>
       </Sheet>
 
       <Sheet visible={configOpen} onClose={() => setConfigOpen(false)} autoHeight>
