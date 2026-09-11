@@ -282,8 +282,16 @@ export class FlashSaleService {
    */
   @Cron('0 * * * *')
   async notifyStartedFlashSales(now: Date = new Date()): Promise<void> {
+    // Lọc cửa sổ sale NGAY TRONG TRUY VẤN. Trước đây chỉ lọc `notifiedAt: null` rồi mới xét
+    // trong JS: nhắc của những sale đã kết thúc/đã tắt nằm lại vĩnh viễn ở notifiedAt = null
+    // (không có đường dọn), tích tụ dần cho tới khi lấp hết hạn mức 500 — mà truy vấn lại
+    // không có orderBy, nên 500 dòng lấy ra có thể không chứa dòng nào thuộc sale đang chạy.
+    // Kết quả: không ai được nhắc, không lỗi, không log.
     const reminders = await this.prisma.flashSaleReminder.findMany({
-      where: { notifiedAt: null },
+      where: {
+        notifiedAt: null,
+        item: { flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
+      },
       include: {
         item: {
           include: {
@@ -292,6 +300,7 @@ export class FlashSaleService {
           },
         },
       },
+      orderBy: { id: 'asc' },
       take: 500,
     });
 
@@ -314,5 +323,16 @@ export class FlashSaleService {
       sent++;
     }
     if (sent) this.logger.log(`Flash-starting reminders sent: ${sent}`);
+
+    // Đóng sổ những nhắc không còn ý nghĩa (sale đã kết thúc hoặc bị tắt trước khi tới giờ) —
+    // nếu không, chúng ở lại notifiedAt = null vĩnh viễn và lấn chỗ của sale đang chạy.
+    const stale = await this.prisma.flashSaleReminder.updateMany({
+      where: {
+        notifiedAt: null,
+        OR: [{ item: { flashSale: { endAt: { lte: now } } } }, { item: { flashSale: { isActive: false } } }],
+      },
+      data: { notifiedAt: now },
+    });
+    if (stale.count > 0) this.logger.log(`Đóng sổ ${stale.count} nhắc giờ vàng đã hết hạn.`);
   }
 }

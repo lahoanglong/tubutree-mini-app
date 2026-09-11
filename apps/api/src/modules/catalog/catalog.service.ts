@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -7,6 +7,8 @@ import { ProductQuery } from './dto/product-query.dto';
 
 @Injectable()
 export class CatalogService {
+  private readonly logger = new Logger(CatalogService.name);
+
   // Brands/categories đổi 15 phút/lần qua sync Pancake nhưng đang query DB mỗi request
   // (brands() groupBy toàn bảng products). Cache 60s là đủ tươi mà giảm tải đáng kể.
   //
@@ -279,18 +281,28 @@ export class CatalogService {
       if (!pid) continue;
       perProduct.set(pid, (perProduct.get(pid) ?? 0) + (g._sum.quantity ?? 0));
     }
-    await this.prisma.product.updateMany({ data: { soldApp: 0 } });
-    const ops = [...perProduct.entries()].map(([productId, sold]) =>
-      this.prisma.product.update({ where: { id: productId }, data: { soldApp: sold } }),
-    );
-    if (ops.length) await this.prisma.$transaction(ops);
+    // Reset PHẢI nằm trong cùng transaction với các lệnh ghi lại: trước đây reset commit riêng
+    // rồi mới chạy transaction, nên chỉ cần 1 sản phẩm bị xoá giữa chừng (update ném P2025) là
+    // cả transaction rollback trong khi reset đã commit — toàn bộ catalog hiện "đã bán 0" cho
+    // tới lần chạy sau, tức 24 giờ.
+    const ops = [
+      this.prisma.product.updateMany({ data: { soldApp: 0 } }),
+      ...[...perProduct.entries()].map(([productId, sold]) =>
+        this.prisma.product.update({ where: { id: productId }, data: { soldApp: sold } }),
+      ),
+    ];
+    await this.prisma.$transaction(ops);
     return { updated: perProduct.size };
   }
 
   /** Cron 03:00 hằng ngày — tính lại số đã bán (social proof không cần realtime). */
   @Cron('0 3 * * *')
   async recomputeSoldCron(): Promise<void> {
-    await this.recomputeSoldCounts().catch(() => undefined);
+    // Nuốt lỗi im lặng ở đây từng khiến hỏng mà không ai biết — số "đã bán" sai cả ngày và
+    // không có một dòng log nào để lần ra.
+    await this.recomputeSoldCounts().catch((err) =>
+      this.logger.error(`Tính lại số đã bán lỗi: ${err instanceof Error ? err.message : err}`),
+    );
   }
 
   /** Admin nhập tổng đã bán từ sàn ngoài theo SKU (variation.sku → product.soldExternal). */

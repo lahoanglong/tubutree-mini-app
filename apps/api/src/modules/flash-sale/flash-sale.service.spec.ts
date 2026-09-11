@@ -372,12 +372,13 @@ describe('FlashSaleService.notifyStartedFlashSales', () => {
       },
     });
     const findMany = jest.fn().mockResolvedValue([rowNotStarted]);
-    const updateMany = jest.fn();
+    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
     const prisma = { flashSaleReminder: { findMany, updateMany } } as any;
     const notify = jest.fn();
     const notifSvc = { notify } as unknown as NotificationsService;
     await new FlashSaleService(prisma, config, notifSvc).notifyStartedFlashSales(now);
-    expect(updateMany).not.toHaveBeenCalled();
+    // Không CLAIM dòng nào (claim nhận diện bằng where.id); lượt dọn sổ cuối hàm thì được phép.
+    expect(updateMany.mock.calls.every((c) => c[0].where.id === undefined)).toBe(true);
     expect(notify).not.toHaveBeenCalled();
   });
 
@@ -389,12 +390,12 @@ describe('FlashSaleService.notifyStartedFlashSales', () => {
       },
     });
     const findMany = jest.fn().mockResolvedValue([rowEnded]);
-    const updateMany = jest.fn();
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = { flashSaleReminder: { findMany, updateMany } } as any;
     const notify = jest.fn();
     const notifSvc = { notify } as unknown as NotificationsService;
     await new FlashSaleService(prisma, config, notifSvc).notifyStartedFlashSales(now);
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(updateMany.mock.calls.every((c) => c[0].where.id === undefined)).toBe(true);
     expect(notify).not.toHaveBeenCalled();
   });
 
@@ -409,10 +410,34 @@ describe('FlashSaleService.notifyStartedFlashSales', () => {
     ).resolves.not.toThrow();
   });
 
-  it('query notifiedAt: null', async () => {
+  /**
+   * Nhắc của sale đã kết thúc/đã tắt nằm lại vĩnh viễn ở notifiedAt = null (không có đường dọn)
+   * và tích tụ dần. Truy vấn cũ chỉ lọc notifiedAt và không có orderBy, nên khi số dòng "chết"
+   * vượt 500 thì lô lấy ra có thể KHÔNG chứa dòng nào thuộc sale đang chạy — không ai được
+   * nhắc, không lỗi, không log.
+   */
+  it('chỉ lấy nhắc của sale ĐANG CHẠY, có thứ tự ổn định', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    const prisma = { flashSaleReminder: { findMany, updateMany: jest.fn() } } as any;
+    const prisma = { flashSaleReminder: { findMany, updateMany: jest.fn().mockResolvedValue({ count: 0 }) } } as any;
     await new FlashSaleService(prisma, config, notifications).notifyStartedFlashSales(now);
-    expect(findMany.mock.calls[0][0].where).toEqual({ notifiedAt: null });
+    const args = findMany.mock.calls[0][0];
+    expect(args.where).toEqual({
+      notifiedAt: null,
+      item: { flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
+    });
+    expect(args.orderBy).toEqual({ id: 'asc' });
+  });
+
+  it('dọn sổ nhắc của sale đã kết thúc/đã tắt để không lấn chỗ lô 500', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const updateMany = jest.fn().mockResolvedValue({ count: 7 });
+    const prisma = { flashSaleReminder: { findMany, updateMany } } as any;
+    await new FlashSaleService(prisma, config, notifications).notifyStartedFlashSales(now);
+    const sweep = updateMany.mock.calls.at(-1)![0];
+    expect(sweep.where.notifiedAt).toBeNull();
+    expect(sweep.where.OR).toEqual([
+      { item: { flashSale: { endAt: { lte: now } } } },
+      { item: { flashSale: { isActive: false } } },
+    ]);
   });
 });
