@@ -303,6 +303,23 @@ export class PayrollService {
     if (await this.isMonthLocked(staffId, workDate)) {
       throw new BadRequestException('Tháng lương đã chốt/đã trả — mở lại tháng trước khi điều chỉnh.');
     }
+    // Chống gửi trùng: unique (shiftId, type) không áp cho MANUAL vì shiftId là NULL, mà Postgres
+    // coi mỗi NULL là một giá trị riêng. Một lần retry/timeout mạng khi gửi khoản trừ 500.000
+    // trước đây tạo hai bản ghi → trừ một triệu. Cùng (ngày, số tiền, lý do) trong 5 phút coi là
+    // một thao tác.
+    const recent = await this.prisma.payrollAdjustment.findFirst({
+      where: {
+        staffId,
+        workDate,
+        type: 'MANUAL',
+        amount,
+        reason,
+        createdAt: { gte: new Date(Date.now() - 5 * 60_000) },
+      },
+      select: { id: true },
+    });
+    if (recent) return { adjusted: true, deduped: true };
+
     await this.prisma.payrollAdjustment.create({
       data: { staffId, workDate, type: 'MANUAL', amount, reason, createdBy: adminId },
     });

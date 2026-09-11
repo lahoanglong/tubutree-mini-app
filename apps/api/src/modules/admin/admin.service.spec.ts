@@ -778,7 +778,8 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     const prisma = makePrisma({
       product: {
         findUnique: jest.fn().mockResolvedValue(product),
-        update: jest.fn().mockResolvedValue({ ...product, approvalStatus: 'APPROVED' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, approvalStatus: 'APPROVED' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     });
     const res = await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true);
@@ -790,12 +791,31 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     const prisma = makePrisma({
       product: {
         findUnique: jest.fn().mockResolvedValue(product),
-        update: jest.fn().mockResolvedValue({ ...product, approvalStatus: 'REJECTED', rejectReason: 'Chưa đủ chứng nhận' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, approvalStatus: 'REJECTED', rejectReason: 'Chưa đủ chứng nhận' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     });
     const res = await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'Chưa đủ chứng nhận');
     expect(res.approvalStatus).toBe('REJECTED');
     expect(res.rejectReason).toBe('Chưa đủ chứng nhận');
+  });
+
+  /**
+   * Hai admin cùng mở danh sách chờ duyệt: A bấm Duyệt, B bấm Từ chối hai giây sau. Không có CAS
+   * thì B ghi đè kết quả của A mà A không hề biết, và không có bản ghi nào cho biết ai làm gì.
+   */
+  it('sản phẩm vừa được người khác xử lý (CAS count 0) → BadRequest thay vì lặng lẽ ghi đè', async () => {
+    const product = { id: 'p1', name: 'Nước giặt', approvalStatus: 'PENDING_REVIEW' };
+    const prisma = makePrisma({
+      product: {
+        findUnique: jest.fn().mockResolvedValue(product),
+        findUniqueOrThrow: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+    });
+    await expect(mkAdmin(prisma).reviewMerchantProduct('admin-2', 'p1', false)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 });
 

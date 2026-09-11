@@ -53,7 +53,11 @@ export class AdjustDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'workDate phải dạng YYYY-MM-DD.' })
   workDate!: string;
 
+  // Trần ±50 triệu: `@IsInt()` không có biên, một cú gõ thừa số 0 là trừ/thưởng sai cả trăm
+  // triệu và chỉ phát hiện được khi nhân viên nhìn bảng lương.
   @IsInt()
+  @Min(-50_000_000)
+  @Max(50_000_000)
   amount!: number; // dương=trừ, âm=thưởng
 
   @IsString()

@@ -358,3 +358,44 @@ describe('PayrollService — tháng đã chốt là khoá, nhưng mở lại đ�
     await expect(mk(prisma).reopen('u1', 2026, 7, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
   });
 });
+
+/**
+ * Unique (shiftId, type) không áp cho MANUAL vì shiftId là NULL, mà Postgres coi mỗi NULL là một
+ * giá trị riêng. Một lần retry/timeout mạng khi gửi khoản trừ 500.000 trước đây tạo hai bản ghi
+ * → trừ một triệu, và không có gì báo cho ai biết.
+ */
+describe('PayrollService.adjust — chống gửi trùng', () => {
+  const base = () =>
+    makePrisma({
+      payrollMonth: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
+      payrollDay: { upsert: jest.fn(), findUnique: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
+    });
+
+  it('cùng ngày + cùng số tiền + cùng lý do trong 5 phút → bỏ qua lần thứ hai', async () => {
+    const create = jest.fn();
+    const prisma = base();
+    (prisma as unknown as { payrollAdjustment: Record<string, jest.Mock> }).payrollAdjustment = {
+      findFirst: jest.fn().mockResolvedValue({ id: 'adj-1' }),
+      create,
+      findMany: jest.fn().mockResolvedValue([]),
+    };
+
+    await expect(mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1')).resolves.toMatchObject({
+      deduped: true,
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('chưa có khoản giống hệt → vẫn tạo bình thường', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const prisma = base();
+    (prisma as unknown as { payrollAdjustment: Record<string, jest.Mock> }).payrollAdjustment = {
+      findFirst: jest.fn().mockResolvedValue(null),
+      create,
+      findMany: jest.fn().mockResolvedValue([]),
+    };
+
+    await mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1');
+    expect(create).toHaveBeenCalled();
+  });
+});

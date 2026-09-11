@@ -481,13 +481,20 @@ export class AdminService {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
 
-    const updated = await this.prisma.product.update({
-      where: { id: productId },
+    // CAS theo trạng thái đã đọc: hai admin cùng mở danh sách chờ duyệt, A bấm Duyệt còn B bấm
+    // Từ chối hai giây sau thì trước đây B ghi đè kết quả của A mà A không hề biết. Nay người
+    // thứ hai nhận lỗi rõ ràng thay vì lặng lẽ lật ngược quyết định.
+    const moved = await this.prisma.product.updateMany({
+      where: { id: productId, approvalStatus: product.approvalStatus },
       data: {
         approvalStatus: approve ? 'APPROVED' : 'REJECTED',
         rejectReason: approve ? null : (rejectReason ?? 'Không đạt tiêu chuẩn xanh của Tubu Tree'),
       },
     });
+    if (moved.count === 0) {
+      throw new BadRequestException('Sản phẩm vừa được người khác xử lý — tải lại danh sách để xem trạng thái mới.');
+    }
+    const updated = await this.prisma.product.findUniqueOrThrow({ where: { id: productId } });
 
     this.logger.warn(
       `Admin ${adminId} đã ${approve ? 'DUYỆT' : 'TỪ CHỐI'} sản phẩm đối tác ${productId} (${product.name})`,
