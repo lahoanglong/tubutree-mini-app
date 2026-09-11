@@ -90,6 +90,12 @@ export const setRate = (userId: string, hourlyRate: number) =>
 export const finalizePayroll = (staffId: string, year: number, month: number) =>
   api.post<{ finalized: boolean }>(`/admin/payroll/${staffId}/finalize`, { year, month }).then((r) => r.data);
 
+/** Mở lại tháng đã chốt/đã trả để sửa — trước đây chốt xong là không còn đường sửa trong app. */
+export const reopenPayroll = (staffId: string, year: number, month: number) =>
+  api
+    .post(`/admin/payroll/${staffId}/reopen?year=${year}&month=${month}`)
+    .then((r) => r.data as { status: string });
+
 export const markPaid = (
   staffId: string,
   body: { year: number; month: number; proofImageUrl: string; note?: string },

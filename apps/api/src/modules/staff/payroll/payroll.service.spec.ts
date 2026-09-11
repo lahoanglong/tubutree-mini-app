@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PayrollService } from './payroll.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
@@ -46,14 +46,31 @@ describe('PayrollService.ensureFines', () => {
     );
   });
 
-  it('phạt đã tồn tại → không tạo trùng', async () => {
+  it('phạt đã tồn tại, số tiền đúng → không tạo trùng, không sửa', async () => {
     const create = jest.fn();
+    const update = jest.fn();
     const prisma = makePrisma({
       shift: { findMany: jest.fn().mockResolvedValue([{ id: 's1', cancelPenalty: false, sessions: [{ isLate: true }] }]) },
-      payrollAdjustment: { findFirst: jest.fn().mockResolvedValue({ id: 'a1' }), create },
+      payrollAdjustment: { findFirst: jest.fn().mockResolvedValue({ id: 'a1', amount: 10000 }), create, update },
     });
     await mk(prisma).ensureFines('u1', new Date('2026-07-03'), 30000);
     expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Phạt huỷ ca = 1 GIỜ CÔNG nên phụ thuộc đơn giá. Tạo một lần rồi không bao giờ cập nhật
+   * nghĩa là: nhân viên mới chưa có hồ sơ lương (rate = 0) huỷ ca trễ → phiếu phạt amount = 0
+   * VĨNH VIỄN, sau này admin đặt đơn giá thật cũng không sửa được.
+   */
+  it('phạt huỷ ca đã tồn tại với số tiền cũ (0đ vì chưa có đơn giá) → cập nhật theo đơn giá hiện tại', async () => {
+    const update = jest.fn();
+    const prisma = makePrisma({
+      shift: { findMany: jest.fn().mockResolvedValue([{ id: 's1', cancelPenalty: true, sessions: [] }]) },
+      payrollAdjustment: { findFirst: jest.fn().mockResolvedValue({ id: 'a1', amount: 0 }), create: jest.fn(), update },
+    });
+    await mk(prisma).ensureFines('u1', new Date('2026-07-03'), 30000);
+    expect(update).toHaveBeenCalledWith({ where: { id: 'a1' }, data: { amount: 30000 } });
   });
 
   it('race: 2 recompute song song — pre-check đọc "chưa có phạt" nhưng create() đụng unique index (shiftId,type) → nuốt lỗi, KHÔNG throw, KHÔNG trừ lương 2 lần', async () => {
@@ -119,13 +136,43 @@ describe('PayrollService.markPaid / finalize', () => {
     );
   });
 
-  it('markPaid đã trả (updateMany count 0) → BadRequest', async () => {
+  it('markPaid đã trả (updateMany count 0, bảng lương vẫn tồn tại) → BadRequest', async () => {
     const prisma = makePrisma({
-      payrollMonth: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      payrollMonth: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findUnique: jest.fn().mockResolvedValue({ status: 'PAID' }),
+        upsert: jest.fn().mockResolvedValue({}),
+      },
     });
     await expect(
       mk(prisma).markPaid('u1', 2026, 7, 'http://img/proof.jpg', undefined, 'a1'),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('markPaid khi CHƯA có bảng lương → NotFound (trước đây báo nhầm "đã trả", che mất lỗi gõ sai staffId)', async () => {
+    const prisma = makePrisma({
+      payrollMonth: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findUnique: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn().mockResolvedValue({}),
+      },
+    });
+    await expect(
+      mk(prisma).markPaid('u1', 2026, 7, 'http://img/proof.jpg', undefined, 'a1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('markPaid tính lại tháng TRƯỚC khi đóng băng (tháng OPEN có thể vừa nhận thêm phiên)', async () => {
+    const monthUpsert = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      payrollMonth: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn().mockResolvedValue(null),
+        upsert: monthUpsert,
+      },
+    });
+    await mk(prisma).markPaid('u1', 2026, 7, 'http://img/proof.jpg', undefined, 'a1');
+    expect(monthUpsert).toHaveBeenCalled();
   });
 
   it('finalize tháng không mở → BadRequest', async () => {
@@ -253,5 +300,61 @@ describe('PayrollService.recomputeStaffMonth — tiền phạt thật sự bị 
     await mk(prisma).recomputeStaffMonth('u1', 2026, 7);
 
     expect(upsert.mock.calls[0][0].update.net).toBe(0);
+  });
+});
+
+/**
+ * FINALIZED từng là ngõ cụt: không có endpoint nào đưa tháng về OPEN, recompute bị chặn vĩnh
+ * viễn, FE ẩn luôn nút "Chốt" khi khác OPEN. Phát hiện sai giờ sau khi chốt là hết cách sửa
+ * trong app — mà sửa giờ phiên vẫn ghi đè PayrollDay trong khi tổng tháng đứng yên, nên màn
+ * hình hiện đồng thời số ngày MỚI và tổng tháng CŨ.
+ */
+describe('PayrollService — tháng đã chốt là khoá, nhưng mở lại được', () => {
+  const locked = (status: string) =>
+    makePrisma({
+      payrollMonth: {
+        findUnique: jest.fn().mockResolvedValue({ status }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        upsert: jest.fn().mockResolvedValue({}),
+      },
+      payrollDay: { upsert: jest.fn(), findUnique: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
+    });
+
+  it('sửa giờ ngày thuộc tháng đã CHỐT → từ chối thay vì ghi đè lệch với tổng tháng', async () => {
+    const prisma = locked('FINALIZED');
+    await expect(mk(prisma).recomputeDay('u1', new Date('2026-07-03'))).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('điều chỉnh tay vào tháng đã TRẢ → từ chối', async () => {
+    const prisma = locked('PAID');
+    await expect(mk(prisma).adjust('u1', new Date('2026-07-03'), 50000, 'thưởng', 'a1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('mở lại tháng đã chốt → về OPEN rồi tính lại', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const upsert = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      payrollMonth: { findUnique: jest.fn().mockResolvedValue(null), updateMany, upsert },
+      payrollDay: { upsert: jest.fn(), findUnique: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
+    });
+
+    await mk(prisma).reopen('u1', 2026, 7, 'admin1');
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { staffId: 'u1', year: 2026, month: 7, status: { in: ['FINALIZED', 'PAID'] } },
+      data: { status: 'OPEN', finalizedAt: null },
+    });
+    expect(upsert).toHaveBeenCalled();
+  });
+
+  it('mở lại tháng đang mở → BadRequest (không có gì để mở)', async () => {
+    const prisma = makePrisma({
+      payrollMonth: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    });
+    await expect(mk(prisma).reopen('u1', 2026, 7, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
   });
 });

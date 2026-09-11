@@ -67,6 +67,18 @@ export class AdminPayrollController {
     return this.payroll.recomputeStaffMonth(staffId, y, m, { reprice: reprice === '1' || reprice === 'true' });
   }
 
+  /** Mở lại tháng đã chốt/đã trả để sửa — trước đây FINALIZED là ngõ cụt, không có đường về. */
+  @Post('payroll/:staffId/reopen')
+  reopen(
+    @CurrentUser('sub') adminId: string,
+    @Param('staffId') staffId: string,
+    @Query('year') year: string,
+    @Query('month') month: string,
+  ) {
+    const { y, m } = parseYearMonth(year, month);
+    return this.payroll.reopen(staffId, y, m, adminId);
+  }
+
   @Post('payroll/:staffId/finalize')
   finalize(@Param('staffId') staffId: string, @Body() dto: FinalizeDto) {
     return this.payroll.finalize(staffId, dto.year, dto.month);

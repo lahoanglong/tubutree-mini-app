@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
@@ -56,7 +56,15 @@ export class PayrollService {
     // song song (vd 2 tab mở /staff/payroll) đều có thể đọc "chưa có phạt" trước khi request
     // đầu commit; P2002 chặn tạo trùng, tránh trừ phạt 2 lần.
     const existing = await this.prisma.payrollAdjustment.findFirst({ where: { shiftId, type } });
-    if (existing) return;
+    if (existing) {
+      // Số tiền phạt huỷ ca = 1 GIỜ CÔNG, tức phụ thuộc đơn giá. Trước đây tạo một lần rồi
+      // không bao giờ cập nhật: nhân viên mới chưa có hồ sơ lương thì rate = 0 → phiếu phạt
+      // amount = 0 VĨNH VIỄN, sau này admin đặt đơn giá thật cũng không sửa được.
+      if (existing.amount !== amount) {
+        await this.prisma.payrollAdjustment.update({ where: { id: existing.id }, data: { amount } });
+      }
+      return;
+    }
     try {
       await this.prisma.payrollAdjustment.create({ data: { staffId, workDate, type, amount, reason, shiftId } });
     } catch (err) {
@@ -78,6 +86,12 @@ export class PayrollService {
    * mới cho ngày cũ.
    */
   async recomputeDay(staffId: string, workDate: Date, opts: { reprice?: boolean } = {}) {
+    // Tháng đã chốt/đã trả thì KHÔNG ghi lại ngày: trước đây admin sửa giờ một phiên của tháng
+    // đã chốt vẫn ghi đè PayrollDay trong khi PayrollMonth đứng yên — sheet chi tiết hiện đồng
+    // thời số ngày MỚI và tổng tháng CŨ, và snackbar báo "đã tính lại" là nói sai.
+    if (await this.isMonthLocked(staffId, workDate)) {
+      throw new BadRequestException('Tháng lương đã chốt/đã trả — mở lại tháng trước khi sửa.');
+    }
     const [profile, existingDay] = await Promise.all([
       this.prisma.staffProfile.findUnique({ where: { userId: staffId } }),
       this.prisma.payrollDay.findUnique({ where: { staffId_workDate: { staffId, workDate } }, select: { hourlyRate: true } }),
@@ -111,6 +125,21 @@ export class PayrollService {
       create: { staffId, workDate, workedMinutes: pay.workedMinutes, hourlyRate: rate, gross: pay.gross, fines: pay.fines, net: pay.net },
     });
     return pay;
+  }
+
+  /** Tháng chứa `workDate` đã FINALIZED/PAID chưa (theo mốc VN — workDate là midnight UTC của date-key VN). */
+  private async isMonthLocked(staffId: string, workDate: Date): Promise<boolean> {
+    const month = await this.prisma.payrollMonth.findUnique({
+      where: {
+        staffId_year_month: {
+          staffId,
+          year: workDate.getUTCFullYear(),
+          month: workDate.getUTCMonth() + 1,
+        },
+      },
+      select: { status: true },
+    });
+    return month?.status === 'FINALIZED' || month?.status === 'PAID';
   }
 
   /** Tính lại cả tháng (bỏ qua nếu đã FINALIZED/PAID). Trả PayrollMonth. */
@@ -231,16 +260,49 @@ export class PayrollService {
     adminId: string,
   ) {
     if (!proofImageUrl) throw new BadRequestException('Cần ảnh xác nhận đã chuyển khoản.');
+    // Tính lại TRƯỚC khi đóng băng: tháng OPEN có thể vừa nhận thêm phiên chấm công vài phút
+    // trước. Đóng băng số cũ là phần công đó không bao giờ được trả (PAID chặn recompute vĩnh
+    // viễn). recomputeStaffMonth tự bỏ qua tháng đã FINALIZED nên gọi luôn là an toàn.
+    await this.recomputeStaffMonth(staffId, year, month);
     const r = await this.prisma.payrollMonth.updateMany({
       where: { staffId, year, month, status: { in: ['OPEN', 'FINALIZED'] } },
       data: { status: 'PAID', paidAt: new Date(), paidBy: adminId, proofImageUrl, note },
     });
-    if (r.count === 0) throw new BadRequestException('Tháng lương đã được đánh dấu đã trả.');
+    if (r.count === 0) {
+      const existing = await this.prisma.payrollMonth.findUnique({
+        where: { staffId_year_month: { staffId, year, month } },
+        select: { status: true },
+      });
+      // Phân biệt "chưa có bảng lương" với "đã trả" — trước đây cả hai đều báo "đã được đánh
+      // dấu đã trả", che mất lỗi thật (vd gõ nhầm staffId).
+      if (!existing) throw new NotFoundException('Chưa có bảng lương cho tháng này.');
+      throw new BadRequestException('Tháng lương đã được đánh dấu đã trả.');
+    }
     this.logger.warn(`Admin ${adminId} đánh dấu ĐÃ TRẢ lương ${staffId} T${month}/${year}`);
     return { paid: true };
   }
 
+  /**
+   * Mở lại tháng đã chốt/đã trả để sửa.
+   *
+   * Trước đây FINALIZED là ngõ cụt: không có endpoint nào đưa trạng thái về OPEN, recompute bị
+   * chặn vĩnh viễn, và FE ẩn luôn nút "Chốt" khi khác OPEN. Phát hiện sai giờ sau khi chốt là
+   * không còn cách nào sửa trong app.
+   */
+  async reopen(staffId: string, year: number, month: number, adminId: string) {
+    const r = await this.prisma.payrollMonth.updateMany({
+      where: { staffId, year, month, status: { in: ['FINALIZED', 'PAID'] } },
+      data: { status: 'OPEN', finalizedAt: null },
+    });
+    if (r.count === 0) throw new BadRequestException('Tháng lương đang mở (hoặc chưa tồn tại).');
+    this.logger.warn(`Admin ${adminId} MỞ LẠI bảng lương ${staffId} T${month}/${year}`);
+    return this.recomputeStaffMonth(staffId, year, month);
+  }
+
   async adjust(staffId: string, workDate: Date, amount: number, reason: string, adminId: string) {
+    if (await this.isMonthLocked(staffId, workDate)) {
+      throw new BadRequestException('Tháng lương đã chốt/đã trả — mở lại tháng trước khi điều chỉnh.');
+    }
     await this.prisma.payrollAdjustment.create({
       data: { staffId, workDate, type: 'MANUAL', amount, reason, createdBy: adminId },
     });

@@ -30,6 +30,7 @@ import {
   adminGetDetail,
   setRate,
   finalizePayroll,
+  reopenPayroll,
   markPaid,
   type AdminPayrollRow,
   type PayrollStatus,
@@ -158,6 +159,14 @@ function PayrollSection() {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const reopenM = useMutation({
+    mutationFn: (r: AdminPayrollRow) => reopenPayroll(r.staff.id, ym.year, ym.month),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã mở lại bảng lương — sửa xong nhớ chốt lại.', type: 'success' });
+      invalidate();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
   const paidM = useMutation({
     mutationFn: () => markPaid(payRow!.staff.id, { year: ym.year, month: ym.month, proofImageUrl: proof, note: note || undefined }),
     onSuccess: () => {
@@ -210,6 +219,21 @@ function PayrollSection() {
             )}
             {row.month.status !== 'PAID' && (
               <Button size="small" onClick={() => { setPayRow(row); setProof(''); setNote(''); }}>Đã chuyển</Button>
+            )}
+            {/* Chốt/đã trả xong mà phát hiện sai giờ thì trước đây hết cách sửa trong app. */}
+            {row.month.status !== 'OPEN' && (
+              <Button
+                size="small"
+                variant="tertiary"
+                loading={reopenM.isPending}
+                disabled={reopenM.isPending}
+                onClick={() => {
+                  if (!window.confirm(`Mở lại bảng lương T${ym.month}/${ym.year} của ${row.staff.fullName ?? 'NV'}? Cần chốt lại sau khi sửa.`)) return;
+                  reopenM.mutate(row);
+                }}
+              >
+                Mở lại
+              </Button>
             )}
           </Box>
         </Box>
