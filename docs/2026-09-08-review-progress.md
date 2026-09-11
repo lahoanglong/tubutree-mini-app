@@ -605,3 +605,16 @@ admin thêm phiên chấm công chồng giờ · sửa phiên qua đêm ở màn
 "Lương của tôi" lấy biên UTC · `copyWeek` copy cả ca đã bị từ chối · chưa có sổ ghi vết đổi
 trạng thái đơn · web chưa dùng được voucher/Điểm Xanh khi thanh toán · refresh token vẫn ở
 localStorage (cần httpOnly cookie).
+
+## Phase 6 — đo kích thước bundle Mini App (2026-09-12)
+
+`pnpm --filter @tubutree/miniapp build`:
+
+- Vendor chung: **498 kB thô / 156 kB gzip** — đây là con số quyết định thời gian mở app lần đầu.
+- Mọi route đều tách chunk riêng nhờ lazy: lớn nhất là Vườn Xanh 36 kB (9,8 kB gzip), trang sản
+  phẩm 28 kB (8,9 kB gzip), CTV 29 kB (8,3 kB gzip). Phần còn lại 3–7 kB gzip mỗi trang.
+
+**Kết luận: không cần can thiệp.** 156 kB gzip cho React + ReactDOM + zmp-ui + router là mức
+bình thường, và việc tách route đã làm tốt — mở một trang bất kỳ chỉ tải thêm dưới 10 kB. Chưa
+tìm thấy thư viện nặng nào bị kéo vào nhầm (kiểm chuỗi trong bundle: không có recharts/framer;
+lucide-react được tree-shake theo từng icon).
