@@ -126,3 +126,28 @@ Kiểm tra bằng tay trên app (cần người):
 - Smoke test trên API thật (cổng 3009, DB local): health 200 · `/config/public` đủ 5 trường ·
   hai endpoint quản trị mới trả 401 khi không có token · `/cashback/merchants` không còn lộ
   `deeplinkTemplate`/`fullRate` · bảng `order_status_history` có đúng cột và index
+
+---
+
+## 6. Smoke test đã chạy trên API thật (DB local, cổng 3009)
+
+Không phải suy luận từ test đơn vị — đây là kết quả gọi thật vào API đang chạy, kèm kiểm tra
+trực tiếp trong Postgres.
+
+| Kiểm tra | Kết quả |
+|---|---|
+| `GET /health` | 200, `db: up` |
+| `GET /config/public` | đủ 5 trường, có `cashbackHoldDays: 30` |
+| `GET /admin/cashback/transactions` không token | **401** |
+| `GET /admin/orders/:id/status-history` không token | **401** |
+| `GET /cashback/merchants` (công khai) | không còn `deeplinkTemplate` / `fullRate` / `provider` |
+| `POST /checkout/quote` với địa chỉ sai | **400** kèm lý do tiếng Việt (không phải 500) |
+| `POST /me/addresses` với `recipient` 5.000 ký tự | **400** — trần `MaxLength(120)` chặn đúng |
+| `POST /feed` 7 lần liên tiếp | 5 lần đầu **201**, lần 6–7 **429** — giới hạn tốc độ đúng |
+| `POST /feed/:id/report` với `targetId` bịa | **404**, và bảng `community_reports` KHÔNG có dòng rác |
+| `POST /feed/:id/react` với bài không tồn tại | **404** |
+| Bình luận vào bài **chưa duyệt** (PENDING) | **404** — đường farm xu đã bịt |
+| Bài do khách chưa tin cậy đăng | vào `PENDING`, đúng luật kiểm duyệt |
+| Bảng `order_status_history` | đúng 8 cột + index `(orderId, createdAt)` |
+
+Dữ liệu smoke đã dọn sạch sau khi kiểm tra (`DELETE 5` bài thử).
