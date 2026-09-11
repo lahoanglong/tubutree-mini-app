@@ -28,8 +28,8 @@ function build(
     total?: number;
     pointsUsed?: number;
     decCount?: number;
-    stockCount?: number; // count trả về của variation.updateMany (decrement stock)
-    variationUpdateMany?: jest.Mock; // override khi muốn mock chuỗi (race)
+    stockCount?: number; // số dòng câu UPDATE giữ chỗ tồn kho sửa được (0 = hết hàng)
+    executeRaw?: jest.Mock; // override khi muốn mock chuỗi (race)
     combo?: { computeForStorefront: jest.Mock }; // override ComboService
     validateAndCompute?: jest.Mock; // override coupons.validateAndCompute
     getActiveTouch?: jest.Mock; // override affiliate.getActiveTouch (attribution 3 ngày)
@@ -40,8 +40,8 @@ function build(
   const total = opts.total ?? 100;
   const updateMany = jest.fn().mockResolvedValue({ count: opts.decCount ?? 1 });
   const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
-  const variationUpdateMany =
-    opts.variationUpdateMany ?? jest.fn().mockResolvedValue({ count: opts.stockCount ?? 1 });
+  // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
+  const executeRaw = opts.executeRaw ?? jest.fn().mockResolvedValue(opts.stockCount ?? 1);
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(null), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }), create: orderCreate },
     user: {
@@ -49,7 +49,7 @@ function build(
       findUnique: jest.fn().mockResolvedValue(null),
       updateMany,
     },
-    variation: { updateMany: variationUpdateMany },
+    $executeRaw: executeRaw,
     address: { findUnique: jest.fn().mockResolvedValue(ADDRESS) },
     pointsTransaction: { create: jest.fn() },
   } as unknown as PrismaService;
@@ -87,7 +87,7 @@ function build(
   }) as any;
 
   const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, affiliate, coins, config, combo, flashSale);
-  return { svc, prisma, updateMany, orderCreate, variationUpdateMany, total, coins, combo, cart, coupons, flashSale };
+  return { svc, prisma, updateMany, orderCreate, executeRaw, total, coins, combo, cart, coupons, flashSale };
 }
 
 describe('CheckoutService.placeOrder — money safety', () => {
@@ -265,14 +265,12 @@ describe('CheckoutService.placeOrder — combo discount (§7.2)', () => {
 
 describe('CheckoutService.placeOrder — stock atomic (B5)', () => {
   it('stock đủ → trừ đúng số lượng atomic (where gte) + tạo đơn', async () => {
-    const { svc, variationUpdateMany, orderCreate } = build({ stockCount: 1 });
+    const { svc, executeRaw, orderCreate } = build({ stockCount: 1 });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
-    expect(variationUpdateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'v1', stock: { gte: 1 } },
-        data: { stock: { decrement: 1 } },
-      }),
-    );
+    // Tham số câu UPDATE giữ chỗ: (số lượng, số lượng, variationId, số lượng) — điều kiện
+    // `stock >= số lượng` nằm TRONG câu lệnh nên hai đơn tranh nhau chỉ một đơn thắng.
+    expect(executeRaw.mock.calls[0]!.slice(1)).toEqual([1, 1, 'v1', 1]);
+    expect((executeRaw.mock.calls[0]![0] as string[]).join('?')).toContain('reservedStock');
     expect(orderCreate).toHaveBeenCalled();
   });
 
@@ -299,11 +297,11 @@ describe('CheckoutService.placeOrder — stock atomic (B5)', () => {
   });
 
   it('race 2 placeOrder đồng thời chỉ 1 thắng (lần 1 count=1, lần 2 count=0)', async () => {
-    const variationUpdateMany = jest
+    const executeRaw = jest
       .fn()
-      .mockResolvedValueOnce({ count: 1 }) // request A thắng
-      .mockResolvedValueOnce({ count: 0 }); // request B thua → throw
-    const { svc } = build({ variationUpdateMany });
+      .mockResolvedValueOnce(1) // request A thắng
+      .mockResolvedValueOnce(0); // request B thua → throw
+    const { svc } = build({ executeRaw });
     // Lần 1 OK
     await expect(
       svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),

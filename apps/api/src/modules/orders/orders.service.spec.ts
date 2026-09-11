@@ -26,14 +26,15 @@ function makeService(
   spies: {
     updateMany?: jest.Mock;
     userUpdate?: jest.Mock;
-    variationUpdate?: jest.Mock;
+    /** Hoàn kho đi bằng SQL thô (catalog/variation-stock.ts). */
+    executeRaw?: jest.Mock;
     coinCreate?: jest.Mock;
   } = {},
 ) {
   // updateMany trả count=1 (thắng race) mặc định; test race truyền count=0.
   const updateMany = spies.updateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = spies.userUpdate ?? jest.fn().mockResolvedValue({});
-  const variationUpdate = spies.variationUpdate ?? jest.fn().mockResolvedValue({});
+  const executeRaw = spies.executeRaw ?? jest.fn().mockResolvedValue(1);
   const coinCreate = spies.coinCreate ?? jest.fn().mockResolvedValue({});
   // $transaction giờ là CALLBACK form (flip-status + hoàn ví/xu + restock ATOMIC). Forward tx ops vào cùng mock.
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
@@ -41,14 +42,14 @@ function makeService(
       order: { updateMany },
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
       user: { update: userUpdate },
-      variation: { update: variationUpdate },
+      $executeRaw: executeRaw,
       coinTransaction: { create: coinCreate },
     }),
   );
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(order), updateMany },
     user: { update: userUpdate },
-    variation: { update: variationUpdate },
+    $executeRaw: executeRaw,
     coinTransaction: { create: coinCreate },
     $transaction,
   } as unknown as PrismaService;
@@ -56,7 +57,7 @@ function makeService(
     svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal),
     updateMany,
     userUpdate,
-    variationUpdate,
+    executeRaw,
     coinCreate,
     $transaction,
   };
@@ -237,27 +238,22 @@ describe('OrdersService.cancel — B5 restock', () => {
       { variationId: 'v1', quantity: 2 },
       { variationId: 'v2', quantity: 5 },
     ];
-    const { svc, variationUpdate } = makeService({ ...baseOrder, items });
+    const { svc, executeRaw } = makeService({ ...baseOrder, items });
     await svc.cancel('u1', 'TUBU1');
-    expect(variationUpdate).toHaveBeenCalledTimes(2);
-    expect(variationUpdate).toHaveBeenNthCalledWith(1, {
-      where: { id: 'v1' },
-      data: { stock: { increment: 2 } },
-    });
-    expect(variationUpdate).toHaveBeenNthCalledWith(2, {
-      where: { id: 'v2' },
-      data: { stock: { increment: 5 } },
-    });
+    expect(executeRaw).toHaveBeenCalledTimes(2);
+    // Tham số câu UPDATE hoàn kho: (số lượng, số lượng, variationId).
+    expect(executeRaw.mock.calls[0]!.slice(1)).toEqual([2, 2, 'v1']);
+    expect(executeRaw.mock.calls[1]!.slice(1)).toEqual([5, 5, 'v2']);
   });
 
   it('cancel THUA race (count=0) → KHÔNG restock', async () => {
     const items = [{ variationId: 'v1', quantity: 2 }];
-    const { svc, variationUpdate } = makeService(
+    const { svc, executeRaw } = makeService(
       { ...baseOrder, items },
       { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     );
     await svc.cancel('u1', 'TUBU1');
-    expect(variationUpdate).not.toHaveBeenCalled();
+    expect(executeRaw).not.toHaveBeenCalled();
   });
 });
 

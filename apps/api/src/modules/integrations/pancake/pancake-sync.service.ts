@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import { LifecycleService } from '../../lifecycle/lifecycle.service';
+import { applyPancakeStock, forcePancakeStock } from '../../catalog/variation-stock';
 import type { PancakeProductDTO } from './pancake.types';
 
 /**
@@ -29,15 +30,15 @@ export class PancakeSyncService implements OnModuleInit {
 
   /**
    * Sync lần đầu khi boot — không chặn khởi động, lỗi chỉ log.
-   * `skipStock`: cú quét này KHÔNG có `updatedSince` nên đụng vào TOÀN BỘ catalog. Nếu để nó
-   * ghi đè `stock`, mỗi lần restart/deploy là đặt lại tồn kho của mọi sản phẩm theo số Pancake
-   * — kể cả khi đơn cục bộ vừa trừ kho mà Pancake chưa phản ánh → hồi sinh hàng đã bán hết
-   * (P0-3, docs/2026-09-08-review-progress.md). Giá/metadata vẫn đồng bộ bình thường; tồn kho
-   * để cho cú sync tăng dần 15 phút (phạm vi hẹp) và webhook lo.
+   *
+   * Cú quét này không có `updatedSince` nên đụng TOÀN BỘ catalog. Trước đây nó phải chạy ở chế
+   * độ "không ghi tồn kho", vì ghi `stock` tuyệt đối mỗi lần restart/deploy là hồi sinh hàng vừa
+   * bán hết (P0-3). Nay tồn kho đi qua `applyPancakeStock` — ghi theo chênh lệch và trừ phần
+   * giữ chỗ — nên quét toàn bộ không còn nguy hiểm, và boot cũng cập nhật tồn kho như mọi lượt.
    */
   onModuleInit(): void {
     if (!this.client.isConfigured()) return;
-    void this.syncProducts(undefined, { skipStock: true }).catch((e) =>
+    void this.syncProducts().catch((e) =>
       this.logger.error(`Sync lúc khởi động lỗi: ${e instanceof Error ? e.message : e}`),
     );
   }
@@ -50,12 +51,13 @@ export class PancakeSyncService implements OnModuleInit {
 
   /**
    * Đồng bộ toàn bộ (hoặc từ updatedSince). Trả số sản phẩm đã upsert.
-   * `opts.skipStock` — không ghi đè cột `stock` của variation ĐÃ TỒN TẠI (variation mới vẫn
-   * lấy tồn kho ban đầu từ Pancake vì chưa thể có đơn cục bộ nào). Xem onModuleInit.
+   *
+   * `opts.forceStock` — lối thoát CÓ CHỦ ĐÍCH cho admin: tin tuyệt đối số Pancake và xoá sạch
+   * giữ chỗ. Chỉ dùng khi tồn kho local đã lệch thật; luồng tự động không bao giờ bật cờ này.
    */
   async syncProducts(
     updatedSince?: string,
-    opts: { skipStock?: boolean; forceStock?: boolean } = {},
+    opts: { forceStock?: boolean } = {},
   ): Promise<number> {
     if (!this.client.isConfigured()) {
       this.logger.warn('Pancake chưa cấu hình — skip sync.');
@@ -65,14 +67,6 @@ export class PancakeSyncService implements OnModuleInit {
       this.logger.warn('Một lượt sync đang chạy — bỏ qua lượt này để hai lượt không ghi đè nhau.');
       return 0;
     }
-    // An toàn tồn kho buộc theo PHẠM VI QUÉT, không theo ý caller: không có `updatedSince`
-    // nghĩa là đụng TOÀN BỘ catalog, và lúc đó không được ghi `stock`. Trước đây chỉ boot sync
-    // tự truyền skipStock, nên `lastRunAt` (chỉ nằm trong RAM) còn null — boot sync lỗi, hoặc
-    // process vừa khởi động lại — là cron 15 phút quét toàn bộ VÀ ghi đè tồn kho của mọi sản
-    // phẩm theo số Pancake, hồi sinh hàng vừa bán hết cục bộ.
-    // `forceStock` là lối thoát CÓ CHỦ ĐÍCH cho admin khi tồn kho local đã lệch thật — mặc định
-    // vẫn an toàn (quét toàn bộ thì không ghi stock).
-    const skipStock = opts.forceStock ? false : opts.skipStock || updatedSince === undefined;
     this.running = true;
     // Mốc cursor lấy ở ĐẦU sync: sản phẩm đổi trong lúc sync sẽ được bắt ở lần kế
     // (upsert idempotent nên overlap nhẹ là an toàn — thà trùng còn hơn bỏ sót).
@@ -88,7 +82,7 @@ export class PancakeSyncService implements OnModuleInit {
       for (const p of products) {
         // Cô lập lỗi từng sản phẩm — 1 SP hỏng (vd slug trùng) không làm hỏng cả batch.
         try {
-          await this.upsertProduct(p, { ...opts, skipStock });
+          await this.upsertProduct(p, opts);
           count++;
         } catch (err) {
           failed++;
@@ -116,7 +110,7 @@ export class PancakeSyncService implements OnModuleInit {
     }
   }
 
-  private async upsertProduct(p: PancakeProductDTO, opts: { skipStock?: boolean } = {}): Promise<void> {
+  private async upsertProduct(p: PancakeProductDTO, opts: { forceStock?: boolean } = {}): Promise<void> {
     // Pancake POS dùng `id` cho sản phẩm (product_id là của variation) — lấy id thật.
     const pancakeId = p.id ?? p.product_id;
     if (!pancakeId || !p.name) {
@@ -181,9 +175,9 @@ export class PancakeSyncService implements OnModuleInit {
           attributes: v.fields ?? {},
           retailPrice: v.retail_price ?? 0,
           salePrice: v.sale_price ?? null,
-          // Chỉ ghi tồn kho khi KHÔNG ở chế độ skipStock (xem onModuleInit).
-          ...(opts.skipStock ? {} : { stock: v.remain_quantity ?? 0 }),
           weight: v.weight ?? null,
+          // KHÔNG ghi `stock` ở đây: tồn kho đi qua applyPancakeStock ngay dưới, vì nó phải đọc
+          // giá trị cũ của chính hàng đó (chênh lệch + giữ chỗ) trong MỘT câu UPDATE nguyên tử.
         },
         create: {
           pancakeId: v.id,
@@ -194,9 +188,16 @@ export class PancakeSyncService implements OnModuleInit {
           retailPrice: v.retail_price ?? 0,
           salePrice: v.sale_price ?? null,
           stock: v.remain_quantity ?? 0,
+          pancakeStock: v.remain_quantity ?? 0,
           weight: v.weight ?? null,
         },
       });
+      // `remain_quantity` vắng mặt (null/undefined) = Pancake KHÔNG nói gì về tồn kho lần này.
+      // Trước đây `?? 0` biến "không biết" thành "hết hàng" và xoá sạch tồn của variation đó.
+      if (v.remain_quantity != null) {
+        if (opts.forceStock) await forcePancakeStock(this.prisma, v.id, v.remain_quantity);
+        else await applyPancakeStock(this.prisma, v.id, v.remain_quantity);
+      }
     }
 
     // Giá giảm → báo cho user đã wishlist (không chặn sync nếu notify lỗi).

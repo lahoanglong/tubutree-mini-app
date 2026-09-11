@@ -567,7 +567,17 @@ model Variation {
   salePrice     Int?
   dealerPrices  Json? // {tier_silver: 200000, tier_gold: 190000}
   affiliateRate Decimal? // % hoa hồng CTV (import Excel) — spec 15.2 affiliate.product_rate_source
+  /// Tồn kho BÁN ĐƯỢC — mọi nơi kiểm tồn/hiển thị đọc đúng cột này (không đổi).
   stock         Int      @default(0)
+  /// Số `remain_quantity` mà Pancake báo ở lần đồng bộ gần nhất. NULL = chưa từng đồng bộ
+  /// (sản phẩm do merchant tự tạo, hoặc variation có trước khi có cơ chế này).
+  pancakeStock  Int?
+  /// Số đơn vị đã bán bằng đơn CỦA TA mà số liệu Pancake chưa phản ánh.
+  /// Sync tính `stock = pancakeStock_mới − reservedStock`, và mỗi khi số Pancake GIẢM thì trừ
+  /// bấy nhiêu khỏi `reservedStock`. Nhờ đó công thức đúng cho cả hai trường hợp: Pancake có
+  /// tự trừ tồn khi ta tạo đơn (số giảm ⇒ nhả giữ chỗ) lẫn không tự trừ (số đứng yên ⇒ giữ chỗ
+  /// còn nguyên). Xem docs/2026-09-11-P0-3-pancake-stock-decision-brief.md.
+  reservedStock Int      @default(0)
   isActive      Boolean  @default(true)
   weight        Int?
 

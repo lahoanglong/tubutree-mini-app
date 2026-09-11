@@ -31,6 +31,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
       findUnique: jest.fn().mockResolvedValue(null), // mặc định: chưa có giá cũ → không drop
     },
     wishlist: { findMany: jest.fn().mockResolvedValue([]) },
+    // Tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — mock nhận (strings, ...values).
+    $executeRaw: jest.fn().mockResolvedValue(1),
   };
   return { ...base, ...over } as unknown as PrismaService;
 }
@@ -137,83 +139,83 @@ describe('PancakeSyncService.slugify', () => {
     expect(slug('Đậu Đỏ', 'XYZ999')).toBe('dau-do-xyz999');
   });
 });
+// P0-3 (docs/2026-09-08-review-progress.md + docs/2026-09-11-P0-3-pancake-stock-decision-brief.md):
+// sync từng ghi đè TUYỆT ĐỐI `stock` bằng remain_quantity của Pancake, nên một lượt quét mang số
+// cũ hơn đơn vừa đặt là hồi sinh hàng đã bán hết (oversell).
+//
+// Nay cột `stock` không còn được ghi trong `upsert`. Tồn kho đi qua một câu UPDATE nguyên tử
+// (catalog/variation-stock.ts) tính theo chênh lệch số Pancake và trừ phần giữ chỗ — đúng cho CẢ
+// hai khả năng: Pancake tự trừ tồn khi ta tạo đơn, hoặc không. Nhờ vậy quét toàn bộ lúc boot
+// cũng an toàn và không cần chế độ "bỏ qua tồn kho" nữa.
+describe('PancakeSyncService — tồn kho không còn ghi đè tuyệt đối', () => {
+  const rawSql = (prisma: PrismaService) =>
+    (prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw.mock.calls.map((c) => ({
+      sql: (c[0] as string[]).join('?'),
+      args: c.slice(1),
+    }));
 
-// P0-3 (docs/2026-09-08-review-progress.md): sync ghi đè TUYỆT ĐỐI `stock` bằng
-// remain_quantity của Pancake. Nguy hiểm nhất là cú quét TOÀN BỘ catalog lúc boot
-// (onModuleInit, không có updatedSince): mỗi lần restart/deploy là đè lại tồn kho của MỌI
-// sản phẩm — kể cả sản phẩm Pancake không hề đụng tới nhiều tháng, và kể cả khi đơn cục bộ
-// vừa trừ kho mà Pancake chưa kịp phản ánh → hồi sinh hàng đã bán hết (oversell).
-// Sửa an toàn (KHÔNG phụ thuộc câu hỏi chưa chốt "Pancake có tự trừ tồn khi tạo đơn không"):
-// lần quét lúc boot chỉ đồng bộ giá/metadata, KHÔNG đụng cột stock. Biến thể tăng dần 15 phút
-// (updatedSince, phạm vi hẹp hơn nhiều) và webhook vẫn cập nhật tồn kho như cũ.
-describe('PancakeSyncService — quét toàn bộ lúc boot không ghi đè tồn kho', () => {
-  it('syncProducts({ skipStock: true }) → update variation KHÔNG chứa field stock', async () => {
-    const prisma = makePrisma();
-    (prisma.variation.findUnique as jest.Mock).mockResolvedValue({ retailPrice: 1000, salePrice: null });
-    await new PancakeSyncService(prisma, makeClient([[prod('p1')]]), lifecycle).syncProducts(undefined, {
-      skipStock: true,
+  function existingProduct() {
+    return makePrisma({
+      product: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'existing', pancakeId: 'a' }),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ id: 'existing', name: 'Tinh dầu' }),
+      },
     });
+  }
+
+  it('upsert KHÔNG còn ghi field stock — kể cả nhánh sync tăng dần', async () => {
+    const prisma = existingProduct();
+    await new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle).syncProducts(
+      '2026-09-12T00:00:00.000Z',
+    );
     const call = (prisma.variation.upsert as jest.Mock).mock.calls[0][0];
     expect(call.update).not.toHaveProperty('stock');
-    // Vẫn phải đồng bộ giá như thường.
-    expect(call.update).toMatchObject({ retailPrice: 1000 });
-    // Variation MỚI vẫn cần stock ban đầu (chưa từng có đơn cục bộ nào để mất).
-    expect(call.create).toMatchObject({ stock: 5 });
+    expect(call.update).toMatchObject({ retailPrice: 1000 }); // giá vẫn đồng bộ
   });
 
-  it('sync định kỳ (mặc định) vẫn ghi stock như cũ', async () => {
-    const prisma = makePrisma();
-    await new PancakeSyncService(prisma, makeClient([[prod('p1')]]), lifecycle).syncProducts('2026-09-11T00:00:00Z');
-    expect((prisma.variation.upsert as jest.Mock).mock.calls[0][0].update).toMatchObject({ stock: 5 });
+  it('variation MỚI lấy tồn kho ban đầu và ghi luôn mốc pancakeStock', async () => {
+    const prisma = existingProduct();
+    await new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle).syncProducts();
+    const call = (prisma.variation.upsert as jest.Mock).mock.calls[0][0];
+    expect(call.create).toMatchObject({ stock: 5, pancakeStock: 5 });
   });
 
-  it('onModuleInit → gọi sync ở chế độ skipStock (bảo vệ tồn kho khi restart/deploy)', async () => {
+  it('quét TOÀN BỘ (không updatedSince) vẫn cập nhật tồn kho — qua công thức an toàn', async () => {
+    const prisma = existingProduct();
+    await new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle).syncProducts();
+    const calls = rawSql(prisma);
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls).toHaveLength(1); // một câu lệnh cho mỗi variation, không nhiều hơn
+    // Số Pancake và id variation phải được truyền qua tham số, không nội suy vào chuỗi SQL.
+    expect(calls[0]!.args).toContain(5);
+    expect(calls[0]!.args).toContain('v-a');
+    expect(calls[0]!.sql).toContain('reservedStock');
+  });
+
+  it('remain_quantity vắng mặt → KHÔNG đụng tồn kho (trước đây ?? 0 xoá sạch tồn)', async () => {
+    const prisma = existingProduct();
+    const noStock = { ...prod('a'), variations: [{ id: 'v-a', sku: 's', retail_price: 1000, fields: {} }] };
+    await new PancakeSyncService(prisma, makeClient([[noStock]]), lifecycle).syncProducts();
+    expect(rawSql(prisma)).toHaveLength(0);
+  });
+
+  it('onModuleInit gọi sync thường — không còn chế độ bỏ qua tồn kho', async () => {
     const prisma = makePrisma();
     const svc = new PancakeSyncService(prisma, makeClient([[prod('p1')]]), lifecycle);
     const spy = jest.spyOn(svc, 'syncProducts').mockResolvedValue(0);
     svc.onModuleInit();
     await new Promise((r) => setImmediate(r));
-    expect(spy).toHaveBeenCalledWith(undefined, { skipStock: true });
-  });
-});
-
-describe('PancakeSyncService — cron cũng không được ghi đè tồn kho khi quét TOÀN BỘ', () => {
-  const stockFields = (prisma: PrismaService) =>
-    (prisma as unknown as { variation: { upsert: jest.Mock } }).variation.upsert.mock.calls.map(
-      (c) => Object.keys(c[0].update as Record<string, unknown>),
-    );
-
-  it('scheduledSync khi chưa có cursor (boot sync lỗi/restart) → KHÔNG ghi stock', async () => {
-    // lastRunAt chỉ nằm trong RAM: boot sync lỗi hoặc process vừa khởi động lại thì nó là null,
-    // và scheduledSync sẽ quét TOÀN BỘ catalog. Nếu cú quét đó ghi stock thì mọi sản phẩm bị
-    // đặt lại theo số Pancake — kể cả hàng vừa bán hết cục bộ mà Pancake chưa phản ánh.
-    const prisma = makePrisma({
-      product: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'existing', pancakeId: 'a' }),
-        create: jest.fn(),
-        update: jest.fn().mockResolvedValue({ id: 'existing', name: 'Tinh dầu' }),
-      },
-    });
-    const svc = new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle);
-
-    await svc.scheduledSync();
-
-    expect(stockFields(prisma).every((keys) => !keys.includes('stock'))).toBe(true);
+    expect(spy).toHaveBeenCalledWith();
   });
 
-  it('sync TĂNG DẦN (có updatedSince) vẫn ghi stock như cũ — phạm vi hẹp, đúng thiết kế', async () => {
-    const prisma = makePrisma({
-      product: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'existing', pancakeId: 'a' }),
-        create: jest.fn(),
-        update: jest.fn().mockResolvedValue({ id: 'existing', name: 'Tinh dầu' }),
-      },
+  it('forceStock → đặt lại tuyệt đối và xoá giữ chỗ (lối thoát có chủ đích cho admin)', async () => {
+    const prisma = existingProduct();
+    await new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle).syncProducts(undefined, {
+      forceStock: true,
     });
-    const svc = new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle);
-
-    await svc.syncProducts('2026-09-12T00:00:00.000Z');
-
-    expect(stockFields(prisma).some((keys) => keys.includes('stock'))).toBe(true);
+    const sql = rawSql(prisma).map((c) => c.sql).join('\n');
+    expect(sql).toContain('"reservedStock" = 0');
   });
 
   it('không dừng phân trang theo giả định page size = 20 (Pancake đổi sang 10 là mất sạch trang sau)', async () => {
@@ -227,41 +229,5 @@ describe('PancakeSyncService — cron cũng không được ghi đè tồn kho k
     const svc = new PancakeSyncService(prisma, makeClient([[prod('a')], []]), lifecycle);
     const [first, second] = await Promise.all([svc.syncProducts(), svc.syncProducts()]);
     expect([first, second].filter((x) => x === 0)).toHaveLength(1);
-  });
-});
-
-/**
- * Mặc định an toàn (quét toàn bộ không ghi stock) đúng cho cron, nhưng khi tồn kho local đã lệch
- * thật thì nút "Đồng bộ" của admin là đường sửa DUY NHẤT trong app — không có lối thoát tường
- * minh thì chỉ còn cách chạy SQL.
- */
-describe('PancakeSyncService — lối thoát có chủ đích cho admin', () => {
-  const stockFields = (prisma: PrismaService) =>
-    (prisma as unknown as { variation: { upsert: jest.Mock } }).variation.upsert.mock.calls.map(
-      (c) => Object.keys(c[0].update as Record<string, unknown>),
-    );
-
-  function existingProduct() {
-    return makePrisma({
-      product: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'existing', pancakeId: 'a' }),
-        create: jest.fn(),
-        update: jest.fn().mockResolvedValue({ id: 'existing', name: 'Tinh dầu' }),
-      },
-    });
-  }
-
-  it('forceStock → GHI stock dù quét toàn bộ', async () => {
-    const prisma = existingProduct();
-    await new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle).syncProducts(undefined, {
-      forceStock: true,
-    });
-    expect(stockFields(prisma).some((keys) => keys.includes('stock'))).toBe(true);
-  });
-
-  it('không truyền gì → vẫn KHÔNG ghi stock (mặc định an toàn cho cron)', async () => {
-    const prisma = existingProduct();
-    await new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle).syncProducts();
-    expect(stockFields(prisma).every((keys) => !keys.includes('stock'))).toBe(true);
   });
 });

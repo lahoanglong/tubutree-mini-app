@@ -7,6 +7,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { PricingService } from '../pricing/pricing.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
+import { reserveVariationStock } from '../catalog/variation-stock';
 
 /**
  * CTV nội bộ (Build Spec §6.x, §15 affiliate.*).
@@ -252,13 +253,10 @@ export class AffiliateService {
     let order: { id: string };
     try {
       order = await this.prisma.$transaction(async (tx) => {
-        // Trừ stock ATOMIC từng line (gte) — chống oversell; count 0 → throw rollback.
+        // Giữ chỗ tồn kho ATOMIC từng line — chống oversell; 0 dòng bị sửa → throw rollback.
         for (const line of lines) {
-          const hit = await tx.variation.updateMany({
-            where: { id: line.variationId, stock: { gte: line.quantity } },
-            data: { stock: { decrement: line.quantity } },
-          });
-          if (hit.count === 0) {
+          const hit = await reserveVariationStock(tx, line.variationId, line.quantity);
+          if (!hit) {
             throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
           }
         }

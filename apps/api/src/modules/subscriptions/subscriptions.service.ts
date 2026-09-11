@@ -8,6 +8,7 @@ import { PricingService } from '../pricing/pricing.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
+import { reserveVariationStock } from '../catalog/variation-stock';
 
 interface CreateSubInput {
   variationId: string;
@@ -219,11 +220,8 @@ export class SubscriptionsService {
     let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
     try {
       order = await this.prisma.$transaction(async (tx) => {
-        const stockHit = await tx.variation.updateMany({
-          where: { id: variation.id, stock: { gte: sub.quantity } },
-          data: { stock: { decrement: sub.quantity } },
-        });
-        if (stockHit.count === 0) {
+        const stockHit = await reserveVariationStock(tx, variation.id, sub.quantity);
+        if (!stockHit) {
           throw new SubscriptionOutOfStockError(
             `Sản phẩm "${variation.product.name}" không đủ tồn kho cho đơn định kỳ.`,
           );

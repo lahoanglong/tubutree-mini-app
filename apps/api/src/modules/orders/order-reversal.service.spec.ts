@@ -7,7 +7,8 @@ type MockTx = {
   order: { updateMany: jest.Mock };
   user: { update: jest.Mock };
   coinTransaction: { create: jest.Mock };
-  variation: { update: jest.Mock };
+  /** Hoàn kho đi bằng SQL thô (catalog/variation-stock.ts) để sửa 3 cột nguyên tử. */
+  $executeRaw: jest.Mock;
   dealerCreditLedger: { findFirst: jest.Mock; create: jest.Mock };
 };
 
@@ -16,7 +17,7 @@ function makeTx(): MockTx {
     order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     user: { update: jest.fn().mockResolvedValue({}) },
     coinTransaction: { create: jest.fn().mockResolvedValue({}) },
-    variation: { update: jest.fn().mockResolvedValue({}) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
   };
 }
@@ -69,11 +70,9 @@ describe('OrderReversalService', () => {
       where: { id: 'u1' },
       data: { walletBalance: { increment: 150000 } },
     });
-    expect(tx.variation.update).toHaveBeenCalledTimes(2);
-    expect(tx.variation.update).toHaveBeenCalledWith({
-      where: { id: 'v1' },
-      data: { stock: { increment: 2 } },
-    });
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
+    // Tham số của câu UPDATE hoàn kho: (số lượng, số lượng, variationId).
+    expect(tx.$executeRaw.mock.calls[0]!.slice(1)).toEqual([2, 2, 'v1']);
     expect(flashSale.restore).toHaveBeenCalledWith(tx, 'fs1', 'u1', 1);
     expect(flashSale.restore).toHaveBeenCalledTimes(1);
   });
@@ -101,7 +100,7 @@ describe('OrderReversalService', () => {
     expect(tx.user.update).not.toHaveBeenCalled();
     // Restock vẫn phải chạy — caller đảm bảo hàm này chỉ được gọi 1 lần tổng thể;
     // guard paymentStatus chỉ bảo vệ riêng phần tiền khỏi 2 nguồn ghi PAID khác nhau.
-    expect(tx.variation.update).toHaveBeenCalledTimes(2);
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
   });
 
   it('KHÔNG hoàn tiền cho đơn COD còn UNPAID (chưa thu tiền)', async () => {

@@ -22,20 +22,21 @@ function setup(order: Record<string, unknown> | null) {
   const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const txUserUpdate = jest.fn().mockResolvedValue({});
   const txCoinCreate = jest.fn().mockResolvedValue({});
-  const txVariationUpdate = jest.fn().mockResolvedValue({});
+  /** Tồn kho (hoàn kho khi huỷ) đi bằng SQL thô — xem catalog/variation-stock.ts. */
+  const txExecuteRaw = jest.fn().mockResolvedValue(1);
   const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       order: { updateMany: txUpdateMany },
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
       user: { update: txUserUpdate },
       coinTransaction: { create: txCoinCreate },
-      variation: { update: txVariationUpdate },
+      $executeRaw: txExecuteRaw,
     }),
   );
   const prisma = {
     order: { findFirst: orderFindFirst, findUniqueOrThrow: orderFindUniqueOrThrow, updateMany: orderUpdateMany },
     pancakeWebhookEvent: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
-    variation: { updateMany: jest.fn().mockResolvedValue({}) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction,
   } as unknown as PrismaService;
   const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
@@ -59,7 +60,7 @@ function setup(order: Record<string, unknown> | null) {
     extractOrderCode(d: Record<string, unknown>): string | null;
     process(job: { data: { eventId: string } }): Promise<void>;
   };
-  return { proc, prisma, notifications, loyalty, affiliate, txUpdateMany, txUserUpdate, txVariationUpdate, orderUpdateMany };
+  return { proc, prisma, notifications, loyalty, affiliate, txUpdateMany, txUserUpdate, txExecuteRaw, orderUpdateMany };
 }
 
 describe('PancakeProcessor.extractOrderCode', () => {
@@ -213,7 +214,7 @@ describe('PancakeProcessor.onCancelled', () => {
   });
 
   it('đơn CONFIRMED (chưa giao) → hủy được qua webhook cancelled → hoàn tiền/restock/reverse', async () => {
-    const { proc, txUpdateMany, txVariationUpdate, loyalty, affiliate } = setup({
+    const { proc, txUpdateMany, txExecuteRaw, loyalty, affiliate } = setup({
       id: 'o1',
       code: 'TUBU1',
       userId: 'u1',
@@ -228,7 +229,8 @@ describe('PancakeProcessor.onCancelled', () => {
     expect(txUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'o1', status: 'CONFIRMED' }, data: expect.objectContaining({ status: 'CANCELLED' }) }),
     );
-    expect(txVariationUpdate).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { stock: { increment: 1 } } });
+    // Tham số câu UPDATE hoàn kho: (số lượng, số lượng, variationId).
+    expect(txExecuteRaw.mock.calls[0]!.slice(1)).toEqual([1, 1, 'v1']);
     expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
   });

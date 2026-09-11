@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Order, OrderItem, Prisma } from '@prisma/client';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { releaseVariationStock } from '../catalog/variation-stock';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
@@ -71,10 +72,7 @@ export class OrderReversalService {
     // Hoàn stock + release quota flash-sale — không có guard idempotency riêng ở đây vì
     // caller (status flip atomic) đảm bảo hàm này chỉ chạy đúng 1 lần cho mỗi đơn.
     for (const item of order.items) {
-      await tx.variation.update({
-        where: { id: item.variationId },
-        data: { stock: { increment: item.quantity } },
-      });
+      await releaseVariationStock(tx, item.variationId, item.quantity);
       if (item.flashSaleItemId) {
         await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, item.quantity);
       }

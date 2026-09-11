@@ -155,7 +155,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     opts: {
       variations?: Array<{ id: string; isActive?: boolean; salePrice?: number | null; retailPrice?: number; name?: string; product?: { name: string } }>;
       stockCount?: number;
-      variationUpdateMany?: jest.Mock;
+      executeRaw?: jest.Mock;
       role?: string;
       storefront?: { slug: string } | null;
       shippingFee?: number;
@@ -164,11 +164,13 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const variations =
       opts.variations ?? [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'Mặc định', product: { name: 'Trà thảo mộc' } }];
     const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
-    const variationUpdateMany = opts.variationUpdateMany ?? jest.fn().mockResolvedValue({ count: opts.stockCount ?? 1 });
+    // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
+    const executeRaw = opts.executeRaw ?? jest.fn().mockResolvedValue(opts.stockCount ?? 1);
     const commissionCreate = jest.fn().mockResolvedValue({});
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv', role: opts.role ?? 'AFFILIATE' }) },
-      variation: { findMany: jest.fn().mockResolvedValue(variations), updateMany: variationUpdateMany },
+      variation: { findMany: jest.fn().mockResolvedValue(variations) },
+      $executeRaw: executeRaw,
       storefront: { findFirst: jest.fn().mockResolvedValue(opts.storefront === undefined ? { slug: 'ctv-shop' } : opts.storefront) },
       order: {
         create: orderCreate,
@@ -186,7 +188,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const pricingLocal = { calcShippingFee: jest.fn().mockResolvedValue(opts.shippingFee ?? 0) } as unknown as PricingService;
     const pancakeOrderLocal = { enqueuePush: jest.fn().mockResolvedValue(undefined) } as unknown as PancakeOrderService;
     const svc = new AffiliateService(prisma, config, pricingLocal, pancakeOrderLocal);
-    return { svc, prisma, orderCreate, variationUpdateMany, commissionCreate, pricingLocal, pancakeOrderLocal };
+    return { svc, prisma, orderCreate, executeRaw, commissionCreate, pricingLocal, pancakeOrderLocal };
   }
 
   const DTO = (over: Record<string, unknown> = {}) => ({
@@ -230,11 +232,10 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
   });
 
   it('trừ stock ATOMIC từng line (where gte) trước khi tạo đơn', async () => {
-    const { svc, variationUpdateMany, orderCreate } = build();
+    const { svc, executeRaw, orderCreate } = build();
     await svc.placeOrderForCustomer('ctv', DTO() as never);
-    expect(variationUpdateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'v1', stock: { gte: 2 } }, data: { stock: { decrement: 2 } } }),
-    );
+    // Tham số câu UPDATE giữ chỗ: (số lượng, số lượng, variationId, số lượng).
+    expect(executeRaw.mock.calls[0]!.slice(1)).toEqual([2, 2, 'v1', 2]);
     expect(orderCreate).toHaveBeenCalled();
   });
 
@@ -300,13 +301,13 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
   });
 
   it('idempotency-key double-tap/retry → trả lại đơn đã tạo trước đó, KHÔNG trừ kho/tạo đơn/commission lần 2', async () => {
-    const { svc, prisma, orderCreate, variationUpdateMany, commissionCreate } = build();
+    const { svc, prisma, orderCreate, executeRaw, commissionCreate } = build();
     (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'o-existing', userId: 'ctv' });
     (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'o-existing', items: [] });
     const r = (await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-1')) as { id: string };
     expect(r.id).toBe('o-existing');
     expect(orderCreate).not.toHaveBeenCalled();
-    expect(variationUpdateMany).not.toHaveBeenCalled();
+    expect(executeRaw).not.toHaveBeenCalled();
     expect(commissionCreate).not.toHaveBeenCalled();
   });
 

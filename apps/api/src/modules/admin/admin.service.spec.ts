@@ -220,7 +220,8 @@ function makeReturnPrisma(opts: {
   // orderUpdate giữ tên cũ để các test cũ vẫn dùng được như spy duy nhất cho order.update*.
   const orderUpdate = jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = jest.fn().mockResolvedValue({});
-  const variationUpdate = jest.fn().mockResolvedValue({});
+  /** Hoàn kho đi bằng SQL thô — xem catalog/variation-stock.ts. */
+  const stockExecuteRaw = jest.fn().mockResolvedValue(1);
   const coinCreate = jest.fn().mockResolvedValue({});
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
@@ -232,7 +233,7 @@ function makeReturnPrisma(opts: {
         updateMany: orderUpdate,
       },
       user: { update: userUpdate },
-      variation: { update: variationUpdate },
+      $executeRaw: stockExecuteRaw,
       coinTransaction: { create: coinCreate },
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     }),
@@ -245,7 +246,7 @@ function makeReturnPrisma(opts: {
     user: { findMany: jest.fn().mockResolvedValue([]) },
     $transaction,
   } as unknown as PrismaService;
-  return { prisma, returnUpdateMany, orderUpdate, userUpdate, variationUpdate, coinCreate, $transaction };
+  return { prisma, returnUpdateMany, orderUpdate, userUpdate, stockExecuteRaw, coinCreate, $transaction };
 }
 
 describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', () => {
@@ -261,7 +262,7 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
   });
 
   it('APPROVE với COD UNPAID → đơn RETURNED, KHÔNG hoàn walletBalance, restock đủ', async () => {
-    const { prisma, returnUpdateMany, orderUpdate, userUpdate, variationUpdate } = makeReturnPrisma({
+    const { prisma, returnUpdateMany, orderUpdate, userUpdate, stockExecuteRaw } = makeReturnPrisma({
       order: {
         id: 'o1',
         code: 'TUBU1',
@@ -290,15 +291,10 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     // COD UNPAID — khách chưa trả → KHÔNG hoàn ví.
     expect(userUpdate).not.toHaveBeenCalled();
     // Restock cả 2 item.
-    expect(variationUpdate).toHaveBeenCalledTimes(2);
-    expect(variationUpdate).toHaveBeenNthCalledWith(1, {
-      where: { id: 'v1' },
-      data: { stock: { increment: 2 } },
-    });
-    expect(variationUpdate).toHaveBeenNthCalledWith(2, {
-      where: { id: 'v2' },
-      data: { stock: { increment: 3 } },
-    });
+    expect(stockExecuteRaw).toHaveBeenCalledTimes(2);
+    // Tham số câu UPDATE hoàn kho: (số lượng, số lượng, variationId).
+    expect(stockExecuteRaw.mock.calls[0]!.slice(1)).toEqual([2, 2, 'v1']);
+    expect(stockExecuteRaw.mock.calls[1]!.slice(1)).toEqual([3, 3, 'v2']);
     expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
   });
@@ -337,7 +333,7 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
   });
 
   it('APPROVE với WALLET PAID → hoàn walletBalance + restock', async () => {
-    const { prisma, userUpdate, variationUpdate } = makeReturnPrisma({
+    const { prisma, userUpdate, stockExecuteRaw } = makeReturnPrisma({
       order: {
         id: 'o1',
         code: 'TUBU1',
@@ -353,7 +349,7 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
       where: { id: 'u1' },
       data: { walletBalance: { increment: 500000 } },
     });
-    expect(variationUpdate).toHaveBeenCalledTimes(1);
+    expect(stockExecuteRaw).toHaveBeenCalledTimes(1);
   });
 
   it('APPROVE với ZALOPAY PAID → hoàn walletBalance', async () => {
@@ -424,19 +420,19 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
   });
 
   it('race 2 admin approve cùng request → bên thua (updateMany count=0) throw, không hoàn ví/restock', async () => {
-    const { prisma, userUpdate, variationUpdate } = makeReturnPrisma({ returnUpdateManyCount: 0 });
+    const { prisma, userUpdate, stockExecuteRaw } = makeReturnPrisma({ returnUpdateManyCount: 0 });
     await expect(mkAdmin(prisma).reviewReturn('admin2', 'r1', true)).rejects.toBeInstanceOf(
       BadRequestException,
     );
     expect(userUpdate).not.toHaveBeenCalled();
-    expect(variationUpdate).not.toHaveBeenCalled();
+    expect(stockExecuteRaw).not.toHaveBeenCalled();
     // Reverse loyalty/affiliate cũng KHÔNG được gọi vì throw trước khi tới đoạn ngoài tx.
     expect(loyalty.reverseOrderPoints).not.toHaveBeenCalled();
     expect(affiliate.reverseCommissionsForOrder).not.toHaveBeenCalled();
   });
 
   it('REJECT → update REJECTED + note, KHÔNG hoàn ví, KHÔNG restock, KHÔNG reverse', async () => {
-    const { prisma, returnUpdateMany, userUpdate, variationUpdate } = makeReturnPrisma();
+    const { prisma, returnUpdateMany, userUpdate, stockExecuteRaw } = makeReturnPrisma();
     await mkAdmin(prisma).reviewReturn('admin1', 'r1', false, 'không phải lỗi NSX');
     expect(returnUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -445,7 +441,7 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
       }),
     );
     expect(userUpdate).not.toHaveBeenCalled();
-    expect(variationUpdate).not.toHaveBeenCalled();
+    expect(stockExecuteRaw).not.toHaveBeenCalled();
     expect(loyalty.reverseOrderPoints).not.toHaveBeenCalled();
     expect(affiliate.reverseCommissionsForOrder).not.toHaveBeenCalled();
   });

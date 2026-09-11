@@ -7,6 +7,7 @@ import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { mapPancakeStatus } from './pancake-status.map';
 import { isPancakeOrderPaid } from './pancake-payment.util';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
+import { applyPancakeStock } from '../../catalog/variation-stock';
 
 interface EventData {
   event?: string;
@@ -241,12 +242,15 @@ export class PancakeProcessor extends WorkerHost {
     const variationId = data['variation_id'] ?? data['id'];
     const stock = data['remain_quantity'];
     if (variationId == null || stock == null) return;
+    const n = Number(stock);
+    if (!Number.isFinite(n) || n < 0) return;
     // KHÔNG nuốt lỗi: process() đánh dấu event PROCESSED sau khi handler trả về, nên nuốt ở đây
     // là mất hẳn một lần cập nhật tồn kho — BullMQ không retry, không có log, và tồn kho lệch
     // với kho thật cho tới lần đồng bộ sau. Mọi handler khác trong file này đều để lỗi nổi lên.
-    await this.prisma.variation.updateMany({
-      where: { pancakeId: String(variationId) },
-      data: { stock: Number(stock) },
-    });
+    //
+    // Cùng lớp lỗi với sync định kỳ (P0-3): webhook cũng từng ghi `stock` TUYỆT ĐỐI, nên một sự
+    // kiện mang số cũ hơn đơn vừa đặt là hồi sinh hàng đã bán. Dùng chung công thức chênh lệch +
+    // giữ chỗ với sync — xem catalog/variation-stock.ts.
+    await applyPancakeStock(this.prisma, String(variationId), n);
   }
 }

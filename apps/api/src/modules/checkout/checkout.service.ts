@@ -14,6 +14,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { ComboService } from '../storefront/combo.service';
 import { FlashSaleService, FLASH_OVER_LIMIT_MSG } from '../flash-sale/flash-sale.service';
 import { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
+import { reserveVariationStock } from '../catalog/variation-stock';
 
 @Injectable()
 export class CheckoutService {
@@ -116,15 +117,12 @@ export class CheckoutService {
     let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
     try {
       order = await this.prisma.$transaction(async (tx) => {
-        // Trừ stock ATOMIC từng line (gte) — chống oversell khi flash-sale/hàng giới hạn:
-        // 2 đơn cùng grab variation cuối → chỉ 1 thắng updateMany; thua thì throw rollback.
+        // Giữ chỗ tồn kho ATOMIC từng line — chống oversell khi flash-sale/hàng giới hạn:
+        // 2 đơn cùng grab variation cuối → chỉ 1 câu UPDATE sửa được dòng; thua thì throw rollback.
         // Đặt TRƯỚC order.create để fail-fast, không tốn resource ghi Order/Item rồi rollback.
         for (const line of cart.items) {
-          const stockHit = await tx.variation.updateMany({
-            where: { id: line.variationId, stock: { gte: line.quantity } },
-            data: { stock: { decrement: line.quantity } },
-          });
-          if (stockHit.count === 0) {
+          const reserved = await reserveVariationStock(tx, line.variationId, line.quantity);
+          if (!reserved) {
             throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
           }
           const fid = line.flashSaleItemId;
