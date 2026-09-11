@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -141,6 +142,13 @@ export class CommunityFeedController {
     return this.feed.getPost(userId, id);
   }
 
+  /**
+   * Throttler toàn cục là 60 request/phút cho MỌI endpoint — thừa sức để một tài khoản đã tin
+   * cậy (chỉ cần 1 đơn DELIVERED) đăng 60 bài/phút, tất cả lên thẳng PUBLISHED nên kiểm duyệt
+   * cũng không thấy gì trong hàng chờ; dọn là xoá tay từng bài. 5 bài/phút vẫn thoải mái cho
+   * người dùng thật.
+   */
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post()
   createPost(@CurrentUser() user: { sub: string; role: string }, @Body() dto: CreatePostDto) {
     return this.feed.createPost(user.sub, user.role, dto as CreatePostInput);
@@ -174,6 +182,7 @@ export class CommunityFeedController {
     return this.feed.getComments(id, userId);
   }
 
+  @Throttle({ default: { limit: 15, ttl: 60_000 } })
   @Post(':id/comments')
   addComment(@CurrentUser() user: { sub: string; role: string }, @Param('id') id: string, @Body() dto: CommentDto) {
     return this.feed.addComment(user.sub, user.role, id, dto.body);
@@ -188,6 +197,7 @@ export class CommunityFeedController {
     return this.feed.setBestAnswer(user.sub, user.role, id, commentId);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post(':id/report')
   report(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() dto: ReportDto) {
     return this.feed.report(userId, {

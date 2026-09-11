@@ -363,10 +363,17 @@ export class CommunityFeedService {
     if (input.eventId) {
       const event = await this.prisma.communityEvent.findUnique({
         where: { id: input.eventId },
-        select: { id: true, status: true },
+        select: { id: true, status: true, startAt: true, endAt: true },
       });
       if (!event || event.status !== 'OPEN') {
         throw new BadRequestException('Sự kiện không hợp lệ hoặc đã đóng.');
+      }
+      // App đã khoá nút nộp bài sau hạn, nhưng BE thì không: chỉ cần admin chưa bấm đóng sự
+      // kiện là gọi thẳng API (hoặc dùng bản app cũ) vẫn nộp được bài muộn, và bài đó đủ tư
+      // cách được chọn trúng giải kèm rewardXu.
+      const now = new Date();
+      if (event.startAt > now || event.endAt < now) {
+        throw new BadRequestException('Sự kiện chưa mở hoặc đã hết hạn nộp bài.');
       }
     }
     if (input.categoryId) {
@@ -510,16 +517,28 @@ export class CommunityFeedService {
 
   /** Thả/bỏ tim — toggle. Trả trạng thái sau toggle. */
   async toggleReaction(userId: string, postId: string) {
-    const post = await this.prisma.feedPost.findUnique({ where: { id: postId } });
-    if (!post) throw new NotFoundException('Bài viết không tồn tại.');
+    const post = await this.prisma.feedPost.findUnique({
+      where: { id: postId },
+      select: { id: true, status: true },
+    });
+    // Chỉ bài ĐÃ DUYỆT: trước đây thả tim được cho cả bài PENDING/REMOVED của người khác nếu
+    // biết id — đẩy lượt tim để bài leo hạng "Phổ biến" ngay khi được duyệt.
+    if (!post || post.status !== 'PUBLISHED') throw new NotFoundException('Bài viết không tồn tại.');
     const existing = await this.prisma.feedReaction.findUnique({
       where: { postId_userId: { postId, userId } },
     });
     if (existing) {
-      await this.prisma.feedReaction.delete({ where: { postId_userId: { postId, userId } } });
+      // deleteMany thay vì delete: hai thiết bị bấm cùng lúc thì kẻ thua gặp "record not found"
+      // → 500 cho một thao tác thực ra đã thành công.
+      await this.prisma.feedReaction.deleteMany({ where: { postId, userId } });
       return { liked: false };
     }
-    await this.prisma.feedReaction.create({ data: { postId, userId } });
+    try {
+      await this.prisma.feedReaction.create({ data: { postId, userId } });
+    } catch (err) {
+      // P2002 = thiết bị kia vừa tạo xong. Kết quả cuối cùng vẫn là "đã thích".
+      if ((err as { code?: string } | null)?.code !== 'P2002') throw err;
+    }
     return { liked: true };
   }
 
@@ -736,6 +755,23 @@ export class CommunityFeedService {
   async report(reporterId: string, dto: { targetType: string; targetId: string; reason: string }) {
     const type = dto.targetType === 'COMMENT' ? 'COMMENT' : 'POST';
     const reason = (dto.reason ?? '').trim().slice(0, 500) || 'Không phù hợp';
+    // targetId trước đây là chuỗi tuỳ ý, không kiểm tra gì: gửi 60 báo cáo/phút trỏ vào id bịa
+    // hoặc vào bình luận của người khác ở bài khác là hàng chờ kiểm duyệt ngập id rác, mà hub
+    // admin chỉ hiện đúng cái cuid đó — bấm "Ẩn nội dung" là gỡ nhầm nội dung lành.
+    const exists =
+      type === 'COMMENT'
+        ? await this.prisma.feedComment.findUnique({ where: { id: dto.targetId }, select: { id: true } })
+        : await this.prisma.feedPost.findUnique({ where: { id: dto.targetId }, select: { id: true } });
+    if (!exists) throw new NotFoundException('Nội dung bị báo cáo không tồn tại.');
+
+    // Cùng người báo cáo cùng một nội dung nhiều lần chỉ tính một — tránh một tài khoản tự đẩy
+    // hàng chờ lên hàng trăm dòng.
+    const already = await this.prisma.communityReport.findFirst({
+      where: { reporterId, targetType: type, targetId: dto.targetId, status: 'OPEN' },
+      select: { id: true },
+    });
+    if (already) return { ok: true };
+
     await this.prisma.communityReport.create({
       data: { reporterId, targetType: type, targetId: dto.targetId, reason, status: 'OPEN' },
     });
