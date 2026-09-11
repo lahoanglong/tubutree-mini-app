@@ -1,3 +1,4 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { CashbackService } from './cashback.service';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -374,5 +375,99 @@ describe('CashbackService.reconcile', () => {
     const reg = { all: () => [p], get: jest.fn() } as unknown as CashbackProviderRegistry;
     const svc = new CashbackService({} as unknown as PrismaService, config, coins, notifications, reg);
     await expect(svc.reconcile()).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * Trước đây không có đường quản trị nào cho cashback: trạng thái chỉ đổi qua postback, mà cron
+ * reconcile tự tắt khi chưa có API key. Một postback rớt mạng là giao dịch nằm PENDING vĩnh
+ * viễn — khách thấy "Chờ duyệt" vô thời hạn và không ai xử lý được ngoài chạy SQL.
+ */
+describe('CashbackService.adminReview', () => {
+  function mk(existing: Record<string, unknown> | null) {
+    const userUpdate = jest.fn().mockResolvedValue({});
+    const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      cashbackTransaction: {
+        findUnique: jest.fn().mockResolvedValue(existing),
+        updateMany: txUpdateMany,
+      },
+      user: { update: userUpdate },
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) =>
+        cb({ cashbackTransaction: { updateMany: txUpdateMany }, user: { update: userUpdate } }),
+      ),
+    } as unknown as PrismaService;
+    return {
+      svc: new CashbackService(prisma, config, coins, notifications, registry),
+      userUpdate,
+      txUpdateMany,
+    };
+  }
+
+  const pending = {
+    id: 'c1',
+    userId: 'u1',
+    status: 'PENDING',
+    confirmedAt: null,
+    userReward: 35000,
+    orderAmount: 1000000,
+    commission: 50000,
+    merchantOrderId: 'SPX1',
+    provider: 'accesstrade',
+  };
+
+  it('duyệt giao dịch treo → chuyển CONFIRMED và cộng đúng cashbackPending đã ghi', async () => {
+    const { svc, userUpdate, txUpdateMany } = mk(pending);
+
+    await svc.adminReview('admin1', 'c1', 'CONFIRMED', 'khách gửi ảnh đơn');
+
+    expect(txUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'c1', status: 'PENDING' } }),
+    );
+    expect(userUpdate).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { cashbackPending: { increment: 35000 } },
+    });
+  });
+
+  it('KHÔNG định giá lại: giữ nguyên số tiền đã ghi khi duyệt', async () => {
+    const { svc, txUpdateMany } = mk(pending);
+
+    await svc.adminReview('admin1', 'c1', 'CONFIRMED');
+
+    const data = txUpdateMany.mock.calls[0][0].data as Record<string, unknown>;
+    expect(data.orderAmount).toBe(1000000);
+    expect(data.commission).toBe(50000);
+    expect(data.userReward).toBe(35000);
+  });
+
+  it('từ chối giao dịch ĐÃ confirmed → trừ lại cashbackPending', async () => {
+    const { svc, userUpdate } = mk({ ...pending, status: 'CONFIRMED', confirmedAt: new Date() });
+
+    await svc.adminReview('admin1', 'c1', 'REJECTED', 'sàn báo huỷ đơn');
+
+    expect(userUpdate).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { cashbackPending: { decrement: 35000 } },
+    });
+  });
+
+  it('giao dịch ĐÃ trả về Ví (PAID) → từ chối đổi trạng thái (không claw-back được)', async () => {
+    const { svc, userUpdate } = mk({ ...pending, status: 'PAID' });
+
+    await expect(svc.adminReview('admin1', 'c1', 'REJECTED')).rejects.toBeInstanceOf(BadRequestException);
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it('đặt lại đúng trạng thái đang có → từ chối (tránh bấm nhầm 2 lần)', async () => {
+    const { svc } = mk(pending);
+    await expect(svc.adminReview('admin1', 'c1', 'PENDING' as never)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('không tìm thấy giao dịch → NotFound', async () => {
+    const { svc } = mk(null);
+    await expect(svc.adminReview('admin1', 'cX', 'CONFIRMED')).rejects.toBeInstanceOf(NotFoundException);
   });
 });

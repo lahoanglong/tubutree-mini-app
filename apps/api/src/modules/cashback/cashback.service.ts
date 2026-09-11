@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CashbackStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -134,6 +134,91 @@ export class CashbackService {
       );
     }
     return { ok: true };
+  }
+
+  // ── Quản trị ────────────────────────────────────────────────────────────────────────────
+  /**
+   * Danh sách giao dịch cashback cho admin, kèm sàn và khách.
+   *
+   * Trước đây KHÔNG có đường quản trị nào cho cashback: trạng thái chỉ đổi qua postback của
+   * provider, mà reconcile lại tắt khi chưa có API key. Postback rớt mạng hoặc sàn chỉ đổi
+   * trạng thái qua API report là giao dịch nằm PENDING vĩnh viễn — khách thấy "Chờ duyệt" vô
+   * thời hạn và không ai xử lý được.
+   */
+  async adminListTransactions(status?: string, take = 100) {
+    const rows = await this.prisma.cashbackTransaction.findMany({
+      where: status ? { status: status as CashbackStatus } : {},
+      orderBy: { confirmedAt: { sort: 'desc', nulls: 'first' } },
+      take: Math.min(Math.max(take, 1), 200),
+      select: {
+        id: true,
+        userId: true,
+        provider: true,
+        merchantOrderId: true,
+        orderAmount: true,
+        commission: true,
+        userReward: true,
+        status: true,
+        confirmedAt: true,
+        paidAt: true,
+        clickId: true,
+      },
+    });
+    if (rows.length === 0) return [];
+    // CashbackTransaction chỉ lưu clickId dạng chuỗi (schema không khai quan hệ) nên nạp theo
+    // lô rồi ghép — 3 truy vấn cho cả trang, không phải N+1.
+    const clickIds = [...new Set(rows.map((r) => r.clickId).filter((id): id is string => !!id))];
+    const [users, clicks] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.userId))] } },
+        select: { id: true, fullName: true, phone: true },
+      }),
+      clickIds.length
+        ? this.prisma.cashbackClick.findMany({
+            where: { id: { in: clickIds } },
+            select: { id: true, merchant: { select: { name: true, slug: true } } },
+          })
+        : Promise.resolve([]),
+    ]);
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    const clickMap = new Map(clicks.map((c) => [c.id, c.merchant]));
+    return rows.map((r) => ({
+      ...r,
+      user: userMap.get(r.userId) ?? null,
+      merchant: r.clickId ? (clickMap.get(r.clickId) ?? null) : null,
+    }));
+  }
+
+  /**
+   * Admin duyệt/từ chối một giao dịch cashback đang treo. Dùng LẠI đúng bộ chuyển trạng thái
+   * của postback (CAS theo status + điều chỉnh cashbackPending trong cùng transaction) nên
+   * không có đường tính tiền thứ hai để lệch nhau.
+   *
+   * Không đụng tới giao dịch đã PAID: tiền đã về Ví, không claw-back được.
+   */
+  async adminReview(adminId: string, id: string, status: 'CONFIRMED' | 'REJECTED', note?: string) {
+    const existing = await this.prisma.cashbackTransaction.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Không tìm thấy giao dịch cashback.');
+    if (existing.status === 'PAID') {
+      throw new BadRequestException('Giao dịch đã trả về Ví — không đổi được trạng thái.');
+    }
+    if (existing.status === status) {
+      throw new BadRequestException('Giao dịch đã ở trạng thái này.');
+    }
+    // Sự kiện tổng hợp: giữ nguyên số tiền đã ghi để admin duyệt KHÔNG vô tình định giá lại.
+    const synthetic: NormalizedCashbackEvent = {
+      clickRef: '',
+      merchantOrderId: existing.merchantOrderId,
+      orderAmount: existing.orderAmount,
+      commission: existing.commission,
+      status,
+      raw: { adminReview: { adminId, note: note ?? null, at: new Date().toISOString() } },
+    };
+    await this.applyToExisting(existing, synthetic, status, existing.userReward);
+    this.logger.warn(
+      `Admin ${adminId} đặt cashback ${existing.merchantOrderId} (${existing.provider}): ${existing.status} → ${status}${note ? ` — ${note}` : ''}`,
+    );
+    return this.prisma.cashbackTransaction.findUnique({ where: { id } });
   }
 
   /** Chuyển trạng thái 1 giao dịch cashback đã tồn tại theo sự kiện mới (idempotent, atomic). */

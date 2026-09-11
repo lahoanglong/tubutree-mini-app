@@ -17,6 +17,7 @@ import { formatVnd, formatRatePct } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
+import { usePublicConfig } from '../hooks/use-public-config';
 
 const TXN_META: Record<CashbackStatus, { label: string; color: string; bg: string }> = {
   PENDING: { label: 'Chờ duyệt', color: 'var(--clay-700)', bg: 'var(--clay-50)' },
@@ -31,6 +32,7 @@ export default function CashbackPage() {
   // vĩnh viễn (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (như wallet.tsx).
   // /cashback/merchants là @Public() nên KHÔNG cần chờ authed.
   const authed = useAuthStore((s) => s.status === 'authenticated');
+  const cfg = usePublicConfig();
   const merchantsQ = useQuery({ queryKey: ['cashback-merchants'], queryFn: getMerchants });
   const txnQ = useQuery({ queryKey: ['cashback-txn'], queryFn: getCashbackTransactions, enabled: authed });
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
@@ -202,7 +204,9 @@ export default function CashbackPage() {
                 items={[
                   'Bấm "Mua sắm" để mở sàn qua liên kết Tubu',
                   'Mua hàng & thanh toán như bình thường trên sàn',
-                  'Sàn xác nhận đơn → hoàn tiền vào Ví Tubu (sau 30 ngày)',
+                  // Số ngày giữ lấy từ config BE: admin đổi cashback.hold_days mà đây chép cứng
+                  // "30 ngày" thì tới ngày thứ 31 khách không thấy tiền và đi khiếu nại.
+                  `Sàn xác nhận đơn → hoàn tiền vào Ví Tubu (sau ${cfg.cashbackHoldDays} ngày)`,
                 ]}
               />
             </Box>

@@ -10,6 +10,7 @@ export const PUBLIC_CONFIG_FALLBACK: PublicConfig = {
   subscribeDiscountPct: 0.12,
   affiliateWalletMultiplier: 1.5,
   affiliateMinWithdrawBank: 50_000,
+  cashbackHoldDays: 30,
 };
 
 /**

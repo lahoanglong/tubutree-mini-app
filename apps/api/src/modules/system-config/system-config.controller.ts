@@ -19,13 +19,25 @@ export class SystemConfigController {
    * đã hiển thị công khai cho người dùng, không lộ tham số nội bộ.
    */
   async publicConfig() {
-    const [freeshipThreshold, subscribeDiscountPct, affiliateWalletMultiplier, affiliateMinWithdrawBank] =
-      await Promise.all([
-        this.config.get<number>('shipping.free_threshold', 200000),
-        this.config.get<number>('subscribe.discount_pct', 0.12),
-        this.config.get<number>('affiliate.tubu_wallet_multiplier', 1.5),
-        this.config.get<number>('affiliate.min_withdraw_bank', 50000),
-      ]);
-    return { freeshipThreshold, subscribeDiscountPct, affiliateWalletMultiplier, affiliateMinWithdrawBank };
+    const [
+      freeshipThreshold,
+      subscribeDiscountPct,
+      affiliateWalletMultiplier,
+      affiliateMinWithdrawBank,
+      cashbackHoldDays,
+    ] = await Promise.all([
+      this.config.get<number>('shipping.free_threshold', 200000),
+      this.config.get<number>('subscribe.discount_pct', 0.12),
+      this.config.get<number>('affiliate.tubu_wallet_multiplier', 1.5),
+      this.config.get<number>('affiliate.min_withdraw_bank', 50000),
+      this.config.get<number>('cashback.hold_days', 30),
+    ]);
+    return {
+      freeshipThreshold,
+      subscribeDiscountPct,
+      affiliateWalletMultiplier,
+      affiliateMinWithdrawBank,
+      cashbackHoldDays,
+    };
   }
 }

@@ -113,6 +113,8 @@ export interface PublicConfig {
   affiliateWalletMultiplier: number;
   /** Mốc tối thiểu rút hoa hồng về ngân hàng. */
   affiliateMinWithdrawBank: number;
+  /** Số ngày giữ trước khi hoàn tiền sàn ngoài về Ví. */
+  cashbackHoldDays: number;
 }
 export const getPublicConfig = () =>
   api.get<PublicConfig>('/config/public').then((r) => r.data);
