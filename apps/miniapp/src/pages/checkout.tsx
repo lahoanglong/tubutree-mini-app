@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ticket, ChevronRight, X, Sprout, AlertCircle } from 'lucide-react';
 import type { OrderDTO } from '@tubutree/shared-types';
 import { getAddresses, getCart, checkoutQuote, placeOrder } from '../services/shop-api';
+import { getWallet, getLoyalty } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
@@ -74,7 +75,17 @@ export default function CheckoutPage() {
   const itemIds = (location.state as { itemIds?: string[] } | null)?.itemIds;
   const itemIdsKey = itemIds ? itemIds.join(',') : '';
 
-  const pointsToUse = usePoints ? (user?.pointsBalance ?? 0) : 0;
+  // Số dư PHẢI đọc từ query (được invalidate sau mọi thao tác tiền), KHÔNG từ auth store —
+  // store chỉ được nạp lại lúc mở app và sau khi đặt đơn, nên khách vừa đổi Ví→xu hoặc vừa
+  // tiêu xu trong Vườn Xanh sẽ thấy số cũ: hoặc không chọn được cách trả tiền mình vừa nạp,
+  // hoặc chọn được rồi bị BE từ chối "số dư không đủ" sau khi chờ spinner.
+  const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
+  const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
+  const walletBalanceLive = walletQ.data?.walletBalance ?? user?.walletBalance ?? 0;
+  const coinsBalanceLive = walletQ.data?.coinsBalance ?? user?.coinsBalance ?? 0;
+  const pointsBalanceLive = loyaltyQ.data?.pointsBalance ?? user?.pointsBalance ?? 0;
+
+  const pointsToUse = usePoints ? pointsBalanceLive : 0;
   const quote = useQuery({
     queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey],
     queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
@@ -86,10 +97,10 @@ export default function CheckoutPage() {
   // Đang chọn Ví/TubuXu mà tổng đơn vượt số dư → tự trả về COD, tránh đặt fail.
   useEffect(() => {
     if (!quote.data) return;
-    if (shouldFallbackToCod(payment, user?.walletBalance ?? 0, user?.coinsBalance ?? 0, quote.data.total)) {
+    if (shouldFallbackToCod(payment, walletBalanceLive, coinsBalanceLive, quote.data.total)) {
       setPayment('COD');
     }
-  }, [payment, quote.data, user?.walletBalance, user?.coinsBalance]);
+  }, [payment, quote.data, walletBalanceLive, coinsBalanceLive]);
 
   const order = useMutation({
     mutationFn: () =>
@@ -128,6 +139,9 @@ export default function CheckoutPage() {
       // Thanh toán WALLET trừ walletBalance và sử dụng điểm cộng/trừ pointsBalance ở BE;
       // staleTime=60s global → wallet/profile sẽ stale 60s nếu không invalidate → user thấy số cũ.
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      void queryClient.invalidateQueries({ queryKey: ['coins'] });
+      // Điểm Xanh đọc từ ['loyalty'] (nguồn số dư dùng ở chính màn này) — đơn vừa tiêu/tích điểm.
+      void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
       void queryClient.invalidateQueries({ queryKey: ['me'] });
       // Refresh auth store (user.walletBalance / pointsBalance dùng ở header/checkout) để UI đồng bộ.
       void useAuthStore.getState().restore().catch(() => undefined);
@@ -191,11 +205,11 @@ export default function CheckoutPage() {
     );
   }
 
-  const walletBalance = user?.walletBalance ?? 0;
+  const walletBalance = walletBalanceLive;
   const total = quote.data?.total ?? 0;
   const canPlace = !!addressId && quote.isSuccess && !order.isPending && !!invoiceValid && !submitting;
 
-  const coinsBalance = user?.coinsBalance ?? 0;
+  const coinsBalance = coinsBalanceLive;
   const paymentMethods = [
     { value: 'COD', label: vi.checkout.paymentCod, disabled: false },
     // ZALOPAY tạm ẨN: chưa nối cổng thanh toán thật → nếu hiện, bấm đặt sẽ ra "thành công"
@@ -520,7 +534,10 @@ export default function CheckoutPage() {
               accent={quote.data.shippingFee === 0 ? 'leaf' : undefined}
             />
             <Row label={vi.checkout.total} value={formatVnd(quote.data.total)} bold />
-            {quote.data.pointsEarned > 0 && (
+            {/* Đơn trả bằng TubuXu KHÔNG tích điểm (checkout.service.ts đặt pointsEarned=0 khi
+                paymentMethod='XU'), nhưng /checkout/quote không nhận paymentMethod nên vẫn trả
+                số điểm mặc định → nếu hiện nguyên, khách chọn XU sẽ được hứa điểm rồi không có. */}
+            {payment !== 'XU' && quote.data.pointsEarned > 0 && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
                 <Sprout size={13} color="var(--leaf-700)" aria-hidden />
                 <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
@@ -679,7 +696,7 @@ export default function CheckoutPage() {
               bold
             />
 
-            {(quote.data?.pointsEarned ?? 0) > 0 && (
+            {payment !== 'XU' && (quote.data?.pointsEarned ?? 0) > 0 && (
               <Box flex alignItems="center" justifyContent="flex-end" style={{ gap: 4, marginTop: 6 }}>
                 <Sprout size={13} color="var(--leaf-700)" aria-hidden />
                 <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>

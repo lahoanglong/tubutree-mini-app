@@ -790,6 +790,10 @@ model OrderItem {
   order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   variationId     String
   productName     String
+  // Slug SP tại thời điểm mua — snapshot như productName. Không có nó thì từ đơn hàng không
+  // mở được trang sản phẩm: khách nhận hàng xong KHÔNG có lối nào để đánh giá (P1-2, audit
+  // mạch lạc B2C), và "mua lại từng món" cũng không dẫn đi đâu được. Nullable cho đơn cũ.
+  productSlug     String?
   variationName   String
   unitPrice       Int
   quantity        Int

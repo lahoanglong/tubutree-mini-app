@@ -172,7 +172,7 @@ export class SubscriptionsService {
   }): Promise<void> {
     const variation = await this.prisma.variation.findUnique({
       where: { id: sub.variationId },
-      include: { product: { select: { name: true } } },
+      include: { product: { select: { name: true, slug: true } } },
     });
     if (!variation || !variation.isActive) {
       // SP ngừng bán → tạm dừng lịch + báo user.
@@ -248,6 +248,7 @@ export class SubscriptionsService {
                 {
                   variationId: variation.id,
                   productName: variation.product.name,
+                  productSlug: variation.product.slug,
                   variationName: variation.name,
                   unitPrice,
                   quantity: sub.quantity,

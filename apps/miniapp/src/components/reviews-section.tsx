@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Text, Button, Input, Sheet, Avatar, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchReviews, createReview } from '../services/shop-api';
+import { fetchReviews, createReview, canReviewProduct } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { MultiImageUpload, VideoUpload } from './image-upload';
@@ -29,6 +29,13 @@ export function ReviewsSection({ slug }: { slug: string }) {
   const [filter, setFilter] = useState<number | 'all' | 'photo' | 'video'>('all');
   const [visible, setVisible] = useState(5);
   const reviewsQ = useQuery({ queryKey: ['reviews', slug], queryFn: () => fetchReviews(slug) });
+  // Chỉ hỏi khi đã đăng nhập; chưa đăng nhập thì vẫn hiện nút để còn mời login.
+  const eligQ = useQuery({
+    queryKey: ['can-review', slug],
+    queryFn: () => canReviewProduct(slug),
+    enabled: status === 'authenticated',
+    retry: false,
+  });
 
   const data = reviewsQ.data;
   const dist = data?.distribution ?? {};
@@ -48,18 +55,28 @@ export function ReviewsSection({ slug }: { slug: string }) {
         <Text bold size="small">
           Đánh giá {data && data.count > 0 ? `(${data.count})` : ''}
         </Text>
-        <Text
-          size="small"
-          bold
-          style={{ color: 'var(--primary-700)' }}
-          onClick={() => {
-            haptic('light');
-            if (status !== 'authenticated') return void login();
-            setWriting(true);
-          }}
-        >
-          Viết đánh giá
-        </Text>
+        {/* Chỉ mở ô soạn khi BE xác nhận đủ điều kiện. Trước đây mở cho mọi user đăng nhập,
+            khách chưa mua chọn sao + upload ảnh/video xong mới nhận lỗi "chỉ đánh giá sản phẩm
+            đã mua" — mất trắng công sức (P1-2). */}
+        {(status !== 'authenticated' || eligQ.data?.canReview !== false) && (
+          <Text
+            size="small"
+            bold
+            style={{ color: 'var(--primary-700)' }}
+            onClick={() => {
+              haptic('light');
+              if (status !== 'authenticated') return void login();
+              setWriting(true);
+            }}
+          >
+            Viết đánh giá
+          </Text>
+        )}
+        {status === 'authenticated' && eligQ.data?.canReview === false && (
+          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+            {eligQ.data.reason === 'ALREADY_REVIEWED' ? 'Bạn đã đánh giá' : 'Mua & nhận hàng để đánh giá'}
+          </Text>
+        )}
       </Box>
 
       {data && data.count > 0 ? (

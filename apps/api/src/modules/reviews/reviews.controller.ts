@@ -24,6 +24,12 @@ export class ReviewsController {
     return this.reviews.create(userId, slug, dto);
   }
 
+  /** FE hỏi trước khi mở ô soạn đánh giá (cần đăng nhập — không @Public). */
+  @Get('products/:slug/reviews/can-review')
+  canReview(@CurrentUser('sub') userId: string, @Param('slug') slug: string) {
+    return this.reviews.canReview(userId, slug);
+  }
+
   @Public()
   @Get('products/:slug/reviews')
   list(@Param('slug') slug: string) {

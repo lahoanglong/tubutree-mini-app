@@ -9,6 +9,36 @@ type Db = PrismaService | Prisma.TransactionClient;
 export class ReviewsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Người dùng có được đánh giá sản phẩm này không — để FE hỏi TRƯỚC khi mở ô soạn.
+   * Không có endpoint này, trang sản phẩm mở ô đánh giá cho mọi user đăng nhập; khách chưa mua
+   * chọn sao, upload ảnh/video (đã tải lên server) rồi bấm Gửi mới nhận lỗi và mất trắng công
+   * sức (P1-2, audit mạch lạc B2C). Trả kèm `reason` để FE nói đúng lý do thay vì báo chung.
+   */
+  async canReview(userId: string, slug: string): Promise<{ canReview: boolean; reason: string | null }> {
+    const product = await this.prisma.product.findUnique({ where: { slug } });
+    if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
+
+    const variations = await this.prisma.variation.findMany({
+      where: { productId: product.id },
+      select: { id: true },
+    });
+    const delivered = await this.prisma.order.findFirst({
+      where: {
+        userId,
+        status: 'DELIVERED',
+        items: { some: { variationId: { in: variations.map((v) => v.id) } } },
+      },
+      select: { id: true },
+    });
+    if (!delivered) return { canReview: false, reason: 'NOT_PURCHASED' };
+
+    const existing = await this.prisma.review.findFirst({ where: { userId, productId: product.id } });
+    if (existing) return { canReview: false, reason: 'ALREADY_REVIEWED' };
+
+    return { canReview: true, reason: null };
+  }
+
   async create(userId: string, slug: string, dto: CreateReviewDto) {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');

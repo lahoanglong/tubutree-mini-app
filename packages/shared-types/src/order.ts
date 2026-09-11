@@ -10,6 +10,8 @@ export interface OrderItemDTO {
   id: string;
   variationId: string;
   productName: string;
+  /** Slug SP lúc mua — để mở trang sản phẩm từ đơn (đánh giá / mua lại). Null với đơn cũ. */
+  productSlug: string | null;
   variationName: string;
   unitPrice: number;
   quantity: number;

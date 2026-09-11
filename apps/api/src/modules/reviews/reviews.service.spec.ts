@@ -209,3 +209,32 @@ describe('ReviewsService.setVisibility (§6.13 admin ẩn review)', () => {
     await expect(new ReviewsService(prisma).setVisibility('x', false)).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+// P1-2 (audit mạch lạc B2C): nút "Viết đánh giá" ở trang sản phẩm mở cho MỌI user đăng nhập,
+// nhưng BE chỉ nhận đánh giá của người đã có đơn DELIVERED. Khách chưa mua chọn sao, upload
+// 3 ảnh + 1 video (đã tải lên server xong) rồi bấm Gửi mới nhận lỗi — mất trắng công sức.
+// FE cần biết TRƯỚC khi mở ô soạn.
+describe('ReviewsService.canReview', () => {
+  it('đã có đơn DELIVERED chứa sản phẩm, chưa đánh giá → được đánh giá', async () => {
+    const prisma = makePrisma();
+    const r = await new ReviewsService(prisma).canReview('u1', 'tinh-dau');
+    expect(r).toEqual({ canReview: true, reason: null });
+  });
+
+  it('chưa từng mua → không được, kèm lý do để FE hiện đúng thông điệp', async () => {
+    const prisma = makePrisma({ order: { findFirst: jest.fn().mockResolvedValue(null) } });
+    const r = await new ReviewsService(prisma).canReview('u1', 'tinh-dau');
+    expect(r).toEqual({ canReview: false, reason: 'NOT_PURCHASED' });
+  });
+
+  it('đã đánh giá rồi → không được, lý do khác (mỗi SP 1 lần)', async () => {
+    const prisma = makePrisma({ review: { findFirst: jest.fn().mockResolvedValue({ id: 'r0' }) } });
+    const r = await new ReviewsService(prisma).canReview('u1', 'tinh-dau');
+    expect(r).toEqual({ canReview: false, reason: 'ALREADY_REVIEWED' });
+  });
+
+  it('sản phẩm không tồn tại → NotFound (không lộ thành "chưa mua")', async () => {
+    const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(null) } });
+    await expect(new ReviewsService(prisma).canReview('u1', 'khong-co')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});

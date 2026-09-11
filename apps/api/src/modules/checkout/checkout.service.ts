@@ -173,6 +173,8 @@ export class CheckoutService {
               create: cart.items.map((l) => ({
                 variationId: l.variationId,
                 productName: l.productName,
+                // Snapshot slug để từ chi tiết đơn mở được trang SP (đánh giá / mua lại).
+                productSlug: l.slug,
                 variationName: l.variationName,
                 unitPrice: l.unitPrice,
                 quantity: l.quantity,

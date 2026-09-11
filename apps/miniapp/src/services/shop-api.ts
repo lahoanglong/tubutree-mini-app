@@ -277,6 +277,14 @@ export interface ReviewSummary {
 }
 export const fetchReviews = (slug: string) =>
   api.get<ReviewSummary>(`/products/${slug}/reviews`).then((r) => r.data);
+
+/** Hỏi TRƯỚC khi mở ô soạn đánh giá — tránh để khách chưa mua upload ảnh/video rồi mới bị từ chối. */
+export const canReviewProduct = (slug: string) =>
+  api
+    .get<{ canReview: boolean; reason: 'NOT_PURCHASED' | 'ALREADY_REVIEWED' | null }>(
+      `/products/${slug}/reviews/can-review`,
+    )
+    .then((r) => r.data);
 export const createReview = (
   slug: string,
   data: { rating: number; comment?: string; images?: string[]; videoUrl?: string },

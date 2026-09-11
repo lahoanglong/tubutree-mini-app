@@ -269,7 +269,16 @@ export default function WalletPage() {
           {/* Nguồn tiền chờ */}
           <Box mx={4} mb={3} flex style={{ gap: 10 }}>
             <SourceCard label="Hoa hồng chờ duyệt" value={w.commissionPending} Icon={Clock} />
-            <SourceCard label="Hoa hồng có thể rút" value={w.commissionApproved} Icon={CheckCircle2} />
+            {/* Hoa hồng APPROVED KHÔNG tự vào Ví — phải bấm "Nhận về ví" ở trang Cộng tác viên.
+                Trước đây thẻ này chỉ để đọc, nên CTV thấy "có thể rút 520.000đ" ngay cạnh
+                "Ví: 0đ", bấm Rút thì bị báo chưa đủ mốc, và không có chỉ dẫn nào. */}
+            <SourceCard
+              label="Hoa hồng có thể rút"
+              value={w.commissionApproved}
+              Icon={CheckCircle2}
+              hint={w.commissionApproved > 0 ? 'Nhận về Ví →' : undefined}
+              onClick={w.commissionApproved > 0 ? () => navigate('/affiliate') : undefined}
+            />
           </Box>
           <Box mx={4} mb={3}>
             <SourceCard label="Hoàn tiền sàn ngoài đang chờ" value={w.cashbackPending} Icon={ShoppingBag} wide />
@@ -378,9 +387,30 @@ export default function WalletPage() {
   );
 }
 
-function SourceCard({ label, value, Icon, wide }: { label: string; value: number; Icon: LucideIcon; wide?: boolean }) {
+function SourceCard({
+  label,
+  value,
+  Icon,
+  wide,
+  hint,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  Icon: LucideIcon;
+  wide?: boolean;
+  /** Dòng phụ giải thích tiền này ở đâu / cần làm gì để lấy về. */
+  hint?: string;
+  onClick?: () => void;
+}) {
   return (
-    <Box p={3} style={{ flex: 1, background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xs)' }}>
+    <Box
+      p={3}
+      role={onClick ? 'button' : undefined}
+      className={onClick ? 'tubu-press' : undefined}
+      onClick={onClick}
+      style={{ flex: 1, background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xs)' }}
+    >
       <Box style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
         <Icon size={17} color="var(--leaf-700)" strokeWidth={1.9} />
       </Box>
@@ -390,6 +420,11 @@ function SourceCard({ label, value, Icon, wide }: { label: string; value: number
       <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
         {label}
       </Text>
+      {hint && (
+        <Text size="xSmall" style={{ color: 'var(--primary-700)', marginTop: 4, fontWeight: 600 }}>
+          {hint}
+        </Text>
+      )}
     </Box>
   );
 }

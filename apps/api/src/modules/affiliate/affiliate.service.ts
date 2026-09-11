@@ -212,7 +212,7 @@ export class AffiliateService {
     const variationIds = [...new Set(dto.items.map((i) => i.variationId))];
     const variations = await this.prisma.variation.findMany({
       where: { id: { in: variationIds } },
-      include: { product: { select: { name: true } } },
+      include: { product: { select: { name: true, slug: true } } },
     });
     const vmap = new Map(variations.map((v) => [v.id, v]));
 
@@ -226,6 +226,7 @@ export class AffiliateService {
       return {
         variationId: v.id,
         productName: v.product.name,
+        productSlug: v.product.slug,
         variationName: v.name,
         unitPrice,
         quantity: i.quantity,
@@ -285,6 +286,7 @@ export class AffiliateService {
               create: lines.map((l) => ({
                 variationId: l.variationId,
                 productName: l.productName,
+                productSlug: l.productSlug,
                 variationName: l.variationName,
                 unitPrice: l.unitPrice,
                 quantity: l.quantity,

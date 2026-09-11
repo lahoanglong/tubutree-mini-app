@@ -92,6 +92,10 @@ export default function GamePage() {
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['game'] });
     void queryClient.invalidateQueries({ queryKey: ['me'] });
+    // Điểm Xanh/xu vừa đổi → màn Thanh toán đọc số dư từ ['loyalty']/['coins'], phải làm mới
+    // cùng lúc, nếu không khách vừa tiêu xong sang checkout vẫn thấy số cũ.
+    void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
+    void queryClient.invalidateQueries({ queryKey: ['coins'] });
   };
 
   const checkInM = useMutation({

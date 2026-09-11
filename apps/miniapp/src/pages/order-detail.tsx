@@ -136,16 +136,35 @@ export default function OrderDetailPage() {
           {vi.orders.products}
         </Text>
         {o.items.map((it) => (
-          <Box key={it.id} flex justifyContent="space-between" style={{ padding: '6px 0', gap: 12 }}>
-            <Text size="small" style={{ flex: 1 }}>
-              {it.productName} · {it.variationName}{' '}
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)', display: 'inline' }}>
-                ×{it.quantity}
+          <Box key={it.id} style={{ padding: '6px 0' }}>
+            <Box flex justifyContent="space-between" style={{ gap: 12 }}>
+              <Text size="small" style={{ flex: 1 }}>
+                {it.productName} · {it.variationName}{' '}
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)', display: 'inline' }}>
+                  ×{it.quantity}
+                </Text>
               </Text>
-            </Text>
-            <Text size="small" style={{ flex: '0 0 auto' }}>
-              {formatVnd(it.total)}
-            </Text>
+              <Text size="small" style={{ flex: '0 0 auto' }}>
+                {formatVnd(it.total)}
+              </Text>
+            </Box>
+            {/* Lối vào đánh giá: trước đây nhận hàng xong KHÔNG có đường nào để đánh giá —
+                chữ "đánh giá" chỉ tồn tại ở trang sản phẩm, mà từ đơn không mở được trang đó
+                (OrderItem không lưu slug). Nay snapshot productSlug nên dẫn thẳng được. */}
+            {o.status === 'DELIVERED' && it.productSlug && (
+              <Text
+                size="xSmall"
+                bold
+                className="tubu-press"
+                style={{ color: 'var(--primary-700)', marginTop: 2, display: 'inline-block' }}
+                onClick={() => {
+                  haptic('light');
+                  navigate(`/product/${it.productSlug}`);
+                }}
+              >
+                ★ {vi.orders.reviewItem}
+              </Text>
+            )}
           </Box>
         ))}
       </Box>
