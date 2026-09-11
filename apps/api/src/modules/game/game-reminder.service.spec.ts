@@ -7,12 +7,18 @@ const config = {
   get: async <T>(_k: string, fb?: T): Promise<T> => fb as T,
 } as unknown as SystemConfigService;
 
-function setup(profiles: unknown[]) {
-  const findMany = jest.fn().mockResolvedValue(profiles);
-  const prisma = { gameProfile: { findMany } } as unknown as PrismaService;
+function setup(profiles: unknown[], remindedUserIds: string[] = []) {
+  // Trang 1 trả dữ liệu, trang 2 rỗng → vòng cursor dừng (xem pageProfiles).
+  const rows = profiles.map((p, i) => ({ id: `gp${i}`, ...(p as object) }));
+  const findMany = jest.fn().mockResolvedValueOnce(rows).mockResolvedValue([]);
+  const logFindMany = jest.fn().mockResolvedValue(remindedUserIds.map((userId) => ({ userId })));
+  const prisma = {
+    gameProfile: { findMany },
+    notificationLog: { findMany: logFindMany },
+  } as unknown as PrismaService;
   const notify = jest.fn().mockResolvedValue(undefined);
   const notifications = { notify } as unknown as NotificationsService;
-  return { svc: new GameReminderService(prisma, config, notifications), findMany, notify };
+  return { svc: new GameReminderService(prisma, config, notifications), findMany, notify, logFindMany };
 }
 
 describe('GameReminderService.sendCheckInReminders', () => {
@@ -76,5 +82,26 @@ describe('GameReminderService.sendDailyReminders (cron)', () => {
     const { svc, findMany } = setup([]);
     await svc.sendDailyReminders();
     expect(findMany).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * Cửa sổ "sắp héo" rộng (death − wilt + 1) ngày, mặc định 5 — không có cờ chống lặp nghĩa là
+ * CÙNG một người nhận đúng thông báo này 5 ngày liên tiếp.
+ */
+describe('GameReminderService — không nhắc lặp, không nạp vô hạn', () => {
+  it('user đã được nhắc "cây khát" gần đây → bỏ qua', async () => {
+    const { svc, notify } = setup([{ userId: 'u1' }, { userId: 'u2' }], ['u1']);
+    const sent = await svc.sendThirstyTreeReminders();
+    expect(sent).toBe(1);
+    expect(notify).toHaveBeenCalledWith('u2', 'GAME_TREE_THIRSTY', {});
+    expect(notify).not.toHaveBeenCalledWith('u1', 'GAME_TREE_THIRSTY', {});
+  });
+
+  it('truy vấn hồ sơ có take + cursor (không nạp toàn bộ vườn vào RAM)', async () => {
+    const { svc, findMany } = setup([{ userId: 'u1' }]);
+    await svc.sendCheckInReminders();
+    expect(findMany.mock.calls[0][0].take).toBeGreaterThan(0);
+    expect(findMany.mock.calls[0][0].orderBy).toEqual({ id: 'asc' });
   });
 });

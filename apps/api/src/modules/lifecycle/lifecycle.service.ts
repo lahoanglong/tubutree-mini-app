@@ -19,6 +19,9 @@ interface ReorderRow {
  */
 @Injectable()
 export class LifecycleService {
+  /** Trần người nhận mỗi lần báo giảm giá — hàm chạy trong cron đồng bộ nên không được kéo dài. */
+  private static readonly PRICE_DROP_MAX_RECIPIENTS = 2_000;
+
   private readonly logger = new Logger(LifecycleService.name);
 
   constructor(
@@ -101,8 +104,13 @@ export class LifecycleService {
    * chặn cả lô (notify đã nuốt lỗi).
    */
   async notifyWishlistPriceDrop(productId: string, productName: string): Promise<void> {
+    // Trần số người nhận: hàm này chạy NGAY TRONG cron đồng bộ Pancake (15 phút/lần). Một sản
+    // phẩm hot giảm giá với 20 nghìn lượt yêu thích sẽ gửi 20 nghìn thông báo tuần tự, chặn
+    // đứng phần còn lại của lượt đồng bộ và có thể để lượt kế chạy chồng lên.
     const items = await this.prisma.wishlist.findMany({
       where: { productId },
+      orderBy: { id: 'asc' },
+      take: LifecycleService.PRICE_DROP_MAX_RECIPIENTS,
       select: { userId: true },
     });
     for (const w of items) {
@@ -110,6 +118,9 @@ export class LifecycleService {
         .notify(w.userId, 'PRICE_DROP_ALERT', { product: productName })
         .catch(() => undefined);
     }
-    if (items.length) this.logger.log(`Price-drop alert: ${productName} → ${items.length} user.`);
+    if (items.length) {
+      const capped = items.length === LifecycleService.PRICE_DROP_MAX_RECIPIENTS ? ' (đã chạm trần)' : '';
+      this.logger.log(`Price-drop alert: ${productName} → ${items.length} user${capped}.`);
+    }
   }
 }

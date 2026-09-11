@@ -14,6 +14,10 @@ import { decideTier } from './tier-policy';
  */
 @Injectable()
 export class LoyaltyService {
+  private static readonly RECALC_PAGE = 500;
+  /** 500 × 2.000 = 1 triệu thành viên mỗi đêm; cũng là chốt chặn vòng lặp vô tận. */
+  private static readonly RECALC_MAX_PAGES = 2_000;
+
   private readonly logger = new Logger(LoyaltyService.name);
 
   constructor(
@@ -255,14 +259,31 @@ export class LoyaltyService {
    * hạng ở đơn DELIVERED đầu tiên nên không cần quét. Lỗi 1 user không chặn người khác.
    */
   async recalcAllTiers(): Promise<number> {
-    const users = await this.prisma.user.findMany({ where: { tierId: { not: null } }, select: { id: true } });
     // Load tiers 1 LẦN cho cả batch — trước đây mỗi recalcTier tự findMany lại → N+1 query
     // thật sự khi quét hàng nghìn user/đêm. Danh sách hạng gần như tĩnh, không cần fresh mỗi user.
     const tiers = await this.prisma.membershipTier.findMany({ orderBy: { sortOrder: 'asc' } });
-    for (const u of users) {
-      await this.recalcTier(u.id, tiers).catch((e) => this.logger.warn(`recalcTier lỗi user=${u.id}: ${(e as Error).message}`));
+    // Phân trang bằng cursor: `findMany` không giới hạn nạp TOÀN BỘ thành viên có hạng vào RAM
+    // ngay dòng đầu. Với vài trăm nghìn thành viên, job bắt đầu 03:15 có thể chạy sang tận sáng
+    // và chồng lên lần chạy đêm sau (@Cron không tự chặn overlap).
+    let processed = 0;
+    let cursor: string | undefined;
+    for (let page = 0; page < LoyaltyService.RECALC_MAX_PAGES; page++) {
+      const users = await this.prisma.user.findMany({
+        where: { tierId: { not: null } },
+        orderBy: { id: 'asc' },
+        take: LoyaltyService.RECALC_PAGE,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        select: { id: true },
+      });
+      if (users.length === 0) break;
+      cursor = users[users.length - 1]!.id;
+      for (const u of users) {
+        await this.recalcTier(u.id, tiers).catch((e) => this.logger.warn(`recalcTier lỗi user=${u.id}: ${(e as Error).message}`));
+        processed++;
+      }
+      if (users.length < LoyaltyService.RECALC_PAGE) break;
     }
-    return users.length;
+    return processed;
   }
 
   /** Multiplier điểm của hạng hiện tại (1 nếu chưa có hạng). */

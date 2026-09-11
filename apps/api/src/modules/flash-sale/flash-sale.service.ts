@@ -317,10 +317,17 @@ export class FlashSaleService {
       });
       if (claimed.count === 0) continue;
 
-      await this.notifications
-        .notify(r.userId, 'FLASH_STARTING', { product: r.item.variation.product.name })
-        .catch(() => undefined);
-      sent++;
+      try {
+        await this.notifications.notify(r.userId, 'FLASH_STARTING', { product: r.item.variation.product.name });
+        sent++;
+      } catch (err) {
+        // Claim đã ghi trước khi gửi: nuốt lỗi ở đây là mất luôn cơ hội giờ vàng của khách đó,
+        // và không có dấu vết nào. Trả cờ về để lượt cron sau (mỗi giờ) thử lại.
+        this.logger.error(`Nhắc giờ vàng lỗi (reminder=${r.id}): ${err instanceof Error ? err.message : err}`);
+        await this.prisma.flashSaleReminder
+          .updateMany({ where: { id: r.id, notifiedAt: now }, data: { notifiedAt: null } })
+          .catch(() => undefined);
+      }
     }
     if (sent) this.logger.log(`Flash-starting reminders sent: ${sent}`);
 

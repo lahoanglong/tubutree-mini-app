@@ -16,6 +16,12 @@ const DAY = 864e5;
  */
 @Injectable()
 export class GameReminderService {
+  private static readonly PAGE = 500;
+  /** 500 × 200 = 100.000 vườn mỗi lượt — quá đủ, và chặn vòng lặp vô tận nếu truy vấn sai. */
+  private static readonly MAX_PAGES = 200;
+  /** Không nhắc "cây khát" lại trong ngần này ngày (cửa sổ héo rộng tới 5 ngày). */
+  private static readonly THIRSTY_COOLDOWN_DAYS = 3;
+
   private readonly logger = new Logger(GameReminderService.name);
 
   constructor(
@@ -43,25 +49,45 @@ export class GameReminderService {
   async sendCheckInReminders(): Promise<number> {
     const startToday = this.startOfVNDay(new Date());
     const startYesterday = new Date(startToday.getTime() - DAY);
-    const profiles = await this.prisma.gameProfile.findMany({
-      where: {
-        streakDays: { gte: 1 },
-        // điểm danh gần nhất rơi vào "hôm qua" (chưa điểm danh hôm nay)
-        lastCheckInAt: { gte: startYesterday, lt: startToday },
-      },
-      select: { userId: true, streakDays: true, streakFreezes: true },
-    });
     let sent = 0;
-    for (const p of profiles) {
-      await this.notifications
-        .notify(p.userId, 'GAME_CHECKIN_REMINDER', {
-          streak: String(p.streakDays),
-          freezes: String(p.streakFreezes),
-        })
-        .catch(() => undefined);
-      sent++;
+    // Phân trang: `findMany` không giới hạn sẽ nạp toàn bộ vườn đang hoạt động vào RAM rồi gửi
+    // tuần tự — 50 nghìn vườn là job chạy hàng giờ và giữ nguyên chừng ấy dòng trong bộ nhớ.
+    for await (const batch of this.pageProfiles({
+      streakDays: { gte: 1 },
+      // điểm danh gần nhất rơi vào "hôm qua" (chưa điểm danh hôm nay)
+      lastCheckInAt: { gte: startYesterday, lt: startToday },
+    })) {
+      for (const p of batch) {
+        await this.notifications
+          .notify(p.userId, 'GAME_CHECKIN_REMINDER', {
+            streak: String(p.streakDays ?? 0),
+            freezes: String(p.streakFreezes ?? 0),
+          })
+          .catch(() => undefined);
+        sent++;
+      }
     }
     return sent;
+  }
+
+  /** Duyệt GameProfile theo lô bằng cursor — trần an toàn để job không chạy vô tận. */
+  private async *pageProfiles(
+    where: Record<string, unknown>,
+  ): AsyncGenerator<{ userId: string; streakDays?: number; streakFreezes?: number }[]> {
+    let cursor: string | undefined;
+    for (let page = 0; page < GameReminderService.MAX_PAGES; page++) {
+      const rows = await this.prisma.gameProfile.findMany({
+        where,
+        orderBy: { id: 'asc' },
+        take: GameReminderService.PAGE,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        select: { id: true, userId: true, streakDays: true, streakFreezes: true },
+      });
+      if (rows.length === 0) return;
+      cursor = rows[rows.length - 1]!.id;
+      yield rows;
+      if (rows.length < GameReminderService.PAGE) return;
+    }
   }
 
   async sendThirstyTreeReminders(): Promise<number> {
@@ -70,17 +96,33 @@ export class GameReminderService {
     const now = Date.now();
     const warnAfter = new Date(now - (wiltDays - 1) * DAY); // chưa tưới ≥ (wilt-1) ngày
     const deadBefore = new Date(now - deathDays * DAY); // nhưng chưa quá ngày chết
-    const profiles = await this.prisma.gameProfile.findMany({
-      where: {
-        // đã từng tưới (cây đang lớn) + rơi vào cửa sổ sắp héo, chưa chết
-        lastWateredAt: { lte: warnAfter, gt: deadBefore },
-      },
-      select: { userId: true },
-    });
+    // Cửa sổ "sắp héo" rộng tới (death − wilt + 1) ngày, mặc định là 5 — không có cờ chống lặp
+    // nghĩa là CÙNG một người nhận đúng thông báo này 5 ngày liên tiếp. Dò lại nhật ký thông báo
+    // trong 3 ngày gần nhất thay vì thêm cột mới: một truy vấn cho cả lô.
+    const recentlyReminded = new Set(
+      (
+        await this.prisma.notificationLog.findMany({
+          where: {
+            templateCode: 'GAME_TREE_THIRSTY',
+            sentAt: { gte: new Date(now - GameReminderService.THIRSTY_COOLDOWN_DAYS * DAY) },
+          },
+          select: { userId: true },
+          distinct: ['userId'],
+          take: 20_000,
+        })
+      ).map((r) => r.userId),
+    );
+
     let sent = 0;
-    for (const p of profiles) {
-      await this.notifications.notify(p.userId, 'GAME_TREE_THIRSTY', {}).catch(() => undefined);
-      sent++;
+    for await (const batch of this.pageProfiles({
+      // đã từng tưới (cây đang lớn) + rơi vào cửa sổ sắp héo, chưa chết
+      lastWateredAt: { lte: warnAfter, gt: deadBefore },
+    })) {
+      for (const p of batch) {
+        if (recentlyReminded.has(p.userId)) continue;
+        await this.notifications.notify(p.userId, 'GAME_TREE_THIRSTY', {}).catch(() => undefined);
+        sent++;
+      }
     }
     return sent;
   }

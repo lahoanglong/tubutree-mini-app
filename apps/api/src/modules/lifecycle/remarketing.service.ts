@@ -65,10 +65,26 @@ export class RemarketingService {
 
       const itemCount = cart.items.reduce((s, i) => s + i.quantity, 0);
       const product = cart.items[0]?.variation.product.name ?? '';
-      await this.notifications
-        .notify(cart.userId, 'CART_ABANDONED', { item_count: String(itemCount), product })
-        .catch(() => undefined);
-      sent++;
+      try {
+        await this.notifications.notify(cart.userId, 'CART_ABANDONED', {
+          item_count: String(itemCount),
+          product,
+        });
+        sent++;
+      } catch (err) {
+        // Đã CLAIM trước khi gửi, nên nuốt lỗi ở đây là mất hẳn lần nhắc đó: guard
+        // `abandonRemindedAt >= updatedAt` chặn mọi lượt sau, và `.catch(() => undefined)` xoá
+        // sạch dấu vết. Trả cờ về để lượt sau thử lại, và ghi log để lỗi gửi được phát hiện.
+        this.logger.error(
+          `Nhắc bỏ quên giỏ lỗi (cart=${cart.id}): ${err instanceof Error ? err.message : err}`,
+        );
+        await this.prisma.cart
+          .updateMany({
+            where: { id: cart.id, abandonRemindedAt: claimedAt },
+            data: { abandonRemindedAt: cart.abandonRemindedAt, updatedAt: cart.updatedAt },
+          })
+          .catch(() => undefined);
+      }
     }
     if (sent) this.logger.log(`Cart abandon reminders sent: ${sent}`);
   }

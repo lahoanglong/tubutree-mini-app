@@ -399,15 +399,25 @@ describe('FlashSaleService.notifyStartedFlashSales', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it('notify lỗi → không throw (non-fatal)', async () => {
+  /**
+   * Claim (notifiedAt) được ghi TRƯỚC khi gửi. Nuốt lỗi gửi là mất luôn cơ hội giờ vàng của
+   * khách đó — claim chặn mọi lượt sau — và `.catch(() => undefined)` xoá sạch dấu vết.
+   */
+  it('notify lỗi → không throw, và TRẢ LẠI claim để lượt cron sau thử lại', async () => {
     const findMany = jest.fn().mockResolvedValue([reminderRow()]);
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = { flashSaleReminder: { findMany, updateMany } } as any;
     const notify = jest.fn().mockRejectedValue(new Error('boom'));
     const notifSvc = { notify } as unknown as NotificationsService;
+
     await expect(
       new FlashSaleService(prisma, config, notifSvc).notifyStartedFlashSales(now),
     ).resolves.not.toThrow();
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', notifiedAt: now },
+      data: { notifiedAt: null },
+    });
   });
 
   /**
