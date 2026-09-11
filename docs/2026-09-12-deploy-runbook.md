@@ -150,4 +150,6 @@ trực tiếp trong Postgres.
 | Bài do khách chưa tin cậy đăng | vào `PENDING`, đúng luật kiểm duyệt |
 | Bảng `order_status_history` | đúng 8 cột + index `(orderId, createdAt)` |
 
-Dữ liệu smoke đã dọn sạch sau khi kiểm tra (`DELETE 5` bài thử).
+| Phân trang bình luận (cursor) | trang 1 trả 2 bình luận + cursor, trang 2 trả 2 bình luận TIẾP THEO rồi hết — **không lặp, không sót** |
+
+Dữ liệu smoke đã dọn sạch sau khi kiểm tra (5 bài thử + 3 bình luận thử).
