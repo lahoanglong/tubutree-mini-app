@@ -367,7 +367,7 @@ export default function BrowsePage() {
               <Box flex justifyContent="center" pt={4}>
                 <Button
                   variant="secondary"
-                  loading={products.isFetchingNextPage}
+                  loading={products.isFetchingNextPage} disabled={products.isFetchingNextPage}
                   onClick={() => void products.fetchNextPage()}
                   style={{ minWidth: 160 }}
                 >

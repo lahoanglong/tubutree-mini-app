@@ -131,7 +131,7 @@ export function WheelOfFortune({
       </Box>
 
       <Button
-        loading={spinning}
+        loading={spinning} disabled={spinning}
         onClick={() => void handleSpin()}
         style={{ background: 'var(--clay-500)', minWidth: 200 }}
       >

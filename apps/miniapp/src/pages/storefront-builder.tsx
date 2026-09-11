@@ -360,7 +360,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         >
           {vi.storefront.preview}
         </Button>
-        <Button style={{ flex: 1, background: 'var(--primary-600)' }} loading={publishMut.isPending} onClick={() => publishMut.mutate()}>{vi.storefront.publish}</Button>
+        <Button style={{ flex: 1, background: 'var(--primary-600)' }} loading={publishMut.isPending} disabled={publishMut.isPending} onClick={() => publishMut.mutate()}>{vi.storefront.publish}</Button>
       </Box>
 
       <Sheet visible={!!pickerCol} onClose={() => setPickerCol(null)} autoHeight>
@@ -397,7 +397,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             </Button>
             <Button
               style={{ flex: 1, background: 'var(--danger)' }}
-              loading={deleteColMut.isPending}
+              loading={deleteColMut.isPending} disabled={deleteColMut.isPending}
               onClick={() => confirmDeleteCol && deleteColMut.mutate(confirmDeleteCol)}
             >
               {vi.storefront.deleteCollection}
@@ -438,7 +438,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
               </Button>
               <Button
                 style={{ flex: 1, background: 'var(--primary-600)' }}
-                loading={noteMut.isPending}
+                loading={noteMut.isPending} disabled={noteMut.isPending}
                 onClick={() => noteMut.mutate({ id: notingItem.id, note: notingItem.note.trim() })}
               >
                 Lưu
@@ -464,7 +464,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             </Button>
             <Button
               fullWidth
-              loading={delItemMut.isPending}
+              loading={delItemMut.isPending} disabled={delItemMut.isPending}
               onClick={() => delItemMut.mutate(confirmDeleteItemId!)}
               style={{ background: 'var(--danger)' }}
             >
@@ -525,7 +525,7 @@ function QuestSection() {
               <Button
                 size="small"
                 style={{ background: 'var(--primary-600)', whiteSpace: 'nowrap' }}
-                loading={claimMut.isPending && claimMut.variables === q.code}
+                loading={claimMut.isPending && claimMut.variables === q.code} disabled={claimMut.isPending}
                 onClick={() => claimMut.mutate(q.code)}
               >
                 +{q.rewardXu.toLocaleString('vi-VN')} xu
@@ -649,7 +649,7 @@ function ProfileSheet({
 
       <Button
         fullWidth
-        loading={saveMut.isPending}
+        loading={saveMut.isPending} disabled={saveMut.isPending}
         onClick={() => saveMut.mutate()}
         style={{ marginTop: 16, background: 'var(--primary-600)' }}
       >
@@ -811,7 +811,7 @@ function MerchantConfigSheet({
         <Button
           fullWidth
           style={{ marginTop: 12, background: 'var(--primary-600)' }}
-          loading={saveMut.isPending}
+          loading={saveMut.isPending} disabled={saveMut.isPending}
           onClick={() => saveMut.mutate()}
         >
           Lưu cấu hình gian hàng

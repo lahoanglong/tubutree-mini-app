@@ -106,7 +106,7 @@ export default function BankPaymentPage() {
       <Page className="page" style={{ background: 'var(--neutral-50)' }}>
         <Box style={{ textAlign: 'center', padding: '48px 24px' }}>
           <Text style={{ color: 'var(--neutral-600)' }}>Không tải được thông tin thanh toán.</Text>
-          <Button loading={isFetching} onClick={() => void refetch()} style={{ marginTop: 16, background: 'var(--leaf-600)' }}>
+          <Button loading={isFetching} disabled={isFetching} onClick={() => void refetch()} style={{ marginTop: 16, background: 'var(--leaf-600)' }}>
             Thử lại
           </Button>
           <Button variant="secondary" onClick={() => navigate(`/order/${code}`, { replace: true })} style={{ marginTop: 8 }}>
@@ -185,7 +185,7 @@ export default function BankPaymentPage() {
           <Text size="small">Đang chờ thanh toán… tự cập nhật khi nhận được tiền</Text>
         </Box>
 
-        <Button fullWidth loading={isFetching} onClick={handleCheckPayment} style={{ marginTop: 12, background: 'var(--leaf-600)' }}>
+        <Button fullWidth loading={isFetching} disabled={isFetching} onClick={handleCheckPayment} style={{ marginTop: 12, background: 'var(--leaf-600)' }}>
           Tôi đã chuyển khoản — Kiểm tra
         </Button>
         <Button fullWidth variant="secondary" onClick={() => navigate(`/order/${data.orderCode}`, { replace: true })} style={{ marginTop: 8 }}>

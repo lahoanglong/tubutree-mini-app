@@ -265,7 +265,7 @@ function AddressForm({
           {vi.common.cancel}
         </Button>
         <Button
-          loading={create.isPending}
+          loading={create.isPending} disabled={create.isPending}
           onClick={submit}
           style={{ background: 'var(--primary-600)', minHeight: 44, flex: 1 }}
         >

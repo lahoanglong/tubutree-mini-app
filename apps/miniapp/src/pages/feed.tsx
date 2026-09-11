@@ -271,7 +271,7 @@ export default function FeedPage() {
             <Box flex justifyContent="center" pt={4}>
               <Button
                 variant="secondary"
-                loading={feed.isFetchingNextPage}
+                loading={feed.isFetchingNextPage} disabled={feed.isFetchingNextPage}
                 onClick={() => void feed.fetchNextPage()}
                 style={{ minWidth: 160 }}
               >

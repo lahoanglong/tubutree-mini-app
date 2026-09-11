@@ -446,7 +446,7 @@ export default function OrderDetailPage() {
         )}
         {isDone && (
           <Button
-            loading={repurchase.isPending}
+            loading={repurchase.isPending} disabled={repurchase.isPending}
             onClick={() => repurchase.mutate()}
             style={{ background: 'var(--primary-600)', minHeight: 48, fontWeight: 600, flex: 1 }}
           >
@@ -485,7 +485,7 @@ export default function OrderDetailPage() {
             <Button
               fullWidth
               variant="tertiary"
-              loading={cancel.isPending}
+              loading={cancel.isPending} disabled={cancel.isPending}
               onClick={() => cancel.mutate()}
               style={{ color: 'var(--danger)', minHeight: 44 }}
             >

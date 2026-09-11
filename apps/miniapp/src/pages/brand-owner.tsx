@@ -152,7 +152,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
         <Box mb={2}><Input label="Tagline" value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} /></Box>
         <Box mb={2}><Input label="Nguồn gốc" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} /></Box>
         <Box mb={2}><Input.TextArea label="Câu chuyện thương hiệu" value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} /></Box>
-        <Button fullWidth style={{ background: 'var(--primary-600)' }} loading={saveMut.isPending} onClick={() => saveMut.mutate()}>
+        <Button fullWidth style={{ background: 'var(--primary-600)' }} loading={saveMut.isPending} disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
           Lưu thông tin
         </Button>
       </Box>
@@ -226,7 +226,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
             </Button>
             <Button
               fullWidth
-              loading={delPromo.isPending}
+              loading={delPromo.isPending} disabled={delPromo.isPending}
               onClick={() => delPromo.mutate(confirmDeleteId!)}
               style={{ background: 'var(--danger)' }}
             >

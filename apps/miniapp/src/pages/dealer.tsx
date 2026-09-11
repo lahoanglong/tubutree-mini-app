@@ -559,7 +559,7 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
           <Box flex style={{ gap: 8 }}>
             <Button
               variant="secondary"
-              loading={place.isPending}
+              loading={place.isPending} disabled={place.isPending}
               onClick={() => place.mutate('PREPAID')}
               style={{ flex: 1 }}
             >

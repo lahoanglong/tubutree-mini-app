@@ -88,7 +88,7 @@ export default function BetaPage() {
                 <Button
                   size="small"
                   variant="secondary"
-                  loading={leaveM.isPending}
+                  loading={leaveM.isPending} disabled={leaveM.isPending}
                   onClick={() => leaveM.mutate()}
                   style={{ marginTop: 10 }}
                 >

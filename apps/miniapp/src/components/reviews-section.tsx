@@ -295,7 +295,7 @@ function WriteReview({ slug, onDone }: { slug: string; onDone: () => void }) {
       </Text>
       <Button
         fullWidth
-        loading={submit.isPending}
+        loading={submit.isPending} disabled={submit.isPending}
         onClick={() => submit.mutate()}
         style={{ marginTop: 16, background: 'var(--primary-600)' }}
       >

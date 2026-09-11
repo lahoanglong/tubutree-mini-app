@@ -182,7 +182,7 @@ function TodayCard() {
             variant="secondary"
             prefixIcon={<LogOut size={16} />}
             style={{ marginTop: 10 }}
-            loading={checkoutM.isPending}
+            loading={checkoutM.isPending} disabled={checkoutM.isPending}
             onClick={() => checkoutM.mutate(undefined)}
           >
             Checkout
@@ -220,7 +220,7 @@ function TodayCard() {
             <Button
               size="small"
               prefixIcon={<LogIn size={15} />}
-              loading={checkinM.isPending}
+              loading={checkinM.isPending} disabled={checkinM.isPending}
               onClick={() => checkinM.mutate(s.id)}
             >
               Checkin
@@ -474,7 +474,7 @@ function StaffHub() {
             variant="secondary"
             prefixIcon={<Copy size={15} />}
             style={{ flex: 1 }}
-            loading={copyM.isPending}
+            loading={copyM.isPending} disabled={copyM.isPending}
             onClick={() => copyM.mutate()}
           >
             Copy tuần trước

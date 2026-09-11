@@ -216,7 +216,7 @@ export function AvatarCropModal({
 
           <Button
             fullWidth
-            loading={processing}
+            loading={processing} disabled={processing}
             onClick={handleConfirm}
             style={{ background: 'var(--leaf-600)' }}
           >

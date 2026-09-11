@@ -343,7 +343,7 @@ function DetailSheet({
                         <TimeInput value={ci} onChange={setCi} style={{ flex: 1 }} />
                         <TimeInput value={co} onChange={setCo} style={{ flex: 1 }} />
                       </Box>
-                      <Button size="small" style={{ marginTop: 6 }} loading={editM.isPending} onClick={() => editM.mutate(dayKey)}>
+                      <Button size="small" style={{ marginTop: 6 }} loading={editM.isPending} disabled={editM.isPending} onClick={() => editM.mutate(dayKey)}>
                         Lưu giờ
                       </Button>
                     </Box>
@@ -615,7 +615,7 @@ function ShiftsSection() {
       </Box>
 
       {pendingIds.length > 0 && (
-        <Button size="small" loading={bulkM.isPending} onClick={() => bulkM.mutate()}>
+        <Button size="small" loading={bulkM.isPending} disabled={bulkM.isPending} onClick={() => bulkM.mutate()}>
           Duyệt tất cả ({pendingIds.length})
         </Button>
       )}
