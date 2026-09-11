@@ -209,9 +209,21 @@ export class LoyaltyService {
     });
     const spent12m = spentAgg._sum.total ?? 0;
 
+    // Hạng xét theo điểm ĐÃ TÍCH trong 12 tháng, KHÔNG phải số dư còn lại. Trước đây dùng
+    // `user.pointsBalance`: tiêu điểm lúc thanh toán (hoặc điểm hết hạn) kéo số dư xuống dưới
+    // mốc → hết ân hạn là bị hạ hạng, mất ×1,5 điểm + freeship. Dùng đúng loyalty currency lại
+    // bị phạt, trong khi doc-comment và FE ("từ X điểm") đều mô tả là điểm TÍCH LUỸ
+    // (P2, docs/2026-09-08-review-progress.md). Cùng cửa sổ 12 tháng với tiêu chí chi tiêu nên
+    // hạng vẫn phản ánh mức độ hoạt động gần đây, không thành hạng vĩnh viễn.
+    const earnedAgg = await this.prisma.pointsTransaction.aggregate({
+      where: { userId, delta: { gt: 0 }, createdAt: { gte: since } },
+      _sum: { delta: true },
+    });
+    const earned12m = earnedAgg._sum.delta ?? 0;
+
     let qualified = tiers[0];
     for (const t of tiers) {
-      const byPoints = user.pointsBalance >= t.minPoints;
+      const byPoints = earned12m >= t.minPoints;
       const bySpending = t.minSpending != null && spent12m >= t.minSpending;
       if (byPoints || bySpending) qualified = t;
     }
