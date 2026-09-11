@@ -142,14 +142,21 @@ export class VouchersService {
       { spend: 3_000_000, reward: 100_000 },
       { spend: 5_000_000, reward: 200_000 },
     ]);
-    const since = new Date(Date.now() - 30 * 864e5);
+    // Cửa sổ tính PHẢI khớp với khoá idempotency bên dưới (`...-yyyy-mm`). Trước đây gom theo
+    // 30 ngày TRƯỢT nhưng khoá theo THÁNG: cùng một lần chi tiêu nằm trong cửa sổ trượt sinh
+    // khoá khác khi sang tháng mới → cấp voucher lần 2 cho đúng số tiền đó (P2,
+    // docs/2026-09-08-review-progress.md). Nay cả hai cùng dùng tháng dương lịch GIỜ VN
+    // (container chạy UTC nên phải trừ offset, nếu không mốc tháng lệch 7 tiếng).
+    const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+    const nowVn = new Date(Date.now() + VN_OFFSET_MS);
+    const since = new Date(Date.UTC(nowVn.getUTCFullYear(), nowVn.getUTCMonth(), 1) - VN_OFFSET_MS);
     const rows = await this.prisma.$queryRaw<{ userId: string; spent: bigint }[]>`
       SELECT "userId", SUM("total") AS spent
       FROM orders
       WHERE status::text = 'DELIVERED' AND "createdAt" >= ${since}
       GROUP BY "userId"
       LIMIT 1000`;
-    const period = new Date().toISOString().slice(0, 7); // yyyy-mm
+    const period = nowVn.toISOString().slice(0, 7); // yyyy-mm theo giờ VN
     let granted = 0;
     for (const r of rows) {
       const spent = Number(r.spent);

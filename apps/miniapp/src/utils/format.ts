@@ -32,3 +32,17 @@ export const ORDER_STATUS_LABEL: Record<string, string> = {
   RETURNED: 'Đã hoàn',
   CANCELLED: 'Đã hủy',
 };
+
+/**
+ * Tỉ lệ hoàn tiền lưu ở DB dạng PHÂN SỐ (0.035 = 3,5%) — không phải phần trăm.
+ * Trước đây FE render thẳng `{Number(baseRate)}%` nên mọi sàn đều hiện "0.035%" thay vì
+ * "3,5%", sai 100 lần trên đúng con số mời chào người dùng.
+ * Trả chuỗi đã kèm "%", dùng dấu phẩy thập phân kiểu Việt, bỏ ",0" thừa.
+ */
+export function formatRatePct(rate: number | string | null | undefined): string {
+  const v = Number(rate ?? 0);
+  if (!Number.isFinite(v) || v <= 0) return '0%';
+  const pct = v * 100;
+  // 1 chữ số thập phân là đủ cho khoảng 0,5%–10% thường gặp; số tròn thì bỏ phần thập phân.
+  return `${pct.toFixed(1).replace(/\.0$/, '').replace('.', ',')}%`;
+}

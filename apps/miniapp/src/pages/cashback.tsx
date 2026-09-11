@@ -13,7 +13,7 @@ import { getWallet } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { openAffiliateLink } from '../services/zmp-bridge';
 import { useAuthStore } from '../store/auth';
-import { formatVnd } from '../utils/format';
+import { formatVnd, formatRatePct } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -115,7 +115,7 @@ export default function CashbackPage() {
                   {m.name}
                 </Text>
                 <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-                  ↩ {Number(m.baseRate)}%
+                  ↩ {formatRatePct(m.baseRate)}
                 </Text>
               </Box>
             ))}
@@ -185,7 +185,7 @@ export default function CashbackPage() {
                   {selected.name}
                 </Text>
                 <Text size="small" style={{ color: 'var(--leaf-700)' }}>
-                  Hoàn đến {Number(selected.baseRate)}% giá trị đơn
+                  Hoàn đến {formatRatePct(selected.baseRate)} giá trị đơn
                 </Text>
               </Box>
             </Box>

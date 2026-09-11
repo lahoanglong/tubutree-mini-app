@@ -97,7 +97,7 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
       coupon: { findUnique: jest.fn().mockResolvedValue(null), create },
     } as unknown as PrismaService;
     const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
-    return { svc: new VouchersService(prisma, makeConfig(), notify), create };
+    return { svc: new VouchersService(prisma, makeConfig(), notify), create, prisma };
   }
 
   it('cấp voucher mốc CAO NHẤT đạt được (3tr → 100k)', async () => {
@@ -118,4 +118,39 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
     await svc.milestoneVouchers();
     expect(create.mock.calls[0][0].data.value).toBe(200000);
   });
+
+  // P2 (docs/2026-09-08-review-progress.md): cửa sổ tính là 30 ngày TRƯỢT nhưng khoá
+  // idempotency lại theo THÁNG DƯƠNG LỊCH (`MILESTONE<spend>-yyyy-mm`). Cùng một lần chi tiêu
+  // nằm trong 30 ngày trượt sẽ sinh khoá khác khi sang tháng mới → cấp voucher LẦN 2 cho đúng
+  // số tiền đó. Phải cho 2 thứ dùng CHUNG một mốc thời gian: gom theo tháng dương lịch.
+  it('gom chi tiêu theo THÁNG DƯƠNG LỊCH (giờ VN), không phải 30 ngày trượt', async () => {
+    const { svc, prisma } = setup([{ userId: 'u1', spent: BigInt(3_500_000) }]);
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-05T03:00:00Z')); // 10:00 ngày 5/10 giờ VN
+    try {
+      await svc.milestoneVouchers();
+    } finally {
+      jest.useRealTimers();
+    }
+    // Tham số truyền vào $queryRaw là mốc đầu tháng 10 theo giờ VN = 2026-09-30T17:00:00Z.
+    const since = ($queryRawArg(prisma) as Date);
+    expect(since.toISOString()).toBe('2026-09-30T17:00:00.000Z');
+  });
+
+  it('khoá idempotency vẫn theo tháng → cùng tháng chỉ cấp 1 lần (grant trả false lần 2)', async () => {
+    const { svc, create, prisma } = setup([{ userId: 'u1', spent: BigInt(3_500_000) }]);
+    await svc.milestoneVouchers();
+    const reason = create.mock.calls[0][0].data.scopeMeta?.reason ?? create.mock.calls[0][0].data.code;
+    expect(String(reason)).toContain(new Date().toISOString().slice(0, 7));
+    // Lần 2 trong cùng tháng: coupon đã tồn tại → grant() bail, không tạo thêm.
+    (prisma.coupon.findUnique as jest.Mock).mockResolvedValue({ id: 'c1' });
+    create.mockClear();
+    await svc.milestoneVouchers();
+    expect(create).not.toHaveBeenCalled();
+  });
 });
+
+/** Lấy tham số Date đầu tiên truyền vào $queryRaw (template tag → args nằm sau mảng strings). */
+function $queryRawArg(prisma: PrismaService): unknown {
+  const call = ((prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw).mock.calls[0];
+  return call.slice(1).find((a: unknown) => a instanceof Date);
+}
