@@ -7,6 +7,7 @@ import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { Skeleton } from './ui/skeleton';
 import { ErrorState } from './ui/empty-state';
+import { copyText } from '../utils/clipboard';
 
 /**
  * "Bộ nội dung bán hàng" theo từng sản phẩm — CTV mở lên là copy/chia sẻ được ngay:
@@ -28,16 +29,16 @@ export function ContentKitSheet({
     enabled: visible,
   });
 
+  // Trước đây không có clipboard thì `return` im lặng: chạm vào bài mẫu không có gì xảy ra và
+  // cũng không nói vì sao. copyText còn có phương án execCommand cho webview cũ.
   const copy = async (text: string) => {
-    if (!navigator.clipboard) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      haptic('light');
-      openSnackbar({ text: vi.contentKit.copied, type: 'success' });
-    } catch {
-      // Quyền clipboard bị từ chối hoặc lỗi khác — báo cho user thay vì hiện toast thành công giả.
-      openSnackbar({ text: vi.errors.generic, type: 'error' });
-    }
+    const ok = await copyText(text);
+    if (ok) haptic('light');
+    openSnackbar(
+      ok
+        ? { text: vi.contentKit.copied, type: 'success' }
+        : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
+    );
   };
 
   const data = q.data;

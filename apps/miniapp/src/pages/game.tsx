@@ -41,6 +41,7 @@ import { haptic } from '../utils/haptic';
 import { getErrorMessage } from '../services/api';
 import { vi } from '../i18n/vi';
 import { ChevronRight, MessagesSquare, Recycle } from 'lucide-react';
+import { copyText } from '../utils/clipboard';
 
 // Số giọt mỗi lần bấm "Mua nước" — đây là lựa chọn của FE (gửi lên BE), không phải giá.
 // Mọi GIÁ (đóng băng chuỗi, xu mỗi giọt, giá cây thật) đọc từ /game/profile: admin đổi config
@@ -1076,10 +1077,13 @@ export default function GamePage() {
                 mt={3}
                 p={3}
                 onClick={() => {
-                  if (navigator.clipboard) {
-                    void navigator.clipboard.writeText(harvestCoupon);
-                    openSnackbar({ text: 'Đã sao chép mã giảm giá', type: 'success' });
-                  }
+                  void copyText(harvestCoupon).then((ok) =>
+                    openSnackbar(
+                      ok
+                        ? { text: 'Đã sao chép mã giảm giá', type: 'success' }
+                        : { text: `Không sao chép được — mã của bạn: ${harvestCoupon}`, type: 'info', duration: 4000 },
+                    ),
+                  );
                 }}
                 style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--leaf-600)' }}
               >

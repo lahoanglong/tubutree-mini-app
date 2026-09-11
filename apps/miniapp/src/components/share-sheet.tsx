@@ -3,6 +3,7 @@ import { QrCode } from './qr-code';
 import { shareLink } from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { copyText } from '../utils/clipboard';
 
 export function ShareSheet({
   visible,
@@ -41,14 +42,12 @@ export function ShareSheet({
     ]
   ).map((c) => (c.includes(url) ? c : `${c} ${url}`)); // luôn đảm bảo có link để dán
   const copy = async (t: string) => {
-    if (!navigator.clipboard) return;
-    try {
-      await navigator.clipboard.writeText(t);
-      openSnackbar({ text: vi.storefront.copied, type: 'success' });
-    } catch {
-      // Quyền clipboard bị từ chối hoặc lỗi khác — báo cho user thay vì hiện toast thành công giả.
-      openSnackbar({ text: vi.errors.generic, type: 'error' });
-    }
+    const ok = await copyText(t);
+    openSnackbar(
+      ok
+        ? { text: vi.storefront.copied, type: 'success' }
+        : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
+    );
   };
   return (
     <Sheet visible={visible} onClose={onClose} autoHeight>

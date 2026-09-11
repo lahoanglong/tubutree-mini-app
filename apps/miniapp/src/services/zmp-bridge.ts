@@ -8,6 +8,7 @@ import {
   openWebview,
   openChat,
 } from 'zmp-sdk/apis';
+import { copyText } from '../utils/clipboard';
 
 /**
  * Bọc các API gốc của zmp-sdk: login, share, (pay - Phase 1).
@@ -113,13 +114,9 @@ export async function openExternal(url: string) {
 
 /** Mở link hoàn tiền sàn ngoài (Shopee, Lazada...) trực tiếp sang native app / trình duyệt ngoài. */
 export async function openAffiliateLink(url: string) {
-  try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      await navigator.clipboard.writeText(url).catch(() => {});
-    }
-  } catch {
-    /* bỏ qua lỗi clipboard */
-  }
+  // Chép link sang clipboard là tiện ích phụ (khách dán lại nếu app sàn không tự mở) — hỏng
+  // thì im lặng, KHÔNG chặn việc mở link.
+  await copyText(url).catch(() => false);
 
   try {
     window.location.href = url;

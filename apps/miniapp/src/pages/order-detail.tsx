@@ -13,6 +13,7 @@ import { STATUS_COLOR, TIMELINE_STEPS, timelineIndex } from '../utils/order-stat
 import { openOAChat, openExternal, hasOA } from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { copyText } from '../utils/clipboard';
 
 export default function OrderDetailPage() {
   const { code } = useParams<{ code: string }>();
@@ -216,14 +217,13 @@ export default function OrderDetailPage() {
                 variant="secondary"
                 onClick={() => {
                   haptic('light');
-                  if (!navigator.clipboard) {
-                    openSnackbar({ text: 'Trình duyệt không hỗ trợ sao chép.', type: 'error' });
-                    return;
-                  }
-                  navigator.clipboard
-                    .writeText(o.shippingCode!)
-                    .then(() => openSnackbar({ text: 'Đã sao chép mã vận đơn', type: 'success' }))
-                    .catch(() => openSnackbar({ text: 'Không thể sao chép. Vui lòng thử lại.', type: 'error' }));
+                  void copyText(o.shippingCode!).then((ok) =>
+                    openSnackbar(
+                      ok
+                        ? { text: 'Đã sao chép mã vận đơn', type: 'success' }
+                        : { text: 'Không sao chép được — hãy chép mã thủ công.', type: 'error' },
+                    ),
+                  );
                 }}
               >
                 Sao chép

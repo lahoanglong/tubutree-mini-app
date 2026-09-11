@@ -14,6 +14,7 @@ import { ErrorState } from '../components/ui/empty-state';
 import { ShareSheet } from '../components/share-sheet';
 import { getDealerMe } from '../services/dealer-api';
 import { BadgePercent, Sparkles, Store } from 'lucide-react';
+import { copyText } from '../utils/clipboard';
 
 const HEADER_BG = 'linear-gradient(120deg, var(--leaf-600), var(--primary-600))';
 
@@ -170,16 +171,13 @@ export default function BrandViewPage() {
                   className="tubu-press"
                   onClick={() => {
                     const code = p.couponCode!;
-                    if (!navigator.clipboard) {
-                      openSnackbar({ text: `Mã ưu đãi: ${code}`, type: 'info', duration: 3000 });
-                      return;
-                    }
-                    navigator.clipboard
-                      .writeText(code)
-                      .then(() =>
-                        openSnackbar({ text: `Đã chép mã ${code} — dán ở bước thanh toán`, type: 'success', duration: 2600 }),
-                      )
-                      .catch(() => openSnackbar({ text: `Mã ưu đãi: ${code}`, type: 'info', duration: 3000 }));
+                    void copyText(code).then((ok) =>
+                      openSnackbar(
+                        ok
+                          ? { text: `Đã chép mã ${code} — dán ở bước thanh toán`, type: 'success', duration: 2600 }
+                          : { text: `Mã ưu đãi: ${code}`, type: 'info', duration: 3000 },
+                      ),
+                    );
                   }}
                   style={{
                     display: 'inline-flex',

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBankQr } from '../services/payment-api';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
+import { copyText } from '../utils/clipboard';
 
 function fmtVnd(n: number): string {
   return n.toLocaleString('vi-VN') + 'đ';
@@ -25,19 +26,15 @@ export default function BankPaymentPage() {
 
   const copy = (text: string, label: string) => {
     haptic('light');
-    if (!navigator.clipboard) {
-      openSnackbar({ text: 'Trình duyệt không hỗ trợ sao chép.', type: 'error', position: 'top' });
-      return;
-    }
-    // Chỉ báo "Đã copy" SAU KHI writeText() thật sự thành công — trước đây báo thành công
-    // ngay lập tức không chờ Promise, nếu ghi clipboard thất bại (thiếu quyền trong webview
-    // Zalo) user vẫn thấy "Đã copy" rồi dán nhầm nội dung cũ khi chuyển khoản.
-    navigator.clipboard
-      .writeText(text)
-      .then(() => openSnackbar({ text: `Đã copy ${label}`, type: 'success', position: 'top' }))
-      .catch(() =>
-        openSnackbar({ text: `Không thể copy ${label}. Vui lòng copy thủ công.`, type: 'error', position: 'top' }),
-      );
+    // Chỉ báo "Đã copy" SAU KHI ghi clipboard thật sự thành công — báo thành công giả ở đây là
+    // khách dán nhầm số tài khoản cũ khi chuyển khoản.
+    void copyText(text).then((ok) =>
+      openSnackbar(
+        ok
+          ? { text: `Đã copy ${label}`, type: 'success', position: 'top' }
+          : { text: `Không thể copy ${label}. Vui lòng copy thủ công.`, type: 'error', position: 'top' },
+      ),
+    );
   };
 
   const handleCheckPayment = async () => {

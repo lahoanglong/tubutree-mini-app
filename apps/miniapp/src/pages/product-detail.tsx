@@ -35,6 +35,7 @@ import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { getAffiliateMe } from '../services/affiliate-api';
 import { ContentKitSheet } from '../components/content-kit-sheet';
 import { CartBadge } from '../components/ui/cart-badge';
+import { copyText } from '../utils/clipboard';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -389,20 +390,17 @@ export default function ProductDetailPage() {
                 className="tubu-press"
                 onClick={() => {
                   haptic('light');
-                  if (!navigator.clipboard) {
-                    openSnackbar({ text: 'Trình duyệt không hỗ trợ sao chép.', type: 'error', duration: 2200 });
-                    return;
-                  }
-                  navigator.clipboard
-                    .writeText(c.code)
-                    .then(() =>
-                      openSnackbar({
-                        text: `Đã chép mã ${c.code} — mã đã có sẵn trong ví, chọn ở bước thanh toán`,
-                        type: 'success',
-                        duration: 2600,
-                      }),
-                    )
-                    .catch(() => openSnackbar({ text: 'Không thể sao chép mã. Vui lòng thử lại.', type: 'error', duration: 2200 }));
+                  void copyText(c.code).then((ok) =>
+                    openSnackbar(
+                      ok
+                        ? {
+                            text: `Đã chép mã ${c.code} — mã đã có sẵn trong ví, chọn ở bước thanh toán`,
+                            type: 'success',
+                            duration: 2600,
+                          }
+                        : { text: `Mã của bạn: ${c.code} — chọn ở bước thanh toán`, type: 'info', duration: 4000 },
+                    ),
+                  );
                 }}
                 style={{
                   flex: '0 0 auto',

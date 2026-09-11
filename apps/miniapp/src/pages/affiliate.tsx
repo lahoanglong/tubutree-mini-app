@@ -25,6 +25,7 @@ import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
 import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap } from 'lucide-react';
 import { vi } from '../i18n/vi';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { copyText } from '../utils/clipboard';
 
 // Thẻ tổng "Đang chờ" gộp cả PENDING lẫn LOCKED (BE aggregate status IN [PENDING, LOCKED]).
 // Nhãn của hai dòng đó PHẢI cùng tiền tố "Đang chờ" thì CTV mới cộng lại khớp được với thẻ —
@@ -337,10 +338,13 @@ function Dashboard() {
             key={i}
             className="tubu-press"
             onClick={() => {
-              if (navigator.clipboard) {
-                void navigator.clipboard.writeText(cap);
-                openSnackbar({ text: 'Đã sao chép caption', type: 'success' });
-              }
+              void copyText(cap).then((ok) =>
+                openSnackbar(
+                  ok
+                    ? { text: 'Đã sao chép caption', type: 'success' }
+                    : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
+                ),
+              );
             }}
             p={2}
             style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-sm)', marginBottom: 6 }}
@@ -393,11 +397,14 @@ function Dashboard() {
                   bold
                   style={{ color: 'var(--primary-700)' }}
                   onClick={() => {
-                    if (navigator.clipboard) {
-                      const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
-                      void navigator.clipboard.writeText(`${base}/?ref=${referral}&l=${l.shortCode}`);
-                      openSnackbar({ text: 'Đã sao chép link', type: 'success' });
-                    }
+                    const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
+                    void copyText(`${base}/?ref=${referral}&l=${l.shortCode}`).then((ok) =>
+                      openSnackbar(
+                        ok
+                          ? { text: 'Đã sao chép link', type: 'success' }
+                          : { text: 'Không sao chép được — hãy chép link thủ công.', type: 'error' },
+                      ),
+                    );
                   }}
                 >
                   Sao chép

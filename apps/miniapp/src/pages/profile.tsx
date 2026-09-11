@@ -10,6 +10,7 @@ import { getOwnedBrand } from '../services/brand-owner-api';
 import { getDealerMe } from '../services/dealer-api';
 import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { copyText } from '../utils/clipboard';
 
 interface MenuItem {
   Icon: LucideIcon;
@@ -191,10 +192,14 @@ export default function ProfilePage() {
 
   const copyReferral = () => {
     haptic('light');
-    if (navigator.clipboard && user.referralCode) {
-      void navigator.clipboard.writeText(user.referralCode);
-      openSnackbar({ text: 'Đã sao chép mã giới thiệu', type: 'success' });
-    }
+    if (!user.referralCode) return;
+    void copyText(user.referralCode).then((ok) =>
+      openSnackbar(
+        ok
+          ? { text: 'Đã sao chép mã giới thiệu', type: 'success' }
+          : { text: `Không sao chép được — mã của bạn: ${user.referralCode}`, type: 'info', duration: 4000 },
+      ),
+    );
   };
 
   return (
