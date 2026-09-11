@@ -7,6 +7,7 @@ vi.mock('zmp-sdk/apis', () => ({
 }));
 vi.mock('../services/api', () => ({
   setAccessToken: vi.fn(),
+  setAuthReady: vi.fn(),
   setUnauthorizedHandler: vi.fn(),
   loginGuest: vi.fn(),
   loginZaloMiniApp: vi.fn(),

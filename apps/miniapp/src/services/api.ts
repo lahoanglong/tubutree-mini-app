@@ -13,6 +13,18 @@ export const api = axios.create({ baseURL: BASE_URL, timeout: TIMEOUT_MS });
 
 let accessToken: string | null = null;
 let onUnauthorized: (() => Promise<string | null>) | null = null;
+/**
+ * Phiên đang được khôi phục lúc mở app. Mọi request (trừ chính /auth/*) chờ nó xong rồi mới
+ * gửi, để KHÔNG bay đi khi chưa có access token.
+ *
+ * Vì sao cần: mở app từ push/deeplink thì trang đích fetch ngay, trong khi restore() còn đang
+ * chạy → request đi không kèm Authorization → 401. React Query đặt `retry: false` cho 4xx nên
+ * màn hình kẹt ở trạng thái lỗi vĩnh viễn dù ~200ms sau phiên đã sẵn sàng. Trước đây từng màn
+ * phải tự vá bằng `enabled: status === 'authenticated'`, và hơn 40 query vẫn chưa có.
+ */
+let authReady: Promise<unknown> | null = null;
+/** Trần chờ, để phiên treo không giữ mọi request tới lúc timeout 15s của axios. */
+const AUTH_READY_TIMEOUT_MS = 8_000;
 /** Refresh đang chạy — các 401 song song chờ chung 1 promise, tránh refresh bão. */
 let refreshInFlight: Promise<string | null> | null = null;
 
@@ -20,12 +32,26 @@ export function setAccessToken(token: string | null): void {
   accessToken = token;
 }
 
+/** Auth store gọi khi bắt đầu khôi phục/đăng nhập phiên; truyền null khi đã xong. */
+export function setAuthReady(promise: Promise<unknown> | null): void {
+  authReady = promise;
+}
+
 /** Đăng ký callback refresh khi gặp 401 (set bởi auth store). */
 export function setUnauthorizedHandler(handler: (() => Promise<string | null>) | null): void {
   onUnauthorized = handler;
 }
 
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+  // Chính các lệnh /auth/* KHÔNG được chờ authReady — chúng là thứ tạo ra nó (deadlock).
+  if (authReady && !config.url?.includes('/auth/')) {
+    const pending = authReady;
+    await Promise.race([
+      pending.catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, AUTH_READY_TIMEOUT_MS)),
+    ]);
+  }
+  // Đọc token SAU khi chờ — đây mới là lúc nó đã có.
   if (accessToken) {
     config.headers.set('Authorization', `Bearer ${accessToken}`);
   }

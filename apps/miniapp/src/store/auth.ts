@@ -7,6 +7,7 @@ import {
   loginZaloMiniApp,
   refreshTokens,
   setAccessToken,
+  setAuthReady,
   setUnauthorizedHandler,
 } from '../services/api';
 import { getZaloAccessToken, requestZaloPhoneToken, getLaunchReferral } from '../services/zmp-bridge';
@@ -96,43 +97,57 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  // Mở app: ưu tiên refresh token đã lưu; nếu chưa có → silent Zalo login (không xin SĐT).
+  /**
+   * Mở app: ưu tiên refresh token đã lưu; nếu chưa có → silent Zalo login (không xin SĐT).
+   *
+   * Trong lúc chạy, mọi request khác bị giữ lại ở interceptor (setAuthReady) để không bay đi
+   * khi chưa có access token. Mở app từ push/deeplink là đúng tình huống đó: trang đích fetch
+   * ngay, request đi trần → 401, và React Query (retry:false cho 4xx) kẹt luôn màn lỗi.
+   */
   restore: async () => {
     set({ status: 'loading' });
-    try {
-      const res = await refreshSession();
-      if (res) {
+    const done = (async () => {
+      try {
+        const res = await refreshSession();
+        if (res) {
+          setAccessToken(res.accessToken);
+          await persistRefresh(res.refreshToken);
+          set({ user: res.user, status: 'authenticated' });
+          return;
+        }
+      } catch {
+        await clearRefresh();
+      }
+      // Chưa có phiên hợp lệ → đăng nhập ngầm bằng Zalo (im lặng, không sheet SĐT).
+      const ref = getLaunchReferral();
+      try {
+        const { code, accessToken } = await getZaloAccessToken();
+        const res = await loginZaloMiniApp(code, accessToken, undefined, ref);
         setAccessToken(res.accessToken);
         await persistRefresh(res.refreshToken);
         set({ user: res.user, status: 'authenticated' });
         return;
+      } catch {
+        /* Zalo chưa khả dụng → fallback guest bên dưới */
       }
-    } catch {
-      await clearRefresh();
-    }
-    // Chưa có phiên hợp lệ → đăng nhập ngầm bằng Zalo (im lặng, không sheet SĐT).
-    const ref = getLaunchReferral();
+      // Zalo login chưa khả dụng (vd app chưa kích hoạt -1401) → đăng nhập KHÁCH theo
+      // deviceId để app vẫn chạy đầy đủ (giỏ/vườn/tài khoản/mua hàng).
+      try {
+        const res = await loginGuest(await getDeviceId(), ref);
+        setAccessToken(res.accessToken);
+        await persistRefresh(res.refreshToken);
+        set({ user: res.user, status: 'authenticated' });
+      } catch (err) {
+        // Guest fallback fail = lỗi mạng/server/CORS (không phải "chưa đăng nhập") → set 'error' +
+        // message để UI báo đúng "chưa kết nối được, thử lại" thay vì 'idle' im lặng (mất ngữ cảnh).
+        set({ status: 'error', error: err instanceof Error ? err.message : 'Chưa kết nối được máy chủ' });
+      }
+    })();
+    setAuthReady(done);
     try {
-      const { code, accessToken } = await getZaloAccessToken();
-      const res = await loginZaloMiniApp(code, accessToken, undefined, ref);
-      setAccessToken(res.accessToken);
-      await persistRefresh(res.refreshToken);
-      set({ user: res.user, status: 'authenticated' });
-      return;
-    } catch {
-      /* Zalo chưa khả dụng → fallback guest bên dưới */
-    }
-    // Zalo login chưa khả dụng (vd app chưa kích hoạt -1401) → đăng nhập KHÁCH theo
-    // deviceId để app vẫn chạy đầy đủ (giỏ/vườn/tài khoản/mua hàng).
-    try {
-      const res = await loginGuest(await getDeviceId(), ref);
-      setAccessToken(res.accessToken);
-      await persistRefresh(res.refreshToken);
-      set({ user: res.user, status: 'authenticated' });
-    } catch (err) {
-      // Guest fallback fail = lỗi mạng/server/CORS (không phải "chưa đăng nhập") → set 'error' +
-      // message để UI báo đúng "chưa kết nối được, thử lại" thay vì 'idle' im lặng (mất ngữ cảnh).
-      set({ status: 'error', error: err instanceof Error ? err.message : 'Chưa kết nối được máy chủ' });
+      await done;
+    } finally {
+      setAuthReady(null);
     }
   },
 
