@@ -1,10 +1,19 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { ShoppingBag, Truck, Leaf } from 'lucide-react';
+import { ShoppingBag, Truck, Leaf, Ticket, X } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
-import { getCart, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-client';
+import {
+  getCart,
+  updateCartItem,
+  removeCartItem,
+  formatVnd,
+  getMyCoupons,
+  applyCoupon,
+  removeCoupon,
+} from '@/lib/shop-client';
 
 export default function CartPage() {
   const { status } = useAuth();
@@ -148,10 +157,11 @@ export default function CartPage() {
             </div>
             {cart.discount > 0 && (
               <div className="mt-1 flex justify-between text-sm text-leaf-700">
-                <span>Giảm giá</span>
+                <span>Giảm giá{cart.couponCode ? ` (${cart.couponCode})` : ''}</span>
                 <span>-{formatVnd(cart.discount)}</span>
               </div>
             )}
+            <CouponBox currentCode={cart.couponCode} subtotal={cart.subtotal} />
             <div className="mt-3 flex justify-between border-t pt-3 font-bold">
               <span>Tổng</span>
               <span className="text-clay-700">{formatVnd(cart.subtotal - cart.discount)}</span>
@@ -176,5 +186,95 @@ function Shell({ children }: { children: React.ReactNode }) {
       <h1 className="mt-3 text-xl font-bold">Giỏ hàng</h1>
       <div className="mt-4">{children}</div>
     </main>
+  );
+}
+
+/**
+ * Chọn/nhập mã giảm giá.
+ *
+ * Web trước đây chỉ HIỂN THỊ `cart.discount` mà không có chỗ nào áp mã, còn Mini App thì có đủ:
+ * cùng một giỏ, khách có mã WELCOME30 trong ví mà mua trên web vẫn trả nguyên giá — rồi khiếu
+ * nại, CSKH phải huỷ đơn tạo lại.
+ */
+function CouponBox({ currentCode, subtotal }: { currentCode: string | null; subtotal: number }) {
+  const qc = useQueryClient();
+  const [code, setCode] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const couponsQ = useQuery({ queryKey: ['my-coupons'], queryFn: getMyCoupons });
+
+  const apply = useMutation({
+    mutationFn: (c: string) => applyCoupon(c.trim().toUpperCase()),
+    onSuccess: (cart) => {
+      setErr(null);
+      setCode('');
+      qc.setQueryData(['cart'], cart);
+    },
+    onError: (e) => setErr(e instanceof Error ? e.message : 'Không áp được mã'),
+  });
+  const drop = useMutation({
+    mutationFn: removeCoupon,
+    onSuccess: (cart) => qc.setQueryData(['cart'], cart),
+    onError: (e) => setErr(e instanceof Error ? e.message : 'Không bỏ được mã'),
+  });
+  const busy = apply.isPending || drop.isPending;
+
+  return (
+    <div className="mt-3 border-t pt-3">
+      {currentCode ? (
+        <div className="flex items-center justify-between rounded-md border border-dashed border-clay-500 bg-clay-50 px-3 py-2">
+          <span className="flex items-center gap-2 text-sm font-semibold text-clay-800">
+            <Ticket className="h-4 w-4" /> {currentCode}
+          </span>
+          <button
+            type="button"
+            onClick={() => drop.mutate()}
+            disabled={busy}
+            aria-label="Bỏ mã giảm giá"
+            className="text-neutral-500 disabled:opacity-50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="flex gap-2">
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="Nhập mã ưu đãi"
+              className="min-w-0 flex-1 rounded border border-neutral-200 px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => apply.mutate(code)}
+              disabled={!code.trim() || busy}
+              className="rounded bg-primary-600 px-3 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+            >
+              Áp dụng
+            </button>
+          </div>
+          {(couponsQ.data?.length ?? 0) > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {couponsQ.data!.slice(0, 6).map((c) => {
+                const notEligible = c.minOrder != null && subtotal < c.minOrder;
+                return (
+                  <button
+                    key={c.code}
+                    type="button"
+                    disabled={notEligible || busy}
+                    onClick={() => apply.mutate(c.code)}
+                    title={notEligible ? `Cần đơn tối thiểu ${formatVnd(c.minOrder!)}` : undefined}
+                    className="rounded-md border border-dashed border-clay-500 px-2 py-1 text-xs font-semibold text-clay-800 disabled:opacity-50"
+                  >
+                    {c.code}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -46,12 +46,22 @@ export default function CheckoutPage() {
   // không. Đọc một lần khi mount: sessionStorage không phải state phản ứng, và giá trị chỉ đổi
   // khi khách đi qua một gian hàng khác (tức là đã rời trang này).
   const [sfCtx] = useState(() => getStorefrontContext());
+  // Điểm Xanh: Mini App cho tiêu, web thì không — cùng một giỏ mà mua trên web đắt hơn.
+  const [usePoints, setUsePoints] = useState(false);
+  // Quote đầu tiên (pointsToUse = 0) trả về pointsBalance để biết khách có bao nhiêu điểm.
+  const pointsBalance = useRef(0);
 
   const quoteQ = useQuery({
-    queryKey: ['quote', addressId, sfCtx.slug],
-    queryFn: () => checkoutQuote(addressId!, undefined, sfCtx.slug ?? undefined),
+    queryKey: ['quote', addressId, sfCtx.slug, usePoints],
+    queryFn: () =>
+      checkoutQuote(addressId!, usePoints ? pointsBalance.current : 0, sfCtx.slug ?? undefined),
     enabled: !!addressId && status === 'authenticated',
   });
+  useEffect(() => {
+    // Giữ lại số dư điểm của lần quote gần nhất — khi bật "dùng điểm", BE tự kẹp theo trần
+    // loyalty.max_redeem_pct nên gửi toàn bộ số dư là an toàn.
+    if (quoteQ.data && !usePoints) pointsBalance.current = quoteQ.data.pointsBalance;
+  }, [quoteQ.data, usePoints]);
 
   const place = useMutation({
     mutationFn: () =>
@@ -59,6 +69,7 @@ export default function CheckoutPage() {
         {
           addressId: addressId!,
           paymentMethod: payment,
+          pointsToUse: usePoints ? pointsBalance.current : 0,
           storefrontSlug: sfCtx.slug ?? undefined,
           referralCode: sfCtx.referralCode ?? undefined,
         },
@@ -171,10 +182,23 @@ export default function CheckoutPage() {
           </div>
           <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? cart?.subtotal ?? 0)} />
           {(quote?.discount ?? 0) > 0 && <Row label="Giảm giá" value={`-${formatVnd(quote!.discount)}`} green />}
+          {(quote?.pointsDiscount ?? 0) > 0 && (
+            <Row label={`Điểm Xanh (${quote!.pointsUsed})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
+          )}
           <Row label="Phí vận chuyển" value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : '…'} />
+          {pointsBalance.current > 0 && (
+            <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-leaf-200 bg-leaf-50 p-2 text-sm">
+              <input type="checkbox" checked={usePoints} onChange={(e) => setUsePoints(e.target.checked)} />
+              <span className="text-leaf-700">
+                Dùng {pointsBalance.current} Điểm Xanh
+              </span>
+            </label>
+          )}
           <div className="mt-3 flex justify-between border-t pt-3 font-bold">
             <span>Tổng cộng</span>
-            <span className="text-clay-700">{formatVnd(quote?.total ?? 0)}</span>
+            {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi
+                trông như đơn không mất tiền. */}
+            <span className="text-clay-700">{quote ? formatVnd(quote.total) : '…'}</span>
           </div>
           {quote && quote.pointsEarned > 0 && (
             <p className="mt-1 text-xs text-leaf-700">+{quote.pointsEarned} Điểm Xanh sau khi giao</p>

@@ -67,6 +67,21 @@ export const updateCartItem = (id: string, quantity: number) =>
 export const removeCartItem = (id: string) =>
   apiFetch<CartSummary>(`/cart/items/${id}`, { method: 'DELETE' });
 
+// Voucher — web trước đây chỉ HIỂN THỊ cart.discount, không có ô nhập/chọn mã, nên cùng một giỏ
+// mà mua trên web thì đắt hơn mua trong Mini App.
+export interface CouponDTO {
+  code: string;
+  type: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
+  value: number;
+  minOrder: number | null;
+  maxDiscount: number | null;
+  endAt: string;
+}
+export const getMyCoupons = () => apiFetch<CouponDTO[]>('/me/coupons');
+export const applyCoupon = (code: string) =>
+  apiFetch<CartSummary>('/cart/coupon', { method: 'POST', body: { code } });
+export const removeCoupon = () => apiFetch<CartSummary>('/cart/coupon', { method: 'DELETE' });
+
 // Addresses
 export const getAddresses = () => apiFetch<AddressDTO[]>('/me/addresses');
 export const createAddress = (data: Omit<AddressDTO, 'id' | 'isDefault'>) =>
