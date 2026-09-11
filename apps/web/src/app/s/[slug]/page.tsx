@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { getStorefront, formatVnd, formatSold } from '@/lib/api';
 import { CopyButton } from '@/components/copy-button';
+import { StorefrontTracker } from '@/components/storefront-tracker';
 
 export const revalidate = 300;
 
@@ -62,6 +63,9 @@ export default async function StorefrontPage({
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
+      {/* Ghi nhớ gian hàng để đơn đặt sau đó còn ghi nhận hoa hồng CTV + áp combo của gian hàng. */}
+      <StorefrontTracker slug={slug} type={sf.type ?? undefined} />
+
       {/* ── Storefront Banner Cover ── */}
       <div className="relative mb-6 overflow-hidden rounded-3xl shadow-sm">
         {sf.coverUrl ? (

@@ -72,11 +72,25 @@ export const getAddresses = () => apiFetch<AddressDTO[]>('/me/addresses');
 export const createAddress = (data: Omit<AddressDTO, 'id' | 'isDefault'>) =>
   apiFetch<AddressDTO>('/me/addresses', { method: 'POST', body: data });
 
+/** Ghi "chạm" giới thiệu để attribution sống qua cả lúc mất phiên (BE giữ 3 ngày). */
+export const recordReferralTouch = (dto: { referralCode: string; storefrontSlug?: string; kind?: 'ctv' | 'brand' }) =>
+  apiFetch<{ ok: boolean }>('/affiliate/touch', { method: 'POST', body: dto });
+
 // Checkout
-export const checkoutQuote = (addressId: string, pointsToUse?: number) =>
-  apiFetch<CheckoutQuote>('/checkout/quote', { method: 'POST', body: { addressId, pointsToUse } });
+export const checkoutQuote = (addressId: string, pointsToUse?: number, storefrontSlug?: string) =>
+  apiFetch<CheckoutQuote>('/checkout/quote', {
+    method: 'POST',
+    body: { addressId, pointsToUse, storefrontSlug },
+  });
 export const placeOrder = (
-  body: { addressId: string; paymentMethod: string; pointsToUse?: number; note?: string },
+  body: {
+    addressId: string;
+    paymentMethod: string;
+    pointsToUse?: number;
+    note?: string;
+    storefrontSlug?: string;
+    referralCode?: string;
+  },
   idempotencyKey: string,
 ) =>
   apiFetch<OrderDTO>('/checkout/place-order', {

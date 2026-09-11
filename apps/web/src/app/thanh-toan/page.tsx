@@ -16,6 +16,7 @@ import {
   type AddressDTO,
   type OrderDTO,
 } from '@/lib/shop-client';
+import { getStorefrontContext } from '@/lib/storefront-context';
 
 const VN_PHONE = /^(0|\+84)\d{9}$/;
 // Tỉnh/phường chọn qua GeoPicker (mã Pancake thật, hệ 2 cấp — không còn quận/huyện);
@@ -41,14 +42,28 @@ export default function CheckoutPage() {
     }
   }, [addrQ.data, addressId]);
 
+  // Gian hàng đang mua qua — quyết định combo giảm giá và việc CTV có được ghi nhận đơn hay
+  // không. Đọc một lần khi mount: sessionStorage không phải state phản ứng, và giá trị chỉ đổi
+  // khi khách đi qua một gian hàng khác (tức là đã rời trang này).
+  const [sfCtx] = useState(() => getStorefrontContext());
+
   const quoteQ = useQuery({
-    queryKey: ['quote', addressId],
-    queryFn: () => checkoutQuote(addressId!),
+    queryKey: ['quote', addressId, sfCtx.slug],
+    queryFn: () => checkoutQuote(addressId!, undefined, sfCtx.slug ?? undefined),
     enabled: !!addressId && status === 'authenticated',
   });
 
   const place = useMutation({
-    mutationFn: () => placeOrder({ addressId: addressId!, paymentMethod: payment }, idemKey),
+    mutationFn: () =>
+      placeOrder(
+        {
+          addressId: addressId!,
+          paymentMethod: payment,
+          storefrontSlug: sfCtx.slug ?? undefined,
+          referralCode: sfCtx.referralCode ?? undefined,
+        },
+        idemKey,
+      ),
     onSuccess: (order) => {
       setPlaced(order);
       void qc.invalidateQueries({ queryKey: ['cart'] });
