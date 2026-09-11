@@ -1,6 +1,7 @@
 import { useNavigate } from 'zmp-ui';
 import { Box, Text } from 'zmp-ui';
-import type { ProductCard as ProductCardType } from '../services/shop-api';
+import { useQuery } from '@tanstack/react-query';
+import { fetchActiveFlashSales, type ProductCard as ProductCardType } from '../services/shop-api';
 import { formatVnd, formatSold } from '../utils/format';
 import { brandAccent } from '../utils/brands';
 import { vi } from '../i18n/vi';
@@ -22,8 +23,22 @@ function LeafPlaceholder() {
 
 export default function ProductCard({ product }: { product: ProductCardType }) {
   const navigate = useNavigate();
-  const price = product.salePrice ?? product.basePrice;
-  const hasSale = product.salePrice != null && product.salePrice < product.basePrice;
+  // Giá giờ vàng phải hiện ở ĐÂY nữa, không chỉ ở dải "Ưu đãi giờ vàng": trước đây trang chủ
+  // hiện SP X giá flash 99.000đ ở dải trên, rồi chính SP X giá 165.000đ ở lưới bên dưới —
+  // cùng một màn hình, hai giá, khách không biết giá nào thật (P1-4 audit mạch lạc).
+  // Dùng chung queryKey với dải flash nên không phát sinh request mới.
+  const flashQ = useQuery({
+    queryKey: ['flash-sales', 'active'],
+    queryFn: fetchActiveFlashSales,
+    staleTime: 30_000,
+  });
+  const flash = (flashQ.data ?? []).find((f) => f.productSlug === product.slug);
+
+  const standing = product.salePrice ?? product.basePrice;
+  // Giá flash chỉ thắng khi thực sự rẻ hơn giá đang bán (đúng quy tắc BE dùng ở giỏ hàng).
+  const price = flash && flash.flashPrice < standing ? flash.flashPrice : standing;
+  const isFlash = price !== standing;
+  const hasSale = price < product.basePrice;
   const salePct = hasSale ? Math.round((1 - price / product.basePrice) * 100) : 0;
 
   return (
@@ -33,7 +48,8 @@ export default function ProductCard({ product }: { product: ProductCardType }) {
       className="tubu-press"
       onClick={() => {
         haptic('light');
-        navigate(`/product/${product.slug}`);
+        // Mở đúng phân loại đang giảm giờ vàng (SP nhiều phân loại: flash chỉ gắn vào một).
+        navigate(`/product/${product.slug}`, flash ? { state: { variationId: flash.variationId } } : undefined);
       }}
       style={{
         background: 'var(--neutral-0)',
@@ -67,13 +83,13 @@ export default function ProductCard({ product }: { product: ProductCardType }) {
               position: 'absolute',
               top: 8,
               left: 8,
-              background: 'var(--clay-500)',
+              background: isFlash ? 'var(--primary-600)' : 'var(--clay-500)',
               color: 'var(--neutral-0)',
               padding: '2px 8px',
               borderRadius: 'var(--radius-full)',
             }}
           >
-            -{salePct}%
+            {isFlash ? `${vi.flashSale.badge} -${salePct}%` : `-${salePct}%`}
           </Text>
         )}
 

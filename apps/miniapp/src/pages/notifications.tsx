@@ -27,7 +27,9 @@ function meta(code: string): { Icon: LucideIcon; title: string } {
   if (code.startsWith('CASHBACK')) return { Icon: ShoppingBag, title: 'Hoàn tiền' };
   if (code.startsWith('BIRTHDAY') || code.startsWith('VOUCHER')) return { Icon: Gift, title: 'Ưu đãi cho bạn' };
   if (code.startsWith('POINTS')) return { Icon: Leaf, title: 'Điểm Xanh' };
-  if (code.startsWith('FLASH')) return { Icon: Zap, title: 'Flash Sale' };
+  // Trong app mục này tên là "Ưu đãi giờ vàng" (vi.flashSale.sectionTitle) — thông báo gọi
+  // "Flash Sale" khiến khách vào app tìm mục không tồn tại.
+  if (code.startsWith('FLASH')) return { Icon: Zap, title: 'Ưu đãi giờ vàng' };
   return { Icon: Bell, title: 'Thông báo' };
 }
 
@@ -216,6 +218,11 @@ export default function NotificationsPage() {
               const isGame = selectedNotif.templateCode.includes('GAME') || /cây|vườn|tưới|khát|chuỗi/i.test(bodyText);
               const isCart = selectedNotif.templateCode.includes('CART') || /giỏ/i.test(bodyText);
               const isLoyalty = selectedNotif.templateCode.includes('VOUCHER') || selectedNotif.templateCode.includes('POINTS');
+              // Thông báo giờ vàng trước đây KHÔNG có nút đi tiếp: khách đặt nhắc, đúng giờ mở
+              // thông báo, đọc xong rồi phải tự back và tự tìm lại sản phẩm — đúng lúc chuyển
+              // đổi cao nhất lại bắt đi vòng (P1-6 audit mạch lạc).
+              const isFlash = selectedNotif.templateCode.startsWith('FLASH');
+              const flashSlug = selectedNotif.payload.data?.product_slug ?? selectedNotif.payload.data?.productSlug;
 
               return (
                 <Box
@@ -262,7 +269,22 @@ export default function NotificationsPage() {
                       Xem chi tiết đơn hàng
                     </Button>
                   )}
-                  {isGame && !isOrder && (
+                  {isFlash && !isOrder && (
+                    <Button
+                      fullWidth
+                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
+                      onClick={() => {
+                        haptic('light');
+                        setSelectedNotif(null);
+                        // Có slug trong payload thì tới thẳng sản phẩm; không thì về trang chủ,
+                        // nơi dải "Ưu đãi giờ vàng" đang hiển thị.
+                        navigate(flashSlug ? `/product/${encodeURIComponent(String(flashSlug))}` : '/');
+                      }}
+                    >
+                      Xem ưu đãi giờ vàng ⚡
+                    </Button>
+                  )}
+                  {isGame && !isOrder && !isFlash && (
                     <Button
                       fullWidth
                       style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}

@@ -72,7 +72,10 @@ export function FlashSale() {
               className="tubu-press"
               onClick={() => {
                 haptic('light');
-                navigate(`/product/${item.productSlug}`);
+                // Truyền variationId: sản phẩm nhiều phân loại thì flash chỉ gắn vào MỘT phân
+                // loại, mà PDP mặc định chọn phân loại đầu còn hàng → mở ra là giá thường,
+                // không badge, không đếm ngược. Khách tưởng bị treo giá (P1-3 audit mạch lạc).
+                navigate(`/product/${item.productSlug}`, { state: { variationId: item.variationId } });
               }}
               style={{
                 flex: '0 0 132px',

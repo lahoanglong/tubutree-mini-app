@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Page, Text, Button, useNavigate, useParams, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, useNavigate, useParams, useSnackbar, useLocation } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck } from 'lucide-react';
 import {
@@ -58,7 +58,11 @@ export default function ProductDetailPage() {
   // Ngưỡng freeship (public config) cho badge "Miễn phí vận chuyển" — tín hiệu tin cậy ở PDP.
   const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Thẻ "Ưu đãi giờ vàng" truyền variationId qua state để PDP mở đúng phân loại đang giảm;
+  // không có state (vào từ lưới sản phẩm/deep link) thì giữ hành vi cũ là tự chọn phân loại
+  // đầu tiên còn hàng.
+  const navState = useLocation().state as { variationId?: string } | null;
+  const [selectedId, setSelectedId] = useState<string | null>(navState?.variationId ?? null);
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
   const [showSubscribe, setShowSubscribe] = useState(false);

@@ -13,6 +13,7 @@ import { brandAccent } from '../utils/brands';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import logo from '../assets/tubu-logo.png';
+import { getNotifications } from '../services/account-api';
 
 const SECTION_LIMIT = 6;
 
@@ -30,6 +31,13 @@ export default function HomePage() {
   const authed = useAuthStore((s) => s.status === 'authenticated');
   // Badge số lượng giỏ trên header (gate theo auth — tránh 401 lúc chưa login xong).
   const cartCount = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: authed }).data?.itemCount ?? 0;
+  // Chuông ở đây trước đây trơ, không báo gì — trong khi voucher sinh nhật, nhắc giỏ, hoa hồng
+  // duyệt đều nằm trong Thông báo. Khách quay lại app không có tín hiệu nào, phải vào tận trang
+  // Cá nhân mới thấy badge (P1-8 audit mạch lạc). Dùng chung queryKey với trang Thông báo.
+  const unreadCount =
+    useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: authed }).data?.filter(
+      (n) => n.status !== 'READ',
+    ).length ?? 0;
 
   const featured = useQuery({
     queryKey: ['products', 'home-featured'],
@@ -78,9 +86,21 @@ export default function HomePage() {
             aria-label="Thông báo"
             className="tubu-press"
             onClick={() => navigate('/notifications')}
-            style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}
+            style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}
           >
             <Bell size={20} color="var(--leaf-700)" strokeWidth={1.8} />
+            {unreadCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18,
+                  borderRadius: 'var(--radius-full)', background: 'var(--clay-500)', color: 'var(--neutral-0)',
+                  fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box',
+                }}
+              >
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </Box>
           <Box
             role="button"
