@@ -42,8 +42,13 @@ export class WalletController {
   }
 
   @Post('wallet/convert-xu')
-  convertXu(@CurrentUser('sub') userId: string, @Body() dto: ConvertXuDto) {
-    return this.wallet.convertToXu(userId, dto.amount);
+  convertXu(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: ConvertXuDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    // Đổi Ví→xu là một chiều (xu không rút được) → double-tap phải không đổi 2 lần.
+    return this.wallet.convertToXu(userId, dto.amount, idempotencyKey);
   }
 
   @Get('me/coins')

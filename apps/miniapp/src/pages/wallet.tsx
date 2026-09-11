@@ -54,10 +54,14 @@ export default function WalletPage() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  // Cung ly do voi withdrawKey: giu nguyen key qua cac lan retry cua CUNG 1 lenh doi,
+  // regenerate sau khi doi thanh cong (lenh sau la lenh moi).
+  const convertKey = useRef(newIdempotencyKey());
   const convertMut = useMutation({
-    mutationFn: () => convertToXu(Number(convertAmount)),
+    mutationFn: () => convertToXu(Number(convertAmount), convertKey.current),
     onSuccess: (r) => {
       openSnackbar({ text: `Đã đổi ${formatVnd(r.spent)} → ${formatXu(r.received)} 🎉`, type: 'success' });
+      convertKey.current = newIdempotencyKey();
       setConvertOpen(false);
       setConvertAmount('');
       refreshAll();

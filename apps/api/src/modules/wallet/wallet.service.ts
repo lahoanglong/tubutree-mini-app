@@ -46,23 +46,63 @@ export class WalletService {
    * Đổi Ví → TubuXu (×multiplier). Atomic: trừ ví (gte guard chống overdraft) +
    * cộng xu + ghi CoinTransaction trong 1 transaction (bất biến coinsBalance == Σdelta).
    */
-  async convertToXu(userId: string, amountVnd: number) {
+  /**
+   * Đổi Ví (tiền rút được) → TubuXu. MỘT CHIỀU: xu không rút được và không có đường về ví,
+   * nên double-tap là mất vĩnh viễn phần tiền đổi dư. Trước đây đây là endpoint tiền DUY NHẤT
+   * không nhận Idempotency-Key (place-order, withdraw, dealer.placeOrder đều có) — react-query
+   * không tự dedupe và `disabled` chỉ ăn sau khi re-render nên 2 request thật sự lọt được
+   * (P2, docs/2026-09-08-review-progress.md).
+   * Khoá idempotency lưu ở `CoinTransaction.refId` (refType='CONVERT'), có partial unique index
+   * làm guard cứng ở DB — migration 20260911030000_coin_convert_idempotency.
+   */
+  async convertToXu(userId: string, amountVnd: number, idempotencyKey?: string) {
     if (!Number.isInteger(amountVnd) || amountVnd <= 0) {
       throw new BadRequestException('Số tiền đổi không hợp lệ.');
     }
+    // Chuẩn hoá '' / khoảng trắng → undefined (mirror withdraw): header rỗng do proxy/bug mà
+    // ghi refId='' sẽ khiến lệnh đổi thứ 2 cũng '' đụng unique index → 500 thay vì hoạt động.
+    const key = idempotencyKey?.trim() || undefined;
     const multiplier = await this.config.get<number>('wallet.xu_convert_multiplier', 1.2);
     const received = Math.floor(amountVnd * multiplier);
-    await this.prisma.$transaction(async (tx) => {
-      const dec = await tx.user.updateMany({
-        where: { id: userId, walletBalance: { gte: amountVnd } },
-        data: { walletBalance: { decrement: amountVnd } },
+
+    if (key) {
+      const existing = await this.prisma.coinTransaction.findFirst({
+        where: { refType: 'CONVERT', refId: key },
       });
-      if (dec.count === 0) throw new BadRequestException('Số dư Ví không đủ.');
-      await tx.user.update({ where: { id: userId }, data: { coinsBalance: { increment: received } } });
-      await tx.coinTransaction.create({
-        data: { userId, delta: received, reason: 'CONVERT_FROM_WALLET', refType: 'CONVERT' },
+      // Key trùng của user KHÁC (keygen yếu/đụng độ hiếm): KHÔNG trả giao dịch người khác ra
+      // ngoài — bắt client thử lại với key mới. Mirror wallet.withdraw.
+      if (existing && existing.userId !== userId) {
+        throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
+      }
+      if (existing) return { spent: amountVnd, received: existing.delta, multiplier };
+    }
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const dec = await tx.user.updateMany({
+          where: { id: userId, walletBalance: { gte: amountVnd } },
+          data: { walletBalance: { decrement: amountVnd } },
+        });
+        if (dec.count === 0) throw new BadRequestException('Số dư Ví không đủ.');
+        await tx.user.update({ where: { id: userId }, data: { coinsBalance: { increment: received } } });
+        await tx.coinTransaction.create({
+          data: {
+            userId,
+            delta: received,
+            reason: 'CONVERT_FROM_WALLET',
+            refType: 'CONVERT',
+            ...(key ? { refId: key } : {}),
+          },
+        });
       });
-    });
+    } catch (err) {
+      // Thua race 2 request cùng key: unique index chặn bản ghi thứ 2 → coi như replay, KHÔNG
+      // báo lỗi cho user (giao dịch của bên thắng đã thành công đúng 1 lần).
+      if (key && (err as { code?: string } | null)?.code === 'P2002') {
+        return { spent: amountVnd, received, multiplier };
+      }
+      throw err;
+    }
     return { spent: amountVnd, received, multiplier };
   }
 

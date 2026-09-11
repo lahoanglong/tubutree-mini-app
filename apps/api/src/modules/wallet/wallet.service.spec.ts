@@ -18,13 +18,13 @@ function makePrisma(walletBalance: number, decCount = 1) {
   const prisma = {
     user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance }), updateMany, update: userUpdate },
     payout: { create: payoutCreate, findUnique: payoutFindUnique },
-    coinTransaction: { create: coinCreate },
+    coinTransaction: { create: coinCreate, findFirst: jest.fn().mockResolvedValue(null) },
     $transaction: jest.fn(),
   } as unknown as PrismaService;
   (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
     .fn()
     .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
-  return { prisma, updateMany, userUpdate, payoutCreate, payoutFindUnique, coinCreate };
+  return { prisma, updateMany, userUpdate, payoutCreate, payoutFindUnique, coinCreate, coinFindFirst: (prisma as unknown as { coinTransaction: { findFirst: jest.Mock } }).coinTransaction.findFirst };
 }
 
 describe('WalletService.withdraw (Ví → ngân hàng, min 100k, phí 3k)', () => {
@@ -135,5 +135,39 @@ describe('WalletService.convertToXu (Ví → TubuXu ×1.2)', () => {
     await expect(svc.convertToXu('u1', 0)).rejects.toThrow();
     await expect(svc.convertToXu('u1', -5)).rejects.toThrow();
     await expect(svc.convertToXu('u1', 1.5)).rejects.toThrow();
+  });
+
+  // P2 (docs/2026-09-08-review-progress.md): đây là endpoint tiền DUY NHẤT không có
+  // Idempotency-Key, trong khi chiều đổi là MỘT CHIỀU — xu không rút được, không có đường về
+  // ví. Double-tap "Đổi ngay" (react-query không tự dedupe, `disabled` chỉ có tác dụng sau
+  // khi re-render) là mất vĩnh viễn phần tiền rút được đã đổi dư.
+  it('cùng Idempotency-Key lần 2 → KHÔNG trừ ví lần 2, trả lại kết quả lần đầu', async () => {
+    const { prisma, updateMany, userUpdate, coinFindFirst } = makePrisma(200_000);
+    coinFindFirst.mockResolvedValue({ id: 'ct1', userId: 'u1', delta: 120_000, refId: 'key-1' });
+    const r = await new WalletService(prisma, config).convertToXu('u1', 100_000, 'key-1');
+    expect(r).toEqual({ spent: 100_000, received: 120_000, multiplier: 1.2 });
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it('có Idempotency-Key (lần đầu) → lưu key vào CoinTransaction.refId để lần sau nhận ra', async () => {
+    const { prisma, coinCreate } = makePrisma(200_000);
+    await new WalletService(prisma, config).convertToXu('u1', 100_000, 'key-1');
+    expect(coinCreate.mock.calls[0][0].data).toMatchObject({ refType: 'CONVERT', refId: 'key-1' });
+  });
+
+  it('key rỗng/khoảng trắng → coi như không có key (không ghi refId rỗng gây đụng unique)', async () => {
+    const { prisma, coinCreate, coinFindFirst } = makePrisma(200_000);
+    await new WalletService(prisma, config).convertToXu('u1', 100_000, '   ');
+    expect(coinFindFirst).not.toHaveBeenCalled();
+    expect(coinCreate.mock.calls[0][0].data.refId ?? null).toBeNull();
+  });
+
+  it('key trùng nhưng của user KHÁC → từ chối, không trả giao dịch người khác ra ngoài', async () => {
+    const { prisma, coinFindFirst } = makePrisma(200_000);
+    coinFindFirst.mockResolvedValue({ id: 'ct1', userId: 'nguoi-khac', delta: 120_000, refId: 'key-1' });
+    await expect(new WalletService(prisma, config).convertToXu('u1', 100_000, 'key-1')).rejects.toThrow(
+      'Idempotency-Key',
+    );
   });
 });

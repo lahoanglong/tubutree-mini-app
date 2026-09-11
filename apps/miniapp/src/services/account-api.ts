@@ -102,9 +102,14 @@ export const withdraw = (amount: number, bankInfo: BankInfo, idempotencyKey?: st
 
 // TubuXu
 export const getCoins = () => api.get<CoinsOverview>('/me/coins').then((r) => r.data);
-export const convertToXu = (amount: number) =>
+/** Doi Vi -> xu kem Idempotency-Key: doi 1 chieu (xu khong rut duoc) nen double-tap khong duoc doi 2 lan. */
+export const convertToXu = (amount: number, idempotencyKey?: string) =>
   api
-    .post<{ spent: number; received: number; multiplier: number }>('/wallet/convert-xu', { amount })
+    .post<{ spent: number; received: number; multiplier: number }>(
+      '/wallet/convert-xu',
+      { amount },
+      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined,
+    )
     .then((r) => r.data);
 
 // Notifications
