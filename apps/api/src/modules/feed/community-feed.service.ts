@@ -167,17 +167,26 @@ export class CommunityFeedService {
    * cũng chỉ trừ đúng 1 lần. NON-FATAL: lỗi đảo điểm không được chặn việc gỡ bài.
    */
   private async reverseReputationForPost(userId: string, postId: string): Promise<void> {
+    return this.reverseReputationForRef(userId, postId, 'REVERSE_POST');
+  }
+
+  /**
+   * Đảo điểm đã cộng từ MỘT nguồn (bài hoặc bình luận). Tách ra từ reverseReputationForPost vì
+   * điểm của người TRẢ LỜI ghi theo refId = commentId: gỡ bình luận mà chỉ đảo theo postId thì
+   * người trả lời giữ nguyên điểm cho nội dung đã bị kiểm duyệt gỡ đi.
+   */
+  private async reverseReputationForRef(userId: string, refId: string, reason: string): Promise<void> {
     try {
       const thresholds = await this.config.get<number[]>('community.rep_thresholds', DEFAULT_REP_THRESHOLDS);
       await this.prisma.$transaction(async (tx) => {
         const events = await tx.reputationEvent.findMany({
-          where: { userId, refId: postId, amount: { gt: 0 } },
+          where: { userId, refId, amount: { gt: 0 } },
           select: { amount: true },
         });
         const total = events.reduce((sum, e) => sum + e.amount, 0);
         if (total <= 0) return;
         await tx.reputationEvent.create({
-          data: { userId, amount: -total, reason: 'REVERSE_POST', refId: postId },
+          data: { userId, amount: -total, reason, refId },
         });
         await tx.communityProfile.update({
           where: { userId },
@@ -194,7 +203,7 @@ export class CommunityFeedService {
     } catch (err) {
       const code = (err as { code?: string } | null)?.code;
       if (code === 'P2002') return; // đã đảo rồi (gỡ lần 2)
-      this.logger.warn(`reverseReputationForPost failed for ${postId}: ${(err as Error).message}`);
+      this.logger.warn(`reverseReputation failed for ${refId}: ${(err as Error).message}`);
     }
   }
 
@@ -465,10 +474,30 @@ export class CommunityFeedService {
 
   /** Từ chối bài PENDING (hoặc bất kỳ) → xoá mềm REMOVED. */
   async rejectPost(postId: string) {
-    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true } });
+    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
+    // Endpoint này nhận cả bài ĐÃ PUBLISHED (đã cộng điểm + xu), nên phải đảo điểm y như
+    // deletePost — nếu không, kiểm duyệt gỡ bài vi phạm mà tác giả vẫn giữ nguyên hạng.
+    await this.reverseReputationForPost(post.userId, postId);
+    await this.revokeTrust(post.userId);
     await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
     return { ok: true };
+  }
+
+  /**
+   * Rút cờ tin cậy của tác giả khi kiểm duyệt gỡ bài của họ.
+   *
+   * approvePost gắn `isTrusted: true` VĨNH VIỄN sau đúng một lần duyệt, và trước đây không có
+   * đường nào set lại false: một tài khoản chỉ cần được duyệt một bài hiền là từ đó mọi bài sau
+   * lên thẳng PUBLISHED, không bao giờ qua hàng chờ nữa. Đây là tín hiệu ngược còn thiếu.
+   * Không đụng tới quyền theo ROLE (nhân viên/CTV/đại lý vẫn tin cậy theo vai trò).
+   */
+  private async revokeTrust(userId: string): Promise<void> {
+    try {
+      await this.prisma.communityProfile.updateMany({ where: { userId }, data: { isTrusted: false } });
+    } catch (err) {
+      this.logger.warn(`revokeTrust failed for ${userId}: ${(err as Error).message}`);
+    }
   }
 
   /** Tạo bài thành tích (auto-post). Không validate độ dài người-dùng-nhập. */
@@ -496,7 +525,11 @@ export class CommunityFeedService {
     if (!text) throw new BadRequestException('Nội dung bình luận trống.');
     if (text.length > MAX_COMMENT) throw new BadRequestException('Bình luận quá dài.');
     const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true, status: true, title: true } });
-    if (!post || post.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
+    // Chỉ bài ĐÃ DUYỆT mới bình luận được. Bài PENDING không hiện trên bảng tin nhưng trước
+    // đây vẫn nhận bình luận nếu biết id — hai tài khoản của cùng một người hỏi–đáp trên bài
+    // vô hình đó để rút xu (100 xu/bình luận, 500 xu/câu trả lời hay nhất) mà không ai kiểm
+    // duyệt được. Xu tiêu thẳng được ở thanh toán nên đây là mất hàng thật.
+    if (!post || post.status !== 'PUBLISHED') throw new NotFoundException('Bài viết không tồn tại.');
     const comment = await this.prisma.feedComment.create({ data: { userId, postId, body: text } });
     if (post.kind === 'QUESTION') {
       try {
@@ -556,13 +589,19 @@ export class CommunityFeedService {
   async setBestAnswer(userId: string, role: string, postId: string, commentId: string) {
     const post = await this.prisma.feedPost.findUnique({
       where: { id: postId },
-      select: { id: true, userId: true, kind: true, bestCommentId: true },
+      select: { id: true, userId: true, kind: true, bestCommentId: true, status: true },
     });
-    if (!post) throw new NotFoundException('Bài viết không tồn tại.');
+    // Cùng lý do với addComment: thưởng 500 xu chỉ được chi cho nội dung đã qua kiểm duyệt.
+    if (!post || post.status !== 'PUBLISHED') throw new NotFoundException('Bài viết không tồn tại.');
     if (post.kind !== 'QUESTION') throw new BadRequestException('Chỉ câu hỏi mới có câu trả lời hay nhất.');
     if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Chỉ chủ bài mới chọn được.');
-    const comment = await this.prisma.feedComment.findUnique({ where: { id: commentId }, select: { id: true, postId: true, userId: true } });
-    if (!comment || comment.postId !== postId) throw new NotFoundException('Câu trả lời không tồn tại.');
+    const comment = await this.prisma.feedComment.findUnique({ where: { id: commentId }, select: { id: true, postId: true, userId: true, isRemoved: true } });
+    // Bình luận đã gỡ không được nhận thưởng, và bestCommentId không được trỏ vào nội dung ẩn:
+    // danh sách bình luận lọc isRemoved nên thẻ bài sẽ khoe "đã có câu trả lời hay nhất" trong
+    // khi mở ra chẳng thấy câu nào.
+    if (!comment || comment.postId !== postId || comment.isRemoved) {
+      throw new NotFoundException('Câu trả lời không tồn tại.');
+    }
     // Lần chọn ĐẦU TIÊN cho bài này (bestCommentId hiện đang null) — chỉ lần này mới được
     // cộng rep/notify (xem chống-farm bên dưới). Đọc trước transaction: nhất quán với
     // rewardBestAnswer (idempotent theo postId, không theo commentId).
@@ -658,6 +697,11 @@ export class CommunityFeedService {
     if (!comment) throw new NotFoundException('Bình luận không tồn tại.');
     if (comment.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Không có quyền gỡ bình luận này.');
 
+    // Trả lại điểm đã cộng cho NGƯỜI TRẢ LỜI từ chính bình luận này (ANSWER + BEST_ANSWER ghi
+    // theo refId = commentId). Trước đây chỉ xoá BÀI mới đảo điểm, nên gỡ một câu trả lời vi
+    // phạm vẫn để người viết giữ nguyên hạng đã lên nhờ nó.
+    await this.reverseReputationForRef(comment.userId, commentId, 'REVERSE_COMMENT');
+
     // Bình luận đang được chọn là câu trả lời hay nhất: bỏ cờ + gỡ con trỏ ở bài, nếu không
     // bài sẽ trỏ tới một comment đã ẩn (getComments lọc mất) → hiện "đã có best answer" mà
     // người đọc không thấy nội dung nào.
@@ -678,6 +722,9 @@ export class CommunityFeedService {
     // Trả lại điểm reputation đã cộng từ bài này TRƯỚC khi gỡ — nếu không, đăng-ăn-điểm-rồi-xoá
     // là cách farm hạng sạch dấu vết (P1-1). Trừ theo CHỦ BÀI, kể cả khi ADMIN là người gỡ.
     await this.reverseReputationForPost(post.userId, postId);
+    // ADMIN gỡ bài của người khác = hành vi kiểm duyệt → rút cờ tin cậy. Tác giả tự xoá bài
+    // của mình thì không (không có vi phạm nào được xác nhận).
+    if (post.userId !== userId && role === 'ADMIN') await this.revokeTrust(post.userId);
     await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
     return { ok: true };
   }
