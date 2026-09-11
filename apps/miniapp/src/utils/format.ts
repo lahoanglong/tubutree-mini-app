@@ -23,16 +23,6 @@ export function addressLine(a: {
   return [a.street, a.ward, a.district, a.province].filter(Boolean).join(', ');
 }
 
-export const ORDER_STATUS_LABEL: Record<string, string> = {
-  PENDING_PAYMENT: 'Chờ thanh toán',
-  CONFIRMED: 'Đã xác nhận',
-  PACKED: 'Đang đóng gói',
-  SHIPPING: 'Đang giao',
-  DELIVERED: 'Đã giao',
-  RETURNED: 'Đã hoàn',
-  CANCELLED: 'Đã hủy',
-};
-
 /**
  * Tỉ lệ hoàn tiền lưu ở DB dạng PHÂN SỐ (0.035 = 3,5%) — không phải phần trăm.
  * Trước đây FE render thẳng `{Number(baseRate)}%` nên mọi sàn đều hiện "0.035%" thay vì

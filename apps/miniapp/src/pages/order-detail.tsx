@@ -316,17 +316,38 @@ export default function OrderDetailPage() {
       )}
 
       {/* ── Địa chỉ nhận ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
-        <Text bold size="small" style={{ marginBottom: 4 }}>
-          {vi.checkout.address}
-        </Text>
-        <Text size="small">
-          {o.shippingAddress.recipient} · {o.shippingAddress.phone}
-        </Text>
-        <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-          {addressLine(o.shippingAddress)}
-        </Text>
-      </Box>
+      {/* Đơn đại lý không có địa chỉ khách lẻ (giao theo hợp đồng) — snapshot chỉ có `note`.
+          Render thẳng các trường rỗng sẽ ra dòng "· " trơ trọi, nên rơi về ghi chú giao hàng. */}
+      {(() => {
+        const addr = o.shippingAddress as typeof o.shippingAddress & { note?: string | null };
+        const line = addressLine(addr);
+        const hasContact = !!(addr.recipient || addr.phone);
+        if (!hasContact && !line) {
+          return addr.note ? (
+            <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+              <Text bold size="small" style={{ marginBottom: 4 }}>
+                {vi.checkout.address}
+              </Text>
+              <Text size="small" style={{ color: 'var(--neutral-600)' }}>
+                {addr.note}
+              </Text>
+            </Box>
+          ) : null;
+        }
+        return (
+          <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+            <Text bold size="small" style={{ marginBottom: 4 }}>
+              {vi.checkout.address}
+            </Text>
+            <Text size="small">{[addr.recipient, addr.phone].filter(Boolean).join(' · ')}</Text>
+            {line && (
+              <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+                {line}
+              </Text>
+            )}
+          </Box>
+        );
+      })()}
 
       {/* Đổi/trả — chỉ đơn đã giao, lỗi NSX (§6.4) */}
       {o.status === 'DELIVERED' &&

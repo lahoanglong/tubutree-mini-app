@@ -83,5 +83,36 @@ export class OrderReversalService {
     // Hoàn coupon — trước đây thiếu bước này: voucher usageLimit=1 (birthday/welcome/referral)
     // bị đốt vĩnh viễn cho một đơn đã hủy/trả (P1, docs/2026-09-08-review-progress.md).
     await this.coupons.release(order.couponCode, order.id, tx);
+
+    // Đảo công nợ đại lý. Đơn đại lý "Ghi công nợ" tạo dòng DealerCreditLedger dương lúc đặt;
+    // huỷ/trả đơn mà không đảo thì đại lý vẫn NỢ tiền một đơn không còn tồn tại, và khoản nợ ảo
+    // đó tiếp tục ăn vào hạn mức nên chặn luôn các đơn sau. Không dùng delete để giữ vết sổ sách.
+    await this.reverseDealerCredit(tx, order);
+  }
+
+  /**
+   * Idempotent nhờ unique (userId, refType, refId) trên DealerCreditLedger: dòng đối ứng dùng
+   * refType='ORDER_CANCEL' + refId=order.id nên gọi lại không thể tạo dòng thứ hai.
+   * Đơn "Trả trước" không có dòng ghi nợ nào → không đụng sổ.
+   */
+  private async reverseDealerCredit(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<void> {
+    if (order.type !== 'DEALER') return;
+    const already = await tx.dealerCreditLedger.findFirst({
+      where: { userId: order.userId, refType: 'ORDER_CANCEL', refId: order.id },
+    });
+    if (already) return;
+    const debit = await tx.dealerCreditLedger.findFirst({
+      where: { userId: order.userId, refType: 'ORDER', refId: order.id },
+    });
+    if (!debit || debit.delta === 0) return;
+    await tx.dealerCreditLedger.create({
+      data: {
+        userId: order.userId,
+        delta: -debit.delta,
+        refType: 'ORDER_CANCEL',
+        refId: order.id,
+        note: `Huỷ đơn ${order.code}`,
+      },
+    });
   }
 }

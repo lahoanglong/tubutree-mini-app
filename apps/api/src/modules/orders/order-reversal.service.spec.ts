@@ -8,6 +8,7 @@ type MockTx = {
   user: { update: jest.Mock };
   coinTransaction: { create: jest.Mock };
   variation: { update: jest.Mock };
+  dealerCreditLedger: { findFirst: jest.Mock; create: jest.Mock };
 };
 
 function makeTx(): MockTx {
@@ -16,6 +17,7 @@ function makeTx(): MockTx {
     user: { update: jest.fn().mockResolvedValue({}) },
     coinTransaction: { create: jest.fn().mockResolvedValue({}) },
     variation: { update: jest.fn().mockResolvedValue({}) },
+    dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
   };
 }
 
@@ -139,5 +141,72 @@ describe('OrderReversalService', () => {
     const order = makeOrder({ couponCode: null });
     await service.reverseFinancials(tx as never, order);
     expect(coupons.release).toHaveBeenCalledWith(null, 'o1', tx);
+  });
+});
+
+// Đơn đại lý ghi công nợ: huỷ đơn mà không đảo sổ thì đại lý vẫn NỢ tiền một đơn không còn
+// tồn tại, và nợ ảo đó còn ăn vào hạn mức nên chặn luôn các đơn sau.
+describe('công nợ đại lý khi huỷ đơn CREDIT', () => {
+  let service: OrderReversalService;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        OrderReversalService,
+        { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
+        { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+      ],
+    }).compile();
+    service = module.get(OrderReversalService);
+  });
+
+  it('ghi dòng đối ứng ÂM đúng bằng khoản đã ghi nợ', async () => {
+    const tx = makeTx();
+    tx.dealerCreditLedger.findFirst.mockImplementation(({ where }: { where: { refType: string } }) =>
+      where.refType === 'ORDER' ? Promise.resolve({ id: 'l1', delta: 150000 }) : Promise.resolve(null),
+    );
+    const order = makeOrder({ type: 'DEALER', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' });
+
+    await service.reverseFinancials(tx as never, order);
+
+    expect(tx.dealerCreditLedger.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'u1',
+        delta: -150000,
+        refType: 'ORDER_CANCEL',
+        refId: 'o1',
+        note: 'Huỷ đơn TUBU1',
+      },
+    });
+  });
+
+  it('đã đảo rồi thì KHÔNG đảo lần hai (chống cộng hạn mức khống)', async () => {
+    const tx = makeTx();
+    tx.dealerCreditLedger.findFirst.mockResolvedValue({ id: 'x', delta: -150000 });
+    const order = makeOrder({ type: 'DEALER', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' });
+
+    await service.reverseFinancials(tx as never, order);
+
+    expect(tx.dealerCreditLedger.create).not.toHaveBeenCalled();
+  });
+
+  it('đơn đại lý TRẢ TRƯỚC (không có dòng ghi nợ) thì không đụng sổ công nợ', async () => {
+    const tx = makeTx();
+    tx.dealerCreditLedger.findFirst.mockResolvedValue(null);
+    const order = makeOrder({ type: 'DEALER', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' });
+
+    await service.reverseFinancials(tx as never, order);
+
+    expect(tx.dealerCreditLedger.create).not.toHaveBeenCalled();
+  });
+
+  it('đơn khách lẻ KHÔNG đụng tới sổ công nợ', async () => {
+    const tx = makeTx();
+    const order = makeOrder({ type: 'B2C' });
+
+    await service.reverseFinancials(tx as never, order);
+
+    expect(tx.dealerCreditLedger.findFirst).not.toHaveBeenCalled();
+    expect(tx.dealerCreditLedger.create).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,17 @@
 import { useMemo, useRef, useState } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
-import { Store, Hourglass, Save, AlertTriangle, ClipboardList, Plane, Gift, Award, X } from 'lucide-react';
+import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
+import {
+  Store,
+  Hourglass,
+  Save,
+  AlertTriangle,
+  ClipboardList,
+  Plane,
+  Gift,
+  Award,
+  X,
+  ChevronRight,
+} from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getDealerMe,
@@ -19,7 +30,8 @@ import {
   type PricelistRow,
 } from '../services/dealer-api';
 import { getErrorMessage } from '../services/api';
-import { formatVnd, ORDER_STATUS_LABEL } from '../utils/format';
+import { formatVnd } from '../utils/format';
+import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
 import { newIdempotencyKey } from '../utils/idempotency';
@@ -328,6 +340,7 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
   // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lần đặt đơn (double-tap/timeout mạng) →
   // BE không tạo đơn công nợ đôi; regenerate sau khi đặt thành công (đơn sau là đơn mới, mirror wallet.withdraw).
   const orderKey = useRef(newIdempotencyKey());
+  const navigate = useNavigate();
   const place = useMutation({
     mutationFn: (method: 'CREDIT' | 'PREPAID') =>
       placeDealerOrder(
@@ -336,7 +349,7 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
         undefined,
         orderKey.current,
       ),
-    onSuccess: () => {
+    onSuccess: (order, method) => {
       haptic('medium');
       openSnackbar({ text: 'Đã tạo đơn đại lý!', type: 'success' });
       orderKey.current = newIdempotencyKey();
@@ -348,6 +361,9 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
       // nếu không card vẫn hiện "Còn X để đạt" dù backend đã tính achieved.
       void qc.invalidateQueries({ queryKey: ['dealer-rewards'] });
       void qc.invalidateQueries({ queryKey: ['dealer-report'] });
+      // Đơn "Trả trước" tạo ra ở trạng thái PENDING_PAYMENT / BANK_TRANSFER nhưng trước đây
+      // không có đường nào tới màn QR — đại lý đặt xong không biết chuyển khoản vào đâu.
+      if (method === 'PREPAID') navigate(`/bank-payment/${order.code}`);
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -609,6 +625,7 @@ function PriceRow({
 }
 
 function DealerOrders() {
+  const navigate = useNavigate();
   const ordersQ = useQuery({ queryKey: ['dealer-orders'], queryFn: getDealerOrders });
   return (
     <Box mx={4} style={{ paddingBottom: 24 }} flex flexDirection="column">
@@ -621,24 +638,51 @@ function DealerOrders() {
         <ErrorState message={getErrorMessage(ordersQ.error)} onRetry={() => void ordersQ.refetch()} />
       ) : ordersQ.data && ordersQ.data.length > 0 ? (
         <Box flex flexDirection="column" style={{ gap: 10 }}>
-          {ordersQ.data.map((o) => (
-            <Box key={o.code} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-              <Box flex justifyContent="space-between" alignItems="center">
-                <Text size="small" bold>
-                  #{o.code}
+          {ordersQ.data.map((o) => {
+            // Đơn "Trả trước" nằm ở PENDING_PAYMENT/BANK_TRANSFER — màn chi tiết đơn có sẵn
+            // nút "Thanh toán ngay" dẫn tới QR, nên thẻ đơn phải bấm được thì đại lý mới trả
+            // tiền được sau khi đã rời màn đặt hàng.
+            const needsPayment = o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER';
+            return (
+              <Box
+                key={o.code}
+                p={3}
+                role="button"
+                aria-label={`Xem đơn ${o.code}`}
+                className="tubu-press"
+                onClick={() => {
+                  haptic('light');
+                  navigate(`/order/${o.code}`);
+                }}
+                style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}
+              >
+                <Box flex justifyContent="space-between" alignItems="center">
+                  <Text size="small" bold>
+                    #{o.code}
+                  </Text>
+                  <Box flex alignItems="center" style={{ gap: 2 }}>
+                    <Text size="xSmall" style={{ color: needsPayment ? 'var(--warning)' : 'var(--info)' }}>
+                      {vi.orderStatus[o.status] ?? o.status}
+                    </Text>
+                    <ChevronRight size={16} color="var(--neutral-400)" />
+                  </Box>
+                </Box>
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+                  {o.items?.length ?? 0} mặt hàng · {new Date(o.createdAt).toLocaleDateString('vi-VN')}
                 </Text>
-                <Text size="xSmall" style={{ color: 'var(--info)' }}>
-                  {ORDER_STATUS_LABEL[o.status] ?? o.status}
-                </Text>
+                <Box flex justifyContent="space-between" alignItems="center" style={{ marginTop: 4 }}>
+                  <Text bold style={{ color: 'var(--dealer-ink)' }}>
+                    {formatVnd(o.total)}
+                  </Text>
+                  {needsPayment && (
+                    <Text size="xSmall" bold style={{ color: 'var(--primary-600)' }}>
+                      Thanh toán ngay →
+                    </Text>
+                  )}
+                </Box>
               </Box>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
-                {o.items?.length ?? 0} mặt hàng · {new Date(o.createdAt).toLocaleDateString('vi-VN')}
-              </Text>
-              <Text bold style={{ color: 'var(--dealer-ink)', marginTop: 4 }}>
-                {formatVnd(o.total)}
-              </Text>
-            </Box>
-          ))}
+            );
+          })}
         </Box>
       ) : (
         <EmptyState art="box" heading="Chưa có đơn đại lý nào" />
