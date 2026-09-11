@@ -26,8 +26,16 @@ export class CashbackService {
     private readonly registry: CashbackProviderRegistry,
   ) {}
 
+  /**
+   * Endpoint này là @Public. Trả nguyên bản ghi sẽ lộ `deeplinkTemplate` (link affiliate thật
+   * của Tubu, ai cũng dùng lại được), `provider` và `fullRate` — từ chênh lệch fullRate với
+   * baseRate suy ra ngay phần Tubu giữ lại. FE chỉ dùng đúng các trường dưới đây.
+   */
   listMerchants() {
-    return this.prisma.cashbackMerchant.findMany({ where: { isActive: true } });
+    return this.prisma.cashbackMerchant.findMany({
+      where: { isActive: true },
+      select: { id: true, slug: true, name: true, logoUrl: true, category: true, baseRate: true, terms: true },
+    });
   }
 
   /** Tạo click + sinh deeplink chứa clickId theo provider của merchant. */

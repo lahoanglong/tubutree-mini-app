@@ -7,7 +7,6 @@ export interface CashbackMerchant {
   logoUrl: string;
   category: string;
   baseRate: string; // Decimal → string, % người dùng nhận
-  fullRate: string;
   terms: string | null;
 }
 

@@ -241,8 +241,12 @@ export class PancakeProcessor extends WorkerHost {
     const variationId = data['variation_id'] ?? data['id'];
     const stock = data['remain_quantity'];
     if (variationId == null || stock == null) return;
-    await this.prisma.variation
-      .updateMany({ where: { pancakeId: String(variationId) }, data: { stock: Number(stock) } })
-      .catch(() => undefined);
+    // KHÔNG nuốt lỗi: process() đánh dấu event PROCESSED sau khi handler trả về, nên nuốt ở đây
+    // là mất hẳn một lần cập nhật tồn kho — BullMQ không retry, không có log, và tồn kho lệch
+    // với kho thật cho tới lần đồng bộ sau. Mọi handler khác trong file này đều để lỗi nổi lên.
+    await this.prisma.variation.updateMany({
+      where: { pancakeId: String(variationId) },
+      data: { stock: Number(stock) },
+    });
   }
 }

@@ -27,12 +27,48 @@ export class AdminService {
   ) {}
 
   // ── Đổi/trả (§6.4) ──
-  listReturnRequests(status?: string) {
-    return this.prisma.returnRequest.findMany({
+  /**
+   * Kèm đơn + khách: portal web render `r.order?.code`, `r.user?.fullName`, tổng đơn và phương
+   * thức thanh toán, nhưng trước đây truy vấn không include gì cả — admin chỉ thấy một dãy cuid
+   * và chữ "Khách hàng", rồi bấm Duyệt để hoàn nguyên tổng đơn về ví mà KHÔNG nhìn thấy số tiền
+   * mình đang hoàn.
+   */
+  async listReturnRequests(status?: string) {
+    const rows = await this.prisma.returnRequest.findMany({
       where: status ? { status: status as never } : {},
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
+    return this.withReturnContext(rows);
+  }
+
+  /**
+   * ReturnRequest chỉ lưu orderId/userId dạng chuỗi (không khai quan hệ trong schema) nên không
+   * include được — nạp theo lô rồi ghép. Hai truy vấn cho cả trang, không phải N+1.
+   */
+  private async withReturnContext<T extends { orderId: string; userId: string } | null>(
+    input: T | T[],
+  ): Promise<unknown> {
+    const rows = (Array.isArray(input) ? input : [input]).filter((r): r is NonNullable<T> => r != null);
+    if (rows.length === 0) return Array.isArray(input) ? [] : null;
+    const [orders, users] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.orderId))] } },
+        select: { id: true, code: true, total: true, status: true, paymentMethod: true, paymentStatus: true },
+      }),
+      this.prisma.user.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.userId))] } },
+        select: { id: true, fullName: true, phone: true },
+      }),
+    ]);
+    const orderMap = new Map(orders.map((o) => [o.id, o]));
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    const decorated = rows.map((r) => ({
+      ...r,
+      order: orderMap.get(r.orderId) ?? null,
+      user: userMap.get(r.userId) ?? null,
+    }));
+    return Array.isArray(input) ? decorated : decorated[0];
   }
 
   /** Duyệt đổi/trả. APPROVED → hoàn đúng kênh thanh toán + reverse điểm + reverse commission CTV + restock. */
@@ -49,7 +85,7 @@ export class AdminService {
         data: { status: 'REJECTED', adminNote: note, reviewedBy: adminId, reviewedAt: new Date() },
       });
       if (rejected.count === 0) throw new BadRequestException('Yêu cầu đã được xử lý.');
-      return this.prisma.returnRequest.findUnique({ where: { id } });
+      return this.withReturnContext(await this.prisma.returnRequest.findUnique({ where: { id } }));
     }
 
     // Load order TRONG transaction để paymentStatus/status nhất quán với guard updateMany.
@@ -94,7 +130,7 @@ export class AdminService {
     await this.notifications
       .notify(orderForReturn.userId, 'RETURN_APPROVED', { order_code: orderForReturn.code })
       .catch(() => undefined);
-    return this.prisma.returnRequest.findUnique({ where: { id } });
+    return this.withReturnContext(await this.prisma.returnRequest.findUnique({ where: { id } }));
   }
 
   // ── Dealer applications ──

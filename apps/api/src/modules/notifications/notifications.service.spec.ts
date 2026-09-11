@@ -13,14 +13,21 @@ function makePrisma(over: Record<string, unknown> = {}) {
 }
 
 describe('NotificationsService.notify', () => {
-  it('luôn ghi INAPP log dù không có template (fallback dùng code)', async () => {
+  /**
+   * Thiếu template thì fallback CŨ in nguyên văn mã code cho khách — họ nhận được một thông báo
+   * nội dung là "SUBSCRIPTION_ORDER_FAILED". Nay hiện câu tiếng Việt trung tính; mã code vẫn
+   * được lưu ở templateCode để dò, và log warn để phát hiện template thiếu.
+   */
+  it('thiếu template → vẫn ghi INAPP log, nội dung là câu tiếng Việt chứ không phải mã code', async () => {
     const { prisma, create } = makePrisma();
     const zns = { sendTemplate: jest.fn() } as unknown as ZnsClient;
     await new NotificationsService(prisma, zns).notify('u1', 'ORDER_CONFIRMED', { order_code: 'X1' });
     expect(create).toHaveBeenCalledTimes(1);
     const data = create.mock.calls[0][0].data;
     expect(data.channel).toBe('INAPP');
-    expect(data.payload.body).toBe('ORDER_CONFIRMED'); // fallback = code khi thiếu template
+    expect(data.templateCode).toBe('ORDER_CONFIRMED');
+    expect(data.payload.body).not.toContain('ORDER_CONFIRMED');
+    expect(data.payload.body.length).toBeGreaterThan(0);
     expect(zns.sendTemplate).not.toHaveBeenCalled();
   });
 

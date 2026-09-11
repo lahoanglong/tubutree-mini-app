@@ -79,7 +79,10 @@ const FEED_INCLUDE = {
   category: { select: { slug: true, name: true, icon: true } },
   productTags: { include: { product: { select: { slug: true, name: true, thumbnail: true, salePrice: true, basePrice: true } } } },
   tags: { include: { tag: { select: { slug: true, name: true } } } },
-  _count: { select: { reactions: true, comments: true } },
+  // comments đếm CÓ LỌC isRemoved: thẻ bài và màn chi tiết cùng hiện con số này, trong khi
+      // danh sách bình luận lại lọc bỏ bài đã gỡ — người đọc thấy "💬 5" cạnh "Trả lời (3)" và
+      // tưởng bị giấu nội dung.
+      _count: { select: { reactions: true, comments: { where: { isRemoved: false } } } },
 } as const;
 
 /** Hình dạng FeedPost sau khi include FEED_INCLUDE + reactions (dùng chung getFeed/getPost/eventPosts). */

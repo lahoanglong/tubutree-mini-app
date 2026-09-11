@@ -2,6 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ZnsClient } from '../integrations/zns/zns.client';
 
+/** Nội dung dùng khi template chưa được seed — tuyệt đối không in mã code ra cho khách. */
+const MISSING_TEMPLATE_BODY = 'Tubu Tree có cập nhật mới cho bạn. Mở mục liên quan trong app để xem chi tiết nhé 🌿';
+
 /**
  * Gửi thông báo theo template code (Build Spec §4.10, §11).
  * Tra NotificationTemplate → gửi qua kênh tương ứng (ZNS/INAPP) → ghi NotificationLog.
@@ -25,7 +28,13 @@ export class NotificationsService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
     // In-app luôn lưu để hiển thị danh sách thông báo.
-    const body = tpl ? this.render(tpl.bodyTemplate, data) : templateCode;
+    // Thiếu template KHÔNG được in mã code ra cho khách (họ nhận thông báo nội dung là
+    // "SUBSCRIPTION_ORDER_FAILED"). Hiện câu trung tính, còn mã vẫn nằm ở cột templateCode để
+    // dò, kèm log warn để template thiếu được phát hiện thay vì âm thầm.
+    if (!tpl) {
+      this.logger.warn(`Thiếu NotificationTemplate "${templateCode}" — đã gửi nội dung mặc định.`);
+    }
+    const body = tpl ? this.render(tpl.bodyTemplate, data) : MISSING_TEMPLATE_BODY;
     await this.prisma.notificationLog.create({
       data: { userId, templateCode, channel: 'INAPP', payload: { body, data }, status: 'SENT' },
     });
