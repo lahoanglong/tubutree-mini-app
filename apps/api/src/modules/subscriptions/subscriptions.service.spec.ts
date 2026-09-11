@@ -3,6 +3,10 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { PricingService } from '../pricing/pricing.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
+import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
+
+/** Stub tối thiểu cho các test không quan tâm việc đẩy Pancake. */
+const pancakeStub = () => ({ enqueuePush: jest.fn().mockResolvedValue(undefined) }) as unknown as PancakeOrderService;
 import type { NotificationsService } from '../notifications/notifications.service';
 
 const config = {} as unknown as SystemConfigService;
@@ -17,7 +21,7 @@ function makeService(opts: { variation?: unknown; address?: unknown; create?: je
     address: { findUnique: jest.fn().mockResolvedValue(opts.address ?? { id: 'a1', userId: 'u1' }) },
     subscription: { create },
   } as unknown as PrismaService;
-  return { svc: new SubscriptionsService(prisma, config, pricing, loyalty, notifications), create };
+  return { svc: new SubscriptionsService(prisma, config, pricing, loyalty, notifications, { enqueuePush: jest.fn() } as unknown as PancakeOrderService), create };
 }
 
 const dto = (over = {}) => ({ variationId: 'v1', quantity: 2, intervalWeeks: 4, addressId: 'a1', ...over });
@@ -91,7 +95,9 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     const ly = { getTierMultiplier: jest.fn().mockResolvedValue(1) } as unknown as LoyaltyService;
     const notify = jest.fn().mockResolvedValue(undefined);
     const nt = { notify } as unknown as NotificationsService;
-    return { svc: new SubscriptionsService(prisma, cfg, pr, ly, nt), updateMany, orderCreate, stockUpdateMany, notify };
+    const enqueuePush = jest.fn().mockResolvedValue(undefined);
+    const pancake = { enqueuePush } as unknown as PancakeOrderService;
+    return { svc: new SubscriptionsService(prisma, cfg, pr, ly, nt, pancake), updateMany, orderCreate, stockUpdateMany, notify, enqueuePush };
   }
 
   it('claim thành công (count=1) → tạo đơn định kỳ', async () => {
@@ -153,6 +159,26 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     expect(data.discount).toBe(Math.floor(100000 * 0.15));
     expect(data.total).toBe(data.subtotal - data.discount + data.shippingFee);
   });
+
+  // P1-4 (docs/2026-09-08-review-progress.md): đơn Subscribe & Save do cron tạo KHÔNG được đẩy
+  // sang Pancake ở bất kỳ đường nào — kho vật lý không bao giờ thấy đơn, không webhook nào khớp
+  // được, đơn kẹt CONFIRMED vĩnh viễn dù đã trừ kho và đã báo khách "đơn định kỳ đang tới".
+  describe('SubscriptionsService — đẩy đơn định kỳ sang Pancake', () => {
+    it('tạo đơn thành công → enqueuePush(orderId)', async () => {
+      const { svc, enqueuePush, orderCreate } = makeProcess(1);
+      await svc.processDue();
+      expect(orderCreate).toHaveBeenCalled();
+      expect(enqueuePush).toHaveBeenCalledWith(expect.any(String));
+    });
+
+    it('enqueuePush lỗi → KHÔNG làm hỏng chu kỳ cron (non-fatal, cron reconcile quét lại)', async () => {
+      const { svc, enqueuePush } = makeProcess(1);
+      enqueuePush.mockRejectedValue(new Error('redis down'));
+      // processDue() trả void — điều cần khẳng định là KHÔNG ném lỗi ra ngoài cron.
+      await expect(svc.processDue()).resolves.toBeUndefined();
+    });
+  });
+
 });
 
 describe('SubscriptionsService.effectiveDiscountPct', () => {
@@ -166,7 +192,7 @@ describe('SubscriptionsService.effectiveDiscountPct', () => {
       get: async <T>(k: string, fb?: T): Promise<T> =>
         k === 'subscribe.discount_tiers' ? (tiers as unknown as T) : (fb as T),
     } as unknown as SystemConfigService;
-    return new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications);
+    return new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, { enqueuePush: jest.fn() } as unknown as PancakeOrderService);
   }
 
   it.each([
@@ -196,7 +222,7 @@ describe('SubscriptionsService.skipCycle', () => {
         update,
       },
     } as unknown as PrismaService;
-    const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications);
+    const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub());
     return { svc, update };
   }
 
@@ -245,7 +271,7 @@ describe('SubscriptionsService.list', () => {
       get: async <T>(k: string, fb?: T): Promise<T> =>
         k === 'subscribe.discount_tiers' ? (tiers as unknown as T) : (fb as T),
     } as unknown as SystemConfigService;
-    const svc = new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications);
+    const svc = new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, pancakeStub());
     const result = await svc.list('u1');
     expect(result[0]?.effectiveDiscountPct).toBe(0.14);
   });

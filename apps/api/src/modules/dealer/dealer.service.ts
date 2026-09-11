@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
 
 interface BonusTier {
@@ -32,6 +33,10 @@ export class DealerService {
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
     @Optional() private readonly notifications?: NotificationsService,
+    // @Optional theo đúng kiểu `notifications` ở trên (18 chỗ test dựng service trực tiếp).
+    // Thiếu wiring thì log cảnh báo to, KHÔNG im lặng bỏ qua — chính việc im lặng đã khiến
+    // đơn đại lý không bao giờ tới kho mà không ai biết (P1-4).
+    @Optional() private readonly pancakeOrder?: PancakeOrderService,
   ) {}
 
   async apply(userId: string, dto: ApplyDealerDto) {
@@ -198,6 +203,19 @@ export class DealerService {
         if (existing) return this.prisma.order.findUniqueOrThrow({ where: { id: existing.id }, include: { items: true } });
       }
       throw err;
+    }
+    // Đẩy sang Pancake như mọi đường tạo đơn khác — thiếu bước này thì kho vật lý KHÔNG BAO
+    // GIỜ thấy đơn đại lý, không webhook nào khớp được (P1-4,
+    // docs/2026-09-08-review-progress.md). Non-fatal: đơn + ghi công nợ đã commit xong, lỗi
+    // xếp hàng không được lật ngược chúng; cron reconcile của Pancake quét lại sau.
+    if (this.pancakeOrder) {
+      await this.pancakeOrder
+        .enqueuePush(order.id)
+        .catch((err) =>
+          this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn đại lý ${order.id}: ${err instanceof Error ? err.message : err}`),
+        );
+    } else {
+      this.logger.warn(`PancakeOrderService chưa wiring — đơn đại lý ${order.id} KHÔNG được đẩy sang kho.`);
     }
     return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
   }

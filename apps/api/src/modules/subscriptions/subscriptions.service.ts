@@ -7,6 +7,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { PricingService } from '../pricing/pricing.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 
 interface CreateSubInput {
   variationId: string;
@@ -39,6 +40,7 @@ export class SubscriptionsService {
     private readonly pricing: PricingService,
     private readonly loyalty: LoyaltyService,
     private readonly notifications: NotificationsService,
+    private readonly pancakeOrder: PancakeOrderService,
   ) {}
 
   async create(userId: string, dto: CreateSubInput) {
@@ -267,6 +269,16 @@ export class SubscriptionsService {
       throw err; // giữ nguyên hành vi cũ: processDue() log lỗi + đếm là chu kỳ bị bỏ qua.
     }
     await this.prisma.subscription.update({ where: { id: sub.id }, data: { lastOrderId: order.id } });
+    // Đẩy sang Pancake như mọi đường tạo đơn khác (checkout, CTV lên đơn hộ). Thiếu bước này
+    // thì kho vật lý KHÔNG BAO GIỜ thấy đơn định kỳ, không webhook nào khớp được, đơn kẹt
+    // CONFIRMED vĩnh viễn dù đã trừ kho và đã báo khách (P1-4,
+    // docs/2026-09-08-review-progress.md). Non-fatal: lỗi xếp hàng không được làm hỏng chu kỳ
+    // cron — cron reconcile của Pancake sẽ quét lại đơn chưa có pancakeOrderId.
+    await this.pancakeOrder
+      .enqueuePush(order.id)
+      .catch((err) =>
+        this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`),
+      );
     await this.notifications.notify(sub.userId, 'SUBSCRIPTION_ORDER', { order_code: code }).catch(() => undefined);
   }
 

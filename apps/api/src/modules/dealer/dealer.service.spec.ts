@@ -259,6 +259,46 @@ describe('DealerService.placeOrder idempotency (chống double-submit đơn CRED
     );
     expect(orderCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ idempotencyKey: 'idem-key-2' }) }));
   });
+
+  // P1-4 (docs/2026-09-08-review-progress.md): đơn đại lý KHÔNG được đẩy sang Pancake ở bất kỳ
+  // đường nào → kho vật lý không bao giờ thấy đơn, không webhook nào khớp được để cập nhật
+  // trạng thái giao hàng.
+  it('tạo đơn xong → enqueuePush sang Pancake', async () => {
+    const { prisma } = prismaForOrder();
+    const enqueuePush = jest.fn().mockResolvedValue(undefined);
+    await new DealerService(prisma, makeConfig(), undefined, { enqueuePush } as never).placeOrder(
+      'd1',
+      { items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'PREPAID' } as never,
+      'idem-key-3',
+    );
+    expect(enqueuePush).toHaveBeenCalledWith('o1');
+  });
+
+  it('enqueuePush lỗi → đơn + công nợ đã commit KHÔNG bị lật ngược (non-fatal)', async () => {
+    const { prisma, orderCreate } = prismaForOrder();
+    const enqueuePush = jest.fn().mockRejectedValue(new Error('redis down'));
+    await expect(
+      new DealerService(prisma, makeConfig(), undefined, { enqueuePush } as never).placeOrder(
+        'd1',
+        { items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'PREPAID' } as never,
+        'idem-key-4',
+      ),
+    ).resolves.toBeDefined();
+    expect(orderCreate).toHaveBeenCalled();
+  });
+
+  it('trả lại đơn cũ theo idempotency → KHÔNG đẩy Pancake lần nữa', async () => {
+    const { prisma } = prismaForOrder();
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'o-existing', userId: 'd1' });
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'o-existing', items: [] });
+    const enqueuePush = jest.fn().mockResolvedValue(undefined);
+    await new DealerService(prisma, makeConfig(), undefined, { enqueuePush } as never).placeOrder(
+      'd1',
+      { items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'PREPAID' } as never,
+      'idem-key-1',
+    );
+    expect(enqueuePush).not.toHaveBeenCalled();
+  });
 });
 
 describe('DealerService.rewardsProgress (hiển thị điều kiện + tiến trình)', () => {
