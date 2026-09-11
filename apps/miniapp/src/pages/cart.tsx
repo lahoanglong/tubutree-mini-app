@@ -589,8 +589,11 @@ function StickySummary({
         </Box>
       )}
       <Box flex justifyContent="space-between" alignItems="baseline">
+        {/* Con số này ĐÃ trừ giảm giá và CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán
+            là tiền hàng gộp chưa trừ gì — cùng một nhãn, hai số khác nhau, khách tưởng bị đội
+            giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn. */}
         <Text size="small" style={{ color: 'var(--neutral-600)' }}>
-          {vi.cart.subtotal}
+          {vi.cart.subtotalAfterDiscount}
         </Text>
         <Text bold style={{ fontSize: 18, color: 'var(--primary-700)', fontFamily: 'var(--font-display)' }}>
           {formatVnd(Math.max(0, selectedSubtotal - discount))}

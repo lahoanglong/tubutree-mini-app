@@ -1,6 +1,6 @@
 import { Box, Page, Text, Button, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { Copy, CheckCircle2, Clock } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBankQr } from '../services/payment-api';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
@@ -14,6 +14,7 @@ export default function BankPaymentPage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
 
+  const qc = useQueryClient();
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['bank-qr', code],
     queryFn: () => getBankQr(code!),
@@ -126,7 +127,17 @@ export default function BankPaymentPage() {
           <Text size="small" style={{ color: 'var(--neutral-500)', marginTop: 4 }}>
             Đơn {data.orderCode} đã được xác nhận. Cảm ơn bạn 🌿
           </Text>
-          <Button fullWidth onClick={() => navigate(`/order/${data.orderCode}`, { replace: true })} style={{ marginTop: 24, background: 'var(--leaf-600)' }}>
+          <Button
+            fullWidth
+            onClick={() => {
+              // Không invalidate thì màn chi tiết/danh sách đơn đọc lại từ cache và vẫn hiện
+              // "Chờ thanh toán" ngay sau khi khách vừa thấy "Đã nhận thanh toán" (P2-9 audit).
+              void qc.invalidateQueries({ queryKey: ['order', data.orderCode] });
+              void qc.invalidateQueries({ queryKey: ['orders'] });
+              navigate(`/order/${data.orderCode}`, { replace: true });
+            }}
+            style={{ marginTop: 24, background: 'var(--leaf-600)' }}
+          >
             Xem đơn hàng
           </Button>
           <Button fullWidth variant="secondary" onClick={() => navigate('/', { replace: true })} style={{ marginTop: 8 }}>

@@ -7,7 +7,7 @@ import {
 import { useAuthStore } from '../store/auth';
 import { getLoyalty, getNotifications } from '../services/account-api';
 import { getOwnedBrand } from '../services/brand-owner-api';
-import { formatVnd } from '../utils/format';
+import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 
 interface MenuItem {
@@ -268,7 +268,7 @@ export default function ProfilePage() {
       <Box flex p={3} style={{ gap: 10, marginTop: -20 }}>
         <Stat
           label="Điểm Xanh"
-          value={String(loyaltyQ.data?.pointsBalance ?? user.pointsBalance)}
+          value={formatPoints(loyaltyQ.data?.pointsBalance ?? user.pointsBalance)}
           onClick={() => navigate('/loyalty')}
         />
         <Stat label="Ví Tubu" value={formatVnd(user.walletBalance)} onClick={() => navigate('/wallet', { state: { from: '/profile' } })} />

@@ -89,6 +89,7 @@ export const vi = {
     emptyBody: 'Khám phá sản phẩm Tubu chọn riêng cho bạn',
     emptyCta: 'Khám phá ngay',
     subtotal: 'Tạm tính',
+    subtotalAfterDiscount: 'Tạm tính (đã giảm, chưa gồm ship)',
     discount: 'Giảm giá',
     checkout: (n: number) => `Thanh toán (${n})`,
     removed: 'Đã bỏ khỏi giỏ',
@@ -137,6 +138,7 @@ export const vi = {
   },
 
   success: {
+    prepareCash: 'Chuẩn bị tiền mặt khi nhận hàng',
     heading: 'Cảm ơn bạn đã chọn Tubu 🌿',
     orderCode: 'Mã đơn hàng',
     pointsComing: (n: number) => `${n} điểm Xanh sẽ về tay khi đơn giao thành công`,

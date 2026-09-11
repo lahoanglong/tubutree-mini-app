@@ -2,6 +2,7 @@ import { Box, Text, Button, useNavigate } from 'zmp-ui';
 import type { OrderDTO } from '@tubutree/shared-types';
 import { vi } from '../../i18n/vi';
 import { useStorefrontContext } from '../../store/storefront-context';
+import { formatVnd } from '../../utils/format';
 
 const LEAVES = [
   { left: '12%', delay: '0ms', size: 16, rotate: 20 },
@@ -98,6 +99,17 @@ export function OrderSuccess({
           {order.code}
         </Text>
       </Box>
+
+      {/* Tổng tiền: đơn COD thì khách cần biết chuẩn bị bao nhiêu tiền mặt — trước đây màn này
+          chỉ có mã đơn, không nhắc lại số tiền vừa đặt. */}
+      <Text bold style={{ fontSize: 20, marginTop: 12, color: 'var(--neutral-900)' }}>
+        {formatVnd(order.total)}
+      </Text>
+      {order.paymentMethod === 'COD' && (
+        <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 2, textAlign: 'center' }}>
+          {vi.success.prepareCash}
+        </Text>
+      )}
 
       {order.pointsEarned > 0 && (
         <Text size="small" style={{ color: 'var(--leaf-700)', marginTop: 12, textAlign: 'center' }}>

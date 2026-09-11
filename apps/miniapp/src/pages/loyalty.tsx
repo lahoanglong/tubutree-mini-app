@@ -11,7 +11,7 @@ import {
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
-import { formatVnd } from '../utils/format';
+import { formatVnd, formatPoints } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 
@@ -100,7 +100,7 @@ export default function LoyaltyPage() {
                 {tierName}
               </Text>
               <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
-                Tích điểm ×{data.tier?.multiplier ?? 1} · {data.pointsBalance} Điểm Xanh
+                Tích điểm ×{data.tier?.multiplier ?? 1} · {formatPoints(data.pointsBalance)} Xanh
               </Text>
 
               {next ? (

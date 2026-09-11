@@ -46,3 +46,13 @@ export function formatRatePct(rate: number | string | null | undefined): string 
   // 1 chữ số thập phân là đủ cho khoảng 0,5%–10% thường gặp; số tròn thì bỏ phần thập phân.
   return `${pct.toFixed(1).replace(/\.0$/, '').replace('.', ',')}%`;
 }
+
+/**
+ * Điểm Xanh: LUÔN có dấu phân cách nghìn + đơn vị "điểm".
+ * Trước đây mỗi màn tự format một kiểu — "1.250 điểm" (Ví), "1250 Điểm Xanh" (Điểm Xanh),
+ * "1250" (Cá nhân) — cùng một con số trông như ba giá trị khác nhau.
+ */
+export function formatPoints(n: number | null | undefined): string {
+  const v = Number(n ?? 0);
+  return `${(Number.isFinite(v) ? v : 0).toLocaleString('vi-VN')} điểm`;
+}

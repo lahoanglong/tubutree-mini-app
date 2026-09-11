@@ -477,14 +477,33 @@ export default function ProductDetailPage() {
         className="tubu-press"
         p={4}
         mt={2}
-        onClick={() => groupBuyMutation.mutate(p.id)}
-        style={{ background: 'var(--neutral-0)', display: 'flex', alignItems: 'center', gap: 12 }}
+        // Trước đây bắn mutation ngay khi chạm: chưa đăng nhập thì ra lỗi 401 khó hiểu, chạm
+        // 2 lần thì tạo 2 nhóm, và không có trạng thái chờ nên tưởng không ăn (P2-7 audit).
+        // Các hành động khác trên trang này (Thêm giỏ / Mua ngay / Đặt định kỳ) đều đã guard.
+        onClick={async () => {
+          if (groupBuyMutation.isPending) return;
+          haptic('light');
+          if (status !== 'authenticated') {
+            await login();
+            return;
+          }
+          groupBuyMutation.mutate(p.id);
+        }}
+        style={{
+          background: 'var(--neutral-0)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          opacity: groupBuyMutation.isPending ? 0.6 : 1,
+        }}
       >
         <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
           <Users size={20} color="var(--leaf-700)" strokeWidth={2} />
         </Box>
         <Box style={{ flex: 1 }}>
-          <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>Mở nhóm mua chung — giá tốt hơn</Text>
+          <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
+            {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — giá tốt hơn'}
+          </Text>
           <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
             Rủ bạn bè cho đủ nhóm, cả nhóm cùng được giảm giá
           </Text>

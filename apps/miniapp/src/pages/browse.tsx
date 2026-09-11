@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Page, Text, Button, Input, useLocation, useNavigate } from 'zmp-ui';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
-import { fetchProducts, fetchBrands } from '../services/shop-api';
+import { fetchProducts, fetchBrands, getCart } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import ProductCard from '../components/product-card';
 import { ProductGridSkeleton } from '../components/ui/skeleton';
@@ -11,6 +11,8 @@ import { brandAccent } from '../utils/brands';
 import { useDebounced } from '../utils/use-debounced';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { ShoppingCart } from 'lucide-react';
+import { useAuthStore } from '../store/auth';
 
 const PAGE_LIMIT = 30;
 const SEGMENT_LABELS: Record<string, string> = {
@@ -44,6 +46,9 @@ function pushRecent(term: string): string[] {
 }
 
 export default function BrowsePage() {
+  // Badge giỏ dùng chung query ['cart'] với trang chủ/PDP — không phát sinh request mới.
+  const authed = useAuthStore((st) => st.status === 'authenticated');
+  const cartCount = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: authed }).data?.itemCount ?? 0;
   const location = useLocation();
   const navigate = useNavigate();
   const initialBrands = useMemo(() => {
@@ -136,13 +141,51 @@ export default function BrowsePage() {
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 72 }}>
       <PullToRefresh onRefresh={() => Promise.all([products.refetch(), brands.refetch()])} />
-      <Box p={3}>
-        <Input.Search
-          placeholder={vi.browse.searchPlaceholder}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          clearable
-        />
+      <Box p={3} flex alignItems="center" style={{ gap: 10 }}>
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Input.Search
+            placeholder={vi.browse.searchPlaceholder}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            clearable
+          />
+        </Box>
+        {/* Trang này KHÔNG có lối nào tới giỏ (bottom nav cũng không có tab giỏ): khách thêm
+            vài món rồi cuộn tiếp thì phải quay về trang chủ hoặc mở lại một trang sản phẩm
+            mới thấy giỏ đâu (P2-8 audit mạch lạc). */}
+        <Box
+          role="button"
+          aria-label="Giỏ hàng"
+          className="tubu-press"
+          onClick={() => {
+            haptic('light');
+            navigate('/cart');
+          }}
+          style={{
+            position: 'relative',
+            width: 40,
+            height: 40,
+            flex: '0 0 auto',
+            borderRadius: '50%',
+            background: 'var(--leaf-50)',
+            display: 'grid',
+            placeItems: 'center',
+          }}
+        >
+          <ShoppingCart size={20} color="var(--leaf-700)" strokeWidth={1.8} />
+          {cartCount > 0 && (
+            <span
+              style={{
+                position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18,
+                borderRadius: 'var(--radius-full)', background: 'var(--clay-500)', color: 'var(--neutral-0)',
+                fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center',
+                justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box',
+              }}
+            >
+              {cartCount > 99 ? '99+' : cartCount}
+            </span>
+          )}
+        </Box>
       </Box>
 
       {/* Lưới Danh mục — hiện khi ở trạng thái duyệt gốc (chưa gõ/chưa lọc). Trước đây tab
