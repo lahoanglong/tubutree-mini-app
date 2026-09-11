@@ -299,7 +299,8 @@ describe('AttendanceService.adminEditSession / adminAddSession', () => {
     const update = jest.fn().mockResolvedValue({});
     const prisma = makePrisma({
       attendanceSession: {
-        findUnique: jest.fn().mockResolvedValue({ id: 's1', staffId: 'u1', checkinAt, checkoutAt: null, shift: { workDate } }),
+        findUnique: jest.fn().mockResolvedValue({ id: 's1', staffId: 'u1', shiftId: 'sh1', checkinAt, checkoutAt: null, shift: { workDate } }),
+        findMany: jest.fn().mockResolvedValue([]),
         update,
       },
     });
@@ -319,10 +320,74 @@ describe('AttendanceService.adminEditSession / adminAddSession', () => {
     const create = jest.fn().mockResolvedValue({ id: 'new1' });
     const prisma = makePrisma({
       shift: { findUnique: jest.fn().mockResolvedValue({ id: 'sh1', staffId: 'u1', workDate }) },
-      attendanceSession: { create },
+      attendanceSession: { create, findMany: jest.fn().mockResolvedValue([]) },
     });
     const out = await mk(prisma).adminAddSession('sh1', new Date('2026-07-03T01:00:00Z'), new Date('2026-07-03T05:00:00Z'));
     expect(out).toEqual({ staffId: 'u1', workDate });
     expect(create).toHaveBeenCalled();
+  });
+});
+
+/**
+ * sumWorkedMinutes cộng phần giao của TỪNG phiên với cửa sổ ca, nên hai phiên 08:00–17:00 của
+ * cùng một ca cho ra 18 giờ công trong một ngày. Quản lý tưởng nhân viên quên chấm rồi thêm tay
+ * một phiên nữa là đủ để xảy ra — mà endpoint thêm phiên còn không có UI nên rất dễ lọt.
+ */
+describe('AttendanceService — không cho phiên chấm công chồng giờ', () => {
+  const workDate = new Date('2026-07-03');
+  const existing = { checkinAt: new Date('2026-07-03T01:00:00Z'), checkoutAt: new Date('2026-07-03T10:00:00Z') };
+
+  it('thêm phiên trùng giờ với phiên đã có của cùng ca → BadRequest', async () => {
+    const create = jest.fn();
+    const prisma = makePrisma({
+      shift: { findUnique: jest.fn().mockResolvedValue({ id: 'sh1', staffId: 'u1', workDate }) },
+      attendanceSession: { create, findMany: jest.fn().mockResolvedValue([existing]) },
+    });
+    await expect(
+      mk(prisma).adminAddSession('sh1', new Date('2026-07-03T02:00:00Z'), new Date('2026-07-03T08:00:00Z')),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('thêm phiên nối tiếp (không chồng) → cho qua', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'new1' });
+    const prisma = makePrisma({
+      shift: { findUnique: jest.fn().mockResolvedValue({ id: 'sh1', staffId: 'u1', workDate }) },
+      attendanceSession: { create, findMany: jest.fn().mockResolvedValue([existing]) },
+    });
+    await mk(prisma).adminAddSession('sh1', new Date('2026-07-03T10:00:00Z'), new Date('2026-07-03T12:00:00Z'));
+    expect(create).toHaveBeenCalled();
+  });
+
+  it('phiên CHƯA đóng của ca coi như kéo dài vô hạn → thêm phiên sau đó vẫn bị chặn', async () => {
+    const create = jest.fn();
+    const prisma = makePrisma({
+      shift: { findUnique: jest.fn().mockResolvedValue({ id: 'sh1', staffId: 'u1', workDate }) },
+      attendanceSession: {
+        create,
+        findMany: jest.fn().mockResolvedValue([{ checkinAt: new Date('2026-07-03T01:00:00Z'), checkoutAt: null }]),
+      },
+    });
+    await expect(
+      mk(prisma).adminAddSession('sh1', new Date('2026-07-03T20:00:00Z'), new Date('2026-07-03T22:00:00Z')),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('sửa phiên: không tự so với CHÍNH NÓ (loại trừ theo id)', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      attendanceSession: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 's1', staffId: 'u1', shiftId: 'sh1',
+          checkinAt: existing.checkinAt, checkoutAt: existing.checkoutAt,
+          shift: { workDate },
+        }),
+        findMany: jest.fn().mockResolvedValue([]), // đã loại trừ chính nó
+        update,
+      },
+    });
+    await mk(prisma).adminEditSession('s1', { checkoutAt: new Date('2026-07-03T11:00:00Z') });
+    expect(update).toHaveBeenCalled();
   });
 });

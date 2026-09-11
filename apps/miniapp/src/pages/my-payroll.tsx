@@ -18,7 +18,7 @@ import {
   mondayKeyOf,
   shortDayLabel,
   isoToVnHHMM,
-  keyToUtcMidnightISO,
+  vnDateTimeISO,
   vnDateKey,
 } from '../utils/week';
 
@@ -49,9 +49,13 @@ function MyPayrollHub() {
   const { openSnackbar } = useSnackbar();
   const [ym, setYm] = useState(() => currentVnYearMonth());
   const payQ = useQuery({ queryKey: ['my-payroll', ym.year, ym.month], queryFn: () => getMyPayroll(ym.year, ym.month) });
-  const monFrom = keyToUtcMidnightISO(`${ym.year}-${String(ym.month).padStart(2, '0')}-01`);
+  // Biên phải theo GIỜ VN, không phải UTC: BE lọc lịch sử theo `checkinAt` thật, lệch 7 tiếng
+  // nghĩa là phiên checkin 06:00 sáng ngày 1 (= 23:00 UTC ngày cuối tháng trước) rơi ra ngoài
+  // khoảng — bảng lương vẫn hiện giờ công và tiền của ngày đó, nhưng bấm xổ ra lại báo "Không có
+  // phiên chấm công", nhân viên tưởng hệ thống tính khống. BE cho admin đã sửa đúng chỗ này.
+  const monFrom = vnDateTimeISO(`${ym.year}-${String(ym.month).padStart(2, '0')}-01`, '00:00');
   const nextM = shiftYearMonth(ym.year, ym.month, 1);
-  const monTo = keyToUtcMidnightISO(`${nextM.year}-${String(nextM.month).padStart(2, '0')}-01`);
+  const monTo = vnDateTimeISO(`${nextM.year}-${String(nextM.month).padStart(2, '0')}-01`, '00:00');
   const histQ = useQuery({ queryKey: ['my-attn-history', ym.year, ym.month], queryFn: () => getHistory(monFrom, monTo) });
   const [openDay, setOpenDay] = useState<string | null>(null);
 

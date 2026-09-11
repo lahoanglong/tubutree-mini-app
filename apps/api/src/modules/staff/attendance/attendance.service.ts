@@ -211,6 +211,37 @@ export class AttendanceService {
     });
   }
 
+
+  /**
+   * Chặn phiên chấm công CHỒNG GIỜ trong cùng một ca.
+   *
+   * `sumWorkedMinutes` cộng phần giao của TỪNG phiên với cửa sổ ca, nên hai phiên 08:00–17:00
+   * của cùng một ca cho ra 18 giờ công trong một ngày. Quản lý tưởng nhân viên quên chấm rồi
+   * thêm tay một phiên nữa là đủ để xảy ra — mà endpoint thêm phiên lại không có UI nên lỗi
+   * kiểu này rất dễ lọt.
+   */
+  private async assertNoOverlap(
+    shiftId: string,
+    checkinAt: Date,
+    checkoutAt: Date | null,
+    excludeSessionId?: string,
+  ): Promise<void> {
+    const siblings = await this.prisma.attendanceSession.findMany({
+      where: { shiftId, ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}) },
+      select: { checkinAt: true, checkoutAt: true },
+    });
+    // Phiên chưa đóng coi như kéo dài vô hạn về phía sau.
+    const end = checkoutAt?.getTime() ?? Number.POSITIVE_INFINITY;
+    const start = checkinAt.getTime();
+    for (const other of siblings) {
+      const oStart = other.checkinAt.getTime();
+      const oEnd = other.checkoutAt?.getTime() ?? Number.POSITIVE_INFINITY;
+      if (start < oEnd && oStart < end) {
+        throw new BadRequestException('Khoảng giờ này chồng với một phiên chấm công khác của cùng ca.');
+      }
+    }
+  }
+
   /** QL sửa giờ phiên (điều chỉnh giờ làm). Trả {staffId, workDate} để controller recompute lương. */
   async adminEditSession(sessionId: string, patch: { checkinAt?: Date; checkoutAt?: Date | null }) {
     const s = await this.prisma.attendanceSession.findUnique({
@@ -224,6 +255,7 @@ export class AttendanceService {
       throw new BadRequestException('Giờ checkout phải sau giờ checkin.');
     // closeReason chỉ đổi khi CALL NÀY thực sự thay đổi checkoutAt — sửa riêng checkinAt không
     // được ghi đè lý do đóng phiên gốc (MANUAL/SHIFT_END/OUT_OF_RANGE), phá mất audit trail.
+    await this.assertNoOverlap(s.shiftId, checkinAt, checkoutAt, sessionId);
     const closeReason =
       patch.checkoutAt === undefined ? s.closeReason : checkoutAt ? 'ADMIN' : null;
     await this.prisma.attendanceSession.update({
@@ -242,6 +274,7 @@ export class AttendanceService {
       select: { id: true, staffId: true, workDate: true },
     });
     if (!shift) throw new NotFoundException('Không tìm thấy ca.');
+    await this.assertNoOverlap(shiftId, checkinAt, checkoutAt);
     await this.prisma.attendanceSession.create({
       data: {
         shiftId,

@@ -310,8 +310,11 @@ function DetailSheet({
   const editM = useMutation({
     mutationFn: (dayKey: string) =>
       adminEditSession(editId as string, {
+        // Ca qua đêm: checkout 02:00 thuộc NGÀY HÔM SAU. Dựng cả hai mốc theo cùng một ngày như
+        // trước sẽ gửi checkout < checkin → BE từ chối, và quản lý bấm bao nhiêu lần cũng lỗi mà
+        // không có cách nào sửa. Màn của nhân viên đã xử lý đúng (staff.tsx) — chỉ màn này sót.
         checkinAt: vnDateTimeISO(dayKey, ci),
-        checkoutAt: vnDateTimeISO(dayKey, co),
+        checkoutAt: vnDateTimeISO(co <= ci ? addDaysKey(dayKey, 1) : dayKey, co),
       }),
     onSuccess: () => {
       openSnackbar({ text: 'Đã sửa giờ & tính lại.', type: 'success' });

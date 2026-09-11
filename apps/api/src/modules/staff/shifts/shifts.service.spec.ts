@@ -247,3 +247,45 @@ describe('ShiftsService.approve/reject (admin)', () => {
     );
   });
 });
+
+/**
+ * Không lọc trạng thái thì ca đã bị TỪ CHỐI/đã huỷ tuần trước cũng được chép sang: nhân viên
+ * đăng 08:00–12:00 bị REJECT rồi đăng lại 09:00–13:00 (APPROVED), bấm "Copy tuần trước" là ra
+ * HAI ca chồng giờ — đúng thứ createShifts cố tình cấm; admin bulk-approve xong là hai ca
+ * APPROVED trùng giờ, giờ công tính hai lần.
+ */
+describe('ShiftsService.copyWeek — chỉ chép ca còn hiệu lực, không tạo ca chồng', () => {
+  const monday = new Date('2026-07-06T00:00:00.000Z');
+  const nextMonday = new Date('2026-07-13T00:00:00.000Z');
+
+  function mkPrisma(src: unknown[]) {
+    const findMany = jest.fn().mockResolvedValueOnce(src).mockResolvedValueOnce([]);
+    const create = jest.fn().mockImplementation(({ data }) => data);
+    const prisma = {
+      shift: { findMany, create },
+      $transaction: jest.fn().mockImplementation((ops: unknown[]) => Promise.resolve(ops)),
+    } as unknown as PrismaService;
+    return { prisma, findMany, create };
+  }
+
+  it('truy vấn ca nguồn lọc theo trạng thái PENDING/APPROVED', async () => {
+    const { prisma, findMany } = mkPrisma([]);
+    await mk(prisma).copyWeek('u1', monday, nextMonday);
+    expect(findMany.mock.calls[0][0].where.status).toEqual({ in: ['PENDING', 'APPROVED'] });
+  });
+
+  it('hai ca nguồn chồng giờ nhau → chỉ chép một, không đẩy cả hai sang tuần đích', async () => {
+    const sh = (h1: number, h2: number) => ({
+      workDate: monday,
+      startAt: new Date(`2026-07-06T0${h1}:00:00.000Z`),
+      endAt: new Date(`2026-07-06T${String(h2).padStart(2, '0')}:00:00.000Z`),
+      templateId: null,
+    });
+    const { prisma, create } = mkPrisma([sh(1, 5), sh(2, 6)]);
+
+    const out = await mk(prisma).copyWeek('u1', monday, nextMonday);
+
+    expect(out).toEqual({ created: 1, skipped: 1 });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+});

@@ -111,7 +111,12 @@ export class ShiftsService {
       where: {
         staffId,
         workDate: { gte: sourceWeekStart, lt: new Date(sourceWeekStart.getTime() + 7 * 86400000) },
+        // Chỉ chép ca CÒN HIỆU LỰC. Không lọc thì ca đã bị từ chối/đã huỷ tuần trước cũng được
+        // chép sang: nhân viên đăng 08:00–12:00 bị REJECT rồi đăng lại 09:00–13:00 (APPROVED),
+        // bấm "Copy tuần trước" là ra HAI ca chồng giờ — đúng thứ createShifts cố tình cấm.
+        status: { in: ['PENDING', 'APPROVED'] },
       },
+      orderBy: { startAt: 'asc' },
     });
     const existing = await this.prisma.shift.findMany({
       where: {
@@ -121,14 +126,21 @@ export class ShiftsService {
       },
       select: { startAt: true, endAt: true },
     });
-    const toCreate = src
-      .map((s) => ({
-        workDate: new Date(s.workDate.getTime() + offset),
-        startAt: new Date(s.startAt.getTime() + offset),
-        endAt: new Date(s.endAt.getTime() + offset),
-        templateId: s.templateId ?? undefined,
-      }))
-      .filter((c) => !existing.some((ex) => rangesOverlap(c.startAt, c.endAt, ex.startAt, ex.endAt)));
+    // So chồng với CẢ ca đã có ở tuần đích LẪN các ca vừa nhận trong chính lượt copy này —
+    // trước đây chỉ so với tuần đích, nên hai ca nguồn chồng nhau vẫn vào được cùng lúc.
+    const accepted: { startAt: Date; endAt: Date }[] = [...existing];
+    const toCreate: { workDate: Date; startAt: Date; endAt: Date; templateId?: string }[] = [];
+    for (const sh of src) {
+      const c = {
+        workDate: new Date(sh.workDate.getTime() + offset),
+        startAt: new Date(sh.startAt.getTime() + offset),
+        endAt: new Date(sh.endAt.getTime() + offset),
+        templateId: sh.templateId ?? undefined,
+      };
+      if (accepted.some((ex) => rangesOverlap(c.startAt, c.endAt, ex.startAt, ex.endAt))) continue;
+      accepted.push({ startAt: c.startAt, endAt: c.endAt });
+      toCreate.push(c);
+    }
     if (toCreate.length) {
       await this.prisma.$transaction(
         toCreate.map((c) => this.prisma.shift.create({ data: { staffId, ...c } })),
