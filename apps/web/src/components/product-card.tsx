@@ -22,6 +22,7 @@ export default function ProductCard({ product }: { product: P }) {
             alt={product.name}
             className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-leaf-50/70 text-leaf-600">

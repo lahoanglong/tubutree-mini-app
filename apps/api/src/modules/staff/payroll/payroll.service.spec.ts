@@ -399,3 +399,58 @@ describe('PayrollService.adjust — chống gửi trùng', () => {
     expect(create).toHaveBeenCalled();
   });
 });
+
+/**
+ * Mỗi lần admin mở tab Lương (kể cả chỉ để xem tháng cũ) trước đây chạy recompute tuần tự cho
+ * từng nhân sự — một GET gây ghi PayrollDay/PayrollMonth cho cả tháng đã qua, kèm findUnique hồ
+ * sơ trong vòng lặp (N+1).
+ */
+describe('PayrollService.adminMonth — GET không ghi dữ liệu tháng cũ', () => {
+  const members = [
+    { id: 'u1', fullName: 'A', phone: '01' },
+    { id: 'u2', fullName: 'B', phone: '02' },
+  ];
+
+  function mkPrisma() {
+    const monthUpsert = jest.fn().mockResolvedValue({});
+    const profileFindMany = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({
+      user: { findMany: jest.fn().mockResolvedValue(members) },
+      staffProfile: { findMany: profileFindMany, findUnique: jest.fn().mockResolvedValue(null) },
+      payrollMonth: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        upsert: monthUpsert,
+      },
+      payrollDay: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() },
+    });
+    return { prisma, monthUpsert, profileFindMany };
+  }
+
+  it('xem THÁNG CŨ → không recompute, không ghi gì', async () => {
+    const { prisma, monthUpsert } = mkPrisma();
+    await mk(prisma).adminMonth(2020, 1);
+    expect(monthUpsert).not.toHaveBeenCalled();
+  });
+
+  it('xem THÁNG HIỆN TẠI → vẫn tính lại để số liệu tươi', async () => {
+    const { prisma, monthUpsert } = mkPrisma();
+    const vnNow = new Date(Date.now() + 7 * 3600_000);
+    await mk(prisma).adminMonth(vnNow.getUTCFullYear(), vnNow.getUTCMonth() + 1);
+    expect(monthUpsert).toHaveBeenCalled();
+  });
+
+  it('nạp hồ sơ lương theo LÔ, không findUnique trong vòng lặp', async () => {
+    const { prisma, profileFindMany } = mkPrisma();
+    const rows = await mk(prisma).adminMonth(2020, 1);
+    expect(rows).toHaveLength(2);
+    expect(profileFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('chưa có bảng lương tháng đó → trả số 0, không tạo bản ghi rỗng', async () => {
+    const { prisma, monthUpsert } = mkPrisma();
+    const rows = await mk(prisma).adminMonth(2020, 1);
+    expect(rows[0]!.month).toMatchObject({ net: 0, status: 'OPEN' });
+    expect(monthUpsert).not.toHaveBeenCalled();
+  });
+});

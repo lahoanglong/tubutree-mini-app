@@ -39,8 +39,19 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       <div className="mt-4 grid gap-8 md:grid-cols-2">
         <div className="flex aspect-square items-center justify-center rounded-2xl bg-leaf-50 text-leaf-600 overflow-hidden shadow-sm border border-neutral-100">
           {product.thumbnail ? (
+            // Ảnh LCP của trang: tải sớm và ưu tiên cao thay vì để trình duyệt đoán. Chưa dùng
+            // next/image vì ảnh sản phẩm đến từ host tuỳ ý (Pancake/Cloudinary/…) — bật
+            // optimizer cho mọi host là biến nó thành proxy ảnh mở; cần chốt danh sách host
+            // trước khi chuyển.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.thumbnail} alt={product.name} className="h-full w-full rounded-2xl object-cover" />
+            <img
+              src={product.thumbnail}
+              alt={product.name}
+              className="h-full w-full rounded-2xl object-cover"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+            />
           ) : (
             <Leaf className="h-20 w-20 text-leaf-600 stroke-[1.5]" />
           )}

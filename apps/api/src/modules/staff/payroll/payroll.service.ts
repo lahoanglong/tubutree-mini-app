@@ -205,24 +205,53 @@ export class PayrollService {
     });
   }
 
+  /**
+   * Bảng lương tháng cho admin.
+   *
+   * Hai điều đã sửa ở đây:
+   * - Chỉ TÍNH LẠI cho THÁNG HIỆN TẠI. Trước đây mỗi lần admin mở tab Lương (kể cả chỉ để xem
+   *   tháng cũ) là chạy recompute tuần tự cho từng nhân sự, tức một GET gây ghi PayrollDay và
+   *   PayrollMonth cho cả tháng đã qua — vừa chậm vừa ghi dữ liệu không ai yêu cầu. Tháng cũ đã
+   *   được cron đêm và nút "Chốt" lo; cần tính lại có chủ đích thì có sẵn nút riêng.
+   * - Nạp hồ sơ lương theo LÔ thay vì findUnique trong vòng lặp (N+1).
+   */
   async adminMonth(year: number, month: number) {
     const members = await this.prisma.user.findMany({
       where: { role: { in: ['STAFF', 'ADMIN'] } },
       select: { id: true, fullName: true, phone: true },
       orderBy: { createdAt: 'desc' },
     });
-    const rows = [];
-    for (const m of members) {
-      const monthRow = await this.recomputeStaffMonth(m.id, year, month);
-      const profile = await this.prisma.staffProfile.findUnique({ where: { userId: m.id } });
-      rows.push({
+    if (members.length === 0) return [];
+
+    const vnNow = new Date(Date.now() + 7 * 3600_000);
+    const isCurrentMonth = vnNow.getUTCFullYear() === year && vnNow.getUTCMonth() + 1 === month;
+
+    const ids = members.map((m) => m.id);
+    if (isCurrentMonth) {
+      for (const id of ids) {
+        await this.recomputeStaffMonth(id, year, month);
+      }
+    }
+    const [profiles, monthRows] = await Promise.all([
+      this.prisma.staffProfile.findMany({ where: { userId: { in: ids } } }),
+      this.prisma.payrollMonth.findMany({ where: { staffId: { in: ids }, year, month } }),
+    ]);
+    const profileMap = new Map(profiles.map((p) => [p.userId, p]));
+    const monthMap = new Map(monthRows.map((r) => [r.staffId, r]));
+
+    return members.map((m) => {
+      const profile = profileMap.get(m.id) ?? null;
+      // Chưa có bảng lương cho tháng đó (nhân sự mới, hoặc tháng chưa có ca nào) → số 0, không
+      // tạo bản ghi rỗng chỉ vì admin mở màn hình.
+      const monthRow =
+        monthMap.get(m.id) ?? { staffId: m.id, year, month, totalMinutes: 0, gross: 0, totalFines: 0, net: 0, status: 'OPEN' };
+      return {
         staff: m,
         month: monthRow,
         profile,
         qrImageUrl: this.buildQr(profile, monthRow.net, `Luong T${month}/${year} ${m.fullName ?? ''}`.trim()),
-      });
-    }
-    return rows;
+      };
+    });
   }
 
   private buildQr(
