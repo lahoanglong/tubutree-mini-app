@@ -274,6 +274,11 @@ export class CommunityFeedService {
       where.bestCommentId = null;
     }
     if (opts.tag) where.tags = { some: { tag: { slug: opts.tag } } };
+    // HẠN CHẾ ĐÃ BIẾT của sort 'popular': khoá sắp xếp là số tim — một con số THAY ĐỔI ĐƯỢC. Ai
+    // đó thả tim cho một bài ở trang 2 trong lúc người dùng đang xem trang 1 thì bài đó có thể
+    // nhảy lên và hiện lần thứ hai (hoặc một bài khác bị bỏ qua). Sửa triệt để cần cột likeCount
+    // vật chất hoá + keyset theo (likeCount, createdAt, id), tức phải bảo trì bộ đếm ở mọi lượt
+    // thả/bỏ tim — chưa làm vì rủi ro lệch bộ đếm lớn hơn phiền toái hiện tại.
     const orderBy =
       opts.sort === 'popular'
         ? [
@@ -598,7 +603,10 @@ export class CommunityFeedService {
     const limit = Math.min(Math.max(take, 1), 100);
     const rows = await this.prisma.feedComment.findMany({
       where: { postId, isRemoved: false },
-      orderBy: [{ isAccepted: 'desc' }, { createdAt: 'asc' }],
+      // `id` làm khoá phá hoà BẮT BUỘC khi phân trang bằng cursor: thiếu nó thì hai bình luận
+      // cùng createdAt (gửi trong cùng mili-giây, hoặc seed cùng lúc) có thứ tự không xác định
+      // giữa hai lần truy vấn → trang sau lặp lại hoặc bỏ sót bình luận.
+      orderBy: [{ isAccepted: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }],
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       include: { user: { select: { fullName: true, avatarUrl: true, role: true, communityProfile: { select: { level: true } } } } },
