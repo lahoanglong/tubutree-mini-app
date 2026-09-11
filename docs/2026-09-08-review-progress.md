@@ -342,20 +342,68 @@ Smoke test trên API + DB thật (không chỉ mock):
 - `reputation_events`: câu truy vấn tổng-điểm-trong-ngày chạy đúng; INSERT trùng
   `(userId, reason, refId)` bị chặn bởi unique constraint thật (đã dọn dữ liệu test).
 
+## Đợt 2 cùng phiên — P0-3 (thu hẹp) + 4 lỗi P2
+
+6. **P0-3 — thu hẹp phần chắc chắn an toàn, phần còn lại bị chặn bởi 1 sự thật ngoài repo.**
+   Cú quét toàn bộ catalog lúc boot (`onModuleInit`, không có `updatedSince`) là chỗ ghi đè
+   nguy hiểm nhất: mỗi lần restart/deploy là đặt lại `stock` của MỌI sản phẩm theo số Pancake,
+   kể cả khi đơn cục bộ vừa trừ kho mà Pancake chưa phản ánh → hồi sinh hàng đã bán hết. Đã
+   đổi boot sang chế độ `skipStock` (chỉ đồng bộ giá/metadata; variation MỚI vẫn lấy tồn kho
+   ban đầu). Sync 15 phút + webhook giữ nguyên. **Phần còn lại chưa làm** vì phụ thuộc câu hỏi
+   *"Pancake có tự trừ `remain_quantity` khi ta tạo đơn qua API không?"* — repo không trả lời
+   được và `pancake_webhook_events` ở DB dev trống 0 dòng nên không có bằng chứng hành vi.
+   Hai thiết kế khả dĩ KHÔNG tương thích nhau, chọn sai thì hoặc oversell hoặc báo hết hàng ảo.
+   → viết brief riêng: `docs/2026-09-11-P0-3-pancake-stock-decision-brief.md` (câu hỏi chặn,
+   thí nghiệm 30 phút trên prod để chốt, thiết kế đầy đủ cho từng nhánh). 3 test mới.
+
+7. **P2 — hiển thị tỉ lệ hoàn tiền sai 100 lần.** `baseRate` lưu dạng phân số (Shopee 0.035 =
+   3,5%) và KHÔNG được API dùng để tính gì cả — chỉ để hiển thị. FE render thẳng
+   `{Number(baseRate)}%` nên mọi ô sàn hiện "0.035%". → helper `formatRatePct` (dấu phẩy thập
+   phân kiểu Việt, bỏ ",0", trả "0%" cho giá trị rỗng/rác) dùng ở cả 2 chỗ. 4 test mới.
+
+8. **P2 — voucher mốc chi tiêu cấp 2 lần ở ranh giới tháng.** Cửa sổ gom là 30 ngày TRƯỢT
+   nhưng khoá idempotency theo THÁNG DƯƠNG LỊCH → cùng một lần chi tiêu sinh khoá khác khi
+   sang tháng mới, cấp voucher lần 2. → cho cả hai dùng chung tháng dương lịch, tính theo
+   **giờ VN** (container chạy UTC nên lấy mốc tháng từ giờ server sẽ lệch 7 tiếng, gom nhầm
+   đơn đặt cuối ngày 1 và ngày cuối tháng). 2 test mới.
+
+9. **P2 — hạng thành viên tính theo điểm CÒN LẠI.** `recalcTier` so `user.pointsBalance` với
+   `minPoints`: tiêu điểm lúc thanh toán (hoặc điểm hết hạn) kéo số dư xuống dưới mốc → hết ân
+   hạn là bị hạ hạng, mất ×1,5 điểm + freeship. Dùng đúng loyalty currency lại bị phạt, trong
+   khi doc-comment lẫn FE ("từ X điểm") đều mô tả là điểm TÍCH LUỸ. → xét theo tổng điểm DƯƠNG
+   đã tích trong 12 tháng (`PointsTransaction`), cùng cửa sổ với tiêu chí chi tiêu nên hạng
+   vẫn phản ánh hoạt động gần đây chứ không thành hạng vĩnh viễn. 2 test mới.
+
+10. **P2 — `convert-xu` không có Idempotency-Key.** Endpoint tiền DUY NHẤT thiếu, trong khi
+    chiều đổi là MỘT CHIỀU (xu không rút được, không có đường về ví) → double-tap "Đổi ngay"
+    là mất vĩnh viễn phần tiền rút được đã đổi dư (react-query không dedupe `mutate()`,
+    `disabled` chỉ ăn sau re-render nên 2 request thật sự lọt). → khoá lưu ở
+    `CoinTransaction.refId` (refType='CONVERT') + partial unique index làm guard cứng
+    (migration `20260911030000_coin_convert_idempotency`); replay trả kết quả cũ không đụng số
+    dư; key của user khác bị từ chối; thua race unique = replay. FE gửi key + regenerate sau
+    khi đổi thành công (mirror luồng rút ngay cạnh đó). 5 test mới.
+
+### Verify đợt 2
+
+`pnpm typecheck` 5/5 · `pnpm lint` 5/5 · API **93 suite / 1338 test** · miniapp **7 file /
+40 test** · `prisma migrate deploy` áp sạch 3 migration mới của phiên.
+
 ## Còn lại cho phiên sau (thứ tự đề xuất)
 
-1. **P0-3 (đơn hàng) — Pancake catalog sync ghi đè tuyệt đối `stock`.** Vẫn chưa làm: cần
-   quyết định kiến trúc (cột `reservedStock` riêng, hay coi Pancake là nguồn chân lý rồi bỏ
-   trừ kho cục bộ). Không phải fix 1 dòng.
-2. **P2 rải rác 4 domain** (đã có danh sách trong overnight report): guest login
-   `Math.random()`, refresh token web trong localStorage, milestone voucher cấp 2 lần ở ranh
-   giới tháng, cashback rate hiển thị sai ×100 ở FE, hạng thành viên tính theo điểm CÒN LẠI,
-   zalopay `paymentTxnId` bị ghi đè giữa các lần thử.
-3. **Phase 2 (coherence audit UX)** → **Phase 4-5 (design system)** → Phase 6 → Phase 7.
+1. **P0-3 phần còn lại (sync 15 phút vẫn ghi đè `stock`)** — CHỈ cần 1 câu trả lời để mở khoá,
+   xem `docs/2026-09-11-P0-3-pancake-stock-decision-brief.md`. Đây là việc P0 duy nhất còn treo.
+2. **P2 còn lại**: guest login dùng `Math.random()`, refresh token web trong localStorage,
+   zalopay `paymentTxnId` bị ghi đè giữa các lần thử (cần bảng `PaymentAttempt` riêng),
+   vài chỗ thiếu `@ArrayMaxSize`.
+3. **P1-4 (đơn hàng)**: `subscriptions.service.ts` và `dealer.service.ts` vẫn KHÔNG đẩy đơn
+   sang Pancake — kho vật lý không bao giờ thấy 2 loại đơn này. (Cũng là điều kiện tiên quyết
+   nếu chọn Hướng 1 của P0-3.)
+4. **Phase 2 (coherence audit UX)** → **Phase 4-5 (design system)** → Phase 6 → Phase 7.
 
 ## Việc cần người
 
-- **Migration mới cần chạy khi deploy** (2 cái): `20260911020000_community_reputation_ledger_and_comment_moderation`
+- **Migration mới cần chạy khi deploy** (3 cái — thêm
+  `20260911030000_coin_convert_idempotency`, an toàn, chỉ thêm partial unique index): `20260911020000_community_reputation_ledger_and_comment_moderation`
   (an toàn, thuần thêm mới) và `20260911020100_storefront_merchant_columns_drift_fix`
   (**đọc phần cảnh báo trong file .sql trước**: chạy 2 câu SELECT kiểm tra trùng
   subdomain/customDomain trên prod, nếu có trùng phải đổi tên thủ công 1 bên rồi mới chạy).
