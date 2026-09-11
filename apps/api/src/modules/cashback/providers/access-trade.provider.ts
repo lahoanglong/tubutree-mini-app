@@ -44,18 +44,39 @@ export class AccessTradeProvider implements CashbackProvider {
     return this.tokenMatches(headers['x-accesstrade-token']);
   }
 
+  /**
+   * Số tiền: chấp nhận cả chuỗi số và số thập phân rồi LÀM TRÒN, thay vì loại bỏ.
+   *
+   * Trước đây `commission: 15750.5` (hoa hồng lẻ, rất bình thường) hoặc `amount: "500000"`
+   * (chuỗi) đều trả null → controller trả 2xx im lặng → sàn coi như đã giao, không gửi lại.
+   * Khoản hoàn tiền của khách biến mất mà không có bản ghi nào và không ai biết.
+   */
+  private static toAmount(v: unknown): number | null {
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+    if (!Number.isFinite(n) || n < 0) return null; // chống cộng số dư âm (forge/bug)
+    return Math.round(n);
+  }
+
   parseWebhook(body: unknown): NormalizedCashbackEvent | null {
     const p = body as Partial<AccesstradePayload> | null;
-    if (!p || typeof p.utm_content !== 'string' || typeof p.order_id !== 'string') return null;
-    if (typeof p.amount !== 'number' || typeof p.commission !== 'number') return null;
-    if (!Number.isInteger(p.amount) || !Number.isInteger(p.commission)) return null;
-    if (p.amount < 0 || p.commission < 0) return null; // chống cộng số dư âm (forge/bug)
+    if (!p || typeof p.utm_content !== 'string' || typeof p.order_id !== 'string') {
+      this.logger.warn(`Postback thiếu utm_content/order_id — bỏ qua: ${JSON.stringify(body).slice(0, 300)}`);
+      return null;
+    }
+    const orderAmount = AccessTradeProvider.toAmount(p.amount);
+    const commission = AccessTradeProvider.toAmount(p.commission);
+    if (orderAmount === null || commission === null) {
+      this.logger.error(
+        `Postback ${p.order_id} có số tiền không hợp lệ (amount=${String(p.amount)}, commission=${String(p.commission)}) — bỏ qua.`,
+      );
+      return null;
+    }
     const status = p.status === 'approved' ? 'CONFIRMED' : p.status === 'rejected' ? 'REJECTED' : 'PENDING';
     return {
       clickRef: p.utm_content,
       merchantOrderId: p.order_id,
-      orderAmount: p.amount,
-      commission: p.commission,
+      orderAmount,
+      commission,
       status,
       raw: body,
     };

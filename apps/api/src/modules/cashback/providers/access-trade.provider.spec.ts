@@ -44,13 +44,27 @@ describe('AccessTradeProvider.parseWebhook', () => {
 
   it('thiếu field / sai kiểu → null', () => {
     expect(makeProvider().parseWebhook(post({ order_id: undefined }))).toBeNull();
-    expect(makeProvider().parseWebhook(post({ amount: 'x' }))).toBeNull();
+    expect(makeProvider().parseWebhook(post({ amount: {} }))).toBeNull();
     expect(makeProvider().parseWebhook(null)).toBeNull();
   });
 
-  it('amount/commission không phải số nguyên → null', () => {
-    expect(makeProvider().parseWebhook(post({ commission: 1.5 }))).toBeNull();
-    expect(makeProvider().parseWebhook(post({ amount: 99.9 }))).toBeNull();
+  /**
+   * Hoa hồng lẻ (15.750,5đ) là chuyện bình thường của sàn, và có sàn gửi số dưới dạng chuỗi.
+   * Loại bỏ những payload đó = controller trả 2xx im lặng → sàn coi như đã giao, không gửi lại,
+   * và khoản hoàn tiền của khách biến mất không dấu vết. Nay LÀM TRÒN thay vì vứt.
+   */
+  it('số thập phân → làm tròn, KHÔNG vứt bỏ', () => {
+    expect(makeProvider().parseWebhook(post({ commission: 15750.5 }))?.commission).toBe(15751);
+    expect(makeProvider().parseWebhook(post({ amount: 99.4 }))?.orderAmount).toBe(99);
+  });
+
+  it('số gửi dưới dạng chuỗi → vẫn nhận', () => {
+    expect(makeProvider().parseWebhook(post({ amount: '500000' }))?.orderAmount).toBe(500000);
+  });
+
+  it('chuỗi không phải số → null (vẫn chặn rác)', () => {
+    expect(makeProvider().parseWebhook(post({ amount: 'x' }))).toBeNull();
+    expect(makeProvider().parseWebhook(post({ amount: '' }))).toBeNull();
   });
 });
 

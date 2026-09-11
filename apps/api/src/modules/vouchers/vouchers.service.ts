@@ -12,6 +12,10 @@ import { NotificationsService } from '../notifications/notifications.service';
  */
 @Injectable()
 export class VouchersService {
+  private static readonly WELCOME_PAGE = 200;
+  /** Trần an toàn: 200 × 25 = 5.000 user/giờ, đủ cho mọi chiến dịch thực tế. */
+  private static readonly WELCOME_MAX_PAGES = 25;
+
   private readonly logger = new Logger(VouchersService.name);
 
   constructor(
@@ -75,20 +79,38 @@ export class VouchersService {
   @Cron(CronExpression.EVERY_HOUR)
   async welcomeVouchers(): Promise<void> {
     const since = new Date(Date.now() - 24 * 3600 * 1000);
-    const users = await this.prisma.user.findMany({
-      // "chưa có đơn" (đúng như doc-comment) — trước đây thiếu filter `orders: { none: {} }`
-      // nên user đã đặt đơn trong 24h đầu vẫn bị cấp voucher chào mừng, sai business rule.
-      where: { createdAt: { gte: since }, role: 'CUSTOMER', orders: { none: {} } },
-      orderBy: { createdAt: 'asc' }, // ưu tiên user cũ nhất trong cửa sổ 24h trước khi rớt khỏi `since`
-      take: 200,
-    });
     const value = await this.config.get<number>('voucher.welcome_amount', 30000);
     const minOrder = await this.config.get<number>('voucher.welcome_min_order', 199000);
+
+    // Quét HẾT cửa sổ 24h bằng cursor thay vì lấy đúng 200 user cũ nhất.
+    //
+    // Vì sao: `grant()` trả false ngay với user đã cấp (code tất định theo userId), nên một lô
+    // 200 cố định phần lớn là người đã cấp từ lượt trước. Một chiến dịch kéo 1.000 đăng ký trong
+    // một giờ khiến 800 người mới chỉ leo lên top-200 khi lứa cũ rời cửa sổ 24h — mà cả nhóm rời
+    // gần như cùng lúc. Hàng trăm khách mới KHÔNG BAO GIỜ nhận voucher chào mừng, không lỗi nào
+    // được ghi.
     let granted = 0;
-    for (const u of users) {
-      if (await this.grant({ userId: u.id, reason: 'WELCOME', type: 'AMOUNT', value, minOrder, validDays: 30, templateCode: 'WELCOME_VOUCHER' })) granted++;
+    let scanned = 0;
+    let cursor: string | undefined;
+    for (let page = 0; page < VouchersService.WELCOME_MAX_PAGES; page++) {
+      const users = await this.prisma.user.findMany({
+        // "chưa có đơn" (đúng như doc-comment) — trước đây thiếu filter `orders: { none: {} }`
+        // nên user đã đặt đơn trong 24h đầu vẫn bị cấp voucher chào mừng, sai business rule.
+        where: { createdAt: { gte: since }, role: 'CUSTOMER', orders: { none: {} } },
+        orderBy: { id: 'asc' }, // khoá cursor ổn định (createdAt có thể trùng nhau hàng loạt)
+        take: VouchersService.WELCOME_PAGE,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        select: { id: true },
+      });
+      if (users.length === 0) break;
+      scanned += users.length;
+      cursor = users[users.length - 1]!.id;
+      for (const u of users) {
+        if (await this.grant({ userId: u.id, reason: 'WELCOME', type: 'AMOUNT', value, minOrder, validDays: 30, templateCode: 'WELCOME_VOUCHER' })) granted++;
+      }
+      if (users.length < VouchersService.WELCOME_PAGE) break;
     }
-    if (granted) this.logger.log(`Welcome vouchers granted: ${granted}`);
+    if (granted) this.logger.log(`Welcome vouchers granted: ${granted}/${scanned} user trong cửa sổ 24h.`);
   }
 
   /** Birthday: user có dob trùng ngày hôm nay. Chạy 1 giờ sáng hằng ngày. */

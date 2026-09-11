@@ -16,6 +16,9 @@ import type { NormalizedCashbackEvent } from './providers/cashback-provider.inte
  */
 @Injectable()
 export class CashbackService {
+  /** Trần mỗi lượt settle — phần còn lại để lượt cron kế (chạy 30 phút/lần). */
+  private static readonly SETTLE_BATCH = 500;
+
   private readonly logger = new Logger(CashbackService.name);
 
   constructor(
@@ -318,8 +321,15 @@ export class CashbackService {
   async settleConfirmed(): Promise<void> {
     const holdDays = await this.config.get<number>('cashback.hold_days', 30);
     const threshold = new Date(Date.now() - holdDays * 24 * 3600 * 1000);
+    // `take` + `select`: bản ghi có cột postbackPayload là JSON nguyên văn của provider. Nạp
+    // KHÔNG giới hạn cả payload vào RAM là rủi ro thật khi bật đối soát với cửa sổ 45 ngày —
+    // hàng chục nghìn giao dịch qua mốc hold cùng lúc, và vì đây là bước ĐẦU TIÊN nên OOM ở đây
+    // là không giao dịch nào được settle.
     const due = await this.prisma.cashbackTransaction.findMany({
       where: { status: 'CONFIRMED', confirmedAt: { lte: threshold } },
+      select: { id: true, userId: true, userReward: true },
+      orderBy: { id: 'asc' },
+      take: CashbackService.SETTLE_BATCH,
     });
     for (const tx of due) {
       const settled = await this.prisma.$transaction(async (t) => {
@@ -361,8 +371,25 @@ export class CashbackService {
       }
       try {
         const events = await provider.fetchTransactions(since);
-        for (const e of events) await this.ingest(e, provider.key);
-        if (events.length) this.logger.log(`Reconcile ${provider.key}: ${events.length} giao dịch.`);
+        // Cô lập lỗi TỪNG sự kiện: ingest re-throw mọi lỗi không phải P2002, nên trước đây một
+        // event hỏng cố định ở vị trí thứ 3/500 chặn luôn 497 event sau — lặp lại y hệt mỗi 6
+        // giờ, và dấu vết duy nhất là một dòng log. Tiền hoàn của khách âm thầm ngừng chảy.
+        let failed = 0;
+        for (const e of events) {
+          try {
+            await this.ingest(e, provider.key);
+          } catch (err) {
+            failed++;
+            this.logger.error(
+              `Reconcile ${provider.key} — đơn ${e.merchantOrderId} lỗi: ${err instanceof Error ? err.message : err}`,
+            );
+          }
+        }
+        if (events.length) {
+          this.logger.log(
+            `Reconcile ${provider.key}: ${events.length} giao dịch${failed ? ` (${failed} lỗi, đã bỏ qua)` : ''}.`,
+          );
+        }
       } catch (err) {
         this.logger.error(`Reconcile ${provider.key} lỗi: ${err instanceof Error ? err.message : err}`);
       }

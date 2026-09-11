@@ -154,3 +154,51 @@ function $queryRawArg(prisma: PrismaService): unknown {
   const call = ((prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw).mock.calls[0];
   return call.slice(1).find((a: unknown) => a instanceof Date);
 }
+
+/**
+ * `grant()` trả false ngay với user đã cấp (code coupon tất định theo userId), nên một lô 200 cố
+ * định phần lớn là người đã cấp từ lượt trước. Chiến dịch kéo 1.000 đăng ký trong một giờ khiến
+ * 800 người mới chỉ leo lên top-200 khi lứa cũ rời cửa sổ 24h — mà cả nhóm rời gần như cùng lúc.
+ * Hàng trăm khách mới không bao giờ nhận voucher, không lỗi nào được ghi.
+ */
+describe('VouchersService.welcomeVouchers — quét hết cửa sổ 24h', () => {
+  it('1000 user mới → quét qua nhiều trang bằng cursor, không dừng ở 200', async () => {
+    const ids = Array.from({ length: 1000 }, (_, i) => ({ id: `u${String(i).padStart(4, '0')}` }));
+    const findMany = jest.fn().mockImplementation(({ cursor, take }: { cursor?: { id: string }; take: number }) => {
+      const start = cursor ? ids.findIndex((u) => u.id === cursor.id) + 1 : 0;
+      return Promise.resolve(ids.slice(start, start + take));
+    });
+    const created: string[] = [];
+    const prisma = {
+      user: { findMany },
+      coupon: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation(({ data }: { data: { code: string } }) => {
+          created.push(data.code);
+          return Promise.resolve({});
+        }),
+      },
+      notificationLog: { create: jest.fn().mockResolvedValue({}) },
+    } as unknown as PrismaService;
+
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    await new VouchersService(prisma, makeConfig(), notify).welcomeVouchers();
+
+    expect(created).toHaveLength(1000);
+    expect(findMany.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('trang cuối ngắn hơn kích thước trang → dừng, không quét vô hạn', async () => {
+    const findMany = jest.fn().mockResolvedValueOnce([{ id: 'u1' }]).mockResolvedValue([]);
+    const prisma = {
+      user: { findMany },
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+      notificationLog: { create: jest.fn().mockResolvedValue({}) },
+    } as unknown as PrismaService;
+
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    await new VouchersService(prisma, makeConfig(), notify).welcomeVouchers();
+
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+});
