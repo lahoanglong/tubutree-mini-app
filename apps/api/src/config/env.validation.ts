@@ -65,6 +65,12 @@ export const envSchema = z.object({
 
   // CORS allowlist (CSV các origin). Ở prod nên cấu hình rõ ràng.
   CORS_ORIGINS: z.string().default(''),
+  // Cookie refresh token của web shop (xem modules/auth/refresh-cookie.ts).
+  // Đặt 'none' khi web và API KHÁC site (vd tubutree.com vs api-tubu.vn) — lúc đó trình duyệt
+  // chỉ gửi cookie nếu SameSite=None, và None bắt buộc đi kèm Secure (code tự bật).
+  AUTH_COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
+  // Để trống nếu web và API cùng host. Đặt '.tubutree.com' để cookie dùng chung mọi subdomain.
+  AUTH_COOKIE_DOMAIN: z.string().optional(),
 
   // AI tư vấn 24/7 (§6.14.3) — DeepSeek (chính) + Gemini (dự phòng). Trống → tính năng tự tắt graceful.
   // CẢ HAI đều gọi qua endpoint OpenAI-compatible (/chat/completions, Bearer). Gemini ở đây là

@@ -5,8 +5,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   apiFetch,
   setAccessToken,
-  setRefreshToken,
-  getRefreshToken,
+  hasSessionMarker,
+  setSessionMarker,
+  clearSessionMarker,
 } from './client-api';
 
 export interface WebUser {
@@ -21,6 +22,7 @@ export interface WebUser {
 
 interface LoginResponse {
   accessToken: string;
+  /** Rỗng với web: refresh token đi bằng cookie HttpOnly, JS không được thấy nó. */
   refreshToken: string;
   user: WebUser;
 }
@@ -33,8 +35,8 @@ interface AuthState {
    *
    * `status` khởi tạo là 'idle' và chỉ chuyển sang 'loading' TRONG useEffect, nên lần render đầu
    * tiên luôn là 'idle' — trang nào coi 'idle' = "chưa đăng nhập" sẽ chớp màn "Cần đăng nhập"
-   * trước khi vào được. Không thể khởi tạo theo localStorage vì render phía server không đọc
-   * được nó (lệch hydrate).
+   * trước khi vào được. Không thể khởi tạo theo cờ phiên trong localStorage vì render phía
+   * server không đọc được localStorage (lệch hydrate).
    */
   initialized: boolean;
   startZaloLogin: () => Promise<void>;
@@ -73,24 +75,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthState['status']>('idle');
   const [initialized, setInitialized] = useState(false);
 
-  // Khôi phục phiên từ refresh token đã lưu.
+  // Khôi phục phiên từ cookie refresh (HttpOnly, do BE set). Cờ `tubu_web_session` trong
+  // localStorage chỉ để biết CÓ ĐÁNG gọi hay không — khách vãng lai không tốn một lượt 401.
   useEffect(() => {
-    const rt = getRefreshToken();
-    if (!rt) {
+    if (!hasSessionMarker()) {
       setStatus('idle');
       setInitialized(true);
       return;
     }
     setStatus('loading');
-    apiFetch<LoginResponse>('/auth/refresh', { method: 'POST', body: { refreshToken: rt }, auth: false })
+    apiFetch<LoginResponse>('/auth/refresh', { method: 'POST', body: {}, auth: false })
       .then((res) => {
         setAccessToken(res.accessToken);
-        setRefreshToken(res.refreshToken);
+        setSessionMarker();
         setUser(res.user);
         setStatus('authenticated');
       })
       .catch(() => {
-        setRefreshToken(null);
+        // BE đã tự xoá cookie khi token chết; xoá nốt cờ phía client.
+        clearSessionMarker();
         setStatus('idle');
       })
       .finally(() => setInitialized(true));
@@ -129,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         auth: false,
       });
       setAccessToken(res.accessToken);
-      setRefreshToken(res.refreshToken);
+      setSessionMarker();
       setUser(res.user);
       setStatus('authenticated');
     } catch (e) {
@@ -144,10 +147,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    const rt = getRefreshToken();
-    if (rt) await apiFetch('/auth/logout', { method: 'POST', body: { refreshToken: rt }, auth: false }).catch(() => {});
+    // Gọi kể cả khi không thấy cờ: cookie thật có thể còn sống (cờ bị xoá nhầm/hết hạn lệch),
+    // và chỉ BE mới thu hồi được token trong DB.
+    await apiFetch('/auth/logout', { method: 'POST', body: {}, auth: false }).catch(() => {});
     setAccessToken(null);
-    setRefreshToken(null);
+    clearSessionMarker();
     setUser(null);
     setStatus('idle');
     qc.clear(); // xóa cache giỏ/đơn để không hiện dữ liệu user cũ

@@ -42,12 +42,12 @@ test.describe('Web Admin Dashboard E2E - Luồng Duyệt Đại Lý', () => {
       });
     });
 
-    // 3. Navigate tới /admin — PHẢI set localStorage trước để auth-context.tsx
-    //    đọc được refresh token (key: tubu_web_refresh) và gọi /api/auth/refresh
+    // 3. Navigate tới /admin — refresh token thật nằm ở cookie HttpOnly do BE set, test không
+    //    giả được. Thứ auth-context.tsx nhìn để quyết định có gọi /auth/refresh hay không là cờ
+    //    `tubu_web_session` trong localStorage; /auth/refresh đã được mock ở trên nên chỉ cần cờ.
     await page.goto('/admin');
-    // Inject refresh token vào localStorage rồi reload để AuthProvider khởi động lại
     await page.evaluate(() => {
-      localStorage.setItem('tubu_web_refresh', 'mock-admin-refresh-token');
+      localStorage.setItem('tubu_web_session', '1');
     });
     await page.reload();
   });
