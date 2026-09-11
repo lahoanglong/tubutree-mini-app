@@ -408,3 +408,79 @@ Smoke test trên API + DB thật (không chỉ mock):
   (**đọc phần cảnh báo trong file .sql trước**: chạy 2 câu SELECT kiểm tra trùng
   subdomain/customDomain trên prod, nếu có trùng phải đổi tên thủ công 1 bên rồi mới chạy).
 - Vẫn chưa deploy BE/WEB lên VM prod và chưa deploy miniapp lên Zalo.
+
+---
+
+# Phiên 2026-09-11/12 (tiếp) — Phase 2 coherence + Phase 4 nền UI
+
+## Phase 2 — Audit mạch lạc UX (ĐÃ CHẠY, 2 agent đọc code thật)
+
+- **B2C (2 hành trình khách)** — ~52 file: 3 P0, 8 P1, 12 P2, ~8 P3.
+- **Đối tác (CTV/đại lý + nhãn hàng)** — ~53 file: 5 P0, 9 P1, 7 P2, 6 P3.
+
+### Đã sửa từ audit mạch lạc
+
+1. **P0 (CTV) — gian hàng CTV KHÔNG BAO GIỜ mở được qua link công khai.** `slug` lưu từ
+   `referralCode` (luôn IN HOA), còn `getPublicBySlug` hạ chữ mã tra cứu rồi so khớp CHÍNH XÁC.
+   Đã kiểm trên DB thật: `SELECT 'ABC' = 'abc'` → `f`, và cột `slug` không có collation
+   case-insensitive. Nghĩa là mọi link `/s/<slug>` CTV gửi khách đều trả "gian hàng không tồn
+   tại". → ghi chữ thường tại nguồn + đọc `mode: 'insensitive'` (cứu link đã phát cho khách mà
+   không phải chờ backfill) + migration hạ chữ dữ liệu cũ (chỉ khi không đụng trùng).
+2. **P0 (CTV) — nút "Chia sẻ qua Zalo" làm MẤT mã giới thiệu** (chỉ nút "Sao chép link" có
+   `?ref=`) → khách mua qua link chia sẻ, CTV không được hoa hồng. Cùng 1 sheet, 2 kết quả tiền
+   bạc khác nhau. → truyền `sharePath` có `?ref=` cho cả hai lối.
+3. **P0 (B2C) — đơn chuyển khoản không có đường quay lại màn QR.** `/bank-payment/:code` chỉ
+   tới được đúng 1 lần ngay sau khi đặt. Rời đi là mất QR/số tài khoản → chỉ còn cách huỷ đơn.
+   → nút "Thanh toán ngay" ở chi tiết đơn + ở màn thành công của đơn CTV lên hộ khách.
+4. **P0 (B2C) — số dư ở checkout lấy từ auth store, không bao giờ làm mới trong phiên.** Vừa
+   đổi Ví→xu hoặc vừa tiêu xu trong Vườn Xanh → checkout vẫn thấy số cũ: hoặc không chọn được
+   cách trả tiền vừa nạp, hoặc chọn được rồi BE từ chối. → đọc từ query `['wallet']`/`['loyalty']`
+   (được invalidate sau mọi thao tác tiền) + bổ sung invalidate còn thiếu ở checkout/game.
+5. **P0 (B2C) — hoa hồng "có thể rút" là ngõ cụt.** Thẻ chỉ để đọc, nằm ngay cạnh "Ví: 0đ";
+   bấm Rút thì báo chưa đủ mốc, không chỗ nào nói phải sang trang CTV bấm "Nhận về ví".
+   → thẻ thành nút dẫn sang `/affiliate` kèm dòng gợi ý.
+6. **P1 (B2C) — vòng đánh giá đứt cả hai đầu.** Nhận hàng xong không có lối nào để đánh giá
+   (OrderItem không lưu slug nên từ đơn không mở được trang SP), trong khi nút "Viết đánh giá"
+   ở trang SP lại mở cho MỌI user đăng nhập — khách chưa mua upload 3 ảnh + 1 video xong mới
+   bị từ chối. → thêm cột `OrderItem.productSlug` (4 nơi tạo đơn đều ghi, migration backfill),
+   nút đánh giá từng món trên đơn DELIVERED, và endpoint `GET .../reviews/can-review` để FE hỏi
+   TRƯỚC khi mở ô soạn.
+7. **P1 (B2C) — cùng 1 sản phẩm hiện 2 giá trên cùng màn hình.** Dải "Ưu đãi giờ vàng" hiện giá
+   flash, lưới bên dưới hiện giá thường vì `ProductCard` không biết flash là gì. Bấm thẻ flash
+   còn làm mất `variationId` → mở PDP ra giá thường, không badge, không đếm ngược.
+   → thẻ đọc chung query flash (không thêm request), truyền `variationId` qua state, PDP mở
+   đúng phân loại đang giảm.
+8. **P1 (B2C)** — thông báo giờ vàng là ngõ cụt (không có nút đi tiếp) + gọi sai tên
+   ("Flash Sale" vs "Ưu đãi giờ vàng" trong app); `/notifications` không chờ auth nên mở từ push
+   là kẹt màn lỗi; danh sách đơn thiếu tab "Chờ thanh toán"; chuông trang chủ không có badge.
+9. **P1 (CTV)** — bộ sưu tập không đổi tên/xoá được (API có sẵn, FE không gọi) và tạo mới bị
+   hardcode tên "Bộ sưu tập mới"; builder không hiện nháp/đã đăng nên "Xem trước" lúc còn nháp
+   rơi vào màn lỗi; portal web nuốt lỗi đổi trạng thái đơn (không onError, không disable) và
+   thiếu địa chỉ giao trong bảng đơn (không ghi được vận đơn).
+10. **P2** — chi tiết đơn gộp điểm Xanh vào "Giảm giá" (nay tách dòng), thiếu nhãn `XU`, nút
+    ghi "Về trang chủ" nhưng đi tới danh sách đơn; checkout hứa "+điểm Xanh" cho đơn trả bằng
+    xu (BE luôn cho 0); nhãn "Hoàn tiền đang chờ" ≠ danh sách "Chờ duyệt" ngay dưới.
+
+## Phase 4 — Tầng component nền (bước 4 của prompt gốc)
+
+Dựng `components/ui/primitives.tsx` + `price.tsx`: `Txt` (tone đặt theo Ý NGHĨA), `Stack`/`Row`,
+`Card`, `Btn` (vùng chạm tối thiểu bake sẵn, loading ⇒ disabled), `Badge`, `Chip`,
+`SectionHeader`, `StickyActionBar` (tự chừa safe-area), `ListRow`, `Price`/`DiscountPct`.
+Bật test DOM cho miniapp (`environmentMatchGlobs` → jsdom cho `.spec.tsx`; test logic vẫn chạy
+node cho nhanh) — 18 test cho chính những chỗ dễ sai thầm lặng: phân biệt tone, chiều cao vùng
+chạm, safe-area, `aria-pressed`, làm tròn % giảm.
+**CHƯA chuyển trang nào sang primitive** — làm theo lô để soi được từng màn.
+
+## Phase 6 — Đo hiệu năng (bắt đầu)
+
+Bật `log_min_duration_statement=0` trên Postgres thật, đếm số câu SQL mỗi endpoint rồi tắt lại:
+`/products` 3 · `/feed` 7 · `/cart` 6 · `/orders` 2 · `/me/coins` 5 · `/game/profile` 7 ·
+`/me/wishlist` 1 · `/categories` 1. **Phát hiện:** `SystemConfigService.get()` không cache —
+`/game/profile` đọc bảng `system_configs` 6 lần trong 1 request. Đây là hệ số nhân hệ thống
+(config được đọc ở khắp pricing/loyalty/game/checkout) → ứng viên tối ưu số 1 cho lượt sau.
+
+## Verify cuối lượt
+
+`pnpm typecheck` 5/5 · `pnpm lint` 5/5 · API **93 suite / 1354 test** · miniapp **9 file /
+61 test** · 6 migration mới đã áp sạch trên DB local · smoke test API thật:
+`can-review` trả `NOT_PURCHASED` cho SP chưa mua, 404 cho SP không tồn tại.
