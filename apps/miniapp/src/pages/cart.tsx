@@ -22,6 +22,7 @@ import { useDebounced } from '../utils/use-debounced';
 import { recompute } from '../utils/cart-rules';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
+import { rememberCheckoutSelection } from '../utils/checkout-selection';
 
 const UNDO_WINDOW_MS = 3500;
 const CART_KEY = ['cart'] as const;
@@ -162,8 +163,11 @@ export default function CartPage() {
   };
   const goCheckout = () => {
     if (selectedItems.length === 0) return;
-    const itemIds = allSelected ? undefined : selectedItems.map((l) => l.id);
-    navigate('/checkout', itemIds ? { state: { itemIds } } : undefined);
+    // null = cố ý thanh toán toàn giỏ. Luôn ghi nhớ để lần tải lại trang thanh toán không
+    // âm thầm chuyển từ "1 món đã chọn" sang "cả giỏ".
+    const itemIds = allSelected ? null : selectedItems.map((l) => l.id);
+    rememberCheckoutSelection(itemIds);
+    navigate('/checkout', { state: { itemIds } });
   };
 
   return (

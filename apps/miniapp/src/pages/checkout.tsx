@@ -16,6 +16,13 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd } from '../utils/format';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { isInvoiceValid, shouldFallbackToCod } from '../utils/checkout-rules';
+import {
+  clearCheckoutSelection,
+  recallCheckoutSelection,
+  reconcileSelection,
+  rememberCheckoutSelection,
+  type RememberedSelection,
+} from '../utils/checkout-selection';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 
@@ -69,10 +76,21 @@ export default function CheckoutPage() {
     }
   }, [addresses.data, addressId]);
 
-  // Checkout TẬP CON: itemIds do trang Giỏ truyền qua navigation state (chọn từng món).
-  // Không có state (vd "Mua ngay" từ PDP / mở trực tiếp) → undefined = toàn giỏ.
+  // Checkout TẬP CON: itemIds do trang Giỏ / "Mua ngay" truyền qua navigation state.
+  // Zalo Mini App có thể tải lại trang (back-forward, khôi phục phiên, deep link) — state mất
+  // thì trước đây màn này âm thầm chuyển sang TOÀN GIỎ, tính tiền cả những món khách không
+  // chọn. Nay lựa chọn được ghi nhớ theo phiên; state (nếu có) luôn thắng bộ nhớ.
   const location = useLocation();
-  const itemIds = (location.state as { itemIds?: string[] } | null)?.itemIds;
+  const navSelection = (location.state as { itemIds?: RememberedSelection } | null)?.itemIds;
+  const rawSelection: RememberedSelection | undefined =
+    navSelection !== undefined ? navSelection : recallCheckoutSelection();
+  useEffect(() => {
+    if (navSelection !== undefined) rememberCheckoutSelection(navSelection);
+  }, [navSelection]);
+
+  // Dòng đã nhớ có thể không còn trong giỏ → đối chiếu với giỏ thật trước khi quote.
+  const cartReady = rawSelection == null || cart.isSuccess;
+  const itemIds = reconcileSelection(rawSelection, (cart.data?.items ?? []).map((it) => it.id));
   const itemIdsKey = itemIds ? itemIds.join(',') : '';
 
   // Số dư PHẢI đọc từ query (được invalidate sau mọi thao tác tiền), KHÔNG từ auth store —
@@ -89,7 +107,7 @@ export default function CheckoutPage() {
   const quote = useQuery({
     queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey],
     queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
-    enabled: !!addressId && authed,
+    enabled: !!addressId && authed && cartReady,
   });
 
   const invoiceValid = isInvoiceValid(wantInvoice, invoice);
@@ -146,6 +164,7 @@ export default function CheckoutPage() {
       // Refresh auth store (user.walletBalance / pointsBalance dùng ở header/checkout) để UI đồng bộ.
       void useAuthStore.getState().restore().catch(() => undefined);
       idempotencyKey.current = newIdempotencyKey(); // đơn sau là đơn mới
+      clearCheckoutSelection(); // lựa chọn của đơn vừa đặt không được dính sang đơn sau
       // Chuyển khoản: sang màn VietQR để khách quét trả ngay (Pancake đối soát → tự xác nhận).
       if (payment === 'BANK_TRANSFER') {
         navigate(`/bank-payment/${o.code}`, { replace: true });

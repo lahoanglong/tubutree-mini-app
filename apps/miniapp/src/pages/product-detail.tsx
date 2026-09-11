@@ -31,6 +31,7 @@ import { haptic } from '../utils/haptic';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { rememberCheckoutSelection } from '../utils/checkout-selection';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -51,7 +52,9 @@ export default function ProductDetailPage() {
   // Voucher khả dụng (endpoint /me/coupons đã lọc active + scope-eligible + chưa hết lượt).
   // Hiển thị để user KHÁM PHÁ ưu đãi ngay ở PDP (trước đây phải tự biết mã mới gõ ở giỏ).
   const couponsQ = useQuery({
-    queryKey: ['available-coupons'],
+    // Cùng queryKey với VoucherSheet ở giỏ/thanh toán → một cache, không gọi 2 lần và
+    // không có cảnh "PDP thấy mã, sheet chưa thấy" sau khi nhận mã mới.
+    queryKey: ['coupons'],
     queryFn: getCoupons,
     enabled: status === 'authenticated',
   });
@@ -153,7 +156,10 @@ export default function ProductDetailPage() {
           duration: 3200,
         });
       }
-      navigate('/checkout', line ? { state: { itemIds: [line.id] } } : undefined);
+      // "Mua ngay" chỉ thanh toán đúng dòng vừa thêm; ghi nhớ để tải lại trang không tính cả giỏ.
+      const itemIds = line ? [line.id] : null;
+      rememberCheckoutSelection(itemIds);
+      navigate('/checkout', { state: { itemIds } });
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -376,7 +382,11 @@ export default function ProductDetailPage() {
                   navigator.clipboard
                     .writeText(c.code)
                     .then(() =>
-                      openSnackbar({ text: `Đã chép mã ${c.code} — dán ở giỏ hàng để áp dụng`, type: 'success', duration: 2200 }),
+                      openSnackbar({
+                        text: `Đã chép mã ${c.code} — mã đã có sẵn trong ví, chọn ở bước thanh toán`,
+                        type: 'success',
+                        duration: 2600,
+                      }),
                     )
                     .catch(() => openSnackbar({ text: 'Không thể sao chép mã. Vui lòng thử lại.', type: 'error', duration: 2200 }));
                 }}
@@ -394,7 +404,9 @@ export default function ProductDetailPage() {
                   boxSizing: 'border-box',
                 }}
               >
-                <Text size="xSmall" bold style={{ color: 'var(--clay-700)' }}>{couponLabel(c)}</Text>
+                <Text size="xSmall" bold style={{ color: 'var(--clay-700)' }}>
+                  {c.code} · {couponLabel(c)}
+                </Text>
                 {c.minOrder ? (
                   <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Đơn từ {formatVnd(c.minOrder)}</Text>
                 ) : null}
