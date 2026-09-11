@@ -34,12 +34,28 @@ export function StorefrontTracker({ slug, type }: { slug: string; type?: string 
   return null;
 }
 
-/** Bắt `?ref=` trên BẤT KỲ trang nào (link CTV chia sẻ thẳng tới trang sản phẩm). */
+/**
+ * Bắt `?ref=` trên BẤT KỲ trang nào (link CTV chia sẻ trỏ thẳng tới trang chủ/trang sản phẩm,
+ * không qua /s/), và ghi "chạm giới thiệu" lên server.
+ *
+ * Chỉ nhớ vào sessionStorage là chưa đủ: khách mở link, xem rồi đóng tab, hôm sau mở tab mới và
+ * mua thì sessionStorage đã mất — đơn về `referralCode = null` và CTV mất hoa hồng. "Chạm" phía
+ * server sống 3 ngày, đó mới là lớp giữ attribution thật.
+ */
 export function ReferralCapture() {
+  const { status } = useAuth();
+
   useEffect(() => {
     const ref = new URLSearchParams(window.location.search).get('ref');
     if (ref) rememberReferral(ref);
   }, []);
+
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    const { referralCode } = getStorefrontContext();
+    if (!referralCode) return;
+    void recordReferralTouch({ referralCode }).catch(() => undefined);
+  }, [status]);
 
   return null;
 }

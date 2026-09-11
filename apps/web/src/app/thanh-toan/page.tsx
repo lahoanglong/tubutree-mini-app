@@ -16,7 +16,7 @@ import {
   type AddressDTO,
   type OrderDTO,
 } from '@/lib/shop-client';
-import { getStorefrontContext } from '@/lib/storefront-context';
+import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 
 const VN_PHONE = /^(0|\+84)\d{9}$/;
 // Tỉnh/phường chọn qua GeoPicker (mã Pancake thật, hệ 2 cấp — không còn quận/huyện);
@@ -46,6 +46,8 @@ export default function CheckoutPage() {
   // không. Đọc một lần khi mount: sessionStorage không phải state phản ứng, và giá trị chỉ đổi
   // khi khách đi qua một gian hàng khác (tức là đã rời trang này).
   const [sfCtx] = useState(() => getStorefrontContext());
+  // CHỈ gian hàng CTV mới gắn vào đơn — xem ghi chú ở StorefrontContext.kind.
+  const ctvSlug = ctvSlugFor(sfCtx);
   // Điểm Xanh: Mini App cho tiêu, web thì không — cùng một giỏ mà mua trên web đắt hơn.
   const [usePoints, setUsePoints] = useState(false);
   // Quote đầu tiên (pointsToUse = 0) trả về pointsBalance để biết khách có bao nhiêu điểm.
@@ -55,9 +57,9 @@ export default function CheckoutPage() {
   const [pointsBalance, setPointsBalance] = useState(0);
 
   const quoteQ = useQuery({
-    queryKey: ['quote', addressId, sfCtx.slug, usePoints],
+    queryKey: ['quote', addressId, ctvSlug, usePoints],
     queryFn: () =>
-      checkoutQuote(addressId!, usePoints ? pointsBalance : 0, sfCtx.slug ?? undefined),
+      checkoutQuote(addressId!, usePoints ? pointsBalance : 0, ctvSlug),
     enabled: !!addressId && status === 'authenticated',
   });
   useEffect(() => {
@@ -73,7 +75,7 @@ export default function CheckoutPage() {
           addressId: addressId!,
           paymentMethod: payment,
           pointsToUse: usePoints ? pointsBalance : 0,
-          storefrontSlug: sfCtx.slug ?? undefined,
+          storefrontSlug: ctvSlug,
           referralCode: sfCtx.referralCode ?? undefined,
         },
         idemKey,

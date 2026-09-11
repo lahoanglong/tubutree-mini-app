@@ -121,7 +121,15 @@ export class StorefrontService {
       await assertIdentifierAvailable(this.prisma, sub, sf.id);
       dto.subdomain = sub;
     }
-    return this.prisma.storefront.update({ where: { id: sf.id }, data: dto });
+    // Chuỗi rỗng = CHỦ ĐỘNG XOÁ → ghi null. FE gửi '' khi CTV xoá ảnh/lời nhắn (gửi undefined
+    // thì PATCH bỏ qua trường đó, xoá xong ảnh cũ vẫn còn). Lưu '' thay vì null sẽ làm bẩn dữ
+    // liệu và khiến điều kiện `Boolean(sf.avatarUrl && ...)` của nhiệm vụ hồ sơ đọc khó hiểu.
+    const data: Record<string, string | null> = {};
+    for (const [k, v] of Object.entries(dto)) {
+      if (v === undefined) continue;
+      data[k] = typeof v === 'string' && v.trim() === '' ? null : v;
+    }
+    return this.prisma.storefront.update({ where: { id: sf.id }, data });
   }
 
   async publishMine(userId: string, isPublished: boolean) {

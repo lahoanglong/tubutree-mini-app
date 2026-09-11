@@ -7,7 +7,16 @@ import { PRIVATE_PATHS, SITE_URL } from '@/lib/site';
  */
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: [{ userAgent: '*', allow: '/', disallow: PRIVATE_PATHS.map((p) => `${p}/`) }],
+    // Chặn CẢ đường dẫn trần lẫn cây con: `Disallow: /admin/` KHÔNG khớp `/admin` — mà chính
+    // `/admin` mới là URL của trang. Ba trang /gio-hang, /thanh-toan, /dang-nhap không có layout
+    // noindex nên chỉ còn đúng lớp này bảo vệ.
+    rules: [
+      {
+        userAgent: '*',
+        allow: '/',
+        disallow: [...PRIVATE_PATHS, ...PRIVATE_PATHS.map((p) => `${p}/`)],
+      },
+    ],
     sitemap: `${SITE_URL}/sitemap.xml`,
   };
 }

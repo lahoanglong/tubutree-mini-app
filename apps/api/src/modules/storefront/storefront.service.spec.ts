@@ -483,3 +483,30 @@ describe('StorefrontService.getPublicBySlug — không phân biệt hoa/thườn
     }
   });
 });
+
+/**
+ * FE gửi chuỗi RỖNG khi CTV chủ động xoá ảnh/lời nhắn (gửi undefined thì PATCH bỏ qua trường đó,
+ * nên xoá xong ảnh cũ vẫn còn trên gian hàng công khai). Lưu '' thay vì null sẽ làm bẩn dữ liệu
+ * và khiến điều kiện `Boolean(sf.avatarUrl && ...)` của nhiệm vụ hồ sơ đọc khó hiểu.
+ */
+describe('StorefrontService.updateMine — xoá được ảnh/lời nhắn', () => {
+  function mk() {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = {
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 'sf1', ownerUserId: 'u1' }), update },
+    } as unknown as PrismaService;
+    return { svc: new StorefrontService(prisma, config), update };
+  }
+
+  it('chuỗi rỗng → ghi null (xoá thật)', async () => {
+    const { svc, update } = mk();
+    await svc.updateMine('u1', { coverUrl: '', headerNote: '   ' });
+    expect(update.mock.calls[0][0].data).toEqual({ coverUrl: null, headerNote: null });
+  });
+
+  it('undefined → không đụng tới trường đó', async () => {
+    const { svc, update } = mk();
+    await svc.updateMine('u1', { coverUrl: undefined, headerNote: 'xin chào' });
+    expect(update.mock.calls[0][0].data).toEqual({ headerNote: 'xin chào' });
+  });
+});

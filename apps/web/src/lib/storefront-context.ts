@@ -16,9 +16,17 @@ const KEY = 'tubu_web_storefront';
 export interface StorefrontContext {
   slug: string | null;
   referralCode: string | null;
+  /**
+   * Loại gian hàng đang xem. Quan trọng với `slug`: chỉ gian hàng CTV mới được gắn vào
+   * `Order.storefrontSlug` — gắn slug của gian hàng NHÃN HÀNG vào đó làm bẩn báo cáo đơn theo
+   * CTV và khiến combo được tính theo nhầm gian hàng. Mini App lọc đúng như vậy
+   * (checkout.tsx: `kind === 'ctv' ? slug : undefined`), và BE cũng giữ nguyên tắc đó ở nhánh
+   * fallback theo "chạm giới thiệu".
+   */
+  kind: string | null;
 }
 
-const EMPTY: StorefrontContext = { slug: null, referralCode: null };
+const EMPTY: StorefrontContext = { slug: null, referralCode: null, kind: null };
 
 function read(): StorefrontContext {
   if (typeof window === 'undefined') return EMPTY;
@@ -29,6 +37,7 @@ function read(): StorefrontContext {
     return {
       slug: typeof parsed.slug === 'string' ? parsed.slug : null,
       referralCode: typeof parsed.referralCode === 'string' ? parsed.referralCode : null,
+      kind: typeof parsed.kind === 'string' ? parsed.kind : null,
     };
   } catch {
     return EMPTY;
@@ -53,8 +62,14 @@ export function rememberStorefront(slug: string, type?: string): void {
   const current = read();
   write({
     slug,
+    kind: type ?? null,
     referralCode: type === 'CTV' ? slug.toUpperCase() : current.referralCode,
   });
+}
+
+/** Slug chỉ được gắn vào đơn khi là gian hàng CTV — xem ghi chú ở `kind`. */
+export function ctvSlugFor(ctx: StorefrontContext): string | undefined {
+  return ctx.kind === 'CTV' && ctx.slug ? ctx.slug : undefined;
 }
 
 export function rememberReferral(code: string): void {

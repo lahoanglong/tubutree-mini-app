@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Box, Page, Text, Button, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { Copy, CheckCircle2, Clock } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -37,8 +38,14 @@ export default function BankPaymentPage() {
     );
   };
 
+  // Cờ RIÊNG cho thao tác bấm tay. Dùng `isFetching` của query sẽ bật/tắt theo nhịp poll nền 4
+  // giây, nên nút vừa quay spinner liên tục vừa bị disable đúng lúc khách chạm — chạm vào không
+  // có gì xảy ra, không có phản hồi, ngay ở bước phải trả tiền.
+  const [checking, setChecking] = useState(false);
+
   const handleCheckPayment = async () => {
     haptic('medium');
+    setChecking(true);
     try {
       const res = await refetch();
       const status = res.data?.paymentStatus;
@@ -73,6 +80,8 @@ export default function BankPaymentPage() {
         type: 'error',
         position: 'top',
       });
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -182,7 +191,7 @@ export default function BankPaymentPage() {
           <Text size="small">Đang chờ thanh toán… tự cập nhật khi nhận được tiền</Text>
         </Box>
 
-        <Button fullWidth loading={isFetching} disabled={isFetching} onClick={handleCheckPayment} style={{ marginTop: 12, background: 'var(--leaf-600)' }}>
+        <Button fullWidth loading={checking} disabled={checking} onClick={handleCheckPayment} style={{ marginTop: 12, background: 'var(--leaf-600)' }}>
           Tôi đã chuyển khoản — Kiểm tra
         </Button>
         <Button fullWidth variant="secondary" onClick={() => navigate(`/order/${data.orderCode}`, { replace: true })} style={{ marginTop: 8 }}>

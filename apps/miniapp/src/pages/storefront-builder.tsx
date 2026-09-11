@@ -603,10 +603,13 @@ function ProfileSheet({
 
   const saveMut = useMutation({
     mutationFn: () =>
+      // Gửi chuỗi RỖNG (không phải undefined) khi CTV chủ động xoá: undefined bị PATCH bỏ qua,
+      // nên trước đây xoá ảnh bìa rồi bấm Lưu là snackbar báo thành công mà ảnh cũ vẫn còn trên
+      // gian hàng công khai, thử lại bao nhiêu lần cũng vậy.
       updateStorefront({
-        avatarUrl: avatarUrl.trim() || undefined,
-        coverUrl: coverUrl.trim() || undefined,
-        headerNote: headerNote.trim() || undefined,
+        avatarUrl: avatarUrl.trim(),
+        coverUrl: coverUrl.trim(),
+        headerNote: headerNote.trim(),
       }),
     onSuccess: () => {
       haptic('medium');
