@@ -58,7 +58,10 @@ export default function NotificationsPage() {
 
   const readMut = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
+    // onSettled chứ không onSuccess: đánh dấu đã đọc hỏng thì huy hiệu chưa-đọc ở trang chủ sai
+    // vĩnh viễn mà không có tín hiệu nào. Nạp lại trong CẢ HAI trường hợp để giao diện khớp lại
+    // với máy chủ; không hiện toast vì đây là thao tác nền, báo lỗi chỉ thành nhiễu.
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
 
   // Sync với popstate (nút back cứng / vuốt back của Zalo) để đóng detail overlay khi back
