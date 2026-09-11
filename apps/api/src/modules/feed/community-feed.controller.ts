@@ -178,8 +178,13 @@ export class CommunityFeedController {
   }
 
   @Get(':id/comments')
-  comments(@CurrentUser('sub') userId: string, @Param('id') id: string) {
-    return this.feed.getComments(id, userId);
+  comments(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+    @Query('cursor') cursor?: string,
+    @Query('take') take?: string,
+  ) {
+    return this.feed.getComments(id, userId, take ? Number(take) : undefined, cursor);
   }
 
   @Throttle({ default: { limit: 15, ttl: 60_000 } })

@@ -128,8 +128,15 @@ export const deletePost = (id: string) => api.delete<{ ok: boolean }>(`/feed/${i
 export const reactPost = (id: string) =>
   api.post<{ liked: boolean }>(`/feed/${id}/react`).then((r) => r.data);
 
-export const getComments = (id: string) =>
-  api.get<FeedComment[]>(`/feed/${id}/comments`).then((r) => r.data);
+export interface CommentPage {
+  items: FeedComment[];
+  nextCursor: string | null;
+}
+/** Phân trang: câu hỏi hot từng bị cắt cứng ở 50 câu trả lời và không có đường xem tiếp. */
+export const getComments = (id: string, cursor?: string) =>
+  api
+    .get<CommentPage>(`/feed/${id}/comments`, { params: cursor ? { cursor } : undefined })
+    .then((r) => r.data);
 
 export const addComment = (id: string, body: string) =>
   api.post<{ id: string }>(`/feed/${id}/comments`, { body }).then((r) => r.data);

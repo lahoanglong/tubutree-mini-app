@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Trash2, Flag, Pin, Sprout } from 'lucide-react';
 import {
   getPost,
@@ -58,9 +58,11 @@ export default function PostDetailPage() {
     queryFn: () => getPost(id!),
     enabled: authed && !!id,
   });
-  const comments = useQuery({
+  const comments = useInfiniteQuery({
     queryKey: ['community', id, 'comments'],
-    queryFn: () => getComments(id!),
+    queryFn: ({ pageParam }) => getComments(id!, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: authed && !!id,
   });
 
@@ -187,7 +189,7 @@ export default function PostDetailPage() {
   const p = post.data;
   const kindLabel = KIND_LABEL[p.kind];
   const canMarkBest = p.kind === 'QUESTION' && (p.isOwner || role === 'ADMIN');
-  const sortedComments = comments.data ?? [];
+  const sortedComments = comments.data?.pages.flatMap((pg) => pg.items) ?? [];
   const needsEditTitle = p.kind === 'QUESTION' && editTitle.trim().length === 0;
 
   const openEdit = () => {
@@ -463,6 +465,18 @@ export default function PostDetailPage() {
               removing={removeCommentMut.isPending && removeCommentMut.variables === c.id}
             />
           ))
+        )}
+        {comments.hasNextPage && (
+          <Button
+            variant="secondary"
+            size="small"
+            loading={comments.isFetchingNextPage}
+            disabled={comments.isFetchingNextPage}
+            onClick={() => void comments.fetchNextPage()}
+            style={{ marginTop: 10 }}
+          >
+            Xem thêm trả lời
+          </Button>
         )}
       </Box>
 

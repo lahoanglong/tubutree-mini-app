@@ -306,7 +306,10 @@ export class CommunityFeedService {
     if (!p) throw new NotFoundException('Bài viết không tồn tại.');
     if (p.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
     if (p.status === 'PENDING' && p.userId !== userId) throw new NotFoundException('Bài viết không tồn tại.');
-    await this.prisma.feedPost.update({ where: { id: postId }, data: { viewCount: { increment: 1 } } });
+    // KHÔNG tăng viewCount ở đây nữa: đây là đường đọc nóng nhất, mỗi lượt mở/refresh là một
+    // UPDATE khoá đúng một dòng (ghi tuần tự trên bài viral), trong khi toItem() và FeedItem
+    // KHÔNG hề trả `viewCount` ra — không màn nào hiển thị con số đó. Cột vẫn còn trong schema
+    // cho báo cáo sau này; khi cần hãy đếm theo phiên/ngày hoặc gom batch thay vì ghi mỗi request.
     return this.toItem(p, userId);
   }
 
@@ -581,20 +584,28 @@ export class CommunityFeedService {
     return { id: comment.id };
   }
 
-  async getComments(postId: string, viewerId?: string, take = 50) {
+  async getComments(postId: string, viewerId?: string, take = 50, cursor?: string) {
     // Cùng quy tắc hiển thị với getPost — thiếu check này cho phép đọc bình luận của bài
     // REMOVED (đã gỡ vì vi phạm) hoặc PENDING (chưa duyệt, không phải bài của mình) dù
     // chính bài viết đã bị chặn xem qua getPost (IDOR: rò rỉ nội dung qua đường vòng).
     const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { status: true, userId: true } });
     if (!post || post.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
     if (post.status === 'PENDING' && post.userId !== viewerId) throw new NotFoundException('Bài viết không tồn tại.');
-    const comments = await this.prisma.feedComment.findMany({
+    // Phân trang: trước đây cắt cứng ở 50 bình luận và không có đường xem tiếp — câu hỏi hot 80
+    // câu trả lời thì 30 người đã được cộng xu/uy tín nhưng không ai đọc được nội dung của họ,
+    // trong khi con số đếm vẫn nói 80. `id` là cuid (tăng dần theo thời gian tạo) nên đủ ổn định
+    // làm khoá cursor cho thứ tự thời gian.
+    const limit = Math.min(Math.max(take, 1), 100);
+    const rows = await this.prisma.feedComment.findMany({
       where: { postId, isRemoved: false },
       orderBy: [{ isAccepted: 'desc' }, { createdAt: 'asc' }],
-      take,
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       include: { user: { select: { fullName: true, avatarUrl: true, role: true, communityProfile: { select: { level: true } } } } },
     });
-    return comments.map((c) => ({
+    const hasMore = rows.length > limit;
+    const comments = hasMore ? rows.slice(0, limit) : rows;
+    const items = comments.map((c) => ({
       id: c.id,
       body: c.body,
       author: c.user.fullName ?? 'Bạn Tubu',
@@ -605,6 +616,7 @@ export class CommunityFeedService {
       createdAt: c.createdAt,
       isOwner: c.userId === viewerId,
     }));
+    return { items, nextCursor: hasMore ? comments[comments.length - 1]!.id : null };
   }
 
   /** Chọn câu trả lời hay nhất — chủ bài QUESTION hoặc ADMIN. */
