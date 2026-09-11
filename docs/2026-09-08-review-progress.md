@@ -618,3 +618,34 @@ localStorage (cần httpOnly cookie).
 bình thường, và việc tách route đã làm tốt — mở một trang bất kỳ chỉ tải thêm dưới 10 kB. Chưa
 tìm thấy thư viện nặng nào bị kéo vào nhầm (kiểm chuỗi trong bundle: không có recharts/framer;
 lucide-react được tree-shake theo từng icon).
+
+## Tự review lại diff của chính phiên (2026-09-12)
+
+Sau khi sửa xong, chạy hai agent đọc lại TOÀN BỘ diff của phiên (145 file, +5400/−598) với yêu
+cầu tìm **regression do chính đợt sửa gây ra**, không liệt kê lại lỗi cũ. Mỗi phát hiện đều được
+tự kiểm chứng trong code trước khi sửa — agent có thể bịa, artifact máy kiểm được mới tin.
+
+**11 lỗi do chính đợt này gây ra, đã sửa hết.** Đáng chú ý:
+
+- **Tính năng vừa thêm không dùng được:** ô "Dùng Điểm Xanh" trên web KHÔNG BAO GIỜ hiện vì số dư
+  lưu bằng `useRef` — ghi vào ref không kích hoạt render, mà render có quote chính là render cuối
+  của luồng khởi động.
+- **Sửa một lỗi tiền, tạo ra lỗi tiền khác:** nhánh suy-ngày-hôm-sau cho ca qua đêm dùng `co <= ci`
+  (có dấu bằng); ô giờ ra của phiên đang mở được khởi tạo bằng đúng giờ vào, nên "Lưu giờ" ghi
+  thành ca **24 tiếng** và payroll trả tiền cho ngần ấy.
+- **Guard đặt sai lớp:** chặn sửa tháng đã chốt nằm ở `recomputeDay`, chạy SAU lần ghi và không
+  chung transaction — phiên đã đổi trong DB rồi API mới trả 400.
+- **Bịt lỗ này, mở lỗ kia:** `enqueuePush` xoá job cũ bất kể trạng thái; nhưng `pushOrder` chỉ ghi
+  `pancakeOrderId` khi Pancake TRẢ VỀ id, nên đơn đã tạo mà response thiếu id sẽ bị cron cứu hộ
+  đẩy lại **mỗi 15 phút, vô thời hạn** → đơn trùng ở kho vật lý.
+- **Comment nói sai sự thật:** tôi ghi "ANSWER + BEST_ANSWER đều theo refId = commentId" trong khi
+  BEST_ANSWER ghi theo postId — gỡ bình luận chỉ đảo được một nửa số điểm, và vì `removeComment`
+  đặt `bestCommentId = null` nên vòng chọn–gỡ–chọn lại farm được điểm.
+- **Khoá quá rộng:** đưa `updateMany` không điều kiện vào transaction để đạt tính nguyên tử, nhưng
+  nó khoá MỌI dòng `products` suốt transaction — đủ chặn cron đồng bộ Pancake cùng nổ lúc 03:00.
+- **Chặn nhầm luồng hợp lệ:** kiểm chồng giờ coi phiên chưa đóng là vô hạn (chặn đúng tình huống
+  quản lý cần bù giờ); đóng sổ nhắc giờ vàng theo `isActive` (admin tắt sale 30 phút để sửa giá là
+  mất sạch nhắc); nút "Kiểm tra" ở màn chuyển khoản bị disable theo nhịp poll nền 4 giây.
+
+Bài học ghi lại cho phiên sau: **mọi guard phải đặt ở lớp GHI, không phải lớp tính lại sau đó**;
+và sau một đợt sửa lớn thì đọc lại diff của chính mình là bước bắt buộc, không phải tuỳ chọn.
