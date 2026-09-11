@@ -51,14 +51,20 @@ export class AdminPayrollController {
     return this.payroll.setRate(userId, dto.hourlyRate);
   }
 
+  /**
+   * Tính lại lương tháng. `reprice=1` áp đơn giá HIỆN TẠI cho cả những ngày đã có bản ghi —
+   * dùng khi đơn giá bị nhập sai và quản lý cố ý định giá lại. Mặc định KHÔNG reprice: đổi đơn
+   * giá không được âm thầm tính lại công đã làm xong (xem PayrollService.recomputeDay).
+   */
   @Post('payroll/:staffId/recompute')
   recompute(
     @Param('staffId') staffId: string,
     @Query('year') year: string,
     @Query('month') month: string,
+    @Query('reprice') reprice?: string,
   ) {
     const { y, m } = parseYearMonth(year, month);
-    return this.payroll.recomputeStaffMonth(staffId, y, m);
+    return this.payroll.recomputeStaffMonth(staffId, y, m, { reprice: reprice === '1' || reprice === 'true' });
   }
 
   @Post('payroll/:staffId/finalize')

@@ -65,10 +65,26 @@ export class PayrollService {
     }
   }
 
-  /** Tính lại lương 1 ngày (workDate = midnight UTC của date-key VN). */
-  async recomputeDay(staffId: string, workDate: Date) {
-    const profile = await this.prisma.staffProfile.findUnique({ where: { userId: staffId } });
-    const rate = profile?.hourlyRate ?? 0;
+  /**
+   * Tính lại lương 1 ngày (workDate = midnight UTC của date-key VN).
+   *
+   * Đơn giá KHOÁ THEO NGÀY: nếu ngày đó đã có bản ghi lương thì giữ nguyên đơn giá đã lưu.
+   * Trước đây luôn đọc hourlyRate hiện tại của hồ sơ, trong khi recomputeStaffMonth tính lại
+   * MỌI ngày trong tháng — nên đổi đơn giá ngày 11 là tự động định giá lại cả 10 ngày đã làm
+   * xong: tăng đơn giá thì trả dư, giảm thì ăn bớt lương của công đã bỏ ra. Chỉ cần nhân viên
+   * mở màn "Lương của tôi" là recompute chạy, không ai bấm gì cả.
+   *
+   * `reprice` = quản lý CỐ Ý định giá lại (nút tính lại của tháng) — chỉ khi đó mới áp đơn giá
+   * mới cho ngày cũ.
+   */
+  async recomputeDay(staffId: string, workDate: Date, opts: { reprice?: boolean } = {}) {
+    const [profile, existingDay] = await Promise.all([
+      this.prisma.staffProfile.findUnique({ where: { userId: staffId } }),
+      this.prisma.payrollDay.findUnique({ where: { staffId_workDate: { staffId, workDate } }, select: { hourlyRate: true } }),
+    ]);
+    const currentRate = profile?.hourlyRate ?? 0;
+    // hourlyRate = 0 nghĩa là ngày đó tính khi hồ sơ chưa có đơn giá → không phải mốc đáng khoá.
+    const rate = !opts.reprice && existingDay && existingDay.hourlyRate > 0 ? existingDay.hourlyRate : currentRate;
     await this.ensureFines(staffId, workDate, rate);
 
     const shifts = await this.prisma.shift.findMany({
@@ -98,7 +114,7 @@ export class PayrollService {
   }
 
   /** Tính lại cả tháng (bỏ qua nếu đã FINALIZED/PAID). Trả PayrollMonth. */
-  async recomputeStaffMonth(staffId: string, year: number, month: number) {
+  async recomputeStaffMonth(staffId: string, year: number, month: number, opts: { reprice?: boolean } = {}) {
     const { start, end } = this.monthRange(year, month);
     const existing = await this.prisma.payrollMonth.findUnique({
       where: { staffId_year_month: { staffId, year, month } },
@@ -111,7 +127,7 @@ export class PayrollService {
       this.prisma.payrollAdjustment.findMany({ where: { staffId, workDate: { gte: start, lt: end } }, select: { workDate: true }, distinct: ['workDate'] }),
     ]);
     const dayMs = new Set<number>([...shiftDays, ...adjDays].map((d) => d.workDate.getTime()));
-    for (const ms of dayMs) await this.recomputeDay(staffId, new Date(ms));
+    for (const ms of dayMs) await this.recomputeDay(staffId, new Date(ms), opts);
 
     const days = await this.prisma.payrollDay.findMany({ where: { staffId, workDate: { gte: start, lt: end } } });
     const totalMinutes = days.reduce((s, d) => s + d.workedMinutes, 0);

@@ -181,10 +181,14 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   // office_lat / office_lng: KHÔNG seed (để null mặc định) — admin nhập toạ độ thật qua config.
   { key: 'attendance.radius_m', value: 150, category: 'attendance', description: 'Bán kính GPS cho phép (m)' },
   { key: 'attendance.late_grace_min', value: 30, category: 'attendance', description: 'Trễ quá X phút thì phạt' },
+  { key: 'attendance.checkin_early_min', value: 60, category: 'attendance', description: 'Cho checkin sớm nhất X phút trước giờ vào ca (chặn checkin vào ca của ngày khác)' },
   { key: 'attendance.late_fine', value: 10000, category: 'attendance', description: 'Tiền phạt đi trễ (VND)' },
   { key: 'attendance.cancel_notice_days', value: 3, category: 'attendance', description: 'Huỷ ca báo trước X ngày' },
   { key: 'attendance.emergency_cap_month', value: 3, category: 'attendance', description: 'Số lần huỷ đột xuất miễn phạt/tháng' },
-  { key: 'attendance.heartbeat_stale_min', value: 10, category: 'attendance', description: 'Không heartbeat quá X phút → auto checkout' },
+  // CHƯA ĐƯỢC DÙNG: cron chỉ đóng phiên khi quá giờ hết ca, cố ý không cắt theo heartbeat (cất
+  // điện thoại vào túi là bình thường, cắt theo heartbeat sẽ cắt nhầm về ~0 giờ công). Mô tả cũ
+  // ghi "→ auto checkout" khiến admin tưởng đang bật chống gian lận.
+  { key: 'attendance.heartbeat_stale_min', value: 10, category: 'attendance', description: 'Ngưỡng coi heartbeat là cũ (hiện CHƯA dùng để tự checkout)' },
   { key: 'attendance.enforce_ip', value: true, category: 'attendance', description: 'Bật kiểm IP (tắt nếu chưa có IP tĩnh)' },
 ];
 

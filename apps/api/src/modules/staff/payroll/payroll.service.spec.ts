@@ -12,7 +12,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
   const base = {
     shift: { findMany: jest.fn().mockResolvedValue([]) },
     payrollAdjustment: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
-    payrollDay: { upsert: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
+    payrollDay: { upsert: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null) },
     payrollMonth: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     staffProfile: { findUnique: jest.fn().mockResolvedValue({ hourlyRate: 30000 }), upsert: jest.fn() },
     user: { findMany: jest.fn().mockResolvedValue([]) },
@@ -91,7 +91,7 @@ describe('PayrollService.recomputeDay', () => {
           ]),
       },
       payrollAdjustment: { findFirst: jest.fn(), create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
-      payrollDay: { upsert },
+      payrollDay: { upsert, findUnique: jest.fn().mockResolvedValue(null) },
     });
     const pay = await mk(prisma).recomputeDay('u1', new Date('2026-07-03'));
     expect(pay.gross).toBe(60000);
@@ -140,5 +140,79 @@ describe('PayrollService.markPaid / finalize', () => {
       payrollDay: { findMany: jest.fn().mockResolvedValue([]) },
     });
     await expect(mk(prisma).finalize('u1', 2026, 7)).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+/**
+ * Đơn giá giờ phải KHOÁ THEO NGÀY. Trước đây recomputeDay luôn đọc hourlyRate HIỆN TẠI của hồ
+ * sơ, còn recomputeStaffMonth thì tính lại MỌI ngày trong tháng — nên đổi đơn giá ngày 11 là tự
+ * động định giá lại cả 10 ngày đã làm xong (trả dư khi tăng, ăn bớt lương đã làm khi giảm). Chỉ
+ * cần NV mở màn "Lương của tôi" là recompute chạy.
+ */
+describe('PayrollService.recomputeDay — đơn giá khoá theo ngày', () => {
+  const dayWithTwoHours = (over: Record<string, unknown> = {}) =>
+    makePrisma({
+      shift: {
+        findMany: jest
+          .fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([
+            {
+              startAt: new Date('2026-07-03T01:00:00Z'),
+              endAt: new Date('2026-07-03T05:00:00Z'),
+              approvedStart: null,
+              approvedEnd: null,
+              sessions: [{ checkinAt: new Date('2026-07-03T01:00:00Z'), checkoutAt: new Date('2026-07-03T03:00:00Z') }],
+            },
+          ]),
+      },
+      ...over,
+    });
+
+  it('ngày đã có bản ghi lương với đơn giá cũ → giữ đơn giá CŨ, không định giá lại', async () => {
+    const upsert = jest.fn().mockResolvedValue({});
+    const prisma = dayWithTwoHours({
+      staffProfile: { findUnique: jest.fn().mockResolvedValue({ hourlyRate: 40000 }) }, // đơn giá MỚI
+      payrollDay: { upsert, findUnique: jest.fn().mockResolvedValue({ hourlyRate: 25000 }) },
+    });
+
+    const pay = await mk(prisma).recomputeDay('u1', new Date('2026-07-03'));
+
+    expect(pay.gross).toBe(50000); // 2h × 25k, KHÔNG phải 2h × 40k
+    expect(upsert.mock.calls[0][0].update.hourlyRate).toBe(25000);
+  });
+
+  it('ngày chưa có bản ghi → lấy đơn giá hiện hành của hồ sơ', async () => {
+    const upsert = jest.fn().mockResolvedValue({});
+    const prisma = dayWithTwoHours({
+      staffProfile: { findUnique: jest.fn().mockResolvedValue({ hourlyRate: 40000 }) },
+      payrollDay: { upsert, findUnique: jest.fn().mockResolvedValue(null) },
+    });
+
+    const pay = await mk(prisma).recomputeDay('u1', new Date('2026-07-03'));
+
+    expect(pay.gross).toBe(80000);
+  });
+
+  it('bản ghi cũ có đơn giá 0 (chưa từng set) → dùng đơn giá hiện hành', async () => {
+    const prisma = dayWithTwoHours({
+      staffProfile: { findUnique: jest.fn().mockResolvedValue({ hourlyRate: 40000 }) },
+      payrollDay: { upsert: jest.fn().mockResolvedValue({}), findUnique: jest.fn().mockResolvedValue({ hourlyRate: 0 }) },
+    });
+
+    const pay = await mk(prisma).recomputeDay('u1', new Date('2026-07-03'));
+
+    expect(pay.gross).toBe(80000);
+  });
+
+  it('reprice: true (quản lý bấm tính lại có chủ đích) → mới áp đơn giá mới cho ngày cũ', async () => {
+    const prisma = dayWithTwoHours({
+      staffProfile: { findUnique: jest.fn().mockResolvedValue({ hourlyRate: 40000 }) },
+      payrollDay: { upsert: jest.fn().mockResolvedValue({}), findUnique: jest.fn().mockResolvedValue({ hourlyRate: 25000 }) },
+    });
+
+    const pay = await mk(prisma).recomputeDay('u1', new Date('2026-07-03'), { reprice: true });
+
+    expect(pay.gross).toBe(80000);
   });
 });

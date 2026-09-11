@@ -11,6 +11,7 @@ const CFG: Record<string, unknown> = {
   'attendance.radius_m': 150,
   'attendance.enforce_ip': true,
   'attendance.late_grace_min': 30,
+  'attendance.checkin_early_min': 60,
   'attendance.heartbeat_stale_min': 10,
 };
 const config = {
@@ -46,7 +47,7 @@ describe('AttendanceService.checkin', () => {
 
   it('sai IP → BadRequest', async () => {
     const prisma = makePrisma({
-      shift: { findFirst: jest.fn().mockResolvedValue({ id: 's1', staffId: 'u1', status: 'APPROVED', startAt: new Date(), approvedStart: null }) },
+      shift: { findFirst: jest.fn().mockResolvedValue({ id: 's1', staffId: 'u1', status: 'APPROVED', startAt: new Date(), endAt: new Date(Date.now() + 8 * 3600_000), approvedStart: null, approvedEnd: null }) },
     });
     await expect(mk(prisma).checkin('u1', '8.8.8.8', { shiftId: 's1', ...IN })).rejects.toBeInstanceOf(
       BadRequestException,
@@ -55,7 +56,7 @@ describe('AttendanceService.checkin', () => {
 
   it('đang có phiên mở → BadRequest', async () => {
     const prisma = makePrisma({
-      shift: { findFirst: jest.fn().mockResolvedValue({ id: 's1', staffId: 'u1', status: 'APPROVED', startAt: new Date(), approvedStart: null }) },
+      shift: { findFirst: jest.fn().mockResolvedValue({ id: 's1', staffId: 'u1', status: 'APPROVED', startAt: new Date(), endAt: new Date(Date.now() + 8 * 3600_000), approvedStart: null, approvedEnd: null }) },
       attendanceSession: {
         findFirst: jest.fn().mockResolvedValue({ id: 'open1' }),
         count: jest.fn(),
@@ -73,7 +74,7 @@ describe('AttendanceService.checkin', () => {
       new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' }),
     );
     const prisma = makePrisma({
-      shift: { findFirst: jest.fn().mockResolvedValue({ id: 's1', staffId: 'u1', status: 'APPROVED', startAt: new Date(), approvedStart: null }) },
+      shift: { findFirst: jest.fn().mockResolvedValue({ id: 's1', staffId: 'u1', status: 'APPROVED', startAt: new Date(), endAt: new Date(Date.now() + 8 * 3600_000), approvedStart: null, approvedEnd: null }) },
       attendanceSession: {
         findFirst: jest.fn().mockResolvedValue(null), // pre-check: chưa thấy phiên mở (thua race)
         count: jest.fn().mockResolvedValue(0),
@@ -96,7 +97,9 @@ describe('AttendanceService.checkin', () => {
           staffId: 'u1',
           status: 'APPROVED',
           startAt: new Date(Date.now() - 5 * 60000), // ca vừa bắt đầu 5' trước
+          endAt: new Date(Date.now() + 8 * 3600_000),
           approvedStart: null,
+          approvedEnd: null,
         }),
       },
       attendanceSession: {
@@ -122,7 +125,9 @@ describe('AttendanceService.checkin', () => {
           staffId: 'u1',
           status: 'APPROVED',
           startAt: new Date(Date.now() - 60 * 60000), // ca bắt đầu 60' trước, grace 30' → trễ
+          endAt: new Date(Date.now() + 7 * 3600_000),
           approvedStart: null,
+          approvedEnd: null,
         }),
       },
       attendanceSession: {
@@ -134,6 +139,70 @@ describe('AttendanceService.checkin', () => {
     });
     const out = await mk(prisma).checkin('u1', GOOD_IP, { shiftId: 's1', ...IN });
     expect(out.isLate).toBe(true);
+  });
+});
+
+describe('AttendanceService.checkin — cửa sổ thời gian của ca', () => {
+  const shiftAt = (startOffsetMs: number, durationMs = 9 * 3600_000) => ({
+    shift: {
+      findFirst: jest.fn().mockResolvedValue({
+        id: 's1',
+        staffId: 'u1',
+        status: 'APPROVED',
+        startAt: new Date(Date.now() + startOffsetMs),
+        endAt: new Date(Date.now() + startOffsetMs + durationMs),
+        approvedStart: null,
+        approvedEnd: null,
+      }),
+    },
+  });
+
+  /**
+   * Trước đây checkin nhận BẤT KỲ ca đã duyệt nào của mình, không xét ngày giờ. NV đang ở công
+   * ty lúc 17:05 có thể checkin vào ca 08:00–17:00 NGÀY MAI: phiên mở ra, cron chỉ đóng phiên
+   * khi đã quá giờ hết ca nên tới 17:00 hôm sau nó mới đóng — payroll lấy phần giao nhau với
+   * cửa sổ ca = 9 giờ công đầy đủ cho một ngày không đi làm phút nào.
+   */
+  it('ca ngày mai (chưa tới cửa sổ) → BadRequest, không tạo phiên', async () => {
+    const create = jest.fn();
+    const prisma = makePrisma({
+      ...shiftAt(24 * 3600_000),
+      attendanceSession: { findFirst: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0), create, update: jest.fn() },
+    });
+    await expect(mk(prisma).checkin('u1', GOOD_IP, { shiftId: 's1', ...IN })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('tới sớm trong hạn cho phép (30 phút trước giờ vào) → vẫn checkin được', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'sess1' });
+    const prisma = makePrisma({
+      ...shiftAt(30 * 60000),
+      attendanceSession: { findFirst: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0), create, update: jest.fn() },
+    });
+    await expect(mk(prisma).checkin('u1', GOOD_IP, { shiftId: 's1', ...IN })).resolves.toMatchObject({ sessionId: 'sess1' });
+  });
+
+  it('ca đã kết thúc → BadRequest (bổ sung phiên là việc của quản lý, không phải mở phiên mới)', async () => {
+    const create = jest.fn();
+    const prisma = makePrisma({
+      ...shiftAt(-10 * 3600_000),
+      attendanceSession: { findFirst: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0), create, update: jest.fn() },
+    });
+    await expect(mk(prisma).checkin('u1', GOOD_IP, { shiftId: 's1', ...IN })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('ca qua đêm: checkin lúc 00:30 của ngày hôm sau vẫn hợp lệ (không chặn theo ngày lịch)', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'sess1' });
+    const prisma = makePrisma({
+      ...shiftAt(-90 * 60000, 3 * 3600_000), // ca bắt đầu 1,5h trước, còn 1,5h nữa mới hết
+      attendanceSession: { findFirst: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0), create, update: jest.fn() },
+    });
+    await expect(mk(prisma).checkin('u1', GOOD_IP, { shiftId: 's1', ...IN })).resolves.toMatchObject({ sessionId: 'sess1' });
   });
 });
 

@@ -25,8 +25,8 @@ export class AttendanceService {
     private readonly config: SystemConfigService,
   ) {}
 
-  private async loadCfg(): Promise<AttnConfig & { graceMin: number; staleMin: number }> {
-    const [officeIps, lat, lng, radiusM, enforceIp, graceMin, staleMin] = await Promise.all([
+  private async loadCfg(): Promise<AttnConfig & { graceMin: number; staleMin: number; earlyMin: number }> {
+    const [officeIps, lat, lng, radiusM, enforceIp, graceMin, staleMin, earlyMin] = await Promise.all([
       this.config.get<string[]>('attendance.office_ips', []),
       this.config.get<number | null>('attendance.office_lat', null),
       this.config.get<number | null>('attendance.office_lng', null),
@@ -34,8 +34,9 @@ export class AttendanceService {
       this.config.get<boolean>('attendance.enforce_ip', true),
       this.config.get<number>('attendance.late_grace_min', 30),
       this.config.get<number>('attendance.heartbeat_stale_min', 10),
+      this.config.get<number>('attendance.checkin_early_min', 60),
     ]);
-    return { officeIps, lat, lng, radiusM, enforceIp, graceMin, staleMin };
+    return { officeIps, lat, lng, radiusM, enforceIp, graceMin, staleMin, earlyMin };
   }
 
   /** Ranh giới ngày VN của "hôm nay" (để khớp workDate @db.Date lưu midnight UTC theo date-key VN). */
@@ -69,6 +70,23 @@ export class AttendanceService {
     if (!shift) throw new NotFoundException('Không tìm thấy ca đã duyệt.');
 
     const cfg = await this.loadCfg();
+
+    // Phiên chấm công phải nằm trong CỬA SỔ của chính ca đó. Trước đây checkin nhận bất kỳ ca
+    // đã duyệt nào của mình, không xét giờ: NV đang ở công ty lúc 17:05 checkin được vào ca
+    // 08:00–17:00 NGÀY MAI. Cron chỉ đóng phiên khi đã quá giờ hết ca, nên phiên đó mở suốt
+    // tới 17:00 hôm sau và payroll tính phần giao với cửa sổ ca = 9 giờ công đầy đủ cho một
+    // ngày không đi làm phút nào. Xét theo MỐC GIỜ của ca chứ không theo ngày lịch — ca qua
+    // đêm (23:00 hôm nay → 02:00 hôm sau) vẫn checkin bình thường.
+    const now = Date.now();
+    const effStart = shift.approvedStart ?? shift.startAt;
+    const effEnd = shift.approvedEnd ?? shift.endAt;
+    if (now < effStart.getTime() - cfg.earlyMin * 60000) {
+      throw new BadRequestException(`Chưa tới giờ ca — chỉ checkin được sớm nhất ${cfg.earlyMin} phút trước giờ vào.`);
+    }
+    if (now > effEnd.getTime()) {
+      throw new BadRequestException('Ca đã kết thúc — nhờ quản lý bổ sung phiên chấm công giúp bạn.');
+    }
+
     const v = verifyPresence(cfg, ip, body.lat, body.lng);
     if (!v.ok) throw new BadRequestException(REASON_MSG[v.reason]);
 
@@ -83,9 +101,7 @@ export class AttendanceService {
     if (open) throw new BadRequestException('Bạn đang trong ca, hãy checkout trước.');
 
     const priorCount = await this.prisma.attendanceSession.count({ where: { shiftId: shift.id } });
-    const effectiveStart = shift.approvedStart ?? shift.startAt;
-    const isLate =
-      priorCount === 0 && Date.now() > effectiveStart.getTime() + cfg.graceMin * 60000;
+    const isLate = priorCount === 0 && now > effStart.getTime() + cfg.graceMin * 60000;
 
     let session: { id: string };
     try {
