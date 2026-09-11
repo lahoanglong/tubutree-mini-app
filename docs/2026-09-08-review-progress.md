@@ -492,3 +492,59 @@ Còn đáng làm ở Phase 6: đo lại trên DB có DỮ LIỆU THẬT (DB dev 
 `pnpm typecheck` 5/5 · `pnpm lint` 5/5 · API **93 suite / 1354 test** · miniapp **9 file /
 61 test** · 6 migration mới đã áp sạch trên DB local · smoke test API thật:
 `can-review` trả `NOT_PURCHASED` cho SP chưa mua, 404 cho SP không tồn tại.
+
+---
+
+# Phiên 2026-09-12 — đóng nốt các phát hiện mạch lạc
+
+Mọi phát hiện của hai lượt audit mạch lạc (B2C và CTV) đã được sửa, trừ P0-3 (Pancake ghi đè
+tồn kho) vẫn chờ một dữ kiện bên ngoài — xem `docs/2026-09-11-P0-3-pancake-stock-decision-brief.md`.
+
+## Số nghiệp vụ không còn chép cứng ở FE
+
+`GET /config/public` nay trả thêm `subscribeDiscountPct`, `affiliateWalletMultiplier`,
+`affiliateMinWithdrawBank`. Hook dùng chung `hooks/use-public-config.ts` trả kèm `isLoaded` để
+màn nào HỨA một con số cụ thể với khách (ngưỡng freeship ở trang sản phẩm) chờ dữ liệu thật
+thay vì hiện giá trị mặc định. Đã thay: "tiết kiệm 12%" (3 nơi), "Ví Tubu ×1.5" và "tối thiểu
+50k" (mô tả quyền lợi, chip chọn phương thức, điều kiện hợp lệ của form rút, nhãn số tiền trên
+nút). Giá trong Vườn Xanh (vé giữ lửa, gói nước, cây thật) đọc từ `/game/profile`.
+
+## Lỗi tiền
+
+- **Thanh toán tập con bị mất khi tải lại trang.** Lựa chọn "thanh toán món nào" chỉ nằm trong
+  navigation state; Zalo Mini App tải lại trang là mất, màn thanh toán âm thầm chuyển sang TOÀN
+  GIỎ. Nay ghi nhớ ở sessionStorage + đối chiếu lại với giỏ thật (`utils/checkout-selection.ts`,
+  9 test).
+- **Huỷ đơn đại lý "Ghi công nợ" không đảo sổ.** `DealerCreditLedger` giữ nguyên khoản nợ của
+  một đơn không còn tồn tại, và khoản nợ ảo đó ăn vào hạn mức nên chặn luôn các đơn sau. Nay
+  `OrderReversalService` ghi dòng đối ứng âm (`refType='ORDER_CANCEL'`, idempotent nhờ unique
+  `(userId, refType, refId)`) — chạy cho mọi lối đưa đơn về CANCELLED/RETURNED.
+- **27 nút chỉ có `loading` không chặn được cú chạm thứ hai.** zmp-ui `Button` gọi `onClick` kể
+  cả khi `loading` bật (đã đọc `node_modules/zmp-ui/cjs/components/button/index.js`); chỉ
+  `disabled` mới chặn. Đã thêm `disabled` cho cả 27, kèm test quét mã nguồn
+  (`components/ui/button-guard.spec.ts`) để lỗi không quay lại ở nút mới.
+
+## Tính năng có BE mà thiếu UI
+
+- **Hồ sơ gian hàng CTV** (avatar/ảnh bìa/lời nhắn) và **lý do giới thiệu từng sản phẩm** —
+  hai nhiệm vụ "Hành trình gian hàng" (2.000 + 1.500 xu) trước đây KHÔNG THỂ hoàn thành vì
+  builder không có ô nhập, dù trang gian hàng công khai đã render sẵn cả bốn trường.
+- **`BrandPromotion.couponCode`** có trong schema và trong payload công khai nhưng không màn
+  nào nhập hay hiện — banner "MUA 2 TẶNG 1" là lời quảng cáo không hành động được. Nay chủ nhãn
+  nhập được mã, trang nhãn hiện mã chạm-để-chép.
+- **Chủ nhãn không xem trước được trang nhãn**; **đơn đại lý không bấm được** nên đơn "Trả
+  trước" (PENDING_PAYMENT/BANK_TRANSFER) không có đường nào tới màn QR.
+- **Bộ nội dung bán hàng** chỉ mở được từ trình dựng gian hàng — nay có ở trang sản phẩm cho CTV.
+
+## Mạch lạc
+
+Một huy hiệu giỏ hàng duy nhất (`components/ui/cart-badge.tsx`) thay vì hai màu; một bảng nhãn
+trạng thái đơn (`vi.orderStatus`) thay vì hai bảng lệch nhau ở DELIVERED; một bộ từ vựng cho
+hoa hồng ("Đang chờ" ở cả thẻ tổng lẫn từng dòng); `['coupons']` là queryKey duy nhất cho
+`/me/coupons`; khoá học Học viện có URL riêng nên nút back của Zalo quay về danh sách và gửi
+link được; ô tìm kiếm ở Trang chủ mở thẳng bàn phím ở ô thật bên `/browse`.
+
+## Verify
+
+`pnpm typecheck` 5/5 · `pnpm lint` 5/5 · API **93 suite / 1360 test** · miniapp **11 file /
+83 test**. 7 commit đã push `origin/main`.
