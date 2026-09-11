@@ -107,6 +107,12 @@ export interface AddressDTO {
 // Catalog (public)
 export interface PublicConfig {
   freeshipThreshold: number;
+  /** Tỉ lệ giảm khi đặt định kỳ, dạng phân số (0.12 = 12%). */
+  subscribeDiscountPct: number;
+  /** Hệ số khi CTV nhận hoa hồng về Ví Tubu (×1.5). */
+  affiliateWalletMultiplier: number;
+  /** Mốc tối thiểu rút hoa hồng về ngân hàng. */
+  affiliateMinWithdrawBank: number;
 }
 export const getPublicConfig = () =>
   api.get<PublicConfig>('/config/public').then((r) => r.data);

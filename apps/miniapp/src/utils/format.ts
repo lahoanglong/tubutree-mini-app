@@ -56,3 +56,23 @@ export function formatPoints(n: number | null | undefined): string {
   const v = Number(n ?? 0);
   return `${(Number.isFinite(v) ? v : 0).toLocaleString('vi-VN')} điểm`;
 }
+
+/**
+ * VND rút gọn cho câu chữ marketing: 50000 → "50k", 1500000 → "1,5tr".
+ * Số lẻ không tròn nghìn thì trả về dạng đầy đủ để không nói sai con số.
+ */
+export function formatVndShort(amount: number | null | undefined): string {
+  const v = Number(amount ?? 0);
+  if (!Number.isFinite(v) || v <= 0) return '0đ';
+  const trim = (x: number) => x.toFixed(1).replace(/\.0$/, '').replace('.', ',');
+  if (v >= 1_000_000 && v % 100_000 === 0) return `${trim(v / 1_000_000)}tr`;
+  if (v >= 1_000 && v % 1_000 === 0) return `${Math.round(v / 1_000)}k`;
+  return formatVnd(v);
+}
+
+/** Hệ số nhân kiểu Việt: 1.5 → "1,5" (không có ",0" thừa với số tròn). */
+export function formatMultiplier(x: number | null | undefined): string {
+  const v = Number(x ?? 0);
+  if (!Number.isFinite(v) || v <= 0) return '1';
+  return v.toFixed(2).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
+}

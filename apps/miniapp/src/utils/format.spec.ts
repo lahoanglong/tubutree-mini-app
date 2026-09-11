@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatRatePct, formatPoints } from './format';
+import { formatRatePct, formatPoints, formatVndShort, formatMultiplier } from './format';
 
 // Seed lưu baseRate dạng phân số: Shopee 0.035, Lazada 0.042, TikTok 0.049.
 describe('formatRatePct — tỉ lệ hoàn tiền (DB lưu phân số, hiển thị phần trăm)', () => {
@@ -38,5 +38,47 @@ describe('formatPoints — điểm Xanh hiển thị thống nhất', () => {
     expect(formatPoints(null)).toBe('0 điểm');
     expect(formatPoints(undefined)).toBe('0 điểm');
     expect(formatPoints(Number('x'))).toBe('0 điểm');
+  });
+});
+
+// Mốc rút tối thiểu và hệ số Ví Tubu đến từ config BE — FE chỉ định dạng lại, không bịa số.
+describe('formatVndShort — số tiền rút gọn trong câu chữ', () => {
+  it('50000 → "50k"', () => {
+    expect(formatVndShort(50_000)).toBe('50k');
+  });
+
+  it('1500000 → "1,5tr" (dấu phẩy thập phân kiểu Việt)', () => {
+    expect(formatVndShort(1_500_000)).toBe('1,5tr');
+  });
+
+  it('2000000 → "2tr" (bỏ ",0" thừa)', () => {
+    expect(formatVndShort(2_000_000)).toBe('2tr');
+  });
+
+  it('số lẻ không tròn nghìn giữ nguyên dạng đầy đủ để không nói sai con số', () => {
+    expect(formatVndShort(50_500)).toBe('50.500đ');
+  });
+
+  it('null/0 → "0đ"', () => {
+    expect(formatVndShort(null)).toBe('0đ');
+    expect(formatVndShort(0)).toBe('0đ');
+  });
+});
+
+describe('formatMultiplier — hệ số nhân', () => {
+  it('1.5 → "1,5"', () => {
+    expect(formatMultiplier(1.5)).toBe('1,5');
+  });
+
+  it('2 → "2" (không có ",00")', () => {
+    expect(formatMultiplier(2)).toBe('2');
+  });
+
+  it('1.25 → "1,25"', () => {
+    expect(formatMultiplier(1.25)).toBe('1,25');
+  });
+
+  it('thiếu config → "1" (không nhân sai lên)', () => {
+    expect(formatMultiplier(undefined)).toBe('1');
   });
 });

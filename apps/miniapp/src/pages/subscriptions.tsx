@@ -15,6 +15,7 @@ import { haptic } from '../utils/haptic';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { vi } from '../i18n/vi';
+import { usePublicConfig } from '../hooks/use-public-config';
 
 export default function SubscriptionsPage() {
   const navigate = useNavigate();
@@ -24,6 +25,12 @@ export default function SubscriptionsPage() {
   // (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (cùng bug đã fix ở wallet.tsx).
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const subsQ = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions, enabled: authed });
+  // % giảm lấy từ config công khai (BE là nguồn chân lý) — nếu có lịch rồi thì ưu tiên % thực
+  // tế đang áp cho user (thang bậc: càng nhiều lịch càng giảm sâu).
+  const cfg = usePublicConfig();
+  const subscribePct = Math.round(
+    (subsQ.data?.[0]?.effectiveDiscountPct ?? cfg.subscribeDiscountPct) * 100,
+  );
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
 
   const statusMut = useMutation({
@@ -54,7 +61,9 @@ export default function SubscriptionsPage() {
 
       <Box p={4}>
         <Text size="small" style={{ color: 'var(--neutral-600)' }}>
-          Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm <b>12%</b> mỗi đơn, hủy bất kỳ lúc nào.
+          {/* 12% từng bị gõ cứng ở đây trong khi BE tính theo thang bậc (càng nhiều lịch càng
+              giảm sâu) — màn hình có lúc hiện đồng thời "tiết kiệm 12%" và "Đang giảm 14%". */}
+          Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm <b>{subscribePct}%</b> mỗi đơn, hủy bất kỳ lúc nào.
         </Text>
         {subsQ.data && subsQ.data[0] ? (
           <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 4 }}>

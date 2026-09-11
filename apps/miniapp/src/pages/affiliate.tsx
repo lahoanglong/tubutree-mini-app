@@ -17,13 +17,14 @@ import {
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
 import { useAuthStore } from '../store/auth';
-import { formatVnd } from '../utils/format';
+import { formatVnd, formatVndShort, formatMultiplier } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
 import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap } from 'lucide-react';
 import { vi } from '../i18n/vi';
+import { usePublicConfig } from '../hooks/use-public-config';
 
 const COMMISSION_META: Record<CommissionStatus, { label: string; color: string; bg: string }> = {
   PENDING: { label: 'Chờ (đơn chưa giao)', color: 'var(--clay-700)', bg: 'var(--clay-50)' },
@@ -76,10 +77,14 @@ function RegisterGate() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  const cfg = usePublicConfig();
   const benefits = [
     { Icon: BadgePercent, text: 'Hoa hồng theo từng sản phẩm + thưởng bậc doanh số tháng' },
     { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi click & chuyển đổi' },
-    { Icon: Landmark, text: 'Rút về ngân hàng (tối thiểu 50k) hoặc Ví Tubu ×1.5' },
+    {
+      Icon: Landmark,
+      text: `Rút về ngân hàng (tối thiểu ${formatVndShort(cfg.affiliateMinWithdrawBank)}) hoặc Ví Tubu ×${formatMultiplier(cfg.affiliateWalletMultiplier)}`,
+    },
     { Icon: TrendingUp, text: 'Dashboard hoa hồng realtime, minh bạch' },
   ];
 
@@ -568,6 +573,8 @@ function WithdrawForm({
   onDone: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
+  const { affiliateWalletMultiplier: walletMultiplier, affiliateMinWithdrawBank: minBank } =
+    usePublicConfig();
   const [method, setMethod] = useState<'BANK' | 'WALLET_BALANCE'>('WALLET_BALANCE');
   const [amount, setAmount] = useState(String(max));
   const [bank, setBank] = useState({ bankName: '', accountNumber: '', accountName: '' });
@@ -593,7 +600,7 @@ function WithdrawForm({
   const valid =
     amountNum > 0 &&
     (!knownMax || amountNum <= max) &&
-    (method !== 'BANK' || amountNum >= 50_000) &&
+    (method !== 'BANK' || amountNum >= minBank) &&
     bankValid &&
     !mut.isPending;
 
@@ -606,14 +613,14 @@ function WithdrawForm({
       <Box flex style={{ gap: 8, marginBottom: 12 }}>
         <MethodChip
           active={method === 'WALLET_BALANCE'}
-          title="Ví Tubu ×1.5"
+          title={`Ví Tubu ×${formatMultiplier(walletMultiplier)}`}
           sub="Nhận ngay, mua sắm"
           onClick={() => setMethod('WALLET_BALANCE')}
         />
         <MethodChip
           active={method === 'BANK'}
           title="Ngân hàng"
-          sub="Tối thiểu 50k"
+          sub={`Tối thiểu ${formatVndShort(minBank)}`}
           onClick={() => setMethod('BANK')}
         />
       </Box>
@@ -656,7 +663,7 @@ function WithdrawForm({
         style={{ marginTop: 20, background: 'var(--primary-600)' }}
       >
         {method === 'WALLET_BALANCE'
-          ? `Nhận ${formatVnd(Math.round(amountNum * 1.5))} vào Ví`
+          ? `Nhận ${formatVnd(Math.round(amountNum * walletMultiplier))} vào Ví`
           : `Rút ${formatVnd(amountNum)}`}
       </Button>
     </Box>

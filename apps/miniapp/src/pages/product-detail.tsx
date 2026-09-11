@@ -8,7 +8,6 @@ import {
   fetchBoughtTogether,
   getCart,
   addToCart,
-  getPublicConfig,
   fetchActiveFlashSales,
   type VariationDetail,
 } from '../services/shop-api';
@@ -31,6 +30,7 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
+import { usePublicConfig } from '../hooks/use-public-config';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -56,7 +56,7 @@ export default function ProductDetailPage() {
     enabled: status === 'authenticated',
   });
   // Ngưỡng freeship (public config) cho badge "Miễn phí vận chuyển" — tín hiệu tin cậy ở PDP.
-  const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
+  const config = usePublicConfig();
 
   // Thẻ "Ưu đãi giờ vàng" truyền variationId qua state để PDP mở đúng phân loại đang giảm;
   // không có state (vào từ lưới sản phẩm/deep link) thì giữ hành vi cũ là tự chọn phân loại
@@ -329,11 +329,11 @@ export default function ProductDetailPage() {
         )}
 
         {/* Badge freeship — tín hiệu vận chuyển ở nơi ra quyết định mua (trước đây chỉ có ở giỏ). */}
-        {configQ.data && (
+        {config.isLoaded && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
             <Truck size={15} color="var(--leaf-700)" strokeWidth={2} aria-hidden />
             <Text size="xSmall" style={{ color: 'var(--leaf-700)', fontWeight: 600 }}>
-              Miễn phí vận chuyển cho đơn từ {formatVnd(configQ.data.freeshipThreshold)}
+              Miễn phí vận chuyển cho đơn từ {formatVnd(config.freeshipThreshold)}
             </Text>
           </Box>
         )}
@@ -428,7 +428,7 @@ export default function ProductDetailPage() {
           >
             <Repeat size={18} color="var(--leaf-700)" strokeWidth={1.9} />
             <Text size="small" bold style={{ color: 'var(--leaf-700)', flex: 1 }}>
-              Đặt định kỳ — tiết kiệm 12%
+              Đặt định kỳ — tiết kiệm {Math.round(config.subscribeDiscountPct * 100)}%
             </Text>
             <ChevronRight size={18} color="var(--leaf-700)" strokeWidth={2} />
           </Box>

@@ -5,6 +5,7 @@ import { getAddresses } from '../services/shop-api';
 import { createSubscription } from '../services/subscriptions-api';
 import { getErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
+import { usePublicConfig } from '../hooks/use-public-config';
 
 const INTERVALS = [4, 6, 8, 10];
 
@@ -23,6 +24,7 @@ export function SubscribeSheet({
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [weeks, setWeeks] = useState(4);
+  const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: visible });
   const defaultAddr = addrQ.data?.find((a) => a.isDefault) ?? addrQ.data?.[0];
 
@@ -31,7 +33,7 @@ export function SubscribeSheet({
       createSubscription({ variationId, quantity, intervalWeeks: weeks, addressId: defaultAddr!.id }),
     onSuccess: () => {
       haptic('medium');
-      openSnackbar({ text: 'Đã tạo lịch đặt định kỳ! Tiết kiệm 12% mỗi đơn 🌿', type: 'success' });
+      openSnackbar({ text: `Đã tạo lịch đặt định kỳ! Tiết kiệm ${discountPct}% mỗi đơn 🌿`, type: 'success' });
       void qc.invalidateQueries({ queryKey: ['subscriptions'] });
       onClose();
     },
@@ -42,7 +44,7 @@ export function SubscribeSheet({
     <Sheet visible={visible} onClose={onClose} autoHeight>
       <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
         <Text bold size="large">
-          Đặt định kỳ — tiết kiệm 12%
+          Đặt định kỳ — tiết kiệm {discountPct}%
         </Text>
         <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
           Tự động giao lại theo chu kỳ bạn chọn. Tạm dừng/hủy bất kỳ lúc nào.
