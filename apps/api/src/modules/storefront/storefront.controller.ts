@@ -1,16 +1,20 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { StorefrontService } from './storefront.service';
 import { StorefrontQuestService } from './storefront-quest.service';
 
+// Ảnh có thể là URL Cloudinary HOẶC data URL base64 (fallback khi chưa cấu hình Cloudinary),
+// nên trần phải rộng — đủ cho ảnh nén ~1MB nhưng chặn payload vô hạn (body limit là 10MB).
+const IMAGE_MAX = 1_500_000;
+
 class UpdateStorefrontDto {
-  @IsOptional() @IsString() title?: string;
-  @IsOptional() @IsString() headerNote?: string;
-  @IsOptional() @IsString() avatarUrl?: string;
-  @IsOptional() @IsString() coverUrl?: string;
+  @IsOptional() @IsString() @MaxLength(120) title?: string;
+  @IsOptional() @IsString() @MaxLength(200) headerNote?: string;
+  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) avatarUrl?: string;
+  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
   @IsOptional() @IsString() theme?: string;
   @IsOptional() @IsString() themeColor?: string;
   @IsOptional() @IsString() subdomain?: string;
@@ -26,23 +30,23 @@ class UpdateStorefrontDto {
 }
 class PublishDto { @IsBoolean() isPublished!: boolean; }
 class CreateCollectionDto {
-  @IsString() title!: string;
+  @IsString() @MaxLength(80) title!: string;
   @IsOptional() @IsIn(['NORMAL', 'COMBO']) kind?: 'NORMAL' | 'COMBO';
   @IsOptional() @IsIn(['GRID', 'CAROUSEL', 'STACK']) layout?: 'GRID' | 'CAROUSEL' | 'STACK';
   @IsOptional() @IsInt() @Min(0) @Max(100) comboDiscountPct?: number;
 }
 class UpdateCollectionDto {
-  @IsOptional() @IsString() title?: string;
+  @IsOptional() @IsString() @MaxLength(80) title?: string;
   @IsOptional() @IsIn(['GRID', 'CAROUSEL', 'STACK']) layout?: 'GRID' | 'CAROUSEL' | 'STACK';
   @IsOptional() @IsInt() @Min(0) @Max(100) comboDiscountPct?: number;
 }
 class AddItemDto {
   @IsString() productId!: string;
   @IsOptional() @IsString() variationId?: string;
-  @IsOptional() @IsString() note?: string;
+  @IsOptional() @IsString() @MaxLength(200) note?: string;
 }
 class UpdateItemDto {
-  @IsOptional() @IsString() note?: string;
+  @IsOptional() @IsString() @MaxLength(200) note?: string;
   @IsOptional() @IsBoolean() isPinned?: boolean;
   @IsOptional() @IsBoolean() isHidden?: boolean;
 }

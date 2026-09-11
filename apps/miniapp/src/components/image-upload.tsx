@@ -79,10 +79,15 @@ export function ImageUpload({
   label,
   value,
   onChange,
+  maxDim,
+  quality,
 }: {
   label: string;
   value: string;
   onChange: (url: string) => void;
+  /** Cạnh dài tối đa khi phải nén client-side (chưa cấu hình Cloudinary). */
+  maxDim?: number;
+  quality?: number;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -113,7 +118,7 @@ export function ImageUpload({
       }
 
       // 2. Client-side Smart Compression Fallback
-      const dataUrl = await readAndCompressImage(file);
+      const dataUrl = await readAndCompressImage(file, maxDim, quality);
       haptic('medium');
       onChange(dataUrl);
     } catch {

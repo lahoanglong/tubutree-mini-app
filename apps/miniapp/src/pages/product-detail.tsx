@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Page, Text, Button, useNavigate, useParams, useSnackbar, useLocation } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck } from 'lucide-react';
+import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone } from 'lucide-react';
 import {
   fetchProduct,
   fetchRelated,
@@ -32,6 +32,8 @@ import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
+import { getAffiliateMe } from '../services/affiliate-api';
+import { ContentKitSheet } from '../components/content-kit-sheet';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -69,6 +71,17 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
   const [showSubscribe, setShowSubscribe] = useState(false);
+  const [showContentKit, setShowContentKit] = useState(false);
+  // "Bộ nội dung bán hàng" trước đây CHỈ mở được từ trình dựng gian hàng, tức CTV phải thêm
+  // sản phẩm vào gian hàng mới lấy được bài mẫu — trong khi lúc cần là lúc đang xem sản phẩm
+  // để đi đăng bài (P1-7). Cùng queryKey với trang CTV nên không tốn thêm request.
+  const affiliateQ = useQuery({
+    queryKey: ['affiliate-me'],
+    queryFn: getAffiliateMe,
+    enabled: status === 'authenticated',
+    staleTime: 5 * 60_000,
+  });
+  const isAffiliate = affiliateQ.data?.isAffiliate === true;
 
   const product = useQuery({
     queryKey: ['product', slug],
@@ -523,6 +536,34 @@ export default function ProductDetailPage() {
         <ChevronRight size={18} color="var(--leaf-700)" strokeWidth={2} />
       </Box>
 
+      {isAffiliate && (
+        <Box
+          className="tubu-press"
+          p={4}
+          mt={2}
+          role="button"
+          aria-label={vi.contentKit.sheetTitle}
+          onClick={() => {
+            haptic('light');
+            setShowContentKit(true);
+          }}
+          style={{ background: 'var(--neutral-0)', display: 'flex', alignItems: 'center', gap: 12 }}
+        >
+          <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--primary-50)', display: 'grid', placeItems: 'center' }}>
+            <Megaphone size={20} color="var(--primary-700)" strokeWidth={2} />
+          </Box>
+          <Box style={{ flex: 1 }}>
+            <Text size="small" bold style={{ color: 'var(--primary-700)' }}>
+              {vi.contentKit.sheetTitle}
+            </Text>
+            <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+              Bài mẫu đã gắn sẵn link giới thiệu của bạn — copy là đăng được
+            </Text>
+          </Box>
+          <ChevronRight size={18} color="var(--primary-700)" strokeWidth={2} />
+        </Box>
+      )}
+
       {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}
       {p.ingredients && p.ingredients.length > 0 && (
         <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
@@ -587,6 +628,14 @@ export default function ProductDetailPage() {
           onClose={() => setShowSubscribe(false)}
           variationId={selected.id}
           quantity={quantity}
+        />
+      )}
+
+      {slug && (
+        <ContentKitSheet
+          visible={showContentKit}
+          onClose={() => setShowContentKit(false)}
+          productSlug={slug}
         />
       )}
 

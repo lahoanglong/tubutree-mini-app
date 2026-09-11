@@ -7,6 +7,7 @@ import {
 import { useAuthStore } from '../store/auth';
 import { getLoyalty, getNotifications } from '../services/account-api';
 import { getOwnedBrand } from '../services/brand-owner-api';
+import { getDealerMe } from '../services/dealer-api';
 import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 
@@ -112,13 +113,31 @@ export default function ProfilePage() {
     enabled: status === 'authenticated',
     retry: false,
   });
+  // Đại lý đã duyệt mà menu vẫn mời "Đăng ký đại lý" thì đọc như chưa được duyệt. Dùng chung
+  // queryKey ['dealer-me'] với trang /dealer nên không tốn thêm request.
+  const dealerQ = useQuery({
+    queryKey: ['dealer-me'],
+    queryFn: getDealerMe,
+    enabled: status === 'authenticated',
+    retry: false,
+  });
+  const dealerItem: MenuItem = dealerQ.data?.isDealer || dealerQ.data?.status === 'APPROVED'
+    ? { Icon: Store, label: 'Kênh đại lý', to: '/dealer', hint: dealerQ.data?.tier?.name ?? 'Bảng giá sỉ — công nợ' }
+    : dealerQ.data?.status === 'PENDING'
+      ? { Icon: Store, label: 'Hồ sơ đại lý', to: '/dealer', hint: 'Đang chờ duyệt' }
+      : { Icon: Store, label: 'Đăng ký đại lý', to: '/dealer' };
+  const withDealer = MENU.map((s) =>
+    s.group === 'Khác'
+      ? { ...s, items: s.items.map((it) => (it.to === '/dealer' ? dealerItem : it)) }
+      : s,
+  );
   const baseMenu = ownedBrandQ.data
-    ? MENU.map((s) =>
+    ? withDealer.map((s) =>
         s.group === 'Kiếm thưởng'
           ? { ...s, items: [...s.items, { Icon: Store, label: 'Quản lý nhãn hàng', to: '/brand-owner', hint: ownedBrandQ.data!.name }] }
           : s,
       )
-    : MENU;
+    : withDealer;
   // Nhóm công việc nội bộ — STAFF thấy "Ca làm", ADMIN thấy thêm "Quản trị nhân sự".
   const isStaffOrAdmin = user?.role === 'STAFF' || user?.role === 'ADMIN';
   const workItems: MenuItem[] = [];

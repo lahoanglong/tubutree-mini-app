@@ -241,6 +241,18 @@ export const vi = {
     copyLink: 'Sao chép link',
     captionHint: 'Caption gợi ý (chạm để sao chép)',
     copied: 'Đã sao chép',
+    editProfile: 'Sửa hồ sơ',
+    profileTitle: 'Hồ sơ gian hàng',
+    profileHint: 'Ảnh đại diện, ảnh bìa và lời nhắn là thứ khách nhìn thấy đầu tiên.',
+    avatar: 'Ảnh đại diện',
+    cover: 'Ảnh bìa',
+    headerNote: 'Lời nhắn của bạn',
+    headerNotePlaceholder: 'VD: Mình dùng thật, review thật — hỏi mình bất cứ lúc nào nhé!',
+    profileSaved: 'Đã cập nhật hồ sơ gian hàng',
+    itemNote: 'Vì sao mình giới thiệu',
+    itemNotePlaceholder: 'VD: Mình dùng 3 tháng, da đỡ khô hẳn.',
+    itemNoteEmpty: 'Thêm lý do giới thiệu',
+    itemNoteSaved: 'Đã lưu lý do giới thiệu',
   },
 
   ctvOrder: {

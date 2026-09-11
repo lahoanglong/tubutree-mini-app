@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pin, Eye, EyeOff, Trash2, Target, Settings, Pencil } from 'lucide-react';
+import { Pin, Eye, EyeOff, Trash2, Target, Settings, Pencil, MessageSquarePlus, UserRoundCog } from 'lucide-react';
 import {
   getMyStorefront, createStorefront, publishStorefront, updateStorefront,
   createCollection, updateCollection, deleteCollection, addItem, updateItem, removeItem, pickerProducts,
@@ -15,6 +15,7 @@ import { vi } from '../i18n/vi';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { ContentKitSheet } from '../components/content-kit-sheet';
+import { ImageUpload } from '../components/image-upload';
 
 export default function StorefrontBuilderPage() {
   const qc = useQueryClient();
@@ -60,6 +61,10 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const [pickerCol, setPickerCol] = useState<string | null>(null);
   const [contentKitSlug, setContentKitSlug] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  // Nhiệm vụ "Viết lý do cho 3 sản phẩm" (1.500 xu) đọc StorefrontItem.note, nhưng builder
+  // chưa từng có ô nhập note — CTV không thể hoàn thành dù thanh tiến trình vẫn hiện (P0-5).
+  const [notingItem, setNotingItem] = useState<{ id: string; note: string } | null>(null);
 
   const pickerQ = useQuery({
     queryKey: ['picker', ''],
@@ -119,6 +124,16 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     onSuccess: () => { haptic('light'); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const noteMut = useMutation({
+    mutationFn: (v: { id: string; note: string }) => updateItem(v.id, { note: v.note }),
+    onSuccess: () => {
+      haptic('light');
+      setNotingItem(null);
+      openSnackbar({ text: vi.storefront.itemNoteSaved, type: 'success' });
+      void refresh();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
   const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<string | null>(null);
   const delItemMut = useMutation({
     mutationFn: removeItem,
@@ -151,14 +166,66 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             {sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/${sf.slug}`}
           </Text>
         </Box>
-        <Button
-          size="small"
-          variant="secondary"
-          onClick={() => setConfigOpen(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-        >
-          <Settings size={14} /> Cấu hình
-        </Button>
+        <Box flex style={{ gap: 6 }}>
+          <Button
+            size="small"
+            variant="secondary"
+            onClick={() => setProfileOpen(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            <UserRoundCog size={14} /> {vi.storefront.editProfile}
+          </Button>
+          <Button
+            size="small"
+            variant="secondary"
+            onClick={() => setConfigOpen(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            <Settings size={14} /> Cấu hình
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Hồ sơ gian hàng — đúng thứ khách nhìn thấy đầu tiên, và là điều kiện của nhiệm vụ
+          "Hoàn thiện hồ sơ gian hàng" (2.000 xu). */}
+      <Box
+        mx={4}
+        mb={3}
+        role="button"
+        aria-label={vi.storefront.editProfile}
+        className="tubu-press"
+        onClick={() => setProfileOpen(true)}
+        style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}
+      >
+        <Box
+          style={{
+            height: 84,
+            background: sf.coverUrl
+              ? `center/cover no-repeat url(${sf.coverUrl})`
+              : 'linear-gradient(135deg, var(--leaf-100), var(--primary-100))',
+          }}
+        />
+        <Box flex alignItems="center" p={3} style={{ gap: 10 }}>
+          <Box
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              flexShrink: 0,
+              border: '2px solid var(--neutral-0)',
+              marginTop: -28,
+              background: sf.avatarUrl
+                ? `center/cover no-repeat url(${sf.avatarUrl})`
+                : 'var(--neutral-200)',
+            }}
+          />
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <Text size="small" style={{ color: sf.headerNote ? 'var(--neutral-900)' : 'var(--neutral-400)' }}>
+              {sf.headerNote || vi.storefront.profileHint}
+            </Text>
+          </Box>
+          <Pencil size={15} color="var(--neutral-400)" />
+        </Box>
       </Box>
 
       {sf.collections.map((col) => (
@@ -190,9 +257,25 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
 
             return (
               <Box key={it.id} flex alignItems="center" style={{ gap: 8, padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
-                <Box style={{ flex: 1 }}>
+                <Box style={{ flex: 1, minWidth: 0 }}>
                   <Text size="small" style={{ opacity: it.isHidden ? 0.5 : 1 }}>{name}</Text>
                   <Text size="xSmall" style={{ color: 'var(--primary-700)' }}>{formatVnd(price)}</Text>
+                  <Text
+                    size="xSmall"
+                    className="tubu-press"
+                    onClick={() => setNotingItem({ id: it.id, note: it.note ?? '' })}
+                    style={{
+                      color: it.note ? 'var(--neutral-600)' : 'var(--leaf-700)',
+                      fontStyle: it.note ? 'italic' : 'normal',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      marginTop: 2,
+                    }}
+                  >
+                    <MessageSquarePlus size={13} strokeWidth={2} style={{ flexShrink: 0 }} />
+                    {it.note ? `“${it.note}”` : vi.storefront.itemNoteEmpty}
+                  </Text>
                 </Box>
                 {slug && (
                   <Text
@@ -327,6 +410,44 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         <MerchantConfigSheet sf={sf} onClose={() => setConfigOpen(false)} onSaved={() => void refresh()} />
       </Sheet>
 
+      <Sheet visible={profileOpen} onClose={() => setProfileOpen(false)} autoHeight>
+        {profileOpen && (
+          <ProfileSheet sf={sf} onClose={() => setProfileOpen(false)} onSaved={() => void refresh()} />
+        )}
+      </Sheet>
+
+      <Sheet visible={!!notingItem} onClose={() => setNotingItem(null)} autoHeight>
+        {notingItem && (
+          <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
+            <Text bold size="large">{vi.storefront.itemNote}</Text>
+            <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 2, marginBottom: 12 }}>
+              Lời thật của bạn thuyết phục hơn mọi mô tả sản phẩm — khách thấy ngay dưới tên món.
+            </Text>
+            <Input.TextArea
+              value={notingItem.note}
+              maxLength={200}
+              placeholder={vi.storefront.itemNotePlaceholder}
+              onChange={(e) => setNotingItem({ ...notingItem, note: e.target.value })}
+            />
+            <Text size="xxxxSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+              {notingItem.note.length}/200
+            </Text>
+            <Box flex style={{ gap: 8, marginTop: 16 }}>
+              <Button variant="secondary" style={{ flex: 1 }} onClick={() => setNotingItem(null)}>
+                Huỷ
+              </Button>
+              <Button
+                style={{ flex: 1, background: 'var(--primary-600)' }}
+                loading={noteMut.isPending}
+                onClick={() => noteMut.mutate({ id: notingItem.id, note: notingItem.note.trim() })}
+              >
+                Lưu
+              </Button>
+            </Box>
+          </Box>
+        )}
+      </Sheet>
+
       <ContentKitSheet
         visible={!!contentKitSlug}
         onClose={() => setContentKitSlug(null)}
@@ -458,6 +579,85 @@ function PickerSheet({ collectionId, onAdded, onClose }: { collectionId: string;
           ))}
       </Box>
       <Button fullWidth variant="secondary" style={{ marginTop: 12 }} onClick={onClose}>Xong</Button>
+    </Box>
+  );
+}
+
+/**
+ * Hồ sơ gian hàng: ảnh đại diện, ảnh bìa, lời nhắn. Ba trường này quyết định nhiệm vụ
+ * "Hoàn thiện hồ sơ gian hàng" (2.000 xu) nhưng trước đây không có màn nào nhập được.
+ */
+function ProfileSheet({
+  sf,
+  onClose,
+  onSaved,
+}: {
+  sf: StorefrontEdit;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { openSnackbar } = useSnackbar();
+  const [avatarUrl, setAvatarUrl] = useState(sf.avatarUrl ?? '');
+  const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
+  const [headerNote, setHeaderNote] = useState(sf.headerNote ?? '');
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      updateStorefront({
+        avatarUrl: avatarUrl.trim() || undefined,
+        coverUrl: coverUrl.trim() || undefined,
+        headerNote: headerNote.trim() || undefined,
+      }),
+    onSuccess: () => {
+      haptic('medium');
+      openSnackbar({ text: vi.storefront.profileSaved, type: 'success' });
+      onSaved();
+      onClose();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  const complete = !!(avatarUrl.trim() && coverUrl.trim() && headerNote.trim());
+
+  return (
+    <Box p={4} style={{ maxHeight: '80vh', overflowY: 'auto', paddingBottom: 'calc(24px + var(--safe-bottom))' }}>
+      <Text.Title size="small">{vi.storefront.profileTitle}</Text.Title>
+      <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 2, marginBottom: 14 }}>
+        {vi.storefront.profileHint}
+      </Text>
+
+      {/* Ảnh đại diện nhỏ nên nén mạnh hơn ảnh bìa — cả hai đi kèm mọi lượt xem gian hàng. */}
+      <ImageUpload label={vi.storefront.avatar} value={avatarUrl} onChange={setAvatarUrl} maxDim={400} quality={0.8} />
+      <ImageUpload label={vi.storefront.cover} value={coverUrl} onChange={setCoverUrl} maxDim={1000} quality={0.75} />
+
+      <Text size="xSmall" bold style={{ marginBottom: 4 }}>{vi.storefront.headerNote}</Text>
+      <Input.TextArea
+        value={headerNote}
+        maxLength={200}
+        placeholder={vi.storefront.headerNotePlaceholder}
+        onChange={(e) => setHeaderNote(e.target.value)}
+      />
+      <Text size="xxxxSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+        {headerNote.length}/200
+      </Text>
+
+      {!complete && (
+        <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 10 }}>
+          Đủ cả ba mục sẽ hoàn thành nhiệm vụ “{vi.storefront.profileTitle.toLowerCase()}”.
+        </Text>
+      )}
+
+      <Button
+        fullWidth
+        loading={saveMut.isPending}
+        onClick={() => saveMut.mutate()}
+        style={{ marginTop: 16, background: 'var(--primary-600)' }}
+      >
+        Lưu hồ sơ
+      </Button>
+      <Button fullWidth variant="secondary" style={{ marginTop: 8 }} onClick={onClose}>
+        Đóng
+      </Button>
     </Box>
   );
 }

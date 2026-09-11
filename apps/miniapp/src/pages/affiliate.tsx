@@ -26,9 +26,12 @@ import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, G
 import { vi } from '../i18n/vi';
 import { usePublicConfig } from '../hooks/use-public-config';
 
+// Thẻ tổng "Đang chờ" gộp cả PENDING lẫn LOCKED (BE aggregate status IN [PENDING, LOCKED]).
+// Nhãn của hai dòng đó PHẢI cùng tiền tố "Đang chờ" thì CTV mới cộng lại khớp được với thẻ —
+// trước đây một khoản tiền có ba tên gọi: "Chờ duyệt" (thẻ), "Chờ (đơn chưa giao)", "Đang giữ".
 const COMMISSION_META: Record<CommissionStatus, { label: string; color: string; bg: string }> = {
-  PENDING: { label: 'Chờ (đơn chưa giao)', color: 'var(--clay-700)', bg: 'var(--clay-50)' },
-  LOCKED: { label: 'Đang giữ', color: 'var(--info)', bg: 'var(--info-bg)' },
+  PENDING: { label: 'Đang chờ · đơn chưa giao', color: 'var(--clay-700)', bg: 'var(--clay-50)' },
+  LOCKED: { label: 'Đang chờ · đang giữ', color: 'var(--info)', bg: 'var(--info-bg)' },
   APPROVED: { label: 'Có thể rút', color: 'var(--leaf-700)', bg: 'var(--leaf-50)' },
   PAID: { label: 'Đã trả', color: 'var(--neutral-600)', bg: 'var(--neutral-100)' },
   REJECTED: { label: 'Từ chối', color: 'var(--danger)', bg: 'var(--danger-bg)' },
@@ -249,7 +252,8 @@ function Dashboard() {
           Khi dashQ lỗi: hiển thị "—" thay vì giá trị giả, để WithdrawForm tự query số dư riêng. */}
       <Box mx={4} mb={3} flex style={{ gap: 10 }}>
         <KpiCard
-          label="Chờ duyệt"
+          label="Đang chờ"
+          hint="đơn chưa giao hoặc đang giữ"
           value={dashQ.isError ? '—' : formatVnd(d?.pendingCommission ?? 0)}
         />
         <KpiCard
@@ -716,7 +720,17 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function KpiCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function KpiCard({
+  label,
+  value,
+  highlight,
+  hint,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+  hint?: string;
+}) {
   return (
     <Box
       p={3}
@@ -733,6 +747,11 @@ function KpiCard({ label, value, highlight }: { label: string; value: string; hi
       <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
         {label}
       </Text>
+      {hint && (
+        <Text size="xxxxSmall" style={{ color: 'var(--neutral-400)' }}>
+          {hint}
+        </Text>
+      )}
     </Box>
   );
 }

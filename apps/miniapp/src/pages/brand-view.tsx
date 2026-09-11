@@ -6,11 +6,13 @@ import {
   getBrandFollowState, followBrand, unfollowBrand,
 } from '../services/brand-api';
 import { useStorefrontContext } from '../store/storefront-context';
+import { useAuthStore } from '../store/auth';
 import { getErrorMessage } from '../services/api';
 import { formatVnd, formatSold } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { ShareSheet } from '../components/share-sheet';
+import { getDealerMe } from '../services/dealer-api';
 import { BadgePercent, Sparkles, Store } from 'lucide-react';
 
 const HEADER_BG = 'linear-gradient(120deg, var(--leaf-600), var(--primary-600))';
@@ -23,6 +25,12 @@ export default function BrandViewPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const setSfContext = useStorefrontContext((s) => s.setContext);
   const q = useQuery({ queryKey: ['public-brand', slug], queryFn: () => getPublicBrand(slug), staleTime: 60_000 });
+  // Đại lý đã duyệt vẫn thấy "Đăng ký đại lý" thì đọc như hồ sơ chưa được duyệt (P3-22).
+  // enabled theo trạng thái đăng nhập: khách vãng lai mở trang nhãn không nên bắn request 401
+  // (kéo theo một lượt refresh token vô ích ở interceptor).
+  const authed = useAuthStore((st) => st.status === 'authenticated');
+  const dealerQ = useQuery({ queryKey: ['dealer-me'], queryFn: getDealerMe, retry: false, enabled: authed });
+  const alreadyDealer = dealerQ.data?.isDealer === true || dealerQ.data?.status === 'APPROVED';
 
   // Vào trang nhãn → lưu store-context kind 'brand' để back/sau-mua quay về trang nhãn.
   // KHÔNG set storefrontSlug khi checkout (kind='brand') → tránh ô nhiễm analytics gian hàng CTV.
@@ -206,7 +214,9 @@ export default function BrandViewPage() {
               </Text>
             </Box>
           ))}
-          <Button variant="secondary" size="small" onClick={() => navigate('/dealer')}>Đăng ký đại lý</Button>
+          <Button variant="secondary" size="small" onClick={() => navigate('/dealer')}>
+            {alreadyDealer ? 'Vào kênh đại lý' : dealerQ.data?.status === 'PENDING' ? 'Xem hồ sơ đại lý' : 'Đăng ký đại lý'}
+          </Button>
         </Box>
       )}
 
