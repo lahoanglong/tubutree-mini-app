@@ -584,8 +584,11 @@ function WithdrawForm({
   onDone: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
-  const { affiliateWalletMultiplier: walletMultiplier, affiliateMinWithdrawBank: minBank } =
-    usePublicConfig();
+  const {
+    affiliateWalletMultiplier: walletMultiplier,
+    affiliateMinWithdrawBank: minBank,
+    isLoaded: cfgLoaded,
+  } = usePublicConfig();
   const [method, setMethod] = useState<'BANK' | 'WALLET_BALANCE'>('WALLET_BALANCE');
   const [amount, setAmount] = useState(String(max));
   const [bank, setBank] = useState({ bankName: '', accountNumber: '', accountName: '' });
@@ -611,7 +614,10 @@ function WithdrawForm({
   const valid =
     amountNum > 0 &&
     (!knownMax || amountNum <= max) &&
-    (method !== 'BANK' || amountNum >= minBank) &&
+    // Chờ config THẬT trước khi cho gửi lệnh rút về ngân hàng: mốc mặc định (50k) có thể khác
+    // config đang chạy, nên trong ~200ms đầu CTV gõ 60k sẽ thấy nút hợp lệ rồi bị BE từ chối,
+    // và nhãn "Tối thiểu 50k" cũng hiện sai trong khoảng đó.
+    (method !== 'BANK' || (cfgLoaded && amountNum >= minBank)) &&
     bankValid &&
     !mut.isPending;
 
@@ -631,7 +637,7 @@ function WithdrawForm({
         <MethodChip
           active={method === 'BANK'}
           title="Ngân hàng"
-          sub={`Tối thiểu ${formatVndShort(minBank)}`}
+          sub={cfgLoaded ? `Tối thiểu ${formatVndShort(minBank)}` : 'Đang tải mốc tối thiểu…'}
           onClick={() => setMethod('BANK')}
         />
       </Box>

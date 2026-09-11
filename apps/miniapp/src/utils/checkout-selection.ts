@@ -57,5 +57,10 @@ export function reconcileSelection(
 ): string[] | undefined {
   if (selection == null) return undefined;
   const alive = selection.filter((id) => cartItemIds.includes(id));
-  return alive.length > 0 ? alive : undefined;
+  if (alive.length > 0) return alive;
+  // Không còn dòng nào → lựa chọn đã hết hạn (khách đã xoá món đó khỏi giỏ). Dọn luôn bộ nhớ:
+  // giữ lại thì lần vào /checkout sau vẫn phải đối chiếu một danh sách chết. Rơi về toàn giỏ —
+  // màn thanh toán liệt kê rõ từng món sẽ trả tiền nên khách vẫn thấy được mình đang mua gì.
+  clearCheckoutSelection();
+  return undefined;
 }

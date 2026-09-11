@@ -55,4 +55,10 @@ describe('reconcileSelection — đối chiếu với giỏ thật', () => {
   it('không còn dòng nào → toàn giỏ (không tạo đơn rỗng)', () => {
     expect(reconcileSelection(['gone'], ['a', 'c'])).toBeUndefined();
   });
+
+  it('lựa chọn hết hạn thì DỌN LUÔN bộ nhớ, không để lần sau phải đối chiếu danh sách chết', () => {
+    rememberCheckoutSelection(['gone']);
+    expect(reconcileSelection(['gone'], ['a'])).toBeUndefined();
+    expect(recallCheckoutSelection()).toBeUndefined();
+  });
 });
