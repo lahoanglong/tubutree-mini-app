@@ -216,3 +216,42 @@ describe('PayrollService.recomputeDay — đơn giá khoá theo ngày', () => {
     expect(pay.gross).toBe(80000);
   });
 });
+
+describe('PayrollService.recomputeStaffMonth — tiền phạt thật sự bị trừ', () => {
+  it('ngày huỷ ca (net âm) kéo giảm thực nhận cả tháng', async () => {
+    const upsert = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      shift: { findMany: jest.fn().mockResolvedValue([]) },
+      payrollAdjustment: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+      payrollDay: {
+        upsert: jest.fn().mockResolvedValue({}),
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([
+          { workedMinutes: 480, gross: 240000, fines: 0, net: 240000 },
+          { workedMinutes: 0, gross: 0, fines: 30000, net: -30000 },
+        ]),
+      },
+      payrollMonth: { findUnique: jest.fn().mockResolvedValue(null), upsert },
+    });
+
+    await mk(prisma).recomputeStaffMonth('u1', 2026, 7);
+
+    expect(upsert.mock.calls[0][0].update).toMatchObject({ gross: 240000, totalFines: 30000, net: 210000 });
+  });
+
+  it('phạt vượt lương cả tháng → thực nhận 0, không đòi ngược nhân viên', async () => {
+    const upsert = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      payrollDay: {
+        upsert: jest.fn().mockResolvedValue({}),
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([{ workedMinutes: 0, gross: 0, fines: 30000, net: -30000 }]),
+      },
+      payrollMonth: { findUnique: jest.fn().mockResolvedValue(null), upsert },
+    });
+
+    await mk(prisma).recomputeStaffMonth('u1', 2026, 7);
+
+    expect(upsert.mock.calls[0][0].update.net).toBe(0);
+  });
+});

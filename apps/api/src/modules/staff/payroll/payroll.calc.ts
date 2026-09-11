@@ -34,11 +34,19 @@ export interface DayPay {
   net: number;
 }
 
-/** gross=round(giờ×đơn giá); fines=Σ khoản dương; net=max(0, gross−Σ điều chỉnh) (MANUAL âm = thưởng). */
+/**
+ * gross = round(giờ × đơn giá); fines = Σ khoản dương; net = gross − Σ điều chỉnh (MANUAL âm =
+ * thưởng).
+ *
+ * net CÓ THỂ ÂM và đó là chủ ý: kẹp về 0 theo TỪNG NGÀY làm tiền phạt biến mất khi ngày đó
+ * không có giờ công. Ngày huỷ ca trễ là đúng tình huống đó — gross = 0, phạt 1h công bị kẹp
+ * lại thành 0, nên bảng lương hiện "Phạt: 30.000" cạnh "Thực nhận" không đổi một đồng, và
+ * người xem không biết tin số nào. Khoản âm là NỢ chuyển lên mức tháng; việc kẹp ≥ 0 làm ở đó
+ * (PayrollService.recomputeStaffMonth).
+ */
 export function computeDayPay(minutes: number, rate: number, adjustments: AdjLike[]): DayPay {
   const gross = Math.round((minutes / 60) * rate);
   const adjTotal = adjustments.reduce((s, a) => s + a.amount, 0);
   const fines = adjustments.reduce((s, a) => (a.amount > 0 ? s + a.amount : s), 0);
-  const net = Math.max(0, gross - adjTotal);
-  return { workedMinutes: minutes, hourlyRate: rate, gross, fines, net };
+  return { workedMinutes: minutes, hourlyRate: rate, gross, fines, net: gross - adjTotal };
 }

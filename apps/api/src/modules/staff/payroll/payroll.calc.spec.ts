@@ -60,9 +60,21 @@ describe('computeDayPay', () => {
     expect(r.net).toBe(35000);
   });
 
-  it('net không âm', () => {
-    const r = computeDayPay(30, 20000, [{ amount: 50000 }]); // 10k - 50k → 0
-    expect(r.net).toBe(0);
+  /**
+   * Kẹp net ≥ 0 theo TỪNG NGÀY làm tiền phạt biến mất: ngày huỷ ca không có giờ công nào nên
+   * gross = 0, phạt 30.000 kẹp lại thành 0 — bảng lương hiện "Phạt: 30.000" mà "Thực nhận"
+   * không đổi một đồng. Nay giữ số âm ở mức NGÀY (là khoản nợ), chỉ kẹp ở mức THÁNG.
+   */
+  it('phạt vượt lương ngày → net ÂM (khoản nợ chuyển lên tháng), không bị nuốt mất', () => {
+    const r = computeDayPay(30, 20000, [{ amount: 50000 }]); // 10k - 50k
+    expect(r.net).toBe(-40000);
+    expect(r.fines).toBe(50000);
+  });
+
+  it('ngày huỷ ca: không có giờ công + phạt 1h công → net = -30.000', () => {
+    const r = computeDayPay(0, 30000, [{ amount: 30000 }]);
+    expect(r.gross).toBe(0);
+    expect(r.net).toBe(-30000);
   });
 
   it('rate 0 → gross 0', () => {

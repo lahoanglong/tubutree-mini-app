@@ -133,7 +133,10 @@ export class PayrollService {
     const totalMinutes = days.reduce((s, d) => s + d.workedMinutes, 0);
     const gross = days.reduce((s, d) => s + d.gross, 0);
     const totalFines = days.reduce((s, d) => s + d.fines, 0);
-    const net = days.reduce((s, d) => s + d.net, 0);
+    // Kẹp ≥ 0 ở mức THÁNG, không phải từng ngày: ngày huỷ ca không có giờ công nên gross = 0,
+    // kẹp theo ngày sẽ nuốt mất tiền phạt (xem computeDayPay). Tổng âm cả tháng nghĩa là phạt
+    // vượt lương — vẫn trả 0, không đòi ngược nhân viên.
+    const net = Math.max(0, days.reduce((s, d) => s + d.net, 0));
 
     return this.prisma.payrollMonth.upsert({
       where: { staffId_year_month: { staffId, year, month } },

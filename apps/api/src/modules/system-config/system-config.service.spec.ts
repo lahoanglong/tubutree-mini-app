@@ -115,3 +115,59 @@ describe('SystemConfigService.set', () => {
     expect(await service.get<number>('wallet.withdraw_min')).toBe(150000);
   });
 });
+
+/**
+ * Kiểm tra kiểu không cứu được lỗi ĐƠN VỊ. Mô tả trong seed ghi "User nhận 70%" nhưng giá trị
+ * thật là 0.7 — admin nâng lên 80% rất dễ gõ "80": hoa hồng 50.000đ thành 4.000.000đ cộng thẳng
+ * vào ví rút được, và sau khi đã trả thì không đòi lại được.
+ */
+describe('SystemConfigService.set — biên đơn vị cho khoá nhạy cảm', () => {
+  function mk() {
+    const tx = {
+      systemConfig: { findUnique: jest.fn().mockResolvedValue({ value: 0.7 }), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+
+  it('tỉ lệ chia hoa hồng gõ 80 thay vì 0.8 → từ chối, không ghi gì', async () => {
+    const { svc, tx } = mk();
+    await expect(svc.set('cashback.merchant_user_share', 80, 'admin1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(tx.systemConfig.upsert).not.toHaveBeenCalled();
+  });
+
+  it('tỉ lệ âm → từ chối (trước đây trừ ngược vào ví user)', async () => {
+    const { svc } = mk();
+    await expect(svc.set('cashback.merchant_user_share', -0.5, 'admin1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('0.8 hợp lệ → ghi bình thường', async () => {
+    const { svc, tx } = mk();
+    await svc.set('cashback.merchant_user_share', 0.8, 'admin1');
+    expect(tx.systemConfig.upsert).toHaveBeenCalled();
+  });
+
+  it('cùng hậu tố _pct nhưng khác đơn vị: groupbuy nhận 15 (phần trăm nguyên), subscribe từ chối 15', async () => {
+    const a = mk();
+    await a.svc.set('groupbuy.discount_pct', 15, 'admin1');
+    expect(a.tx.systemConfig.upsert).toHaveBeenCalled();
+
+    const b = mk();
+    await expect(b.svc.set('subscribe.discount_pct', 15, 'admin1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('khoá không nằm trong bảng → không bị ràng buộc thêm', async () => {
+    const { svc, tx } = mk();
+    await svc.set('shipping.free_threshold', 500000, 'admin1');
+    expect(tx.systemConfig.upsert).toHaveBeenCalled();
+  });
+});
