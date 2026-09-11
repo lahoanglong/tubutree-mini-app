@@ -41,7 +41,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1' }) },
-    user: { findUnique: jest.fn(), update: jest.fn() },
+    user: { findUnique: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(3) },
     returnRequest: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
     order: { findUniqueOrThrow: jest.fn() },
     $transaction: jest.fn().mockResolvedValue([]),
@@ -546,16 +546,56 @@ describe('AdminService.setUserRole', () => {
   it('hạ role → gọi rbac.revokeGrantsAbove(phone, role mới) để chặn applyGrants tự phục hồi', async () => {
     const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'CUSTOMER', fullName: 'X' });
     const prisma = makePrisma({
-      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'ADMIN' }), update },
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'ADMIN' }), update, count: jest.fn().mockResolvedValue(3) },
     });
     await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
     expect(rbac.revokeGrantsAbove).toHaveBeenCalledWith('0899625240', 'CUSTOMER');
   });
 
+  // Một cú chạm nhầm không được phép khoá cả tổ chức ra ngoài: khôi phục chỉ còn cách vào
+  // thẳng DB bằng SQL.
+  it('admin tự hạ quyền CHÍNH MÌNH → từ chối, không đụng tới role', async () => {
+    const update = jest.fn();
+    const prisma = makePrisma({
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'admin1', phone: '0899625240', role: 'ADMIN' }), update, count: jest.fn().mockResolvedValue(5) },
+    });
+    await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('admin tự đổi role chính mình THÀNH ADMIN (không hạ) → vẫn cho qua', async () => {
+    const update = jest.fn().mockResolvedValue({ id: 'admin1', phone: '0899625240', role: 'ADMIN', fullName: 'X' });
+    const prisma = makePrisma({
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'admin1', phone: '0899625240', role: 'ADMIN' }), update, count: jest.fn().mockResolvedValue(1) },
+    });
+    await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'ADMIN')).resolves.toMatchObject({ ok: true });
+  });
+
+  it('hạ ADMIN CUỐI CÙNG → từ chối (không còn ai cấp lại quyền cho ai)', async () => {
+    const update = jest.fn();
+    const prisma = makePrisma({
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u2', phone: '0899625240', role: 'ADMIN' }), update, count: jest.fn().mockResolvedValue(1) },
+    });
+    await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'STAFF')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('hạ một ADMIN khi còn admin khác → cho qua', async () => {
+    const update = jest.fn().mockResolvedValue({ id: 'u2', phone: '0899625240', role: 'STAFF', fullName: 'X' });
+    const prisma = makePrisma({
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u2', phone: '0899625240', role: 'ADMIN' }), update, count: jest.fn().mockResolvedValue(2) },
+    });
+    await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'STAFF')).resolves.toMatchObject({ ok: true });
+  });
+
   it('rbac.revokeGrantsAbove lỗi → vẫn trả kết quả đổi role thành công (best-effort, không rollback role)', async () => {
     const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'CUSTOMER', fullName: 'X' });
     const prisma = makePrisma({
-      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'ADMIN' }), update },
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'ADMIN' }), update, count: jest.fn().mockResolvedValue(3) },
     });
     (rbac.revokeGrantsAbove as jest.Mock).mockRejectedValueOnce(new Error('db down'));
     const out = await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');

@@ -436,7 +436,19 @@ function StaffSection() {
                   prefixIcon={<Trash2 size={15} />}
                   style={{ color: 'var(--danger)' }}
                   disabled={revokeM.isPending}
-                  onClick={() => revokeM.mutate(m.phone as string)}
+                  onClick={() => {
+                    // Thao tác một chạm, không hoàn tác được từ trong app: hạ quyền nhầm một
+                    // quản trị viên thì chỉ người còn quyền mới cấp lại được. Cấp quyền ADMIN
+                    // đã hỏi lại (dòng ~398) — thu hồi thì chưa.
+                    if (
+                      !window.confirm(
+                        `Thu hồi quyền của ${m.fullName ?? m.phone}? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.`,
+                      )
+                    ) {
+                      return;
+                    }
+                    revokeM.mutate(m.phone as string);
+                  }}
                 >
                   Thu hồi
                 </Button>

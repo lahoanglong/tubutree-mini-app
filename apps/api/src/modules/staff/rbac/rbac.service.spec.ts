@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { RbacService } from './rbac.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { User } from '@prisma/client';
@@ -252,5 +253,46 @@ describe('RbacService.revokeGrantsAbove', () => {
       where: { phone: '0900000001', revokedAt: null, role: { in: ['ADMIN'] } },
       data: { revokedAt: expect.any(Date) },
     });
+  });
+});
+
+describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', () => {
+  function txWith(user: Record<string, unknown> | null, adminCount = 3) {
+    const tx = {
+      roleGrant: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue(user),
+        update: jest.fn().mockResolvedValue({}),
+        count: jest.fn().mockResolvedValue(adminCount),
+      },
+      dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
+    };
+    const prisma = {
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    return { prisma, tx };
+  }
+
+  it('admin bấm Thu hồi trên dòng CHÍNH MÌNH → từ chối, không hạ role', async () => {
+    const { prisma, tx } = txWith({ id: 'admin1', role: 'ADMIN' });
+    await expect(new RbacService(prisma).revokeGrant('admin1', '0899625240')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it('thu hồi ADMIN CUỐI CÙNG → từ chối', async () => {
+    const { prisma, tx } = txWith({ id: 'u2', role: 'ADMIN' }, 1);
+    await expect(new RbacService(prisma).revokeGrant('admin1', '0899625240')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it('thu hồi một ADMIN khi còn admin khác → vẫn hạ role như cũ', async () => {
+    const { prisma, tx } = txWith({ id: 'u2', role: 'ADMIN' }, 2);
+    const out = await new RbacService(prisma).revokeGrant('admin1', '0899625240');
+    expect(tx.user.update).toHaveBeenCalled();
+    expect(out.downgraded).toBe(true);
   });
 });

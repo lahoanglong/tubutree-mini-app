@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { User, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -92,6 +92,17 @@ export class RbacService {
         data: { revokedAt: new Date() },
       });
       const user = await tx.user.findUnique({ where: { phone: normalized } });
+      // Cùng hai lối khoá tổ chức ra ngoài như AdminService.setUserRole: nút "Thu hồi" trong
+      // app hiện ngay trên dòng của chính admin đang đăng nhập và không hỏi lại lần nào.
+      if (user && user.id === adminId) {
+        throw new BadRequestException('Không thể tự thu hồi quyền của chính mình — nhờ một quản trị viên khác thực hiện.');
+      }
+      if (user?.role === 'ADMIN') {
+        const admins = await tx.user.count({ where: { role: 'ADMIN' } });
+        if (admins <= 1) {
+          throw new BadRequestException('Đây là quản trị viên cuối cùng — cấp quyền cho người khác trước khi thu hồi.');
+        }
+      }
       let downgraded = false;
       if (user && (user.role === 'STAFF' || user.role === 'ADMIN')) {
         const base = await this.resolveBaseRole(user.id, tx);

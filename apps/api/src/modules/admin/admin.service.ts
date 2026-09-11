@@ -186,6 +186,18 @@ export class AdminService {
     const user = await this.prisma.user.findUnique({ where: { phone: normalized } });
     if (!user) throw new NotFoundException('Không tìm thấy user với SĐT này (cần mở Mini App Zalo ≥1 lần).');
     const previousRole = user.role;
+    // Hai cách khoá cả tổ chức ra ngoài, trước đây đều không có gì chặn — và khôi phục thì chỉ
+    // còn đường vào thẳng DB bằng SQL. Nút "Thu hồi" trong app nằm ngay trên dòng của chính
+    // admin đang đăng nhập, chỉ cần một cú chạm nhầm.
+    if (user.id === adminId && role !== 'ADMIN') {
+      throw new BadRequestException('Không thể tự hạ quyền của chính mình — nhờ một quản trị viên khác thực hiện.');
+    }
+    if (previousRole === 'ADMIN' && role !== 'ADMIN') {
+      const admins = await this.prisma.user.count({ where: { role: 'ADMIN' } });
+      if (admins <= 1) {
+        throw new BadRequestException('Đây là quản trị viên cuối cùng — cấp quyền cho người khác trước khi hạ.');
+      }
+    }
     const updated = await this.prisma.user.update({
       where: { id: user.id },
       data: { role },
