@@ -234,6 +234,7 @@ function makeReturnPrisma(opts: {
       user: { update: userUpdate },
       variation: { update: variationUpdate },
       coinTransaction: { create: coinCreate },
+      orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     }),
   );
   const prisma = {
@@ -682,7 +683,7 @@ describe('AdminService.getDashboardStats', () => {
 // giả lập order.updateMany, khác với `makePrisma` mặc định (chỉ resolve [] không gọi callback).
 function makeStatusPrisma(order: Record<string, unknown>, finalOrder: Record<string, unknown>, flipCount = 1) {
   const txUpdateMany = jest.fn().mockResolvedValue({ count: flipCount });
-  const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) => cb({ order: { updateMany: txUpdateMany } }));
+  const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) => cb({ order: { updateMany: txUpdateMany }, orderStatusHistory: { create: jest.fn().mockResolvedValue({}) } }));
   const prisma = {
     order: {
       findFirst: jest.fn().mockResolvedValue(order),

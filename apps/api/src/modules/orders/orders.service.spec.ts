@@ -39,6 +39,7 @@ function makeService(
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       order: { updateMany },
+      orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
       user: { update: userUpdate },
       variation: { update: variationUpdate },
       coinTransaction: { create: coinCreate },

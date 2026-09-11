@@ -44,7 +44,13 @@ export class OrderStatusService {
   async setStatus(
     orderId: string,
     targetStatus: OrderStatus,
-    opts: { note?: string; notifyEvent?: string } = {},
+    opts: {
+      note?: string;
+      notifyEvent?: string;
+      /** Ai đổi — để lại vết trong order_status_history (mặc định SYSTEM). */
+      actorType?: 'ADMIN' | 'CUSTOMER' | 'MERCHANT' | 'PANCAKE' | 'SYSTEM';
+      actorId?: string;
+    } = {},
   ) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: orderId }, { code: orderId }] },
@@ -68,6 +74,21 @@ export class OrderStatusService {
         },
       });
       if (flip.count === 0) return false;
+
+      // Ghi vết TRONG cùng transaction với lần lật trạng thái: đổi trạng thái trước đây chỉ để
+      // lại một dòng log ứng dụng (xoay vòng theo container) và một chuỗi note nối thêm, không
+      // có actor. Một tài khoản admin bị chiếm chuyển 50 đơn đã giao sang CANCELLED là mỗi đơn
+      // tự động hoàn tổng tiền vào ví khách, mà sau đó không truy được ai làm gì.
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          fromStatus: order.status,
+          toStatus: targetStatus,
+          actorType: opts.actorType ?? 'SYSTEM',
+          actorId: opts.actorId ?? null,
+          note: opts.note ?? null,
+        },
+      });
 
       if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
         await this.reversal.reverseFinancials(tx, order);

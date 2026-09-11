@@ -410,7 +410,10 @@ export class MerchantService {
     // giờ credit/reverse — mất vĩnh viễn, P1-1). Ủy quyền cho OrderStatusService — cùng nguồn
     // ghi status với admin/pancake. Xem docs/2026-09-08-review-progress.md.
     try {
-      return await this.orderStatus.setStatus(order.id, status as OrderStatus);
+      return await this.orderStatus.setStatus(order.id, status as OrderStatus, {
+        actorType: 'MERCHANT',
+        actorId: userId,
+      });
     } catch (err) {
       toHttpBadRequest(err);
     }

@@ -26,6 +26,7 @@ function setup(order: Record<string, unknown> | null) {
   const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       order: { updateMany: txUpdateMany },
+      orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
       user: { update: txUserUpdate },
       coinTransaction: { create: txCoinCreate },
       variation: { update: txVariationUpdate },

@@ -1679,6 +1679,27 @@ model GroupBuyMember {
 
 // Yêu cầu đổi/trả (§6.4): chỉ lỗi NSX, window 7 ngày, admin duyệt → hoàn Ví +
 // reverse điểm + reverse commission CTV.
+/// Sổ ghi vết đổi trạng thái đơn hàng.
+///
+/// Trước đây đổi trạng thái chỉ để lại một dòng log ứng dụng (xoay vòng theo container) và một
+/// chuỗi note nối thêm — không có actor. Một tài khoản admin bị chiếm chuyển 50 đơn đã giao
+/// sang CANCELLED là mỗi đơn tự động hoàn tổng tiền vào ví khách, mà sau đó không truy được
+/// admin nào thao tác đơn nào.
+model OrderStatusHistory {
+  id         String   @id @default(cuid())
+  orderId    String
+  fromStatus String
+  toStatus   String
+  /// ADMIN | CUSTOMER | MERCHANT | PANCAKE | SYSTEM
+  actorType  String
+  actorId    String?
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
+}
+
 model ReturnRequest {
   id           String       @id @default(cuid())
   orderId      String

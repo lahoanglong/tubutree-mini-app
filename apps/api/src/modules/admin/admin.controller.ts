@@ -219,6 +219,12 @@ export class AdminController {
     return this.admin.listOrders(q.page, q.limit, status, search);
   }
 
+  /** Sổ ghi vết: ai đổi trạng thái đơn này, từ đâu sang đâu, lúc nào. */
+  @Get('orders/:id/status-history')
+  orderStatusHistory(@Param('id') id: string) {
+    return this.admin.orderStatusHistory(id);
+  }
+
   @Put('orders/:id/status')
   updateOrderStatus(
     @CurrentUser('sub') adminId: string,

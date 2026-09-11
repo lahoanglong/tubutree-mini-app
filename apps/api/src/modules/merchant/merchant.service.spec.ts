@@ -301,7 +301,10 @@ describe('MerchantService', () => {
       const svc = new MerchantService(prisma, orderStatus);
       const res = await svc.updateMerchantOrderStatus('u1', 'ord-1', 'PACKED');
       expect(res.status).toBe('PACKED');
-      expect(orderStatus.setStatus).toHaveBeenCalledWith('ord-1', 'PACKED');
+      expect(orderStatus.setStatus).toHaveBeenCalledWith('ord-1', 'PACKED', {
+        actorType: 'MERCHANT',
+        actorId: expect.any(String),
+      });
     });
 
     it('ném BadRequestException nếu trạng thái đơn hàng không hợp lệ', async () => {

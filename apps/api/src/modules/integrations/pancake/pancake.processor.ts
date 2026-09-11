@@ -128,7 +128,7 @@ export class PancakeProcessor extends WorkerHost {
     // KHÔNG phải lỗi thật). Lỗi khác (DB down, loyalty/affiliate throw thật) phải NÉM TIẾP
     // để process() đánh dấu FAILED + BullMQ retry — nuốt hết ở đây sẽ mất event vĩnh viễn.
     try {
-      await this.orderStatus.setStatus(order.id, status);
+      await this.orderStatus.setStatus(order.id, status, { actorType: 'PANCAKE' });
     } catch (err) {
       if (err instanceof InvalidOrderTransitionError) {
         this.logger.warn(`Bỏ qua webhook status=${status} cho đơn ${order.code}: ${err.message}`);
@@ -214,7 +214,7 @@ export class PancakeProcessor extends WorkerHost {
     // Ủy quyền cho OrderStatusService — trước đây chỉ đảo điểm/hoa hồng mà KHÔNG hoàn tiền/
     // restock/release flash quota khi POS hủy đơn (P0-4, docs/2026-09-08-review-progress.md).
     try {
-      await this.orderStatus.setStatus(order.id, 'CANCELLED');
+      await this.orderStatus.setStatus(order.id, 'CANCELLED', { actorType: 'PANCAKE' });
     } catch (err) {
       if (err instanceof InvalidOrderTransitionError) {
         this.logger.warn(`Bỏ qua webhook cancelled cho đơn ${order.code}: ${err.message}`);

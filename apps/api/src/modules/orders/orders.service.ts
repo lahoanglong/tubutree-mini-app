@@ -62,6 +62,17 @@ export class OrdersService {
         data: { status: 'CANCELLED' },
       });
       if (res.count === 0) return false;
+      // Ghi vết trong cùng transaction — luồng khách tự huỷ không đi qua OrderStatusService
+      // nhưng vẫn phải để lại actor, nếu không thì sổ lịch sử có lỗ đúng ở nhóm đơn đông nhất.
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          fromStatus: order.status,
+          toStatus: 'CANCELLED',
+          actorType: 'CUSTOMER',
+          actorId: userId,
+        },
+      });
       // Hoàn ví/xu + restock + release flash quota — logic dùng chung với admin.reviewReturn/
       // OrderStatusService (xem order-reversal.service.ts), tránh chép tay lệch nhau (P0-4
       // trong docs/2026-09-08-review-progress.md). Refetch paymentStatus TRONG tx qua guard

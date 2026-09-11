@@ -119,6 +119,17 @@ export class AdminService {
       if (flipped.count === 0) {
         throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
       }
+      // Duyệt đổi/trả cũng là một lần đổi trạng thái có hoàn tiền — phải có vết như mọi lối khác.
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          fromStatus: 'DELIVERED',
+          toStatus: 'RETURNED',
+          actorType: 'ADMIN',
+          actorId: adminId,
+          note: note ?? null,
+        },
+      });
       // Hoàn đúng KÊNH thanh toán + restock + release flash quota — logic dùng chung với
       // orders.service.cancel/OrderStatusService (xem order-reversal.service.ts), tránh
       // 3 bản chép tay lệch nhau (P0-4 trong docs/2026-09-08-review-progress.md).
@@ -131,6 +142,36 @@ export class AdminService {
       .notify(orderForReturn.userId, 'RETURN_APPROVED', { order_code: orderForReturn.code })
       .catch(() => undefined);
     return this.withReturnContext(await this.prisma.returnRequest.findUnique({ where: { id } }));
+  }
+
+  /**
+   * Lịch sử đổi trạng thái của một đơn — ai đổi, từ đâu sang đâu, lúc nào.
+   *
+   * Có bảng mà không có đường đọc thì vẫn phải vào DB bằng SQL mỗi lần cần tra.
+   */
+  async orderStatusHistory(orderCode: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: orderCode }, { code: orderCode }] },
+      select: { id: true, code: true },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    const rows = await this.prisma.orderStatusHistory.findMany({
+      where: { orderId: order.id },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+    });
+    const actorIds = [...new Set(rows.map((r) => r.actorId).filter((id): id is string => !!id))];
+    const actors = actorIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: actorIds } },
+          select: { id: true, fullName: true, phone: true },
+        })
+      : [];
+    const actorMap = new Map(actors.map((a) => [a.id, a]));
+    return {
+      orderCode: order.code,
+      history: rows.map((r) => ({ ...r, actor: r.actorId ? (actorMap.get(r.actorId) ?? null) : null })),
+    };
   }
 
   // ── Dealer applications ──
@@ -356,6 +397,8 @@ export class AdminService {
     try {
       updated = await this.orderStatus.setStatus(before.id, status, {
         note: note ? `Admin: ${note}` : undefined,
+        actorType: 'ADMIN',
+        actorId: adminId,
       });
     } catch (err) {
       toHttpBadRequest(err);

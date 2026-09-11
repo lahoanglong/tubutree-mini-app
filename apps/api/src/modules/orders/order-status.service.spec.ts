@@ -65,10 +65,68 @@ describe('OrderStatusService', () => {
   });
 
   function mockTx(flipCount = 1) {
-    const tx = { order: { updateMany: jest.fn().mockResolvedValue({ count: flipCount }) } };
+    const tx = {
+      order: { updateMany: jest.fn().mockResolvedValue({ count: flipCount }) },
+      // Sổ ghi vết đổi trạng thái — ghi trong CÙNG transaction với lần lật status.
+      orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
     prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(tx));
     return tx;
   }
+
+  /**
+   * Đổi trạng thái trước đây chỉ để lại một dòng log ứng dụng (xoay vòng theo container) và một
+   * chuỗi note nối thêm, không có actor. Một tài khoản admin bị chiếm chuyển 50 đơn đã giao sang
+   * CANCELLED là mỗi đơn tự động hoàn tổng tiền vào ví khách, mà sau đó không truy được ai làm gì.
+   */
+  it('ghi vết đúng from/to + actor trong CÙNG transaction với lần lật status', async () => {
+    const order = makeOrder({ status: 'CONFIRMED' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'PACKED' });
+    const tx = mockTx();
+
+    await service.setStatus('o1', 'PACKED' as never, {
+      actorType: 'ADMIN',
+      actorId: 'admin-1',
+      note: 'gói xong',
+    });
+
+    expect(tx.orderStatusHistory.create).toHaveBeenCalledWith({
+      data: {
+        orderId: 'o1',
+        fromStatus: 'CONFIRMED',
+        toStatus: 'PACKED',
+        actorType: 'ADMIN',
+        actorId: 'admin-1',
+        note: 'gói xong',
+      },
+    });
+  });
+
+  it('không truyền actor (webhook/cron) → SYSTEM, vẫn có vết', async () => {
+    const order = makeOrder({ status: 'CONFIRMED' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'PACKED' });
+    const tx = mockTx();
+
+    await service.setStatus('o1', 'PACKED' as never);
+
+    expect(tx.orderStatusHistory.create.mock.calls[0][0].data).toMatchObject({
+      actorType: 'SYSTEM',
+      actorId: null,
+    });
+  });
+
+  it('thua race (flip count 0) → KHÔNG ghi vết giả', async () => {
+    const order = makeOrder({ status: 'CONFIRMED' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue(order);
+    const tx = mockTx(0);
+
+    await service.setStatus('o1', 'PACKED' as never);
+
+    expect(tx.orderStatusHistory.create).not.toHaveBeenCalled();
+  });
 
   it('DELIVERED: credit điểm + lock hoa hồng + refer-reward, KHÔNG gọi reversal', async () => {
     const order = makeOrder({ status: 'SHIPPING' });
@@ -154,3 +212,9 @@ describe('OrderStatusService', () => {
     });
   });
 });
+
+/**
+ * Đổi trạng thái trước đây chỉ để lại một dòng log ứng dụng (xoay vòng theo container) và một
+ * chuỗi note nối thêm, không có actor. Một tài khoản admin bị chiếm chuyển 50 đơn đã giao sang
+ * CANCELLED là mỗi đơn tự động hoàn tổng tiền vào ví khách, mà sau đó không truy được ai làm gì.
+ */
