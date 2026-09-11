@@ -46,9 +46,15 @@ export class GameGiftService {
       where: { id: userId },
       select: { referredById: true },
     });
+    // Trần 200: đây là DANH SÁCH để hiển thị. Một CTV lâu năm có thể có hàng nghìn người được
+    // giới thiệu — tải hết về rồi render hết là tốn băng thông và treo màn hình cho đúng một
+    // tính năng tặng nước. (friendIds() bên trên KHÔNG đặt trần vì nó dùng để kiểm tra quyền —
+    // cắt bớt ở đó sẽ loại nhầm bạn bè thật.)
     const referees = await this.prisma.user.findMany({
       where: { referredById: userId },
       select: { id: true, fullName: true },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
     });
     const list: { id: string; fullName: string | null }[] = [...referees];
     if (me?.referredById) {
