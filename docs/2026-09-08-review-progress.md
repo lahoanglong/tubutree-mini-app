@@ -475,9 +475,17 @@ chạm, safe-area, `aria-pressed`, làm tròn % giảm.
 
 Bật `log_min_duration_statement=0` trên Postgres thật, đếm số câu SQL mỗi endpoint rồi tắt lại:
 `/products` 3 · `/feed` 7 · `/cart` 6 · `/orders` 2 · `/me/coins` 5 · `/game/profile` 7 ·
-`/me/wishlist` 1 · `/categories` 1. **Phát hiện:** `SystemConfigService.get()` không cache —
-`/game/profile` đọc bảng `system_configs` 6 lần trong 1 request. Đây là hệ số nhân hệ thống
-(config được đọc ở khắp pricing/loyalty/game/checkout) → ứng viên tối ưu số 1 cho lượt sau.
+`/me/wishlist` 1 · `/categories` 1.
+
+**Kết luận (đã kiểm lại):** KHÔNG có N+1 trên các đường đọc nóng. Ban đầu tôi ghi
+"`SystemConfigService` không cache" vì thấy `/game/profile` đọc `system_configs` 6 lần — **ghi
+nhận đó SAI**. Gọi lại endpoint 3 lần liên tiếp: lần 1 = 6 truy vấn, lần 2 và 3 = **0**. Service
+đã có cache in-memory TTL 60s theo từng key; 6 truy vấn chỉ là cold-start cho 6 key khác nhau,
+đúng như thiết kế. Các endpoint còn lại cũng dùng `findMany` gom `in: [...]` chứ không truy vấn
+theo từng dòng (đã đọc `catalog.service.ts`, `community-feed.service.ts`).
+
+Còn đáng làm ở Phase 6: đo lại trên DB có DỮ LIỆU THẬT (DB dev gần như rỗng nên số đo chỉ phản
+ánh chi phí cố định, không lộ được chỗ tăng theo N), và đo kích thước bundle FE.
 
 ## Verify cuối lượt
 
