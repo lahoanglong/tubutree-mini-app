@@ -135,6 +135,19 @@ export class PayrollService {
     return pay;
   }
 
+  /**
+   * Ném lỗi nếu tháng chứa `workDate` đã chốt/đã trả.
+   *
+   * Public để nơi GHI dữ liệu chấm công gọi được TRƯỚC khi ghi: nếu chỉ chặn ở recomputeDay
+   * (chạy SAU lần ghi và không nằm chung transaction) thì phiên đã đổi trong DB rồi API mới trả
+   * 400 — quản lý tưởng thất bại, còn dữ liệu thì đã lệch.
+   */
+  async assertMonthEditable(staffId: string, workDate: Date): Promise<void> {
+    if (await this.isMonthLocked(staffId, workDate)) {
+      throw new BadRequestException('Tháng lương đã chốt/đã trả — mở lại tháng trước khi sửa.');
+    }
+  }
+
   /** Tháng chứa `workDate` đã FINALIZED/PAID chưa (theo mốc VN — workDate là midnight UTC của date-key VN). */
   private async isMonthLocked(staffId: string, workDate: Date): Promise<boolean> {
     const month = await this.prisma.payrollMonth.findUnique({

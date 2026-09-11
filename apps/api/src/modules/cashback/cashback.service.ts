@@ -217,7 +217,17 @@ export class CashbackService {
       status,
       raw: { adminReview: { adminId, note: note ?? null, at: new Date().toISOString() } },
     };
-    await this.applyToExisting(existing, synthetic, status, existing.userReward);
+    const result = await this.applyToExisting(existing, synthetic, status, existing.userReward);
+    // Đường postback thưởng xu giới thiệu khi giao dịch chuyển sang CONFIRMED (xem ingest) —
+    // duyệt tay mà bỏ bước này thì cùng một giao dịch, đi lối admin thì người giới thiệu KHÔNG
+    // nhận xu, đi lối postback thì có. Mà duyệt tay chính là lối dành cho giao dịch bị treo.
+    if (result.becameConfirmed && result.confirmedUserId) {
+      await this.coins.grantReferralCoins(result.confirmedUserId).catch((err) =>
+        this.logger.error(
+          `Thưởng xu giới thiệu lỗi (referee=${result.confirmedUserId}): ${err instanceof Error ? err.message : err}`,
+        ),
+      );
+    }
     this.logger.warn(
       `Admin ${adminId} đặt cashback ${existing.merchantOrderId} (${existing.provider}): ${existing.status} → ${status}${note ? ` — ${note}` : ''}`,
     );

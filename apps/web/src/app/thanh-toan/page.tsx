@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -49,18 +49,21 @@ export default function CheckoutPage() {
   // Điểm Xanh: Mini App cho tiêu, web thì không — cùng một giỏ mà mua trên web đắt hơn.
   const [usePoints, setUsePoints] = useState(false);
   // Quote đầu tiên (pointsToUse = 0) trả về pointsBalance để biết khách có bao nhiêu điểm.
-  const pointsBalance = useRef(0);
+  // PHẢI là state: dùng useRef thì lần ghi trong effect không kích hoạt render nào nữa, mà render
+  // có quote chính là render cuối của luồng khởi động (refetchOnWindowFocus đang tắt) — ô "Dùng
+  // Điểm Xanh" sẽ KHÔNG BAO GIỜ hiện, tức tính năng vừa thêm không dùng được.
+  const [pointsBalance, setPointsBalance] = useState(0);
 
   const quoteQ = useQuery({
     queryKey: ['quote', addressId, sfCtx.slug, usePoints],
     queryFn: () =>
-      checkoutQuote(addressId!, usePoints ? pointsBalance.current : 0, sfCtx.slug ?? undefined),
+      checkoutQuote(addressId!, usePoints ? pointsBalance : 0, sfCtx.slug ?? undefined),
     enabled: !!addressId && status === 'authenticated',
   });
   useEffect(() => {
     // Giữ lại số dư điểm của lần quote gần nhất — khi bật "dùng điểm", BE tự kẹp theo trần
     // loyalty.max_redeem_pct nên gửi toàn bộ số dư là an toàn.
-    if (quoteQ.data && !usePoints) pointsBalance.current = quoteQ.data.pointsBalance;
+    if (quoteQ.data && !usePoints) setPointsBalance(quoteQ.data.pointsBalance);
   }, [quoteQ.data, usePoints]);
 
   const place = useMutation({
@@ -69,7 +72,7 @@ export default function CheckoutPage() {
         {
           addressId: addressId!,
           paymentMethod: payment,
-          pointsToUse: usePoints ? pointsBalance.current : 0,
+          pointsToUse: usePoints ? pointsBalance : 0,
           storefrontSlug: sfCtx.slug ?? undefined,
           referralCode: sfCtx.referralCode ?? undefined,
         },
@@ -186,11 +189,11 @@ export default function CheckoutPage() {
             <Row label={`Điểm Xanh (${quote!.pointsUsed})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
           )}
           <Row label="Phí vận chuyển" value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : '…'} />
-          {pointsBalance.current > 0 && (
+          {pointsBalance > 0 && (
             <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-leaf-200 bg-leaf-50 p-2 text-sm">
               <input type="checkbox" checked={usePoints} onChange={(e) => setUsePoints(e.target.checked)} />
               <span className="text-leaf-700">
-                Dùng {pointsBalance.current} Điểm Xanh
+                Dùng {pointsBalance} Điểm Xanh
               </span>
             </label>
           )}

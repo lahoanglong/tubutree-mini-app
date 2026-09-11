@@ -739,10 +739,19 @@ export class CommunityFeedService {
     if (!comment) throw new NotFoundException('Bình luận không tồn tại.');
     if (comment.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Không có quyền gỡ bình luận này.');
 
-    // Trả lại điểm đã cộng cho NGƯỜI TRẢ LỜI từ chính bình luận này (ANSWER + BEST_ANSWER ghi
-    // theo refId = commentId). Trước đây chỉ xoá BÀI mới đảo điểm, nên gỡ một câu trả lời vi
-    // phạm vẫn để người viết giữ nguyên hạng đã lên nhờ nó.
+    // Trả lại điểm đã cộng cho NGƯỜI TRẢ LỜI từ chính bình luận này. Trước đây chỉ xoá BÀI mới
+    // đảo điểm, nên gỡ một câu trả lời vi phạm vẫn để người viết giữ nguyên hạng lên nhờ nó.
+    //
+    // Hai nguồn điểm, HAI refId khác nhau — phải đảo cả hai:
+    //  - ANSWER      ghi theo refId = commentId (xem addComment)
+    //  - BEST_ANSWER ghi theo refId = postId   (xem setBestAnswer)
+    // Chỉ đảo theo commentId thì người viết giữ nguyên điểm best-answer; tệ hơn, removeComment
+    // đặt bestCommentId = null nên chủ bài chọn lại người khác là cộng thêm một lượt nữa —
+    // vòng chọn–gỡ–chọn lại farm được điểm.
     await this.reverseReputationForRef(comment.userId, commentId, 'REVERSE_COMMENT');
+    if (comment.isAccepted) {
+      await this.reverseReputationForRef(comment.userId, comment.postId, 'REVERSE_BEST_ANSWER');
+    }
 
     // Bình luận đang được chọn là câu trả lời hay nhất: bỏ cờ + gỡ con trỏ ở bài, nếu không
     // bài sẽ trỏ tới một comment đã ẩn (getComments lọc mất) → hiện "đã có best answer" mà

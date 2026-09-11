@@ -77,10 +77,8 @@ describe('PancakeOrderService.pushOrder', () => {
 describe('PancakeOrderService.enqueuePush', () => {
   it('add job vào queue với jobId=orderId (dedupe cùng đơn)', async () => {
     const add = jest.fn().mockResolvedValue({});
-    const remove = jest.fn().mockResolvedValue(1);
-    const prisma = {} as unknown as PrismaService;
-    const client = {} as unknown as PancakeClient;
-    const svc = new PancakeOrderService(prisma, client, { add, remove } as never);
+    const getJob = jest.fn().mockResolvedValue(null);
+    const svc = new PancakeOrderService({} as unknown as PrismaService, {} as unknown as PancakeClient, { add, getJob } as never);
     await svc.enqueuePush('o1');
     expect(add).toHaveBeenCalledWith('push', { orderId: 'o1' }, { jobId: 'o1' });
   });
@@ -93,22 +91,51 @@ describe('PancakeOrderService.enqueuePush', () => {
    * remove() là no-op với job đang chạy (script removeJob bỏ qua job bị khoá) nên vẫn giữ
    * đúng tác dụng chống đẩy đôi khi job cũ còn active.
    */
-  it('xoá job cũ trước khi add — nếu không, job đã thất bại chặn mọi lần enqueue sau', async () => {
+  it('job cũ ĐÃ THẤT BẠI → xoá rồi add lại (nếu không, đơn hỏng chặn mọi lần enqueue sau)', async () => {
     const calls: string[] = [];
+    const remove = jest.fn().mockImplementation(() => { calls.push('remove'); return Promise.resolve(); });
     const add = jest.fn().mockImplementation(() => { calls.push('add'); return Promise.resolve({}); });
-    const remove = jest.fn().mockImplementation(() => { calls.push('remove'); return Promise.resolve(1); });
-    const svc = new PancakeOrderService({} as unknown as PrismaService, {} as unknown as PancakeClient, { add, remove } as never);
+    const getJob = jest.fn().mockResolvedValue({ getState: jest.fn().mockResolvedValue('failed'), remove });
+    const svc = new PancakeOrderService({} as unknown as PrismaService, {} as unknown as PancakeClient, { add, getJob } as never);
 
     await svc.enqueuePush('o1');
 
-    expect(remove).toHaveBeenCalledWith('o1');
     expect(calls).toEqual(['remove', 'add']);
   });
 
-  it('remove lỗi (job đang chạy/redis chớp) → vẫn add, không ném ra ngoài', async () => {
+  /**
+   * pushOrder chỉ ghi pancakeOrderId khi Pancake TRẢ VỀ id. Nếu Pancake đã tạo đơn nhưng
+   * response thiếu id thì job vẫn "completed" trong khi pancakeOrderId còn null — mà cron cứu hộ
+   * quét đúng điều kiện đó. Xoá cả job completed là cứ 15 phút lại tạo thêm một đơn TRÙNG ở kho
+   * vật lý, vô thời hạn.
+   */
+  it('job cũ đã HOÀN TẤT → KHÔNG xoá, để BullMQ dedupe chặn đẩy đơn trùng', async () => {
+    const remove = jest.fn();
     const add = jest.fn().mockResolvedValue({});
-    const remove = jest.fn().mockRejectedValue(new Error('locked'));
-    const svc = new PancakeOrderService({} as unknown as PrismaService, {} as unknown as PancakeClient, { add, remove } as never);
+    const getJob = jest.fn().mockResolvedValue({ getState: jest.fn().mockResolvedValue('completed'), remove });
+    const svc = new PancakeOrderService({} as unknown as PrismaService, {} as unknown as PancakeClient, { add, getJob } as never);
+
+    await svc.enqueuePush('o1');
+
+    expect(remove).not.toHaveBeenCalled();
+    expect(add).toHaveBeenCalled();
+  });
+
+  it('job đang CHẠY → KHÔNG xoá (chống đẩy đôi)', async () => {
+    const remove = jest.fn();
+    const add = jest.fn().mockResolvedValue({});
+    const getJob = jest.fn().mockResolvedValue({ getState: jest.fn().mockResolvedValue('active'), remove });
+    const svc = new PancakeOrderService({} as unknown as PrismaService, {} as unknown as PancakeClient, { add, getJob } as never);
+
+    await svc.enqueuePush('o1');
+
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('không đọc được trạng thái job (redis chớp) → vẫn add, không ném ra ngoài', async () => {
+    const add = jest.fn().mockResolvedValue({});
+    const getJob = jest.fn().mockRejectedValue(new Error('redis down'));
+    const svc = new PancakeOrderService({} as unknown as PrismaService, {} as unknown as PancakeClient, { add, getJob } as never);
 
     await expect(svc.enqueuePush('o1')).resolves.toBeUndefined();
     expect(add).toHaveBeenCalled();

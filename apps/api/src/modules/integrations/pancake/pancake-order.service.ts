@@ -41,16 +41,27 @@ export class PancakeOrderService {
    * jobId=orderId → BullMQ tự chặn trùng job cho cùng 1 đơn (dedupe) khi enqueue nhiều lần
    * (checkout gọi + cron reconcile gọi lại) trong lúc job cũ còn active/waiting.
    *
-   * PHẢI xoá job cũ trước khi add: BullMQ giữ job hash lại sau khi job xong/thất bại
-   * (removeOnComplete 1000, removeOnFail 5000 — xem jobs/queue.module.ts), và script
-   * addStandardJob trả về job cũ mà KHÔNG enqueue nếu hash cùng jobId còn tồn tại. Không có
-   * bước xoá thì đơn đã đẩy hỏng hết 5 lần thử sẽ chặn vĩnh viễn mọi lần enqueue sau — cron
-   * cứu hộ 15 phút/lần in log "re-enqueue" mãi mà không có gì chạy, đơn đã trừ kho và đã thu
-   * tiền không bao giờ tới kho vật lý. Tác dụng chống đẩy đôi vẫn còn: removeJob bỏ qua job
-   * đang bị khoá (đang chạy), nên lúc đó add() vẫn dedupe như cũ.
+   * Xoá job cũ trước khi add, NHƯNG CHỈ KHI nó đã THẤT BẠI: BullMQ giữ job hash lại sau khi job
+   * xong/thất bại (removeOnComplete 1000, removeOnFail 5000 — xem jobs/queue.module.ts), và
+   * script addStandardJob trả về job cũ mà KHÔNG enqueue nếu hash cùng jobId còn tồn tại. Không
+   * dọn thì đơn đã đẩy hỏng hết 5 lần thử sẽ chặn vĩnh viễn mọi lần enqueue sau — cron cứu hộ
+   * 15 phút/lần in log "re-enqueue" mãi mà không có gì chạy.
+   *
+   * Vì sao CHỈ xoá job failed: `pushOrder` chỉ ghi `pancakeOrderId` khi Pancake trả về id
+   * (dòng dưới). Nếu Pancake ĐÃ TẠO đơn nhưng response thiếu id, job vẫn "completed" trong khi
+   * `pancakeOrderId` còn null — và cron cứu hộ quét đúng điều kiện đó. Xoá luôn job completed
+   * thì cứ 15 phút lại tạo thêm MỘT ĐƠN TRÙNG ở kho vật lý, vô thời hạn. Giữ job completed
+   * chính là chốt chặn cuối cho trường hợp này.
    */
   async enqueuePush(orderId: string): Promise<void> {
-    await this.pushQueue.remove(orderId).catch(() => undefined);
+    try {
+      const existing = await this.pushQueue.getJob(orderId);
+      if (existing && (await existing.getState()) === 'failed') {
+        await existing.remove();
+      }
+    } catch {
+      /* không đọc được trạng thái job → cứ add, BullMQ tự dedupe */
+    }
     await this.pushQueue.add('push', { orderId }, { jobId: orderId });
   }
 

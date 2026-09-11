@@ -391,3 +391,32 @@ describe('AttendanceService — không cho phiên chấm công chồng giờ', (
     expect(update).toHaveBeenCalled();
   });
 });
+
+describe('AttendanceService.sessionOwner / shiftOwner', () => {
+  it('trả {staffId, workDate} để controller kiểm khoá tháng TRƯỚC khi ghi', async () => {
+    const workDate = new Date('2026-07-03');
+    const prisma = makePrisma({
+      attendanceSession: {
+        findUnique: jest.fn().mockResolvedValue({ staffId: 'u1', shift: { workDate } }),
+        findFirst: jest.fn(),
+        count: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+        findMany: jest.fn(),
+      },
+      shift: { findUnique: jest.fn().mockResolvedValue({ staffId: 'u2', workDate }), findMany: jest.fn(), findFirst: jest.fn() },
+    });
+
+    await expect(mk(prisma).sessionOwner('s1')).resolves.toEqual({ staffId: 'u1', workDate });
+    await expect(mk(prisma).shiftOwner('sh1')).resolves.toEqual({ staffId: 'u2', workDate });
+  });
+
+  it('không tìm thấy → NotFound (không để controller đọc undefined)', async () => {
+    const prisma = makePrisma({
+      attendanceSession: { findUnique: jest.fn().mockResolvedValue(null), findFirst: jest.fn(), count: jest.fn(), create: jest.fn(), update: jest.fn(), findMany: jest.fn() },
+      shift: { findUnique: jest.fn().mockResolvedValue(null), findMany: jest.fn(), findFirst: jest.fn() },
+    });
+    await expect(mk(prisma).sessionOwner('sX')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(mk(prisma).shiftOwner('shX')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});

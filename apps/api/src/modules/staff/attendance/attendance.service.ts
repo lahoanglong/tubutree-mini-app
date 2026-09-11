@@ -242,6 +242,26 @@ export class AttendanceService {
     }
   }
 
+  /** Tra nhanh {staffId, workDate} của một phiên — để controller kiểm khoá tháng TRƯỚC khi ghi. */
+  async sessionOwner(sessionId: string): Promise<{ staffId: string; workDate: Date }> {
+    const s = await this.prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
+      select: { staffId: true, shift: { select: { workDate: true } } },
+    });
+    if (!s) throw new NotFoundException('Không tìm thấy phiên.');
+    return { staffId: s.staffId, workDate: s.shift.workDate };
+  }
+
+  /** Tra nhanh {staffId, workDate} của một ca — để controller kiểm khoá tháng TRƯỚC khi ghi. */
+  async shiftOwner(shiftId: string): Promise<{ staffId: string; workDate: Date }> {
+    const sh = await this.prisma.shift.findUnique({
+      where: { id: shiftId },
+      select: { staffId: true, workDate: true },
+    });
+    if (!sh) throw new NotFoundException('Không tìm thấy ca.');
+    return { staffId: sh.staffId, workDate: sh.workDate };
+  }
+
   /** QL sửa giờ phiên (điều chỉnh giờ làm). Trả {staffId, workDate} để controller recompute lương. */
   async adminEditSession(sessionId: string, patch: { checkinAt?: Date; checkoutAt?: Date | null }) {
     const s = await this.prisma.attendanceSession.findUnique({

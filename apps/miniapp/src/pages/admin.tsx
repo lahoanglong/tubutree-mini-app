@@ -313,8 +313,12 @@ function DetailSheet({
         // Ca qua đêm: checkout 02:00 thuộc NGÀY HÔM SAU. Dựng cả hai mốc theo cùng một ngày như
         // trước sẽ gửi checkout < checkin → BE từ chối, và quản lý bấm bao nhiêu lần cũng lỗi mà
         // không có cách nào sửa. Màn của nhân viên đã xử lý đúng (staff.tsx) — chỉ màn này sót.
+        //
+        // `co < ci` chứ KHÔNG phải `<=`: phiên chưa checkout được khởi tạo co = ci, nên dấu `=`
+        // sẽ đẩy checkout sang hôm sau và ghi thành ca đúng 24 tiếng — BE chỉ chặn
+        // checkout <= checkin nên nó lọt, rồi payroll trả tiền cho 24 giờ đó.
         checkinAt: vnDateTimeISO(dayKey, ci),
-        checkoutAt: vnDateTimeISO(co <= ci ? addDaysKey(dayKey, 1) : dayKey, co),
+        checkoutAt: vnDateTimeISO(co < ci ? addDaysKey(dayKey, 1) : dayKey, co),
       }),
     onSuccess: () => {
       openSnackbar({ text: 'Đã sửa giờ & tính lại.', type: 'success' });
@@ -370,7 +374,21 @@ function DetailSheet({
                         <TimeInput value={ci} onChange={setCi} style={{ flex: 1 }} />
                         <TimeInput value={co} onChange={setCo} style={{ flex: 1 }} />
                       </Box>
-                      <Button size="small" style={{ marginTop: 6 }} loading={editM.isPending} disabled={editM.isPending} onClick={() => editM.mutate(dayKey)}>
+                      {/* co === ci là phiên chưa checkout (ô giờ ra khởi tạo bằng giờ vào) —
+                          lưu lúc đó là ghi một khoảng 0 phút hoặc, nếu suy sang hôm sau, cả 24
+                          tiếng. Bắt quản lý nhập giờ ra thật trước. */}
+                      {co === ci && (
+                        <Text size="xxxxSmall" style={{ color: 'var(--warning)', marginTop: 4 }}>
+                          Nhập giờ ra khác giờ vào để lưu.
+                        </Text>
+                      )}
+                      <Button
+                        size="small"
+                        style={{ marginTop: 6 }}
+                        loading={editM.isPending}
+                        disabled={editM.isPending || co === ci}
+                        onClick={() => editM.mutate(dayKey)}
+                      >
                         Lưu giờ
                       </Button>
                     </Box>
