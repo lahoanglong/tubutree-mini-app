@@ -70,6 +70,8 @@ import {
   type AdminLesson,
   type AcademyLessonContentType,
   type AdminQuickReply,
+  listCashbackTxns,
+  reviewCashbackTxn,
 } from '@/lib/admin-client';
 import {
   exportOrdersToCsv,
@@ -92,12 +94,14 @@ type Tab =
   | 'contentKit'
   | 'academy'
   | 'quickReplies'
-  | 'merchantProducts';
+  | 'merchantProducts'
+  | 'cashback';
 const TABS: { k: Tab; label: string }[] = [
   { k: 'dashboard', label: 'Tổng quan KPI' },
   { k: 'dealers', label: 'Đại lý' },
   { k: 'orders', label: 'Đơn hàng' },
   { k: 'returns', label: 'Đổi / Trả' },
+  { k: 'cashback', label: 'Hoàn tiền sàn ngoài' },
   { k: 'users', label: 'Người dùng' },
   { k: 'config', label: 'Cấu hình' },
   { k: 'coupons', label: 'Voucher' },
@@ -148,6 +152,7 @@ export default function AdminPage() {
         {tab === 'dealers' && <DealersTab />}
         {tab === 'orders' && <OrdersTab />}
         {tab === 'returns' && <ReturnsTab />}
+        {tab === 'cashback' && <CashbackTab />}
         {tab === 'users' && <UsersTab />}
         {tab === 'config' && <ConfigTab />}
         {tab === 'coupons' && <CouponsTab />}
@@ -657,6 +662,96 @@ function OrdersTab() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Duyệt tay hoàn tiền sàn ngoài. Trước đây trạng thái chỉ đổi qua postback của sàn, mà cron đối
+ * soát thì tắt khi chưa có API key — postback rớt là giao dịch treo PENDING vĩnh viễn, khách
+ * thấy "Chờ duyệt" vô thời hạn và không ai trong tổ chức xử lý được.
+ */
+function CashbackTab() {
+  const qc = useQueryClient();
+  const [filter, setFilter] = useState('PENDING');
+  const [err, setErr] = useState<string | null>(null);
+  const q = useQuery({
+    queryKey: ['admin-cashback', filter],
+    queryFn: () => listCashbackTxns(filter || undefined),
+  });
+  const review = useMutation({
+    mutationFn: (v: { id: string; status: 'CONFIRMED' | 'REJECTED'; note?: string }) =>
+      reviewCashbackTxn(v.id, v.status, v.note),
+    onSuccess: () => {
+      setErr(null);
+      void qc.invalidateQueries({ queryKey: ['admin-cashback'] });
+    },
+    onError: (e) => setErr(e instanceof Error ? e.message : 'Không cập nhật được'),
+  });
+
+  return (
+    <div>
+      <div className="mb-3 flex gap-2">
+        {['PENDING', 'CONFIRMED', 'REJECTED', 'PAID', ''].map((s) => (
+          <button
+            key={s || 'all'}
+            onClick={() => setFilter(s)}
+            className={`rounded px-3 py-1 text-sm ${filter === s ? 'bg-green-600 text-white' : 'bg-neutral-100'}`}
+          >
+            {s || 'Tất cả'}
+          </button>
+        ))}
+      </div>
+      {err && <p className="mb-2 text-sm text-red-600">{err}</p>}
+      {q.isLoading && <p className="text-sm text-neutral-500">Đang tải…</p>}
+      {q.isError && <p className="text-sm text-red-600">Không tải được danh sách.</p>}
+      <div className="space-y-2">
+        {q.data?.map((t) => (
+          <div key={t.id} className="rounded-lg border border-neutral-100 bg-white p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">
+                {t.merchant?.name ?? t.provider} · {t.merchantOrderId}
+              </span>
+              <span className="text-xs text-neutral-500">{t.status}</span>
+            </div>
+            <div className="mt-1 text-xs text-neutral-500">
+              Khách: {t.user?.fullName ?? 'Khách hàng'}
+              {t.user?.phone ? ` · ${t.user.phone}` : ''}
+            </div>
+            <div className="mt-1 text-xs text-neutral-600">
+              Đơn {formatVnd(t.orderAmount)} · hoa hồng {formatVnd(t.commission)} · khách nhận{' '}
+              <b>{formatVnd(t.userReward)}</b>
+            </div>
+            {t.status !== 'PAID' && (
+              <div className="mt-2 flex gap-2">
+                {t.status !== 'CONFIRMED' && (
+                  <button
+                    onClick={() => review.mutate({ id: t.id, status: 'CONFIRMED' })}
+                    disabled={review.isPending}
+                    className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white disabled:bg-neutral-300"
+                  >
+                    Duyệt hoàn tiền
+                  </button>
+                )}
+                {t.status !== 'REJECTED' && (
+                  <button
+                    onClick={() => {
+                      const note = window.prompt('Lý do từ chối (khách sẽ không nhận tiền):') ?? undefined;
+                      if (note === undefined) return;
+                      review.mutate({ id: t.id, status: 'REJECTED', note });
+                    }}
+                    disabled={review.isPending}
+                    className="rounded border border-red-200 px-3 py-1 text-xs font-medium text-red-600 disabled:opacity-50"
+                  >
+                    Từ chối
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+        {q.data?.length === 0 && <p className="text-sm text-neutral-500">Không có giao dịch nào.</p>}
+      </div>
     </div>
   );
 }

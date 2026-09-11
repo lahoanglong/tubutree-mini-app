@@ -457,3 +457,25 @@ export const reviewMerchantProduct = (
     },
   );
 
+// ── Hoàn tiền sàn ngoài (cashback) ──
+export interface AdminCashbackTxn {
+  id: string;
+  userId: string;
+  provider: string;
+  merchantOrderId: string;
+  orderAmount: number;
+  commission: number;
+  userReward: number;
+  status: 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'PAID';
+  confirmedAt: string | null;
+  paidAt: string | null;
+  user: { id: string; fullName: string | null; phone: string | null } | null;
+  merchant: { name: string; slug: string } | null;
+}
+export const listCashbackTxns = (status?: string) =>
+  apiFetch<AdminCashbackTxn[]>(`/admin/cashback/transactions${status ? `?status=${status}` : ''}`);
+export const reviewCashbackTxn = (id: string, status: 'CONFIRMED' | 'REJECTED', note?: string) =>
+  apiFetch<AdminCashbackTxn>(`/admin/cashback/transactions/${id}/review`, {
+    method: 'POST',
+    body: { status, note },
+  });
