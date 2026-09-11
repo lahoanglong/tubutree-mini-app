@@ -75,6 +75,14 @@ export class ZalopayService {
       params: payload,
       timeout: 12000,
     });
+    // Ghi TỪNG lần thử: app_trans_id có tiền tố ngày nên bấm thanh toán lại hôm sau sinh mã
+    // khác. Nếu chỉ giữ mã mới nhất ở orders.paymentTxnId thì callback của lần thử cũ (khách
+    // hoàn tất giao dịch hôm qua) sẽ không khớp đơn nào → tiền thu rồi mà đơn vẫn UNPAID
+    // (P2, docs/2026-09-08-review-progress.md).
+    await this.prisma.paymentAttempt.create({
+      data: { orderId: order.id, provider: 'ZALOPAY', appTransId, amount: order.total },
+    });
+    // Vẫn cập nhật paymentTxnId để chỗ hiển thị/đối soát cũ thấy lần thử gần nhất.
     await this.prisma.order.update({
       where: { id: order.id },
       data: { paymentTxnId: appTransId },
@@ -90,10 +98,26 @@ export class ZalopayService {
       this.logger.warn('ZaloPay callback MAC mismatch.');
       return { return_code: -1, return_message: 'mac not equal' };
     }
-    const data = JSON.parse(rawData) as { app_trans_id: string };
-    const order = await this.prisma.order.findFirst({
-      where: { paymentTxnId: data.app_trans_id },
+    const data = JSON.parse(rawData) as { app_trans_id: string; amount?: number };
+    // Tra theo sổ lần-thử trước (khớp được CẢ lần thử cũ); đơn tạo TRƯỚC bản vá chưa có dòng
+    // attempt nào nên fallback về cách cũ (orders.paymentTxnId).
+    const attempt = await this.prisma.paymentAttempt.findUnique({
+      where: { appTransId: data.app_trans_id },
+      include: { order: true },
     });
+    if (attempt && typeof data.amount === 'number' && data.amount !== attempt.amount) {
+      // MAC chỉ chứng minh callback đến từ ZaloPay, KHÔNG chứng minh số tiền khớp đơn.
+      // Lệch tiền → không ghi nhận PAID, để người đối soát xử lý tay.
+      this.logger.error(
+        `Callback ZaloPay lệch số tiền cho ${data.app_trans_id}: nhận ${data.amount}, kỳ vọng ${attempt.amount} — KHÔNG lật PAID.`,
+      );
+      return { return_code: 1, return_message: 'success' };
+    }
+    const order =
+      attempt?.order ??
+      (await this.prisma.order.findFirst({
+        where: { paymentTxnId: data.app_trans_id },
+      }));
     if (order && order.paymentStatus !== 'PAID') {
       // P1-3 (docs/2026-09-08-review-progress.md): trước đây chỉ check paymentStatus, không
       // check status — callback tới sau khi đơn đã hủy/trả vẫn bị lật PAID êm, đơn đứng

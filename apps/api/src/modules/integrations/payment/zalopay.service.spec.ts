@@ -1,4 +1,9 @@
 import { createHmac } from 'node:crypto';
+import axios from 'axios';
+
+// createPayment gọi ZaloPay thật qua axios — mock ở mức module để test không đụng mạng.
+jest.mock('axios', () => ({ __esModule: true, default: { post: jest.fn() } }));
+const axiosPost = (axios as unknown as { post: jest.Mock }).post;
 import { ZalopayService } from './zalopay.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { NotificationsService } from '../../notifications/notifications.service';
@@ -28,11 +33,15 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
   function setup(over: Record<string, unknown> = {}) {
     const update = jest.fn().mockResolvedValue({});
     const findFirst = jest.fn().mockResolvedValue(order);
-    const prisma = { order: { findFirst, update } } as unknown as PrismaService;
+    const attemptFindUnique = jest.fn().mockResolvedValue(null);
+    const prisma = {
+      order: { findFirst, update },
+      paymentAttempt: { findUnique: attemptFindUnique, create: jest.fn().mockResolvedValue({}) },
+    } as unknown as PrismaService;
     const notify = jest.fn().mockResolvedValue(undefined);
     const notifications = { notify } as unknown as NotificationsService;
     const svc = new ZalopayService(prisma, notifications, makeConfig(true) as never);
-    return { svc, update, findFirst, notify, ...over };
+    return { svc, update, findFirst, notify, attemptFindUnique, prisma, ...over };
   }
 
   it('chưa cấu hình → return_code 2, không xử lý', async () => {
@@ -66,6 +75,8 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
     const update = jest.fn().mockResolvedValue({});
     const prisma = {
       order: { findFirst: jest.fn().mockResolvedValue({ ...order, paymentStatus: 'PAID' }), update },
+      // Đơn tạo TRƯỚC bản vá PaymentAttempt: không có dòng attempt nào → fallback paymentTxnId.
+      paymentAttempt: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     } as unknown as PrismaService;
     const notify = jest.fn();
     const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never);
@@ -84,6 +95,8 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
     const notify = jest.fn();
     const prisma = {
       order: { findFirst: jest.fn().mockResolvedValue({ ...order, status: 'CANCELLED' }), update },
+      // Đơn tạo TRƯỚC bản vá PaymentAttempt: không có dòng attempt nào → fallback paymentTxnId.
+      paymentAttempt: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     } as unknown as PrismaService;
     const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never);
     const raw = JSON.stringify({ app_trans_id: '250101_TUBU1' });
@@ -97,6 +110,8 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
     const update = jest.fn().mockResolvedValue({});
     const prisma = {
       order: { findFirst: jest.fn().mockResolvedValue({ ...order, status: 'RETURNED' }), update },
+      // Đơn tạo TRƯỚC bản vá PaymentAttempt: không có dòng attempt nào → fallback paymentTxnId.
+      paymentAttempt: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     } as unknown as PrismaService;
     const svc = new ZalopayService(prisma, { notify: jest.fn() } as unknown as NotificationsService, makeConfig(true) as never);
     const raw = JSON.stringify({ app_trans_id: '250101_TUBU1' });
@@ -110,5 +125,68 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
     const r = await svc.handleCallback(raw, 'short'); // ngắn hơn hex digest → length khác
     expect(r.return_code).toBe(-1);
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+
+// P2 (docs/2026-09-08-review-progress.md): app_trans_id của ZaloPay có tiền tố NGÀY
+// (yymmdd_<order code>) nên mỗi ngày bấm thanh toán lại sinh mã khác, mà trước đây chỉ có
+// orders.paymentTxnId lưu mã MỚI NHẤT. Khách bấm hôm nay rồi bỏ dở, mai bấm lại, sau đó hoàn
+// tất giao dịch của HÔM QUA → callback mang mã cũ, tra paymentTxnId không khớp đơn nào, handler
+// im lặng trả success trong khi TIỀN ĐÃ THU và đơn vẫn UNPAID.
+describe('ZalopayService — nhiều lần thử thanh toán (PaymentAttempt)', () => {
+  const order = { id: 'o1', code: 'TUBU1', userId: 'u1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT', total: 250000 };
+
+  function setup(attempt: unknown, orderRow: unknown = order) {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = {
+      order: { findFirst: jest.fn().mockResolvedValue(null), findUnique: jest.fn().mockResolvedValue(orderRow), update },
+      paymentAttempt: {
+        findUnique: jest.fn().mockResolvedValue(attempt),
+        create: jest.fn().mockResolvedValue({}),
+      },
+    } as unknown as PrismaService;
+    const notify = jest.fn().mockResolvedValue(undefined);
+    const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never);
+    return { svc, update, prisma, notify };
+  }
+
+  function callbackFor(appTransId: string, amount = 250000) {
+    const raw = JSON.stringify({ app_trans_id: appTransId, amount });
+    return { raw, mac: sign(raw) };
+  }
+
+  it('callback của lần thử CŨ (hôm qua) vẫn khớp đúng đơn qua PaymentAttempt', async () => {
+    const { svc, update } = setup({ appTransId: '260910_TUBU1', orderId: 'o1', amount: 250000, order });
+    const { raw, mac } = callbackFor('260910_TUBU1');
+    const r = await svc.handleCallback(raw, mac);
+    expect(r.return_code).toBe(1);
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ paymentStatus: 'PAID' }) }));
+  });
+
+  it('số tiền callback KHÁC số tiền lúc tạo lệnh → KHÔNG lật PAID (chống sửa amount)', async () => {
+    const { svc, update } = setup({ appTransId: '260910_TUBU1', orderId: 'o1', amount: 250000, order });
+    const { raw, mac } = callbackFor('260910_TUBU1', 1000);
+    const r = await svc.handleCallback(raw, mac);
+    expect(update).not.toHaveBeenCalled();
+    expect(r.return_code).toBe(1); // vẫn báo đã nhận để ZaloPay không retry vô hạn
+  });
+
+  it('không tìm thấy attempt → fallback tra theo orders.paymentTxnId (đơn tạo TRƯỚC bản vá)', async () => {
+    const { svc, prisma, update } = setup(null);
+    (prisma.order.findFirst as jest.Mock).mockResolvedValue(order);
+    const { raw, mac } = callbackFor('260910_TUBU1');
+    await svc.handleCallback(raw, mac);
+    expect(prisma.order.findFirst).toHaveBeenCalledWith({ where: { paymentTxnId: '260910_TUBU1' } });
+    expect(update).toHaveBeenCalled();
+  });
+
+  it('createPayment ghi lại từng lần thử vào PaymentAttempt', async () => {
+    const { svc, prisma } = setup(null);
+    axiosPost.mockResolvedValue({ data: { order_url: 'x' } });
+    await svc.createPayment('u1', 'TUBU1');
+    expect(prisma.paymentAttempt.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ orderId: 'o1', provider: 'ZALOPAY', amount: 250000 }) }),
+    );
   });
 });

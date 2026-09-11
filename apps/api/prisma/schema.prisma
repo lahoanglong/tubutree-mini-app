@@ -771,6 +771,7 @@ model Order {
   note              String?
   items             OrderItem[]
   commissions       Commission[]
+  paymentAttempts   PaymentAttempt[]
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
@@ -819,6 +820,25 @@ model PointsTransaction {
   // WHERE delta>0 AND expiresAt <=/BETWEEN now — không có index này sẽ full-scan bảng lớn mỗi đêm.
   @@index([expiresAt])
   @@map("points_transactions")
+}
+
+// Mỗi lần bấm thanh toán cổng (ZaloPay...) = 1 dòng. Trước đây chỉ có Order.paymentTxnId lưu
+// lần thử MỚI NHẤT: khách bấm thanh toán hôm nay rồi bỏ dở, mai bấm lại (app_trans_id có tiền
+// tố ngày nên khác), sau đó hoàn tất giao dịch của HÔM QUA → callback mang app_trans_id cũ,
+// tra theo paymentTxnId không khớp gì cả, handler im lặng trả success trong khi TIỀN ĐÃ THU và
+// đơn vẫn UNPAID. Lưu từng lần thử + khoá unique theo appTransId để callback nào cũng khớp
+// đúng đơn, và đối chiếu được số tiền (P2, docs/2026-09-08-review-progress.md).
+model PaymentAttempt {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider   String // ZALOPAY | VNPAY ...
+  appTransId String   @unique
+  amount     Int // số tiền kỳ vọng lúc tạo lệnh — dùng đối chiếu với callback
+  createdAt  DateTime @default(now())
+
+  @@index([orderId])
+  @@map("payment_attempts")
 }
 
 model CoinTransaction {
