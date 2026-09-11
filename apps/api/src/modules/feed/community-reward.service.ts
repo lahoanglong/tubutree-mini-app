@@ -72,11 +72,18 @@ export class CommunityRewardService {
    * comment khác (hợp lệ, sửa lựa chọn) không cấp thưởng lần 2 (partial unique index
    * reason WHERE refType='COMMUNITY' → P2002 → grantCoins bail idempotent). Nếu key theo
    * commentId, đổi best-answer liên tục giữa nhiều tài khoản phụ farm được xu vô hạn.
+   *
+   * NHƯNG idempotency theo postId chỉ chặn farm trên CÙNG 1 bài: tài khoản phụ đăng N bài
+   * QUESTION rồi chọn best-answer cho nhau ở cả N bài vẫn ăn N×reward (mỗi bài 1 reason
+   * khác nhau). Vì vậy phải đi qua rewardWithDailyCap giống rewardPost/rewardAnswer —
+   * xem P1-2 trong docs/2026-09-08-review-progress.md.
    */
   async rewardBestAnswer(answererId: string, postAuthorId: string, postId: string): Promise<void> {
     if (answererId === postAuthorId) return;
     const amount = await this.config.get<number>('community.best_answer_reward', 500);
-    await this.coins.grantCoins(answererId, amount, `COMMUNITY_BEST:${postId}`, 'COMMUNITY', postId);
+    if (amount <= 0) return;
+    const cap = await this.config.get<number>('community.daily_best_answer_cap', 5);
+    await this.rewardWithDailyCap(answererId, 'COMMUNITY_BEST', postId, amount, cap);
   }
 
   /** Thưởng người thắng sự kiện cộng đồng (Pha 4). Idempotent qua reason (partial unique index refType='COMMUNITY'). */

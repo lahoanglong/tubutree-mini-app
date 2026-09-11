@@ -274,6 +274,7 @@ model User {
   staffProfile           StaffProfile?
   communityReports       CommunityReport[]       @relation("CommunityReports")
   communityProfile       CommunityProfile?       @relation("CommunityProfile")
+  reputationEvents       ReputationEvent[]       @relation("ReputationEvents")
 
   @@index([referredById])
   @@map("users")
@@ -1480,6 +1481,11 @@ model FeedComment {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   body       String
   isAccepted Boolean  @default(false)
+  // Ẩn mềm (tác giả tự xoá, hoặc admin gỡ khi bị báo cáo). Trước đây KHÔNG có đường nào
+  // gỡ 1 bình luận: hub kiểm duyệt chỉ hiện nút ẩn cho targetType=POST vì backend không có
+  // endpoint cho COMMENT → bình luận bị báo cáo vẫn hiển thị vĩnh viễn (P1-3,
+  // docs/2026-09-08-review-progress.md). Giữ dòng để còn dấu vết kiểm duyệt, không xoá cứng.
+  isRemoved  Boolean  @default(false)
   createdAt  DateTime @default(now())
 
   @@index([postId])
@@ -1542,6 +1548,26 @@ model CommunityProfile {
   updatedAt       DateTime @updatedAt
 
   @@map("community_profiles")
+}
+
+// Sổ cái điểm reputation cộng đồng. Trước đây bumpReputation chỉ increment thẳng vào
+// CommunityProfile: không đếm được theo ngày (→ farm không trần: bình luận liên tục
+// +2 rep/lần, lên top BXH trong vài phút), không idempotent (retry cộng 2 lần), và
+// không đảo được khi bài bị xoá/gỡ (xoá bài vẫn giữ điểm). Mỗi dòng = 1 lần cộng/trừ,
+// khoá theo (userId, reason, refId) nên retry/gọi lại không cộng lần 2.
+// Xem P1-1 trong docs/2026-09-08-review-progress.md.
+model ReputationEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("ReputationEvents", fields: [userId], references: [id], onDelete: Cascade)
+  amount    Int
+  reason    String // POST | ANSWER | BEST_ANSWER | REVERSE_POST ...
+  refId     String // postId/commentId — nguồn phát sinh, để idempotent + đảo ngược
+  createdAt DateTime @default(now())
+
+  @@unique([userId, reason, refId])
+  @@index([userId, createdAt])
+  @@map("reputation_events")
 }
 
 // Thẻ tự do (hashtag) cho bài viết cộng đồng — dùng để tìm kiếm/lọc theo chủ đề (Pha 3).

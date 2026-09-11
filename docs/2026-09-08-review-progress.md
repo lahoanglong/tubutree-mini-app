@@ -266,3 +266,97 @@ sửa, để lại phiên sau.
 - Phase 2 (coherence UX), Phase 4 bước 2+ (design system), Phase 5-7: KHÔNG kịp làm trong
   phiên này — ưu tiên "chất lượng > số lượng" dồn hết cho audit + sửa lỗi P0/P1 bảo mật/tiền
   thật đã tìm thấy, thay vì dàn mỏng sang UI/tính năng mới. Lý do đầy đủ trong overnight report.
+
+---
+
+# Phiên tiếp theo — 2026-09-11
+
+Tiếp đúng danh sách "việc rẻ/nhanh còn lại" mà overnight report để lại: 4 lỗi P1 xã hội/cộng
+đồng + 1 drift schema phát hiện trong lúc làm.
+
+## Đã sửa
+
+1. **P1-2 xã hội — farm xu qua best-answer.** `rewardBestAnswer` idempotent theo `postId` nên
+   chỉ chặn farm trên CÙNG 1 bài; tài khoản phụ đăng N bài QUESTION rồi chọn best-answer cho
+   nhau ở cả N bài vẫn ăn N×500 xu (mỗi bài 1 reason khác nhau, unique index không bao giờ
+   chạm). → cho đi qua `rewardWithDailyCap` như 2 reward anh em, trần
+   `community.daily_best_answer_cap` (mặc định 5/ngày). 2 test mới.
+
+2. **P1-4 xã hội — sửa bài sau khi được duyệt không quay lại kiểm duyệt.** `editPost` chỉ
+   `select: { userId }`, không hề đọc `status`. Bài hiền lành được duyệt (đồng thời tác giả
+   được gắn `isTrusted` VĨNH VIỄN), sau đó tác giả PATCH thành spam: bài vẫn PUBLISHED, giữ
+   nguyên ghim/best-answer, và không bao giờ xuất hiện lại trong hàng chờ duyệt. → đổi nội
+   dung (body/title/ảnh) của bài PUBLISHED bởi tác giả chưa tin cậy ⇒ đưa về PENDING.
+   Controller truyền thêm `role`. 3 test mới.
+
+3. **P1-1 xã hội — reputation farm không trần, không idempotent, không đảo được.** Trước đây
+   `bumpReputation` increment thẳng vào `community_profiles`: không đếm được theo ngày (bình
+   luận liên tục +2 rep/lần → lên top BXH trong vài phút), retry cộng 2 lần, và `deletePost`
+   chỉ set REMOVED nên đăng-ăn-điểm-rồi-xoá giữ nguyên hạng mà không còn nội dung để kiểm
+   chứng. → thêm bảng sổ cái `ReputationEvent` (unique `userId+reason+refId`), cộng điểm
+   đếm-rồi-quyết trong transaction **Serializable** với trần `community.daily_rep_cap`
+   (mặc định 30 điểm/ngày), + `reverseReputationForPost` trừ lại đúng tổng khi gỡ bài (dòng
+   âm `REVERSE_POST`, unique chặn trừ 2 lần). 4 call site truyền `reason`+`refId`. 11 test mới.
+
+4. **P1-3 xã hội — không có đường nào gỡ 1 bình luận.** Cả bảng `feed_comments` chỉ có
+   create/findMany/isAccepted; hub kiểm duyệt chỉ hiện nút ẩn cho `targetType='POST'` vì
+   backend không có endpoint cho COMMENT → bình luận bị báo cáo hiển thị vĩnh viễn, chính tác
+   giả cũng không xoá được. → cột `isRemoved` (ẩn mềm, giữ dấu vết kiểm duyệt) +
+   `removeComment(userId, role, commentId)` (tác giả hoặc ADMIN) + `getComments` lọc
+   `isRemoved: false` + gỡ luôn cờ best-answer/`bestCommentId` nếu comment đó đang là best.
+   Route `DELETE /feed/comments/:commentId`. FE: hub kiểm duyệt gọi đúng endpoint theo
+   `targetType`, và post-detail có nút tự gỡ bình luận của mình. 6 test mới.
+
+5. **DRIFT SCHEMA CÓ SẴN TỪ TRƯỚC (phát hiện tình cờ, quan trọng).** `prisma migrate dev` báo
+   drift → đối chiếu bằng `prisma migrate diff`: commit `0572e74` (trước cả phiên overnight)
+   thêm một loạt field vào `schema.prisma` mà **KHÔNG tạo migration nào**:
+   - `products.approvalStatus / rejectReason / storefrontId` + enum `ProductApprovalStatus`
+     + `StorefrontType.MERCHANT` + 2 index + FK
+   - `storefronts.subdomain / customDomain / themeColor / bank* / warehouse*` + index
+     + 2 unique index
+   DB local thật sự THIẾU đúng những cột đó (đã xác nhận bằng `information_schema.columns`:
+   bảng `storefronts` chỉ có 14 cột). Nghĩa là mọi DB cập nhật bằng `prisma migrate deploy`
+   (gồm prod nếu deploy theo runbook) đều không có các cột này, trong khi code đọc/ghi chúng.
+   → viết migration bù `20260911020100_storefront_merchant_columns_drift_fix` (toàn bộ lệnh
+   idempotent: `IF NOT EXISTS` / `DO $$ EXCEPTION`), kèm cảnh báo + câu SQL kiểm tra trùng
+   subdomain/customDomain phải chạy TRƯỚC trên prod. Sau khi áp: `prisma migrate diff` trả
+   **"This is an empty migration"** = lịch sử migration khớp schema 100%.
+
+## Verify (lệnh thật đã chạy)
+
+| Lệnh | Kết quả |
+|---|---|
+| `pnpm typecheck` | 5/5 task pass |
+| `pnpm lint` | 5/5 task pass |
+| `pnpm test:ci` | api **93 suite / 1327 test pass** (từ 93/1309), web 1/14 |
+| `pnpm --filter @tubutree/miniapp test` | 6/6 suite, 36/36 test |
+| `nest build` | sạch |
+| `prisma migrate deploy` (DB local) | 2 migration mới applied |
+| `prisma migrate diff` (migrations ↔ schema) | "This is an empty migration" (drift = 0) |
+| API thật (`nest start`, cổng 3009) | health 200, 0 lỗi DI |
+
+Smoke test trên API + DB thật (không chỉ mock):
+- `DELETE /api/feed/comments/<id-không-tồn-tại>` → 404 `"Bình luận không tồn tại."` (đúng
+  service, không phải route-miss); không token → 401.
+- Tạo bài → bình luận → `DELETE` → đọc lại: **1 bình luận → 0 bình luận**.
+- `reputation_events`: câu truy vấn tổng-điểm-trong-ngày chạy đúng; INSERT trùng
+  `(userId, reason, refId)` bị chặn bởi unique constraint thật (đã dọn dữ liệu test).
+
+## Còn lại cho phiên sau (thứ tự đề xuất)
+
+1. **P0-3 (đơn hàng) — Pancake catalog sync ghi đè tuyệt đối `stock`.** Vẫn chưa làm: cần
+   quyết định kiến trúc (cột `reservedStock` riêng, hay coi Pancake là nguồn chân lý rồi bỏ
+   trừ kho cục bộ). Không phải fix 1 dòng.
+2. **P2 rải rác 4 domain** (đã có danh sách trong overnight report): guest login
+   `Math.random()`, refresh token web trong localStorage, milestone voucher cấp 2 lần ở ranh
+   giới tháng, cashback rate hiển thị sai ×100 ở FE, hạng thành viên tính theo điểm CÒN LẠI,
+   zalopay `paymentTxnId` bị ghi đè giữa các lần thử.
+3. **Phase 2 (coherence audit UX)** → **Phase 4-5 (design system)** → Phase 6 → Phase 7.
+
+## Việc cần người
+
+- **Migration mới cần chạy khi deploy** (2 cái): `20260911020000_community_reputation_ledger_and_comment_moderation`
+  (an toàn, thuần thêm mới) và `20260911020100_storefront_merchant_columns_drift_fix`
+  (**đọc phần cảnh báo trong file .sql trước**: chạy 2 câu SELECT kiểm tra trùng
+  subdomain/customDomain trên prod, nếu có trùng phải đổi tên thủ công 1 bên rồi mới chạy).
+- Vẫn chưa deploy BE/WEB lên VM prod và chưa deploy miniapp lên Zalo.

@@ -180,6 +180,10 @@ export const adminResolveReport = (id: string) =>
 // Dùng DELETE (owner/ADMIN) để ẩn bài bị report — không có endpoint ẩn riêng cho admin.
 export const adminHidePost = (id: string) => api.delete<{ ok: boolean }>(`/feed/${id}`).then((r) => r.data);
 
+/** Gỡ 1 bình luận bị báo cáo (tác giả bình luận hoặc ADMIN). */
+export const removeComment = (commentId: string) =>
+  api.delete<{ ok: boolean }>(`/feed/comments/${commentId}`).then((r) => r.data);
+
 export const adminPin = (id: string, pinned: boolean) =>
   api.post<{ ok: boolean }>(`/feed/admin/${id}/pin`, { pinned }).then((r) => r.data);
 

@@ -49,9 +49,24 @@ function makePrisma(over: Record<string, unknown> = {}) {
       update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
-    $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    // Sổ cái reputation (chặn farm + idempotent + đảo khi xoá bài).
+    reputationEvent: {
+      aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 0 } }),
+      create: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   };
-  return { ...base, ...over } as unknown as PrismaService;
+  // $transaction hỗ trợ CẢ 2 dạng: mảng op (cũ) và callback interactive (bumpReputation/
+  // reverseReputationForPost chạy Serializable) — callback nhận chính mock prisma này làm tx.
+  base.$transaction = jest.fn((arg: unknown) =>
+    typeof arg === 'function' ? (arg as (tx: unknown) => unknown)(base) : Promise.all(arg as Promise<unknown>[]),
+  );
+  const merged = { ...base, ...over } as Record<string, unknown>;
+  // Nếu test override 1 bảng nào đó, callback tx vẫn phải thấy bản override.
+  merged.$transaction = jest.fn((arg: unknown) =>
+    typeof arg === 'function' ? (arg as (tx: unknown) => unknown)(merged) : Promise.all(arg as Promise<unknown>[]),
+  );
+  return merged as unknown as PrismaService;
 }
 
 // Mock SystemConfigService — mặc định trả về fallback truyền vào (giống hành vi thật khi
@@ -529,6 +544,35 @@ describe('CommunityFeedService.editPost', () => {
     expect(arg.data.body).toBe('nội dung mới');
     expect(arg.data.editedAt).toBeInstanceOf(Date);
   });
+
+  // P1-4 (docs/2026-09-08-review-progress.md): bài của user CHƯA tin cậy đi qua kiểm duyệt
+  // (PENDING → admin duyệt → PUBLISHED, đồng thời tác giả được đánh isTrusted VĨNH VIỄN).
+  // Sau đó tác giả PATCH nội dung thành spam/lừa đảo: bài vẫn PUBLISHED, giữ nguyên vị trí đã
+  // ghim/best-answer, và KHÔNG bao giờ quay lại hàng chờ duyệt (adminPending chỉ lọc PENDING).
+  it('sửa NỘI DUNG bài PUBLISHED của user chưa tin cậy → quay lại PENDING để duyệt lại', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED' });
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ isTrusted: false });
+    (prisma.order.findFirst as jest.Mock).mockResolvedValue(null); // chưa có đơn DELIVERED
+    await makeSvc(prisma).editPost('author', 'p1', { body: 'nội dung đổi hoàn toàn' }, 'CUSTOMER');
+    expect((prisma.feedPost.update as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+  });
+
+  it('sửa nội dung bài PUBLISHED của user TIN CẬY (vd STAFF) → giữ nguyên PUBLISHED', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED' });
+    await makeSvc(prisma).editPost('author', 'p1', { body: 'sửa chính tả' }, 'STAFF');
+    expect((prisma.feedPost.update as jest.Mock).mock.calls[0][0].data.status).toBeUndefined();
+  });
+
+  it('bài đang PENDING sẵn → sửa không đụng tới status (vẫn chờ duyệt)', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PENDING' });
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ isTrusted: false });
+    (prisma.order.findFirst as jest.Mock).mockResolvedValue(null);
+    await makeSvc(prisma).editPost('author', 'p1', { body: 'bổ sung thêm' }, 'CUSTOMER');
+    expect((prisma.feedPost.update as jest.Mock).mock.calls[0][0].data.status).toBeUndefined();
+  });
 });
 
 describe('CommunityFeedService.getComments', () => {
@@ -971,10 +1015,13 @@ describe('slugifyTag (pure fn)', () => {
 });
 
 describe('CommunityFeedService.bumpReputation', () => {
-  it('upsert increment reputation + set create.level theo ngưỡng mặc định', async () => {
+  it('ghi 1 dòng sổ cái ReputationEvent (khoá theo reason+refId) rồi mới cộng điểm', async () => {
     const prisma = makePrisma();
     (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 5 });
-    await makeSvc(prisma).bumpReputation('u1', 5);
+    await makeSvc(prisma).bumpReputation('u1', 5, 'POST', 'p1');
+    expect(prisma.reputationEvent.create).toHaveBeenCalledWith({
+      data: { userId: 'u1', amount: 5, reason: 'POST', refId: 'p1' },
+    });
     expect(prisma.communityProfile.upsert).toHaveBeenCalledWith({
       where: { userId: 'u1' },
       create: { userId: 'u1', reputation: 5, level: 1 },
@@ -985,7 +1032,7 @@ describe('CommunityFeedService.bumpReputation', () => {
   it('sau upsert → đọc lại reputation rồi cập nhật level tương ứng (2 bước)', async () => {
     const prisma = makePrisma();
     (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 210 });
-    await makeSvc(prisma).bumpReputation('u1', 10);
+    await makeSvc(prisma).bumpReputation('u1', 10, 'BEST_ANSWER', 'p1');
     expect(prisma.communityProfile.findUnique).toHaveBeenCalledWith({ where: { userId: 'u1' }, select: { reputation: true } });
     expect(prisma.communityProfile.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { level: 3 } });
   });
@@ -994,33 +1041,148 @@ describe('CommunityFeedService.bumpReputation', () => {
     const prisma = makePrisma();
     (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 15 });
     const config = makeConfig({ 'community.rep_thresholds': [0, 10, 20] });
-    await makeSvc(prisma, undefined, undefined, config).bumpReputation('u1', 15);
+    await makeSvc(prisma, undefined, undefined, config).bumpReputation('u1', 15, 'POST', 'p1');
     expect(config.get).toHaveBeenCalledWith('community.rep_thresholds', [0, 50, 200, 500]);
     expect(prisma.communityProfile.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { level: 2 } });
   });
 
-  it('upsert lỗi → nuốt lỗi, KHÔNG throw (non-fatal)', async () => {
-    const prisma = makePrisma({
-      communityProfile: {
-        findUnique: jest.fn().mockResolvedValue(null),
-        upsert: jest.fn().mockRejectedValue(new Error('db down')),
-        update: jest.fn().mockResolvedValue({}),
-        findMany: jest.fn().mockResolvedValue([]),
-      },
-    });
-    await expect(makeSvc(prisma).bumpReputation('u1', 5)).resolves.toBeUndefined();
+  // P1-1 (docs/2026-09-08-review-progress.md): trước đây bumpReputation KHÔNG có trần —
+  // bình luận liên tục là +2 rep/lần, ở 60 req/phút thì lên top bảng xếp hạng trong ~4 phút.
+  it('vượt trần điểm/ngày → KHÔNG ghi sổ cái, KHÔNG cộng điểm', async () => {
+    const prisma = makePrisma();
+    (prisma.reputationEvent.aggregate as jest.Mock).mockResolvedValue({ _sum: { amount: 28 } });
+    const config = makeConfig({ 'community.daily_rep_cap': 30 });
+    await makeSvc(prisma, undefined, undefined, config).bumpReputation('u1', 5, 'ANSWER', 'c9');
+    expect(prisma.reputationEvent.create).not.toHaveBeenCalled();
+    expect(prisma.communityProfile.upsert).not.toHaveBeenCalled();
   });
 
-  it('findUnique/update lỗi sau upsert → vẫn nuốt lỗi, KHÔNG throw', async () => {
-    const prisma = makePrisma({
-      communityProfile: {
-        findUnique: jest.fn().mockRejectedValue(new Error('boom')),
-        upsert: jest.fn().mockResolvedValue({}),
-        update: jest.fn().mockResolvedValue({}),
-        findMany: jest.fn().mockResolvedValue([]),
-      },
+  it('còn dưới trần → vẫn cộng bình thường', async () => {
+    const prisma = makePrisma();
+    (prisma.reputationEvent.aggregate as jest.Mock).mockResolvedValue({ _sum: { amount: 20 } });
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 25 });
+    const config = makeConfig({ 'community.daily_rep_cap': 30 });
+    await makeSvc(prisma, undefined, undefined, config).bumpReputation('u1', 5, 'ANSWER', 'c9');
+    expect(prisma.reputationEvent.create).toHaveBeenCalled();
+  });
+
+  it('cộng lại cho CÙNG nguồn (reason+refId) → P2002 từ unique → bỏ qua êm, không throw', async () => {
+    const prisma = makePrisma();
+    (prisma.reputationEvent.create as jest.Mock).mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' }));
+    await expect(makeSvc(prisma).bumpReputation('u1', 5, 'POST', 'p1')).resolves.toBeUndefined();
+    expect(prisma.communityProfile.upsert).not.toHaveBeenCalled();
+  });
+
+  it('thua race Serializable (P2034) → bỏ qua êm (điểm rep là trang trí, không phải tiền)', async () => {
+    const prisma = makePrisma();
+    (prisma.$transaction as jest.Mock).mockRejectedValue(Object.assign(new Error('serialize'), { code: 'P2034' }));
+    await expect(makeSvc(prisma).bumpReputation('u1', 5, 'POST', 'p1')).resolves.toBeUndefined();
+  });
+
+  it('upsert lỗi thật → nuốt lỗi, KHÔNG throw (non-fatal)', async () => {
+    const prisma = makePrisma();
+    (prisma.communityProfile.upsert as jest.Mock).mockRejectedValue(new Error('db down'));
+    await expect(makeSvc(prisma).bumpReputation('u1', 5, 'POST', 'p1')).resolves.toBeUndefined();
+  });
+});
+
+describe('CommunityFeedService.deletePost — đảo điểm reputation đã cộng', () => {
+  // P1-1: deletePost trước đây chỉ set status REMOVED. Farmer đăng bài lấy +5 rep rồi xoá sạch
+  // → giữ nguyên điểm, không còn nội dung nào để ai kiểm chứng. Phải đảo lại đúng số đã cộng.
+  it('xoá bài → ghi dòng đảo REVERSE_POST + trừ đúng tổng điểm đã cộng từ bài đó', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author' });
+    (prisma.reputationEvent.findMany as jest.Mock).mockResolvedValue([
+      { amount: 5, reason: 'POST', refId: 'p1' },
+      { amount: 10, reason: 'BEST_ANSWER', refId: 'p1' },
+    ]);
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 40 });
+    await makeSvc(prisma).deletePost('author', 'CUSTOMER', 'p1');
+    expect(prisma.reputationEvent.create).toHaveBeenCalledWith({
+      data: { userId: 'author', amount: -15, reason: 'REVERSE_POST', refId: 'p1' },
     });
-    await expect(makeSvc(prisma).bumpReputation('u1', 5)).resolves.toBeUndefined();
+    expect(prisma.communityProfile.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'author' }, data: { reputation: { decrement: 15 } } }),
+    );
+  });
+
+  it('xoá bài chưa từng được cộng điểm → không ghi dòng đảo, không trừ', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author' });
+    (prisma.reputationEvent.findMany as jest.Mock).mockResolvedValue([]);
+    await makeSvc(prisma).deletePost('author', 'CUSTOMER', 'p1');
+    expect(prisma.reputationEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('xoá lại lần 2 (P2002 trên REVERSE_POST) → KHÔNG trừ điểm lần 2', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author' });
+    (prisma.reputationEvent.findMany as jest.Mock).mockResolvedValue([{ amount: 5, reason: 'POST', refId: 'p1' }]);
+    (prisma.reputationEvent.create as jest.Mock).mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' }));
+    await expect(makeSvc(prisma).deletePost('author', 'CUSTOMER', 'p1')).resolves.toEqual({ ok: true });
+    expect(prisma.communityProfile.update).not.toHaveBeenCalled();
+  });
+
+  it('đảo điểm lỗi → bài vẫn được gỡ (non-fatal)', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author' });
+    (prisma.reputationEvent.findMany as jest.Mock).mockRejectedValue(new Error('db down'));
+    await expect(makeSvc(prisma).deletePost('author', 'CUSTOMER', 'p1')).resolves.toEqual({ ok: true });
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { status: 'REMOVED' } });
+  });
+});
+
+// P1-3 (docs/2026-09-08-review-progress.md): TOÀN BỘ bảng feed_comments trước đây chỉ có
+// create/findMany/isAccepted — không có đường nào gỡ 1 bình luận. Hub kiểm duyệt chỉ hiện nút
+// ẩn cho targetType='POST' vì backend không có endpoint cho COMMENT → bình luận bị báo cáo
+// (chửi bới, lộ SĐT người khác) hiển thị vĩnh viễn, chính tác giả cũng không xoá được.
+describe('CommunityFeedService.removeComment', () => {
+  it('tác giả tự gỡ bình luận của mình → đánh dấu isRemoved', async () => {
+    const prisma = makePrisma();
+    (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue({ id: 'c1', userId: 'me', postId: 'p1' });
+    const r = await makeSvc(prisma).removeComment('me', 'CUSTOMER', 'c1');
+    expect(r).toEqual({ ok: true });
+    expect(prisma.feedComment.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { isRemoved: true } });
+  });
+
+  it('ADMIN gỡ bình luận của người khác → được phép (đường xử lý báo cáo)', async () => {
+    const prisma = makePrisma();
+    (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue({ id: 'c1', userId: 'someone', postId: 'p1' });
+    await makeSvc(prisma).removeComment('admin', 'ADMIN', 'c1');
+    expect(prisma.feedComment.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { isRemoved: true } });
+  });
+
+  it('người ngoài gỡ bình luận của người khác → Forbidden, KHÔNG đụng DB', async () => {
+    const prisma = makePrisma();
+    (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue({ id: 'c1', userId: 'someone', postId: 'p1' });
+    await expect(makeSvc(prisma).removeComment('intruder', 'CUSTOMER', 'c1')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.feedComment.update).not.toHaveBeenCalled();
+  });
+
+  it('bình luận không tồn tại → NotFound', async () => {
+    const prisma = makePrisma();
+    (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue(null);
+    await expect(makeSvc(prisma).removeComment('me', 'CUSTOMER', 'cX')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('gỡ bình luận đang là best-answer → bỏ luôn cờ isAccepted + bestCommentId của bài', async () => {
+    const prisma = makePrisma();
+    (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue({ id: 'c1', userId: 'me', postId: 'p1', isAccepted: true });
+    await makeSvc(prisma).removeComment('me', 'CUSTOMER', 'c1');
+    expect(prisma.feedComment.update).toHaveBeenCalledWith({
+      where: { id: 'c1' },
+      data: { isRemoved: true, isAccepted: false },
+    });
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { bestCommentId: null } });
+  });
+});
+
+describe('CommunityFeedService.getComments — lọc bình luận đã gỡ', () => {
+  it('chỉ trả bình luận chưa bị gỡ (isRemoved: false)', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ status: 'PUBLISHED', userId: 'author' });
+    await makeSvc(prisma).getComments('p1');
+    expect((prisma.feedComment.findMany as jest.Mock).mock.calls[0][0].where).toEqual({ postId: 'p1', isRemoved: false });
   });
 });
 

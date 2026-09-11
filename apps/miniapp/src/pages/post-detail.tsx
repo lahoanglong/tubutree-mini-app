@@ -11,6 +11,7 @@ import {
   editPost,
   reactPost,
   reportContent,
+  removeComment,
   adminPin,
   type FeedItem,
   type FeedComment,
@@ -86,6 +87,16 @@ export default function PostDetailPage() {
 
   const markBest = useMutation({
     mutationFn: (commentId: string) => setBestAnswer(id!, commentId),
+    onSuccess: () => {
+      haptic('medium');
+      void invalidateCommunity();
+    },
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
+  // Tự gỡ bình luận của mình — trước đây không có đường nào (kể cả tác giả) để gỡ 1 bình luận.
+  const removeCommentMut = useMutation({
+    mutationFn: (commentId: string) => removeComment(commentId),
     onSuccess: () => {
       haptic('medium');
       void invalidateCommunity();
@@ -445,6 +456,11 @@ export default function PostDetailPage() {
                 haptic('light');
                 setReportTarget({ targetType: 'COMMENT', targetId: c.id });
               }}
+              onRemove={() => {
+                haptic('light');
+                removeCommentMut.mutate(c.id);
+              }}
+              removing={removeCommentMut.isPending && removeCommentMut.variables === c.id}
             />
           ))
         )}
@@ -606,12 +622,16 @@ function CommentRow({
   onMarkBest,
   markingPending,
   onReport,
+  onRemove,
+  removing,
 }: {
   comment: FeedComment;
   canMarkBest: boolean;
   onMarkBest: () => void;
   markingPending: boolean;
   onReport: () => void;
+  onRemove: () => void;
+  removing: boolean;
 }) {
   return (
     <Box
@@ -664,7 +684,17 @@ function CommentRow({
             </Text>
           </Box>
         </Box>
-        {!comment.isOwner && (
+        {comment.isOwner ? (
+          <Box
+            role="button"
+            aria-label={vi.community.hideContent}
+            className="tubu-press"
+            style={{ opacity: removing ? 0.5 : 1 }}
+            onClick={removing ? undefined : onRemove}
+          >
+            <Trash2 size={14} color="var(--neutral-300)" strokeWidth={1.8} />
+          </Box>
+        ) : (
           <Box role="button" aria-label={vi.community.report} className="tubu-press" onClick={onReport}>
             <Flag size={14} color="var(--neutral-300)" strokeWidth={1.8} />
           </Box>

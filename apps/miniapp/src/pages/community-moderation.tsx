@@ -9,6 +9,7 @@ import {
   adminReports,
   adminResolveReport,
   adminHidePost,
+  removeComment,
   listEvents,
   createEvent,
   closeEvent,
@@ -205,8 +206,11 @@ function ReportsSection() {
   const reportsQ = useQuery({ queryKey: ['admin-community-reports'], queryFn: adminReports });
   const invalidate = () => qc.invalidateQueries({ queryKey: ['admin-community-reports'] });
 
+  // Bài và bình luận là 2 endpoint khác nhau — trước đây chỉ có đường cho bài nên nút ẩn
+  // bị giấu hoàn toàn với báo cáo bình luận (bình luận vi phạm hiển thị vĩnh viễn).
   const hideM = useMutation({
-    mutationFn: (targetId: string) => adminHidePost(targetId),
+    mutationFn: ({ targetId, targetType }: { targetId: string; targetType: string }) =>
+      targetType === 'COMMENT' ? removeComment(targetId) : adminHidePost(targetId),
     onSuccess: () => {
       openSnackbar({ text: vi.community.hideContent, type: 'success' });
       invalidate();
@@ -234,9 +238,9 @@ function ReportsSection() {
         <ReportCard
           key={report.id}
           report={report}
-          onHide={() => hideM.mutate(report.targetId)}
+          onHide={() => hideM.mutate({ targetId: report.targetId, targetType: report.targetType })}
           onResolve={() => resolveM.mutate(report.id)}
-          hideLoading={hideM.isPending && hideM.variables === report.targetId}
+          hideLoading={hideM.isPending && hideM.variables?.targetId === report.targetId}
           resolveLoading={resolveM.isPending && resolveM.variables === report.id}
         />
       ))}
@@ -264,19 +268,17 @@ function ReportCard({
       </Text>
       <Text size="small" style={{ marginTop: 4 }}>{report.reason}</Text>
       <Box flex style={{ gap: 8, marginTop: 10 }}>
-        {report.targetType === 'POST' && (
-          <Button
-            size="small"
-            variant="secondary"
-            prefixIcon={<EyeOff size={15} />}
-            disabled={hideLoading}
-            loading={hideLoading}
-            style={{ flex: 1, color: 'var(--danger)' }}
-            onClick={onHide}
-          >
-            {vi.community.hideContent}
-          </Button>
-        )}
+        <Button
+          size="small"
+          variant="secondary"
+          prefixIcon={<EyeOff size={15} />}
+          disabled={hideLoading}
+          loading={hideLoading}
+          style={{ flex: 1, color: 'var(--danger)' }}
+          onClick={onHide}
+        >
+          {vi.community.hideContent}
+        </Button>
         <Button size="small" prefixIcon={<Check size={15} />} disabled={resolveLoading} loading={resolveLoading} style={{ flex: 1 }} onClick={onResolve}>
           {vi.community.resolve}
         </Button>

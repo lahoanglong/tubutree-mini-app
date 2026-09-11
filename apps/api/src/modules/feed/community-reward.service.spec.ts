@@ -95,7 +95,8 @@ describe('CommunityRewardService.rewardBestAnswer', () => {
     const d = deps();
     d.config.get.mockImplementation(async (k: string, f: number) => (k === 'community.best_answer_reward' ? 500 : f));
     await make(d).rewardBestAnswer('answerer', 'author', 'p1');
-    expect(d.coins.grantCoins).toHaveBeenCalledWith('answerer', 500, 'COMMUNITY_BEST:p1', 'COMMUNITY', 'p1');
+    // tham số cuối là tx — best-answer giờ cũng đếm-rồi-cấp trong transaction như rewardPost/rewardAnswer.
+    expect(d.coins.grantCoins).toHaveBeenCalledWith('answerer', 500, 'COMMUNITY_BEST:p1', 'COMMUNITY', 'p1', d.prisma);
   });
 
   it('best-answer trỏ chính chủ bài → KHÔNG thưởng', async () => {
@@ -115,5 +116,38 @@ describe('CommunityRewardService.rewardBestAnswer', () => {
     expect(reasons).toEqual(['COMMUNITY_BEST:p1', 'COMMUNITY_BEST:p1']);
     // 2 reason giống hệt nhau → CoinsService.grantCoins (partial unique index reason
     // WHERE refType='COMMUNITY') sẽ chặn lần cấp thứ 2 bằng P2002 idempotent-skip.
+  });
+
+  // P1-2 (docs/2026-09-08-review-progress.md): idempotency theo postId CHỈ chặn farm trên
+  // CÙNG 1 bài. Tài khoản A đăng 200 QUESTION (đăng bài không giới hạn, chỉ xu-thưởng-đăng bị
+  // trần 3/ngày) rồi chọn best-answer cho B ở cả 200 bài → B nhận 200×500 = 100.000 xu, mỗi
+  // lần một reason khác nhau nên unique index không bao giờ chạm. Phải có trần NGÀY như 2
+  // reward anh em (rewardPost/rewardAnswer đều đã đi qua rewardWithDailyCap).
+  it('chạm trần best-answer/ngày → KHÔNG thưởng (chặn farm qua nhiều bài khác nhau)', async () => {
+    const d = deps();
+    d.config.get.mockImplementation(async (k: string, f: number) =>
+      k === 'community.best_answer_reward' ? 500 : k === 'community.daily_best_answer_cap' ? 5 : f,
+    );
+    d.prisma.coinTransaction.count.mockResolvedValue(5);
+    await make(d).rewardBestAnswer('answerer', 'author', 'p1');
+    expect(d.coins.grantCoins).not.toHaveBeenCalled();
+  });
+
+  it('đếm trần best-answer theo reason COMMUNITY_BEST của HÔM NAY, trong transaction Serializable', async () => {
+    const d = deps();
+    d.config.get.mockImplementation(async (k: string, f: number) =>
+      k === 'community.best_answer_reward' ? 500 : k === 'community.daily_best_answer_cap' ? 5 : f,
+    );
+    await make(d).rewardBestAnswer('answerer', 'author', 'p1');
+    expect(d.prisma.coinTransaction.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'answerer',
+          refType: 'COMMUNITY',
+          reason: { startsWith: 'COMMUNITY_BEST:' },
+        }),
+      }),
+    );
+    expect(d.prisma.$transaction).toHaveBeenCalled();
   });
 });

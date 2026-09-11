@@ -147,8 +147,16 @@ export class CommunityFeedController {
   }
 
   @Patch(':id')
-  editPost(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() dto: EditPostDto) {
-    return this.feed.editPost(userId, id, dto);
+  editPost(@CurrentUser() user: { sub: string; role: string }, @Param('id') id: string, @Body() dto: EditPostDto) {
+    // role cần cho re-moderation: sửa nội dung bài đã duyệt của user chưa tin cậy → về PENDING.
+    return this.feed.editPost(user.sub, id, dto, user.role);
+  }
+
+  /** Gỡ 1 bình luận (tác giả bình luận hoặc ADMIN) — khai báo TRƯỚC `@Delete(':id')` để
+   *  'comments' không bị nuốt thành postId nếu sau này đổi sang route 1 đoạn. */
+  @Delete('comments/:commentId')
+  removeComment(@CurrentUser() user: { sub: string; role: string }, @Param('commentId') commentId: string) {
+    return this.feed.removeComment(user.sub, user.role, commentId);
   }
 
   @Delete(':id')

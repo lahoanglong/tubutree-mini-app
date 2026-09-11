@@ -110,26 +110,91 @@ export class CommunityFeedService {
   /**
    * Cộng điểm reputation (§6.14 Pha 4) + cập nhật hạng — NON-FATAL: tự try/catch,
    * không bao giờ throw ra caller (reputation chỉ mang tính trang trí, không ảnh hưởng
-   * tiền/nghiệp vụ chính). Đơn giản hoá 2 bước: upsert increment reputation, rồi đọc lại
-   * để tính level chính xác (tránh phải biết reputation "trước" khi tính increment).
+   * tiền/nghiệp vụ chính).
+   *
+   * Mọi lần cộng đều ghi 1 dòng `ReputationEvent` TRƯỚC, vì 3 lý do (P1-1,
+   * docs/2026-09-08-review-progress.md):
+   *  1. TRẦN NGÀY: trước đây không có gì đếm được số điểm đã cộng trong ngày → bình luận
+   *     liên tục (+rep_answer mỗi lần) là lên top bảng xếp hạng trong vài phút.
+   *  2. IDEMPOTENT: unique (userId, reason, refId) → retry/gọi lại cùng nguồn không cộng 2 lần.
+   *  3. ĐẢO ĐƯỢC: xoá bài phải trừ lại đúng số đã cộng (xem reverseReputationForPost).
+   * Đếm-rồi-quyết nằm TRONG transaction Serializable — cùng pattern với trần thưởng xu ở
+   * `CommunityRewardService.rewardWithDailyCap` — để 2 request dồn dập không cùng lọt trần.
    */
-  async bumpReputation(userId: string, amount: number): Promise<void> {
+  async bumpReputation(userId: string, amount: number, reason: string, refId: string): Promise<void> {
+    if (amount <= 0) return;
     try {
       const thresholds = await this.config.get<number[]>('community.rep_thresholds', DEFAULT_REP_THRESHOLDS);
-      await this.prisma.communityProfile.upsert({
-        where: { userId },
-        create: { userId, reputation: amount, level: levelFromReputation(amount, thresholds) },
-        update: { reputation: { increment: amount } },
-      });
-      const profile = await this.prisma.communityProfile.findUnique({ where: { userId }, select: { reputation: true } });
-      if (profile) {
-        await this.prisma.communityProfile.update({
-          where: { userId },
-          data: { level: levelFromReputation(profile.reputation, thresholds) },
-        });
-      }
+      const dailyCap = await this.config.get<number>('community.daily_rep_cap', 30);
+      const since = new Date();
+      since.setHours(0, 0, 0, 0);
+      await this.prisma.$transaction(
+        async (tx) => {
+          const earnedToday = await tx.reputationEvent.aggregate({
+            where: { userId, amount: { gt: 0 }, createdAt: { gte: since } },
+            _sum: { amount: true },
+          });
+          if ((earnedToday._sum.amount ?? 0) + amount > dailyCap) return; // chạm trần → bỏ qua êm
+          await tx.reputationEvent.create({ data: { userId, amount, reason, refId } });
+          await tx.communityProfile.upsert({
+            where: { userId },
+            create: { userId, reputation: amount, level: levelFromReputation(amount, thresholds) },
+            update: { reputation: { increment: amount } },
+          });
+          const profile = await tx.communityProfile.findUnique({ where: { userId }, select: { reputation: true } });
+          if (profile) {
+            await tx.communityProfile.update({
+              where: { userId },
+              data: { level: levelFromReputation(profile.reputation, thresholds) },
+            });
+          }
+        },
+        { isolationLevel: 'Serializable' },
+      );
     } catch (err) {
+      // P2002 = đã cộng cho đúng nguồn này rồi; P2034 = thua race Serializable. Cả hai đều là
+      // "không cộng lần này" đúng ý đồ, không phải lỗi cần báo.
+      const code = (err as { code?: string } | null)?.code;
+      if (code === 'P2002' || code === 'P2034') return;
       this.logger.warn(`bumpReputation failed for ${userId}: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Đảo toàn bộ điểm reputation đã cộng từ 1 bài khi bài bị gỡ/xoá. Không có bước này thì
+   * farmer đăng bài ăn điểm rồi xoá sạch vẫn giữ nguyên hạng mà chẳng còn nội dung nào để
+   * kiểm chứng. Ghi 1 dòng âm `REVERSE_POST` — unique (userId, reason, refId) khiến gỡ 2 lần
+   * cũng chỉ trừ đúng 1 lần. NON-FATAL: lỗi đảo điểm không được chặn việc gỡ bài.
+   */
+  private async reverseReputationForPost(userId: string, postId: string): Promise<void> {
+    try {
+      const thresholds = await this.config.get<number[]>('community.rep_thresholds', DEFAULT_REP_THRESHOLDS);
+      await this.prisma.$transaction(async (tx) => {
+        const events = await tx.reputationEvent.findMany({
+          where: { userId, refId: postId, amount: { gt: 0 } },
+          select: { amount: true },
+        });
+        const total = events.reduce((sum, e) => sum + e.amount, 0);
+        if (total <= 0) return;
+        await tx.reputationEvent.create({
+          data: { userId, amount: -total, reason: 'REVERSE_POST', refId: postId },
+        });
+        await tx.communityProfile.update({
+          where: { userId },
+          data: { reputation: { decrement: total } },
+        });
+        const profile = await tx.communityProfile.findUnique({ where: { userId }, select: { reputation: true } });
+        if (profile) {
+          await tx.communityProfile.update({
+            where: { userId },
+            data: { level: levelFromReputation(Math.max(0, profile.reputation), thresholds) },
+          });
+        }
+      });
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code;
+      if (code === 'P2002') return; // đã đảo rồi (gỡ lần 2)
+      this.logger.warn(`reverseReputationForPost failed for ${postId}: ${(err as Error).message}`);
     }
   }
 
@@ -353,7 +418,7 @@ export class CommunityFeedService {
       }
       try {
         const amount = await this.config.get<number>('community.rep_post', 5);
-        await this.bumpReputation(userId, amount);
+        await this.bumpReputation(userId, amount, 'POST', post.id);
       } catch (err) {
         this.logger.warn(`bumpReputation(post) failed for ${userId}: ${(err as Error).message}`);
       }
@@ -386,7 +451,7 @@ export class CommunityFeedService {
     }
     try {
       const amount = await this.config.get<number>('community.rep_post', 5);
-      await this.bumpReputation(post.userId, amount);
+      await this.bumpReputation(post.userId, amount, 'POST', post.id);
     } catch (err) {
       this.logger.warn(`bumpReputation(approve) failed for ${post.userId}: ${(err as Error).message}`);
     }
@@ -452,7 +517,7 @@ export class CommunityFeedService {
         }
         try {
           const amount = await this.config.get<number>('community.rep_answer', 2);
-          await this.bumpReputation(userId, amount);
+          await this.bumpReputation(userId, amount, 'ANSWER', comment.id);
         } catch (err) {
           this.logger.warn(`bumpReputation(answer) failed for ${userId}: ${(err as Error).message}`);
         }
@@ -469,7 +534,7 @@ export class CommunityFeedService {
     if (!post || post.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
     if (post.status === 'PENDING' && post.userId !== viewerId) throw new NotFoundException('Bài viết không tồn tại.');
     const comments = await this.prisma.feedComment.findMany({
-      where: { postId },
+      where: { postId, isRemoved: false },
       orderBy: [{ isAccepted: 'desc' }, { createdAt: 'asc' }],
       take,
       include: { user: { select: { fullName: true, avatarUrl: true, role: true, communityProfile: { select: { level: true } } } } },
@@ -523,7 +588,7 @@ export class CommunityFeedService {
     if (comment.userId !== post.userId && isFirstSelection) {
       try {
         const amount = await this.config.get<number>('community.rep_best', 10);
-        await this.bumpReputation(comment.userId, amount);
+        await this.bumpReputation(comment.userId, amount, 'BEST_ANSWER', postId);
       } catch (err) {
         this.logger.warn(`bumpReputation(best-answer) failed for ${comment.userId}: ${(err as Error).message}`);
       }
@@ -537,8 +602,20 @@ export class CommunityFeedService {
   }
 
   /** Sửa bài — chỉ chủ bài; set editedAt. */
-  async editPost(userId: string, postId: string, patch: { title?: string; body?: string; images?: string[] }) {
-    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { userId: true } });
+  /**
+   * Sửa bài của chính mình. `role` dùng để quyết định có phải duyệt lại hay không — xem
+   * khối re-moderation bên dưới (P1-4, docs/2026-09-08-review-progress.md).
+   */
+  async editPost(
+    userId: string,
+    postId: string,
+    patch: { title?: string; body?: string; images?: string[] },
+    role = '',
+  ) {
+    const post = await this.prisma.feedPost.findUnique({
+      where: { id: postId },
+      select: { userId: true, status: true },
+    });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.userId !== userId) throw new ForbiddenException('Chỉ chủ bài mới sửa được.');
     const data: Record<string, unknown> = { editedAt: new Date() };
@@ -549,15 +626,58 @@ export class CommunityFeedService {
     }
     if (patch.title !== undefined) data.title = patch.title.trim().slice(0, MAX_TITLE) || null;
     if (patch.images !== undefined) data.images = patch.images.filter((u) => u?.trim()).slice(0, MAX_IMAGES);
+
+    // Đổi NỘI DUNG (body/title/ảnh) của bài ĐÃ ĐƯỢC DUYỆT, bởi tác giả chưa thuộc nhóm tin cậy
+    // → trả về PENDING để kiểm duyệt lại. Không có bước này thì: bài hiền lành được duyệt (đồng
+    // thời tác giả được gắn isTrusted vĩnh viễn), sau đó tác giả thay ruột thành spam/lừa đảo mà
+    // bài vẫn PUBLISHED và không bao giờ xuất hiện lại trong hàng chờ duyệt (adminPending chỉ lọc
+    // PENDING). Chỉ reset khi thực sự đổi nội dung — sửa rỗng (chỉ chạm editedAt) không đáng
+    // đẩy bài ra khỏi bảng tin.
+    const contentChanged = patch.body !== undefined || patch.title !== undefined || patch.images !== undefined;
+    if (contentChanged && post.status === 'PUBLISHED' && !(await this.isTrusted(userId, role))) {
+      data.status = 'PENDING';
+    }
+
     await this.prisma.feedPost.update({ where: { id: postId }, data });
     return { ok: true };
   }
 
   /** Xoá mềm — chủ bài hoặc ADMIN. */
+  /**
+   * Gỡ (ẩn mềm) 1 bình luận — tác giả bình luận hoặc ADMIN. Đây là đường DUY NHẤT để xử lý
+   * bình luận bị báo cáo: trước đây bảng feed_comments chỉ có create/findMany/isAccepted nên
+   * bình luận chửi bới/lộ thông tin hiển thị vĩnh viễn, chính tác giả cũng không xoá được
+   * (P1-3, docs/2026-09-08-review-progress.md). Ẩn mềm (isRemoved) chứ không xoá cứng để còn
+   * dấu vết kiểm duyệt.
+   */
+  async removeComment(userId: string, role: string, commentId: string) {
+    const comment = await this.prisma.feedComment.findUnique({
+      where: { id: commentId },
+      select: { id: true, userId: true, postId: true, isAccepted: true },
+    });
+    if (!comment) throw new NotFoundException('Bình luận không tồn tại.');
+    if (comment.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Không có quyền gỡ bình luận này.');
+
+    // Bình luận đang được chọn là câu trả lời hay nhất: bỏ cờ + gỡ con trỏ ở bài, nếu không
+    // bài sẽ trỏ tới một comment đã ẩn (getComments lọc mất) → hiện "đã có best answer" mà
+    // người đọc không thấy nội dung nào.
+    await this.prisma.feedComment.update({
+      where: { id: commentId },
+      data: comment.isAccepted ? { isRemoved: true, isAccepted: false } : { isRemoved: true },
+    });
+    if (comment.isAccepted) {
+      await this.prisma.feedPost.update({ where: { id: comment.postId }, data: { bestCommentId: null } });
+    }
+    return { ok: true };
+  }
+
   async deletePost(userId: string, role: string, postId: string) {
     const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { userId: true } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Không có quyền xoá.');
+    // Trả lại điểm reputation đã cộng từ bài này TRƯỚC khi gỡ — nếu không, đăng-ăn-điểm-rồi-xoá
+    // là cách farm hạng sạch dấu vết (P1-1). Trừ theo CHỦ BÀI, kể cả khi ADMIN là người gỡ.
+    await this.reverseReputationForPost(post.userId, postId);
     await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
     return { ok: true };
   }
