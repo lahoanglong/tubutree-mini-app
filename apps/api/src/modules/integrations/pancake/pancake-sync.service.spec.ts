@@ -137,3 +137,42 @@ describe('PancakeSyncService.slugify', () => {
     expect(slug('Đậu Đỏ', 'XYZ999')).toBe('dau-do-xyz999');
   });
 });
+
+// P0-3 (docs/2026-09-08-review-progress.md): sync ghi đè TUYỆT ĐỐI `stock` bằng
+// remain_quantity của Pancake. Nguy hiểm nhất là cú quét TOÀN BỘ catalog lúc boot
+// (onModuleInit, không có updatedSince): mỗi lần restart/deploy là đè lại tồn kho của MỌI
+// sản phẩm — kể cả sản phẩm Pancake không hề đụng tới nhiều tháng, và kể cả khi đơn cục bộ
+// vừa trừ kho mà Pancake chưa kịp phản ánh → hồi sinh hàng đã bán hết (oversell).
+// Sửa an toàn (KHÔNG phụ thuộc câu hỏi chưa chốt "Pancake có tự trừ tồn khi tạo đơn không"):
+// lần quét lúc boot chỉ đồng bộ giá/metadata, KHÔNG đụng cột stock. Biến thể tăng dần 15 phút
+// (updatedSince, phạm vi hẹp hơn nhiều) và webhook vẫn cập nhật tồn kho như cũ.
+describe('PancakeSyncService — quét toàn bộ lúc boot không ghi đè tồn kho', () => {
+  it('syncProducts({ skipStock: true }) → update variation KHÔNG chứa field stock', async () => {
+    const prisma = makePrisma();
+    (prisma.variation.findUnique as jest.Mock).mockResolvedValue({ retailPrice: 1000, salePrice: null });
+    await new PancakeSyncService(prisma, makeClient([[prod('p1')]]), lifecycle).syncProducts(undefined, {
+      skipStock: true,
+    });
+    const call = (prisma.variation.upsert as jest.Mock).mock.calls[0][0];
+    expect(call.update).not.toHaveProperty('stock');
+    // Vẫn phải đồng bộ giá như thường.
+    expect(call.update).toMatchObject({ retailPrice: 1000 });
+    // Variation MỚI vẫn cần stock ban đầu (chưa từng có đơn cục bộ nào để mất).
+    expect(call.create).toMatchObject({ stock: 5 });
+  });
+
+  it('sync định kỳ (mặc định) vẫn ghi stock như cũ', async () => {
+    const prisma = makePrisma();
+    await new PancakeSyncService(prisma, makeClient([[prod('p1')]]), lifecycle).syncProducts('2026-09-11T00:00:00Z');
+    expect((prisma.variation.upsert as jest.Mock).mock.calls[0][0].update).toMatchObject({ stock: 5 });
+  });
+
+  it('onModuleInit → gọi sync ở chế độ skipStock (bảo vệ tồn kho khi restart/deploy)', async () => {
+    const prisma = makePrisma();
+    const svc = new PancakeSyncService(prisma, makeClient([[prod('p1')]]), lifecycle);
+    const spy = jest.spyOn(svc, 'syncProducts').mockResolvedValue(0);
+    svc.onModuleInit();
+    await new Promise((r) => setImmediate(r));
+    expect(spy).toHaveBeenCalledWith(undefined, { skipStock: true });
+  });
+});

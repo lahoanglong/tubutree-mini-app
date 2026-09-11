@@ -23,10 +23,17 @@ export class PancakeSyncService implements OnModuleInit {
     private readonly lifecycle: LifecycleService,
   ) {}
 
-  /** Sync lần đầu khi boot — không chặn khởi động, lỗi chỉ log. */
+  /**
+   * Sync lần đầu khi boot — không chặn khởi động, lỗi chỉ log.
+   * `skipStock`: cú quét này KHÔNG có `updatedSince` nên đụng vào TOÀN BỘ catalog. Nếu để nó
+   * ghi đè `stock`, mỗi lần restart/deploy là đặt lại tồn kho của mọi sản phẩm theo số Pancake
+   * — kể cả khi đơn cục bộ vừa trừ kho mà Pancake chưa phản ánh → hồi sinh hàng đã bán hết
+   * (P0-3, docs/2026-09-08-review-progress.md). Giá/metadata vẫn đồng bộ bình thường; tồn kho
+   * để cho cú sync tăng dần 15 phút (phạm vi hẹp) và webhook lo.
+   */
   onModuleInit(): void {
     if (!this.client.isConfigured()) return;
-    void this.syncProducts().catch((e) =>
+    void this.syncProducts(undefined, { skipStock: true }).catch((e) =>
       this.logger.error(`Sync lúc khởi động lỗi: ${e instanceof Error ? e.message : e}`),
     );
   }
@@ -37,8 +44,12 @@ export class PancakeSyncService implements OnModuleInit {
     await this.syncProducts(this.lastRunAt ?? undefined);
   }
 
-  /** Đồng bộ toàn bộ (hoặc từ updatedSince). Trả số sản phẩm đã upsert. */
-  async syncProducts(updatedSince?: string): Promise<number> {
+  /**
+   * Đồng bộ toàn bộ (hoặc từ updatedSince). Trả số sản phẩm đã upsert.
+   * `opts.skipStock` — không ghi đè cột `stock` của variation ĐÃ TỒN TẠI (variation mới vẫn
+   * lấy tồn kho ban đầu từ Pancake vì chưa thể có đơn cục bộ nào). Xem onModuleInit.
+   */
+  async syncProducts(updatedSince?: string, opts: { skipStock?: boolean } = {}): Promise<number> {
     if (!this.client.isConfigured()) {
       this.logger.warn('Pancake chưa cấu hình — skip sync.');
       return 0;
@@ -56,7 +67,7 @@ export class PancakeSyncService implements OnModuleInit {
       for (const p of products) {
         // Cô lập lỗi từng sản phẩm — 1 SP hỏng (vd slug trùng) không làm hỏng cả batch.
         try {
-          await this.upsertProduct(p);
+          await this.upsertProduct(p, opts);
           count++;
         } catch (err) {
           failed++;
@@ -73,7 +84,7 @@ export class PancakeSyncService implements OnModuleInit {
     return count;
   }
 
-  private async upsertProduct(p: PancakeProductDTO): Promise<void> {
+  private async upsertProduct(p: PancakeProductDTO, opts: { skipStock?: boolean } = {}): Promise<void> {
     // Pancake POS dùng `id` cho sản phẩm (product_id là của variation) — lấy id thật.
     const pancakeId = p.id ?? p.product_id;
     if (!pancakeId || !p.name) {
@@ -138,7 +149,8 @@ export class PancakeSyncService implements OnModuleInit {
           attributes: v.fields ?? {},
           retailPrice: v.retail_price ?? 0,
           salePrice: v.sale_price ?? null,
-          stock: v.remain_quantity ?? 0,
+          // Chỉ ghi tồn kho khi KHÔNG ở chế độ skipStock (xem onModuleInit).
+          ...(opts.skipStock ? {} : { stock: v.remain_quantity ?? 0 }),
           weight: v.weight ?? null,
         },
         create: {
