@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Box, Page, Text, Button, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, useSnackbar, useNavigate, useParams } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlayCircle, FileText, ChevronLeft, CheckCircle2, BookOpen } from 'lucide-react';
 import {
@@ -16,14 +15,17 @@ import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 
 export default function AcademyPage() {
-  const [openCourseId, setOpenCourseId] = useState<string | null>(null);
+  // Khoá đang mở nằm trên URL, KHÔNG phải state cục bộ: trước đây back của Zalo thoát thẳng
+  // khỏi Học viện thay vì quay về danh sách, và không có cách nào gửi link tới một khoá.
+  const { courseId } = useParams<{ courseId?: string }>();
+  const navigate = useNavigate();
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      {openCourseId ? (
-        <CourseDetail courseId={openCourseId} onBack={() => setOpenCourseId(null)} />
+      {courseId ? (
+        <CourseDetail courseId={courseId} onBack={() => navigate('/academy', { replace: true })} />
       ) : (
-        <CourseList onOpen={setOpenCourseId} />
+        <CourseList onOpen={(id) => navigate(`/academy/${id}`)} />
       )}
     </Page>
   );

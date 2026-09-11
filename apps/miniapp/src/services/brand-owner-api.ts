@@ -4,6 +4,8 @@ export interface OwnedPromotion {
   id: string;
   title: string;
   subtitle: string | null;
+  /** Mã giảm giá khách nhập khi thanh toán — không có thì banner chỉ là lời quảng cáo. */
+  couponCode: string | null;
   startAt: string;
   endAt: string;
   isActive: boolean;
@@ -26,9 +28,9 @@ export interface OwnedBrand {
 export const getOwnedBrand = () => api.get('/brand/owner/me').then((r) => r.data as OwnedBrand);
 export const updateOwnedBrand = (dto: Partial<Pick<OwnedBrand, 'logoUrl' | 'coverUrl' | 'tagline' | 'story' | 'origin'>>) =>
   api.patch('/brand/owner/me', dto).then((r) => r.data as OwnedBrand);
-export const createOwnedPromotion = (dto: { title: string; subtitle?: string; startAt: string; endAt: string }) =>
+export const createOwnedPromotion = (dto: { title: string; subtitle?: string; couponCode?: string; startAt: string; endAt: string }) =>
   api.post('/brand/owner/me/promotions', dto).then((r) => r.data as OwnedPromotion);
-export const updateOwnedPromotion = (id: string, dto: { title?: string; subtitle?: string; startAt?: string; endAt?: string; isActive?: boolean }) =>
+export const updateOwnedPromotion = (id: string, dto: { title?: string; subtitle?: string; couponCode?: string; startAt?: string; endAt?: string; isActive?: boolean }) =>
   api.patch(`/brand/owner/me/promotions/${id}`, dto).then((r) => r.data);
 export const deleteOwnedPromotion = (id: string) =>
   api.delete(`/brand/owner/me/promotions/${id}`).then((r) => r.data);

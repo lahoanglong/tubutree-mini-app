@@ -161,6 +161,44 @@ export default function BrandViewPage() {
             >
               <Text bold size="small" style={{ color: 'var(--clay-800)' }}>{p.title}</Text>
               {p.subtitle && <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>{p.subtitle}</Text>}
+              {/* Có mã mà không hiện thì banner chỉ là lời quảng cáo: khách đọc xong không
+                  biết làm gì tiếp. Chạm để chép, dán ở bước thanh toán. */}
+              {p.couponCode && (
+                <Box
+                  role="button"
+                  aria-label={`Sao chép mã ${p.couponCode}`}
+                  className="tubu-press"
+                  onClick={() => {
+                    const code = p.couponCode!;
+                    if (!navigator.clipboard) {
+                      openSnackbar({ text: `Mã ưu đãi: ${code}`, type: 'info', duration: 3000 });
+                      return;
+                    }
+                    navigator.clipboard
+                      .writeText(code)
+                      .then(() =>
+                        openSnackbar({ text: `Đã chép mã ${code} — dán ở bước thanh toán`, type: 'success', duration: 2600 }),
+                      )
+                      .catch(() => openSnackbar({ text: `Mã ưu đãi: ${code}`, type: 'info', duration: 3000 }));
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginTop: 8,
+                    padding: '6px 12px',
+                    minHeight: 36,
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px dashed var(--clay-500)',
+                    background: 'var(--neutral-0)',
+                  }}
+                >
+                  <Text size="xSmall" bold style={{ color: 'var(--clay-800)', letterSpacing: 0.5 }}>
+                    {p.couponCode}
+                  </Text>
+                  <Text size="xxxxSmall" style={{ color: 'var(--neutral-500)' }}>chạm để chép</Text>
+                </Box>
+              )}
             </Box>
           ))}
         </Box>

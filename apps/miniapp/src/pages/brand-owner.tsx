@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getOwnedBrand,
@@ -45,6 +45,7 @@ export default function BrandOwnerPage() {
 function Editor({ brand }: { brand: OwnedBrand }) {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
+  const navigate = useNavigate();
   const refresh = () => qc.invalidateQueries({ queryKey: ['owned-brand'] });
 
   const [f, setF] = useState({
@@ -61,8 +62,8 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   });
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [promo, setPromo] = useState({ title: '', subtitle: '', startAt: '', endAt: '' });
-  const resetPromoForm = () => { setEditingId(null); setPromo({ title: '', subtitle: '', startAt: '', endAt: '' }); };
+  const [promo, setPromo] = useState({ title: '', subtitle: '', couponCode: '', startAt: '', endAt: '' });
+  const resetPromoForm = () => { setEditingId(null); setPromo({ title: '', subtitle: '', couponCode: '', startAt: '', endAt: '' }); };
   // Chỉ chặn khi CẢ HAI ngày do người dùng tự nhập và endAt < startAt — không tự hoán đổi,
   // chỉ chặn submit + báo lỗi (an toàn hơn tự sửa hộ dữ liệu người dùng nhập).
   const dateRangeInvalid =
@@ -75,6 +76,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     return {
       title: promo.title.trim(),
       subtitle: promo.subtitle.trim() || undefined,
+      couponCode: promo.couponCode.trim().toUpperCase() || undefined,
       startAt: new Date(startMs).toISOString(),
       endAt: new Date(endMs).toISOString(),
     };
@@ -102,6 +104,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     setPromo({
       title: p.title,
       subtitle: p.subtitle ?? '',
+      couponCode: p.couponCode ?? '',
       startAt: p.startAt ? new Date(p.startAt).toISOString().slice(0, 10) : '',
       endAt: p.endAt ? new Date(p.endAt).toISOString().slice(0, 10) : '',
     });
@@ -123,6 +126,22 @@ function Editor({ brand }: { brand: OwnedBrand }) {
         <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
           Bạn sửa được thông tin & khuyến mãi. Tên nhãn, chứng nhận, đăng/ẩn do Tubu duyệt.
         </Text>
+        {/* Sửa logo/ảnh bìa/câu chuyện mà không xem được kết quả thì chỉ đoán — trang nhãn
+            công khai đã có sẵn ở /brand/:slug, chỉ thiếu lối sang. */}
+        <Button
+          size="small"
+          variant="secondary"
+          style={{ marginTop: 10 }}
+          onClick={() => {
+            if (!brand.isPublished) {
+              openSnackbar({ text: 'Nhãn đang là nháp — Tubu duyệt xong khách mới xem được.', type: 'warning' });
+              return;
+            }
+            navigate(`/brand/${brand.slug}`);
+          }}
+        >
+          Xem trang nhãn
+        </Button>
       </Box>
 
       {/* Thông tin nhãn */}
@@ -156,6 +175,17 @@ function Editor({ brand }: { brand: OwnedBrand }) {
         <Box mt={2} flex flexDirection="column" style={{ gap: 6 }}>
           <Input placeholder="Tiêu đề (MUA 2 TẶNG 1)" value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} />
           <Input placeholder="Mô tả" value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} />
+          {/* Không có mã thì banner chỉ là lời quảng cáo: khách đọc "MUA 2 TẶNG 1" rồi không
+              biết làm gì tiếp. Cột couponCode đã có sẵn ở BE, chỉ thiếu ô nhập. */}
+          <Input
+            placeholder="Mã giảm giá (tuỳ chọn) — VD: TUBU20"
+            value={promo.couponCode}
+            onChange={(e) => setPromo({ ...promo, couponCode: e.target.value.toUpperCase() })}
+          />
+          <Text size="xxxxSmall" style={{ color: 'var(--neutral-400)' }}>
+            Có mã thì khách chạm để sao chép ngay trên trang nhãn. Mã phải được Tubu tạo trước
+            trong hệ thống voucher thì mới dùng được khi thanh toán.
+          </Text>
           <Box flex style={{ gap: 6 }}>
             <input
               type="date"

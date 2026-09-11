@@ -174,6 +174,9 @@ export default function MyApp() {
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/affiliate" element={<AffiliatePage />} />
                 <Route path="/academy" element={<AcademyPage />} />
+                {/* Khoá học có URL riêng: nút back của Zalo quay về danh sách thay vì thoát
+                    hẳn Học viện, và CTV gửi được link thẳng tới một khoá cho đội của mình. */}
+                <Route path="/academy/:courseId" element={<AcademyPage />} />
                 <Route path="/cashback" element={<CashbackPage />} />
                 <Route path="/dealer" element={<DealerPage />} />
                 <Route path="/about" element={<AboutPage />} />
