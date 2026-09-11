@@ -53,7 +53,10 @@ export class PancakeSyncService implements OnModuleInit {
    * `opts.skipStock` — không ghi đè cột `stock` của variation ĐÃ TỒN TẠI (variation mới vẫn
    * lấy tồn kho ban đầu từ Pancake vì chưa thể có đơn cục bộ nào). Xem onModuleInit.
    */
-  async syncProducts(updatedSince?: string, opts: { skipStock?: boolean } = {}): Promise<number> {
+  async syncProducts(
+    updatedSince?: string,
+    opts: { skipStock?: boolean; forceStock?: boolean } = {},
+  ): Promise<number> {
     if (!this.client.isConfigured()) {
       this.logger.warn('Pancake chưa cấu hình — skip sync.');
       return 0;
@@ -67,7 +70,9 @@ export class PancakeSyncService implements OnModuleInit {
     // tự truyền skipStock, nên `lastRunAt` (chỉ nằm trong RAM) còn null — boot sync lỗi, hoặc
     // process vừa khởi động lại — là cron 15 phút quét toàn bộ VÀ ghi đè tồn kho của mọi sản
     // phẩm theo số Pancake, hồi sinh hàng vừa bán hết cục bộ.
-    const skipStock = opts.skipStock || updatedSince === undefined;
+    // `forceStock` là lối thoát CÓ CHỦ ĐÍCH cho admin khi tồn kho local đã lệch thật — mặc định
+    // vẫn an toàn (quét toàn bộ thì không ghi stock).
+    const skipStock = opts.forceStock ? false : opts.skipStock || updatedSince === undefined;
     this.running = true;
     // Mốc cursor lấy ở ĐẦU sync: sản phẩm đổi trong lúc sync sẽ được bắt ở lần kế
     // (upsert idempotent nên overlap nhẹ là an toàn — thà trùng còn hơn bỏ sót).

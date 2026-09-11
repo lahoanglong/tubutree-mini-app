@@ -603,10 +603,15 @@ export class CommunityFeedService {
     const limit = Math.min(Math.max(take, 1), 100);
     const rows = await this.prisma.feedComment.findMany({
       where: { postId, isRemoved: false },
-      // `id` làm khoá phá hoà BẮT BUỘC khi phân trang bằng cursor: thiếu nó thì hai bình luận
-      // cùng createdAt (gửi trong cùng mili-giây, hoặc seed cùng lúc) có thứ tự không xác định
-      // giữa hai lần truy vấn → trang sau lặp lại hoặc bỏ sót bình luận.
-      orderBy: [{ isAccepted: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }],
+      // Keyset THUẦN theo (createdAt, id) — cố ý KHÔNG có `isAccepted` ở đây.
+      //
+      // `isAccepted` là khoá sắp xếp THAY ĐỔI ĐƯỢC: người đọc lấy trang 1 (cursor = bình luận
+      // cuối, isAccepted=false), chủ bài chọn đúng bình luận đó làm câu trả lời hay nhất, thì
+      // Prisma dựng điều kiện cursor theo giá trị HIỆN TẠI của hàng cursor → "từ cursor trở đi"
+      // gần như là toàn bộ danh sách, trang 2 trả lại gần hết trang 1 (UI lặp, React trùng key).
+      // `id` là khoá phá hoà bắt buộc: thiếu nó thì hai bình luận cùng createdAt có thứ tự không
+      // xác định giữa hai lần truy vấn. Câu trả lời hay nhất được ghim riêng ở dưới.
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       include: { user: { select: { fullName: true, avatarUrl: true, role: true, communityProfile: { select: { level: true } } } } },

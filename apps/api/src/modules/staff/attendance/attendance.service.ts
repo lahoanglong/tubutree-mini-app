@@ -230,14 +230,24 @@ export class AttendanceService {
       where: { shiftId, ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}) },
       select: { checkinAt: true, checkoutAt: true },
     });
-    // Phiên chưa đóng coi như kéo dài vô hạn về phía sau.
-    const end = checkoutAt?.getTime() ?? Number.POSITIVE_INFINITY;
+    // Phiên CHƯA ĐÓNG kết thúc ở "bây giờ", KHÔNG phải vô hạn.
+    //
+    // Coi nó là vô hạn sẽ chặn đúng tình huống cần sửa nhất: nhân viên checkin 08:00 rồi quên
+    // checkout, quản lý muốn thêm phiên chiều 13:00–17:00 giúp thì MỌI khoảng giờ sau 08:00 đều
+    // "chồng" → không thêm được, mà thông báo lỗi cũng không gợi ý gì.
+    const now = Date.now();
+    const end = checkoutAt?.getTime() ?? now;
     const start = checkinAt.getTime();
     for (const other of siblings) {
       const oStart = other.checkinAt.getTime();
-      const oEnd = other.checkoutAt?.getTime() ?? Number.POSITIVE_INFINITY;
+      const openOther = other.checkoutAt == null;
+      const oEnd = other.checkoutAt?.getTime() ?? now;
       if (start < oEnd && oStart < end) {
-        throw new BadRequestException('Khoảng giờ này chồng với một phiên chấm công khác của cùng ca.');
+        throw new BadRequestException(
+          openOther
+            ? 'Có một phiên chấm công CHƯA ĐÓNG trùng khoảng giờ này — đóng phiên đó trước rồi thử lại.'
+            : 'Khoảng giờ này chồng với một phiên chấm công khác của cùng ca.',
+        );
       }
     }
   }

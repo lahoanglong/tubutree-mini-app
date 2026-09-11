@@ -189,7 +189,14 @@ export default function PostDetailPage() {
   const p = post.data;
   const kindLabel = KIND_LABEL[p.kind];
   const canMarkBest = p.kind === 'QUESTION' && (p.isOwner || role === 'ADMIN');
-  const sortedComments = comments.data?.pages.flatMap((pg) => pg.items) ?? [];
+  // BE sắp thuần theo thời gian để cursor phân trang ổn định (isAccepted là khoá THAY ĐỔI ĐƯỢC,
+  // để trong orderBy sẽ khiến trang 2 lặp lại trang 1 khi chủ bài chọn best-answer giữa chừng).
+  // Ghim câu trả lời hay nhất lên đầu ở đây.
+  const allComments = comments.data?.pages.flatMap((pg) => pg.items) ?? [];
+  const sortedComments = [
+    ...allComments.filter((c) => c.isAccepted),
+    ...allComments.filter((c) => !c.isAccepted),
+  ];
   const needsEditTitle = p.kind === 'QUESTION' && editTitle.trim().length === 0;
 
   const openEdit = () => {

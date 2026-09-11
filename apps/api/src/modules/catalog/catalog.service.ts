@@ -281,15 +281,25 @@ export class CatalogService {
       if (!pid) continue;
       perProduct.set(pid, (perProduct.get(pid) ?? 0) + (g._sum.quantity ?? 0));
     }
-    // Reset PHẢI nằm trong cùng transaction với các lệnh ghi lại: trước đây reset commit riêng
-    // rồi mới chạy transaction, nên chỉ cần 1 sản phẩm bị xoá giữa chừng (update ném P2025) là
-    // cả transaction rollback trong khi reset đã commit — toàn bộ catalog hiện "đã bán 0" cho
-    // tới lần chạy sau, tức 24 giờ.
+    // Reset phải nguyên tử cùng với lần ghi lại — nhưng KHÔNG được reset toàn bảng bên trong
+    // transaction: `updateMany` không điều kiện khoá MỌI dòng `products` cho tới khi N lệnh
+    // update chạy xong, đủ để chặn đứng cron đồng bộ Pancake (cũng nổ lúc 03:00) và mọi thao tác
+    // sửa sản phẩm của admin/đối tác. Trước đó nữa thì reset commit riêng, nên một sản phẩm bị
+    // xoá giữa chừng làm transaction rollback trong khi reset đã commit — cả catalog hiện "đã
+    // bán 0" suốt 24 giờ.
+    //
+    // Cách hiện tại: chỉ chạm đúng những dòng CẦN đổi.
+    //  - Dòng có số bán mới → update từng dòng (khoá đúng dòng đó).
+    //  - Dòng đang khác 0 mà không còn đơn nào → đưa về 0, một câu lệnh, phạm vi hẹp.
+    const ids = [...perProduct.keys()];
     const ops = [
-      this.prisma.product.updateMany({ data: { soldApp: 0 } }),
       ...[...perProduct.entries()].map(([productId, sold]) =>
         this.prisma.product.update({ where: { id: productId }, data: { soldApp: sold } }),
       ),
+      this.prisma.product.updateMany({
+        where: { soldApp: { not: 0 }, ...(ids.length ? { id: { notIn: ids } } : {}) },
+        data: { soldApp: 0 },
+      }),
     ];
     await this.prisma.$transaction(ops);
     return { updated: perProduct.size };

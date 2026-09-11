@@ -342,9 +342,13 @@ export class PayrollService {
    * không còn cách nào sửa trong app.
    */
   async reopen(staffId: string, year: number, month: number, adminId: string) {
+    // Xoá luôn dấu vết ĐÃ TRẢ. Mở lại một tháng PAID rồi sửa giờ sẽ làm `net` đổi, trong khi
+    // paidAt/paidBy/proofImageUrl vẫn là của lần chuyển khoản CŨ — sổ sách nói "đã chuyển X đồng
+    // lúc T, ảnh chứng từ Y" cho một số tiền không còn là X, và màn "Lương của tôi" vẫn hiện ảnh
+    // chứng từ cũ cho nhân viên. Chốt và trả lại là hai thao tác phải làm lại từ đầu.
     const r = await this.prisma.payrollMonth.updateMany({
       where: { staffId, year, month, status: { in: ['FINALIZED', 'PAID'] } },
-      data: { status: 'OPEN', finalizedAt: null },
+      data: { status: 'OPEN', finalizedAt: null, paidAt: null, paidBy: null, proofImageUrl: null },
     });
     if (r.count === 0) throw new BadRequestException('Tháng lương đang mở (hoặc chưa tồn tại).');
     this.logger.warn(`Admin ${adminId} MỞ LẠI bảng lương ${staffId} T${month}/${year}`);

@@ -331,13 +331,14 @@ export class FlashSaleService {
     }
     if (sent) this.logger.log(`Flash-starting reminders sent: ${sent}`);
 
-    // Đóng sổ những nhắc không còn ý nghĩa (sale đã kết thúc hoặc bị tắt trước khi tới giờ) —
-    // nếu không, chúng ở lại notifiedAt = null vĩnh viễn và lấn chỗ của sale đang chạy.
+    // Đóng sổ những nhắc KHÔNG CÒN CƠ HỘI nào — chỉ theo `endAt` đã qua.
+    //
+    // Cố ý KHÔNG đóng theo `isActive: false`: đó là cờ bật/tắt admin sửa bất cứ lúc nào. Sale
+    // chạy 20:00, 18:30 admin tắt để sửa giá, cron 19:00 sẽ đánh dấu TOÀN BỘ nhắc là đã-nhắc,
+    // 19:30 admin bật lại — tới giờ vàng thì không một ai được nhắc, và log chỉ có dòng "đã đóng
+    // sổ N nhắc hết hạn". Sale đang tắt thì điều kiện truy vấn bên trên đã tự lọc rồi.
     const stale = await this.prisma.flashSaleReminder.updateMany({
-      where: {
-        notifiedAt: null,
-        OR: [{ item: { flashSale: { endAt: { lte: now } } } }, { item: { flashSale: { isActive: false } } }],
-      },
+      where: { notifiedAt: null, item: { flashSale: { endAt: { lte: now } } } },
       data: { notifiedAt: now },
     });
     if (stale.count > 0) this.logger.log(`Đóng sổ ${stale.count} nhắc giờ vàng đã hết hạn.`);

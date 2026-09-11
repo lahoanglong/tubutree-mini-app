@@ -344,9 +344,11 @@ describe('PayrollService — tháng đã chốt là khoá, nhưng mở lại đ�
 
     await mk(prisma).reopen('u1', 2026, 7, 'admin1');
 
+    // Xoá cả dấu vết ĐÃ TRẢ: giữ lại paidAt/proofImageUrl trong khi `net` sắp đổi sẽ khiến sổ
+    // sách nói "đã chuyển X đồng, ảnh chứng từ Y" cho một số tiền không còn là X.
     expect(updateMany).toHaveBeenCalledWith({
       where: { staffId: 'u1', year: 2026, month: 7, status: { in: ['FINALIZED', 'PAID'] } },
-      data: { status: 'OPEN', finalizedAt: null },
+      data: { status: 'OPEN', finalizedAt: null, paidAt: null, paidBy: null, proofImageUrl: null },
     });
     expect(upsert).toHaveBeenCalled();
   });

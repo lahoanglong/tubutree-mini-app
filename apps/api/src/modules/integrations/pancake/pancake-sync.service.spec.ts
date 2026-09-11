@@ -229,3 +229,39 @@ describe('PancakeSyncService — cron cũng không được ghi đè tồn kho k
     expect([first, second].filter((x) => x === 0)).toHaveLength(1);
   });
 });
+
+/**
+ * Mặc định an toàn (quét toàn bộ không ghi stock) đúng cho cron, nhưng khi tồn kho local đã lệch
+ * thật thì nút "Đồng bộ" của admin là đường sửa DUY NHẤT trong app — không có lối thoát tường
+ * minh thì chỉ còn cách chạy SQL.
+ */
+describe('PancakeSyncService — lối thoát có chủ đích cho admin', () => {
+  const stockFields = (prisma: PrismaService) =>
+    (prisma as unknown as { variation: { upsert: jest.Mock } }).variation.upsert.mock.calls.map(
+      (c) => Object.keys(c[0].update as Record<string, unknown>),
+    );
+
+  function existingProduct() {
+    return makePrisma({
+      product: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'existing', pancakeId: 'a' }),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ id: 'existing', name: 'Tinh dầu' }),
+      },
+    });
+  }
+
+  it('forceStock → GHI stock dù quét toàn bộ', async () => {
+    const prisma = existingProduct();
+    await new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle).syncProducts(undefined, {
+      forceStock: true,
+    });
+    expect(stockFields(prisma).some((keys) => keys.includes('stock'))).toBe(true);
+  });
+
+  it('không truyền gì → vẫn KHÔNG ghi stock (mặc định an toàn cho cron)', async () => {
+    const prisma = existingProduct();
+    await new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle).syncProducts();
+    expect(stockFields(prisma).every((keys) => !keys.includes('stock'))).toBe(true);
+  });
+});

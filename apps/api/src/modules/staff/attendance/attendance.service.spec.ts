@@ -359,19 +359,32 @@ describe('AttendanceService — không cho phiên chấm công chồng giờ', (
     expect(create).toHaveBeenCalled();
   });
 
-  it('phiên CHƯA đóng của ca coi như kéo dài vô hạn → thêm phiên sau đó vẫn bị chặn', async () => {
+  /**
+   * Phiên CHƯA ĐÓNG kết thúc ở "bây giờ", không phải vô hạn: coi là vô hạn sẽ chặn đúng tình
+   * huống cần sửa nhất — nhân viên quên checkout, quản lý muốn thêm phiên bù giúp.
+   */
+  it('phiên chưa đóng (bắt đầu trong quá khứ) → chặn khoảng giờ TRÙNG, kèm thông báo chỉ đúng việc cần làm', async () => {
     const create = jest.fn();
+    const openStart = new Date(Date.now() - 4 * 3600_000);
     const prisma = makePrisma({
       shift: { findUnique: jest.fn().mockResolvedValue({ id: 'sh1', staffId: 'u1', workDate }) },
-      attendanceSession: {
-        create,
-        findMany: jest.fn().mockResolvedValue([{ checkinAt: new Date('2026-07-03T01:00:00Z'), checkoutAt: null }]),
-      },
+      attendanceSession: { create, findMany: jest.fn().mockResolvedValue([{ checkinAt: openStart, checkoutAt: null }]) },
     });
     await expect(
-      mk(prisma).adminAddSession('sh1', new Date('2026-07-03T20:00:00Z'), new Date('2026-07-03T22:00:00Z')),
-    ).rejects.toBeInstanceOf(BadRequestException);
+      mk(prisma).adminAddSession('sh1', new Date(Date.now() - 2 * 3600_000), new Date(Date.now() - 3600_000)),
+    ).rejects.toThrow(/CHƯA ĐÓNG/);
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('phiên chưa đóng → thêm phiên ở khoảng giờ TƯƠNG LAI vẫn được (không coi là vô hạn)', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'new1' });
+    const openStart = new Date(Date.now() - 4 * 3600_000);
+    const prisma = makePrisma({
+      shift: { findUnique: jest.fn().mockResolvedValue({ id: 'sh1', staffId: 'u1', workDate }) },
+      attendanceSession: { create, findMany: jest.fn().mockResolvedValue([{ checkinAt: openStart, checkoutAt: null }]) },
+    });
+    await mk(prisma).adminAddSession('sh1', new Date(Date.now() + 3600_000), new Date(Date.now() + 2 * 3600_000));
+    expect(create).toHaveBeenCalled();
   });
 
   it('sửa phiên: không tự so với CHÍNH NÓ (loại trừ theo id)', async () => {

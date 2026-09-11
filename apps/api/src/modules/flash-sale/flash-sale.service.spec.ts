@@ -445,9 +445,20 @@ describe('FlashSaleService.notifyStartedFlashSales', () => {
     await new FlashSaleService(prisma, config, notifications).notifyStartedFlashSales(now);
     const sweep = updateMany.mock.calls.at(-1)![0];
     expect(sweep.where.notifiedAt).toBeNull();
-    expect(sweep.where.OR).toEqual([
-      { item: { flashSale: { endAt: { lte: now } } } },
-      { item: { flashSale: { isActive: false } } },
-    ]);
+    expect(sweep.where.item).toEqual({ flashSale: { endAt: { lte: now } } });
+  });
+
+  /**
+   * `isActive` là cờ admin bật/tắt bất cứ lúc nào. Đóng sổ theo nó nghĩa là: sale chạy 20:00,
+   * 18:30 admin tắt để sửa giá, cron 19:00 đánh dấu TOÀN BỘ nhắc là đã-nhắc, 19:30 admin bật
+   * lại — tới giờ vàng không một ai được nhắc.
+   */
+  it('KHÔNG đóng sổ theo isActive (admin tắt sale tạm thời không được giết nhắc)', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const prisma = { flashSaleReminder: { findMany, updateMany } } as any;
+    await new FlashSaleService(prisma, config, notifications).notifyStartedFlashSales(now);
+    const sweep = updateMany.mock.calls.at(-1)![0];
+    expect(JSON.stringify(sweep.where)).not.toContain('isActive');
   });
 });

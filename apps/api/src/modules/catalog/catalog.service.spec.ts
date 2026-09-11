@@ -164,7 +164,7 @@ describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
 });
 
 describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
-  it('recomputeSoldCounts: gom đơn DELIVERED theo product (reset 0 rồi set)', async () => {
+  it('recomputeSoldCounts: gom đơn DELIVERED theo product, chỉ chạm dòng CẦN đổi', async () => {
     const tx = jest.fn().mockResolvedValue([]);
     const prisma = {
       orderItem: { groupBy: jest.fn().mockResolvedValue([
@@ -178,11 +178,31 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
       $transaction: tx,
     } as unknown as PrismaService;
     const r = await new CatalogService(prisma).recomputeSoldCounts();
-    // reset toàn bộ về 0 trước
-    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({ data: { soldApp: 0 } });
     // p1 = 5 + 3 = 8 (gộp 2 biến thể)
     expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldApp: 8 } });
+    // Đưa về 0 CHỈ những dòng đang khác 0 và không còn đơn nào — `updateMany` không điều kiện sẽ
+    // khoá MỌI dòng products suốt transaction, chặn đứng cron đồng bộ và mọi thao tác sửa SP.
+    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({
+      where: { soldApp: { not: 0 }, id: { notIn: ['p1'] } },
+      data: { soldApp: 0 },
+    });
     expect(r.updated).toBe(1);
+  });
+
+  it('không có đơn nào → vẫn đưa các dòng khác 0 về 0, không cần điều kiện notIn rỗng', async () => {
+    const prisma = {
+      orderItem: { groupBy: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn() },
+      $transaction: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+
+    await new CatalogService(prisma).recomputeSoldCounts();
+
+    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({
+      where: { soldApp: { not: 0 } },
+      data: { soldApp: 0 },
+    });
   });
 
   it('setSoldExternal: map sku→product, set soldExternal', async () => {
