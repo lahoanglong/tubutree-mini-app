@@ -454,3 +454,47 @@ describe('PayrollService.adminMonth — GET không ghi dữ liệu tháng cũ', 
     expect(monthUpsert).not.toHaveBeenCalled();
   });
 });
+
+describe('PayrollService.recomputeStaffMonth — không kiểm trạng thái tháng lặp lại cho từng ngày', () => {
+  it('tháng 26 ngày công → chỉ 1 lần đọc PayrollMonth để kiểm khoá, không phải 26', async () => {
+    const days = Array.from({ length: 26 }, (_, i) => ({
+      id: `sh${i}`,
+      workDate: new Date(Date.UTC(2026, 6, i + 1)),
+      cancelPenalty: false,
+      sessions: [],
+      startAt: new Date(Date.UTC(2026, 6, i + 1, 1)),
+      endAt: new Date(Date.UTC(2026, 6, i + 1, 9)),
+      approvedStart: null,
+      approvedEnd: null,
+    }));
+    const monthFindUnique = jest.fn().mockResolvedValue(null);
+    const prisma = makePrisma({
+      shift: { findMany: jest.fn().mockResolvedValue(days) },
+      payrollAdjustment: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
+      payrollDay: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn().mockResolvedValue({}),
+      },
+      payrollMonth: { findUnique: monthFindUnique, upsert: jest.fn().mockResolvedValue({}) },
+    });
+
+    await mk(prisma).recomputeStaffMonth('u1', 2026, 7);
+
+    // 1 lần duy nhất ở đầu recomputeStaffMonth — recomputeDay không kiểm lại.
+    expect(monthFindUnique).toHaveBeenCalledTimes(1);
+  });
+
+  it('gọi recomputeDay TRỰC TIẾP (admin sửa giờ) → vẫn kiểm khoá tháng', async () => {
+    const monthFindUnique = jest.fn().mockResolvedValue({ status: 'FINALIZED' });
+    const prisma = makePrisma({
+      payrollMonth: { findUnique: monthFindUnique, upsert: jest.fn() },
+      payrollDay: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+    });
+
+    await expect(mk(prisma).recomputeDay('u1', new Date('2026-07-03'))).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(monthFindUnique).toHaveBeenCalled();
+  });
+});

@@ -85,11 +85,19 @@ export class PayrollService {
    * `reprice` = quản lý CỐ Ý định giá lại (nút tính lại của tháng) — chỉ khi đó mới áp đơn giá
    * mới cho ngày cũ.
    */
-  async recomputeDay(staffId: string, workDate: Date, opts: { reprice?: boolean } = {}) {
+  async recomputeDay(
+    staffId: string,
+    workDate: Date,
+    opts: { reprice?: boolean; monthAlreadyChecked?: boolean } = {},
+  ) {
     // Tháng đã chốt/đã trả thì KHÔNG ghi lại ngày: trước đây admin sửa giờ một phiên của tháng
     // đã chốt vẫn ghi đè PayrollDay trong khi PayrollMonth đứng yên — sheet chi tiết hiện đồng
     // thời số ngày MỚI và tổng tháng CŨ, và snackbar báo "đã tính lại" là nói sai.
-    if (await this.isMonthLocked(staffId, workDate)) {
+    //
+    // `monthAlreadyChecked`: recomputeStaffMonth đã kiểm trạng thái tháng MỘT LẦN ở đầu hàm rồi
+    // mới lặp qua từng ngày — kiểm lại ở đây là thêm một truy vấn cho MỖI ngày công (một tháng
+    // 26 ngày làm là 26 truy vấn thừa mỗi lần ai đó mở màn lương).
+    if (!opts.monthAlreadyChecked && (await this.isMonthLocked(staffId, workDate))) {
       throw new BadRequestException('Tháng lương đã chốt/đã trả — mở lại tháng trước khi sửa.');
     }
     const [profile, existingDay] = await Promise.all([
@@ -156,7 +164,9 @@ export class PayrollService {
       this.prisma.payrollAdjustment.findMany({ where: { staffId, workDate: { gte: start, lt: end } }, select: { workDate: true }, distinct: ['workDate'] }),
     ]);
     const dayMs = new Set<number>([...shiftDays, ...adjDays].map((d) => d.workDate.getTime()));
-    for (const ms of dayMs) await this.recomputeDay(staffId, new Date(ms), opts);
+    // Trạng thái tháng đã kiểm ở ngay trên (return sớm nếu FINALIZED/PAID) — không kiểm lại
+    // cho từng ngày.
+    for (const ms of dayMs) await this.recomputeDay(staffId, new Date(ms), { ...opts, monthAlreadyChecked: true });
 
     const days = await this.prisma.payrollDay.findMany({ where: { staffId, workDate: { gte: start, lt: end } } });
     const totalMinutes = days.reduce((s, d) => s + d.workedMinutes, 0);
