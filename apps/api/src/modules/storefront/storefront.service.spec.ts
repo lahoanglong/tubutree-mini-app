@@ -40,7 +40,11 @@ describe('StorefrontService.getOrCreateMine', () => {
     const sf = await svc.getOrCreateMine('u1');
 
     expect(prisma.storefront.create).toHaveBeenCalled();
-    expect(sf.slug).toBe('LINH123');
+    // P0 (audit mạch lạc CTV): referralCode LUÔN in hoa (auth.service.ts sinh bằng
+    // toUpperCase), trong khi getPublicBySlug hạ chữ mã tra cứu rồi so khớp CHÍNH XÁC.
+    // Postgres so sánh chuỗi phân biệt hoa/thường (đã kiểm trên DB thật: 'ABC' = 'abc' → false),
+    // nên slug in hoa = gian hàng KHÔNG BAO GIỜ mở được qua link công khai.
+    expect(sf.slug).toBe('linh123');
     expect(sf.type).toBe('CTV');
     expect(sf.title).toContain('Linh');
   });
@@ -460,5 +464,22 @@ describe('StorefrontService.pickerProducts — guardrail role', () => {
     const svc = new StorefrontService(prisma, config);
     const out = await svc.pickerProducts('u1', {});
     expect(out[0]!.maxAffiliateRate).toBe(8);
+  });
+});
+
+
+describe('StorefrontService.getPublicBySlug — không phân biệt hoa/thường', () => {
+  it('tra cứu khớp cả slug in hoa còn sót trong DB (dữ liệu tạo trước bản vá)', async () => {
+    const prisma = makePrisma();
+    const found = jest.fn().mockResolvedValue(null);
+    (prisma.storefront.findFirst as jest.Mock) = found;
+    const svc = new StorefrontService(prisma, config);
+    await svc.getPublicBySlug('LINH123').catch(() => undefined);
+    const where = found.mock.calls[0][0].where;
+    // Mỗi nhánh OR phải so khớp không phân biệt hoa/thường, nếu không slug cũ vẫn chết.
+    for (const branch of where.OR) {
+      const field = Object.values(branch)[0] as { mode?: string };
+      expect(field.mode).toBe('insensitive');
+    }
   });
 });

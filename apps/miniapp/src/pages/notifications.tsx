@@ -14,6 +14,7 @@ import { getErrorMessage } from '../services/api';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
+import { useAuthStore } from '../store/auth';
 
 /** Icon + nhãn nhóm theo templateCode (§4.10). */
 function meta(code: string): { Icon: LucideIcon; title: string } {
@@ -47,7 +48,11 @@ export default function NotificationsPage() {
   const qc = useQueryClient();
   const [selectedNotif, setSelectedNotif] = useState<NotificationDTO | null>(null);
 
-  const notifQ = useQuery({ queryKey: ['notifications'], queryFn: getNotifications });
+  // Trang này là CỬA VÀO từ push của Zalo: mở app từ thông báo thì restore() chưa kịp xong,
+  // fetch ngay sẽ 401 và (retry:false cho 4xx) kẹt màn lỗi vĩnh viễn dù ~200ms sau đã có phiên.
+  // Mọi trang /me/* khác đều đã gate như vậy; riêng đây bị sót.
+  const authed = useAuthStore((s) => s.status === 'authenticated');
+  const notifQ = useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: authed });
 
   const readMut = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),

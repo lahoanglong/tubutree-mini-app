@@ -28,7 +28,11 @@ export function ShareSheet({
   const { openSnackbar } = useSnackbar();
   const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
   const path = `/${pathPrefix}/${slug}`;
-  const url = `${base}${path}${referralCode ? `?ref=${referralCode}` : ''}`;
+  // Mã giới thiệu PHẢI đi kèm ở CẢ 2 lối chia sẻ. Trước đây chỉ `url` (nút Sao chép link) có
+  // `?ref=`, còn nút "Chia sẻ qua Zalo" gửi `path` trần → khách mở từ Zalo mua hàng thì CTV
+  // KHÔNG được tính hoa hồng, mà không có dấu hiệu nào cho thấy điều đó.
+  const sharePath = referralCode ? `${path}?ref=${referralCode}` : path;
+  const url = `${base}${sharePath}`;
   const captions = (
     captionsProp ?? [
       `Mình tuyển vài món sống xanh đang dùng, ghé xem nha 🌿 ${url}`,
@@ -56,7 +60,7 @@ export function ShareSheet({
           style={{ background: 'var(--primary-600)', marginBottom: 8 }}
           onClick={() => {
             haptic('light');
-            void shareLink({ title, description: captions[0] ?? '', thumbnail, path }).catch(() => {});
+            void shareLink({ title, description: captions[0] ?? '', thumbnail, path: sharePath }).catch(() => {});
           }}
         >
           ↗ {vi.storefront.shareZalo}

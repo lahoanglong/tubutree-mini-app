@@ -36,7 +36,11 @@ export class StorefrontService {
       return await this.prisma.storefront.create({
         data: {
           type: 'CTV',
-          slug: user.referralCode,
+          // referralCode luôn in hoa (auth.service.ts sinh bằng toUpperCase). Nếu lưu nguyên,
+          // slug in hoa sẽ KHÔNG BAO GIỜ khớp getPublicBySlug (hàm đó hạ chữ mã tra cứu rồi so
+          // khớp chính xác; Postgres phân biệt hoa/thường) → mọi link gian hàng CTV đều chết.
+          // Chuẩn hoá tại nguồn; phía đọc cũng so khớp insensitive để cứu dữ liệu cũ.
+          slug: user.referralCode.toLowerCase(),
           ownerUserId: userId,
           title: `Cửa hàng của ${user.fullName ?? 'bạn'}`,
         },
@@ -169,10 +173,12 @@ export class StorefrontService {
     const clean = identifier.trim().toLowerCase();
     const sf = await this.prisma.storefront.findFirst({
       where: {
+        // insensitive để gian hàng tạo TRƯỚC bản vá (slug in hoa) vẫn mở được mà không phải
+        // chờ chạy migration hạ chữ — link CTV đã phát cho khách không được chết thêm ngày nào.
         OR: [
-          { slug: clean },
-          { subdomain: clean },
-          { customDomain: clean },
+          { slug: { equals: clean, mode: 'insensitive' } },
+          { subdomain: { equals: clean, mode: 'insensitive' } },
+          { customDomain: { equals: clean, mode: 'insensitive' } },
         ],
         isPublished: true,
       },

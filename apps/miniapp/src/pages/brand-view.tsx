@@ -35,6 +35,10 @@ export default function BrandViewPage() {
     mutationFn: () => (followQ.data?.following ? unfollowBrand(slug) : followBrand(slug)),
     onSuccess: (r) => {
       qc.setQueryData(['brand-follow', slug], r);
+      // Số "N người theo dõi" nằm trong query ['public-brand'] (staleTime 60s). Không làm mới
+      // thì bấm Theo dõi xong con số đứng im cả phút → người dùng bấm lại "cho chắc" và vô
+      // tình bỏ theo dõi.
+      void qc.invalidateQueries({ queryKey: ['public-brand', slug] });
       openSnackbar({ text: r.following ? 'Đã theo dõi nhãn 💚' : 'Đã bỏ theo dõi', type: 'success' });
     },
     onError: () => openSnackbar({ text: 'Cần đăng nhập để theo dõi nhãn.', type: 'warning' }),

@@ -1048,14 +1048,27 @@ function OrdersTab({ store }: { store: MerchantStore }) {
     queryFn: () => listMerchantOrders(status || undefined),
   });
 
+  // Trước đây mutation này KHÔNG có onError và nút không disable khi đang chạy: API trả
+  // 400/403 thì màn hình không đổi gì cả, đối tác bấm lại 4-5 lần rồi tưởng hệ thống hỏng.
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const updateMut = useMutation({
     mutationFn: ({ id, newStatus }: { id: string; newStatus: string }) =>
       updateMerchantOrderStatus(id, newStatus),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-orders'] }),
+    onSuccess: () => {
+      setUpdateError(null);
+      void qc.invalidateQueries({ queryKey: ['merchant-orders'] });
+    },
+    onError: (e: unknown) =>
+      setUpdateError(e instanceof Error ? e.message : 'Không cập nhật được trạng thái đơn.'),
   });
 
   return (
     <div className="space-y-4">
+      {updateError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {updateError}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-neutral-900">Đơn Hàng Xuất Phát Từ Kho Của Bạn</h3>
         <select
@@ -1120,7 +1133,8 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                         {o.status === 'CONFIRMED' && (
                           <button
                             onClick={() => updateMut.mutate({ id: o.id, newStatus: 'PACKED' })}
-                            className="rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+                            disabled={updateMut.isPending}
+                            className="rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
                           >
                             Đã đóng gói
                           </button>
@@ -1128,7 +1142,8 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                         {o.status === 'PACKED' && (
                           <button
                             onClick={() => updateMut.mutate({ id: o.id, newStatus: 'SHIPPING' })}
-                            className="rounded bg-purple-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-purple-700"
+                            disabled={updateMut.isPending}
+                            className="rounded bg-purple-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-purple-700 disabled:opacity-50"
                           >
                             Bắt đầu giao
                           </button>
@@ -1136,7 +1151,8 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                         {o.status === 'SHIPPING' && (
                           <button
                             onClick={() => updateMut.mutate({ id: o.id, newStatus: 'DELIVERED' })}
-                            className="rounded bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700"
+                            disabled={updateMut.isPending}
+                            className="rounded bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
                           >
                             Đã giao
                           </button>

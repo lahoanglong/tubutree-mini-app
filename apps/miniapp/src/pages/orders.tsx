@@ -15,6 +15,9 @@ import { haptic } from '../utils/haptic';
 // trước đây bị thiếu khiến đơn COD chỉ hiện ở "Tất cả".
 const TABS = [
   { key: undefined, label: vi.orders.tabAll },
+  // PENDING_PAYMENT là nhóm CẦN HÀNH ĐỘNG GẤP NHẤT (khách chưa trả tiền, đơn đang giữ hàng)
+  // nhưng trước đây không có tab riêng — phải lục trong "Tất cả" mới thấy.
+  { key: 'PENDING_PAYMENT', label: vi.orderStatus.PENDING_PAYMENT! },
   { key: 'CONFIRMED', label: vi.orderStatus.CONFIRMED! },
   { key: 'SHIPPING', label: vi.orderStatus.SHIPPING! },
   { key: 'DELIVERED', label: vi.orderStatus.DELIVERED! },

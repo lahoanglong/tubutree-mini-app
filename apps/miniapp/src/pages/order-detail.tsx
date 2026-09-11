@@ -101,6 +101,10 @@ export default function OrderDetailPage() {
   // Bỏ entry shape cũ ({at,data} trước khi chuẩn hoá) — chỉ hiện mốc có trạng thái/mã.
   const journey = (o.shippingHistory ?? []).filter((e) => e && (e.status || e.code));
   const canCancel = o.status === 'PENDING_PAYMENT' || o.status === 'CONFIRMED';
+  // Đơn chuyển khoản chưa trả tiền: trước đây màn QR (/bank-payment/:code) CHỈ tới được đúng
+  // một lần ngay sau khi đặt hàng (checkout.tsx). Rời khỏi đó là mất luôn mã QR/số tài khoản —
+  // khách muốn trả tiền cũng không có đường quay lại, chỉ còn cách huỷ đơn rồi đặt lại.
+  const canPayNow = o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER';
   const isDone = o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.status === 'RETURNED';
 
   return (
@@ -150,6 +154,9 @@ export default function OrderDetailPage() {
       <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
         <Row label={vi.cart.subtotal} value={formatVnd(o.subtotal)} />
         {o.discount > 0 && <Row label={vi.cart.discount} value={`-${formatVnd(o.discount)}`} accent />}
+        {/* BE gộp voucher + combo + điểm vào cùng cột `discount`; nếu không tách dòng này thì
+            khách tiêu điểm Xanh xong không thấy điểm mình đi đâu (checkout có tách, chi tiết đơn thì không). */}
+        {o.pointsUsed > 0 && <Row label={vi.orders.pointsUsed} value={`${o.pointsUsed.toLocaleString('vi-VN')} điểm`} />}
         <Row
           label={vi.checkout.shippingFee}
           value={o.shippingFee === 0 ? vi.common.freeShip : formatVnd(o.shippingFee)}
@@ -384,6 +391,19 @@ export default function OrderDetailPage() {
             {vi.orders.cancelOrder}
           </Button>
         )}
+        {canPayNow && (
+          /* Hành động CHÍNH của đơn chờ chuyển khoản — đặt sau nút Huỷ để nằm bên phải (vị trí
+             ngón cái) và tô đặc, tránh việc "Huỷ đơn" là nút nổi bật duy nhất. */
+          <Button
+            onClick={() => {
+              haptic('light');
+              navigate(`/bank-payment/${o.code}`);
+            }}
+            style={{ background: 'var(--primary-600)', minHeight: 48, fontWeight: 700, flex: 1 }}
+          >
+            {vi.orders.payNow}
+          </Button>
+        )}
         {isDone && (
           <Button
             loading={repurchase.isPending}
@@ -400,7 +420,9 @@ export default function OrderDetailPage() {
             onClick={() => navigate('/orders')}
             style={{ color: 'var(--primary-700)', minHeight: 48 }}
           >
-            {vi.common.backHome}
+            {/* Nút này đi tới DANH SÁCH đơn — trước đây dùng nhãn "Về trang chủ" nên bấm xong
+                khách rơi lại vào danh sách đơn thay vì trang chủ như chữ hứa. */}
+            {vi.orders.viewAllOrders}
           </Button>
         )}
       </Box>

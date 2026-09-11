@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Text, Button, Input, useSnackbar } from 'zmp-ui';
+import { Box, Text, Button, Input, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Plus, Minus } from 'lucide-react';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '../geo-picker';
@@ -45,6 +45,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [showErrors, setShowErrors] = useState(false);
   const [result, setResult] = useState<CtvOrderResult | null>(null);
+  const navigate = useNavigate();
 
   const addLine = (v: VariationDetail, productName: string) => {
     haptic('light');
@@ -144,7 +145,22 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
           <Row label={t.orderCode} value={result.code} />
           <Row label={t.orderTotal} value={formatVnd(result.total)} strong />
         </Box>
-        <Box flex style={{ gap: 8, marginTop: 20 }}>
+        {/* Đơn chuyển khoản: CTV cần QR/số tài khoản để gửi khách. Trước đây màn này chỉ báo
+            "đã tạo đơn" rồi hết — không QR, không nút mở đơn — nên đơn nằm chờ thanh toán tới
+            khi bị huỷ, CTV mất cả đơn lẫn hoa hồng. */}
+        {payment === 'BANK_TRANSFER' && (
+          <Button
+            fullWidth
+            onClick={() => {
+              onClose();
+              navigate(`/bank-payment/${result.code}`);
+            }}
+            style={{ marginTop: 16, minHeight: 44, background: 'var(--primary-600)', fontWeight: 700 }}
+          >
+            {t.openPayment}
+          </Button>
+        )}
+        <Box flex style={{ gap: 8, marginTop: payment === 'BANK_TRANSFER' ? 8 : 20 }}>
           <Button
             variant="secondary"
             onClick={() => {
@@ -157,10 +173,18 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
             {t.createAnother}
           </Button>
           <Button
-            onClick={onClose}
-            style={{ flex: 1, minHeight: 44, background: 'var(--primary-600)' }}
+            variant={payment === 'BANK_TRANSFER' ? 'secondary' : undefined}
+            onClick={() => {
+              onClose();
+              navigate(`/order/${result.code}`);
+            }}
+            style={{
+              flex: 1,
+              minHeight: 44,
+              ...(payment === 'BANK_TRANSFER' ? {} : { background: 'var(--primary-600)' }),
+            }}
           >
-            {t.done}
+            {t.viewOrder}
           </Button>
         </Box>
       </Box>
