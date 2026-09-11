@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Post } from '@nestjs/common';
-import { IsIn, IsInt, IsObject, IsOptional, IsString, Min } from 'class-validator';
+import { IsIn, IsInt, IsObject, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AffiliateService } from './affiliate.service';
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
@@ -16,8 +16,8 @@ class PayoutDto {
 }
 
 class TouchDto {
-  @IsString() referralCode!: string;
-  @IsOptional() @IsString() storefrontSlug?: string;
+  @IsString() @MaxLength(64) referralCode!: string;
+  @IsOptional() @IsString() @MaxLength(64) storefrontSlug?: string;
   @IsOptional() @IsIn(['ctv', 'brand']) kind?: string;
 }
 

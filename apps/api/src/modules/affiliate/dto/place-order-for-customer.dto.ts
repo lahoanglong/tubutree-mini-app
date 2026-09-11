@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -24,15 +25,18 @@ export class CtvOrderItemDto {
  * 2 cấp (Pancake) không còn quận/huyện — FE gửi chuỗi rỗng.
  */
 export class CtvOrderCustomerDto {
-  @IsString() recipient!: string;
-  @IsString() phone!: string;
-  @IsString() province!: string;
-  @IsOptional() @IsString() district?: string;
-  @IsString() ward!: string;
-  @IsString() street!: string;
-  @IsString() provinceCode!: string;
-  @IsOptional() @IsString() districtCode?: string;
-  @IsString() wardCode!: string;
+  // Trần độ dài cho mọi trường text: body limit là 10MB, cột Postgres là text không giới hạn.
+  // Không có trần thì một tài khoản đã đăng nhập gửi được tên người nhận dài vài MB, lưu vĩnh
+  // viễn trong snapshot địa chỉ của đơn rồi hiện lại ở mọi danh sách đơn của quản trị.
+  @IsString() @MaxLength(120) recipient!: string;
+  @IsString() @MaxLength(20) phone!: string;
+  @IsString() @MaxLength(120) province!: string;
+  @IsOptional() @IsString() @MaxLength(120) district?: string;
+  @IsString() @MaxLength(120) ward!: string;
+  @IsString() @MaxLength(255) street!: string;
+  @IsString() @MaxLength(20) provinceCode!: string;
+  @IsOptional() @IsString() @MaxLength(20) districtCode?: string;
+  @IsString() @MaxLength(20) wardCode!: string;
 }
 
 /**
