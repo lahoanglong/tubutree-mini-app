@@ -14,6 +14,7 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import logo from '../assets/tubu-logo.png';
 import { getNotifications } from '../services/account-api';
+import { CartBadge } from '../components/ui/cart-badge';
 
 const SECTION_LIMIT = 6;
 
@@ -110,18 +111,7 @@ export default function HomePage() {
             style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}
           >
             <ShoppingCart size={20} color="var(--leaf-700)" strokeWidth={1.8} />
-            {cartCount > 0 && (
-              <span
-                style={{
-                  position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18,
-                  borderRadius: 'var(--radius-full)', background: 'var(--clay-500)', color: '#fff',
-                  fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box',
-                }}
-              >
-                {cartCount > 99 ? '99+' : cartCount}
-              </span>
-            )}
+            <CartBadge count={cartCount} />
           </Box>
         </Box>
       </Box>
@@ -132,7 +122,11 @@ export default function HomePage() {
           role="button"
           aria-label={vi.home.searchPlaceholder}
           className="tubu-press"
-          onClick={() => goBrand()}
+          onClick={() => {
+            haptic('light');
+            // Mở thẳng bàn phím ở ô tìm kiếm thật bên /browse — ô ở đây chỉ là vỏ.
+            navigate('/browse?focus=search');
+          }}
           style={{
             background: 'var(--neutral-0)',
             border: '1px solid var(--neutral-200)',
@@ -230,7 +224,11 @@ export default function HomePage() {
           <Box
             role="button"
             className="tubu-press"
-            onClick={() => goBrand()}
+            onClick={() => {
+            haptic('light');
+            // Mở thẳng bàn phím ở ô tìm kiếm thật bên /browse — ô ở đây chỉ là vỏ.
+            navigate('/browse?focus=search');
+          }}
             style={{
               display: 'inline-flex',
               alignItems: 'center',

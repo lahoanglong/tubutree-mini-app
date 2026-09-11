@@ -12,6 +12,11 @@ export interface GameProfile {
   brokenStreakDays?: number;
   streakRepairCost?: number;
   streakRepairable?: boolean;
+  /** Giá các món tiêu xu — BE là nguồn chân lý, FE chỉ hiển thị (không chép cứng). */
+  streakFreezeCost?: number;
+  xuPerSeed?: number;
+  treeXuPrice?: number;
+  tankCapacity?: number;
 }
 export interface CheckInResult {
   seedsEarned: number;

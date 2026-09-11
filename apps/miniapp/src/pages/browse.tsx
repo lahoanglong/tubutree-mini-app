@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Page, Text, Button, Input, useLocation, useNavigate } from 'zmp-ui';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { fetchProducts, fetchBrands, getCart } from '../services/shop-api';
@@ -13,6 +13,7 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { ShoppingCart } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
+import { CartBadge } from '../components/ui/cart-badge';
 
 const PAGE_LIMIT = 30;
 const SEGMENT_LABELS: Record<string, string> = {
@@ -61,6 +62,16 @@ export default function BrowsePage() {
   );
 
   const [q, setQ] = useState('');
+  // Ô tìm kiếm ở Trang chủ chỉ là cái vỏ dẫn sang đây; nếu tới đây khách vẫn phải chạm thêm
+  // một lần nữa vào ô thật thì thao tác "tìm" tốn 2 chạm và đọc như bị nuốt mất cú chạm đầu.
+  // zmp-ui Box khai báo ref là MutableRefObject (không nhận null) → khởi tạo non-null giả.
+  const searchBoxRef = useRef<HTMLDivElement>(null!);
+  const wantsFocus = new URLSearchParams(location.search).get('focus') === 'search';
+  useEffect(() => {
+    if (!wantsFocus) return;
+    const input = searchBoxRef.current?.querySelector('input');
+    input?.focus();
+  }, [wantsFocus]);
   const [selectedBrands, setSelectedBrands] = useState<string[]>(initialBrands);
   const [segment, setSegment] = useState<string | undefined>(initialSegment);
   const [sort, setSort] = useState<string | undefined>(undefined);
@@ -142,7 +153,7 @@ export default function BrowsePage() {
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 72 }}>
       <PullToRefresh onRefresh={() => Promise.all([products.refetch(), brands.refetch()])} />
       <Box p={3} flex alignItems="center" style={{ gap: 10 }}>
-        <Box style={{ flex: 1, minWidth: 0 }}>
+        <Box ref={searchBoxRef} style={{ flex: 1, minWidth: 0 }}>
           <Input.Search
             placeholder={vi.browse.searchPlaceholder}
             value={q}
@@ -173,18 +184,7 @@ export default function BrowsePage() {
           }}
         >
           <ShoppingCart size={20} color="var(--leaf-700)" strokeWidth={1.8} />
-          {cartCount > 0 && (
-            <span
-              style={{
-                position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18,
-                borderRadius: 'var(--radius-full)', background: 'var(--clay-500)', color: 'var(--neutral-0)',
-                fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center',
-                justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box',
-              }}
-            >
-              {cartCount > 99 ? '99+' : cartCount}
-            </span>
-          )}
+          <CartBadge count={cartCount} />
         </Box>
       </Box>
 

@@ -34,6 +34,7 @@ import { usePublicConfig } from '../hooks/use-public-config';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { getAffiliateMe } from '../services/affiliate-api';
 import { ContentKitSheet } from '../components/content-kit-sheet';
+import { CartBadge } from '../components/ui/cart-badge';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -716,29 +717,7 @@ export default function ProductDetailPage() {
           }}
         >
           <CartIcon />
-          {cartCount > 0 && (
-            <span
-              className={badgeBounce ? 'tubu-bounce' : undefined}
-              style={{
-                position: 'absolute',
-                top: -6,
-                right: -6,
-                minWidth: 18,
-                height: 18,
-                borderRadius: 'var(--radius-full)',
-                background: 'var(--primary-600)',
-                color: 'white',
-                fontSize: 11,
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '0 4px',
-              }}
-            >
-              {cartCount}
-            </span>
-          )}
+          <CartBadge count={cartCount} bounce={badgeBounce} />
         </Box>
         {inStock ? (
           <>

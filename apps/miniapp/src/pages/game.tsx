@@ -42,8 +42,10 @@ import { getErrorMessage } from '../services/api';
 import { vi } from '../i18n/vi';
 import { ChevronRight, MessagesSquare, Recycle } from 'lucide-react';
 
-const FREEZE_COST = 80; // khớp default game.streak_freeze_cost (BE là nguồn chân lý)
-const BUY_SEEDS_PACK = 50; // gói mua nước bằng TubuXu (chi phí thực do BE quyết theo game.xu_per_seed)
+// Số giọt mỗi lần bấm "Mua nước" — đây là lựa chọn của FE (gửi lên BE), không phải giá.
+// Mọi GIÁ (đóng băng chuỗi, xu mỗi giọt, giá cây thật) đọc từ /game/profile: admin đổi config
+// mà FE chép cứng thì nhãn trên nút hiện giá cũ, bấm xong mới biết bị trừ khác.
+const BUY_SEEDS_PACK = 50;
 
 // Cùng ngày theo giờ VN (UTC+7) — khớp dayKey backend, để khoá nút đã dùng trong ngày.
 function isSameVNDay(iso: string | null): boolean {
@@ -469,7 +471,7 @@ export default function GamePage() {
               onClick={() => freezeM.mutate()}
               style={{ color: 'var(--leaf-700)' }}
             >
-              Mua ({FREEZE_COST}💧)
+              Mua ({(profile?.streakFreezeCost ?? 80).toLocaleString('vi-VN')}💧)
             </Button>
           </Box>
           <Button
@@ -537,9 +539,11 @@ export default function GamePage() {
         <Box flex style={{ gap: 8, marginTop: 8 }}>
           <Button style={{ flex: 1 }} size="small" disabled={buySeedsM.isPending} loading={buySeedsM.isPending} onClick={() => buySeedsM.mutate()}>
             💧 Mua {BUY_SEEDS_PACK} nước
+            {profile?.xuPerSeed != null && ` (${(BUY_SEEDS_PACK * profile.xuPerSeed).toLocaleString('vi-VN')} xu)`}
           </Button>
           <Button style={{ flex: 1 }} size="small" disabled={buyTreeM.isPending} loading={buyTreeM.isPending} onClick={() => buyTreeM.mutate()}>
             🌳 Mua cây thật
+            {profile?.treeXuPrice != null && ` (${profile.treeXuPrice.toLocaleString('vi-VN')} xu)`}
           </Button>
         </Box>
         <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, textAlign: 'center' }}>

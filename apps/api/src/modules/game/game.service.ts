@@ -60,6 +60,14 @@ export class GameService {
     const streakRepairCost = await this.config.get<number>('game.streak_repair_cost', 150);
     const windowH = await this.config.get<number>('game.streak_repair_window_hours', 48);
     const cooldownD = await this.config.get<number>('game.streak_repair_cooldown_days', 30);
+    // Giá các món tiêu xu — FE trước đây chép cứng (80💧 đóng băng chuỗi, 1 xu/giọt, 50.000 xu
+    // một cây): admin đổi config thì nhãn trên nút vẫn hiện giá cũ, bấm xong mới biết trừ khác.
+    const [streakFreezeCost, xuPerSeed, treeXuPrice, tankCapacity] = await Promise.all([
+      this.config.get<number>('game.streak_freeze_cost', 80),
+      this.config.get<number>('game.xu_per_seed', 1),
+      this.config.get<number>('game.tree_xu_price', 50000),
+      this.config.get<number>('game.tank_capacity', 500),
+    ]);
     const streakRepairable =
       !!profile.brokenStreakAt &&
       profile.brokenStreakDays > 0 &&
@@ -71,6 +79,10 @@ export class GameService {
       brokenStreakDays: profile.brokenStreakDays,
       streakRepairCost,
       streakRepairable,
+      streakFreezeCost,
+      xuPerSeed,
+      treeXuPrice,
+      tankCapacity,
     };
   }
 
