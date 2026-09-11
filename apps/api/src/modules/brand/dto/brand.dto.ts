@@ -1,4 +1,4 @@
-import { Allow, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { Allow, ArrayMaxSize, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateBrandDto {
   @IsString() name!: string;
@@ -73,7 +73,7 @@ export class DealerRewardDto {
 }
 
 export class ProductIdsDto {
-  @IsArray() @ArrayNotEmpty() @IsString({ each: true }) productIds!: string[];
+  @IsArray() @ArrayNotEmpty() @ArrayMaxSize(500) @IsString({ each: true }) productIds!: string[];
 }
 
 export class UpdateDealerRewardDto {

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsEmail, IsInt, IsObject, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEmail, IsInt, IsObject, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { PaymentMethod } from '@tubutree/shared-types';
 import { IsIn } from 'class-validator';
 
@@ -16,7 +16,8 @@ export class QuoteDto {
   /** Slug gian hàng — để tính giảm combo (nếu mua qua gian hàng). */
   @IsOptional() @IsString() storefrontSlug?: string;
   /** ID các dòng giỏ được CHỌN để thanh toán. Rỗng/thiếu = toàn giỏ (tương thích ngược). */
-  @IsOptional() @IsArray() @IsString({ each: true }) itemIds?: string[];
+  // Giới hạn để 1 request không ép server duyệt mảng vô hạn (giỏ thật tối đa vài chục dòng).
+  @IsOptional() @IsArray() @ArrayMaxSize(200) @IsString({ each: true }) itemIds?: string[];
 }
 
 /**
@@ -45,7 +46,8 @@ export class PlaceOrderDto {
   @IsOptional() @IsString() storefrontSlug?: string;
 
   /** ID các dòng giỏ được CHỌN để thanh toán. Rỗng/thiếu = toàn giỏ (tương thích ngược). */
-  @IsOptional() @IsArray() @IsString({ each: true }) itemIds?: string[];
+  // Giới hạn để 1 request không ép server duyệt mảng vô hạn (giỏ thật tối đa vài chục dòng).
+  @IsOptional() @IsArray() @ArrayMaxSize(200) @IsString({ each: true }) itemIds?: string[];
 
   @IsOptional()
   @IsObject()

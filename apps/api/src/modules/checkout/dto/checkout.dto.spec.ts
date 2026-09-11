@@ -64,3 +64,25 @@ describe('Cart quantity bounds', () => {
     expect(await errorsFor(UpdateItemDto, { quantity: 1000 })).toContain('max');
   });
 });
+
+// P2 (docs/2026-09-08-review-progress.md): mảng trong body không có trần kích thước — mỗi phần
+// tử kéo theo truy vấn/vòng lặp phía server nên 1 request đủ để ghim DB.
+describe('Trần kích thước mảng trong body', () => {
+  it('PlaceOrderDto: itemIds quá 200 phần tử → lỗi arrayMaxSize', async () => {
+    const keys = await errorsFor(PlaceOrderDto, {
+      addressId: 'a1',
+      paymentMethod: 'COD',
+      itemIds: Array.from({ length: 201 }, (_, i) => `i${i}`),
+    });
+    expect(keys).toContain('arrayMaxSize');
+  });
+
+  it('PlaceOrderDto: đúng 200 phần tử → hợp lệ', async () => {
+    const keys = await errorsFor(PlaceOrderDto, {
+      addressId: 'a1',
+      paymentMethod: 'COD',
+      itemIds: Array.from({ length: 200 }, (_, i) => `i${i}`),
+    });
+    expect(keys).not.toContain('arrayMaxSize');
+  });
+});

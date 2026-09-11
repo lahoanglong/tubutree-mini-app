@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsIn,
@@ -41,6 +42,9 @@ export class CtvOrderCustomerDto {
 export class PlaceOrderForCustomerDto {
   @IsArray()
   @ArrayMinSize(1)
+  // Chặn body khổng lồ: mỗi dòng là 1 vòng truy vấn giá + trừ kho, không giới hạn thì 1 request
+  // có thể ghim DB (P2, docs/2026-09-08-review-progress.md). Đơn thật không quá vài chục dòng.
+  @ArrayMaxSize(50)
   @ValidateNested({ each: true })
   @Type(() => CtvOrderItemDto)
   items!: CtvOrderItemDto[];

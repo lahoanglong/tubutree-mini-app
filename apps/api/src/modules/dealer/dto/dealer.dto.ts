@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsIn,
@@ -31,6 +32,8 @@ export class DealerOrderLine {
 export class DealerOrderDto {
   @IsArray()
   @ArrayMinSize(1)
+  // Xem chú thích cùng loại ở place-order-for-customer.dto.ts — mỗi dòng là 1 vòng truy vấn.
+  @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => DealerOrderLine)
   items!: DealerOrderLine[];
