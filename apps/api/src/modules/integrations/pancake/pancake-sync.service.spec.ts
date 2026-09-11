@@ -176,3 +176,56 @@ describe('PancakeSyncService — quét toàn bộ lúc boot không ghi đè tồ
     expect(spy).toHaveBeenCalledWith(undefined, { skipStock: true });
   });
 });
+
+describe('PancakeSyncService — cron cũng không được ghi đè tồn kho khi quét TOÀN BỘ', () => {
+  const stockFields = (prisma: PrismaService) =>
+    (prisma as unknown as { variation: { upsert: jest.Mock } }).variation.upsert.mock.calls.map(
+      (c) => Object.keys(c[0].update as Record<string, unknown>),
+    );
+
+  it('scheduledSync khi chưa có cursor (boot sync lỗi/restart) → KHÔNG ghi stock', async () => {
+    // lastRunAt chỉ nằm trong RAM: boot sync lỗi hoặc process vừa khởi động lại thì nó là null,
+    // và scheduledSync sẽ quét TOÀN BỘ catalog. Nếu cú quét đó ghi stock thì mọi sản phẩm bị
+    // đặt lại theo số Pancake — kể cả hàng vừa bán hết cục bộ mà Pancake chưa phản ánh.
+    const prisma = makePrisma({
+      product: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'existing', pancakeId: 'a' }),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ id: 'existing', name: 'Tinh dầu' }),
+      },
+    });
+    const svc = new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle);
+
+    await svc.scheduledSync();
+
+    expect(stockFields(prisma).every((keys) => !keys.includes('stock'))).toBe(true);
+  });
+
+  it('sync TĂNG DẦN (có updatedSince) vẫn ghi stock như cũ — phạm vi hẹp, đúng thiết kế', async () => {
+    const prisma = makePrisma({
+      product: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'existing', pancakeId: 'a' }),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ id: 'existing', name: 'Tinh dầu' }),
+      },
+    });
+    const svc = new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle);
+
+    await svc.syncProducts('2026-09-12T00:00:00.000Z');
+
+    expect(stockFields(prisma).some((keys) => keys.includes('stock'))).toBe(true);
+  });
+
+  it('không dừng phân trang theo giả định page size = 20 (Pancake đổi sang 10 là mất sạch trang sau)', async () => {
+    const client = makeClient([[prod('a'), prod('b')], [prod('c')], []]);
+    const n = await new PancakeSyncService(makePrisma(), client, lifecycle).syncProducts('2026-09-12T00:00:00.000Z');
+    expect(n).toBe(3);
+  });
+
+  it('hai lượt sync chồng nhau → lượt sau bỏ qua, không ghi đè lẫn nhau', async () => {
+    const prisma = makePrisma();
+    const svc = new PancakeSyncService(prisma, makeClient([[prod('a')], []]), lifecycle);
+    const [first, second] = await Promise.all([svc.syncProducts(), svc.syncProducts()]);
+    expect([first, second].filter((x) => x === 0)).toHaveLength(1);
+  });
+});

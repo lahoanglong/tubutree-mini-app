@@ -40,8 +40,17 @@ export class PancakeOrderService {
    * vĩnh viễn, kho vật lý không bao giờ thấy dù đã trừ kho + trừ tiền khách.
    * jobId=orderId → BullMQ tự chặn trùng job cho cùng 1 đơn (dedupe) khi enqueue nhiều lần
    * (checkout gọi + cron reconcile gọi lại) trong lúc job cũ còn active/waiting.
+   *
+   * PHẢI xoá job cũ trước khi add: BullMQ giữ job hash lại sau khi job xong/thất bại
+   * (removeOnComplete 1000, removeOnFail 5000 — xem jobs/queue.module.ts), và script
+   * addStandardJob trả về job cũ mà KHÔNG enqueue nếu hash cùng jobId còn tồn tại. Không có
+   * bước xoá thì đơn đã đẩy hỏng hết 5 lần thử sẽ chặn vĩnh viễn mọi lần enqueue sau — cron
+   * cứu hộ 15 phút/lần in log "re-enqueue" mãi mà không có gì chạy, đơn đã trừ kho và đã thu
+   * tiền không bao giờ tới kho vật lý. Tác dụng chống đẩy đôi vẫn còn: removeJob bỏ qua job
+   * đang bị khoá (đang chạy), nên lúc đó add() vẫn dedupe như cũ.
    */
   async enqueuePush(orderId: string): Promise<void> {
+    await this.pushQueue.remove(orderId).catch(() => undefined);
     await this.pushQueue.add('push', { orderId }, { jobId: orderId });
   }
 

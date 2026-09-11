@@ -77,10 +77,40 @@ describe('PancakeOrderService.pushOrder', () => {
 describe('PancakeOrderService.enqueuePush', () => {
   it('add job vào queue với jobId=orderId (dedupe cùng đơn)', async () => {
     const add = jest.fn().mockResolvedValue({});
+    const remove = jest.fn().mockResolvedValue(1);
     const prisma = {} as unknown as PrismaService;
     const client = {} as unknown as PancakeClient;
-    const svc = new PancakeOrderService(prisma, client, { add } as never);
+    const svc = new PancakeOrderService(prisma, client, { add, remove } as never);
     await svc.enqueuePush('o1');
     expect(add).toHaveBeenCalledWith('push', { orderId: 'o1' }, { jobId: 'o1' });
+  });
+
+  /**
+   * BullMQ giữ job hash lại sau khi job xong/thất bại (removeOnComplete 1000, removeOnFail
+   * 5000). Script addStandardJob trả về job cũ mà KHÔNG enqueue nếu hash cùng jobId còn tồn
+   * tại. Nghĩa là đơn đã đẩy hỏng hết 5 lần thử thì cron cứu hộ 15 phút/lần gọi enqueuePush
+   * mãi mãi mà không có gì chạy — đơn đã trừ kho, đã thu tiền, không bao giờ tới kho vật lý.
+   * remove() là no-op với job đang chạy (script removeJob bỏ qua job bị khoá) nên vẫn giữ
+   * đúng tác dụng chống đẩy đôi khi job cũ còn active.
+   */
+  it('xoá job cũ trước khi add — nếu không, job đã thất bại chặn mọi lần enqueue sau', async () => {
+    const calls: string[] = [];
+    const add = jest.fn().mockImplementation(() => { calls.push('add'); return Promise.resolve({}); });
+    const remove = jest.fn().mockImplementation(() => { calls.push('remove'); return Promise.resolve(1); });
+    const svc = new PancakeOrderService({} as unknown as PrismaService, {} as unknown as PancakeClient, { add, remove } as never);
+
+    await svc.enqueuePush('o1');
+
+    expect(remove).toHaveBeenCalledWith('o1');
+    expect(calls).toEqual(['remove', 'add']);
+  });
+
+  it('remove lỗi (job đang chạy/redis chớp) → vẫn add, không ném ra ngoài', async () => {
+    const add = jest.fn().mockResolvedValue({});
+    const remove = jest.fn().mockRejectedValue(new Error('locked'));
+    const svc = new PancakeOrderService({} as unknown as PrismaService, {} as unknown as PancakeClient, { add, remove } as never);
+
+    await expect(svc.enqueuePush('o1')).resolves.toBeUndefined();
+    expect(add).toHaveBeenCalled();
   });
 });

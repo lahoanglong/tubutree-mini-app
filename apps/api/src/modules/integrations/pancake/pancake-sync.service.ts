@@ -16,6 +16,10 @@ import type { PancakeProductDTO } from './pancake.types';
 export class PancakeSyncService implements OnModuleInit {
   private readonly logger = new Logger(PancakeSyncService.name);
   private lastRunAt: string | null = null;
+  /** Chặn hai lượt sync chạy chồng lên nhau (boot sync chậm gặp đúng mốc cron 15 phút). */
+  private running = false;
+  /** Trần số trang — phòng trường hợp API bỏ qua tham số `page` và trả mãi cùng một trang. */
+  private static readonly MAX_PAGES = 500;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -54,20 +58,32 @@ export class PancakeSyncService implements OnModuleInit {
       this.logger.warn('Pancake chưa cấu hình — skip sync.');
       return 0;
     }
+    if (this.running) {
+      this.logger.warn('Một lượt sync đang chạy — bỏ qua lượt này để hai lượt không ghi đè nhau.');
+      return 0;
+    }
+    // An toàn tồn kho buộc theo PHẠM VI QUÉT, không theo ý caller: không có `updatedSince`
+    // nghĩa là đụng TOÀN BỘ catalog, và lúc đó không được ghi `stock`. Trước đây chỉ boot sync
+    // tự truyền skipStock, nên `lastRunAt` (chỉ nằm trong RAM) còn null — boot sync lỗi, hoặc
+    // process vừa khởi động lại — là cron 15 phút quét toàn bộ VÀ ghi đè tồn kho của mọi sản
+    // phẩm theo số Pancake, hồi sinh hàng vừa bán hết cục bộ.
+    const skipStock = opts.skipStock || updatedSince === undefined;
+    this.running = true;
     // Mốc cursor lấy ở ĐẦU sync: sản phẩm đổi trong lúc sync sẽ được bắt ở lần kế
     // (upsert idempotent nên overlap nhẹ là an toàn — thà trùng còn hơn bỏ sót).
     const startedAt = new Date().toISOString();
     let page = 1;
     let count = 0;
     let failed = 0;
-    for (;;) {
+    try {
+      for (;;) {
       const res = await this.client.fetchProducts(page, updatedSince);
       const products = res.data ?? res.products ?? [];
       if (products.length === 0) break;
       for (const p of products) {
         // Cô lập lỗi từng sản phẩm — 1 SP hỏng (vd slug trùng) không làm hỏng cả batch.
         try {
-          await this.upsertProduct(p, opts);
+          await this.upsertProduct(p, { ...opts, skipStock });
           count++;
         } catch (err) {
           failed++;
@@ -77,11 +93,22 @@ export class PancakeSyncService implements OnModuleInit {
         }
       }
       page++;
-      if (products.length < 20) break; // hết trang (giả định page size ~20)
+      // Dừng khi trang rỗng (kiểm ở đầu vòng), KHÔNG đoán theo page size: trước đây dừng ngay
+      // khi một trang trả < 20 bản ghi, nên nếu Pancake đặt page size 10 thì mọi trang đều
+      // "ngắn" và đồng bộ im lặng dừng sau trang đầu — log vẫn báo thành công.
+      if (page > PancakeSyncService.MAX_PAGES) {
+        this.logger.error(`Dừng sync ở trang ${page}: vượt trần ${PancakeSyncService.MAX_PAGES} trang.`);
+        break;
+      }
+      }
+      this.lastRunAt = startedAt;
+      this.logger.log(`Đã đồng bộ ${count} sản phẩm từ Pancake${failed ? ` (${failed} lỗi, bỏ qua)` : ''}.`);
+      return count;
+    } finally {
+      // Cờ phải được nhả kể cả khi fetch ném — nếu không, một lần Pancake timeout là mọi lượt
+      // sync sau đều bị chính cờ này chặn cho tới lần restart.
+      this.running = false;
     }
-    this.lastRunAt = startedAt;
-    this.logger.log(`Đã đồng bộ ${count} sản phẩm từ Pancake${failed ? ` (${failed} lỗi, bỏ qua)` : ''}.`);
-    return count;
   }
 
   private async upsertProduct(p: PancakeProductDTO, opts: { skipStock?: boolean } = {}): Promise<void> {
