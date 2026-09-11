@@ -233,8 +233,11 @@ describe('DealerService.placeOrder idempotency (chống double-submit đơn CRED
       },
       dealerCreditLedger: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }), create: jest.fn().mockResolvedValue({}) },
     };
+    // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
+    const executeRaw = jest.fn().mockResolvedValue(1);
+    base.$executeRaw = executeRaw;
     base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
-    return { prisma: base as unknown as PrismaService, orderCreate };
+    return { prisma: base as unknown as PrismaService, orderCreate, executeRaw };
   }
 
   it('key đã tồn tại (đơn đã tạo trước đó) → trả lại đơn cũ, KHÔNG tạo đơn/ghi công nợ lần 2', async () => {
@@ -332,5 +335,57 @@ describe('DealerService.rewardsProgress (hiển thị điều kiện + tiến tr
   it('chặn nếu không phải đại lý', async () => {
     const prisma = { user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ role: 'CUSTOMER' }) } } as unknown as PrismaService;
     await expect(new DealerService(prisma, makeConfig()).rewardsProgress('u1', NOW)).rejects.toThrow();
+  });
+});
+
+/**
+ * Đơn đại lý là đường tạo đơn DUY NHẤT không trừ tồn kho — trong khi đường HUỶ đơn dùng chung
+ * `OrderReversalService` thì lại CỘNG kho cho mọi item. Đặt một đơn đại lý rồi huỷ là in ra tồn
+ * kho từ không khí, và trước lúc huỷ thì khách lẻ vẫn thấy hàng đã bán cho đại lý là "còn".
+ */
+describe('DealerService.placeOrder — tồn kho', () => {
+  function prismaForStock(reserveResult = 1) {
+    const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
+    const executeRaw = jest.fn().mockResolvedValue(reserveResult);
+    const base: Record<string, unknown> = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
+      dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
+      variation: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', retailPrice: 100000, dealerPrices: null, name: '500ml', product: { name: 'SP' } },
+        ]),
+      },
+      order: {
+        create: orderCreate,
+        findUnique: jest.fn().mockResolvedValue(null),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }),
+      },
+      dealerCreditLedger: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }), create: jest.fn().mockResolvedValue({}) },
+      $executeRaw: executeRaw,
+    };
+    base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
+    return { prisma: base as unknown as PrismaService, orderCreate, executeRaw };
+  }
+
+  it('trừ tồn kho như mọi đường tạo đơn khác', async () => {
+    const { prisma, executeRaw, orderCreate } = prismaForStock();
+    await new DealerService(prisma, makeConfig()).placeOrder(
+      'd1',
+      { items: [{ variationId: 'v1', quantity: 4 }], paymentMethod: 'PREPAID' } as never,
+    );
+    // Tham số câu UPDATE giữ chỗ: (số lượng, số lượng, variationId, số lượng).
+    expect(executeRaw.mock.calls[0]!.slice(1)).toEqual([4, 4, 'v1', 4]);
+    expect(orderCreate).toHaveBeenCalled();
+  });
+
+  it('không đủ tồn → báo lỗi và KHÔNG tạo đơn', async () => {
+    const { prisma, orderCreate } = prismaForStock(0);
+    await expect(
+      new DealerService(prisma, makeConfig()).placeOrder(
+        'd1',
+        { items: [{ variationId: 'v1', quantity: 4 }], paymentMethod: 'PREPAID' } as never,
+      ),
+    ).rejects.toThrow('không đủ tồn kho');
+    expect(orderCreate).not.toHaveBeenCalled();
   });
 });

@@ -6,6 +6,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
+import { reserveVariationStock } from '../catalog/variation-stock';
 
 interface BonusTier {
   min: number;
@@ -164,6 +165,14 @@ export class DealerService {
             const agg = await tx.dealerCreditLedger.aggregate({ where: { userId }, _sum: { delta: true } });
             const debt = agg._sum.delta ?? 0;
             if (debt + subtotal > tier.creditLimit) throw new BadRequestException('Vượt hạn mức công nợ.');
+          }
+          // Trừ tồn kho như MỌI đường tạo đơn khác (checkout, CTV lên đơn hộ, đơn định kỳ).
+          // Thiếu bước này thì: (1) hàng đã bán cho đại lý vẫn hiện "còn" với khách lẻ, và
+          // (2) huỷ đơn đại lý đi qua OrderReversalService — vốn CỘNG kho cho mọi item —
+          // nên đặt rồi huỷ là in tồn kho từ không khí.
+          for (const line of items) {
+            const ok = await reserveVariationStock(tx, line.variationId, line.quantity);
+            if (!ok) throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
           }
           const created = await tx.order.create({
             data: {
