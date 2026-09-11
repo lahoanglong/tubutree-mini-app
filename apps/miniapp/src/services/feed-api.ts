@@ -168,6 +168,15 @@ export interface AdminReport {
   reason: string;
   status: string;
   createdAt: string;
+  /** Trích nội dung bị báo cáo — null nếu nội dung đã bị xoá cứng. */
+  target: {
+    kind: 'POST' | 'COMMENT';
+    author: string;
+    title: string | null;
+    excerpt: string;
+    alreadyHandled: boolean;
+    postId: string;
+  } | null;
 }
 
 export const adminPendingPosts = () =>

@@ -811,8 +811,64 @@ export class CommunityFeedService {
   }
 
   /** Danh sách report đang mở (OPEN), cũ nhất trước. */
+  /**
+   * Hàng chờ báo cáo, KÈM trích nội dung bị báo cáo.
+   *
+   * Trước đây chỉ trả bản ghi report, nên hub kiểm duyệt hiện đúng một dãy cuid cạnh lý do do
+   * người báo cáo tự gõ — admin bấm "Ẩn nội dung" mà không nhìn thấy nội dung đó là gì. Nạp theo
+   * lô (2 truy vấn cho cả trang) vì CommunityReport không khai quan hệ tới bài/bình luận.
+   */
   async adminReports(take = 50) {
-    return this.prisma.communityReport.findMany({ where: { status: 'OPEN' }, orderBy: { createdAt: 'asc' }, take });
+    const reports = await this.prisma.communityReport.findMany({
+      where: { status: 'OPEN' },
+      orderBy: { createdAt: 'asc' },
+      take,
+    });
+    if (reports.length === 0) return [];
+    const postIds = reports.filter((r) => r.targetType === 'POST').map((r) => r.targetId);
+    const commentIds = reports.filter((r) => r.targetType === 'COMMENT').map((r) => r.targetId);
+    const [posts, comments] = await Promise.all([
+      postIds.length
+        ? this.prisma.feedPost.findMany({
+            where: { id: { in: [...new Set(postIds)] } },
+            select: { id: true, title: true, body: true, status: true, user: { select: { fullName: true } } },
+          })
+        : Promise.resolve([]),
+      commentIds.length
+        ? this.prisma.feedComment.findMany({
+            where: { id: { in: [...new Set(commentIds)] } },
+            select: { id: true, body: true, postId: true, isRemoved: true, user: { select: { fullName: true } } },
+          })
+        : Promise.resolve([]),
+    ]);
+    const postMap = new Map(posts.map((p) => [p.id, p]));
+    const commentMap = new Map(comments.map((c) => [c.id, c]));
+    return reports.map((r) => {
+      const post = r.targetType === 'POST' ? postMap.get(r.targetId) : undefined;
+      const comment = r.targetType === 'COMMENT' ? commentMap.get(r.targetId) : undefined;
+      return {
+        ...r,
+        target: post
+          ? {
+              kind: 'POST' as const,
+              author: post.user.fullName ?? 'Thành viên',
+              title: post.title,
+              excerpt: post.body.slice(0, 300),
+              alreadyHandled: post.status === 'REMOVED',
+              postId: post.id,
+            }
+          : comment
+            ? {
+                kind: 'COMMENT' as const,
+                author: comment.user.fullName ?? 'Thành viên',
+                title: null,
+                excerpt: comment.body.slice(0, 300),
+                alreadyHandled: comment.isRemoved,
+                postId: comment.postId,
+              }
+            : null, // nội dung đã bị xoá cứng ở đâu đó — vẫn hiện để admin đóng báo cáo
+      };
+    });
   }
 
   /** Đánh dấu report đã xử lý. */

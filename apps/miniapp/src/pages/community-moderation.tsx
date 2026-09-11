@@ -264,9 +264,29 @@ function ReportCard({
   return (
     <Box style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
       <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-        {TARGET_LABEL[report.targetType] ?? report.targetType} · {report.targetId} · {timeAgo(report.createdAt)}
+        {TARGET_LABEL[report.targetType] ?? report.targetType}
+        {report.target ? ` · ${report.target.author}` : ''} · {timeAgo(report.createdAt)}
       </Text>
-      <Text size="small" style={{ marginTop: 4 }}>{report.reason}</Text>
+      {/* Nội dung BỊ BÁO CÁO, không phải cuid: bấm "Ẩn nội dung" mà không nhìn thấy nội dung đó
+          là gì thì rất dễ gỡ nhầm nội dung lành. */}
+      {report.target ? (
+        <Box mt={1} p={2} style={{ background: 'var(--neutral-50)', borderRadius: 8 }}>
+          {report.target.title && (
+            <Text size="xSmall" bold style={{ color: 'var(--neutral-800)' }}>{report.target.title}</Text>
+          )}
+          <Text size="xSmall" style={{ color: 'var(--neutral-700)' }}>{report.target.excerpt}</Text>
+          {report.target.alreadyHandled && (
+            <Text size="xxxxSmall" style={{ color: 'var(--leaf-700)', marginTop: 2 }}>
+              Nội dung này đã được gỡ.
+            </Text>
+          )}
+        </Box>
+      ) : (
+        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+          Nội dung không còn tồn tại.
+        </Text>
+      )}
+      <Text size="small" style={{ marginTop: 6 }}>Lý do báo cáo: {report.reason}</Text>
       <Box flex style={{ gap: 8, marginTop: 10 }}>
         <Button
           size="small"
