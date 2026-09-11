@@ -111,10 +111,12 @@ const TABS: { k: Tab; label: string }[] = [
 ];
 
 export default function AdminPage() {
-  const { user, status } = useAuth();
+  const { user, status, initialized } = useAuth();
   const [tab, setTab] = useState<Tab>('dashboard');
 
-  if (status === 'loading') return <Center>Đang tải…</Center>;
+  // Chờ lượt khôi phục phiên chạy xong: render đầu tiên luôn là 'idle' (xem AuthState.initialized),
+  // không chờ thì màn "Cần đăng nhập quản trị" chớp lên mỗi lần F5.
+  if (!initialized || status === 'loading') return <Center>Đang tải…</Center>;
   if (status !== 'authenticated')
     return (
       <Center>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { addToCart, formatVnd } from '@/lib/shop-client';
 
@@ -15,6 +16,7 @@ interface Variation {
 
 export default function AddToCart({ variations }: { variations: Variation[] }) {
   const router = useRouter();
+  const qc = useQueryClient();
   const { status } = useAuth();
   const inStock = variations.filter((v) => v.stock > 0);
   const [selectedId, setSelectedId] = useState<string>((inStock[0] ?? variations[0])?.id ?? '');
@@ -45,7 +47,11 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
     setBusy(true);
     setMsg(null);
     try {
-      await addToCart(selected.id, qty);
+      const cart = await addToCart(selected.id, qty);
+      // Badge giỏ ở header đọc cùng queryKey ['cart'] nhưng nằm trong layout nên không bao giờ
+      // remount, và providers tắt refetchOnWindowFocus — không cập nhật thì khách thêm 3 món
+      // vẫn thấy số cũ, tưởng chưa thêm được rồi thêm lại thành trùng số lượng.
+      qc.setQueryData(['cart'], cart);
       setMsg('Đã thêm vào giỏ!');
       setSuccess(true);
     } catch (e) {
