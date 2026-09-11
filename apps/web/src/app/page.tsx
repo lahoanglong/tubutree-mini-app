@@ -89,8 +89,11 @@ export default async function HomePage({
             <RotateCcw className="h-5 w-5" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-neutral-900">Đổi Trả Miễn Phí 7 Ngày</h4>
-            <p className="text-[11px] text-neutral-500">Cam kết hoàn tiền nếu không hài lòng</p>
+            {/* Chính sách thật (miniapp /about, và chính tab Đổi/Trả của admin): chỉ đổi/trả khi
+                sản phẩm LỖI NHÀ SẢN XUẤT, trong 7 ngày. Hứa "hoàn tiền nếu không hài lòng" là
+                rộng hơn hẳn — khách đổi ý sẽ bị từ chối và có cơ sở khiếu nại. */}
+            <h4 className="text-xs font-bold text-neutral-900">Đổi Trả 7 Ngày</h4>
+            <p className="text-[11px] text-neutral-500">Hàng lỗi nhà sản xuất — đổi mới hoặc hoàn tiền</p>
           </div>
         </div>
       </section>

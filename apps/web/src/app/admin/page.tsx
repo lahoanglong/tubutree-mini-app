@@ -953,25 +953,55 @@ function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => void }) {
   );
 }
 
+/**
+ * `<input type="date">` trả "2026-09-30". `new Date("2026-09-30")` được JS hiểu theo UTC, tức
+ * 07:00 sáng giờ VN — voucher "đến hết 30/9" chết từ 7h sáng 30/9, còn voucher "từ 1/10" không
+ * dùng được suốt 7 tiếng đầu ngày. Ghép giờ địa phương trước khi dựng Date để mốc đúng ý admin.
+ */
+function localDateIso(dayKey: string, endOfDay: boolean, fallbackMs: number): string {
+  if (!dayKey) return new Date(fallbackMs).toISOString();
+  return new Date(`${dayKey}T${endOfDay ? '23:59:59' : '00:00:00'}`).toISOString();
+}
+
 function CouponsTab() {
-  const [f, setF] = useState({ code: '', type: 'PERCENT', value: 10, startAt: '', endAt: '', scope: 'PUBLIC' });
+  const [f, setF] = useState({
+    code: '',
+    type: 'PERCENT',
+    value: 10,
+    startAt: '',
+    endAt: '',
+    scope: 'PUBLIC',
+    minOrder: '',
+    maxDiscount: '',
+    usageLimit: '',
+    perUserLimit: '1',
+  });
   const [msg, setMsg] = useState<string | null>(null);
+  const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
   const create = useMutation({
     mutationFn: () =>
       createCoupon({
         code: f.code,
         type: f.type as 'PERCENT' | 'AMOUNT' | 'FREESHIP',
         value: Number(f.value),
-        startAt: new Date(f.startAt || Date.now()).toISOString(),
-        endAt: new Date(f.endAt || Date.now() + 30 * 864e5).toISOString(),
+        // BE coi các trường này thiếu = KHÔNG GIỚI HẠN: một mã PERCENT 30 không trần giảm và
+        // không giới hạn lượt dùng nghĩa là đơn 10 triệu được giảm 3 triệu, lặp lại bao nhiêu
+        // lần cũng được. Form cũ không thu bốn trường này nên mọi voucher tạo từ web đều vậy.
+        minOrder: num(f.minOrder),
+        maxDiscount: num(f.maxDiscount),
+        usageLimit: num(f.usageLimit),
+        perUserLimit: num(f.perUserLimit),
+        startAt: localDateIso(f.startAt, false, Date.now()),
+        endAt: localDateIso(f.endAt, true, Date.now() + 30 * 864e5),
         scope: f.scope as 'PUBLIC',
       }),
     onSuccess: () => setMsg('Đã tạo voucher!'),
     onError: (e) => setMsg(e instanceof Error ? e.message : 'Lỗi'),
   });
+  const field = 'w-full rounded border border-neutral-200 px-3 py-2 text-sm';
   return (
     <div className="max-w-md space-y-2">
-      <input placeholder="Mã (vd WELCOME30)" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} className="w-full rounded border border-neutral-200 px-3 py-2 text-sm" />
+      <input placeholder="Mã (vd WELCOME30)" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} className={field} />
       <div className="flex gap-2">
         <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className="rounded border border-neutral-200 px-2 py-2 text-sm">
           <option value="PERCENT">% giảm</option>
@@ -981,8 +1011,19 @@ function CouponsTab() {
         <input type="number" placeholder="Giá trị" value={f.value} onChange={(e) => setF({ ...f, value: Number(e.target.value) })} className="w-28 rounded border border-neutral-200 px-3 py-2 text-sm" />
       </div>
       <div className="flex gap-2">
-        <input type="date" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm" />
-        <input type="date" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm" />
+        <input type="number" placeholder="Đơn tối thiểu (đ)" value={f.minOrder} onChange={(e) => setF({ ...f, minOrder: e.target.value })} className={field} />
+        <input type="number" placeholder="Giảm tối đa (đ)" value={f.maxDiscount} onChange={(e) => setF({ ...f, maxDiscount: e.target.value })} className={field} />
+      </div>
+      <div className="flex gap-2">
+        <input type="number" placeholder="Tổng lượt dùng" value={f.usageLimit} onChange={(e) => setF({ ...f, usageLimit: e.target.value })} className={field} />
+        <input type="number" placeholder="Lượt / khách" value={f.perUserLimit} onChange={(e) => setF({ ...f, perUserLimit: e.target.value })} className={field} />
+      </div>
+      <p className="text-xs text-neutral-400">
+        Bỏ trống = không giới hạn. Mã % nên đặt &quot;Giảm tối đa&quot; để đơn lớn không bị giảm quá tay.
+      </p>
+      <div className="flex gap-2">
+        <input type="date" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
+        <input type="date" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
       </div>
       <button onClick={() => create.mutate()} disabled={!f.code} className="w-full rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300">Tạo voucher</button>
       {msg && <p className="text-sm text-green-700">{msg}</p>}
@@ -1056,8 +1097,9 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
   const addPromo = useMutation({
     mutationFn: () => createPromotion(brand.id, {
       title: promo.title.trim(), subtitle: promo.subtitle.trim() || undefined,
-      startAt: new Date(promo.startAt || Date.now()).toISOString(),
-      endAt: new Date(promo.endAt || Date.now() + 30 * 864e5).toISOString(),
+      // Cùng lỗi múi giờ với voucher — xem localDateIso.
+      startAt: localDateIso(promo.startAt, false, Date.now()),
+      endAt: localDateIso(promo.endAt, true, Date.now() + 30 * 864e5),
     }),
     onSuccess: () => { setPromo({ title: '', subtitle: '', startAt: '', endAt: '' }); void qc.invalidateQueries({ queryKey: ['admin-brand-promos', brand.id] }); },
   });

@@ -14,6 +14,8 @@ export interface ProductCard {
   isFeatured: boolean;
   sold?: number;
   inStock: boolean;
+  ratingAvg?: number;
+  reviewCount?: number;
 }
 export interface VariationDetail {
   id: string;

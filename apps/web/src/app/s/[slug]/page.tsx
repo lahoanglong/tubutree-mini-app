@@ -233,7 +233,7 @@ export default async function StorefrontPage({
         </div>
         <div className="flex items-center gap-2 rounded-xl border border-neutral-200/70 bg-white p-3 shadow-sm">
           <RotateCcw className="h-4 w-4 shrink-0 text-leaf-700" />
-          <span className="text-xs font-semibold text-neutral-800">Đổi trả 7 ngày</span>
+          <span className="text-xs font-semibold text-neutral-800">Đổi trả 7 ngày (hàng lỗi NSX)</span>
         </div>
       </section>
 
