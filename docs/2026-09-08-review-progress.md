@@ -649,3 +649,63 @@ tự kiểm chứng trong code trước khi sửa — agent có thể bịa, art
 
 Bài học ghi lại cho phiên sau: **mọi guard phải đặt ở lớp GHI, không phải lớp tính lại sau đó**;
 và sau một đợt sửa lớn thì đọc lại diff của chính mình là bước bắt buộc, không phải tuỳ chọn.
+
+## Đóng nốt hai việc chặn của phiên (2026-09-12, lượt sau)
+
+Hai mục "cần người quyết" trong runbook đã xử lý xong bằng code; chỉ còn API key và một vòng bấm
+tay trên Zalo thật là thực sự cần người.
+
+### P0-3 — tồn kho Pancake: thoát thế bí bằng thiết kế đúng với CẢ HAI câu trả lời
+
+Hai phiên trước dừng ở câu hỏi *"Pancake có tự trừ `remain_quantity` khi ta tạo đơn qua API
+không?"* và soạn hai hướng sửa tuỳ theo câu trả lời. Lượt này bỏ hẳn câu hỏi đó: có một thiết kế
+cho ra số đúng ở cả hai trường hợp.
+
+Thêm `Variation.pancakeStock` (số Pancake báo lần gần nhất) và `Variation.reservedStock` (số ta
+đã bán mà Pancake chưa phản ánh). `stock` **giữ nguyên** nghĩa "tồn kho bán được", nên **không
+một chỗ đọc nào phải sửa** — khác hẳn "Hướng 2" trong brief vốn đòi đổi mọi nơi hiển thị/kiểm
+tồn sang `stock - reservedStock`. Đồng bộ nhả phần GIẢM của số Pancake khỏi giữ chỗ rồi đặt
+`stock = số mới − giữ chỗ còn lại`:
+
+- Pancake CÓ tự trừ ⇒ số giảm đúng bằng đơn của ta ⇒ giữ chỗ nhả hết ⇒ không trừ hai lần.
+- Pancake KHÔNG tự trừ ⇒ số đứng yên ⇒ giữ chỗ còn nguyên ⇒ không hồi sinh hàng đã bán.
+
+Ba thao tác gói trong `catalog/variation-stock.ts`, mỗi thao tác là MỘT câu `UPDATE` (không có
+khe hở đọc-rồi-ghi giữa checkout và cron 15 phút). Webhook `variation.stock_changed` — cùng lớp
+lỗi, trước đây cũng ghi tuyệt đối — nay dùng chung công thức. Bỏ luôn chế độ `skipStock` vì quét
+toàn bộ lúc boot không còn nguy hiểm.
+
+Dữ liệu cũ để `pancakeStock = NULL`: lượt sync đầu sau deploy CHỈ ghi mốc, không đụng `stock`,
+nên không có cú đặt lại tồn kho hàng loạt ngay sau khi lên bản mới.
+
+**Kiểm chứng trên Postgres thật, 11/11 kịch bản** (không phải mock): có tự trừ · không tự trừ ·
+sync hai lần không cộng dồn · nhập thêm hàng · huỷ đơn sau khi giữ chỗ đã nhả (kẹp ở 0, không
+âm) · dữ liệu cũ chỉ ghi mốc · hết hàng thì 0 dòng bị sửa · số Pancake tụt sâu thì `stock` kẹp 0.
+
+### Phát hiện thêm khi làm P0-3: đơn đại lý in ra tồn kho
+
+`DealerService.placeOrder` là đường tạo đơn DUY NHẤT không trừ kho, nhưng đường huỷ đơn dùng
+chung `OrderReversalService` thì CỘNG kho cho mọi item. Đặt một đơn đại lý rồi huỷ là tạo tồn
+kho từ không khí; trước lúc huỷ thì khách lẻ vẫn thấy hàng đã bán cho đại lý là "còn". Nay trừ
+kho như mọi đường khác (test đỏ trước khi sửa). Đổi hành vi: đơn đại lý vượt tồn bị từ chối —
+ghi trong runbook mục 4.2 để chủ shop quyết có cần cơ chế đặt-trước riêng không.
+
+### Refresh token của web: localStorage → cookie HttpOnly
+
+Refresh token sống 30 ngày và đổi được thành access token bất cứ lúc nào, nên một lỗ XSS ở web
+là mất tài khoản vĩnh viễn — đổi mật khẩu cũng không cứu vì token đã bị copy đi. Nay BE set
+cookie `HttpOnly; Secure; SameSite` (`refresh-cookie.ts`), JS không đọc được kể cả JS của mình.
+
+Ba điểm thiết kế đáng ghi:
+
+1. **Mini App không đổi.** Chế độ cookie chỉ bật khi client gửi `x-client: web`; webview Zalo là
+   origin khác và không giữ cookie bên thứ ba ổn định nên vẫn nhận token trong thân response.
+2. **Header đó cũng là lớp chống CSRF.** Cookie chỉ được ĐỌC khi có header tuỳ biến, mà header
+   tuỳ biến ép trình duyệt preflight và preflight bị CORS allowlist chặn. Không có lớp này thì
+   (với `SameSite=None` khi web và API khác site) một trang lạ ép được nạn nhân xoay token.
+3. **Web vẫn cần biết "có phiên không"** ở lần render đầu mà không đọc được cookie thật, nên có
+   thêm cờ `tubu_web_session=1` — cookie thường, không chứa bí mật. Refresh hỏng thì BE xoá cả
+   hai, web xoá nốt cờ, để không thử khôi phục vô hạn mỗi lần mở trang.
+
+Deploy sẽ **đăng xuất toàn bộ phiên web hiện có** (token cũ ở localStorage, code mới không đọc
+nữa) — runbook mục 4.1, kèm hai biến env mới `AUTH_COOKIE_SAMESITE` / `AUTH_COOKIE_DOMAIN`.

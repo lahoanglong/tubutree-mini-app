@@ -1,7 +1,13 @@
 # P0-3 — Pancake sync ghi đè tồn kho: brief để chốt kiến trúc
 
-Trạng thái: **chưa chốt được bằng code** — phụ thuộc 1 sự thật về hệ thống ngoài mà repo không
-trả lời được. Tài liệu này gói gọn mọi thứ cần để quyết trong ~15 phút khi có câu trả lời.
+> **ĐÃ XONG — 2026-09-12. Câu hỏi chặn không còn cần trả lời.**
+>
+> Thay vì chọn một trong hai hướng dưới đây, đã làm một thiết kế ĐÚNG VỚI CẢ HAI câu trả lời,
+> nên không phải chạy thí nghiệm trên prod nữa. Xem mục "Cách đã chốt" ở cuối file. Phần còn lại
+> giữ nguyên làm hồ sơ vì sao lại thiết kế như vậy.
+
+Trạng thái ban đầu: **chưa chốt được bằng code** — phụ thuộc 1 sự thật về hệ thống ngoài mà repo
+không trả lời được.
 
 ## Vấn đề
 
@@ -72,3 +78,39 @@ Sửa: thêm `Variation.reservedStock Int @default(0)`.
 - Đơn subscription và đơn dealer hiện **không đẩy Pancake** (P1-4, chưa sửa). Ở Hướng 1 thì
   những đơn này Pancake vĩnh viễn không biết → tồn kho của chúng sẽ bị ghi đè ngược. Nếu chọn
   Hướng 1, phải đẩy Pancake cho 2 luồng đó trước/cùng lúc.
+
+
+---
+
+## Cách đã chốt (2026-09-12) — không cần biết Pancake có tự trừ tồn hay không
+
+`Variation` có thêm hai cột (migration `20260912020000_variation_reserved_stock`):
+
+- `pancakeStock` — số `remain_quantity` Pancake báo lần gần nhất. `NULL` = chưa từng đồng bộ.
+- `reservedStock` — số đơn vị đã bán bằng đơn CỦA TA mà số Pancake chưa phản ánh.
+
+`stock` giữ nguyên ý nghĩa **tồn kho bán được**, nên **không một chỗ đọc nào phải sửa** — đây là
+điểm khác then chốt so với "Hướng 2" bên trên, và là lý do chi phí xuống thấp hẳn.
+
+Khi đồng bộ (và cả webhook `variation.stock_changed`), phần GIẢM của số Pancake được nhả khỏi
+`reservedStock`, rồi `stock = số Pancake mới − giữ chỗ còn lại`:
+
+| | Pancake CÓ tự trừ | Pancake KHÔNG tự trừ |
+|---|---|---|
+| Số Pancake sau khi ta bán 3 | giảm 3 | đứng yên |
+| Giữ chỗ sau sync | nhả hết → 0 | còn 3 |
+| `stock` sau sync | = số Pancake (không trừ hai lần) | = số Pancake − 3 (không hồi sinh hàng) |
+
+Ba câu SQL nằm gọn trong `apps/api/src/modules/catalog/variation-stock.ts` — mỗi thao tác là MỘT
+câu `UPDATE` nên không có khe hở đọc-rồi-ghi giữa checkout và cron.
+
+**Đã kiểm chứng trên Postgres thật, 11/11 kịch bản** (không phải mock): Pancake có tự trừ · không
+tự trừ · sync chạy hai lần không cộng dồn · kho nhập thêm hàng · huỷ đơn SAU khi giữ chỗ đã được
+nhả (`reservedStock` kẹp ở 0, không âm) · dữ liệu cũ chưa có mốc thì lượt sync đầu chỉ ghi mốc và
+KHÔNG đụng `stock` · hết hàng thì 0 dòng bị sửa · số Pancake tụt sâu hơn phần giữ chỗ thì `stock`
+kẹp ở 0.
+
+Nhờ đó cũng bỏ luôn chế độ `skipStock`: quét toàn bộ lúc boot không còn nguy hiểm.
+
+Việc còn lại: nếu sau này muốn biết Pancake có tự trừ tồn hay không thì đó chỉ là câu hỏi vận
+hành (giúp đọc số cho dễ), **không còn chặn code**.

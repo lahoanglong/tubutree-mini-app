@@ -21,6 +21,7 @@ migrate diff` báo không còn lệch.
 | `20260911050000_storefront_slug_lowercase` | Hạ chữ thường `storefronts.slug` | Sửa dữ liệu, xem mục 1.2 |
 | `20260911060000_order_item_product_slug` | Cột `OrderItem.productSlug` | Chỉ thêm mới |
 | `20260912010000_order_status_history` | Bảng `order_status_history` | Chỉ thêm mới |
+| `20260912020000_variation_reserved_stock` | Cột `Variation.pancakeStock` + `reservedStock` | Chỉ thêm mới, **không** đụng dữ liệu `stock` — xem mục 1.3 |
 
 ### 1.1. Migration drift storefronts — chạy hai câu kiểm tra TRƯỚC
 
@@ -48,6 +49,30 @@ Sau khi áp, kiểm tra:
 ```sql
 SELECT COUNT(*) FROM storefronts WHERE slug <> LOWER(slug);  -- phải = 0
 ```
+
+### 1.3. Tồn kho: mốc Pancake + giữ chỗ (P0-3 đã đóng)
+
+Migration chỉ THÊM hai cột và cố tình **không** gán `pancakeStock = stock` cho dữ liệu cũ. Để
+`NULL`, lượt đồng bộ đầu tiên sau deploy chỉ ghi mốc mà không đụng `stock`, nên **không có cú
+đặt lại tồn kho hàng loạt ngay sau khi lên bản mới**. Từ lượt thứ hai trở đi công thức chênh
+lệch mới có hiệu lực.
+
+Kiểm tra sau vài chu kỳ sync (15 phút/lượt):
+
+```sql
+-- Đã có mốc cho các sản phẩm Pancake?
+SELECT count(*) FILTER (WHERE "pancakeStock" IS NULL) AS chua_co_moc,
+       count(*) FILTER (WHERE "pancakeStock" IS NOT NULL) AS da_co_moc
+FROM variations;
+
+-- Giữ chỗ không bao giờ được âm, và không nên phình to bất thường.
+SELECT count(*) FROM variations WHERE "reservedStock" < 0;          -- phải = 0
+SELECT id, sku, stock, "reservedStock", "pancakeStock"
+FROM variations WHERE "reservedStock" > 0 ORDER BY "reservedStock" DESC LIMIT 20;
+```
+
+`reservedStock` lớn kéo dài ở một SKU = đơn của ta Pancake chưa bao giờ phản ánh. Đó là tín hiệu
+đơn không tới được kho, không phải lỗi tồn kho.
 
 ---
 
@@ -80,6 +105,15 @@ curl -s -o /dev/null -w '%{http_code}\n' https://<api>/api/admin/orders/XXX/stat
 
 # 4. Danh sách sàn hoàn tiền KHÔNG được lộ deeplinkTemplate / fullRate / provider
 curl -s https://<api>/api/cashback/merchants
+
+# 5. Chế độ cookie của web: có header x-client thì refresh token nằm ở Set-Cookie,
+#    và KHÔNG còn trong thân response.
+curl -si -X POST https://<api>/api/auth/guest -H 'content-type: application/json' -H 'x-client: web' -d '{"deviceId":"smoke-test"}' | grep -iE 'set-cookie|refreshToken'
+# mong: Set-Cookie: tubu_rt=...; Path=/api/auth; HttpOnly; Secure; SameSite=Lax
+#       và "refreshToken":"" trong thân
+
+# 6. KHÔNG có header x-client (Mini App) thì hành vi cũ giữ nguyên: token trong thân, không cookie.
+curl -si -X POST https://<api>/api/auth/guest -H 'content-type: application/json' -d '{"deviceId":"smoke-test-2"}' | grep -iE 'set-cookie|refreshToken'
 ```
 
 Kiểm tra bằng tay trên app (cần người):
@@ -94,40 +128,63 @@ Kiểm tra bằng tay trên app (cần người):
 
 ---
 
-## 4. Việc CẦN NGƯỜI QUYẾT, chưa làm
+## 4. Việc CẦN NGƯỜI, chưa làm
 
-1. **P0-3 (Pancake ghi đè tồn kho) — phần còn lại.** Đã bịt nhánh nguy hiểm nhất: mọi lượt quét
-   TOÀN BỘ catalog (kể cả cron khi cursor rỗng) không còn ghi `stock`. Phần còn lại phụ thuộc một
-   dữ kiện bên ngoài mà repo không trả lời được: *Pancake có tự trừ `remain_quantity` khi mình
-   tạo đơn qua API không?* Xem `docs/2026-09-11-P0-3-pancake-stock-decision-brief.md` — trong đó
-   có thí nghiệm 30 phút trên PROD và cả hai thiết kế ứng với hai câu trả lời.
-
-2. **Refresh token của web đang nằm trong `localStorage`.** Một lỗ XSS là mất tài khoản vĩnh
-   viễn. Đã thêm CSP ở chế độ **báo cáo** (`Content-Security-Policy-Report-Only`) làm lớp phòng
-   thủ tạm. Việc đúng là chuyển sang cookie `httpOnly; Secure; SameSite=Lax` do BE set — nhưng
-   đổi cách này sẽ **đăng xuất toàn bộ phiên web hiện có**, nên cần chọn thời điểm. Sau khi soi
-   báo cáo CSP trên môi trường thật thì đổi header sang chế độ chặn.
-
-3. **AccessTrade API key.** Chưa có key thì cron đối soát tự tắt, và hoàn tiền chỉ trông vào
+1. **AccessTrade API key.** Chưa có key thì cron đối soát tự tắt, và hoàn tiền chỉ trông vào
    postback. Nay đã có đường quản trị để duyệt tay giao dịch treo, nhưng đó là chữa cháy.
 
-4. **Kiểm tra giao diện trên Zalo thật.** Phiên này sửa nhiều màn (hồ sơ gian hàng CTV, lý do
-   giới thiệu từng sản phẩm, tab Hoàn tiền, nút Mở lại bảng lương, phân trang bình luận/bài dự
-   thi). Test tự động không thay được một vòng bấm tay trên máy thật.
+2. **Kiểm tra giao diện trên Zalo thật.** Nhiều màn đã sửa (hồ sơ gian hàng CTV, lý do giới
+   thiệu từng sản phẩm, tab Hoàn tiền, nút Mở lại bảng lương, phân trang bình luận/bài dự thi).
+   Test tự động không thay được một vòng bấm tay trên máy thật.
 
----
+3. **Chọn thời điểm deploy web** — xem mục 4.1: bản này **đăng xuất toàn bộ phiên web hiện có**.
+
+### 4.1. Đổi cách lưu refresh token của web (CÓ ĐĂNG XUẤT TOÀN BỘ)
+
+Refresh token của web trước đây nằm trong `localStorage`: một lỗ XSS là mất tài khoản vĩnh viễn.
+Nay do BE set trong cookie `HttpOnly; Secure; SameSite` — JS không đọc được, kể cả JS của chính
+mình. Mini App Zalo KHÔNG đổi (vẫn nhận token trong thân response); chế độ cookie chỉ bật khi
+client gửi header `x-client: web`, đồng thời là lớp chống CSRF.
+
+Thứ duy nhất web còn giữ ở `localStorage` là cờ `tubu_web_session = "1"` — không phải bí mật,
+chỉ để biết có đáng gọi `/auth/refresh` khi mở trang hay không. Cố tình KHÔNG để cờ này ở cookie:
+cookie do API set thuộc origin của API, nên nếu API ở `api.tubutree.com` còn web ở
+`tubutree.com` thì web không đọc được và sẽ luôn tưởng khách chưa đăng nhập.
+
+**Hệ quả khi deploy: mọi phiên web đang đăng nhập bị đăng xuất** (token cũ nằm ở localStorage,
+code mới không đọc nữa). Chọn giờ thấp điểm. Mini App không bị ảnh hưởng.
+
+Hai biến môi trường mới ở API:
+
+| Biến | Mặc định | Khi nào đổi |
+|---|---|---|
+| `AUTH_COOKIE_SAMESITE` | `lax` | Đặt `none` NẾU web và API khác site (vd `tubutree.com` với `api-tubu.vn`). Cùng site (`tubutree.com` + `api.tubutree.com`) thì để `lax`. Code tự bật `Secure` khi chọn `none`. |
+| `AUTH_COOKIE_DOMAIN` | rỗng | Đặt `.tubutree.com` nếu muốn mọi subdomain dùng chung phiên. Để rỗng vẫn chạy đúng khi web và API cùng registrable domain. |
+
+Sai `AUTH_COOKIE_SAMESITE` thì triệu chứng rất rõ: đăng nhập web xong tải lại trang là mất phiên.
+
+Sau khi soi báo cáo CSP (`Content-Security-Policy-Report-Only`) trên môi trường thật thì đổi
+header sang chế độ chặn — việc này độc lập với thay đổi trên.
+
+### 4.2. Đơn đại lý nay TRỪ TỒN KHO (đổi hành vi)
+
+Đơn đại lý là đường tạo đơn duy nhất không trừ kho, trong khi đường huỷ đơn dùng chung
+`OrderReversalService` lại CỘNG kho cho mọi item ⇒ đặt đơn đại lý rồi huỷ là **in tồn kho từ
+không khí**, và trước lúc huỷ thì khách lẻ vẫn thấy hàng đã bán cho đại lý là "còn".
+
+Nay đơn đại lý trừ kho như mọi đường khác. **Đổi hành vi:** đơn đại lý vượt tồn kho hiện có sẽ
+bị từ chối ("Sản phẩm ... không đủ tồn kho") thay vì tạo được như trước. Nếu nghiệp vụ muốn cho
+đại lý đặt trước hàng chưa về, cần một cơ chế đặt-trước riêng — nói để làm tiếp.
 
 ## 5. Trạng thái kiểm thử lúc đóng đợt
 
-- API: **94 suite / 1451 test** — xanh
-- Mini App: **13 file / 95 test** — xanh
-- Web: **3 file / 25 test** — xanh
-- `pnpm typecheck` và `pnpm lint` xanh toàn workspace
-- Smoke test trên API thật (cổng 3009, DB local): health 200 · `/config/public` đủ 5 trường ·
-  hai endpoint quản trị mới trả 401 khi không có token · `/cashback/merchants` không còn lộ
-  `deeplinkTemplate`/`fullRate` · bảng `order_status_history` có đúng cột và index
-
----
+- API: **97 suite / 1500 test** — xanh
+- Mini App: **13 file / 96 test** — xanh
+- Web: **4 file / 35 test** — xanh
+- `pnpm typecheck` và `pnpm lint` xanh toàn workspace (5/5 task mỗi lệnh)
+- Công thức tồn kho mới được chạy trên **Postgres thật** (không mock): **11/11 kịch bản** — xem
+  mục 1.3 và `docs/2026-09-11-P0-3-pancake-stock-decision-brief.md`
+- Smoke test trên API thật (cổng 3009, DB local): xem mục 6
 
 ## 6. Smoke test đã chạy trên API thật (DB local, cổng 3009)
 
@@ -151,5 +208,27 @@ trực tiếp trong Postgres.
 | Bảng `order_status_history` | đúng 8 cột + index `(orderId, createdAt)` |
 
 | Phân trang bình luận (cursor) | trang 1 trả 2 bình luận + cursor, trang 2 trả 2 bình luận TIẾP THEO rồi hết — **không lặp, không sót** |
+
+### 6.1. Chế độ cookie của web — đã gọi thật vào API đang chạy (2026-09-12)
+
+| Kiểm tra | Kết quả |
+|---|---|
+| `POST /auth/guest` **có** `x-client: web` | 200 · `Set-Cookie: tubu_rt=…; Path=/api/auth; HttpOnly; SameSite=Lax` · thân trả `"refreshToken":""` |
+| Số cookie được set | **đúng 1** (không có cookie phụ nào) |
+| `POST /auth/guest` **không** header (Mini App) | token vẫn nằm trong thân, **không** `Set-Cookie` — hành vi cũ nguyên vẹn |
+| `POST /auth/refresh` có cookie + có header | **200**, cookie được xoay sang token mới |
+| `POST /auth/refresh` có cookie, **thiếu** header | **400** — cookie bị bỏ qua, đây là lớp chặn CSRF |
+| `POST /auth/logout` | **204** + `Set-Cookie: tubu_rt=; Expires=1970` (cookie chết) |
+| `POST /auth/refresh` sau logout | **401** |
+| `POST /auth/refresh` với token đã chết | **401** *và* xoá luôn cookie (không để web thử lại vô hạn) |
+
+Dữ liệu thử đã dọn sạch (7 user khách thử nghiệm, gồm cả rác còn lại từ các lượt smoke trước).
+
+### 6.2. Công thức tồn kho — chạy trên Postgres thật, 11/11
+
+Dựng variation tạm rồi chạy đúng ba câu SQL trong `variation-stock.ts`, so số cuối với kỳ vọng:
+Pancake có tự trừ · không tự trừ · sync hai lần không cộng dồn · nhập thêm hàng · huỷ đơn sau khi
+giữ chỗ đã nhả (kẹp 0, không âm) · dữ liệu cũ chỉ ghi mốc không đụng `stock` · hết hàng thì 0
+dòng bị sửa · số Pancake tụt sâu thì `stock` kẹp 0. Dữ liệu thử đã xoá.
 
 Dữ liệu smoke đã dọn sạch sau khi kiểm tra (5 bài thử + 3 bình luận thử).
