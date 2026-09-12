@@ -81,6 +81,27 @@ describe('LifecycleService.sendReorderReminders (§6.14.7)', () => {
     await svc.sendReorderReminders();
     expect(notify).not.toHaveBeenCalled();
   });
+
+  it('claim rồi gửi lỗi thật (lần đầu nhắc, đường create) → xoá remindedAt để lượt sau thử lại', async () => {
+    // Trước sửa: .catch(() => undefined) nuốt lỗi mà KHÔNG trả remindedAt lại — sản phẩm này
+    // vĩnh viễn không được nhắc mua lại nữa (guard đầu hàm coi remindedAt đã set là "đã nhắc").
+    const { svc, updateMany, notify } = setup([row()], null);
+    notify.mockRejectedValue(new Error('DB timeout khi ghi notificationLog'));
+    await svc.sendReorderReminders();
+    expect(updateMany).toHaveBeenCalledTimes(1); // revert (create không đi qua updateMany)
+    expect(updateMany.mock.calls[0]![0].data.remindedAt).toBeNull();
+  });
+
+  it('claim rồi gửi lỗi thật (đã có bản ghi, đường update) → xoá remindedAt để lượt sau thử lại', async () => {
+    const { svc, updateMany, notify } = setup(
+      [row({ lastOrderAt: new Date('2026-06-01') })],
+      { remindedAt: new Date('2026-04-20') },
+    );
+    notify.mockRejectedValue(new Error('DB timeout khi ghi notificationLog'));
+    await svc.sendReorderReminders();
+    expect(updateMany).toHaveBeenCalledTimes(2); // claim rồi revert
+    expect(updateMany.mock.calls[1]![0].data.remindedAt).toBeNull();
+  });
 });
 
 describe('LifecycleService.notifyWishlistPriceDrop (§6.14.10)', () => {

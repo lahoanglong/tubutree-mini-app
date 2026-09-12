@@ -124,6 +124,25 @@ describe('RemarketingService.sendCartAbandonReminders', () => {
     expect(where.updatedAt.lte).toEqual(new Date('2026-07-04T18:00:00Z')); // now - 6h
     expect(where.updatedAt.gte).toEqual(new Date('2026-07-02T00:00:00Z')); // now - 72h
   });
+
+  it('claim rồi gửi lỗi thật (không phải ZNS graceful-fail) → trả cờ về null để lượt sau thử lại', async () => {
+    // Claim (updateMany) xảy ra TRƯỚC notify — nếu notify ném lỗi thật (không phải ZNS fail
+    // graceful, cái đó notify() đã tự nuốt và luôn resolve) mà không trả cờ lại thì
+    // abandonRemindedAt đã ghi vĩnh viễn chặn guard ở đầu hàm, mất hẳn lần nhắc này.
+    const cart = cartRow();
+    const findMany = jest.fn().mockResolvedValue([cart]);
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = { cart: { findMany, updateMany } } as unknown as PrismaService;
+    const notify = jest.fn().mockRejectedValue(new Error('DB timeout khi ghi notificationLog'));
+    const notifications = { notify } as unknown as NotificationsService;
+    const svc = new RemarketingService(prisma, makeConfig(), notifications);
+
+    await svc.sendCartAbandonReminders();
+
+    expect(updateMany).toHaveBeenCalledTimes(2); // claim rồi revert
+    const revert = updateMany.mock.calls[1]![0];
+    expect(revert.data.abandonRemindedAt).toBe(cart.abandonRemindedAt); // về giá trị CŨ (null)
+  });
 });
 
 // ============================================================
@@ -213,5 +232,21 @@ describe('RemarketingService.sendVoucherExpiryReminders', () => {
     expect(where.remindedAt).toBeNull();
     expect(where.endAt.gte).toEqual(new Date('2026-07-05T00:00:00Z'));
     expect(where.endAt.lte).toEqual(new Date('2026-07-08T00:00:00Z')); // now + 3 ngày
+  });
+
+  it('claim rồi gửi lỗi thật → trả remindedAt về null để lượt sau thử lại (mirror cart-abandon)', async () => {
+    // Trước sửa: .catch(() => undefined) nuốt lỗi mà KHÔNG trả remindedAt lại — voucher này
+    // vĩnh viễn không được nhắc nữa (query lọc remindedAt: null ở đầu hàm).
+    const findMany = jest.fn().mockResolvedValue([couponRow()]);
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = { coupon: { findMany, updateMany } } as unknown as PrismaService;
+    const notify = jest.fn().mockRejectedValue(new Error('DB timeout khi ghi notificationLog'));
+    const notifications = { notify } as unknown as NotificationsService;
+    const svc = new RemarketingService(prisma, makeConfig(), notifications);
+
+    await svc.sendVoucherExpiryReminders();
+
+    expect(updateMany).toHaveBeenCalledTimes(2); // claim rồi revert
+    expect(updateMany.mock.calls[1]![0].data.remindedAt).toBeNull();
   });
 });

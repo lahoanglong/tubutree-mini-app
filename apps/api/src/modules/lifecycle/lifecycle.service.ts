@@ -63,6 +63,7 @@ export class LifecycleService {
       // - đã có bản ghi → chỉ update nếu remindedAt vẫn còn cũ hơn lastOrderAt tại thời điểm ghi
       //   (updateMany guard — nếu instance khác đã claim trước, count=0).
       // - chưa có bản ghi → create; unique(userId,variationId) tự chặn instance thứ hai (P2002).
+      const claimedAt = new Date();
       let claimed: boolean;
       if (existing) {
         const res = await this.prisma.reorderReminder.updateMany({
@@ -71,13 +72,13 @@ export class LifecycleService {
             variationId: r.variationId,
             OR: [{ remindedAt: null }, { remindedAt: { lt: lastOrderAt } }],
           },
-          data: { productName: r.productName, lastOrderAt, remindedAt: new Date() },
+          data: { productName: r.productName, lastOrderAt, remindedAt: claimedAt },
         });
         claimed = res.count > 0;
       } else {
         try {
           await this.prisma.reorderReminder.create({
-            data: { userId: r.userId, variationId: r.variationId, productName: r.productName, lastOrderAt, remindedAt: new Date() },
+            data: { userId: r.userId, variationId: r.variationId, productName: r.productName, lastOrderAt, remindedAt: claimedAt },
           });
           claimed = true;
         } catch (err) {
@@ -90,10 +91,25 @@ export class LifecycleService {
       }
       if (!claimed) continue;
 
-      await this.notifications
-        .notify(r.userId, 'REORDER_REMINDER', { product: r.productName })
-        .catch(() => undefined);
-      sent++;
+      try {
+        await this.notifications.notify(r.userId, 'REORDER_REMINDER', { product: r.productName });
+        sent++;
+      } catch (err) {
+        // Đã CLAIM trước khi gửi (mirror RemarketingService) — nuốt lỗi ở đây là mất hẳn lần
+        // nhắc đó: guard đầu hàm coi remindedAt đã set là "đã nhắc cho chu kỳ này", không bao
+        // giờ thử lại. Trả cờ về null để lượt sau thử lại (cùng where cho cả 2 nhánh create/
+        // update — nhánh create không có bản ghi cũ để revert kiểu update, nhưng row vừa tạo
+        // vẫn khớp where này).
+        this.logger.error(
+          `Nhắc mua lại lỗi (user=${r.userId}, variation=${r.variationId}): ${err instanceof Error ? err.message : err}`,
+        );
+        await this.prisma.reorderReminder
+          .updateMany({
+            where: { userId: r.userId, variationId: r.variationId, remindedAt: claimedAt },
+            data: { remindedAt: null },
+          })
+          .catch(() => undefined);
+      }
     }
     if (sent) this.logger.log(`Reorder reminders sent: ${sent}`);
   }

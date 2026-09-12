@@ -116,19 +116,30 @@ export class RemarketingService {
       if (!meta.userId) continue;
 
       // Atomic guard tương tự cart-abandon: chỉ claim nếu chưa ai nhắc.
+      const claimedAt = new Date();
       const claimed = await this.prisma.coupon.updateMany({
         where: { id: c.id, remindedAt: null },
-        data: { remindedAt: new Date() },
+        data: { remindedAt: claimedAt },
       });
       if (claimed.count === 0) continue;
 
-      await this.notifications
-        .notify(meta.userId, 'VOUCHER_EXPIRING', {
+      try {
+        await this.notifications.notify(meta.userId, 'VOUCHER_EXPIRING', {
           code: c.code,
           expires: c.endAt.toLocaleDateString('vi-VN'),
-        })
-        .catch(() => undefined);
-      sent++;
+        });
+        sent++;
+      } catch (err) {
+        // Đã CLAIM trước khi gửi (mirror sendCartAbandonReminders) — nuốt lỗi ở đây là mất hẳn
+        // lần nhắc đó: query đầu hàm lọc `remindedAt: null` nên voucher này không bao giờ được
+        // xét lại. Trả cờ về null để lượt sau thử lại, và log để lỗi gửi được phát hiện.
+        this.logger.error(
+          `Nhắc voucher sắp hết hạn lỗi (coupon=${c.id}): ${err instanceof Error ? err.message : err}`,
+        );
+        await this.prisma.coupon
+          .updateMany({ where: { id: c.id, remindedAt: claimedAt }, data: { remindedAt: null } })
+          .catch(() => undefined);
+      }
     }
     if (sent) this.logger.log(`Voucher expiry reminders sent: ${sent}`);
   }
