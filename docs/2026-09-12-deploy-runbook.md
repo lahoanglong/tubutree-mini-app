@@ -201,24 +201,26 @@ header sang chế độ chặn — việc này độc lập với thay đổi tr
 không khí**. Đã sửa: trừ kho như mọi đường khác, và theo quyết định 2026-09-12, đơn vượt tồn
 **không bị từ chối** mà chuyển sang đặt trước — chi tiết thiết kế ở mục 1.4.
 
-### 4.3. Hạ tầng deploy — GCP đã đóng, api.tubutree.com đang downtime
+### 4.3. Hạ tầng deploy — ĐÃ dựng tạm trên VPS Vietnix, chỉ còn thiếu DNS
 
-Phát hiện khi soát hạ tầng (2026-09-12): DNS `api.tubutree.com` vẫn trỏ IP GCP cũ
-(`34.142.194.160`) nhưng máy đó **không còn kết nối được** — nghĩa là backend Mini App đang
-downtime thật, không phải "chưa deploy". Domain gốc `tubutree.com` hiện chạy **WordPress sống**
-trên VPS Vietnix (`14.225.207.177`, cùng máy với project ChoDeli) qua aaPanel — tuyệt đối không
-được deploy đè lên domain gốc.
+GCP đã đóng, `api.tubutree.com` từng downtime thật (DNS trỏ IP chết `34.142.194.160`). Quyết
+định 2026-09-12: dựng tạm trên VPS Vietnix (`14.225.207.177`, chung ChoDeli), sau này có máy
+riêng thì chuyển tiếp — chi tiết đầy đủ, đã verify từng bước: `ops/README-vietnix-deploy.md`.
 
-VPS Vietnix: 4 vCPU, RAM 7.8GB (đã dùng 3GB + đang cần 1.2GB swap — có áp lực bộ nhớ), disk còn
-22GB/48GB. Đang chạy ChoDeli (Next.js + 2 container bridge + Postgres riêng) + Antigravity
-gateway + WordPress/MariaDB/aaPanel. Cổng 80/443 do nginx aaPanel giữ (đụng Caddy trong
-`docs/DEPLOY-GCP.md` — phải đổi sang dùng nginx aaPanel làm reverse proxy nếu chọn máy này).
+**Đã xong:**
+- Stack chạy bằng `docker-compose.vietnix.yml` (không Caddy, `mem_limit` từng service) —
+  Postgres/Redis/API/Web đều healthy, seed xong (44 sản phẩm mẫu).
+- Sửa 1 bug hạ tầng thật: `express` là phantom dependency, chỉ resolve nhờ hoist khi cài full
+  monorepo — Docker build (chỉ copy `apps/api`) không hoist được, container crash-loop. Đã thêm
+  `express` làm dependency trực tiếp (commit `d80ecf2`).
+- Vhost Apache phase 1 (HTTP-only) đã cài, verify bằng Host header giả lập — route đúng vào
+  container, WordPress ở domain gốc không bị ảnh hưởng. RAM idle: 4 container Tubu Tree cộng
+  lại ~150MB (giới hạn 2GB), ChoDeli/WordPress không đổi.
 
-**Rủi ro dùng chung**: RAM khá mỏng để cõng thêm Postgres+Redis+API+Web của Tubu Tree; và hai
-sản phẩm không liên quan chia sẻ một điểm lỗi duy nhất (ChoDeli crash/leak RAM kéo cả Tubu Tree
-xuống và ngược lại) — trong khi Tubu Tree xử lý tiền thật (Ví, lương NV, ZaloPay/chuyển khoản).
-
-**Chưa quyết định** dùng chung VPS này hay tạo máy riêng — xem mục 4 để chọn trước khi deploy.
+**CÒN LẠI — cần người, không có quyền tự làm:** đổi DNS Cloudflare (2 bản ghi A, xem
+`ops/README-vietnix-deploy.md` mục "CÒN LẠI" để có giá trị chính xác + lưu ý tắt proxy cam lúc
+đầu). Sau khi DNS trỏ đúng, phần còn lại (lấy cert + bật SSL + verify domain thật) tôi tự làm
+tiếp không cần hỏi lại.
 
 ## 5. Trạng thái kiểm thử lúc đóng đợt
 
