@@ -4,6 +4,10 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+// Import trực tiếp — không phải qua @nestjs/platform-express — nên PHẢI là dependency trực
+// tiếp của package này (đã thêm ở package.json). Trước đây chỉ resolve được nhờ hoist tình cờ
+// khi cài đặt TOÀN BỘ monorepo (dev/CI); Docker build chỉ copy apps/api + packages nên hoist
+// khác đi, và `require('express')` vỡ ở runtime với "Cannot find module 'express'".
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
