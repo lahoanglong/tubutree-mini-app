@@ -1,0 +1,37 @@
+# PHASE 2 — dán ĐÈ lên phase1 sau khi `certbot certonly --webroot ... -d api.tubutree.com` chạy
+# xong (đường dẫn cert cố định, không cần sửa gì thêm).
+<VirtualHost *:80>
+    ServerName api.tubutree.com
+    ErrorLog "/www/wwwlogs/api.tubutree.com-error_log"
+    CustomLog "/www/wwwlogs/api.tubutree.com-access_log" combined
+
+    Alias /.well-known/acme-challenge/ /var/www/certbot/.well-known/acme-challenge/
+    <Directory "/var/www/certbot/.well-known/acme-challenge/">
+        Options None
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    ProxyPass /.well-known/acme-challenge/ !
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}$1 [L,R=301]
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName api.tubutree.com
+    ErrorLog "/www/wwwlogs/api.tubutree.com-error_log"
+    CustomLog "/www/wwwlogs/api.tubutree.com-access_log" combined
+
+    SSLEngine On
+    SSLCertificateFile /etc/letsencrypt/live/api.tubutree.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/api.tubutree.com/privkey.pem
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+    RequestHeader set X-Forwarded-Proto "https"
+
+    ProxyPass / http://127.0.0.1:14001/
+    ProxyPassReverse / http://127.0.0.1:14001/
+</VirtualHost>

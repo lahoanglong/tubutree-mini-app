@@ -1,0 +1,104 @@
+# ──────────────────────────────────────────────────────────────
+# Tubu Tree — deploy TẠM trên VPS Vietnix dùng CHUNG với ChoDeli (2026-09-12).
+#
+# Khác docker-compose.prod.yml ở 3 chỗ, vì máy này KHÔNG phải VM riêng:
+#   1. KHÔNG có service `caddy` — cổng 80/443 đã do nginx aaPanel (WordPress) giữ.
+#      api/web chỉ bind ra 127.0.0.1 (không lộ ra ngoài); aaPanel nginx sẽ reverse-proxy
+#      vào 2 cổng này cho api.tubutree.com / app.tubutree.com — xem hướng dẫn kèm theo.
+#   2. Cổng host CỐ TÌNH lệch xa dải ChoDeli đang dùng (3000/3003/3004/5435) để không đụng.
+#   3. `mem_limit` mọi service — máy đang chia RAM với ChoDeli + WordPress/MariaDB, giới hạn
+#      cứng để một lượt traffic tăng đột biến của Tubu Tree không kéo sập ChoDeli và ngược lại.
+#      Tổng ngân sách ~2.3GB, để lại ~2GB+ cho ChoDeli/WordPress/hệ điều hành trên máy 7.8GB.
+#
+# Khi có VM/VPS riêng: quay lại dùng docker-compose.prod.yml (có Caddy, không giới hạn RAM).
+# ──────────────────────────────────────────────────────────────
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tubu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?đặt POSTGRES_PASSWORD trong .env}
+      POSTGRES_DB: ${POSTGRES_DB:-tubutree}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-tubu} -d ${POSTGRES_DB:-tubutree}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [tubu]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    mem_limit: 192m
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '150mb', '--maxmemory-policy', 'allkeys-lru']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [tubu]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    mem_limit: 768m
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tubu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tubutree}
+      REDIS_URL: redis://redis:6379
+    ports:
+      - '127.0.0.1:14001:3001' # aaPanel nginx proxy_pass vào đây cho api.tubutree.com
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://localhost:3001/api/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks: [tubu]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: https://api.${WEB_DOMAIN}/api
+        NEXT_PUBLIC_APP_URL: https://app.${WEB_DOMAIN}
+        NEXT_PUBLIC_ZALO_APP_ID: ${ZALO_APP_ID:-}
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_BASE_URL: http://api:3001/api
+    ports:
+      - '127.0.0.1:14000:3000' # aaPanel nginx proxy_pass vào đây cho app.tubutree.com
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://localhost:3000/\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks: [tubu]
+
+volumes:
+  pg_data:
+  redis_data:
+
+networks:
+  tubu:

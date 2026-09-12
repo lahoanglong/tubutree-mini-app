@@ -1,0 +1,22 @@
+# Tubu Tree Web (checkout/merchant/admin) — vhost RIÊNG, KHÔNG do aaPanel quản lý.
+# Proxy vào container Docker (web bind 127.0.0.1:14000). PHASE 1 — xem ghi chú ở file api.
+<VirtualHost *:80>
+    ServerName app.tubutree.com
+    ErrorLog "/www/wwwlogs/app.tubutree.com-error_log"
+    CustomLog "/www/wwwlogs/app.tubutree.com-access_log" combined
+
+    Alias /.well-known/acme-challenge/ /var/www/certbot/.well-known/acme-challenge/
+    <Directory "/var/www/certbot/.well-known/acme-challenge/">
+        Options None
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+    RequestHeader set X-Forwarded-Proto "http"
+
+    ProxyPass /.well-known/acme-challenge/ !
+    ProxyPass / http://127.0.0.1:14000/
+    ProxyPassReverse / http://127.0.0.1:14000/
+</VirtualHost>

@@ -1,0 +1,25 @@
+# Tubu Tree API — vhost RIÊNG, KHÔNG do aaPanel quản lý (thêm tay qua SSH, mirror
+# erp.chodeli.com.conf). Proxy thẳng vào container Docker (api bind 127.0.0.1:14001).
+# PHASE 1 (trước khi có cert): chỉ HTTP, để certbot --webroot lấy cert xong mới thêm khối 443
+# + redirect (xem vietnix-vhost-api.conf.phase2). Không redirect sớm — DNS trỏ vào rồi mà chưa
+# có cert thì redirect sang https là chết cứng, không ai vào được kể cả để lấy cert.
+<VirtualHost *:80>
+    ServerName api.tubutree.com
+    ErrorLog "/www/wwwlogs/api.tubutree.com-error_log"
+    CustomLog "/www/wwwlogs/api.tubutree.com-access_log" combined
+
+    Alias /.well-known/acme-challenge/ /var/www/certbot/.well-known/acme-challenge/
+    <Directory "/var/www/certbot/.well-known/acme-challenge/">
+        Options None
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+    RequestHeader set X-Forwarded-Proto "http"
+
+    ProxyPass /.well-known/acme-challenge/ !
+    ProxyPass / http://127.0.0.1:14001/
+    ProxyPassReverse / http://127.0.0.1:14001/
+</VirtualHost>
