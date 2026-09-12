@@ -809,8 +809,15 @@ model OrderItem {
   quantity        Int
   total           Int
   flashSaleItemId String?
+  /// Số đơn vị của dòng này CHƯA có hàng thật để giữ chỗ — chỉ > 0 cho đơn ĐẠI LÝ khi đặt vượt
+  /// tồn (§ DealerService.placeOrder cho đặt trước thay vì từ chối). Với mọi đơn khác luôn 0.
+  /// `quantity - backorderedQty` là số đã thực sự trừ kho (dùng khi hoàn kho lúc huỷ/trả).
+  backorderedQty  Int     @default(0)
 
   @@index([orderId])
+  // Đối soát đặt trước quét OrderItem theo variation + còn thiếu hàng — cần nhanh, chạy mỗi
+  // chu kỳ đồng bộ Pancake.
+  @@index([variationId, backorderedQty])
   @@map("order_items")
 }
 

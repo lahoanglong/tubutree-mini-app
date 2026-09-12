@@ -22,6 +22,7 @@ migrate diff` báo không còn lệch.
 | `20260911060000_order_item_product_slug` | Cột `OrderItem.productSlug` | Chỉ thêm mới |
 | `20260912010000_order_status_history` | Bảng `order_status_history` | Chỉ thêm mới |
 | `20260912020000_variation_reserved_stock` | Cột `Variation.pancakeStock` + `reservedStock` | Chỉ thêm mới, **không** đụng dữ liệu `stock` — xem mục 1.3 |
+| `20260912030000_dealer_order_backorder` | Cột `OrderItem.backorderedQty` | Chỉ thêm mới, mặc định 0 — xem mục 1.4 |
 
 ### 1.1. Migration drift storefronts — chạy hai câu kiểm tra TRƯỚC
 
@@ -73,6 +74,25 @@ FROM variations WHERE "reservedStock" > 0 ORDER BY "reservedStock" DESC LIMIT 20
 
 `reservedStock` lớn kéo dài ở một SKU = đơn của ta Pancake chưa bao giờ phản ánh. Đó là tín hiệu
 đơn không tới được kho, không phải lỗi tồn kho.
+
+### 1.4. Đại lý đặt trước hàng chưa về (backorder) — quyết định nghiệp vụ 2026-09-12
+
+Trước đây đơn đại lý vượt tồn kho bị **từ chối thẳng**. Theo quyết định của chủ shop, nay đại lý
+được **đặt trước**: `DealerService.placeOrder` giữ tối đa tồn kho đang có, phần còn thiếu ghi
+vào `OrderItem.backorderedQty` thay vì chặn cả đơn. Giá tính đủ 100% số lượng đặt — đại lý không
+trả thêm khi hàng về.
+
+Đơn còn backorder **chưa được đẩy sang Pancake** (kho vật lý chưa đủ hàng để soạn/xuất). Cron
+mới `DealerBackorderService.reconcile()` (mỗi 15 phút, lệch 30s sau Pancake sync) lấp dần theo
+tồn kho về, **FIFO theo đơn cũ trước** — công bằng giữa các đại lý tranh cùng 1 SKU. Khi một đơn
+lấp đủ 100% mới đẩy Pancake lần đầu.
+
+Huỷ/trả đơn đại lý: `OrderReversalService` chỉ hoàn đúng phần **đã giữ** (`quantity -
+backorderedQty`), không hoàn cả `quantity` (sẽ cộng khống tồn kho đúng bằng phần đặt trước).
+
+**Chưa có UI riêng cho backorder** — dữ liệu đã có sẵn trong response `GET /dealer/orders`
+(field `backorderedQty` từng dòng), nhưng miniapp/web chưa hiển thị nhãn "đặt trước còn X". Việc
+UI là follow-up, không chặn go-live.
 
 ---
 
@@ -128,7 +148,7 @@ Kiểm tra bằng tay trên app (cần người):
 
 ---
 
-## 4. Việc CẦN NGƯỜI, chưa làm
+## 4. Việc CẦN NGƯỜI
 
 1. **AccessTrade API key.** Chưa có key thì cron đối soát tự tắt, và hoàn tiền chỉ trông vào
    postback. Nay đã có đường quản trị để duyệt tay giao dịch treo, nhưng đó là chữa cháy.
@@ -138,6 +158,14 @@ Kiểm tra bằng tay trên app (cần người):
    Test tự động không thay được một vòng bấm tay trên máy thật.
 
 3. **Chọn thời điểm deploy web** — xem mục 4.1: bản này **đăng xuất toàn bộ phiên web hiện có**.
+
+4. **Chọn hạ tầng deploy — xem mục 4.3.** GCP đã đóng, `api.tubutree.com` hiện đang **downtime
+   thật** (DNS trỏ về IP GCP cũ, không kết nối được). Chưa quyết định chạy trên VPS Vietnix
+   (đang chia sẻ với ChoDeli) hay tạo máy riêng.
+
+**Đã quyết (2026-09-12), không cần hỏi lại:**
+- CTV tự đăng ký affiliate: **giữ tự động duyệt** (không đổi code).
+- Đơn đại lý vượt tồn kho: **cho đặt trước (backorder)** — đã build, xem mục 1.4 và 4.2.
 
 ### 4.1. Đổi cách lưu refresh token của web (CÓ ĐĂNG XUẤT TOÀN BỘ)
 
@@ -166,19 +194,35 @@ Sai `AUTH_COOKIE_SAMESITE` thì triệu chứng rất rõ: đăng nhập web xon
 Sau khi soi báo cáo CSP (`Content-Security-Policy-Report-Only`) trên môi trường thật thì đổi
 header sang chế độ chặn — việc này độc lập với thay đổi trên.
 
-### 4.2. Đơn đại lý nay TRỪ TỒN KHO (đổi hành vi)
+### 4.2. Đơn đại lý: trừ tồn kho + cho đặt trước (backorder) — xem mục 1.4
 
-Đơn đại lý là đường tạo đơn duy nhất không trừ kho, trong khi đường huỷ đơn dùng chung
+Đơn đại lý là đường tạo đơn duy nhất từng không trừ kho, trong khi đường huỷ đơn dùng chung
 `OrderReversalService` lại CỘNG kho cho mọi item ⇒ đặt đơn đại lý rồi huỷ là **in tồn kho từ
-không khí**, và trước lúc huỷ thì khách lẻ vẫn thấy hàng đã bán cho đại lý là "còn".
+không khí**. Đã sửa: trừ kho như mọi đường khác, và theo quyết định 2026-09-12, đơn vượt tồn
+**không bị từ chối** mà chuyển sang đặt trước — chi tiết thiết kế ở mục 1.4.
 
-Nay đơn đại lý trừ kho như mọi đường khác. **Đổi hành vi:** đơn đại lý vượt tồn kho hiện có sẽ
-bị từ chối ("Sản phẩm ... không đủ tồn kho") thay vì tạo được như trước. Nếu nghiệp vụ muốn cho
-đại lý đặt trước hàng chưa về, cần một cơ chế đặt-trước riêng — nói để làm tiếp.
+### 4.3. Hạ tầng deploy — GCP đã đóng, api.tubutree.com đang downtime
+
+Phát hiện khi soát hạ tầng (2026-09-12): DNS `api.tubutree.com` vẫn trỏ IP GCP cũ
+(`34.142.194.160`) nhưng máy đó **không còn kết nối được** — nghĩa là backend Mini App đang
+downtime thật, không phải "chưa deploy". Domain gốc `tubutree.com` hiện chạy **WordPress sống**
+trên VPS Vietnix (`14.225.207.177`, cùng máy với project ChoDeli) qua aaPanel — tuyệt đối không
+được deploy đè lên domain gốc.
+
+VPS Vietnix: 4 vCPU, RAM 7.8GB (đã dùng 3GB + đang cần 1.2GB swap — có áp lực bộ nhớ), disk còn
+22GB/48GB. Đang chạy ChoDeli (Next.js + 2 container bridge + Postgres riêng) + Antigravity
+gateway + WordPress/MariaDB/aaPanel. Cổng 80/443 do nginx aaPanel giữ (đụng Caddy trong
+`docs/DEPLOY-GCP.md` — phải đổi sang dùng nginx aaPanel làm reverse proxy nếu chọn máy này).
+
+**Rủi ro dùng chung**: RAM khá mỏng để cõng thêm Postgres+Redis+API+Web của Tubu Tree; và hai
+sản phẩm không liên quan chia sẻ một điểm lỗi duy nhất (ChoDeli crash/leak RAM kéo cả Tubu Tree
+xuống và ngược lại) — trong khi Tubu Tree xử lý tiền thật (Ví, lương NV, ZaloPay/chuyển khoản).
+
+**Chưa quyết định** dùng chung VPS này hay tạo máy riêng — xem mục 4 để chọn trước khi deploy.
 
 ## 5. Trạng thái kiểm thử lúc đóng đợt
 
-- API: **97 suite / 1500 test** — xanh
+- API: **98 suite / 1526 test** — xanh
 - Mini App: **13 file / 96 test** — xanh
 - Web: **4 file / 35 test** — xanh
 - `pnpm typecheck` và `pnpm lint` xanh toàn workspace (5/5 task mỗi lệnh)

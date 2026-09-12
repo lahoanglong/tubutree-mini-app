@@ -2,6 +2,7 @@ import {
   applyPancakeStock,
   forcePancakeStock,
   releaseVariationStock,
+  reserveAvailableVariationStock,
   reserveVariationStock,
 } from './variation-stock';
 
@@ -16,7 +17,8 @@ import {
  */
 function mockTx() {
   const $executeRaw = jest.fn().mockResolvedValue(1);
-  return { tx: { $executeRaw } as never, $executeRaw };
+  const $queryRaw = jest.fn().mockResolvedValue([{ reserved: 0 }]);
+  return { tx: { $executeRaw, $queryRaw } as never, $executeRaw, $queryRaw };
 }
 const sqlOf = (m: jest.Mock, i = 0) => (m.mock.calls[i]![0] as string[]).join('?');
 const argsOf = (m: jest.Mock, i = 0) => m.mock.calls[i]!.slice(1);
@@ -106,3 +108,34 @@ describe('variation-stock', () => {
     });
   });
 });
+
+  describe('reserveAvailableVariationStock', () => {
+    it('đủ hàng → giữ đúng số yêu cầu, dùng $queryRaw (cần giá trị trả về)', async () => {
+      const { tx, $queryRaw } = mockTx();
+      $queryRaw.mockResolvedValue([{ reserved: 5 }]);
+      await expect(reserveAvailableVariationStock(tx, 'v1', 5)).resolves.toBe(5);
+      const sql = ($queryRaw.mock.calls[0]![0] as string[]).join('?');
+      expect(sql).toContain('LEAST(');
+      expect(sql).toContain('FOR UPDATE');
+    });
+
+    it('thiếu hàng → giữ được BAO NHIÊU trả về bấy nhiêu, không throw', async () => {
+      const { tx, $queryRaw } = mockTx();
+      $queryRaw.mockResolvedValue([{ reserved: 2 }]); // yêu cầu 5, kho chỉ còn 2
+      await expect(reserveAvailableVariationStock(tx, 'v1', 5)).resolves.toBe(2);
+    });
+
+    it('hết sạch hàng (0 dòng trả về) → 0, không throw', async () => {
+      const { tx, $queryRaw } = mockTx();
+      $queryRaw.mockResolvedValue([]);
+      await expect(reserveAvailableVariationStock(tx, 'v1', 5)).resolves.toBe(0);
+    });
+
+    it('số lượng âm/0/không nguyên → từ chối, KHÔNG chạy SQL', async () => {
+      const { tx, $queryRaw } = mockTx();
+      for (const q of [-1, 0, 1.5, NaN]) {
+        await expect(reserveAvailableVariationStock(tx, 'v1', q)).resolves.toBe(0);
+      }
+      expect($queryRaw).not.toHaveBeenCalled();
+    });
+  });

@@ -195,7 +195,7 @@ type Order = {
   total: number;
   paymentMethod: 'COD' | 'WALLET' | 'ZALOPAY' | 'XU';
   paymentStatus: 'PAID' | 'UNPAID';
-  items: Array<{ variationId: string; quantity: number; flashSaleItemId?: string | null }>;
+  items: Array<{ variationId: string; quantity: number; flashSaleItemId?: string | null; backorderedQty?: number }>;
 };
 type ReturnReq = { id: string; orderId: string; status: 'REQUESTED' | 'APPROVED' | 'REJECTED' } | null;
 
@@ -206,7 +206,7 @@ function makeReturnPrisma(opts: {
 } = {}) {
   const returnReq: ReturnReq =
     opts.returnReq === undefined ? { id: 'r1', orderId: 'o1', status: 'REQUESTED' } : opts.returnReq;
-  const order: Order = opts.order ?? {
+  const rawOrder: Order = opts.order ?? {
     id: 'o1',
     code: 'TUBU1',
     userId: 'u1',
@@ -215,6 +215,9 @@ function makeReturnPrisma(opts: {
     paymentStatus: 'UNPAID',
     items: [{ variationId: 'v1', quantity: 1 }],
   };
+  // Đơn thường luôn backorderedQty=0 (OrderReversalService đọc field này để chỉ hoàn đúng phần
+  // đã giữ) — fixture cũ không khai báo field mới này, chuẩn hoá 1 chỗ thay vì sửa từng literal.
+  const order: Order = { ...rawOrder, items: rawOrder.items.map((i) => ({ backorderedQty: 0, ...i })) };
   const returnUpdateMany = jest.fn().mockResolvedValue({ count: opts.returnUpdateManyCount ?? 1 });
   // reviewReturn giờ dùng order.updateMany (guard status=DELIVERED) + tx.order.findUniqueOrThrow.
   // orderUpdate giữ tên cũ để các test cũ vẫn dùng được như spy duy nhất cho order.update*.

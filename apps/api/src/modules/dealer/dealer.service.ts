@@ -6,7 +6,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
-import { reserveVariationStock } from '../catalog/variation-stock';
+import { reserveAvailableVariationStock } from '../catalog/variation-stock';
 
 interface BonusTier {
   min: number;
@@ -127,6 +127,8 @@ export class DealerService {
     const vmap = new Map(variations.map((v) => [v.id, v]));
 
     let subtotal = 0;
+    // Giá/tổng tiền tính đủ 100% số lượng đặt, KỂ CẢ phần sẽ đặt trước — đại lý trả đúng giá đã
+    // chốt lúc đặt, không phải trả thêm khi hàng về (backorderedQty chỉ ảnh hưởng tồn kho).
     const items = dto.items.map((line) => {
       const v = vmap.get(line.variationId);
       if (!v) throw new BadRequestException(`Sản phẩm ${line.variationId} không tồn tại.`);
@@ -155,7 +157,7 @@ export class DealerService {
     }
 
     const code = await this.generateCode();
-    let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
+    let order: Awaited<ReturnType<typeof this.prisma.order.create>> & { hasBackorder: boolean };
     try {
       order = await this.prisma.$transaction(
         async (tx) => {
@@ -166,13 +168,18 @@ export class DealerService {
             const debt = agg._sum.delta ?? 0;
             if (debt + subtotal > tier.creditLimit) throw new BadRequestException('Vượt hạn mức công nợ.');
           }
-          // Trừ tồn kho như MỌI đường tạo đơn khác (checkout, CTV lên đơn hộ, đơn định kỳ).
-          // Thiếu bước này thì: (1) hàng đã bán cho đại lý vẫn hiện "còn" với khách lẻ, và
-          // (2) huỷ đơn đại lý đi qua OrderReversalService — vốn CỘNG kho cho mọi item —
-          // nên đặt rồi huỷ là in tồn kho từ không khí.
+          // Giữ chỗ tồn kho như mọi đường tạo đơn khác (checkout, CTV lên đơn hộ, đơn định
+          // kỳ) — NHƯNG đại lý được phép đặt trước phần vượt tồn thay vì bị từ chối cả đơn:
+          // giữ tối đa có thể, phần còn thiếu ghi vào `backorderedQty` để job đối soát lấp dần
+          // khi hàng về (xem DealerBackorderService). Huỷ/trả đơn vẫn phải chỉ hoàn đúng phần
+          // ĐÃ giữ (`quantity - backorderedQty`) — xem OrderReversalService.
+          let hasBackorder = false;
+          const itemsWithBackorder = [];
           for (const line of items) {
-            const ok = await reserveVariationStock(tx, line.variationId, line.quantity);
-            if (!ok) throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
+            const reserved = await reserveAvailableVariationStock(tx, line.variationId, line.quantity);
+            const backorderedQty = line.quantity - reserved;
+            if (backorderedQty > 0) hasBackorder = true;
+            itemsWithBackorder.push({ ...line, backorderedQty });
           }
           const created = await tx.order.create({
             data: {
@@ -189,7 +196,7 @@ export class DealerService {
               shippingAddress: { note: 'Giao theo hợp đồng đại lý' },
               note: dto.note,
               idempotencyKey: key ?? null,
-              items: { create: items },
+              items: { create: itemsWithBackorder },
             },
           });
           if (onCredit) {
@@ -197,7 +204,7 @@ export class DealerService {
               data: { userId, delta: subtotal, refType: 'ORDER', refId: created.id, note: `Đơn ${code}` },
             });
           }
-          return created;
+          return { ...created, hasBackorder };
         },
         onCredit ? { isolationLevel: 'Serializable' } : undefined,
       );
@@ -214,11 +221,18 @@ export class DealerService {
       }
       throw err;
     }
-    // Đẩy sang Pancake như mọi đường tạo đơn khác — thiếu bước này thì kho vật lý KHÔNG BAO
-    // GIỜ thấy đơn đại lý, không webhook nào khớp được (P1-4,
-    // docs/2026-09-08-review-progress.md). Non-fatal: đơn + ghi công nợ đã commit xong, lỗi
-    // xếp hàng không được lật ngược chúng; cron reconcile của Pancake quét lại sau.
-    if (this.pancakeOrder) {
+    // Đơn còn thiếu hàng (backorder) KHÔNG được đẩy Pancake ngay — kho vật lý chưa có đủ số
+    // lượng để soạn/xuất, đẩy sớm chỉ tạo đơn ảo bên Pancake. DealerBackorderService sẽ tự đẩy
+    // khi lấp đủ (xem reconcile()).
+    if (order.hasBackorder) {
+      this.logger.warn(
+        `Đơn đại lý ${order.id} có hàng đặt trước — chưa đẩy Pancake, chờ đối soát tồn kho.`,
+      );
+    } else if (this.pancakeOrder) {
+      // Đẩy sang Pancake như mọi đường tạo đơn khác — thiếu bước này thì kho vật lý KHÔNG BAO
+      // GIỜ thấy đơn đại lý, không webhook nào khớp được (P1-4,
+      // docs/2026-09-08-review-progress.md). Non-fatal: đơn + ghi công nợ đã commit xong, lỗi
+      // xếp hàng không được lật ngược chúng; cron reconcile của Pancake quét lại sau.
       await this.pancakeOrder
         .enqueuePush(order.id)
         .catch((err) =>

@@ -709,3 +709,49 @@ Ba điểm thiết kế đáng ghi:
 
 Deploy sẽ **đăng xuất toàn bộ phiên web hiện có** (token cũ ở localStorage, code mới không đọc
 nữa) — runbook mục 4.1, kèm hai biến env mới `AUTH_COOKIE_SAMESITE` / `AUTH_COOKIE_DOMAIN`.
+
+## Đại lý đặt trước (backorder) + soát hạ tầng deploy (2026-09-12, lượt sau nữa)
+
+Ba quyết định nghiệp vụ được chốt qua hỏi trực tiếp: (1) deploy — chưa quyết, cần đánh giá rủi ro
+trước; (2) CTV tự đăng ký — giữ tự động; (3) đơn đại lý vượt tồn — cho đặt trước thay vì chặn.
+
+### Soát hạ tầng: phát hiện `api.tubutree.com` đang downtime thật
+
+Trước khi động vào deploy, SSH kiểm tra thực tế thay vì tin giả định cũ (memory ghi VM GCP
+`tubu-prod` đã deploy) — DNS `api.tubutree.com` vẫn trỏ IP GCP cũ nhưng máy đó **chết hẳn**
+(connect timeout). Domain gốc `tubutree.com` hiện chạy **WordPress sống** trên VPS Vietnix
+(chung máy với project ChoDeli khác của user, qua SSH host `chodeli-vps` có sẵn trong
+`~/.ssh/config`) — suýt thì deploy đè lên trang WP thật nếu không kiểm tra trước.
+
+Đánh giá rủi ro dùng chung VPS: 4 vCPU/7.8GB RAM, đã dùng 3GB + đang cần swap 1.2GB (áp lực bộ
+nhớ có thật), disk 22GB/48GB còn trống. Cổng 80/443 do nginx aaPanel giữ (đụng Caddy trong
+`DEPLOY-GCP.md`). Rủi ro chính không phải hết chỗ mà là **cộng hưởng sự cố**: Tubu Tree xử lý
+tiền thật, ChoDeli là sản phẩm không liên quan — chia sẻ 1 điểm lỗi. User chọn "chưa quyết, để
+sau" — không đụng gì vào hạ tầng, đầy đủ ở `docs/2026-09-12-deploy-runbook.md` mục 4.3.
+
+### Đại lý đặt trước (backorder) — migration `20260912030000_dealer_order_backorder`
+
+Thêm `OrderItem.backorderedQty` (mặc định 0, chỉ có giá trị cho đơn ĐẠI LÝ). Ba mảnh:
+
+1. **`reserveAvailableVariationStock`** (catalog/variation-stock.ts) — giữ TỐI ĐA có thể
+   (`min(stock, quantity)`), không throw. Một câu `UPDATE ... FROM (SELECT ... FOR UPDATE)`
+   nguyên tử — đã kiểm chứng trên Postgres thật: đủ hàng, thiếu hàng, hết sạch, và **race 3
+   request cùng xin 4 đơn vị trên kho 10 → tổng giữ đúng 10, không vượt không thiếu**.
+2. **`DealerService.placeOrder`** — giữ tối đa có thể mỗi dòng, phần thiếu ghi
+   `backorderedQty`. Giá tính đủ 100% số lượng đặt (không chiết theo phần chưa có hàng). Đơn còn
+   backorder KHÔNG đẩy Pancake (kho vật lý chưa đủ để soạn/xuất).
+3. **`DealerBackorderService.reconcile()`** (cron 15 phút, lệch sau Pancake sync) — quét
+   `OrderItem.backorderedQty > 0` của đơn chưa huỷ/trả, **FIFO theo `order.createdAt`** (đã
+   kiểm chứng trên Postgres thật: đơn cũ xếp trước đơn mới, đơn đã huỷ không lọt vào). Lấp dần
+   theo tồn kho về; đơn lấp đủ 100% mới đẩy Pancake lần đầu. Guard atomic chống 2 lượt reconcile
+   chồng nhau (mirror pattern các cron đối soát khác) — thua race thì trả lại phần vừa giữ
+   (`releaseVariationStock`), không mất tồn kho vào hư không.
+4. **`OrderReversalService`** — huỷ/trả đơn đại lý chỉ hoàn đúng phần ĐÃ giữ
+   (`quantity - backorderedQty`), và xoá `backorderedQty` về 0 để job đối soát không tốn công
+   lấp hàng cho đơn đã chết.
+
+Test đỏ trước khi sửa ở cả 4 mảnh (dealer, order-reversal, catalog, backorder-service mới), API
+98 suite/1526 test xanh, typecheck+lint sạch toàn workspace.
+
+**Chưa có UI hiển thị backorder** — dữ liệu đã có trong response `GET /dealer/orders`, chỉ chưa
+gắn nhãn "đặt trước còn X" trên miniapp/web. Không chặn go-live, để làm sau.

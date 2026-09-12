@@ -72,7 +72,17 @@ export class OrderReversalService {
     // Hoàn stock + release quota flash-sale — không có guard idempotency riêng ở đây vì
     // caller (status flip atomic) đảm bảo hàm này chỉ chạy đúng 1 lần cho mỗi đơn.
     for (const item of order.items) {
-      await releaseVariationStock(tx, item.variationId, item.quantity);
+      // Đơn đại lý đặt trước (backorder) có thể còn `backorderedQty` > 0 — phần đó CHƯA BAO
+      // GIỜ được giữ từ kho thật (xem DealerService.placeOrder), nên chỉ hoàn đúng phần đã
+      // giữ (`quantity - backorderedQty`). Hoàn nguyên `quantity` sẽ CỘNG KHỐNG phần chưa từng
+      // trừ — tồn kho tăng ảo đúng bằng số đặt trước của đơn bị huỷ.
+      const reserved = item.quantity - item.backorderedQty;
+      if (reserved > 0) await releaseVariationStock(tx, item.variationId, reserved);
+      // Đơn đã chết thì không còn nhu cầu backorder nữa — xoá cờ để DealerBackorderService
+      // (quét theo `backorderedQty > 0`) không tốn công lấp hàng cho một đơn không tồn tại nữa.
+      if (item.backorderedQty > 0) {
+        await tx.orderItem.update({ where: { id: item.id }, data: { backorderedQty: 0 } });
+      }
       if (item.flashSaleItemId) {
         await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, item.quantity);
       }

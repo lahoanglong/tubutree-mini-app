@@ -219,6 +219,19 @@ describe('DealerService.creditPayment (an authenticated non-dealer must not be a
   });
 });
 
+/**
+ * Mock cho `reserveAvailableVariationStock` (catalog/variation-stock.ts): luôn giữ được ĐỦ số
+ * yêu cầu (không backorder) — dùng cho mọi test không tập trung vào tồn kho. `$queryRaw` là
+ * tagged template nên tham số số (quantity) lặp lại nhiều lần với cùng giá trị; lọc theo
+ * `typeof === 'number'` lấy đúng nó bất kể lặp bao nhiêu lần.
+ */
+function fullReserveQueryRaw() {
+  return jest.fn(async (_strings: unknown, ...vals: unknown[]) => {
+    const desired = vals.find((v) => typeof v === 'number') as number | undefined;
+    return [{ reserved: desired ?? 0 }];
+  });
+}
+
 describe('DealerService.placeOrder idempotency (chống double-submit đơn CREDIT)', () => {
   function prismaForOrder() {
     const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
@@ -233,11 +246,11 @@ describe('DealerService.placeOrder idempotency (chống double-submit đơn CRED
       },
       dealerCreditLedger: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }), create: jest.fn().mockResolvedValue({}) },
     };
-    // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
-    const executeRaw = jest.fn().mockResolvedValue(1);
-    base.$executeRaw = executeRaw;
+    // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — $queryRaw trả số giữ được.
+    const queryRaw = fullReserveQueryRaw();
+    base.$queryRaw = queryRaw;
     base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
-    return { prisma: base as unknown as PrismaService, orderCreate, executeRaw };
+    return { prisma: base as unknown as PrismaService, orderCreate, queryRaw };
   }
 
   it('key đã tồn tại (đơn đã tạo trước đó) → trả lại đơn cũ, KHÔNG tạo đơn/ghi công nợ lần 2', async () => {
@@ -344,9 +357,17 @@ describe('DealerService.rewardsProgress (hiển thị điều kiện + tiến tr
  * kho từ không khí, và trước lúc huỷ thì khách lẻ vẫn thấy hàng đã bán cho đại lý là "còn".
  */
 describe('DealerService.placeOrder — tồn kho', () => {
-  function prismaForStock(reserveResult = 1) {
-    const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
-    const executeRaw = jest.fn().mockResolvedValue(reserveResult);
+  /** `reservedAmount`: số đơn vị `reserveAvailableVariationStock` giữ được (kịch bản thiếu hàng). */
+  function prismaForStock(reservedAmount?: number) {
+    const orderCreate = jest.fn().mockImplementation(async ({ data }: { data: { items: { create: unknown[] } } }) => ({
+      id: 'o1',
+      items: data.items.create,
+    }));
+    const queryRaw = jest.fn(async (_strings: unknown, ...vals: unknown[]) => {
+      const desired = vals.find((v) => typeof v === 'number') as number | undefined;
+      const reserved = reservedAmount ?? desired ?? 0;
+      return [{ reserved: Math.min(reserved, desired ?? 0) }];
+    });
     const base: Record<string, unknown> = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
@@ -358,34 +379,65 @@ describe('DealerService.placeOrder — tồn kho', () => {
       order: {
         create: orderCreate,
         findUnique: jest.fn().mockResolvedValue(null),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }),
+        findUniqueOrThrow: jest.fn().mockImplementation(async ({ where }: { where: { id: string } }) => ({
+          id: where.id,
+          items: [],
+        })),
       },
       dealerCreditLedger: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }), create: jest.fn().mockResolvedValue({}) },
-      $executeRaw: executeRaw,
+      $queryRaw: queryRaw,
     };
     base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
-    return { prisma: base as unknown as PrismaService, orderCreate, executeRaw };
+    return { prisma: base as unknown as PrismaService, orderCreate, queryRaw };
   }
 
-  it('trừ tồn kho như mọi đường tạo đơn khác', async () => {
-    const { prisma, executeRaw, orderCreate } = prismaForStock();
+  it('đủ hàng → giữ hết, backorderedQty=0, đẩy Pancake ngay', async () => {
+    const { prisma, orderCreate } = prismaForStock();
+    const enqueuePush = jest.fn().mockResolvedValue(undefined);
+    await new DealerService(prisma, makeConfig(), undefined, { enqueuePush } as never).placeOrder(
+      'd1',
+      { items: [{ variationId: 'v1', quantity: 4 }], paymentMethod: 'PREPAID' } as never,
+    );
+    const call = orderCreate.mock.calls[0]![0] as { data: { items: { create: Record<string, unknown>[] } } };
+    expect(call.data.items.create).toEqual([expect.objectContaining({ variationId: 'v1', quantity: 4, backorderedQty: 0 })]);
+    expect(enqueuePush).toHaveBeenCalledWith('o1');
+  });
+
+  it('thiếu hàng một phần → vẫn tạo đơn, ghi backorderedQty đúng số còn thiếu, KHÔNG đẩy Pancake', async () => {
+    const { prisma, orderCreate } = prismaForStock(1); // kho chỉ còn 1, đặt 4
+    const enqueuePush = jest.fn().mockResolvedValue(undefined);
+    await new DealerService(prisma, makeConfig(), undefined, { enqueuePush } as never).placeOrder(
+      'd1',
+      { items: [{ variationId: 'v1', quantity: 4 }], paymentMethod: 'PREPAID' } as never,
+    );
+    const call = orderCreate.mock.calls[0]![0] as { data: { items: { create: Record<string, unknown>[] } } };
+    expect(call.data.items.create).toEqual([expect.objectContaining({ variationId: 'v1', quantity: 4, backorderedQty: 3 })]);
+    expect(enqueuePush).not.toHaveBeenCalled(); // kho vật lý chưa đủ để soạn hàng
+  });
+
+  it('hết sạch hàng → vẫn tạo đơn (KHÔNG từ chối như trước), backorderedQty = toàn bộ số lượng', async () => {
+    const { prisma, orderCreate } = prismaForStock(0);
+    const r = await new DealerService(prisma, makeConfig()).placeOrder(
+      'd1',
+      { items: [{ variationId: 'v1', quantity: 4 }], paymentMethod: 'PREPAID' } as never,
+    );
+    expect(r).toBeDefined(); // không throw
+    const call = orderCreate.mock.calls[0]![0] as { data: { items: { create: Record<string, unknown>[] } } };
+    expect(call.data.items.create).toEqual([expect.objectContaining({ backorderedQty: 4 })]);
+  });
+
+  it('giá tính đủ 100% số lượng đặt kể cả phần đặt trước — đại lý không trả thêm khi hàng về', async () => {
+    const { prisma, orderCreate } = prismaForStock(0); // hết sạch, toàn bộ là backorder
     await new DealerService(prisma, makeConfig()).placeOrder(
       'd1',
       { items: [{ variationId: 'v1', quantity: 4 }], paymentMethod: 'PREPAID' } as never,
     );
-    // Tham số câu UPDATE giữ chỗ: (số lượng, số lượng, variationId, số lượng).
-    expect(executeRaw.mock.calls[0]!.slice(1)).toEqual([4, 4, 'v1', 4]);
-    expect(orderCreate).toHaveBeenCalled();
-  });
-
-  it('không đủ tồn → báo lỗi và KHÔNG tạo đơn', async () => {
-    const { prisma, orderCreate } = prismaForStock(0);
-    await expect(
-      new DealerService(prisma, makeConfig()).placeOrder(
-        'd1',
-        { items: [{ variationId: 'v1', quantity: 4 }], paymentMethod: 'PREPAID' } as never,
-      ),
-    ).rejects.toThrow('không đủ tồn kho');
-    expect(orderCreate).not.toHaveBeenCalled();
+    const created = orderCreate.mock.calls[0]![0] as {
+      data: { subtotal: number; items: { create: { total: number }[] } };
+    };
+    // 100000 x 0.8 (chiết khấu mặc định 20%, không tier) x 4 = 320000 — GIỐNG HỆT giá khi đủ
+    // hàng, không bị tính khác vì có phần đặt trước.
+    expect(created.data.subtotal).toBe(320000);
+    expect(created.data.items.create[0]!.total).toBe(320000);
   });
 });

@@ -10,6 +10,7 @@ type MockTx = {
   /** Hoàn kho đi bằng SQL thô (catalog/variation-stock.ts) để sửa 3 cột nguyên tử. */
   $executeRaw: jest.Mock;
   dealerCreditLedger: { findFirst: jest.Mock; create: jest.Mock };
+  orderItem: { update: jest.Mock };
 };
 
 function makeTx(): MockTx {
@@ -19,6 +20,7 @@ function makeTx(): MockTx {
     coinTransaction: { create: jest.fn().mockResolvedValue({}) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    orderItem: { update: jest.fn().mockResolvedValue({}) },
   };
 }
 
@@ -32,8 +34,8 @@ function makeOrder(overrides: Record<string, unknown> = {}) {
     paymentStatus: 'PAID',
     couponCode: null,
     items: [
-      { id: 'i1', variationId: 'v1', quantity: 2, flashSaleItemId: null },
-      { id: 'i2', variationId: 'v2', quantity: 1, flashSaleItemId: 'fs1' },
+      { id: 'i1', variationId: 'v1', quantity: 2, flashSaleItemId: null, backorderedQty: 0 },
+      { id: 'i2', variationId: 'v2', quantity: 1, flashSaleItemId: 'fs1', backorderedQty: 0 },
     ],
     ...overrides,
   } as never;
@@ -123,7 +125,7 @@ describe('OrderReversalService', () => {
 
   it('đơn không có item flash-sale thì không gọi flashSale.restore', async () => {
     const tx = makeTx();
-    const order = makeOrder({ items: [{ id: 'i1', variationId: 'v1', quantity: 3, flashSaleItemId: null }] });
+    const order = makeOrder({ items: [{ id: 'i1', variationId: 'v1', quantity: 3, flashSaleItemId: null, backorderedQty: 0 }] });
     await service.reverseFinancials(tx as never, order);
     expect(flashSale.restore).not.toHaveBeenCalled();
   });
@@ -207,5 +209,79 @@ describe('công nợ đại lý khi huỷ đơn CREDIT', () => {
 
     expect(tx.dealerCreditLedger.findFirst).not.toHaveBeenCalled();
     expect(tx.dealerCreditLedger.create).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Đơn đại lý đặt trước (backorder): `backorderedQty > 0` nghĩa là phần đó CHƯA BAO GIỜ được
+ * giữ từ kho thật (xem DealerService.placeOrder). Huỷ đơn phải chỉ hoàn đúng phần ĐÃ giữ —
+ * hoàn cả `quantity` là cộng khống tồn kho đúng bằng số đặt trước.
+ */
+describe('OrderReversalService — huỷ đơn có backorder', () => {
+  let service: OrderReversalService;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        OrderReversalService,
+        { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
+        { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+      ],
+    }).compile();
+    service = module.get(OrderReversalService);
+  });
+
+  it('hoàn ĐÚNG phần đã giữ (quantity - backorderedQty), không hoàn phần đặt trước', async () => {
+    const tx = makeTx();
+    const order = makeOrder({
+      type: 'DEALER',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      items: [{ id: 'i1', variationId: 'v1', quantity: 10, flashSaleItemId: null, backorderedQty: 6 }],
+    });
+
+    await service.reverseFinancials(tx as never, order);
+
+    // Chỉ 4 đơn vị (10 - 6) từng thực sự bị trừ kho — chỉ hoàn 4.
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$executeRaw.mock.calls[0]!.slice(1)).toEqual([4, 4, 'v1']);
+  });
+
+  it('xoá backorderedQty về 0 — đơn đã chết thì không còn nhu cầu lấp hàng nữa', async () => {
+    const tx = makeTx();
+    const order = makeOrder({
+      type: 'DEALER',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      items: [{ id: 'i1', variationId: 'v1', quantity: 10, flashSaleItemId: null, backorderedQty: 6 }],
+    });
+
+    await service.reverseFinancials(tx as never, order);
+
+    expect(tx.orderItem.update).toHaveBeenCalledWith({ where: { id: 'i1' }, data: { backorderedQty: 0 } });
+  });
+
+  it('backorderedQty = TOÀN BỘ quantity (chưa giữ được gì) → không gọi hoàn kho, vẫn xoá cờ', async () => {
+    const tx = makeTx();
+    const order = makeOrder({
+      type: 'DEALER',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      items: [{ id: 'i1', variationId: 'v1', quantity: 5, flashSaleItemId: null, backorderedQty: 5 }],
+    });
+
+    await service.reverseFinancials(tx as never, order);
+
+    expect(tx.$executeRaw).not.toHaveBeenCalled();
+    expect(tx.orderItem.update).toHaveBeenCalledWith({ where: { id: 'i1' }, data: { backorderedQty: 0 } });
+  });
+
+  it('backorderedQty = 0 (đơn thường) → KHÔNG gọi orderItem.update (không có gì để xoá)', async () => {
+    const tx = makeTx();
+    const order = makeOrder(); // fixture mặc định: backorderedQty 0 cho cả 2 item
+
+    await service.reverseFinancials(tx as never, order);
+
+    expect(tx.orderItem.update).not.toHaveBeenCalled();
   });
 });

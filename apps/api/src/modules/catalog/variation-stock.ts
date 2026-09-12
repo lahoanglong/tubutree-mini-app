@@ -37,7 +37,7 @@ import { Prisma } from '@prisma/client';
  */
 
 /** Client hoặc transaction client — helper chạy được ở cả hai. */
-export type StockExecutor = Pick<Prisma.TransactionClient, '$executeRaw'>;
+export type StockExecutor = Pick<Prisma.TransactionClient, '$executeRaw' | '$queryRaw'>;
 
 /**
  * Giữ chỗ `quantity` đơn vị cho một đơn: `stock -= q`, `reservedStock += q`.
@@ -129,4 +129,33 @@ export async function forcePancakeStock(
        SET "stock" = ${pancakeStock}, "reservedStock" = 0, "pancakeStock" = ${pancakeStock}
      WHERE "pancakeId" = ${pancakeVariationId}
   `;
+}
+
+/**
+ * Giữ chỗ TỐI ĐA có thể (`min(stock hiện có, quantity)`), không bao giờ throw vì thiếu hàng.
+ * Trả về số đơn vị THỰC SỰ giữ được — 0 nếu hết sạch, bằng `quantity` nếu đủ.
+ *
+ * Dùng cho đơn ĐẠI LÝ được phép đặt trước (backorder): phần `quantity - đã giữ` ghi vào
+ * `OrderItem.backorderedQty` thay vì từ chối cả đơn. Đơn thường (checkout/CTV/subscription)
+ * vẫn dùng `reserveVariationStock` — tất-cả-hoặc-không, không đổi hành vi.
+ *
+ * Một câu UPDATE duy nhất (CTE `old` khoá đúng 1 dòng qua `FOR UPDATE`) để "số giữ được" và
+ * "số trừ đi" luôn khớp nhau dưới tải đồng thời — không có khoảng hở đọc-rồi-ghi.
+ */
+export async function reserveAvailableVariationStock(
+  tx: StockExecutor,
+  variationId: string,
+  quantity: number,
+): Promise<number> {
+  if (!Number.isInteger(quantity) || quantity <= 0) return 0;
+  const rows = await tx.$queryRaw<{ reserved: number }[]>`
+    WITH old AS (SELECT "stock" FROM "variations" WHERE "id" = ${variationId} FOR UPDATE)
+    UPDATE "variations" v
+       SET "stock" = old."stock" - LEAST(old."stock", ${quantity}),
+           "reservedStock" = v."reservedStock" + LEAST(old."stock", ${quantity})
+      FROM old
+     WHERE v."id" = ${variationId}
+    RETURNING LEAST(old."stock", ${quantity})::int AS reserved
+  `;
+  return rows[0]?.reserved ?? 0;
 }

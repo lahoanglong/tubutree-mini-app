@@ -235,8 +235,8 @@ describe('OrdersService.cancel — B5 restock', () => {
 
   it('cancel THẮNG → tx.variation.update increment cho mỗi item', async () => {
     const items = [
-      { variationId: 'v1', quantity: 2 },
-      { variationId: 'v2', quantity: 5 },
+      { variationId: 'v1', quantity: 2, backorderedQty: 0 },
+      { variationId: 'v2', quantity: 5, backorderedQty: 0 },
     ];
     const { svc, executeRaw } = makeService({ ...baseOrder, items });
     await svc.cancel('u1', 'TUBU1');
@@ -247,7 +247,7 @@ describe('OrdersService.cancel — B5 restock', () => {
   });
 
   it('cancel THUA race (count=0) → KHÔNG restock', async () => {
-    const items = [{ variationId: 'v1', quantity: 2 }];
+    const items = [{ variationId: 'v1', quantity: 2, backorderedQty: 0 }];
     const { svc, executeRaw } = makeService(
       { ...baseOrder, items },
       { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
@@ -262,8 +262,8 @@ describe('OrdersService.cancel — flash sale quota restore', () => {
 
   it('cancel THẮNG → gọi flash.restore(tx, itemId, userId, qty) cho item có flashSaleItemId', async () => {
     const items = [
-      { variationId: 'v1', quantity: 2, flashSaleItemId: 'fi1' },
-      { variationId: 'v2', quantity: 5, flashSaleItemId: null },
+      { variationId: 'v1', quantity: 2, flashSaleItemId: 'fi1', backorderedQty: 0 },
+      { variationId: 'v2', quantity: 5, flashSaleItemId: null, backorderedQty: 0 },
     ];
     const { svc } = makeService({ ...baseOrder, items });
     await svc.cancel('u1', 'TUBU1');
@@ -272,7 +272,7 @@ describe('OrdersService.cancel — flash sale quota restore', () => {
   });
 
   it('cancel THUA race (count=0) → KHÔNG gọi flash.restore', async () => {
-    const items = [{ variationId: 'v1', quantity: 2, flashSaleItemId: 'fi1' }];
+    const items = [{ variationId: 'v1', quantity: 2, flashSaleItemId: 'fi1', backorderedQty: 0 }];
     const { svc } = makeService(
       { ...baseOrder, items },
       { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },

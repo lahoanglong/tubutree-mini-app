@@ -205,7 +205,7 @@ describe('PancakeProcessor.onCancelled', () => {
       total: 100000,
       paymentMethod: 'COD',
       paymentStatus: 'PAID',
-      items: [{ id: 'i1', variationId: 'v1', quantity: 1, flashSaleItemId: null }],
+      items: [{ id: 'i1', variationId: 'v1', quantity: 1, flashSaleItemId: null, backorderedQty: 0 }],
     });
     await proc.onCancelled({ id: 'p1' });
     expect(txUpdateMany).not.toHaveBeenCalled();
@@ -223,7 +223,7 @@ describe('PancakeProcessor.onCancelled', () => {
       total: 100000,
       paymentMethod: 'COD',
       paymentStatus: 'UNPAID',
-      items: [{ id: 'i1', variationId: 'v1', quantity: 1, flashSaleItemId: null }],
+      items: [{ id: 'i1', variationId: 'v1', quantity: 1, flashSaleItemId: null, backorderedQty: 0 }],
     });
     await proc.onCancelled({ id: 'p1' });
     expect(txUpdateMany).toHaveBeenCalledWith(
