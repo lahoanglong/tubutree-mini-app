@@ -136,32 +136,42 @@ export class SubscriptionsService {
     return this.prisma.subscription.update({ where: { id }, data: { nextRunAt } });
   }
 
-  /** Cron 3h sáng: xử lý các subscription đến hạn → tạo đơn COD + dời chu kỳ. */
+  /**
+   * Cron 3h sáng: xử lý các subscription đến hạn → tạo đơn COD + dời chu kỳ.
+   *
+   * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — findMany/updateMany lỗi (DB blip...) ném ra
+   * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi tạo đơn từng subscription
+   * đã được cô lập ở try/catch trong vòng lặp bên dưới.
+   */
   @Cron('0 3 * * *')
   async processDue(): Promise<void> {
-    const now = new Date();
-    const due = await this.prisma.subscription.findMany({
-      where: { status: 'ACTIVE', nextRunAt: { lte: now } },
-      take: 200,
-    });
-    let created = 0;
-    for (const sub of due) {
-      // CLAIM atomic: advance nextRunAt TRƯỚC khi tạo đơn. Chỉ instance đầu tiên
-      // (count=1) được xử lý → multi-instance cron không tạo đơn TRÙNG cho khách.
-      const claimed = await this.prisma.subscription.updateMany({
-        where: { id: sub.id, status: 'ACTIVE', nextRunAt: { lte: now } },
-        data: { nextRunAt: this.addWeeks(now, sub.intervalWeeks) },
+    try {
+      const now = new Date();
+      const due = await this.prisma.subscription.findMany({
+        where: { status: 'ACTIVE', nextRunAt: { lte: now } },
+        take: 200,
       });
-      if (claimed.count === 0) continue; // instance khác đã claim
-      try {
-        await this.createOrderFor(sub);
-        created++;
-      } catch (err) {
-        // nextRunAt đã advance → bỏ qua chu kỳ này (không double-charge), chờ chu kỳ kế.
-        this.logger.error(`Subscription ${sub.id} lỗi: ${err instanceof Error ? err.message : err}`);
+      let created = 0;
+      for (const sub of due) {
+        // CLAIM atomic: advance nextRunAt TRƯỚC khi tạo đơn. Chỉ instance đầu tiên
+        // (count=1) được xử lý → multi-instance cron không tạo đơn TRÙNG cho khách.
+        const claimed = await this.prisma.subscription.updateMany({
+          where: { id: sub.id, status: 'ACTIVE', nextRunAt: { lte: now } },
+          data: { nextRunAt: this.addWeeks(now, sub.intervalWeeks) },
+        });
+        if (claimed.count === 0) continue; // instance khác đã claim
+        try {
+          await this.createOrderFor(sub);
+          created++;
+        } catch (err) {
+          // nextRunAt đã advance → bỏ qua chu kỳ này (không double-charge), chờ chu kỳ kế.
+          this.logger.error(`Subscription ${sub.id} lỗi: ${err instanceof Error ? err.message : err}`);
+        }
       }
+      if (created) this.logger.log(`Subscription orders created: ${created}`);
+    } catch (err) {
+      this.logger.error(`processDue lỗi: ${err instanceof Error ? err.message : err}`);
     }
-    if (created) this.logger.log(`Subscription orders created: ${created}`);
   }
 
   private async createOrderFor(sub: {

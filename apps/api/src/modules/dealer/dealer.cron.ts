@@ -11,7 +11,11 @@ export class DealerCron {
   // 04:00 ngày 1 của tháng 1,4,7,10 — trả thưởng cho quý vừa kết thúc.
   @Cron('0 0 4 1 1,4,7,10 *')
   async payoutQuarterly() {
-    const { paid, quarter } = await this.dealer.payoutQuarterlyBonuses();
-    this.logger.log(`Cron thưởng quý ${quarter}: đã trả ${paid} đại lý.`);
+    try {
+      const { paid, quarter } = await this.dealer.payoutQuarterlyBonuses();
+      this.logger.log(`Cron thưởng quý ${quarter}: đã trả ${paid} đại lý.`);
+    } catch (err) {
+      this.logger.error(`Cron trả thưởng quý lỗi: ${err instanceof Error ? err.stack ?? err.message : err}`);
+    }
   }
 }

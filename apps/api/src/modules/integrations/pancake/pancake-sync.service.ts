@@ -46,7 +46,14 @@ export class PancakeSyncService implements OnModuleInit {
   @Cron('0 */15 * * * *') // mỗi 15 phút
   async scheduledSync(): Promise<void> {
     if (!this.client.isConfigured()) return; // dev: bỏ qua khi chưa có key
-    await this.syncProducts(this.lastRunAt ?? undefined);
+    // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — syncProducts() ném ra ngoài (Pancake
+    // timeout, DB lỗi...) là unhandledRejection, Node 20 mặc định crash cả process. syncProducts()
+    // tự nó vẫn được phép throw (pancake.controller gọi trực tiếp, cần biết khi lỗi để trả HTTP).
+    try {
+      await this.syncProducts(this.lastRunAt ?? undefined);
+    } catch (err) {
+      this.logger.error(`scheduledSync lỗi: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   /**

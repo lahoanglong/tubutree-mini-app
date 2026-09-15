@@ -5,7 +5,10 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 const DAY = 864e5;
-const BATCH = 500; // giới hạn số user xử lý mỗi lần chạy cron (bound công việc).
+const BATCH = 500; // kích thước mỗi trang candidate.
+// Trần số trang — phòng vòng lặp vô tận nếu truy vấn sai (mirror LoyaltyService.RECALC_MAX_PAGES).
+// 500 × 2.000 = 1.000.000 user/lượt, đủ cho mọi quy mô thực tế.
+const MAX_PAGES = 2_000;
 
 /** Shape tối giản của PointsTransaction mà helper thuần cần. */
 export interface PointExpiryTxn {
@@ -108,30 +111,57 @@ export class LoyaltyExpiryService {
   /**
    * Cron 1h sáng: trừ điểm đã hết hạn. Ứng viên = user có ÍT NHẤT 1 lô (delta>0) đã tới hạn;
    * với mỗi user tính lại FIFO từ TOÀN BỘ sổ cái → chỉ trừ phần còn tồn trong lô hết hạn.
+   *
+   * Phân trang bằng keyset (`userId > cursor` + `orderBy: userId asc`) thay vì lấy đúng BATCH
+   * candidate đầu tiên mỗi lần. Trước đây `distinct(userId)` + `take: BATCH` KHÔNG orderBy/cursor:
+   * Postgres không đảm bảo cùng 500 user cũ ở đầu kết quả lặp lại y hệt mỗi đêm, nhưng trong thực
+   * tế thường trả theo thứ tự vật lý gần cố định — khi số candidate vượt 500, một nhóm user "chiếm
+   * chỗ" vĩnh viễn ở top-500 (giống lỗi welcomeVouchers) và điểm hết hạn của user mới hơn có thể
+   * không bao giờ được trừ. Không dùng cursor built-in của Prisma (`cursor: { userId }`) vì userId
+   * không phải @unique trên PointsTransaction — dùng where `userId: { gt: cursor }` thay thế, cùng
+   * tinh thần với LoyaltyService.recalcAllTiers().
+   *
+   * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — findMany lỗi giữa lúc phân trang ném ra
+   * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi xử lý từng user đã được
+   * expireUser().catch() cô lập.
    */
   @Cron('0 1 * * *')
   async expirePoints(): Promise<void> {
-    const now = new Date();
-    const candidates = await this.prisma.pointsTransaction.findMany({
-      where: { delta: { gt: 0 }, expiresAt: { lte: now } },
-      select: { userId: true },
-      distinct: ['userId'],
-      take: BATCH,
-    });
-
-    let totalExpired = 0;
-    let affected = 0;
-    for (const c of candidates) {
-      const expired = await this.expireUser(c.userId, now).catch((e) => {
-        this.logger.warn(`expirePoints lỗi user=${c.userId}: ${(e as Error).message}`);
-        return 0;
-      });
-      if (expired > 0) {
-        totalExpired += expired;
-        affected++;
+    try {
+      const now = new Date();
+      let totalExpired = 0;
+      let affected = 0;
+      let cursor: string | undefined;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const candidates = await this.prisma.pointsTransaction.findMany({
+          where: {
+            delta: { gt: 0 },
+            expiresAt: { lte: now },
+            ...(cursor ? { userId: { gt: cursor } } : {}),
+          },
+          select: { userId: true },
+          distinct: ['userId'],
+          orderBy: { userId: 'asc' },
+          take: BATCH,
+        });
+        if (candidates.length === 0) break;
+        cursor = candidates[candidates.length - 1]!.userId;
+        for (const c of candidates) {
+          const expired = await this.expireUser(c.userId, now).catch((e) => {
+            this.logger.warn(`expirePoints lỗi user=${c.userId}: ${(e as Error).message}`);
+            return 0;
+          });
+          if (expired > 0) {
+            totalExpired += expired;
+            affected++;
+          }
+        }
+        if (candidates.length < BATCH) break;
       }
+      if (affected) this.logger.log(`Điểm hết hạn: trừ ${totalExpired} điểm của ${affected} user.`);
+    } catch (err) {
+      this.logger.error(`expirePoints lỗi: ${err instanceof Error ? err.message : err}`);
     }
-    if (affected) this.logger.log(`Điểm hết hạn: trừ ${totalExpired} điểm của ${affected} user.`);
   }
 
   /** Trừ điểm hết hạn cho 1 user (cặp atomic: decrement có guard + tạo txn âm). Trả về số điểm đã trừ. */
@@ -166,30 +196,51 @@ export class LoyaltyExpiryService {
   /**
    * Cron 8h sáng: nhắc user có điểm sắp hết hạn trong cửa sổ (config point_expiry_reminder_days).
    * Dedup qua NotificationLog: bỏ qua nếu đã gửi POINTS_EXPIRING trong ≤ reminderDays ngày.
+   *
+   * Cùng lỗi thiếu orderBy/cursor như expirePoints() (candidate cũ chiếm chỗ vĩnh viễn khi vượt
+   * BATCH) — phân trang bằng keyset y hệt cho nhất quán trong cùng file.
+   *
+   * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — findMany lỗi giữa lúc phân trang ném ra
+   * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi nhắc từng user đã được
+   * remindUser().catch() cô lập.
    */
   @Cron('0 8 * * *')
   async remindExpiringPoints(): Promise<void> {
-    const reminderDays = await this.config.get<number>('loyalty.point_expiry_reminder_days', 7);
-    const now = new Date();
-    const windowMs = reminderDays * DAY;
-    const windowEnd = new Date(now.getTime() + windowMs);
+    try {
+      const reminderDays = await this.config.get<number>('loyalty.point_expiry_reminder_days', 7);
+      const now = new Date();
+      const windowMs = reminderDays * DAY;
+      const windowEnd = new Date(now.getTime() + windowMs);
 
-    const candidates = await this.prisma.pointsTransaction.findMany({
-      where: { delta: { gt: 0 }, expiresAt: { gt: now, lte: windowEnd } },
-      select: { userId: true },
-      distinct: ['userId'],
-      take: BATCH,
-    });
-
-    let sent = 0;
-    for (const c of candidates) {
-      const ok = await this.remindUser(c.userId, now, windowMs, reminderDays).catch((e) => {
-        this.logger.warn(`remindExpiringPoints lỗi user=${c.userId}: ${(e as Error).message}`);
-        return false;
-      });
-      if (ok) sent++;
+      let sent = 0;
+      let cursor: string | undefined;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const candidates = await this.prisma.pointsTransaction.findMany({
+          where: {
+            delta: { gt: 0 },
+            expiresAt: { gt: now, lte: windowEnd },
+            ...(cursor ? { userId: { gt: cursor } } : {}),
+          },
+          select: { userId: true },
+          distinct: ['userId'],
+          orderBy: { userId: 'asc' },
+          take: BATCH,
+        });
+        if (candidates.length === 0) break;
+        cursor = candidates[candidates.length - 1]!.userId;
+        for (const c of candidates) {
+          const ok = await this.remindUser(c.userId, now, windowMs, reminderDays).catch((e) => {
+            this.logger.warn(`remindExpiringPoints lỗi user=${c.userId}: ${(e as Error).message}`);
+            return false;
+          });
+          if (ok) sent++;
+        }
+        if (candidates.length < BATCH) break;
+      }
+      if (sent) this.logger.log(`Nhắc điểm sắp hết hạn: ${sent} user.`);
+    } catch (err) {
+      this.logger.error(`remindExpiringPoints lỗi: ${err instanceof Error ? err.message : err}`);
     }
-    if (sent) this.logger.log(`Nhắc điểm sắp hết hạn: ${sent} user.`);
   }
 
   private async remindUser(

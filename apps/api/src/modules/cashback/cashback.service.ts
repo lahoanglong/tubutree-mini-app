@@ -329,41 +329,45 @@ export class CashbackService {
   /** Cron mỗi giờ: cashback CONFIRMED quá hold_days → chuyển pending→Ví (PAID). */
   @Cron('0 30 * * * *')
   async settleConfirmed(): Promise<void> {
-    const holdDays = await this.config.get<number>('cashback.hold_days', 30);
-    const threshold = new Date(Date.now() - holdDays * 24 * 3600 * 1000);
-    // `take` + `select`: bản ghi có cột postbackPayload là JSON nguyên văn của provider. Nạp
-    // KHÔNG giới hạn cả payload vào RAM là rủi ro thật khi bật đối soát với cửa sổ 45 ngày —
-    // hàng chục nghìn giao dịch qua mốc hold cùng lúc, và vì đây là bước ĐẦU TIÊN nên OOM ở đây
-    // là không giao dịch nào được settle.
-    const due = await this.prisma.cashbackTransaction.findMany({
-      where: { status: 'CONFIRMED', confirmedAt: { lte: threshold } },
-      select: { id: true, userId: true, userReward: true },
-      orderBy: { id: 'asc' },
-      take: CashbackService.SETTLE_BATCH,
-    });
-    for (const tx of due) {
-      const settled = await this.prisma.$transaction(async (t) => {
-        const marked = await t.cashbackTransaction.updateMany({
-          where: { id: tx.id, status: 'CONFIRMED' },
-          data: { status: 'PAID', paidAt: new Date() },
-        });
-        if (marked.count === 0) return false;
-        await t.user.update({
-          where: { id: tx.userId },
-          data: {
-            cashbackPending: { decrement: tx.userReward },
-            walletBalance: { increment: tx.userReward },
-          },
-        });
-        return true;
+    try {
+      const holdDays = await this.config.get<number>('cashback.hold_days', 30);
+      const threshold = new Date(Date.now() - holdDays * 24 * 3600 * 1000);
+      // `take` + `select`: bản ghi có cột postbackPayload là JSON nguyên văn của provider. Nạp
+      // KHÔNG giới hạn cả payload vào RAM là rủi ro thật khi bật đối soát với cửa sổ 45 ngày —
+      // hàng chục nghìn giao dịch qua mốc hold cùng lúc, và vì đây là bước ĐẦU TIÊN nên OOM ở đây
+      // là không giao dịch nào được settle.
+      const due = await this.prisma.cashbackTransaction.findMany({
+        where: { status: 'CONFIRMED', confirmedAt: { lte: threshold } },
+        select: { id: true, userId: true, userReward: true },
+        orderBy: { id: 'asc' },
+        take: CashbackService.SETTLE_BATCH,
       });
-      if (settled) {
-        await this.notifications
-          .notify(tx.userId, 'CASHBACK_PAID', { amount: tx.userReward.toLocaleString('vi-VN') })
-          .catch((err) => this.logger.error(`Notify CASHBACK_PAID lỗi: ${err instanceof Error ? err.message : err}`));
+      for (const tx of due) {
+        const settled = await this.prisma.$transaction(async (t) => {
+          const marked = await t.cashbackTransaction.updateMany({
+            where: { id: tx.id, status: 'CONFIRMED' },
+            data: { status: 'PAID', paidAt: new Date() },
+          });
+          if (marked.count === 0) return false;
+          await t.user.update({
+            where: { id: tx.userId },
+            data: {
+              cashbackPending: { decrement: tx.userReward },
+              walletBalance: { increment: tx.userReward },
+            },
+          });
+          return true;
+        });
+        if (settled) {
+          await this.notifications
+            .notify(tx.userId, 'CASHBACK_PAID', { amount: tx.userReward.toLocaleString('vi-VN') })
+            .catch((err) => this.logger.error(`Notify CASHBACK_PAID lỗi: ${err instanceof Error ? err.message : err}`));
+        }
       }
+      if (due.length > 0) this.logger.log(`Settle ${due.length} cashback → Ví Tubu.`);
+    } catch (err) {
+      this.logger.error(err);
     }
-    if (due.length > 0) this.logger.log(`Settle ${due.length} cashback → Ví Tubu.`);
   }
 
   /**

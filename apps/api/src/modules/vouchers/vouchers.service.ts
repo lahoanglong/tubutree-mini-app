@@ -75,128 +75,165 @@ export class VouchersService {
     return true;
   }
 
-  /** Welcome: user mới (24h) chưa có đơn → voucher chào mừng. Chạy mỗi giờ. */
+  /**
+   * Welcome: user mới (24h) chưa có đơn → voucher chào mừng. Chạy mỗi giờ.
+   *
+   * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — findMany lỗi giữa lúc phân trang ném ra
+   * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi cấp/notify từng user đã
+   * được `grant()` tự cô lập (P2002 nuốt, notify `.catch(() => undefined)`).
+   */
   @Cron(CronExpression.EVERY_HOUR)
   async welcomeVouchers(): Promise<void> {
-    const since = new Date(Date.now() - 24 * 3600 * 1000);
-    const value = await this.config.get<number>('voucher.welcome_amount', 30000);
-    const minOrder = await this.config.get<number>('voucher.welcome_min_order', 199000);
+    try {
+      const since = new Date(Date.now() - 24 * 3600 * 1000);
+      const value = await this.config.get<number>('voucher.welcome_amount', 30000);
+      const minOrder = await this.config.get<number>('voucher.welcome_min_order', 199000);
 
-    // Quét HẾT cửa sổ 24h bằng cursor thay vì lấy đúng 200 user cũ nhất.
-    //
-    // Vì sao: `grant()` trả false ngay với user đã cấp (code tất định theo userId), nên một lô
-    // 200 cố định phần lớn là người đã cấp từ lượt trước. Một chiến dịch kéo 1.000 đăng ký trong
-    // một giờ khiến 800 người mới chỉ leo lên top-200 khi lứa cũ rời cửa sổ 24h — mà cả nhóm rời
-    // gần như cùng lúc. Hàng trăm khách mới KHÔNG BAO GIỜ nhận voucher chào mừng, không lỗi nào
-    // được ghi.
-    let granted = 0;
-    let scanned = 0;
-    let cursor: string | undefined;
-    for (let page = 0; page < VouchersService.WELCOME_MAX_PAGES; page++) {
-      const users = await this.prisma.user.findMany({
-        // "chưa có đơn" (đúng như doc-comment) — trước đây thiếu filter `orders: { none: {} }`
-        // nên user đã đặt đơn trong 24h đầu vẫn bị cấp voucher chào mừng, sai business rule.
-        where: { createdAt: { gte: since }, role: 'CUSTOMER', orders: { none: {} } },
-        orderBy: { id: 'asc' }, // khoá cursor ổn định (createdAt có thể trùng nhau hàng loạt)
-        take: VouchersService.WELCOME_PAGE,
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-        select: { id: true },
-      });
-      if (users.length === 0) break;
-      scanned += users.length;
-      cursor = users[users.length - 1]!.id;
-      for (const u of users) {
-        if (await this.grant({ userId: u.id, reason: 'WELCOME', type: 'AMOUNT', value, minOrder, validDays: 30, templateCode: 'WELCOME_VOUCHER' })) granted++;
+      // Quét HẾT cửa sổ 24h bằng cursor thay vì lấy đúng 200 user cũ nhất.
+      //
+      // Vì sao: `grant()` trả false ngay với user đã cấp (code tất định theo userId), nên một lô
+      // 200 cố định phần lớn là người đã cấp từ lượt trước. Một chiến dịch kéo 1.000 đăng ký trong
+      // một giờ khiến 800 người mới chỉ leo lên top-200 khi lứa cũ rời cửa sổ 24h — mà cả nhóm rời
+      // gần như cùng lúc. Hàng trăm khách mới KHÔNG BAO GIỜ nhận voucher chào mừng, không lỗi nào
+      // được ghi.
+      let granted = 0;
+      let scanned = 0;
+      let cursor: string | undefined;
+      for (let page = 0; page < VouchersService.WELCOME_MAX_PAGES; page++) {
+        const users = await this.prisma.user.findMany({
+          // "chưa có đơn" (đúng như doc-comment) — trước đây thiếu filter `orders: { none: {} }`
+          // nên user đã đặt đơn trong 24h đầu vẫn bị cấp voucher chào mừng, sai business rule.
+          where: { createdAt: { gte: since }, role: 'CUSTOMER', orders: { none: {} } },
+          orderBy: { id: 'asc' }, // khoá cursor ổn định (createdAt có thể trùng nhau hàng loạt)
+          take: VouchersService.WELCOME_PAGE,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+          select: { id: true },
+        });
+        if (users.length === 0) break;
+        scanned += users.length;
+        cursor = users[users.length - 1]!.id;
+        for (const u of users) {
+          if (await this.grant({ userId: u.id, reason: 'WELCOME', type: 'AMOUNT', value, minOrder, validDays: 30, templateCode: 'WELCOME_VOUCHER' })) granted++;
+        }
+        if (users.length < VouchersService.WELCOME_PAGE) break;
       }
-      if (users.length < VouchersService.WELCOME_PAGE) break;
+      if (granted) this.logger.log(`Welcome vouchers granted: ${granted}/${scanned} user trong cửa sổ 24h.`);
+    } catch (err) {
+      this.logger.error(`welcomeVouchers lỗi: ${err instanceof Error ? err.message : err}`);
     }
-    if (granted) this.logger.log(`Welcome vouchers granted: ${granted}/${scanned} user trong cửa sổ 24h.`);
   }
 
-  /** Birthday: user có dob trùng ngày hôm nay. Chạy 1 giờ sáng hằng ngày. */
+  /**
+   * Birthday: user có dob trùng ngày hôm nay. Chạy 1 giờ sáng hằng ngày.
+   *
+   * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — $queryRaw lỗi ném ra ngoài là
+   * unhandledRejection, Node 20 mặc định crash cả process.
+   */
   @Cron('0 1 * * *')
   async birthdayVouchers(): Promise<void> {
-    const today = new Date();
-    const mm = today.getMonth() + 1;
-    const dd = today.getDate();
-    // Lọc theo tháng/ngày của dob (Postgres EXTRACT qua raw).
-    const users = await this.prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM users
-      WHERE dob IS NOT NULL
-        AND EXTRACT(MONTH FROM dob) = ${mm}
-        AND EXTRACT(DAY FROM dob) = ${dd}
-      LIMIT 500`;
-    const value = await this.config.get<number>('voucher.birthday_amount', 50000);
-    const reason = `BIRTHDAY-${today.getFullYear()}-${mm}`;
-    let granted = 0;
-    for (const u of users) {
-      if (await this.grant({ userId: u.id, reason, type: 'AMOUNT', value, validDays: 30, templateCode: 'BIRTHDAY_VOUCHER' })) granted++;
+    try {
+      const today = new Date();
+      const mm = today.getMonth() + 1;
+      const dd = today.getDate();
+      // Lọc theo tháng/ngày của dob (Postgres EXTRACT qua raw).
+      const users = await this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM users
+        WHERE dob IS NOT NULL
+          AND EXTRACT(MONTH FROM dob) = ${mm}
+          AND EXTRACT(DAY FROM dob) = ${dd}
+        LIMIT 500`;
+      const value = await this.config.get<number>('voucher.birthday_amount', 50000);
+      const reason = `BIRTHDAY-${today.getFullYear()}-${mm}`;
+      let granted = 0;
+      for (const u of users) {
+        if (await this.grant({ userId: u.id, reason, type: 'AMOUNT', value, validDays: 30, templateCode: 'BIRTHDAY_VOUCHER' })) granted++;
+      }
+      if (granted) this.logger.log(`Birthday vouchers granted: ${granted}`);
+    } catch (err) {
+      this.logger.error(`birthdayVouchers lỗi: ${err instanceof Error ? err.message : err}`);
     }
-    if (granted) this.logger.log(`Birthday vouchers granted: ${granted}`);
   }
 
-  /** Win-back: user từng mua nhưng >60 ngày không đặt đơn. Chạy 2 giờ sáng. */
+  /**
+   * Win-back: user từng mua nhưng >60 ngày không đặt đơn. Chạy 2 giờ sáng.
+   *
+   * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — $queryRaw lỗi ném ra ngoài là
+   * unhandledRejection, Node 20 mặc định crash cả process.
+   */
   @Cron('0 2 * * *')
   async winbackVouchers(): Promise<void> {
-    const days = await this.config.get<number>('voucher.winback_days', 60);
-    const cutoff = new Date(Date.now() - days * 864e5);
-    const rows = await this.prisma.$queryRaw<{ userId: string }[]>`
-      SELECT "userId", MAX("createdAt") AS last
-      FROM orders
-      GROUP BY "userId"
-      HAVING MAX("createdAt") < ${cutoff}
-      LIMIT 500`;
-    const value = await this.config.get<number>('voucher.winback_amount', 50000);
-    const reason = `WINBACK-${new Date().toISOString().slice(0, 7)}`;
-    let granted = 0;
-    for (const r of rows) {
-      if (await this.grant({ userId: r.userId, reason, type: 'AMOUNT', value, validDays: 21, templateCode: 'WINBACK_VOUCHER' })) granted++;
+    try {
+      const days = await this.config.get<number>('voucher.winback_days', 60);
+      const cutoff = new Date(Date.now() - days * 864e5);
+      const rows = await this.prisma.$queryRaw<{ userId: string }[]>`
+        SELECT "userId", MAX("createdAt") AS last
+        FROM orders
+        GROUP BY "userId"
+        HAVING MAX("createdAt") < ${cutoff}
+        LIMIT 500`;
+      const value = await this.config.get<number>('voucher.winback_amount', 50000);
+      const reason = `WINBACK-${new Date().toISOString().slice(0, 7)}`;
+      let granted = 0;
+      for (const r of rows) {
+        if (await this.grant({ userId: r.userId, reason, type: 'AMOUNT', value, validDays: 21, templateCode: 'WINBACK_VOUCHER' })) granted++;
+      }
+      if (granted) this.logger.log(`Win-back vouchers granted: ${granted}`);
+    } catch (err) {
+      this.logger.error(`winbackVouchers lỗi: ${err instanceof Error ? err.message : err}`);
     }
-    if (granted) this.logger.log(`Win-back vouchers granted: ${granted}`);
   }
 
-  /** Milestone (§6.6): chi tiêu đạt mốc trong 30 ngày → voucher tri ân. Chạy 5h sáng.
-   * Mặc định 1tr→30k, 3tr→100k, 5tr→200k. Idempotent theo (mốc, tháng) qua grant. */
+  /**
+   * Milestone (§6.6): chi tiêu đạt mốc trong 30 ngày → voucher tri ân. Chạy 5h sáng.
+   * Mặc định 1tr→30k, 3tr→100k, 5tr→200k. Idempotent theo (mốc, tháng) qua grant.
+   *
+   * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — $queryRaw lỗi ném ra ngoài là
+   * unhandledRejection, Node 20 mặc định crash cả process.
+   */
   @Cron('0 5 * * *')
   async milestoneVouchers(): Promise<void> {
-    const milestones = await this.config.get<{ spend: number; reward: number }[]>('voucher.milestones', [
-      { spend: 1_000_000, reward: 30_000 },
-      { spend: 3_000_000, reward: 100_000 },
-      { spend: 5_000_000, reward: 200_000 },
-    ]);
-    // Cửa sổ tính PHẢI khớp với khoá idempotency bên dưới (`...-yyyy-mm`). Trước đây gom theo
-    // 30 ngày TRƯỢT nhưng khoá theo THÁNG: cùng một lần chi tiêu nằm trong cửa sổ trượt sinh
-    // khoá khác khi sang tháng mới → cấp voucher lần 2 cho đúng số tiền đó (P2,
-    // docs/2026-09-08-review-progress.md). Nay cả hai cùng dùng tháng dương lịch GIỜ VN
-    // (container chạy UTC nên phải trừ offset, nếu không mốc tháng lệch 7 tiếng).
-    const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-    const nowVn = new Date(Date.now() + VN_OFFSET_MS);
-    const since = new Date(Date.UTC(nowVn.getUTCFullYear(), nowVn.getUTCMonth(), 1) - VN_OFFSET_MS);
-    const rows = await this.prisma.$queryRaw<{ userId: string; spent: bigint }[]>`
-      SELECT "userId", SUM("total") AS spent
-      FROM orders
-      WHERE status::text = 'DELIVERED' AND "createdAt" >= ${since}
-      GROUP BY "userId"
-      LIMIT 1000`;
-    const period = nowVn.toISOString().slice(0, 7); // yyyy-mm theo giờ VN
-    let granted = 0;
-    for (const r of rows) {
-      const spent = Number(r.spent);
-      // Cấp voucher cho mốc CAO NHẤT đạt được (tránh chồng nhiều voucher 1 đợt).
-      const hit = [...milestones].sort((a, b) => b.spend - a.spend).find((m) => spent >= m.spend);
-      if (!hit) continue;
-      if (
-        await this.grant({
-          userId: r.userId,
-          reason: `MILESTONE${hit.spend}-${period}`,
-          type: 'AMOUNT',
-          value: hit.reward,
-          validDays: 30,
-          templateCode: 'MILESTONE_VOUCHER',
-        })
-      )
-        granted++;
+    try {
+      const milestones = await this.config.get<{ spend: number; reward: number }[]>('voucher.milestones', [
+        { spend: 1_000_000, reward: 30_000 },
+        { spend: 3_000_000, reward: 100_000 },
+        { spend: 5_000_000, reward: 200_000 },
+      ]);
+      // Cửa sổ tính PHẢI khớp với khoá idempotency bên dưới (`...-yyyy-mm`). Trước đây gom theo
+      // 30 ngày TRƯỢT nhưng khoá theo THÁNG: cùng một lần chi tiêu nằm trong cửa sổ trượt sinh
+      // khoá khác khi sang tháng mới → cấp voucher lần 2 cho đúng số tiền đó (P2,
+      // docs/2026-09-08-review-progress.md). Nay cả hai cùng dùng tháng dương lịch GIỜ VN
+      // (container chạy UTC nên phải trừ offset, nếu không mốc tháng lệch 7 tiếng).
+      const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+      const nowVn = new Date(Date.now() + VN_OFFSET_MS);
+      const since = new Date(Date.UTC(nowVn.getUTCFullYear(), nowVn.getUTCMonth(), 1) - VN_OFFSET_MS);
+      const rows = await this.prisma.$queryRaw<{ userId: string; spent: bigint }[]>`
+        SELECT "userId", SUM("total") AS spent
+        FROM orders
+        WHERE status::text = 'DELIVERED' AND "createdAt" >= ${since}
+        GROUP BY "userId"
+        LIMIT 1000`;
+      const period = nowVn.toISOString().slice(0, 7); // yyyy-mm theo giờ VN
+      let granted = 0;
+      for (const r of rows) {
+        const spent = Number(r.spent);
+        // Cấp voucher cho mốc CAO NHẤT đạt được (tránh chồng nhiều voucher 1 đợt).
+        const hit = [...milestones].sort((a, b) => b.spend - a.spend).find((m) => spent >= m.spend);
+        if (!hit) continue;
+        if (
+          await this.grant({
+            userId: r.userId,
+            reason: `MILESTONE${hit.spend}-${period}`,
+            type: 'AMOUNT',
+            value: hit.reward,
+            validDays: 30,
+            templateCode: 'MILESTONE_VOUCHER',
+          })
+        )
+          granted++;
+      }
+      if (granted) this.logger.log(`Milestone vouchers granted: ${granted}`);
+    } catch (err) {
+      this.logger.error(`milestoneVouchers lỗi: ${err instanceof Error ? err.message : err}`);
     }
-    if (granted) this.logger.log(`Milestone vouchers granted: ${granted}`);
   }
 }

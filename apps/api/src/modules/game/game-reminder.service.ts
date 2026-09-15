@@ -36,13 +36,24 @@ export class GameReminderService {
     return new Date(utc7.getTime() - 7 * 3600 * 1000);
   }
 
-  /** Cron 11h sáng: gửi cả 2 loại nhắc trong ngày. */
+  /**
+   * Cron 11h sáng: gửi cả 2 loại nhắc trong ngày.
+   *
+   * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — sendCheckInReminders/sendThirstyTreeReminders
+   * ném ra ngoài (DB lỗi giữa lúc phân trang...) là unhandledRejection, Node 20 mặc định crash cả
+   * process. Lỗi gửi từng user đã được `.catch(() => undefined)` cô lập bên trong hai hàm đó; lớp
+   * ngoài này bắt phần còn lại (vd truy vấn gameProfile/notificationLog lỗi giữa chừng).
+   */
   @Cron('0 11 * * *')
   async sendDailyReminders(): Promise<void> {
-    const checkin = await this.sendCheckInReminders();
-    const thirsty = await this.sendThirstyTreeReminders();
-    if (checkin || thirsty) {
-      this.logger.log(`Game reminders sent — check-in: ${checkin}, thirsty: ${thirsty}`);
+    try {
+      const checkin = await this.sendCheckInReminders();
+      const thirsty = await this.sendThirstyTreeReminders();
+      if (checkin || thirsty) {
+        this.logger.log(`Game reminders sent — check-in: ${checkin}, thirsty: ${thirsty}`);
+      }
+    } catch (err) {
+      this.logger.error(`sendDailyReminders lỗi: ${err instanceof Error ? err.message : err}`);
     }
   }
 

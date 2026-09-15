@@ -81,6 +81,15 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
   }
 
+  // Lưới an toàn cuối cùng: 'cron'/@nestjs/schedule KHÔNG tự catch lỗi trong @Cron() handler.
+  // Node 20 mặc định unhandledRejection=throw → 1 lỗi Prisma/network thoáng qua trong BẤT KỲ
+  // cron nào sẽ sập TOÀN BỘ API process, ảnh hưởng mọi user đang dùng app. Đây KHÔNG thay thế
+  // try/catch riêng từng cron (đã bọc ở dealer/loyalty/groupbuy/cashback/flash-sale) — chỉ chặn
+  // rơi sót ở nơi khác.
+  process.on('unhandledRejection', (reason) => {
+    new Logger('UnhandledRejection').error(`Unhandled rejection: ${reason instanceof Error ? reason.stack ?? reason.message : reason}`);
+  });
+
   const port = Number(process.env.PORT ?? 3001);
   await app.listen(port, '0.0.0.0');
   Logger.log(`🌿 Tubu Tree API listening on http://localhost:${port}/api`, 'Bootstrap');

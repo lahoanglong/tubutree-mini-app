@@ -228,6 +228,10 @@ export class PancakeProcessor extends WorkerHost {
   private async onInvoiceIssued(data: Record<string, unknown>): Promise<void> {
     const order = await this.findOrder(data);
     if (!order) return;
+    // Guard idempotent: Pancake có thể redeliver cùng 1 webhook invoice.issued (retry hạ tầng
+    // phía Pancake) — không có guard này thì mỗi lần redeliver lại notify() thêm 1 lần, khách
+    // nhận thông báo "đã xuất hoá đơn" trùng lặp dù order đã ISSUED từ trước.
+    if (order.invoiceStatus === 'ISSUED') return;
     await this.prisma.order.update({
       where: { id: order.id },
       data: {

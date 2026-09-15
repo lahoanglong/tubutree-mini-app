@@ -10,8 +10,12 @@ export class GroupBuyCron {
 
   @Cron('0 */15 * * * *')
   async sweep() {
-    const n = await this.groupBuy.expireGroups();
-    if (n > 0) this.logger.log(`Đã đánh dấu ${n} nhóm mua chung hết hạn → FAILED.`);
+    try {
+      const n = await this.groupBuy.expireGroups();
+      if (n > 0) this.logger.log(`Đã đánh dấu ${n} nhóm mua chung hết hạn → FAILED.`);
+    } catch (err) {
+      this.logger.error(`Cron quét nhóm mua chung hết hạn lỗi: ${err instanceof Error ? err.stack ?? err.message : err}`);
+    }
     // Đối soát: nhóm SUCCESS còn sót coupon (lỗi DB lúc cấp) → cấp lại idempotent.
     await this.groupBuy.reconcileSuccessfulGroups().catch((e) => this.logger.warn(`reconcile lỗi: ${(e as Error).message}`));
   }
