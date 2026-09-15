@@ -918,7 +918,13 @@ function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
 const ROLES: UserRole[] = ['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'];
 
 function UsersTab() {
-  const q = useQuery({ queryKey: ['admin-users'], queryFn: () => listUsers(1) });
+  // Trước đây gọi listUsers(1) CỐ ĐỊNH trang 1, không có UI phân trang — hệ thống có hơn 20
+  // người dùng (limit mặc định của BE) thì phần còn lại vĩnh viễn không xem/không cấp quyền
+  // được. Thêm page state + nút chuyển trang, mirror đúng pattern OrdersTab cùng file.
+  const [page, setPage] = useState(1);
+  const q = useQuery({ queryKey: ['admin-users', page], queryFn: () => listUsers(page) });
+  const totalPages = q.data ? Math.ceil(q.data.meta.total / q.data.meta.limit) : 1;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -937,17 +943,46 @@ function UsersTab() {
       {q.isError ? (
         <p className="text-sm text-red-600">Không tải được danh sách người dùng.</p>
       ) : (
-        <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày']}>
-          {q.data?.data.map((u) => (
-            <tr key={u.id} className="border-t border-neutral-100">
-              <td className="py-2 font-medium">{u.fullName ?? '—'}</td>
-              <td>{u.phone ?? '—'}</td>
-              <td>{u.role}</td>
-              <td>{u.pointsBalance}</td>
-              <td className="text-neutral-400">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
-            </tr>
-          ))}
-        </Table>
+        <>
+          <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày']}>
+            {q.data?.data.map((u) => (
+              <tr key={u.id} className="border-t border-neutral-100">
+                <td className="py-2 font-medium">{u.fullName ?? '—'}</td>
+                <td>{u.phone ?? '—'}</td>
+                <td>{u.role}</td>
+                <td>{u.pointsBalance}</td>
+                <td className="text-neutral-400">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
+              </tr>
+            ))}
+          </Table>
+
+          {q.data && totalPages > 1 && (
+            <div className="flex items-center justify-between px-2 pt-2 text-sm text-neutral-600">
+              <div>
+                Tổng số: <span className="font-semibold text-neutral-900">{q.data.meta.total}</span> người dùng
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="rounded border border-neutral-200 px-3 py-1 text-xs font-medium hover:bg-neutral-50 disabled:opacity-40"
+                >
+                  ← Trang trước
+                </button>
+                <span className="text-xs">
+                  Trang <span className="font-semibold">{page}</span> / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="rounded border border-neutral-200 px-3 py-1 text-xs font-medium hover:bg-neutral-50 disabled:opacity-40"
+                >
+                  Trang sau →
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

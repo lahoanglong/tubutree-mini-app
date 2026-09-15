@@ -20,14 +20,16 @@ const apiOrigin = (() => {
 /**
  * CSP ở chế độ BÁO CÁO trước, chưa chặn.
  *
- * Refresh token của web nằm trong localStorage (xem lib/client-api.ts), nên một lỗ XSS là mất
- * tài khoản vĩnh viễn — mà trang này lại render nhiều URL do người dùng khác nhập (logo nhãn
- * hàng, ảnh bìa gian hàng, video trong Content Kit). CSP là lớp phòng thủ thứ hai cho tới khi
- * chuyển refresh token sang cookie httpOnly.
+ * Refresh token của web đã chuyển sang cookie HttpOnly (xem lib/client-api.ts) nên không còn lấy
+ * được qua XSS, nhưng access token vẫn giữ trong bộ nhớ JS runtime, và trang này lại render nhiều
+ * URL do người dùng khác nhập (logo nhãn hàng, ảnh bìa gian hàng, video trong Content Kit) — vẫn
+ * còn bề mặt để một lỗ XSS đánh cắp access token hoặc mạo danh hành động trong phiên đang mở.
+ * CSP là lớp phòng thủ thứ hai chặn bớt việc nhúng mã ngoài, bất kể refresh token nằm ở đâu.
  *
  * Đặt Report-Only vì chính sách này chưa được kiểm chứng trên trình duyệt thật: bật chặn ngay
- * mà thiếu một host nào đó là trang trắng cho khách. Sau khi soi báo cáo trên môi trường thật
- * thì đổi key sang 'Content-Security-Policy'.
+ * mà thiếu một host nào đó là trang trắng cho khách. Việc đổi sang 'Content-Security-Policy'
+ * (bật chặn thật) cần soi báo cáo vi phạm trên môi trường thật trước — chưa làm ở đây, để
+ * nguyên Report-Only cho tới khi có quyết định đó.
  *
  * `'unsafe-inline'` cho script là điều Next cần khi chưa dựng nonce qua middleware — nó vẫn
  * chặn được script từ host lạ, tức chặn đường nhúng mã bên ngoài.

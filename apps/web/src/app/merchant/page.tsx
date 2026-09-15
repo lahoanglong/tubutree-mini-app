@@ -37,6 +37,7 @@ import {
   updateMerchantOrderStatus,
   type MerchantStore,
   type MerchantProduct,
+  type MerchantOrder,
   type UpdateMerchantStoreInput,
   type CreateMerchantProductInput,
 } from '@/lib/merchant-client';
@@ -135,7 +136,7 @@ export default function MerchantPage() {
   const store = storeQ.data;
   const ownCount = productsQ.data?.ownProducts?.length ?? 0;
   const resellCount = productsQ.data?.resellProducts?.length ?? 0;
-  const pendingOrdersCount = ordersQ.data?.filter((o: any) => o.status === 'CONFIRMED')?.length ?? 0;
+  const pendingOrdersCount = ordersQ.data?.filter((o) => o.status === 'CONFIRMED')?.length ?? 0;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
@@ -764,6 +765,21 @@ function ProductsTab({ store }: { store: MerchantStore }) {
 
   const q = useQuery({ queryKey: ['merchant-products'], queryFn: getMerchantProducts });
 
+  // Trước đây nút "Gỡ khỏi shop" gọi await removeResellProduct(p.id) TRỰC TIẾP trong onClick,
+  // không try/catch, không hiện lỗi, không có state busy/disable — API lỗi (403/404/…) thì màn
+  // hình im lặng, đối tác bấm lại nhiều lần tưởng web bị treo. Bọc bằng useMutation, mirror đúng
+  // pattern updateMut ở OrdersTab cùng file (mutation dùng chung cho cả bảng + banner lỗi phía trên).
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const removeMut = useMutation({
+    mutationFn: (productId: string) => removeResellProduct(productId),
+    onSuccess: () => {
+      setRemoveError(null);
+      void qc.invalidateQueries({ queryKey: ['merchant-products'] });
+    },
+    onError: (e: unknown) =>
+      setRemoveError(e instanceof Error ? e.message : 'Không gỡ được sản phẩm khỏi gian hàng.'),
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -796,6 +812,12 @@ function ProductsTab({ store }: { store: MerchantStore }) {
           </button>
         )}
       </div>
+
+      {removeError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {removeError}
+        </div>
+      )}
 
       {q.isLoading && <p className="text-sm text-neutral-500">Đang tải danh sách sản phẩm…</p>}
       {q.isError && <p className="text-sm text-red-600">Không tải được danh sách sản phẩm.</p>}
@@ -883,16 +905,16 @@ function ProductsTab({ store }: { store: MerchantStore }) {
                     <td className="px-3 py-2.5 font-semibold text-leaf-700">{formatVnd(p.basePrice)}</td>
                     <td className="px-3 py-2.5 text-right">
                       <button
-                        onClick={async () => {
+                        onClick={() => {
                           if (window.confirm(`Gỡ sản phẩm ${p.name} khỏi gian hàng?`)) {
-                            await removeResellProduct(p.id);
-                            void qc.invalidateQueries({ queryKey: ['merchant-products'] });
+                            removeMut.mutate(p.id);
                           }
                         }}
-                        className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline"
+                        disabled={removeMut.isPending}
+                        className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline disabled:opacity-50"
                       >
                         <Trash2 className="h-3 w-3" />
-                        <span>Gỡ khỏi shop</span>
+                        <span>{removeMut.isPending ? 'Đang gỡ…' : 'Gỡ khỏi shop'}</span>
                       </button>
                     </td>
                   </tr>
@@ -1133,7 +1155,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                   </td>
                 </tr>
               ) : (
-                q.data.map((o: any) => (
+                q.data.map((o) => (
                   <tr key={o.id} className="hover:bg-neutral-50/50">
                     <td className="px-3 py-3 font-semibold text-neutral-900">{o.code}</td>
                     <td className="px-3 py-3">
@@ -1160,7 +1182,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                     </td>
                     <td className="px-3 py-3">
                       <div className="space-y-1">
-                        {o.items?.map((it: any) => (
+                        {o.items?.map((it) => (
                           <div key={it.id} className="text-xs text-neutral-700">
                             • {it.productTitle} <span className="font-semibold">x{it.quantity}</span> ({formatVnd(it.price)})
                           </div>

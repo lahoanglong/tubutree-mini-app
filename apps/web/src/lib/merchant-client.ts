@@ -1,6 +1,7 @@
 'use client';
 
 import { apiFetch } from './client-api';
+import type { AdminOrderItem } from './admin-client';
 
 export interface MerchantStore {
   id: string;
@@ -121,8 +122,40 @@ export const addResellProduct = (productId: string, collectionId?: string) =>
 export const removeResellProduct = (productId: string) =>
   apiFetch(`/merchant/resell-products/${productId}`, { method: 'DELETE' });
 
+/**
+ * BE (merchant.service.listMerchantOrders) trả nguyên Prisma `Order` kèm include `items` + `user`
+ * — cùng một entity Order mà admin-client.ts (AdminOrder) mô tả, chỉ khác là đơn ở đây còn cần
+ * `shippingAddress` để đối tác đóng gói/ghi vận đơn (AdminOrder không khai trường này). Tái dùng
+ * AdminOrderItem cho `items` vì tên trường (productTitle/price/…) đang khớp đúng cách trang này
+ * render — tránh khai trùng một interface item thứ hai cho cùng một shape.
+ */
+export interface MerchantOrder {
+  id: string;
+  code: string;
+  status: string;
+  total: number;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  note?: string | null;
+  createdAt: string;
+  shippingAddress?: {
+    recipient?: string;
+    phone?: string;
+    street?: string;
+    ward?: string;
+    district?: string;
+    province?: string;
+  } | null;
+  user?: {
+    id: string;
+    phone: string | null;
+    fullName: string | null;
+  } | null;
+  items?: AdminOrderItem[];
+}
+
 export const listMerchantOrders = (status?: string) =>
-  apiFetch<any[]>(`/merchant/orders${status ? `?status=${status}` : ''}`);
+  apiFetch<MerchantOrder[]>(`/merchant/orders${status ? `?status=${status}` : ''}`);
 
 export const updateMerchantOrderStatus = (orderId: string, status: string) =>
   apiFetch(`/merchant/orders/${orderId}/status`, { method: 'PUT', body: { status } });
