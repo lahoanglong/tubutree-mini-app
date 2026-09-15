@@ -82,6 +82,12 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      # Docker tự set HOSTNAME=<container id> cho mọi container; Next.js standalone server.js đọc
+      # process.env.HOSTNAME làm địa chỉ bind thay vì mặc định 0.0.0.0 — bind nhầm vào IP container
+      # trên bridge network, "localhost"/127.0.0.1 bên trong container không kết nối được (dù host
+      # vẫn curl qua port-map bình thường vì NAT route thẳng vào IP bridge đó). Docker healthcheck
+      # (node fetch http://localhost:3000/) vì vậy luôn "unhealthy" dù app chạy đúng. Ép 0.0.0.0.
+      HOSTNAME: '0.0.0.0'
       API_BASE_URL: http://api:3001/api
     ports:
       - '127.0.0.1:14000:3000' # aaPanel nginx proxy_pass vào đây cho app.tubutree.com
