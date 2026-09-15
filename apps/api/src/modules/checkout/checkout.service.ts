@@ -64,7 +64,7 @@ export class CheckoutService {
   async placeOrder(userId: string, dto: PlaceOrderDto, idempotencyKey?: string) {
     if (idempotencyKey) {
       const existing = await this.prisma.order.findUnique({ where: { idempotencyKey } });
-      if (existing) return this.findOrderResponse(existing.id);
+      if (existing) return this.replayIdempotentOrder(existing, userId, dto);
     }
 
     // Attribution: ưu tiên referralCode/slug của phiên hiện tại; nếu phiên mất nhưng còn
@@ -225,7 +225,7 @@ export class CheckoutService {
       // cuộc ăn unique-violation (P2002). Trả lại đơn mà request thắng đã tạo.
       if (idempotencyKey && this.isUniqueViolation(err)) {
         const existing = await this.prisma.order.findUnique({ where: { idempotencyKey } });
-        if (existing) return this.findOrderResponse(existing.id);
+        if (existing) return this.replayIdempotentOrder(existing, userId, dto);
       }
       throw err;
     }
@@ -269,6 +269,41 @@ export class CheckoutService {
   }
 
   // ── Helpers ────────────────────────────────────────
+  /**
+   * Idempotency-Key trùng → trả lại đơn ĐÃ tạo thay vì tạo đơn mới, nhưng chỉ khi an toàn:
+   *
+   * 1) Chống IDOR: `idempotencyKey` unique TOÀN CỤC (không compound theo userId ở DB) — user B
+   *    đoán/dùng lại key mà user A đã dùng KHÔNG được trả đơn của A ra (lộ địa chỉ/tổng tiền/
+   *    phương thức thanh toán của A). Bắt thử lại với key mới — mirror wallet.service.ts
+   *    (convertToXu/withdraw đã làm đúng theo pattern này).
+   * 2) Chống trả nhầm đơn CŨ khi lần gọi lại KHÔNG PHẢI cùng một yêu cầu: khách bấm đặt hàng,
+   *    mất mạng SAU KHI server đã tạo đơn thành công (COD/địa chỉ A), tưởng thất bại nên đổi
+   *    sang WALLET + địa chỉ B rồi bấm lại CÙNG key → phải từ chối rõ ràng, không được âm thầm
+   *    trả đơn A ra như thể vừa đặt đơn mới (đơn trả về vẫn COD/địa chỉ A, không phải điều
+   *    khách vừa yêu cầu).
+   *
+   * KHÔNG đổi schema Order để lưu hash payload: so trực tiếp `paymentMethod` (có sẵn trên
+   * Order) + so JSON snapshot địa chỉ (Order không lưu addressId, chỉ lưu snapshot
+   * `shippingAddress` — dựng lại snapshot từ addressId mới rồi so với snapshot đã lưu lúc tạo).
+   */
+  private async replayIdempotentOrder(
+    existing: { id: string; userId: string; paymentMethod: string; shippingAddress: Prisma.JsonValue },
+    userId: string,
+    dto: PlaceOrderDto,
+  ) {
+    if (existing.userId !== userId) {
+      throw new BadRequestException('Idempotency-Key không hợp lệ.');
+    }
+    const paymentChanged = existing.paymentMethod !== dto.paymentMethod;
+    const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
+    const addressChanged =
+      !address || JSON.stringify(this.addressSnapshot(address)) !== JSON.stringify(existing.shippingAddress);
+    if (paymentChanged || addressChanged) {
+      throw new BadRequestException('Yêu cầu trước đó với thông tin khác đã được xử lý, vui lòng tải lại trang.');
+    }
+    return this.findOrderResponse(existing.id);
+  }
+
   /** Lỗi vi phạm ràng buộc unique của Prisma (P2002). */
   private isUniqueViolation(err: unknown): boolean {
     return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';

@@ -16,8 +16,15 @@ function makePrisma(over: Record<string, unknown> = {}) {
     payrollMonth: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     staffProfile: { findUnique: jest.fn().mockResolvedValue({ hourlyRate: 30000 }), upsert: jest.fn() },
     user: { findMany: jest.fn().mockResolvedValue([]) },
-  };
-  return { ...base, ...over } as unknown as PrismaService;
+    $executeRaw: jest.fn(),
+  } as Record<string, unknown>;
+  const merged = { ...base, ...over } as Record<string, unknown>;
+  // adjust() luôn tự mở $transaction(cb) (không nhận tx ngoài) — mock chạy cb với chính `merged`
+  // này (mirror coupons.service.spec.ts) để findFirst/create bên trong dùng CHUNG mock đã set ở
+  // trên (kể cả khi test gán đè `prisma.payrollAdjustment = {...}` SAU khi gọi makePrisma, vì
+  // cb đọc property tại thời điểm gọi, không snapshot).
+  merged.$transaction = jest.fn().mockImplementation((cb: (tx: unknown) => unknown) => cb(merged));
+  return merged as unknown as PrismaService;
 }
 const mk = (p: PrismaService) => new PayrollService(p, config);
 
@@ -399,6 +406,63 @@ describe('PayrollService.adjust — chống gửi trùng', () => {
 
     await mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1');
     expect(create).toHaveBeenCalled();
+  });
+
+  /**
+   * findFirst pre-check KHÔNG phải constraint DB thật (shiftId NULL cho MANUAL nên unique
+   * (shiftId,type) không áp) — 2 request gần nhau (double-click, retry mạng) có thể ĐỀU đọc
+   * "chưa có" trước khi request đầu commit. Khoá advisory (mirror coupons.service.ts) phải BỌC
+   * cả check LẪN create trong CÙNG 1 transaction, và phải LẤY LOCK TRƯỚC khi check — nếu không,
+   * request thứ 2 vẫn có thể check xong trước khi request 1 tạo xong.
+   */
+  it('khoá advisory PHẢI lấy trước, rồi mới check trùng, rồi mới tạo (order: lock → check → create) — để request đến sau luôn thấy bản ghi request trước vừa commit', async () => {
+    const order: string[] = [];
+    const prisma = base();
+    (prisma as unknown as { payrollAdjustment: Record<string, jest.Mock> }).payrollAdjustment = {
+      findFirst: jest.fn().mockImplementation(async () => {
+        order.push('check');
+        return null;
+      }),
+      create: jest.fn().mockImplementation(async () => {
+        order.push('create');
+        return {};
+      }),
+      findMany: jest.fn().mockResolvedValue([]),
+    };
+    const executeRaw = jest.fn().mockImplementation(async () => {
+      order.push('lock');
+    });
+    (prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw = executeRaw;
+
+    await mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1');
+
+    expect(order).toEqual(['lock', 'check', 'create']);
+    // Khoá theo (staffId, workDate, type) — đúng phạm vi task yêu cầu, không lẫn amount/reason
+    // (2 khoản khác số tiền/lý do CÙNG ngày vẫn phải serialize qua nhau).
+    expect(executeRaw.mock.calls[0].slice(1)).toEqual(['u1:2026-07-03T00:00:00.000Z:MANUAL']);
+  });
+
+  it('2 request "đồng thời" cùng ngày/số tiền/lý do (giả lập tuần tự do mock $transaction chạy đồng bộ) → chỉ request đầu tạo bản ghi, request sau tự nhận biết đã trùng', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const existing: { id: string }[] = [];
+    const prisma = base();
+    (prisma as unknown as { payrollAdjustment: Record<string, jest.Mock> }).payrollAdjustment = {
+      // Mô phỏng DB thật: findFirst thấy bản ghi mà lần gọi create() trước đã "commit".
+      findFirst: jest.fn().mockImplementation(async () => existing[0] ?? null),
+      create: jest.fn().mockImplementation(async () => {
+        existing.push({ id: 'adj-1' });
+        return create();
+      }),
+      findMany: jest.fn().mockResolvedValue([]),
+    };
+
+    const r1 = await mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1');
+    const r2 = await mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1');
+
+    expect(r1).toMatchObject({ adjusted: true });
+    expect((r1 as { deduped?: boolean }).deduped).toBeUndefined();
+    expect(r2).toMatchObject({ adjusted: true, deduped: true });
+    expect(create).toHaveBeenCalledTimes(1);
   });
 });
 

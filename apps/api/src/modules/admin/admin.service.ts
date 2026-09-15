@@ -33,13 +33,18 @@ export class AdminService {
    * và chữ "Khách hàng", rồi bấm Duyệt để hoàn nguyên tổng đơn về ví mà KHÔNG nhìn thấy số tiền
    * mình đang hoàn.
    */
-  async listReturnRequests(status?: string) {
-    const rows = await this.prisma.returnRequest.findMany({
-      where: status ? { status: status as never } : {},
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
-    return this.withReturnContext(rows);
+  async listReturnRequests(status: string | undefined, page: number, limit: number) {
+    const where = status ? { status: status as never } : {};
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.returnRequest.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        ...skipTake(page, limit),
+      }),
+      this.prisma.returnRequest.count({ where }),
+    ]);
+    const decorated = (await this.withReturnContext(rows)) as unknown[];
+    return paginated(decorated, page, limit, total);
   }
 
   /**
@@ -175,12 +180,17 @@ export class AdminService {
   }
 
   // ── Dealer applications ──
-  listDealerApplications(status?: string) {
-    return this.prisma.dealerApplication.findMany({
-      where: status ? { status: status as never } : {},
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
+  async listDealerApplications(status: string | undefined, page: number, limit: number) {
+    const where = status ? { status: status as never } : {};
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.dealerApplication.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        ...skipTake(page, limit),
+      }),
+      this.prisma.dealerApplication.count({ where }),
+    ]);
+    return paginated(items, page, limit, total);
   }
 
   async reviewDealerApplication(
@@ -467,57 +477,113 @@ export class AdminService {
     const tier = await this.prisma.dealerTier.findUnique({ where: { id: tierId } });
     if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
 
-    let updated = 0;
-    const notFound: string[] = [];
+    // 1) Chuẩn hoá + validate TỪNG dòng trước (giữ nguyên logic cũ: sku rỗng/giá không hữu
+    // hạn/giá <= 0 → bỏ) — bước này không đụng DB.
+    const validRows: { sku: string; price: number }[] = [];
     for (const row of rows ?? []) {
       const sku = String(row?.sku ?? '').trim();
       const price = Math.round(Number(row?.price));
       if (!sku || !Number.isFinite(price) || price <= 0) continue; // bỏ dòng lỗi
+      validRows.push({ sku, price });
+    }
 
-      const v = await this.prisma.variation.findUnique({ where: { sku } });
+    // 2) Bug 1 (N+1 nghiêm trọng): trước đây findUnique() + 1 $transaction RIÊNG cho TỪNG dòng —
+    // vài trăm/nghìn dòng = vài nghìn round-trip DB tuần tự → timeout/treo connection pool.
+    // Nay MỘT findMany cho toàn bộ SKU, tra cứu qua Map, rồi ghi theo LÔ cố định bên dưới.
+    const skus = [...new Set(validRows.map((r) => r.sku))];
+    const variations = skus.length
+      ? await this.prisma.variation.findMany({ where: { sku: { in: skus } } })
+      : [];
+    const variationBySku = new Map(variations.map((v) => [v.sku, v]));
+    // dealerPrices hiện tại theo variationId — cập nhật DẦN trong vòng lặp bên dưới để 2 dòng
+    // trùng SKU trong cùng file import (dòng sau đè dòng trước) thấy đúng giá của dòng liền
+    // trước, không dùng snapshot cũ nạp 1 lần từ DB.
+    const currentPrices = new Map<string, Record<string, number>>(
+      variations.map((v) => [v.id, (v.dealerPrices as Record<string, number> | null) ?? {}]),
+    );
+
+    const notFound: string[] = [];
+    const pending: { variationId: string; sku: string; oldPrice: number | null; newPrice: number }[] = [];
+    for (const { sku, price } of validRows) {
+      const v = variationBySku.get(sku);
       if (!v) {
         notFound.push(sku);
         continue;
       }
-      const current = ((v.dealerPrices as Record<string, number> | null) ?? {});
+      const current = currentPrices.get(v.id) ?? {};
       const oldPrice = typeof current[tierId] === 'number' ? current[tierId] : null;
       if (oldPrice === price) continue; // không đổi → không ghi lịch sử thừa
-
-      await this.prisma.$transaction([
-        this.prisma.variation.update({
-          where: { id: v.id },
-          data: { dealerPrices: { ...current, [tierId]: price } },
-        }),
-        this.prisma.dealerPriceHistory.create({
-          data: { variationId: v.id, sku, tierId, oldPrice, newPrice: price, changedBy: adminId },
-        }),
-      ]);
-      updated += 1;
+      currentPrices.set(v.id, { ...current, [tierId]: price });
+      pending.push({ variationId: v.id, sku, oldPrice, newPrice: price });
     }
-    return { tierId, updated, notFound, skipped: (rows?.length ?? 0) - updated - notFound.length };
+
+    // 3) Ghi theo LÔ cố định — MỘT $transaction duy nhất cho cả BATCH_SIZE dòng (update + create
+    // gộp chung), không phải 1 $transaction/dòng như trước.
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < pending.length; i += BATCH_SIZE) {
+      const batch = pending.slice(i, i + BATCH_SIZE);
+      await this.prisma.$transaction([
+        ...batch.map((w) =>
+          this.prisma.variation.update({
+            where: { id: w.variationId },
+            data: { dealerPrices: currentPrices.get(w.variationId) },
+          }),
+        ),
+        ...batch.map((w) =>
+          this.prisma.dealerPriceHistory.create({
+            data: {
+              variationId: w.variationId,
+              sku: w.sku,
+              tierId,
+              oldPrice: w.oldPrice,
+              newPrice: w.newPrice,
+              changedBy: adminId,
+            },
+          }),
+        ),
+      ]);
+    }
+
+    return {
+      tierId,
+      updated: pending.length,
+      notFound,
+      skipped: (rows?.length ?? 0) - pending.length - notFound.length,
+    };
   }
 
   /** Lịch sử đổi giá đại lý (mới nhất trước), lọc theo variation nếu có. */
-  getDealerPriceHistory(variationId?: string) {
-    return this.prisma.dealerPriceHistory.findMany({
-      where: variationId ? { variationId } : {},
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
+  async getDealerPriceHistory(variationId: string | undefined, page: number, limit: number) {
+    const where = variationId ? { variationId } : {};
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.dealerPriceHistory.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        ...skipTake(page, limit),
+      }),
+      this.prisma.dealerPriceHistory.count({ where }),
+    ]);
+    return paginated(items, page, limit, total);
   }
 
   // ── Kiểm duyệt sản phẩm của đối tác ──
-  listPendingMerchantProducts() {
-    return this.prisma.product.findMany({
-      where: { approvalStatus: 'PENDING_REVIEW' },
-      include: {
-        storefront: {
-          select: { id: true, title: true, subdomain: true, ownerUserId: true },
+  async listPendingMerchantProducts(page: number, limit: number) {
+    const where = { approvalStatus: 'PENDING_REVIEW' as const };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.product.findMany({
+        where,
+        include: {
+          storefront: {
+            select: { id: true, title: true, subdomain: true, ownerUserId: true },
+          },
+          variations: true,
         },
-        variations: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+        ...skipTake(page, limit),
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+    return paginated(items, page, limit, total);
   }
 
   async reviewMerchantProduct(adminId: string, productId: string, approve: boolean, rejectReason?: string) {

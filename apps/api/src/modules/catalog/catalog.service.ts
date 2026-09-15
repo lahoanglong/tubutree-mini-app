@@ -23,6 +23,32 @@ export class CatalogService {
   private categoriesCache: { value: unknown; expiresAt: number } | null = null;
   private readonly TTL_MS = 60_000;
 
+  // Mapper public-safe cho getBySlug() — endpoint /products/:slug là @Public() (không cần đăng
+  // nhập). KHÔNG được `include` trần cho variations/reviews: `include` kéo TOÀN BỘ cột của
+  // Prisma, gồm dealerPrices/affiliateRate (giá sỉ đại lý + % hoa hồng CTV) và reservedStock/
+  // pancakeStock/pancakeId (nội bộ đồng bộ) ở Variation, cùng userId/orderId (định danh khách +
+  // đơn hàng thật) ở Review — bất kỳ ai gọi API này đều lấy được. `stock` đã là tồn kho BÁN ĐƯỢC
+  // (xem comment tại Variation.stock trong schema) nên không cần trừ reservedStock lại ở đây.
+  private readonly publicVariationSelect = {
+    id: true,
+    sku: true,
+    name: true,
+    attributes: true,
+    retailPrice: true,
+    salePrice: true,
+    stock: true,
+    weight: true,
+  } satisfies Prisma.VariationSelect;
+
+  private readonly publicReviewSelect = {
+    rating: true,
+    comment: true,
+    images: true,
+    videoUrl: true,
+    isVerified: true,
+    createdAt: true,
+  } satisfies Prisma.ReviewSelect;
+
   constructor(private readonly prisma: PrismaService) {}
 
   async list(query: ProductQuery) {
@@ -61,7 +87,17 @@ export class CatalogService {
   async getBySlug(slug: string) {
     const product = await this.prisma.product.findUnique({
       where: { slug },
-      include: { variations: { where: { isActive: true } }, reviews: { where: { isVisible: true } } },
+      include: {
+        variations: { where: { isActive: true }, select: this.publicVariationSelect },
+        // take:20 — trang chi tiết không phân trang review; sản phẩm nhiều review sẽ load hết
+        // nếu không giới hạn. FE cần xem thêm thì gọi endpoint /products/:slug/reviews riêng.
+        reviews: {
+          where: { isVisible: true },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: this.publicReviewSelect,
+        },
+      },
     });
     if (!product || !product.isActive) throw new NotFoundException('Không tìm thấy sản phẩm.');
     return { ...product, sold: product.soldExternal + product.soldApp };
@@ -160,6 +196,9 @@ export class CatalogService {
       if (purchasedProductIds.length) where.id = { notIn: purchasedProductIds };
       items = await this.prisma.product.findMany({
         where,
+        // take:200 — trước đây không giới hạn nên load HẾT sản phẩm khớp rồi mới sort+cắt 10
+        // trong JS; catalog càng lớn càng nặng. 200 ứng viên là đủ dư để sort lấy top 10.
+        take: 200,
         include: { variations: { where: { isActive: true } } },
       });
     }
@@ -167,6 +206,7 @@ export class CatalogService {
     if (items.length === 0) {
       items = await this.prisma.product.findMany({
         where: { isActive: true, isFeatured: true },
+        take: 200,
         include: { variations: { where: { isActive: true } } },
       });
     }
@@ -315,21 +355,40 @@ export class CatalogService {
     );
   }
 
-  /** Admin nhập tổng đã bán từ sàn ngoài theo SKU (variation.sku → product.soldExternal). */
+  /**
+   * Admin nhập tổng đã bán từ sàn ngoài theo SKU (variation.sku → product.soldExternal).
+   * Trước đây findUnique+update TUẦN TỰ từng dòng — N+1 thật khi admin đối soát vài nghìn SKU
+   * (hàng nghìn round-trip DB nối tiếp nhau). Fix: gom 1 findMany rồi cập nhật theo lô qua
+   * $transaction, ~50 dòng/lô để không gửi 1 transaction khổng lồ.
+   */
   async setSoldExternal(rows: { sku: string; count: number }[]): Promise<{ updated: number }> {
+    const BATCH_SIZE = 50;
+    const valid = rows.filter((r) => r.sku && Number.isFinite(r.count) && r.count >= 0);
+    if (valid.length === 0) return { updated: 0 };
+
+    const skus = [...new Set(valid.map((r) => r.sku))];
+    const variations = await this.prisma.variation.findMany({
+      where: { sku: { in: skus } },
+      select: { sku: true, productId: true },
+    });
+    const productIdBySku = new Map(variations.map((v) => [v.sku, v.productId]));
+
     let updated = 0;
-    for (const r of rows) {
-      if (!r.sku || !Number.isFinite(r.count) || r.count < 0) continue;
-      const v = await this.prisma.variation.findUnique({
-        where: { sku: r.sku },
-        select: { productId: true },
-      });
-      if (!v) continue;
-      await this.prisma.product.update({
-        where: { id: v.productId },
-        data: { soldExternal: Math.floor(r.count) },
-      });
-      updated++;
+    for (let i = 0; i < valid.length; i += BATCH_SIZE) {
+      const batch = valid.slice(i, i + BATCH_SIZE);
+      const ops = batch
+        .map((r) => {
+          const productId = productIdBySku.get(r.sku);
+          if (!productId) return null;
+          return this.prisma.product.update({
+            where: { id: productId },
+            data: { soldExternal: Math.floor(r.count) },
+          });
+        })
+        .filter((op): op is NonNullable<typeof op> => op !== null);
+      if (ops.length === 0) continue;
+      await this.prisma.$transaction(ops);
+      updated += ops.length;
     }
     return { updated };
   }

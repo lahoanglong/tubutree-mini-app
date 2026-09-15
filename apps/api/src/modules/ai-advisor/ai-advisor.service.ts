@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FaqService } from '../faq/faq.service';
 import { LlmClient, type ChatMessage } from './llm.client';
@@ -33,6 +33,8 @@ const OFFLINE_REPLY =
  */
 @Injectable()
 export class AiAdvisorService {
+  private readonly logger = new Logger(AiAdvisorService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly llm: LlmClient,
@@ -57,8 +59,15 @@ export class AiAdvisorService {
       ...history.slice(-MAX_HISTORY),
       { role: 'user', content: text },
     ];
-    const reply = await this.llm.complete(messages);
-    return { reply, products };
+    try {
+      const reply = await this.llm.complete(messages);
+      return { reply, products };
+    } catch (e) {
+      // DeepSeek + Gemini cùng lỗi (LlmClient hết phương án) → fallback graceful thay vì để
+      // ServiceUnavailableException tràn thành 503, giữ uptime cảm nhận được cho người dùng.
+      this.logger.error(`LLM tạm ngưng hoạt động, fallback offline reply: ${(e as Error).message}`);
+      return { reply: OFFLINE_REPLY, products };
+    }
   }
 
   /** RAG: tìm tối đa 5 sản phẩm ACTIVE khớp bất kỳ token nào trong câu hỏi (theo tên). */

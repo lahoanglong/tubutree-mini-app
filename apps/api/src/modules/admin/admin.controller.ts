@@ -3,12 +3,14 @@ import {
   Allow,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsIn,
   IsInt,
   IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   ValidateIf,
   registerDecorator,
@@ -106,13 +108,16 @@ class SetConfigDto {
 }
 // Export để test DTO validation trực tiếp (xem admin.controller.spec.ts).
 export class CreateCouponDto {
-  @IsString() code!: string;
+  @IsString() @IsNotEmpty() @MaxLength(64) code!: string;
   @IsIn(['PERCENT', 'AMOUNT', 'FREESHIP']) type!: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
   @IsInt() @Min(0) @MaxIfPercent(100) value!: number;
   @IsOptional() @IsInt() minOrder?: number;
   @IsOptional() @IsInt() maxDiscount?: number;
-  @IsString() startAt!: string;
-  @IsString() endAt!: string;
+  // Bug 2: trước đây chỉ @IsString() — ngày sai định dạng lọt qua validation, new Date() ra
+  // Invalid Date, Prisma serialize RangeError khi ghi startAt/endAt → lọt qua
+  // PrismaExceptionFilter (chỉ bắt PrismaClientKnownRequestError) → 500 trần cho admin.
+  @IsDateString() startAt!: string;
+  @IsDateString() endAt!: string;
   @IsOptional() @IsInt() usageLimit?: number;
   // perUserLimit <= 0 = "không giới hạn" (nhất quán với coupons.service.ts / loyalty.service.ts —
   // grep `perUserLimit > 0`). @Min(0) chỉ chặn số âm vô nghĩa, KHÔNG cấm 0.
@@ -180,8 +185,8 @@ export class AdminController {
   }
 
   @Get('dealer-applications')
-  dealerApps(@Query('status') status?: string) {
-    return this.admin.listDealerApplications(status);
+  dealerApps(@Query() q: PaginationQuery, @Query('status') status?: string) {
+    return this.admin.listDealerApplications(status, q.page, q.limit);
   }
 
   @Post('dealer-applications/:id/review')
@@ -190,8 +195,8 @@ export class AdminController {
   }
 
   @Get('return-requests')
-  returns(@Query('status') status?: string) {
-    return this.admin.listReturnRequests(status);
+  returns(@Query() q: PaginationQuery, @Query('status') status?: string) {
+    return this.admin.listReturnRequests(status, q.page, q.limit);
   }
 
   @Post('return-requests/:id/review')
@@ -257,8 +262,8 @@ export class AdminController {
   }
 
   @Get('dealer-prices/history')
-  dealerPriceHistory(@Query('variationId') variationId?: string) {
-    return this.admin.getDealerPriceHistory(variationId);
+  dealerPriceHistory(@Query() q: PaginationQuery, @Query('variationId') variationId?: string) {
+    return this.admin.getDealerPriceHistory(variationId, q.page, q.limit);
   }
 
   // "Đã bán" gom từ sàn ngoài: dán "sku,số-đã-bán" hoặc rows JSON.
@@ -278,8 +283,8 @@ export class AdminController {
 
   // ── Duyệt sản phẩm do đối tác đăng ──
   @Get('merchant-products/pending')
-  listPendingMerchantProducts() {
-    return this.admin.listPendingMerchantProducts();
+  listPendingMerchantProducts(@Query() q: PaginationQuery) {
+    return this.admin.listPendingMerchantProducts(q.page, q.limit);
   }
 
   @Post('merchant-products/:id/review')

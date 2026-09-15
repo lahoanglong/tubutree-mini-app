@@ -61,9 +61,15 @@ export class AffiliateController {
     return this.affiliate.listCommissions(userId);
   }
 
+  // Idempotency-Key: mirror wallet.withdraw / affiliate.orders — chống double-tap/retry rút tiền
+  // trùng lần (header optional ở tầng type, nhưng client thực tế BẮT BUỘC gửi khi rút tiền thật).
   @Post('payouts')
-  payout(@CurrentUser('sub') userId: string, @Body() dto: PayoutDto) {
-    return this.affiliate.requestPayout(userId, dto.amount, dto.method, dto.bankInfo);
+  payout(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: PayoutDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.affiliate.requestPayout(userId, dto.amount, dto.method, dto.bankInfo, idempotencyKey);
   }
 
   // CTV lên đơn hộ khách (COD/chuyển khoản) → CTV hưởng hoa hồng (placedForCustomer).

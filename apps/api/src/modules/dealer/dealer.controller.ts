@@ -67,8 +67,12 @@ export class DealerController {
   }
 
   @Post('credit-payment')
-  payment(@CurrentUser('sub') userId: string, @Body() dto: CreditPaymentDto) {
-    return this.dealer.creditPayment(userId, dto.amount, dto.note);
+  payment(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: CreditPaymentDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.dealer.creditPayment(userId, dto.amount, dto.note, idempotencyKey);
   }
 
   @Get('quarterly-report')

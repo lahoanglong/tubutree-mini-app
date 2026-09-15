@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CommissionStatus, type Prisma } from '@prisma/client';
 import { randomBytes, randomInt } from 'node:crypto';
@@ -477,9 +477,39 @@ export class AffiliateService {
     });
   }
 
-  async requestPayout(userId: string, amount: number, method: string, bankInfo?: object) {
+  async requestPayout(
+    userId: string,
+    amount: number,
+    method: string,
+    bankInfo?: object,
+    idempotencyKey?: string,
+  ) {
     const minWithdraw = await this.config.get<number>('affiliate.min_withdraw_bank', 50000);
     const multiplier = await this.config.get<number>('affiliate.tubu_wallet_multiplier', 1.5);
+
+    // Chuẩn hoá '' / khoảng trắng → undefined (mirror wallet.withdraw / checkout.placeOrder /
+    // placeOrderForCustomer ở trên) — tránh ghi '' vào payouts.idempotencyKey (unique) rồi lần
+    // rút tiếp theo cũng '' đụng P2002.
+    const key = idempotencyKey?.trim() || undefined;
+    // Double-tap/retry cùng key → trả lại Payout đã tạo, KHÔNG rút/cộng tiền lần 2. Payout đã có
+    // sẵn cột idempotencyKey (unique) trong schema (payouts.idempotencyKey) — dùng lại, KHÔNG
+    // cần thêm cột mới.
+    if (key) {
+      const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey: key } });
+      if (existing && existing.userId === userId) {
+        return existing.method === 'WALLET_BALANCE'
+          ? {
+              ok: true,
+              method: existing.method,
+              credited: existing.amount,
+              note: `Đã cộng ${existing.amount}đ vào Ví Tubu (×${multiplier}).`,
+            }
+          : { ok: true, payoutId: existing.id, status: existing.status };
+      }
+      // idempotencyKey unique toàn cục (không compound theo userId) — nếu key trùng nhưng thuộc
+      // user khác thì KHÔNG trả payout của người khác ra ngoài; bắt buộc client thử lại key mới.
+      if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
+    }
 
     // "Khả dụng" = APPROVED và CHƯA thuộc batch payout nào (payoutBatchId null).
     const approved = await this.prisma.commission.aggregate({
@@ -489,29 +519,70 @@ export class AffiliateService {
     const available = approved._sum.amount ?? 0;
     if (available <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
     if (amount > available) throw new BadRequestException('Số dư hoa hồng khả dụng không đủ.');
+    // Bug đã sửa: trước đây 'amount' chỉ được VALIDATE (amount > available → throw ở trên) nhưng
+    // KHÔNG ĐƯỢC DÙNG để giới hạn số tiền rút thực — code luôn rút/cộng HẾT toàn bộ available bất
+    // kể amount truyền vào là bao nhiêu. Phương án sửa ĐÃ CHỌN: BẮT BUỘC rút toàn bộ (amount phải
+    // === available), throw rõ ràng nếu ít hơn — KHÔNG chọn phương án "chọn subset commission row
+    // sao cho tổng khớp đúng amount tuỳ ý", vì đó là bài toán subset-sum trên các bản ghi rời rạc:
+    // phức tạp hơn nhiều và rủi ro chọn sai/không tìm được tổ hợp khớp cao hơn hẳn so với việc yêu
+    // cầu client xác nhận rút đúng số dư khả dụng (đã trả về sẵn ở GET /affiliate/dashboard qua
+    // withdrawableCommission). Với tiền thật, throw rõ ràng an toàn hơn cả 2: rút "hết bất kể
+    // amount" (bug cũ) lẫn 1 thuật toán chọn row phức tạp khó review.
+    if (amount < available) {
+      throw new BadRequestException(
+        `Chỉ hỗ trợ rút toàn bộ số dư hoa hồng khả dụng (${available.toLocaleString('vi-VN')}đ), không hỗ trợ rút một phần.`,
+      );
+    }
 
     // Rút = cash-out TOÀN BỘ hoa hồng khả dụng (commission là bản ghi rời rạc, không
     // tách lẻ theo số tiền tùy ý). credited tính theo tổng THỰC trong transaction →
     // không mất tiền; gate theo updateMany.count → không double-spend khi chạy đồng thời.
     if (method === 'WALLET_BALANCE') {
-      const result = await this.prisma.$transaction(async (tx) => {
-        const rows = await tx.commission.findMany({
-          where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
-          select: { id: true, amount: true },
+      let result: { credited: number };
+      try {
+        result = await this.prisma.$transaction(async (tx) => {
+          const rows = await tx.commission.findMany({
+            where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
+            select: { id: true, amount: true },
+          });
+          const total = rows.reduce((s, c) => s + c.amount, 0);
+          const marked = await tx.commission.updateMany({
+            where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
+            data: { status: 'PAID', paidAt: new Date() },
+          });
+          if (marked.count === 0 || total <= 0) throw new BadRequestException('Hoa hồng đã được xử lý.');
+          // marked.count !== rows.length nghĩa là 1 phần row đã bị thay đổi (status/payoutBatchId)
+          // GIỮA lúc đọc (rows/total) và lúc updateMany — total tính từ rows cũ không còn khớp với
+          // số row thực sự vừa bị đánh dấu PAID. Trước đây chỉ check marked.count===0 nên vẫn coi
+          // là thành công với total có thể SAI (thừa/thiếu tiền cộng vào ví) — throw rõ ràng để
+          // client thử lại thay vì tiếp tục với số liệu không nhất quán.
+          if (marked.count !== rows.length) {
+            throw new ConflictException('Dữ liệu hoa hồng đã thay đổi, vui lòng thử lại.');
+          }
+          const credited = Math.floor(total * multiplier);
+          await tx.user.update({ where: { id: userId }, data: { walletBalance: { increment: credited } } });
+          await tx.payout.create({
+            data: { userId, amount: credited, method, status: 'PAID', paidAt: new Date(), idempotencyKey: key },
+          });
+          return { credited };
         });
-        const total = rows.reduce((s, c) => s + c.amount, 0);
-        const marked = await tx.commission.updateMany({
-          where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
-          data: { status: 'PAID', paidAt: new Date() },
-        });
-        if (marked.count === 0 || total <= 0) throw new BadRequestException('Hoa hồng đã được xử lý.');
-        const credited = Math.floor(total * multiplier);
-        await tx.user.update({ where: { id: userId }, data: { walletBalance: { increment: credited } } });
-        await tx.payout.create({
-          data: { userId, amount: credited, method, status: 'PAID', paidAt: new Date() },
-        });
-        return { credited };
-      });
+      } catch (err) {
+        // Race idempotency: 2 request cùng key chạy đồng thời — request thua ăn P2002 trên
+        // idempotencyKey khi payout.create (toàn bộ transaction rollback, KHÔNG double-credit).
+        // Trả lại kết quả của request thắng (mirror wallet.withdraw).
+        if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
+          const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey: key } });
+          if (existing && existing.userId === userId) {
+            return {
+              ok: true,
+              method: existing.method,
+              credited: existing.amount,
+              note: `Đã cộng ${existing.amount}đ vào Ví Tubu (×${multiplier}).`,
+            };
+          }
+        }
+        throw err;
+      }
       return {
         ok: true,
         method,
@@ -524,37 +595,63 @@ export class AffiliateService {
     if (amount < minWithdraw) {
       throw new BadRequestException(`Số tiền rút tối thiểu ${minWithdraw.toLocaleString('vi-VN')}đ.`);
     }
-    const payout = await this.prisma.$transaction(async (tx) => {
-      const rows = await tx.commission.findMany({
-        where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
-        select: { id: true, amount: true },
+    let payout: { id: string; status: string };
+    try {
+      payout = await this.prisma.$transaction(async (tx) => {
+        const rows = await tx.commission.findMany({
+          where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
+          select: { id: true, amount: true },
+        });
+        const total = rows.reduce((s, c) => s + c.amount, 0);
+        if (total <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
+        const p = await tx.payout.create({
+          data: { userId, amount: total, method: 'BANK', bankInfo: bankInfo ?? {}, status: 'REQUESTED', idempotencyKey: key },
+        });
+        // Gán batch + set PAID để loại khỏi "khả dụng" → chống rút trùng (gate theo count).
+        const marked = await tx.commission.updateMany({
+          where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
+          data: { payoutBatchId: p.id, status: 'PAID', paidAt: new Date() },
+        });
+        if (marked.count === 0) throw new BadRequestException('Hoa hồng đã được xử lý.');
+        // Xem giải thích ở nhánh WALLET_BALANCE phía trên — cùng 1 kiểu race hiếm cần chặn.
+        if (marked.count !== rows.length) {
+          throw new ConflictException('Dữ liệu hoa hồng đã thay đổi, vui lòng thử lại.');
+        }
+        return p;
       });
-      const total = rows.reduce((s, c) => s + c.amount, 0);
-      if (total <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
-      const p = await tx.payout.create({
-        data: { userId, amount: total, method: 'BANK', bankInfo: bankInfo ?? {}, status: 'REQUESTED' },
-      });
-      // Gán batch + set PAID để loại khỏi "khả dụng" → chống rút trùng (gate theo count).
-      const marked = await tx.commission.updateMany({
-        where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
-        data: { payoutBatchId: p.id, status: 'PAID', paidAt: new Date() },
-      });
-      if (marked.count === 0) throw new BadRequestException('Hoa hồng đã được xử lý.');
-      return p;
-    });
+    } catch (err) {
+      if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
+        const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey: key } });
+        if (existing && existing.userId === userId) {
+          return { ok: true, payoutId: existing.id, status: existing.status };
+        }
+      }
+      throw err;
+    }
     return { ok: true, payoutId: payout.id, status: 'REQUESTED' };
   }
 
-  /** Cron mỗi giờ: LOCKED quá hold_days → APPROVED. */
+  /**
+   * Cron mỗi giờ: LOCKED quá hold_days → APPROVED.
+   * try/catch BẮT BUỘC: đây là job Nest @Cron chạy NGAY TRONG process API chính, không ai await
+   * Promise nó trả về — một lỗi Prisma tạm thời (mất kết nối DB, timeout pool, deadlock...) văng
+   * ra ngoài sẽ thành unhandledRejection; Node 20 mặc định (--unhandled-rejections=throw) CRASH
+   * toàn bộ process mỗi khi cron này lỗi, tức sập API cho MỌI user mỗi giờ vì một lỗi có thể chỉ
+   * là nhất thời. Bắt lỗi + log để cron thử lại giờ sau thay vì sập process.
+   */
   @Cron('0 0 * * * *')
   async approveDueCommissions(): Promise<void> {
-    const holdDays = await this.config.get<number>('affiliate.hold_days', 20);
-    const threshold = new Date(Date.now() - holdDays * 24 * 3600 * 1000);
-    const res = await this.prisma.commission.updateMany({
-      where: { status: 'LOCKED', lockedAt: { lte: threshold } },
-      data: { status: 'APPROVED', approvedAt: new Date() },
-    });
-    if (res.count > 0) this.logger.log(`Duyệt ${res.count} commission hết hold.`);
+    try {
+      const holdDays = await this.config.get<number>('affiliate.hold_days', 20);
+      const threshold = new Date(Date.now() - holdDays * 24 * 3600 * 1000);
+      const res = await this.prisma.commission.updateMany({
+        where: { status: 'LOCKED', lockedAt: { lte: threshold } },
+        data: { status: 'APPROVED', approvedAt: new Date() },
+      });
+      if (res.count > 0) this.logger.log(`Duyệt ${res.count} commission hết hold.`);
+    } catch (err) {
+      this.logger.error(`approveDueCommissions lỗi: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   /** Thống kê theo từng gian hàng của CTV (đơn có storefrontSlug thuộc tôi + referrer là tôi). */

@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { IsString } from 'class-validator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
@@ -32,8 +33,9 @@ export class PaymentController {
     return this.bankTransfer.getBankQr(code, userId);
   }
 
-  /** Webhook ZaloPay (server-to-server). */
+  /** Webhook ZaloPay (server-to-server). MAC (key2) đã chặn giả mạo → bỏ qua rate limit. */
   @Public()
+  @SkipThrottle()
   @Post('webhooks/zalopay')
   webhook(@Body() body: ZaloPayCallbackDto) {
     return this.zalopay.handleCallback(body.data, body.mac);

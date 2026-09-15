@@ -7,6 +7,8 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -17,9 +19,11 @@ export class ApplyDealerDto {
   @IsString() ownerName!: string;
   @IsString() phone!: string;
   @IsString() address!: string;
-  @IsString() cccdFrontUrl!: string;
-  @IsString() cccdBackUrl!: string;
-  @IsOptional() @IsString() storeFrontUrl?: string;
+  // Ảnh CCCD/mặt tiền cửa hàng chỉ nhận URL (Cloudinary), không phải chuỗi tuỳ ý — chặn phình
+  // bảng DealerApplication bằng chuỗi rác/rất dài (docs/2026-09-16, audit security phần 2).
+  @IsUrl({ require_protocol: true }) @MaxLength(1000) cccdFrontUrl!: string;
+  @IsUrl({ require_protocol: true }) @MaxLength(1000) cccdBackUrl!: string;
+  @IsOptional() @IsUrl({ require_protocol: true }) @MaxLength(1000) storeFrontUrl?: string;
   @IsOptional() @IsInt() monthlyVolumeEstimate?: number;
   @IsOptional() @IsString() notes?: string;
 }

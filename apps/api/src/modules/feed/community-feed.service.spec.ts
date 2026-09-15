@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { CommunityFeedService, levelFromReputation, levelName, slugifyTag } from './community-feed.service';
+import { CommunityFeedService, containsBannedContent, levelFromReputation, levelName, slugifyTag } from './community-feed.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 function makePrisma(over: Record<string, unknown> = {}) {
@@ -626,6 +626,23 @@ describe('CommunityFeedService.editPost', () => {
     expect((prisma.feedPost.update as jest.Mock).mock.calls[0][0].data.status).toBeUndefined();
   });
 
+  // Bug fix (cùng logic với createPost): isTrusted chỉ phản ánh lịch sử tới lúc TẠO bài — tác
+  // giả có thể sửa lại ruột bài ĐÃ DUYỆT thành link ngoài/spam mà không bao giờ quay lại hàng
+  // chờ nếu chỉ check isTrusted. Phải quét nội dung SAU khi sửa, kể cả với user tin cậy.
+  it('sửa nội dung bài PUBLISHED của user TIN CẬY (STAFF) THÀNH nội dung vi phạm → quay lại PENDING', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', title: null, body: 'nội dung cũ hiền lành' });
+    await makeSvc(prisma).editPost('author', 'p1', { body: 'Group casino đổi thưởng, inbox ngay' }, 'STAFF');
+    expect((prisma.feedPost.update as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+  });
+
+  it('sửa nội dung bài PUBLISHED của user TIN CẬY (STAFF) chỉ đổi TITLE thành vi phạm (giữ nguyên body) → vẫn quét ra PENDING', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', title: 'Tiêu đề cũ', body: 'nội dung hiền lành' });
+    await makeSvc(prisma).editPost('author', 'p1', { title: 'Vay nong lãi thấp, inbox ngay' }, 'STAFF');
+    expect((prisma.feedPost.update as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+  });
+
   it('bài đang PENDING sẵn → sửa không đụng tới status (vẫn chờ duyệt)', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PENDING' });
@@ -873,6 +890,42 @@ describe('CommunityFeedService.createPost (kiểm duyệt lai)', () => {
     expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.status).toBe('PUBLISHED');
     expect(reward.rewardPost).toHaveBeenCalledWith('u1', 'p1');
   });
+
+  // Bug fix: rào cản "đã mua 1 lần" (isTrusted) quá thấp — trước đây user isTrusted được
+  // PUBLISHED thẳng dù nội dung chứa từ cấm/link ngoài. Match → ép PENDING (không chặn hẳn) để
+  // admin còn duyệt tay, thay vì bỏ qua mọi bộ lọc chỉ vì tác giả đã từng mua 1 đơn.
+  it('khách trusted (STAFF) NHƯNG nội dung chứa từ cấm → vẫn PENDING, KHÔNG thưởng', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'p1' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    await makeSvc(prisma, reward).createPost('u1', 'STAFF', {
+      kind: 'TIP', body: 'Kiếm tiền nhanh với vay nong lãi thấp, inbox ngay!',
+    });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+    expect(reward.rewardPost).not.toHaveBeenCalled();
+  });
+
+  it('khách trusted (STAFF) NHƯNG có link ngoài domain lạ → vẫn PENDING', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'p1' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    await makeSvc(prisma, reward).createPost('u1', 'STAFF', {
+      kind: 'TIP', body: 'Xem thêm tại http://trung-thuong-fake.biz/claim nhé mọi người',
+    });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+    expect(reward.rewardPost).not.toHaveBeenCalled();
+  });
+
+  it('khách trusted (STAFF) + link thuộc domain whitelist (tubutree.com) → vẫn PUBLISHED', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'p1' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    await makeSvc(prisma, reward).createPost('u1', 'STAFF', {
+      kind: 'TIP', body: 'Xem thêm sản phẩm tại https://tubutree.com/san-pham/cay-a',
+    });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.status).toBe('PUBLISHED');
+    expect(reward.rewardPost).toHaveBeenCalledWith('u1', 'p1');
+  });
 });
 
 describe('CommunityFeedService.approvePost', () => {
@@ -1072,6 +1125,41 @@ describe('slugifyTag (pure fn)', () => {
   });
   it('khoảng trắng thừa + ký tự lạ → cắt gọn, bỏ ký tự ngoài [a-z0-9-]', () => {
     expect(slugifyTag('  Đá & Sỏi!!  ')).toBe('da-soi');
+  });
+});
+
+describe('containsBannedContent (pure fn)', () => {
+  it('nội dung bình thường → false', () => {
+    expect(containsBannedContent('Vườn nhà mình hôm nay xanh tốt quá')).toBe(false);
+  });
+
+  it('rỗng/undefined → false', () => {
+    expect(containsBannedContent('')).toBe(false);
+    expect(containsBannedContent(undefined as unknown as string)).toBe(false);
+  });
+
+  it('chứa từ cấm CÓ dấu (vd "cờ bạc") → true', () => {
+    expect(containsBannedContent('Group cờ bạc đổi thưởng uy tín')).toBe(true);
+  });
+
+  it('chứa từ cấm KHÔNG dấu (vd "vay nong") → true (so khớp không phân biệt dấu)', () => {
+    expect(containsBannedContent('Cần tiền gấp? Vay nong lãi thấp inbox ngay')).toBe(true);
+  });
+
+  it('chứa link ngoài domain lạ (không whitelist) → true', () => {
+    expect(containsBannedContent('Xem thêm tại http://trung-thuong-fake.biz/claim')).toBe(true);
+  });
+
+  it('chứa link thuộc domain whitelist (tubutree.com) → false', () => {
+    expect(containsBannedContent('Xem chi tiết sản phẩm tại https://tubutree.com/san-pham/cay-a')).toBe(false);
+  });
+
+  it('chứa link thuộc domain whitelist (zalo.me) → false', () => {
+    expect(containsBannedContent('Nhắn mình qua https://zalo.me/0901234567 nhé')).toBe(false);
+  });
+
+  it('link whitelist nhưng là subdomain giả mạo (vd tubutree.com.evil.com) → true (không bị lừa)', () => {
+    expect(containsBannedContent('Xem tại http://tubutree.com.evil.com/claim')).toBe(true);
   });
 });
 

@@ -205,25 +205,47 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
     });
   });
 
-  it('setSoldExternal: map sku→product, set soldExternal', async () => {
+  it('setSoldExternal: gom 1 findMany theo SKU (không N+1) rồi cập nhật theo lô qua $transaction', async () => {
+    const variationFindMany = jest.fn().mockResolvedValue([{ sku: 'SKU1', productId: 'p1' }]);
+    const transaction = jest.fn((ops: unknown[]) => Promise.all(ops));
     const prisma = {
-      variation: { findUnique: jest.fn().mockResolvedValue({ productId: 'p1' }) },
+      variation: { findMany: variationFindMany },
       product: { update: jest.fn().mockResolvedValue({}) },
+      $transaction: transaction,
     } as unknown as PrismaService;
     const r = await new CatalogService(prisma).setSoldExternal([{ sku: 'SKU1', count: 1200 }]);
-    expect((prisma as any).variation.findUnique).toHaveBeenCalledWith({ where: { sku: 'SKU1' }, select: { productId: true } });
+    expect(variationFindMany).toHaveBeenCalledWith({ where: { sku: { in: ['SKU1'] } }, select: { sku: true, productId: true } });
     expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldExternal: 1200 } });
+    expect(transaction).toHaveBeenCalledTimes(1);
     expect(r.updated).toBe(1);
   });
 
   it('setSoldExternal: bỏ qua sku không tồn tại / count âm', async () => {
     const prisma = {
-      variation: { findUnique: jest.fn().mockResolvedValue(null) },
+      variation: { findMany: jest.fn().mockResolvedValue([]) }, // 'NOPE' không khớp variation nào
       product: { update: jest.fn() },
+      $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
     } as unknown as PrismaService;
     const r = await new CatalogService(prisma).setSoldExternal([{ sku: 'NOPE', count: 5 }, { sku: 'X', count: -1 }]);
     expect((prisma as any).product.update).not.toHaveBeenCalled();
     expect(r.updated).toBe(0);
+  });
+
+  it('setSoldExternal: nhiều SKU hơn 1 lô (BATCH_SIZE=50) → gọi $transaction nhiều lần, gộp đúng tổng updated', async () => {
+    const rows = Array.from({ length: 120 }, (_, i) => ({ sku: `SKU${i}`, count: i }));
+    const variationFindMany = jest
+      .fn()
+      .mockResolvedValue(rows.map((r, i) => ({ sku: r.sku, productId: `p${i}` })));
+    const transaction = jest.fn((ops: unknown[]) => Promise.all(ops));
+    const prisma = {
+      variation: { findMany: variationFindMany },
+      product: { update: jest.fn().mockResolvedValue({}) },
+      $transaction: transaction,
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).setSoldExternal(rows);
+    expect(variationFindMany).toHaveBeenCalledTimes(1); // 1 lần duy nhất, không N+1
+    expect(transaction).toHaveBeenCalledTimes(3); // 120 dòng / 50 mỗi lô = 3 lô
+    expect(r.updated).toBe(120);
   });
 });
 

@@ -13,6 +13,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PaginationQuery } from '../../common/pagination';
 import { MerchantService } from './merchant.service';
 
 export class UpdateMerchantStoreDto {
@@ -109,6 +110,7 @@ export class CreateMerchantProductDto {
 
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })
   images?: string[];
 
   @IsOptional()
@@ -117,14 +119,17 @@ export class CreateMerchantProductDto {
 
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })
   categoryIds?: string[];
 
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })
   tags?: string[];
 
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })
   forSegment?: string[];
 
   @IsOptional()
@@ -132,6 +137,7 @@ export class CreateMerchantProductDto {
 
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })
   certifications?: string[];
 
   @IsOptional()
@@ -162,6 +168,13 @@ export class UpdateMerchantOrderStatusDto {
   status!: string;
 }
 
+// Bug 3: /merchant/orders trước đây chỉ nhận `status` rời, không có page/limit thật.
+class MerchantOrderListQuery extends PaginationQuery {
+  @IsOptional()
+  @IsString()
+  status?: string;
+}
+
 @Controller('merchant')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('DEALER', 'AFFILIATE', 'ADMIN')
@@ -184,8 +197,8 @@ export class MerchantController {
   }
 
   @Get('products')
-  listMyProducts(@CurrentUser('sub') userId: string) {
-    return this.merchant.listMyProducts(userId);
+  listMyProducts(@CurrentUser('sub') userId: string, @Query() query: PaginationQuery) {
+    return this.merchant.listMyProducts(userId, query.page, query.limit);
   }
 
   @Post('products')
@@ -204,8 +217,8 @@ export class MerchantController {
   }
 
   @Get('orders')
-  listOrders(@CurrentUser('sub') userId: string, @Query('status') status?: string) {
-    return this.merchant.listMerchantOrders(userId, status);
+  listOrders(@CurrentUser('sub') userId: string, @Query() query: MerchantOrderListQuery) {
+    return this.merchant.listMerchantOrders(userId, query.status, query.page, query.limit);
   }
 
   @Put('orders/:id/status')

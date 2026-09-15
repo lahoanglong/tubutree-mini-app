@@ -263,15 +263,57 @@ export class DealerService {
     return { balance, entries };
   }
 
-  async creditPayment(userId: string, amount: number, note?: string) {
+  /**
+   * Đại lý tự báo "đã chuyển khoản" để trừ công nợ — KHÔNG có xác nhận ngân hàng thật, nên
+   * double-submit/retry mạng (mất kết nối giữa lúc chờ response, double-tap nút) trước đây có
+   * thể trừ nợ 2 LẦN cho đúng 1 lần chuyển khoản thật. Idempotency-Key bắt buộc từ FE (mirror
+   * wallet.withdraw/convertToXu): dedupe theo (userId, refType='PAYMENT', refId=key) — unique
+   * constraint đã sẵn có ở schema (migration 20260902020200_dealer_credit_ledger_ref_unique,
+   * @@unique([userId, refType, refId])); NULL không tự đụng nên client cũ không gửi key (hoặc
+   * gọi service trực tiếp không qua HTTP, xem test) vẫn tạo dòng PAYMENT bình thường như trước.
+   * Key trùng nhưng SỐ TIỀN khác → throw rõ ràng thay vì âm thầm trả kết quả cũ (có thể che giấu
+   * nhầm lẫn số tiền báo); giống số tiền → coi là replay, trả lại sổ công nợ hiện tại.
+   */
+  async creditPayment(userId: string, amount: number, note?: string, idempotencyKey?: string) {
     // Chặn nếu chưa phải đại lý (mirror mọi method công nợ/đơn hàng khác) — thiếu check này
     // trước đây cho phép BẤT KỲ user đã đăng nhập nào tự ghi "đã thanh toán" (delta âm) vào
     // DealerCreditLedger của chính mình, tạo công nợ ảo âm nếu sau này họ được duyệt làm đại lý.
     await this.dealerContext(userId);
     if (amount <= 0) throw new BadRequestException('Số tiền không hợp lệ.');
-    await this.prisma.dealerCreditLedger.create({
-      data: { userId, delta: -amount, refType: 'PAYMENT', note: note ?? 'Thanh toán công nợ' },
-    });
+    // Chuẩn hoá '' / khoảng trắng → undefined (mirror wallet.withdraw/convertToXu, dealer.placeOrder).
+    const key = idempotencyKey?.trim() || undefined;
+
+    if (key) {
+      const existing = await this.prisma.dealerCreditLedger.findFirst({
+        where: { userId, refType: 'PAYMENT', refId: key },
+      });
+      if (existing) {
+        if (existing.delta !== -amount) {
+          throw new BadRequestException('Idempotency-Key đã được sử dụng với số tiền khác, vui lòng thử lại.');
+        }
+        return this.creditLedger(userId);
+      }
+    }
+
+    try {
+      await this.prisma.dealerCreditLedger.create({
+        data: {
+          userId,
+          delta: -amount,
+          refType: 'PAYMENT',
+          note: note ?? 'Thanh toán công nợ',
+          ...(key ? { refId: key } : {}),
+        },
+      });
+    } catch (err) {
+      // Race 2 request cùng key: kẻ thua ăn P2002 trên unique (userId,refType,refId) → coi như
+      // replay của cùng 1 lần báo, trả kết quả hiện tại thay vì lỗi 500 (mirror
+      // wallet.withdraw/convertToXu/payoutQuarterlyBonuses).
+      if (key && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        return this.creditLedger(userId);
+      }
+      throw err;
+    }
     return this.creditLedger(userId);
   }
 

@@ -1,13 +1,18 @@
-import { Allow, ArrayMaxSize, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { Allow, ArrayMaxSize, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+
+// Ảnh có thể là URL Cloudinary HOẶC data URL base64 (fallback khi chưa cấu hình Cloudinary), nên
+// trần phải rộng — đủ cho ảnh nén ~1MB nhưng chặn payload vô hạn. Mirror IMAGE_MAX của
+// storefront.controller.ts (không export sẵn nên khai lại hằng số tương đương ở đây).
+const IMAGE_MAX = 1_500_000;
 
 export class CreateBrandDto {
   @IsString() name!: string;
   @IsOptional() @IsString() slug?: string;
-  @IsOptional() @IsString() logoUrl?: string;
-  @IsOptional() @IsString() coverUrl?: string;
-  @IsOptional() @IsString() tagline?: string;
+  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
+  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
+  @IsOptional() @IsString() @MaxLength(200) tagline?: string;
   @IsOptional() @IsString() story?: string;
-  @IsOptional() @IsString() origin?: string;
+  @IsOptional() @IsString() @MaxLength(200) origin?: string;
   @IsOptional() @Allow() certifications?: unknown;
   @IsOptional() @IsBoolean() isPublished?: boolean;
 }
@@ -15,11 +20,11 @@ export class CreateBrandDto {
 export class UpdateBrandDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() slug?: string;
-  @IsOptional() @IsString() logoUrl?: string;
-  @IsOptional() @IsString() coverUrl?: string;
-  @IsOptional() @IsString() tagline?: string;
+  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
+  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
+  @IsOptional() @IsString() @MaxLength(200) tagline?: string;
   @IsOptional() @IsString() story?: string;
-  @IsOptional() @IsString() origin?: string;
+  @IsOptional() @IsString() @MaxLength(200) origin?: string;
   @IsOptional() @Allow() certifications?: unknown;
   @IsOptional() @IsBoolean() isPublished?: boolean;
   // Gán chủ nhãn (lộ trình B): userId của đối tác → cho phép họ tự quản nhãn.
@@ -32,11 +37,11 @@ export class VerifyBrandDto {
 
 /** Brand-owner CHỈ sửa thông tin nhãn (không name/slug/verified/publish/cert). */
 export class UpdateOwnedBrandDto {
-  @IsOptional() @IsString() logoUrl?: string;
-  @IsOptional() @IsString() coverUrl?: string;
-  @IsOptional() @IsString() tagline?: string;
+  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
+  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
+  @IsOptional() @IsString() @MaxLength(200) tagline?: string;
   @IsOptional() @IsString() story?: string;
-  @IsOptional() @IsString() origin?: string;
+  @IsOptional() @IsString() @MaxLength(200) origin?: string;
 }
 
 export class PromotionDto {

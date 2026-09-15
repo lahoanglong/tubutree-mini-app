@@ -193,10 +193,13 @@ export class GameService {
           // Postgres abort 1 bên (P2034, bắt bên dưới) thay vì cả hai cùng lọt qua trần.
           // Coupon không có createdAt — grantCoupon() luôn set startAt=new Date() lúc cấp
           // (game.service.ts grantCoupon), nên startAt chính là mốc "được cấp lúc nào" cho
-          // đúng loại coupon GAME* này.
+          // đúng loại coupon GAME*/GARDEN* này.
+          // DÙNG CHUNG trần với waterPlot (lô phụ, game-garden.service.ts): đếm cả coupon
+          // 'GAME'-prefix (lô nhà) lẫn 'GARDEN'-prefix (lô phụ) trong CÙNG 1 trần/user/ngày —
+          // nếu không, user có thể lách trần bằng cách tưới lô nhà + lô phụ song song.
           let couponsToday = await tx.coupon.count({
             where: {
-              code: { startsWith: 'GAME' },
+              OR: [{ code: { startsWith: 'GAME' } }, { code: { startsWith: 'GARDEN' } }],
               scopeMeta: { path: ['userId'], equals: userId },
               startAt: { gte: dayStart },
             },
@@ -462,7 +465,13 @@ export class GameService {
     }
   }
 
-  /** Tạo coupon cá nhân AMOUNT cho user (thưởng game). Trả về code. */
+  /**
+   * Tạo coupon cá nhân AMOUNT cho user (thưởng game). Trả về code.
+   * minOrder = chính giá trị coupon (mirror groupbuy.service.ts grantCoupon, P0-2): không có
+   * ràng buộc này, coupon AMOUNT không có product/minOrder restriction dùng được trên BẤT KỲ
+   * đơn nào (CouponsService.validateAndCompute chỉ trừ min(value, subtotal), không xét sản
+   * phẩm) — thu hoạch xong là có "tiền free" tiêu ở đơn bất kỳ, không cần đơn thật tương xứng.
+   */
   private async grantCoupon(userId: string, amount: number, tx?: Prisma.TransactionClient): Promise<string> {
     const code = `GAME${amount}-${userId.slice(-5)}-${Math.floor(Math.random() * 9000 + 1000)}`.toUpperCase();
     const end = new Date();
@@ -473,6 +482,7 @@ export class GameService {
         code,
         type: 'AMOUNT',
         value: amount,
+        minOrder: amount,
         startAt: new Date(),
         endAt: end,
         perUserLimit: 1,

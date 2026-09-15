@@ -275,11 +275,18 @@ export class BrandService {
   }
 
   // ---- Admin: gán sản phẩm vào nhãn (Product.brandId) ----
-  /** SP của nhãn (admin xem để quản lý). */
-  listBrandProducts(brandId: string) {
+  /**
+   * SP của nhãn (admin xem để quản lý). Phân trang (take/skip) — trước đây trả toàn bộ SP của
+   * nhãn không giới hạn, nhãn nhiều SP → payload lớn, chậm (mirror pattern StorefrontService.pickerProducts).
+   */
+  listBrandProducts(brandId: string, query: { page?: number; limit?: number } = {}) {
+    const take = Math.min(query.limit ?? 20, 50);
+    const skip = ((query.page ?? 1) - 1) * take;
     return this.prisma.product.findMany({
       where: { brandId },
       orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+      take,
+      skip,
       select: { id: true, name: true, slug: true, thumbnail: true, brand: true, isActive: true },
     });
   }

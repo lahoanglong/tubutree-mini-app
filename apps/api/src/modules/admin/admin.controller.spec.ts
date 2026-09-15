@@ -56,6 +56,55 @@ describe('CreateCouponDto validation (Phase 1 findings)', () => {
   });
 });
 
+// Bug 2 (audit round): code chỉ @IsString() thiếu @IsNotEmpty()/@MaxLength(); startAt/endAt chỉ
+// @IsString() thay vì @IsDateString() — ngày sai định dạng lọt qua validation, new Date() ra
+// Invalid Date, Prisma serialize RangeError khi ghi → lọt qua PrismaExceptionFilter (chỉ bắt
+// PrismaClientKnownRequestError) → 500 trần thay vì 400 rõ ràng cho admin.
+describe('CreateCouponDto — code/startAt/endAt validation (Bug 2)', () => {
+  const base = {
+    code: 'SALE10',
+    type: 'PERCENT',
+    value: 10,
+    startAt: '2026-01-01T00:00:00.000Z',
+    endAt: '2026-12-31T00:00:00.000Z',
+    scope: 'PUBLIC',
+  };
+
+  function makeDto(overrides: Record<string, unknown>) {
+    return plainToInstance(CreateCouponDto, { ...base, ...overrides });
+  }
+
+  it('code rỗng → lỗi validate', async () => {
+    const errors = await validate(makeDto({ code: '' }));
+    expect(errors.some((e) => e.property === 'code')).toBe(true);
+  });
+
+  it('code quá dài (>64 ký tự) → lỗi validate', async () => {
+    const errors = await validate(makeDto({ code: 'A'.repeat(65) }));
+    expect(errors.some((e) => e.property === 'code')).toBe(true);
+  });
+
+  it('code hợp lệ → PASS', async () => {
+    const errors = await validate(makeDto({ code: 'SALE10' }));
+    expect(errors.some((e) => e.property === 'code')).toBe(false);
+  });
+
+  it('startAt sai định dạng ngày (vd chuỗi bất kỳ) → lỗi validate thay vì lọt qua tới Prisma', async () => {
+    const errors = await validate(makeDto({ startAt: 'khong-phai-ngay' }));
+    expect(errors.some((e) => e.property === 'startAt')).toBe(true);
+  });
+
+  it('endAt sai định dạng ngày → lỗi validate', async () => {
+    const errors = await validate(makeDto({ endAt: 'không phải ngày' }));
+    expect(errors.some((e) => e.property === 'endAt')).toBe(true);
+  });
+
+  it('startAt/endAt là ISO date string hợp lệ → PASS', async () => {
+    const errors = await validate(makeDto({}));
+    expect(errors.some((e) => e.property === 'startAt' || e.property === 'endAt')).toBe(false);
+  });
+});
+
 // Việc 9 (audit round 2): CreateCouponDto thiếu scopeMeta cho scope TIER/USER_GROUP → coupon tạo
 // ra fail-closed ở MỌI user trong isCouponEligible (coupon-scope.ts), không lỗi khi tạo — bug
 // chức năng im lặng. RequiredScopeMeta() bắt buộc đúng field theo scope.

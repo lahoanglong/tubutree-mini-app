@@ -154,10 +154,72 @@ describe('CheckoutService.placeOrder — money safety', () => {
     (CART.items[0] as { total: number }).total = 100;
   });
 
-  it('idempotency: key đã tồn tại → trả đơn cũ, không tạo mới', async () => {
+  it('idempotency: key đã tồn tại, cùng user + cùng payload → trả đơn cũ, không tạo mới', async () => {
     const { svc, prisma, orderCreate } = build();
-    (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'existing' });
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+      id: 'existing',
+      userId: 'u1',
+      paymentMethod: 'COD',
+      shippingAddress: {
+        recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
+        provinceCode: '1', districtCode: '2', wardCode: '3',
+      },
+    });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'key-123');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('idempotency IDOR: key trùng nhưng thuộc user KHÁC → BadRequest, KHÔNG lộ đơn của user khác', async () => {
+    const { svc, prisma, orderCreate } = build();
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+      id: 'existing-of-u2',
+      userId: 'u2',
+      paymentMethod: 'COD',
+      shippingAddress: {},
+    });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'key-shared'),
+    ).rejects.toThrow('Idempotency-Key không hợp lệ');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('idempotency payload đổi (đổi phương thức thanh toán) → BadRequest, KHÔNG âm thầm trả đơn cũ', async () => {
+    const { svc, prisma, orderCreate } = build();
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+      id: 'existing',
+      userId: 'u1',
+      paymentMethod: 'COD', // đơn cũ đã tạo bằng COD
+      shippingAddress: {
+        recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
+        provinceCode: '1', districtCode: '2', wardCode: '3',
+      },
+    });
+    // Lần gọi lại đổi sang WALLET với CÙNG key (client tưởng lần trước fail).
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never, 'key-123'),
+    ).rejects.toThrow('thông tin khác đã được xử lý');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('idempotency payload đổi (đổi địa chỉ giao hàng) → BadRequest, KHÔNG âm thầm trả đơn cũ', async () => {
+    const { svc, prisma, orderCreate } = build();
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+      id: 'existing',
+      userId: 'u1',
+      paymentMethod: 'COD',
+      shippingAddress: {
+        recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
+        provinceCode: '1', districtCode: '2', wardCode: '3',
+      },
+    });
+    // address.findUnique mặc định trả ADDRESS (addr1, HN/BD) — mock đè để mô phỏng đổi sang địa chỉ khác.
+    (prisma.address.findUnique as jest.Mock).mockResolvedValue({
+      id: 'addr2', userId: 'u1', recipient: 'A', phone: '09', province: 'HCM', district: 'Q1',
+      ward: 'W2', street: 'S2', provinceCode: '9', districtCode: '8', wardCode: '7',
+    });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr2', paymentMethod: 'COD' } as never, 'key-123'),
+    ).rejects.toThrow('thông tin khác đã được xử lý');
     expect(orderCreate).not.toHaveBeenCalled();
   });
 });

@@ -24,7 +24,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'new-plot', ...data })),
       update: jest.fn().mockResolvedValue({}),
     },
-    coupon: { create: jest.fn().mockResolvedValue({}) },
+    coupon: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
     plantedTree: { create: jest.fn().mockResolvedValue({}) },
   };
   base.$transaction = jest
@@ -278,5 +278,54 @@ describe('GameGardenService.waterPlot', () => {
     const r = await svc.waterPlot('u1', 'p1', 20);
     expect(feed.createAchievementPost).toHaveBeenCalledWith('u1', 'HARVEST', expect.any(String), expect.any(Object));
     expect(r.harvested).toBe(true);
+  });
+
+  // P0-1 (mirror waterTree ở game.service.ts): lô phụ KHÔNG được cấp coupon vô hạn — trần
+  // dùng CHUNG với lô nhà (đếm cả coupon 'GAME'-prefix lẫn 'GARDEN'-prefix trong cùng ngày).
+  it('đã đạt trần coupon/ngày (kể cả trần đến từ lô nhà GAME-prefix) → vẫn thu hoạch nhưng KHÔNG cấp thêm coupon', async () => {
+    const prisma = makePrisma();
+    (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 0, target: 30, treesPlanted: 0 }));
+    (prisma.coupon.count as jest.Mock).mockResolvedValue(3); // đã đủ trần mặc định (3/ngày), kể cả do lô nhà cấp
+    const svc = new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 }));
+    const r = await svc.waterPlot('u1', 'p1', 70); // 70/30 = 2 lần harvest
+    expect(r.harvested).toBe(true);
+    expect(r.treesPlanted).toBe(2);
+    expect(prisma.plantedTree.create).toHaveBeenCalledTimes(2); // cây thật KHÔNG bị cap
+    expect(prisma.coupon.create).not.toHaveBeenCalled();
+    expect(r.reward.coupon).toBeUndefined();
+    // Đếm trần phải gộp cả 2 tiền tố coupon (lô nhà + lô phụ) — nếu không sẽ lọt lưới an toàn.
+    const countArgs = (prisma.coupon.count as jest.Mock).mock.calls[0][0];
+    expect(countArgs.where.OR).toEqual([{ code: { startsWith: 'GAME' } }, { code: { startsWith: 'GARDEN' } }]);
+  });
+
+  it('còn dưới trần → cấp coupon tới khi CHẠM trần trong CÙNG 1 lần tưới, phần sau đó thì thôi', async () => {
+    const prisma = makePrisma();
+    (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 0, target: 30, treesPlanted: 0 }));
+    (prisma.coupon.count as jest.Mock).mockResolvedValue(2); // còn đúng 1 suất trước khi chạm trần 3
+    const svc = new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 }));
+    const r = await svc.waterPlot('u1', 'p1', 70); // 2 lần harvest trong lần gọi này
+    expect(r.treesPlanted).toBe(2);
+    expect(prisma.plantedTree.create).toHaveBeenCalledTimes(2);
+    expect(prisma.coupon.create).toHaveBeenCalledTimes(1); // chỉ 1 coupon (suất còn lại) — lần 2 chạm trần
+  });
+
+  it('race Serializable (P2034 — 2 request song song đụng trần/tồn kho) → BadRequest rõ ràng, không nuốt lỗi', async () => {
+    const prisma = makePrisma();
+    (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 590, target: 600 }));
+    (prisma.$transaction as jest.Mock).mockRejectedValue(
+      Object.assign(new Error('could not serialize access'), { code: 'P2034' }),
+    );
+    const svc = new GameGardenService(prisma, makeConfig());
+    await expect(svc.waterPlot('u1', 'p1', 20)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('grantCoupon set minOrder = giá trị coupon (P0-2, chặn coupon dùng free trên đơn bất kỳ)', async () => {
+    const prisma = makePrisma();
+    (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 590, target: 600 }));
+    const svc = new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_amount': 30000 }));
+    await svc.waterPlot('u1', 'p1', 20);
+    const couponData = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data;
+    expect(couponData.value).toBe(30000);
+    expect(couponData.minOrder).toBe(30000);
   });
 });

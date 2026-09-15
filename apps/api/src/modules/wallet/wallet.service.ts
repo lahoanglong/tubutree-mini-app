@@ -74,7 +74,17 @@ export class WalletService {
       if (existing && existing.userId !== userId) {
         throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
       }
-      if (existing) return { spent: amountVnd, received: existing.delta, multiplier };
+      if (existing) {
+        // So sánh với giá trị ĐÃ LƯU (không phải request hiện tại): nếu client đổi số tiền rồi
+        // bấm lại CÙNG key (vd sau lỗi mạng), tuyệt đối không được trộn lẫn amountVnd mới với
+        // received cũ — phải từ chối rõ ràng thay vì trả dữ liệu sai lệch.
+        if (existing.delta !== received) {
+          throw new BadRequestException(
+            'Yêu cầu trước đó với số tiền khác đã được xử lý, vui lòng tải lại và thử lại.',
+          );
+        }
+        return { spent: amountVnd, received: existing.delta, multiplier };
+      }
     }
 
     try {
@@ -122,11 +132,20 @@ export class WalletService {
       // thuộc user khác (đụng độ hiếm/keygen yếu ở client cũ) thì KHÔNG trả payout của người
       // khác ra ngoài; coi như đụng key, bắt buộc client thử lại với key mới.
       if (existing && existing.userId === userId) {
+        // So sánh gross (net+fee đã lưu) với `amount` của request hiện tại: nếu client đổi số
+        // tiền rồi bấm lại CÙNG key (vd sau lỗi mạng), tuyệt đối không được trộn lẫn amount mới
+        // với Payout cũ — phải từ chối rõ ràng thay vì trả dữ liệu sai lệch.
+        const existingGross = existing.amount + existing.fee;
+        if (existingGross !== amount) {
+          throw new BadRequestException(
+            'Yêu cầu trước đó với số tiền khác đã được xử lý, vui lòng tải lại và thử lại.',
+          );
+        }
         return {
           ok: true,
           payoutId: existing.id,
           status: existing.status,
-          withdrawn: existing.amount + existing.fee,
+          withdrawn: existingGross,
           fee: existing.fee,
           net: existing.amount,
         };

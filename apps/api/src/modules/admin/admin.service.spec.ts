@@ -461,11 +461,14 @@ describe('AdminService.importDealerPrices (import bảng giá đại lý theo b�
   function importPrisma(over: Record<string, unknown> = {}) {
     const base = {
       dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1', name: 'Bạc' }) },
+      // Bug 1 fix: 1 findMany cho toàn bộ SKU (thay vì findUnique/dòng).
       variation: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'v1', sku: 'SKU-1', dealerPrices: { t0: 99000 } }),
+        findMany: jest.fn().mockResolvedValue([{ id: 'v1', sku: 'SKU-1', dealerPrices: { t0: 99000 } }]),
         update: jest.fn().mockResolvedValue({}),
       },
       dealerPriceHistory: { create: jest.fn().mockResolvedValue({}) },
+      // Ghi theo lô: mỗi lô 1 $transaction([...]) — mock chỉ cần resolve, vì .update()/.create()
+      // đã được gọi (ghi nhận bởi jest.fn) ngay lúc XÂY mảng đối số truyền vào $transaction.
       $transaction: jest.fn().mockResolvedValue([]),
     };
     return { ...base, ...over } as unknown as PrismaService;
@@ -489,7 +492,7 @@ describe('AdminService.importDealerPrices (import bảng giá đại lý theo b�
 
   it('SKU không tồn tại → vào notFound, không update', async () => {
     const prisma = importPrisma({
-      variation: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() },
+      variation: { findMany: jest.fn().mockResolvedValue([]), update: jest.fn() },
     });
     const r = await mkAdmin(prisma).importDealerPrices('admin1', 't1', [{ sku: 'SKU-X', price: 100000 }]);
     expect(r.updated).toBe(0);
@@ -500,7 +503,7 @@ describe('AdminService.importDealerPrices (import bảng giá đại lý theo b�
   it('giá không đổi → bỏ qua (không update/không ghi history thừa)', async () => {
     const prisma = importPrisma({
       variation: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'v1', sku: 'SKU-1', dealerPrices: { t1: 150000 } }),
+        findMany: jest.fn().mockResolvedValue([{ id: 'v1', sku: 'SKU-1', dealerPrices: { t1: 150000 } }]),
         update: jest.fn(),
       },
     });
@@ -759,18 +762,26 @@ describe('AdminService.listOrders with search', () => {
 });
 
 describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () => {
-  it('listPendingMerchantProducts chỉ lấy sản phẩm có approvalStatus=PENDING_REVIEW', async () => {
+  it('listPendingMerchantProducts chỉ lấy sản phẩm có approvalStatus=PENDING_REVIEW, có phân trang thật', async () => {
     const findMany = jest.fn().mockResolvedValue([
       { id: 'p1', name: 'Nước giặt sinh học', approvalStatus: 'PENDING_REVIEW' },
     ]);
-    const prisma = makePrisma({ product: { findMany } });
-    const res = await mkAdmin(prisma).listPendingMerchantProducts();
+    const count = jest.fn().mockResolvedValue(1);
+    const prisma = makePrisma({
+      product: { findMany, count },
+      // listUsers/listOrders pattern: $transaction([findMany, count]) — mock chạy THẬT mảng.
+      $transaction: jest.fn((arr) => Promise.all(arr)),
+    });
+    const res = await mkAdmin(prisma).listPendingMerchantProducts(1, 20);
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { approvalStatus: 'PENDING_REVIEW' },
+        skip: 0,
+        take: 20,
       }),
     );
-    expect(res).toHaveLength(1);
+    expect(res.data).toHaveLength(1);
+    expect(res.meta).toMatchObject({ page: 1, limit: 20, total: 1 });
   });
 
   it('reviewMerchantProduct duyệt APPROVED', async () => {
@@ -826,7 +837,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
  * cũ không trả gì. Admin chỉ thấy một dãy cuid và chữ "Khách hàng", rồi bấm Duyệt để hoàn nguyên
  * tổng đơn về ví mà KHÔNG nhìn thấy số tiền mình đang hoàn.
  */
-describe('AdminService.listReturnRequests — kèm đơn và khách', () => {
+describe('AdminService.listReturnRequests — kèm đơn và khách, có phân trang thật', () => {
   it('ghép order + user vào từng yêu cầu, chỉ 2 truy vấn phụ cho cả trang', async () => {
     const orderFindMany = jest.fn().mockResolvedValue([
       { id: 'o1', code: 'TUBU1', total: 250000, status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'PAID' },
@@ -838,19 +849,23 @@ describe('AdminService.listReturnRequests — kèm đơn và khách', () => {
           { id: 'r1', orderId: 'o1', userId: 'u1', status: 'REQUESTED' },
           { id: 'r2', orderId: 'o1', userId: 'u1', status: 'REQUESTED' },
         ]),
+        count: jest.fn().mockResolvedValue(2),
       },
       order: { findMany: orderFindMany },
       user: { findMany: userFindMany },
+      // Bug 3 fix: pattern listUsers/listOrders — $transaction([findMany, count]).
+      $transaction: jest.fn((arr) => Promise.all(arr)),
     });
 
-    const rows = (await mkAdmin(prisma).listReturnRequests()) as {
-      order: { code: string; total: number } | null;
-      user: { phone: string } | null;
-    }[];
+    const res = (await mkAdmin(prisma).listReturnRequests(undefined, 1, 20)) as {
+      data: { order: { code: string; total: number } | null; user: { phone: string } | null }[];
+      meta: { page: number; limit: number; total: number };
+    };
 
-    expect(rows).toHaveLength(2);
-    expect(rows[0]!.order).toMatchObject({ code: 'TUBU1', total: 250000 });
-    expect(rows[0]!.user).toMatchObject({ phone: '0899625240' });
+    expect(res.data).toHaveLength(2);
+    expect(res.meta).toMatchObject({ page: 1, limit: 20, total: 2 });
+    expect(res.data[0]!.order).toMatchObject({ code: 'TUBU1', total: 250000 });
+    expect(res.data[0]!.user).toMatchObject({ phone: '0899625240' });
     expect(orderFindMany).toHaveBeenCalledTimes(1);
     expect(userFindMany).toHaveBeenCalledTimes(1);
     // id trùng nhau chỉ hỏi 1 lần
@@ -860,24 +875,32 @@ describe('AdminService.listReturnRequests — kèm đơn và khách', () => {
   it('không có yêu cầu nào → mảng rỗng, không truy vấn thừa', async () => {
     const orderFindMany = jest.fn();
     const prisma = makePrisma({
-      returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      returnRequest: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
       order: { findMany: orderFindMany },
       user: { findMany: jest.fn() },
+      $transaction: jest.fn((arr) => Promise.all(arr)),
     });
 
-    await expect(mkAdmin(prisma).listReturnRequests()).resolves.toEqual([]);
+    const res = (await mkAdmin(prisma).listReturnRequests(undefined, 1, 20)) as { data: unknown[] };
+    expect(res.data).toEqual([]);
     expect(orderFindMany).not.toHaveBeenCalled();
   });
 
   it('đơn đã bị xoá → order = null, không làm hỏng cả danh sách', async () => {
     const prisma = makePrisma({
-      returnRequest: { findMany: jest.fn().mockResolvedValue([{ id: 'r1', orderId: 'gone', userId: 'u1' }]) },
+      returnRequest: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'r1', orderId: 'gone', userId: 'u1' }]),
+        count: jest.fn().mockResolvedValue(1),
+      },
       order: { findMany: jest.fn().mockResolvedValue([]) },
       user: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn((arr) => Promise.all(arr)),
     });
 
-    const rows = (await mkAdmin(prisma).listReturnRequests()) as { order: unknown; user: unknown }[];
-    expect(rows[0]!.order).toBeNull();
-    expect(rows[0]!.user).toBeNull();
+    const res = (await mkAdmin(prisma).listReturnRequests(undefined, 1, 20)) as {
+      data: { order: unknown; user: unknown }[];
+    };
+    expect(res.data[0]!.order).toBeNull();
+    expect(res.data[0]!.user).toBeNull();
   });
 });

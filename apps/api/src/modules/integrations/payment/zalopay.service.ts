@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import type { Env } from '../../../config/env.validation';
@@ -49,7 +49,11 @@ export class ZalopayService {
     if (order.paymentStatus === 'PAID') throw new BadRequestException('Đơn đã thanh toán.');
 
     const appTime = Date.now();
-    const appTransId = `${this.yymmdd()}_${order.code}`;
+    // Hậu tố ngẫu nhiên phân biệt LẦN THỬ: appTransId chỉ phân giải theo NGÀY (yymmdd_code) nên
+    // khách thoát/hủy giữa chừng rồi thanh toán lại TRONG CÙNG NGÀY cho cùng đơn sẽ sinh
+    // appTransId trùng hệt lần trước → PaymentAttempt.create() (appTransId @unique) ném P2002
+    // không được catch → 500 chặn đứng thanh toán lại (Bug 2, docs/2026-09-16).
+    const appTransId = `${this.yymmdd()}_${order.code}_${randomBytes(3).toString('hex')}`;
     const embedData = JSON.stringify({ orderCode: order.code });
     const items = JSON.stringify([{ itemid: order.code, itemprice: order.total, itemquantity: 1 }]);
     const appUser = userId;
@@ -118,7 +122,7 @@ export class ZalopayService {
       (await this.prisma.order.findFirst({
         where: { paymentTxnId: data.app_trans_id },
       }));
-    if (order && order.paymentStatus !== 'PAID') {
+    if (order) {
       // P1-3 (docs/2026-09-08-review-progress.md): trước đây chỉ check paymentStatus, không
       // check status — callback tới sau khi đơn đã hủy/trả vẫn bị lật PAID êm, đơn đứng
       // CANCELLED/RETURNED + PAID mà không cơ chế nào tự phát hiện cần hoàn tiền thật cho
@@ -130,11 +134,26 @@ export class ZalopayService {
         );
         return { return_code: 1, return_message: 'success' };
       }
-      await this.prisma.order.update({
-        where: { id: order.id },
-        data: { paymentStatus: 'PAID', status: order.status === 'PENDING_PAYMENT' ? 'CONFIRMED' : order.status },
+      // Bug 1 (Critical, docs/2026-09-16): đọc rồi update() thẳng không atomic — 2 webhook (retry)
+      // tới gần nhau có thể cùng đọc order còn UNPAID rồi cùng ghi đè, hoặc tệ hơn "hồi sinh" đơn
+      // đã bị hủy ở giữa 2 lần đọc/ghi thành CONFIRMED+PAID sau khi kho đã nhả bán chỗ đó cho đơn
+      // khác. Mirror pattern onPaymentReconcile (pancake.processor.ts): updateMany guard cả
+      // paymentStatus:'UNPAID' lẫn status not-in CANCELLED/RETURNED, chỉ notify khi count>0.
+      const flip = await this.prisma.order.updateMany({
+        where: {
+          id: order.id,
+          paymentStatus: 'UNPAID',
+          status: { notIn: ['CANCELLED', 'RETURNED'] },
+        },
+        data: {
+          paymentStatus: 'PAID',
+          ...(order.status === 'PENDING_PAYMENT' ? { status: 'CONFIRMED' } : {}),
+        },
       });
-      await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
+      if (flip.count > 0) {
+        this.logger.log(`ZaloPay xác nhận thanh toán đơn ${order.code} → PAID`);
+        await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
+      }
     }
     return { return_code: 1, return_message: 'success' };
   }

@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -16,17 +16,19 @@ class UpdateStorefrontDto {
   @IsOptional() @IsString() @MaxLength(IMAGE_MAX) avatarUrl?: string;
   @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
   @IsOptional() @IsString() theme?: string;
-  @IsOptional() @IsString() themeColor?: string;
+  // Không tìm thấy danh sách theme hợp lệ tường minh trong storefront.service.ts để dùng @IsIn —
+  // chỉ ràng buộc themeColor (mã hex #rrggbb, khớp default '#16a34a' ở getPublicBySlug).
+  @IsOptional() @IsString() @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'themeColor phải là mã màu hex dạng #rrggbb.' }) themeColor?: string;
   @IsOptional() @IsString() subdomain?: string;
-  @IsOptional() @IsString() bankName?: string;
-  @IsOptional() @IsString() bankBin?: string;
-  @IsOptional() @IsString() bankAccountNo?: string;
-  @IsOptional() @IsString() bankAccountName?: string;
-  @IsOptional() @IsString() warehouseAddress?: string;
-  @IsOptional() @IsString() warehouseCity?: string;
-  @IsOptional() @IsString() warehouseDistrict?: string;
-  @IsOptional() @IsString() warehouseWard?: string;
-  @IsOptional() @IsString() warehousePhone?: string;
+  @IsOptional() @IsString() @MaxLength(200) bankName?: string;
+  @IsOptional() @IsString() @MaxLength(200) bankBin?: string;
+  @IsOptional() @IsString() @MaxLength(200) bankAccountNo?: string;
+  @IsOptional() @IsString() @MaxLength(200) bankAccountName?: string;
+  @IsOptional() @IsString() @MaxLength(200) warehouseAddress?: string;
+  @IsOptional() @IsString() @MaxLength(200) warehouseCity?: string;
+  @IsOptional() @IsString() @MaxLength(200) warehouseDistrict?: string;
+  @IsOptional() @IsString() @MaxLength(200) warehouseWard?: string;
+  @IsOptional() @IsString() @MaxLength(200) warehousePhone?: string;
 }
 class PublishDto { @IsBoolean() isPublished!: boolean; }
 class CreateCollectionDto {

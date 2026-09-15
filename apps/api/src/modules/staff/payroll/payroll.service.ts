@@ -360,25 +360,38 @@ export class PayrollService {
       throw new BadRequestException('Tháng lương đã chốt/đã trả — mở lại tháng trước khi điều chỉnh.');
     }
     // Chống gửi trùng: unique (shiftId, type) không áp cho MANUAL vì shiftId là NULL, mà Postgres
-    // coi mỗi NULL là một giá trị riêng. Một lần retry/timeout mạng khi gửi khoản trừ 500.000
-    // trước đây tạo hai bản ghi → trừ một triệu. Cùng (ngày, số tiền, lý do) trong 5 phút coi là
-    // một thao tác.
-    const recent = await this.prisma.payrollAdjustment.findFirst({
-      where: {
-        staffId,
-        workDate,
-        type: 'MANUAL',
-        amount,
-        reason,
-        createdAt: { gte: new Date(Date.now() - 5 * 60_000) },
-      },
-      select: { id: true },
-    });
-    if (recent) return { adjusted: true, deduped: true };
+    // coi mỗi NULL là một giá trị riêng. findFirst() dưới đây chỉ là HEURISTIC — KHÔNG phải
+    // constraint DB thật — nên hai request gần nhau (double-click, retry mạng khi gửi khoản trừ
+    // 500.000) có thể ĐỀU đọc "chưa có" trước khi request đầu commit, rồi cả hai cùng tạo → trừ
+    // một triệu thay vì 500.000.
+    //
+    // Khoá advisory theo (staffId, workDate, type) TRONG transaction — mirror pattern
+    // pg_advisory_xact_lock ở coupons.service.ts (redeemInTx, khoá theo couponId+userId): request
+    // thứ 2 phải đợi tới khi request 1 COMMIT xong mới được chạy tiếp bên trong lock, lúc đó
+    // findFirst đọc được bản ghi vừa tạo và tự dừng (deduped) thay vì tạo thêm.
+    const lockKey = `${staffId}:${workDate.toISOString()}:MANUAL`;
+    const deduped = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+      const recent = await tx.payrollAdjustment.findFirst({
+        where: {
+          staffId,
+          workDate,
+          type: 'MANUAL',
+          amount,
+          reason,
+          createdAt: { gte: new Date(Date.now() - 5 * 60_000) },
+        },
+        select: { id: true },
+      });
+      if (recent) return true;
 
-    await this.prisma.payrollAdjustment.create({
-      data: { staffId, workDate, type: 'MANUAL', amount, reason, createdBy: adminId },
+      await tx.payrollAdjustment.create({
+        data: { staffId, workDate, type: 'MANUAL', amount, reason, createdBy: adminId },
+      });
+      return false;
     });
+    if (deduped) return { adjusted: true, deduped: true };
+
     await this.recomputeDay(staffId, workDate);
     return { adjusted: true };
   }

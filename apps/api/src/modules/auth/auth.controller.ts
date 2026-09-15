@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, HttpCode, HttpStatus, Req, Res, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, MinLength, MaxLength, Matches } from 'class-validator';
 import type { Request, Response } from 'express';
 import type { JwtPayload, LoginResponse } from '@tubutree/shared-types';
 import type { Env } from '../../config/env.validation';
@@ -20,7 +20,11 @@ import { ZaloOAuthDto } from './dto/zalo-oauth.dto';
 import { RefreshTokenDto } from './dto/refresh.dto';
 
 class GuestLoginDto {
-  @IsString() @IsNotEmpty() deviceId!: string;
+  // deviceId là thứ DUY NHẤT xác thực tài khoản khách (xem apps/miniapp/src/utils/idempotency.ts
+  // newDeviceId(): luôn dạng `d_<uuid|hex|base36>` — chỉ gồm chữ/số/`_`/`-`, dài 34-38 ký tự).
+  // Ràng buộc định dạng + độ dài ở đây để BE không tin mù một chuỗi tuỳ ý làm định danh xác thực.
+  @IsString() @IsNotEmpty() @MinLength(8) @MaxLength(128) @Matches(/^[A-Za-z0-9_-]+$/)
+  deviceId!: string;
   @IsString() @IsOptional() referralCode?: string;
 }
 

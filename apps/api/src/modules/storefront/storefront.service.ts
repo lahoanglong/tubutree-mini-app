@@ -4,6 +4,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { normalizeSubdomain, assertIdentifierAvailable } from './identifier-validation';
 
+// Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
+// bán hàng bình thường) — mirror MAX_WISHLIST_ITEMS ở wishlist.service.ts.
+const MAX_COLLECTIONS_PER_STORE = 30;
+const MAX_ITEMS_PER_COLLECTION = 100;
+
 @Injectable()
 export class StorefrontService {
   constructor(
@@ -294,6 +299,9 @@ export class StorefrontService {
       return await this.prisma.$transaction(
         async (tx) => {
           const count = await tx.storefrontCollection.count({ where: { storefrontId: sf.id } });
+          if (count >= MAX_COLLECTIONS_PER_STORE) {
+            throw new BadRequestException(`Mỗi gian hàng chỉ được tạo tối đa ${MAX_COLLECTIONS_PER_STORE} bộ sưu tập.`);
+          }
           return tx.storefrontCollection.create({
             data: {
               storefrontId: sf.id,
@@ -390,6 +398,9 @@ export class StorefrontService {
       return await this.prisma.$transaction(
         async (tx) => {
           const count = await tx.storefrontItem.count({ where: { collectionId } });
+          if (count >= MAX_ITEMS_PER_COLLECTION) {
+            throw new BadRequestException(`Mỗi bộ sưu tập chỉ được thêm tối đa ${MAX_ITEMS_PER_COLLECTION} sản phẩm.`);
+          }
           return tx.storefrontItem.create({
             data: { collectionId, productId: dto.productId, variationId: dto.variationId ?? null, note: dto.note ?? null, sortOrder: count },
             include: {

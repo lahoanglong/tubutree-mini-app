@@ -138,61 +138,121 @@ export class GameGardenService {
   // ── Tưới 1 lô phụ ──────────────────────────────────
   async waterPlot(userId: string, plotId: string, drops: number) {
     if (!Number.isInteger(drops) || drops <= 0) throw new BadRequestException('Số giọt nước không hợp lệ.');
-    const plot = await this.prisma.gardenPlot.findFirst({ where: { id: plotId, userId } });
-    if (!plot) throw new NotFoundException('Không tìm thấy lô đất.');
-    // Guard target hợp lệ: nếu config lỗi để target<=0 thì vòng `while (progress >= target)`
-    // dưới đây sẽ lặp vô hạn (treo API + OOM). Fail-fast thay vì treo.
-    if (!Number.isInteger(plot.target) || plot.target <= 0) {
-      throw new BadRequestException('Lô đất chưa cấu hình mục tiêu hợp lệ.');
-    }
 
     const deathDays = await this.config.get<number>('game.death_days', 7);
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
+    // Trần cứng số coupon thu hoạch/ngày — mirror waterTree() ở game.service.ts (P0-1): xu mua
+    // nước rẻ hơn nhiều giá trị coupon thu hoạch, không có trần thì vòng mua-nước→tưới→thu-hoạch
+    // in coupon vô hạn ở LÔ PHỤ cũng như lô nhà.
+    const dailyCap = await this.config.get<number>('game.harvest_coupon_daily_cap', 3);
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
 
-    // ATOMIC: trừ nước + cấp thưởng (coupon/cây thật) + cập nhật lô trong CÙNG 1 transaction.
-    // Nếu bất kỳ bước nào lỗi → rollback cả cụm: không thể "trừ nước rồi mất", cũng không
-    // "cấp thưởng nhưng không lưu progress" (lỗ hổng thu-hoạch-lại trước đây).
-    const tx = await this.prisma.$transaction(async (db) => {
-      const dec = await db.gameProfile.updateMany({
-        where: { userId, totalSeeds: { gte: drops } },
-        data: { totalSeeds: { decrement: drops } },
-      });
-      if (dec.count === 0) throw new BadRequestException('Không đủ giọt nước.');
+    let progress = 0;
+    let target = 600;
+    let treesPlanted = 0;
+    let harvestCount = 0;
+    let couponCode: string | undefined;
+    let certificateCode: string | undefined;
+    let revivedFromDead = false;
 
-      let progress = plot.progress;
-      // §6.7.3: lô CHẾT (≥ death_days không tưới, có tiến trình) → reset, trồng lại.
-      let revivedFromDead = false;
-      if (
-        plot.lastWateredAt &&
-        progress > 0 &&
-        (Date.now() - new Date(plot.lastWateredAt).getTime()) / 864e5 >= deathDays
-      ) {
-        progress = 0;
-        revivedFromDead = true;
+    try {
+      // ATOMIC + Serializable: đọc lô, đếm trần coupon, trừ nước, cấp thưởng, cập nhật lô đều
+      // nằm TRONG CÙNG 1 transaction Serializable (giống waterTree()) — không còn đọc
+      // progress/treesPlanted/lastWateredAt NGOÀI tx rồi ghi lại giá trị tuyệt đối: 2 request
+      // waterPlot song song (cùng lô, hoặc cùng lúc với waterTree tranh trần) không thể cùng
+      // đọc trạng thái cũ rồi cùng ghi đè → double-harvest / lọt trần (Postgres abort 1 bên
+      // bằng P2034 nếu đụng nhau thật, bắt bên dưới thay vì nuốt lỗi).
+      const result = await this.prisma.$transaction(
+        async (db) => {
+          const plot = await db.gardenPlot.findFirst({ where: { id: plotId, userId } });
+          if (!plot) throw new NotFoundException('Không tìm thấy lô đất.');
+          // Guard target hợp lệ: nếu config lỗi để target<=0 thì vòng `while (progress >= target)`
+          // dưới đây sẽ lặp vô hạn (treo API + OOM, giữ lock Serializable). Fail-fast thay vì treo.
+          if (!Number.isInteger(plot.target) || plot.target <= 0) {
+            throw new BadRequestException('Lô đất chưa cấu hình mục tiêu hợp lệ.');
+          }
+
+          const dec = await db.gameProfile.updateMany({
+            where: { userId, totalSeeds: { gte: drops } },
+            data: { totalSeeds: { decrement: drops } },
+          });
+          if (dec.count === 0) throw new BadRequestException('Không đủ giọt nước.');
+
+          // Đếm TRONG cùng transaction Serializable — DÙNG CHUNG trần với waterTree (lô nhà):
+          // cả coupon 'GAME'-prefix lẫn 'GARDEN'-prefix đều tính vào 1 trần/user/ngày, tránh
+          // lách trần bằng cách tưới lô nhà + lô phụ song song trong cùng ngày.
+          let couponsToday = await db.coupon.count({
+            where: {
+              OR: [{ code: { startsWith: 'GAME' } }, { code: { startsWith: 'GARDEN' } }],
+              scopeMeta: { path: ['userId'], equals: userId },
+              startAt: { gte: dayStart },
+            },
+          });
+
+          let p = plot.progress;
+          // §6.7.3: lô CHẾT (≥ death_days không tưới, có tiến trình) → reset, trồng lại.
+          let revived = false;
+          if (
+            plot.lastWateredAt &&
+            p > 0 &&
+            (Date.now() - new Date(plot.lastWateredAt).getTime()) / 864e5 >= deathDays
+          ) {
+            p = 0;
+            revived = true;
+          }
+          p += drops;
+
+          let planted = plot.treesPlanted;
+          let harvests = 0;
+          let coupon: string | undefined;
+          let certificate: string | undefined;
+          while (p >= plot.target) {
+            p -= plot.target;
+            planted += 1;
+            harvests += 1;
+            // Cây thật + chứng nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn/ngày.
+            certificate = await this.plantTree(userId, plot.treeType, db);
+            if (couponsToday < dailyCap) {
+              coupon = await this.grantCoupon(userId, harvestAmount, db);
+              couponsToday += 1;
+            }
+          }
+
+          const stage = Math.min(4, Math.max(1, Math.ceil((p / plot.target) * 4)));
+          await db.gardenPlot.update({
+            where: { id: plot.id },
+            data: { progress: p, treeStage: stage, treesPlanted: planted, lastWateredAt: new Date() },
+          });
+
+          return {
+            progress: p,
+            target: plot.target,
+            treesPlanted: planted,
+            harvestCount: harvests,
+            couponCode: coupon,
+            certificateCode: certificate,
+            revivedFromDead: revived,
+          };
+        },
+        { isolationLevel: 'Serializable' },
+      );
+      progress = result.progress;
+      target = result.target;
+      treesPlanted = result.treesPlanted;
+      harvestCount = result.harvestCount;
+      couponCode = result.couponCode;
+      certificateCode = result.certificateCode;
+      revivedFromDead = result.revivedFromDead;
+    } catch (err) {
+      // P2034 = Postgres serialization failure (2 request song song đụng trần coupon/tồn kho
+      // nước) — không nuốt lỗi: báo rõ để client thử lại, giao dịch đã tự rollback nguyên vẹn.
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+        throw new BadRequestException('Hệ thống đang bận, vui lòng thử tưới lại.');
       }
-      progress += drops;
+      throw err;
+    }
 
-      let treesPlanted = plot.treesPlanted;
-      let harvestCount = 0;
-      let couponCode: string | undefined;
-      let certificateCode: string | undefined;
-      while (progress >= plot.target) {
-        progress -= plot.target;
-        treesPlanted += 1;
-        harvestCount += 1;
-        couponCode = await this.grantCoupon(userId, harvestAmount, db);
-        certificateCode = await this.plantTree(userId, plot.treeType, db);
-      }
-
-      const stage = Math.min(4, Math.max(1, Math.ceil((progress / plot.target) * 4)));
-      await db.gardenPlot.update({
-        where: { id: plot.id },
-        data: { progress, treeStage: stage, treesPlanted, lastWateredAt: new Date() },
-      });
-      return { progress, treesPlanted, harvestCount, couponCode, certificateCode, revivedFromDead };
-    });
-
-    const { progress, treesPlanted, harvestCount, couponCode, certificateCode, revivedFromDead } = tx;
     const harvested = harvestCount > 0;
 
     // Phase 3: thu hoạch → sưu tập 1 loài. Lỗi sưu tập không chặn thu hoạch (ngoài tx, best-effort).
@@ -204,7 +264,7 @@ export class GameGardenService {
 
     // Phase 2: thu hoạch → 💧 đã nuôi cây góp vào hồ cộng đồng. Lỗi góp hồ không chặn thu hoạch.
     if (harvested && this.community) {
-      await this.community.contribute(userId, harvestCount * plot.target).catch(() => undefined);
+      await this.community.contribute(userId, harvestCount * target).catch(() => undefined);
     }
 
     // §6.14.12: auto-post thành tích lên bảng tin. Lỗi post không chặn thu hoạch.
@@ -226,7 +286,7 @@ export class GameGardenService {
       ...(certificateCode ? { certificate: certificateCode } : {}),
       ...(species ? { species } : {}),
     };
-    return { progress, target: plot.target, harvested, treesPlanted, revivedFromDead, reward };
+    return { progress, target, harvested, treesPlanted, revivedFromDead, reward };
   }
 
   // ── Helpers ────────────────────────────────────────
@@ -263,6 +323,11 @@ export class GameGardenService {
     return 'HEALTHY';
   }
 
+  /**
+   * minOrder = chính giá trị coupon (mirror groupbuy.service.ts grantCoupon + game.service.ts
+   * grantCoupon, P0-2): không có ràng buộc này, coupon AMOUNT dùng được trên BẤT KỲ đơn nào
+   * (CouponsService.validateAndCompute chỉ trừ min(value, subtotal), không xét sản phẩm).
+   */
   private async grantCoupon(userId: string, amount: number, db: Db = this.prisma): Promise<string> {
     const code = `GARDEN${amount}-${userId.slice(-5)}-${Math.floor(Math.random() * 9000 + 1000)}`.toUpperCase();
     const end = new Date();
@@ -272,6 +337,7 @@ export class GameGardenService {
         code,
         type: 'AMOUNT',
         value: amount,
+        minOrder: amount,
         startAt: new Date(),
         endAt: end,
         perUserLimit: 1,

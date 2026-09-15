@@ -518,6 +518,7 @@ model Storefront {
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
+  @@unique([ownerUserId])
   @@index([ownerUserId])
   @@index([subdomain])
   @@map("storefronts")

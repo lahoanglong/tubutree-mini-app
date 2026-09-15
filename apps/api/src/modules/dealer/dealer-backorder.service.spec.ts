@@ -25,11 +25,17 @@ function setup(items: unknown[], opts: { reserved?: Record<string, number>; upda
   const orderItemCount = jest.fn().mockResolvedValue(0); // mặc định: hết backorder sau khi lấp
   const orderFindUnique = jest.fn().mockResolvedValue({ pancakeOrderId: null });
   const executeRaw = jest.fn().mockResolvedValue(1); // releaseVariationStock khi thua race
+  // reserveAvailableVariationStock/releaseVariationStock/orderItem.updateMany đều được gọi qua
+  // "tx" (client trong $transaction), không phải trực tiếp qua prisma — tx phải lộ ra đúng các
+  // method này (dùng chung mock với prisma cấp ngoài để assertion trong test vẫn bắt được).
+  const txClient = { orderItem: { updateMany: orderItemUpdateMany }, $queryRaw: queryRaw, $executeRaw: executeRaw };
+  const transaction = jest.fn((cb: (tx: typeof txClient) => unknown) => cb(txClient));
   const prisma = {
     orderItem: { findMany, updateMany: orderItemUpdateMany, count: orderItemCount },
     order: { findUnique: orderFindUnique },
     $queryRaw: queryRaw,
     $executeRaw: executeRaw,
+    $transaction: transaction,
   } as unknown as PrismaService;
   const enqueuePush = jest.fn().mockResolvedValue(undefined);
   const pancakeOrder = { enqueuePush } as unknown as PancakeOrderService;
@@ -121,10 +127,13 @@ describe('DealerBackorderService.reconcile', () => {
   it('không có PancakeOrderService (chưa wiring) → không throw', async () => {
     const findMany = jest.fn().mockResolvedValue([makeItem({ backorderedQty: 4 })]);
     const queryRaw = jest.fn().mockResolvedValue([{ reserved: 4 }]);
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const txClient = { orderItem: { updateMany }, $queryRaw: queryRaw, $executeRaw: jest.fn() };
     const prisma = {
-      orderItem: { findMany, updateMany: jest.fn().mockResolvedValue({ count: 1 }), count: jest.fn().mockResolvedValue(0) },
+      orderItem: { findMany, updateMany, count: jest.fn().mockResolvedValue(0) },
       order: { findUnique: jest.fn().mockResolvedValue({ pancakeOrderId: null }) },
       $queryRaw: queryRaw,
+      $transaction: jest.fn((cb: (tx: typeof txClient) => unknown) => cb(txClient)),
     } as unknown as PrismaService;
     const svc = new DealerBackorderService(prisma, undefined);
     await expect(svc.reconcile()).resolves.toBe(4);

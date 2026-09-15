@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, IsUrl, Matches, MaxLength } from 'class-validator';
 
 export class UpdateMeDto {
   @IsOptional()
@@ -11,7 +11,8 @@ export class UpdateMeDto {
   email?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUrl({ require_protocol: true })
+  @MaxLength(1000)
   avatarUrl?: string;
 
   /**

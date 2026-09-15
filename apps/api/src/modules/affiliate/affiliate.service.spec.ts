@@ -418,7 +418,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     ).rejects.toThrow('không đủ');
   });
 
-  it('WALLET_BALANCE → credit ×1.5 theo TỔNG THỰC (không mất tiền) + mark PAID', async () => {
+  it('WALLET_BALANCE → credit ×1.5 theo TỔNG THỰC các row APPROVED (không mất tiền) + mark PAID', async () => {
     const { prisma, userUpdate, payoutCreate } = makePrisma({
       available: 100_000,
       rows: [
@@ -426,11 +426,35 @@ describe('AffiliateService.requestPayout (money safety)', () => {
         { id: 'c2', amount: 40_000 },
       ],
     });
-    const r = await new AffiliateService(prisma, config, pricing, pancakeOrder).requestPayout('u1', 50_000, 'WALLET_BALANCE');
-    // dù request 50k, credit theo tổng thực 100k ×1.5 = 150k (không mất 50k còn lại)
+    // amount PHẢI === available (rút toàn bộ, xem Bug 2 fix) — request đúng 100k.
+    const r = await new AffiliateService(prisma, config, pricing, pancakeOrder).requestPayout('u1', 100_000, 'WALLET_BALANCE');
     expect(r.credited).toBe(150_000);
     expect(userUpdate.mock.calls[0][0].data.walletBalance).toEqual({ increment: 150_000 });
     expect(payoutCreate.mock.calls[0][0].data.status).toBe('PAID');
+  });
+
+  it('amount KHÁC available (rút một phần) → BadRequest rõ ràng, KHÔNG âm thầm rút hết (Bug 2 fix)', async () => {
+    const { prisma, userUpdate, payoutCreate } = makePrisma({ available: 100_000 });
+    await expect(
+      new AffiliateService(prisma, config, pricing, pancakeOrder).requestPayout('u1', 60_000, 'WALLET_BALANCE'),
+    ).rejects.toThrow('không hỗ trợ rút một phần');
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(payoutCreate).not.toHaveBeenCalled();
+  });
+
+  it('WALLET_BALANCE: 1 phần row bị đổi giữa đọc và ghi (marked.count !== rows.length) → Conflict, KHÔNG credit ví (Bug 4 fix)', async () => {
+    const { prisma, userUpdate } = makePrisma({
+      available: 100_000,
+      rows: [
+        { id: 'c1', amount: 60_000 },
+        { id: 'c2', amount: 40_000 },
+      ],
+      markCount: 1, // chỉ 1/2 row thực sự được đánh dấu PAID
+    });
+    await expect(
+      new AffiliateService(prisma, config, pricing, pancakeOrder).requestPayout('u1', 100_000, 'WALLET_BALANCE'),
+    ).rejects.toThrow('thay đổi');
+    expect(userUpdate).not.toHaveBeenCalled();
   });
 
   it('WALLET_BALANCE double-spend: updateMany count=0 → BadRequest, KHÔNG credit ví', async () => {
@@ -441,8 +465,10 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     expect(userUpdate).not.toHaveBeenCalled();
   });
 
-  it('BANK dưới mức tối thiểu → BadRequest', async () => {
-    const { prisma } = makePrisma({ available: 100_000 });
+  it('BANK dưới mức tối thiểu → BadRequest (available === amount, chỉ available nhỏ)', async () => {
+    // amount PHẢI === available (rút toàn bộ, Bug 2 fix) — set available=10k để test riêng
+    // ngưỡng minWithdraw, không lẫn với check "không hỗ trợ rút một phần".
+    const { prisma } = makePrisma({ available: 10_000, rows: [{ id: 'c1', amount: 10_000 }] });
     await expect(new AffiliateService(prisma, config, pricing, pancakeOrder).requestPayout('u1', 10_000, 'BANK', {})).rejects.toThrow(
       'tối thiểu',
     );
@@ -453,11 +479,26 @@ describe('AffiliateService.requestPayout (money safety)', () => {
       available: 100_000,
       rows: [{ id: 'c1', amount: 100_000 }],
     });
-    const r = await new AffiliateService(prisma, config, pricing, pancakeOrder).requestPayout('u1', 80_000, 'BANK', { bank: 'VCB' });
+    // amount PHẢI === available (rút toàn bộ, xem Bug 2 fix) — request đúng 100k.
+    const r = await new AffiliateService(prisma, config, pricing, pancakeOrder).requestPayout('u1', 100_000, 'BANK', { bank: 'VCB' });
     expect(r.status).toBe('REQUESTED');
-    expect(payoutCreate.mock.calls[0][0].data.amount).toBe(100_000); // tổng thực, không phải 80k
+    expect(payoutCreate.mock.calls[0][0].data.amount).toBe(100_000);
     expect(updateMany.mock.calls[0][0].data.payoutBatchId).toBe('payout-1');
     expect(updateMany.mock.calls[0][0].data.status).toBe('PAID');
+  });
+
+  it('BANK: 1 phần row bị đổi giữa đọc và ghi (marked.count !== rows.length) → Conflict, KHÔNG trả payout REQUESTED (Bug 4 fix)', async () => {
+    const { prisma } = makePrisma({
+      available: 100_000,
+      rows: [
+        { id: 'c1', amount: 60_000 },
+        { id: 'c2', amount: 40_000 },
+      ],
+      markCount: 1,
+    });
+    await expect(
+      new AffiliateService(prisma, config, pricing, pancakeOrder).requestPayout('u1', 100_000, 'BANK', {}),
+    ).rejects.toThrow('thay đổi');
   });
 });
 

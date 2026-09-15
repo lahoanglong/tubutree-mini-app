@@ -238,7 +238,7 @@ export class AuthService {
     const tokenHash = this.hashToken(refreshToken);
     await this.prisma.refreshToken
       .updateMany({ where: { tokenHash, revokedAt: null }, data: { revokedAt: new Date() } })
-      .catch(() => undefined);
+      .catch((err) => this.logger.warn(`Revoke refresh token thất bại khi logout: ${err}`));
   }
 
   private async issueTokens(user: User): Promise<LoginResponse> {
