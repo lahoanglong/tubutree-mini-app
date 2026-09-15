@@ -306,7 +306,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       <Button
         fullWidth
         loading={mut.isPending}
-        disabled={showErrors && !valid}
+        disabled={(showErrors && !valid) || mut.isPending}
         onClick={submit}
         style={{ marginTop: 12, background: 'var(--primary-600)' }}
       >

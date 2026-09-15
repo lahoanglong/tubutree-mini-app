@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Page, Text, Button, Input, Avatar, useSnackbar, useNavigate } from 'zmp-ui';
-import { Camera } from 'lucide-react';
+import { Camera, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getMe, updateMe } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
@@ -187,7 +187,10 @@ export default function EditProfilePage() {
               onClick={handlePickAvatar}
               style={{ color: 'var(--leaf-700)', marginTop: 8, cursor: 'pointer' }}
             >
-              {uploadingAvatar ? '⏳ Đang xử lý ảnh…' : '📷 Chạm để chọn & cắt ảnh đại diện'}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                {uploadingAvatar ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
+                {uploadingAvatar ? 'Đang xử lý ảnh…' : 'Chạm để chọn & cắt ảnh đại diện'}
+              </span>
             </Text>
           </Box>
 
@@ -235,7 +238,7 @@ export default function EditProfilePage() {
           <Button
             fullWidth
             loading={save.isPending}
-            disabled={emailInvalid || uploadingAvatar}
+            disabled={emailInvalid || uploadingAvatar || save.isPending}
             onClick={() => {
               setTouched(true);
               if (!(email.trim() !== '' && !EMAIL.test(email.trim()))) save.mutate();

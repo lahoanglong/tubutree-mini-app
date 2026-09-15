@@ -133,13 +133,18 @@ export const fetchProducts = async (params: Record<string, string | number> = {}
 
   const page = Number(params.page ?? 1);
   const limit = Number(params.limit ?? 30);
+  // Bug 2 fix: truoc day moi brand nhan CUNG params (gom ca page/limit goc) roi tu phan trang
+  // rieng, nen tu "trang 2" tro di moi brand tra ve "trang 2 cua rieng no" truoc khi gop lai ->
+  // offset sai. Luon goi tung brand tu page=1 voi limit du lon (tinh theo trang+so brand dang
+  // yeu cau) de co du du lieu tho, roi TU cat theo offset dung tren tap da gop TOAN BO ben duoi.
+  const perBrandLimit = page * limit * brandList.length;
 
   const responses: PageResponse<ProductCard>[] = await Promise.all(
     brandList.map((b) =>
       api
-        .get<PageResponse<ProductCard>>('/products', { params: { ...params, brand: b } })
+        .get<PageResponse<ProductCard>>('/products', { params: { ...params, brand: b, page: 1, limit: perBrandLimit } })
         .then((r) => r.data)
-        .catch((): PageResponse<ProductCard> => ({ data: [], meta: { page: 1, limit, total: 0 } })),
+        .catch((): PageResponse<ProductCard> => ({ data: [], meta: { page: 1, limit: perBrandLimit, total: 0 } })),
     ),
   );
 
@@ -299,8 +304,12 @@ export const createReview = (
 ) => api.post<ReviewItem>(`/products/${slug}/reviews`, data).then((r) => r.data);
 
 // Orders
-export const fetchOrders = (status?: string) =>
-  api.get<PageResponse<OrderDTO>>('/orders', { params: status ? { status } : {} }).then((r) => r.data);
+// Bug 1 fix: truoc day khong truyen page/limit -> BE mac dinh page=1 limit=20, khach co >20 don
+// khong bao gio xem duoc don cu hon qua app. Nhan them page/limit de orders.tsx phan trang duoc.
+export const fetchOrders = (status?: string, page = 1, limit = 20) =>
+  api
+    .get<PageResponse<OrderDTO>>('/orders', { params: { ...(status ? { status } : {}), page, limit } })
+    .then((r) => r.data);
 export const fetchOrder = (code: string) =>
   api.get<OrderDTO>(`/orders/${code}`).then((r) => r.data);
 export const cancelOrder = (code: string) =>

@@ -20,6 +20,7 @@ export default function GroupBuyPage() {
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const authed = useAuthStore((s) => s.status) === 'authenticated';
+  const login = useAuthStore((s) => s.login);
 
   const {
     data: groups,
@@ -68,7 +69,7 @@ export default function GroupBuyPage() {
               g={g}
               authed={authed}
               onOpen={() => navigate(`/product/${g.product.slug}`)}
-              onJoin={() => joinM.mutate(g.id)}
+              onJoin={() => (authed ? joinM.mutate(g.id) : void login())}
               joining={joinM.isPending && joinM.variables === g.id}
             />
           ))}
@@ -130,12 +131,12 @@ function GroupCard({
       <Button
         fullWidth
         size="small"
-        disabled={!authed || g.joined || joining}
+        disabled={(authed && g.joined) || joining}
         loading={joining}
         onClick={onJoin}
-        style={{ marginTop: 10, background: g.joined ? 'var(--neutral-300)' : 'var(--leaf-600)' }}
+        style={{ marginTop: 10, background: !authed ? 'var(--leaf-600)' : g.joined ? 'var(--neutral-300)' : 'var(--leaf-600)' }}
       >
-        {g.joined ? 'Đã tham gia' : `Tham gia mua chung (−${g.discountPct}%)`}
+        {!authed ? 'Đăng nhập để tham gia' : g.joined ? 'Đã tham gia' : `Tham gia mua chung (−${g.discountPct}%)`}
       </Button>
     </Box>
   );

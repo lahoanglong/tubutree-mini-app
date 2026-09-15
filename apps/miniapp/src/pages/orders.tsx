@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Box, Page, Text, useNavigate } from 'zmp-ui';
-import { useQuery } from '@tanstack/react-query';
+import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { fetchOrders } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -24,18 +24,28 @@ const TABS = [
   { key: 'CANCELLED', label: vi.orderStatus.CANCELLED! },
 ] as const;
 
+const PAGE_LIMIT = 20;
+
 export default function OrdersPage() {
   const navigate = useNavigate();
   const authStatus = useAuthStore((s) => s.status);
   const [tab, setTab] = useState<string | undefined>(undefined);
 
-  const orders = useQuery({
+  // Bug 1 fix: truoc day dung useQuery goi fetchOrders() 1 lan, khong truyen page/limit nen BE
+  // mac dinh page=1 limit=20 -> khach co >20 don khong bao gio xem duoc don cu hon qua app.
+  // Doi sang useInfiniteQuery (cung pattern voi apps/miniapp/src/pages/browse.tsx) + nut "Xem them".
+  const orders = useInfiniteQuery({
     queryKey: ['orders', tab],
-    queryFn: () => fetchOrders(tab),
+    queryFn: ({ pageParam }) => fetchOrders(tab, pageParam, PAGE_LIMIT),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const { page, limit, total } = lastPage.meta;
+      return page * limit < total ? page + 1 : undefined;
+    },
     enabled: authStatus === 'authenticated',
   });
 
-  const list = orders.data?.data ?? [];
+  const list = orders.data?.pages.flatMap((pg) => pg.data) ?? [];
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 72 }}>
@@ -90,6 +100,7 @@ export default function OrdersPage() {
           onCta={() => navigate('/browse')}
         />
       ) : (
+        <>
         <Box p={3} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {list.map((o) => {
             const color = STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!;
@@ -153,6 +164,20 @@ export default function OrdersPage() {
             );
           })}
         </Box>
+        {orders.hasNextPage && (
+          <Box flex justifyContent="center" pb={4}>
+            <Button
+              variant="secondary"
+              loading={orders.isFetchingNextPage}
+              disabled={orders.isFetchingNextPage}
+              onClick={() => void orders.fetchNextPage()}
+              style={{ minWidth: 160 }}
+            >
+              Xem thêm
+            </Button>
+          </Box>
+        )}
+        </>
       )}
     </Page>
   );

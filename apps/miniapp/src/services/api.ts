@@ -23,8 +23,17 @@ let onUnauthorized: (() => Promise<string | null>) | null = null;
  * phải tự vá bằng `enabled: status === 'authenticated'`, và hơn 40 query vẫn chưa có.
  */
 let authReady: Promise<unknown> | null = null;
-/** Trần chờ, để phiên treo không giữ mọi request tới lúc timeout 15s của axios. */
-const AUTH_READY_TIMEOUT_MS = 8_000;
+/**
+ * Trần chờ, để phiên treo không giữ mọi request tới lúc timeout 15s của axios.
+ *
+ * Hết trần mà authReady vẫn chưa xong thì request bên dưới VẪN được gửi đi — nhưng KHÔNG kèm
+ * Authorization (accessToken lúc đó còn null) → 401 chắc chắn. Fix triệt để (đánh dấu các request
+ * này rồi gọi queryClient.invalidateQueries() sau khi restore() xong) cần truy cập queryClient,
+ * nhưng nó được khởi tạo cục bộ (không export) ở components/app.tsx — ngoài phạm vi sửa của file
+ * này. Nới trần lên 15s là giảm thiểu TẠM THỜI (khớp timeout tổng của axios ở trên): giảm mạnh xác
+ * suất rơi vào trường hợp này (restore() thực tế thường xong trong <1-2s), KHÔNG loại bỏ hẳn.
+ */
+const AUTH_READY_TIMEOUT_MS = 15_000;
 /** Refresh đang chạy — các 401 song song chờ chung 1 promise, tránh refresh bão. */
 let refreshInFlight: Promise<string | null> | null = null;
 

@@ -526,7 +526,7 @@ export default function OrderDetailPage() {
           <Button
             fullWidth
             loading={returnReq.isPending}
-            disabled={returnReason.trim().length < 5}
+            disabled={returnReason.trim().length < 5 || returnReq.isPending}
             onClick={() => returnReq.mutate()}
             style={{ background: 'var(--primary-600)', minHeight: 48, marginTop: 14, fontWeight: 600 }}
           >

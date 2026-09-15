@@ -7,6 +7,7 @@ export interface GameProfile {
   treeHealth?: 'HEALTHY' | 'WILTED' | 'DEAD';
   streakFreezes: number;
   lastDewAt: string | null;
+  lastCheckInAt: string | null;
   ecoImpact: { progress: number; target: number; treeType: string; treesPlanted: number } | null;
   /** §streak-repair: chuỗi vừa mất, còn trong cửa sổ hồi sinh (xem streakRepairable). */
   brokenStreakDays?: number;

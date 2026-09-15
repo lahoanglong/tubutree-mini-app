@@ -63,9 +63,11 @@ interface EmptyStateProps {
   body?: string;
   ctaLabel?: string;
   onCta?: () => void;
+  /** true khi hành động của CTA đang chạy — disable nút để chặn double-tap (vd. tạo trùng gian hàng). */
+  ctaLoading?: boolean;
 }
 
-export function EmptyState({ art, heading, body, ctaLabel, onCta }: EmptyStateProps) {
+export function EmptyState({ art, heading, body, ctaLabel, onCta, ctaLoading }: EmptyStateProps) {
   return (
     <div
       className="tubu-rise"
@@ -90,6 +92,8 @@ export function EmptyState({ art, heading, body, ctaLabel, onCta }: EmptyStatePr
       {ctaLabel && onCta && (
         <Button
           onClick={onCta}
+          loading={ctaLoading}
+          disabled={ctaLoading}
           style={{ background: 'var(--primary-600)', marginTop: 14, minHeight: 44 }}
         >
           {ctaLabel}

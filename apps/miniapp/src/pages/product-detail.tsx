@@ -723,7 +723,7 @@ export default function ProductDetailPage() {
             <Button
               variant="secondary"
               loading={addMutation.isPending}
-              disabled={!selected}
+              disabled={!selected || addMutation.isPending}
               onClick={handleAdd}
               style={{ flex: 1, minHeight: 48, fontWeight: 600 }}
             >
@@ -731,7 +731,7 @@ export default function ProductDetailPage() {
             </Button>
             <Button
               loading={buyNowMutation.isPending}
-              disabled={!selected}
+              disabled={!selected || buyNowMutation.isPending}
               onClick={handleBuyNow}
               style={{ flex: 1, background: 'var(--primary-600)', minHeight: 48, fontWeight: 700 }}
             >

@@ -115,9 +115,9 @@ describe('useAuthStore.restore — refresh dedup', () => {
     expect(useAuthStore.getState().status).toBe('authenticated');
   });
 
-  it('refresh token đã lưu nhưng BE từ chối (hết hạn/đã bị xoay) → xoá refresh cũ rồi thử đăng nhập ngầm', async () => {
+  it('refresh token đã lưu nhưng BE từ chối (401, hết hạn/đã bị xoay) → xoá refresh cũ rồi thử đăng nhập ngầm', async () => {
     mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'expired' });
-    mockedRefresh.mockRejectedValue(new Error('refresh token invalid'));
+    mockedRefresh.mockRejectedValue({ isAxiosError: true, response: { status: 401 } });
     mockedGetZaloAccessToken.mockResolvedValue({ code: 'c1', accessToken: 'zalo-at' });
     mockedLoginZalo.mockResolvedValue(loginResponse('u2'));
 
@@ -127,10 +127,23 @@ describe('useAuthStore.restore — refresh dedup', () => {
     expect(useAuthStore.getState().status).toBe('authenticated');
     expect(useAuthStore.getState().user?.id).toBe('u2');
   });
+
+  it('refresh lỗi mạng/timeout (không có response) → KHÔNG xoá refresh token đã lưu, vẫn thử đăng nhập ngầm', async () => {
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh' });
+    mockedRefresh.mockRejectedValue({ isAxiosError: true, message: 'Network Error', response: undefined });
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c1', accessToken: 'zalo-at' });
+    mockedLoginZalo.mockResolvedValue(loginResponse('u4'));
+
+    await useAuthStore.getState().restore();
+
+    expect(mockedRemoveStorage).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().status).toBe('authenticated');
+    expect(useAuthStore.getState().user?.id).toBe('u4');
+  });
 });
 
 describe('401 handler đăng ký lúc module load — dùng chung cơ chế refresh dedup', () => {
-  it('refresh thành công → trả access token mới, cập nhật user; refresh thất bại → logout về idle', async () => {
+  it('refresh thành công → trả access token mới, cập nhật user; refresh thất bại (401) → logout về idle, xoá refresh token', async () => {
     const handler = unauthorizedHandler!;
     expect(handler).toBeTypeOf('function');
 
@@ -141,10 +154,23 @@ describe('401 handler đăng ký lúc module load — dùng chung cơ chế refr
     expect(useAuthStore.getState().status).toBe('authenticated');
 
     mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh-2' });
-    mockedRefresh.mockRejectedValue(new Error('invalid'));
+    mockedRefresh.mockRejectedValue({ isAxiosError: true, response: { status: 401 } });
     const token2 = await handler();
     expect(token2).toBeNull();
     expect(useAuthStore.getState().status).toBe('idle');
+    expect(mockedRemoveStorage).toHaveBeenCalled();
+  });
+
+  it('refresh thất bại vì mạng/timeout (không có response) → vẫn trả null nhưng KHÔNG xoá refresh token đã lưu', async () => {
+    const handler = unauthorizedHandler!;
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh-3' });
+    mockedRefresh.mockRejectedValue({ isAxiosError: true, message: 'Network Error', response: undefined });
+
+    const token = await handler();
+
+    expect(token).toBeNull();
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(mockedRemoveStorage).not.toHaveBeenCalled();
   });
 });
 

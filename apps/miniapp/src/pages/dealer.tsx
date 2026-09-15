@@ -143,7 +143,7 @@ function DealerApply({ rejected }: { rejected: boolean }) {
         <Button
           fullWidth
           loading={mut.isPending}
-          disabled={!valid}
+          disabled={!valid || mut.isPending}
           onClick={() => mut.mutate()}
           style={{ marginTop: 20, background: 'var(--dealer-ink)' }}
         >
@@ -439,7 +439,7 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
           <Button
             fullWidth
             loading={saveTpl.isPending}
-            disabled={!tplName.trim()}
+            disabled={!tplName.trim() || saveTpl.isPending}
             onClick={() => saveTpl.mutate()}
             style={{ marginTop: 14, background: 'var(--dealer-ink)' }}
           >
@@ -567,7 +567,7 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
             </Button>
             <Button
               loading={place.isPending}
-              disabled={overLimit}
+              disabled={overLimit || place.isPending}
               onClick={() => place.mutate('CREDIT')}
               style={{ flex: 1, background: 'var(--dealer-ink)' }}
             >
@@ -697,11 +697,16 @@ function DealerCredit() {
   const ledgerQ = useQuery({ queryKey: ['dealer-credit'], queryFn: getCreditLedger });
   const [amount, setAmount] = useState('');
 
+  // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lần báo đã chuyển khoản (double-tap/
+  // timeout mạng) → BE không trừ công nợ đôi; regenerate sau khi báo thành công (mirror orderKey
+  // ở PriceAndOrder / wallet.withdraw).
+  const payKey = useRef(newIdempotencyKey());
   const pay = useMutation({
-    mutationFn: () => payCredit(Number(amount), 'Báo đã chuyển khoản'),
+    mutationFn: () => payCredit(Number(amount), payKey.current, 'Báo đã chuyển khoản'),
     onSuccess: () => {
       haptic('medium');
       openSnackbar({ text: 'Đã ghi nhận thanh toán công nợ.', type: 'success' });
+      payKey.current = newIdempotencyKey();
       setAmount('');
       void qc.invalidateQueries({ queryKey: ['dealer-credit'] });
       void qc.invalidateQueries({ queryKey: ['dealer-me'] });

@@ -190,7 +190,7 @@ function Onboarding({ onDone }: { onDone: () => void }) {
             <Box style={{ marginTop: 'auto', paddingTop: 20 }}>
               <Button
                 fullWidth
-                disabled={sel.length === 0}
+                disabled={sel.length === 0 || (step === total && submit.isPending)}
                 loading={step === total && submit.isPending}
                 onClick={() => {
                   if (step < total) setStep(step + 1);

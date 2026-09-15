@@ -8,6 +8,7 @@ import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
 import BackButton from './back-button';
 import { OnboardingGate } from './onboarding';
+import ErrorBoundary from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch } from '../services/affiliate-api';
@@ -144,64 +145,66 @@ export default function MyApp() {
   }, [setSfContext]);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <App>
-        <SnackbarProvider>
-          <ZMPRouter>
-            <Suspense fallback={<RouteFallback />}>
-              <AnimationRoutes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/browse" element={<BrowsePage />} />
-                <Route path="/product/:slug" element={<ProductDetailPage />} />
-                <Route path="/cart" element={<CartPage />} />
-                <Route path="/checkout" element={<CheckoutPage />} />
-                <Route path="/bank-payment/:code" element={<BankPaymentPage />} />
-                <Route path="/orders" element={<OrdersPage />} />
-                <Route path="/order/:code" element={<OrderDetailPage />} />
-                <Route path="/game" element={<GamePage />} />
-                <Route path="/feed" element={<FeedPage />} />
-                <Route path="/feed/leaderboard" element={<CommunityLeaderboardPage />} />
-                <Route path="/feed/events" element={<CommunityEventsPage />} />
-                <Route path="/feed/:id" element={<PostDetailPage />} />
-                <Route path="/ai-advisor" element={<AiAdvisorPage />} />
-                <Route path="/group-buy" element={<GroupBuyPage />} />
-                <Route path="/refill" element={<RefillPage />} />
-                <Route path="/beta" element={<BetaPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/loyalty" element={<LoyaltyPage />} />
-                <Route path="/wallet" element={<WalletPage />} />
-                <Route path="/addresses" element={<AddressesPage />} />
-                <Route path="/notifications" element={<NotificationsPage />} />
-                <Route path="/affiliate" element={<AffiliatePage />} />
-                <Route path="/academy" element={<AcademyPage />} />
-                {/* Khoá học có URL riêng: nút back của Zalo quay về danh sách thay vì thoát
-                    hẳn Học viện, và CTV gửi được link thẳng tới một khoá cho đội của mình. */}
-                <Route path="/academy/:courseId" element={<AcademyPage />} />
-                <Route path="/cashback" element={<CashbackPage />} />
-                <Route path="/dealer" element={<DealerPage />} />
-                <Route path="/about" element={<AboutPage />} />
-                <Route path="/wishlist" element={<WishlistPage />} />
-                <Route path="/edit-profile" element={<EditProfilePage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/brand-story" element={<BrandStoryPage />} />
-                <Route path="/subscriptions" element={<SubscriptionsPage />} />
-                <Route path="/storefront" element={<StorefrontBuilderPage />} />
-                <Route path="/s/:slug" element={<StorefrontViewPage />} />
-                <Route path="/brand/:slug" element={<BrandViewPage />} />
-                <Route path="/brand-owner" element={<BrandOwnerPage />} />
-                <Route path="/admin" element={<AdminPage />} />
-                <Route path="/admin/community" element={<CommunityModerationPage />} />
-                <Route path="/staff" element={<StaffPage />} />
-                <Route path="/my-payroll" element={<MyPayrollPage />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </AnimationRoutes>
-            </Suspense>
-            <BottomNav />
-            <BackButton />
-            <OnboardingGate />
-          </ZMPRouter>
-        </SnackbarProvider>
-      </App>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <SnackbarProvider>
+            <ZMPRouter>
+              <Suspense fallback={<RouteFallback />}>
+                <AnimationRoutes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/browse" element={<BrowsePage />} />
+                  <Route path="/product/:slug" element={<ProductDetailPage />} />
+                  <Route path="/cart" element={<CartPage />} />
+                  <Route path="/checkout" element={<CheckoutPage />} />
+                  <Route path="/bank-payment/:code" element={<BankPaymentPage />} />
+                  <Route path="/orders" element={<OrdersPage />} />
+                  <Route path="/order/:code" element={<OrderDetailPage />} />
+                  <Route path="/game" element={<GamePage />} />
+                  <Route path="/feed" element={<FeedPage />} />
+                  <Route path="/feed/leaderboard" element={<CommunityLeaderboardPage />} />
+                  <Route path="/feed/events" element={<CommunityEventsPage />} />
+                  <Route path="/feed/:id" element={<PostDetailPage />} />
+                  <Route path="/ai-advisor" element={<AiAdvisorPage />} />
+                  <Route path="/group-buy" element={<GroupBuyPage />} />
+                  <Route path="/refill" element={<RefillPage />} />
+                  <Route path="/beta" element={<BetaPage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/loyalty" element={<LoyaltyPage />} />
+                  <Route path="/wallet" element={<WalletPage />} />
+                  <Route path="/addresses" element={<AddressesPage />} />
+                  <Route path="/notifications" element={<NotificationsPage />} />
+                  <Route path="/affiliate" element={<AffiliatePage />} />
+                  <Route path="/academy" element={<AcademyPage />} />
+                  {/* Khoá học có URL riêng: nút back của Zalo quay về danh sách thay vì thoát
+                      hẳn Học viện, và CTV gửi được link thẳng tới một khoá cho đội của mình. */}
+                  <Route path="/academy/:courseId" element={<AcademyPage />} />
+                  <Route path="/cashback" element={<CashbackPage />} />
+                  <Route path="/dealer" element={<DealerPage />} />
+                  <Route path="/about" element={<AboutPage />} />
+                  <Route path="/wishlist" element={<WishlistPage />} />
+                  <Route path="/edit-profile" element={<EditProfilePage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/brand-story" element={<BrandStoryPage />} />
+                  <Route path="/subscriptions" element={<SubscriptionsPage />} />
+                  <Route path="/storefront" element={<StorefrontBuilderPage />} />
+                  <Route path="/s/:slug" element={<StorefrontViewPage />} />
+                  <Route path="/brand/:slug" element={<BrandViewPage />} />
+                  <Route path="/brand-owner" element={<BrandOwnerPage />} />
+                  <Route path="/admin" element={<AdminPage />} />
+                  <Route path="/admin/community" element={<CommunityModerationPage />} />
+                  <Route path="/staff" element={<StaffPage />} />
+                  <Route path="/my-payroll" element={<MyPayrollPage />} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </AnimationRoutes>
+              </Suspense>
+              <BottomNav />
+              <BackButton />
+              <OnboardingGate />
+            </ZMPRouter>
+          </SnackbarProvider>
+        </App>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

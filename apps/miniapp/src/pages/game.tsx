@@ -91,6 +91,7 @@ export default function GamePage() {
   const [harvestSpecies, setHarvestSpecies] = useState<HarvestSpecies | null>(null);
 
   const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
+  const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['game'] });
@@ -425,8 +426,14 @@ export default function GamePage() {
           <Text size="small" bold>
             🔥 Điểm danh chuỗi {profile?.streakDays ?? 0} ngày
           </Text>
-          <Button size="small" disabled={checkInM.isPending} loading={checkInM.isPending} onClick={() => checkInM.mutate()} style={{ background: 'var(--leaf-600)' }}>
-            Điểm danh
+          <Button
+            size="small"
+            disabled={checkedInToday || checkInM.isPending}
+            loading={checkInM.isPending}
+            onClick={() => checkInM.mutate()}
+            style={{ background: 'var(--leaf-600)' }}
+          >
+            {checkedInToday ? '✅ Đã điểm danh' : 'Điểm danh'}
           </Button>
         </Box>
         <Box flex style={{ gap: 6 }}>

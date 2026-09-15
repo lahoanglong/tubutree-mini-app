@@ -1,4 +1,5 @@
 import { Box, Sheet, Text, Button, useSnackbar } from 'zmp-ui';
+import { Share2, Copy } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchContentKit } from '../services/affiliate-api';
 import { getErrorMessage } from '../services/api';
@@ -89,10 +90,16 @@ export function ContentKitSheet({
                 }).catch(() => {});
               }}
             >
-              ↗ {vi.contentKit.shareZalo}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Share2 size={16} />
+                {vi.contentKit.shareZalo}
+              </span>
             </Button>
             <Button fullWidth variant="secondary" style={{ marginBottom: 12 }} onClick={() => copy(data.shareLink)}>
-              📋 {vi.contentKit.copyLink}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Copy size={16} />
+                {vi.contentKit.copyLink}
+              </span>
             </Button>
 
             {!hasContent && (

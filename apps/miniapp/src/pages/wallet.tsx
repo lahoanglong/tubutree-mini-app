@@ -50,7 +50,13 @@ export default function WalletPage() {
       setAmount('');
       refreshAll();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Lỗi (kể cả server đã tạo giao dịch thật, hoặc BE báo key đã dùng với số tiền khác) →
+    // regenerate key TRƯỚC khi cho phép bấm lại, để lần thử tiếp theo (số tiền có thể đã sửa)
+    // dùng key MỚI thay vì lặp lại đúng lệnh cũ (mirror convertMut bên dưới).
+    onError: (e) => {
+      withdrawKey.current = newIdempotencyKey();
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    },
   });
 
   // Cung ly do voi withdrawKey: giu nguyen key qua cac lan retry cua CUNG 1 lenh doi,
@@ -65,7 +71,13 @@ export default function WalletPage() {
       setConvertAmount('');
       refreshAll();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Lỗi mạng/timeout: server CÓ THỂ đã tạo giao dịch thật dù FE nhận lỗi. Nếu user sửa số tiền
+    // rồi bấm lại mà vẫn dùng key CŨ, BE sẽ coi là replay của lệnh trước (idempotency) → trả/ghép
+    // sai số tiền. Regenerate key ngay khi lỗi để lần bấm tiếp theo luôn là lệnh MỚI.
+    onError: (e) => {
+      convertKey.current = newIdempotencyKey();
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    },
   });
 
   const w = walletQ.data;

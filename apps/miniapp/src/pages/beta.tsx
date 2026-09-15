@@ -103,7 +103,7 @@ export default function BetaPage() {
                 <Button
                   fullWidth
                   loading={joinM.isPending}
-                  disabled={!authed}
+                  disabled={!authed || joinM.isPending}
                   onClick={() => joinM.mutate()}
                   style={{ marginTop: 12, background: 'var(--leaf-600)' }}
                 >
@@ -156,7 +156,7 @@ export default function BetaPage() {
               <Button
                 fullWidth
                 loading={feedbackM.isPending}
-                disabled={!feedback.trim()}
+                disabled={!feedback.trim() || feedbackM.isPending}
                 onClick={() => feedbackM.mutate()}
                 style={{ marginTop: 10, background: feedback.trim() ? 'var(--leaf-600)' : 'var(--neutral-300)' }}
               >

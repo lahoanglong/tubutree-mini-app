@@ -247,7 +247,7 @@ function TodayCard() {
           <Button
             fullWidth
             loading={checkoutM.isPending}
-            disabled={backoutInvalid}
+            disabled={backoutInvalid || checkoutM.isPending}
             onClick={() => backoutCandidateISO && checkoutM.mutate(backoutCandidateISO)}
           >
             Xác nhận checkout
@@ -637,7 +637,7 @@ function StaffHub() {
           <Button
             fullWidth
             loading={saveM.isPending}
-            disabled={!custom && !editId ? !tplId : !/^\d{1,2}:\d{2}$/.test(customStart) || !/^\d{1,2}:\d{2}$/.test(customEnd)}
+            disabled={(!custom && !editId ? !tplId : !/^\d{1,2}:\d{2}$/.test(customStart) || !/^\d{1,2}:\d{2}$/.test(customEnd)) || saveM.isPending}
             onClick={() => saveM.mutate()}
           >
             {editId ? 'Lưu' : 'Gửi duyệt'}
@@ -696,7 +696,7 @@ function StaffHub() {
           <Button
             fullWidth
             loading={quickM.isPending}
-            disabled={quickDays.size === 0 || (!quickTplId && (!/^\d{1,2}:\d{2}$/.test(quickStart) || !/^\d{1,2}:\d{2}$/.test(quickEnd)))}
+            disabled={quickDays.size === 0 || (!quickTplId && (!/^\d{1,2}:\d{2}$/.test(quickStart) || !/^\d{1,2}:\d{2}$/.test(quickEnd))) || quickM.isPending}
             onClick={() => quickM.mutate()}
           >
             Gửi duyệt {quickDays.size > 0 ? `(${quickDays.size} ngày)` : ''}
@@ -754,7 +754,7 @@ function StaffHub() {
           <Button
             fullWidth
             loading={cancelM.isPending}
-            disabled={cancelReason.trim().length === 0 || (cancelEmergency && !cancelEvidence)}
+            disabled={cancelReason.trim().length === 0 || (cancelEmergency && !cancelEvidence) || cancelM.isPending}
             onClick={() => cancelM.mutate()}
           >
             Xác nhận huỷ

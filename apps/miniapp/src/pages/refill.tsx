@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Box, Page, Text, Button, useSnackbar, useNavigate } from 'zmp-ui';
 import { Recycle, Droplets, Minus, Plus, Sprout, ChevronRight } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/auth';
 import { ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
 import { haptic } from '../utils/haptic';
+import { newIdempotencyKey } from '../utils/idempotency';
 
 function fmtDate(iso: string): string {
   try {
@@ -23,6 +24,9 @@ export default function RefillPage() {
   const queryClient = useQueryClient();
   const authed = useAuthStore((s) => s.status) === 'authenticated';
   const [qty, setQty] = useState(1);
+  // Key giữ nguyên khi lỗi để retry mạng thật không tạo thêm 1 yêu cầu đổi vỏ nữa; chỉ đổi
+  // key mới sau khi đã đổi vỏ thành công (lệnh sau là lệnh mới) — mirror pattern checkout/wallet.
+  const returnKey = useRef(newIdempotencyKey());
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['refill'],
@@ -31,11 +35,12 @@ export default function RefillPage() {
   });
 
   const returnM = useMutation({
-    mutationFn: () => returnBottles(qty),
+    mutationFn: () => returnBottles(qty, returnKey.current),
     onSuccess: () => {
       haptic('heavy');
       openSnackbar({ text: 'Đã gửi yêu cầu đổi vỏ chai! Vui lòng chờ quản lý duyệt.', type: 'success' });
       setQty(1);
+      returnKey.current = newIdempotencyKey();
       void queryClient.invalidateQueries({ queryKey: ['refill'] });
       void queryClient.invalidateQueries({ queryKey: ['garden'] });
       void queryClient.invalidateQueries({ queryKey: ['game'] });

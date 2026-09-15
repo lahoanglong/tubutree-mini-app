@@ -94,7 +94,7 @@ export function SubscribeSheet({
             <Button
               fullWidth
               loading={create.isPending}
-              disabled={!defaultAddr}
+              disabled={!defaultAddr || create.isPending}
               onClick={() => create.mutate()}
               style={{ marginTop: 16, background: 'var(--leaf-600)' }}
             >

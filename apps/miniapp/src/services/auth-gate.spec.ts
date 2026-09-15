@@ -65,7 +65,8 @@ describe('request chờ phiên khôi phục xong mới gửi', () => {
     setAuthReady(new Promise<void>(() => {}));
 
     const inFlight = api.get('/cart');
-    await vi.advanceTimersByTimeAsync(8_000);
+    // Trần chờ AUTH_READY_TIMEOUT_MS = 15_000ms (xem comment ở api.ts).
+    await vi.advanceTimersByTimeAsync(15_000);
     await inFlight;
     expect(cap.calls()).toBe(1);
   });

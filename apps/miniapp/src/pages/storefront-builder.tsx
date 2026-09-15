@@ -40,7 +40,7 @@ export default function StorefrontBuilderPage() {
         <Page className="page" style={{ background: 'var(--neutral-50)' }}>
           <Box p={6}>
             <EmptyState art="sprout" heading={vi.storefront.title} body={vi.storefront.empty}
-              ctaLabel={vi.storefront.create} onCta={() => createMut.mutate()} />
+              ctaLabel={vi.storefront.create} onCta={() => createMut.mutate()} ctaLoading={createMut.isPending} />
           </Box>
         </Page>
       );

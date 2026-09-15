@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import axios from 'axios';
 import { newDeviceId } from '../utils/idempotency';
 import { setStorage, getStorage, removeStorage } from 'zmp-sdk/apis';
 import type { AuthUser, LoginResponse } from '@tubutree/shared-types';
@@ -48,6 +49,16 @@ async function readRefresh(): Promise<string | null> {
 }
 async function clearRefresh(): Promise<void> {
   await removeStorage({ keys: [REFRESH_KEY] });
+}
+
+/**
+ * Chỉ coi là "BE từ chối refresh token" (hết hạn/đã bị xoay — nghiệp vụ, nên xoá token đã lưu)
+ * khi có response 401/403 thật từ server. Lỗi KHÔNG có response (mất mạng/timeout/CORS) không
+ * chứng minh được token đã hỏng — xoá nhầm bắt user đăng nhập lại dù token vẫn còn dùng được,
+ * lần sau tự retry là đủ.
+ */
+function isRefreshRejected(err: unknown): boolean {
+  return axios.isAxiosError(err) && (err.response?.status === 401 || err.response?.status === 403);
 }
 
 /**
@@ -115,8 +126,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           set({ user: res.user, status: 'authenticated' });
           return;
         }
-      } catch {
-        await clearRefresh();
+      } catch (err) {
+        if (isRefreshRejected(err)) await clearRefresh();
       }
       // Chưa có phiên hợp lệ → đăng nhập ngầm bằng Zalo (im lặng, không sheet SĐT).
       const ref = getLaunchReferral();
@@ -196,8 +207,8 @@ setUnauthorizedHandler(async () => {
     await persistRefresh(res.refreshToken);
     useAuthStore.setState({ user: res.user, status: 'authenticated' });
     return res.accessToken;
-  } catch {
-    await clearRefresh();
+  } catch (err) {
+    if (isRefreshRejected(err)) await clearRefresh();
     useAuthStore.setState({ user: null, status: 'idle' });
     return null;
   }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
+import { Gift } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getOwnedBrand,
@@ -64,10 +65,13 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [promo, setPromo] = useState({ title: '', subtitle: '', couponCode: '', startAt: '', endAt: '' });
   const resetPromoForm = () => { setEditingId(null); setPromo({ title: '', subtitle: '', couponCode: '', startAt: '', endAt: '' }); };
-  // Chỉ chặn khi CẢ HAI ngày do người dùng tự nhập và endAt < startAt — không tự hoán đổi,
-  // chỉ chặn submit + báo lỗi (an toàn hơn tự sửa hộ dữ liệu người dùng nhập).
+  // Chặn khi CẢ HAI ngày được nhập và endAt < startAt — không tự hoán đổi, chỉ chặn submit +
+  // báo lỗi (an toàn hơn tự sửa hộ dữ liệu người dùng nhập). Khi CHỈ có endAt (startAt để trống),
+  // promoIso() mặc định startMs = Date.now() nên phải so endAt với hiện tại — nếu không, endAt là
+  // ngày quá khứ vẫn lọt qua vì !!promo.startAt là false, tạo ra khuyến mãi chết ngay khi lưu.
   const dateRangeInvalid =
-    !!promo.startAt && !!promo.endAt && new Date(promo.endAt).getTime() < new Date(promo.startAt).getTime();
+    (!!promo.startAt && !!promo.endAt && new Date(promo.endAt).getTime() < new Date(promo.startAt).getTime()) ||
+    (!promo.startAt && !!promo.endAt && new Date(promo.endAt).getTime() < Date.now());
   // startAt/endAt (yyyy-mm-dd từ input date) → ISO. endAt mặc định = startAt + 30 ngày
   // (KHÔNG phải now+30d — nếu chiến dịch bắt đầu >30 ngày sau thì endAt<startAt, KM không bao giờ hiện).
   const promoIso = () => {
@@ -159,7 +163,10 @@ function Editor({ brand }: { brand: OwnedBrand }) {
 
       {/* Khuyến mãi */}
       <Box mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-        <Text bold size="small" style={{ marginBottom: 8 }}>🎉 Khuyến mãi</Text>
+        <Box flex alignItems="center" style={{ gap: 6, marginBottom: 8 }}>
+          <Gift size={16} color="var(--primary-700)" />
+          <Text bold size="small">Khuyến mãi</Text>
+        </Box>
         {brand.promotions.map((p) => (
           <Box key={p.id} flex alignItems="center" justifyContent="space-between" style={{ gap: 8, padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
             <Box style={{ flex: 1 }}>
@@ -207,11 +214,11 @@ function Editor({ brand }: { brand: OwnedBrand }) {
           )}
           {editingId ? (
             <Box flex style={{ gap: 6 }}>
-              <Button variant="secondary" style={{ flex: 1 }} disabled={!promo.title.trim() || dateRangeInvalid} loading={updPromo.isPending} onClick={() => updPromo.mutate()}>Lưu thay đổi</Button>
+              <Button variant="secondary" style={{ flex: 1 }} disabled={!promo.title.trim() || dateRangeInvalid || updPromo.isPending} loading={updPromo.isPending} onClick={() => updPromo.mutate()}>Lưu thay đổi</Button>
               <Button variant="tertiary" onClick={resetPromoForm}>Huỷ</Button>
             </Box>
           ) : (
-            <Button variant="secondary" disabled={!promo.title.trim() || dateRangeInvalid} loading={addPromo.isPending} onClick={() => addPromo.mutate()}>+ Thêm khuyến mãi</Button>
+            <Button variant="secondary" disabled={!promo.title.trim() || dateRangeInvalid || addPromo.isPending} loading={addPromo.isPending} onClick={() => addPromo.mutate()}>+ Thêm khuyến mãi</Button>
           )}
         </Box>
       </Box>

@@ -173,6 +173,11 @@ export default function CheckoutPage() {
       setPlaced(o);
     },
     onError: (e: unknown) => {
+      // Bất kể lỗi gì (mạng/timeout/PRICE_CHANGED/lỗi nghiệp vụ khác): server CÓ THỂ đã tạo đơn
+      // thật dù FE nhận lỗi. Nếu user sửa địa chỉ/thanh toán rồi bấm lại mà vẫn dùng key CŨ, BE sẽ
+      // coi là replay của lệnh trước (AD-004) → không áp dụng thay đổi vừa sửa. Regenerate NGAY
+      // để lần bấm tiếp theo luôn là đơn MỚI.
+      idempotencyKey.current = newIdempotencyKey();
       if (getErrorMessage(e) === 'PRICE_CHANGED') {
         setPriceChanged(true);
         return;

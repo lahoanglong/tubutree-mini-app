@@ -260,7 +260,7 @@ function PayrollSection() {
         <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
           <Text.Title size="small">Đơn giá giờ · {rateRow?.staff.fullName ?? ''}</Text.Title>
           <Input type="number" label="Đơn giá (VND/giờ)" value={rateVal} onChange={(e) => setRateVal(e.target.value)} />
-          <Button fullWidth loading={rateM.isPending} disabled={!/^\d+$/.test(rateVal)} onClick={() => rateM.mutate()}>Lưu đơn giá</Button>
+          <Button fullWidth loading={rateM.isPending} disabled={!/^\d+$/.test(rateVal) || rateM.isPending} onClick={() => rateM.mutate()}>Lưu đơn giá</Button>
         </Box>
       </Sheet>
 
@@ -271,7 +271,7 @@ function PayrollSection() {
           <Text size="small">Số tiền: <b>{formatVnd(payRow?.month.net ?? 0)}</b></Text>
           <ImageUpload label="Ảnh xác nhận chuyển khoản *" value={proof} onChange={setProof} />
           <Input label="Ghi chú (tuỳ chọn)" value={note} onChange={(e) => setNote(e.target.value)} />
-          <Button fullWidth loading={paidM.isPending} disabled={!proof} onClick={() => paidM.mutate()}>Đánh dấu đã trả</Button>
+          <Button fullWidth loading={paidM.isPending} disabled={!proof || paidM.isPending} onClick={() => paidM.mutate()}>Đánh dấu đã trả</Button>
         </Box>
       </Sheet>
 
@@ -561,7 +561,7 @@ function StaffSection() {
           <Button
             fullWidth
             loading={grantM.isPending}
-            disabled={!PHONE_RE.test(phone.trim())}
+            disabled={!PHONE_RE.test(phone.trim()) || grantM.isPending}
             onClick={submitGrant}
           >
             Lưu quyền
@@ -763,7 +763,7 @@ function ShiftsSection() {
           <Button
             fullWidth
             loading={approveM.isPending}
-            disabled={!/^\d{1,2}:\d{2}$/.test(adjStart) || !/^\d{1,2}:\d{2}$/.test(adjEnd)}
+            disabled={!/^\d{1,2}:\d{2}$/.test(adjStart) || !/^\d{1,2}:\d{2}$/.test(adjEnd) || approveM.isPending}
             onClick={() =>
               adjust &&
               approveM.mutate({
@@ -786,7 +786,7 @@ function ShiftsSection() {
           <Button
             fullWidth
             loading={rejectM.isPending}
-            disabled={rejectReason.trim().length === 0}
+            disabled={rejectReason.trim().length === 0 || rejectM.isPending}
             onClick={() => rejectId && rejectM.mutate({ id: rejectId, reason: rejectReason.trim() })}
           >
             Xác nhận từ chối
@@ -851,7 +851,7 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
             style={{ marginTop: 10 }}
             prefixIcon={<Plus size={15} />}
             loading={addM.isPending}
-            disabled={!name.trim() || !/^\d{1,2}:\d{2}$/.test(start) || !/^\d{1,2}:\d{2}$/.test(end)}
+            disabled={!name.trim() || !/^\d{1,2}:\d{2}$/.test(start) || !/^\d{1,2}:\d{2}$/.test(end) || addM.isPending}
             onClick={() => addM.mutate()}
           >
             Thêm ca chuẩn

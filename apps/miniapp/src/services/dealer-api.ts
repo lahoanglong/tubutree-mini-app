@@ -64,8 +64,16 @@ export const placeDealerOrder = (
 export const getDealerOrders = () => api.get<OrderDTO[]>('/dealer/orders').then((r) => r.data);
 export const getCreditLedger = () =>
   api.get<{ balance: number; entries: CreditEntry[] }>('/dealer/credit-ledger').then((r) => r.data);
-export const payCredit = (amount: number, note?: string) =>
-  api.post<{ ok: boolean }>('/dealer/credit-payment', { amount, note }).then((r) => r.data);
+/** Báo đã chuyển khoản trả nợ, kèm Idempotency-Key BẮT BUỘC (mirror placeDealerOrder/wallet.withdraw)
+ * — double-tap/retry mạng của 1 lần báo không được trừ nợ 2 lần. */
+export const payCredit = (amount: number, idempotencyKey: string, note?: string) =>
+  api
+    .post<{ ok: boolean }>(
+      '/dealer/credit-payment',
+      { amount, note },
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    )
+    .then((r) => r.data);
 
 // ── Báo cáo quý (#71) ──
 export interface QuarterlyReport {

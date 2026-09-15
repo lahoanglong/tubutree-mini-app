@@ -1,4 +1,5 @@
 import { Box, Text, useNavigate } from 'zmp-ui';
+import { Store } from 'lucide-react';
 import { useStorefrontContext } from '../store/storefront-context';
 import { vi } from '../i18n/vi';
 
@@ -19,7 +20,10 @@ export function StorefrontContextBar() {
       style={{ padding: '8px 14px', background: 'var(--neutral-0)', boxShadow: 'var(--shadow-xs)' }}
     >
       <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-        🏪 {vi.storefront.inStore}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <Store size={13} />
+          {vi.storefront.inStore}
+        </span>
       </Text>
       <Text
         size="xSmall"

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Box, Text, Input } from 'zmp-ui';
-import { Camera } from 'lucide-react';
+import { Camera, Loader2, RefreshCw } from 'lucide-react';
 import { haptic } from '../utils/haptic';
 
 const CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string | undefined;
@@ -156,19 +156,28 @@ export function ImageUpload({
       >
         {uploading ? (
           <Text size="small" style={{ color: 'var(--neutral-500)' }}>
-            ⏳ Đang tải ảnh…
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Loader2 size={14} className="animate-spin" />
+              Đang tải ảnh…
+            </span>
           </Text>
         ) : value ? (
           <img src={value} alt={label || 'preview'} style={{ width: '100%', maxHeight: 180, objectFit: 'cover', display: 'block' }} />
         ) : (
           <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
-            📷 Chạm để tải ảnh lên
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Camera size={15} />
+              Chạm để tải ảnh lên
+            </span>
           </Text>
         )}
       </Box>
       {value && !uploading && (
         <Text size="xSmall" onClick={pick} style={{ color: 'var(--leaf-700)', marginTop: 4, cursor: 'pointer' }}>
-          🔄 Đổi ảnh khác
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <RefreshCw size={12} />
+            Đổi ảnh khác
+          </span>
         </Text>
       )}
       {error && (

@@ -236,6 +236,7 @@ function UpcomingFlashCard({
           className="tubu-press"
           onClick={(e: React.MouseEvent) => {
             e.stopPropagation();
+            if (pending) return;
             onToggleRemind();
           }}
           style={{

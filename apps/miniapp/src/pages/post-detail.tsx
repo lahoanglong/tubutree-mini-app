@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Trash2, Flag, Pin, Sprout } from 'lucide-react';
+import { Pencil, Trash2, Flag, Pin, Sprout, Heart, MessageCircle } from 'lucide-react';
 import {
   getPost,
   getComments,
@@ -13,7 +13,6 @@ import {
   reportContent,
   removeComment,
   adminPin,
-  type FeedItem,
   type FeedComment,
 } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
@@ -25,15 +24,7 @@ import { ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { RankBadge } from '../components/community/rank-badge';
-
-const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
-  QUESTION: '❓ ' + vi.community.kindQuestion,
-  SHOWCASE: '🌿 ' + vi.community.kindShowcase,
-  TIP: '💡 ' + vi.community.kindTip,
-  HARVEST: vi.community.kindHarvest,
-  SPECIES: vi.community.kindSpecies,
-  MILESTONE: vi.community.kindMilestone,
-};
+import { KIND_LABEL } from '../components/community/post-card';
 
 export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -417,11 +408,20 @@ export default function PostDetailPage() {
             alignItems="center"
             style={{ gap: 6, opacity: react.isPending ? 0.6 : 1 }}
           >
+            <Heart
+              size={18}
+              color={p.liked ? 'var(--leaf-700)' : 'var(--neutral-500)'}
+              fill={p.liked ? 'var(--leaf-700)' : 'none'}
+              strokeWidth={1.8}
+            />
             <Text style={{ color: p.liked ? 'var(--leaf-700)' : 'var(--neutral-500)' }}>
-              {p.liked ? '💚' : '🤍'} {p.likeCount}
+              {p.likeCount}
             </Text>
           </Box>
-          <Text style={{ color: 'var(--neutral-500)' }}>💬 {p.commentCount}</Text>
+          <Box flex alignItems="center" style={{ gap: 6 }}>
+            <MessageCircle size={18} color="var(--neutral-500)" strokeWidth={1.8} />
+            <Text style={{ color: 'var(--neutral-500)' }}>{p.commentCount}</Text>
+          </Box>
         </Box>
       </Box>
 

@@ -91,24 +91,24 @@ export const getCoupons = () => api.get<CouponDTO[]>('/me/coupons').then((r) => 
 
 // Wallet
 export const getWallet = () => api.get<WalletSummary>('/me/wallet').then((r) => r.data);
-export const withdraw = (amount: number, bankInfo: BankInfo, idempotencyKey?: string) =>
+export const withdraw = (amount: number, bankInfo: BankInfo, idempotencyKey: string) =>
   api
     .post<{ ok: boolean; payoutId: string; status: string; withdrawn: number; fee: number; net: number }>(
       '/wallet/withdraw',
       { amount, bankInfo },
-      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined,
+      { headers: { 'Idempotency-Key': idempotencyKey } },
     )
     .then((r) => r.data);
 
 // TubuXu
 export const getCoins = () => api.get<CoinsOverview>('/me/coins').then((r) => r.data);
 /** Doi Vi -> xu kem Idempotency-Key: doi 1 chieu (xu khong rut duoc) nen double-tap khong duoc doi 2 lan. */
-export const convertToXu = (amount: number, idempotencyKey?: string) =>
+export const convertToXu = (amount: number, idempotencyKey: string) =>
   api
     .post<{ spent: number; received: number; multiplier: number }>(
       '/wallet/convert-xu',
       { amount },
-      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined,
+      { headers: { 'Idempotency-Key': idempotencyKey } },
     )
     .then((r) => r.data);
 

@@ -6,6 +6,8 @@ import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { MultiImageUpload, VideoUpload } from './image-upload';
 import { haptic } from '../utils/haptic';
+import { Skeleton } from './ui/skeleton';
+import { ErrorState } from './ui/empty-state';
 
 /** Dải sao tĩnh (hiển thị) — size tùy chỉnh. */
 export function Stars({ value, size = 14 }: { value: number; size?: number }) {
@@ -79,7 +81,14 @@ export function ReviewsSection({ slug }: { slug: string }) {
         )}
       </Box>
 
-      {data && data.count > 0 ? (
+      {reviewsQ.isLoading ? (
+        <Box style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Skeleton width="100%" height={64} />
+          <Skeleton width="100%" height={64} />
+        </Box>
+      ) : reviewsQ.isError ? (
+        <ErrorState message={getErrorMessage(reviewsQ.error)} onRetry={() => void reviewsQ.refetch()} />
+      ) : data && data.count > 0 ? (
         <>
           {/* Trung bình + breakdown sao 5→1 */}
           <Box flex style={{ gap: 16, marginTop: 12, alignItems: 'center' }}>

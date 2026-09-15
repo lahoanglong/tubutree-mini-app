@@ -1,4 +1,5 @@
 import { Box, Text, Button, Sheet, useSnackbar } from 'zmp-ui';
+import { Share2, Copy } from 'lucide-react';
 import { QrCode } from './qr-code';
 import { shareLink } from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
@@ -62,10 +63,16 @@ export function ShareSheet({
             void shareLink({ title, description: captions[0] ?? '', thumbnail, path: sharePath }).catch(() => {});
           }}
         >
-          ↗ {vi.storefront.shareZalo}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Share2 size={16} />
+            {vi.storefront.shareZalo}
+          </span>
         </Button>
         <Button fullWidth variant="secondary" style={{ marginBottom: 12 }} onClick={() => copy(url)}>
-          📋 {vi.storefront.copyLink}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Copy size={16} />
+            {vi.storefront.copyLink}
+          </span>
         </Button>
         <Text size="xSmall" bold style={{ marginBottom: 6 }}>{vi.storefront.captionHint}</Text>
         {captions.map((c, i) => (

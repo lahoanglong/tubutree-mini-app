@@ -405,3 +405,30 @@ body.with-back-btn .page.page-bleed {
   -webkit-overflow-scrolling: touch;
 }
 
+/*
+ * Override vùng chạm tối thiểu cho Button size="small" của zmp-ui (nạp trước ở
+ * app.tsx bằng 'zmp-ui/zaui.css'). CSS gốc: .zaui-btn-small{height:32px} và
+ * .zaui-btn-icon-only.zaui-btn-small{width:32px;height:32px} — dưới ngưỡng 44px
+ * khuyến nghị cho vùng chạm mobile (xem .touch-target ở trên), trong khi rất
+ * nhiều nút hành động tần suất cao (tưới nước, tặng nước, tham gia mua chung,
+ * duyệt/từ chối ca làm, xóa...) đang dùng size="small".
+ *
+ * Chỉ đôn `min-height` (không ép `height`/`min-width` cho nút dạng văn bản) để
+ * nút cao hơn, dễ chạm hơn mà KHÔNG đổi bề rộng — tránh vỡ layout ngang ở các
+ * hàng nút chật (thanh hành động, danh sách, thẻ sản phẩm). `!important` cần
+ * thiết vì `.zaui-btn-small` gốc đặt `height` (không phải `min-height`) — dùng
+ * cùng `height` để override sẽ ép cứng chiều cao, mất khả năng nút tự giãn khi
+ * nội dung dài hơn 1 dòng; `min-height` + `!important` giữ được điều đó.
+ */
+.zaui-btn-small {
+  min-height: 44px !important;
+}
+/* Icon-only size="small" (vd nút icon tròn nhỏ): hiện chưa có chỗ nào trong
+ * app dùng tổ hợp này (grep icon-only + size small ra 0 kết quả), nhưng vẫn ép
+ * đủ cả bề rộng lẫn bề cao theo đúng khuyến nghị 44x44 vì đây là nút icon đơn,
+ * không có nội dung để mất bố cục ngang. */
+.zaui-btn-icon-only.zaui-btn-small {
+  min-width: 44px !important;
+  min-height: 44px !important;
+}
+
