@@ -31,6 +31,7 @@ class UpdateStorefrontDto {
   @IsOptional() @IsString() @MaxLength(200) warehousePhone?: string;
 }
 class PublishDto { @IsBoolean() isPublished!: boolean; }
+class ApplyTemplateDto { @IsString() categoryId!: string; }
 class CreateCollectionDto {
   @IsString() @MaxLength(80) title!: string;
   @IsOptional() @IsIn(['NORMAL', 'COMBO']) kind?: 'NORMAL' | 'COMBO';
@@ -72,6 +73,7 @@ export class StorefrontController {
   @Post('me/publish') publish(@CurrentUser('sub') uid: string, @Body() dto: PublishDto) { return this.svc.publishMine(uid, dto.isPublished); }
 
   @Post('me/collections') addCol(@CurrentUser('sub') uid: string, @Body() dto: CreateCollectionDto) { return this.svc.createCollection(uid, dto); }
+  @Post('me/apply-template') applyTemplate(@CurrentUser('sub') uid: string, @Body() dto: ApplyTemplateDto) { return this.svc.applyTemplate(uid, dto.categoryId); }
   @Patch('me/collections/:id') updCol(@CurrentUser('sub') uid: string, @Param('id') id: string, @Body() dto: UpdateCollectionDto) { return this.svc.updateCollection(uid, id, dto); }
   @Delete('me/collections/:id') delCol(@CurrentUser('sub') uid: string, @Param('id') id: string) { return this.svc.deleteCollection(uid, id); }
   @Post('me/collections/reorder') reorderCol(@CurrentUser('sub') uid: string, @Body() dto: ReorderDto) { return this.svc.reorderCollections(uid, dto.orderedIds); }

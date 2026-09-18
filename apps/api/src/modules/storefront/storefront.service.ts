@@ -409,6 +409,52 @@ export class StorefrontService {
     }
   }
 
+  /**
+   * Áp mẫu dựng sẵn theo danh mục — tạo 1 collection + tối đa 8 sản phẩm nổi bật của danh mục
+   * đó. Giảm ma sát cho CTV mới (trước đây gian hàng luôn trắng hoàn toàn, phải tự tạo từng
+   * collection/sản phẩm). CHỈ áp dụng được khi gian hàng CHƯA có collection nào — tránh mẫu đè
+   * lên gian hàng CTV đã tự dựng tay.
+   */
+  async applyTemplate(userId: string, categoryId: string) {
+    const sf = await this.assertOwnedStorefront(userId);
+    const category = await this.prisma.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true } });
+    if (!category) throw new BadRequestException('Danh mục không tồn tại.');
+    const products = await this.prisma.product.findMany({
+      where: { categoryIds: { has: categoryId }, isActive: true, affiliateBlocked: false },
+      orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
+      take: 8,
+      select: { id: true },
+    });
+    if (products.length === 0) {
+      throw new BadRequestException('Danh mục này chưa có sản phẩm gợi ý — hãy chọn danh mục khác hoặc tự tạo bộ sưu tập.');
+    }
+    try {
+      // Serializable + đếm lại collection TRONG transaction (mirror createCollection) — chặn
+      // race 2 request "áp mẫu" cùng lúc tạo 2 collection trùng cho cùng 1 gian hàng trống.
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const existing = await tx.storefrontCollection.count({ where: { storefrontId: sf.id } });
+          if (existing > 0) {
+            throw new BadRequestException('Gian hàng đã có bộ sưu tập — mẫu chỉ áp dụng được cho gian hàng còn trống.');
+          }
+          const collection = await tx.storefrontCollection.create({
+            data: { storefrontId: sf.id, title: category.name, kind: 'NORMAL', layout: 'CAROUSEL', sortOrder: 0 },
+          });
+          await tx.storefrontItem.createMany({
+            data: products.map((p, i) => ({ collectionId: collection.id, productId: p.id, sortOrder: i })),
+          });
+          return { collectionId: collection.id, title: collection.title, itemCount: products.length };
+        },
+        { isolationLevel: 'Serializable' },
+      );
+    } catch (err) {
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+        throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
+      }
+      throw err;
+    }
+  }
+
   async updateCollection(
     userId: string,
     collectionId: string,

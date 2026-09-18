@@ -289,6 +289,73 @@ describe('StorefrontService collections', () => {
   });
 });
 
+describe('StorefrontService.applyTemplate', () => {
+  function makeTemplatePrisma(over: Record<string, any> = {}) {
+    return makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', ownerUserId: 'u1' }) },
+      category: { findUnique: jest.fn().mockResolvedValue({ id: 'cat1', name: 'Mẹ & bé' }) },
+      product: { findMany: jest.fn().mockResolvedValue([{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }]) },
+      storefrontCollection: {
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn().mockImplementation(({ data }) => ({ id: 'newcol', ...data })),
+      },
+      storefrontItem: { createMany: jest.fn().mockResolvedValue({ count: 3 }) },
+      ...over,
+    });
+  }
+
+  it('tạo 1 collection tên theo category + item cho tối đa 8 SP nổi bật, sortOrder 0..N-1', async () => {
+    const prisma = makeTemplatePrisma();
+    const svc = new StorefrontService(prisma, config, affiliate);
+    const r = await svc.applyTemplate('u1', 'cat1');
+
+    expect((prisma.product.findMany as jest.Mock).mock.calls[0]?.[0]).toEqual({
+      where: { categoryIds: { has: 'cat1' }, isActive: true, affiliateBlocked: false },
+      orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
+      take: 8,
+      select: { id: true },
+    });
+    expect((prisma.storefrontCollection.create as jest.Mock).mock.calls[0]?.[0].data).toMatchObject({
+      storefrontId: 's1', title: 'Mẹ & bé', kind: 'NORMAL', layout: 'CAROUSEL', sortOrder: 0,
+    });
+    expect((prisma.storefrontItem.createMany as jest.Mock).mock.calls[0]?.[0].data).toEqual([
+      { collectionId: 'newcol', productId: 'p1', sortOrder: 0 },
+      { collectionId: 'newcol', productId: 'p2', sortOrder: 1 },
+      { collectionId: 'newcol', productId: 'p3', sortOrder: 2 },
+    ]);
+    expect(r).toEqual({ collectionId: 'newcol', title: 'Mẹ & bé', itemCount: 3 });
+  });
+
+  it('category không tồn tại → BadRequest, KHÔNG đụng transaction', async () => {
+    const prisma = makeTemplatePrisma({ category: { findUnique: jest.fn().mockResolvedValue(null) } });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await expect(svc.applyTemplate('u1', 'bad')).rejects.toThrow();
+    expect(prisma.storefrontCollection.create).not.toHaveBeenCalled();
+  });
+
+  it('category chưa có sản phẩm nào → BadRequest, KHÔNG tạo collection rỗng', async () => {
+    const prisma = makeTemplatePrisma({ product: { findMany: jest.fn().mockResolvedValue([]) } });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await expect(svc.applyTemplate('u1', 'cat1')).rejects.toThrow();
+    expect(prisma.storefrontCollection.create).not.toHaveBeenCalled();
+  });
+
+  it('gian hàng ĐÃ có collection → từ chối, không đè lên gian hàng CTV tự dựng', async () => {
+    const prisma = makeTemplatePrisma({ storefrontCollection: { count: jest.fn().mockResolvedValue(2), create: jest.fn() } });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await expect(svc.applyTemplate('u1', 'cat1')).rejects.toThrow();
+    expect(prisma.storefrontCollection.create).not.toHaveBeenCalled();
+  });
+
+  it('race sortOrder đụng Serializable (P2034) → báo thân thiện, không phải lỗi thô', async () => {
+    const prisma = makeTemplatePrisma({
+      $transaction: jest.fn().mockRejectedValue({ code: 'P2034' }),
+    });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await expect(svc.applyTemplate('u1', 'cat1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
 describe('StorefrontService items', () => {
   it('addItem gắn vào collection của tôi', async () => {
     const prisma = makePrisma({

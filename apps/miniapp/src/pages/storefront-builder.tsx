@@ -5,8 +5,8 @@ import { Pin, Eye, EyeOff, Trash2, Target, Settings, Pencil, MessageSquarePlus, 
 import {
   getMyStorefront, createStorefront, publishStorefront, updateStorefront,
   createCollection, updateCollection, deleteCollection, addItem, updateItem, removeItem, pickerProducts,
-  getQuests, claimQuest, getStorefrontStats,
-  type StorefrontEdit, type PickerProduct,
+  getQuests, claimQuest, getStorefrontStats, getStorefrontCategories, applyStorefrontTemplate,
+  type StorefrontEdit, type PickerProduct, type StorefrontCategory,
 } from '../services/storefront-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
@@ -21,10 +21,25 @@ export default function StorefrontBuilderPage() {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
   const sfQ = useQuery({ queryKey: ['my-storefront'], queryFn: getMyStorefront, retry: false });
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const createMut = useMutation({
     mutationFn: createStorefront,
     onSuccess: () => { haptic('medium'); void qc.invalidateQueries({ queryKey: ['my-storefront'] }); },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+  // Tạo gian hàng RỒI áp mẫu — tách 2 bước để lỗi ở bước áp mẫu (vd hết SP gợi ý) không
+  // chặn gian hàng đã tạo, CTV vẫn vào được Builder để tự thêm collection.
+  const createWithTemplateMut = useMutation({
+    mutationFn: async (categoryId: string) => {
+      await createStorefront();
+      return applyStorefrontTemplate(categoryId);
+    },
+    onSuccess: () => {
+      haptic('medium');
+      setPickerOpen(false);
+      void qc.invalidateQueries({ queryKey: ['my-storefront'] });
+    },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
@@ -40,8 +55,17 @@ export default function StorefrontBuilderPage() {
         <Page className="page" style={{ background: 'var(--neutral-50)' }}>
           <Box p={6}>
             <EmptyState art="sprout" heading={vi.storefront.title} body={vi.storefront.empty}
-              ctaLabel={vi.storefront.create} onCta={() => createMut.mutate()} ctaLoading={createMut.isPending} />
+              ctaLabel={vi.storefront.create} onCta={() => setPickerOpen(true)} ctaLoading={createMut.isPending} />
           </Box>
+          <Sheet visible={pickerOpen} onClose={() => setPickerOpen(false)} autoHeight>
+            <TemplatePickerSheet
+              applying={createWithTemplateMut.isPending}
+              applyingCategoryId={createWithTemplateMut.variables ?? null}
+              onPick={(categoryId) => createWithTemplateMut.mutate(categoryId)}
+              onSkip={() => { setPickerOpen(false); createMut.mutate(); }}
+              skipLoading={createMut.isPending}
+            />
+          </Sheet>
         </Page>
       );
     }
@@ -52,6 +76,69 @@ export default function StorefrontBuilderPage() {
     );
   }
   return <Builder sf={sfQ.data!} />;
+}
+
+/**
+ * Chọn mẫu dựng sẵn theo danh mục khi tạo gian hàng mới — mỗi mẫu tạo sẵn 1 collection + tối
+ * đa 8 sản phẩm nổi bật của danh mục đó (POST /storefront/me/apply-template), giảm ma sát cho
+ * CTV mới thay vì bắt đầu từ gian hàng trắng hoàn toàn. Luôn có lối "Bỏ qua" để giữ đúng hành
+ * vi cũ (tự tạo, tự dựng tay) — không ép buộc.
+ */
+function TemplatePickerSheet({
+  applying, applyingCategoryId, onPick, onSkip, skipLoading,
+}: {
+  applying: boolean;
+  applyingCategoryId: string | null;
+  onPick: (categoryId: string) => void;
+  onSkip: () => void;
+  skipLoading: boolean;
+}) {
+  const catQ = useQuery({ queryKey: ['storefront-categories'], queryFn: getStorefrontCategories });
+  const busy = applying || skipLoading;
+
+  return (
+    <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
+      <Text bold size="large">Bắt đầu nhanh với 1 mẫu có sẵn</Text>
+      <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 2, marginBottom: 12 }}>
+        Chọn danh mục gần với sản phẩm bạn muốn giới thiệu — chúng tôi tự thêm sẵn 8 sản phẩm nổi bật, bạn chỉnh sửa sau cũng được.
+      </Text>
+      {catQ.isLoading && <Skeleton style={{ height: 120, borderRadius: 16 }} />}
+      {catQ.data && (
+        <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {catQ.data.map((c: StorefrontCategory) => (
+            <Box
+              key={c.id}
+              role="button"
+              aria-label={`Dùng mẫu ${c.name}`}
+              className="tubu-press"
+              onClick={() => !busy && onPick(c.id)}
+              style={{
+                border: '1px solid var(--neutral-200)', borderRadius: 'var(--radius-lg)', padding: 12,
+                textAlign: 'center', cursor: busy ? 'default' : 'pointer', opacity: busy && applyingCategoryId !== c.id ? 0.5 : 1,
+              }}
+            >
+              {c.image ? (
+                <img src={c.image} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 10, margin: '0 auto 6px' }} />
+              ) : (
+                <Box style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--leaf-50)', margin: '0 auto 6px' }} />
+              )}
+              <Text size="small">{applying && applyingCategoryId === c.id ? 'Đang dựng...' : c.name}</Text>
+            </Box>
+          ))}
+        </Box>
+      )}
+      <Button
+        variant="secondary"
+        fullWidth
+        disabled={busy}
+        loading={skipLoading}
+        style={{ marginTop: 16 }}
+        onClick={onSkip}
+      >
+        Bỏ qua, tự tạo gian hàng trống
+      </Button>
+    </Box>
+  );
 }
 
 function Builder({ sf }: { sf: StorefrontEdit }) {
