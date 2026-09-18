@@ -126,8 +126,10 @@ export const removeResellProduct = (productId: string) =>
  * BE (merchant.service.listMerchantOrders) trả nguyên Prisma `Order` kèm include `items` + `user`
  * — cùng một entity Order mà admin-client.ts (AdminOrder) mô tả, chỉ khác là đơn ở đây còn cần
  * `shippingAddress` để đối tác đóng gói/ghi vận đơn (AdminOrder không khai trường này). Tái dùng
- * AdminOrderItem cho `items` vì tên trường (productTitle/price/…) đang khớp đúng cách trang này
- * render — tránh khai trùng một interface item thứ hai cho cùng một shape.
+ * AdminOrderItem cho `items` — tránh khai trùng một interface item thứ hai cho cùng một shape.
+ * (Trước đây AdminOrderItem tự nó khai sai tên field — productTitle/price/sku không tồn tại
+ * trên OrderItem thật — khiến panel đơn ở CẢ đây lẫn admin/page.tsx render "undefined"; đã sửa
+ * đúng tên field ở admin-client.ts, xem comment tại đó.)
  */
 export interface MerchantOrder {
   id: string;

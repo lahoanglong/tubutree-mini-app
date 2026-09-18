@@ -24,12 +24,17 @@ export interface AdminUser {
 }
 export interface AdminOrderItem {
   id: string;
-  productTitle: string;
-  variationTitle?: string | null;
-  sku?: string | null;
-  price: number;
+  // Tên field khớp đúng OrderItem thật (Prisma) — trước đây field đặt tên sai
+  // (productTitle/variationTitle/sku/price không tồn tại trên OrderItem) khiến panel chi tiết
+  // đơn ở admin luôn hiện "undefined" cho tên SP/biến thể/giá, chỉ số lượng+tổng còn đúng vì
+  // trùng tên field tình cờ.
+  productName: string;
+  variationName?: string | null;
+  unitPrice: number;
   quantity: number;
   total: number;
+  /** Số lượng đang đặt trước (đơn đại lý vượt tồn) — 0 với đơn khác. */
+  backorderedQty?: number;
 }
 export interface AdminOrder {
   id: string;
