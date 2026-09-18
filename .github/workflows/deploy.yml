@@ -10,10 +10,14 @@ name: Deploy API to VM
 # Lý do chọn workflow_run thay vì `needs: ci`: ci.yml và deploy.yml là 2 workflow
 # riêng (path filter của deploy khác CI), không thể `needs:` cross-workflow.
 #
-# Trigger tự động (workflow_run) TẮT TẠM THỜI 2026-09-01 — VM prod đang down (đã tắt),
-# push lên main lúc này sẽ chỉ khiến job SSH-deploy fail vô ích. Đang test cục bộ trước.
-# Chỉ chạy tay qua workflow_dispatch (tab Actions → Deploy API to VM → Run workflow) khi
-# VM đã sống lại và sẵn sàng deploy thật. Bật lại tự động: bỏ comment khối workflow_run.
+# Trigger tự động (workflow_run) VẪN CỐ Ý TẮT — 2026-09-18: khác với CI, workflow này
+# KHÔNG nên tự bật lại theo baseline xanh, vì secret VM_HOST/VM_USER/VM_SSH_KEY hiện trỏ vào
+# VM GCP cũ đã đóng (xem docs/2026-09-12-deploy-runbook.md mục 4.3) — hạ tầng thật bây giờ là
+# VPS Vietnix, deploy bằng tay theo ops/README-vietnix-deploy.md + docker-compose.vietnix.yml
+# (compose khác, không phải docker-compose.prod.yml mà workflow này dùng). Bật workflow_run
+# lúc này sẽ SSH nhầm/fail vào máy sai mỗi lần merge main. Trước khi bật lại: (1) trỏ DNS +
+# hạ tầng ổn định trên 1 host duy nhất, (2) cập nhật 3 secret trỏ đúng host đó, (3) đổi
+# `docker-compose.prod.yml` → compose file đang dùng thật nếu vẫn còn ở Vietnix lúc đó.
 on:
   workflow_dispatch: {}
   # workflow_run:

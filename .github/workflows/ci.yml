@@ -1,14 +1,15 @@
 name: CI
 
-# Trigger tự động (push/pull_request) TẮT TẠM THỜI 2026-09-01 — VM prod đang down, đang
-# test cục bộ trước khi bật lại CI/CD. Vẫn chạy tay được qua workflow_dispatch (tab Actions
-# → CI → Run workflow). Bật lại tự động: bỏ comment 2 mục push/pull_request bên dưới.
+# Trigger tự động BẬT LẠI 2026-09-18 — lý do tắt tạm 01/09 (VM prod down, đang test cục bộ)
+# không còn: điển hình prod đã dựng lại (VPS Vietnix, xem docs/2026-09-12-deploy-runbook.md
+# mục 4.3) và baseline hiện tại xanh toàn bộ (typecheck/lint/test đã verify lại 2026-09-18).
+# Vẫn chạy tay được qua workflow_dispatch khi cần (tab Actions → CI → Run workflow).
 on:
   workflow_dispatch: {}
-  # push:
-  #   branches: [main]
-  # pull_request:
-  #   branches: [main]
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 # Least-privilege GITHUB_TOKEN: workflow chỉ checkout + build/test, không push/comment/release.
 permissions:
