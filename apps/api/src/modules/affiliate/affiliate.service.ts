@@ -147,19 +147,50 @@ export class AffiliateService {
       totalClicks: links._sum.clicks ?? 0,
       totalConversions: links._sum.conversions ?? 0,
       monthRevenue,
-      tier: this.monthlyTier(monthRevenue),
+      tier: await this.monthlyTier(monthRevenue),
     };
   }
 
-  /** Bậc bonus doanh số tháng (Build Spec §6.8.2). */
-  private monthlyTier(revenue: number) {
-    const TIERS = [
-      { name: 'Tân binh', emoji: '🌱', bonusPct: 0, min: 0 },
-      { name: 'Đồng', emoji: '🌿', bonusPct: 1, min: 3_000_000 },
-      { name: 'Bạc', emoji: '🌳', bonusPct: 2.5, min: 10_000_000 },
-      { name: 'Vàng', emoji: '🌲', bonusPct: 4, min: 30_000_000 },
-      { name: 'Kim Cương', emoji: '💎', bonusPct: 6, min: 80_000_000 },
+  /**
+   * Bậc bonus doanh số tháng (Build Spec §6.8.2). Ngưỡng/% bonus đọc từ SystemConfig
+   * (`affiliate.monthly_tier_thresholds` / `affiliate.monthly_tier_bonuses` — đã seed sẵn
+   * nhưng trước đây không ai đọc, TIERS bị hardcode) để đúng quy tắc "mọi tham số nghiệp vụ
+   * đọc từ SystemConfig" — admin đổi được mà không cần deploy code.
+   *
+   * `affiliate.monthly_tier_bonuses` lưu dạng PHÂN SỐ (0.01 = 1%, mirror `cashback.baseRate`),
+   * trong khi `bonusPct` trả ra cho FE là SỐ NGUYÊN PHẦN TRĂM (mirror dealer `bonusPct`, FE
+   * render thẳng `{bonusPct}%`) — PHẢI nhân 100 khi đọc, nếu không lặp lại đúng lớp lỗi
+   * "cashback baseRate hiện 0.035%" đã từng vá (docs/2026-09-11, mục "P2 — hiển thị tỉ lệ hoàn
+   * tiền sai 100 lần"). Validate hình dạng mảng nghiêm ngặt — sai cấu hình ở đây chỉ ảnh hưởng
+   * HIỂN THỊ (bonusPct chưa được cộng vào Commission.amount thật ở đâu), nhưng vẫn không được
+   * để admin gõ nhầm ra bậc âm/ngược.
+   */
+  private async monthlyTier(revenue: number) {
+    const names = [
+      { name: 'Tân binh', emoji: '🌱' },
+      { name: 'Đồng', emoji: '🌿' },
+      { name: 'Bạc', emoji: '🌳' },
+      { name: 'Vàng', emoji: '🌲' },
+      { name: 'Kim Cương', emoji: '💎' },
     ];
+    const defaultThresholds = [3_000_000, 10_000_000, 30_000_000, 80_000_000];
+    const defaultBonusFractions = [0, 0.01, 0.025, 0.04, 0.06];
+
+    const rawThresholds = await this.config.get<number[]>('affiliate.monthly_tier_thresholds', defaultThresholds);
+    const rawBonuses = await this.config.get<number[]>('affiliate.monthly_tier_bonuses', defaultBonusFractions);
+    const validThresholds =
+      Array.isArray(rawThresholds) && rawThresholds.length === defaultThresholds.length &&
+      rawThresholds.every((v, i) => typeof v === 'number' && v > 0 && (i === 0 || v > rawThresholds[i - 1]!));
+    const validBonuses =
+      Array.isArray(rawBonuses) && rawBonuses.length === names.length &&
+      rawBonuses.every((v) => typeof v === 'number' && v >= 0 && v <= 1);
+    if (!validThresholds || !validBonuses) {
+      this.logger.warn('affiliate.monthly_tier_thresholds/bonuses cấu hình sai định dạng — dùng giá trị mặc định.');
+    }
+    const thresholds = [0, ...(validThresholds ? rawThresholds : defaultThresholds)];
+    const bonusFractions = validBonuses ? rawBonuses : defaultBonusFractions;
+
+    const TIERS = names.map((n, i) => ({ ...n, min: thresholds[i]!, bonusPct: bonusFractions[i]! * 100 }));
     let idx = 0;
     for (let i = 0; i < TIERS.length; i++) if (revenue >= TIERS[i]!.min) idx = i;
     const cur = TIERS[idx]!;
@@ -172,6 +203,21 @@ export class AffiliateService {
       nextThreshold: next?.min ?? null,
       toNext: next ? Math.max(0, next.min - revenue) : 0,
     };
+  }
+
+  /**
+   * Bậc CTV để hiện công khai trên trang gian hàng (storefront.service.ts getPublicBySlug) —
+   * CHỈ trả tên+icon, KHÔNG trả doanh thu/bonusPct thật để tránh lộ doanh số CTV cho khách xem
+   * gian hàng của họ.
+   */
+  async getPublicTier(userId: string, now: Date = new Date()): Promise<{ name: string; emoji: string }> {
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const agg = await this.prisma.commission.aggregate({
+      where: { affiliateUserId: userId, createdAt: { gte: startOfMonth }, status: { not: CommissionStatus.REJECTED } },
+      _sum: { orderTotal: true },
+    });
+    const tier = await this.monthlyTier(agg._sum.orderTotal ?? 0);
+    return { name: tier.name, emoji: tier.emoji };
   }
 
   listCommissions(userId: string) {

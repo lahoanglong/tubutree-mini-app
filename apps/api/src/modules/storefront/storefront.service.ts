@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { AffiliateService } from '../affiliate/affiliate.service';
 import { normalizeSubdomain, assertIdentifierAvailable } from './identifier-validation';
 
 // Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
@@ -14,6 +15,9 @@ export class StorefrontService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    // AffiliateModule là @Global() (affiliate.module.ts) — inject thẳng không cần import module,
+    // không tạo circular dependency (AffiliateModule không phụ thuộc ngược lại StorefrontModule).
+    private readonly affiliate: AffiliateService,
   ) {}
 
   /**
@@ -216,9 +220,15 @@ export class StorefrontService {
       },
     });
     if (!sf) throw new NotFoundException('Gian hàng không tồn tại hoặc chưa đăng.');
+    // Huy hiệu bậc CHỈ cho gian hàng CTV (bậc tính theo doanh số cá nhân — MERCHANT/BRAND không
+    // có khái niệm này). CHỈ trả tên+icon (getPublicTier), không lộ doanh thu/bonusPct thật cho
+    // khách xem gian hàng.
+    const ownerTier =
+      sf.type === 'CTV' && sf.ownerUserId ? await this.affiliate.getPublicTier(sf.ownerUserId) : null;
     return {
       id: sf.id,
       slug: sf.slug,
+      ownerTier,
       subdomain: sf.subdomain,
       customDomain: sf.customDomain,
       type: sf.type,
@@ -284,25 +294,40 @@ export class StorefrontService {
    * gian hàng đang bán chạy để tối ưu, không chỉ số hoa hồng tổng đã có ở /affiliate/dashboard.
    * Gộp trực tiếp từ Order.storefrontSlug (đã có @@index sẵn) — không cần bảng đếm lượt xem/
    * click riêng, và không đụng logic tính hoa hồng (chỉ đọc, không tin cậy để trả tiền).
+   *
+   * Hoa hồng lấy từ bảng `Commission` (affiliateUserId + order.storefrontSlug), KHÔNG dùng cột
+   * `Order.commission` — cột đó không nơi nào trong codebase ghi giá trị (mãi mãi = 0 mặc định
+   * schema), affiliate.service.ts tự có bảng Commission riêng làm nguồn chân lý duy nhất cho
+   * tiền hoa hồng (mirror dashboard()/storefrontAnalytics() cùng service).
    */
   async getStats(userId: string) {
     const sf = await this.assertOwnedStorefront(userId);
     const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const orders = await this.prisma.order.findMany({
-      where: { storefrontSlug: sf.slug, status: { notIn: ['CANCELLED', 'RETURNED'] } },
-      select: { createdAt: true, commission: true, items: { select: { productSlug: true, productName: true, quantity: true, total: true } } },
-    });
+    const [orders, commission30dAgg] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { storefrontSlug: sf.slug, status: { notIn: ['CANCELLED', 'RETURNED'] } },
+        select: { createdAt: true, items: { select: { productSlug: true, productName: true, quantity: true, total: true } } },
+      }),
+      this.prisma.commission.aggregate({
+        where: {
+          affiliateUserId: userId,
+          order: { storefrontSlug: sf.slug },
+          createdAt: { gte: since30d },
+          status: { not: 'REJECTED' },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
 
     const byProduct = new Map<string, { productSlug: string; productName: string; qty: number; revenue: number }>();
     let orders30d = 0;
     let orders7d = 0;
     let revenue30d = 0;
-    let commission30d = 0;
     for (const o of orders) {
       const in30d = o.createdAt >= since30d;
       const in7d = o.createdAt >= since7d;
-      if (in30d) { orders30d += 1; revenue30d += o.items.reduce((s, i) => s + i.total, 0); commission30d += o.commission; }
+      if (in30d) { orders30d += 1; revenue30d += o.items.reduce((s, i) => s + i.total, 0); }
       if (in7d) orders7d += 1;
       for (const item of o.items) {
         // Đơn cũ trước migration OrderItem.productSlug có thể null — gộp vào key riêng thay vì
@@ -319,7 +344,7 @@ export class StorefrontService {
       orders7d,
       orders30d,
       revenue30d,
-      commission30d,
+      commission30d: commission30dAgg._sum.amount ?? 0,
       byProduct: [...byProduct.values()].sort((a, b) => b.revenue - a.revenue),
     };
   }

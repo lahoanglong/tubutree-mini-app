@@ -135,6 +135,7 @@ export interface StorefrontDetail {
   warehouseDistrict?: string | null;
   warehouseWard?: string | null;
   warehousePhone?: string | null;
+  ownerTier?: { name: string; emoji: string } | null;
   collections: StorefrontCollection[];
 }
 

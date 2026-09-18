@@ -18,12 +18,15 @@ export interface StorefrontCollectionEdit extends Omit<StorefrontCollection, 'it
 export interface Storefront {
   id: string; slug: string; subdomain?: string | null; customDomain?: string | null;
   type: 'CTV' | 'BRAND' | 'MERCHANT'; title: string; headerNote: string | null;
+  ownerTier: { name: string; emoji: string } | null;
   avatarUrl: string | null; coverUrl: string | null; theme: string; themeColor?: string | null;
   bankName?: string | null; bankBin?: string | null; bankAccountNo?: string | null; bankAccountName?: string | null;
   warehouseAddress?: string | null; warehouseCity?: string | null; warehouseDistrict?: string | null; warehouseWard?: string | null; warehousePhone?: string | null;
   collections: StorefrontCollection[];
 }
-export interface StorefrontEdit extends Omit<Storefront, 'collections'> { isPublished: boolean; collections: StorefrontCollectionEdit[]; }
+// GET /storefront/me KHÔNG trả ownerTier (chỉ trang công khai getPublicBySlug mới tính bậc) —
+// loại field này khỏi view chỉnh sửa để type khớp đúng response thật.
+export interface StorefrontEdit extends Omit<Storefront, 'collections' | 'ownerTier'> { isPublished: boolean; collections: StorefrontCollectionEdit[]; }
 export interface PickerProduct {
   id: string; name: string; slug: string; thumbnail: string | null; brand: string;
   basePrice: number; salePrice: number | null; ratingAvg: number; reviewCount: number; maxAffiliateRate: number;

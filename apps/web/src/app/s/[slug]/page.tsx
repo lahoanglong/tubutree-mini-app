@@ -128,6 +128,12 @@ export default async function StorefrontPage({
                   <Sparkles className="h-3 w-3" />
                   {sf.type === 'MERCHANT' ? 'Đối tác chính hãng' : 'CTV tuyển chọn'}
                 </span>
+                {sf.ownerTier && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 shadow-sm ring-1 ring-inset ring-amber-200">
+                    <span aria-hidden>{sf.ownerTier.emoji}</span>
+                    {sf.ownerTier.name}
+                  </span>
+                )}
               </div>
 
               {sf.subdomain && (

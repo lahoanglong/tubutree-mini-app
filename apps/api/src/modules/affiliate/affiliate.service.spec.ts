@@ -333,20 +333,21 @@ describe('AffiliateService.dashboard (monthRevenue loại đơn REJECTED khỏi 
 });
 
 describe('AffiliateService.monthlyTier (Build Spec §6.8.2)', () => {
-  // monthlyTier là private + thuần — gọi qua cast để kiểm tra ranh giới bậc.
+  // monthlyTier là private + async (đọc ngưỡng/bonus từ SystemConfig) — gọi qua cast để kiểm
+  // tra ranh giới bậc. `config` mock (fallback-trả-default) → dùng đúng default cũ.
   const tier = (revenue: number) =>
     (new AffiliateService({} as unknown as PrismaService, config, pricing, pancakeOrder) as unknown as {
-      monthlyTier(r: number): {
+      monthlyTier(r: number): Promise<{
         name: string;
         bonusPct: number;
         nextName: string | null;
         nextThreshold: number | null;
         toNext: number;
-      };
+      }>;
     }).monthlyTier(revenue);
 
-  it('doanh số 0 → Tân binh, bonus 0%, next là Đồng tại 3tr', () => {
-    const t = tier(0);
+  it('doanh số 0 → Tân binh, bonus 0%, next là Đồng tại 3tr', async () => {
+    const t = await tier(0);
     expect(t.name).toBe('Tân binh');
     expect(t.bonusPct).toBe(0);
     expect(t.nextName).toBe('Đồng');
@@ -354,32 +355,77 @@ describe('AffiliateService.monthlyTier (Build Spec §6.8.2)', () => {
     expect(t.toNext).toBe(3_000_000);
   });
 
-  it('đúng tại ngưỡng (inclusive): 3tr → Đồng, 10tr → Bạc, 80tr → Kim Cương', () => {
-    expect(tier(3_000_000).name).toBe('Đồng');
-    expect(tier(10_000_000).name).toBe('Bạc');
-    expect(tier(30_000_000).name).toBe('Vàng');
-    expect(tier(80_000_000).name).toBe('Kim Cương');
+  it('đúng tại ngưỡng (inclusive): 3tr → Đồng, 10tr → Bạc, 80tr → Kim Cương', async () => {
+    expect((await tier(3_000_000)).name).toBe('Đồng');
+    expect((await tier(10_000_000)).name).toBe('Bạc');
+    expect((await tier(30_000_000)).name).toBe('Vàng');
+    expect((await tier(80_000_000)).name).toBe('Kim Cương');
   });
 
-  it('ngay dưới ngưỡng vẫn ở bậc thấp hơn', () => {
-    expect(tier(2_999_999).name).toBe('Tân binh');
-    expect(tier(9_999_999).name).toBe('Đồng');
+  it('ngay dưới ngưỡng vẫn ở bậc thấp hơn', async () => {
+    expect((await tier(2_999_999)).name).toBe('Tân binh');
+    expect((await tier(9_999_999)).name).toBe('Đồng');
   });
 
-  it('toNext = phần còn thiếu để lên bậc kế', () => {
-    const t = tier(5_000_000); // Đồng, cần lên Bạc (10tr)
+  it('toNext = phần còn thiếu để lên bậc kế', async () => {
+    const t = await tier(5_000_000); // Đồng, cần lên Bạc (10tr)
     expect(t.name).toBe('Đồng');
     expect(t.bonusPct).toBe(1);
     expect(t.toNext).toBe(5_000_000);
   });
 
-  it('bậc cao nhất (Kim Cương) không còn next', () => {
-    const t = tier(120_000_000);
+  it('bậc cao nhất (Kim Cương) không còn next', async () => {
+    const t = await tier(120_000_000);
     expect(t.name).toBe('Kim Cương');
     expect(t.bonusPct).toBe(6);
     expect(t.nextName).toBeNull();
     expect(t.nextThreshold).toBeNull();
     expect(t.toNext).toBe(0);
+  });
+
+  it('cấu hình sai định dạng (độ dài mảng lệch) → fallback về mặc định, không crash', async () => {
+    const badConfig = {
+      get: async <T>(k: string, fb?: T): Promise<T> =>
+        (k === 'affiliate.monthly_tier_thresholds' ? ([1, 2] as unknown as T) : (fb as T)),
+    } as unknown as SystemConfigService;
+    const svc = new AffiliateService({} as unknown as PrismaService, badConfig, pricing, pancakeOrder) as unknown as {
+      monthlyTier(r: number): Promise<{ name: string }>;
+    };
+    const t = await svc.monthlyTier(0);
+    expect(t.name).toBe('Tân binh');
+  });
+
+  it('cấu hình bonus vượt biên (>1, tức >100%) → fallback về mặc định', async () => {
+    const badConfig = {
+      get: async <T>(k: string, fb?: T): Promise<T> =>
+        (k === 'affiliate.monthly_tier_bonuses' ? ([0, 0.01, 0.025, 0.04, 5] as unknown as T) : (fb as T)),
+    } as unknown as SystemConfigService;
+    const svc = new AffiliateService({} as unknown as PrismaService, badConfig, pricing, pancakeOrder) as unknown as {
+      monthlyTier(r: number): Promise<{ bonusPct: number }>;
+    };
+    const t = await svc.monthlyTier(120_000_000);
+    expect(t.bonusPct).toBe(6); // fallback mặc định, không phải 500%
+  });
+});
+
+describe('AffiliateService.getPublicTier', () => {
+  it('trả tên + icon theo doanh số tháng, KHÔNG lộ số tiền/bonusPct thật', async () => {
+    const agg = jest.fn().mockResolvedValue({ _sum: { orderTotal: 15_000_000 } });
+    const prisma = { commission: { aggregate: agg } } as unknown as PrismaService;
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder);
+    const t = await svc.getPublicTier('u1');
+    expect(t).toEqual({ name: 'Bạc', emoji: '🌳' });
+    expect(Object.keys(t)).toEqual(['name', 'emoji']);
+    // Loại REJECTED khỏi doanh số, đúng tháng hiện tại
+    expect(agg.mock.calls[0]?.[0].where.status).toEqual({ not: 'REJECTED' });
+  });
+
+  it('chưa có hoa hồng nào → Tân binh', async () => {
+    const agg = jest.fn().mockResolvedValue({ _sum: { orderTotal: null } });
+    const prisma = { commission: { aggregate: agg } } as unknown as PrismaService;
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder);
+    const t = await svc.getPublicTier('u1');
+    expect(t.name).toBe('Tân binh');
   });
 });
 
