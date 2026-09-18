@@ -515,6 +515,9 @@ model Storefront {
   publishedAt       DateTime?
   collections       StorefrontCollection[]
   products          Product[]              @relation("StorefrontProducts")
+  /// Mốc lần cuối nhắc CTV thêm sản phẩm nổi bật còn thiếu vào gian hàng (storefront-reminder.service.ts).
+  /// Null = chưa từng nhắc. Chỉ dùng cho guard chống gửi trùng, không phải mốc nghiệp vụ khác.
+  lastReminderAt    DateTime?
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
