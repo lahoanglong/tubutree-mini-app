@@ -87,6 +87,17 @@ export async function getStorefront(slug: string): Promise<StorefrontDetail | nu
   }
 }
 
+/** Danh sách nhẹ gian hàng đã đăng, dùng cho sitemap.ts. Mảng rỗng nếu API chưa chạy. */
+export async function getStorefrontList(): Promise<{ slug: string; updatedAt: string }[]> {
+  try {
+    const res = await fetch(`${BASE}/storefront/public-list`, { next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    return (await res.json()) as { slug: string; updatedAt: string }[];
+  } catch {
+    return [];
+  }
+}
+
 export interface StorefrontItem {
   id: string;
   note?: string | null;

@@ -476,6 +476,22 @@ describe('StorefrontService.getStats', () => {
   });
 });
 
+describe('StorefrontService.getPublicList', () => {
+  it('chỉ lấy gian hàng isPublished, sắp updatedAt giảm dần, giới hạn 500', async () => {
+    const findMany = jest.fn().mockResolvedValue([{ slug: 'a', updatedAt: new Date() }]);
+    const prisma = makePrisma({ storefront: { findMany } });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    const r = await svc.getPublicList();
+    expect(findMany.mock.calls[0]?.[0]).toEqual({
+      where: { isPublished: true },
+      select: { slug: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 500,
+    });
+    expect(r).toEqual([{ slug: 'a', updatedAt: expect.any(Date) }]);
+  });
+});
+
 describe('StorefrontService.getPublicBySlug', () => {
   it('404 nếu chưa publish', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(null) } });

@@ -89,4 +89,7 @@ export class StorefrontController {
 
   @Public() @Get('public/:slug') publicView(@Param('slug') slug: string) { return this.svc.getPublicBySlug(slug); }
   @Public() @Get('by-host') byHost(@Query('host') host: string) { return this.svc.getPublicByHost(host); }
+  // Danh sách nhẹ cho web sitemap.ts — KHÔNG dùng path param ':slug' nên không đụng route
+  // 'public/:slug' phía trên (2 literal segment khác nhau, Express không mơ hồ).
+  @Public() @Get('public-list') publicList() { return this.svc.getPublicList(); }
 }

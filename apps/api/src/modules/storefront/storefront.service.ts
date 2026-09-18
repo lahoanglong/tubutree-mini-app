@@ -270,6 +270,22 @@ export class StorefrontService {
     };
   }
 
+  /**
+   * Danh sách nhẹ gian hàng ĐÃ ĐĂNG cho web sitemap.ts — trước đây gian hàng/nhãn hàng chưa
+   * được liệt kê trong sitemap vì "API công khai chưa có endpoint liệt kê chúng" (comment cũ
+   * trong sitemap.ts). Giới hạn 500 gian hàng cập nhật gần nhất, mirror đúng cách sitemap.ts
+   * đang giới hạn 200 sản phẩm — không cần crawler biết TOÀN BỘ, chỉ cần nội dung mới nhất.
+   */
+  async getPublicList() {
+    const stores = await this.prisma.storefront.findMany({
+      where: { isPublished: true },
+      select: { slug: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 500,
+    });
+    return stores;
+  }
+
   async getPublicByHost(host: string) {
     if (!host) throw new BadRequestException('Host không hợp lệ.');
     const hostname = host.split(':')[0]!.toLowerCase();
