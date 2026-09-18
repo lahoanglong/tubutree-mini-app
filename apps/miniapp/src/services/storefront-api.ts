@@ -82,6 +82,13 @@ export interface StorefrontQuest {
 }
 export interface QuestList { quests: StorefrontQuest[]; totalEarnedXu: number; level: number; levelMax: number; }
 
+export interface StorefrontProductStat { productSlug: string; productName: string; qty: number; revenue: number }
+export interface StorefrontStats {
+  orders7d: number; orders30d: number; revenue30d: number; commission30d: number;
+  byProduct: StorefrontProductStat[];
+}
+export const getStorefrontStats = () => api.get('/storefront/me/stats').then((r) => r.data as StorefrontStats);
+
 export const getQuests = () => api.get('/storefront/me/quests').then((r) => r.data as QuestList);
 export const claimQuest = (code: string) =>
   api.post(`/storefront/me/quests/${code}/claim`).then((r) => r.data as { claimed: boolean; code: string; rewardXu: number; coinsBalance: number });

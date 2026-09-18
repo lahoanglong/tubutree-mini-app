@@ -279,6 +279,51 @@ export class StorefrontService {
     return this.getPublicBySlug(hostname);
   }
 
+  /**
+   * Thống kê theo sản phẩm cho chính CTV xem (không public) — CTV cần biết sản phẩm nào trong
+   * gian hàng đang bán chạy để tối ưu, không chỉ số hoa hồng tổng đã có ở /affiliate/dashboard.
+   * Gộp trực tiếp từ Order.storefrontSlug (đã có @@index sẵn) — không cần bảng đếm lượt xem/
+   * click riêng, và không đụng logic tính hoa hồng (chỉ đọc, không tin cậy để trả tiền).
+   */
+  async getStats(userId: string) {
+    const sf = await this.assertOwnedStorefront(userId);
+    const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const orders = await this.prisma.order.findMany({
+      where: { storefrontSlug: sf.slug, status: { notIn: ['CANCELLED', 'RETURNED'] } },
+      select: { createdAt: true, commission: true, items: { select: { productSlug: true, productName: true, quantity: true, total: true } } },
+    });
+
+    const byProduct = new Map<string, { productSlug: string; productName: string; qty: number; revenue: number }>();
+    let orders30d = 0;
+    let orders7d = 0;
+    let revenue30d = 0;
+    let commission30d = 0;
+    for (const o of orders) {
+      const in30d = o.createdAt >= since30d;
+      const in7d = o.createdAt >= since7d;
+      if (in30d) { orders30d += 1; revenue30d += o.items.reduce((s, i) => s + i.total, 0); commission30d += o.commission; }
+      if (in7d) orders7d += 1;
+      for (const item of o.items) {
+        // Đơn cũ trước migration OrderItem.productSlug có thể null — gộp vào key riêng thay vì
+        // vỡ thống kê hoặc lẫn với sản phẩm khác.
+        const key = item.productSlug ?? `__unknown:${item.productName}`;
+        const row = byProduct.get(key) ?? { productSlug: item.productSlug ?? '', productName: item.productName, qty: 0, revenue: 0 };
+        row.qty += item.quantity;
+        row.revenue += item.total;
+        byProduct.set(key, row);
+      }
+    }
+
+    return {
+      orders7d,
+      orders30d,
+      revenue30d,
+      commission30d,
+      byProduct: [...byProduct.values()].sort((a, b) => b.revenue - a.revenue),
+    };
+  }
+
   private async assertOwnedStorefront(userId: string) {
     const sf = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId, type: 'CTV' } });
     if (!sf) throw new NotFoundException('Chưa có gian hàng.');

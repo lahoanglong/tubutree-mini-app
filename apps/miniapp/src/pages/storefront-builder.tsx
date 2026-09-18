@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pin, Eye, EyeOff, Trash2, Target, Settings, Pencil, MessageSquarePlus, UserRoundCog } from 'lucide-react';
+import { Pin, Eye, EyeOff, Trash2, Target, Settings, Pencil, MessageSquarePlus, UserRoundCog, TrendingUp } from 'lucide-react';
 import {
   getMyStorefront, createStorefront, publishStorefront, updateStorefront,
   createCollection, updateCollection, deleteCollection, addItem, updateItem, removeItem, pickerProducts,
-  getQuests, claimQuest,
+  getQuests, claimQuest, getStorefrontStats,
   type StorefrontEdit, type PickerProduct,
 } from '../services/storefront-api';
 import { getErrorMessage } from '../services/api';
@@ -341,6 +341,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         </Box>
       </Box>
 
+      <StatsSection />
       <QuestSection />
 
 
@@ -474,6 +475,46 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         </Box>
       </Sheet>
     </Page>
+  );
+}
+
+/** Section "Thống kê" — sản phẩm nào trong gian hàng đang bán chạy, để CTV biết mà tối ưu. */
+function StatsSection() {
+  const statsQ = useQuery({ queryKey: ['storefront-stats'], queryFn: getStorefrontStats });
+  const data = statsQ.data;
+  if (!data) return null;
+
+  return (
+    <Box mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
+      <Box flex alignItems="center" style={{ gap: 6, marginBottom: 10 }}>
+        <TrendingUp size={18} color="var(--primary-700)" strokeWidth={2} />
+        <Text bold>Thống kê 30 ngày</Text>
+      </Box>
+      <Box flex style={{ gap: 8, marginBottom: 12 }}>
+        <Box style={{ flex: 1, background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', padding: 10, textAlign: 'center' }}>
+          <Text bold size="large">{data.orders30d}</Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Đơn (7 ngày: {data.orders7d})</Text>
+        </Box>
+        <Box style={{ flex: 1, background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', padding: 10, textAlign: 'center' }}>
+          <Text bold size="large">{formatVnd(data.revenue30d)}</Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Doanh thu</Text>
+        </Box>
+        <Box style={{ flex: 1, background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', padding: 10, textAlign: 'center' }}>
+          <Text bold size="large" style={{ color: 'var(--leaf-700)' }}>{formatVnd(data.commission30d)}</Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Hoa hồng</Text>
+        </Box>
+      </Box>
+      {data.byProduct.length === 0 ? (
+        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>Chưa có đơn nào qua gian hàng — chia sẻ link để bắt đầu bán nhé.</Text>
+      ) : (
+        data.byProduct.slice(0, 5).map((p) => (
+          <Box key={p.productSlug || p.productName} flex alignItems="center" justifyContent="space-between" style={{ padding: '6px 0', borderTop: '1px solid var(--neutral-100)' }}>
+            <Text size="small" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.productName}</Text>
+            <Text size="xSmall" style={{ color: 'var(--neutral-500)', whiteSpace: 'nowrap', marginLeft: 8 }}>{p.qty} món · {formatVnd(p.revenue)}</Text>
+          </Box>
+        ))
+      )}
+    </Box>
   );
 }
 

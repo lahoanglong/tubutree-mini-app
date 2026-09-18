@@ -409,6 +409,60 @@ describe('StorefrontService.pickerProducts', () => {
   });
 });
 
+describe('StorefrontService.getStats', () => {
+  it('gộp doanh thu/số lượng theo productSlug, loại đơn CANCELLED/RETURNED', async () => {
+    const now = new Date();
+    const oldDate = new Date(now.getTime() - 40 * 24 * 60 * 60 * 1000);
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', slug: 'linh', ownerUserId: 'u1' }) },
+      order: { findMany: jest.fn().mockResolvedValue([
+        { createdAt: now, commission: 5000, items: [
+          { productSlug: 'p1', productName: 'P1', quantity: 2, total: 200000 },
+          { productSlug: 'p2', productName: 'P2', quantity: 1, total: 50000 },
+        ] },
+        { createdAt: now, commission: 3000, items: [
+          { productSlug: 'p1', productName: 'P1', quantity: 1, total: 100000 },
+        ] },
+        // Đơn cũ hơn 30 ngày — vẫn gộp vào byProduct (tổng lịch sử) nhưng KHÔNG tính vào revenue30d/commission30d.
+        { createdAt: oldDate, commission: 9000, items: [
+          { productSlug: 'p2', productName: 'P2', quantity: 5, total: 500000 },
+        ] },
+        // Đơn productSlug null (dữ liệu cũ trước migration) — không được vỡ hoặc lẫn với SP khác.
+        { createdAt: now, commission: 0, items: [
+          { productSlug: null, productName: 'P cũ', quantity: 1, total: 10000 },
+        ] },
+      ]) },
+    });
+    const svc = new StorefrontService(prisma, config);
+    const r = await svc.getStats('u1');
+
+    expect((prisma.order.findMany as jest.Mock).mock.calls[0]?.[0].where).toEqual({
+      storefrontSlug: 'linh', status: { notIn: ['CANCELLED', 'RETURNED'] },
+    });
+    expect(r.orders30d).toBe(3); // đơn oldDate (40 ngày) không tính
+    expect(r.orders7d).toBe(3);
+    expect(r.revenue30d).toBe(360000); // 200000+50000+100000+10000
+    expect(r.commission30d).toBe(8000); // 5000+3000+0
+
+    const p1 = r.byProduct.find((p) => p.productSlug === 'p1')!;
+    expect(p1.qty).toBe(3);
+    expect(p1.revenue).toBe(300000);
+    const p2 = r.byProduct.find((p) => p.productSlug === 'p2')!;
+    expect(p2.qty).toBe(6); // gộp cả đơn 40 ngày trước (1) + đơn trong 30 ngày (5)
+    expect(p2.revenue).toBe(550000);
+    // Sắp theo doanh thu giảm dần
+    expect(r.byProduct[0]!.productSlug).toBe('p2');
+    // Sản phẩm productSlug null không vỡ, không lẫn vào p1/p2
+    expect(r.byProduct).toHaveLength(3);
+  });
+
+  it('404 nếu chưa có gian hàng', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(null) } });
+    const svc = new StorefrontService(prisma, config);
+    await expect(svc.getStats('u1')).rejects.toThrow();
+  });
+});
+
 describe('StorefrontService.getPublicBySlug', () => {
   it('404 nếu chưa publish', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(null) } });
