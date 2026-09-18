@@ -16,6 +16,22 @@ import { FlashSaleService, FLASH_OVER_LIMIT_MSG } from '../flash-sale/flash-sale
 import { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 import { reserveVariationStock } from '../catalog/variation-stock';
 
+/**
+ * `JSON.stringify` sắp khoá theo thứ tự chèn — Postgres `jsonb` thì KHÔNG (tự sắp lại theo độ
+ * dài + alphabet nội bộ khi lưu). So sánh 2 giá trị JSON "có đổi gì không" mà một bên đọc từ cột
+ * `Json`/`jsonb` phải qua hàm này, không được `JSON.stringify` thẳng (xem comment
+ * `replayIdempotentOrder`). Dùng cho object phẳng (không mảng lồng object) là đủ cho snapshot
+ * địa chỉ hiện tại; mở rộng đệ quy sẵn cho an toàn nếu sau này snapshot thêm trường lồng.
+ */
+function stableStringify(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`;
+  if (v !== null && typeof v === 'object') {
+    const keys = Object.keys(v as Record<string, unknown>).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify((v as Record<string, unknown>)[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v);
+}
+
 @Injectable()
 export class CheckoutService {
   private readonly logger = new Logger(CheckoutService.name);
@@ -285,6 +301,17 @@ export class CheckoutService {
    * KHÔNG đổi schema Order để lưu hash payload: so trực tiếp `paymentMethod` (có sẵn trên
    * Order) + so JSON snapshot địa chỉ (Order không lưu addressId, chỉ lưu snapshot
    * `shippingAddress` — dựng lại snapshot từ addressId mới rồi so với snapshot đã lưu lúc tạo).
+   *
+   * So bằng `stableStringify` (sắp khoá trước khi stringify), KHÔNG so `JSON.stringify` thô:
+   * cột `shippingAddress` kiểu `Json` map sang Postgres `jsonb`, và `jsonb` KHÔNG giữ thứ tự
+   * khoá gốc khi ghi (đã kiểm chứng trên Postgres thật — ghi object theo thứ tự
+   * recipient/phone/.../wardCode, đọc lại ra thứ tự khác hẳn, Postgres tự sắp theo độ dài tên
+   * khoá). `JSON.stringify` thô so object JS mới dựng (giữ đúng thứ tự viết code) với giá trị
+   * đọc lại từ cột (đã bị Postgres xáo thứ tự) sẽ LUÔN LUÔN lệch chuỗi dù địa chỉ giống hệt —
+   * vô hiệu hoá hẳn tính năng "thử lại an toàn" cho MỌI lần gọi lại hợp lệ (network timeout,
+   * double-tap), không chỉ ca race hiếm gặp: khách luôn thấy "vui lòng tải lại trang" dù chưa
+   * đổi gì. Test cũ (checkout.service.spec.ts) không bắt được lỗi này vì mock `prisma.order.findUnique`
+   * trả thẳng object JS (giữ nguyên thứ tự đã viết), không đi qua Postgres thật.
    */
   private async replayIdempotentOrder(
     existing: { id: string; userId: string; paymentMethod: string; shippingAddress: Prisma.JsonValue },
@@ -297,7 +324,7 @@ export class CheckoutService {
     const paymentChanged = existing.paymentMethod !== dto.paymentMethod;
     const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
     const addressChanged =
-      !address || JSON.stringify(this.addressSnapshot(address)) !== JSON.stringify(existing.shippingAddress);
+      !address || stableStringify(this.addressSnapshot(address)) !== stableStringify(existing.shippingAddress);
     if (paymentChanged || addressChanged) {
       throw new BadRequestException('Yêu cầu trước đó với thông tin khác đã được xử lý, vui lòng tải lại trang.');
     }
