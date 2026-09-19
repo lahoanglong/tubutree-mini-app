@@ -50,6 +50,10 @@ test.describe('Web Admin Dashboard E2E - Luồng Duyệt Đại Lý', () => {
       localStorage.setItem('tubu_web_session', '1');
     });
     await page.reload();
+
+    // Tab mặc định của trang admin là "Tổng quan KPI" (dashboard), không phải "Đại lý" —
+    // phải bấm sang tab Đại lý thì DealersTab mới mount và gọi listDealerApps().
+    await page.getByRole('button', { name: 'Đại lý' }).click();
   });
 
   test('Hiển thị và Duyệt hồ sơ Đại lý', async ({ page }) => {
@@ -70,9 +74,10 @@ test.describe('Web Admin Dashboard E2E - Luồng Duyệt Đại Lý', () => {
       });
     });
 
-    // Điền Tier ID rồi bấm Duyệt
+    // Điền Tier ID rồi bấm Duyệt — exact match bắt buộc vì tab bar cũng có nút "Duyệt SP đối
+    // tác" chứa "Duyệt" như substring, khớp nhầm nút đó (chỉ đổi tab) nếu dùng :has-text().
     await page.fill('input[placeholder*="Tier"]', 'dealer_l1');
-    await page.click('button:has-text("Duyệt")');
+    await page.getByRole('button', { name: 'Duyệt', exact: true }).click();
 
     // Đợi một chút để mutation hoàn thành
     await page.waitForTimeout(500);
