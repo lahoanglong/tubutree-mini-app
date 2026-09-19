@@ -3,10 +3,16 @@ import { BadRequestException } from '@nestjs/common';
 import { StorefrontService } from './storefront.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import type { AffiliateService } from '../affiliate/affiliate.service';
 
 const config = {
   get: async <T>(_k: string, fb?: T): Promise<T> => fb as T,
 } as unknown as SystemConfigService;
+
+// Mặc định không có bậc (null) — test nào cần assert huy hiệu bậc tự override qua tham số thứ 3.
+const affiliate = {
+  getPublicTier: async () => null,
+} as unknown as AffiliateService;
 
 function makePrisma(over: Record<string, any> = {}) {
   const merged: Record<string, any> = {
@@ -36,7 +42,7 @@ describe('StorefrontService.getOrCreateMine', () => {
     (prisma.storefront.findFirst as jest.Mock).mockResolvedValue(null);
     (prisma.storefront.create as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
 
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const sf = await svc.getOrCreateMine('u1');
 
     expect(prisma.storefront.create).toHaveBeenCalled();
@@ -54,7 +60,7 @@ describe('StorefrontService.getOrCreateMine', () => {
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', role: 'AFFILIATE', referralCode: 'L', fullName: 'L' });
     (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', type: 'CTV' });
 
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const sf = await svc.getOrCreateMine('u1');
 
     expect(sf.id).toBe('s1');
@@ -64,7 +70,7 @@ describe('StorefrontService.getOrCreateMine', () => {
   it('từ chối user không phải CTV', async () => {
     const prisma = makePrisma();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', role: 'CUSTOMER', referralCode: 'L' });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.getOrCreateMine('u1')).rejects.toBeInstanceOf(BadRequestException);
   });
 });
@@ -79,7 +85,7 @@ describe('StorefrontService.getMine', () => {
     };
     const prisma = makePrisma();
     (prisma.storefront.findFirst as jest.Mock).mockResolvedValue(sfWithChildren);
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const sf = await svc.getMine('u1');
 
     // verify behavior: trả đúng cây dữ liệu, item ẩn vẫn còn (để CTV sửa)
@@ -97,7 +103,7 @@ describe('StorefrontService.getMine', () => {
   it('throw NotFound khi chưa có gian hàng', async () => {
     const prisma = makePrisma();
     (prisma.storefront.findFirst as jest.Mock).mockResolvedValue(null);
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.getMine('u1')).rejects.toThrow();
   });
 });
@@ -107,7 +113,7 @@ describe('StorefrontService.updateMine/publishMine', () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
     (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1' });
     (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.updateMine('u1', { title: 'Shop Linh', headerNote: 'xin chào', theme: 'leaf-orange' });
     expect(r.title).toBe('Shop Linh');
     expect(prisma.storefront.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 's1' } }));
@@ -120,7 +126,7 @@ describe('StorefrontService.updateMine/publishMine', () => {
     (prisma.storefront.findFirst as jest.Mock)
       .mockResolvedValueOnce({ id: 's1', ownerUserId: 'u1' }) // assertOwnedStorefront
       .mockResolvedValueOnce({ id: 's-other', slug: 'organic-tea' }); // trùng SLUG
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.updateMine('u1', { subdomain: 'organic-tea' })).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.storefront.update).not.toHaveBeenCalled();
   });
@@ -129,7 +135,7 @@ describe('StorefrontService.updateMine/publishMine', () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
     (prisma.storefront.findFirst as jest.Mock).mockResolvedValueOnce({ id: 's1', ownerUserId: 'u1' }).mockResolvedValueOnce(null);
     (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.updateMine('u1', { subdomain: 'Pure-Green' });
     expect(r.subdomain).toBe('pure-green');
   });
@@ -138,7 +144,7 @@ describe('StorefrontService.updateMine/publishMine', () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
     (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1' });
     (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.publishMine('u1', true);
     expect(r.isPublished).toBe(true);
     expect(r.publishedAt).toBeInstanceOf(Date);
@@ -151,7 +157,7 @@ describe('StorefrontService collections', () => {
       storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', ownerUserId: 'u1' }) },
       storefrontCollection: { count: jest.fn().mockResolvedValue(2), create: jest.fn().mockImplementation(({ data }) => ({ id: 'c3', ...data })) },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const c = await svc.createCollection('u1', { title: 'Skincare' });
     expect(c.storefrontId).toBe('s1');
     expect(c.sortOrder).toBe(2);
@@ -166,7 +172,7 @@ describe('StorefrontService collections', () => {
       storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', ownerUserId: 'u1' }) },
       $transaction: jest.fn().mockRejectedValue({ code: 'P2034', message: 'serialization failure' }),
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.createCollection('u1', { title: 'Skincare' })).rejects.toThrow(
       'Hệ thống đang bận xử lý, vui lòng thử lại.',
     );
@@ -185,7 +191,7 @@ describe('StorefrontService collections', () => {
     const cappedConfig = {
       get: async <T>(k: string, fb?: T): Promise<T> => (k === 'storefront.max_combo_pct' ? (30 as unknown as T) : (fb as T)),
     } as unknown as SystemConfigService;
-    const svc = new StorefrontService(prisma, cappedConfig);
+    const svc = new StorefrontService(prisma, cappedConfig, affiliate);
     await svc.createCollection('u1', { title: 'Combo sập sàn', kind: 'COMBO', comboDiscountPct: 100 });
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ comboDiscountPct: 30 }) }));
   });
@@ -199,7 +205,7 @@ describe('StorefrontService collections', () => {
     const cappedConfig = {
       get: async <T>(k: string, fb?: T): Promise<T> => (k === 'storefront.max_combo_pct' ? (30 as unknown as T) : (fb as T)),
     } as unknown as SystemConfigService;
-    const svc = new StorefrontService(prisma, cappedConfig);
+    const svc = new StorefrontService(prisma, cappedConfig, affiliate);
     await svc.createCollection('u1', { title: 'Combo hợp lý', kind: 'COMBO', comboDiscountPct: 15 });
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ comboDiscountPct: 15 }) }));
   });
@@ -210,7 +216,7 @@ describe('StorefrontService collections', () => {
       storefrontCollection: { findMany: jest.fn().mockResolvedValue([{ id: 'a' }, { id: 'b' }]), update: jest.fn() },
       $transaction: jest.fn((ops) => Promise.all(ops)),
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await svc.reorderCollections('u1', ['b', 'a']);
     expect(prisma.storefrontCollection.update).toHaveBeenCalledWith({ where: { id: 'b' }, data: { sortOrder: 0 } });
     expect(prisma.storefrontCollection.update).toHaveBeenCalledWith({ where: { id: 'a' }, data: { sortOrder: 1 } });
@@ -223,7 +229,7 @@ describe('StorefrontService collections', () => {
         update: jest.fn().mockImplementation(({ data }) => ({ id: 'c1', ...data })),
       },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.updateCollection('u1', 'c1', { title: 'New' });
     expect(r.title).toBe('New');
     expect(prisma.storefrontCollection.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { title: 'New' } });
@@ -240,7 +246,7 @@ describe('StorefrontService collections', () => {
     const cappedConfig = {
       get: async <T>(k: string, fb?: T): Promise<T> => (k === 'storefront.max_combo_pct' ? (30 as unknown as T) : (fb as T)),
     } as unknown as SystemConfigService;
-    const svc = new StorefrontService(prisma, cappedConfig);
+    const svc = new StorefrontService(prisma, cappedConfig, affiliate);
     await svc.updateCollection('u1', 'c1', { comboDiscountPct: 90 });
     expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { comboDiscountPct: 30 } });
   });
@@ -252,7 +258,7 @@ describe('StorefrontService collections', () => {
         update: jest.fn(),
       },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.updateCollection('u1', 'c1', { title: 'New' })).rejects.toThrow();
     expect(prisma.storefrontCollection.update).not.toHaveBeenCalled();
   });
@@ -264,7 +270,7 @@ describe('StorefrontService collections', () => {
         delete: jest.fn().mockResolvedValue({ id: 'c1' }),
       },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.deleteCollection('u1', 'c1');
     expect(r).toEqual({ ok: true });
     expect(prisma.storefrontCollection.delete).toHaveBeenCalledWith({ where: { id: 'c1' } });
@@ -277,9 +283,76 @@ describe('StorefrontService collections', () => {
         delete: jest.fn(),
       },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.deleteCollection('u1', 'c1')).rejects.toThrow();
     expect(prisma.storefrontCollection.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('StorefrontService.applyTemplate', () => {
+  function makeTemplatePrisma(over: Record<string, any> = {}) {
+    return makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', ownerUserId: 'u1' }) },
+      category: { findUnique: jest.fn().mockResolvedValue({ id: 'cat1', name: 'Mẹ & bé' }) },
+      product: { findMany: jest.fn().mockResolvedValue([{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }]) },
+      storefrontCollection: {
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn().mockImplementation(({ data }) => ({ id: 'newcol', ...data })),
+      },
+      storefrontItem: { createMany: jest.fn().mockResolvedValue({ count: 3 }) },
+      ...over,
+    });
+  }
+
+  it('tạo 1 collection tên theo category + item cho tối đa 8 SP nổi bật, sortOrder 0..N-1', async () => {
+    const prisma = makeTemplatePrisma();
+    const svc = new StorefrontService(prisma, config, affiliate);
+    const r = await svc.applyTemplate('u1', 'cat1');
+
+    expect((prisma.product.findMany as jest.Mock).mock.calls[0]?.[0]).toEqual({
+      where: { categoryIds: { has: 'cat1' }, isActive: true, affiliateBlocked: false },
+      orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
+      take: 8,
+      select: { id: true },
+    });
+    expect((prisma.storefrontCollection.create as jest.Mock).mock.calls[0]?.[0].data).toMatchObject({
+      storefrontId: 's1', title: 'Mẹ & bé', kind: 'NORMAL', layout: 'CAROUSEL', sortOrder: 0,
+    });
+    expect((prisma.storefrontItem.createMany as jest.Mock).mock.calls[0]?.[0].data).toEqual([
+      { collectionId: 'newcol', productId: 'p1', sortOrder: 0 },
+      { collectionId: 'newcol', productId: 'p2', sortOrder: 1 },
+      { collectionId: 'newcol', productId: 'p3', sortOrder: 2 },
+    ]);
+    expect(r).toEqual({ collectionId: 'newcol', title: 'Mẹ & bé', itemCount: 3 });
+  });
+
+  it('category không tồn tại → BadRequest, KHÔNG đụng transaction', async () => {
+    const prisma = makeTemplatePrisma({ category: { findUnique: jest.fn().mockResolvedValue(null) } });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await expect(svc.applyTemplate('u1', 'bad')).rejects.toThrow();
+    expect(prisma.storefrontCollection.create).not.toHaveBeenCalled();
+  });
+
+  it('category chưa có sản phẩm nào → BadRequest, KHÔNG tạo collection rỗng', async () => {
+    const prisma = makeTemplatePrisma({ product: { findMany: jest.fn().mockResolvedValue([]) } });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await expect(svc.applyTemplate('u1', 'cat1')).rejects.toThrow();
+    expect(prisma.storefrontCollection.create).not.toHaveBeenCalled();
+  });
+
+  it('gian hàng ĐÃ có collection → từ chối, không đè lên gian hàng CTV tự dựng', async () => {
+    const prisma = makeTemplatePrisma({ storefrontCollection: { count: jest.fn().mockResolvedValue(2), create: jest.fn() } });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await expect(svc.applyTemplate('u1', 'cat1')).rejects.toThrow();
+    expect(prisma.storefrontCollection.create).not.toHaveBeenCalled();
+  });
+
+  it('race sortOrder đụng Serializable (P2034) → báo thân thiện, không phải lỗi thô', async () => {
+    const prisma = makeTemplatePrisma({
+      $transaction: jest.fn().mockRejectedValue({ code: 'P2034' }),
+    });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await expect(svc.applyTemplate('u1', 'cat1')).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 
@@ -290,7 +363,7 @@ describe('StorefrontService items', () => {
       product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true, affiliateBlocked: false }) },
       storefrontItem: { count: jest.fn().mockResolvedValue(1), create: jest.fn().mockImplementation(({ data }) => ({ id: 'i2', ...data })) },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const it = await svc.addItem('u1', 'c1', { productId: 'p1', note: 'thích' });
     expect(it.collectionId).toBe('c1');
     expect(it.productId).toBe('p1');
@@ -306,7 +379,7 @@ describe('StorefrontService items', () => {
       product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true, affiliateBlocked: false }) },
       $transaction: jest.fn().mockRejectedValue({ code: 'P2034', message: 'serialization failure' }),
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.addItem('u1', 'c1', { productId: 'p1' })).rejects.toThrow(
       'Hệ thống đang bận xử lý, vui lòng thử lại.',
     );
@@ -318,7 +391,7 @@ describe('StorefrontService items', () => {
       product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true, affiliateBlocked: true }) },
       storefrontItem: { count: jest.fn(), create: jest.fn() },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.addItem('u1', 'c1', { productId: 'p1' })).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.storefrontItem.create).not.toHaveBeenCalled();
   });
@@ -329,7 +402,7 @@ describe('StorefrontService items', () => {
       product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: false, affiliateBlocked: false }) },
       storefrontItem: { count: jest.fn(), create: jest.fn() },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.addItem('u1', 'c1', { productId: 'p1' })).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.storefrontItem.create).not.toHaveBeenCalled();
   });
@@ -340,7 +413,7 @@ describe('StorefrontService items', () => {
       product: { findUnique: jest.fn().mockResolvedValue(null) },
       storefrontItem: { count: jest.fn(), create: jest.fn() },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.addItem('u1', 'c1', { productId: 'nope' })).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.storefrontItem.create).not.toHaveBeenCalled();
   });
@@ -349,7 +422,7 @@ describe('StorefrontService items', () => {
     const prisma = makePrisma({
       storefrontItem: { findUnique: jest.fn().mockResolvedValue({ id: 'i1', collection: { storefront: { ownerUserId: 'OTHER' } } }) },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.updateItem('u1', 'i1', { isHidden: true })).rejects.toThrow();
   });
 
@@ -360,7 +433,7 @@ describe('StorefrontService items', () => {
         delete: jest.fn().mockResolvedValue({ id: 'i1' }),
       },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.removeItem('u1', 'i1');
     expect(r).toEqual({ ok: true });
     expect(prisma.storefrontItem.delete).toHaveBeenCalledWith({ where: { id: 'i1' } });
@@ -375,7 +448,7 @@ describe('StorefrontService items', () => {
       },
       $transaction: jest.fn((ops) => Promise.all(ops)),
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     // 'STRANGER' không thuộc collection → phải bị loại
     await svc.reorderItems('u1', 'c1', ['i2', 'STRANGER', 'i1']);
     expect(prisma.storefrontItem.update).toHaveBeenCalledWith({ where: { id: 'i2' }, data: { sortOrder: 0 } });
@@ -397,7 +470,7 @@ describe('StorefrontService.pickerProducts', () => {
           variations: [{ affiliateRate: '8' }, { affiliateRate: '10' }] },
       ]) },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.pickerProducts('u1', { search: 'dầu' });
     expect((prisma.product.findMany as jest.Mock).mock.calls[0]?.[0].where.affiliateBlocked).toBe(false);
     const first = r[0]!;
@@ -409,10 +482,87 @@ describe('StorefrontService.pickerProducts', () => {
   });
 });
 
+describe('StorefrontService.getStats', () => {
+  it('gộp doanh thu/số lượng theo productSlug, loại đơn CANCELLED/RETURNED', async () => {
+    const now = new Date();
+    const oldDate = new Date(now.getTime() - 40 * 24 * 60 * 60 * 1000);
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', slug: 'linh', ownerUserId: 'u1' }) },
+      order: { findMany: jest.fn().mockResolvedValue([
+        { createdAt: now, items: [
+          { productSlug: 'p1', productName: 'P1', quantity: 2, total: 200000 },
+          { productSlug: 'p2', productName: 'P2', quantity: 1, total: 50000 },
+        ] },
+        { createdAt: now, items: [
+          { productSlug: 'p1', productName: 'P1', quantity: 1, total: 100000 },
+        ] },
+        // Đơn cũ hơn 30 ngày — vẫn gộp vào byProduct (tổng lịch sử) nhưng KHÔNG tính vào revenue30d.
+        { createdAt: oldDate, items: [
+          { productSlug: 'p2', productName: 'P2', quantity: 5, total: 500000 },
+        ] },
+        // Đơn productSlug null (dữ liệu cũ trước migration) — không được vỡ hoặc lẫn với SP khác.
+        { createdAt: now, items: [
+          { productSlug: null, productName: 'P cũ', quantity: 1, total: 10000 },
+        ] },
+      ]) },
+      commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 8000 } }) },
+    });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    const r = await svc.getStats('u1');
+
+    expect((prisma.order.findMany as jest.Mock).mock.calls[0]?.[0].where).toEqual({
+      storefrontSlug: 'linh', status: { notIn: ['CANCELLED', 'RETURNED'] },
+    });
+    // Hoa hồng đọc từ bảng Commission (affiliateUserId + order.storefrontSlug + trong 30 ngày,
+    // loại REJECTED) — KHÔNG phải cột Order.commission (cột chết, không ai ghi giá trị).
+    expect((prisma.commission.aggregate as jest.Mock).mock.calls[0]?.[0].where).toEqual({
+      affiliateUserId: 'u1', order: { storefrontSlug: 'linh' },
+      createdAt: { gte: expect.any(Date) }, status: { not: 'REJECTED' },
+    });
+    expect(r.orders30d).toBe(3); // đơn oldDate (40 ngày) không tính
+    expect(r.orders7d).toBe(3);
+    expect(r.revenue30d).toBe(360000); // 200000+50000+100000+10000
+    expect(r.commission30d).toBe(8000); // từ commission.aggregate mock
+
+    const p1 = r.byProduct.find((p) => p.productSlug === 'p1')!;
+    expect(p1.qty).toBe(3);
+    expect(p1.revenue).toBe(300000);
+    const p2 = r.byProduct.find((p) => p.productSlug === 'p2')!;
+    expect(p2.qty).toBe(6); // gộp cả đơn 40 ngày trước (1) + đơn trong 30 ngày (5)
+    expect(p2.revenue).toBe(550000);
+    // Sắp theo doanh thu giảm dần
+    expect(r.byProduct[0]!.productSlug).toBe('p2');
+    // Sản phẩm productSlug null không vỡ, không lẫn vào p1/p2
+    expect(r.byProduct).toHaveLength(3);
+  });
+
+  it('404 nếu chưa có gian hàng', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(null) } });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await expect(svc.getStats('u1')).rejects.toThrow();
+  });
+});
+
+describe('StorefrontService.getPublicList', () => {
+  it('chỉ lấy gian hàng isPublished, sắp updatedAt giảm dần, giới hạn 500', async () => {
+    const findMany = jest.fn().mockResolvedValue([{ slug: 'a', updatedAt: new Date() }]);
+    const prisma = makePrisma({ storefront: { findMany } });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    const r = await svc.getPublicList();
+    expect(findMany.mock.calls[0]?.[0]).toEqual({
+      where: { isPublished: true },
+      select: { slug: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 500,
+    });
+    expect(r).toEqual([{ slug: 'a', updatedAt: expect.any(Date) }]);
+  });
+});
+
 describe('StorefrontService.getPublicBySlug', () => {
   it('404 nếu chưa publish', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(null) } });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.getPublicBySlug('x')).rejects.toThrow();
   });
 
@@ -431,7 +581,7 @@ describe('StorefrontService.getPublicBySlug', () => {
           ] }],
       }) },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.getPublicBySlug('linh');
     const col0 = r.collections[0]!;
     // i2 ẩn (isHidden), i3 bị chặn (affiliateBlocked) → chỉ còn i1
@@ -441,6 +591,32 @@ describe('StorefrontService.getPublicBySlug', () => {
     expect(JSON.stringify(r)).not.toContain('affiliateRate');
     expect(JSON.stringify(r)).not.toContain('affiliateBlocked');
   });
+
+  it('gian hàng CTV → trả ownerTier (tên+icon), gọi affiliate.getPublicTier đúng ownerUserId', async () => {
+    const getPublicTier = jest.fn().mockResolvedValue({ name: 'Bạc', emoji: '🌳' });
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'linh', title: 'Shop', isPublished: true, type: 'CTV', ownerUserId: 'u1', collections: [],
+      }) },
+    });
+    const svc = new StorefrontService(prisma, config, { getPublicTier } as unknown as AffiliateService);
+    const r = await svc.getPublicBySlug('linh');
+    expect(r.ownerTier).toEqual({ name: 'Bạc', emoji: '🌳' });
+    expect(getPublicTier).toHaveBeenCalledWith('u1');
+  });
+
+  it('gian hàng MERCHANT/BRAND → ownerTier null, KHÔNG gọi affiliate (bậc chỉ có ý nghĩa cho CTV)', async () => {
+    const getPublicTier = jest.fn();
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'shop', title: 'Shop', isPublished: true, type: 'MERCHANT', ownerUserId: 'u1', collections: [],
+      }) },
+    });
+    const svc = new StorefrontService(prisma, config, { getPublicTier } as unknown as AffiliateService);
+    const r = await svc.getPublicBySlug('shop');
+    expect(r.ownerTier).toBeNull();
+    expect(getPublicTier).not.toHaveBeenCalled();
+  });
 });
 
 describe('StorefrontService.pickerProducts — guardrail role', () => {
@@ -449,7 +625,7 @@ describe('StorefrontService.pickerProducts — guardrail role', () => {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER' }) },
       product: { findMany: jest.fn().mockResolvedValue([]) },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.pickerProducts('u1', {})).rejects.toBeInstanceOf(BadRequestException);
     expect((prisma as any).product.findMany).not.toHaveBeenCalled();
   });
@@ -461,7 +637,7 @@ describe('StorefrontService.pickerProducts — guardrail role', () => {
         { id: 'p1', name: 'X', slug: 'x', thumbnail: null, brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 0, reviewCount: 0, variations: [{ affiliateRate: 8 }] },
       ]) },
     });
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     const out = await svc.pickerProducts('u1', {});
     expect(out[0]!.maxAffiliateRate).toBe(8);
   });
@@ -473,7 +649,7 @@ describe('StorefrontService.getPublicBySlug — không phân biệt hoa/thườn
     const prisma = makePrisma();
     const found = jest.fn().mockResolvedValue(null);
     (prisma.storefront.findFirst as jest.Mock) = found;
-    const svc = new StorefrontService(prisma, config);
+    const svc = new StorefrontService(prisma, config, affiliate);
     await svc.getPublicBySlug('LINH123').catch(() => undefined);
     const where = found.mock.calls[0][0].where;
     // Mỗi nhánh OR phải so khớp không phân biệt hoa/thường, nếu không slug cũ vẫn chết.
@@ -495,7 +671,7 @@ describe('StorefrontService.updateMine — xoá được ảnh/lời nhắn', ()
     const prisma = {
       storefront: { findFirst: jest.fn().mockResolvedValue({ id: 'sf1', ownerUserId: 'u1' }), update },
     } as unknown as PrismaService;
-    return { svc: new StorefrontService(prisma, config), update };
+    return { svc: new StorefrontService(prisma, config, affiliate), update };
   }
 
   it('chuỗi rỗng → ghi null (xoá thật)', async () => {

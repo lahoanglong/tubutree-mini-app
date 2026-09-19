@@ -9,6 +9,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { useStorefrontContext } from '../store/storefront-context';
 import { ShareSheet } from '../components/share-sheet';
+import { TierBadge } from '../components/ui/tier-badge';
 
 const THEME: Record<string, string> = {
   'leaf-orange': 'linear-gradient(120deg, var(--leaf-600), var(--primary-600))',
@@ -44,6 +45,7 @@ export default function StorefrontViewPage() {
             <CheckCircle2 size={12} />
             {sf.type === 'MERCHANT' ? 'Đối tác chính hãng Tubu' : 'CTV tuyển chọn Tubu'}
           </Text>
+          {sf.ownerTier && <TierBadge name={sf.ownerTier.name} emoji={sf.ownerTier.emoji} />}
           {sf.warehouseCity && (
             <Text size="xSmall" style={{ background: 'var(--neutral-200)', color: 'var(--neutral-800)', padding: '3px 9px', borderRadius: 'var(--radius-full)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <MapPin size={12} />

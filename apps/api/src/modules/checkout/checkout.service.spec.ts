@@ -160,9 +160,15 @@ describe('CheckoutService.placeOrder — money safety', () => {
       id: 'existing',
       userId: 'u1',
       paymentMethod: 'COD',
+      // Thứ tự khoá CỐ Ý đảo khác addressSnapshot() (recipient/phone/province/district/ward/
+      // street/provinceCode/districtCode/wardCode) — mô phỏng đúng hành vi Postgres `jsonb`
+      // thật (không giữ thứ tự chèn, xem comment stableStringify). Test này TỪNG xanh giả vì
+      // mock trả thẳng thứ tự đã viết trong code, không đi qua jsonb thật — đảo thứ tự ở đây để
+      // lần sau ai lỡ quay lại so `JSON.stringify` thô thì test đỏ ngay, không phải đợi phát
+      // hiện trên Postgres thật.
       shippingAddress: {
-        recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
-        provinceCode: '1', districtCode: '2', wardCode: '3',
+        ward: 'W', phone: '09', street: 'S', district: 'BD', province: 'HN',
+        wardCode: '3', recipient: 'A', districtCode: '2', provinceCode: '1',
       },
     });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'key-123');

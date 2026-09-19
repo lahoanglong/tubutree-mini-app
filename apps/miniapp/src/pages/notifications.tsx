@@ -3,7 +3,7 @@ import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
-  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, type LucideIcon,
+  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, type LucideIcon,
 } from 'lucide-react';
 import {
   getNotifications,
@@ -27,6 +27,7 @@ function meta(code: string): { Icon: LucideIcon; title: string } {
   if (code.startsWith('CASHBACK')) return { Icon: ShoppingBag, title: 'Hoàn tiền' };
   if (code.startsWith('BIRTHDAY') || code.startsWith('VOUCHER')) return { Icon: Gift, title: 'Ưu đãi cho bạn' };
   if (code.startsWith('POINTS')) return { Icon: Leaf, title: 'Điểm Xanh' };
+  if (code.startsWith('STOREFRONT')) return { Icon: Store, title: 'Gian hàng của bạn' };
   // Trong app mục này tên là "Ưu đãi giờ vàng" (vi.flashSale.sectionTitle) — thông báo gọi
   // "Flash Sale" khiến khách vào app tìm mục không tồn tại.
   if (code.startsWith('FLASH')) return { Icon: Zap, title: 'Ưu đãi giờ vàng' };
@@ -226,6 +227,7 @@ export default function NotificationsPage() {
               // đổi cao nhất lại bắt đi vòng (P1-6 audit mạch lạc).
               const isFlash = selectedNotif.templateCode.startsWith('FLASH');
               const flashSlug = selectedNotif.payload.data?.product_slug ?? selectedNotif.payload.data?.productSlug;
+              const isStorefront = selectedNotif.templateCode.startsWith('STOREFRONT');
 
               return (
                 <Box
@@ -324,6 +326,19 @@ export default function NotificationsPage() {
                       }}
                     >
                       Xem ưu đãi 🎁
+                    </Button>
+                  )}
+                  {isStorefront && !isOrder && !isGame && !isCart && !isLoyalty && (
+                    <Button
+                      fullWidth
+                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
+                      onClick={() => {
+                        haptic('light');
+                        setSelectedNotif(null);
+                        navigate('/storefront');
+                      }}
+                    >
+                      Thêm vào gian hàng 🛍️
                     </Button>
                   )}
                 </Box>

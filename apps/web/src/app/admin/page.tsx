@@ -535,12 +535,16 @@ function OrdersTab() {
                                     {o.items.map((it) => (
                                       <div key={it.id} className="flex items-center justify-between px-3 py-2 text-xs">
                                         <div>
-                                          <span className="font-medium text-neutral-800">{it.productTitle}</span>
-                                          {it.variationTitle && <span className="text-neutral-500"> ({it.variationTitle})</span>}
-                                          {it.sku && <span className="text-neutral-400"> - SKU: {it.sku}</span>}
+                                          <span className="font-medium text-neutral-800">{it.productName}</span>
+                                          {it.variationName && <span className="text-neutral-500"> ({it.variationName})</span>}
+                                          {!!it.backorderedQty && (
+                                            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                                              Đặt trước {it.backorderedQty}
+                                            </span>
+                                          )}
                                         </div>
                                         <div className="text-right">
-                                          <span className="text-neutral-500">{it.quantity} x {formatVnd(it.price)}</span>
+                                          <span className="text-neutral-500">{it.quantity} x {formatVnd(it.unitPrice)}</span>
                                           <span className="ml-3 font-semibold text-neutral-800">{formatVnd(it.total)}</span>
                                         </div>
                                       </div>

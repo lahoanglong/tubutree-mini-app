@@ -161,8 +161,8 @@ describe('CSV export utility', () => {
         note: 'Giao giờ hành chính, gọi trước',
         user: { id: 'u1', fullName: 'Nguyễn Văn A', phone: '0901234567' },
         items: [
-          { id: 'i1', productTitle: 'Trà Oolong', price: 150000, quantity: 2, total: 300000 },
-          { id: 'i2', productTitle: 'Bình giữ nhiệt', price: 50000, quantity: 1, total: 50000 },
+          { id: 'i1', productName: 'Trà Oolong', unitPrice: 150000, quantity: 2, total: 300000, backorderedQty: 0 },
+          { id: 'i2', productName: 'Bình giữ nhiệt', unitPrice: 50000, quantity: 1, total: 50000, backorderedQty: 0 },
         ],
       },
     ];

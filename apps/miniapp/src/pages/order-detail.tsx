@@ -149,6 +149,19 @@ export default function OrderDetailPage() {
                 {formatVnd(it.total)}
               </Text>
             </Box>
+            {/* Đơn đại lý đặt vượt tồn kho hiện tại — phần này chờ nhập hàng, chưa xuất kho
+                (DealerBackorderService lấp dần theo tồn về, FIFO theo đơn cũ trước). */}
+            {it.backorderedQty > 0 && (
+              <Text
+                size="xSmall"
+                style={{
+                  color: 'var(--warning)', background: 'var(--warning-bg)',
+                  display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--radius-full)', marginTop: 4,
+                }}
+              >
+                Đặt trước {it.backorderedQty}/{it.quantity} — chờ hàng về
+              </Text>
+            )}
             {/* Lối vào đánh giá: trước đây nhận hàng xong KHÔNG có đường nào để đánh giá —
                 chữ "đánh giá" chỉ tồn tại ở trang sản phẩm, mà từ đơn không mở được trang đó
                 (OrderItem không lưu slug). Nay snapshot productSlug nên dẫn thẳng được. */}

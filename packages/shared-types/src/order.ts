@@ -16,6 +16,9 @@ export interface OrderItemDTO {
   unitPrice: number;
   quantity: number;
   total: number;
+  /** Số đơn vị của dòng này CHƯA có hàng thật để giữ chỗ — chỉ > 0 cho đơn ĐẠI LÝ đặt vượt tồn
+   * (dealer.service.ts placeOrder cho đặt trước thay vì từ chối). Luôn 0 với đơn khác. */
+  backorderedQty: number;
 }
 
 export interface ShippingAddressSnapshot {

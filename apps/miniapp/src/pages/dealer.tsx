@@ -643,6 +643,9 @@ function DealerOrders() {
             // nút "Thanh toán ngay" dẫn tới QR, nên thẻ đơn phải bấm được thì đại lý mới trả
             // tiền được sau khi đã rời màn đặt hàng.
             const needsPayment = o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER';
+            // Tổng số lượng đang đặt trước (chờ nhập hàng) của đơn — DealerService.placeOrder
+            // ghi vào OrderItem.backorderedQty khi đặt vượt tồn hiện có (đặt trước thay vì chặn).
+            const totalBackordered = o.items?.reduce((s, it) => s + (it.backorderedQty || 0), 0) ?? 0;
             return (
               <Box
                 key={o.code}
@@ -670,6 +673,17 @@ function DealerOrders() {
                 <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
                   {o.items?.length ?? 0} mặt hàng · {new Date(o.createdAt).toLocaleDateString('vi-VN')}
                 </Text>
+                {totalBackordered > 0 && (
+                  <Text
+                    size="xSmall"
+                    style={{
+                      color: 'var(--warning)', background: 'var(--warning-bg)',
+                      display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--radius-full)', marginTop: 4,
+                    }}
+                  >
+                    Đặt trước {totalBackordered} — chờ hàng về
+                  </Text>
+                )}
                 <Box flex justifyContent="space-between" alignItems="center" style={{ marginTop: 4 }}>
                   <Text bold style={{ color: 'var(--dealer-ink)' }}>
                     {formatVnd(o.total)}

@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { AffiliateService } from '../affiliate/affiliate.service';
 import { normalizeSubdomain, assertIdentifierAvailable } from './identifier-validation';
 
 // Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
@@ -14,6 +15,9 @@ export class StorefrontService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    // AffiliateModule là @Global() (affiliate.module.ts) — inject thẳng không cần import module,
+    // không tạo circular dependency (AffiliateModule không phụ thuộc ngược lại StorefrontModule).
+    private readonly affiliate: AffiliateService,
   ) {}
 
   /**
@@ -216,9 +220,15 @@ export class StorefrontService {
       },
     });
     if (!sf) throw new NotFoundException('Gian hàng không tồn tại hoặc chưa đăng.');
+    // Huy hiệu bậc CHỈ cho gian hàng CTV (bậc tính theo doanh số cá nhân — MERCHANT/BRAND không
+    // có khái niệm này). CHỈ trả tên+icon (getPublicTier), không lộ doanh thu/bonusPct thật cho
+    // khách xem gian hàng.
+    const ownerTier =
+      sf.type === 'CTV' && sf.ownerUserId ? await this.affiliate.getPublicTier(sf.ownerUserId) : null;
     return {
       id: sf.id,
       slug: sf.slug,
+      ownerTier,
       subdomain: sf.subdomain,
       customDomain: sf.customDomain,
       type: sf.type,
@@ -260,6 +270,22 @@ export class StorefrontService {
     };
   }
 
+  /**
+   * Danh sách nhẹ gian hàng ĐÃ ĐĂNG cho web sitemap.ts — trước đây gian hàng/nhãn hàng chưa
+   * được liệt kê trong sitemap vì "API công khai chưa có endpoint liệt kê chúng" (comment cũ
+   * trong sitemap.ts). Giới hạn 500 gian hàng cập nhật gần nhất, mirror đúng cách sitemap.ts
+   * đang giới hạn 200 sản phẩm — không cần crawler biết TOÀN BỘ, chỉ cần nội dung mới nhất.
+   */
+  async getPublicList() {
+    const stores = await this.prisma.storefront.findMany({
+      where: { isPublished: true },
+      select: { slug: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 500,
+    });
+    return stores;
+  }
+
   async getPublicByHost(host: string) {
     if (!host) throw new BadRequestException('Host không hợp lệ.');
     const hostname = host.split(':')[0]!.toLowerCase();
@@ -277,6 +303,66 @@ export class StorefrontService {
       }
     }
     return this.getPublicBySlug(hostname);
+  }
+
+  /**
+   * Thống kê theo sản phẩm cho chính CTV xem (không public) — CTV cần biết sản phẩm nào trong
+   * gian hàng đang bán chạy để tối ưu, không chỉ số hoa hồng tổng đã có ở /affiliate/dashboard.
+   * Gộp trực tiếp từ Order.storefrontSlug (đã có @@index sẵn) — không cần bảng đếm lượt xem/
+   * click riêng, và không đụng logic tính hoa hồng (chỉ đọc, không tin cậy để trả tiền).
+   *
+   * Hoa hồng lấy từ bảng `Commission` (affiliateUserId + order.storefrontSlug), KHÔNG dùng cột
+   * `Order.commission` — cột đó không nơi nào trong codebase ghi giá trị (mãi mãi = 0 mặc định
+   * schema), affiliate.service.ts tự có bảng Commission riêng làm nguồn chân lý duy nhất cho
+   * tiền hoa hồng (mirror dashboard()/storefrontAnalytics() cùng service).
+   */
+  async getStats(userId: string) {
+    const sf = await this.assertOwnedStorefront(userId);
+    const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [orders, commission30dAgg] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { storefrontSlug: sf.slug, status: { notIn: ['CANCELLED', 'RETURNED'] } },
+        select: { createdAt: true, items: { select: { productSlug: true, productName: true, quantity: true, total: true } } },
+      }),
+      this.prisma.commission.aggregate({
+        where: {
+          affiliateUserId: userId,
+          order: { storefrontSlug: sf.slug },
+          createdAt: { gte: since30d },
+          status: { not: 'REJECTED' },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const byProduct = new Map<string, { productSlug: string; productName: string; qty: number; revenue: number }>();
+    let orders30d = 0;
+    let orders7d = 0;
+    let revenue30d = 0;
+    for (const o of orders) {
+      const in30d = o.createdAt >= since30d;
+      const in7d = o.createdAt >= since7d;
+      if (in30d) { orders30d += 1; revenue30d += o.items.reduce((s, i) => s + i.total, 0); }
+      if (in7d) orders7d += 1;
+      for (const item of o.items) {
+        // Đơn cũ trước migration OrderItem.productSlug có thể null — gộp vào key riêng thay vì
+        // vỡ thống kê hoặc lẫn với sản phẩm khác.
+        const key = item.productSlug ?? `__unknown:${item.productName}`;
+        const row = byProduct.get(key) ?? { productSlug: item.productSlug ?? '', productName: item.productName, qty: 0, revenue: 0 };
+        row.qty += item.quantity;
+        row.revenue += item.total;
+        byProduct.set(key, row);
+      }
+    }
+
+    return {
+      orders7d,
+      orders30d,
+      revenue30d,
+      commission30d: commission30dAgg._sum.amount ?? 0,
+      byProduct: [...byProduct.values()].sort((a, b) => b.revenue - a.revenue),
+    };
   }
 
   private async assertOwnedStorefront(userId: string) {
@@ -312,6 +398,52 @@ export class StorefrontService {
               sortOrder: count,
             },
           });
+        },
+        { isolationLevel: 'Serializable' },
+      );
+    } catch (err) {
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+        throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Áp mẫu dựng sẵn theo danh mục — tạo 1 collection + tối đa 8 sản phẩm nổi bật của danh mục
+   * đó. Giảm ma sát cho CTV mới (trước đây gian hàng luôn trắng hoàn toàn, phải tự tạo từng
+   * collection/sản phẩm). CHỈ áp dụng được khi gian hàng CHƯA có collection nào — tránh mẫu đè
+   * lên gian hàng CTV đã tự dựng tay.
+   */
+  async applyTemplate(userId: string, categoryId: string) {
+    const sf = await this.assertOwnedStorefront(userId);
+    const category = await this.prisma.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true } });
+    if (!category) throw new BadRequestException('Danh mục không tồn tại.');
+    const products = await this.prisma.product.findMany({
+      where: { categoryIds: { has: categoryId }, isActive: true, affiliateBlocked: false },
+      orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
+      take: 8,
+      select: { id: true },
+    });
+    if (products.length === 0) {
+      throw new BadRequestException('Danh mục này chưa có sản phẩm gợi ý — hãy chọn danh mục khác hoặc tự tạo bộ sưu tập.');
+    }
+    try {
+      // Serializable + đếm lại collection TRONG transaction (mirror createCollection) — chặn
+      // race 2 request "áp mẫu" cùng lúc tạo 2 collection trùng cho cùng 1 gian hàng trống.
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const existing = await tx.storefrontCollection.count({ where: { storefrontId: sf.id } });
+          if (existing > 0) {
+            throw new BadRequestException('Gian hàng đã có bộ sưu tập — mẫu chỉ áp dụng được cho gian hàng còn trống.');
+          }
+          const collection = await tx.storefrontCollection.create({
+            data: { storefrontId: sf.id, title: category.name, kind: 'NORMAL', layout: 'CAROUSEL', sortOrder: 0 },
+          });
+          await tx.storefrontItem.createMany({
+            data: products.map((p, i) => ({ collectionId: collection.id, productId: p.id, sortOrder: i })),
+          });
+          return { collectionId: collection.id, title: collection.title, itemCount: products.length };
         },
         { isolationLevel: 'Serializable' },
       );
