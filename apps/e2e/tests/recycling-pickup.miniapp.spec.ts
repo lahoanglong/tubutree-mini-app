@@ -143,7 +143,14 @@ interface DetailCase {
   waybill: string | null;
   /** Nút "Hủy đơn" ở action bar có hiện không. */
   canCancel: boolean;
+  /** Câu chi tiết phải hiện đúng (bỏ trống = không kiểm). */
+  detail?: string;
+  /** Đơn đã rời hàng đợi CSKH → tuyệt đối không hứa "CSKH sẽ liên hệ". */
+  noCskhPromise?: boolean;
 }
+
+/** utils/format.ts NEUTRAL_PICKUP_DETAIL — cùng câu với web lib/recycling.ts. */
+const NEUTRAL_DETAIL = 'Nếu bưu tá chưa nhận vật liệu tái chế, nhắn Zalo OA Tubu để được hẹn lại.';
 
 const RECYCLING = { hasRecyclingPickup: true, recyclingNote: '3 cục pin, vỏ hộp sữa' } as const;
 
@@ -203,6 +210,24 @@ const DETAIL_CASES: DetailCase[] = [
     waybill: null,
     canCancel: false,
   },
+  {
+    name: 'Đã giao bằng vận đơn tay (DELIVERED, Gomdon FAILED) → trung tính, không hứa CSKH',
+    order: { ...RECYCLING, status: 'DELIVERED', paymentStatus: 'PAID', gomdonStatus: 'FAILED' },
+    title: 'Đã giao hàng',
+    waybill: null,
+    canCancel: false,
+    detail: NEUTRAL_DETAIL,
+    noCskhPromise: true,
+  },
+  {
+    name: 'Admin "Đã xử lý tay" (MANUAL_HANDLED) → trung tính, ẩn mã vận đơn cũ',
+    order: { ...RECYCLING, status: 'CONFIRMED', gomdonStatus: 'MANUAL_HANDLED', gomdonPartnerCode: 'BEX000444' },
+    title: 'Thu gom được xử lý riêng',
+    waybill: null,
+    canCancel: true,
+    detail: NEUTRAL_DETAIL,
+    noCskhPromise: true,
+  },
 ];
 
 test.describe('Chi tiết đơn — trạng thái thu gom theo gomdonStatus', () => {
@@ -229,6 +254,8 @@ test.describe('Chi tiết đơn — trạng thái thu gom theo gomdonStatus', ()
       } else {
         await expect(box).not.toContainText('Mã vận đơn BestExpress:');
       }
+      if (c.detail) await expect(box).toContainText(c.detail);
+      if (c.noCskhPromise) await expect(box).not.toContainText('CSKH');
 
       const cancelBtn = page.getByRole('button', { name: 'Hủy đơn', exact: true });
       if (c.canCancel) await expect(cancelBtn).toBeVisible();

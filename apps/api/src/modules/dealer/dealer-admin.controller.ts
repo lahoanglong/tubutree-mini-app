@@ -49,3 +49,25 @@ export class DealerAdminController {
     return this.dealer.markRewardClaimPaid(adminId, id, dto.note);
   }
 }
+
+export class ConfirmDealerPaymentDto {
+  /** Mã giao dịch ngân hàng (vd FT26270…) — lưu vào ghi chú lịch sử đơn để đối soát. */
+  @IsOptional() @IsString() @MaxLength(100) bankRef?: string;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
+/**
+ * Admin thao tác trên đơn đại lý. POST /api/admin/dealer-orders/:id/confirm-payment — xác nhận đã
+ * nhận chuyển khoản cho đơn TRẢ TRƯỚC (UNPAID → PAID; `:id` nhận id hoặc mã đơn). Có ghi vết
+ * order_status_history (actor ADMIN) — xem DealerService.confirmDealerOrderPayment.
+ */
+@Roles('ADMIN')
+@Controller('admin/dealer-orders')
+export class DealerOrderAdminController {
+  constructor(private readonly dealer: DealerService) {}
+
+  @Post(':id/confirm-payment')
+  confirmPayment(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ConfirmDealerPaymentDto) {
+    return this.dealer.confirmDealerOrderPayment(adminId, id, dto);
+  }
+}

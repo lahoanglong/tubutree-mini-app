@@ -15,7 +15,11 @@ import type { CouponsService } from '../../coupons/coupons.service';
  * $transaction interactive thật sự gọi callback — khác `jest.fn().mockResolvedValue([])`
  * đơn thuần, để assertTransition + atomic flip + side-effect chạy đúng như production.
  */
-function setup(order: Record<string, unknown> | null, gomdonQueue?: { getJob: jest.Mock; add: jest.Mock }) {
+function setup(
+  order: Record<string, unknown> | null,
+  gomdonQueue?: { getJob: jest.Mock; add: jest.Mock },
+  alerts?: { alert: jest.Mock },
+) {
   const orderFindFirst = jest.fn().mockResolvedValue(order);
   const orderFindUniqueOrThrow = jest.fn().mockResolvedValue(order);
   const orderUpdateMany = jest.fn().mockResolvedValue({ count: 1 }); // onPaymentReconcile gọi TRỰC TIẾP, không qua $transaction
@@ -38,6 +42,7 @@ function setup(order: Record<string, unknown> | null, gomdonQueue?: { getJob: je
     order: {
       findFirst: orderFindFirst,
       findUniqueOrThrow: orderFindUniqueOrThrow,
+      findUnique: jest.fn().mockResolvedValue(order ?? null),
       updateMany: orderUpdateMany,
       update: orderUpdate,
     },
@@ -59,7 +64,7 @@ function setup(order: Record<string, unknown> | null, gomdonQueue?: { getJob: je
   const coupons = { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService;
   const reversal = new OrderReversalService(flashSale, coupons);
   const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal, gomdonQueue as never);
-  const proc = new PancakeProcessor(prisma, notifications, orderStatus, gomdonQueue as never) as unknown as {
+  const proc = new PancakeProcessor(prisma, notifications, orderStatus, gomdonQueue as never, alerts as never) as unknown as {
     onStatusUpdated(d: Record<string, unknown>): Promise<void>;
     onCancelled(d: Record<string, unknown>): Promise<void>;
     onPaymentReconcile(d: Record<string, unknown>): Promise<void>;
@@ -263,9 +268,39 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
     });
     await proc.onPaymentReconcile(paidPayload);
+    // Guard theo trạng thái HIỆN TẠI trong DB: chỉ lật CONFIRMED khi đơn còn PENDING_PAYMENT.
     expect(orderUpdateMany).toHaveBeenCalledWith({
-      where: { id: 'o1', paymentStatus: 'UNPAID' },
+      where: { id: 'o1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
       data: { paymentStatus: 'PAID', status: 'CONFIRMED' },
+    });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
+  });
+
+  it('RACE: đọc thấy PENDING_PAYMENT nhưng khách vừa HUỶ (đã hoàn kho) trước khi lật → KHÔNG hồi sinh đơn thành PAID+CONFIRMED', async () => {
+    const { proc, orderUpdateMany, notifications } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
+    });
+    orderUpdateMany.mockResolvedValue({ count: 0 }); // DB giờ là CANCELLED → cả 2 guard đều trượt
+    await proc.onPaymentReconcile(paidPayload);
+    for (const [args] of orderUpdateMany.mock.calls) {
+      const st = args.where.status;
+      // Không lần lật nào được phép khớp đơn đã huỷ/trả.
+      expect(st === 'PENDING_PAYMENT' || (st?.notIn?.includes('CANCELLED') && st.notIn.includes('RETURNED'))).toBe(true);
+    }
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('đơn đã CONFIRMED (xác nhận trước khi tiền về) → chỉ lật PAID, KHÔNG đụng status, guard loại đơn huỷ/trả', async () => {
+    const { proc, orderUpdateMany, notifications } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
+    });
+    orderUpdateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+    await proc.onPaymentReconcile(paidPayload);
+    expect(orderUpdateMany).toHaveBeenLastCalledWith({
+      where: { id: 'o1', paymentStatus: 'UNPAID', status: { notIn: ['CANCELLED', 'RETURNED', 'PENDING_PAYMENT'] } },
+      data: { paymentStatus: 'PAID' },
     });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
   });
@@ -594,5 +629,44 @@ describe('PancakeProcessor — đơn thu gom tái chế (Gomdon)', () => {
     });
     await proc.onShippingUpdated({ id: 'p1', partner: { partner_name: 'GHN', extend_code: 'GHN999', partner_status: 'picking' } });
     expect(orderUpdate).not.toHaveBeenCalled();
+  });
+
+  const liveGomdon = {
+    id: 'o1', code: 'TUBU1', userId: 'u1', status: 'SHIPPING', hasRecyclingPickup: true,
+    gomdonOrderId: '77', gomdonPartnerCode: 'BE77', gomdonStatus: '5', gomdonCancelStatus: null,
+    shippingCode: 'BE77', shippingPartner: 'BestExpress', shippingStatus: 'Đang đi giao hàng', shippingHistory: [],
+  };
+
+  it('vận đơn Gomdon đang sống + Pancake báo MÃ VẬN ĐƠN KHÁC → báo động vận hành thật (OPS alert), không ghi đè; báo 1 lần cho cùng mã', async () => {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const { proc, orderUpdate } = setup(liveGomdon, undefined, alerts);
+    const payload = { id: 'p1', partner: { partner_name: 'GHN', extend_code: 'GHN999', partner_status: 'picking' } };
+    await proc.onShippingUpdated(payload);
+    expect(orderUpdate).not.toHaveBeenCalled();
+    expect(alerts.alert).toHaveBeenCalledTimes(1);
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1', expect.stringContaining('GHN999'));
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1', expect.stringContaining('BE77'));
+    // Pancake gửi lại (mỗi lần đơn đổi) — không spam cùng một cảnh báo.
+    await proc.onShippingUpdated(payload);
+    expect(alerts.alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('Pancake báo đúng mã Gomdon (hoặc id số) → không báo động', async () => {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const { proc } = setup(liveGomdon, undefined, alerts);
+    await proc.onShippingUpdated({ id: 'p1', partner: { partner_name: 'BEST', extend_code: 'BE77' } });
+    await proc.onShippingUpdated({ id: 'p1', partner: { partner_name: 'BEST', extend_code: '77' } });
+    expect(alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('vận đơn Gomdon đã huỷ (status 2 / gomdonCancelStatus CANCELLED / đã xử lý tay) → Gomdon hết sở hữu field vận chuyển, ghi cập nhật Pancake bình thường', async () => {
+    for (const over of [{ gomdonStatus: '2' }, { gomdonCancelStatus: 'CANCELLED' }, { gomdonStatus: 'MANUAL_HANDLED' }]) {
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const { proc, orderUpdate } = setup({ ...liveGomdon, status: 'CONFIRMED', ...over }, undefined, alerts);
+      await proc.onShippingUpdated({ id: 'p1', partner: { partner_name: 'GHN', extend_code: 'GHN999', partner_status: 'picking' } });
+      expect(orderUpdate).toHaveBeenCalledTimes(1);
+      expect((orderUpdate as jest.Mock).mock.calls[0][0].data).toMatchObject({ shippingPartner: 'GHN', shippingCode: 'GHN999', shippingStatus: 'picking' });
+      expect(alerts.alert).not.toHaveBeenCalled();
+    }
   });
 });

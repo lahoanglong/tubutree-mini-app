@@ -657,6 +657,10 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-dealer-reward-claim-approved', code: 'DEALER_REWARD_CLAIM_APPROVED', channel: 'INAPP', bodyTemplate: '✅ Yêu cầu nhận thưởng "{{reward}}" ({{period}}) đã được duyệt. Tubu Tree sẽ liên hệ để trao thưởng cho bạn 🌿' },
   { id: 'nt-dealer-reward-claim-rejected', code: 'DEALER_REWARD_CLAIM_REJECTED', channel: 'INAPP', bodyTemplate: 'Yêu cầu nhận thưởng "{{reward}}" ({{period}}) chưa được duyệt. Lý do: {{reason}}. Cần hỗ trợ, bạn nhắn Zalo OA Tubu Tree nhé.' },
   { id: 'nt-dealer-reward-claim-paid', code: 'DEALER_REWARD_CLAIM_PAID', channel: 'INAPP', bodyTemplate: '🎁 Tubu Tree đã trao thưởng "{{reward}}" ({{period}}) cho bạn. Cảm ơn bạn đã đồng hành 🌿' },
+  // Thu hồi thưởng doanh số quý khi đơn đại lý bị huỷ/trả (dealer.service clawbackQuarterBonusForOrder) —
+  // cùng mã/nội dung với migration 20260927100000_dealer_bonus_adjusted_template. createOnly: admin sửa nội
+  // dung rồi thì chạy lại seed KHÔNG ghi đè.
+  { id: 'nt-dealer-bonus-adjusted', code: 'DEALER_BONUS_ADJUSTED', channel: 'INAPP', bodyTemplate: 'Thưởng doanh số {{quarter}} đã được điều chỉnh do đơn {{order_code}} bị huỷ/trả: thu hồi {{amount}}đ (cộng lại vào công nợ đại lý). Thưởng {{quarter}} còn lại: {{remaining}}đ. Cần hỗ trợ, bạn nhắn Zalo OA Tubu Tree nhé.', createOnly: true },
   { id: 'nt-comm-answer', code: 'COMMUNITY_NEW_ANSWER', channel: 'INAPP', bodyTemplate: '💬 {{author}} vừa trả lời câu hỏi "{{title}}" của bạn.' },
   { id: 'nt-comm-expert', code: 'COMMUNITY_EXPERT_REPLIED', channel: 'INAPP', bodyTemplate: '🌿 Chuyên gia Tubu vừa trả lời câu hỏi "{{title}}" của bạn.' },
   { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm TubuXu thưởng.' },
@@ -780,8 +784,9 @@ async function main() {
   console.log(`   → ${PRODUCTS.length} products, ${variationCount} variations.`);
 
   console.log('🌱 Seeding NotificationTemplates...');
-  for (const t of NOTIFICATION_TEMPLATES) {
-    await prisma.notificationTemplate.upsert({ where: { id: t.id }, update: t, create: t });
+  for (const { createOnly, ...t } of NOTIFICATION_TEMPLATES) {
+    // createOnly: chỉ tạo khi chưa có — không ghi đè nội dung admin đã chỉnh.
+    await prisma.notificationTemplate.upsert({ where: { id: t.id }, update: createOnly ? {} : t, create: t });
   }
   console.log(`   → ${NOTIFICATION_TEMPLATES.length} templates.`);
 

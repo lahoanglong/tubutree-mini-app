@@ -41,12 +41,13 @@ export class AdminService {
    * và chữ "Khách hàng", rồi bấm Duyệt để hoàn nguyên tổng đơn về ví mà KHÔNG nhìn thấy số tiền
    * mình đang hoàn.
    */
-  async listReturnRequests(status: string | undefined, page: number, limit: number) {
+  async listReturnRequests(status: string | undefined, page: number, limit: number, order?: 'asc' | 'desc') {
     const where = status ? { status: status as never } : {};
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.returnRequest.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        // Hàng chờ duyệt (REQUESTED) web gửi order=asc — yêu cầu cũ nhất lên đầu, không bị chìm.
+        orderBy: { createdAt: order ?? 'desc' },
         ...skipTake(page, limit),
       }),
       this.prisma.returnRequest.count({ where }),
@@ -188,12 +189,13 @@ export class AdminService {
   }
 
   // ── Dealer applications ──
-  async listDealerApplications(status: string | undefined, page: number, limit: number) {
+  async listDealerApplications(status: string | undefined, page: number, limit: number, order?: 'asc' | 'desc') {
     const where = status ? { status: status as never } : {};
     const [items, total] = await this.prisma.$transaction([
       this.prisma.dealerApplication.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        // Hàng chờ duyệt (PENDING) web gửi order=asc — hồ sơ cũ nhất lên đầu.
+        orderBy: { createdAt: order ?? 'desc' },
         ...skipTake(page, limit),
       }),
       this.prisma.dealerApplication.count({ where }),
@@ -392,7 +394,19 @@ export class AdminService {
       }),
       this.prisma.order.count({ where }),
     ]);
-    return paginated(items, page, limit, total);
+    // Đơn đại lý: gắn cờ "Ghi công nợ" (có dòng DealerCreditLedger refType=ORDER — đúng điều kiện
+    // DealerService.confirmDealerOrderPayment dùng để từ chối). Đơn công nợ cũng BANK_TRANSFER + UNPAID
+    // nên màn admin không tự phân biệt được với đơn trả trước đang chờ chuyển khoản; không có cờ này thì
+    // nút "Xác nhận đã nhận chuyển khoản" hiện cả trên đơn công nợ rồi bấm vào mới bị từ chối.
+    const dealerIds = items.filter((o) => o.type === 'DEALER').map((o) => o.id);
+    if (dealerIds.length === 0) return paginated(items, page, limit, total);
+    const debits = await this.prisma.dealerCreditLedger.findMany({
+      where: { refType: 'ORDER', refId: { in: dealerIds } },
+      select: { refId: true },
+    });
+    const onCredit = new Set(debits.map((d) => d.refId));
+    const data = items.map((o) => (o.type === 'DEALER' ? { ...o, dealerOnCredit: onCredit.has(o.id) } : o));
+    return paginated(data, page, limit, total);
   }
 
   /**
@@ -470,6 +484,29 @@ export class AdminService {
     } catch (err) {
       this.logger.warn(
         `Admin ${adminId} huỷ vận đơn Gomdon đơn ${order.code} bị từ chối: ${err instanceof Error ? err.message : err}`,
+      );
+      throw err;
+    }
+  }
+
+  /**
+   * "Đã xử lý tay": admin đã xử lý vận đơn thu gom ngoài hệ thống → gomdonStatus MANUAL_HANDLED (guard
+   * nguyên tử ở GomdonOrderService.markHandled), đơn rời hàng đợi "Cần xử lý thu gom". Ghi chú của admin
+   * chỉ vào log vết (không ghi vào lịch sử vận chuyển khách nhìn thấy).
+   */
+  async markGomdonHandled(adminId: string, idOrCode: string, note?: string) {
+    const order = await this.resolveOrderRef(idOrCode);
+    const cleanNote = note?.trim().replace(/\s+/g, ' ').slice(0, 500);
+    try {
+      const res = await this.gomdonOrder.markHandled(order.id);
+      this.logger.warn(
+        `Admin ${adminId} đánh dấu "Đã xử lý tay" vận đơn thu gom đơn ${order.code} (trạng thái trước: ${res.previousStatus})` +
+          `${cleanNote ? ` — ghi chú: ${cleanNote}` : ''}.`,
+      );
+      return res;
+    } catch (err) {
+      this.logger.warn(
+        `Admin ${adminId} đánh dấu "Đã xử lý tay" đơn ${order.code} bị từ chối: ${err instanceof Error ? err.message : err}`,
       );
       throw err;
     }

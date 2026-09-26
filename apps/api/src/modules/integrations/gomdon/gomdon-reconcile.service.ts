@@ -16,8 +16,10 @@ import { GOMDON_EVENT_STATUS } from './gomdon-webhook.service';
  *  1. Webhook event kẹt RECEIVED/FAILED (enqueue lỗi, hết lượt retry) → enqueue lại (giới hạn số lần).
  *  2. Đơn thu gom chưa từng tạo vận đơn (gomdonStatus null — enqueue lúc checkout lỗi), hoặc đã PAID mà
  *     còn AWAITING_PAYMENT (enqueue lúc xác nhận thanh toán lỗi) → enqueue tạo vận đơn (có claim, an toàn).
- *  3. CREATING quá lâu (tiến trình chết giữa lúc gọi Gomdon) → NEEDS_MANUAL_CHECK + đẩy Pancake + báo CSKH.
- *  4. Đơn đã huỷ còn vận đơn chưa xử lý huỷ (enqueue huỷ lỗi) → enqueue huỷ.
+ *  3. CREATING quá lâu (tiến trình chết giữa lúc gọi Gomdon) của đơn còn hiệu lực → NEEDS_MANUAL_CHECK +
+ *     đẩy Pancake + báo CSKH.
+ *  4. Đơn đã huỷ còn vận đơn chưa xử lý huỷ (enqueue huỷ lỗi) → enqueue huỷ. Vận đơn chỉ có mã BestExpress
+ *     (thiếu id số) cũng tính là có vận đơn.
  */
 @Injectable()
 export class GomdonReconcileService {
@@ -109,12 +111,18 @@ export class GomdonReconcileService {
     const orders = await this.prisma.order.findMany({
       where: {
         hasRecyclingPickup: true,
+        // Đơn đã huỷ/trả kẹt CREATING do luồng huỷ lo (cancelOnGomdon hết lượt → FAILED + báo; pushOrder
+        // chạy lại → NEEDS_MANUAL_CHECK + báo). Trước đây pushOrder bỏ qua đơn chết mà không đổi trạng thái
+        // → đơn khớp cron này mãi mãi, chiếm lô của đơn còn hiệu lực.
+        status: { notIn: ['CANCELLED', 'RETURNED'] },
         gomdonStatus: GOMDON_STATE.CREATING,
         gomdonOrderId: null,
         gomdonPartnerCode: null,
         updatedAt: { lt: this.minutesAgo(GomdonReconcileService.CREATING_STALE_MINUTES) },
       },
       select: { id: true, code: true },
+      // Cũ nhất trước — lô không bị vài đơn mới hơn chiếm chỗ.
+      orderBy: { updatedAt: 'asc' },
       take: GomdonReconcileService.BATCH_SIZE,
     });
     for (const o of orders) {
@@ -134,7 +142,15 @@ export class GomdonReconcileService {
         status: 'CANCELLED',
         gomdonCancelStatus: null,
         updatedAt: { lt: this.minutesAgo(GomdonReconcileService.CANCEL_STALE_MINUTES) },
-        OR: [{ gomdonOrderId: { not: null } }, { gomdonStatus: GOMDON_STATE.NEEDS_MANUAL_CHECK }],
+        // CÓ vận đơn = id số HOẶC chỉ mã BestExpress (vận đơn chỉ-có-mã vẫn là vận đơn sống).
+        OR: [
+          { gomdonOrderId: { not: null } },
+          { gomdonPartnerCode: { not: null } },
+          { gomdonStatus: GOMDON_STATE.NEEDS_MANUAL_CHECK },
+          { gomdonStatus: GOMDON_STATE.MANUAL_HANDLED },
+          // Kẹt CREATING: cancelOnGomdon chốt NEEDS_MANUAL_CHECK + báo khi claim đã quá lease.
+          { gomdonStatus: GOMDON_STATE.CREATING },
+        ],
       },
       select: { id: true, code: true },
       take: GomdonReconcileService.BATCH_SIZE,

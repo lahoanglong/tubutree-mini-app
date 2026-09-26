@@ -120,10 +120,23 @@ export function isRecyclingPickedUp(gomdonStatus: string | null | undefined): bo
 }
 
 const NEEDS_CSKH = new Set(['NEEDS_MANUAL_CHECK', 'FAILED', 'NOT_CONFIGURED', '2', '6', '8', '9', '10', '11', '12']);
+/** Chưa có vận đơn tự động (kho tạo tay / kiểm tra tay) — trùng hàng đợi "Cần xử lý thu gom" của admin. */
+const NO_WAYBILL_STATES = new Set(['NEEDS_MANUAL_CHECK', 'FAILED', 'NOT_CONFIGURED']);
+/** Admin bấm "Đã xử lý tay" (BE GOMDON_STATE.MANUAL_HANDLED). */
+const MANUAL_HANDLED = 'MANUAL_HANDLED';
+/** Hãng của vận đơn Gomdon (Order.shippingPartner do Gomdon ghi). */
+const GOMDON_CARRIER = 'BestExpress';
+/**
+ * Câu trung tính khi hàng đợi CSKH KHÔNG còn đơn này (đã giao / "Đã xử lý tay" / hàng đã rời kho bằng
+ * vận đơn tay) — không hứa "CSKH sẽ liên hệ" vì sẽ không ai được nhắc liên hệ.
+ */
+const NEUTRAL_PICKUP_DETAIL = 'Nếu bưu tá chưa nhận vật liệu tái chế, nhắn Zalo OA Tubu để được hẹn lại.';
 
 /**
  * Trạng thái thu gom hiển thị cho KHÁCH ở chi tiết đơn — nói đúng những gì hệ thống đã làm
- * (không hứa "bưu tá sẽ tới" khi vận đơn chưa tạo được / đơn chưa thanh toán / đã huỷ).
+ * (không hứa "bưu tá sẽ tới" khi vận đơn chưa tạo được / đơn chưa thanh toán / đã huỷ, không hứa
+ * "CSKH sẽ liên hệ" khi đơn đã rời hàng đợi CSKH). Cùng nội dung recyclingPickupView của web
+ * (apps/web/src/lib/recycling.ts).
  * gomdonStatus: mã Gomdon "1".."12" hoặc trạng thái nội bộ (xem shared-types OrderDTO).
  */
 export function recyclingPickupView(o: {
@@ -133,9 +146,15 @@ export function recyclingPickupView(o: {
   gomdonStatus?: string | null;
   gomdonPartnerCode?: string | null;
   gomdonCancelStatus?: string | null;
+  shippingCode?: string | null;
+  shippingPartner?: string | null;
 }): RecyclingPickupView {
   const s = o.gomdonStatus ?? null;
   const waybill = o.gomdonPartnerCode ?? null;
+  /** Mã BestExpress còn để đối chiếu với bưu tá: vận đơn Gomdon có mã số, trừ vận đơn đã huỷ (2). */
+  const liveWaybill = s && /^\d+$/.test(s) && s !== '2' ? waybill : null;
+  /** Kho đã giao bằng hãng khác (Pancake ghi mã vận đơn hãng đó). */
+  const shippedByOtherCarrier = !!o.shippingCode && o.shippingPartner !== GOMDON_CARRIER;
 
   if (o.status === 'CANCELLED' || o.status === 'RETURNED') {
     const pending = o.gomdonCancelStatus === 'FAILED' || o.gomdonCancelStatus === 'TOO_LATE';
@@ -154,6 +173,20 @@ export function recyclingPickupView(o: {
       title: 'Đã giao hàng',
       detail: 'Cảm ơn bạn đã chung tay tái chế 🌿 Nếu bưu tá chưa nhận vật liệu của bạn, nhắn Zalo OA Tubu để được hỗ trợ.',
       waybill,
+    };
+  }
+  if (o.status === 'DELIVERED') {
+    // Đơn giao xong nhưng Gomdon chưa/không báo "Giao thành công" (giao bằng vận đơn tay / hãng khác).
+    return { tone: 'muted', title: 'Đã giao hàng', detail: NEUTRAL_PICKUP_DETAIL, waybill: liveWaybill };
+  }
+  const handledOutside =
+    s === MANUAL_HANDLED || (!!s && NO_WAYBILL_STATES.has(s) && (o.status === 'SHIPPING' || shippedByOtherCarrier));
+  if (handledOutside) {
+    return {
+      tone: 'muted',
+      title: o.status === 'SHIPPING' ? 'Đang giao hàng' : 'Thu gom được xử lý riêng',
+      detail: NEUTRAL_PICKUP_DETAIL,
+      waybill: null,
     };
   }
   if (s && NEEDS_CSKH.has(s)) {

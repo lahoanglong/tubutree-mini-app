@@ -41,6 +41,13 @@ export interface AdminOrder {
   id: string;
   code: string;
   status: string;
+  /** RETAIL | DEALER (cột Order.type — listOrders trả nguyên dòng). */
+  type?: string;
+  /**
+   * Chỉ có trên đơn DEALER: true = "Ghi công nợ" (có dòng ghi nợ trong sổ công nợ đại lý), false = trả
+   * trước (chờ chuyển khoản). Xem AdminService.listOrders.
+   */
+  dealerOnCredit?: boolean;
   total: number;
   paymentMethod: string;
   paymentStatus?: string;
@@ -104,18 +111,74 @@ export interface Page<T> {
 }
 
 /**
- * Danh sách hồ sơ đại lý / đổi-trả: API trả dạng phân trang `{ data, meta }` nhưng web cũ đọc như mảng
- * (`q.data.map` → crash trắng tab). Nhận cả hai dạng để không vỡ khi BE đổi qua lại.
+ * Chuẩn hoá về `Page<T>`: API trả `{ data, meta }` (paginated()), BE cũ từng trả mảng trần. Trước đây
+ * helper `unwrapList` chỉ lấy `data` và VỨT meta → tab Đổi/Trả (limit 20) và Đại lý (limit 100) cắt cụt
+ * im lặng, không ai biết còn hồ sơ cũ hơn — mà với hàng chờ, hồ sơ cũ nhất lại là hồ sơ quá hạn nhất.
  */
-export function unwrapList<T>(res: T[] | Page<T> | null | undefined): T[] {
-  if (Array.isArray(res)) return res;
-  return res?.data ?? [];
+export function asPage<T>(res: T[] | Page<T> | null | undefined, page: number, limit: number): Page<T> {
+  if (Array.isArray(res)) return { data: res, meta: { page, limit, total: res.length } };
+  if (res && Array.isArray(res.data)) return { data: res.data, meta: res.meta ?? { page, limit, total: res.data.length } };
+  return { data: [], meta: { page, limit, total: 0 } };
 }
 
-export const listDealerApps = (status?: string) =>
-  apiFetch<DealerApp[] | Page<DealerApp>>(
-    `/admin/dealer-applications?limit=100${status ? `&status=${encodeURIComponent(status)}` : ''}`,
-  ).then(unwrapList);
+/** getNextPageParam cho useInfiniteQuery: còn dòng chưa tải → trang kế, hết → undefined. */
+export function nextPageParam(meta: Page<unknown>['meta']): number | undefined {
+  return meta.page * meta.limit < meta.total ? meta.page + 1 : undefined;
+}
+
+/**
+ * Gộp các trang "Tải thêm" của một hàng đợi. Bỏ trùng theo id: sau khi duyệt 1 hồ sơ, refetch các trang
+ * đã tải với offset lệch 1 dòng nên 1 hồ sơ có thể nằm ở 2 trang.
+ *
+ * `oldestFirst` (hàng CHỜ duyệt): xếp cũ nhất lên đầu — hồ sơ chờ lâu nhất cần xử lý trước. HẠN CHẾ: API
+ * (admin.service listDealerApplications/listReturnRequests) chỉ xếp `createdAt desc` và không nhận tham số
+ * thứ tự (DTO có forbidNonWhitelisted → gửi `order=` là 400), nên đây chỉ là sắp xếp TRONG phần đã tải; khi
+ * `hasMore` thì hồ sơ cũ nhất thật sự vẫn còn ở các trang chưa tải — UI phải nói rõ điều đó.
+ */
+export function mergeQueuePages<T extends { id: string; createdAt: string }>(
+  pages: Page<T>[] | undefined,
+  oldestFirst: boolean,
+): { items: T[]; total: number; hasMore: boolean; label: string } {
+  if (!pages || pages.length === 0) return { items: [], total: 0, hasMore: false, label: 'Hiển thị 0/0' };
+  const seen = new Set<string>();
+  const items: T[] = [];
+  for (const p of pages) {
+    for (const row of p.data) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      items.push(row);
+    }
+  }
+  if (oldestFirst) items.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  const last = pages[pages.length - 1]!;
+  const total = Math.max(last.meta.total, items.length);
+  return { items, total, hasMore: nextPageParam(last.meta) !== undefined, label: `Hiển thị ${items.length}/${total}` };
+}
+
+/** Phân trang kiểu Trang trước / Trang sau (cổng đối tác): nhãn "Hiển thị 21–40/45" + trạng thái nút. */
+export function pageRange(
+  meta: { page: number; limit: number },
+  total: number,
+  shown: number,
+): { label: string; totalPages: number; hasPrev: boolean; hasNext: boolean } {
+  const totalPages = Math.max(1, Math.ceil(total / Math.max(1, meta.limit)));
+  const from = (meta.page - 1) * meta.limit + 1;
+  const label = shown > 0 ? `Hiển thị ${from}–${from + shown - 1}/${total}` : `Hiển thị 0/${total}`;
+  return { label, totalPages, hasPrev: meta.page > 1, hasNext: meta.page < totalPages };
+}
+
+/** Cỡ trang hàng đợi admin = @Max(100) của PaginationQuery (apps/api/src/common/pagination.ts). */
+export const ADMIN_QUEUE_PAGE_SIZE = 100;
+
+/** `order`: 'asc' cho hàng CHỜ duyệt (chờ lâu nhất lên đầu, đúng trên MỌI trang); bỏ trống = mới nhất trước. */
+export type QueueOrder = 'asc' | 'desc';
+const queueQuery = (page: number, limit: number, status?: string, order?: QueueOrder) =>
+  `page=${page}&limit=${limit}${status ? `&status=${encodeURIComponent(status)}` : ''}${order ? `&order=${order}` : ''}`;
+
+export const listDealerApps = (status?: string, page = 1, limit = ADMIN_QUEUE_PAGE_SIZE, order?: QueueOrder) =>
+  apiFetch<DealerApp[] | Page<DealerApp>>(`/admin/dealer-applications?${queueQuery(page, limit, status, order)}`).then((res) =>
+    asPage(res, page, limit),
+  );
 export const reviewDealerApp = (id: string, approve: boolean, tierId?: string, reason?: string) =>
   apiFetch(`/admin/dealer-applications/${id}/review`, { method: 'POST', body: { approve, tierId, reason } });
 
@@ -145,10 +208,10 @@ export interface AdminReturnRequest {
     phone: string | null;
   } | null;
 }
-export const listReturnRequests = (status?: string) =>
-  apiFetch<AdminReturnRequest[] | Page<AdminReturnRequest>>(
-    `/admin/return-requests${status ? `?status=${encodeURIComponent(status)}` : ''}`,
-  ).then(unwrapList);
+export const listReturnRequests = (status?: string, page = 1, limit = ADMIN_QUEUE_PAGE_SIZE, order?: QueueOrder) =>
+  apiFetch<AdminReturnRequest[] | Page<AdminReturnRequest>>(`/admin/return-requests?${queueQuery(page, limit, status, order)}`).then(
+    (res) => asPage(res, page, limit),
+  );
 export const reviewReturnRequest = (id: string, approve: boolean, note?: string) =>
   apiFetch<AdminReturnRequest>(`/admin/return-requests/${id}/review`, {
     method: 'POST',
@@ -203,6 +266,41 @@ export const retryGomdon = (orderId: string, confirmedNoWaybill: boolean) =>
   });
 export const cancelGomdonWaybill = (orderId: string) =>
   apiFetch<GomdonActionResult>(`/admin/orders/${encodeURIComponent(orderId)}/gomdon/cancel-waybill`, { method: 'POST' });
+/** Giới hạn ghi chú "Đã xử lý tay" — trùng @MaxLength(500) của GomdonMarkHandledDto. */
+export const GOMDON_HANDLED_NOTE_MAX = 500;
+/** POST /admin/orders/:id/gomdon/mark-handled — "Đã xử lý tay" (gomdonStatus → MANUAL_HANDLED). Ghi chú rỗng → body {}. */
+export const markGomdonHandled = (orderId: string, note: string) => {
+  const trimmed = note.trim().slice(0, GOMDON_HANDLED_NOTE_MAX);
+  return apiFetch<{ result: 'MANUAL_HANDLED'; message: string }>(
+    `/admin/orders/${encodeURIComponent(orderId)}/gomdon/mark-handled`,
+    { method: 'POST', body: trimmed ? { note: trimmed } : {} },
+  );
+};
+
+// ── Đơn đại lý trả trước: xác nhận đã nhận chuyển khoản ──
+/** Trùng @MaxLength của ConfirmDealerPaymentDto (bankRef 100, note 500). */
+export const DEALER_BANK_REF_MAX = 100;
+export const DEALER_PAYMENT_NOTE_MAX = 500;
+export interface ConfirmDealerPaymentResult {
+  ok: boolean;
+  /** true = đơn đã PAID từ trước (webhook/admin khác) — không ghi gì thêm. */
+  alreadyPaid: boolean;
+  message: string;
+  order: { id: string; code: string; status: string; paymentStatus: string };
+}
+/**
+ * POST /admin/dealer-orders/:id/confirm-payment — UNPAID → PAID (PENDING_PAYMENT → CONFIRMED). Chỉ gửi
+ * trường có nội dung (DTO forbidNonWhitelisted, MaxLength). Luật (chỉ DEALER trả trước, không công nợ,
+ * không huỷ/trả) nằm ở DealerService.confirmDealerOrderPayment — lỗi 400 hiện NGUYÊN VĂN.
+ */
+export const confirmDealerOrderPayment = (orderId: string, input: { bankRef?: string; note?: string } = {}) => {
+  const bankRef = input.bankRef?.trim().slice(0, DEALER_BANK_REF_MAX);
+  const note = input.note?.trim().slice(0, DEALER_PAYMENT_NOTE_MAX);
+  return apiFetch<ConfirmDealerPaymentResult>(`/admin/dealer-orders/${encodeURIComponent(orderId)}/confirm-payment`, {
+    method: 'POST',
+    body: { ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}) },
+  });
+};
 export interface GomdonIntegrationStatus {
   baseUrlSet: boolean;
   credentialsSet: boolean;

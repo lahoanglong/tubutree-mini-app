@@ -15,7 +15,12 @@ export const GOMDON_STATE = {
   NEEDS_MANUAL_CHECK: 'NEEDS_MANUAL_CHECK',
   FAILED: 'FAILED',
   NOT_CONFIGURED: 'NOT_CONFIGURED',
+  /** Admin bấm "Đã xử lý tay" — hệ thống không tự tạo vận đơn nữa, đơn rời hàng đợi cần xử lý. */
+  MANUAL_HANDLED: 'MANUAL_HANDLED',
 } as const;
+
+/** Hãng của vận đơn Gomdon (Order.shippingPartner do Gomdon ghi) — trùng GOMDON_CARRIER phía BE. */
+export const GOMDON_CARRIER = 'BestExpress';
 
 /** Mã số Gomdon gửi qua webhook — trùng GOMDON_STATUS_TEXT phía BE. */
 export const GOMDON_STATUS_TEXT: Record<string, string> = {
@@ -63,6 +68,11 @@ const INTERNAL_LABEL: Record<string, StatusLabel> = {
     label: 'Chưa cấu hình Gomdon',
     tone: 'warning',
     hint: 'Thiếu tài khoản Gomdon (env) lúc đặt đơn — kho tạo vận đơn tay theo ghi chú Pancake.',
+  },
+  MANUAL_HANDLED: {
+    label: 'Đã xử lý tay',
+    tone: 'neutral',
+    hint: 'Admin đã xử lý vận đơn thu gom ngoài hệ thống — hệ thống không tự tạo vận đơn Gomdon cho đơn này nữa.',
   },
 };
 
@@ -112,8 +122,15 @@ export function isGomdonPickedUp(status: string | null | undefined): boolean {
   return !['1', '2', '10'].includes(status);
 }
 
-const ATTENTION_STATUSES = new Set(['FAILED', 'NEEDS_MANUAL_CHECK', 'NOT_CONFIGURED', '2', '6', '8', '9', '10', '11', '12']);
+/** Chưa có vận đơn tự động (kho tạo tay / kiểm tra tay) — BE RECYCLING_ATTENTION_NO_WAYBILL_STATUSES. */
+const NO_WAYBILL_ATTENTION = new Set(['FAILED', 'NEEDS_MANUAL_CHECK', 'NOT_CONFIGURED']);
+/** Mã Gomdon báo huỷ / hoàn / hỏng / lấy-giao thất bại — BE RECYCLING_ATTENTION_PROBLEM_CODES. */
+const PROBLEM_ATTENTION = new Set(['2', '6', '8', '9', '10', '11', '12']);
 const CLOSED_ORDER = new Set(['DELIVERED', 'CANCELLED', 'RETURNED']);
+/** Hàng đã rời kho — không tạo thêm vận đơn Gomdon (BE GomdonOrderService.retryPush từ chối). */
+const SHIPPED_ORDER = new Set(['SHIPPING', 'DELIVERED']);
+/** Trạng thái được bấm "Đã xử lý tay" — trùng GOMDON_MANUAL_HANDLEABLE phía BE. */
+const MANUAL_HANDLEABLE = new Set([...NO_WAYBILL_ATTENTION, ...PROBLEM_ATTENTION]);
 
 export interface RecyclingOrderFields {
   status: string;
@@ -126,13 +143,27 @@ export interface RecyclingOrderFields {
   gomdonOrderId?: string | null;
   gomdonCancelStatus?: string | null;
   deliveredAt?: string | null;
+  shippingCode?: string | null;
+  shippingPartner?: string | null;
+}
+
+/** Kho đã giao bằng hãng khác (Pancake ghi mã vận đơn hãng đó) — mã do Gomdon ghi luôn kèm BestExpress. */
+function shippedByOtherCarrier(o: { shippingCode?: string | null; shippingPartner?: string | null }): boolean {
+  return !!o.shippingCode && o.shippingPartner !== GOMDON_CARRIER;
 }
 
 /** Đơn nằm trong hàng đợi "Cần xử lý thu gom" — cùng điều kiện với BE (admin-order-filter.ts). */
 export function needsRecyclingAttention(o: RecyclingOrderFields): boolean {
   if (!o.hasRecyclingPickup) return false;
+  const s = o.gomdonStatus ?? null;
+  if (s === GOMDON_STATE.MANUAL_HANDLED) return false;
   if (o.gomdonCancelStatus === 'FAILED' || o.gomdonCancelStatus === 'TOO_LATE') return true;
-  return !!o.gomdonStatus && ATTENTION_STATUSES.has(o.gomdonStatus) && !CLOSED_ORDER.has(o.status);
+  if (!s) return false;
+  if (NO_WAYBILL_ATTENTION.has(s)) {
+    // Hàng đã rời kho / kho đã giao bằng hãng khác → việc tạo vận đơn tay đã xong.
+    return !CLOSED_ORDER.has(o.status) && !SHIPPED_ORDER.has(o.status) && !shippedByOtherCarrier(o);
+  }
+  return PROBLEM_ATTENTION.has(s) && !CLOSED_ORDER.has(o.status);
 }
 
 export interface GomdonAdminActions {
@@ -144,6 +175,8 @@ export interface GomdonAdminActions {
   retryWarning: string | null;
   /** Hiện nút "Huỷ vận đơn Gomdon". */
   canCancel: boolean;
+  /** Hiện nút "Đã xử lý tay" (POST …/gomdon/mark-handled). */
+  canMarkHandled: boolean;
 }
 
 /**
@@ -151,10 +184,17 @@ export interface GomdonAdminActions {
  * Chỉ để ẩn nút chắc chắn bị từ chối; BE vẫn kiểm lại và FE hiện nguyên văn lỗi nếu có.
  */
 export function gomdonAdminActions(o: RecyclingOrderFields): GomdonAdminActions {
-  const none: GomdonAdminActions = { canRetry: false, retryNeedsConfirm: false, retryWarning: null, canCancel: false };
+  const none: GomdonAdminActions = {
+    canRetry: false,
+    retryNeedsConfirm: false,
+    retryWarning: null,
+    canCancel: false,
+    canMarkHandled: false,
+  };
   if (!o.hasRecyclingPickup) return none;
   const s = o.gomdonStatus ?? null;
   const dead = o.status === 'CANCELLED' || o.status === 'RETURNED';
+  const shipped = SHIPPED_ORDER.has(o.status);
   const hasWaybill = !!(o.gomdonOrderId || o.gomdonPartnerCode);
   const payable = o.paymentMethod === 'COD' || o.paymentStatus === 'PAID';
 
@@ -164,7 +204,8 @@ export function gomdonAdminActions(o: RecyclingOrderFields): GomdonAdminActions 
   let canRetry = false;
   let retryNeedsConfirm = false;
   let retryWarning: string | null = null;
-  if (!dead && payable && s !== GOMDON_STATE.CREATING) {
+  // Hàng đã rời kho (đang giao / đã giao) → không tạo thêm vận đơn: dùng "Đã xử lý tay" sau khi hẹn thu gom riêng.
+  if (!dead && !shipped && payable && s !== GOMDON_STATE.CREATING && s !== GOMDON_STATE.MANUAL_HANDLED) {
     if (s === '2') {
       canRetry = true;
       retryWarning = 'Vận đơn cũ đã huỷ phía Gomdon. Tạo vận đơn mới sẽ đặt lại bưu tá tới giao + thu gom.';
@@ -188,9 +229,10 @@ export function gomdonAdminActions(o: RecyclingOrderFields): GomdonAdminActions 
     // lấy hàng (TOO_LATE) thì API Gomdon không huỷ được → không hiện nút, xem gợi ý xử lý tay.
     canCancel = !!o.gomdonOrderId && (o.gomdonCancelStatus == null || o.gomdonCancelStatus === 'FAILED');
   } else if (!dead) {
-    canCancel = !!o.gomdonOrderId && s !== '2' && !isGomdonPickedUp(s);
+    canCancel = !!o.gomdonOrderId && s !== '2' && s !== GOMDON_STATE.MANUAL_HANDLED && !isGomdonPickedUp(s);
   }
-  return { canRetry, retryNeedsConfirm, retryWarning, canCancel };
+  const canMarkHandled = !!s && MANUAL_HANDLEABLE.has(s);
+  return { canRetry, retryNeedsConfirm, retryWarning, canCancel, canMarkHandled };
 }
 
 // ── Web shop ──────────────────────────────────────────────────────────────────────────────────
@@ -230,10 +272,16 @@ export interface RecyclingPickupView {
 
 const PICKED_UP_OR_MOVING = new Set(['3', '4', '5']);
 const NEEDS_CSKH = new Set(['NEEDS_MANUAL_CHECK', 'FAILED', 'NOT_CONFIGURED', '2', '6', '8', '9', '10', '11', '12']);
+/**
+ * Câu trung tính khi hàng đợi CSKH KHÔNG còn đơn này (đã giao / "Đã xử lý tay" / hàng đã rời kho bằng
+ * vận đơn tay) — không hứa "CSKH sẽ liên hệ" vì sẽ không ai được nhắc liên hệ.
+ */
+const NEUTRAL_PICKUP_DETAIL = 'Nếu bưu tá chưa nhận vật liệu tái chế, nhắn Zalo OA Tubu để được hẹn lại.';
 
 /**
  * Trạng thái thu gom hiển thị cho KHÁCH — cùng nội dung với recyclingPickupView của miniapp: nói đúng
- * những gì hệ thống đã làm (không hứa "bưu tá sẽ tới" khi vận đơn chưa tạo được / chưa thanh toán / đã huỷ).
+ * những gì hệ thống đã làm (không hứa "bưu tá sẽ tới" khi vận đơn chưa tạo được / chưa thanh toán / đã huỷ,
+ * không hứa "CSKH sẽ liên hệ" khi đơn đã rời hàng đợi CSKH — xem needsRecyclingAttention).
  */
 export function recyclingPickupView(o: {
   status: string;
@@ -242,9 +290,13 @@ export function recyclingPickupView(o: {
   gomdonStatus?: string | null;
   gomdonPartnerCode?: string | null;
   gomdonCancelStatus?: string | null;
+  shippingCode?: string | null;
+  shippingPartner?: string | null;
 }): RecyclingPickupView {
   const s = o.gomdonStatus ?? null;
   const waybill = o.gomdonPartnerCode ?? null;
+  /** Mã BestExpress còn để đối chiếu với bưu tá: vận đơn Gomdon có mã số, trừ vận đơn đã huỷ (2). */
+  const liveWaybill = s && /^\d+$/.test(s) && s !== '2' ? waybill : null;
 
   if (o.status === 'CANCELLED' || o.status === 'RETURNED') {
     const pending = o.gomdonCancelStatus === 'FAILED' || o.gomdonCancelStatus === 'TOO_LATE';
@@ -263,6 +315,21 @@ export function recyclingPickupView(o: {
       title: 'Đã giao hàng',
       detail: 'Cảm ơn bạn đã chung tay tái chế 🌿 Nếu bưu tá chưa nhận vật liệu của bạn, nhắn Zalo OA Tubu để được hỗ trợ.',
       waybill,
+    };
+  }
+  if (o.status === 'DELIVERED') {
+    // Đơn giao xong nhưng Gomdon chưa/không báo "Giao thành công" (giao bằng vận đơn tay / hãng khác).
+    return { tone: 'muted', title: 'Đã giao hàng', detail: NEUTRAL_PICKUP_DETAIL, waybill: liveWaybill };
+  }
+  const handledOutside =
+    s === GOMDON_STATE.MANUAL_HANDLED ||
+    (!!s && NO_WAYBILL_ATTENTION.has(s) && (o.status === 'SHIPPING' || shippedByOtherCarrier(o)));
+  if (handledOutside) {
+    return {
+      tone: 'muted',
+      title: o.status === 'SHIPPING' ? 'Đang giao hàng' : 'Thu gom được xử lý riêng',
+      detail: NEUTRAL_PICKUP_DETAIL,
+      waybill: null,
     };
   }
   if (s && NEEDS_CSKH.has(s)) {

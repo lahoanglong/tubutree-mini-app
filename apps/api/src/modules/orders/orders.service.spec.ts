@@ -30,18 +30,44 @@ function makeService(
     executeRaw?: jest.Mock;
     coinCreate?: jest.Mock;
     gomdonQueue?: { getJob: jest.Mock; add: jest.Mock };
+    /**
+     * Trạng thái dòng `orders` ĐANG nằm trong DB lúc tx huỷ chạy — lệch ảnh chụp mà detail() đọc
+     * trước đó (admin xác nhận chuyển khoản / webhook lật PAID, admin chuyển giao vận…). Mặc định = ảnh chụp.
+     */
+    db?: Record<string, unknown>;
   } = {},
 ) {
-  // updateMany trả count=1 (thắng race) mặc định; test race truyền count=0.
-  const updateMany = spies.updateMany ?? jest.fn().mockResolvedValue({ count: 1 });
+  const row: Record<string, unknown> = { ...order, ...(spies.db ?? {}) };
+  const matches = (where: Record<string, unknown>) =>
+    Object.entries(where).every(([k, v]) =>
+      v !== null && typeof v === 'object' && Array.isArray((v as { in?: unknown[] }).in)
+        ? (v as { in: unknown[] }).in.includes(row[k])
+        : row[k] === v,
+    );
+  // updateMany phản ánh ĐÚNG guard của Postgres: count=1 chỉ khi `where` khớp dòng trong DB (rồi ghi
+  // `data` vào dòng). Bản cũ trả count=1 cho MỌI câu — guard hoàn tiền PAID→REFUNDED "thắng" cả với
+  // đơn COD UNPAID. Test race "thua mọi câu ghi" vẫn truyền count=0 qua spies.updateMany.
+  const updateMany =
+    spies.updateMany ??
+    jest.fn(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+      if (!matches(where)) return { count: 0 };
+      Object.assign(row, data);
+      return { count: 1 };
+    });
   const userUpdate = spies.userUpdate ?? jest.fn().mockResolvedValue({});
   const executeRaw = spies.executeRaw ?? jest.fn().mockResolvedValue(1);
   const coinCreate = spies.coinCreate ?? jest.fn().mockResolvedValue({});
+  /** SELECT … FOR UPDATE khoá dòng đơn trong tx. */
+  const lockRow = jest.fn().mockResolvedValue([{ id: row.id }]);
+  /** Đọc lại đơn TRONG tx (sau khoá) — trả dòng DB hiện tại, không phải ảnh chụp. */
+  const txFindUnique = jest.fn(async () => ({ ...row }));
+  const historyCreate = jest.fn().mockResolvedValue({});
   // $transaction giờ là CALLBACK form (flip-status + hoàn ví/xu + restock ATOMIC). Forward tx ops vào cùng mock.
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
-      order: { updateMany },
-      orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+      $queryRaw: lockRow,
+      order: { updateMany, findUnique: txFindUnique },
+      orderStatusHistory: { create: historyCreate },
       user: { update: userUpdate },
       $executeRaw: executeRaw,
       coinTransaction: { create: coinCreate },
@@ -61,6 +87,10 @@ function makeService(
     executeRaw,
     coinCreate,
     $transaction,
+    row,
+    lockRow,
+    txFindUnique,
+    historyCreate,
   };
 }
 
@@ -83,7 +113,7 @@ describe('OrdersService.cancel', () => {
     await svc.cancel('u1', 'TUBU1');
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'o1', status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] } },
+        where: { id: 'o1', status: 'CONFIRMED' },
         data: { status: 'CANCELLED' },
       }),
     );
@@ -198,7 +228,7 @@ describe('OrdersService.cancel — atomic flip+refund (B1)', () => {
     expect(typeof $transaction.mock.calls[0]?.[0]).toBe('function');
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'o1', status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] } },
+        where: { id: 'o1', status: 'CONFIRMED' },
         data: { status: 'CANCELLED' },
       }),
     );
@@ -208,14 +238,17 @@ describe('OrdersService.cancel — atomic flip+refund (B1)', () => {
   });
 
   it('COD+UNPAID: chỉ flip status, KHÔNG đụng tới user.update walletBalance', async () => {
-    const { svc, $transaction, userUpdate } = makeService({
+    const { svc, $transaction, userUpdate, updateMany, row } = makeService({
       ...baseOrder,
       paymentMethod: 'COD',
       paymentStatus: 'UNPAID',
     });
     await svc.cancel('u1', 'TUBU1');
     expect($transaction).toHaveBeenCalledTimes(1);
+    // Guard hoàn tiền vẫn được thử trong tx — DB (UNPAID) trả count=0 nên không chi gì.
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'o1', paymentStatus: 'PAID' }, data: { paymentStatus: 'REFUNDED' } });
     expect(userUpdate).not.toHaveBeenCalled();
+    expect(row).toMatchObject({ status: 'CANCELLED', paymentStatus: 'UNPAID' });
   });
 
   it('race count=0: KHÔNG gọi reverseOrderPoints, KHÔNG hoàn ví', async () => {
@@ -228,6 +261,69 @@ describe('OrdersService.cancel — atomic flip+refund (B1)', () => {
     expect(userUpdate).not.toHaveBeenCalled();
     expect((loyalty.reverseOrderPoints as jest.Mock)).not.toHaveBeenCalled();
     expect((affiliate.reverseCommissionsForOrder as jest.Mock)).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * RACE tiền: cancel() đọc đơn (detail) NGOÀI tx. Giữa lần đọc đó và tx huỷ, admin xác nhận chuyển khoản
+ * (POST /admin/dealer-orders/:id/confirm-payment: PENDING_PAYMENT+UNPAID → CONFIRMED+PAID) hoặc webhook
+ * Pancake/ZaloPay lật PAID. Bản cũ: đơn vẫn bị huỷ nhưng KHÔNG hoàn tiền (ảnh chụp nói UNPAID).
+ */
+describe('OrdersService.cancel — trạng thái đổi giữa lúc đọc đơn và tx huỷ', () => {
+  beforeEach(() => jest.clearAllMocks());
+  const pending = { ...baseOrder, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' };
+
+  it('ảnh chụp UNPAID nhưng DB đã PAID (admin xác nhận CK chen giữa) → hoàn ví ĐÚNG 1 lần, kể cả khi huỷ lặp', async () => {
+    const { svc, userUpdate, row, historyCreate } = makeService(pending, {
+      db: { status: 'CONFIRMED', paymentStatus: 'PAID' },
+    });
+    await svc.cancel('u1', 'TUBU1');
+    expect(userUpdate).toHaveBeenCalledTimes(1);
+    expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { walletBalance: { increment: 300000 } } });
+    expect(row).toMatchObject({ status: 'CANCELLED', paymentStatus: 'REFUNDED' });
+    // Lịch sử ghi đúng trạng thái THẬT trước khi huỷ (CONFIRMED), không phải ảnh chụp PENDING_PAYMENT.
+    expect(historyCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ fromStatus: 'CONFIRMED', toStatus: 'CANCELLED', actorType: 'CUSTOMER', actorId: 'u1' }),
+    });
+    // Double-tap / retry: ảnh chụp vẫn cũ nhưng DB đã CANCELLED → không hoàn lần 2, không ghi vết lần 2.
+    await svc.cancel('u1', 'TUBU1');
+    expect(userUpdate).toHaveBeenCalledTimes(1);
+    expect(historyCreate).toHaveBeenCalledTimes(1);
+    expect((loyalty.reverseOrderPoints as jest.Mock)).toHaveBeenCalledTimes(1);
+  });
+
+  it('guard lật trạng thái theo ĐÚNG trạng thái hiện tại trong DB (đọc lại sau khi khoá dòng FOR UPDATE)', async () => {
+    const { svc, updateMany, lockRow, txFindUnique } = makeService(pending, {
+      db: { status: 'CONFIRMED', paymentStatus: 'PAID' },
+    });
+    await svc.cancel('u1', 'TUBU1');
+    const sql = (lockRow.mock.calls[0]![0] as string[]).join('?');
+    expect(sql).toMatch(/FROM "orders"[\s\S]*FOR UPDATE/);
+    expect(lockRow.mock.invocationCallOrder[0]).toBeLessThan(txFindUnique.mock.invocationCallOrder[0]!);
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'o1', status: 'CONFIRMED' }, data: { status: 'CANCELLED' } });
+  });
+
+  it('DB đã chuyển SHIPPING sau khi đọc đơn → từ chối huỷ, KHÔNG lật trạng thái, KHÔNG hoàn tiền/kho', async () => {
+    const { svc, updateMany, userUpdate, executeRaw, historyCreate, row } = makeService(
+      { ...baseOrder, paymentMethod: 'WALLET', paymentStatus: 'PAID', items: [{ variationId: 'v1', quantity: 1, backorderedQty: 0 }] },
+      { db: { status: 'SHIPPING' } },
+    );
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('Đơn đã vào quy trình giao');
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(executeRaw).not.toHaveBeenCalled();
+    expect(historyCreate).not.toHaveBeenCalled();
+    expect(row.status).toBe('SHIPPING');
+    expect((loyalty.reverseOrderPoints as jest.Mock)).not.toHaveBeenCalled();
+  });
+
+  it('webhook Gomdon báo bưu tá đã lấy hàng sau khi đọc đơn → từ chối huỷ trong tx', async () => {
+    const { svc, updateMany } = makeService(
+      { ...baseOrder, hasRecyclingPickup: true, gomdonOrderId: '77', gomdonStatus: '1' },
+      { db: { gomdonStatus: '3' } },
+    );
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('bưu tá lấy hàng');
+    expect(updateMany).not.toHaveBeenCalled();
   });
 });
 

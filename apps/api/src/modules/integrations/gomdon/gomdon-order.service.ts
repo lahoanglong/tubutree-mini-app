@@ -20,6 +20,7 @@ import { enqueueGomdonCancel, enqueueGomdonPush } from './gomdon-queue';
 import { recyclingWeight } from './gomdon-weight';
 import {
   GOMDON_CANCEL,
+  GOMDON_MANUAL_HANDLEABLE,
   GOMDON_STATE,
   gomdonStatusNumber,
   gomdonStatusText,
@@ -44,12 +45,19 @@ type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 const DEAD_STATUSES = ['CANCELLED', 'RETURNED'] as const;
 const isDead = (status: string) => (DEAD_STATUSES as readonly string[]).includes(status);
 
-/** Trạng thái "đã chốt, không tự tạo vận đơn nữa" — kho đã/ sẽ được báo tạo tay hoặc kiểm tra tay. */
+/**
+ * Trạng thái "đã chốt, không tự tạo vận đơn nữa" — kho đã/ sẽ được báo tạo tay hoặc kiểm tra tay, hoặc
+ * admin đã đánh dấu "Đã xử lý tay".
+ */
 const SETTLED_WITHOUT_WAYBILL = new Set<string>([
   GOMDON_STATE.FAILED,
   GOMDON_STATE.NOT_CONFIGURED,
   GOMDON_STATE.NEEDS_MANUAL_CHECK,
+  GOMDON_STATE.MANUAL_HANDLED,
 ]);
+
+/** Hàng đã rời kho — tạo vận đơn Gomdon mới lúc này là bưu tá giao lần 2. */
+const SHIPPED_STATUSES = ['SHIPPING', 'DELIVERED'] as const;
 
 /**
  * Vận đơn đổi hàng Gomdon (bưu tá giao hàng + thu lại vật liệu tái chế) cho đơn có hasRecyclingPickup.
@@ -120,13 +128,19 @@ export class GomdonOrderService {
 
     // Đơn đã huỷ/trả: KHÔNG đặt bưu tá, không đẩy Pancake.
     if (isDead(order.status)) {
+      // Kẹt CREATING quá lease (tiến trình chết giữa lúc gọi Gomdon) → Gomdon CÓ THỂ đã tạo vận đơn cho
+      // đơn đã huỷ. Chốt NEEDS_MANUAL_CHECK + báo người huỷ tay — không để đơn nằm CREATING mãi (cron
+      // cứu hộ không còn gì để làm với nó). Còn trong lease: tiến trình đang tạo tự enqueue huỷ sau khi có mã.
+      if (order.gomdonStatus === GOMDON_STATE.CREATING && this.creatingLeaseExpired(order)) {
+        await this.markDeadCreatingForManualCheck(order);
+      }
       this.logger.log(`Đơn ${order.code} đã ${order.status} — không tạo vận đơn Gomdon.`);
       return null;
     }
 
     const status = order.gomdonStatus;
     if (status && (SETTLED_WITHOUT_WAYBILL.has(status) || gomdonStatusNumber(status) != null)) {
-      // Đã chốt (tạo tay / kiểm tra tay) hoặc webhook đã báo trạng thái — không tự tạo thêm.
+      // Đã chốt (tạo tay / kiểm tra tay / đã xử lý tay) hoặc webhook đã báo trạng thái — không tự tạo thêm.
       if (!order.pancakeOrderId) await this.pancakeOrder.enqueuePush(order.id);
       return null;
     }
@@ -134,8 +148,7 @@ export class GomdonOrderService {
     if (status === GOMDON_STATE.CREATING) {
       // Claim còn "tươi" → tiến trình khác (job chạy chồng do BullMQ stalled) đang gọi Gomdon; nó sẽ tự
       // ghi mã + đẩy Pancake. Bỏ qua lần này thay vì báo động nhầm. CREATING kẹt lâu do cron cứu hộ xử lý.
-      const ageMs = order.updatedAt ? Date.now() - order.updatedAt.getTime() : Number.POSITIVE_INFINITY;
-      if (ageMs < GomdonOrderService.CREATING_LEASE_MS) {
+      if (!this.creatingLeaseExpired(order)) {
         this.logger.warn(`Đơn ${order.code}: đang có tiến trình khác tạo vận đơn Gomdon — bỏ qua lần chạy chồng.`);
         return null;
       }
@@ -308,15 +321,47 @@ export class GomdonOrderService {
       return; // đã chốt
     }
 
+    // Lần chạy lại khi đã FAILED (job chồng / webhook xếp lại) không báo động trùng cho cùng một việc.
+    const alreadyFailed = order.gomdonCancelStatus === GOMDON_CANCEL.FAILED;
+    // CÓ vận đơn = có id số Gomdon HOẶC chỉ có mã BestExpress (Gomdon không trả id / webhook tự lành chỉ
+    // có order_code). Vận đơn chỉ-có-mã vẫn là vận đơn SỐNG — coi là "không cần huỷ" thì bưu tá vẫn giao
+    // và thu COD cho đơn đã huỷ.
+    const hasWaybill = Boolean(order.gomdonOrderId || order.gomdonPartnerCode);
+
     try {
-      if (!order.gomdonOrderId) {
+      if (order.gomdonStatus === GOMDON_STATE.MANUAL_HANDLED) {
+        // Thu gom đã được người xử lý tay (có thể có vận đơn tạo tay / vận đơn Gomdon cũ) — hệ thống không
+        // biết vận đơn nào còn sống → mở lại thành việc kiểm tra tay (vào lại hàng đợi "Cần xử lý thu gom").
+        await this.prisma.order.updateMany({
+          where: { id: order.id, gomdonStatus: GOMDON_STATE.MANUAL_HANDLED },
+          data: { gomdonStatus: GOMDON_STATE.NEEDS_MANUAL_CHECK },
+        });
+        await this.setCancelStatus(order.id, GOMDON_CANCEL.FAILED);
+        if (!alreadyFailed) {
+          await this.alerts.alert(
+            order.code,
+            `Đơn đã huỷ sau khi thu gom được đánh dấu "Đã xử lý tay" — kiểm tra & huỷ tay mọi vận đơn thu gom còn chạy${
+              order.gomdonPartnerCode ? ` (Gomdon ${order.gomdonPartnerCode})` : ''
+            } và vận đơn tạo tay (nếu có).`,
+          );
+        }
+        return;
+      }
+      if (!hasWaybill) {
         if (order.gomdonStatus === GOMDON_STATE.CREATING) {
+          if (this.creatingLeaseExpired(order)) {
+            // Tiến trình tạo vận đơn đã chết giữa chừng → không ai enqueue huỷ nữa: chốt kiểm tra tay.
+            await this.markDeadCreatingForManualCheck(order);
+            return;
+          }
           // Vận đơn đang được tạo — pushOrder sẽ tự enqueue huỷ sau khi tạo xong; thử lại sau.
           throw new Error('Vận đơn Gomdon đang được tạo, chưa có mã để huỷ');
         }
         if (order.gomdonStatus === GOMDON_STATE.NEEDS_MANUAL_CHECK) {
           await this.setCancelStatus(order.id, GOMDON_CANCEL.FAILED);
-          await this.alerts.alert(order.code, 'Đơn đã huỷ nhưng không rõ Gomdon đã tạo vận đơn chưa — kiểm tra và huỷ tay trên Gomdon.');
+          if (!alreadyFailed) {
+            await this.alerts.alert(order.code, 'Đơn đã huỷ nhưng không rõ Gomdon đã tạo vận đơn chưa — kiểm tra và huỷ tay trên Gomdon.');
+          }
           return;
         }
         await this.setCancelStatus(order.id, GOMDON_CANCEL.NOT_NEEDED);
@@ -332,6 +377,18 @@ export class GomdonOrderService {
           order.code,
           `Đơn đã huỷ nhưng bưu tá đã lấy hàng (Gomdon: ${gomdonStatusText(Number(order.gomdonStatus))}) — liên hệ Gomdon/BestExpress chặn giao và hoàn hàng về kho.`,
         );
+        return;
+      }
+      if (!order.gomdonOrderId) {
+        // API huỷ là /order/cancel/{id số} — chỉ có mã BestExpress thì không huỷ tự động được. KHÔNG
+        // retry (vô ích); webhook Gomdon tới sau mang order_id sẽ điền id và xếp lại job huỷ.
+        await this.setCancelStatus(order.id, GOMDON_CANCEL.FAILED);
+        if (!alreadyFailed) {
+          await this.alerts.alert(
+            order.code,
+            `Đơn đã huỷ nhưng vận đơn Gomdon ${order.gomdonPartnerCode} chưa có mã số Gomdon để huỷ qua API — HUỶ TAY trên Gomdon theo mã vận đơn ${order.gomdonPartnerCode} để bưu tá không tới giao hàng/thu COD.`,
+          );
+        }
         return;
       }
 
@@ -367,6 +424,12 @@ export class GomdonOrderService {
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     if (!order.hasRecyclingPickup) throw new BadRequestException('Đơn không chọn thu gom tái chế.');
     if (isDead(order.status)) throw new BadRequestException(`Đơn đã ${order.status} — không tạo vận đơn Gomdon.`);
+    if ((SHIPPED_STATUSES as readonly string[]).includes(order.status)) {
+      throw new BadRequestException(
+        `Đơn ${order.status === 'SHIPPING' ? 'đang giao' : 'đã giao'} — hàng đã rời kho, không tạo vận đơn Gomdon mới (bưu tá sẽ giao lần 2). ` +
+          'Nếu bưu tá chưa nhận vật liệu tái chế, hẹn thu gom riêng với khách rồi bấm "Đã xử lý tay".',
+      );
+    }
     if (!isGomdonPayable(order)) {
       throw new BadRequestException('Đơn trả trước chưa thanh toán — vận đơn sẽ tự tạo khi khách thanh toán.');
     }
@@ -380,6 +443,8 @@ export class GomdonOrderService {
 
     if (cur === GOMDON_STATE.CREATING) {
       throw new BadRequestException('Vận đơn đang được tạo — thử lại sau ít phút.');
+    } else if (cur === GOMDON_STATE.MANUAL_HANDLED) {
+      throw new BadRequestException('Đơn đã được đánh dấu "Đã xử lý tay" — hệ thống không tự tạo vận đơn Gomdon cho đơn này nữa.');
     } else if (cur === '2') {
       const history = Array.isArray(order.shippingHistory) ? order.shippingHistory : [];
       reset = {
@@ -463,17 +528,26 @@ export class GomdonOrderService {
       return { result: 'QUEUED', message: 'Đã xếp hàng huỷ vận đơn Gomdon (tự thử lại nếu Gomdon lỗi).' };
     }
 
-    if (!order.gomdonOrderId) {
+    if (!order.gomdonOrderId && !order.gomdonPartnerCode) {
       throw new BadRequestException(
         order.gomdonStatus === GOMDON_STATE.NEEDS_MANUAL_CHECK
           ? `Chưa có mã vận đơn Gomdon — tra Gomdon theo mã đơn ${order.code} và huỷ tay nếu có.`
           : 'Đơn chưa có vận đơn Gomdon để huỷ.',
       );
     }
+    if (order.gomdonStatus === GOMDON_STATE.MANUAL_HANDLED) {
+      throw new BadRequestException('Đơn đã được đánh dấu "Đã xử lý tay" — hệ thống không tự huỷ vận đơn; huỷ tay trên Gomdon nếu cần.');
+    }
     if (order.gomdonStatus === '2') throw new BadRequestException('Vận đơn Gomdon đã bị huỷ trước đó.');
     if (isGomdonPickedUp(order.gomdonStatus)) {
       throw new BadRequestException(
         `Bưu tá đã lấy hàng (${gomdonStatusText(Number(order.gomdonStatus))}) — không huỷ qua API được, liên hệ Gomdon/BestExpress.`,
+      );
+    }
+    if (!order.gomdonOrderId) {
+      // Có vận đơn (mã BestExpress) nhưng thiếu id số — API /order/cancel/{id} không dùng được.
+      throw new BadRequestException(
+        `Vận đơn ${order.gomdonPartnerCode} chưa có mã số Gomdon nên không huỷ qua API được — huỷ tay trên Gomdon theo mã vận đơn ${order.gomdonPartnerCode}.`,
       );
     }
 
@@ -506,7 +580,60 @@ export class GomdonOrderService {
     };
   }
 
+  /**
+   * Admin bấm "Đã xử lý tay": vận đơn thu gom đã được người xử lý ngoài hệ thống (tạo vận đơn tay, hẹn
+   * thu gom riêng, báo khách...). Chỉ từ trạng thái cần người xử lý (GOMDON_MANUAL_HANDLEABLE) — vận đơn
+   * đang chạy bình thường / đang tạo / chờ thanh toán thì từ chối. Ghi bằng updateMany có guard: webhook
+   * vừa gắn vận đơn sống (vd NEEDS_MANUAL_CHECK → '1') thì count=0 → Conflict, không che mất vận đơn đó.
+   * Sau đó pushOrder không tự tạo vận đơn (SETTLED_WITHOUT_WAYBILL), đơn rời hàng đợi "Cần xử lý thu gom".
+   */
+  async markHandled(orderId: string): Promise<{ result: 'MANUAL_HANDLED'; previousStatus: string; message: string }> {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (!order.hasRecyclingPickup) throw new BadRequestException('Đơn không chọn thu gom tái chế.');
+    const cur = order.gomdonStatus;
+    if (cur === GOMDON_STATE.MANUAL_HANDLED) throw new BadRequestException('Đơn đã được đánh dấu "Đã xử lý tay" trước đó.');
+    if (!cur || !GOMDON_MANUAL_HANDLEABLE.includes(cur)) {
+      const label = cur == null ? 'chưa tạo vận đơn' : gomdonStatusNumber(cur) != null ? gomdonStatusText(Number(cur)) : cur;
+      throw new BadRequestException(`Vận đơn thu gom đang ở trạng thái "${label}" — không cần đánh dấu xử lý tay.`);
+    }
+
+    const r = await this.prisma.order.updateMany({
+      where: { id: order.id, hasRecyclingPickup: true, gomdonStatus: { in: [...GOMDON_MANUAL_HANDLEABLE] } },
+      data: { gomdonStatus: GOMDON_STATE.MANUAL_HANDLED },
+    });
+    if (r.count === 0) throw new ConflictException('Trạng thái vận đơn vừa thay đổi — tải lại trang rồi thử lại.');
+    return {
+      result: 'MANUAL_HANDLED',
+      previousStatus: cur,
+      message: 'Đã đánh dấu "Đã xử lý tay" — đơn rời hàng đợi "Cần xử lý thu gom", hệ thống không tự tạo vận đơn Gomdon cho đơn này nữa.',
+    };
+  }
+
   // ── Helpers ────────────────────────────────────────
+
+  /** Claim CREATING đã quá lease (không còn tiến trình nào đang gọi Gomdon cho đơn này). */
+  private creatingLeaseExpired(order: { updatedAt?: Date | null }): boolean {
+    const ageMs = order.updatedAt ? Date.now() - order.updatedAt.getTime() : Number.POSITIVE_INFINITY;
+    return ageMs >= GomdonOrderService.CREATING_LEASE_MS;
+  }
+
+  /**
+   * Đơn đã huỷ/trả mà claim CREATING bị bỏ dở: không rõ Gomdon đã tạo vận đơn chưa → NEEDS_MANUAL_CHECK
+   * (+ gomdonCancelStatus FAILED với đơn CANCELLED để nằm trong hàng đợi "Cần xử lý thu gom") + báo huỷ tay.
+   */
+  private async markDeadCreatingForManualCheck(order: Pick<OrderWithItems, 'id' | 'code' | 'status'>): Promise<void> {
+    const r = await this.prisma.order.updateMany({
+      where: { id: order.id, gomdonOrderId: null, gomdonPartnerCode: null, gomdonStatus: GOMDON_STATE.CREATING },
+      data: { gomdonStatus: GOMDON_STATE.NEEDS_MANUAL_CHECK },
+    });
+    if (r.count === 0) return; // tiến trình khác vừa ghi kết quả — nó tự xử lý tiếp
+    if (order.status === 'CANCELLED') await this.setCancelStatus(order.id, GOMDON_CANCEL.FAILED);
+    await this.alerts.alert(
+      order.code,
+      `Lần tạo vận đơn trước bị gián đoạn: đơn đã ${order.status === 'RETURNED' ? 'trả' : 'huỷ'} nhưng có thể đã tạo vận đơn Gomdon — kiểm tra & huỷ tay trên Gomdon (tra theo mã đơn ${order.code}).`,
+    );
+  }
 
   private async setCancelStatus(orderId: string, value: string): Promise<void> {
     await this.prisma.order.updateMany({

@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import type { Order, OrderItem, Prisma } from '@prisma/client';
+import { Prisma, type Order, type OrderItem } from '@prisma/client';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { DealerService } from '../dealer/dealer.service';
@@ -41,20 +41,32 @@ export class OrderReversalService {
   async reverseFinancials(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<void> {
     // Hoàn tiền — guard paymentStatus:'PAID' bằng updateMany, count=1 mới thực sự chi tiền,
     // tránh hoàn 2 lần nếu bị gọi lại (dù caller đã guard status, phòng thủ 2 lớp cho tiền).
+    //
+    // KHÔNG xét ảnh chụp `order.paymentStatus`: mọi caller đọc đơn NGOÀI tx (orders.cancel/detail,
+    // OrderStatusService.setStatus, admin.reviewReturn), và giữa lần đọc đó với tx huỷ, admin xác nhận
+    // chuyển khoản (POST /admin/dealer-orders/:id/confirm-payment) hoặc webhook Pancake/ZaloPay có thể
+    // đã lật UNPAID → PAID. Bản cũ chỉ thử hoàn khi ảnh chụp là PAID → đơn bị huỷ mà tiền khách đã trả
+    // KHÔNG được hoàn. Giờ LUÔN thử guard PAID→REFUNDED trong tx: DB (không phải ảnh chụp) quyết định có
+    // hoàn hay không; đơn thật sự UNPAID thì count=0, không chi gì.
     const isRefundableChannel =
-      order.paymentStatus === 'PAID' &&
-      (order.paymentMethod === 'WALLET' ||
-        order.paymentMethod === 'ZALOPAY' ||
-        order.paymentMethod === 'BANK_TRANSFER' ||
-        order.paymentMethod === 'VNPAY' ||
-        order.paymentMethod === 'XU' ||
-        // COD đã thu hộ (paymentStatus PAID lúc DELIVERED) — trả hàng vẫn phải hoàn ví.
-        order.paymentMethod === 'COD');
+      order.paymentMethod === 'WALLET' ||
+      order.paymentMethod === 'ZALOPAY' ||
+      order.paymentMethod === 'BANK_TRANSFER' ||
+      order.paymentMethod === 'VNPAY' ||
+      order.paymentMethod === 'XU' ||
+      // COD đã thu hộ (paymentStatus PAID lúc DELIVERED) — trả hàng vẫn phải hoàn ví.
+      order.paymentMethod === 'COD';
+    // Đơn có THỰC SỰ đang PAID ngay trước lần đảo không — guard PAID→REFUNDED thắng (count=1) là
+    // bằng chứng trong CÙNG tx; ảnh chụp `order.paymentStatus` đọc trước đó có thể đã cũ. Dùng cho
+    // thu hồi thưởng quý đại lý (đơn trả trước chỉ được tính doanh số khi đã PAID). Phương thức lạ
+    // (ngoài danh sách hoàn tự động) chỉ còn ảnh chụp để dựa vào.
+    let paidBeforeReversal = !isRefundableChannel && order.paymentStatus === 'PAID';
     if (isRefundableChannel) {
       const refunded = await tx.order.updateMany({
         where: { id: order.id, paymentStatus: 'PAID' },
         data: { paymentStatus: 'REFUNDED' },
       });
+      paidBeforeReversal = refunded.count === 1;
       if (refunded.count === 1) {
         if (order.paymentMethod === 'XU') {
           await tx.user.update({
@@ -81,16 +93,29 @@ export class OrderReversalService {
 
     // Hoàn stock + release quota flash-sale — không có guard idempotency riêng ở đây vì
     // caller (status flip atomic) đảm bảo hàm này chỉ chạy đúng 1 lần cho mỗi đơn.
+    // Dòng đặt trước: ĐỌC LẠI backorderedQty dưới khoá dòng. Ảnh chụp `order.items` của caller có
+    // thể cũ — cron DealerBackorderService.reconcile vừa lấp hàng (giữ kho + giảm backorderedQty)
+    // sau lúc caller đọc đơn; dùng số cũ thì phần vừa giữ không bao giờ được hoàn → kẹt kho. Khoá
+    // FOR UPDATE còn làm guard `backorderedQty = <đã đọc>` của cron chờ rồi trượt (tự trả phần giữ).
+    const boIds = order.items.filter((i) => i.backorderedQty > 0).map((i) => i.id);
+    const freshBackorder = new Map<string, number>();
+    if (boIds.length > 0) {
+      const rows = await tx.$queryRaw<{ id: string; backorderedQty: number }[]>`
+        SELECT "id", "backorderedQty" FROM "order_items" WHERE "id" IN (${Prisma.join(boIds)}) FOR UPDATE`;
+      for (const r of rows) freshBackorder.set(r.id, Number(r.backorderedQty));
+    }
+
     for (const item of order.items) {
       // Đơn đại lý đặt trước (backorder) có thể còn `backorderedQty` > 0 — phần đó CHƯA BAO
       // GIỜ được giữ từ kho thật (xem DealerService.placeOrder), nên chỉ hoàn đúng phần đã
       // giữ (`quantity - backorderedQty`). Hoàn nguyên `quantity` sẽ CỘNG KHỐNG phần chưa từng
       // trừ — tồn kho tăng ảo đúng bằng số đặt trước của đơn bị huỷ.
-      const reserved = item.quantity - item.backorderedQty;
+      const backordered = freshBackorder.get(item.id) ?? item.backorderedQty;
+      const reserved = item.quantity - backordered;
       if (reserved > 0) await releaseVariationStock(tx, item.variationId, reserved);
       // Đơn đã chết thì không còn nhu cầu backorder nữa — xoá cờ để DealerBackorderService
       // (quét theo `backorderedQty > 0`) không tốn công lấp hàng cho một đơn không tồn tại nữa.
-      if (item.backorderedQty > 0) {
+      if (backordered > 0) {
         await tx.orderItem.update({ where: { id: item.id }, data: { backorderedQty: 0 } });
       }
       if (item.flashSaleItemId) {
@@ -108,12 +133,14 @@ export class OrderReversalService {
     await this.reverseDealerCredit(tx, order);
 
     // Thu hồi thưởng doanh số quý nếu quý của đơn đã được trả thưởng (cron ngày 10 quý sau) — chạy
-    // SAU CÙNG để dealerVolume (đọc qua tx) thấy đơn đã lật trạng thái/REFUNDED. Lỗi DB ở đây phải
-    // ném ra: transaction Postgres đã hỏng thì cả lần huỷ đơn rollback, không để tiền lệch.
+    // SAU CÙNG để dealerVolume (đọc qua tx) thấy đơn đã lật trạng thái/REFUNDED. `order` là ảnh chụp
+    // TRƯỚC lần lật (status cũ) — DealerService dùng nó + paidBeforeReversal để biết đơn có đang được
+    // tính vào doanh số đã chốt không (chỉ thu phần biên của đơn đó). Lỗi DB ở đây phải ném ra:
+    // transaction Postgres đã hỏng thì cả lần huỷ đơn rollback, không để tiền lệch.
     if (order.type === 'DEALER') {
       const dealer = this.resolveDealer();
       if (dealer) {
-        await dealer.clawbackQuarterBonusForOrder(tx, order);
+        await dealer.clawbackQuarterBonusForOrder(tx, order, { paidBeforeReversal });
       } else {
         this.logger.error(
           `DealerService chưa wiring — KHÔNG thu hồi được thưởng quý cho đơn đại lý ${order.code} bị huỷ/trả. Cần đối soát tay.`,

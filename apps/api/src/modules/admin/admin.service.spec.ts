@@ -243,7 +243,15 @@ function makeReturnPrisma(opts: {
   const returnUpdateMany = jest.fn().mockResolvedValue({ count: opts.returnUpdateManyCount ?? 1 });
   // reviewReturn giờ dùng order.updateMany (guard status=DELIVERED) + tx.order.findUniqueOrThrow.
   // orderUpdate giữ tên cũ để các test cũ vẫn dùng được như spy duy nhất cho order.update*.
-  const orderUpdate = jest.fn().mockResolvedValue({ count: 1 });
+  // Phản ánh ĐÚNG guard của Postgres: chỉ count=1 khi `where` khớp dòng đang nằm trong DB (đơn
+  // DELIVERED + paymentStatus như fixture). Bản cũ trả count=1 cho MỌI câu, nên guard hoàn tiền
+  // PAID→REFUNDED "thắng" cả với đơn COD UNPAID — OrderReversalService giờ luôn thử guard đó trong tx.
+  const orderRow: Record<string, unknown> = { status: 'DELIVERED', ...order };
+  const orderUpdate = jest.fn(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+    if (!Object.entries(where).every(([k, v]) => orderRow[k] === v)) return { count: 0 };
+    Object.assign(orderRow, data);
+    return { count: 1 };
+  });
   const userUpdate = jest.fn().mockResolvedValue({});
   /** Hoàn kho đi bằng SQL thô — xem catalog/variation-stock.ts. */
   const stockExecuteRaw = jest.fn().mockResolvedValue(1);
@@ -706,7 +714,14 @@ describe('AdminService.getDashboardStats', () => {
 // flip qua $transaction interactive) — cần mock $transaction thật sự GỌI callback với 1 tx
 // giả lập order.updateMany, khác với `makePrisma` mặc định (chỉ resolve [] không gọi callback).
 function makeStatusPrisma(order: Record<string, unknown>, finalOrder: Record<string, unknown>, flipCount = 1) {
-  const txUpdateMany = jest.fn().mockResolvedValue({ count: flipCount });
+  // flipCount=0 mô phỏng thua race (mọi câu ghi đều trượt). flipCount=1: updateMany chỉ count=1 khi
+  // `where` khớp dòng trong DB — guard hoàn tiền PAID→REFUNDED không được "thắng" với đơn UNPAID.
+  const row: Record<string, unknown> = { ...order };
+  const txUpdateMany = jest.fn(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+    if (flipCount === 0 || !Object.entries(where).every(([k, v]) => row[k] === v)) return { count: 0 };
+    Object.assign(row, data);
+    return { count: 1 };
+  });
   const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) => cb({ order: { updateMany: txUpdateMany }, orderStatusHistory: { create: jest.fn().mockResolvedValue({}) } }));
   const prisma = {
     order: {
@@ -924,5 +939,41 @@ describe('AdminService.listReturnRequests — kèm đơn và khách, có phân t
     };
     expect(res.data[0]!.order).toBeNull();
     expect(res.data[0]!.user).toBeNull();
+  });
+});
+
+/** Hàng đợi chờ duyệt (PENDING / REQUESTED) cần xem CŨ NHẤT trước — web gửi order=asc. */
+describe('AdminService.listReturnRequests / listDealerApplications — thứ tự createdAt theo tham số order', () => {
+  function rrPrisma() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({
+      returnRequest: { findMany, count: jest.fn().mockResolvedValue(0) },
+      $transaction: jest.fn((arr) => Promise.all(arr)),
+    });
+    return { prisma, findMany };
+  }
+  function daPrisma() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({
+      dealerApplication: { findMany, count: jest.fn().mockResolvedValue(0) },
+      $transaction: jest.fn((arr) => Promise.all(arr)),
+    });
+    return { prisma, findMany };
+  }
+
+  it('order=asc → orderBy createdAt asc; bỏ trống → desc như cũ', async () => {
+    const a = rrPrisma();
+    await mkAdmin(a.prisma).listReturnRequests('REQUESTED', 1, 20, 'asc');
+    expect(a.findMany.mock.calls[0][0].orderBy).toEqual({ createdAt: 'asc' });
+    const b = rrPrisma();
+    await mkAdmin(b.prisma).listReturnRequests(undefined, 1, 20);
+    expect(b.findMany.mock.calls[0][0].orderBy).toEqual({ createdAt: 'desc' });
+
+    const c = daPrisma();
+    await mkAdmin(c.prisma).listDealerApplications('PENDING', 1, 20, 'asc');
+    expect(c.findMany.mock.calls[0][0].orderBy).toEqual({ createdAt: 'asc' });
+    const d = daPrisma();
+    await mkAdmin(d.prisma).listDealerApplications(undefined, 1, 20);
+    expect(d.findMany.mock.calls[0][0].orderBy).toEqual({ createdAt: 'desc' });
   });
 });

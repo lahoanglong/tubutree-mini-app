@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Store,
   CreditCard,
@@ -34,6 +34,7 @@ import {
   addResellProduct,
   removeResellProduct,
   listMerchantOrders,
+  countMerchantOrders,
   updateMerchantOrderStatus,
   type MerchantStore,
   type MerchantProduct,
@@ -41,6 +42,7 @@ import {
   type UpdateMerchantStoreInput,
   type CreateMerchantProductInput,
 } from '@/lib/merchant-client';
+import { pageRange } from '@/lib/admin-client';
 import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
 
 const POPULAR_BANKS = [
@@ -79,8 +81,16 @@ export default function MerchantPage() {
   // và coi lần dùng lại là reuse → thu hồi TOÀN BỘ phiên của user, văng khỏi cả web lẫn Mini App.
   const authed = status === 'authenticated';
   const storeQ = useQuery({ queryKey: ['merchant-store'], queryFn: getMerchantStore, enabled: authed });
-  const productsQ = useQuery({ queryKey: ['merchant-products'], queryFn: getMerchantProducts, enabled: authed });
-  const ordersQ = useQuery({ queryKey: ['merchant-orders'], queryFn: () => listMerchantOrders(), enabled: authed });
+  // Cùng queryKey/limit với trang 1 của ProductsTab → dùng chung cache. Số trên thẻ KPI đọc meta tổng
+  // (ownTotal/resellTotal) — đếm `.length` của trang đầu thì không bao giờ vượt cỡ trang.
+  const productsQ = useQuery({ queryKey: ['merchant-products', 1], queryFn: () => getMerchantProducts(1), enabled: authed });
+  // Chỉ cần SỐ đơn chờ đóng gói → đọc meta.total (limit=1). Trước đây tải trang đơn đầu rồi `.filter` —
+  // vừa sai khi quá 1 trang, vừa crash vì BE trả `{ data, meta }` chứ không phải mảng.
+  const pendingOrdersQ = useQuery({
+    queryKey: ['merchant-orders', 'count', 'CONFIRMED'],
+    queryFn: () => countMerchantOrders('CONFIRMED'),
+    enabled: authed,
+  });
 
   // Chờ lượt khôi phục phiên chạy xong: render đầu tiên luôn là 'idle' (xem AuthState.initialized),
   // không chờ thì màn "Cổng Quản Trị Đối Tác — đăng nhập" chớp lên mỗi lần F5.
@@ -134,9 +144,9 @@ export default function MerchantPage() {
   }
 
   const store = storeQ.data;
-  const ownCount = productsQ.data?.ownProducts?.length ?? 0;
-  const resellCount = productsQ.data?.resellProducts?.length ?? 0;
-  const pendingOrdersCount = ordersQ.data?.filter((o) => o.status === 'CONFIRMED')?.length ?? 0;
+  const ownCount = productsQ.data?.meta?.ownTotal ?? 0;
+  const resellCount = productsQ.data?.meta?.resellTotal ?? 0;
+  const pendingOrdersCount = pendingOrdersQ.data ?? 0;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
@@ -760,10 +770,28 @@ function WarehouseTab({ store, onUpdated }: { store: MerchantStore; onUpdated: (
 // ── Tab 4: Quản Lý Sản Phẩm ──
 function ProductsTab({ store }: { store: MerchantStore }) {
   const qc = useQueryClient();
-  const [subTab, setSubTab] = useState<'own' | 'resell'>('own');
+  const [subTab, setSubTabState] = useState<'own' | 'resell'>('own');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // BE phân trang CẢ 2 danh sách bằng cùng page/limit (merchant.service.listMyProducts) → 1 số trang,
+  // về trang 1 khi đổi danh sách.
+  const [page, setPage] = useState(1);
+  const setSubTab = (t: 'own' | 'resell') => {
+    setSubTabState(t);
+    setPage(1);
+  };
 
-  const q = useQuery({ queryKey: ['merchant-products'], queryFn: getMerchantProducts });
+  const q = useQuery({
+    queryKey: ['merchant-products', page],
+    queryFn: () => getMerchantProducts(page),
+    placeholderData: keepPreviousData,
+  });
+  const listTotal = (subTab === 'own' ? q.data?.meta?.ownTotal : q.data?.meta?.resellTotal) ?? 0;
+  const listShown = (subTab === 'own' ? q.data?.ownProducts.length : q.data?.resellProducts.length) ?? 0;
+  const lastPage = q.data ? pageRange(q.data.meta, listTotal, listShown).totalPages : 1;
+  // Gỡ/duyệt làm trang hiện tại rỗng (vd gỡ SP cuối của trang cuối) → lùi về trang cuối còn dữ liệu.
+  useEffect(() => {
+    if (q.data && !q.isPlaceholderData && page > lastPage) setPage(lastPage);
+  }, [q.data, q.isPlaceholderData, page, lastPage]);
 
   // Trước đây nút "Gỡ khỏi shop" gọi await removeResellProduct(p.id) TRỰC TIẾP trong onClick,
   // không try/catch, không hiện lỗi, không có state busy/disable — API lỗi (403/404/…) thì màn
@@ -790,7 +818,7 @@ function ProductsTab({ store }: { store: MerchantStore }) {
               subTab === 'own' ? 'bg-green-600 text-white' : 'border border-neutral-200 bg-white text-neutral-700'
             }`}
           >
-            Sản phẩm do tôi đăng ({q.data?.ownProducts.length ?? 0})
+            Sản phẩm do tôi đăng ({q.data?.meta?.ownTotal ?? 0})
           </button>
           <button
             onClick={() => setSubTab('resell')}
@@ -798,7 +826,7 @@ function ProductsTab({ store }: { store: MerchantStore }) {
               subTab === 'resell' ? 'bg-green-600 text-white' : 'border border-neutral-200 bg-white text-neutral-700'
             }`}
           >
-            Sản phẩm Tubu Tree bán lại ({q.data?.resellProducts.length ?? 0})
+            Sản phẩm Tubu Tree bán lại ({q.data?.meta?.resellTotal ?? 0})
           </button>
         </div>
 
@@ -923,6 +951,16 @@ function ProductsTab({ store }: { store: MerchantStore }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {q.data && (
+        <Pager
+          meta={q.data.meta}
+          total={listTotal}
+          shown={listShown}
+          busy={q.isPlaceholderData}
+          onPage={setPage}
+        />
       )}
 
       {showCreateModal && (
@@ -1089,12 +1127,25 @@ function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuc
 // ── Tab 5: Đơn Hàng Xuất Kho ──
 function OrdersTab({ store }: { store: MerchantStore }) {
   const qc = useQueryClient();
-  const [status, setStatus] = useState('');
+  const [status, setStatusState] = useState('');
+  const [page, setPage] = useState(1);
+  const setStatus = (s: string) => {
+    setStatusState(s);
+    setPage(1);
+  };
 
+  // BE trả `{ data, meta }` (phân trang, mặc định 20 đơn/trang) — xem listMerchantOrders.
   const q = useQuery({
-    queryKey: ['merchant-orders', status],
-    queryFn: () => listMerchantOrders(status || undefined),
+    queryKey: ['merchant-orders', status, page],
+    queryFn: () => listMerchantOrders(status || undefined, page),
+    placeholderData: keepPreviousData,
   });
+  const orders = q.data?.data ?? [];
+  const lastPage = q.data ? pageRange(q.data.meta, q.data.meta.total, orders.length).totalPages : 1;
+  // Đơn vừa chuyển trạng thái rời khỏi bộ lọc làm trang cuối rỗng → lùi về trang cuối còn đơn.
+  useEffect(() => {
+    if (q.data && !q.isPlaceholderData && page > lastPage) setPage(lastPage);
+  }, [q.data, q.isPlaceholderData, page, lastPage]);
 
   // Trước đây mutation này KHÔNG có onError và nút không disable khi đang chạy: API trả
   // 400/403 thì màn hình không đổi gì cả, đối tác bấm lại 4-5 lần rồi tưởng hệ thống hỏng.
@@ -1148,14 +1199,14 @@ function OrdersTab({ store }: { store: MerchantStore }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
-              {q.data.length === 0 ? (
+              {orders.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-xs text-neutral-400">
-                    Chưa có đơn hàng nào phát sinh cho kho của bạn.
+                    {status ? 'Không có đơn nào ở trạng thái này.' : 'Chưa có đơn hàng nào phát sinh cho kho của bạn.'}
                   </td>
                 </tr>
               ) : (
-                q.data.map((o) => (
+                orders.map((o) => (
                   <tr key={o.id} className="hover:bg-neutral-50/50">
                     <td className="px-3 py-3 font-semibold text-neutral-900">{o.code}</td>
                     <td className="px-3 py-3">
@@ -1235,6 +1286,62 @@ function OrdersTab({ store }: { store: MerchantStore }) {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {q.data && (
+        <Pager
+          meta={q.data.meta}
+          total={q.data.meta.total}
+          shown={orders.length}
+          busy={q.isPlaceholderData}
+          onPage={setPage}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Thanh "Hiển thị 21–40/45 · ← Trang trước · Trang sau →" dùng chung cho bảng sản phẩm + đơn. */
+function Pager({
+  meta,
+  total,
+  shown,
+  busy,
+  onPage,
+}: {
+  meta: { page: number; limit: number };
+  total: number;
+  shown: number;
+  busy: boolean;
+  onPage: (page: number) => void;
+}) {
+  if (total === 0) return null;
+  const r = pageRange(meta, total, shown);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500">
+      <span>{r.label}</span>
+      {r.totalPages > 1 && (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onPage(meta.page - 1)}
+            disabled={!r.hasPrev || busy}
+            className="rounded border border-neutral-200 bg-white px-2.5 py-1 font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+          >
+            ← Trang trước
+          </button>
+          <span>
+            Trang {meta.page}/{r.totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => onPage(meta.page + 1)}
+            disabled={!r.hasNext || busy}
+            className="rounded border border-neutral-200 bg-white px-2.5 py-1 font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+          >
+            Trang sau →
+          </button>
         </div>
       )}
     </div>

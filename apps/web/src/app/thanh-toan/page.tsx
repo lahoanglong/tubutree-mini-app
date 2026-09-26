@@ -19,6 +19,7 @@ import {
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { recyclingCheckoutFields } from '@/lib/recycling';
+import { checkoutPointsOffer } from '@/lib/checkout-points';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
 
@@ -54,11 +55,13 @@ export default function CheckoutPage() {
   const ctvSlug = ctvSlugFor(sfCtx);
   // Điểm Xanh: Mini App cho tiêu, web thì không — cùng một giỏ mà mua trên web đắt hơn.
   const [usePoints, setUsePoints] = useState(false);
-  // Quote đầu tiên (pointsToUse = 0) trả về pointsBalance để biết khách có bao nhiêu điểm.
+  // Quote đầu tiên (pointsToUse = 0) trả về số điểm DÙNG ĐƯỢC (redeemablePoints = số dư − điểm đơn còn
+  // trong hạn/đang chờ xử lý đổi-trả; backend kẹp đúng theo số này) để biết khách dùng được bao nhiêu.
   // PHẢI là state: dùng useRef thì lần ghi trong effect không kích hoạt render nào nữa, mà render
   // có quote chính là render cuối của luồng khởi động (refetchOnWindowFocus đang tắt) — ô "Dùng
   // Điểm Xanh" sẽ KHÔNG BAO GIỜ hiện, tức tính năng vừa thêm không dùng được.
-  const [pointsBalance, setPointsBalance] = useState(0);
+  const [pointsOffer, setPointsOffer] = useState<{ usable: number; lockNote: string | null }>({ usable: 0, lockNote: null });
+  const usablePoints = pointsOffer.usable;
   // Thu gom vật liệu tái chế: CHỈ hiện khi BE xác nhận tính năng đang chạy (Gomdon đã cấu hình + admin
   // bật). Chưa tải xong / lỗi / API cũ không có field → coi như tắt: không hứa thu gom khi không ai đi thu.
   const publicQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
@@ -69,13 +72,13 @@ export default function CheckoutPage() {
   const quoteQ = useQuery({
     queryKey: ['quote', addressId, ctvSlug, usePoints],
     queryFn: () =>
-      checkoutQuote(addressId!, usePoints ? pointsBalance : 0, ctvSlug),
+      checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug),
     enabled: !!addressId && status === 'authenticated',
   });
   useEffect(() => {
-    // Giữ lại số dư điểm của lần quote gần nhất — khi bật "dùng điểm", BE tự kẹp theo trần
-    // loyalty.max_redeem_pct nên gửi toàn bộ số dư là an toàn.
-    if (quoteQ.data && !usePoints) setPointsBalance(quoteQ.data.pointsBalance);
+    // Giữ lại số điểm dùng được của lần quote gần nhất — khi bật "dùng điểm", BE tự kẹp theo trần
+    // loyalty.max_redeem_pct nên gửi toàn bộ số dùng được là an toàn.
+    if (quoteQ.data && !usePoints) setPointsOffer(checkoutPointsOffer(quoteQ.data));
   }, [quoteQ.data, usePoints]);
 
   const place = useMutation({
@@ -84,7 +87,7 @@ export default function CheckoutPage() {
         {
           addressId: addressId!,
           paymentMethod: payment,
-          pointsToUse: usePoints ? pointsBalance : 0,
+          pointsToUse: usePoints ? usablePoints : 0,
           storefrontSlug: ctvSlug,
           referralCode: sfCtx.referralCode ?? undefined,
           // Chỉ có khoá khi bật + chọn (API forbidNonWhitelisted; tắt thì body y hệt bản cũ).
@@ -219,14 +222,15 @@ export default function CheckoutPage() {
             <Row label={`Điểm Xanh (${quote!.pointsUsed})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
           )}
           <Row label="Phí vận chuyển" value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : '…'} />
-          {pointsBalance > 0 && (
+          {usablePoints > 0 && (
             <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-leaf-200 bg-leaf-50 p-2 text-sm">
               <input type="checkbox" checked={usePoints} onChange={(e) => setUsePoints(e.target.checked)} />
               <span className="text-leaf-700">
-                Dùng {pointsBalance} Điểm Xanh
+                Dùng {usablePoints} Điểm Xanh
               </span>
             </label>
           )}
+          {pointsOffer.lockNote && <p className="mt-1 text-xs text-neutral-500">{pointsOffer.lockNote}</p>}
           <div className="mt-3 flex justify-between border-t pt-3 font-bold">
             <span>Tổng cộng</span>
             {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi

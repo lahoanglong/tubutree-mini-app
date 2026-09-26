@@ -1,12 +1,14 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { ValidationPipe } from '@nestjs/common';
+import { RequestMethod, ValidationPipe } from '@nestjs/common';
+import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import {
   AdminController,
   CreateCouponDto,
   DealerAppsQuery,
   DealerPriceHistoryQuery,
+  GomdonMarkHandledDto,
   GomdonRetryDto,
   ListOrdersQuery,
   ReturnRequestsQuery,
@@ -212,6 +214,30 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     await expect(asQuery(ReturnRequestsQuery, { status: 'PENDING' })).rejects.toThrow();
   });
 
+  it('DealerAppsQuery / ReturnRequestsQuery nhận order=asc|desc (hàng chờ duyệt xem cũ nhất trước), chặn giá trị lạ', async () => {
+    const d = (await asQuery(DealerAppsQuery, { status: 'PENDING', order: 'asc' })) as DealerAppsQuery;
+    expect(d).toEqual(expect.objectContaining({ status: 'PENDING', order: 'asc' }));
+    const r = (await asQuery(ReturnRequestsQuery, { status: 'REQUESTED', order: 'desc' })) as ReturnRequestsQuery;
+    expect(r.order).toBe('desc');
+    expect(((await asQuery(ReturnRequestsQuery, {})) as ReturnRequestsQuery).order).toBeUndefined();
+    for (const bad of ['ASC', 'random', 'createdAt']) {
+      await expect(asQuery(DealerAppsQuery, { order: bad })).rejects.toThrow();
+      await expect(asQuery(ReturnRequestsQuery, { order: bad })).rejects.toThrow();
+    }
+  });
+
+  it('controller chuyển order xuống AdminService (thiếu → undefined, service mặc định desc)', async () => {
+    const admin = {
+      listDealerApplications: jest.fn().mockResolvedValue({ data: [], meta: {} }),
+      listReturnRequests: jest.fn().mockResolvedValue({ data: [], meta: {} }),
+    };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await ctrl.dealerApps(Object.assign(new DealerAppsQuery(), { page: 1, limit: 20, status: 'PENDING' as const, order: 'asc' as const }));
+    expect(admin.listDealerApplications).toHaveBeenCalledWith('PENDING', 1, 20, 'asc');
+    await ctrl.returns(Object.assign(new ReturnRequestsQuery(), { page: 2, limit: 10 }));
+    expect(admin.listReturnRequests).toHaveBeenCalledWith(undefined, 2, 10, undefined);
+  });
+
   it('DealerPriceHistoryQuery nhận variationId', async () => {
     const q = (await asQuery(DealerPriceHistoryQuery, { variationId: 'v1' })) as DealerPriceHistoryQuery;
     expect(q.variationId).toBe('v1');
@@ -223,12 +249,20 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     await expect(asBody(GomdonRetryDto, { confirmedNoWaybill: 'yes' })).rejects.toThrow();
     await expect(asBody(GomdonRetryDto, { force: true })).rejects.toThrow();
   });
+
+  it('GomdonMarkHandledDto: note chuỗi tuỳ chọn ≤ 500 ký tự, chặn field lạ', async () => {
+    await expect(asBody(GomdonMarkHandledDto, {})).resolves.toEqual({});
+    await expect(asBody(GomdonMarkHandledDto, { note: 'Đã tạo vận đơn GHN tay' })).resolves.toEqual({ note: 'Đã tạo vận đơn GHN tay' });
+    await expect(asBody(GomdonMarkHandledDto, { note: 'x'.repeat(501) })).rejects.toThrow();
+    await expect(asBody(GomdonMarkHandledDto, { note: 5 })).rejects.toThrow();
+    await expect(asBody(GomdonMarkHandledDto, { gomdonStatus: 'MANUAL_HANDLED' })).rejects.toThrow();
+  });
 });
 
 describe('AdminController — quyền + passthrough endpoint thu gom', () => {
   it('@Roles(ADMIN) ở cấp controller; endpoint Gomdon/config KHÔNG hạ quyền ở cấp method', () => {
     expect(Reflect.getMetadata(ROLES_KEY, AdminController)).toEqual(['ADMIN']);
-    for (const m of ['retryGomdon', 'cancelGomdonWaybill', 'gomdonStatus', 'getConfig', 'setConfig', 'orders'] as const) {
+    for (const m of ['retryGomdon', 'cancelGomdonWaybill', 'markGomdonHandled', 'gomdonStatus', 'getConfig', 'setConfig', 'orders'] as const) {
       const methodRoles = Reflect.getMetadata(ROLES_KEY, AdminController.prototype[m]);
       expect(methodRoles === undefined || JSON.stringify(methodRoles) === JSON.stringify(['ADMIN'])).toBe(true);
     }
@@ -247,5 +281,14 @@ describe('AdminController — quyền + passthrough endpoint thu gom', () => {
     expect(admin.cancelGomdonWaybill).toHaveBeenCalledWith('admin-1', 'o1');
     await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, recycling: 'attention' as const }));
     expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention');
+  });
+
+  it('POST orders/:id/gomdon/mark-handled chuyển adminId + id + note xuống AdminService', async () => {
+    const admin = { markGomdonHandled: jest.fn().mockResolvedValue({ result: 'MANUAL_HANDLED', message: 'ok' }) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await ctrl.markGomdonHandled('admin-1', 'o1', { note: 'đã hẹn lại' });
+    expect(admin.markGomdonHandled).toHaveBeenCalledWith('admin-1', 'o1', 'đã hẹn lại');
+    expect(Reflect.getMetadata(PATH_METADATA, AdminController.prototype.markGomdonHandled)).toBe('orders/:id/gomdon/mark-handled');
+    expect(Reflect.getMetadata(METHOD_METADATA, AdminController.prototype.markGomdonHandled)).toBe(RequestMethod.POST);
   });
 });

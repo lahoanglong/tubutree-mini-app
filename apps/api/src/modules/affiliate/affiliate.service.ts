@@ -695,6 +695,10 @@ export class AffiliateService {
         where: {
           status: 'LOCKED',
           lockedAt: { lte: threshold },
+          // Đơn phải CÒN DELIVERED ngay trong câu UPDATE: duyệt trả hàng lật đơn → RETURNED trước,
+          // reverseCommissionsForOrder chạy sau (ngoài tx) — lượt cron rơi vào khe đó mà không có
+          // điều kiện này sẽ chốt APPROVED (không-đảo-được) hoa hồng của đơn đã trả hàng.
+          order: { status: 'DELIVERED' },
           ...(heldOrderIds.length > 0 ? { orderId: { notIn: heldOrderIds } } : {}),
         },
         data: { status: 'APPROVED', approvedAt: new Date() },

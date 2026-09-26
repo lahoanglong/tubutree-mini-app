@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { formatSold, formatVnd } from './api';
+import type { MerchantOrder, MerchantProduct } from './merchant-client';
 
 describe('formatVnd', () => {
   it('format số nguyên kèm đ, phân cách nghìn kiểu VN', () => {
@@ -40,20 +41,40 @@ describe('formatSold — kiểu Shopee', () => {
 });
 
 describe('listReturnRequests & reviewReturnRequest client', () => {
-  it('listReturnRequests gọi đúng endpoint với query status', async () => {
+  it('listReturnRequests gọi đúng endpoint với page/limit + status, giữ meta phân trang', async () => {
     const { listReturnRequests } = await import('./admin-client');
     const { vi: vitestVi } = await import('vitest');
     const mockFetch = vitestVi.fn().mockResolvedValue({
       ok: true,
-      json: async () => [{ id: 'ret-1', status: 'REQUESTED' }],
+      json: async () => ({ data: [{ id: 'ret-1', status: 'REQUESTED' }], meta: { page: 1, limit: 100, total: 130 } }),
     });
     vitestVi.stubGlobal('fetch', mockFetch);
-    const data = await listReturnRequests('REQUESTED');
+    const res = await listReturnRequests('REQUESTED');
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/admin/return-requests?status=REQUESTED'),
+      expect.stringContaining('/admin/return-requests?page=1&limit=100&status=REQUESTED'),
       expect.any(Object),
     );
-    expect(data).toHaveLength(1);
+    expect(res.data).toHaveLength(1);
+    // meta KHÔNG được bỏ: tab Đổi/Trả cần total để biết còn yêu cầu cũ hơn chưa tải.
+    expect(res.meta.total).toBe(130);
+    vitestVi.unstubAllGlobals();
+  });
+
+  it('hàng chờ duyệt gửi order=asc (chờ lâu nhất lên đầu trên MỌI trang); không truyền → không gửi order', async () => {
+    const { listReturnRequests, listDealerApps } = await import('./admin-client');
+    const { vi: vitestVi } = await import('vitest');
+    const mockFetch = vitestVi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [], meta: { page: 1, limit: 100, total: 0 } }),
+    });
+    vitestVi.stubGlobal('fetch', mockFetch);
+    await listReturnRequests('REQUESTED', 1, undefined, 'asc');
+    await listDealerApps('PENDING', 2, undefined, 'asc');
+    await listDealerApps('APPROVED');
+    const urls = mockFetch.mock.calls.map((c) => String(c[0]));
+    expect(urls[0]).toContain('/admin/return-requests?page=1&limit=100&status=REQUESTED&order=asc');
+    expect(urls[1]).toContain('/admin/dealer-applications?page=2&limit=100&status=PENDING&order=asc');
+    expect(urls[2]).not.toContain('order=');
     vitestVi.unstubAllGlobals();
   });
 
@@ -144,6 +165,92 @@ describe('admin dashboard & order management client', () => {
       expect.any(Object),
     );
     vitestVi.unstubAllGlobals();
+  });
+});
+
+/**
+ * Cổng đối tác (/merchant): BE MerchantService.listMerchantOrders trả `paginated()` = `{ data, meta }`
+ * nhưng client cũ khai `MerchantOrder[]` → trang gọi `ordersQ.data?.filter(...)` / `q.data.map(...)` trên
+ * một OBJECT → TypeError, trắng trang với MỌI đại lý/CTV. listMyProducts cũng trả kèm meta
+ * {ownTotal, resellTotal} mà client bỏ qua → số "Sản phẩm riêng" không bao giờ vượt 20.
+ */
+describe('merchant-client — khớp dạng phân trang của MerchantService', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubFetch(json: unknown) {
+    const f = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => json });
+    vi.stubGlobal('fetch', f);
+    return f;
+  }
+
+  const order = (code: string): MerchantOrder => ({
+    id: `id-${code}`,
+    code,
+    status: 'CONFIRMED',
+    total: 150000,
+    createdAt: '2026-09-20T08:00:00.000Z',
+    items: [{ id: 'i1', productName: 'Trà Oolong', unitPrice: 150000, quantity: 1, total: 150000 }],
+  });
+
+  it('listMerchantOrders gửi page/limit/status và trả {data, meta} — không phải mảng', async () => {
+    const { listMerchantOrders } = await import('./merchant-client');
+    const f = stubFetch({ data: [order('TB-1')], meta: { page: 2, limit: 20, total: 45 } });
+    const res = await listMerchantOrders('CONFIRMED', 2);
+    expect(f.mock.calls[0]![0]).toContain('/merchant/orders?page=2&limit=20&status=CONFIRMED');
+    // Kiểu: `res.data` phải là MerchantOrder[] (client cũ khai cả response là MerchantOrder[] → tsc lỗi ở đây).
+    const rows: MerchantOrder[] = res.data;
+    expect(rows.map((o) => o.code)).toEqual(['TB-1']);
+    expect(res.meta).toEqual({ page: 2, limit: 20, total: 45 });
+  });
+
+  it('listMerchantOrders không lọc trạng thái → không gửi status', async () => {
+    const { listMerchantOrders } = await import('./merchant-client');
+    const f = stubFetch({ data: [], meta: { page: 1, limit: 20, total: 0 } });
+    await listMerchantOrders();
+    expect(f.mock.calls[0]![0]).toMatch(/\/merchant\/orders\?page=1&limit=20$/);
+  });
+
+  it('countMerchantOrders đọc meta.total (limit=1), không đếm trên trang đầu', async () => {
+    const { countMerchantOrders } = await import('./merchant-client');
+    const f = stubFetch({ data: [order('TB-9')], meta: { page: 1, limit: 1, total: 37 } });
+    await expect(countMerchantOrders('CONFIRMED')).resolves.toBe(37);
+    expect(f.mock.calls[0]![0]).toContain('/merchant/orders?page=1&limit=1&status=CONFIRMED');
+  });
+
+  it('getMerchantProducts gửi page/limit và giữ meta ownTotal/resellTotal', async () => {
+    const { getMerchantProducts } = await import('./merchant-client');
+    const p = { id: 'p1', name: 'SP', slug: 'sp', description: '', basePrice: 1, images: [], approvalStatus: 'APPROVED', createdAt: '' };
+    const f = stubFetch({ ownProducts: [p], resellProducts: [], meta: { page: 3, limit: 20, ownTotal: 61, resellTotal: 4 } });
+    const res = await getMerchantProducts(3);
+    expect(f.mock.calls[0]![0]).toContain('/merchant/products?page=3&limit=20');
+    const own: MerchantProduct[] = res.ownProducts;
+    expect(own).toHaveLength(1);
+    expect(res.meta.ownTotal).toBe(61);
+    expect(res.meta.resellTotal).toBe(4);
+  });
+});
+
+describe('pageRange — phân trang theo trang (cổng đối tác)', () => {
+  it('trang giữa / trang cuối / rỗng', async () => {
+    const { pageRange } = await import('./admin-client');
+    expect(pageRange({ page: 2, limit: 20 }, 45, 20)).toEqual({
+      label: 'Hiển thị 21–40/45',
+      totalPages: 3,
+      hasPrev: true,
+      hasNext: true,
+    });
+    expect(pageRange({ page: 3, limit: 20 }, 45, 5)).toEqual({
+      label: 'Hiển thị 41–45/45',
+      totalPages: 3,
+      hasPrev: true,
+      hasNext: false,
+    });
+    expect(pageRange({ page: 1, limit: 20 }, 0, 0)).toEqual({
+      label: 'Hiển thị 0/0',
+      totalPages: 1,
+      hasPrev: false,
+      hasNext: false,
+    });
   });
 });
 

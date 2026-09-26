@@ -53,10 +53,20 @@ describe('AdminService.listOrders — bộ lọc "Cần xử lý thu gom"', () =
       hasRecyclingPickup: true,
       OR: [
         {
-          gomdonStatus: { in: ['FAILED', 'NEEDS_MANUAL_CHECK', 'NOT_CONFIGURED', '2', '6', '8', '9', '10', '11', '12'] },
+          // Chưa có vận đơn tự động: hết là việc cần làm khi hàng đã rời kho hoặc kho đã giao bằng hãng khác.
+          gomdonStatus: { in: ['FAILED', 'NEEDS_MANUAL_CHECK', 'NOT_CONFIGURED'] },
+          status: { notIn: ['SHIPPING', 'DELIVERED', 'CANCELLED', 'RETURNED'] },
+          OR: [{ shippingCode: null }, { shippingPartner: 'BestExpress' }],
+        },
+        {
+          gomdonStatus: { in: ['2', '6', '8', '9', '10', '11', '12'] },
           status: { notIn: ['DELIVERED', 'CANCELLED', 'RETURNED'] },
         },
-        { gomdonCancelStatus: { in: ['FAILED', 'TOO_LATE'] } },
+        // Huỷ vận đơn lỗi: luôn giữ — trừ khi admin đã bấm "Đã xử lý tay".
+        {
+          gomdonCancelStatus: { in: ['FAILED', 'TOO_LATE'] },
+          OR: [{ gomdonStatus: null }, { gomdonStatus: { not: 'MANUAL_HANDLED' } }],
+        },
       ],
     });
     // count dùng CÙNG điều kiện — số trên badge khớp danh sách.
@@ -79,6 +89,37 @@ describe('AdminService.listOrders — bộ lọc "Cần xử lý thu gom"', () =
       expect.arrayContaining([{ gomdonPartnerCode: { contains: 'TB-1', mode: 'insensitive' } }]),
     );
     expect(where.AND[2].hasRecyclingPickup).toBe(true);
+  });
+
+  // Nút "Xác nhận đã nhận chuyển khoản" (POST /admin/dealer-orders/:id/confirm-payment) chỉ dành cho đơn đại
+  // lý TRẢ TRƯỚC; đơn "Ghi công nợ" cũng BANK_TRANSFER + UNPAID (+ CONFIRMED) nên FE không tự phân biệt được —
+  // BE gắn cờ theo dòng ghi nợ refType=ORDER (đúng điều kiện confirmDealerOrderPayment dùng để từ chối).
+  it('đơn DEALER kèm dealerOnCredit theo dòng ghi nợ refType=ORDER; đơn lẻ không bị gắn cờ', async () => {
+    const { prisma, findMany } = listOrdersPrisma();
+    findMany.mockResolvedValue([
+      { id: 'd1', type: 'DEALER', paymentStatus: 'UNPAID' },
+      { id: 'd2', type: 'DEALER', paymentStatus: 'UNPAID' },
+      { id: 'r1', type: 'RETAIL', paymentStatus: 'UNPAID' },
+    ]);
+    const ledgerFindMany = jest.fn().mockResolvedValue([{ refId: 'd1' }]);
+    const res = await mkAdmin({ ...prisma, dealerCreditLedger: { findMany: ledgerFindMany } }).listOrders(1, 20);
+    expect(ledgerFindMany).toHaveBeenCalledWith({
+      where: { refType: 'ORDER', refId: { in: ['d1', 'd2'] } },
+      select: { refId: true },
+    });
+    expect(res.data).toEqual([
+      { id: 'd1', type: 'DEALER', paymentStatus: 'UNPAID', dealerOnCredit: true },
+      { id: 'd2', type: 'DEALER', paymentStatus: 'UNPAID', dealerOnCredit: false },
+      { id: 'r1', type: 'RETAIL', paymentStatus: 'UNPAID' },
+    ]);
+  });
+
+  it('trang không có đơn DEALER → không truy vấn sổ công nợ', async () => {
+    const { prisma, findMany } = listOrdersPrisma();
+    findMany.mockResolvedValue([{ id: 'r1', type: 'RETAIL' }]);
+    const ledgerFindMany = jest.fn();
+    await mkAdmin({ ...prisma, dealerCreditLedger: { findMany: ledgerFindMany } }).listOrders(1, 20);
+    expect(ledgerFindMany).not.toHaveBeenCalled();
   });
 
   it('dùng include (không select) → trả đủ cột thu gom (hasRecyclingPickup, gomdonStatus, deliveredAt…)', async () => {
@@ -144,6 +185,37 @@ describe('AdminService.retryGomdonPush / cancelGomdonWaybill — gọi thẳng G
     const err = new BadRequestException('Bưu tá đã lấy hàng (Đã lấy hàng) — không huỷ qua API được, liên hệ Gomdon/BestExpress.');
     cancelWaybill.mockRejectedValueOnce(err);
     await expect(admin.cancelGomdonWaybill('admin-1', 'TB-9')).rejects.toBe(err);
+  });
+});
+
+describe('AdminService.markGomdonHandled — "Đã xử lý tay"', () => {
+  const order = { id: 'o1', code: 'TB-9', gomdonStatus: 'FAILED', gomdonPartnerCode: null };
+  const ok = { result: 'MANUAL_HANDLED' as const, previousStatus: 'FAILED', message: 'Đã đánh dấu "Đã xử lý tay".' };
+
+  it('tìm đơn theo id HOẶC mã, gọi GomdonOrderService.markHandled theo id thật, ghi vết admin + ghi chú, trả kết quả', async () => {
+    const markHandled = jest.fn().mockResolvedValue(ok);
+    const findFirst = jest.fn().mockResolvedValue(order);
+    const admin = mkAdmin({ order: { findFirst } }, { gomdonOrder: { markHandled } as Partial<GomdonOrderService> });
+    const warn = jest.spyOn((admin as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
+    await expect(admin.markGomdonHandled('admin-1', 'TB-9', '  đã tạo vận đơn GHN tay  ')).resolves.toEqual(ok);
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: [{ id: 'TB-9' }, { code: 'TB-9' }] } }));
+    expect(markHandled).toHaveBeenCalledWith('o1');
+    const logged = warn.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(logged).toContain('admin-1');
+    expect(logged).toContain('TB-9');
+    expect(logged).toContain('đã tạo vận đơn GHN tay');
+  });
+
+  it('lỗi của service (vd trạng thái không cho phép) đi NGUYÊN VẸN; đơn không tồn tại → NotFound, không gọi service', async () => {
+    const err = new BadRequestException('Vận đơn thu gom đang ở trạng thái "Tạo đơn thành công" — không cần đánh dấu xử lý tay.');
+    const markHandled = jest.fn().mockRejectedValueOnce(err);
+    const admin = mkAdmin({ order: { findFirst: jest.fn().mockResolvedValue(order) } }, { gomdonOrder: { markHandled } as Partial<GomdonOrderService> });
+    await expect(admin.markGomdonHandled('admin-1', 'o1')).rejects.toBe(err);
+
+    const markHandled2 = jest.fn();
+    const missing = mkAdmin({ order: { findFirst: jest.fn().mockResolvedValue(null) } }, { gomdonOrder: { markHandled: markHandled2 } as Partial<GomdonOrderService> });
+    await expect(missing.markGomdonHandled('admin-1', 'x')).rejects.toBeInstanceOf(NotFoundException);
+    expect(markHandled2).not.toHaveBeenCalled();
   });
 });
 

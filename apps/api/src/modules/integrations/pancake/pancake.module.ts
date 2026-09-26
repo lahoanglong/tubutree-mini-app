@@ -13,7 +13,13 @@ import { GeoService } from './geo.service';
 import { QUEUE_PANCAKE_EVENTS, QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { LifecycleModule } from '../../lifecycle/lifecycle.module';
 import { OrdersModule } from '../../orders/orders.module';
+import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
 
+/**
+ * GomdonAlertService (báo ADMIN in-app, template OPS_GOMDON_ALERT) được provide LẠI ở đây thay vì import
+ * GomdonModule: Gomdon → Pancake là phụ thuộc một chiều, import ngược sẽ thành vòng module. Service chỉ
+ * cần PrismaService + NotificationsService (đều @Global) nên một bản riêng cho module này là đủ.
+ */
 @Module({
   imports: [
     BullModule.registerQueue({ name: QUEUE_PANCAKE_EVENTS }, { name: QUEUE_PANCAKE_PUSH }),
@@ -29,6 +35,7 @@ import { OrdersModule } from '../../orders/orders.module';
     PancakePushProcessor,
     PancakePushReconcileService,
     GeoService,
+    GomdonAlertService,
   ],
   exports: [PancakeClient, PancakeSyncService, PancakeOrderService],
 })

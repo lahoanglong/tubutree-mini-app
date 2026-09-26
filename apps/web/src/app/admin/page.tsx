@@ -2,12 +2,14 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { formatVnd } from '@/lib/shop-client';
 import {
   listDealerApps,
   reviewDealerApp,
+  mergeQueuePages,
+  nextPageParam,
   type DealerApp,
   listUsers,
   setUserRole,
@@ -77,6 +79,7 @@ import {
   type RecyclingFilter,
 } from '@/lib/admin-client';
 import { RecyclingBadge, RecyclingPanel } from '@/components/admin/recycling-panel';
+import { DealerPaymentPanel } from '@/components/admin/dealer-payment-panel';
 import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
 import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
@@ -237,20 +240,75 @@ export default function AdminPage() {
 
 function DealersTab() {
   const [filter, setFilter] = useState('PENDING');
-  const q = useQuery({ queryKey: ['admin-dealers', filter], queryFn: () => listDealerApps(filter || undefined) });
+  // Phân trang thật + "Tải thêm": trước đây chỉ lấy 1 trang (limit 100) và vứt meta → quá 100 hồ sơ thì
+  // phần cũ nhất (chờ lâu nhất) biến mất khỏi màn hình mà không ai biết.
+  const q = useInfiniteQuery({
+    queryKey: ['admin-dealers', filter],
+    queryFn: ({ pageParam }) =>
+      listDealerApps(filter || undefined, pageParam, undefined, filter === 'PENDING' ? 'asc' : undefined),
+    initialPageParam: 1,
+    getNextPageParam: (last) => nextPageParam(last.meta),
+  });
+  const pending = filter === 'PENDING';
+  const view = mergeQueuePages(q.data?.pages, pending);
 
   return (
     <div>
-      <select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded border border-neutral-200 px-2 py-1 text-sm">
-        {['PENDING', 'APPROVED', 'REJECTED', ''].map((s) => (
-          <option key={s} value={s}>{s || 'Tất cả'}</option>
-        ))}
-      </select>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded border border-neutral-200 px-2 py-1 text-sm">
+          {['PENDING', 'APPROVED', 'REJECTED', ''].map((s) => (
+            <option key={s} value={s}>{s || 'Tất cả'}</option>
+          ))}
+        </select>
+        {q.data && (
+          <span className="text-xs text-neutral-500">
+            {view.label} hồ sơ{pending ? ' · cũ nhất trước' : ''}
+          </span>
+        )}
+      </div>
+      <QueueMoreNotice pending={pending} view={view} noun="hồ sơ" />
       <div className="mt-3 space-y-3">
         {q.isError && <p className="text-sm text-red-600">Không tải được danh sách hồ sơ đại lý.</p>}
-        {q.data?.map((a) => <DealerRow key={a.id} app={a} />)}
-        {q.data?.length === 0 && <Empty>Không có hồ sơ.</Empty>}
+        {q.isLoading && <p className="text-sm text-neutral-500">Đang tải danh sách hồ sơ…</p>}
+        {view.items.map((a) => <DealerRow key={a.id} app={a} />)}
+        {q.data && view.items.length === 0 && <Empty>Không có hồ sơ.</Empty>}
       </div>
+      <LoadMoreButton
+        hasMore={view.hasMore}
+        loading={q.isFetchingNextPage}
+        onClick={() => void q.fetchNextPage()}
+        error={q.isFetchNextPageError}
+      />
+    </div>
+  );
+}
+
+/**
+ * Hàng CHỜ duyệt mà còn trang chưa tải: API trả cũ nhất trước (order=asc) nên phần CHƯA tải là các
+ * mục MỚI hơn — báo rõ để admin biết danh sách chưa hết.
+ */
+function QueueMoreNotice({ pending, view, noun }: { pending: boolean; view: { total: number; items: unknown[]; hasMore: boolean }; noun: string }) {
+  if (!pending || !view.hasMore) return null;
+  return (
+    <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+      Còn {view.total - view.items.length} {noun} mới hơn chưa tải — bấm &quot;Tải thêm&quot; để xem tiếp.
+    </p>
+  );
+}
+
+function LoadMoreButton({ hasMore, loading, error, onClick }: { hasMore: boolean; loading: boolean; error: boolean; onClick: () => void }) {
+  if (!hasMore) return null;
+  return (
+    <div className="mt-3 text-center">
+      {error && <p className="mb-1 text-xs text-red-600">Không tải thêm được, thử lại.</p>}
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={loading}
+        className="rounded border border-neutral-300 bg-white px-4 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+      >
+        {loading ? 'Đang tải…' : 'Tải thêm'}
+      </button>
     </div>
   );
 }
@@ -667,6 +725,11 @@ function OrdersTab({
                               {o.paymentStatus === 'PAID' ? 'Đã TT' : o.paymentStatus}
                             </div>
                           )}
+                          {o.type === 'DEALER' && (
+                            <div className="text-[11px] font-medium text-amber-700">
+                              Đại lý{o.dealerOnCredit === true ? ' · công nợ' : o.dealerOnCredit === false ? ' · trả trước' : ''}
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-3 font-semibold text-green-700">{formatVnd(o.total)}</td>
                         <td className="px-3 py-3">
@@ -733,6 +796,9 @@ function OrdersTab({
                               )}
 
                               <RecyclingPanel order={o} />
+
+                              {/* Đơn đại lý trả trước chờ chuyển khoản: admin xác nhận đã nhận tiền (tự ẩn khi không đủ điều kiện). */}
+                              <DealerPaymentPanel order={o} />
 
                               {/* Quick status transitions */}
                               <div className="flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-2">
@@ -939,7 +1005,17 @@ function CashbackTab() {
 
 function ReturnsTab() {
   const [filter, setFilter] = useState('REQUESTED');
-  const q = useQuery({ queryKey: ['admin-returns', filter], queryFn: () => listReturnRequests(filter || undefined) });
+  // Trước đây 1 trang (mặc định 20 của BE) và vứt meta → quá 20 yêu cầu thì các yêu cầu CŨ NHẤT (sát hạn
+  // 7 ngày nhất) biến mất im lặng. Nay "Tải thêm" + hiện tổng.
+  const q = useInfiniteQuery({
+    queryKey: ['admin-returns', filter],
+    queryFn: ({ pageParam }) =>
+      listReturnRequests(filter || undefined, pageParam, undefined, filter === 'REQUESTED' ? 'asc' : undefined),
+    initialPageParam: 1,
+    getNextPageParam: (last) => nextPageParam(last.meta),
+  });
+  const pending = filter === 'REQUESTED';
+  const view = mergeQueuePages(q.data?.pages, pending);
 
   return (
     <div>
@@ -965,13 +1041,25 @@ function ReturnsTab() {
           Chỉ đơn lỗi NSX trong 7 ngày. Duyệt = hoàn tiền đúng kênh + restock + reverse điểm/hoa hồng.
         </span>
       </div>
+      {q.data && (
+        <p className="mt-2 text-xs text-neutral-500">
+          {view.label} yêu cầu{pending ? ' · cũ nhất trước' : ''}
+        </p>
+      )}
+      <QueueMoreNotice pending={pending} view={view} noun="yêu cầu" />
 
       <div className="mt-3 space-y-3">
         {q.isError && <p className="text-sm text-red-600">Không tải được danh sách yêu cầu đổi/trả.</p>}
         {q.isLoading && <p className="text-sm text-neutral-500">Đang tải danh sách yêu cầu…</p>}
-        {q.data?.map((r) => <ReturnRow key={r.id} item={r} />)}
-        {q.data && q.data.length === 0 && <Empty>Không có yêu cầu đổi/trả nào.</Empty>}
+        {view.items.map((r) => <ReturnRow key={r.id} item={r} />)}
+        {q.data && view.items.length === 0 && <Empty>Không có yêu cầu đổi/trả nào.</Empty>}
       </div>
+      <LoadMoreButton
+        hasMore={view.hasMore}
+        loading={q.isFetchingNextPage}
+        onClick={() => void q.fetchNextPage()}
+        error={q.isFetchNextPageError}
+      />
     </div>
   );
 }

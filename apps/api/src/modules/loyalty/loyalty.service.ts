@@ -230,7 +230,7 @@ export class LoyaltyService {
     // bị phạt, trong khi doc-comment và FE ("từ X điểm") đều mô tả là điểm TÍCH LUỸ
     // (P2, docs/2026-09-08-review-progress.md). Cùng cửa sổ 12 tháng với tiêu chí chi tiêu nên
     // hạng vẫn phản ánh mức độ hoạt động gần đây, không thành hạng vĩnh viễn.
-    // Loại các nguồn điểm không phải mua hàng (TIER_EXCLUDED_REASON_PREFIXES) — xem tierPointsWhere.
+    // CHỈ điểm từ đơn đã giao (trừ phần đơn đó bị trả/huỷ) — xem tierPoints.
     const earned12m = await this.tierPoints(userId, since);
 
     let qualified = tiers[0];
@@ -295,32 +295,120 @@ export class LoyaltyService {
   }
 
   /**
-   * Điều kiện "điểm xét hạng" 12 tháng. Hạng là hạng theo CHI TIÊU: seed đặt minPoints đúng bằng
-   * minSpending / loyalty.vnd_per_point (500 điểm ↔ 5 triệu, 2.000 ↔ 20 triệu, 5.000 ↔ 50 triệu),
-   * nên điểm chỉ là thước đo thay cho tiền đã mua. Những nguồn điểm KHÔNG phản ánh chi tiêu thì
-   * không được đẩy hạng (TIER_EXCLUDED_REASON_PREFIXES):
-   *  - DAILY_CHECKIN: bấm điểm danh mỗi ngày — không mua gì vẫn lên Lộc Biếc/Đại Thụ/Cổ Thụ
-   *    (freeship toàn shop, ×2 điểm, giảm 5% mọi đơn).
-   *  - POS_OFFLINE_ORDER: nhân viên nhập tay tổng hoá đơn, hệ thống không đối chiếu được hoá đơn.
-   *  - ORDER_REFUND_POINTS: hoàn lại điểm ĐÃ TIÊU khi huỷ đơn — vòng đặt-dùng-điểm-rồi-huỷ lặp lại
-   *    sẽ cộng dồn "điểm tích" vô hạn dù số dư không đổi.
-   * Các dòng này vẫn là điểm tiêu được bình thường, chỉ không tính vào xét hạng.
+   * "Điểm xét hạng" 12 tháng — WHITELIST: chỉ điểm tích từ đơn online ĐÃ GIAO (dòng
+   * `ORDER_DELIVERED:<code>`, creditOrderPoints) có trong cửa sổ, TRỪ dòng `ORDER_REVERSED:<code>`
+   * của CHÍNH các đơn đó (reverseOrderPoints — cùng refId = order.id) khi đơn bị trả/huỷ.
+   *
+   * Hạng là hạng theo CHI TIÊU: seed đặt minPoints đúng bằng minSpending / loyalty.vnd_per_point
+   * (500 điểm ↔ 5 triệu, 2.000 ↔ 20 triệu, 5.000 ↔ 50 triệu), nên điểm chỉ là thước đo thay cho
+   * tiền đã mua. Bản blacklist trước đây (loại DAILY_CHECKIN/POS_OFFLINE_ORDER/ORDER_REFUND_POINTS)
+   * vẫn đếm mọi nguồn mới thêm sau: GAME_SPIN_WIN (quay vòng quay = đổi số dư thành điểm hạng),
+   * REVIEW, SEASONPASS…, và bỏ qua ORDER_REVERSED nên mua → giao → trả hàng vẫn giữ nguyên điểm hạng.
+   *
+   * THAY ĐỔI HÀNH VI (2026-09-27): điểm game, đánh giá, season pass, điểm danh, POS KHÔNG còn tính
+   * vào xét hạng — vẫn là Điểm Xanh tiêu được bình thường. Nguồn mới muốn tính hạng phải được thêm
+   * vào đây một cách có chủ đích.
+   *
+   * Chỉ khớp ORDER_REVERSED theo đơn có dòng giao TRONG cửa sổ: đơn giao trước cửa sổ (điểm giao
+   * không còn được tính) bị trả trong cửa sổ không trừ lần nữa.
    */
-  private tierPointsWhere(userId: string, since: Date): Prisma.PointsTransactionWhereInput {
-    return {
-      userId,
-      delta: { gt: 0 },
-      createdAt: { gte: since },
-      NOT: TIER_EXCLUDED_REASON_PREFIXES.map((p) => ({ reason: { startsWith: p } })),
-    };
-  }
-
   private async tierPoints(userId: string, since: Date): Promise<number> {
-    const agg = await this.prisma.pointsTransaction.aggregate({
-      where: this.tierPointsWhere(userId, since),
+    const delivered = await this.prisma.pointsTransaction.findMany({
+      where: {
+        userId,
+        reason: { startsWith: TIER_DELIVERED_PREFIX },
+        delta: { gt: 0 },
+        createdAt: { gte: since },
+      },
+      select: { refId: true, delta: true },
+    });
+    if (delivered.length === 0) return 0;
+    const earned = delivered.reduce((s, r) => s + r.delta, 0);
+    const orderIds = [...new Set(delivered.map((r) => r.refId).filter((id): id is string => !!id))];
+    if (orderIds.length === 0) return earned;
+    const reversed = await this.prisma.pointsTransaction.aggregate({
+      where: { userId, reason: { startsWith: TIER_REVERSED_PREFIX }, refId: { in: orderIds } },
       _sum: { delta: true },
     });
-    return agg._sum.delta ?? 0;
+    // Dòng ORDER_REVERSED ghi delta ÂM (= -pointsEarned) → cộng vào là trừ đi.
+    return Math.max(0, earned + (reversed._sum.delta ?? 0));
+  }
+
+  /**
+   * Điểm Xanh CHƯA được đổi quà vì còn có thể bị đảo: điểm `ORDER_DELIVERED` của đơn
+   *  - còn trong cửa sổ đổi/trả (`returns.window_days`, tính từ deliveredAt — cùng mốc
+   *    OrdersService.requestReturn; đơn cũ thiếu deliveredAt dùng thời điểm cộng điểm), hoặc
+   *  - đang có yêu cầu đổi/trả chờ duyệt (REQUESTED), hoặc
+   *  - đã chuyển CANCELLED/RETURNED nhưng reverseOrderPoints chưa kịp trừ điểm,
+   * và chưa có dòng ORDER_REVERSED. Lạm dụng mà hàm này chặn: nhận điểm đơn vừa giao → đổi ngay
+   * voucher → trả hàng (điểm bị trừ lại, số dư có thể âm) nhưng voucher vẫn giữ.
+   *
+   * `db` = tx của redeemReward / CheckoutService.placeOrder khi dùng làm guard (đọc SAU khi đã khoá
+   * dòng user), mặc định this.prisma cho màn hình tổng quan / báo giá checkout. Câu SQL thật được kiểm
+   * ở test/integration-race. Public vì checkout tiêu điểm theo CÙNG luật (không tự viết lại SQL).
+   */
+  async lockedOrderPoints(
+    userId: string,
+    now: Date,
+    db: Pick<Prisma.TransactionClient, '$queryRaw'> = this.prisma,
+  ): Promise<LockedPoints> {
+    const windowDays = await this.returnWindowDays();
+    const cutoff = new Date(now.getTime() - windowDays * DAY_MS);
+    const rows = await db.$queryRaw<{ delta: number; deliveredAt: Date; pendingReturn: boolean }[]>`
+      SELECT pt."delta" AS "delta",
+             COALESCE(o."deliveredAt", pt."createdAt") AS "deliveredAt",
+             (o."status" <> 'DELIVERED' OR EXISTS (
+               SELECT 1 FROM "return_requests" rr WHERE rr."orderId" = o."id" AND rr."status" = 'REQUESTED'
+             )) AS "pendingReturn"
+      FROM "points_transactions" pt
+      JOIN "orders" o ON o."id" = pt."refId"
+      WHERE pt."userId" = ${userId}
+        AND pt."reason" LIKE 'ORDER_DELIVERED:%'
+        AND pt."delta" > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM "points_transactions" r
+          WHERE r."userId" = pt."userId" AND r."refId" = pt."refId" AND r."reason" LIKE 'ORDER_REVERSED:%'
+        )
+        AND (
+          COALESCE(o."deliveredAt", pt."createdAt") > ${cutoff}
+          OR o."status" <> 'DELIVERED'
+          OR EXISTS (SELECT 1 FROM "return_requests" rr WHERE rr."orderId" = o."id" AND rr."status" = 'REQUESTED')
+        )`;
+    let locked = 0;
+    let lockedReturn = 0;
+    let lockedUntil: Date | null = null;
+    for (const r of rows) {
+      const delta = Number(r.delta);
+      locked += delta;
+      if (r.pendingReturn) {
+        lockedReturn += delta;
+        continue;
+      }
+      const unlockAt = new Date(new Date(r.deliveredAt).getTime() + windowDays * DAY_MS);
+      if (!lockedUntil || unlockAt > lockedUntil) lockedUntil = unlockAt;
+    }
+    return { locked, lockedReturn, lockedUntil };
+  }
+
+  /** returns.window_days (mặc định 7, cùng key/mặc định với OrdersService.requestReturn); sai kiểu → 7. */
+  private async returnWindowDays(): Promise<number> {
+    const v = Number(await this.config.get<number>('returns.window_days', 7));
+    return Number.isFinite(v) && v >= 0 ? v : 7;
+  }
+
+  /** Câu giải thích vì sao 1 phần Điểm Xanh chưa dùng được (lỗi redeemReward + checkout tiêu điểm). */
+  lockedPointsMessage(lock: LockedPoints): string {
+    const parts: string[] = [];
+    const inWindow = lock.locked - lock.lockedReturn;
+    if (inWindow > 0 && lock.lockedUntil) {
+      parts.push(
+        `${inWindow} điểm từ đơn mới giao sẽ dùng được sau ngày ${vnDateLabel(lock.lockedUntil)} (hết hạn đổi/trả hàng)`,
+      );
+    }
+    if (lock.lockedReturn > 0) {
+      parts.push(`${lock.lockedReturn} điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong`);
+    }
+    return parts.join('; ');
   }
 
   /** Multiplier điểm của hạng hiện tại (1 nếu chưa có hạng). */
@@ -348,10 +436,18 @@ export class LoyaltyService {
     const since = new Date();
     since.setMonth(since.getMonth() - 12);
     const tierPoints = await this.tierPoints(userId, since);
+    const lock = await this.lockedOrderPoints(userId, new Date());
 
     return {
       pointsBalance: user.pointsBalance,
       tierPoints,
+      // Phần Điểm Xanh chưa đổi quà được vì đơn còn có thể bị trả hàng (xem lockedOrderPoints).
+      lockedPoints: lock.locked,
+      /** Phần khoá thuộc đơn đang có yêu cầu đổi/trả (mở khoá khi yêu cầu được xử lý, không theo ngày). */
+      lockedReturnPoints: lock.lockedReturn,
+      /** Mốc muộn nhất phần khoá theo cửa sổ đổi/trả được mở (null nếu không có). */
+      lockedUntil: lock.lockedUntil?.toISOString() ?? null,
+      redeemablePoints: Math.max(0, user.pointsBalance - lock.locked),
       tier: current
         ? {
             id: current.id,
@@ -430,11 +526,17 @@ export class LoyaltyService {
   /** Danh mục phần thưởng đổi bằng Điểm Xanh (Reward Catalog). */
   async getRewardCatalog(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    // canRedeem theo điểm DÙNG ĐƯỢC (cùng quy tắc guard của redeemReward), không theo số dư —
+    // không thì nút "Đổi ngay" sáng mà bấm vào bị từ chối.
+    const lock = await this.lockedOrderPoints(userId, new Date());
+    const redeemable = Math.max(0, user.pointsBalance - lock.locked);
     return {
       pointsBalance: user.pointsBalance,
+      lockedPoints: lock.locked,
+      redeemablePoints: redeemable,
       rewards: DEFAULT_REWARD_CATALOG.map((r) => ({
         ...r,
-        canRedeem: user.pointsBalance >= r.pointsCost,
+        canRedeem: redeemable >= r.pointsCost,
       })),
     };
   }
@@ -447,6 +549,12 @@ export class LoyaltyService {
    * Fix: GIÀNH điểm bằng 1 câu updateMany có guard `pointsBalance >= giá` (atomic, cùng mẫu
    * checkout.service.ts / game creditPoints) — count=0 là không đủ điểm, không ghi gì thêm.
    * Coupon + dòng ledger chỉ tạo SAU khi đã giành được điểm, trong cùng transaction.
+   *
+   * CHỈ điểm không còn bị đảo được mới đổi được (lockedOrderPoints): đổi voucher bằng điểm đơn vừa
+   * giao rồi trả hàng là giữ voucher miễn phí. Phần khoá tính TRONG tx rồi đưa thẳng vào guard
+   * (`pointsBalance >= giá + khoá`). Khoá dòng user (FOR UPDATE) TRƯỚC khi tính: creditOrderPoints/
+   * reverseOrderPoints đều ghi dòng ledger + cập nhật số dư của CHÍNH dòng user này, nên sau khoá,
+   * phần khoá và số dư được đọc nhất quán (không lọt điểm của đơn vừa giao commit chen giữa 2 câu).
    */
   async redeemReward(userId: string, rewardId: string) {
     const reward = DEFAULT_REWARD_CATALOG.find((r) => r.id === rewardId);
@@ -455,14 +563,23 @@ export class LoyaltyService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      const lock = await this.lockedOrderPoints(userId, new Date(), tx);
       const dec = await tx.user.updateMany({
-        where: { id: userId, pointsBalance: { gte: reward.pointsCost } },
+        where: { id: userId, pointsBalance: { gte: reward.pointsCost + lock.locked } },
         data: { pointsBalance: { decrement: reward.pointsCost } },
       });
       if (dec.count === 0) {
         const cur = await tx.user.findUnique({ where: { id: userId }, select: { pointsBalance: true } });
+        const balance = cur?.pointsBalance ?? 0;
+        if (lock.locked > 0 && balance >= reward.pointsCost) {
+          const usable = Math.max(0, balance - lock.locked);
+          throw new BadRequestException(
+            `Bạn cần ${reward.pointsCost} Điểm Xanh dùng được để đổi ưu đãi này — hiện dùng được ${usable}/${balance} điểm: ${this.lockedPointsMessage(lock)}.`,
+          );
+        }
         throw new BadRequestException(
-          `Bạn cần ${reward.pointsCost} Điểm Xanh để đổi ưu đãi này (hiện có ${cur?.pointsBalance ?? 0} điểm).`,
+          `Bạn cần ${reward.pointsCost} Điểm Xanh để đổi ưu đãi này (hiện có ${balance} điểm).`,
         );
       }
 
@@ -1003,8 +1120,29 @@ export const DEFAULT_CHECKIN_POINTS: readonly number[] = Object.freeze([1, 1, 1,
 const CHECKIN_MAX_POINTS_PER_DAY = 100;
 const CHECKIN_ALREADY_MESSAGE = 'Hôm nay bạn đã điểm danh nhận điểm rồi 🌿';
 
-/** Nguồn điểm KHÔNG tính vào xét hạng (xem LoyaltyService.tierPointsWhere). */
-export const TIER_EXCLUDED_REASON_PREFIXES = ['DAILY_CHECKIN', 'POS_OFFLINE_ORDER', 'ORDER_REFUND_POINTS'] as const;
+/**
+ * Điểm xét hạng = WHITELIST (xem LoyaltyService.tierPoints): dòng cộng điểm đơn đã giao
+ * (creditOrderPoints) trừ dòng đảo điểm của chính đơn đó (reverseOrderPoints).
+ */
+const TIER_DELIVERED_PREFIX = 'ORDER_DELIVERED:';
+const TIER_REVERSED_PREFIX = 'ORDER_REVERSED:';
+
+/** Điểm Xanh chưa đổi quà được (xem LoyaltyService.lockedOrderPoints). */
+export interface LockedPoints {
+  /** Tổng điểm khoá. */
+  locked: number;
+  /** Phần khoá thuộc đơn có yêu cầu đổi/trả chờ duyệt / đã huỷ-trả chờ trừ điểm (không có ngày mở). */
+  lockedReturn: number;
+  /** Mốc muộn nhất phần khoá theo cửa sổ đổi/trả được mở; null nếu không có phần đó. */
+  lockedUntil: Date | null;
+}
+
+/** dd/mm/yyyy theo giờ Việt Nam (UTC+7). */
+function vnDateLabel(d: Date): string {
+  const v = new Date(d.getTime() + 7 * 3600 * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(v.getUTCDate())}/${pad(v.getUTCMonth() + 1)}/${v.getUTCFullYear()}`;
+}
 
 /** Trần mặc định cho tích điểm tại quầy (ghi đè bằng SystemConfig, xem creditPosPoints). */
 const POS_DEFAULTS = {

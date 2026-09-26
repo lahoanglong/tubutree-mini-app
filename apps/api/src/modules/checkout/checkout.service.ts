@@ -75,6 +75,10 @@ export class CheckoutService {
       total: computed.total,
       pointsEarned: computed.pointsEarned,
       pointsBalance: user.pointsBalance,
+      // Trần điểm FE được phép đề nghị: số dư − điểm đơn còn có thể bị đảo (cùng luật đổi quà).
+      // placeOrder kẹp theo đúng số này + guard trong tx, nên UI không bao giờ hứa số điểm bị từ chối.
+      redeemablePoints: computed.redeemablePoints,
+      lockedPoints: computed.lockedPoints,
       items: cart.items,
     };
   }
@@ -211,11 +215,28 @@ export class CheckoutService {
 
         if (computed.pointsUsed > 0) {
           // Trừ điểm ATOMIC (gte) — chống TOCTOU khi đặt nhiều đơn đồng thời tiêu cùng điểm.
+          // CHỈ tiêu điểm DÙNG ĐƯỢC — cùng luật LoyaltyService.redeemReward (lockedOrderPoints): điểm
+          // đơn vừa giao còn trong hạn đổi/trả / đang có yêu cầu đổi-trả thì chưa tiêu được, không thì
+          // nhận điểm đơn A → tiêu vào đơn B → trả đơn A là giữ giảm giá miễn phí. Khoá dòng user
+          // (FOR UPDATE) TRƯỚC khi tính phần khoá (creditOrderPoints/reverseOrderPoints/redeemReward
+          // đều ghi CHÍNH dòng này) rồi đưa thẳng vào guard `pointsBalance >= dùng + khoá`.
+          await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+          const lock = await this.loyalty.lockedOrderPoints(userId, new Date(), tx);
           const dec = await tx.user.updateMany({
-            where: { id: userId, pointsBalance: { gte: computed.pointsUsed } },
+            where: { id: userId, pointsBalance: { gte: computed.pointsUsed + lock.locked } },
             data: { pointsBalance: { decrement: computed.pointsUsed } },
           });
-          if (dec.count === 0) throw new BadRequestException('Số điểm Xanh không đủ.');
+          if (dec.count === 0) {
+            const cur = await tx.user.findUnique({ where: { id: userId }, select: { pointsBalance: true } });
+            const balance = cur?.pointsBalance ?? 0;
+            if (lock.locked > 0 && balance >= computed.pointsUsed) {
+              const usable = Math.max(0, balance - lock.locked);
+              throw new BadRequestException(
+                `Đơn này dùng ${computed.pointsUsed} Điểm Xanh nhưng hiện bạn chỉ dùng được ${usable}/${balance} điểm: ${this.loyalty.lockedPointsMessage(lock)}. Vui lòng tải lại trang thanh toán.`,
+              );
+            }
+            throw new BadRequestException(`Số điểm Xanh không đủ (hiện có ${balance} điểm).`);
+          }
           await tx.pointsTransaction.create({
             data: {
               userId,
@@ -430,9 +451,14 @@ export class CheckoutService {
     const goodsAfterCoupon = Math.max(0, goodsAfterCombo - discount);
     // Điểm áp trên TOÀN đơn (gồm flash): base = phần non-flash sau coupon + flashSubtotal.
     const redeemBase = goodsAfterCoupon + flashSubtotal;
+    // Trần điểm = số DÙNG ĐƯỢC (số dư − điểm đơn còn có thể bị đảo), không phải số dư — cùng luật
+    // LoyaltyService.redeemReward. Đọc ngoài tx ở đây chỉ để báo giá/kẹp; placeOrder kiểm lại trong tx.
+    const lockedPoints =
+      user.pointsBalance > 0 ? (await this.loyalty.lockedOrderPoints(userId, new Date())).locked : 0;
+    const redeemablePoints = Math.max(0, user.pointsBalance - lockedPoints);
     const redemption = await this.pricing.resolvePointsRedemption(
       pointsToUse ?? 0,
-      user.pointsBalance,
+      redeemablePoints,
       redeemBase,
     );
     const goodsAfterAll = Math.max(0, redeemBase - redemption.discount);
@@ -458,6 +484,8 @@ export class CheckoutService {
         comboPerLine: combo.perLine,
         pointsUsed: redemption.pointsUsed,
         pointsDiscount: redemption.discount,
+        redeemablePoints,
+        lockedPoints,
         shippingFee,
         total,
         pointsEarned,

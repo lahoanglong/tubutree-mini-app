@@ -91,6 +91,23 @@ describe('needsRecyclingAttention — cùng điều kiện với bộ lọc BE',
     expect(needsRecyclingAttention({ ...base, gomdonStatus: '1' })).toBe(false);
     expect(needsRecyclingAttention({ ...base, hasRecyclingPickup: false, gomdonStatus: 'FAILED' })).toBe(false);
   });
+
+  it('chưa có vận đơn tự động mà hàng đã rời kho (SHIPPING) / kho đã giao bằng hãng khác → hết là việc cần làm', () => {
+    for (const s of ['FAILED', 'NOT_CONFIGURED', 'NEEDS_MANUAL_CHECK']) {
+      expect(needsRecyclingAttention({ ...base, status: 'SHIPPING', gomdonStatus: s })).toBe(false);
+      expect(needsRecyclingAttention({ ...base, gomdonStatus: s, shippingCode: 'GHN123', shippingPartner: 'GHN' })).toBe(false);
+      expect(needsRecyclingAttention({ ...base, gomdonStatus: s, shippingCode: 'X1', shippingPartner: null })).toBe(false);
+      // Mã do Gomdon ghi (BestExpress) không tính là hãng khác.
+      expect(needsRecyclingAttention({ ...base, gomdonStatus: s, shippingCode: 'BE1', shippingPartner: 'BestExpress' })).toBe(true);
+    }
+    // Mã lỗi Gomdon (2, 6, 8–12) vẫn cần xử lý khi đơn còn mở, kể cả đang giao.
+    expect(needsRecyclingAttention({ ...base, status: 'SHIPPING', gomdonStatus: '11' })).toBe(true);
+  });
+
+  it('"Đã xử lý tay" (MANUAL_HANDLED) → không bao giờ trong hàng đợi, kể cả huỷ vận đơn lỗi', () => {
+    expect(needsRecyclingAttention({ ...base, gomdonStatus: 'MANUAL_HANDLED' })).toBe(false);
+    expect(needsRecyclingAttention({ ...base, status: 'CANCELLED', gomdonStatus: 'MANUAL_HANDLED', gomdonCancelStatus: 'FAILED' })).toBe(false);
+  });
 });
 
 describe('gomdonAdminActions — chỉ hiện nút có nghĩa (BE vẫn là người quyết định)', () => {
@@ -137,7 +154,35 @@ describe('gomdonAdminActions — chỉ hiện nút có nghĩa (BE vẫn là ngư
       retryNeedsConfirm: false,
       retryWarning: null,
       canCancel: false,
+      canMarkHandled: false,
     });
+  });
+
+  it('đơn đang giao / đã giao (hàng đã rời kho) → ẩn "Tạo lại vận đơn", vẫn cho "Đã xử lý tay"', () => {
+    for (const status of ['SHIPPING', 'DELIVERED']) {
+      for (const s of ['FAILED', 'NOT_CONFIGURED', 'NEEDS_MANUAL_CHECK', '2']) {
+        const a = gomdonAdminActions({ ...base, status, gomdonStatus: s, gomdonOrderId: s === '2' ? 'g1' : null });
+        expect(a.canRetry).toBe(false);
+        expect(a.canMarkHandled).toBe(true);
+      }
+    }
+  });
+
+  it('"Đã xử lý tay" chỉ hiện ở trạng thái cần người xử lý (BE GOMDON_MANUAL_HANDLEABLE)', () => {
+    for (const s of ['FAILED', 'NOT_CONFIGURED', 'NEEDS_MANUAL_CHECK', '2', '6', '8', '9', '10', '11', '12']) {
+      expect(gomdonAdminActions({ ...base, gomdonStatus: s }).canMarkHandled).toBe(true);
+    }
+    for (const s of [null, 'AWAITING_PAYMENT', 'CREATING', '1', '3', '4', '5', '7', 'MANUAL_HANDLED']) {
+      expect(gomdonAdminActions({ ...base, gomdonStatus: s }).canMarkHandled).toBe(false);
+    }
+    // Đơn đã huỷ mà vẫn cần kiểm tra tay (không rõ đã tạo vận đơn) → vẫn đánh dấu được sau khi huỷ tay.
+    expect(gomdonAdminActions({ ...base, status: 'CANCELLED', gomdonStatus: 'NEEDS_MANUAL_CHECK', gomdonCancelStatus: 'FAILED' }).canMarkHandled).toBe(true);
+  });
+
+  it('đã xử lý tay → không tạo lại, không huỷ tự động', () => {
+    const a = gomdonAdminActions({ ...base, gomdonStatus: 'MANUAL_HANDLED', gomdonOrderId: 'g1', gomdonPartnerCode: 'BE1' });
+    expect(a).toEqual(expect.objectContaining({ canRetry: false, canCancel: false, canMarkHandled: false }));
+    expect(gomdonStatusLabel('MANUAL_HANDLED')).toEqual(expect.objectContaining({ label: 'Đã xử lý tay', tone: 'neutral' }));
   });
 });
 
@@ -163,5 +208,40 @@ describe('recyclingPickupView — lời hứa trung thực cho khách (giống m
     const v = recyclingPickupView({ status: 'CANCELLED', paymentMethod: 'COD', gomdonStatus: '1', gomdonPartnerCode: 'BE1' });
     expect(v.title).toBe('Đã huỷ thu gom');
     expect(v.waybill).toBeNull();
+  });
+
+  // Cùng bảng với apps/miniapp/src/utils/format-recycling.spec.ts — hai nền tảng phải nói y hệt.
+  const NEUTRAL = 'Nếu bưu tá chưa nhận vật liệu tái chế, nhắn Zalo OA Tubu để được hẹn lại.';
+  const noCskhPromise = (v: { title: string; detail: string }) => {
+    expect(`${v.title} ${v.detail}`).not.toMatch(/CSKH/);
+    expect(v.detail).toBe(NEUTRAL);
+  };
+
+  it('đơn ĐÃ GIAO mà Gomdon chưa báo giao (≠7) → không hứa "CSKH sẽ liên hệ"; mã chỉ hiện khi vận đơn Gomdon còn sống', () => {
+    for (const s of [null, 'FAILED', 'NOT_CONFIGURED', 'NEEDS_MANUAL_CHECK', '2', '5', '11']) {
+      const v = recyclingPickupView({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'PAID', gomdonStatus: s, gomdonPartnerCode: 'BE9' });
+      expect(v.title).toBe('Đã giao hàng');
+      expect(v.tone).toBe('muted');
+      noCskhPromise(v);
+      expect(v.waybill).toBe(s === '5' || s === '11' ? 'BE9' : null);
+    }
+  });
+
+  it('"Đã xử lý tay" → trung tính, không hứa CSKH, ẩn mã vận đơn cũ', () => {
+    const v = recyclingPickupView({ status: 'CONFIRMED', paymentMethod: 'COD', gomdonStatus: 'MANUAL_HANDLED', gomdonPartnerCode: 'BE9' });
+    expect(v.title).toBe('Thu gom được xử lý riêng');
+    noCskhPromise(v);
+    expect(v.waybill).toBeNull();
+  });
+
+  it('chưa có vận đơn tự động mà hàng đã rời kho / kho giao bằng hãng khác → trung tính (hàng đợi CSKH không còn đơn này)', () => {
+    const shipping = recyclingPickupView({ status: 'SHIPPING', paymentMethod: 'COD', gomdonStatus: 'FAILED' });
+    expect(shipping.title).toBe('Đang giao hàng');
+    noCskhPromise(shipping);
+    const other = recyclingPickupView({ status: 'CONFIRMED', paymentMethod: 'COD', gomdonStatus: 'NOT_CONFIGURED', shippingCode: 'GHN1', shippingPartner: 'GHN' });
+    expect(other.title).toBe('Thu gom được xử lý riêng');
+    noCskhPromise(other);
+    // Còn trong hàng đợi (đơn chưa giao, chưa có hãng khác) → vẫn là "CSKH sẽ liên hệ".
+    expect(recyclingPickupView({ status: 'CONFIRMED', paymentMethod: 'COD', gomdonStatus: 'FAILED' }).title).toBe('CSKH sẽ liên hệ hẹn thu gom');
   });
 });

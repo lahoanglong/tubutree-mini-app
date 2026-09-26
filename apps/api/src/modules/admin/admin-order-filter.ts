@@ -1,22 +1,24 @@
 import type { Prisma } from '@prisma/client';
-import { GOMDON_CANCEL, GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
+import { GOMDON_CANCEL, GOMDON_CARRIER, GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
 
-/**
- * "Cần xử lý thu gom": trạng thái vận đơn Gomdon mà KHÔNG ai tự xử lý được — tạo vận đơn thất bại /
- * không rõ đã tạo / chưa cấu hình (kho phải tạo tay theo ghi chú Pancake), hoặc mã Gomdon báo huỷ /
- * hoàn / hỏng / lấy-giao thất bại (xem GOMDON_PROBLEM_STATUSES trong gomdon-status.ts).
- */
-export const RECYCLING_ATTENTION_GOMDON_STATUSES: readonly string[] = [
+// "Cần xử lý thu gom": trạng thái vận đơn Gomdon mà KHÔNG ai tự xử lý được — tạo vận đơn thất bại /
+// không rõ đã tạo / chưa cấu hình (kho phải tạo tay theo ghi chú Pancake), hoặc mã Gomdon báo huỷ /
+// hoàn / hỏng / lấy-giao thất bại (xem GOMDON_PROBLEM_STATUSES trong gomdon-status.ts).
+// MANUAL_HANDLED (admin bấm "Đã xử lý tay") không bao giờ nằm trong hàng đợi.
+
+/** Chưa có vận đơn tự động — kho tạo vận đơn tay / kiểm tra tay. */
+export const RECYCLING_ATTENTION_NO_WAYBILL_STATUSES: readonly string[] = [
   GOMDON_STATE.FAILED,
   GOMDON_STATE.NEEDS_MANUAL_CHECK,
   GOMDON_STATE.NOT_CONFIGURED,
-  '2',
-  '6',
-  '8',
-  '9',
-  '10',
-  '11',
-  '12',
+];
+
+/** Mã Gomdon báo huỷ / hoàn / hỏng / lấy-giao thất bại. */
+export const RECYCLING_ATTENTION_PROBLEM_CODES: readonly string[] = ['2', '6', '8', '9', '10', '11', '12'];
+
+export const RECYCLING_ATTENTION_GOMDON_STATUSES: readonly string[] = [
+  ...RECYCLING_ATTENTION_NO_WAYBILL_STATUSES,
+  ...RECYCLING_ATTENTION_PROBLEM_CODES,
 ];
 
 /** Huỷ vận đơn không được (lỗi hết lượt retry) hoặc quá muộn (bưu tá đã lấy hàng) → CSKH phải huỷ tay. */
@@ -29,6 +31,12 @@ export const RECYCLING_ATTENTION_CANCEL_STATUSES: readonly string[] = [GOMDON_CA
  * (FAILED/TOO_LATE) luôn cần xử lý, vì nó chỉ xảy ra khi đơn đã huỷ.
  */
 const CLOSED_ORDER_STATUSES = ['DELIVERED', 'CANCELLED', 'RETURNED'] as const;
+
+/**
+ * Chưa có vận đơn tự động mà hàng ĐÃ RỜI KHO (đang giao / đã giao) → kho đã tạo vận đơn tay rồi, không
+ * còn "tạo vận đơn tay" để làm.
+ */
+const SHIPPED_OR_CLOSED_ORDER_STATUSES = ['SHIPPING', ...CLOSED_ORDER_STATUSES] as const;
 
 export const ADMIN_ORDER_STATUSES = [
   'PENDING_PAYMENT',
@@ -53,10 +61,21 @@ export function recyclingAttentionWhere(): Prisma.OrderWhereInput {
     hasRecyclingPickup: true,
     OR: [
       {
-        gomdonStatus: { in: [...RECYCLING_ATTENTION_GOMDON_STATUSES] },
+        gomdonStatus: { in: [...RECYCLING_ATTENTION_NO_WAYBILL_STATUSES] },
+        status: { notIn: [...SHIPPED_OR_CLOSED_ORDER_STATUSES] },
+        // Kho đã giao bằng hãng khác (Pancake ghi mã vận đơn của hãng đó) → việc tạo vận đơn tay đã xong.
+        // Mã do Gomdon ghi luôn kèm shippingPartner = BestExpress.
+        OR: [{ shippingCode: null }, { shippingPartner: GOMDON_CARRIER }],
+      },
+      {
+        gomdonStatus: { in: [...RECYCLING_ATTENTION_PROBLEM_CODES] },
         status: { notIn: [...CLOSED_ORDER_STATUSES] },
       },
-      { gomdonCancelStatus: { in: [...RECYCLING_ATTENTION_CANCEL_STATUSES] } },
+      {
+        gomdonCancelStatus: { in: [...RECYCLING_ATTENTION_CANCEL_STATUSES] },
+        // Admin đã bấm "Đã xử lý tay" → rời hàng đợi. (`not` của Prisma loại cả NULL → ghi rõ nhánh null.)
+        OR: [{ gomdonStatus: null }, { gomdonStatus: { not: GOMDON_STATE.MANUAL_HANDLED } }],
+      },
     ],
   };
 }

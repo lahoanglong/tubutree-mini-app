@@ -1,10 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Recycle } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CopyButton } from '@/components/copy-button';
-import { cancelGomdonWaybill, retryGomdon, type AdminOrder } from '@/lib/admin-client';
+import {
+  cancelGomdonWaybill,
+  GOMDON_HANDLED_NOTE_MAX,
+  markGomdonHandled,
+  retryGomdon,
+  type AdminOrder,
+} from '@/lib/admin-client';
 import {
   gomdonAdminActions,
   gomdonCancelLabel,
@@ -31,17 +37,21 @@ function fmtTime(iso: string | null | undefined): string | null {
 
 /**
  * Khối "Thu gom vật liệu tái chế" trong chi tiết đơn admin: trạng thái vận đơn Gomdon bằng tiếng Việt,
- * mã vận đơn BestExpress, kết quả huỷ, và 2 thao tác tạo lại / huỷ vận đơn. Luật cho phép nằm ở BE
- * (GomdonOrderService) — lỗi trả về được hiện NGUYÊN VĂN.
+ * mã vận đơn BestExpress, kết quả huỷ, và 3 thao tác tạo lại / huỷ vận đơn / "Đã xử lý tay". Luật cho
+ * phép nằm ở BE (GomdonOrderService) — lỗi trả về được hiện NGUYÊN VĂN.
  */
 export function RecyclingPanel({ order }: { order: AdminOrder }) {
   const qc = useQueryClient();
   const [confirmed, setConfirmed] = useState(false);
+  const [handledNote, setHandledNote] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Chặn bấm lặp trước khi React kịp render lại nút disabled (double-submit).
+  const handledInFlight = useRef(false);
 
   const onDone = (text: string) => {
     setMsg({ ok: true, text });
     setConfirmed(false);
+    setHandledNote('');
     void qc.invalidateQueries({ queryKey: ['admin-orders'] });
     void qc.invalidateQueries({ queryKey: ['admin-recycling-count'] });
   };
@@ -58,7 +68,27 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
     onSuccess: (r) => onDone(r.message),
     onError: onFail,
   });
-  const busy = retry.isPending || cancel.isPending;
+  const markHandled = useMutation({
+    mutationFn: (note: string) => markGomdonHandled(order.id, note),
+    onSuccess: (r) => onDone(r.message),
+    onError: onFail,
+    onSettled: () => {
+      handledInFlight.current = false;
+    },
+  });
+  const busy = retry.isPending || cancel.isPending || markHandled.isPending;
+
+  const onMarkHandled = () => {
+    if (handledInFlight.current || busy) return;
+    const ok = window.confirm(
+      `Đánh dấu thu gom của đơn ${order.code} là "Đã xử lý tay"? Đơn sẽ rời hàng đợi "Cần xử lý thu gom" và hệ thống ` +
+        'KHÔNG tự tạo vận đơn Gomdon cho đơn này nữa. Chỉ bấm khi đã xử lý xong ngoài hệ thống (tạo vận đơn tay / hẹn thu gom riêng / báo khách).',
+    );
+    if (!ok) return;
+    handledInFlight.current = true;
+    setMsg(null);
+    markHandled.mutate(handledNote);
+  };
 
   if (!order.hasRecyclingPickup) return null;
 
@@ -104,7 +134,7 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
         <p className="mt-2 text-xs text-neutral-600">{cancelLabel?.hint ?? status.hint}</p>
       )}
 
-      {(actions.canRetry || actions.canCancel) && (
+      {(actions.canRetry || actions.canCancel || actions.canMarkHandled) && (
         <div className="mt-3 space-y-2 border-t border-neutral-100 pt-2">
           {actions.canRetry && (
             <div className="space-y-2">
@@ -158,6 +188,28 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
               </button>
             )}
           </div>
+          {actions.canMarkHandled && (
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                aria-label="Ghi chú đã xử lý tay"
+                placeholder="Ghi chú (tuỳ chọn), vd: đã tạo vận đơn GHN tay"
+                maxLength={GOMDON_HANDLED_NOTE_MAX}
+                value={handledNote}
+                onChange={(e) => setHandledNote(e.target.value)}
+                disabled={busy}
+                className="min-w-0 flex-1 rounded border border-neutral-300 px-2 py-1 text-xs"
+              />
+              <button
+                type="button"
+                onClick={onMarkHandled}
+                disabled={busy}
+                className="rounded border border-neutral-300 px-3 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+              >
+                {markHandled.isPending ? 'Đang lưu…' : 'Đã xử lý tay'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

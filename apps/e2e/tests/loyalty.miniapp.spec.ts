@@ -27,7 +27,11 @@ interface LoyaltyState {
   points: number;
   checkedInToday: boolean;
   coupons: CouponDTO[];
+  /** Điểm từ đơn mới giao còn trong hạn đổi/trả — backend chưa cho đổi quà (loyalty.service lockedOrderPoints). */
+  locked?: { points: number; until: string };
 }
+
+const redeemable = (s: LoyaltyState) => Math.max(0, s.points - (s.locked?.points ?? 0));
 
 function checkInStatus(s: LoyaltyState): CheckInStatusResponse {
   const cycleDay = 3;
@@ -57,6 +61,9 @@ function overview(s: LoyaltyState): LoyaltyOverview {
       { id: 'tier-1', name: 'Mầm Xanh', minPoints: 0, multiplier: 1 },
       { id: 'tier-2', name: 'Lộc Biếc', minPoints: 500, multiplier: 1.2 },
     ],
+    ...(s.locked
+      ? { lockedPoints: s.locked.points, lockedReturnPoints: 0, lockedUntil: s.locked.until, redeemablePoints: redeemable(s) }
+      : {}),
   };
 }
 
@@ -69,16 +76,21 @@ const REWARDS = [
 function catalog(s: LoyaltyState): RewardCatalogResponse {
   return {
     pointsBalance: s.points,
+    ...(s.locked ? { lockedPoints: s.locked.points, redeemablePoints: redeemable(s) } : {}),
     rewards: REWARDS.map((r) => ({
       ...r,
       description: `${r.title} cho đơn từ ${r.minOrder.toLocaleString('vi-VN')}đ`,
-      canRedeem: s.points >= r.pointsCost,
+      // Như backend: canRedeem theo điểm DÙNG ĐƯỢC, không theo số dư.
+      canRedeem: redeemable(s) >= r.pointsCost,
     })),
   };
 }
 
-function mockLoyalty(api: MockApi, opts: { posCreditEnabled?: boolean } = {}): LoyaltyState {
-  const s: LoyaltyState = { points: 60, checkedInToday: false, coupons: [] };
+function mockLoyalty(
+  api: MockApi,
+  opts: { posCreditEnabled?: boolean; locked?: LoyaltyState['locked'] } = {},
+): LoyaltyState {
+  const s: LoyaltyState = { points: 60, checkedInToday: false, coupons: [], locked: opts.locked };
   mockSession(api, makeUser({ id: 'user-loyal', fullName: 'Lê Thành Viên', referralCode: 'E2EREF', pointsBalance: 60 }));
   api.get('/me/loyalty', () => overview(s));
   api.get('/me/coupons', () => s.coupons);
@@ -193,6 +205,23 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     // Số dư sau đổi: 60 − 50 = 10 (GET /me/loyalty tải lại).
     await expect(page.getByText('Tích điểm ×1 · 10 điểm Xanh')).toBeVisible();
     expect(api.callsTo('POST', '/me/loyalty/rewards/:id/redeem')).toHaveLength(1);
+  });
+
+  test('Điểm từ đơn mới giao (còn hạn đổi/trả) chưa đổi quà được: nói rõ lý do + ngày mở, không báo "Cần X điểm" sai', async ({ page, api }) => {
+    // 60 điểm, 40 điểm từ đơn giao gần đây — 2026-10-03T17:30Z = 00:30 04/10 giờ VN.
+    mockLoyalty(api, { locked: { points: 40, until: '2026-10-03T17:30:00.000Z' } });
+    await page.goto('/loyalty');
+
+    await expect(page.getByText('Đổi Điểm Nhận Voucher')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('loyalty-locked-points')).toContainText(
+      'Đổi quà dùng được 20 điểm: 40 điểm từ đơn mới giao sẽ dùng được sau ngày 04/10/2026 (hết hạn đổi/trả hàng).',
+    );
+    // Quà 50 điểm: số dư 60 đủ nhưng chỉ dùng được 20 → nút khoá, KHÔNG ghi "Cần 50 điểm".
+    await expect(page.getByRole('button', { name: 'Chờ mở khoá điểm' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Cần 50 điểm' })).toHaveCount(0);
+    // Quà 20 điểm vẫn đổi được; quà 100 điểm vượt cả số dư → "Cần 100 điểm".
+    await expect(page.getByRole('button', { name: 'Đổi ngay' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Cần 100 điểm' })).toBeDisabled();
   });
 
   test('Thẻ thành viên: QR thật của memberCode, chép mã, lời nhắc KHÔNG hứa tích điểm tại quầy khi tắt', async ({ page, api }) => {

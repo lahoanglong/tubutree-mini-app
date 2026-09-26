@@ -162,6 +162,34 @@ describe('admin-client — endpoint mới gọi đúng đường dẫn/body', ()
     expect(f.mock.calls[2]![1]).toEqual(expect.objectContaining({ method: 'POST' }));
   });
 
+  it('markGomdonHandled (chuyển từ recycling-panel sang admin-client): trim + cắt 500 ký tự, rỗng → body {}', async () => {
+    const { markGomdonHandled } = await import('./admin-client');
+    const f = stubFetch({ result: 'MANUAL_HANDLED', message: 'ok' });
+    await markGomdonHandled('o 1', '  đã tạo vận đơn GHN tay  ');
+    expect(f.mock.calls[0]![0]).toContain('/admin/orders/o%201/gomdon/mark-handled');
+    expect(f.mock.calls[0]![1]).toEqual(expect.objectContaining({ method: 'POST', body: JSON.stringify({ note: 'đã tạo vận đơn GHN tay' }) }));
+    await markGomdonHandled('o1', '   ');
+    expect(f.mock.calls[1]![1]).toEqual(expect.objectContaining({ body: '{}' }));
+    await markGomdonHandled('o1', 'x'.repeat(600));
+    expect(JSON.parse(f.mock.calls[2]![1].body as string).note).toHaveLength(500);
+  });
+
+  it('confirmDealerOrderPayment: POST /admin/dealer-orders/:id/confirm-payment, chỉ gửi trường có nội dung (đã trim, cắt theo MaxLength DTO)', async () => {
+    const { confirmDealerOrderPayment } = await import('./admin-client');
+    const f = stubFetch({ ok: true, alreadyPaid: false, message: 'Đã xác nhận thanh toán đơn TB-1.', order: {} });
+    await confirmDealerOrderPayment('o1', { bankRef: ' FT2627 ', note: ' đã đối soát sao kê ' });
+    expect(f.mock.calls[0]![0]).toContain('/admin/dealer-orders/o1/confirm-payment');
+    expect(f.mock.calls[0]![1]).toEqual(
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ bankRef: 'FT2627', note: 'đã đối soát sao kê' }) }),
+    );
+    await confirmDealerOrderPayment('o1', { bankRef: '  ', note: '' });
+    expect(f.mock.calls[1]![1]).toEqual(expect.objectContaining({ body: '{}' }));
+    await confirmDealerOrderPayment('o1', { bankRef: 'B'.repeat(150), note: 'n'.repeat(700) });
+    const body = JSON.parse(f.mock.calls[2]![1].body as string);
+    expect(body.bankRef).toHaveLength(100);
+    expect(body.note).toHaveLength(500);
+  });
+
   it('dealer reward claims: list/approve/reject/mark-paid', async () => {
     const m = await import('./admin-client');
     const f = stubFetch({ data: [], meta: { page: 1, limit: 20, total: 0 } });
@@ -190,12 +218,69 @@ describe('admin-client — endpoint mới gọi đúng đường dẫn/body', ()
     expect(f.mock.calls[2]![0]).toContain('/admin/loyalty/pos-credits?day=2026-09-27&staffUserId=s1');
   });
 
-  it('danh sách hồ sơ đại lý / đổi trả nhận cả dạng phân trang {data, meta}', async () => {
+  it('hồ sơ đại lý / đổi trả: GIỮ meta phân trang (trước đây unwrapList bỏ meta → cắt cụt im lặng)', async () => {
     const m = await import('./admin-client');
-    stubFetch({ data: [{ id: 'd1' }], meta: { page: 1, limit: 20, total: 1 } });
-    await expect(m.listDealerApps('PENDING')).resolves.toEqual([{ id: 'd1' }]);
-    stubFetch({ data: [{ id: 'r1' }], meta: { page: 1, limit: 20, total: 1 } });
-    await expect(m.listReturnRequests('REQUESTED')).resolves.toEqual([{ id: 'r1' }]);
+    let f = stubFetch({ data: [{ id: 'd1' }], meta: { page: 2, limit: 100, total: 180 } });
+    await expect(m.listDealerApps('PENDING', 2)).resolves.toEqual({
+      data: [{ id: 'd1' }],
+      meta: { page: 2, limit: 100, total: 180 },
+    });
+    expect(f.mock.calls[0]![0]).toContain('/admin/dealer-applications?page=2&limit=100&status=PENDING');
+    f = stubFetch({ data: [{ id: 'r1' }], meta: { page: 1, limit: 100, total: 1 } });
+    await expect(m.listReturnRequests('REQUESTED')).resolves.toEqual({
+      data: [{ id: 'r1' }],
+      meta: { page: 1, limit: 100, total: 1 },
+    });
+    expect(f.mock.calls[0]![0]).toContain('/admin/return-requests?page=1&limit=100&status=REQUESTED');
+  });
+
+  it('BE cũ trả mảng trần → vẫn thành Page (total = số dòng, không còn trang sau)', async () => {
+    const m = await import('./admin-client');
+    stubFetch([{ id: 'd1' }, { id: 'd2' }]);
+    await expect(m.listDealerApps()).resolves.toEqual({
+      data: [{ id: 'd1' }, { id: 'd2' }],
+      meta: { page: 1, limit: 100, total: 2 },
+    });
+    expect(m.asPage(null, 1, 20)).toEqual({ data: [], meta: { page: 1, limit: 20, total: 0 } });
+  });
+});
+
+describe('Hàng đợi chờ duyệt (hồ sơ đại lý / đổi trả) — "Tải thêm" + cũ nhất lên đầu', () => {
+  const row = (id: string, createdAt: string) => ({ id, createdAt });
+  const page = <T,>(data: T[], p: number, limit: number, total: number) => ({ data, meta: { page: p, limit, total } });
+
+  it('nextPageParam: còn dòng chưa tải → trang kế; hết → undefined', async () => {
+    const { nextPageParam } = await import('./admin-client');
+    expect(nextPageParam({ page: 1, limit: 100, total: 101 })).toBe(2);
+    expect(nextPageParam({ page: 2, limit: 100, total: 200 })).toBeUndefined();
+    expect(nextPageParam({ page: 1, limit: 100, total: 0 })).toBeUndefined();
+  });
+
+  it('gộp các trang đã tải, bỏ trùng id (offset lệch khi đơn vừa được duyệt), hàng chờ xếp CŨ NHẤT trước', async () => {
+    const { mergeQueuePages } = await import('./admin-client');
+    // API xếp mới nhất trước (createdAt desc) — trang 2 là các hồ sơ cũ hơn.
+    const pages = [
+      page([row('c', '2026-09-25T00:00:00Z'), row('b', '2026-09-20T00:00:00Z')], 1, 2, 5),
+      page([row('b', '2026-09-20T00:00:00Z'), row('a', '2026-09-01T00:00:00Z')], 2, 2, 5),
+    ];
+    const v = mergeQueuePages(pages, true);
+    expect(v.items.map((r) => r.id)).toEqual(['a', 'b', 'c']);
+    expect(v.total).toBe(5);
+    expect(v.hasMore).toBe(true);
+    expect(v.label).toBe('Hiển thị 3/5');
+  });
+
+  it('không phải hàng chờ (Đã duyệt / Tất cả) → giữ thứ tự API (mới nhất trước)', async () => {
+    const { mergeQueuePages } = await import('./admin-client');
+    const v = mergeQueuePages([page([row('c', '2026-09-25T00:00:00Z'), row('a', '2026-09-01T00:00:00Z')], 1, 100, 2)], false);
+    expect(v.items.map((r) => r.id)).toEqual(['c', 'a']);
+    expect(v.hasMore).toBe(false);
+    expect(v.label).toBe('Hiển thị 2/2');
+  });
+
+  it('chưa có dữ liệu → rỗng', async () => {
+    const { mergeQueuePages } = await import('./admin-client');
+    expect(mergeQueuePages(undefined, true)).toEqual({ items: [], total: 0, hasMore: false, label: 'Hiển thị 0/0' });
   });
 });
 

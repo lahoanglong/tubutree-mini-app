@@ -107,9 +107,33 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue({}),
       },
+      $executeRaw: jest.fn().mockResolvedValue(1),
     };
-    return { ...base, ...over } as unknown as PrismaService;
+    const prisma: Record<string, unknown> = { ...base, ...over };
+    // tx = chính mock (đủ để kiểm thứ tự khoá → đọc doanh số → ghi trong CÙNG transaction).
+    prisma.$transaction = jest.fn(async (cb: (tx: unknown) => unknown) => cb(prisma));
+    return prisma as unknown as PrismaService;
   }
+
+  // Payout vs huỷ đơn chạy đồng thời: payout đọc doanh số (còn gồm đơn X) → lần huỷ X chưa thấy dòng
+  // QUARTER_BONUS (payout chưa commit) nên không thu hồi → payout ghi thưởng tính cả X. Khoá advisory
+  // theo (đại lý, quý) chung với clawbackQuarterBonusForOrder xếp 2 bên thành tuần tự.
+  it('mỗi đại lý: khoá advisory hashtext("userId:quý") rồi mới đọc doanh số + ghi thưởng, TRONG 1 transaction', async () => {
+    const prisma = prismaForPayout({
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
+      order: settledOrders(120_000_000),
+    });
+    await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS })).payoutQuarterlyBonuses(NOW);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    const exec = prisma.$executeRaw as unknown as jest.Mock;
+    const lock = exec.mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]];
+    expect(lock[0].join('?')).toMatch(/pg_advisory_xact_lock\(hashtext\(/);
+    expect(lock.slice(1)).toEqual(['d1:Q1/2026']);
+    const volumeRead = (prisma.order.findMany as jest.Mock).mock.invocationCallOrder[0]!;
+    const insert = (prisma.dealerCreditLedger.create as jest.Mock).mock.invocationCallOrder[0]!;
+    expect(exec.mock.invocationCallOrder[0]).toBeLessThan(volumeRead);
+    expect(volumeRead).toBeLessThan(insert);
+  });
   /** Đơn quý trước đã chốt (đã thanh toán + đã giao) tổng `total`. */
   const settledOrders = (total: number) => ({
     findMany: jest.fn().mockResolvedValue([{ id: 'o1', total, status: 'DELIVERED', paymentStatus: 'PAID' }]),

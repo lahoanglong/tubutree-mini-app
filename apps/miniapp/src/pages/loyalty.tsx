@@ -12,8 +12,10 @@ import {
   postDailyCheckIn,
   getMemberCard,
   checkInView,
+  lockedPointsNote,
   memberCardHint,
   pointsReasonLabel,
+  rewardButtonLabel,
   tierProgressPercent,
   type CheckInStatusResponse,
   type CouponDTO,
@@ -134,6 +136,8 @@ export default function LoyaltyPage() {
   const curMin = data?.tiers.find((t) => t.id === data.tier?.id)?.minPoints ?? 0;
   const progress = data ? tierProgressPercent(data) : 0;
   const checkIn = checkInQ.data ? checkInView(checkInQ.data) : null;
+  // Điểm của đơn mới giao/đang đổi-trả chưa đổi quà được (backend chặn) — nói rõ lý do ngay trên danh mục.
+  const lockedNote = data ? lockedPointsNote(data) : null;
 
   // Phát hiện LÊN HẠNG (§6.6 #78): so minPoints hạng hiện tại với lần xem trước (localStorage).
   const [celebrate, setCelebrate] = useState<string | null>(null);
@@ -472,6 +476,17 @@ export default function LoyaltyPage() {
               </Box>
             ) : rewardsQ.data && rewardsQ.data.rewards.length > 0 ? (
               <Box flex flexDirection="column" style={{ gap: 10 }}>
+                {lockedNote && (
+                  <Box
+                    p={3}
+                    data-testid="loyalty-locked-points"
+                    style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--neutral-200)' }}
+                  >
+                    <Text size="xSmall" style={{ color: 'var(--neutral-700)', lineHeight: '16px' }}>
+                      🔒 {lockedNote}
+                    </Text>
+                  </Box>
+                )}
                 {rewardsQ.data.rewards.map((r) => (
                   <Box
                     key={r.id}
@@ -534,7 +549,7 @@ export default function LoyaltyPage() {
                           fontSize: 12,
                         }}
                       >
-                        {r.canRedeem ? 'Đổi ngay' : `Cần ${r.pointsCost} điểm`}
+                        {rewardButtonLabel(r, rewardsQ.data!)}
                       </Button>
                     </Box>
                   </Box>

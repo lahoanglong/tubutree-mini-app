@@ -70,7 +70,7 @@ describe('LoyaltyService.creditOrderPoints', () => {
         findUniqueOrThrow: jest.fn().mockResolvedValue(order),
         aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 } }), // recalcTier
       },
-      pointsTransaction: { findFirst: jest.fn().mockResolvedValue(existed), create: jest.fn(), aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }) },
+      pointsTransaction: { findFirst: jest.fn().mockResolvedValue(existed), create: jest.fn(), findMany: jest.fn().mockResolvedValue([]), aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }) },
       user: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null }),
         update: jest.fn(),
@@ -114,7 +114,7 @@ describe('LoyaltyService.creditOrderPoints', () => {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 }),
         aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 } }), // recalcTier
       },
-      pointsTransaction: { findFirst, create: jest.fn(), aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }) },
+      pointsTransaction: { findFirst, create: jest.fn(), findMany: jest.fn().mockResolvedValue([]), aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }) },
       user: { findUniqueOrThrow: userFind, update: jest.fn() },
       membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn().mockRejectedValue(p2002),
@@ -137,7 +137,7 @@ describe('LoyaltyService.creditOrderPoints', () => {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 }),
       },
       // pre-check=null VÀ re-query trong catch cũng=null (không có bản ghi reason).
-      pointsTransaction: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn(), aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }) },
+      pointsTransaction: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn(), findMany: jest.fn().mockResolvedValue([]), aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }) },
       user: { findUniqueOrThrow: jest.fn(), update: jest.fn() },
       $transaction: jest.fn().mockRejectedValue(p2002),
     } as unknown as PrismaService;
@@ -273,6 +273,35 @@ describe('LoyaltyService.reverseOrderPoints chỉ trừ pointsEarned khi đã DE
   });
 });
 
+/**
+ * Sổ PointsTransaction giả lọc ĐÚNG theo where (userId/reason.startsWith/delta.gt/createdAt.gte/
+ * refId.in) — test hành vi "điểm xét hạng" theo dữ liệu, không phụ thuộc hình dạng câu truy vấn.
+ */
+type LedgerRow = { userId?: string; reason: string; delta: number; refId?: string | null; createdAt?: Date };
+function fakeLedger(rows: LedgerRow[]) {
+  const all = rows.map((r) => ({ userId: 'u1', refId: null as string | null, createdAt: new Date(), ...r }));
+  type W = {
+    userId?: string;
+    reason?: { startsWith?: string };
+    delta?: { gt?: number };
+    createdAt?: { gte?: Date };
+    refId?: { in?: string[] };
+  };
+  const match = (r: (typeof all)[number], w: W) =>
+    (!w.userId || r.userId === w.userId) &&
+    (!w.reason?.startsWith || r.reason.startsWith(w.reason.startsWith)) &&
+    (w.delta?.gt === undefined || r.delta > w.delta.gt) &&
+    (!w.createdAt?.gte || r.createdAt >= w.createdAt.gte) &&
+    (!w.refId?.in || (r.refId != null && w.refId.in.includes(r.refId)));
+  return {
+    findMany: jest.fn(async ({ where }: { where: W }) => all.filter((r) => match(r, where))),
+    aggregate: jest.fn(async ({ where }: { where: W }) => {
+      const hit = all.filter((r) => match(r, where));
+      return { _sum: { delta: hit.length ? hit.reduce((s, r) => s + r.delta, 0) : null } };
+    }),
+  };
+}
+
 describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)', () => {
   const TIERS = [
     { id: 'mam', sortOrder: 0, minPoints: 0, minSpending: null },
@@ -283,19 +312,23 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     user: { pointsBalance: number; tierId: string | null },
     spent12m: number,
     earned12m?: number,
+    ledgerRows?: LedgerRow[],
   ) {
     const update = jest.fn().mockResolvedValue({});
     const aggregate = jest.fn().mockResolvedValue({ _sum: { total: spent12m } });
-    // Hạng xét theo điểm ĐÃ TÍCH trong 12 tháng (sổ PointsTransaction), không phải số dư còn
-    // lại — mặc định cho bằng số dư để các test cũ giữ nguyên ý nghĩa.
-    const pointsAggregate = jest.fn().mockResolvedValue({ _sum: { delta: earned12m ?? user.pointsBalance } });
+    // Hạng xét theo điểm ĐÃ TÍCH từ đơn đã giao trong 12 tháng (sổ PointsTransaction), không phải
+    // số dư còn lại — mặc định 1 dòng ORDER_DELIVERED bằng số dư để các test cũ giữ nguyên ý nghĩa.
+    const pts = earned12m ?? user.pointsBalance;
+    const ledger = fakeLedger(
+      ledgerRows ?? (pts > 0 ? [{ reason: 'ORDER_DELIVERED:TUBU1', delta: pts, refId: 'o1' }] : []),
+    );
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', ...user }), update },
       membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
       order: { aggregate },
-      pointsTransaction: { aggregate: pointsAggregate },
+      pointsTransaction: ledger,
     } as unknown as PrismaService;
-    return { prisma, update, aggregate, pointsAggregate };
+    return { prisma, update, aggregate, ledger };
   }
 
   it('đạt hạng theo ĐIỂM → nâng lên hạng cao nhất đạt', async () => {
@@ -322,44 +355,75 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     expect(update.mock.calls[0][0].data.tierId).toBe('dai');
   });
 
-  it('chỉ cộng điểm DƯƠNG trong 12 tháng (điểm bị trừ/hoàn không kéo hạng xuống)', async () => {
-    const { prisma, pointsAggregate } = prismaFor({ pointsBalance: 0, tierId: 'mam' }, 0, 0);
+  it('điểm xét hạng = WHITELIST dòng ORDER_DELIVERED dương trong 12 tháng', async () => {
+    const { prisma, ledger } = prismaFor({ pointsBalance: 0, tierId: 'mam' }, 0, 0);
     await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
-    const where = pointsAggregate.mock.calls[0][0].where;
-    expect(where).toMatchObject({ userId: 'u1', delta: { gt: 0 } });
+    const where = ledger.findMany.mock.calls[0]![0].where as Record<string, unknown> & { createdAt: { gte: unknown } };
+    expect(where).toMatchObject({ userId: 'u1', reason: { startsWith: 'ORDER_DELIVERED:' }, delta: { gt: 0 } });
     expect(where.createdAt.gte).toBeInstanceOf(Date);
+    // Không còn blacklist — mọi nguồn khác mặc định KHÔNG tính.
+    expect(where.NOT).toBeUndefined();
   });
 
   // Hạng là hạng theo CHI TIÊU (minPoints = minSpending / loyalty.vnd_per_point: 500đ ↔ 5tr, …).
-  // Điểm KHÔNG sinh từ mua hàng online đã giao không được đẩy hạng: điểm danh (bấm nút mỗi ngày),
-  // điểm POS nhân viên nhập tay (không đối chiếu được hoá đơn), và điểm HOÀN lại khi huỷ đơn đã
-  // dùng điểm (vòng đặt-huỷ lặp lại sẽ cộng dồn "điểm tích" vô hạn).
-  it('điểm danh / POS / hoàn điểm đã dùng KHÔNG tính vào điểm xét hạng', async () => {
-    const { prisma, pointsAggregate } = prismaFor({ pointsBalance: 0, tierId: 'mam' }, 0, 0);
+  // Chỉ điểm sinh từ đơn online ĐÃ GIAO mới đẩy hạng. Bản blacklist cũ vẫn đếm GAME_SPIN_WIN
+  // (quay vòng quay = đổi số dư thành điểm hạng), REVIEW, SEASONPASS; và bỏ qua ORDER_REVERSED.
+  it('điểm danh / POS / hoàn điểm / vòng quay / đánh giá / season pass KHÔNG tính vào điểm xét hạng', async () => {
+    const { prisma, update } = prismaFor({ pointsBalance: 99_999, tierId: 'mam' }, 0, undefined, [
+      { reason: 'ORDER_DELIVERED:TUBU1', delta: 300, refId: 'o1' },
+      { reason: 'DAILY_CHECKIN:DAY_7', delta: 2000, refId: '2026-09-01' },
+      { reason: 'POS_OFFLINE_ORDER:HD1', delta: 2000, refId: 'pos1' },
+      { reason: 'ORDER_REFUND_POINTS:TUBU9', delta: 2000, refId: 'o9' },
+      { reason: 'GAME_SPIN_WIN', delta: 2000 },
+      { reason: 'REVIEW:ca-phe', delta: 2000, refId: 'rv1' },
+      { reason: 'SEASONPASS:s1:5:FREE', delta: 2000 },
+    ]);
     await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
-    const where = pointsAggregate.mock.calls[0][0].where;
-    expect(where.NOT).toEqual(
-      expect.arrayContaining([
-        { reason: { startsWith: 'DAILY_CHECKIN' } },
-        { reason: { startsWith: 'POS_OFFLINE_ORDER' } },
-        { reason: { startsWith: 'ORDER_REFUND_POINTS' } },
-      ]),
-    );
+    expect(update).not.toHaveBeenCalled(); // 300 điểm → vẫn Mầm Xanh
   });
 
-  it('getOverview: "còn X điểm lên hạng" tính theo điểm xét hạng, không theo số dư (số dư có điểm danh)', async () => {
-    const pointsAggregate = jest.fn().mockResolvedValue({ _sum: { delta: 300 } });
+  it('mua → giao → TRẢ HÀNG: ORDER_REVERSED của CÙNG đơn bị trừ khỏi điểm xét hạng', async () => {
+    const { prisma, update, ledger } = prismaFor({ pointsBalance: 0, tierId: 'mam' }, 0, undefined, [
+      { reason: 'ORDER_DELIVERED:TUBU1', delta: 6000, refId: 'o1' },
+      { reason: 'ORDER_REVERSED:TUBU1', delta: -6000, refId: 'o1' },
+      { reason: 'ORDER_DELIVERED:TUBU2', delta: 1200, refId: 'o2' },
+    ]);
+    await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
+    expect(update.mock.calls[0][0].data.tierId).toBe('loc'); // 6000 − 6000 + 1200 = 1200, KHÔNG phải 'dai'
+    const revWhere = ledger.aggregate.mock.calls[0]![0].where as { refId: { in: string[] } };
+    expect(revWhere).toMatchObject({ userId: 'u1', reason: { startsWith: 'ORDER_REVERSED:' } });
+    expect([...revWhere.refId.in].sort()).toEqual(['o1', 'o2']);
+  });
+
+  it('đơn giao TRƯỚC cửa sổ 12 tháng bị trả trong cửa sổ → không trừ nhầm (chỉ khớp đơn có dòng giao trong cửa sổ)', async () => {
+    const old = new Date(Date.now() - 400 * 864e5);
+    const { prisma, update } = prismaFor({ pointsBalance: 0, tierId: 'mam' }, 0, undefined, [
+      { reason: 'ORDER_DELIVERED:OLD', delta: 3000, refId: 'o-old', createdAt: old },
+      { reason: 'ORDER_REVERSED:OLD', delta: -3000, refId: 'o-old' },
+      { reason: 'ORDER_DELIVERED:NEW', delta: 1500, refId: 'o-new' },
+    ]);
+    await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
+    expect(update.mock.calls[0][0].data.tierId).toBe('loc'); // 1500, không phải 1500 − 3000
+  });
+
+  it('getOverview: "còn X điểm lên hạng" tính theo điểm xét hạng (whitelist), không theo số dư', async () => {
+    const ledger = fakeLedger([
+      { reason: 'ORDER_DELIVERED:TUBU1', delta: 300, refId: 'o1' },
+      { reason: 'DAILY_CHECKIN:DAY_1', delta: 600, refId: '2026-09-01' },
+      { reason: 'GAME_SPIN_WIN', delta: 500 },
+    ]);
     const prisma = {
       user: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 900, tierId: null, tier: null }),
       },
       membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
-      pointsTransaction: { aggregate: pointsAggregate },
+      pointsTransaction: ledger,
+      $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
     const ov = await new LoyaltyService(prisma, makeConfig()).getOverview('u1');
     expect(ov.tierPoints).toBe(300);
     expect(ov.nextTier).toMatchObject({ id: 'loc', pointsToGo: 700 });
-    expect(pointsAggregate.mock.calls[0][0].where.NOT).toBeDefined();
+    expect((ledger.findMany.mock.calls[0]![0].where as { reason: unknown }).reason).toEqual({ startsWith: 'ORDER_DELIVERED:' });
   });
 
   it('đã đúng hạng → không update', async () => {

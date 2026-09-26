@@ -16,7 +16,7 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd, recyclingCheckoutFields, recyclingMaxKg } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { newIdempotencyKey } from '../utils/idempotency';
-import { isInvoiceValid, shouldFallbackToCod } from '../utils/checkout-rules';
+import { checkoutPoints, isInvoiceValid, shouldFallbackToCod } from '../utils/checkout-rules';
 import {
   clearCheckoutSelection,
   recallCheckoutSelection,
@@ -108,9 +108,11 @@ export default function CheckoutPage() {
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const walletBalanceLive = walletQ.data?.walletBalance ?? user?.walletBalance ?? 0;
   const coinsBalanceLive = walletQ.data?.coinsBalance ?? user?.coinsBalance ?? 0;
-  const pointsBalanceLive = loyaltyQ.data?.pointsBalance ?? user?.pointsBalance ?? 0;
+  // Điểm DÙNG ĐƯỢC (redeemablePoints), không phải số dư: điểm đơn vừa giao còn trong hạn đổi/trả hoặc
+  // đang chờ xử lý đổi/trả chưa tiêu được — backend kẹp báo giá + đặt đơn đúng theo số này.
+  const points = checkoutPoints(loyaltyQ.data, user?.pointsBalance ?? 0);
 
-  const pointsToUse = usePoints ? pointsBalanceLive : 0;
+  const pointsToUse = usePoints ? points.usable : 0;
   const quote = useQuery({
     queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey],
     queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
@@ -417,11 +419,11 @@ export default function CheckoutPage() {
         <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
           <Box
             role="checkbox"
-            aria-checked={usePoints}
-            aria-disabled={user.pointsBalance <= 0}
-            className={user.pointsBalance > 0 ? 'tubu-press' : undefined}
+            aria-checked={usePoints && points.usable > 0}
+            aria-disabled={points.usable <= 0}
+            className={points.usable > 0 ? 'tubu-press' : undefined}
             onClick={() => {
-              if (user.pointsBalance <= 0) return;
+              if (points.usable <= 0) return;
               haptic('light');
               setUsePoints((v) => !v);
             }}
@@ -435,14 +437,17 @@ export default function CheckoutPage() {
                 {vi.checkout.points}
               </Text>
               <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                {user.pointsBalance > 0
-                  ? usePoints && quote.data
-                    ? vi.checkout.pointsUse(quote.data.pointsUsed, formatVnd(quote.data.pointsDiscount))
-                    : vi.checkout.pointsAvailable(user.pointsBalance)
-                  : vi.checkout.pointsNone}
+                {points.usable > 0 && usePoints && quote.data
+                  ? vi.checkout.pointsUse(quote.data.pointsUsed, formatVnd(quote.data.pointsDiscount))
+                  : (points.label ?? vi.checkout.pointsNone)}
               </Text>
+              {points.lockNote && (
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+                  {points.lockNote}
+                </Text>
+              )}
             </Box>
-            <ToggleVisual on={usePoints} disabled={user.pointsBalance <= 0} />
+            <ToggleVisual on={usePoints && points.usable > 0} disabled={points.usable <= 0} />
           </Box>
         </Box>
       )}

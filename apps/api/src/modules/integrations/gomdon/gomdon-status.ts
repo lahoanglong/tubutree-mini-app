@@ -23,9 +23,35 @@ export const GOMDON_STATE = {
   FAILED: 'FAILED',
   /** Chưa cấu hình Gomdon (thiếu base URL/tài khoản) — kho tạo vận đơn tay. */
   NOT_CONFIGURED: 'NOT_CONFIGURED',
+  /**
+   * Admin bấm "Đã xử lý tay": vận đơn thu gom đã được người xử lý ngoài hệ thống (tạo tay / hẹn riêng /
+   * báo khách). Hệ thống KHÔNG tự tạo vận đơn nữa, đơn rời hàng đợi "Cần xử lý thu gom".
+   */
+  MANUAL_HANDLED: 'MANUAL_HANDLED',
 } as const;
 
 export type GomdonInternalState = (typeof GOMDON_STATE)[keyof typeof GOMDON_STATE];
+
+/** Hãng vận chuyển của vận đơn Gomdon (ghi vào Order.shippingPartner). */
+export const GOMDON_CARRIER = 'BestExpress';
+
+/**
+ * Trạng thái admin được đánh dấu "Đã xử lý tay": chưa/không có vận đơn tự động (FAILED /
+ * NOT_CONFIGURED / NEEDS_MANUAL_CHECK) hoặc Gomdon báo huỷ / hoàn / hỏng / lấy-giao thất bại.
+ * KHÔNG gồm vận đơn đang chạy bình thường (1, 3–5, 7), CREATING, AWAITING_PAYMENT.
+ */
+export const GOMDON_MANUAL_HANDLEABLE: readonly string[] = [
+  GOMDON_STATE.FAILED,
+  GOMDON_STATE.NOT_CONFIGURED,
+  GOMDON_STATE.NEEDS_MANUAL_CHECK,
+  '2',
+  '6',
+  '8',
+  '9',
+  '10',
+  '11',
+  '12',
+];
 
 /** Kết quả huỷ vận đơn Gomdon khi đơn bị huỷ (Order.gomdonCancelStatus). */
 export const GOMDON_CANCEL = {

@@ -239,6 +239,9 @@ export class GomdonWebhookService {
     const cur = order.gomdonStatus;
     const statusChanged = cur !== newStatus;
     const partnerCode = order.gomdonPartnerCode ?? p.partnerCode ?? p.gomdonOrderId;
+    // Đơn đã gắn vận đơn theo mã BestExpress nhưng CHƯA có id số Gomdon (Gomdon không trả id lúc tạo) →
+    // điền id từ payload: API huỷ vận đơn (/order/cancel/{id}) chỉ nhận id số. Tự lành đã điền riêng.
+    const fillId = !backfill && !order.gomdonOrderId && p.gomdonOrderId ? p.gomdonOrderId : null;
 
     // Không lùi trạng thái: webhook tới trễ/không theo thứ tự (Gomdon retry) bị bỏ qua.
     let stale = false;
@@ -256,6 +259,13 @@ export class GomdonWebhookService {
           where: { id: order.id, gomdonOrderId: null, gomdonPartnerCode: null },
           data: { gomdonOrderId: p.gomdonOrderId, gomdonPartnerCode: partnerCode },
         });
+      } else if (fillId) {
+        // Trạng thái cũ thì bỏ, nhưng id vận đơn vẫn đúng — điền để huỷ được qua API.
+        const r = await this.prisma.order.updateMany({
+          where: { id: order.id, gomdonOrderId: null },
+          data: { gomdonOrderId: fillId },
+        });
+        if (r.count > 0) await this.redriveCancelAfterIdFill(order);
       }
       return this.ignored(`status ${newStatus} cũ hơn trạng thái hiện tại ${cur} của đơn ${order.code}`, order.id);
     }
@@ -275,6 +285,8 @@ export class GomdonWebhookService {
     if (backfill) {
       data.gomdonOrderId = p.gomdonOrderId;
       data.gomdonPartnerCode = partnerCode;
+    } else if (fillId) {
+      data.gomdonOrderId = fillId;
     }
     // Đơn có vận đơn Gomdon: Gomdon là nguồn DUY NHẤT của shippingCode/Partner/Status/History
     // (pancake.processor onShippingUpdated không ghi đè các field này — xem ở đó).
@@ -297,12 +309,19 @@ export class GomdonWebhookService {
           order.code,
           `Gomdon CÓ vận đơn ${partnerCode} cho đơn đã được báo "tạo vận đơn tay" — kiểm tra ngay tránh giao trùng 2 vận đơn.`,
         );
+      } else if (cur === GOMDON_STATE.MANUAL_HANDLED) {
+        await this.alerts.alert(
+          order.code,
+          `Gomdon CÓ vận đơn ${partnerCode} cho đơn đã được đánh dấu "Đã xử lý tay" — kiểm tra ngay tránh giao trùng 2 vận đơn.`,
+        );
       } else if (cur === GOMDON_STATE.NEEDS_MANUAL_CHECK) {
         await this.alerts.alert(order.code, `Đã tự khớp vận đơn Gomdon ${partnerCode} — KHÔNG tạo vận đơn tay.`);
       }
     }
     if (backfill && isDead(order.status)) {
       await enqueueGomdonCancel(this.pushQueue, order.id);
+    } else if (fillId) {
+      await this.redriveCancelAfterIdFill(order);
     }
 
     await this.applyOrderEffects(order, p.status, statusChanged);
@@ -351,6 +370,16 @@ export class GomdonWebhookService {
       // Ghi nhận + báo CSKH. KHÔNG tự huỷ/hoàn tiền/restock — người xử lý quyết định.
       await this.alerts.alert(order.code, `Gomdon báo "${text}". ${PROBLEM_ADVICE[status] ?? ''}`.trim());
     }
+  }
+
+  /**
+   * Vừa điền id số cho vận đơn chỉ-có-mã của đơn ĐÃ HUỶ mà việc huỷ chưa xong (null / FAILED vì thiếu id)
+   * → xếp lại job huỷ: giờ API huỷ dùng được. cancelOnGomdon tự bỏ qua nếu vận đơn đã huỷ/đã lấy hàng.
+   */
+  private async redriveCancelAfterIdFill(order: Order): Promise<void> {
+    if (order.status !== 'CANCELLED') return;
+    if (order.gomdonCancelStatus != null && order.gomdonCancelStatus !== GOMDON_CANCEL.FAILED) return;
+    await enqueueGomdonCancel(this.pushQueue, order.id);
   }
 
   /** Chỉ nuốt lỗi chuyển trạng thái không hợp lệ (webhook trễ); lỗi khác ném tiếp để retry. */

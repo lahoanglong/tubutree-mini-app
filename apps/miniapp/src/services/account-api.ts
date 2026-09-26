@@ -5,10 +5,22 @@ import type { AddressDTO } from './shop-api';
 export interface LoyaltyOverview {
   pointsBalance: number;
   /**
-   * Điểm XÉT HẠNG 12 tháng (chỉ điểm từ mua hàng — không gồm điểm danh, tích tại quầy, hoàn điểm
-   * đã dùng). nextTier.pointsToGo tính theo số này. Optional: API cũ chưa trả.
+   * Điểm XÉT HẠNG 12 tháng — CHỈ điểm tích từ đơn online đã giao, trừ phần của đơn bị trả/huỷ
+   * (không gồm điểm danh, tích tại quầy, hoàn điểm đã dùng, Vườn Xanh, đánh giá, season pass).
+   * nextTier.pointsToGo tính theo số này. Optional: API cũ chưa trả.
    */
   tierPoints?: number;
+  /**
+   * Điểm CHƯA đổi quà được vì đơn còn có thể bị trả hàng (đơn mới giao còn trong hạn đổi/trả, đơn
+   * đang có yêu cầu đổi/trả). Optional: API cũ chưa trả.
+   */
+  lockedPoints?: number;
+  /** Phần của lockedPoints thuộc đơn đang chờ xử lý đổi/trả (mở khi yêu cầu được xử lý, không theo ngày). */
+  lockedReturnPoints?: number;
+  /** ISO — mốc muộn nhất phần khoá theo hạn đổi/trả được mở; null nếu không có. */
+  lockedUntil?: string | null;
+  /** Điểm dùng được để đổi quà ngay = số dư − lockedPoints (≥ 0). */
+  redeemablePoints?: number;
   tier: { id: string; name: string; multiplier: number; perks: unknown } | null;
   nextTier: { id: string; name: string; minPoints: number; pointsToGo: number } | null;
   tiers: { id: string; name: string; minPoints: number; multiplier: number }[];
@@ -104,6 +116,10 @@ export interface RewardItem {
 
 export interface RewardCatalogResponse {
   pointsBalance: number;
+  /** Xem LoyaltyOverview.lockedPoints. Optional: API cũ chưa trả. */
+  lockedPoints?: number;
+  /** Điểm dùng được để đổi quà (canRedeem của từng quà tính theo số này). */
+  redeemablePoints?: number;
   rewards: RewardItem[];
 }
 
@@ -186,6 +202,44 @@ export function pointsReasonLabel(reason: string): string {
   if (reason.startsWith('GAME') || reason.startsWith('SEASONPASS')) return 'Phần thưởng Vườn Xanh';
   if (reason.startsWith('REVIEW')) return 'Đánh giá sản phẩm';
   return 'Điều chỉnh Điểm Xanh';
+}
+
+/** dd/mm/yyyy theo giờ Việt Nam (UTC+7) — cùng quy ước với thông báo lỗi của backend. */
+function vnDate(iso: string): string {
+  const v = new Date(new Date(iso).getTime() + 7 * 3600 * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(v.getUTCDate())}/${pad(v.getUTCMonth() + 1)}/${v.getUTCFullYear()}`;
+}
+
+/**
+ * Giải thích vì sao 1 phần Điểm Xanh chưa đổi quà được (backend redeemReward chặn điểm của đơn còn
+ * có thể bị trả hàng). null = không có điểm khoá / API cũ.
+ */
+export function lockedPointsNote(
+  ov: Pick<LoyaltyOverview, 'pointsBalance' | 'lockedPoints' | 'lockedReturnPoints' | 'lockedUntil' | 'redeemablePoints'>,
+): string | null {
+  const locked = ov.lockedPoints ?? 0;
+  if (locked <= 0) return null;
+  const ret = ov.lockedReturnPoints ?? 0;
+  const inWindow = locked - ret;
+  const parts: string[] = [];
+  if (inWindow > 0 && ov.lockedUntil) {
+    parts.push(`${inWindow} điểm từ đơn mới giao sẽ dùng được sau ngày ${vnDate(ov.lockedUntil)} (hết hạn đổi/trả hàng)`);
+  }
+  if (ret > 0) parts.push(`${ret} điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong`);
+  if (parts.length === 0) parts.push(`${locked} điểm từ đơn mới giao chưa dùng được`);
+  const usable = ov.redeemablePoints ?? Math.max(0, ov.pointsBalance - locked);
+  return `Đổi quà dùng được ${usable} điểm: ${parts.join('; ')}.`;
+}
+
+/** Nhãn nút đổi quà — không nói "Cần X điểm" khi số dư đủ mà chỉ đang chờ mở khoá điểm. */
+export function rewardButtonLabel(
+  r: Pick<RewardItem, 'pointsCost' | 'canRedeem'>,
+  catalog: Pick<RewardCatalogResponse, 'pointsBalance' | 'redeemablePoints'>,
+): string {
+  if (r.canRedeem) return 'Đổi ngay';
+  if (catalog.redeemablePoints !== undefined && catalog.pointsBalance >= r.pointsCost) return 'Chờ mở khoá điểm';
+  return `Cần ${r.pointsCost} điểm`;
 }
 
 /** Nút điểm danh: ghi đúng số điểm của ô hôm nay (ô backend sẽ trả khi bấm). */

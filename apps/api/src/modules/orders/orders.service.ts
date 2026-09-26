@@ -55,26 +55,27 @@ export class OrdersService {
   }
 
   async cancel(userId: string, code: string) {
+    // Kiểm tra sớm trên ảnh chụp (thông báo thân thiện, không mở tx vô ích). Ảnh chụp này đọc NGOÀI tx
+    // nên KHÔNG được dùng để quyết định ghi — tx bên dưới khoá dòng đơn rồi kiểm tra lại trên dữ liệu thật.
     const order = await this.detail(userId, code);
-    if (order.status !== 'PENDING_PAYMENT' && order.status !== 'CONFIRMED') {
-      throw new BadRequestException(
-        'Đơn đã vào quy trình giao, vui lòng liên hệ Zalo OA để được hỗ trợ.',
-      );
-    }
-    // Đơn thu gom tái chế: bưu tá Gomdon đã lấy hàng (webhook chuyển SHIPPING có thể tới trễ) → không
-    // cho khách tự huỷ nữa (huỷ vận đơn bằng API không còn được, hàng đã rời kho).
-    if (order.hasRecyclingPickup && isGomdonPickedUp(order.gomdonStatus)) {
-      throw new BadRequestException(
-        'Đơn đã được bưu tá lấy hàng, vui lòng liên hệ Zalo OA để được hỗ trợ.',
-      );
-    }
-    // Chuyển trạng thái ATOMIC (guard theo status) — chống hủy đồng thời (double-tap/retry) gây
-    // HOÀN VÍ 2 LẦN: chỉ request THẮNG (count=1) mới hoàn điểm/ví. Nhất quán pattern atomic ở checkout.
-    // Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash giữa chừng: nếu process chết
-    // sau khi đơn đã CANCELLED nhưng trước khi increment ví → retry bị guard chặn → khách mất tiền.
+    this.assertCustomerCancellable(order);
+    // Chuyển trạng thái ATOMIC — chống hủy đồng thời (double-tap/retry) gây HOÀN VÍ 2 LẦN: chỉ request
+    // THẮNG (count=1) mới hoàn điểm/ví. Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash
+    // giữa chừng: nếu process chết sau khi đơn đã CANCELLED nhưng trước khi increment ví → retry bị guard
+    // chặn → khách mất tiền.
+    //
+    // Giữa lần đọc ở detail() và tx này, admin xác nhận chuyển khoản (PENDING_PAYMENT+UNPAID →
+    // CONFIRMED+PAID), webhook Pancake/ZaloPay lật PAID, admin chuyển giao vận, hay Gomdon báo đã lấy
+    // hàng đều có thể chen vào. Nên trong tx: khoá dòng đơn (FOR UPDATE — các đường ghi kia xếp hàng sau
+    // lần huỷ này), đọc lại, kiểm tra lại, lật guard theo ĐÚNG trạng thái vừa đọc, và đưa bản đọc lại
+    // (không phải ảnh chụp) vào reverseFinancials + sổ lịch sử.
     const won = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR UPDATE`;
+      const current = await tx.order.findUnique({ where: { id: order.id }, include: { items: true } });
+      if (!current || current.status === 'CANCELLED') return false; // request khác đã huỷ trước → không hoàn lần 2
+      this.assertCustomerCancellable(current);
       const res = await tx.order.updateMany({
-        where: { id: order.id, status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] } },
+        where: { id: current.id, status: current.status },
         data: { status: 'CANCELLED' },
       });
       if (res.count === 0) return false;
@@ -82,8 +83,8 @@ export class OrdersService {
       // nhưng vẫn phải để lại actor, nếu không thì sổ lịch sử có lỗ đúng ở nhóm đơn đông nhất.
       await tx.orderStatusHistory.create({
         data: {
-          orderId: order.id,
-          fromStatus: order.status,
+          orderId: current.id,
+          fromStatus: current.status,
           toStatus: 'CANCELLED',
           actorType: 'CUSTOMER',
           actorId: userId,
@@ -91,10 +92,9 @@ export class OrdersService {
       });
       // Hoàn ví/xu + restock + release flash quota — logic dùng chung với admin.reviewReturn/
       // OrderStatusService (xem order-reversal.service.ts), tránh chép tay lệch nhau (P0-4
-      // trong docs/2026-09-08-review-progress.md). Refetch paymentStatus TRONG tx qua guard
-      // updateMany bên trong reverseFinancials — snapshot `order.paymentStatus` (đọc ngoài tx
-      // ở detail()) có thể đã stale nếu webhook ZaloPay/Pancake chuyển REFUNDED giữa lúc đó.
-      await this.reversal.reverseFinancials(tx, order);
+      // trong docs/2026-09-08-review-progress.md). Hoàn tiền quyết bằng guard PAID→REFUNDED
+      // trong reverseFinancials (DB quyết, không phải paymentStatus của bản đọc).
+      await this.reversal.reverseFinancials(tx, current);
       return true;
     });
     if (!won) return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
@@ -118,6 +118,22 @@ export class OrdersService {
     // cho một thao tác thực ra đã thành công. Nhất quán với requestReturn() bên dưới.
     await this.notifications.notify(userId, 'ORDER_CANCELLED', { order_code: code }).catch(() => undefined);
     return this.detail(userId, code);
+  }
+
+  /** Luật khách tự huỷ — dùng cả cho ảnh chụp (kiểm tra sớm) lẫn bản đọc lại trong tx (quyết định). */
+  private assertCustomerCancellable(order: { status: string; hasRecyclingPickup?: boolean | null; gomdonStatus?: string | null }) {
+    if (order.status !== 'PENDING_PAYMENT' && order.status !== 'CONFIRMED') {
+      throw new BadRequestException(
+        'Đơn đã vào quy trình giao, vui lòng liên hệ Zalo OA để được hỗ trợ.',
+      );
+    }
+    // Đơn thu gom tái chế: bưu tá Gomdon đã lấy hàng (webhook chuyển SHIPPING có thể tới trễ) → không
+    // cho khách tự huỷ nữa (huỷ vận đơn bằng API không còn được, hàng đã rời kho).
+    if (order.hasRecyclingPickup && isGomdonPickedUp(order.gomdonStatus)) {
+      throw new BadRequestException(
+        'Đơn đã được bưu tá lấy hàng, vui lòng liên hệ Zalo OA để được hỗ trợ.',
+      );
+    }
   }
 
   async repurchase(userId: string, code: string) {

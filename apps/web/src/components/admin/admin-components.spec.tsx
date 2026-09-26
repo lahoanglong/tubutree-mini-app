@@ -100,6 +100,73 @@ describe('RecyclingPanel (chi tiết đơn admin)', () => {
     const { container } = mount(<RecyclingBadge order={order({ gomdonStatus: 'FAILED' })} />);
     expect(container.textContent).toContain('Thu gom: cần xử lý');
   });
+
+  it('badge: đơn đang giao / đã xử lý tay → không còn "cần xử lý"', () => {
+    const shipping = mount(<RecyclingBadge order={order({ status: 'SHIPPING', gomdonStatus: 'FAILED' })} />);
+    expect(shipping.container.textContent).not.toContain('cần xử lý');
+    const handled = mount(<RecyclingBadge order={order({ gomdonStatus: 'MANUAL_HANDLED' })} />);
+    expect(handled.container.textContent).not.toContain('cần xử lý');
+  });
+
+  it('"Đã xử lý tay": hỏi xác nhận — huỷ thì KHÔNG gọi API; đồng ý thì POST mark-handled kèm ghi chú đã trim', async () => {
+    const api = mockFetch({ '/gomdon/mark-handled': { body: { result: 'MANUAL_HANDLED', message: 'Đã đánh dấu "Đã xử lý tay".' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const { container } = mount(<RecyclingPanel order={order({ gomdonStatus: 'NOT_CONFIGURED' })} />);
+    const btn = byText(container, 'button', 'Đã xử lý tay') as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+
+    click(btn);
+    await flush();
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(api.calls).toHaveLength(0);
+
+    typeInto(container.querySelector('input[aria-label="Ghi chú đã xử lý tay"]'), '  đã tạo vận đơn GHN tay  ');
+    click(btn);
+    await flush();
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(String(confirm.mock.calls[1]![0])).toContain('TB-100');
+    expect(api.calls).toHaveLength(1);
+    expect(api.calls[0]!.url).toContain('/admin/orders/o1/gomdon/mark-handled');
+    expect(api.calls[0]!.init?.method).toBe('POST');
+    expect(api.calls[0]!.init?.body).toBe(JSON.stringify({ note: 'đã tạo vận đơn GHN tay' }));
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã đánh dấu "Đã xử lý tay".');
+  });
+
+  it('"Đã xử lý tay": bấm liên tiếp khi đang gửi → chỉ 1 request (chống double-submit); lỗi BE hiện nguyên văn', async () => {
+    const msg = 'Trạng thái vận đơn vừa thay đổi — tải lại trang rồi thử lại.';
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        await gate;
+        return new Response(JSON.stringify({ message: msg }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { container } = mount(<RecyclingPanel order={order({ gomdonStatus: 'FAILED' })} />);
+    const btn = byText(container, 'button', 'Đã xử lý tay') as HTMLButtonElement;
+    click(btn);
+    click(btn);
+    click(btn);
+    await flush();
+    expect(calls).toHaveLength(1);
+    expect((byText(container, 'button', /Đang lưu|Đã xử lý tay/) as HTMLButtonElement).disabled).toBe(true);
+    release();
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(msg);
+  });
+
+  it('đơn đang giao: ẩn "Tạo lại vận đơn", vẫn có "Đã xử lý tay"; vận đơn đang chạy (1) → không có "Đã xử lý tay"', () => {
+    const shipping = mount(<RecyclingPanel order={order({ status: 'SHIPPING', gomdonStatus: 'FAILED' })} />);
+    expect(byText(shipping.container, 'button', 'Tạo lại vận đơn Gomdon')).toBeNull();
+    expect(byText(shipping.container, 'button', 'Đã xử lý tay')).not.toBeNull();
+    const live = mount(<RecyclingPanel order={order({ gomdonStatus: '1', gomdonOrderId: 'g1', gomdonPartnerCode: 'BE1' })} />);
+    expect(byText(live.container, 'button', 'Đã xử lý tay')).toBeNull();
+  });
 });
 
 const claim = (over: Partial<AdminDealerRewardClaim> = {}): AdminDealerRewardClaim => ({

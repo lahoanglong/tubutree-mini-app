@@ -1,7 +1,7 @@
 'use client';
 
 import { apiFetch } from './client-api';
-import type { AdminOrderItem } from './admin-client';
+import type { AdminOrderItem, Page } from './admin-client';
 
 export interface MerchantStore {
   id: string;
@@ -110,8 +110,24 @@ export const getMerchantStore = () =>
 export const updateMerchantStore = (body: UpdateMerchantStoreInput) =>
   apiFetch<MerchantStore>('/merchant/store', { method: 'PUT', body });
 
-export const getMerchantProducts = () =>
-  apiFetch<{ ownProducts: MerchantProduct[]; resellProducts: MerchantProduct[] }>('/merchant/products');
+/**
+ * Cỡ trang cổng đối tác = mặc định PaginationQuery của BE (limit 20, tối đa 100 —
+ * apps/api/src/common/pagination.ts). Không gửi limit thì BE vẫn cắt ở 20.
+ */
+export const MERCHANT_PAGE_SIZE = 20;
+
+/**
+ * BE merchant.service.listMyProducts phân trang CẢ 2 danh sách bằng cùng page/limit và trả kèm tổng riêng
+ * từng danh sách. Client cũ bỏ qua meta → số "Sản phẩm riêng/bán lại" đếm trên trang đầu, không bao giờ vượt 20.
+ */
+export interface MerchantProductsPage {
+  ownProducts: MerchantProduct[];
+  resellProducts: MerchantProduct[];
+  meta: { page: number; limit: number; ownTotal: number; resellTotal: number };
+}
+
+export const getMerchantProducts = (page = 1, limit = MERCHANT_PAGE_SIZE) =>
+  apiFetch<MerchantProductsPage>(`/merchant/products?page=${page}&limit=${limit}`);
 
 export const createMerchantProduct = (body: CreateMerchantProductInput) =>
   apiFetch<MerchantProduct>('/merchant/products', { method: 'POST', body });
@@ -123,13 +139,10 @@ export const removeResellProduct = (productId: string) =>
   apiFetch(`/merchant/resell-products/${productId}`, { method: 'DELETE' });
 
 /**
- * BE (merchant.service.listMerchantOrders) trả nguyên Prisma `Order` kèm include `items` + `user`
- * — cùng một entity Order mà admin-client.ts (AdminOrder) mô tả, chỉ khác là đơn ở đây còn cần
- * `shippingAddress` để đối tác đóng gói/ghi vận đơn (AdminOrder không khai trường này). Tái dùng
- * AdminOrderItem cho `items` — tránh khai trùng một interface item thứ hai cho cùng một shape.
- * (Trước đây AdminOrderItem tự nó khai sai tên field — productTitle/price/sku không tồn tại
- * trên OrderItem thật — khiến panel đơn ở CẢ đây lẫn admin/page.tsx render "undefined"; đã sửa
- * đúng tên field ở admin-client.ts, xem comment tại đó.)
+ * Một dòng trong `data` của GET /merchant/orders: nguyên Prisma `Order` kèm include `items` + `user`
+ * (merchant.service.listMerchantOrders) — cùng entity Order mà admin-client.ts (AdminOrder) mô tả, chỉ
+ * khác là đơn ở đây còn cần `shippingAddress` để đối tác đóng gói/ghi vận đơn. Tái dùng AdminOrderItem
+ * cho `items` — tránh khai trùng một interface item thứ hai cho cùng một shape.
  */
 export interface MerchantOrder {
   id: string;
@@ -156,8 +169,19 @@ export interface MerchantOrder {
   items?: AdminOrderItem[];
 }
 
-export const listMerchantOrders = (status?: string) =>
-  apiFetch<MerchantOrder[]>(`/merchant/orders${status ? `?status=${status}` : ''}`);
+/**
+ * BE trả `paginated()` = `{ data, meta: { page, limit, total } }`, KHÔNG phải mảng. Client cũ khai
+ * `MerchantOrder[]` → trang /merchant gọi `.filter`/`.map`/`.length` trên object → TypeError, trắng trang
+ * với MỌI tài khoản DEALER/AFFILIATE.
+ */
+export const listMerchantOrders = (status?: string, page = 1, limit = MERCHANT_PAGE_SIZE) =>
+  apiFetch<Page<MerchantOrder>>(
+    `/merchant/orders?page=${page}&limit=${limit}${status ? `&status=${encodeURIComponent(status)}` : ''}`,
+  );
+
+/** Số đơn theo trạng thái (đọc meta.total, không tải danh sách) — cho thẻ "Chờ đóng gói". */
+export const countMerchantOrders = (status: string) =>
+  listMerchantOrders(status, 1, 1).then((r) => r.meta.total);
 
 export const updateMerchantOrderStatus = (orderId: string, status: string) =>
   apiFetch(`/merchant/orders/${orderId}/status`, { method: 'PUT', body: { status } });

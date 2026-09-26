@@ -4,7 +4,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { CartService } from '../cart/cart.service';
 import type { CouponsService } from '../coupons/coupons.service';
 import type { PricingService } from '../pricing/pricing.service';
-import type { LoyaltyService } from '../loyalty/loyalty.service';
+import { LoyaltyService, type LockedPoints } from '../loyalty/loyalty.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
@@ -37,6 +37,9 @@ function build(
     cartData?: unknown; // override giỏ (test checkout tập con)
     flashSale?: { consumeQuota: jest.Mock; resolveEffective: jest.Mock }; // override FlashSaleService
     gomdon?: unknown;
+    pointsBalance?: number;
+    /** Điểm Xanh còn có thể bị đảo (LoyaltyService.lockedOrderPoints) — mặc định 0. */
+    locked?: number;
   } = {},
 ) {
   const total = opts.total ?? 100;
@@ -47,11 +50,13 @@ function build(
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(null), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }), create: orderCreate },
     user: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, coinsBalance: opts.coinsBalance ?? 1000, pointsBalance: 1000, tierId: null }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, coinsBalance: opts.coinsBalance ?? 1000, pointsBalance: opts.pointsBalance ?? 1000, tierId: null }),
       findUnique: jest.fn().mockResolvedValue(null),
       updateMany,
     },
     $executeRaw: executeRaw,
+    // SELECT … FOR UPDATE khoá dòng users trước khi trừ điểm (xem placeOrder).
+    $queryRaw: jest.fn().mockResolvedValue([{ id: 'u1' }]),
     address: { findUnique: jest.fn().mockResolvedValue(ADDRESS) },
     pointsTransaction: { create: jest.fn() },
   } as unknown as PrismaService;
@@ -70,7 +75,13 @@ function build(
     calcShippingFee: jest.fn().mockResolvedValue(0),
     calcPointsEarned: jest.fn().mockResolvedValue(10),
   } as unknown as PricingService;
-  const loyalty = { getTierMultiplier: jest.fn().mockResolvedValue(1) } as unknown as LoyaltyService;
+  const lock: LockedPoints = { locked: opts.locked ?? 0, lockedReturn: 0, lockedUntil: null };
+  const loyalty = {
+    getTierMultiplier: jest.fn().mockResolvedValue(1),
+    lockedOrderPoints: jest.fn().mockResolvedValue(lock),
+    // Câu giải thích THẬT (không phụ thuộc state) — lỗi checkout phải dùng đúng câu của redeemReward.
+    lockedPointsMessage: (l: LockedPoints) => LoyaltyService.prototype.lockedPointsMessage.call({}, l),
+  } as unknown as LoyaltyService;
   const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
   const pancake = { enqueuePush: jest.fn().mockResolvedValue(undefined) } as unknown as PancakeOrderService;
   const gomdon = (opts.gomdon ?? {
@@ -93,7 +104,7 @@ function build(
   }) as any;
 
   const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, coins, config, combo, flashSale);
-  return { svc, prisma, updateMany, orderCreate, executeRaw, total, coins, combo, cart, coupons, flashSale, pancake, gomdon };
+  return { svc, prisma, updateMany, orderCreate, executeRaw, total, coins, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty };
 }
 
 describe('CheckoutService.placeOrder — money safety', () => {
@@ -384,6 +395,160 @@ describe('CheckoutService.placeOrder — stock atomic (B5)', () => {
     await expect(
       svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
     ).rejects.toThrow('không đủ tồn kho');
+  });
+});
+
+/**
+ * Điểm Xanh của đơn vừa giao còn có thể bị đảo (trả hàng trong hạn / đang có yêu cầu đổi-trả / đã huỷ-trả
+ * chờ trừ) — LoyaltyService.redeemReward đã từ chối tiêu phần đó; checkout trước đây thì không: nhận điểm
+ * đơn A → tiêu ngay vào đơn B → trả đơn A (điểm bị trừ lại, số dư có thể âm) nhưng giảm giá ở đơn B vẫn giữ.
+ */
+describe('CheckoutService — chỉ tiêu Điểm Xanh DÙNG ĐƯỢC (cùng luật lockedOrderPoints của đổi quà)', () => {
+  it('quote: kẹp điểm theo số dùng được (số dư − phần khoá) và trả redeemablePoints/lockedPoints cho FE', async () => {
+    const { svc, pricing } = build({ pointsBalance: 1000, locked: 600 });
+    const q = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 1000 } as never);
+    expect(pricing.resolvePointsRedemption).toHaveBeenCalledWith(1000, 400, expect.any(Number));
+    expect(q).toMatchObject({ pointsBalance: 1000, lockedPoints: 600, redeemablePoints: 400 });
+  });
+
+  it('quote: phần khoá ≥ số dư (điểm đã tiêu trước đó) → redeemablePoints = 0, không âm; không tiêu điểm nào', async () => {
+    const { svc, pricing } = build({ pointsBalance: 100, locked: 250 });
+    const q = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 100 } as never);
+    expect(pricing.resolvePointsRedemption).toHaveBeenCalledWith(100, 0, expect.any(Number));
+    expect(q.redeemablePoints).toBe(0);
+  });
+
+  it('placeOrder: kẹp theo số dùng được như quote (không tin pointsToUse client gửi)', async () => {
+    const { svc, pricing } = build({ pointsBalance: 1000, locked: 600, pointsUsed: 400 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 1000 } as never);
+    expect(pricing.resolvePointsRedemption).toHaveBeenCalledWith(1000, 400, expect.any(Number));
+  });
+
+  it('placeOrder: khoá dòng user (FOR UPDATE) rồi tính phần khoá TRONG tx, guard pointsBalance ≥ dùng + khoá', async () => {
+    const { svc, prisma, updateMany, loyalty } = build({ pointsBalance: 1000, locked: 600, pointsUsed: 300 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 300 } as never);
+    const queryRaw = prisma.$queryRaw as unknown as jest.Mock;
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect((queryRaw.mock.calls[0][0] as string[]).join('?')).toMatch(/FROM "users"[\s\S]*FOR UPDATE/);
+    expect(queryRaw.mock.calls[0][1]).toBe('u1');
+    const lockedCalls = (loyalty.lockedOrderPoints as jest.Mock).mock;
+    // Lần đọc trong tx nhận CHÍNH tx (ở mock này tx = prisma) và chạy SAU khi đã khoá dòng user.
+    const inTxIdx = lockedCalls.calls.findIndex((c) => c[2] === prisma);
+    expect(inTxIdx).toBeGreaterThanOrEqual(0);
+    expect(lockedCalls.invocationCallOrder[inTxIdx]).toBeGreaterThan(queryRaw.mock.invocationCallOrder[0]!);
+    const pointsCall = updateMany.mock.calls.find((c) => c[0].data.pointsBalance);
+    expect(pointsCall[0]).toEqual({
+      where: { id: 'u1', pointsBalance: { gte: 900 } },
+      data: { pointsBalance: { decrement: 300 } },
+    });
+  });
+
+  it('placeOrder: điểm vừa bị khoá giữa báo giá và đặt đơn (đơn cũ vừa chuyển trả hàng) → lỗi tiếng Việt giải thích, không tạo đơn', async () => {
+    const { svc, prisma, loyalty } = build({ pointsBalance: 1000, locked: 0, pointsUsed: 500, decCount: 0 });
+    // Ngoài tx (báo giá/compute) chưa khoá gì; trong tx: 800 điểm đơn cũ đang chờ xử lý đổi/trả.
+    (loyalty.lockedOrderPoints as jest.Mock)
+      .mockResolvedValueOnce({ locked: 0, lockedReturn: 0, lockedUntil: null })
+      .mockResolvedValueOnce({ locked: 800, lockedReturn: 800, lockedUntil: null });
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ pointsBalance: 1000 });
+    const err = await svc
+      .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 500 } as never)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toBe(
+      'Đơn này dùng 500 Điểm Xanh nhưng hiện bạn chỉ dùng được 200/1000 điểm: 800 điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong. Vui lòng tải lại trang thanh toán.',
+    );
+  });
+
+  it('placeOrder: số dư thật sự không đủ (không liên quan phần khoá) → giữ thông báo cũ', async () => {
+    const { svc, prisma } = build({ pointsBalance: 1000, locked: 0, pointsUsed: 500, decCount: 0 });
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ pointsBalance: 100 });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 500 } as never),
+    ).rejects.toThrow('Số điểm Xanh không đủ (hiện có 100 điểm).');
+  });
+
+  it('placeOrder không dùng điểm → KHÔNG khoá dòng user, KHÔNG đọc phần khoá trong tx', async () => {
+    const { svc, prisma, loyalty } = build({ pointsBalance: 1000, locked: 600, pointsUsed: 0 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(prisma.$queryRaw as unknown as jest.Mock).not.toHaveBeenCalled();
+    expect((loyalty.lockedOrderPoints as jest.Mock).mock.calls.some((c) => c[2] !== undefined)).toBe(false);
+  });
+
+  /**
+   * CONCURRENCY: 2 đơn song song, cả hai báo giá lúc số dư còn 100 (khoá 30 → dùng được 70) và mỗi
+   * đơn xin 40 điểm. Guard cũ (`pointsBalance >= dùng`) cho cả hai qua: tổng tiêu 80 > 70, 10 điểm
+   * của đơn còn có thể bị trả đã bị tiêu. Guard mới (khoá dòng user + `>= dùng + khoá`) chỉ cho 1 đơn.
+   */
+  it('CONCURRENCY: 2 đơn song song cùng tiêu điểm — tổng điểm tiêu KHÔNG lấn vào phần khoá', async () => {
+    const LOCKED = 30;
+    const state = { pointsBalance: 100 };
+    const { svc, prisma, pricing, loyalty } = build({ locked: LOCKED });
+    const tick = () => new Promise((r) => setImmediate(r));
+    // Rào chắn: cả 2 compute() đều đọc số dư 100 trước khi đơn nào kịp vào tx.
+    let reads = 0;
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockImplementation(async () => {
+      const snap = { id: 'u1', walletBalance: 0, coinsBalance: 0, pointsBalance: state.pointsBalance, tierId: null };
+      reads += 1;
+      if (reads === 2) open();
+      await gate;
+      return snap;
+    });
+    (prisma.user.findUnique as jest.Mock).mockImplementation(async () => ({ pointsBalance: state.pointsBalance }));
+    (pricing.resolvePointsRedemption as jest.Mock).mockImplementation(async (want: number, usable: number) => {
+      const used = Math.max(0, Math.min(want, usable));
+      return { pointsUsed: used, discount: used };
+    });
+    (loyalty.lockedOrderPoints as jest.Mock).mockImplementation(async () => {
+      await tick();
+      return { locked: LOCKED, lockedReturn: LOCKED, lockedUntil: null };
+    });
+    (prisma.user.updateMany as unknown as jest.Mock).mockImplementation(async ({ where, data }: any) => {
+      await tick();
+      if (where.pointsBalance?.gte != null && !(state.pointsBalance >= where.pointsBalance.gte)) return { count: 0 };
+      if (data.pointsBalance?.decrement) state.pointsBalance -= data.pointsBalance.decrement;
+      return { count: 1 };
+    });
+    // Khoá dòng users kiểu Postgres: FOR UPDATE giữ tới hết transaction.
+    let chain = Promise.resolve();
+    let txCalls = 0;
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => {
+      txCalls += 1;
+      const releases: (() => void)[] = [];
+      const tx = {
+        ...prisma,
+        $queryRaw: async (strings: TemplateStringsArray) => {
+          if (!/FOR UPDATE/.test(strings.join('?'))) throw new Error('unexpected raw');
+          let release!: () => void;
+          const mine = new Promise<void>((r) => (release = r));
+          const prev = chain;
+          chain = prev.then(() => mine);
+          await prev;
+          releases.push(release);
+          return [{ id: 'u1' }];
+        },
+      };
+      try {
+        return await cb(tx);
+      } finally {
+        releases.forEach((r) => r());
+      }
+    });
+
+    const results = await Promise.allSettled([
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 40 } as never),
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 40 } as never),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled');
+    const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    expect(txCalls).toBe(2); // cả 2 lọt kiểm tra ngoài tx → chính guard trong tx chặn kẻ thua
+    expect(ok).toHaveLength(1);
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.reason).toBeInstanceOf(BadRequestException);
+    expect((failed[0]!.reason as Error).message).toContain('dùng được 30/60 điểm');
+    expect(state.pointsBalance).toBe(60);
+    expect(state.pointsBalance).toBeGreaterThanOrEqual(LOCKED);
   });
 });
 

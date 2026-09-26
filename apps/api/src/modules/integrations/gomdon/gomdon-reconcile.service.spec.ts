@@ -54,12 +54,35 @@ describe('GomdonReconcileService', () => {
     expect(gomdonOrder.enqueuePush).toHaveBeenCalledWith('o2');
   });
 
+  it('CREATING kẹt: bỏ đơn đã huỷ/trả (lo ở luồng huỷ) + cũ nhất trước (đơn kẹt không chiếm hết lô)', async () => {
+    const { svc, prisma } = build();
+    await svc.escalateStuckCreating();
+    const args = prisma.order.findMany.mock.calls[0][0];
+    expect(args.where.status).toEqual({ notIn: ['CANCELLED', 'RETURNED'] });
+    expect(args.orderBy).toEqual({ updatedAt: 'asc' });
+  });
+
   it('đơn đã huỷ còn vận đơn chưa xử lý huỷ → enqueue huỷ', async () => {
     const { svc, prisma, gomdonOrder } = build();
     prisma.order.findMany.mockResolvedValueOnce([{ id: 'o3', code: 'TUBU3' }]);
     await svc.redriveCancels();
     expect(prisma.order.findMany.mock.calls[0][0].where).toMatchObject({ status: 'CANCELLED', gomdonCancelStatus: null });
     expect(gomdonOrder.enqueueCancel).toHaveBeenCalledWith('o3');
+  });
+
+  it('huỷ còn treo: vận đơn chỉ có mã BestExpress (thiếu id số) cũng tính là CÓ vận đơn', async () => {
+    const { svc, prisma } = build();
+    await svc.redriveCancels();
+    expect(prisma.order.findMany.mock.calls[0][0].where.OR).toEqual(
+      expect.arrayContaining([
+        { gomdonOrderId: { not: null } },
+        { gomdonPartnerCode: { not: null } },
+        { gomdonStatus: 'NEEDS_MANUAL_CHECK' },
+        // Đơn huỷ sau "Đã xử lý tay" / kẹt CREATING cũng phải qua cancelOnGomdon (mở lại kiểm tra tay).
+        { gomdonStatus: 'MANUAL_HANDLED' },
+        { gomdonStatus: 'CREATING' },
+      ]),
+    );
   });
 
   it('một bước lỗi (DB) không chặn các bước sau và KHÔNG ném ra ngoài @Cron', async () => {

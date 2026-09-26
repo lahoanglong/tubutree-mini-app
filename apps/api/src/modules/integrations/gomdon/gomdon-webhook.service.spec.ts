@@ -244,6 +244,49 @@ describe('GomdonWebhookService.processEvent — áp dụng trạng thái', () =>
     expect(data.status).toBe('PROCESSED');
   });
 
+  it('đơn khớp theo mã BestExpress nhưng CHƯA có id số Gomdon → điền gomdonOrderId từ payload (không chỉ lúc tự lành)', async () => {
+    const ctx = build({ orders: [{ status: 'CONFIRMED', gomdonOrderId: null, gomdonPartnerCode: 'BE55', gomdonStatus: '1' }] });
+    await process(ctx, { order_id: 55, order_code: 'BE55', status: 3 });
+    const upd = ctx.prisma.order.updateMany.mock.calls[0][0];
+    expect(upd.data).toMatchObject({ gomdonOrderId: '55', gomdonStatus: '3' });
+    // Không đổi mã BestExpress đang có.
+    expect(upd.data.gomdonPartnerCode).toBeUndefined();
+  });
+
+  it('event cũ (bị chặn lùi trạng thái) vẫn điền gomdonOrderId còn thiếu — có guard id đang null', async () => {
+    const ctx = build({ orders: [{ status: 'SHIPPING', gomdonOrderId: null, gomdonPartnerCode: 'BE55', gomdonStatus: '5' }] });
+    const data = await process(ctx, { order_id: 55, order_code: 'BE55', status: 1 });
+    expect(data.status).toBe('IGNORED');
+    expect(ctx.prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', gomdonOrderId: null },
+      data: { gomdonOrderId: '55' },
+    });
+  });
+
+  it('đơn CANCELLED mà lần huỷ trước FAILED vì thiếu id → điền id rồi xếp lại job huỷ vận đơn', async () => {
+    const ctx = build({
+      orders: [{ status: 'CANCELLED', gomdonOrderId: null, gomdonPartnerCode: 'BE55', gomdonStatus: '1', gomdonCancelStatus: 'FAILED' }],
+    });
+    await process(ctx, { order_id: 55, order_code: 'BE55', status: 1, created_time: 1758330000 });
+    expect(ctx.prisma.order.updateMany.mock.calls[0][0].data).toMatchObject({ gomdonOrderId: '55' });
+    expect(ctx.pushQueue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, { jobId: 'cancel-o1' });
+  });
+
+  it('đã có id số → không ghi đè id, không xếp job huỷ thừa', async () => {
+    const ctx = build({ orders: [{ status: 'CONFIRMED', gomdonStatus: '1' }] });
+    await process(ctx, { order_id: 55, order_code: 'BE55', status: 3 });
+    expect(ctx.prisma.order.updateMany.mock.calls[0][0].data.gomdonOrderId).toBeUndefined();
+    expect(ctx.pushQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('tự lành cho đơn đã đánh dấu "Đã xử lý tay" → báo kiểm tra trùng vận đơn', async () => {
+    const ctx = build({
+      orders: [null, { status: 'CONFIRMED', gomdonOrderId: null, gomdonPartnerCode: null, gomdonStatus: 'MANUAL_HANDLED', shippingCode: null }],
+    });
+    await process(ctx, { order_id: 77, order_code: 'BE77', order_customer_id: 'TUBU1001', status: 1 });
+    expect(ctx.alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('tránh giao trùng'));
+  });
+
   it('2 webhook song song: updateMany guard theo gomdonStatus thua (count=0) → ném để xử lý lại', async () => {
     const ctx = build();
     ctx.prisma.order.updateMany.mockResolvedValueOnce({ count: 0 });

@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   checkInView,
+  lockedPointsNote,
   memberCardHint,
   pointsReasonLabel,
+  rewardButtonLabel,
   tierProgressPercent,
   type CheckInStatusResponse,
   type LoyaltyOverview,
@@ -132,5 +134,44 @@ describe('memberCardHint', () => {
     const hint = memberCardHint(card(false));
     expect(hint).not.toMatch(/thu ngân/);
     expect(hint).toMatch(/chưa/i);
+  });
+});
+
+// Điểm từ đơn mới giao (còn trong hạn đổi/trả) / đơn đang đổi-trả chưa đổi quà được — backend chặn ở
+// redeemReward; UI phải nói rõ vì sao nút "Đổi ngay" tắt dù số dư đủ, thay vì báo "Cần X điểm".
+describe('lockedPointsNote', () => {
+  it('không có điểm khoá / API cũ không trả → không hiện gì', () => {
+    expect(lockedPointsNote(overview())).toBeNull();
+    expect(lockedPointsNote(overview({ lockedPoints: 0 }))).toBeNull();
+  });
+
+  it('điểm đơn mới giao → nêu số điểm + ngày mở (giờ VN)', () => {
+    // 2026-10-03T17:30Z = 00:30 ngày 04/10 giờ VN.
+    const note = lockedPointsNote(
+      overview({ pointsBalance: 100, lockedPoints: 60, lockedReturnPoints: 0, lockedUntil: '2026-10-03T17:30:00.000Z', redeemablePoints: 40 }),
+    );
+    expect(note).toContain('60 điểm từ đơn mới giao sẽ dùng được sau ngày 04/10/2026');
+    expect(note).toContain('40');
+  });
+
+  it('điểm của đơn đang chờ xử lý đổi/trả → không hứa ngày cụ thể', () => {
+    const note = lockedPointsNote(
+      overview({ pointsBalance: 100, lockedPoints: 30, lockedReturnPoints: 30, lockedUntil: null, redeemablePoints: 70 }),
+    )!;
+    expect(note).toContain('30 điểm từ đơn đang chờ xử lý đổi/trả');
+    expect(note).not.toMatch(/sau ngày/);
+  });
+});
+
+describe('rewardButtonLabel', () => {
+  const r = { pointsCost: 50, canRedeem: false };
+  it('đổi được → "Đổi ngay"', () => {
+    expect(rewardButtonLabel({ ...r, canRedeem: true }, { pointsBalance: 100 })).toBe('Đổi ngay');
+  });
+  it('số dư chưa đủ → "Cần X điểm"', () => {
+    expect(rewardButtonLabel(r, { pointsBalance: 20 })).toBe('Cần 50 điểm');
+  });
+  it('số dư đủ nhưng điểm đang khoá (đơn mới giao) → không nói "Cần X điểm" sai sự thật', () => {
+    expect(rewardButtonLabel(r, { pointsBalance: 100, redeemablePoints: 40 })).toBe('Chờ mở khoá điểm');
   });
 });

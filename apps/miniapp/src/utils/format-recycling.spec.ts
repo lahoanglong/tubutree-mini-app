@@ -70,4 +70,42 @@ describe('recyclingPickupView — trạng thái thu gom trung thực ở chi ti�
     expect(done.tone).toBe('success');
     expect(done.detail).toContain('Zalo OA');
   });
+
+  // Cùng bảng với apps/web/src/lib/recycling.spec.ts — hai nền tảng phải nói y hệt.
+  const NEUTRAL = 'Nếu bưu tá chưa nhận vật liệu tái chế, nhắn Zalo OA Tubu để được hẹn lại.';
+  const noCskhPromise = (v: { title: string; detail: string }) => {
+    expect(`${v.title} ${v.detail}`).not.toMatch(/CSKH/);
+    expect(v.detail).toBe(NEUTRAL);
+  };
+
+  it('đơn ĐÃ GIAO mà Gomdon chưa báo giao (≠7) → không hứa "CSKH sẽ liên hệ"; mã chỉ hiện khi vận đơn Gomdon còn sống', () => {
+    for (const s of [null, 'FAILED', 'NOT_CONFIGURED', 'NEEDS_MANUAL_CHECK', '2', '5', '11']) {
+      const v = recyclingPickupView({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'PAID', gomdonStatus: s, gomdonPartnerCode: 'BE9' });
+      expect(v.title).toBe('Đã giao hàng');
+      expect(v.tone).toBe('muted');
+      noCskhPromise(v);
+      expect(v.waybill).toBe(s === '5' || s === '11' ? 'BE9' : null);
+    }
+  });
+
+  it('"Đã xử lý tay" → trung tính, không hứa CSKH, ẩn mã vận đơn cũ', () => {
+    const v = recyclingPickupView({ ...cod, gomdonStatus: 'MANUAL_HANDLED', gomdonPartnerCode: 'BE9' });
+    expect(v.title).toBe('Thu gom được xử lý riêng');
+    noCskhPromise(v);
+    expect(v.waybill).toBeNull();
+  });
+
+  it('chưa có vận đơn tự động mà hàng đã rời kho / kho giao bằng hãng khác → trung tính (hàng đợi CSKH không còn đơn này)', () => {
+    const shipping = recyclingPickupView({ ...cod, status: 'SHIPPING', gomdonStatus: 'FAILED' });
+    expect(shipping.title).toBe('Đang giao hàng');
+    noCskhPromise(shipping);
+    const other = recyclingPickupView({ ...cod, gomdonStatus: 'NOT_CONFIGURED', shippingCode: 'GHN1', shippingPartner: 'GHN' });
+    expect(other.title).toBe('Thu gom được xử lý riêng');
+    noCskhPromise(other);
+    // Mã do Gomdon ghi (BestExpress) không tính là hãng khác → vẫn "CSKH sẽ liên hệ".
+    expect(recyclingPickupView({ ...cod, gomdonStatus: 'FAILED', shippingCode: 'BE1', shippingPartner: 'BestExpress' }).title).toBe(
+      'CSKH sẽ liên hệ hẹn thu gom',
+    );
+    expect(recyclingPickupView({ ...cod, gomdonStatus: 'FAILED' }).title).toBe('CSKH sẽ liên hệ hẹn thu gom');
+  });
 });

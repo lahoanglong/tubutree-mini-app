@@ -11,7 +11,9 @@ const TONE: Record<RecyclingTone, string> = {
 
 /**
  * Trạng thái thu gom vật liệu tái chế cho KHÁCH ở "Đơn hàng của tôi" — cùng nội dung recyclingPickupView
- * của miniapp: nói đúng việc hệ thống đã làm (chờ thanh toán / đã đặt lịch / CSKH sẽ liên hệ / đã huỷ).
+ * của miniapp: nói đúng việc hệ thống đã làm (chờ thanh toán / đã đặt lịch / CSKH sẽ liên hệ / đã huỷ;
+ * đơn đã giao hoặc đã được xử lý tay thì chỉ nhắc nhắn Zalo OA, không hứa CSKH gọi). API trả đủ cột của
+ * Order (gồm shippingCode/shippingPartner) nên truyền nguyên object đơn.
  */
 export function RecyclingStatus({ order }: { order: OrderDTO }) {
   if (!order.hasRecyclingPickup) return null;

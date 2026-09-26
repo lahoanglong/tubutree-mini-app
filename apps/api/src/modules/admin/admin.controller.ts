@@ -159,13 +159,19 @@ class UpdateOrderStatusDto {
  * bị 400 "property status should not exist" (web admin: lọc trạng thái/tìm đơn, lọc hồ sơ đại lý,
  * lọc đổi/trả đều hỏng).
  */
+/** Thứ tự theo createdAt — hàng chờ duyệt (PENDING / REQUESTED) xem CŨ NHẤT trước (asc). Mặc định desc. */
+const SORT_ORDERS = ['asc', 'desc'] as const;
+export type SortOrder = (typeof SORT_ORDERS)[number];
+
 export class DealerAppsQuery extends PaginationQuery {
   // Giá trị lạ lọt xuống Prisma thành PrismaClientValidationError → 500 trần; chặn bằng enum thật.
   @IsOptional() @IsIn(['PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED']) status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+  @IsOptional() @IsIn([...SORT_ORDERS]) order?: SortOrder;
 }
 
 export class ReturnRequestsQuery extends PaginationQuery {
   @IsOptional() @IsIn(['REQUESTED', 'APPROVED', 'REJECTED']) status?: 'REQUESTED' | 'APPROVED' | 'REJECTED';
+  @IsOptional() @IsIn([...SORT_ORDERS]) order?: SortOrder;
 }
 
 export class ListOrdersQuery extends PaginationQuery {
@@ -185,6 +191,11 @@ export class GomdonRetryDto {
    * có vận đơn nào (tránh tạo vận đơn thứ hai → bưu tá giao 2 lần).
    */
   @IsOptional() @IsBoolean() confirmedNoWaybill?: boolean;
+}
+
+export class GomdonMarkHandledDto {
+  /** Ghi chú admin đã xử lý thế nào (vd "đã tạo vận đơn GHN tay") — chỉ vào log vết. */
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
 }
 
 class SetUserRoleDto {
@@ -221,7 +232,7 @@ export class AdminController {
 
   @Get('dealer-applications')
   dealerApps(@Query() q: DealerAppsQuery) {
-    return this.admin.listDealerApplications(q.status, q.page, q.limit);
+    return this.admin.listDealerApplications(q.status, q.page, q.limit, q.order);
   }
 
   @Post('dealer-applications/:id/review')
@@ -231,7 +242,7 @@ export class AdminController {
 
   @Get('return-requests')
   returns(@Query() q: ReturnRequestsQuery) {
-    return this.admin.listReturnRequests(q.status, q.page, q.limit);
+    return this.admin.listReturnRequests(q.status, q.page, q.limit, q.order);
   }
 
   @Post('return-requests/:id/review')
@@ -268,6 +279,16 @@ export class AdminController {
   @Post('orders/:id/gomdon/cancel-waybill')
   cancelGomdonWaybill(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
     return this.admin.cancelGomdonWaybill(adminId, id);
+  }
+
+  /**
+   * "Đã xử lý tay": vận đơn thu gom lỗi đã được người xử lý ngoài hệ thống → MANUAL_HANDLED, rời hàng đợi
+   * "Cần xử lý thu gom", hệ thống không tự tạo vận đơn nữa. Chỉ từ trạng thái cần xử lý (luật ở
+   * GomdonOrderService.markHandled — lỗi trả nguyên văn).
+   */
+  @Post('orders/:id/gomdon/mark-handled')
+  markGomdonHandled(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: GomdonMarkHandledDto) {
+    return this.admin.markGomdonHandled(adminId, id, dto.note);
   }
 
   /** Tình trạng tích hợp Gomdon (chỉ boolean — không bao giờ trả tài khoản/mật khẩu). */

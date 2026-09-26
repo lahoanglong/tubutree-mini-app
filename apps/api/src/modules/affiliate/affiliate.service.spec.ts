@@ -479,6 +479,19 @@ describe('AffiliateService.approveDueCommissions (chỉ chốt đơn KHÔNG còn
     expect(where.orderId).toEqual({ notIn: ['o-return'] });
   });
 
+  // Duyệt trả hàng lật đơn DELIVERED → RETURNED trong 1 tx, còn reverseCommissionsForOrder chạy SAU
+  // (ngoài tx). Cron chạy đúng khe đó: ReturnRequest đã APPROVED (không còn REQUESTED) nhưng hoa
+  // hồng vẫn LOCKED → bị chốt APPROVED (không-đảo-được) cho một đơn đã trả hàng.
+  it('chỉ chốt hoa hồng của đơn còn DELIVERED (đơn vừa lật RETURNED/CANCELLED chờ đảo thì bỏ qua)', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const prisma = {
+      returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      commission: { updateMany },
+    } as unknown as PrismaService;
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins).approveDueCommissions();
+    expect(updateMany.mock.calls[0][0].where).toMatchObject({ status: 'LOCKED', order: { status: 'DELIVERED' } });
+  });
+
   it('không có yêu cầu đổi/trả treo → không thêm điều kiện orderId', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 0 });
     const prisma = {

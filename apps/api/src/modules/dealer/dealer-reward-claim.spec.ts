@@ -139,8 +139,28 @@ function fakeClaims(initial: Partial<FakeClaim>[] = []) {
   };
 }
 
-const REWARD_Q = { id: 'r1', type: 'TOUR', title: 'Tour Đà Lạt', description: null, threshold: 50_000_000, period: 'QUARTER', isActive: true, sortOrder: 0 };
-const REWARD_Y = { id: 'r2', type: 'GIFT', title: 'Quà năm', description: null, threshold: 100_000_000, period: 'YEAR', isActive: true, sortOrder: 1 };
+type RewardFixture = {
+  id: string;
+  type: string;
+  title: string;
+  description: string | null;
+  threshold: number;
+  period: string;
+  isActive: boolean;
+  sortOrder: number;
+  updatedAt?: Date;
+};
+const REWARD_Q: RewardFixture = { id: 'r1', type: 'TOUR', title: 'Tour Đà Lạt', description: null, threshold: 50_000_000, period: 'QUARTER', isActive: true, sortOrder: 0 };
+const REWARD_Y: RewardFixture = { id: 'r2', type: 'GIFT', title: 'Quà năm', description: null, threshold: 100_000_000, period: 'YEAR', isActive: true, sortOrder: 1 };
+
+type RewardWhere = { OR?: RewardWhere[]; isActive?: boolean; updatedAt?: { gte?: Date } };
+/** Lọc dealerReward.findMany theo where như DB (isActive / updatedAt.gte / OR). */
+function matchReward(r: RewardFixture, w: RewardWhere): boolean {
+  if (w.OR) return w.OR.some((x) => matchReward(r, x));
+  if (w.isActive !== undefined && r.isActive !== w.isActive) return false;
+  if (w.updatedAt?.gte && !(r.updatedAt && r.updatedAt >= w.updatedAt.gte)) return false;
+  return true;
+}
 
 // Mốc thời gian (UTC) — kỳ tính theo giờ VN (UTC+7).
 const NOW_Q3 = new Date('2026-08-15T00:00:00Z'); // giữa Q3/2026
@@ -171,7 +191,7 @@ function buildPrisma(opts: {
     dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
     dealerReward: {
       findUnique: jest.fn(async ({ where }: { where: { id: string } }) => rewards.find((r) => r.id === where.id) ?? null),
-      findMany: jest.fn(async () => rewards.filter((r) => r.isActive)),
+      findMany: jest.fn(async ({ where }: { where?: RewardWhere }) => rewards.filter((r) => matchReward(r, where ?? {}))),
     },
     order: { findMany: fakeOrderFindMany(opts.orders ?? []) },
     dealerCreditLedger: {
@@ -181,6 +201,7 @@ function buildPrisma(opts: {
     },
     dealerApplication: { findMany: jest.fn().mockResolvedValue([{ userId: 'd1', businessName: 'Cty Đại lý A' }]) },
     dealerRewardClaim: claims,
+    $executeRaw: jest.fn().mockResolvedValue(1),
   };
   prisma.$transaction = jest.fn(async (arg: unknown) =>
     Array.isArray(arg) ? Promise.all(arg as Promise<unknown>[]) : (arg as (tx: unknown) => unknown)(prisma),
@@ -375,6 +396,50 @@ describe('DealerService.claimReward (lưu yêu cầu thật, idempotent)', () =>
     expect(res.alreadyClaimed).toBe(true);
   });
 
+  // Admin tắt chương trình ĐẦU quý mới (sau khi quý cũ đã kết thúc) — đại lý đã đạt mốc quý cũ vẫn
+  // phải yêu cầu được trong thời gian gia hạn; trước đây mọi claim của reward inactive đều 404.
+  it('reward bị TẮT SAU khi kỳ kết thúc, còn trong gia hạn → vẫn yêu cầu được cho kỳ đó (mốc = threshold hiện tại)', async () => {
+    const off = { ...REWARD_Q, isActive: false, updatedAt: new Date('2026-10-02T03:00:00Z') };
+    const { prisma, claims } = buildPrisma({ rewards: [off], orders: [settled('o1', 60_000_000)] });
+    const res = await new DealerService(prisma, makeConfig()).claimReward('d1', 'r1', { periodKey: 'Q3/2026' }, IN_GRACE);
+    expect(res.claimStatus).toBe('PENDING');
+    expect(claims.create.mock.calls[0]![0].data).toMatchObject({ periodKey: 'Q3/2026', threshold: 50_000_000 });
+  });
+
+  it('reward bị tắt SAU kỳ nhưng doanh số kỳ đó chưa đạt mốc → BadRequest như bình thường', async () => {
+    const off = { ...REWARD_Q, isActive: false, updatedAt: new Date('2026-10-02T03:00:00Z') };
+    const { prisma, claims } = buildPrisma({ rewards: [off], orders: [settled('o1', 20_000_000)] });
+    await expect(
+      new DealerService(prisma, makeConfig()).claimReward('d1', 'r1', { periodKey: 'Q3/2026' }, IN_GRACE),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(claims.create).not.toHaveBeenCalled();
+  });
+
+  it('reward bị tắt TRONG kỳ (trước khi kỳ kết thúc) → không yêu cầu được (NotFound)', async () => {
+    const off = { ...REWARD_Q, isActive: false, updatedAt: new Date('2026-09-10T03:00:00Z') };
+    const { prisma, claims } = buildPrisma({ rewards: [off], orders: [settled('o1', 60_000_000)] });
+    await expect(
+      new DealerService(prisma, makeConfig()).claimReward('d1', 'r1', { periodKey: 'Q3/2026' }, IN_GRACE),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(claims.create).not.toHaveBeenCalled();
+  });
+
+  it('reward bị tắt → kỳ HIỆN TẠI không yêu cầu được, kể cả truyền periodKey', async () => {
+    const off = { ...REWARD_Q, isActive: false, updatedAt: new Date('2026-10-02T03:00:00Z') };
+    const { prisma } = buildPrisma({ rewards: [off], orders: [settled('o1', 60_000_000, { createdAt: new Date('2026-10-03T03:00:00Z') })] });
+    await expect(
+      new DealerService(prisma, makeConfig()).claimReward('d1', 'r1', { periodKey: 'Q4/2026' }, IN_GRACE),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('reward bị tắt sau kỳ nhưng đã QUÁ hạn gia hạn → BadRequest hết hạn', async () => {
+    const off = { ...REWARD_Q, isActive: false, updatedAt: new Date('2026-10-02T03:00:00Z') };
+    const { prisma } = buildPrisma({ rewards: [off], orders: [settled('o1', 60_000_000)] });
+    await expect(
+      new DealerService(prisma, makeConfig()).claimReward('d1', 'r1', { periodKey: 'Q3/2026' }, PAST_GRACE),
+    ).rejects.toThrow(/hết hạn/);
+  });
+
   it('lỗi gửi thông báo admin KHÔNG làm hỏng claim đã lưu', async () => {
     const notifications = { notify: jest.fn().mockRejectedValue(new Error('zns down')) };
     const { prisma, claims } = buildPrisma({ orders: [settled('o1', 60_000_000)] });
@@ -429,6 +494,35 @@ describe('DealerService.rewardsProgress (claimStatus + kỳ trước trong thờ
     const out2 = await new DealerService(b.prisma, makeConfig()).rewardsProgress('d1', PAST_GRACE);
     const prev = out2.rewards.find((r) => !r.isCurrentPeriod)!;
     expect(prev).toMatchObject({ periodKey: 'Q3/2026', claimStatus: 'REJECTED', rejectionReason: 'Đơn đã trả hàng', canClaim: false });
+  });
+
+  it('reward bị TẮT sau khi kỳ trước kết thúc: vẫn hiện dòng kỳ trước đã đạt (canClaim), KHÔNG hiện ở kỳ hiện tại', async () => {
+    const off = { ...REWARD_Q, isActive: false, updatedAt: new Date('2026-10-02T03:00:00Z') };
+    const { prisma } = buildPrisma({ rewards: [off], orders: [settled('o1', 60_000_000)] });
+    const out = await new DealerService(prisma, makeConfig()).rewardsProgress('d1', IN_GRACE);
+    expect(out.rewards.filter((r) => r.isCurrentPeriod)).toHaveLength(0);
+    const prev = out.rewards.find((r) => r.id === 'r1' && !r.isCurrentPeriod);
+    expect(prev).toMatchObject({ periodKey: 'Q3/2026', achieved: true, canClaim: true });
+    // Truy vấn lấy cả reward inactive nhưng CHỈ loại được cập nhật từ đầu kỳ liền trước sớm nhất trở đi.
+    const where = (prisma.dealerReward.findMany as jest.Mock).mock.calls[0][0].where;
+    expect(where).toEqual({
+      OR: [{ isActive: true }, { isActive: false, updatedAt: { gte: new Date('2025-12-31T17:00:00Z') } }],
+    });
+  });
+
+  it('reward bị tắt TRONG kỳ trước: không hiện dòng "có thể yêu cầu"; claim đã gửi trước đó vẫn hiện trạng thái', async () => {
+    const off = { ...REWARD_Q, isActive: false, updatedAt: new Date('2026-09-10T03:00:00Z') };
+    const a = buildPrisma({ rewards: [off], orders: [settled('o1', 60_000_000)] });
+    const out1 = await new DealerService(a.prisma, makeConfig()).rewardsProgress('d1', IN_GRACE);
+    expect(out1.rewards).toHaveLength(0);
+
+    const b = buildPrisma({
+      rewards: [off],
+      orders: [settled('o1', 60_000_000)],
+      claims: fakeClaims([{ periodKey: 'Q3/2026', status: 'APPROVED' }]),
+    });
+    const out2 = await new DealerService(b.prisma, makeConfig()).rewardsProgress('d1', IN_GRACE);
+    expect(out2.rewards).toEqual([expect.objectContaining({ periodKey: 'Q3/2026', claimStatus: 'APPROVED', canClaim: false })]);
   });
 });
 

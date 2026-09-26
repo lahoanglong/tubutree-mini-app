@@ -45,6 +45,9 @@ export interface CheckoutQuote {
   total: number;
   pointsEarned: number;
   pointsBalance: number;
+  /** Điểm DÙNG ĐƯỢC ở checkout = số dư − điểm đơn còn có thể bị trả (backend kẹp theo số này). API cũ chưa trả. */
+  redeemablePoints?: number;
+  lockedPoints?: number;
 }
 export interface OrderDTO {
   code: string;
