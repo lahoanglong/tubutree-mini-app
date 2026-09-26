@@ -1,7 +1,7 @@
 import type { LoyaltyOverview } from '../../miniapp/src/services/account-api';
 import type { OwnedBrand } from '../../miniapp/src/services/brand-owner-api';
 import type { DealerMe } from '../../miniapp/src/services/dealer-api';
-import type { QuestList, StorefrontEdit } from '../../miniapp/src/services/storefront-api';
+import type { QuestList, StorefrontEdit, StorefrontStats } from '../../miniapp/src/services/storefront-api';
 import { test, expect, makeUser, mockSession, reply, type MockApi } from './support/mock-api';
 import { mockAffiliateDashboard } from './support/affiliate-mocks';
 
@@ -93,6 +93,8 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
     api.get('/storefront/me', storefront);
     api.get('/storefront/me/quests', quests);
     api.get('/storefront/me/products', []);
+    const stats: StorefrontStats = { orders7d: 0, orders30d: 0, revenue30d: 0, commission30d: 0, byProduct: [] };
+    api.get('/storefront/me/stats', stats);
 
     await page.goto('/profile');
 

@@ -18,16 +18,25 @@ export interface StorefrontCollectionEdit extends Omit<StorefrontCollection, 'it
 export interface Storefront {
   id: string; slug: string; subdomain?: string | null; customDomain?: string | null;
   type: 'CTV' | 'BRAND' | 'MERCHANT'; title: string; headerNote: string | null;
+  ownerTier: { name: string; emoji: string } | null;
   avatarUrl: string | null; coverUrl: string | null; theme: string; themeColor?: string | null;
   bankName?: string | null; bankBin?: string | null; bankAccountNo?: string | null; bankAccountName?: string | null;
   warehouseAddress?: string | null; warehouseCity?: string | null; warehouseDistrict?: string | null; warehouseWard?: string | null; warehousePhone?: string | null;
   collections: StorefrontCollection[];
 }
-export interface StorefrontEdit extends Omit<Storefront, 'collections'> { isPublished: boolean; collections: StorefrontCollectionEdit[]; }
+// GET /storefront/me KHÔNG trả ownerTier (chỉ trang công khai getPublicBySlug mới tính bậc) —
+// loại field này khỏi view chỉnh sửa để type khớp đúng response thật.
+export interface StorefrontEdit extends Omit<Storefront, 'collections' | 'ownerTier'> { isPublished: boolean; collections: StorefrontCollectionEdit[]; }
 export interface PickerProduct {
   id: string; name: string; slug: string; thumbnail: string | null; brand: string;
   basePrice: number; salePrice: number | null; ratingAvg: number; reviewCount: number; maxAffiliateRate: number;
 }
+
+export interface StorefrontCategory { id: string; name: string; slug: string; image: string | null }
+/** Danh mục sản phẩm hiện có — dùng làm danh sách mẫu gian hàng (mỗi mẫu = 1 danh mục). */
+export const getStorefrontCategories = () => api.get('/categories').then((r) => r.data as StorefrontCategory[]);
+export const applyStorefrontTemplate = (categoryId: string) =>
+  api.post('/storefront/me/apply-template', { categoryId }).then((r) => r.data as { collectionId: string; title: string; itemCount: number });
 
 export const createStorefront = () => api.post('/storefront').then((r) => r.data as StorefrontEdit);
 export const getMyStorefront = () => api.get('/storefront/me').then((r) => r.data as StorefrontEdit);
@@ -81,6 +90,13 @@ export interface StorefrontQuest {
   progress: number; done: boolean; claimed: boolean;
 }
 export interface QuestList { quests: StorefrontQuest[]; totalEarnedXu: number; level: number; levelMax: number; }
+
+export interface StorefrontProductStat { productSlug: string; productName: string; qty: number; revenue: number }
+export interface StorefrontStats {
+  orders7d: number; orders30d: number; revenue30d: number; commission30d: number;
+  byProduct: StorefrontProductStat[];
+}
+export const getStorefrontStats = () => api.get('/storefront/me/stats').then((r) => r.data as StorefrontStats);
 
 export const getQuests = () => api.get('/storefront/me/quests').then((r) => r.data as QuestList);
 export const claimQuest = (code: string) =>

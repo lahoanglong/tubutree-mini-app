@@ -194,6 +194,19 @@ export class AffiliateService {
     return agg._sum.commissionableTotal ?? 0;
   }
 
+  /**
+   * Bậc CTV để hiện công khai trên trang gian hàng (storefront.service.ts getPublicBySlug) —
+   * CHỈ trả tên+icon, KHÔNG trả doanh thu/bonusPct thật để tránh lộ doanh số CTV cho khách xem
+   * gian hàng của họ.
+   */
+  async getPublicTier(userId: string, now: Date = new Date()): Promise<{ name: string; emoji: string }> {
+    // Cùng định nghĩa doanh số ĐÃ CHỐT (tháng VN) với dashboard/bậc của chính CTV — huy hiệu công
+    // khai không được "cao hơn" bậc CTV tự thấy.
+    const revenue = await this.confirmedRevenue(this.prisma, userId, vnMonthBounds(now));
+    const tier = this.monthlyTier(revenue);
+    return { name: tier.name, emoji: tier.emoji };
+  }
+
   listCommissions(userId: string) {
     return this.prisma.commission.findMany({
       where: { affiliateUserId: userId },

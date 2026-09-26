@@ -387,7 +387,8 @@ describe('AffiliateService.dashboard (doanh số tháng = doanh số ĐÃ CHỐT
 });
 
 describe('AffiliateService.monthlyTier (Build Spec §6.8.2)', () => {
-  // monthlyTier là private + thuần — gọi qua cast để kiểm tra ranh giới bậc.
+  // monthlyTier là private (ngưỡng dùng chung với mốc thưởng — ctv-milestones.ts) — gọi qua
+  // cast để kiểm tra ranh giới bậc.
   const tier = (revenue: number) =>
     (new AffiliateService({} as unknown as PrismaService, config, pricing, pancakeOrder, coins) as unknown as {
       monthlyTier(r: number): {
@@ -419,23 +420,45 @@ describe('AffiliateService.monthlyTier (Build Spec §6.8.2)', () => {
     expect(tier(80_000_000).name).toBe('Kim Cương');
   });
 
-  it('ngay dưới ngưỡng vẫn ở bậc thấp hơn', () => {
-    expect(tier(2_999_999).name).toBe('Tân binh');
-    expect(tier(9_999_999).name).toBe('Đồng');
+  it('ngay dưới ngưỡng vẫn ở bậc thấp hơn', async () => {
+    expect((await tier(2_999_999)).name).toBe('Tân binh');
+    expect((await tier(9_999_999)).name).toBe('Đồng');
   });
 
-  it('toNext = phần còn thiếu để lên bậc kế', () => {
-    const t = tier(5_000_000); // Đồng, cần lên Bạc (10tr)
+  it('toNext = phần còn thiếu để lên bậc kế', async () => {
+    const t = await tier(5_000_000); // Đồng, cần lên Bạc (10tr)
     expect(t.name).toBe('Đồng');
     expect(t.toNext).toBe(5_000_000);
   });
 
-  it('bậc cao nhất (Kim Cương) không còn next', () => {
-    const t = tier(120_000_000);
+  it('bậc cao nhất (Kim Cương) không còn next', async () => {
+    const t = await tier(120_000_000);
     expect(t.name).toBe('Kim Cương');
     expect(t.nextName).toBeNull();
     expect(t.nextThreshold).toBeNull();
     expect(t.toNext).toBe(0);
+  });
+});
+
+describe('AffiliateService.getPublicTier', () => {
+  it('trả tên + icon theo doanh số ĐÃ CHỐT tháng VN (cùng định nghĩa bậc CTV tự thấy), KHÔNG lộ số tiền', async () => {
+    const agg = jest.fn().mockResolvedValue({ _sum: { commissionableTotal: 15_000_000 } });
+    const prisma = { commission: { aggregate: agg } } as unknown as PrismaService;
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins);
+    const t = await svc.getPublicTier('u1', new Date('2026-09-30T18:00:00.000Z')); // 01:00 1/10 giờ VN
+    expect(t).toEqual({ name: 'Bạc', emoji: '🌳' });
+    expect(Object.keys(t)).toEqual(['name', 'emoji']);
+    const where = agg.mock.calls[0]?.[0].where;
+    expect(where.status).toEqual({ in: ['APPROVED', 'PAID'] });
+    expect(where.approvedAt.gte.toISOString()).toBe('2026-09-30T17:00:00.000Z');
+  });
+
+  it('chưa có hoa hồng nào → Tân binh', async () => {
+    const agg = jest.fn().mockResolvedValue({ _sum: { commissionableTotal: null } });
+    const prisma = { commission: { aggregate: agg } } as unknown as PrismaService;
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins);
+    const t = await svc.getPublicTier('u1');
+    expect(t.name).toBe('Tân binh');
   });
 });
 

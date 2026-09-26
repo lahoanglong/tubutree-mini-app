@@ -398,6 +398,7 @@ export function makeOrder(over: Partial<OrderDTO> & Pick<OrderDTO, 'code'>): Ord
         variationName: 'Hương Chanh Gừng',
         unitPrice: 65000,
         quantity: 2,
+        backorderedQty: 0,
         total: 130000,
       },
     ],

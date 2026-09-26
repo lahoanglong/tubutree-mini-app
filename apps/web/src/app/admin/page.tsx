@@ -701,6 +701,11 @@ function OrdersTab({
                                         <div>
                                           <span className="font-medium text-neutral-800">{it.productName}</span>
                                           {it.variationName && <span className="text-neutral-500"> ({it.variationName})</span>}
+                                          {!!it.backorderedQty && (
+                                            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                                              Đặt trước {it.backorderedQty}
+                                            </span>
+                                          )}
                                         </div>
                                         <div className="text-right">
                                           <span className="text-neutral-500">{it.quantity} x {formatVnd(it.unitPrice)}</span>
