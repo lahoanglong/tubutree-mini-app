@@ -7,15 +7,9 @@
  */
 import { PrismaClient, Prisma } from '@prisma/client';
 import { seedGameQuiz } from './seed-game-quiz';
+import { configSeedUpsertArgs, type ConfigSeed } from '../src/modules/system-config/config-seed';
 
 const prisma = new PrismaClient();
-
-type ConfigSeed = {
-  key: string;
-  value: Prisma.InputJsonValue;
-  category: string;
-  description: string;
-};
 
 const SYSTEM_CONFIGS: ConfigSeed[] = [
   // Loyalty
@@ -27,6 +21,12 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'loyalty.tier_grace_days', value: 30, category: 'loyalty', description: 'Grace period giữ hạng khi rớt' },
   { key: 'loyalty.welcome_voucher_amount', value: 30000, category: 'loyalty', description: 'Voucher đơn đầu' },
   { key: 'loyalty.welcome_voucher_min_order', value: 199000, category: 'loyalty', description: 'Min order để dùng welcome voucher' },
+  // Điểm danh hằng ngày + tích điểm tại quầy (POS) — loyalty.service. createOnly: admin chỉnh rồi thì seed không reset.
+  { key: 'loyalty.checkin_points', value: [1, 1, 1, 1, 1, 1, 2], category: 'loyalty', description: 'Điểm Xanh điểm danh theo ngày 1..7 của vòng 7 ngày', createOnly: true },
+  { key: 'loyalty.pos_credit_enabled', value: false, category: 'loyalty', description: 'Bật tích điểm tại quầy (POS) do nhân viên nhập', createOnly: true },
+  { key: 'loyalty.pos_max_order_total', value: 5000000, category: 'loyalty', description: 'Giá trị hoá đơn tối đa (đ) mỗi lần tích điểm POS', createOnly: true },
+  { key: 'loyalty.pos_staff_daily_points_cap', value: 3000, category: 'loyalty', description: 'Tổng điểm tối đa một nhân viên được tích POS mỗi ngày', createOnly: true },
+  { key: 'loyalty.pos_member_daily_points_cap', value: 1000, category: 'loyalty', description: 'Tổng điểm POS tối đa một thành viên nhận mỗi ngày', createOnly: true },
 
   // Affiliate
   { key: 'affiliate.product_rate_source', value: 'variation.affiliateRate', category: 'affiliate', description: 'Rate đọc từ từng variation (import Excel)' },
@@ -86,6 +86,8 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   // Dealer
   { key: 'dealer.max_discount_pct', value: 0.45, category: 'dealer', description: 'Chiết khấu tối đa hard cap' },
   { key: 'dealer.kyc_required', value: true, category: 'dealer', description: 'Bắt buộc CCCD khi đăng ký' },
+  // Hạn gửi yêu cầu nhận thưởng mốc sau khi kỳ kết thúc (dealer.service). createOnly: không ghi đè giá trị admin.
+  { key: 'dealer.reward_claim_grace_days', value: 30, category: 'dealer', description: 'Số ngày sau khi kỳ (quý/năm) kết thúc mà đại lý vẫn được gửi yêu cầu nhận thưởng mốc đã đạt trong kỳ đó', createOnly: true },
 
   // Game
   { key: 'game.daily_checkin_seeds', value: 1, category: 'game', description: 'Hạt giống/ngày' },
@@ -152,10 +154,40 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'shipping.free_threshold', value: 200000, category: 'shipping', description: 'Đơn ≥ 200k được freeship' },
   { key: 'shipping.flat_fee_below_threshold', value: 19000, category: 'shipping', description: 'Phí cố định khi đơn < 200k' },
   { key: 'shipping.tier_freeship_overrides', value: { LOC_BIEC: 99000, DAI_THU: 0, CO_THU: 0 }, category: 'shipping', description: 'Hạng được freeship trước ngưỡng' },
+  // Gomdon (thu gom tái chế): createOnly — admin sửa kho/cân nặng/công tắc, deploy chạy lại seed KHÔNG
+  // được reset. Tài khoản Gomdon (phone/password) KHÔNG nằm ở đây: đặt qua env GOMDON_PHONE/
+  // GOMDON_PASSWORD (không lộ mật khẩu ở GET /admin/config + lịch sử config).
+  {
+    key: 'shipping.gomdon.config',
+    value: {
+      defaultWarehouse: {
+        name: 'Fuwa3e Tubu HCM',
+        phone: '0965573541',
+        address: 'Golf Park, 1 đường số 2',
+        ward: 'Phường Long Bình',
+        district: 'Thành phố Thủ Đức',
+        province: 'Thành phố Hồ Chí Minh',
+      },
+      defaultWeightFallback: 500,
+    },
+    category: 'shipping',
+    description: 'Gomdon (đơn đổi hàng thu gom tái chế): kho lấy hàng + cân nặng mặc định (gram). Tài khoản đặt qua env GOMDON_PHONE/GOMDON_PASSWORD.',
+    createOnly: true,
+  },
+  {
+    key: 'shipping.gomdon.recycling_enabled',
+    value: false,
+    category: 'shipping',
+    description: 'Bật lựa chọn "Gửi lại vật liệu tái chế" ở checkout (chỉ hiện khi Gomdon đã cấu hình env)',
+    createOnly: true,
+  },
 
   // Return
   { key: 'return.allow_manufacturer_defect_only', value: true, category: 'return', description: 'Chỉ đổi khi lỗi NSX' },
-  { key: 'return.window_days', value: 15, category: 'return', description: 'Số ngày từ DELIVERED được yêu cầu đổi/trả' },
+  // Khoá code đọc là 'returns.window_days' (orders.service + affiliate.service). Bản cũ seed nhầm
+  // 'return.window_days' = 15 (không ai đọc) → hiệu lực thật luôn là mặc định 7, khớp chính sách đang
+  // công bố trên app ("đổi/trả trong 7 ngày"). createOnly: admin chỉnh rồi thì seed không reset.
+  { key: 'returns.window_days', value: 7, category: 'return', description: 'Số ngày từ khi giao (DELIVERED) được yêu cầu đổi/trả', createOnly: true },
   { key: 'return.shipping_paid_by_tubu_if_defect', value: true, category: 'return', description: 'Tubu trả phí ship hoàn nếu lỗi NSX' },
   { key: 'return.affiliate_commission_reverse_window_days', value: 20, category: 'return', description: 'Trừ ngược hoa hồng nếu hoàn trong X ngày' },
 
@@ -599,6 +631,8 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-invoice', code: 'INVOICE_ISSUED', channel: 'INAPP', bodyTemplate: 'Hóa đơn VAT cho đơn {{order_code}} đã được phát hành.' },
   { id: 'nt-packed', code: 'ORDER_PACKED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được đóng gói, chuẩn bị giao.' },
   { id: 'nt-returned', code: 'ORDER_RETURNED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được hoàn trả.' },
+  // Báo động vận hành (chỉ gửi tài khoản ADMIN) — vận đơn thu gom Gomdon cần người xử lý.
+  { id: 'nt-ops-gomdon', code: 'OPS_GOMDON_ALERT', channel: 'INAPP', bodyTemplate: '⚠️ Vận đơn thu gom đơn {{order_code}}: {{message}}' },
   { id: 'nt-return-req', code: 'RETURN_REQUESTED', channel: 'INAPP', bodyTemplate: 'Đã nhận yêu cầu đổi/trả đơn {{order_code}}. Tubu sẽ phản hồi trong 24h.' },
   { id: 'nt-return-ok', code: 'RETURN_APPROVED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu 🌿' },
   { id: 'nt-cashback-paid', code: 'CASHBACK_PAID', channel: 'INAPP', bodyTemplate: 'Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu 🌿 Đổi sang TubuXu để nhận thêm 20% nhé!' },
@@ -618,6 +652,11 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-game-gift', code: 'GAME_WATER_GIFT', channel: 'INAPP', bodyTemplate: '🎁 Một người bạn vừa tặng bạn {{amount}}💧 cho Vườn Xanh! Vào tưới cây ngay nhé 🌿' },
   { id: 'nt-groupbuy-ok', code: 'GROUP_BUY_SUCCESS', channel: 'INAPP', bodyTemplate: '🎉 Nhóm mua chung đã đủ người! Bạn nhận mã giảm {{discount}}đ để mua với giá nhóm. Đặt hàng ngay nhé 🛒' },
   { id: 'nt-dealer-bonus', code: 'DEALER_BONUS_PAID', channel: 'INAPP', bodyTemplate: '🎁 Thưởng doanh số {{quarter}}: bạn được cộng {{amount}}đ vào công nợ đại lý (doanh số {{revenue}}đ). Cảm ơn bạn đã đồng hành cùng Tubu Tree 🌿' },
+  // Yêu cầu nhận thưởng mốc đại lý — cùng mã/nội dung với migration 20260926130000_dealer_reward_claims.
+  { id: 'nt-dealer-reward-claim-new', code: 'DEALER_REWARD_CLAIM_NEW', channel: 'INAPP', bodyTemplate: '📥 Đại lý {{dealer}} yêu cầu nhận thưởng "{{reward}}" ({{period}}, doanh số đã chốt {{volume}}đ). Vào trang quản trị để duyệt.' },
+  { id: 'nt-dealer-reward-claim-approved', code: 'DEALER_REWARD_CLAIM_APPROVED', channel: 'INAPP', bodyTemplate: '✅ Yêu cầu nhận thưởng "{{reward}}" ({{period}}) đã được duyệt. Tubu Tree sẽ liên hệ để trao thưởng cho bạn 🌿' },
+  { id: 'nt-dealer-reward-claim-rejected', code: 'DEALER_REWARD_CLAIM_REJECTED', channel: 'INAPP', bodyTemplate: 'Yêu cầu nhận thưởng "{{reward}}" ({{period}}) chưa được duyệt. Lý do: {{reason}}. Cần hỗ trợ, bạn nhắn Zalo OA Tubu Tree nhé.' },
+  { id: 'nt-dealer-reward-claim-paid', code: 'DEALER_REWARD_CLAIM_PAID', channel: 'INAPP', bodyTemplate: '🎁 Tubu Tree đã trao thưởng "{{reward}}" ({{period}}) cho bạn. Cảm ơn bạn đã đồng hành 🌿' },
   { id: 'nt-comm-answer', code: 'COMMUNITY_NEW_ANSWER', channel: 'INAPP', bodyTemplate: '💬 {{author}} vừa trả lời câu hỏi "{{title}}" của bạn.' },
   { id: 'nt-comm-expert', code: 'COMMUNITY_EXPERT_REPLIED', channel: 'INAPP', bodyTemplate: '🌿 Chuyên gia Tubu vừa trả lời câu hỏi "{{title}}" của bạn.' },
   { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm TubuXu thưởng.' },
@@ -653,11 +692,8 @@ const CASHBACK_MERCHANTS = [
 async function main() {
   console.log('🌱 Seeding SystemConfig...');
   for (const cfg of SYSTEM_CONFIGS) {
-    await prisma.systemConfig.upsert({
-      where: { key: cfg.key },
-      update: { value: cfg.value, category: cfg.category, description: cfg.description },
-      create: cfg,
-    });
+    // Key createOnly (admin sở hữu giá trị) chỉ tạo khi chưa có — xem config-seed.ts.
+    await prisma.systemConfig.upsert(configSeedUpsertArgs(cfg));
   }
   console.log(`   → ${SYSTEM_CONFIGS.length} config keys.`);
 

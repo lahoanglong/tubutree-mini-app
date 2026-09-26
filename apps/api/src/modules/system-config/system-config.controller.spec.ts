@@ -42,4 +42,51 @@ describe('SystemConfigController.publicConfig', () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
     expect(out.freeshipThreshold).toBe(200000);
   });
+
+  describe('recyclingEnabled — cờ hiện lựa chọn "gửi lại vật liệu tái chế" ở checkout', () => {
+    const KEYS = ['GOMDON_BASE_URL', 'GOMDON_PHONE', 'GOMDON_PASSWORD'] as const;
+    const saved: Record<string, string | undefined> = {};
+    beforeEach(() => {
+      for (const k of KEYS) saved[k] = process.env[k];
+    });
+    afterEach(() => {
+      for (const k of KEYS) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    });
+
+    it('mặc định (chưa bật công tắc / chưa cấu hình Gomdon) → false', async () => {
+      const out = await new SystemConfigController(makeConfig()).publicConfig();
+      expect(out.recyclingEnabled).toBe(false);
+    });
+
+    it('công tắc bật nhưng thiếu tài khoản/base URL Gomdon → false (không hứa thu gom khi không ai đi thu)', async () => {
+      for (const k of KEYS) delete process.env[k];
+      const out = await new SystemConfigController(makeConfig({ 'shipping.gomdon.recycling_enabled': true })).publicConfig();
+      expect(out.recyclingEnabled).toBe(false);
+    });
+
+    it('Gomdon đã cấu hình env + công tắc true → true; chỉ trả boolean, không lộ cấu hình/tài khoản', async () => {
+      process.env.GOMDON_BASE_URL = 'https://gomdon.test';
+      process.env.GOMDON_PHONE = '0900';
+      process.env.GOMDON_PASSWORD = 'pw';
+      const out = await new SystemConfigController(makeConfig({ 'shipping.gomdon.recycling_enabled': true })).publicConfig();
+      expect(out.recyclingEnabled).toBe(true);
+      expect(JSON.stringify(out)).not.toContain('pw');
+      expect(JSON.stringify(out)).not.toContain('0900');
+    });
+
+    it('đọc config lỗi → false, không làm hỏng cả endpoint public', async () => {
+      const config = {
+        get: jest.fn(async (key: string, fb?: unknown) => {
+          if (key.startsWith('shipping.gomdon')) throw new Error('db');
+          return fb;
+        }),
+      } as unknown as SystemConfigService;
+      const out = await new SystemConfigController(config).publicConfig();
+      expect(out.recyclingEnabled).toBe(false);
+      expect(out.freeshipThreshold).toBe(200000);
+    });
+  });
 });

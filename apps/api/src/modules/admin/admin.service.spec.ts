@@ -10,6 +10,8 @@ import type { NotificationsService } from '../notifications/notifications.servic
 import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 import type { CouponsService } from '../coupons/coupons.service';
 import type { RbacService } from '../staff/rbac/rbac.service';
+import type { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
+import type { GomdonClient } from '../integrations/gomdon/gomdon.client';
 
 const config = {} as unknown as SystemConfigService;
 const loyalty = {
@@ -28,10 +30,30 @@ const rbac = { revokeGrantsAbove: jest.fn().mockResolvedValue(0) } as unknown as
 // AdminService không còn tự viết khối restock/refund — ủy quyền cho OrderReversalService
 // (reviewReturn) và OrderStatusService (updateOrderStatus). Dựng instance THẬT (không mock)
 // của cả hai để test vẫn xác minh được hành vi thật qua các spy ở tầng tx bên dưới.
-const mkAdmin = (prisma: PrismaService) => {
+const defaultGomdonOrder = {
+  retryPush: jest.fn(),
+  cancelWaybill: jest.fn(),
+  isRecyclingEnabled: jest.fn().mockResolvedValue(false),
+} as unknown as GomdonOrderService;
+const defaultGomdonClient = { getConfig: jest.fn() } as unknown as GomdonClient;
+const mkAdmin = (
+  prisma: PrismaService,
+  deps: { gomdonOrder?: GomdonOrderService; gomdonClient?: GomdonClient; config?: SystemConfigService } = {},
+) => {
   const reversal = new OrderReversalService(flash, coupons);
   const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal);
-  return new AdminService(prisma, config, loyalty, affiliate, notifications, reversal, orderStatus, rbac);
+  return new AdminService(
+    prisma,
+    deps.config ?? config,
+    loyalty,
+    affiliate,
+    notifications,
+    reversal,
+    orderStatus,
+    rbac,
+    deps.gomdonOrder ?? defaultGomdonOrder,
+    deps.gomdonClient ?? defaultGomdonClient,
+  );
 };
 
 function makePrisma(over: Record<string, unknown> = {}) {

@@ -68,7 +68,10 @@ export class SystemConfigService {
     'wallet.xu_convert_multiplier': { min: 0.1, max: 10, note: 'hệ số nhân (1.2 = ×1,2)' },
     'cashback.hold_days': { min: 0, max: 365, note: 'số ngày' },
     'affiliate.hold_days': { min: 0, max: 365, note: 'số ngày' },
-    'return.window_days': { min: 0, max: 365, note: 'số ngày' },
+    // Khoá code THẬT SỰ đọc (orders.service requestReturn, affiliate.service hold) — trước đây RANGES/seed
+    // ghi 'return.window_days' (không ai đọc) nên giới hạn này chưa bao giờ áp vào khoá thật.
+    'returns.window_days': { min: 0, max: 365, note: 'số ngày' },
+    'dealer.reward_claim_grace_days': { min: 0, max: 366, note: 'số ngày' },
   };
 
   private assertInRange(key: string, value: unknown): void {

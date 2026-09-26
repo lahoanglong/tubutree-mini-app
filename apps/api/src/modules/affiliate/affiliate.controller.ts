@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Headers, Post } from '@nestjs/common';
-import { IsIn, IsInt, IsObject, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
+import { IsIn, IsInt, IsObject, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AffiliateService } from './affiliate.service';
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
@@ -13,6 +13,11 @@ class PayoutDto {
   @IsInt() @Min(1) amount!: number;
   @IsIn(['BANK', 'WALLET_BALANCE', 'ZALOPAY']) method!: string;
   @IsOptional() @IsObject() bankInfo?: object;
+}
+
+class ClaimMilestoneDto {
+  // Tháng VN 'YYYY-MM' — bỏ trống = tháng này; service chỉ nhận tháng này hoặc tháng trước.
+  @IsOptional() @IsString() @Matches(/^\d{4}-(0[1-9]|1[0-2])$/) month?: string;
 }
 
 class TouchDto {
@@ -90,5 +95,24 @@ export class AffiliateController {
   @Get('analytics/products')
   productBreakdown(@CurrentUser('sub') userId: string) {
     return this.affiliate.productCommissionBreakdown(userId);
+  }
+
+  @Get('tiers')
+  tiers(@CurrentUser('sub') userId: string) {
+    return this.affiliate.getCtvTiers(userId);
+  }
+
+  @Get('milestones')
+  milestones(@CurrentUser('sub') userId: string) {
+    return this.affiliate.getMilestones(userId);
+  }
+
+  @Post('milestones/:id/claim')
+  claimMilestone(
+    @CurrentUser('sub') userId: string,
+    @Param('id') milestoneId: string,
+    @Body() dto: ClaimMilestoneDto,
+  ) {
+    return this.affiliate.claimMilestone(userId, milestoneId, dto?.month);
   }
 }

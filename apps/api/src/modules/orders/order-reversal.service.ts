@@ -1,7 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import type { Order, OrderItem, Prisma } from '@prisma/client';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { DealerService } from '../dealer/dealer.service';
 import { releaseVariationStock } from '../catalog/variation-stock';
 
 type OrderWithItems = Order & { items: OrderItem[] };
@@ -23,9 +25,17 @@ type OrderWithItems = Order & { items: OrderItem[] };
  */
 @Injectable()
 export class OrderReversalService {
+  private readonly logger = new Logger(OrderReversalService.name);
+  private dealer?: DealerService;
+
   constructor(
     private readonly flashSale: FlashSaleService,
     private readonly coupons: CouponsService,
+    // DealerService (thu hồi thưởng quý) nằm ở DealerModule, mà DealerModule → PancakeModule →
+    // OrdersModule: import thẳng DealerModule vào OrdersModule thành vòng module. Lấy lười qua
+    // ModuleRef (strict:false) lúc chạy. @Optional để các test dựng tay `new OrderReversalService(
+    // flash, coupons)` vẫn chạy — khi đó thiếu DealerService sẽ log lỗi to (xem resolveDealer).
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   async reverseFinancials(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<void> {
@@ -96,6 +106,30 @@ export class OrderReversalService {
     // huỷ/trả đơn mà không đảo thì đại lý vẫn NỢ tiền một đơn không còn tồn tại, và khoản nợ ảo
     // đó tiếp tục ăn vào hạn mức nên chặn luôn các đơn sau. Không dùng delete để giữ vết sổ sách.
     await this.reverseDealerCredit(tx, order);
+
+    // Thu hồi thưởng doanh số quý nếu quý của đơn đã được trả thưởng (cron ngày 10 quý sau) — chạy
+    // SAU CÙNG để dealerVolume (đọc qua tx) thấy đơn đã lật trạng thái/REFUNDED. Lỗi DB ở đây phải
+    // ném ra: transaction Postgres đã hỏng thì cả lần huỷ đơn rollback, không để tiền lệch.
+    if (order.type === 'DEALER') {
+      const dealer = this.resolveDealer();
+      if (dealer) {
+        await dealer.clawbackQuarterBonusForOrder(tx, order);
+      } else {
+        this.logger.error(
+          `DealerService chưa wiring — KHÔNG thu hồi được thưởng quý cho đơn đại lý ${order.code} bị huỷ/trả. Cần đối soát tay.`,
+        );
+      }
+    }
+  }
+
+  private resolveDealer(): DealerService | undefined {
+    if (this.dealer) return this.dealer;
+    try {
+      this.dealer = this.moduleRef?.get(DealerService, { strict: false });
+    } catch {
+      this.dealer = undefined; // provider không có trong app (test dựng module thiếu) → caller log lỗi
+    }
+    return this.dealer;
   }
 
   /**

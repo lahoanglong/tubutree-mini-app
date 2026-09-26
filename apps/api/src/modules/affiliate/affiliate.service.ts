@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CommissionStatus, type Prisma } from '@prisma/client';
 import { randomBytes, randomInt } from 'node:crypto';
@@ -8,6 +8,22 @@ import { PricingService } from '../pricing/pricing.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { reserveVariationStock } from '../catalog/variation-stock';
+import { CoinsService } from '../wallet/coins.service';
+import {
+  CONFIRMED_COMMISSION_STATUSES,
+  CTV_MONTHLY_MILESTONES,
+  PENDING_COMMISSION_STATUSES,
+  milestoneProgressPct,
+  tierForRevenue,
+  tiersWithRewards,
+  vnDayStart,
+  vnMonthBounds,
+  type VnMonth,
+} from './ctv-milestones';
+
+export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
+
+type Db = PrismaService | Prisma.TransactionClient;
 
 /**
  * CTV nội bộ (Build Spec §6.x, §15 affiliate.*).
@@ -23,6 +39,7 @@ export class AffiliateService {
     private readonly config: SystemConfigService,
     private readonly pricing: PricingService,
     private readonly pancakeOrder: PancakeOrderService,
+    private readonly coins: CoinsService,
   ) {}
 
   async register(userId: string) {
@@ -36,12 +53,16 @@ export class AffiliateService {
     return { ok: true, referralCode: user.referralCode };
   }
 
-  async getMe(userId: string) {
+  async getMe(userId: string, now: Date = new Date()) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const monthRevenue = await this.confirmedRevenue(this.prisma, userId, vnMonthBounds(now));
+
     return {
       isAffiliate: user.role === 'AFFILIATE' || user.role === 'ADMIN',
       referralCode: user.referralCode,
       walletBalance: user.walletBalance,
+      monthRevenue,
+      tier: this.monthlyTier(monthRevenue),
     };
   }
 
@@ -109,12 +130,13 @@ export class AffiliateService {
     return { targetType: link.targetType, targetId: link.targetId };
   }
 
-  async dashboard(userId: string) {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  async dashboard(userId: string, now: Date = new Date()) {
+    // Mốc ngày/tháng theo giờ VN (máy chủ Docker chạy UTC → new Date(y, m, 1) lệch 7 tiếng).
+    const month = vnMonthBounds(now);
+    const startOfMonth = month.start;
+    const startOfDay = vnDayStart(now);
 
-    const [today, month, pending, approved, links, monthRevenueAgg] = await Promise.all([
+    const [today, monthCommission, pending, approved, links, monthRevenue] = await Promise.all([
       this.sumCommission(userId, startOfDay),
       this.sumCommission(userId, startOfMonth),
       this.prisma.commission.aggregate({
@@ -129,19 +151,15 @@ export class AffiliateService {
         where: { userId },
         _sum: { clicks: true, conversions: true },
       }),
-      // Doanh số tháng = tổng giá trị đơn giới thiệu (để tính bậc bonus §6.8.2). Loại REJECTED
-      // (đơn hoàn/hủy đã bị reverseCommissionsForOrder đảo) — nếu không, doanh số đã hoàn vẫn
-      // được tính vào bậc thưởng, khiến CTV được xếp bậc cao hơn doanh số THỰC của họ.
-      this.prisma.commission.aggregate({
-        where: { affiliateUserId: userId, createdAt: { gte: startOfMonth }, status: { not: CommissionStatus.REJECTED } },
-        _sum: { orderTotal: true },
-      }),
+      // Doanh số tháng = doanh số ĐÃ CHỐT (cùng định nghĩa với bậc/mốc — xem ctv-milestones.ts).
+      // Trước đây: orderTotal mọi commission khác REJECTED tạo trong tháng → gồm cả đơn còn huỷ
+      // được, hàng bị chặn affiliate và phí ship.
+      this.confirmedRevenue(this.prisma, userId, month),
     ]);
 
-    const monthRevenue = monthRevenueAgg._sum.orderTotal ?? 0;
     return {
       todayCommission: today,
-      monthCommission: month,
+      monthCommission,
       pendingCommission: pending._sum.amount ?? 0,
       withdrawableCommission: approved._sum.amount ?? 0,
       totalClicks: links._sum.clicks ?? 0,
@@ -151,27 +169,29 @@ export class AffiliateService {
     };
   }
 
-  /** Bậc bonus doanh số tháng (Build Spec §6.8.2). */
+  /**
+   * Bậc CTV theo doanh số đã chốt tháng (Build Spec §6.8.2). Chỉ là danh hiệu — KHÔNG kèm
+   * "+X% bonus": chưa có luồng nào trả khoản đó (xem ctv-milestones.ts).
+   */
   private monthlyTier(revenue: number) {
-    const TIERS = [
-      { name: 'Tân binh', emoji: '🌱', bonusPct: 0, min: 0 },
-      { name: 'Đồng', emoji: '🌿', bonusPct: 1, min: 3_000_000 },
-      { name: 'Bạc', emoji: '🌳', bonusPct: 2.5, min: 10_000_000 },
-      { name: 'Vàng', emoji: '🌲', bonusPct: 4, min: 30_000_000 },
-      { name: 'Kim Cương', emoji: '💎', bonusPct: 6, min: 80_000_000 },
-    ];
-    let idx = 0;
-    for (let i = 0; i < TIERS.length; i++) if (revenue >= TIERS[i]!.min) idx = i;
-    const cur = TIERS[idx]!;
-    const next = TIERS[idx + 1];
-    return {
-      name: cur.name,
-      emoji: cur.emoji,
-      bonusPct: cur.bonusPct,
-      nextName: next?.name ?? null,
-      nextThreshold: next?.min ?? null,
-      toNext: next ? Math.max(0, next.min - revenue) : 0,
-    };
+    return tierForRevenue(revenue);
+  }
+
+  /**
+   * Doanh số CTV ĐÃ CHỐT trong tháng VN `month`: commissionableTotal của commission APPROVED/PAID
+   * có approvedAt trong tháng. Định nghĩa DUY NHẤT cho dashboard/getMe/bậc/mốc/claim — UI không
+   * bao giờ hiện "nhận được" mà claim lại từ chối (hoặc ngược lại). Nhận `db` để claim đọc CÙNG tx.
+   */
+  private async confirmedRevenue(db: Db, userId: string, month: VnMonth): Promise<number> {
+    const agg = await db.commission.aggregate({
+      where: {
+        affiliateUserId: userId,
+        status: { in: [...CONFIRMED_COMMISSION_STATUSES] },
+        approvedAt: { gte: month.start, lt: month.end },
+      },
+      _sum: { commissionableTotal: true },
+    });
+    return agg._sum.commissionableTotal ?? 0;
   }
 
   listCommissions(userId: string) {
@@ -376,10 +396,13 @@ export class AffiliateService {
 
     let amount = 0;
     let weightedRate = 0;
+    // Nền doanh số bậc/mốc: chỉ dòng CÓ hưởng hoa hồng (loại hàng bị chặn/rate 0 + phí ship).
+    let commissionableTotal = 0;
     for (const item of order.items) {
       const rate = rateMap.get(item.variationId) ?? 0;
       amount += Math.floor((item.total * rate) / 100);
       weightedRate += rate;
+      if (rate > 0) commissionableTotal += item.total;
     }
     if (amount <= 0) return;
 
@@ -388,6 +411,7 @@ export class AffiliateService {
         affiliateUserId: order.referrerUserId,
         orderId: order.id,
         orderTotal: order.total,
+        commissionableTotal,
         rate: weightedRate / order.items.length,
         amount,
         status: 'PENDING',
@@ -642,16 +666,43 @@ export class AffiliateService {
   @Cron('0 0 * * * *')
   async approveDueCommissions(): Promise<void> {
     try {
-      const holdDays = await this.config.get<number>('affiliate.hold_days', 20);
+      const holdDays = await this.effectiveHoldDays();
       const threshold = new Date(Date.now() - holdDays * 24 * 3600 * 1000);
+      // Đơn còn yêu cầu đổi/trả CHỜ DUYỆT (khách gửi trong cửa sổ, admin chưa xử lý) → chưa chốt:
+      // APPROVED là điểm không-đảo-được (reverseCommissionsForOrder chỉ đảo PENDING/LOCKED) và là
+      // nền doanh số mốc thưởng. Chốt sớm thì admin duyệt trả hàng sau đó không đảo được nữa.
+      // Yêu cầu mới không lọt giữa 2 câu lệnh: hold hiệu lực ≥ cửa sổ đổi/trả (effectiveHoldDays)
+      // nên lúc đủ hold khách đã hết hạn gửi; bị từ chối thì lượt cron sau chốt tiếp.
+      const openReturns = await this.prisma.returnRequest.findMany({
+        where: { status: 'REQUESTED' },
+        select: { orderId: true },
+      });
+      const heldOrderIds = [...new Set(openReturns.map((r) => r.orderId))];
       const res = await this.prisma.commission.updateMany({
-        where: { status: 'LOCKED', lockedAt: { lte: threshold } },
+        where: {
+          status: 'LOCKED',
+          lockedAt: { lte: threshold },
+          ...(heldOrderIds.length > 0 ? { orderId: { notIn: heldOrderIds } } : {}),
+        },
         data: { status: 'APPROVED', approvedAt: new Date() },
       });
       if (res.count > 0) this.logger.log(`Duyệt ${res.count} commission hết hold.`);
     } catch (err) {
       this.logger.error(`approveDueCommissions lỗi: ${err instanceof Error ? err.message : err}`);
     }
+  }
+
+  /**
+   * Số ngày giữ THỰC trước khi chốt commission = max(affiliate.hold_days, returns.window_days).
+   * Chốt (APPROVED) là điểm không-đảo-được → không được chốt khi khách còn trong cửa sổ gửi đổi/trả
+   * (key + mặc định mirror OrdersService.requestReturn), dù admin cấu hình hold ngắn hơn cửa sổ.
+   */
+  private async effectiveHoldDays(): Promise<number> {
+    const [holdDays, returnWindowDays] = await Promise.all([
+      this.config.get<number>('affiliate.hold_days', 20),
+      this.config.get<number>('returns.window_days', 7),
+    ]);
+    return Math.max(Number(holdDays) || 0, Number(returnWindowDays) || 0);
   }
 
   /** Thống kê theo từng gian hàng của CTV (đơn có storefrontSlug thuộc tôi + referrer là tôi). */
@@ -723,4 +774,125 @@ export class AffiliateService {
     return agg._sum.amount ?? 0;
   }
 
+  /** Chi tiết cấp bậc CTV và tiến độ doanh số (đã chốt) tháng VN. */
+  async getCtvTiers(userId: string, now: Date = new Date()) {
+    const revenue = await this.confirmedRevenue(this.prisma, userId, vnMonthBounds(now));
+    return {
+      revenue,
+      tier: this.monthlyTier(revenue),
+      // Mỗi bậc kèm thưởng mốc TubuXu cùng ngưỡng — phần thưởng THẬT của bậc.
+      allTiers: tiersWithRewards(),
+    };
+  }
+
+  /**
+   * Mốc thưởng doanh số tháng của CTV (tháng VN hiện tại) + mốc tháng trước còn nhận được.
+   * Doanh số = doanh số ĐÃ CHỐT (confirmedRevenue); pendingRevenue chỉ để hiển thị "đang chờ chốt".
+   */
+  async getMilestones(userId: string, now: Date = new Date()) {
+    const cur = vnMonthBounds(now);
+    const prev = vnMonthBounds(now, -1);
+
+    const [currentRevenue, previousRevenue, pendingAgg, claims, holdDays] = await Promise.all([
+      this.confirmedRevenue(this.prisma, userId, cur),
+      this.confirmedRevenue(this.prisma, userId, prev),
+      this.prisma.commission.aggregate({
+        where: { affiliateUserId: userId, status: { in: [...PENDING_COMMISSION_STATUSES] } },
+        _sum: { commissionableTotal: true },
+      }),
+      this.prisma.ctvMilestoneClaim.findMany({
+        where: { userId, monthKey: { in: [cur.key, prev.key] } },
+        select: { milestoneId: true, monthKey: true },
+      }),
+      this.effectiveHoldDays(),
+    ]);
+
+    const claimed = new Set(claims.map((c) => `${c.milestoneId}:${c.monthKey}`));
+    const build = (monthKey: string, revenue: number) =>
+      CTV_MONTHLY_MILESTONES.map((m) => {
+        const achieved = revenue >= m.threshold;
+        const isClaimed = claimed.has(`${m.id}:${monthKey}`);
+        return {
+          ...m,
+          achieved,
+          claimed: isClaimed,
+          canClaim: achieved && !isClaimed,
+          progressPct: milestoneProgressPct(revenue, m.threshold),
+        };
+      });
+
+    // Tháng trước: chỉ trả khi còn mốc đạt mà chưa nhận (commission chốt sát cuối tháng — cron
+    // duyệt chạy mỗi giờ — không làm CTV mất thưởng chỉ vì chưa mở app trước 00:00 ngày 1).
+    const previousClaimable = build(prev.key, previousRevenue).filter((m) => m.canClaim);
+
+    return {
+      monthKey: cur.key,
+      currentRevenue,
+      pendingRevenue: pendingAgg._sum.commissionableTotal ?? 0,
+      holdDays,
+      milestones: build(cur.key, currentRevenue),
+      previousMonth:
+        previousClaimable.length > 0
+          ? { monthKey: prev.key, revenue: previousRevenue, milestones: previousClaimable }
+          : null,
+    };
+  }
+
+  /**
+   * Nhận thưởng mốc doanh số tháng → cộng TubuXu (coinsBalance, KHÔNG rút được).
+   * MONEY-CRITICAL:
+   *  - Điều kiện đọc doanh số ĐÃ CHỐT trong CÙNG tx (không đếm đơn còn huỷ/trả được).
+   *  - Idempotent dưới đồng thời: insert ctv_milestone_claims (unique userId+milestoneId+monthKey)
+   *    TRƯỚC khi cấp xu; request thua ăn P2002 → rollback cả tx → không cộng 2 lần.
+   *  - Cấp xu qua CoinsService.grantCoins(tx) — CoinTransaction + coinsBalance cùng tx (giữ bất
+   *    biến coinsBalance == SUM(delta)). Trước đây ghi CoinTransaction nhưng lại cộng walletBalance
+   *    (tiền rút được) → lệch cả 2 sổ và biến "xu" thành tiền mặt rút về ngân hàng.
+   *  - `monthKey` chỉ nhận tháng này hoặc tháng trước (VN).
+   */
+  async claimMilestone(userId: string, milestoneId: string, monthKey?: string, now: Date = new Date()) {
+    const milestone = CTV_MONTHLY_MILESTONES.find((m) => m.id === milestoneId);
+    if (!milestone) {
+      throw new NotFoundException(`Mốc thưởng "${milestoneId}" không tồn tại.`);
+    }
+
+    const cur = vnMonthBounds(now);
+    const prev = vnMonthBounds(now, -1);
+    const month = !monthKey || monthKey === cur.key ? cur : monthKey === prev.key ? prev : null;
+    if (!month) {
+      throw new BadRequestException('Chỉ nhận được thưởng mốc của tháng này hoặc tháng trước.');
+    }
+    const reason = `CTV_MILESTONE:${milestone.id}:${month.key}`;
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const revenue = await this.confirmedRevenue(tx, userId, month);
+        if (revenue < milestone.threshold) {
+          throw new BadRequestException(
+            `Doanh số đã chốt tháng ${month.key} (${revenue.toLocaleString('vi-VN')}đ) chưa đạt ngưỡng ${milestone.threshold.toLocaleString('vi-VN')}đ.`,
+          );
+        }
+
+        // Insert claim TRƯỚC khi cấp xu: grantCoins nuốt P2002 của chính nó (trả void) nên không
+        // thể làm khoá idempotency ở đây — khoá thật là unique của ctv_milestone_claims.
+        const claim = await tx.ctvMilestoneClaim.create({
+          data: { userId, milestoneId: milestone.id, monthKey: month.key, rewardXu: milestone.rewardXu, revenue },
+        });
+        await this.coins.grantCoins(userId, milestone.rewardXu, reason, 'AFFILIATE_MILESTONE', claim.id, tx);
+
+        return {
+          success: true,
+          message: `Chúc mừng bạn đã nhận ${milestone.rewardXu.toLocaleString('vi-VN')} Tubu Xu từ ${milestone.title}!`,
+          rewardXu: milestone.rewardXu,
+          monthKey: month.key,
+        };
+      });
+    } catch (err) {
+      // Unique (userId, milestoneId, monthKey): đã nhận trước đó HOẶC thua race double-tap —
+      // tx đã rollback, xu KHÔNG bị cộng lần 2.
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
+        throw new BadRequestException('Bạn đã nhận thưởng mốc này rồi.');
+      }
+      throw err;
+    }
+  }
 }

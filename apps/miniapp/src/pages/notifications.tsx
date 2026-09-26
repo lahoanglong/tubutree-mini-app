@@ -3,7 +3,7 @@ import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
-  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, type LucideIcon,
+  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, type LucideIcon,
 } from 'lucide-react';
 import {
   getNotifications,
@@ -17,7 +17,7 @@ import { haptic } from '../utils/haptic';
 import { useAuthStore } from '../store/auth';
 
 /** Icon + nhãn nhóm theo templateCode (§4.10). */
-function meta(code: string): { Icon: LucideIcon; title: string } {
+export function notificationMeta(code: string): { Icon: LucideIcon; title: string } {
   if (code.startsWith('ORDER_CONFIRMED')) return { Icon: CheckCircle2, title: 'Đơn đã xác nhận' };
   if (code.startsWith('ORDER_SHIPPING')) return { Icon: Truck, title: 'Đang giao hàng' };
   if (code.startsWith('ORDER_DELIVERED')) return { Icon: PackageCheck, title: 'Đã giao thành công' };
@@ -30,7 +30,21 @@ function meta(code: string): { Icon: LucideIcon; title: string } {
   // Trong app mục này tên là "Ưu đãi giờ vàng" (vi.flashSale.sectionTitle) — thông báo gọi
   // "Flash Sale" khiến khách vào app tìm mục không tồn tại.
   if (code.startsWith('FLASH')) return { Icon: Zap, title: 'Ưu đãi giờ vàng' };
+  // DEALER_BONUS_PAID / DEALER_REWARD_CLAIM_* — thưởng doanh số & yêu cầu nhận thưởng đại lý.
+  if (code.startsWith('DEALER')) return { Icon: Store, title: 'Đại lý' };
+  // OPS_* (vd OPS_GOMDON_ALERT) gửi tới tài khoản ADMIN; admin đăng nhập mini app vẫn thấy trong
+  // danh sách (listForUser không lọc theo mã) nên cần nhãn riêng thay vì "Thông báo" chung chung.
+  if (code.startsWith('OPS_')) return { Icon: TriangleAlert, title: 'Cảnh báo vận hành' };
   return { Icon: Bell, title: 'Thông báo' };
+}
+
+/**
+ * Có hiện nút "Xem chi tiết đơn hàng" không. Báo động OPS_* mang order_code của đơn KHÁCH KHÁC —
+ * GET /orders/:code chỉ trả đơn của chính người xem (404 với admin), nên nút đó chỉ dẫn tới màn lỗi.
+ */
+export function notificationOrderLink(templateCode: string, orderCode: unknown): boolean {
+  if (templateCode.startsWith('OPS_')) return false;
+  return templateCode.startsWith('ORDER') || !!orderCode;
 }
 
 function relativeTime(iso: string): string {
@@ -105,7 +119,7 @@ export default function NotificationsPage() {
       ) : notifQ.data && notifQ.data.length > 0 ? (
         <Box p={4} flex flexDirection="column" style={{ gap: 8 }}>
           {notifQ.data.map((n) => {
-            const m = meta(n.templateCode);
+            const m = notificationMeta(n.templateCode);
             const unread = n.status !== 'READ';
             return (
               <Box
@@ -214,10 +228,10 @@ export default function NotificationsPage() {
           {/* Detail Content */}
           <Box p={4} style={{ flex: 1 }}>
             {(() => {
-              const m = meta(selectedNotif.templateCode);
+              const m = notificationMeta(selectedNotif.templateCode);
               const bodyText = selectedNotif.payload.body || '';
               const orderCode = selectedNotif.payload.data?.order_code ?? selectedNotif.payload.data?.orderCode;
-              const isOrder = selectedNotif.templateCode.startsWith('ORDER') || !!orderCode;
+              const isOrder = notificationOrderLink(selectedNotif.templateCode, orderCode);
               const isGame = selectedNotif.templateCode.includes('GAME') || /cây|vườn|tưới|khát|chuỗi/i.test(bodyText);
               const isCart = selectedNotif.templateCode.includes('CART') || /giỏ/i.test(bodyText);
               const isLoyalty = selectedNotif.templateCode.includes('VOUCHER') || selectedNotif.templateCode.includes('POINTS');

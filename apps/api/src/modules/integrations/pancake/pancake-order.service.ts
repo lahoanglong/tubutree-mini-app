@@ -1,10 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
 import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
+import { SystemConfigService } from '../../system-config/system-config.service';
+import { loadGomdonConfig, DEFAULT_GOMDON_WEIGHT_FALLBACK } from '../gomdon/gomdon-config';
+import { recyclingWeight } from '../gomdon/gomdon-weight';
+import { GOMDON_STATE } from '../gomdon/gomdon-status';
+
+/** Tag máy đọc được trên đơn Pancake — kho/automation lọc đơn thu gom, không phải đọc note tự do. */
+export const PANCAKE_TAG_RECYCLING = 'RECYCLING';
+/** Đơn ĐÃ có vận đơn Gomdon — kho KHÔNG đặt thêm hãng vận chuyển khác (tránh giao 2 lần/thu COD 2 lần). */
+export const PANCAKE_TAG_GOMDON = 'GOMDON';
 
 interface ShippingSnapshot {
   recipient: string;
@@ -31,6 +40,8 @@ export class PancakeOrderService {
     private readonly prisma: PrismaService,
     private readonly client: PancakeClient,
     @InjectQueue(QUEUE_PANCAKE_PUSH) private readonly pushQueue: Queue,
+    // Optional: chỉ để đọc cân nặng mặc định của Gomdon cho ghi chú thu gom (cùng số với vận đơn).
+    @Optional() private readonly systemConfig?: SystemConfigService,
   ) {}
 
   /**
@@ -105,8 +116,8 @@ export class PancakeOrderService {
       })),
       shipping_fee: order.shippingFee,
       total_discount: order.discount,
-      tags: ['MINIAPP', order.type === 'DEALER' ? 'DEALER' : 'RETAIL'],
-      note: `Order code: ${order.code}`,
+      tags: this.buildTags(order),
+      note: await this.buildOrderNote(order),
       extension: {
         external_order_id: order.code,
         invoice_request: inv
@@ -124,5 +135,64 @@ export class PancakeOrderService {
       });
     }
     return pancakeOrderId;
+  }
+
+  private buildTags(order: { type: string; hasRecyclingPickup?: boolean; gomdonPartnerCode?: string | null }): string[] {
+    const tags = ['MINIAPP', order.type === 'DEALER' ? 'DEALER' : 'RETAIL'];
+    if (order.hasRecyclingPickup) {
+      tags.push(PANCAKE_TAG_RECYCLING);
+      if (order.gomdonPartnerCode) tags.push(PANCAKE_TAG_GOMDON);
+    }
+    return tags;
+  }
+
+  /**
+   * Ghi chú cho kho (người đọc). Đơn thu gom ghi rõ tình trạng vận đơn Gomdon để kho biết có được tự
+   * đặt hãng vận chuyển hay không — tag RECYCLING/GOMDON là bản máy đọc được của cùng thông tin.
+   */
+  private async buildOrderNote(order: {
+    code: string;
+    hasRecyclingPickup?: boolean;
+    recyclingNote?: string | null;
+    gomdonPartnerCode?: string | null;
+    gomdonStatus?: string | null;
+    items: { variationId: string; quantity: number }[];
+  }): Promise<string> {
+    if (!order.hasRecyclingPickup) {
+      return `Order code: ${order.code}`;
+    }
+
+    const variations = await this.prisma.variation.findMany({
+      where: { id: { in: order.items.map((i) => i.variationId) } },
+      select: { id: true, weight: true },
+    });
+    const fallback = await this.recyclingWeightFallback();
+    const { maxKg } = recyclingWeight(order.items, new Map(variations.map((v) => [v.id, v.weight])), fallback);
+    const noteDetail = order.recyclingNote?.trim() ? ` - Ghi chú: ${order.recyclingNote.trim()}` : '';
+    const recyclingTag = `[ĐƠN ĐỔI HÀNG - THU GOM RÁC TÁI CHẾ TỐI ĐA ${maxKg}kg${noteDetail}]`;
+
+    if (order.gomdonPartnerCode) {
+      return `Order code: ${order.code} | ${recyclingTag} Mã VĐ Gomdon: ${order.gomdonPartnerCode} [ĐÃ CÓ VẬN ĐƠN - KHÔNG TẠO VẬN ĐƠN KHÁC]`;
+    }
+    if (order.gomdonStatus === GOMDON_STATE.AWAITING_PAYMENT) {
+      return `Order code: ${order.code} | ${recyclingTag} [CHỜ THANH TOÁN - VẬN ĐƠN GOMDON TỰ TẠO SAU KHI KHÁCH THANH TOÁN, KHÔNG TẠO VẬN ĐƠN KHÁC]`;
+    }
+    if (
+      order.gomdonStatus === GOMDON_STATE.NEEDS_MANUAL_CHECK ||
+      order.gomdonStatus === GOMDON_STATE.CREATING ||
+      order.gomdonStatus == null
+    ) {
+      return `Order code: ${order.code} | ${recyclingTag} [KIỂM TRA GOMDON (mã đơn ${order.code}) TRƯỚC KHI TẠO VẬN ĐƠN TAY]`;
+    }
+    return `Order code: ${order.code} | ${recyclingTag} [LỖI TẠO GOMDON - CẦN TẠO VẬN ĐƠN BẰNG TAY]`;
+  }
+
+  private async recyclingWeightFallback(): Promise<number> {
+    if (!this.systemConfig) return DEFAULT_GOMDON_WEIGHT_FALLBACK;
+    try {
+      return (await loadGomdonConfig(this.systemConfig)).defaultWeightFallback;
+    } catch {
+      return DEFAULT_GOMDON_WEIGHT_FALLBACK;
+    }
   }
 }

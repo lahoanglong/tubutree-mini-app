@@ -4,12 +4,17 @@ export interface AffiliateMe {
   isAffiliate: boolean;
   referralCode: string;
   walletBalance: number;
+  monthRevenue?: number;
+  tier?: AffiliateTier;
 }
 
+/**
+ * Bậc CTV theo doanh số ĐÃ CHỐT tháng (giờ VN). Chỉ là danh hiệu — backend KHÔNG trả "+X% bonus
+ * hoa hồng" theo bậc, nên type không có bonusPct để UI không thể hứa khoản đó.
+ */
 export interface AffiliateTier {
   name: string;
   emoji: string;
-  bonusPct: number;
   nextName: string | null;
   nextThreshold: number | null;
   toNext: number;
@@ -23,6 +28,39 @@ export interface AffiliateDashboard {
   totalConversions: number;
   monthRevenue: number;
   tier: AffiliateTier;
+}
+
+export interface CtvMilestoneItem {
+  id: string;
+  title: string;
+  threshold: number;
+  rewardXu: number;
+  description: string;
+  achieved: boolean;
+  claimed: boolean;
+  canClaim: boolean;
+  progressPct: number;
+}
+
+export interface CtvMilestonesResponse {
+  /** Tháng VN 'YYYY-MM'. */
+  monthKey: string;
+  /** Doanh số ĐÃ CHỐT trong tháng — căn cứ duy nhất để đạt mốc. */
+  currentRevenue: number;
+  /** Doanh số đang chờ chốt (đơn chưa giao / đang giữ đổi-trả) — chỉ để xem, chưa tính mốc. */
+  pendingRevenue: number;
+  /** Số ngày giữ đổi/trả trước khi chốt (config affiliate.hold_days). */
+  holdDays: number;
+  milestones: CtvMilestoneItem[];
+  /** Tháng trước còn mốc đạt mà chưa nhận (null nếu không còn). */
+  previousMonth: { monthKey: string; revenue: number; milestones: CtvMilestoneItem[] } | null;
+}
+
+export interface CtvTiersResponse {
+  revenue: number;
+  tier: AffiliateTier;
+  /** milestoneRewardXu: thưởng mốc Tubu Xu cùng ngưỡng bậc (null với bậc khởi đầu). */
+  allTiers: { name: string; emoji: string; min: number; milestoneRewardXu: number | null }[];
 }
 
 export interface AffiliateLink {
@@ -48,6 +86,16 @@ export interface Commission {
 }
 
 export const getAffiliateMe = () => api.get<AffiliateMe>('/affiliate/me').then((r) => r.data);
+export const getCtvTiers = () => api.get<CtvTiersResponse>('/affiliate/tiers').then((r) => r.data);
+export const getCtvMilestones = () => api.get<CtvMilestonesResponse>('/affiliate/milestones').then((r) => r.data);
+/** Nhận thưởng mốc → cộng Tubu Xu. `month` ('YYYY-MM') bỏ trống = tháng này; chỉ nhận tháng này/tháng trước. */
+export const claimCtvMilestone = (milestoneId: string, month?: string) =>
+  api
+    .post<{ success: boolean; message: string; rewardXu: number; monthKey: string }>(
+      `/affiliate/milestones/${encodeURIComponent(milestoneId)}/claim`,
+      month ? { month } : {},
+    )
+    .then((r) => r.data);
 export const registerAffiliate = () =>
   api.post<{ ok: boolean; referralCode: string }>('/affiliate/register').then((r) => r.data);
 export const getAffiliateDashboard = () =>

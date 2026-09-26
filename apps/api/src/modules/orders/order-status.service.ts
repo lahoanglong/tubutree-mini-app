@@ -1,5 +1,9 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import type { OrderStatus } from '@tubutree/shared-types';
+import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
+import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
@@ -29,6 +33,9 @@ export class OrderStatusService {
     private readonly affiliate: AffiliateService,
     private readonly notifications: NotificationsService,
     private readonly reversal: OrderReversalService,
+    // Optional: test/call site cũ dựng tay 5 tham số vẫn chạy. Huỷ đơn thu gom tái chế → huỷ luôn
+    // vận đơn Gomdon (queue gomdon-push job 'cancel', retry) — không import GomdonModule để tránh vòng.
+    @Optional() @InjectQueue(QUEUE_GOMDON_PUSH) private readonly gomdonQueue?: Queue,
   ) {}
 
   /** true nếu transition hợp lệ — dùng để webhook/cron bỏ qua êm thay vì throw. */
@@ -68,6 +75,8 @@ export class OrderStatusService {
         where: { id: order.id, status: order.status },
         data: {
           status: targetStatus,
+          // Mốc giao thật — hạn đổi/trả tính từ đây (không dùng updatedAt: ghi gì sau đó cũng đổi nó).
+          ...(targetStatus === 'DELIVERED' ? { deliveredAt: new Date() } : {}),
           ...(opts.note
             ? { note: order.note ? `${order.note} | ${opts.note}` : opts.note }
             : {}),
@@ -112,12 +121,29 @@ export class OrderStatusService {
       await this.loyalty.reverseOrderPoints(order.id);
       await this.affiliate.reverseCommissionsForOrder(order.id);
     }
+    if (targetStatus === 'CANCELLED') {
+      await this.enqueueGomdonCancel(order);
+    }
 
     await this.notifications
       .notify(order.userId, opts.notifyEvent ?? `ORDER_${targetStatus}`, { order_code: order.code })
       .catch(() => undefined);
 
     return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
+  }
+
+  /**
+   * Đơn có chọn thu gom tái chế bị huỷ (admin/merchant/Pancake onCancelled...) → enqueue huỷ vận đơn
+   * Gomdon. Best-effort: đơn đã CANCELLED + hoàn tiền xong, lỗi enqueue chỉ log — cron
+   * GomdonReconcileService quét đơn CANCELLED còn vận đơn chưa huỷ và enqueue lại.
+   */
+  private async enqueueGomdonCancel(order: { id: string; code: string; hasRecyclingPickup?: boolean | null }) {
+    if (!order.hasRecyclingPickup || !this.gomdonQueue) return;
+    try {
+      await enqueueGomdonCancel(this.gomdonQueue, order.id);
+    } catch (err) {
+      this.logger.error(`Enqueue huỷ vận đơn Gomdon lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
+    }
   }
 }
 

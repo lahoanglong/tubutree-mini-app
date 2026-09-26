@@ -50,6 +50,7 @@ export class CartService {
         unitPrice,
         quantity: it.quantity,
         stock: it.variation.stock,
+        weight: it.variation.weight ?? null,
         total: unitPrice * it.quantity,
         isFlash: !!flash,
         flashSaleItemId: flash?.itemId ?? null,

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { fetchOrders, formatVnd } from '@/lib/shop-client';
+import { RecyclingStatus } from '@/components/recycling-status';
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING_PAYMENT: 'Chờ thanh toán',
@@ -82,6 +83,7 @@ export default function AccountPage() {
                   {o.items.length} sản phẩm · {new Date(o.createdAt).toLocaleDateString('vi-VN')}
                 </div>
                 <div className="mt-1 font-semibold text-clay-700">{formatVnd(o.total)}</div>
+                <RecyclingStatus order={o} />
               </div>
             ))}
           </div>

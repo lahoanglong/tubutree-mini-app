@@ -2,6 +2,12 @@ import { Test } from '@nestjs/testing';
 import { OrderReversalService } from './order-reversal.service';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { DealerService } from '../dealer/dealer.service';
+
+/** DealerService giả — mặc định không có thưởng quý nào để thu hồi. */
+const noopDealer = () => ({
+  clawbackQuarterBonusForOrder: jest.fn().mockResolvedValue({ quarter: null, clawedBack: 0 }),
+});
 
 type MockTx = {
   order: { updateMany: jest.Mock };
@@ -156,6 +162,7 @@ describe('công nợ đại lý khi huỷ đơn CREDIT', () => {
         OrderReversalService,
         { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
         { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+        { provide: DealerService, useValue: noopDealer() },
       ],
     }).compile();
     service = module.get(OrderReversalService);
@@ -226,6 +233,7 @@ describe('OrderReversalService — huỷ đơn có backorder', () => {
         OrderReversalService,
         { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
         { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+        { provide: DealerService, useValue: noopDealer() },
       ],
     }).compile();
     service = module.get(OrderReversalService);
@@ -283,5 +291,95 @@ describe('OrderReversalService — huỷ đơn có backorder', () => {
     await service.reverseFinancials(tx as never, order);
 
     expect(tx.orderItem.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Thưởng doanh số quý đại lý trả ngày 10 quý sau, tính trên doanh số ĐÃ CHỐT lúc đó. Đơn của quý
+ * đã trả thưởng bị huỷ/trả sau đó → phải tính lại thưởng quý (DealerService, cùng công thức payout)
+ * và thu hồi phần chênh, trong CÙNG transaction với lần lật trạng thái.
+ */
+describe('OrderReversalService — thu hồi thưởng quý đại lý', () => {
+  async function build(dealer?: ReturnType<typeof noopDealer>) {
+    const module = await Test.createTestingModule({
+      providers: [
+        OrderReversalService,
+        { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
+        { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+        ...(dealer ? [{ provide: DealerService, useValue: dealer }] : []),
+      ],
+    }).compile();
+    return module.get(OrderReversalService);
+  }
+
+  it('đơn DEALER → gọi DealerService.clawbackQuarterBonusForOrder(tx, order) SAU khi đảo công nợ', async () => {
+    const dealer = noopDealer();
+    const service = await build(dealer);
+    const tx = makeTx();
+    tx.dealerCreditLedger.findFirst.mockImplementation(({ where }: { where: { refType: string } }) =>
+      where.refType === 'ORDER' ? Promise.resolve({ id: 'l1', delta: 150000 }) : Promise.resolve(null),
+    );
+    const order = makeOrder({ type: 'DEALER', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' });
+
+    await service.reverseFinancials(tx as never, order);
+
+    expect(dealer.clawbackQuarterBonusForOrder).toHaveBeenCalledTimes(1);
+    expect(dealer.clawbackQuarterBonusForOrder).toHaveBeenCalledWith(tx, order);
+    // Tính lại doanh số phải thấy đơn đã REFUNDED/đảo nợ → chạy sau cùng.
+    expect(dealer.clawbackQuarterBonusForOrder.mock.invocationCallOrder[0]).toBeGreaterThan(
+      tx.dealerCreditLedger.create.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('đơn khách lẻ → KHÔNG gọi thu hồi thưởng đại lý', async () => {
+    const dealer = noopDealer();
+    const service = await build(dealer);
+    await service.reverseFinancials(makeTx() as never, makeOrder({ type: 'RETAIL' }));
+    expect(dealer.clawbackQuarterBonusForOrder).not.toHaveBeenCalled();
+  });
+
+  it('lỗi DB khi thu hồi → ném ra để cả transaction huỷ đơn rollback (không nuốt lỗi tiền)', async () => {
+    const dealer = noopDealer();
+    dealer.clawbackQuarterBonusForOrder.mockRejectedValueOnce(new Error('db down'));
+    const service = await build(dealer);
+    await expect(
+      service.reverseFinancials(makeTx() as never, makeOrder({ type: 'DEALER', paymentStatus: 'UNPAID' })),
+    ).rejects.toThrow('db down');
+  });
+
+  it('DealerService chưa wiring (dựng tay / module thiếu) → vẫn huỷ đơn, log lỗi to thay vì sập', async () => {
+    const { Logger } = jest.requireActual('@nestjs/common');
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const service = await build(undefined);
+    const tx = makeTx();
+    await expect(
+      service.reverseFinancials(tx as never, makeOrder({ type: 'DEALER', paymentStatus: 'UNPAID' })),
+    ).resolves.toBeUndefined();
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('thưởng quý'));
+    error.mockRestore();
+  });
+});
+
+describe('OrderReversalService — resolve DealerService xuyên module (đúng wiring thật)', () => {
+  it('OrdersModule KHÔNG import DealerModule (tránh vòng DealerModule→PancakeModule→OrdersModule) vẫn tìm được DealerService', async () => {
+    const { Module } = jest.requireActual('@nestjs/common');
+    const dealer = noopDealer();
+    @Module({ providers: [{ provide: DealerService, useValue: dealer }], exports: [DealerService] })
+    class FakeDealerModule {}
+    @Module({
+      providers: [
+        OrderReversalService,
+        { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
+        { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+      ],
+      exports: [OrderReversalService],
+    })
+    class FakeOrdersModule {}
+    const app = await Test.createTestingModule({ imports: [FakeOrdersModule, FakeDealerModule] }).compile();
+    const service = app.get(OrderReversalService);
+    const order = makeOrder({ type: 'DEALER', paymentStatus: 'UNPAID' });
+    const tx = makeTx();
+    await service.reverseFinancials(tx as never, order);
+    expect(dealer.clawbackQuarterBonusForOrder).toHaveBeenCalledWith(tx, order);
   });
 });

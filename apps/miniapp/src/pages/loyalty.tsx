@@ -1,19 +1,33 @@
-import { useEffect, useState } from 'react';
-import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
-import { useQuery } from '@tanstack/react-query';
-import { Sprout, Recycle, Check, ChevronRight } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Box, Page, Text, Button, useNavigate, useSnackbar } from 'zmp-ui';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Sprout, Recycle, Check, ChevronRight, QrCode as QrCodeIcon, CalendarCheck, Gift, X, Copy } from 'lucide-react';
 import {
   getLoyalty,
   getCoupons,
   getPointsTransactions,
+  getLoyaltyRewards,
+  redeemLoyaltyReward,
+  getDailyCheckInStatus,
+  postDailyCheckIn,
+  getMemberCard,
+  checkInView,
+  memberCardHint,
+  pointsReasonLabel,
+  tierProgressPercent,
+  type CheckInStatusResponse,
   type CouponDTO,
   type PointsTxn,
+  type RewardItem,
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { formatVnd, formatPoints } from '../utils/format';
+import { haptic } from '../utils/haptic';
+import { copyText } from '../utils/clipboard';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
+import { QrCode } from '../components/qr-code';
 
 /** Biểu tượng + màu theo hạng (4 hạng §6.6). */
 const TIER_STYLE: Record<string, { emoji: string; color: string; bg: string }> = {
@@ -32,25 +46,94 @@ function couponLabel(c: CouponDTO): string {
 
 export default function LoyaltyPage() {
   const navigate = useNavigate();
+  const { openSnackbar } = useSnackbar();
+  const qc = useQueryClient();
   // Các endpoint /me/* cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
   // (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (cùng bug đã fix ở wallet.tsx).
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const txnQ = useQuery({ queryKey: ['points-txn'], queryFn: getPointsTransactions, enabled: authed });
+  const rewardsQ = useQuery({ queryKey: ['loyalty-rewards'], queryFn: getLoyaltyRewards, enabled: authed });
+  const checkInQ = useQuery({ queryKey: ['loyalty-checkin'], queryFn: getDailyCheckInStatus, enabled: authed });
+  const memberCardQ = useQuery({ queryKey: ['loyalty-member-card'], queryFn: getMemberCard, enabled: authed });
+
+  const [showMemberCard, setShowMemberCard] = useState(false);
+  const [confirmReward, setConfirmReward] = useState<RewardItem | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+  // Khoá đồng bộ chống chạm đúp: `disabled={mut.isPending}` chỉ có hiệu lực sau lần render kế,
+  // 2 cú chạm trong cùng khung hình vẫn gọi mutate 2 lần. Đổi quà KHÔNG idempotent (mỗi lần đủ
+  // điểm = 1 voucher mới) nên phải chặn ngay tại chỗ; điểm danh thì backend đã unique theo ngày.
+  const busyRef = useRef({ checkIn: false, redeem: false });
+
+  const refreshPoints = () => {
+    void qc.invalidateQueries({ queryKey: ['loyalty'] });
+    void qc.invalidateQueries({ queryKey: ['loyalty-checkin'] });
+    void qc.invalidateQueries({ queryKey: ['points-txn'] });
+    void qc.invalidateQueries({ queryKey: ['loyalty-rewards'] });
+  };
+
+  const checkInMut = useMutation({
+    mutationFn: postDailyCheckIn,
+    onSuccess: (res) => {
+      haptic('medium');
+      openSnackbar({ text: res.message, type: 'success' });
+      // Khoá nút ngay (trước khi refetch trạng thái về) — tránh chạm thêm lúc chờ bị 400 "đã điểm danh".
+      qc.setQueryData<CheckInStatusResponse>(['loyalty-checkin'], (old) =>
+        old ? { ...old, checkedInToday: true } : old,
+      );
+      refreshPoints();
+    },
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Vd đã điểm danh trên thiết bị khác → tải lại trạng thái để nút chuyển "Đã điểm danh".
+      void qc.invalidateQueries({ queryKey: ['loyalty-checkin'] });
+    },
+    onSettled: () => {
+      busyRef.current.checkIn = false;
+    },
+  });
+
+  const redeemMut = useMutation({
+    mutationFn: (rewardId: string) => redeemLoyaltyReward(rewardId),
+    onSuccess: (res) => {
+      haptic('heavy');
+      setConfirmReward(null);
+      openSnackbar({ text: `Đổi thành công! Mã ${res.coupon.code} đã vào Kho voucher.`, type: 'success' });
+      refreshPoints();
+      void qc.invalidateQueries({ queryKey: ['coupons'] });
+    },
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      refreshPoints();
+    },
+    onSettled: () => {
+      busyRef.current.redeem = false;
+    },
+  });
+
+  const doCheckIn = () => {
+    if (busyRef.current.checkIn) return;
+    busyRef.current.checkIn = true;
+    checkInMut.mutate();
+  };
+  const doRedeem = (rewardId: string) => {
+    if (busyRef.current.redeem) return;
+    busyRef.current.redeem = true;
+    redeemMut.mutate(rewardId);
+  };
 
   const data = loyaltyQ.data;
   const style = data?.tier ? (TIER_STYLE[data.tier.name] ?? DEFAULT_STYLE) : DEFAULT_STYLE;
   const tierName = data?.tier?.name ?? 'Mầm Xanh';
   const perks = Array.isArray(data?.tier?.perks) ? (data.tier.perks as string[]) : [];
 
-  // Progress lên hạng kế: tính TỪ SÀN ĐIỂM hạng hiện tại → ngưỡng hạng kế (không phải từ 0).
+  // Progress lên hạng kế: tính TỪ SÀN ĐIỂM hạng hiện tại → ngưỡng hạng kế (không phải từ 0), theo
+  // điểm XÉT HẠNG (điểm danh / tích tại quầy không tính) — xem tierProgressPercent.
   const next = data?.nextTier;
   const curMin = data?.tiers.find((t) => t.id === data.tier?.id)?.minPoints ?? 0;
-  const progress =
-    next && next.minPoints > curMin
-      ? Math.min(100, Math.max(0, Math.round(((data!.pointsBalance - curMin) / (next.minPoints - curMin)) * 100)))
-      : 100;
+  const progress = data ? tierProgressPercent(data) : 0;
+  const checkIn = checkInQ.data ? checkInView(checkInQ.data) : null;
 
   // Phát hiện LÊN HẠNG (§6.6 #78): so minPoints hạng hiện tại với lần xem trước (localStorage).
   const [celebrate, setCelebrate] = useState<string | null>(null);
@@ -124,7 +207,7 @@ export default function LoyaltyPage() {
                     />
                   </Box>
                   <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
-                    Còn <b>{next.pointsToGo}</b> điểm để lên hạng {next.name}
+                    Còn <b>{next.pointsToGo.toLocaleString('vi-VN')}</b> điểm tích từ mua hàng để lên hạng {next.name}
                   </Text>
                 </Box>
               ) : (
@@ -132,8 +215,117 @@ export default function LoyaltyPage() {
                   Bạn đang ở hạng cao nhất 🎉
                 </Text>
               )}
+
+              {/* Nút mở thẻ thành viên số (mã QR) */}
+              <Box mt={4} flex justifyContent="center">
+                <Box
+                  className="tubu-press"
+                  onClick={() => {
+                    haptic('light');
+                    setShowMemberCard(true);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '8px 16px',
+                    background: 'rgba(255, 255, 255, 0.92)',
+                    borderRadius: 'var(--radius-full)',
+                    cursor: 'pointer',
+                    boxShadow: 'var(--shadow-sm)',
+                    border: `1px solid ${style.color}`,
+                  }}
+                >
+                  <QrCodeIcon size={16} color={style.color} />
+                  <Text size="xSmall" bold style={{ color: style.color }}>
+                    Thẻ thành viên số (mã QR)
+                  </Text>
+                </Box>
+              </Box>
             </Box>
           </Box>
+
+          {/* Widget Điểm danh 7 ngày (Điểm Xanh) — tách riêng với điểm danh hạt giống ở Vườn Xanh */}
+          {checkInQ.isLoading ? (
+            <Box mx={4} mb={3}>
+              <Skeleton style={{ height: 120, borderRadius: 16 }} />
+            </Box>
+          ) : checkInQ.isError ? (
+            <Box mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
+              <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8 }}>
+                <Text size="xSmall" style={{ color: 'var(--neutral-600)', flex: 1 }}>
+                  Chưa tải được lịch điểm danh: {getErrorMessage(checkInQ.error)}
+                </Text>
+                <Button size="small" variant="secondary" onClick={() => void checkInQ.refetch()}>
+                  Thử lại
+                </Button>
+              </Box>
+            </Box>
+          ) : checkInQ.data && checkIn ? (
+            <Box mx={4} mb={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
+              <Box flex alignItems="center" justifyContent="space-between" mb={3}>
+                <Box flex alignItems="center" style={{ gap: 8 }}>
+                  <Box style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
+                    <CalendarCheck size={18} color="var(--leaf-600)" />
+                  </Box>
+                  <Box>
+                    <Text bold size="small">Điểm danh nhận Điểm Xanh</Text>
+                    <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                      Chuỗi: <b>{checkInQ.data.streakDays}</b> ngày liên tiếp {checkInQ.data.streakDays > 0 ? '🔥' : ''}
+                    </Text>
+                  </Box>
+                </Box>
+                <Button
+                  size="small"
+                  disabled={!checkIn.canCheckIn || checkInMut.isPending}
+                  loading={checkInMut.isPending}
+                  onClick={doCheckIn}
+                  style={{
+                    borderRadius: 'var(--radius-full)',
+                    background: checkIn.canCheckIn ? 'var(--leaf-600)' : 'var(--neutral-200)',
+                    color: checkIn.canCheckIn ? 'var(--neutral-0)' : 'var(--neutral-500)',
+                  }}
+                >
+                  {checkIn.buttonLabel}
+                </Button>
+              </Box>
+
+              {/* 7 ngày streak */}
+              <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, textAlign: 'center' }}>
+                {checkInQ.data.rewards.map((r) => (
+                  <Box
+                    key={r.day}
+                    p={2}
+                    style={{
+                      borderRadius: 'var(--radius-md)',
+                      background: r.claimed
+                        ? 'var(--leaf-50)'
+                        : r.isToday
+                        ? 'var(--primary-50)'
+                        : 'var(--neutral-100)',
+                      border: r.isToday
+                        ? '1px solid var(--primary-600)'
+                        : r.claimed
+                        ? '1px solid var(--leaf-200)'
+                        : '1px solid transparent',
+                    }}
+                  >
+                    <Text size="xSmall" style={{ color: 'var(--neutral-500)', fontSize: 10 }}>N{r.day}</Text>
+                    <Text bold size="xSmall" style={{ color: r.claimed ? 'var(--leaf-700)' : 'var(--neutral-800)', marginTop: 2 }}>
+                      +{r.points}
+                    </Text>
+                    <Text style={{ fontSize: 12, marginTop: 2 }}>
+                      {r.claimed ? '✓' : r.day === 7 ? '🎁' : '🌱'}
+                    </Text>
+                  </Box>
+                ))}
+              </Box>
+              <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8, lineHeight: '16px' }}>
+                Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính
+                vào xét hạng; hạt giống Vườn Xanh điểm danh riêng trong Vườn Cây.
+              </Text>
+            </Box>
+          ) : null}
 
           {/* Lối tắt tích Điểm & Giọt nước */}
           <Box px={4} pb={2}>
@@ -254,12 +446,105 @@ export default function LoyaltyPage() {
                       </Text>
                     </Box>
                     <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                      từ {t.minPoints} điểm · ×{t.multiplier}
+                      từ {t.minPoints.toLocaleString('vi-VN')} điểm tích luỹ · ×{t.multiplier}
                     </Text>
                   </Box>
                 );
               })}
             </Box>
+          </Section>
+
+          {/* Đổi Điểm Nhận Voucher (Reward Catalog) */}
+          <Section
+            title="Đổi Điểm Nhận Voucher"
+            action={rewardsQ.data ? `${rewardsQ.data.rewards.length} ưu đãi` : undefined}
+          >
+            {rewardsQ.isLoading ? (
+              <Skeleton style={{ height: 96, borderRadius: 12 }} />
+            ) : rewardsQ.isError ? (
+              <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8 }}>
+                <Text size="small" style={{ color: 'var(--neutral-600)', flex: 1 }}>
+                  Chưa tải được danh mục đổi quà: {getErrorMessage(rewardsQ.error)}
+                </Text>
+                <Button size="small" variant="secondary" onClick={() => void rewardsQ.refetch()}>
+                  Thử lại
+                </Button>
+              </Box>
+            ) : rewardsQ.data && rewardsQ.data.rewards.length > 0 ? (
+              <Box flex flexDirection="column" style={{ gap: 10 }}>
+                {rewardsQ.data.rewards.map((r) => (
+                  <Box
+                    key={r.id}
+                    p={3}
+                    style={{
+                      background: 'var(--neutral-50)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--neutral-200)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <Box flex alignItems="flex-start" justifyContent="space-between">
+                      <Box style={{ flex: 1 }}>
+                        <Box flex alignItems="center" style={{ gap: 6 }}>
+                          <Text bold size="small">{r.title}</Text>
+                          {r.badge && (
+                            <Box
+                              px={2}
+                              py={0.5}
+                              style={{
+                                background: 'var(--primary-100)',
+                                borderRadius: 'var(--radius-full)',
+                              }}
+                            >
+                              <Text size="xSmall" bold style={{ color: 'var(--primary-700)', fontSize: 10 }}>
+                                {r.badge}
+                              </Text>
+                            </Box>
+                          )}
+                        </Box>
+                        <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
+                          {r.description}
+                        </Text>
+                      </Box>
+                      <Box style={{ textAlign: 'right', marginLeft: 8 }}>
+                        <Text bold size="small" style={{ color: 'var(--leaf-700)' }}>
+                          {formatPoints(r.pointsCost)}
+                        </Text>
+                      </Box>
+                    </Box>
+
+                    <Box flex alignItems="center" justifyContent="space-between" pt={1} style={{ borderTop: '1px dashed var(--neutral-200)' }}>
+                      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                        HSD 30 ngày sau đổi
+                      </Text>
+                      <Button
+                        size="small"
+                        disabled={!r.canRedeem || redeemMut.isPending}
+                        onClick={() => {
+                          haptic('light');
+                          setConfirmReward(r);
+                        }}
+                        style={{
+                          borderRadius: 'var(--radius-full)',
+                          background: r.canRedeem ? 'var(--leaf-600)' : 'var(--neutral-200)',
+                          color: r.canRedeem ? 'var(--neutral-0)' : 'var(--neutral-500)',
+                          padding: '4px 12px',
+                          fontSize: 12,
+                        }}
+                      >
+                        {r.canRedeem ? 'Đổi ngay' : `Cần ${r.pointsCost} điểm`}
+                      </Button>
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            ) : (
+              <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+                Hiện chưa có ưu đãi nào để đổi.
+              </Text>
+            )}
           </Section>
 
           {/* Kho voucher */}
@@ -322,7 +607,7 @@ export default function LoyaltyPage() {
                     style={{ borderBottom: '1px solid var(--neutral-100)' }}
                   >
                     <Box>
-                      <Text size="small">{reasonLabel(t.reason)}</Text>
+                      <Text size="small">{pointsReasonLabel(t.reason)}</Text>
                       <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
                         {new Date(t.createdAt).toLocaleDateString('vi-VN')}
                       </Text>
@@ -358,6 +643,267 @@ export default function LoyaltyPage() {
           </Box>
         </>
       ) : null}
+
+      {/* Modal Thẻ thành viên số (mã QR) */}
+      {showMemberCard && (
+        <Box
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 3000,
+            background: 'rgba(26,26,23,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+          }}
+          onClick={() => setShowMemberCard(false)}
+        >
+          <Box
+            className="tubu-pop"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--neutral-0)',
+              borderRadius: 'var(--radius-xl)',
+              padding: '24px 20px',
+              maxWidth: 340,
+              width: '100%',
+              boxShadow: 'var(--shadow-md)',
+              position: 'relative',
+            }}
+          >
+            <Box
+              style={{
+                position: 'absolute',
+                top: 14,
+                right: 14,
+                cursor: 'pointer',
+                padding: 4,
+              }}
+              onClick={() => setShowMemberCard(false)}
+            >
+              <X size={20} color="var(--neutral-400)" />
+            </Box>
+
+            <Box style={{ textAlign: 'center' }}>
+              <Text bold size="normal" style={{ color: 'var(--neutral-900)' }}>
+                Thẻ Thành Viên Tubu
+              </Text>
+              <Box
+                mt={2}
+                px={3}
+                py={1}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: style.bg,
+                  borderRadius: 'var(--radius-full)',
+                }}
+              >
+                <Text style={{ fontSize: 14 }}>{style.emoji}</Text>
+                <Text bold size="xSmall" style={{ color: style.color }}>
+                  Hạng {tierName} · {formatPoints(data?.pointsBalance ?? 0)} Xanh
+                </Text>
+              </Box>
+            </Box>
+
+            {/* Mã QR THẬT của memberCode — đúng chuỗi mà /loyalty/staff/scan-member nhận (khớp chính xác). */}
+            <Box
+              mt={4}
+              p={3}
+              style={{
+                background: 'var(--neutral-50)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--neutral-200)',
+                textAlign: 'center',
+              }}
+            >
+              {memberCardQ.isLoading ? (
+                <Box flex justifyContent="center">
+                  <Skeleton style={{ width: 180, height: 180, borderRadius: 12 }} />
+                </Box>
+              ) : memberCardQ.isError || !memberCardQ.data ? (
+                <Box flex flexDirection="column" alignItems="center" style={{ gap: 8 }}>
+                  <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+                    Chưa tải được mã thành viên: {getErrorMessage(memberCardQ.error)}
+                  </Text>
+                  <Button size="small" variant="secondary" onClick={() => void memberCardQ.refetch()}>
+                    Thử lại
+                  </Button>
+                </Box>
+              ) : (
+                <>
+                  <Box flex justifyContent="center">
+                    <QrCode value={memberCardQ.data.memberCode} size={180} />
+                  </Box>
+
+                  {/* Mã thành viên (gõ tay được nếu không quét) & nút chép */}
+                  <Box mt={3} flex alignItems="center" justifyContent="center" style={{ gap: 8 }}>
+                    <Text
+                      bold
+                      size="normal"
+                      style={{ letterSpacing: '2px', fontFamily: 'monospace', color: 'var(--neutral-800)' }}
+                    >
+                      {memberCardQ.data.memberCode}
+                    </Text>
+                    <Box
+                      className="tubu-press"
+                      onClick={async () => {
+                        const code = memberCardQ.data?.memberCode;
+                        if (!code) return;
+                        const ok = await copyText(code);
+                        haptic('light');
+                        if (!ok) {
+                          openSnackbar({ text: 'Không sao chép được — hãy đọc mã cho nhân viên.', type: 'error' });
+                          return;
+                        }
+                        setCopiedCode(true);
+                        openSnackbar({ text: 'Đã sao chép mã thành viên', type: 'success' });
+                        setTimeout(() => setCopiedCode(false), 2000);
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 'var(--radius-full)',
+                        background: copiedCode ? 'var(--leaf-50)' : 'var(--neutral-100)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <Copy size={12} color={copiedCode ? 'var(--leaf-700)' : 'var(--neutral-600)'} />
+                      <Text size="xSmall" style={{ color: copiedCode ? 'var(--leaf-700)' : 'var(--neutral-600)', fontSize: 11 }}>
+                        {copiedCode ? 'Đã chép' : 'Chép'}
+                      </Text>
+                    </Box>
+                  </Box>
+                </>
+              )}
+            </Box>
+
+            {memberCardQ.data && (
+              <Box mt={3} p={2} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)' }}>
+                <Text size="xSmall" style={{ color: 'var(--leaf-800)', textAlign: 'center', lineHeight: '16px' }}>
+                  💡 {memberCardHint(memberCardQ.data)}
+                </Text>
+              </Box>
+            )}
+
+            <Button
+              fullWidth
+              onClick={() => setShowMemberCard(false)}
+              style={{
+                marginTop: 16,
+                background: 'var(--neutral-900)',
+                color: 'var(--neutral-0)',
+                borderRadius: 'var(--radius-full)',
+              }}
+            >
+              Đóng
+            </Button>
+          </Box>
+        </Box>
+      )}
+
+      {/* Modal Xác nhận đổi voucher */}
+      {confirmReward && (
+        <Box
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 3000,
+            background: 'rgba(26,26,23,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+          }}
+          onClick={() => setConfirmReward(null)}
+        >
+          <Box
+            className="tubu-pop"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--neutral-0)',
+              borderRadius: 'var(--radius-xl)',
+              padding: '24px 20px',
+              maxWidth: 320,
+              width: '100%',
+              boxShadow: 'var(--shadow-md)',
+              textAlign: 'center',
+            }}
+          >
+            <Box
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 'var(--radius-full)',
+                background: 'var(--leaf-50)',
+                display: 'grid',
+                placeItems: 'center',
+                margin: '0 auto',
+              }}
+            >
+              <Gift size={24} color="var(--leaf-600)" />
+            </Box>
+
+            <Text bold size="normal" style={{ marginTop: 12, color: 'var(--neutral-900)' }}>
+              Xác nhận đổi ưu đãi
+            </Text>
+
+            <Box mt={3} p={3} style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', textAlign: 'left' }}>
+              <Text bold size="small" style={{ color: 'var(--neutral-900)' }}>
+                {confirmReward.title}
+              </Text>
+              <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
+                {confirmReward.description}
+              </Text>
+              <Box mt={2} pt={2} flex justifyContent="space-between" style={{ borderTop: '1px dashed var(--neutral-200)' }}>
+                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Điểm cần trừ:</Text>
+                <Text bold size="small" style={{ color: 'var(--leaf-700)' }}>
+                  -{confirmReward.pointsCost} Xanh
+                </Text>
+              </Box>
+              <Box mt={1} flex justifyContent="space-between">
+                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Điểm còn lại:</Text>
+                <Text bold size="small" style={{ color: 'var(--neutral-800)' }}>
+                  {formatPoints((data?.pointsBalance ?? 0) - confirmReward.pointsCost)} Xanh
+                </Text>
+              </Box>
+            </Box>
+
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 10, lineHeight: '16px' }}>
+              Voucher sau khi đổi sẽ có hạn 30 ngày và xuất hiện ngay trong Kho voucher của bạn.
+            </Text>
+
+            <Box mt={4} flex style={{ gap: 8 }}>
+              <Button
+                fullWidth
+                variant="secondary"
+                disabled={redeemMut.isPending}
+                onClick={() => setConfirmReward(null)}
+                style={{ borderRadius: 'var(--radius-full)' }}
+              >
+                Huỷ
+              </Button>
+              <Button
+                fullWidth
+                disabled={redeemMut.isPending}
+                loading={redeemMut.isPending}
+                onClick={() => doRedeem(confirmReward.id)}
+                style={{
+                  borderRadius: 'var(--radius-full)',
+                  background: 'var(--leaf-600)',
+                  color: 'var(--neutral-0)',
+                }}
+              >
+                Đổi ngay
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      )}
 
       {/* Modal chúc mừng lên hạng (§6.6 #78) */}
       {celebrate && (
@@ -415,15 +961,6 @@ export default function LoyaltyPage() {
       )}
     </Page>
   );
-}
-
-function reasonLabel(reason: string): string {
-  if (reason.startsWith('ORDER_DELIVERED')) return 'Tích điểm từ đơn hàng';
-  if (reason.startsWith('ORDER_REVERSED')) return 'Hoàn ngược điểm (hủy/trả)';
-  if (reason.startsWith('ORDER_REFUND_POINTS')) return 'Hoàn lại điểm đã dùng';
-  if (reason.startsWith('GAME')) return 'Phần thưởng Vườn Xanh';
-  if (reason.startsWith('REVIEW')) return 'Đánh giá sản phẩm';
-  return reason;
 }
 
 function Section({

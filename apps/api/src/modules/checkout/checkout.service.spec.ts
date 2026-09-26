@@ -7,6 +7,7 @@ import type { PricingService } from '../pricing/pricing.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
+import type { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { CoinsService } from '../wallet/coins.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -35,11 +36,12 @@ function build(
     getActiveTouch?: jest.Mock; // override affiliate.getActiveTouch (attribution 3 ngày)
     cartData?: unknown; // override giỏ (test checkout tập con)
     flashSale?: { consumeQuota: jest.Mock; resolveEffective: jest.Mock }; // override FlashSaleService
+    gomdon?: unknown;
   } = {},
 ) {
   const total = opts.total ?? 100;
   const updateMany = jest.fn().mockResolvedValue({ count: opts.decCount ?? 1 });
-  const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
+  const orderCreate = jest.fn().mockImplementation((args: any) => Promise.resolve({ id: 'o1', ...(args?.data ?? {}) }));
   // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
   const executeRaw = opts.executeRaw ?? jest.fn().mockResolvedValue(opts.stockCount ?? 1);
   const prisma = {
@@ -71,6 +73,10 @@ function build(
   const loyalty = { getTierMultiplier: jest.fn().mockResolvedValue(1) } as unknown as LoyaltyService;
   const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
   const pancake = { enqueuePush: jest.fn().mockResolvedValue(undefined) } as unknown as PancakeOrderService;
+  const gomdon = (opts.gomdon ?? {
+    enqueuePush: jest.fn().mockResolvedValue(undefined),
+    isRecyclingEnabled: jest.fn().mockResolvedValue(true),
+  }) as unknown as GomdonOrderService;
   const affiliate = {
     createCommissionForOrder: jest.fn().mockResolvedValue(undefined),
     getActiveTouch: opts.getActiveTouch ?? jest.fn().mockResolvedValue(null),
@@ -86,8 +92,8 @@ function build(
     resolveEffective: jest.fn().mockResolvedValue(new Map()),
   }) as any;
 
-  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, affiliate, coins, config, combo, flashSale);
-  return { svc, prisma, updateMany, orderCreate, executeRaw, total, coins, combo, cart, coupons, flashSale };
+  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, coins, config, combo, flashSale);
+  return { svc, prisma, updateMany, orderCreate, executeRaw, total, coins, combo, cart, coupons, flashSale, pancake, gomdon };
 }
 
 describe('CheckoutService.placeOrder — money safety', () => {
@@ -522,6 +528,93 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
     await expect(
       svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
     ).rejects.toThrow('Vượt giới hạn mua ưu đãi.');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('đơn hàng có hasRecyclingPickup=true → enqueue Gomdon, không enqueue Pancake trực tiếp', async () => {
+    const { svc, orderCreate, gomdon, pancake } = build();
+    const res = await svc.placeOrder('u1', {
+      addressId: 'addr1',
+      paymentMethod: 'COD',
+      hasRecyclingPickup: true,
+      recyclingNote: '1kg vỏ sữa + pin cũ',
+    } as never);
+
+    expect(res).toBeDefined();
+    expect(orderCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          hasRecyclingPickup: true,
+          recyclingNote: '1kg vỏ sữa + pin cũ',
+        }),
+      }),
+    );
+    expect((gomdon as unknown as { enqueuePush: jest.Mock }).enqueuePush).toHaveBeenCalledWith('o1');
+    expect((pancake as unknown as { enqueuePush: jest.Mock }).enqueuePush).not.toHaveBeenCalled();
+  });
+
+  it('đơn hàng không có hasRecyclingPickup (mặc định) → enqueue Pancake, không enqueue Gomdon', async () => {
+    const { svc, orderCreate, gomdon, pancake } = build();
+    const res = await svc.placeOrder('u1', {
+      addressId: 'addr1',
+      paymentMethod: 'COD',
+    } as never);
+
+    expect(res).toBeDefined();
+    expect(orderCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          hasRecyclingPickup: false,
+          recyclingNote: null,
+        }),
+      }),
+    );
+    expect((pancake as unknown as { enqueuePush: jest.Mock }).enqueuePush).toHaveBeenCalledWith('o1');
+    expect((gomdon as unknown as { enqueuePush: jest.Mock }).enqueuePush).not.toHaveBeenCalled();
+  });
+
+  it('tính năng thu gom TẮT (chưa cấu hình Gomdon / admin chưa bật) mà client gửi hasRecyclingPickup=true → BadRequest, không tạo đơn', async () => {
+    const gomdon = { enqueuePush: jest.fn(), isRecyclingEnabled: jest.fn().mockResolvedValue(false) };
+    const { svc, orderCreate } = build({ gomdon });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', hasRecyclingPickup: true } as never),
+    ).rejects.toThrow('chưa mở');
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(gomdon.enqueuePush).not.toHaveBeenCalled();
+  });
+
+  it('không chọn thu gom → không đọc cờ tính năng (client cũ/không gửi field vẫn đặt được khi tính năng tắt)', async () => {
+    const gomdon = { enqueuePush: jest.fn(), isRecyclingEnabled: jest.fn().mockResolvedValue(false) };
+    const { svc, orderCreate } = build({ gomdon });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', hasRecyclingPickup: false } as never);
+    expect(orderCreate).toHaveBeenCalled();
+    expect(gomdon.isRecyclingEnabled).not.toHaveBeenCalled();
+  });
+
+  it('enqueue Gomdon lỗi (Redis) → KHÔNG đẩy thẳng Pancake (tránh vừa có vận đơn Gomdon vừa note "tạo tay"), đơn vẫn tạo', async () => {
+    const gomdon = { enqueuePush: jest.fn().mockRejectedValue(new Error('redis')), isRecyclingEnabled: jest.fn().mockResolvedValue(true) };
+    const { svc, pancake } = build({ gomdon });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', hasRecyclingPickup: true } as never),
+    ).resolves.toBeDefined();
+    expect((pancake as unknown as { enqueuePush: jest.Mock }).enqueuePush).not.toHaveBeenCalled();
+  });
+
+  it('idempotency: gửi lại cùng key nhưng bật/tắt thu gom khác lần trước → BadRequest, không trả đơn cũ', async () => {
+    const { svc, prisma, orderCreate } = build();
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+      id: 'existing',
+      userId: 'u1',
+      paymentMethod: 'COD',
+      hasRecyclingPickup: false,
+      shippingAddress: {
+        recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
+        provinceCode: '1', districtCode: '2', wardCode: '3',
+      },
+    });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', hasRecyclingPickup: true } as never, 'key-r'),
+    ).rejects.toThrow('thông tin khác');
     expect(orderCreate).not.toHaveBeenCalled();
   });
 });

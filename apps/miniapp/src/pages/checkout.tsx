@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Page, Text, Button, Input, Sheet, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Ticket, ChevronRight, X, Sprout, AlertCircle } from 'lucide-react';
+import { Ticket, ChevronRight, X, Sprout, AlertCircle, Recycle } from 'lucide-react';
 import type { OrderDTO } from '@tubutree/shared-types';
 import { getAddresses, getCart, checkoutQuote, placeOrder } from '../services/shop-api';
 import { getWallet, getLoyalty } from '../services/account-api';
@@ -13,7 +13,8 @@ import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
-import { formatVnd } from '../utils/format';
+import { formatVnd, recyclingCheckoutFields, recyclingMaxKg } from '../utils/format';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { isInvoiceValid, shouldFallbackToCod } from '../utils/checkout-rules';
 import {
@@ -41,6 +42,12 @@ export default function CheckoutPage() {
   const [payment, setPayment] = useState('COD');
   const [usePoints, setUsePoints] = useState(false);
   const [note, setNote] = useState('');
+  const [hasRecyclingPickup, setHasRecyclingPickup] = useState(false);
+  const [recyclingNote, setRecyclingNote] = useState('');
+  // Chỉ hiện lựa chọn thu gom khi BE xác nhận tính năng đang chạy (Gomdon đã cấu hình + admin bật).
+  // Chưa tải xong / API cũ không có field → coi như tắt: không hứa thu gom khi không ai đi thu.
+  const publicConfig = usePublicConfig();
+  const recyclingEnabled = publicConfig.isLoaded && publicConfig.recyclingEnabled === true;
   const [voucherSheetOpen, setVoucherSheetOpen] = useState(false);
   const [summarySheetOpen, setSummarySheetOpen] = useState(false);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
@@ -128,6 +135,8 @@ export default function CheckoutPage() {
           paymentMethod: payment,
           pointsToUse,
           note: note.trim() || undefined,
+          // Chỉ gửi khi bật + chọn (body mặc định y hệt bản cũ — xem recyclingCheckoutFields).
+          ...recyclingCheckoutFields(recyclingEnabled, hasRecyclingPickup, recyclingNote),
           invoiceRequest: wantInvoice
             ? {
                 taxCode: invoice.taxCode.trim(),
@@ -256,6 +265,7 @@ export default function CheckoutPage() {
     : (cart.data?.items ?? []);
   const previewSubtotal = shownItems.reduce((s, it) => s + it.total, 0);
   const previewDiscount = cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;
+  const maxRecycleKg = recyclingMaxKg(shownItems);
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 110 }}>
@@ -444,6 +454,79 @@ export default function CheckoutPage() {
         </Text>
         <Input placeholder={vi.checkout.notePlaceholder} value={note} onChange={(e) => setNote(e.target.value)} />
       </Box>
+
+      {/* ── Thu gom vật liệu tái chế (Eco-Card) — chỉ khi tính năng đang bật ── */}
+      {recyclingEnabled && (
+        <Box id="checkout-recycling" p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+          <Box
+            role="checkbox"
+            aria-label="Gửi lại vật liệu tái chế"
+            aria-checked={hasRecyclingPickup}
+            className="tubu-press"
+            onClick={() => {
+              haptic('light');
+              setHasRecyclingPickup((v) => !v);
+            }}
+            flex
+            alignItems="center"
+            justifyContent="space-between"
+            style={{ minHeight: 44, cursor: 'pointer' }}
+          >
+            <Box flex alignItems="center" style={{ gap: 10 }}>
+              <Box
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--leaf-50)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  flex: '0 0 auto',
+                }}
+              >
+                <Recycle size={20} color="var(--leaf-600)" />
+              </Box>
+              <Box>
+                <Text bold size="small" style={{ color: 'var(--neutral-900)' }}>
+                  Gửi lại vật liệu tái chế (Bảo vệ môi trường)
+                </Text>
+                <Text size="xSmall" style={{ color: 'var(--leaf-700)', fontWeight: 600, marginTop: 2 }}>
+                  Thu gom tối đa ~{maxRecycleKg} kg
+                </Text>
+              </Box>
+            </Box>
+            <ToggleVisual on={hasRecyclingPickup} />
+          </Box>
+
+          {hasRecyclingPickup && (
+            <Box flex flexDirection="column" style={{ gap: 10, marginTop: 12 }}>
+              <Box
+                p={3}
+                style={{
+                  background: 'var(--leaf-50)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--leaf-200)',
+                }}
+              >
+                <Text size="xSmall" style={{ color: 'var(--leaf-900)', lineHeight: '18px' }}>
+                  Chúng tôi sẽ thu gom lại các vật liệu tái chế được đóng gói gọn gàng như bọc nilong, hoặc quần áo cũ, pin, vỏ sữa làm sạch -&gt; giúp bảo vệ môi trường. Số kg thu gom tối đa bằng số kg của đơn hàng (~{maxRecycleKg} kg).
+                </Text>
+              </Box>
+              {payment !== 'COD' && payment !== 'WALLET' && payment !== 'XU' && (
+                <Text size="xSmall" style={{ color: 'var(--neutral-600)', lineHeight: '18px' }}>
+                  Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.
+                </Text>
+              )}
+              <Input
+                placeholder="Ghi chú loại vật dụng muốn gửi (vd: 3 cục pin, vỏ hộp sữa...)"
+                value={recyclingNote}
+                maxLength={200}
+                onChange={(e) => setRecyclingNote(e.target.value)}
+              />
+            </Box>
+          )}
+        </Box>
+      )}
 
       {/* ── Hoá đơn VAT (spec §6.3) ── */}
       <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>

@@ -12,11 +12,15 @@ import {
   createAddress,
   checkoutQuote,
   placeOrder,
+  getPublicConfig,
   formatVnd,
   type AddressDTO,
   type OrderDTO,
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
+import { recyclingCheckoutFields } from '@/lib/recycling';
+import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
+import { RecyclingStatus } from '@/components/recycling-status';
 
 const VN_PHONE = /^(0|\+84)\d{9}$/;
 // Tỉnh/phường chọn qua GeoPicker (mã Pancake thật, hệ 2 cấp — không còn quận/huyện);
@@ -55,6 +59,12 @@ export default function CheckoutPage() {
   // có quote chính là render cuối của luồng khởi động (refetchOnWindowFocus đang tắt) — ô "Dùng
   // Điểm Xanh" sẽ KHÔNG BAO GIỜ hiện, tức tính năng vừa thêm không dùng được.
   const [pointsBalance, setPointsBalance] = useState(0);
+  // Thu gom vật liệu tái chế: CHỈ hiện khi BE xác nhận tính năng đang chạy (Gomdon đã cấu hình + admin
+  // bật). Chưa tải xong / lỗi / API cũ không có field → coi như tắt: không hứa thu gom khi không ai đi thu.
+  const publicQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
+  const recyclingEnabled = publicQ.data?.recyclingEnabled === true;
+  const [hasRecyclingPickup, setHasRecyclingPickup] = useState(false);
+  const [recyclingNote, setRecyclingNote] = useState('');
 
   const quoteQ = useQuery({
     queryKey: ['quote', addressId, ctvSlug, usePoints],
@@ -77,6 +87,8 @@ export default function CheckoutPage() {
           pointsToUse: usePoints ? pointsBalance : 0,
           storefrontSlug: ctvSlug,
           referralCode: sfCtx.referralCode ?? undefined,
+          // Chỉ có khoá khi bật + chọn (API forbidNonWhitelisted; tắt thì body y hệt bản cũ).
+          ...recyclingCheckoutFields(recyclingEnabled, hasRecyclingPickup, recyclingNote),
         },
         idemKey,
       ),
@@ -120,6 +132,11 @@ export default function CheckoutPage() {
           <p className="mt-2 text-neutral-600">
             Mã đơn <span className="font-semibold text-leaf-700">{placed.code}</span> · {formatVnd(placed.total)}
           </p>
+          {placed.hasRecyclingPickup && (
+            <div className="mx-auto mt-3 max-w-md text-left">
+              <RecyclingStatus order={placed} />
+            </div>
+          )}
           <div className="mt-6 flex justify-center gap-3">
             <Link href="/tai-khoan" className="rounded-md bg-primary-600 px-5 py-2.5 font-medium text-white">
               Xem đơn của tôi
@@ -173,6 +190,17 @@ export default function CheckoutPage() {
               ))}
             </div>
           </section>
+
+          {recyclingEnabled && (
+            <RecyclingCheckoutSection
+              selected={hasRecyclingPickup}
+              onSelectedChange={setHasRecyclingPickup}
+              note={recyclingNote}
+              onNoteChange={setRecyclingNote}
+              paymentMethod={payment}
+              disabled={place.isPending}
+            />
+          )}
         </div>
 
         <div className="h-fit rounded-lg border border-neutral-100 bg-white p-4">

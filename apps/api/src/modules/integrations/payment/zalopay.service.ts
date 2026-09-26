@@ -3,14 +3,19 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import axios from 'axios';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import type { Env } from '../../../config/env.validation';
+import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
+import { enqueueGomdonPush } from '../gomdon/gomdon-queue';
 
 /**
  * ZaloPay v2 (Build Spec §10.1). Tạo đơn → trả order_url + zp_trans_token cho SDK mini app.
@@ -29,6 +34,9 @@ export class ZalopayService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     config: ConfigService<Env, true>,
+    // Optional: test dựng tay 3 tham số vẫn chạy. Đơn thu gom tái chế trả ZaloPay: chỉ đặt vận đơn
+    // Gomdon (bưu tá tới lấy hàng) SAU khi tiền về.
+    @Optional() @InjectQueue(QUEUE_GOMDON_PUSH) private readonly gomdonQueue?: Queue,
   ) {
     this.appId = config.get('ZALOPAY_APP_ID', { infer: true });
     this.key1 = config.get('ZALOPAY_KEY1', { infer: true });
@@ -152,6 +160,13 @@ export class ZalopayService {
       });
       if (flip.count > 0) {
         this.logger.log(`ZaloPay xác nhận thanh toán đơn ${order.code} → PAID`);
+        if (order.hasRecyclingPickup && this.gomdonQueue) {
+          // Lỗi enqueue không được làm ZaloPay gửi lại callback (đã lật PAID) — GomdonReconcileService
+          // quét đơn AWAITING_PAYMENT đã PAID và enqueue lại.
+          await enqueueGomdonPush(this.gomdonQueue, order.id).catch((err) =>
+            this.logger.error(`Enqueue vận đơn Gomdon sau thanh toán lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`),
+          );
+        }
         await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
       }
     }

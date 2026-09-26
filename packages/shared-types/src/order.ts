@@ -68,6 +68,23 @@ export interface OrderDTO {
   invoiceStatus?: InvoiceStatus | null;
   invoiceUrl?: string | null;
   note?: string | null;
+  /** Khách chọn "gửi lại vật liệu tái chế" (vận đơn đổi hàng Gomdon/BestExpress). */
+  hasRecyclingPickup?: boolean;
+  recyclingNote?: string | null;
+  gomdonOrderId?: string | null;
+  /** Mã vận đơn BestExpress (hiển thị cho khách/kho). */
+  gomdonPartnerCode?: string | null;
+  /**
+   * Mã trạng thái Gomdon "1".."12" (1 tạo đơn, 2 huỷ, 3 đã lấy hàng, 4-5 đang giao, 6 chuyển hoàn,
+   * 7 giao thành công, 8 đã hoàn, 9 hỏng/mất, 10 lấy không thành công, 11 giao thất bại, 12 hoàn thất bại)
+   * HOẶC trạng thái nội bộ trước khi có vận đơn: AWAITING_PAYMENT | CREATING | NEEDS_MANUAL_CHECK |
+   * FAILED | NOT_CONFIGURED. null = chưa xử lý.
+   */
+  gomdonStatus?: string | null;
+  /** Kết quả huỷ vận đơn Gomdon khi đơn bị huỷ: CANCELLED | FAILED | TOO_LATE | NOT_NEEDED. */
+  gomdonCancelStatus?: string | null;
+  /** Thời điểm đơn chuyển DELIVERED — mốc tính hạn đổi/trả (ISO). */
+  deliveredAt?: string | null;
   items: OrderItemDTO[];
   createdAt: string;
   updatedAt: string;

@@ -5,6 +5,8 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -16,6 +18,13 @@ import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
 class CreditPaymentDto {
   @IsInt() @Min(1) amount!: number;
   @IsOptional() @IsString() note?: string;
+}
+
+export class ClaimRewardDto {
+  /** Kỳ muốn nhận thưởng: 'Q3/2026' (thưởng quý) | '2026' (thưởng năm). Bỏ trống = kỳ hiện tại. */
+  @IsOptional() @IsString() @Matches(/^(Q[1-4]\/\d{4}|\d{4})$/, { message: 'Kỳ thưởng không hợp lệ.' })
+  periodKey?: string;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
 }
 
 class TemplateItemDto {
@@ -84,6 +93,16 @@ export class DealerController {
   @Get('rewards')
   rewards(@CurrentUser('sub') userId: string) {
     return this.dealer.rewardsProgress(userId);
+  }
+
+  // Gửi yêu cầu nhận thưởng mốc (lưu DealerRewardClaim, idempotent theo đại lý + kỳ + phần thưởng).
+  @Post('rewards/:id/claim')
+  claimReward(
+    @CurrentUser('sub') userId: string,
+    @Param('id') rewardId: string,
+    @Body() dto: ClaimRewardDto,
+  ) {
+    return this.dealer.claimReward(userId, rewardId, { periodKey: dto.periodKey, note: dto.note });
   }
 
   @Get('templates')

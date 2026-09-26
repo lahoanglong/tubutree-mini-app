@@ -141,3 +141,80 @@ describe('PancakeOrderService.enqueuePush', () => {
     expect(add).toHaveBeenCalled();
   });
 });
+
+describe('PancakeOrderService - note + tag cho đơn thu gom tái chế (Gomdon)', () => {
+  async function pushed(overrides: Record<string, unknown>, weights: { id: string; weight: number }[] = [], cfgValue?: unknown) {
+    const order = makeOrder(overrides);
+    const createOrder = jest.fn().mockResolvedValue({ id: 'pk-x' });
+    const prisma = {
+      order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order), update: jest.fn() },
+      variation: { findMany: jest.fn().mockResolvedValue(weights) },
+    } as unknown as PrismaService;
+    const client = { isConfigured: jest.fn().mockReturnValue(true), createOrder } as unknown as PancakeClient;
+    const systemConfig = cfgValue === undefined ? undefined : ({ get: jest.fn().mockResolvedValue(cfgValue) } as never);
+    const svc = new PancakeOrderService(prisma, client, { add: jest.fn() } as never, systemConfig);
+    await svc.pushOrder('o1');
+    return createOrder.mock.calls[0][0] as { note: string; tags: string[] };
+  }
+
+  it('đơn thường không thu gom → note chỉ có Order code, tag cũ giữ nguyên', async () => {
+    const body = await pushed({ hasRecyclingPickup: false });
+    expect(body.note).toBe('Order code: TUBU1');
+    expect(body.tags).toEqual(['MINIAPP', 'RETAIL']);
+  });
+
+  it('có mã Gomdon → note có mã + "KHÔNG TẠO VẬN ĐƠN KHÁC", tag máy đọc RECYCLING + GOMDON', async () => {
+    const body = await pushed(
+      { hasRecyclingPickup: true, recyclingNote: 'Vỏ hộp sữa + 4 viên pin', gomdonPartnerCode: 'BE-999', gomdonStatus: '1', items: [{ variationId: 'v1', quantity: 2 }] },
+      [{ id: 'v1', weight: 1200 }],
+    );
+    expect(body.note).toBe(
+      'Order code: TUBU1 | [ĐƠN ĐỔI HÀNG - THU GOM RÁC TÁI CHẾ TỐI ĐA 2.4kg - Ghi chú: Vỏ hộp sữa + 4 viên pin] Mã VĐ Gomdon: BE-999 [ĐÃ CÓ VẬN ĐƠN - KHÔNG TẠO VẬN ĐƠN KHÁC]',
+    );
+    expect(body.tags).toEqual(['MINIAPP', 'RETAIL', 'RECYCLING', 'GOMDON']);
+  });
+
+  it('không có ghi chú riêng → không có "- Ghi chú:" thừa', async () => {
+    const body = await pushed(
+      { hasRecyclingPickup: true, recyclingNote: null, gomdonPartnerCode: 'BE-888', items: [{ variationId: 'v1', quantity: 1 }] },
+      [{ id: 'v1', weight: 800 }],
+    );
+    expect(body.note).toContain('[ĐƠN ĐỔI HÀNG - THU GOM RÁC TÁI CHẾ TỐI ĐA 0.8kg] Mã VĐ Gomdon: BE-888');
+  });
+
+  it('FAILED/NOT_CONFIGURED (chắc chắn chưa có vận đơn) → cảnh báo tạo tay, tag RECYCLING không có GOMDON', async () => {
+    for (const gomdonStatus of ['FAILED', 'NOT_CONFIGURED']) {
+      const body = await pushed(
+        { hasRecyclingPickup: true, recyclingNote: 'Áo quần cũ', gomdonPartnerCode: null, gomdonStatus, items: [{ variationId: 'v1', quantity: 1 }] },
+        [{ id: 'v1', weight: 500 }],
+      );
+      expect(body.note).toBe('Order code: TUBU1 | [ĐƠN ĐỔI HÀNG - THU GOM RÁC TÁI CHẾ TỐI ĐA 0.5kg - Ghi chú: Áo quần cũ] [LỖI TẠO GOMDON - CẦN TẠO VẬN ĐƠN BẰNG TAY]');
+      expect(body.tags).toEqual(['MINIAPP', 'RETAIL', 'RECYCLING']);
+    }
+  });
+
+  it('NEEDS_MANUAL_CHECK (không rõ đã tạo chưa) → "KIỂM TRA GOMDON" thay vì "tạo tay"', async () => {
+    const body = await pushed({ hasRecyclingPickup: true, gomdonStatus: 'NEEDS_MANUAL_CHECK', gomdonPartnerCode: null }, []);
+    expect(body.note).toContain('[KIỂM TRA GOMDON (mã đơn TUBU1) TRƯỚC KHI TẠO VẬN ĐƠN TAY]');
+    expect(body.note).not.toContain('CẦN TẠO VẬN ĐƠN BẰNG TAY');
+  });
+
+  it('AWAITING_PAYMENT (chuyển khoản chưa về) → "CHỜ THANH TOÁN", kho không tạo vận đơn khác', async () => {
+    const body = await pushed({ hasRecyclingPickup: true, gomdonStatus: 'AWAITING_PAYMENT', gomdonPartnerCode: null }, []);
+    expect(body.note).toContain('[CHỜ THANH TOÁN - VẬN ĐƠN GOMDON TỰ TẠO SAU KHI KHÁCH THANH TOÁN, KHÔNG TẠO VẬN ĐƠN KHÁC]');
+  });
+
+  it('variation 0 gram → fallback 500g; fallback đọc từ shipping.gomdon.config (cùng số với vận đơn Gomdon)', async () => {
+    const a = await pushed(
+      { hasRecyclingPickup: true, gomdonPartnerCode: 'BE-7', items: [{ variationId: 'v1', quantity: 2 }] },
+      [{ id: 'v1', weight: 0 }],
+    );
+    expect(a.note).toContain('TỐI ĐA 1.0kg');
+    const b = await pushed(
+      { hasRecyclingPickup: true, gomdonPartnerCode: 'BE-7', items: [{ variationId: 'v1', quantity: 2 }] },
+      [{ id: 'v1', weight: 0 }],
+      { defaultWeightFallback: 800 },
+    );
+    expect(b.note).toContain('TỐI ĐA 1.6kg');
+  });
+});

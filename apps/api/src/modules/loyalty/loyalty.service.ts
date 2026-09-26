@@ -1,9 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { MembershipTier, Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
+import { MembershipTier, PosPointCredit, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible } from '../coupons/coupon-scope';
 import { decideTier } from './tier-policy';
+import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
 
 /**
  * Loyalty core (Build Spec §6.6). Phase 1 dùng cho vòng đời đơn:
@@ -11,6 +20,8 @@ import { decideTier } from './tier-policy';
  *  - reverseOrderPoints khi CANCELLED/RETURNED
  *  - recalcTier theo điểm hoặc chi tiêu 12 tháng
  * Redemption/voucher endpoints mở rộng ở Phase 2.
+ * CNV Loyalty Parity (2026-09): đổi quà lấy voucher, điểm danh 7 ngày (bảng loyalty_check_ins
+ * RIÊNG, không dùng GameProfile), thẻ thành viên số, tích điểm hoá đơn tại quầy (POS, mặc định tắt).
  */
 @Injectable()
 export class LoyaltyService {
@@ -219,11 +230,8 @@ export class LoyaltyService {
     // bị phạt, trong khi doc-comment và FE ("từ X điểm") đều mô tả là điểm TÍCH LUỸ
     // (P2, docs/2026-09-08-review-progress.md). Cùng cửa sổ 12 tháng với tiêu chí chi tiêu nên
     // hạng vẫn phản ánh mức độ hoạt động gần đây, không thành hạng vĩnh viễn.
-    const earnedAgg = await this.prisma.pointsTransaction.aggregate({
-      where: { userId, delta: { gt: 0 }, createdAt: { gte: since } },
-      _sum: { delta: true },
-    });
-    const earned12m = earnedAgg._sum.delta ?? 0;
+    // Loại các nguồn điểm không phải mua hàng (TIER_EXCLUDED_REASON_PREFIXES) — xem tierPointsWhere.
+    const earned12m = await this.tierPoints(userId, since);
 
     let qualified = tiers[0];
     for (const t of tiers) {
@@ -286,6 +294,35 @@ export class LoyaltyService {
     return processed;
   }
 
+  /**
+   * Điều kiện "điểm xét hạng" 12 tháng. Hạng là hạng theo CHI TIÊU: seed đặt minPoints đúng bằng
+   * minSpending / loyalty.vnd_per_point (500 điểm ↔ 5 triệu, 2.000 ↔ 20 triệu, 5.000 ↔ 50 triệu),
+   * nên điểm chỉ là thước đo thay cho tiền đã mua. Những nguồn điểm KHÔNG phản ánh chi tiêu thì
+   * không được đẩy hạng (TIER_EXCLUDED_REASON_PREFIXES):
+   *  - DAILY_CHECKIN: bấm điểm danh mỗi ngày — không mua gì vẫn lên Lộc Biếc/Đại Thụ/Cổ Thụ
+   *    (freeship toàn shop, ×2 điểm, giảm 5% mọi đơn).
+   *  - POS_OFFLINE_ORDER: nhân viên nhập tay tổng hoá đơn, hệ thống không đối chiếu được hoá đơn.
+   *  - ORDER_REFUND_POINTS: hoàn lại điểm ĐÃ TIÊU khi huỷ đơn — vòng đặt-dùng-điểm-rồi-huỷ lặp lại
+   *    sẽ cộng dồn "điểm tích" vô hạn dù số dư không đổi.
+   * Các dòng này vẫn là điểm tiêu được bình thường, chỉ không tính vào xét hạng.
+   */
+  private tierPointsWhere(userId: string, since: Date): Prisma.PointsTransactionWhereInput {
+    return {
+      userId,
+      delta: { gt: 0 },
+      createdAt: { gte: since },
+      NOT: TIER_EXCLUDED_REASON_PREFIXES.map((p) => ({ reason: { startsWith: p } })),
+    };
+  }
+
+  private async tierPoints(userId: string, since: Date): Promise<number> {
+    const agg = await this.prisma.pointsTransaction.aggregate({
+      where: this.tierPointsWhere(userId, since),
+      _sum: { delta: true },
+    });
+    return agg._sum.delta ?? 0;
+  }
+
   /** Multiplier điểm của hạng hiện tại (1 nếu chưa có hạng). */
   async getTierMultiplier(tierId?: string | null): Promise<number> {
     if (!tierId) return 1;
@@ -305,9 +342,16 @@ export class LoyaltyService {
     const current = user.tier ?? tiers[0] ?? null;
     const currentSort = current?.sortOrder ?? -1;
     const next = tiers.find((t) => t.sortOrder > currentSort);
+    // "Còn X điểm để lên hạng" phải tính theo ĐÚNG điểm mà recalcTier xét (điểm tích từ mua hàng
+    // 12 tháng), không theo số dư: số dư có cả điểm danh/POS — hiển thị theo số dư sẽ hứa lên hạng
+    // mà backend không bao giờ cho.
+    const since = new Date();
+    since.setMonth(since.getMonth() - 12);
+    const tierPoints = await this.tierPoints(userId, since);
 
     return {
       pointsBalance: user.pointsBalance,
+      tierPoints,
       tier: current
         ? {
             id: current.id,
@@ -321,7 +365,7 @@ export class LoyaltyService {
             id: next.id,
             name: next.name,
             minPoints: next.minPoints,
-            pointsToGo: Math.max(0, next.minPoints - user.pointsBalance),
+            pointsToGo: Math.max(0, next.minPoints - tierPoints),
           }
         : null,
       tiers: tiers.map((t) => ({
@@ -382,4 +426,719 @@ export class LoyaltyService {
     }
     return result;
   }
+
+  /** Danh mục phần thưởng đổi bằng Điểm Xanh (Reward Catalog). */
+  async getRewardCatalog(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    return {
+      pointsBalance: user.pointsBalance,
+      rewards: DEFAULT_REWARD_CATALOG.map((r) => ({
+        ...r,
+        canRedeem: user.pointsBalance >= r.pointsCost,
+      })),
+    };
+  }
+
+  /**
+   * Đổi Điểm Xanh lấy Voucher cá nhân (HSD 30 ngày).
+   *
+   * RACE: bản WIP đọc số dư trong tx (READ COMMITTED, không khoá) rồi decrement vô điều kiện →
+   * 5 request song song với 100 điểm cùng đọc 100, cùng trừ → số dư -400 và 5 voucher 100k.
+   * Fix: GIÀNH điểm bằng 1 câu updateMany có guard `pointsBalance >= giá` (atomic, cùng mẫu
+   * checkout.service.ts / game creditPoints) — count=0 là không đủ điểm, không ghi gì thêm.
+   * Coupon + dòng ledger chỉ tạo SAU khi đã giành được điểm, trong cùng transaction.
+   */
+  async redeemReward(userId: string, rewardId: string) {
+    const reward = DEFAULT_REWARD_CATALOG.find((r) => r.id === rewardId);
+    if (!reward) {
+      throw new NotFoundException(`Phần thưởng "${rewardId}" không tồn tại.`);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const dec = await tx.user.updateMany({
+        where: { id: userId, pointsBalance: { gte: reward.pointsCost } },
+        data: { pointsBalance: { decrement: reward.pointsCost } },
+      });
+      if (dec.count === 0) {
+        const cur = await tx.user.findUnique({ where: { id: userId }, select: { pointsBalance: true } });
+        throw new BadRequestException(
+          `Bạn cần ${reward.pointsCost} Điểm Xanh để đổi ưu đãi này (hiện có ${cur?.pointsBalance ?? 0} điểm).`,
+        );
+      }
+
+      const endAt = new Date();
+      endAt.setDate(endAt.getDate() + 30);
+      const coupon = await tx.coupon.create({
+        data: {
+          code: rewardCouponCode(reward),
+          type: reward.type,
+          value: reward.value,
+          minOrder: reward.minOrder ?? null,
+          maxDiscount: reward.maxDiscount ?? null,
+          startAt: new Date(),
+          endAt,
+          usageLimit: 1,
+          perUserLimit: 1,
+          scope: 'USER_GROUP',
+          scopeMeta: { userId },
+        },
+      });
+
+      await tx.pointsTransaction.create({
+        data: {
+          userId,
+          delta: -reward.pointsCost,
+          reason: `LOYALTY_REDEEM_VOUCHER:${reward.id}`,
+          refType: 'REWARD',
+          refId: coupon.id,
+        },
+      });
+
+      // Đọc lại số dư THẬT sau khi trừ (request khác có thể vừa cộng/trừ song song).
+      const after = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { pointsBalance: true } });
+
+      return {
+        success: true,
+        message: `Đổi thành công ${reward.title}!`,
+        pointsSpent: reward.pointsCost,
+        remainingPoints: after.pointsBalance,
+        coupon: {
+          code: coupon.code,
+          type: coupon.type,
+          value: coupon.value,
+          minOrder: coupon.minOrder,
+          maxDiscount: coupon.maxDiscount,
+          endAt: coupon.endAt,
+        },
+      };
+    });
+  }
+
+  // ───────────────────────── Điểm danh hằng ngày ─────────────────────────
+
+  /** Ngày theo giờ Việt Nam (UTC+7, không có DST) dạng 'YYYY-MM-DD'. */
+  private getVnDayKey(d: Date): string {
+    return new Date(d.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+  }
+
+  /** Hạn dùng cho điểm mới cộng — cùng quy tắc loyalty.point_expire_months như creditOrderPoints. */
+  private async pointsExpiresAt(from: Date): Promise<Date> {
+    const raw = await this.config.get<number>('loyalty.point_expire_months', 12);
+    const months = typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 12;
+    const d = new Date(from.getTime());
+    d.setMonth(d.getMonth() + months);
+    return d;
+  }
+
+  /** Số dương từ SystemConfig; sai kiểu/≤0 (admin gõ nhầm) → mặc định an toàn + cảnh báo. */
+  private async positiveConfig(key: string, fallback: number): Promise<number> {
+    const v = await this.config.get<number>(key, fallback);
+    if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
+      this.logger.warn(`SystemConfig ${key}=${JSON.stringify(v)} không hợp lệ → dùng mặc định ${fallback}`);
+      return fallback;
+    }
+    return v;
+  }
+
+  /**
+   * Bảng điểm 7 ngày (SystemConfig `loyalty.checkin_points`, mặc định DEFAULT_CHECKIN_POINTS).
+   * Chỉ nhận đúng 7 số nguyên 0..CHECKIN_MAX_POINTS_PER_DAY — gõ nhầm "1000" không biến nút
+   * điểm danh thành máy in tiền; sai định dạng thì quay về bảng mặc định.
+   */
+  private async getCheckInPointsTable(): Promise<number[]> {
+    const raw = await this.config.get<unknown>('loyalty.checkin_points', DEFAULT_CHECKIN_POINTS);
+    const valid =
+      Array.isArray(raw) &&
+      raw.length === 7 &&
+      raw.every((v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= CHECKIN_MAX_POINTS_PER_DAY);
+    if (!valid) {
+      this.logger.warn(`SystemConfig loyalty.checkin_points=${JSON.stringify(raw)} không hợp lệ → dùng mặc định`);
+      return [...DEFAULT_CHECKIN_POINTS];
+    }
+    return raw as number[];
+  }
+
+  /**
+   * Ngày trong vòng 7 ngày + chuỗi của LẦN ĐIỂM DANH KẾ TIẾP. Dùng chung cho status và
+   * dailyCheckIn để ô "hôm nay" hiển thị luôn đúng là ô sẽ được trả thưởng (bản WIP lệch 1 ngày:
+   * hiển thị N3 +20 nhưng bấm lại trả N4 +25; N7 🎁 nhưng trả N1).
+   */
+  private nextCheckIn(
+    last: { dayKey: string; cycleDay: number; streakDays: number } | null,
+    now: Date,
+  ): { cycleDay: number; streakDays: number } {
+    const yesterday = this.getVnDayKey(new Date(now.getTime() - DAY_MS));
+    if (last && last.dayKey === yesterday) {
+      return { cycleDay: (last.cycleDay % 7) + 1, streakDays: last.streakDays + 1 };
+    }
+    return { cycleDay: 1, streakDays: 1 };
+  }
+
+  private lastCheckIn(userId: string) {
+    return this.prisma.loyaltyCheckIn.findFirst({ where: { userId }, orderBy: { dayKey: 'desc' } });
+  }
+
+  /** Trạng thái điểm danh chuỗi 7 ngày (chỉ ĐỌC; không đụng game_profiles). */
+  async getDailyCheckInStatus(userId: string) {
+    const now = new Date();
+    const today = this.getVnDayKey(now);
+    const [table, last] = await Promise.all([this.getCheckInPointsTable(), this.lastCheckIn(userId)]);
+    const checkedInToday = last?.dayKey === today;
+
+    let currentCycleDay: number;
+    let streakDays: number;
+    if (last && checkedInToday) {
+      currentCycleDay = Math.min(7, Math.max(1, last.cycleDay));
+      streakDays = last.streakDays;
+    } else {
+      const next = this.nextCheckIn(last, now);
+      currentCycleDay = next.cycleDay;
+      streakDays = next.streakDays - 1; // chuỗi còn sống = chuỗi hôm qua; đứt = 0
+    }
+
+    return {
+      checkedInToday,
+      streakDays,
+      currentCycleDay,
+      /** Điểm của ô hôm nay: đã nhận (nếu đã điểm danh) hoặc sẽ nhận khi bấm. */
+      todayPoints: table[currentCycleDay - 1] ?? 0,
+      rewards: table.map((points, idx) => ({
+        day: idx + 1,
+        points,
+        claimed: checkedInToday ? idx + 1 <= currentCycleDay : idx + 1 < currentCycleDay,
+        isToday: idx + 1 === currentCycleDay,
+      })),
+    };
+  }
+
+  /**
+   * Điểm danh nhận Điểm Xanh — tối đa 1 lần/user/ngày giờ VN.
+   *
+   * Trạng thái nằm ở bảng RIÊNG loyalty_check_ins (không dùng GameProfile như bản WIP — xem doc
+   * model LoyaltyCheckIn). Thứ tự trong transaction là chốt chặn race: INSERT dòng điểm danh
+   * (unique userId+dayKey) TRƯỚC, rồi mới ghi ledger + cộng số dư. 10 request song song → 1 cái
+   * insert được, 9 cái ăn P2002 và bị rollback trước khi cộng điểm. Dòng ledger còn có partial
+   * unique (userId, refId=dayKey) WHERE refType='CHECKIN' làm lớp phòng thủ thứ hai.
+   *
+   * Điểm điểm danh có hạn (loyalty.point_expire_months) và KHÔNG tính vào xét hạng.
+   */
+  async dailyCheckIn(userId: string) {
+    const now = new Date();
+    const today = this.getVnDayKey(now);
+    const last = await this.lastCheckIn(userId);
+    if (last?.dayKey === today) {
+      throw new BadRequestException(CHECKIN_ALREADY_MESSAGE);
+    }
+
+    const { cycleDay, streakDays } = this.nextCheckIn(last, now);
+    const table = await this.getCheckInPointsTable();
+    const points = table[cycleDay - 1] ?? 0;
+    const expiresAt = await this.pointsExpiresAt(now);
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.loyaltyCheckIn.create({ data: { userId, dayKey: today, cycleDay, streakDays, points } });
+
+        let totalPoints: number;
+        if (points > 0) {
+          await tx.pointsTransaction.create({
+            data: {
+              userId,
+              delta: points,
+              reason: `DAILY_CHECKIN:DAY_${cycleDay}`,
+              refType: 'CHECKIN',
+              refId: today,
+              expiresAt,
+            },
+          });
+          const u = await tx.user.update({
+            where: { id: userId },
+            data: { pointsBalance: { increment: points } },
+            select: { pointsBalance: true },
+          });
+          totalPoints = u.pointsBalance;
+        } else {
+          const u = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { pointsBalance: true } });
+          totalPoints = u.pointsBalance;
+        }
+
+        return {
+          success: true,
+          cycleDay,
+          streakDays,
+          pointsEarned: points,
+          totalPoints,
+          message:
+            points > 0
+              ? `Điểm danh Ngày ${cycleDay} thành công! Nhận +${points} Điểm Xanh.`
+              : `Điểm danh Ngày ${cycleDay} thành công!`,
+        };
+      });
+    } catch (err) {
+      // P2002 = request song song khác đã điểm danh hôm nay (unique loyalty_check_ins hoặc
+      // partial unique CHECKIN trên ledger) — transaction này đã rollback, không cộng gì.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new BadRequestException(CHECKIN_ALREADY_MESSAGE);
+      }
+      throw err;
+    }
+  }
+
+  // ───────────────────────── Thẻ thành viên & POS ─────────────────────────
+
+  /**
+   * Thông tin Thẻ thành viên số (Digital Member Card).
+   *
+   * memberCode = "TUBU" + referralCode — referralCode là mã DUY NHẤT (unique), sinh ngẫu nhiên,
+   * có sẵn cho mọi user, nên tra ngược CHÍNH XÁC được về đúng 1 người. Bản WIP dùng 6 số cuối
+   * SĐT (trùng nhau giữa khách) + mã vạch "893…" giả mà endpoint quét không hề nhận; QR payload
+   * chứa SĐT đầy đủ + userId. Giờ: FE vẽ QR của đúng chuỗi memberCode, endpoint quét nhận đúng
+   * chuỗi đó — một payload chuẩn duy nhất.
+   */
+  async getMemberCard(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      include: { tier: true },
+    });
+    const posCreditEnabled = (await this.config.get<boolean>('loyalty.pos_credit_enabled', false)) === true;
+
+    return {
+      memberCode: memberCodeOf(user.referralCode),
+      name: user.fullName ?? 'Thành viên Tubu',
+      phone: maskPhone(user.phone),
+      tierName: user.tier?.name ?? 'Mầm Xanh',
+      tierMultiplier: user.tier ? Number(user.tier.pointMultiplier) : 1,
+      pointsBalance: user.pointsBalance,
+      /** false → FE KHÔNG hứa "tích điểm tại quầy" (tính năng đang tắt ở backend). */
+      posCreditEnabled,
+    };
+  }
+
+  /** Người gọi phải là STAFF/ADMIN theo DB (JWT có thể còn role cũ sau khi bị hạ quyền) và không bị khoá. */
+  private async assertPosStaff(staffUserId: string) {
+    const staff = await this.prisma.user.findUniqueOrThrow({
+      where: { id: staffUserId },
+      select: { id: true, role: true, isBlocked: true },
+    });
+    if ((staff.role !== 'STAFF' && staff.role !== 'ADMIN') || staff.isBlocked) {
+      throw new ForbiddenException('Chỉ nhân viên hoặc quản trị viên mới có quyền quét thẻ thành viên.');
+    }
+    return staff;
+  }
+
+  /**
+   * Tra CHÍNH XÁC thành viên từ chuỗi quét/gõ tại quầy: "TUBU"+mã, mã giới thiệu trần, hoặc SĐT
+   * đầy đủ (84…/+84… chuẩn hoá về 0…). KHÔNG endsWith, KHÔNG theo id. Chuỗi rỗng/quá ngắn bị từ
+   * chối trước khi chạm DB; khớp > 1 người → 409 (không chọn bừa người nhận điểm).
+   */
+  private async resolveMember(raw: string) {
+    const { phone, codes } = parseMemberCode(raw);
+    const or: Prisma.UserWhereInput[] = [];
+    if (phone) or.push({ phone });
+    if (codes.length > 0) or.push({ referralCode: { in: codes } });
+
+    const found = await this.prisma.user.findMany({ where: { OR: or }, take: 2, include: { tier: true } });
+    if (found.length === 0) {
+      throw new NotFoundException('Không tìm thấy thành viên với mã này.');
+    }
+    if (found.length > 1) {
+      throw new ConflictException(
+        'Mã này khớp nhiều hơn 1 thành viên — hãy quét mã QR trên thẻ hoặc nhập SĐT đầy đủ của khách.',
+      );
+    }
+    return found[0]!;
+  }
+
+  private memberSummary(member: {
+    id: string;
+    referralCode: string;
+    fullName: string | null;
+    phone: string | null;
+    pointsBalance: number;
+    tier?: { name: string } | null;
+  }) {
+    return {
+      id: member.id,
+      memberCode: memberCodeOf(member.referralCode),
+      name: member.fullName ?? 'Thành viên Tubu',
+      phone: maskPhone(member.phone),
+      tier: member.tier?.name ?? 'Mầm Xanh',
+      pointsBalance: member.pointsBalance,
+    };
+  }
+
+  /** Nhân viên / Quầy tra cứu thành viên (CHỈ tra cứu — cộng điểm đi creditPosPoints). */
+  async lookupMemberByStaff(staffUserId: string, memberCode: string) {
+    await this.assertPosStaff(staffUserId);
+    const member = await this.resolveMember(memberCode);
+    return { member: this.memberSummary(member) };
+  }
+
+  /**
+   * Nhân viên tích điểm cho hoá đơn tại quầy (POS).
+   *
+   * Bản WIP: không trần, không idempotency, không ghi ai cộng, nhân viên tự cộng cho mình được,
+   * tỷ lệ hard-code 10.000đ. Giờ:
+   *  - Mặc định TẮT (`loyalty.pos_credit_enabled`=false) cho tới khi có màn thu ngân + nghiệp vụ duyệt.
+   *  - Role STAFF/ADMIN theo DB, không bị khoá; KHÔNG tự tích cho chính mình.
+   *  - receiptId = khoá idempotency (unique pos_point_credits.receiptId): gửi lại cùng hoá đơn →
+   *    trả kết quả cũ; cùng mã mà khác thành viên/số tiền → 409.
+   *  - Trần: mỗi hoá đơn `loyalty.pos_max_order_total`; mỗi ngày theo nhân viên
+   *    `loyalty.pos_staff_daily_points_cap` và theo thành viên `loyalty.pos_member_daily_points_cap`.
+   *    Cộng dồn + ghi chạy dưới pg_advisory_xact_lock để 2 hoá đơn song song không cùng đọc tổng cũ.
+   *  - Tỷ lệ theo loyalty.vnd_per_point × hệ số hạng (như đơn online); điểm có hạn
+   *    loyalty.point_expire_months; KHÔNG tính vào xét hạng (xem tierPointsWhere).
+   *  - Sổ audit: pos_point_credits (staffUserId, memberId, receiptId, orderTotal, points, note).
+   */
+  async creditPosPoints(
+    staffUserId: string,
+    dto: { memberCode: string; orderTotal: number; receiptId: string; note?: string },
+  ) {
+    const staff = await this.assertPosStaff(staffUserId);
+    const enabled = (await this.config.get<boolean>('loyalty.pos_credit_enabled', false)) === true;
+    if (!enabled) {
+      throw new ForbiddenException('Tính năng tích điểm tại quầy (POS) đang tắt. Liên hệ quản trị viên.');
+    }
+
+    const receiptId = (dto.receiptId ?? '').trim();
+    if (!receiptId) throw new BadRequestException('Thiếu mã hoá đơn POS.');
+    // Chốt lại ở service (không chỉ dựa DTO) vì service có thể được gọi trực tiếp.
+    if (!Number.isInteger(dto.orderTotal) || dto.orderTotal < 1000 || dto.orderTotal > POS_ORDER_TOTAL_HARD_MAX) {
+      throw new BadRequestException('Tổng tiền hoá đơn không hợp lệ.');
+    }
+
+    const member = await this.resolveMember(dto.memberCode);
+    if (member.id === staff.id) {
+      throw new ForbiddenException('Nhân viên không được tự tích điểm cho chính mình.');
+    }
+    if (member.isBlocked) {
+      throw new BadRequestException('Tài khoản thành viên đang bị khoá, không thể tích điểm.');
+    }
+
+    const [maxOrderTotal, staffCap, memberCap, vndPerPoint] = await Promise.all([
+      this.positiveConfig('loyalty.pos_max_order_total', POS_DEFAULTS.maxOrderTotal),
+      this.positiveConfig('loyalty.pos_staff_daily_points_cap', POS_DEFAULTS.staffDailyPoints),
+      this.positiveConfig('loyalty.pos_member_daily_points_cap', POS_DEFAULTS.memberDailyPoints),
+      this.positiveConfig('loyalty.vnd_per_point', 10000),
+    ]);
+    if (dto.orderTotal > maxOrderTotal) {
+      throw new BadRequestException(
+        `Hoá đơn vượt trần ${maxOrderTotal.toLocaleString('vi-VN')}đ cho mỗi lần tích điểm tại quầy — liên hệ quản trị viên.`,
+      );
+    }
+
+    const multiplier = member.tier ? Number(member.tier.pointMultiplier) : 1;
+    const points = Math.floor((dto.orderTotal / vndPerPoint) * multiplier);
+    if (!(points > 0)) {
+      throw new BadRequestException('Hoá đơn chưa đủ giá trị để tích điểm.');
+    }
+
+    const now = new Date();
+    const dayKey = this.getVnDayKey(now);
+    const expiresAt = await this.pointsExpiresAt(now);
+    const note = dto.note?.trim() || null;
+
+    type Outcome = { replay: PosPointCredit } | { credit: PosPointCredit; balance: number };
+    let outcome: Outcome;
+    try {
+      outcome = await this.prisma.$transaction(async (tx): Promise<Outcome> => {
+        // Tuần tự hoá MỌI lần tích POS (khối lượng thấp): "cộng dồn hôm nay rồi mới ghi" chỉ đúng
+        // khi không có request nào khác chen giữa. Postgres tự nhả khoá khi transaction kết thúc.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('loyalty.pos_credit'))`;
+
+        const existing = await tx.posPointCredit.findUnique({ where: { receiptId } });
+        if (existing) return { replay: existing };
+
+        const staffAgg = await tx.posPointCredit.aggregate({
+          where: { staffUserId: staff.id, dayKey },
+          _sum: { points: true },
+        });
+        const staffToday = staffAgg._sum.points ?? 0;
+        if (staffToday + points > staffCap) {
+          throw new BadRequestException(
+            `Vượt trần tích điểm tại quầy trong ngày của nhân viên (đã ${staffToday}/${staffCap} điểm). Liên hệ quản trị viên.`,
+          );
+        }
+        const memberAgg = await tx.posPointCredit.aggregate({
+          where: { memberId: member.id, dayKey },
+          _sum: { points: true },
+        });
+        const memberToday = memberAgg._sum.points ?? 0;
+        if (memberToday + points > memberCap) {
+          throw new BadRequestException(
+            `Thành viên đã được tích ${memberToday}/${memberCap} điểm tại quầy hôm nay — vượt trần ngày. Liên hệ quản trị viên.`,
+          );
+        }
+
+        const credit = await tx.posPointCredit.create({
+          data: {
+            receiptId,
+            memberId: member.id,
+            staffUserId: staff.id,
+            orderTotal: dto.orderTotal,
+            points,
+            multiplier,
+            note,
+            dayKey,
+          },
+        });
+        await tx.pointsTransaction.create({
+          data: {
+            userId: member.id,
+            delta: points,
+            reason: `POS_OFFLINE_ORDER:${receiptId}`,
+            refType: 'POS',
+            refId: credit.id,
+            expiresAt,
+          },
+        });
+        const u = await tx.user.update({
+          where: { id: member.id },
+          data: { pointsBalance: { increment: points } },
+          select: { pointsBalance: true },
+        });
+        return { credit, balance: u.pointsBalance };
+      });
+    } catch (err) {
+      // Lưới an toàn nếu khoá advisory không có tác dụng (vd pgbouncer transaction pooling):
+      // unique receiptId vẫn chặn cộng đôi — request thua đọc lại bản ghi của request thắng.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const existing = await this.prisma.posPointCredit.findUnique({ where: { receiptId } });
+        if (!existing) throw err;
+        outcome = { replay: existing };
+      } else {
+        throw err;
+      }
+    }
+
+    if ('replay' in outcome) {
+      const prev = outcome.replay;
+      if (prev.memberId !== member.id || prev.orderTotal !== dto.orderTotal) {
+        throw new ConflictException(
+          `Hoá đơn ${receiptId} đã được tích điểm trước đó cho thành viên/số tiền khác.`,
+        );
+      }
+      const cur = await this.prisma.user.findUniqueOrThrow({
+        where: { id: member.id },
+        select: { pointsBalance: true },
+      });
+      return this.posResult(member, cur.pointsBalance, prev, true);
+    }
+
+    this.logger.log(
+      `POS credit receipt=${receiptId} staff=${staff.id} member=${member.id} total=${dto.orderTotal} points=${points}`,
+    );
+    return this.posResult(member, outcome.balance, outcome.credit, false);
+  }
+
+  /**
+   * Sổ audit tích điểm tại quầy cho admin: ai cộng, cho ai, hoá đơn nào, bao nhiêu. Mới nhất trước,
+   * tối đa POS_AUDIT_PAGE dòng; SĐT luôn che. Lọc theo ngày VN / nhân viên / thành viên.
+   */
+  async listPosCredits(q: { day?: string; staffUserId?: string; memberId?: string }) {
+    const where: Prisma.PosPointCreditWhereInput = {};
+    if (q.day) where.dayKey = q.day;
+    if (q.staffUserId) where.staffUserId = q.staffUserId;
+    if (q.memberId) where.memberId = q.memberId;
+    const rows = await this.prisma.posPointCredit.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: POS_AUDIT_PAGE,
+      include: {
+        staff: { select: { id: true, fullName: true, phone: true } },
+        member: { select: { id: true, fullName: true, phone: true, referralCode: true } },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      receiptId: r.receiptId,
+      orderTotal: r.orderTotal,
+      points: r.points,
+      multiplier: Number(r.multiplier),
+      note: r.note,
+      dayKey: r.dayKey,
+      createdAt: r.createdAt,
+      staff: { id: r.staff.id, name: r.staff.fullName, phone: maskPhone(r.staff.phone) },
+      member: {
+        id: r.member.id,
+        name: r.member.fullName,
+        phone: maskPhone(r.member.phone),
+        memberCode: memberCodeOf(r.member.referralCode),
+      },
+    }));
+  }
+
+  private posResult(
+    member: Parameters<LoyaltyService['memberSummary']>[0],
+    pointsBalance: number,
+    credit: PosPointCredit,
+    replayed: boolean,
+  ) {
+    return {
+      replayed,
+      member: { ...this.memberSummary(member), pointsBalance },
+      posTransaction: {
+        receiptId: credit.receiptId,
+        orderTotal: credit.orderTotal,
+        pointsEarned: credit.points,
+        creditedAt: credit.createdAt,
+      },
+    };
+  }
 }
+
+// ───────────────────────── Hằng số & helper thuần ─────────────────────────
+
+const DAY_MS = 864e5;
+
+/**
+ * Bảng điểm danh 7 ngày MẶC ĐỊNH (ghi đè bằng SystemConfig `loyalty.checkin_points`).
+ * Tổng 8 điểm/tuần ≈ 8.000đ/tuần (≈ 34.000đ/tháng) ở loyalty.vnd_per_point_redeem = 1.000đ —
+ * tương đương điểm của ~80.000đ mua hàng/tuần. Bản WIP trả 10/15/20/25/30/40/50 = 190 điểm/tuần
+ * ≈ 190.000đ/tuần (~9,9 triệu/năm) chỉ để bấm nút, gấp nhiều lần điểm từ mua hàng thật.
+ * Điểm chỉ tiêu được khi mua (tối đa loyalty.max_redeem_pct giá trị đơn, voucher có minOrder).
+ */
+export const DEFAULT_CHECKIN_POINTS: readonly number[] = Object.freeze([1, 1, 1, 1, 1, 1, 2]);
+/** Trần cứng cho 1 ô điểm danh dù admin cấu hình gì. */
+const CHECKIN_MAX_POINTS_PER_DAY = 100;
+const CHECKIN_ALREADY_MESSAGE = 'Hôm nay bạn đã điểm danh nhận điểm rồi 🌿';
+
+/** Nguồn điểm KHÔNG tính vào xét hạng (xem LoyaltyService.tierPointsWhere). */
+export const TIER_EXCLUDED_REASON_PREFIXES = ['DAILY_CHECKIN', 'POS_OFFLINE_ORDER', 'ORDER_REFUND_POINTS'] as const;
+
+/** Trần mặc định cho tích điểm tại quầy (ghi đè bằng SystemConfig, xem creditPosPoints). */
+const POS_DEFAULTS = {
+  /** 5 triệu/hoá đơn → tối đa 500 điểm ×1 (1.000 điểm ở hạng ×2). */
+  maxOrderTotal: 5_000_000,
+  /** 3.000 điểm/nhân viên/ngày ≈ 30 triệu doanh thu quầy ở ×1. */
+  staffDailyPoints: 3_000,
+  /** 1.000 điểm/thành viên/ngày ≈ 10 triệu mua tại quầy ở ×1. */
+  memberDailyPoints: 1_000,
+};
+
+/** Số dòng tối đa mỗi lần admin xem sổ audit POS. */
+const POS_AUDIT_PAGE = 200;
+
+const MEMBER_CODE_PREFIX = 'TUBU';
+/** referralCode sinh 8 (hoặc 10) ký tự — mã ngắn hơn không thể là mã thật, từ chối trước khi chạm DB. */
+const MIN_MEMBER_CODE_LEN = 8;
+
+function memberCodeOf(referralCode: string): string {
+  return `${MEMBER_CODE_PREFIX}${referralCode}`;
+}
+
+function maskPhone(phone: string | null | undefined): string | null {
+  return phone ? `${phone.slice(0, 3)}****${phone.slice(-3)}` : null;
+}
+
+/** SĐT VN chuẩn hoá về 0xxxxxxxxx (cùng quy tắc zalo.service.ts normalizePhone); không phải SĐT → null. */
+function normalizeVnPhone(s: string): string | null {
+  const m = /^\+?(\d+)$/.exec(s);
+  if (!m) return null;
+  let digits = m[1]!;
+  if (digits.startsWith('84') && digits.length === 11) digits = `0${digits.slice(2)}`;
+  return /^0\d{9}$/.test(digits) ? digits : null;
+}
+
+/**
+ * Tách chuỗi quét/gõ thành các ứng viên khớp CHÍNH XÁC. Bỏ khoảng trắng/gạch/chấm, viết hoa.
+ * Ứng viên mã: chính chuỗi đó và phần sau tiền tố "TUBU" — mỗi ứng viên phải ≥ MIN_MEMBER_CODE_LEN.
+ * Không có ứng viên nào hợp lệ → 400 (bản WIP: "", "TUBU" → endsWith("") → khớp mọi user).
+ */
+export function parseMemberCode(raw: string): { phone: string | null; codes: string[] } {
+  const s = (raw ?? '').toUpperCase().replace(/[\s.-]/g, '');
+  const phone = normalizeVnPhone(s);
+  const codes = new Set<string>();
+  if (/^[A-Z0-9]+$/.test(s)) {
+    if (s.length >= MIN_MEMBER_CODE_LEN) codes.add(s);
+    if (s.startsWith(MEMBER_CODE_PREFIX)) {
+      const rest = s.slice(MEMBER_CODE_PREFIX.length);
+      if (rest.length >= MIN_MEMBER_CODE_LEN) codes.add(rest);
+    }
+  }
+  if (!phone && codes.size === 0) {
+    throw new BadRequestException(
+      'Mã thành viên không hợp lệ hoặc quá ngắn — quét mã QR trên thẻ, hoặc nhập mã TUBU… / SĐT đầy đủ.',
+    );
+  }
+  return { phone, codes: [...codes] };
+}
+
+const COUPON_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/**
+ * Mã voucher đổi quà: REWARD-<LOẠI><GIÁ TRỊ>-<8 ký tự ngẫu nhiên crypto>. Bản WIP dùng 4 số
+ * Math.random + 4 ký tự cuối userId → cùng user đổi nhiều lần dễ trùng (P2002 → 500).
+ * 32^8 ≈ 10^12 tổ hợp: trùng gần như không thể; nếu có, unique coupons.code vẫn chặn (tx rollback, không mất điểm).
+ */
+function rewardCouponCode(reward: RewardCatalogItem): string {
+  const bytes = randomBytes(8);
+  let rand = '';
+  for (const b of bytes) rand += COUPON_ALPHABET[b % COUPON_ALPHABET.length];
+  const tag =
+    reward.type === 'AMOUNT'
+      ? `${Math.floor(reward.value / 1000)}K`
+      : reward.type === 'PERCENT'
+        ? `${reward.value}P`
+        : 'SHIP';
+  return `REWARD-${reward.type.slice(0, 3)}${tag}-${rand}`;
+}
+
+export interface RewardCatalogItem {
+  id: string;
+  title: string;
+  description: string;
+  pointsCost: number;
+  type: 'FREESHIP' | 'AMOUNT' | 'PERCENT';
+  value: number;
+  minOrder?: number;
+  maxDiscount?: number;
+  badge?: string;
+}
+
+export const DEFAULT_REWARD_CATALOG: RewardCatalogItem[] = [
+  {
+    // FREESHIP ở checkout miễn TOÀN BỘ phí ship (coupons.service validateAndCompute bỏ qua value),
+    // nên không ghi "tối đa 25k". Đơn ≥ shipping.free_threshold (200k) vốn đã freeship → minOrder
+    // 99k để voucher có ích cho đúng khoảng đơn còn phải trả phí ship (~19k) — giá 20 điểm ≈ 20.000đ.
+    id: 'reward-freeship',
+    title: 'Voucher Miễn phí vận chuyển',
+    description: 'Miễn phí vận chuyển cho 1 đơn từ 99.000đ — hữu ích khi đơn chưa đạt mức freeship của shop.',
+    pointsCost: 20,
+    type: 'FREESHIP',
+    value: 0,
+    minOrder: 99000,
+    badge: 'Phổ biến',
+  },
+  {
+    id: 'reward-discount-50k',
+    title: 'Voucher Giảm 50.000đ',
+    description: 'Giảm ngay 50.000đ cho đơn hàng từ 300.000đ',
+    pointsCost: 50,
+    type: 'AMOUNT',
+    value: 50000,
+    minOrder: 300000,
+    badge: 'Tiết kiệm',
+  },
+  {
+    id: 'reward-discount-100k',
+    title: 'Voucher Giảm 100.000đ',
+    description: 'Giảm ngay 100.000đ cho đơn hàng từ 600.000đ',
+    pointsCost: 100,
+    type: 'AMOUNT',
+    value: 100000,
+    minOrder: 600000,
+    badge: 'HOT',
+  },
+  {
+    id: 'reward-percent-15pct',
+    title: 'Voucher Giảm 15%',
+    description: 'Giảm 15% tối đa 80.000đ cho đơn hàng từ 250.000đ',
+    pointsCost: 75,
+    type: 'PERCENT',
+    value: 15,
+    minOrder: 250000,
+    maxDiscount: 80000,
+    badge: 'Đặc quyền',
+  },
+];

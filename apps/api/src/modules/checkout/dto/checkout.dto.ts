@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsEmail, IsInt, IsObject, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsInt, IsObject, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
 import { PaymentMethod } from '@tubutree/shared-types';
 import { IsIn } from 'class-validator';
 
@@ -54,4 +54,15 @@ export class PlaceOrderDto {
   @ValidateNested()
   @Type(() => InvoiceRequestDto)
   invoiceRequest?: InvoiceRequestDto;
+
+  /** Tùy chọn gửi lại vật liệu tái chế (Gomdon đơn đổi hàng). */
+  @IsOptional()
+  @IsBoolean()
+  hasRecyclingPickup?: boolean;
+
+  /** Ghi chú chi tiết loại vật dụng gửi lại. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  recyclingNote?: string;
 }

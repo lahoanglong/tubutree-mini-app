@@ -47,6 +47,18 @@ export const envSchema = z.object({
   PANCAKE_SHOP_ID: z.string().default(''),
   PANCAKE_WEBHOOK_SECRET: z.string().default(''),
 
+  // Gomdon (vận đơn đổi hàng BestExpress — thu gom vật liệu tái chế). Tính năng optional:
+  // - GOMDON_BASE_URL trống → ở production dùng https://admin.gomdon.com.vn, ở dev/test coi như CHƯA
+  //   cấu hình (không bao giờ tự đặt bưu tá thật từ máy dev) — xem gomdon-config.ts.
+  // - GOMDON_PHONE/GOMDON_PASSWORD: tài khoản Gomdon (ưu tiên hơn phone/password cũ trong SystemConfig).
+  // - GOMDON_WEBHOOK_SECRET: token chia sẻ verify webhook (header x-webhook-token hoặc /webhooks/gomdon/<secret>).
+  //   Rỗng ở production thì GomdonWebhookController từ chối MỌI request 401 (fail-closed); production
+  //   đã đặt GOMDON_PHONE/GOMDON_PASSWORD mà thiếu secret → không boot (superRefine bên dưới).
+  GOMDON_BASE_URL: z.string().default(''),
+  GOMDON_PHONE: z.string().default(''),
+  GOMDON_PASSWORD: z.string().default(''),
+  GOMDON_WEBHOOK_SECRET: z.string().default(''),
+
   // ZaloPay merchant
   ZALOPAY_APP_ID: z.string().default(''),
   ZALOPAY_KEY1: z.string().default(''),
@@ -111,6 +123,16 @@ export const envSchema = z.object({
         code: z.ZodIssueCode.custom,
         path: ['CORS_ORIGINS'],
         message: 'CORS_ORIGINS không được rỗng ở production (CSV danh sách origin được phép).',
+      });
+    }
+    // Gomdon: đã đặt tài khoản (tính năng có thể tự đặt bưu tá thật) thì BẮT BUỘC có secret webhook —
+    // thiếu secret thì controller từ chối mọi webhook (401) → đơn thu gom không bao giờ tự sang
+    // SHIPPING/DELIVERED mà không ai hay. Chặn ngay lúc boot cho lộ ra khi deploy.
+    if (env.GOMDON_PHONE && env.GOMDON_PASSWORD && !env.GOMDON_WEBHOOK_SECRET) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['GOMDON_WEBHOOK_SECRET'],
+        message: 'GOMDON_WEBHOOK_SECRET không được rỗng ở production khi đã đặt GOMDON_PHONE/GOMDON_PASSWORD.',
       });
     }
     // REDIS_URL đã có .url() nên chuỗi rỗng bị chặn ở MỌI env (không tới được đây); check này là

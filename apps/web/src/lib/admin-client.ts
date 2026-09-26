@@ -22,12 +22,12 @@ export interface AdminUser {
   pointsBalance: number;
   createdAt: string;
 }
+/** Khớp model OrderItem của API (snapshot tên SP/biến thể + đơn giá lúc mua). */
 export interface AdminOrderItem {
   id: string;
-  productTitle: string;
-  variationTitle?: string | null;
-  sku?: string | null;
-  price: number;
+  productName: string;
+  variationName?: string | null;
+  unitPrice: number;
   quantity: number;
   total: number;
 }
@@ -43,6 +43,21 @@ export interface AdminOrder {
   note?: string | null;
   createdAt: string;
   updatedAt?: string;
+  shippingPartner?: string | null;
+  shippingCode?: string | null;
+  shippingStatus?: string | null;
+  /** Thu gom vật liệu tái chế (vận đơn đổi hàng Gomdon/BestExpress) — xem lib/recycling.ts. */
+  hasRecyclingPickup?: boolean;
+  recyclingNote?: string | null;
+  gomdonOrderId?: string | null;
+  /** Mã vận đơn BestExpress. */
+  gomdonPartnerCode?: string | null;
+  /** Mã Gomdon "1".."12" hoặc trạng thái nội bộ (AWAITING_PAYMENT/CREATING/NEEDS_MANUAL_CHECK/FAILED/NOT_CONFIGURED). */
+  gomdonStatus?: string | null;
+  gomdonStatusAt?: string | null;
+  /** CANCELLED | FAILED | TOO_LATE | NOT_NEEDED — kết quả huỷ vận đơn khi đơn bị huỷ. */
+  gomdonCancelStatus?: string | null;
+  deliveredAt?: string | null;
   user?: {
     id: string;
     phone: string | null;
@@ -77,13 +92,24 @@ export interface ConfigRow {
   description: string | null;
   category: string;
 }
-interface Page<T> {
+export interface Page<T> {
   data: T[];
   meta: { page: number; limit: number; total: number };
 }
 
+/**
+ * Danh sách hồ sơ đại lý / đổi-trả: API trả dạng phân trang `{ data, meta }` nhưng web cũ đọc như mảng
+ * (`q.data.map` → crash trắng tab). Nhận cả hai dạng để không vỡ khi BE đổi qua lại.
+ */
+export function unwrapList<T>(res: T[] | Page<T> | null | undefined): T[] {
+  if (Array.isArray(res)) return res;
+  return res?.data ?? [];
+}
+
 export const listDealerApps = (status?: string) =>
-  apiFetch<DealerApp[]>(`/admin/dealer-applications${status ? `?status=${status}` : ''}`);
+  apiFetch<DealerApp[] | Page<DealerApp>>(
+    `/admin/dealer-applications?limit=100${status ? `&status=${encodeURIComponent(status)}` : ''}`,
+  ).then(unwrapList);
 export const reviewDealerApp = (id: string, approve: boolean, tierId?: string, reason?: string) =>
   apiFetch(`/admin/dealer-applications/${id}/review`, { method: 'POST', body: { approve, tierId, reason } });
 
@@ -114,7 +140,9 @@ export interface AdminReturnRequest {
   } | null;
 }
 export const listReturnRequests = (status?: string) =>
-  apiFetch<AdminReturnRequest[]>(`/admin/return-requests${status ? `?status=${status}` : ''}`);
+  apiFetch<AdminReturnRequest[] | Page<AdminReturnRequest>>(
+    `/admin/return-requests${status ? `?status=${encodeURIComponent(status)}` : ''}`,
+  ).then(unwrapList);
 export const reviewReturnRequest = (id: string, approve: boolean, note?: string) =>
   apiFetch<AdminReturnRequest>(`/admin/return-requests/${id}/review`, {
     method: 'POST',
@@ -143,10 +171,41 @@ export const setUserRole = (phone: string, role: UserRole) =>
   );
 export const getDashboardStats = () =>
   apiFetch<DashboardStats>('/admin/dashboard/stats');
-export const listOrders = (page = 1, status?: string, search?: string) =>
+/** attention = hàng đợi "Cần xử lý thu gom"; all = mọi đơn có chọn thu gom tái chế. */
+export type RecyclingFilter = 'attention' | 'all';
+export const listOrders = (page = 1, status?: string, search?: string, recycling?: RecyclingFilter, limit = 20) =>
   apiFetch<Page<AdminOrder>>(
-    `/admin/orders?page=${page}&limit=20${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`,
+    `/admin/orders?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}${
+      recycling ? `&recycling=${recycling}` : ''
+    }`,
   );
+/** Số đơn trong hàng đợi "Cần xử lý thu gom" (đọc meta.total, không tải danh sách). */
+export const countRecyclingAttention = () =>
+  listOrders(1, undefined, undefined, 'attention', 1).then((r) => r.meta.total);
+
+// ── Vận đơn thu gom Gomdon (thao tác admin) ──
+export interface GomdonActionResult {
+  message: string;
+  queued?: boolean;
+  result?: 'QUEUED' | 'CANCELLED';
+}
+export const retryGomdon = (orderId: string, confirmedNoWaybill: boolean) =>
+  apiFetch<GomdonActionResult>(`/admin/orders/${encodeURIComponent(orderId)}/gomdon/retry`, {
+    method: 'POST',
+    // Chỉ gửi khi đã tick xác nhận — body rỗng cho FAILED/NOT_CONFIGURED.
+    body: confirmedNoWaybill ? { confirmedNoWaybill: true } : {},
+  });
+export const cancelGomdonWaybill = (orderId: string) =>
+  apiFetch<GomdonActionResult>(`/admin/orders/${encodeURIComponent(orderId)}/gomdon/cancel-waybill`, { method: 'POST' });
+export interface GomdonIntegrationStatus {
+  baseUrlSet: boolean;
+  credentialsSet: boolean;
+  configured: boolean;
+  webhookSecretSet: boolean;
+  recyclingToggle: boolean;
+  recyclingEnabled: boolean;
+}
+export const getGomdonStatus = () => apiFetch<GomdonIntegrationStatus>('/admin/gomdon/status');
 export const updateOrderStatus = (id: string, status: string, note?: string) =>
   apiFetch<AdminOrder>(`/admin/orders/${id}/status`, {
     method: 'PUT',
@@ -479,3 +538,94 @@ export const reviewCashbackTxn = (id: string, status: 'CONFIRMED' | 'REJECTED', 
     method: 'POST',
     body: { status, note },
   });
+
+// ── Yêu cầu nhận thưởng mốc đại lý (tour/quà) ──
+export type DealerRewardClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID';
+export interface AdminDealerRewardClaim {
+  id: string;
+  userId: string;
+  rewardId: string | null;
+  periodKey: string;
+  rewardTitle: string;
+  rewardType: 'TOUR' | 'GIFT' | 'OTHER';
+  rewardPeriod: string;
+  threshold: number;
+  volumeAtClaim: number;
+  note: string | null;
+  status: DealerRewardClaimStatus;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  paidBy: string | null;
+  paidAt: string | null;
+  adminNote: string | null;
+  createdAt: string;
+  dealer?: { id: string; fullName: string | null; phone: string | null; businessName: string | null };
+}
+export const listDealerRewardClaims = (status?: DealerRewardClaimStatus, page = 1, limit = 20) =>
+  apiFetch<Page<AdminDealerRewardClaim>>(
+    `/admin/dealer-reward-claims?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`,
+  );
+export const approveDealerRewardClaim = (id: string, note?: string) =>
+  apiFetch<AdminDealerRewardClaim>(`/admin/dealer-reward-claims/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
+    body: note?.trim() ? { note: note.trim() } : {},
+  });
+export const rejectDealerRewardClaim = (id: string, reason: string) =>
+  apiFetch<AdminDealerRewardClaim>(`/admin/dealer-reward-claims/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    body: { reason: reason.trim() },
+  });
+export const markDealerRewardClaimPaid = (id: string, note?: string) =>
+  apiFetch<AdminDealerRewardClaim>(`/admin/dealer-reward-claims/${encodeURIComponent(id)}/mark-paid`, {
+    method: 'POST',
+    body: note?.trim() ? { note: note.trim() } : {},
+  });
+
+// ── Tích điểm tại quầy (POS) ──
+export interface PosMember {
+  id: string;
+  memberCode: string;
+  name: string;
+  /** SĐT đã che (090****123). */
+  phone: string | null;
+  tier: string;
+  pointsBalance: number;
+}
+export interface PosCreditResult {
+  /** true = hoá đơn này đã được tích trước đó — trả lại kết quả cũ, KHÔNG cộng thêm. */
+  replayed: boolean;
+  member: PosMember;
+  posTransaction: { receiptId: string; orderTotal: number; pointsEarned: number; creditedAt: string };
+}
+export interface AdminPosCredit {
+  id: string;
+  receiptId: string;
+  orderTotal: number;
+  points: number;
+  multiplier: number;
+  note: string | null;
+  dayKey: string;
+  createdAt: string;
+  staff: { id: string; name: string | null; phone: string | null };
+  member: { id: string; name: string | null; phone: string | null; memberCode: string };
+}
+export const scanMember = (memberCode: string) =>
+  apiFetch<{ member: PosMember }>('/loyalty/staff/scan-member', { method: 'POST', body: { memberCode } });
+export const posCredit = (body: { memberCode: string; orderTotal: number; receiptId: string; note?: string }) =>
+  apiFetch<PosCreditResult>('/loyalty/staff/pos-credit', { method: 'POST', body });
+/**
+ * Công tắc loyalty.pos_credit_enabled nhìn từ phía nhân viên: STAFF không đọc được /admin/config, nhưng
+ * thẻ thành viên của CHÍNH MÌNH (/me/loyalty/member-card) có cờ posCreditEnabled — đủ để màn thu ngân
+ * báo "đang tắt" trước khi nhân viên nhập hoá đơn.
+ */
+export const getPosCreditEnabled = () =>
+  apiFetch<{ posCreditEnabled?: boolean }>('/me/loyalty/member-card').then((r) => r.posCreditEnabled === true);
+export const listPosCredits = (q: { day?: string; staffUserId?: string; memberId?: string } = {}) => {
+  const params = new URLSearchParams();
+  if (q.day) params.set('day', q.day);
+  if (q.staffUserId?.trim()) params.set('staffUserId', q.staffUserId.trim());
+  if (q.memberId?.trim()) params.set('memberId', q.memberId.trim());
+  const qs = params.toString();
+  return apiFetch<AdminPosCredit[]>(`/admin/loyalty/pos-credits${qs ? `?${qs}` : ''}`);
+};

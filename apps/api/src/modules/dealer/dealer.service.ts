@@ -1,17 +1,56 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, Optional } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
 import { Prisma } from '@prisma/client';
+import type { DealerRewardClaim, DealerRewardClaimStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
 import { reserveAvailableVariationStock } from '../catalog/variation-stock';
+import { paginated, skipTake } from '../../common/pagination';
 
 interface BonusTier {
   min: number;
   pct: number;
 }
+
+/**
+ * Trạng thái đơn đại lý mà đại lý KHÔNG còn tự huỷ được: orders.service.cancel cho huỷ đơn
+ * PENDING_PAYMENT/CONFIRMED (đơn đã trả tiền còn được hoàn thẳng về ví). Đơn ở 2 trạng thái đó
+ * mà được tính doanh số thì đặt đơn to cuối kỳ → nhận thưởng → tự huỷ là "in" thưởng từ không khí.
+ */
+const DEALER_SETTLED_STATUSES: readonly string[] = ['PACKED', 'SHIPPING', 'DELIVERED'];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Nhãn tiếng Việt cho trạng thái yêu cầu nhận thưởng (message trả về đại lý/admin). */
+const CLAIM_STATUS_LABEL: Record<DealerRewardClaimStatus, string> = {
+  PENDING: 'Đang chờ duyệt',
+  APPROVED: 'Đã duyệt, chờ trao thưởng',
+  REJECTED: 'Bị từ chối',
+  PAID: 'Đã trao thưởng',
+};
+
+const CLAIM_STATUSES = Object.keys(CLAIM_STATUS_LABEL) as DealerRewardClaimStatus[];
+
+/** Doanh số đại lý trong 1 khung thời gian: phần ĐÃ CHỐT (tính thưởng) + phần còn chờ. */
+interface DealerVolume {
+  settled: number;
+  settledCount: number;
+  pending: number;
+  pendingCount: number;
+}
+
+/** 1 kỳ thưởng (quý/năm, giờ VN): khoá lưu DB + nhãn hiển thị + mốc UTC [start, end). */
+interface RewardPeriod {
+  key: string;
+  label: string;
+  start: Date;
+  end: Date;
+}
+
+const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 
 /** Tính phần thưởng cho 1 mức doanh số theo bậc (thuần). */
 function bonusForRevenue(revenue: number, sortedTiers: BonusTier[]) {
@@ -329,6 +368,43 @@ export class DealerService {
     };
   }
 
+  /** Kỳ thưởng quý `q` (0..3) — khoá 'Q3/2026' giống refId QUARTER_BONUS của thưởng quý. */
+  private static quarterPeriod(year: number, q: number): RewardPeriod {
+    const { start, end } = DealerService.vnQuarterRange(year, q);
+    return { key: `Q${q + 1}/${year}`, label: `Quý ${q + 1}/${year}`, start, end };
+  }
+
+  /** Kỳ thưởng năm — khoá '2026'. */
+  private static yearPeriod(year: number): RewardPeriod {
+    const VN = DealerService.VN_OFFSET;
+    return {
+      key: `${year}`,
+      label: `Năm ${year}`,
+      start: new Date(Date.UTC(year, 0, 1) - VN),
+      end: new Date(Date.UTC(year + 1, 0, 1) - VN),
+    };
+  }
+
+  /**
+   * Parse khoá kỳ theo loại kỳ của phần thưởng (DealerReward.period: 'YEAR' → '2026', còn lại
+   * coi là quý → 'Q3/2026', đúng quy ước `r.period === 'YEAR'` ở rewardsProgress). Sai → null.
+   */
+  private static parsePeriodKey(rewardPeriod: string, key: string): RewardPeriod | null {
+    if (rewardPeriod === 'YEAR') {
+      const m = /^(\d{4})$/.exec(key);
+      return m ? DealerService.yearPeriod(Number(m[1])) : null;
+    }
+    const m = /^Q([1-4])\/(\d{4})$/.exec(key);
+    return m ? DealerService.quarterPeriod(Number(m[2]), Number(m[1]) - 1) : null;
+  }
+
+  /** Ngày cuối cùng (giờ VN) còn hiệu lực của hạn chót `deadline` (mốc loại trừ) — dd/mm/yyyy. */
+  private static vnLastDayLabel(deadline: Date): string {
+    const d = new Date(deadline.getTime() - 1 + DealerService.VN_OFFSET);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+  }
+
   /**
    * Quý/năm HIỆN TẠI theo giờ VN + mốc UTC [start,end) của quý và của năm.
    * Dùng chung cho quarterlyReport / rewardsProgress / payoutQuarterlyBonuses (tránh lệch mốc).
@@ -349,25 +425,88 @@ export class DealerService {
     };
   }
 
-  /**
-   * Báo cáo quý đại lý (#71): doanh số quý hiện tại (đơn DEALER không huỷ) + bậc thưởng đạt được.
-   * Bậc thưởng lấy từ config dealer.quarterly_bonus_tiers (mặc định 50tr→2%, 100tr→3%, 200tr→4%).
-   */
-  async quarterlyReport(userId: string) {
-    await this.dealerContext(userId); // chặn nếu chưa phải đại lý
-    const { q, year, qStart: start, qEnd: end } = this.vnPeriodBounds(new Date());
+  /** Kỳ quý/năm hiện tại + kỳ liền trước (để còn yêu cầu nhận thưởng trong thời gian gia hạn). */
+  private rewardPeriods(now: Date) {
+    const { q, year } = this.vnPeriodBounds(now);
+    return {
+      curQuarter: DealerService.quarterPeriod(year, q),
+      curYear: DealerService.yearPeriod(year),
+      prevQuarter: q === 0 ? DealerService.quarterPeriod(year - 1, 3) : DealerService.quarterPeriod(year, q - 1),
+      prevYear: DealerService.yearPeriod(year - 1),
+    };
+  }
 
-    const agg = await this.prisma.order.aggregate({
+  /**
+   * Doanh số đại lý trong [start, end) — nền DUY NHẤT cho báo cáo quý, thưởng quý (tiền thật
+   * vào công nợ) và mốc thưởng tour/quà. Một đơn chỉ được tính ("đã chốt") khi:
+   *  1. KHÔNG còn tự huỷ được (PACKED/SHIPPING/DELIVERED — xem DEALER_SETTLED_STATUSES), và
+   *  2. đã có cam kết tiền: đã thanh toán (paymentStatus=PAID) hoặc là đơn "Ghi công nợ" (có
+   *     dòng DealerCreditLedger refType=ORDER — đơn CREDIT không bao giờ lật PAID).
+   * Trước đây tính MỌI đơn trừ CANCELLED/RETURNED: đặt đơn chuyển khoản 200tr cuối quý rồi không
+   * trả → cron cộng thưởng quý 4% vào công nợ → đại lý tự huỷ đơn, thưởng vẫn giữ nguyên.
+   * Đơn chưa đủ điều kiện (chưa trả/chưa đóng gói) cộng vào `pending` để hiển thị, KHÔNG tính thưởng.
+   * `db` = transaction của caller khi cần thấy chính thay đổi chưa commit (thu hồi thưởng lúc
+   * huỷ/trả đơn — xem clawbackQuarterBonusForOrder); mặc định đọc ngoài transaction.
+   */
+  private async dealerVolume(
+    userId: string,
+    start: Date,
+    end: Date,
+    db: Pick<Prisma.TransactionClient, 'order' | 'dealerCreditLedger'> = this.prisma,
+  ): Promise<DealerVolume> {
+    const orders = await db.order.findMany({
       where: {
         userId,
         type: 'DEALER',
         status: { notIn: ['CANCELLED', 'RETURNED'] },
         createdAt: { gte: start, lt: end },
       },
-      _sum: { total: true },
-      _count: true,
+      select: { id: true, total: true, status: true, paymentStatus: true },
     });
-    const revenue = agg._sum.total ?? 0;
+    const isSettledStatus = (s: string) => DEALER_SETTLED_STATUSES.includes(s);
+    const unpaidSettledIds = orders
+      .filter((o) => isSettledStatus(o.status) && o.paymentStatus === 'UNPAID')
+      .map((o) => o.id);
+    const creditOrderIds = new Set<string>();
+    if (unpaidSettledIds.length > 0) {
+      const debits = await db.dealerCreditLedger.findMany({
+        where: { userId, refType: 'ORDER', refId: { in: unpaidSettledIds } },
+        select: { refId: true },
+      });
+      for (const d of debits) if (d.refId) creditOrderIds.add(d.refId);
+    }
+    const v: DealerVolume = { settled: 0, settledCount: 0, pending: 0, pendingCount: 0 };
+    for (const o of orders) {
+      // Đã hoàn tiền/thanh toán lỗi thì không còn là doanh số — bỏ khỏi cả 2 phía.
+      if (o.paymentStatus === 'REFUNDED' || o.paymentStatus === 'FAILED') continue;
+      if (isSettledStatus(o.status) && (o.paymentStatus === 'PAID' || creditOrderIds.has(o.id))) {
+        v.settled += o.total;
+        v.settledCount += 1;
+      } else {
+        v.pending += o.total;
+        v.pendingCount += 1;
+      }
+    }
+    return v;
+  }
+
+  /** Số ngày sau khi kỳ kết thúc vẫn được gửi yêu cầu nhận thưởng (config, mặc định 30, kẹp 0..366). */
+  private async claimGraceDays(): Promise<number> {
+    const raw = Number(await this.config.get<number>('dealer.reward_claim_grace_days', 30));
+    return Number.isFinite(raw) && raw >= 0 ? Math.min(Math.floor(raw), 366) : 30;
+  }
+
+  /**
+   * Báo cáo quý đại lý (#71): doanh số ĐÃ CHỐT của quý hiện tại (xem dealerVolume) + bậc thưởng
+   * đạt được — cùng công thức với cron trả thưởng, nên con số đại lý thấy khớp số được trả.
+   * Bậc thưởng lấy từ config dealer.quarterly_bonus_tiers (mặc định 50tr→2%, 100tr→3%, 200tr→4%).
+   */
+  async quarterlyReport(userId: string, now: Date = new Date()) {
+    await this.dealerContext(userId); // chặn nếu chưa phải đại lý
+    const { q, year, qStart: start, qEnd: end } = this.vnPeriodBounds(now);
+
+    const vol = await this.dealerVolume(userId, start, end);
+    const revenue = vol.settled;
 
     const sorted = await this.bonusTiers();
     const { bonusPct, bonusAmount, next } = bonusForRevenue(revenue, sorted);
@@ -377,7 +516,10 @@ export class DealerService {
       periodStart: start.toISOString(),
       periodEnd: end.toISOString(),
       revenue,
-      orderCount: agg._count,
+      orderCount: vol.settledCount,
+      // Đơn trong quý chưa thanh toán / chưa đóng gói — CHƯA tính thưởng, hiển thị để đại lý biết.
+      pendingRevenue: vol.pending,
+      pendingOrderCount: vol.pendingCount,
       bonusPct,
       bonusAmount,
       nextTier: next ? { min: next.min, pct: next.pct, toNext: next.min - revenue } : null,
@@ -386,44 +528,351 @@ export class DealerService {
   }
 
   /**
-   * Tiến trình đạt mốc DealerReward (#hoãn): đối chiếu doanh số nhập kỳ (quý/năm theo giờ VN)
-   * với điều kiện từng phần thưởng → hiển thị cho đại lý. CHỈ hiển thị điều kiện + tiến trình;
-   * trao thưởng (tour/quà) admin làm offline. `now` truyền vào để test tất định.
+   * Tiến trình đạt mốc DealerReward: doanh số ĐÃ CHỐT của kỳ (quý/năm theo giờ VN) so với điều
+   * kiện từng phần thưởng + trạng thái yêu cầu nhận thưởng (claimStatus) của kỳ đó.
+   * Ngoài kỳ hiện tại, trả thêm dòng của kỳ LIỀN TRƯỚC khi (a) đã đạt và còn trong thời gian gia
+   * hạn `dealer.reward_claim_grace_days` — để đại lý đạt mốc sát cuối quý vẫn yêu cầu được sau
+   * khi sang quý mới — hoặc (b) đã có yêu cầu (để còn thấy trạng thái duyệt/trao).
+   * `now` truyền vào để test tất định.
    */
   async rewardsProgress(userId: string, now: Date = new Date()) {
     await this.dealerContext(userId); // chặn nếu chưa phải đại lý
-    const { q, year, qStart, qEnd, yStart, yEnd } = this.vnPeriodBounds(now);
-    const base = { userId, type: 'DEALER' as const, status: { notIn: ['CANCELLED', 'RETURNED'] as ('CANCELLED' | 'RETURNED')[] } };
-    const [qAgg, yAgg] = await Promise.all([
-      this.prisma.order.aggregate({ where: { ...base, createdAt: { gte: qStart, lt: qEnd } }, _sum: { total: true } }),
-      this.prisma.order.aggregate({ where: { ...base, createdAt: { gte: yStart, lt: yEnd } }, _sum: { total: true } }),
-    ]);
-    const quarterVolume = qAgg._sum.total ?? 0;
-    const yearVolume = yAgg._sum.total ?? 0;
+    const graceDays = await this.claimGraceDays();
+    const graceMs = graceDays * DAY_MS;
+    const p = this.rewardPeriods(now);
+
     const rewards = await this.prisma.dealerReward.findMany({
       where: { isActive: true },
       orderBy: [{ sortOrder: 'asc' }],
     });
-    return {
-      quarter: `Q${q + 1}/${year}`,
-      year,
-      quarterVolume,
-      yearVolume,
-      rewards: rewards.map((r) => {
-        const volume = r.period === 'YEAR' ? yearVolume : quarterVolume;
-        return {
-          id: r.id,
-          type: r.type,
-          title: r.title,
-          description: r.description,
-          threshold: r.threshold,
-          period: r.period,
-          volume,
-          achieved: volume >= r.threshold,
-          toGo: Math.max(0, r.threshold - volume),
-        };
-      }),
+    const hasQuarterRewards = rewards.some((r) => r.period !== 'YEAR');
+    const hasYearRewards = rewards.some((r) => r.period === 'YEAR');
+    const EMPTY: DealerVolume = { settled: 0, settledCount: 0, pending: 0, pendingCount: 0 };
+    const [curQ, curY, prevQ, prevY] = await Promise.all([
+      this.dealerVolume(userId, p.curQuarter.start, p.curQuarter.end),
+      this.dealerVolume(userId, p.curYear.start, p.curYear.end),
+      hasQuarterRewards ? this.dealerVolume(userId, p.prevQuarter.start, p.prevQuarter.end) : EMPTY,
+      hasYearRewards ? this.dealerVolume(userId, p.prevYear.start, p.prevYear.end) : EMPTY,
+    ]);
+
+    const claims = rewards.length
+      ? await this.prisma.dealerRewardClaim.findMany({
+          where: {
+            userId,
+            periodKey: { in: [p.curQuarter.key, p.curYear.key, p.prevQuarter.key, p.prevYear.key] },
+          },
+        })
+      : [];
+    const claimOf = new Map(claims.map((c) => [`${c.rewardId}|${c.periodKey}`, c]));
+
+    type Reward = (typeof rewards)[number];
+    const row = (r: Reward, period: RewardPeriod, vol: DealerVolume, isCurrentPeriod: boolean) => {
+      const claim = claimOf.get(`${r.id}|${period.key}`) ?? null;
+      const achieved = vol.settled >= r.threshold;
+      const deadline = new Date(period.end.getTime() + graceMs);
+      return {
+        id: r.id,
+        type: r.type,
+        title: r.title,
+        description: r.description,
+        threshold: r.threshold,
+        period: r.period,
+        periodKey: period.key,
+        periodLabel: period.label,
+        isCurrentPeriod,
+        volume: vol.settled,
+        pendingVolume: vol.pending,
+        achieved,
+        toGo: Math.max(0, r.threshold - vol.settled),
+        claimStatus: claim?.status ?? null,
+        claimId: claim?.id ?? null,
+        rejectionReason: claim?.rejectionReason ?? null,
+        claimDeadline: deadline.toISOString(),
+        canClaim: achieved && !claim && now.getTime() < deadline.getTime(),
+      };
     };
+
+    const current = rewards.map((r) =>
+      r.period === 'YEAR' ? row(r, p.curYear, curY, true) : row(r, p.curQuarter, curQ, true),
+    );
+    const previous = rewards
+      .map((r) => (r.period === 'YEAR' ? row(r, p.prevYear, prevY, false) : row(r, p.prevQuarter, prevQ, false)))
+      .filter((x) => x.claimStatus !== null || x.canClaim);
+
+    return {
+      quarter: p.curQuarter.key,
+      year: Number(p.curYear.key),
+      quarterVolume: curQ.settled,
+      yearVolume: curY.settled,
+      quarterPendingVolume: curQ.pending,
+      yearPendingVolume: curY.pending,
+      claimGraceDays: graceDays,
+      rewards: [...current, ...previous],
+    };
+  }
+
+  /**
+   * Đại lý gửi yêu cầu nhận thưởng mốc (tour/quà) cho 1 kỳ. Lưu DealerRewardClaim PENDING và báo
+   * admin; admin duyệt/từ chối rồi xác nhận đã trao (approve/reject/markRewardClaimPaid).
+   *  - `periodKey` bỏ trống = kỳ hiện tại của phần thưởng; cho phép kỳ liền trước trong thời gian
+   *    gia hạn (dealer.reward_claim_grace_days).
+   *  - Idempotent: unique (userId, periodKey, rewardId) — bấm lại/2 request đồng thời chỉ tạo đúng
+   *    1 yêu cầu, lần sau trả lại yêu cầu cũ (alreadyClaimed) thay vì báo "đã ghi nhận" giả.
+   *  - Chỉ tính doanh số ĐÃ CHỐT (dealerVolume) — đơn chưa trả/còn tự huỷ được không đủ điều kiện.
+   */
+  async claimReward(
+    userId: string,
+    rewardId: string,
+    opts: { periodKey?: string; note?: string } = {},
+    now: Date = new Date(),
+  ) {
+    await this.dealerContext(userId);
+    const reward = await this.prisma.dealerReward.findUnique({ where: { id: rewardId } });
+    if (!reward || !reward.isActive) {
+      throw new NotFoundException('Phần thưởng đại lý không tồn tại hoặc đã ngừng áp dụng.');
+    }
+
+    const cur = this.rewardPeriods(now);
+    const periodKey = opts.periodKey?.trim();
+    const period = periodKey
+      ? DealerService.parsePeriodKey(reward.period, periodKey)
+      : reward.period === 'YEAR'
+        ? cur.curYear
+        : cur.curQuarter;
+    if (!period) throw new BadRequestException('Kỳ thưởng không hợp lệ cho phần thưởng này.');
+    if (now.getTime() < period.start.getTime()) {
+      throw new BadRequestException(`${period.label} chưa bắt đầu.`);
+    }
+
+    // Đã gửi rồi → trả lại yêu cầu cũ (kể cả khi đã quá hạn gia hạn) — không tạo trùng, không báo admin lại.
+    const existing = await this.prisma.dealerRewardClaim.findFirst({
+      where: { userId, rewardId: reward.id, periodKey: period.key },
+    });
+    if (existing) return this.claimResponse(existing, period, true);
+
+    const graceDays = await this.claimGraceDays();
+    const deadline = new Date(period.end.getTime() + graceDays * DAY_MS);
+    if (now.getTime() >= deadline.getTime()) {
+      throw new BadRequestException(
+        `Đã hết hạn gửi yêu cầu nhận thưởng ${period.label} (hạn chót ${DealerService.vnLastDayLabel(deadline)}).`,
+      );
+    }
+
+    const vol = await this.dealerVolume(userId, period.start, period.end);
+    if (vol.settled < reward.threshold) {
+      throw new BadRequestException(
+        `Doanh số đã chốt ${period.label} của bạn (${vnd(vol.settled)}) chưa đạt mốc nhận thưởng (${vnd(reward.threshold)}).` +
+          (vol.pending > 0
+            ? ` Còn ${vnd(vol.pending)} từ đơn chưa thanh toán hoặc chưa đóng gói — chỉ được tính khi đơn đã thanh toán/ghi công nợ và đã đóng gói.`
+            : ''),
+      );
+    }
+
+    let claim: DealerRewardClaim;
+    try {
+      claim = await this.prisma.dealerRewardClaim.create({
+        data: {
+          userId,
+          rewardId: reward.id,
+          periodKey: period.key,
+          rewardTitle: reward.title,
+          rewardType: reward.type,
+          rewardPeriod: reward.period,
+          threshold: reward.threshold,
+          volumeAtClaim: vol.settled,
+          note: opts.note?.trim() || null,
+        },
+      });
+    } catch (err) {
+      // Race 2 request cùng lúc cùng qua pre-check: unique (userId, periodKey, rewardId) chặn ở DB,
+      // request thua ăn P2002 → trả yêu cầu của request thắng (mirror apply/creditPayment).
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const won = await this.prisma.dealerRewardClaim.findFirst({
+          where: { userId, rewardId: reward.id, periodKey: period.key },
+        });
+        if (won) return this.claimResponse(won, period, true);
+      }
+      throw err;
+    }
+
+    this.logger.log(
+      `Đại lý ${userId} yêu cầu nhận thưởng "${reward.title}" ${period.label} (doanh số đã chốt ${vnd(vol.settled)}) — claim ${claim.id}.`,
+    );
+    // Non-fatal: yêu cầu đã lưu, admin vẫn thấy ở danh sách chờ duyệt dù gửi thông báo lỗi.
+    await this.notifyAdminsOfClaim(claim, period).catch((e) =>
+      this.logger.warn(`Báo admin yêu cầu nhận thưởng ${claim.id} lỗi: ${(e as Error).message}`),
+    );
+    return this.claimResponse(claim, period, false);
+  }
+
+  private claimResponse(claim: DealerRewardClaim, period: RewardPeriod, alreadyClaimed: boolean) {
+    return {
+      success: true,
+      alreadyClaimed,
+      claimStatus: claim.status,
+      message: alreadyClaimed
+        ? `Bạn đã gửi yêu cầu nhận "${claim.rewardTitle}" (${period.label}) trước đó — trạng thái: ${CLAIM_STATUS_LABEL[claim.status]}.`
+        : `Đã gửi yêu cầu nhận "${claim.rewardTitle}" (${period.label}). Tubu Tree sẽ xét duyệt và báo kết quả trong mục Thông báo của app.`,
+      claim: {
+        id: claim.id,
+        status: claim.status,
+        periodKey: claim.periodKey,
+        volumeAtClaim: claim.volumeAtClaim,
+        createdAt: claim.createdAt,
+      },
+      reward: { id: claim.rewardId, title: claim.rewardTitle, type: claim.rewardType, threshold: claim.threshold },
+      periodKey: period.key,
+      periodLabel: period.label,
+      currentVolume: claim.volumeAtClaim,
+    };
+  }
+
+  /** Báo mọi tài khoản ADMIN (thông báo in-app/ZNS theo template DEALER_REWARD_CLAIM_NEW). */
+  private async notifyAdminsOfClaim(claim: DealerRewardClaim, period: RewardPeriod) {
+    if (!this.notifications) {
+      this.logger.warn(`NotificationsService chưa wiring — không báo được admin về yêu cầu nhận thưởng ${claim.id}.`);
+      return;
+    }
+    const [admins, dealer] = await Promise.all([
+      this.prisma.user.findMany({ where: { role: 'ADMIN', isBlocked: false }, select: { id: true }, take: 20 }),
+      this.prisma.user.findUnique({ where: { id: claim.userId }, select: { fullName: true, phone: true } }),
+    ]);
+    if (admins.length === 0) {
+      this.logger.warn(`Không có tài khoản ADMIN nào để báo yêu cầu nhận thưởng ${claim.id}.`);
+      return;
+    }
+    const data = {
+      dealer: dealer?.fullName || dealer?.phone || claim.userId,
+      reward: claim.rewardTitle,
+      period: period.label,
+      volume: claim.volumeAtClaim.toLocaleString('vi-VN'),
+    };
+    const results = await Promise.allSettled(
+      admins.map((a) => this.notifications!.notify(a.id, 'DEALER_REWARD_CLAIM_NEW', data)),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    if (failed > 0) this.logger.warn(`Báo admin yêu cầu nhận thưởng ${claim.id}: lỗi ${failed}/${admins.length}.`);
+  }
+
+  // ── Admin: xử lý yêu cầu nhận thưởng mốc đại lý ──
+
+  /** Danh sách yêu cầu nhận thưởng (mới nhất trước), lọc theo trạng thái, kèm thông tin đại lý. */
+  async listRewardClaims(status: string | undefined, page: number, limit: number) {
+    if (status && !CLAIM_STATUSES.includes(status as DealerRewardClaimStatus)) {
+      throw new BadRequestException('Trạng thái yêu cầu không hợp lệ.');
+    }
+    const where: Prisma.DealerRewardClaimWhereInput = status ? { status: status as DealerRewardClaimStatus } : {};
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.dealerRewardClaim.findMany({ where, orderBy: { createdAt: 'desc' }, ...skipTake(page, limit) }),
+      this.prisma.dealerRewardClaim.count({ where }),
+    ]);
+    const userIds = [...new Set(items.map((c) => c.userId))];
+    const [users, apps] = userIds.length
+      ? await Promise.all([
+          this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, fullName: true, phone: true } }),
+          this.prisma.dealerApplication.findMany({
+            where: { userId: { in: userIds }, status: 'APPROVED' },
+            orderBy: { createdAt: 'desc' },
+            select: { userId: true, businessName: true },
+          }),
+        ])
+      : [[], []];
+    const userOf = new Map(users.map((u) => [u.id, u]));
+    const bizOf = new Map<string, string>();
+    for (const a of apps) if (!bizOf.has(a.userId)) bizOf.set(a.userId, a.businessName);
+    return paginated(
+      items.map((c) => ({
+        ...c,
+        dealer: {
+          id: c.userId,
+          fullName: userOf.get(c.userId)?.fullName ?? null,
+          phone: userOf.get(c.userId)?.phone ?? null,
+          businessName: bizOf.get(c.userId) ?? null,
+        },
+      })),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  /**
+   * Duyệt yêu cầu PENDING → APPROVED. Kiểm lại doanh số ĐÃ CHỐT của kỳ ngay lúc duyệt: đơn có thể
+   * bị huỷ/trả SAU khi đại lý gửi yêu cầu — tụt dưới mốc thì chặn duyệt (admin từ chối kèm lý do).
+   * Chuyển trạng thái bằng updateMany có guard status → 2 admin bấm cùng lúc chỉ 1 người thắng.
+   */
+  async approveRewardClaim(adminId: string, id: string, note?: string) {
+    const claim = await this.prisma.dealerRewardClaim.findUnique({ where: { id } });
+    if (!claim) throw new NotFoundException('Không tìm thấy yêu cầu nhận thưởng.');
+    if (claim.status !== 'PENDING') {
+      throw new BadRequestException(`Yêu cầu đang ở trạng thái "${CLAIM_STATUS_LABEL[claim.status]}" — không thể duyệt.`);
+    }
+    const period = DealerService.parsePeriodKey(claim.rewardPeriod, claim.periodKey);
+    if (!period) throw new BadRequestException(`Kỳ thưởng "${claim.periodKey}" không hợp lệ.`);
+    const vol = await this.dealerVolume(claim.userId, period.start, period.end);
+    if (vol.settled < claim.threshold) {
+      throw new BadRequestException(
+        `Doanh số đã chốt ${period.label} của đại lý hiện chỉ còn ${vnd(vol.settled)} (mốc ${vnd(claim.threshold)}; lúc yêu cầu ${vnd(claim.volumeAtClaim)}) — có đơn đã huỷ/trả sau khi gửi yêu cầu. Hãy kiểm tra lại hoặc từ chối kèm lý do.`,
+      );
+    }
+    const res = await this.prisma.dealerRewardClaim.updateMany({
+      where: { id, status: 'PENDING' },
+      data: { status: 'APPROVED', reviewedBy: adminId, reviewedAt: new Date(), ...(note?.trim() ? { adminNote: note.trim() } : {}) },
+    });
+    if (res.count === 0) throw new BadRequestException('Yêu cầu vừa được xử lý bởi người khác — vui lòng tải lại.');
+    this.logger.log(`Admin ${adminId} duyệt yêu cầu nhận thưởng ${id} (${claim.rewardTitle} ${period.label}).`);
+    await this.notifyDealerOfClaim(claim, period, 'DEALER_REWARD_CLAIM_APPROVED');
+    return this.prisma.dealerRewardClaim.findUniqueOrThrow({ where: { id } });
+  }
+
+  /** Từ chối yêu cầu PENDING → REJECTED (bắt buộc lý do, gửi kèm cho đại lý). Trạng thái cuối. */
+  async rejectRewardClaim(adminId: string, id: string, reason: string) {
+    const why = reason?.trim();
+    if (!why) throw new BadRequestException('Vui lòng nhập lý do từ chối.');
+    const res = await this.prisma.dealerRewardClaim.updateMany({
+      where: { id, status: 'PENDING' },
+      data: { status: 'REJECTED', reviewedBy: adminId, reviewedAt: new Date(), rejectionReason: why },
+    });
+    const claim = await this.claimAfterTransition(id, res.count, 'từ chối');
+    this.logger.log(`Admin ${adminId} từ chối yêu cầu nhận thưởng ${id}: ${why}`);
+    await this.notifyDealerOfClaim(claim, null, 'DEALER_REWARD_CLAIM_REJECTED', { reason: why });
+    return claim;
+  }
+
+  /** Xác nhận đã trao thưởng: chỉ từ APPROVED → PAID. */
+  async markRewardClaimPaid(adminId: string, id: string, note?: string) {
+    const res = await this.prisma.dealerRewardClaim.updateMany({
+      where: { id, status: 'APPROVED' },
+      data: { status: 'PAID', paidBy: adminId, paidAt: new Date(), ...(note?.trim() ? { adminNote: note.trim() } : {}) },
+    });
+    const claim = await this.claimAfterTransition(id, res.count, 'đánh dấu đã trao');
+    this.logger.log(`Admin ${adminId} xác nhận đã trao thưởng ${id} (${claim.rewardTitle}).`);
+    await this.notifyDealerOfClaim(claim, null, 'DEALER_REWARD_CLAIM_PAID');
+    return claim;
+  }
+
+  /** Sau updateMany có guard: count=0 → 404 nếu không có, 400 nếu sai trạng thái; ngược lại trả bản mới. */
+  private async claimAfterTransition(id: string, count: number, action: string) {
+    const claim = await this.prisma.dealerRewardClaim.findUnique({ where: { id } });
+    if (!claim) throw new NotFoundException('Không tìm thấy yêu cầu nhận thưởng.');
+    if (count === 0) {
+      throw new BadRequestException(`Yêu cầu đang ở trạng thái "${CLAIM_STATUS_LABEL[claim.status]}" — không thể ${action}.`);
+    }
+    return claim;
+  }
+
+  /** Báo đại lý kết quả xử lý yêu cầu (non-fatal: trạng thái đã commit, lỗi gửi chỉ log). */
+  private async notifyDealerOfClaim(
+    claim: DealerRewardClaim,
+    period: RewardPeriod | null,
+    code: 'DEALER_REWARD_CLAIM_APPROVED' | 'DEALER_REWARD_CLAIM_REJECTED' | 'DEALER_REWARD_CLAIM_PAID',
+    extra: Record<string, string> = {},
+  ) {
+    if (!this.notifications) return;
+    const label = period?.label ?? DealerService.parsePeriodKey(claim.rewardPeriod, claim.periodKey)?.label ?? claim.periodKey;
+    await this.notifications
+      .notify(claim.userId, code, { reward: claim.rewardTitle, period: label, ...extra })
+      .catch((e) => this.logger.warn(`notify ${code} lỗi (${claim.userId}): ${(e as Error).message}`));
   }
 
   private async bonusTiers(): Promise<BonusTier[]> {
@@ -436,7 +885,9 @@ export class DealerService {
   }
 
   /**
-   * Cron (đầu mỗi quý): trả thưởng doanh số cho quý VỪA KẾT THÚC cho mọi đại lý.
+   * Cron (ngày 10 tháng đầu mỗi quý — xem DealerCron): trả thưởng doanh số cho quý VỪA KẾT THÚC
+   * cho mọi đại lý, CHỈ trên doanh số đã chốt (dealerVolume). Chạy trễ vài ngày để đơn đặt cuối
+   * quý kịp thanh toán/đóng gói và được tính (tính theo ngày TẠO đơn, nên vẫn thuộc quý cũ).
    * Thưởng ghi vào DealerCreditLedger delta ÂM (giảm công nợ) — nhất quán với creditPayment.
    * Idempotent theo (userId, refType=QUARTER_BONUS, refId=quý) → cron chạy lại không cộng trùng.
    */
@@ -456,11 +907,8 @@ export class DealerService {
 
     let paid = 0;
     for (const d of dealers) {
-      const agg = await this.prisma.order.aggregate({
-        where: { userId: d.id, type: 'DEALER', status: { notIn: ['CANCELLED', 'RETURNED'] }, createdAt: { gte: start, lt: end } },
-        _sum: { total: true },
-      });
-      const revenue = agg._sum.total ?? 0;
+      // CHỈ doanh số đã chốt (đã thanh toán/ghi công nợ + không còn tự huỷ được) — xem dealerVolume.
+      const revenue = (await this.dealerVolume(d.id, start, end)).settled;
       const { bonusAmount } = bonusForRevenue(revenue, sorted);
       if (bonusAmount <= 0) continue;
 
@@ -500,6 +948,73 @@ export class DealerService {
     }
     if (paid > 0) this.logger.log(`Đã trả thưởng quý ${quarter} cho ${paid} đại lý.`);
     return { paid, quarter };
+  }
+
+  /**
+   * Thu hồi thưởng doanh số quý khi 1 đơn đại lý bị huỷ/trả SAU khi quý của đơn (theo createdAt,
+   * giờ VN — đúng cách payoutQuarterlyBonuses gom đơn) đã được trả thưởng. Không có bước này thì
+   * đặt đơn to cuối quý (trả tiền + đóng gói) → nhận thưởng ngày 10 → trả hàng/hoàn tiền là giữ
+   * nguyên phần thưởng tính trên chính đơn đó.
+   *
+   * Tính lại thưởng quý từ doanh số ĐÃ CHỐT hiện tại (dealerVolume, đọc qua `tx` nên thấy đơn vừa
+   * lật CANCELLED/RETURNED/REFUNDED) bằng CÙNG bậc/công thức với payout (bonusTiers +
+   * bonusForRevenue). Thưởng còn giữ = dòng QUARTER_BONUS + mọi dòng QUARTER_BONUS_ADJ của quý đó;
+   * nếu thưởng tính lại THẤP hơn → ghi 1 dòng QUARTER_BONUS_ADJ delta DƯƠNG (tăng lại công nợ —
+   * ngược dấu đúng cách payout đã ghi delta âm; thưởng chỉ đi vào sổ công nợ, không qua ví nào khác).
+   * Không bao giờ điều chỉnh tăng: thiếu thưởng do đơn chốt muộn không được tự bù ở đây.
+   *
+   * BẮT BUỘC gọi trong transaction của lần lật trạng thái (OrderReversalService.reverseFinancials):
+   *  - khoá dòng QUARTER_BONUS (FOR UPDATE) → 2 đơn cùng quý của 1 đại lý huỷ đồng thời phải xếp
+   *    hàng; lượt sau đọc lại các dòng ADJ đã commit nên không thu hồi trùng 1 khoản.
+   *  - idempotent theo unique (userId, refType, refId=`${quarter}:${orderId}`) qua createMany
+   *    skipDuplicates (ON CONFLICT DO NOTHING — KHÔNG ném P2002, vốn làm hỏng cả transaction
+   *    Postgres đang dở). Gọi lặp cho cùng đơn còn bị chặn từ trước: thưởng còn giữ đã trừ phần thu hồi.
+   */
+  async clawbackQuarterBonusForOrder(
+    tx: Prisma.TransactionClient,
+    order: { id: string; code?: string | null; userId: string; type: string; createdAt: Date },
+  ): Promise<{ quarter: string | null; clawedBack: number }> {
+    if (order.type !== 'DEALER') return { quarter: null, clawedBack: 0 };
+    const { q, year, qStart, qEnd } = this.vnPeriodBounds(new Date(order.createdAt));
+    const quarter = `Q${q + 1}/${year}`;
+
+    const bonusRows = await tx.$queryRaw<{ id: string; delta: number }[]>`
+      SELECT "id", "delta" FROM "dealer_credit_ledgers"
+      WHERE "userId" = ${order.userId} AND "refType" = 'QUARTER_BONUS' AND "refId" = ${quarter}
+      FOR UPDATE`;
+    const bonusRow = bonusRows[0];
+    if (!bonusRow) return { quarter, clawedBack: 0 }; // quý chưa trả thưởng → payout sau tự tính đúng
+
+    const adjustments = await tx.dealerCreditLedger.findMany({
+      where: { userId: order.userId, refType: 'QUARTER_BONUS_ADJ', refId: { startsWith: `${quarter}:` } },
+      select: { delta: true },
+    });
+    // Thưởng ghi delta âm, thu hồi ghi delta dương → thưởng còn giữ = -(tổng delta).
+    const heldBonus = -(Number(bonusRow.delta) + adjustments.reduce((s, a) => s + a.delta, 0));
+
+    const revenue = (await this.dealerVolume(order.userId, qStart, qEnd, tx)).settled;
+    const { bonusAmount } = bonusForRevenue(revenue, await this.bonusTiers());
+    const clawback = heldBonus - bonusAmount;
+    if (clawback <= 0) return { quarter, clawedBack: 0 };
+
+    const created = await tx.dealerCreditLedger.createMany({
+      data: [
+        {
+          userId: order.userId,
+          delta: clawback,
+          refType: 'QUARTER_BONUS_ADJ',
+          refId: `${quarter}:${order.id}`,
+          note: `Điều chỉnh thưởng doanh số ${quarter} (huỷ/trả đơn ${order.code ?? order.id})`,
+        },
+      ],
+      skipDuplicates: true,
+    });
+    if (created.count === 0) return { quarter, clawedBack: 0 };
+    this.logger.warn(
+      `Thu hồi ${vnd(clawback)} thưởng ${quarter} của đại lý ${order.userId} do huỷ/trả đơn ${order.code ?? order.id} ` +
+        `(thưởng còn giữ ${vnd(heldBonus)} → ${vnd(bonusAmount)}, doanh số đã chốt ${vnd(revenue)}).`,
+    );
+    return { quarter, clawedBack: clawback };
   }
 
   // ── Mẫu đơn lưu sẵn (#64) ──

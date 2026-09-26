@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpStatus, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Response } from 'express';
+import { redactUrl } from './redact-url';
 
 /**
  * Global filter: map Prisma errors → HTTP nhất quán, không lộ chi tiết DB.
@@ -40,7 +41,8 @@ export class PrismaExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const req = ctx.getRequest<{ method?: string; originalUrl?: string; url?: string }>();
     const res = ctx.getResponse<Response>();
-    const route = `${req?.method ?? '?'} ${req?.originalUrl ?? req?.url ?? '?'}`;
+    // Che bí mật webhook trong URL (/webhooks/gomdon/<token>, ?token=…) trước khi ghi log — xem redact-url.ts.
+    const route = `${req?.method ?? '?'} ${redactUrl(req?.originalUrl ?? req?.url ?? '?')}`;
 
     if (!(exception instanceof Prisma.PrismaClientKnownRequestError)) {
       // Không có `code` ổn định để phân loại (Init/Validation/Unknown/RustPanic) — log đầy đủ,

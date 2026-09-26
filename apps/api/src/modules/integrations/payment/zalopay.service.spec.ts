@@ -199,3 +199,42 @@ describe('ZalopayService — nhiều lần thử thanh toán (PaymentAttempt)', 
     );
   });
 });
+
+describe('ZalopayService — đơn thu gom tái chế: chỉ đặt vận đơn Gomdon SAU khi tiền về', () => {
+  function setup(order: Record<string, unknown>, count = 1) {
+    const updateMany = jest.fn().mockResolvedValue({ count });
+    const prisma = {
+      order: { findFirst: jest.fn().mockResolvedValue(order), update: jest.fn(), updateMany },
+      paymentAttempt: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() },
+    } as unknown as PrismaService;
+    const gomdonQueue = { getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) };
+    const notify = jest.fn().mockResolvedValue(undefined);
+    const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never, gomdonQueue as never);
+    return { svc, gomdonQueue, notify };
+  }
+  const base = { id: 'o1', code: 'TUBU1', userId: 'u1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' };
+  const raw = JSON.stringify({ app_trans_id: '250101_TUBU1' });
+
+  it('lật PAID cho đơn thu gom → enqueue job tạo vận đơn Gomdon', async () => {
+    const { svc, gomdonQueue } = setup({ ...base, hasRecyclingPickup: true });
+    await svc.handleCallback(raw, sign(raw));
+    expect(gomdonQueue.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, { jobId: 'o1' });
+  });
+
+  it('đơn thường / callback lặp (count=0) → không enqueue', async () => {
+    const a = setup({ ...base, hasRecyclingPickup: false });
+    await a.svc.handleCallback(raw, sign(raw));
+    expect(a.gomdonQueue.add).not.toHaveBeenCalled();
+    const b = setup({ ...base, hasRecyclingPickup: true }, 0);
+    await b.svc.handleCallback(raw, sign(raw));
+    expect(b.gomdonQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('enqueue lỗi → vẫn return_code=1 (đã lật PAID; cron Gomdon quét AWAITING_PAYMENT+PAID)', async () => {
+    const { svc, gomdonQueue, notify } = setup({ ...base, hasRecyclingPickup: true });
+    gomdonQueue.add.mockRejectedValueOnce(new Error('redis'));
+    const r = await svc.handleCallback(raw, sign(raw));
+    expect(r.return_code).toBe(1);
+    expect(notify).toHaveBeenCalled();
+  });
+});

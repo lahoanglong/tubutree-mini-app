@@ -86,3 +86,35 @@ describe('Trần kích thước mảng trong body', () => {
     expect(keys).not.toContain('arrayMaxSize');
   });
 });
+
+describe('PlaceOrderDto.recycling — validation thu gom vật liệu tái chế', () => {
+  const base = { addressId: 'a1', paymentMethod: 'COD' };
+
+  it('hasRecyclingPickup boolean hợp lệ', async () => {
+    const keys = await errorsFor(PlaceOrderDto, { ...base, hasRecyclingPickup: true });
+    expect(keys).toHaveLength(0);
+  });
+
+  it('hasRecyclingPickup không phải boolean → lỗi isBoolean', async () => {
+    const keys = await errorsFor(PlaceOrderDto, { ...base, hasRecyclingPickup: 'not-bool' });
+    expect(keys).toContain('isBoolean');
+  });
+
+  it('recyclingNote dài hơn 500 ký tự → lỗi maxLength', async () => {
+    const keys = await errorsFor(PlaceOrderDto, {
+      ...base,
+      hasRecyclingPickup: true,
+      recyclingNote: 'a'.repeat(501),
+    });
+    expect(keys).toContain('maxLength');
+  });
+
+  it('recyclingNote hợp lệ (≤ 500 ký tự) → không lỗi', async () => {
+    const keys = await errorsFor(PlaceOrderDto, {
+      ...base,
+      hasRecyclingPickup: true,
+      recyclingNote: 'Vỏ hộp sữa, túi nilong sạch',
+    });
+    expect(keys).toHaveLength(0);
+  });
+});

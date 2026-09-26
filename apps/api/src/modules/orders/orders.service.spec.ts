@@ -29,6 +29,7 @@ function makeService(
     /** Hoàn kho đi bằng SQL thô (catalog/variation-stock.ts). */
     executeRaw?: jest.Mock;
     coinCreate?: jest.Mock;
+    gomdonQueue?: { getJob: jest.Mock; add: jest.Mock };
   } = {},
 ) {
   // updateMany trả count=1 (thắng race) mặc định; test race truyền count=0.
@@ -54,7 +55,7 @@ function makeService(
     $transaction,
   } as unknown as PrismaService;
   return {
-    svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal),
+    svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal, spies.gomdonQueue as never),
     updateMany,
     userUpdate,
     executeRaw,
@@ -310,5 +311,73 @@ describe('OrdersService.requestReturn', () => {
     const r = await svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi sản phẩm' });
     expect(r).toEqual({ id: 'r1' });
     expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('OrdersService.cancel — đơn thu gom tái chế (Gomdon)', () => {
+  beforeEach(() => jest.clearAllMocks());
+  const queue = () => ({ getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) });
+
+  it('khách huỷ đơn thu gom đã có vận đơn → enqueue job huỷ vận đơn Gomdon', async () => {
+    const q = queue();
+    const { svc } = makeService({ ...baseOrder, hasRecyclingPickup: true, gomdonOrderId: '77', gomdonStatus: '1' }, { gomdonQueue: q });
+    await svc.cancel('u1', 'TUBU1');
+    expect(q.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, { jobId: 'cancel-o1' });
+  });
+
+  it('bưu tá Gomdon đã lấy hàng (webhook SHIPPING tới trễ) → KHÔNG cho khách tự huỷ', async () => {
+    const q = queue();
+    const { svc, updateMany } = makeService({ ...baseOrder, hasRecyclingPickup: true, gomdonOrderId: '77', gomdonStatus: '3' }, { gomdonQueue: q });
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('bưu tá lấy hàng');
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(q.add).not.toHaveBeenCalled();
+  });
+
+  it('đơn thường → không enqueue huỷ Gomdon; thua race (count=0) → không enqueue', async () => {
+    const q = queue();
+    const a = makeService({ ...baseOrder }, { gomdonQueue: q });
+    await a.svc.cancel('u1', 'TUBU1');
+    expect(q.add).not.toHaveBeenCalled();
+    const q2 = queue();
+    const b = makeService(
+      { ...baseOrder, hasRecyclingPickup: true, gomdonOrderId: '77' },
+      { gomdonQueue: q2, updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    );
+    await b.svc.cancel('u1', 'TUBU1').catch(() => undefined);
+    expect(q2.add).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrdersService.requestReturn — hạn đổi/trả tính từ mốc giao THẬT (deliveredAt), không phải updatedAt', () => {
+  const DAY = 864e5;
+  function svcFor(order: Record<string, unknown>, history: { createdAt: Date } | null = null, windowDays = 7) {
+    const create = jest.fn().mockResolvedValue({ id: 'r1' });
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue({ ...baseOrder, status: 'DELIVERED', createdAt: new Date(Date.now() - 30 * DAY), ...order }) },
+      orderStatusHistory: { findFirst: jest.fn().mockResolvedValue(history) },
+      returnRequest: { findFirst: jest.fn().mockResolvedValue(null), create },
+    } as unknown as PrismaService;
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> => (k === 'returns.window_days' ? (windowDays as T) : (fb as T)),
+    } as unknown as SystemConfigService;
+    return { svc: new OrdersService(prisma, loyalty, cart, notifications, cfg, affiliate, reversal), create };
+  }
+
+  it('giao 10 ngày trước, webhook vận chuyển vừa ghi đơn (updatedAt = hôm nay) → QUÁ HẠN 7 ngày', async () => {
+    const { svc, create } = svcFor({ deliveredAt: new Date(Date.now() - 10 * DAY), updatedAt: new Date() });
+    await expect(svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi' })).rejects.toThrow('Quá hạn đổi/trả');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('giao 2 ngày trước → còn hạn, tạo yêu cầu', async () => {
+    const { svc, create } = svcFor({ deliveredAt: new Date(Date.now() - 2 * DAY), updatedAt: new Date() });
+    await svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi' });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('đơn cũ chưa có deliveredAt → lấy lần lật DELIVERED trong order_status_history', async () => {
+    const { svc, create } = svcFor({ deliveredAt: null, updatedAt: new Date() }, { createdAt: new Date(Date.now() - 9 * DAY) });
+    await expect(svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi' })).rejects.toThrow('Quá hạn đổi/trả');
+    expect(create).not.toHaveBeenCalled();
   });
 });

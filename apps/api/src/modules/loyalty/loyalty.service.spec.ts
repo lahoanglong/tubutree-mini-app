@@ -330,6 +330,38 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     expect(where.createdAt.gte).toBeInstanceOf(Date);
   });
 
+  // Hạng là hạng theo CHI TIÊU (minPoints = minSpending / loyalty.vnd_per_point: 500đ ↔ 5tr, …).
+  // Điểm KHÔNG sinh từ mua hàng online đã giao không được đẩy hạng: điểm danh (bấm nút mỗi ngày),
+  // điểm POS nhân viên nhập tay (không đối chiếu được hoá đơn), và điểm HOÀN lại khi huỷ đơn đã
+  // dùng điểm (vòng đặt-huỷ lặp lại sẽ cộng dồn "điểm tích" vô hạn).
+  it('điểm danh / POS / hoàn điểm đã dùng KHÔNG tính vào điểm xét hạng', async () => {
+    const { prisma, pointsAggregate } = prismaFor({ pointsBalance: 0, tierId: 'mam' }, 0, 0);
+    await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
+    const where = pointsAggregate.mock.calls[0][0].where;
+    expect(where.NOT).toEqual(
+      expect.arrayContaining([
+        { reason: { startsWith: 'DAILY_CHECKIN' } },
+        { reason: { startsWith: 'POS_OFFLINE_ORDER' } },
+        { reason: { startsWith: 'ORDER_REFUND_POINTS' } },
+      ]),
+    );
+  });
+
+  it('getOverview: "còn X điểm lên hạng" tính theo điểm xét hạng, không theo số dư (số dư có điểm danh)', async () => {
+    const pointsAggregate = jest.fn().mockResolvedValue({ _sum: { delta: 300 } });
+    const prisma = {
+      user: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 900, tierId: null, tier: null }),
+      },
+      membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
+      pointsTransaction: { aggregate: pointsAggregate },
+    } as unknown as PrismaService;
+    const ov = await new LoyaltyService(prisma, makeConfig()).getOverview('u1');
+    expect(ov.tierPoints).toBe(300);
+    expect(ov.nextTier).toMatchObject({ id: 'loc', pointsToGo: 700 });
+    expect(pointsAggregate.mock.calls[0][0].where.NOT).toBeDefined();
+  });
+
   it('đã đúng hạng → không update', async () => {
     const { prisma, update } = prismaFor({ pointsBalance: 0, tierId: 'mam' }, 0);
     await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');

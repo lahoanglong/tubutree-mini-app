@@ -21,6 +21,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AdminService } from './admin.service';
 import { CatalogService } from '../catalog/catalog.service';
+import { ADMIN_ORDER_STATUSES, type RecyclingFilter } from './admin-order-filter';
 
 /**
  * value <= max CHỈ khi type=PERCENT (chặn admin nhập % vô lý, vd 500%).
@@ -152,6 +153,40 @@ class UpdateOrderStatusDto {
   note?: string;
 }
 
+/**
+ * Query có lọc — PHẢI khai báo trong DTO. ValidationPipe toàn cục bật forbidNonWhitelisted, nên
+ * `@Query() q: PaginationQuery` kèm `@Query('status')` riêng làm MỌI request có `?status=`/`?search=`
+ * bị 400 "property status should not exist" (web admin: lọc trạng thái/tìm đơn, lọc hồ sơ đại lý,
+ * lọc đổi/trả đều hỏng).
+ */
+export class DealerAppsQuery extends PaginationQuery {
+  // Giá trị lạ lọt xuống Prisma thành PrismaClientValidationError → 500 trần; chặn bằng enum thật.
+  @IsOptional() @IsIn(['PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED']) status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+}
+
+export class ReturnRequestsQuery extends PaginationQuery {
+  @IsOptional() @IsIn(['REQUESTED', 'APPROVED', 'REJECTED']) status?: 'REQUESTED' | 'APPROVED' | 'REJECTED';
+}
+
+export class ListOrdersQuery extends PaginationQuery {
+  @IsOptional() @IsIn([...ADMIN_ORDER_STATUSES]) status?: (typeof ADMIN_ORDER_STATUSES)[number];
+  @IsOptional() @IsString() @MaxLength(100) search?: string;
+  /** attention = "Cần xử lý thu gom"; all = mọi đơn có chọn thu gom tái chế. */
+  @IsOptional() @IsIn(['attention', 'all']) recycling?: RecyclingFilter;
+}
+
+export class DealerPriceHistoryQuery extends PaginationQuery {
+  @IsOptional() @IsString() @MaxLength(40) variationId?: string;
+}
+
+export class GomdonRetryDto {
+  /**
+   * Bắt buộc true khi vận đơn ở NEEDS_MANUAL_CHECK: admin đã tra Gomdon theo mã đơn và xác nhận KHÔNG
+   * có vận đơn nào (tránh tạo vận đơn thứ hai → bưu tá giao 2 lần).
+   */
+  @IsOptional() @IsBoolean() confirmedNoWaybill?: boolean;
+}
+
 class SetUserRoleDto {
   @IsString() phone!: string;
   @IsIn(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'])
@@ -185,8 +220,8 @@ export class AdminController {
   }
 
   @Get('dealer-applications')
-  dealerApps(@Query() q: PaginationQuery, @Query('status') status?: string) {
-    return this.admin.listDealerApplications(status, q.page, q.limit);
+  dealerApps(@Query() q: DealerAppsQuery) {
+    return this.admin.listDealerApplications(q.status, q.page, q.limit);
   }
 
   @Post('dealer-applications/:id/review')
@@ -195,8 +230,8 @@ export class AdminController {
   }
 
   @Get('return-requests')
-  returns(@Query() q: PaginationQuery, @Query('status') status?: string) {
-    return this.admin.listReturnRequests(status, q.page, q.limit);
+  returns(@Query() q: ReturnRequestsQuery) {
+    return this.admin.listReturnRequests(q.status, q.page, q.limit);
   }
 
   @Post('return-requests/:id/review')
@@ -216,12 +251,29 @@ export class AdminController {
   }
 
   @Get('orders')
-  orders(
-    @Query() q: PaginationQuery,
-    @Query('status') status?: string,
-    @Query('search') search?: string,
-  ) {
-    return this.admin.listOrders(q.page, q.limit, status, search);
+  orders(@Query() q: ListOrdersQuery) {
+    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling);
+  }
+
+  /**
+   * Tạo lại vận đơn thu gom Gomdon (FAILED / NOT_CONFIGURED / NEEDS_MANUAL_CHECK + xác nhận / Gomdon đã
+   * huỷ vận đơn cũ). Luật an toàn nằm ở GomdonOrderService.retryPush — lỗi của nó trả nguyên văn.
+   */
+  @Post('orders/:id/gomdon/retry')
+  retryGomdon(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: GomdonRetryDto) {
+    return this.admin.retryGomdonPush(adminId, id, dto.confirmedNoWaybill);
+  }
+
+  /** Huỷ vận đơn Gomdon (đơn đã huỷ → xếp job huỷ; đơn còn hiệu lực → huỷ ngay). */
+  @Post('orders/:id/gomdon/cancel-waybill')
+  cancelGomdonWaybill(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
+    return this.admin.cancelGomdonWaybill(adminId, id);
+  }
+
+  /** Tình trạng tích hợp Gomdon (chỉ boolean — không bao giờ trả tài khoản/mật khẩu). */
+  @Get('gomdon/status')
+  gomdonStatus() {
+    return this.admin.gomdonStatus();
   }
 
   /** Sổ ghi vết: ai đổi trạng thái đơn này, từ đâu sang đâu, lúc nào. */
@@ -262,8 +314,8 @@ export class AdminController {
   }
 
   @Get('dealer-prices/history')
-  dealerPriceHistory(@Query() q: PaginationQuery, @Query('variationId') variationId?: string) {
-    return this.admin.getDealerPriceHistory(variationId, q.page, q.limit);
+  dealerPriceHistory(@Query() q: DealerPriceHistoryQuery) {
+    return this.admin.getDealerPriceHistory(q.variationId, q.page, q.limit);
   }
 
   // "Đã bán" gom từ sàn ngoài: dán "sku,số-đã-bán" hoặc rows JSON.

@@ -14,12 +14,13 @@ export function formatSold(n: number | null | undefined): string | null {
 }
 
 /** Ghép dòng địa chỉ, bỏ phần rỗng (hệ 2 cấp không còn quận/huyện → tránh ", ,"). */
-export function addressLine(a: {
+export function addressLine(a?: {
   street?: string | null;
   ward?: string | null;
   district?: string | null;
   province?: string | null;
-}): string {
+} | null): string {
+  if (!a) return '';
   return [a.street, a.ward, a.district, a.province].filter(Boolean).join(', ');
 }
 
@@ -65,4 +66,133 @@ export function formatMultiplier(x: number | null | undefined): string {
   const v = Number(x ?? 0);
   if (!Number.isFinite(v) || v <= 0) return '1';
   return v.toFixed(2).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
+}
+
+// ── Thu gom vật liệu tái chế (đơn đổi hàng Gomdon/BestExpress) ─────────────────────────────
+
+/** Cân nặng mặc định mỗi sản phẩm khi variation chưa khai (gram) — trùng fallback phía BE. */
+export const RECYCLING_WEIGHT_FALLBACK_GRAMS = 500;
+
+/**
+ * Số kg thu gom tối đa ≈ tổng cân nặng đơn (cùng công thức BE gomdon-weight.ts): dòng thiếu/0 gram
+ * lấy 500g, tối thiểu 500g. Trả chuỗi "2.4".
+ */
+export function recyclingMaxKg(lines: { weight?: number | null; quantity: number }[]): string {
+  const fb = RECYCLING_WEIGHT_FALLBACK_GRAMS;
+  const grams = lines.reduce((s, it) => s + (typeof it.weight === 'number' && it.weight > 0 ? it.weight : fb) * it.quantity, 0);
+  return (Math.max(grams, fb) / 1000).toFixed(1);
+}
+
+/**
+ * Trường gửi kèm POST /checkout cho lựa chọn thu gom. CHỈ có mặt khi tính năng đang bật VÀ khách
+ * chọn — mặc định body y hệt bản cũ (API bản cũ bật forbidNonWhitelisted sẽ trả 400 cho mọi đơn nếu
+ * luôn gửi `hasRecyclingPickup:false`; API bản mới cũng từ chối `true` khi tính năng tắt).
+ */
+export function recyclingCheckoutFields(
+  enabled: boolean,
+  selected: boolean,
+  note: string,
+): { hasRecyclingPickup?: true; recyclingNote?: string } {
+  if (!enabled || !selected) return {};
+  const trimmed = note.trim();
+  return trimmed ? { hasRecyclingPickup: true, recyclingNote: trimmed } : { hasRecyclingPickup: true };
+}
+
+export type RecyclingTone = 'progress' | 'success' | 'warning' | 'muted';
+
+export interface RecyclingPickupView {
+  tone: RecyclingTone;
+  title: string;
+  detail: string;
+  /** Mã vận đơn BestExpress để khách đối chiếu với bưu tá (ẩn khi đơn đã huỷ). */
+  waybill: string | null;
+}
+
+const PICKED_UP_OR_MOVING = new Set(['3', '4', '5']);
+
+/**
+ * Bưu tá Gomdon đã cầm hàng (mã số khác 1/2/10) — BE không cho khách tự huỷ nữa (orders.service),
+ * nên FE ẩn nút huỷ thay vì để khách bấm rồi nhận lỗi.
+ */
+export function isRecyclingPickedUp(gomdonStatus: string | null | undefined): boolean {
+  if (!gomdonStatus || !/^\d+$/.test(gomdonStatus)) return false;
+  return !['1', '2', '10'].includes(gomdonStatus);
+}
+
+const NEEDS_CSKH = new Set(['NEEDS_MANUAL_CHECK', 'FAILED', 'NOT_CONFIGURED', '2', '6', '8', '9', '10', '11', '12']);
+
+/**
+ * Trạng thái thu gom hiển thị cho KHÁCH ở chi tiết đơn — nói đúng những gì hệ thống đã làm
+ * (không hứa "bưu tá sẽ tới" khi vận đơn chưa tạo được / đơn chưa thanh toán / đã huỷ).
+ * gomdonStatus: mã Gomdon "1".."12" hoặc trạng thái nội bộ (xem shared-types OrderDTO).
+ */
+export function recyclingPickupView(o: {
+  status: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  gomdonStatus?: string | null;
+  gomdonPartnerCode?: string | null;
+  gomdonCancelStatus?: string | null;
+}): RecyclingPickupView {
+  const s = o.gomdonStatus ?? null;
+  const waybill = o.gomdonPartnerCode ?? null;
+
+  if (o.status === 'CANCELLED' || o.status === 'RETURNED') {
+    const pending = o.gomdonCancelStatus === 'FAILED' || o.gomdonCancelStatus === 'TOO_LATE';
+    return {
+      tone: 'muted',
+      title: 'Đã huỷ thu gom',
+      detail: pending
+        ? 'Đơn đã huỷ. Tubu đang huỷ lịch thu gom với đơn vị vận chuyển, CSKH sẽ liên hệ nếu cần.'
+        : 'Đơn đã huỷ nên lịch thu gom vật liệu tái chế cũng được huỷ.',
+      waybill: null,
+    };
+  }
+  if (s === '7') {
+    return {
+      tone: 'success',
+      title: 'Đã giao hàng',
+      detail: 'Cảm ơn bạn đã chung tay tái chế 🌿 Nếu bưu tá chưa nhận vật liệu của bạn, nhắn Zalo OA Tubu để được hỗ trợ.',
+      waybill,
+    };
+  }
+  if (s && NEEDS_CSKH.has(s)) {
+    return {
+      tone: 'warning',
+      title: 'CSKH sẽ liên hệ hẹn thu gom',
+      detail: 'Lịch thu gom tự động chưa thực hiện được. CSKH Tubu sẽ liên hệ bạn để hẹn lại thời gian.',
+      waybill: s === '2' ? null : waybill,
+    };
+  }
+  if (s && PICKED_UP_OR_MOVING.has(s)) {
+    return {
+      tone: 'progress',
+      title: 'Bưu tá đang giao hàng',
+      detail: 'Khi nhận hàng, bạn gửi vật liệu tái chế đã đóng gói gọn cho bưu tá nhé.',
+      waybill,
+    };
+  }
+  if (s === '1') {
+    return {
+      tone: 'progress',
+      title: 'Đã đặt lịch thu gom',
+      detail: 'Bưu tá BestExpress sẽ giao hàng và nhận lại vật liệu tái chế cùng lúc.',
+      waybill,
+    };
+  }
+  const unpaidPrepaid = o.paymentMethod !== 'COD' && o.paymentStatus !== 'PAID';
+  if (s === 'AWAITING_PAYMENT' || unpaidPrepaid) {
+    return {
+      tone: 'muted',
+      title: 'Chờ thanh toán',
+      detail: 'Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.',
+      waybill: null,
+    };
+  }
+  return {
+    tone: 'progress',
+    title: 'Đang đặt lịch thu gom',
+    detail: 'Tubu đang hẹn bưu tá giao hàng kèm thu gom vật liệu tái chế cho đơn này.',
+    waybill,
+  };
 }

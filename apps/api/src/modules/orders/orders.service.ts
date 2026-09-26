@@ -1,4 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -9,9 +11,14 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { OrderReversalService } from './order-reversal.service';
+import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
+import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';
+import { isGomdonPickedUp } from '../integrations/gomdon/gomdon-status';
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly loyalty: LoyaltyService,
@@ -20,6 +27,8 @@ export class OrdersService {
     private readonly config: SystemConfigService,
     private readonly affiliate: AffiliateService,
     private readonly reversal: OrderReversalService,
+    // Optional: test/call site cũ dựng tay 7 tham số vẫn chạy (xem order-status.service.ts).
+    @Optional() @InjectQueue(QUEUE_GOMDON_PUSH) private readonly gomdonQueue?: Queue,
   ) {}
 
   async list(userId: string, status: OrderStatus | undefined, page: number, limit: number) {
@@ -50,6 +59,13 @@ export class OrdersService {
     if (order.status !== 'PENDING_PAYMENT' && order.status !== 'CONFIRMED') {
       throw new BadRequestException(
         'Đơn đã vào quy trình giao, vui lòng liên hệ Zalo OA để được hỗ trợ.',
+      );
+    }
+    // Đơn thu gom tái chế: bưu tá Gomdon đã lấy hàng (webhook chuyển SHIPPING có thể tới trễ) → không
+    // cho khách tự huỷ nữa (huỷ vận đơn bằng API không còn được, hàng đã rời kho).
+    if (order.hasRecyclingPickup && isGomdonPickedUp(order.gomdonStatus)) {
+      throw new BadRequestException(
+        'Đơn đã được bưu tá lấy hàng, vui lòng liên hệ Zalo OA để được hỗ trợ.',
       );
     }
     // Chuyển trạng thái ATOMIC (guard theo status) — chống hủy đồng thời (double-tap/retry) gây
@@ -89,6 +105,13 @@ export class OrdersService {
     // hiển thị cho CTV vĩnh viễn). Nhất quán với admin/pancake — cả hai đều gọi cặp đôi này.
     await this.loyalty.reverseOrderPoints(order.id);
     await this.affiliate.reverseCommissionsForOrder(order.id);
+    // Đơn thu gom tái chế: huỷ luôn vận đơn Gomdon (job có retry). Best-effort — lỗi enqueue chỉ log,
+    // cron GomdonReconcileService quét đơn CANCELLED còn vận đơn chưa huỷ và enqueue lại.
+    if (order.hasRecyclingPickup && this.gomdonQueue) {
+      await enqueueGomdonCancel(this.gomdonQueue, order.id).catch((err) =>
+        this.logger.error(`Enqueue huỷ vận đơn Gomdon lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`),
+      );
+    }
     // Không để lỗi gửi thông báo (best-effort) làm 500 hoá cả response — đơn đã CANCELLED +
     // hoàn ví/điểm/stock xong xuôi ở trên; guard đầu hàm (status !== PENDING_PAYMENT/CONFIRMED)
     // chặn mọi lần gọi lại cancel() sau đó nên nếu để throw ở đây, client sẽ nhận 500 vĩnh viễn
@@ -140,7 +163,10 @@ export class OrdersService {
       throw new BadRequestException('Chỉ yêu cầu đổi/trả với đơn đã giao.');
     }
     const windowDays = await this.config.get<number>('returns.window_days', 7);
-    const deliveredAt = order.updatedAt ?? order.createdAt;
+    // Mốc giao THẬT (OrderStatusService ghi deliveredAt khi lật DELIVERED; migration 20260926100000
+    // backfill đơn cũ). Trước đây dùng updatedAt: webhook vận chuyển/yêu cầu hoá đơn ghi sau khi giao
+    // làm hạn đổi/trả trôi dài quá mốc duyệt hoa hồng CTV (đổi trả được sau khi hoa hồng đã APPROVED).
+    const deliveredAt = order.deliveredAt ?? (await this.lastDeliveredAt(order.id)) ?? order.updatedAt ?? order.createdAt;
     if (Date.now() - new Date(deliveredAt).getTime() > windowDays * 864e5) {
       throw new BadRequestException(`Quá hạn đổi/trả (${windowDays} ngày từ khi nhận hàng).`);
     }
@@ -186,5 +212,17 @@ export class OrdersService {
       shippingCode: order.shippingCode,
       shippingHistory: order.shippingHistory ?? [],
     };
+  }
+
+  /** Fallback cho đơn chưa có deliveredAt: lần lật DELIVERED cuối trong sổ lịch sử trạng thái. */
+  private async lastDeliveredAt(orderId: string): Promise<Date | null> {
+    const h = await this.prisma.orderStatusHistory
+      ?.findFirst({
+        where: { orderId, toStatus: 'DELIVERED' },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      })
+      .catch(() => null);
+    return h?.createdAt ?? null;
   }
 }

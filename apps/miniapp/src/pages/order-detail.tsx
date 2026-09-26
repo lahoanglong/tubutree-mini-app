@@ -1,19 +1,33 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RotateCcw, MessageSquare } from 'lucide-react';
+import { RotateCcw, MessageSquare, Recycle } from 'lucide-react';
 import { fetchOrder, cancelOrder, repurchaseOrder, requestReturn, fetchMyReturns } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { MultiImageUpload } from '../components/image-upload';
-import { formatVnd, addressLine } from '../utils/format';
+import { formatVnd, addressLine, isRecyclingPickedUp, recyclingPickupView, type RecyclingTone } from '../utils/format';
 import { STATUS_COLOR, TIMELINE_STEPS, timelineIndex } from '../utils/order-status';
 import { openOAChat, openExternal, hasOA } from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
+
+/** Màu ô trạng thái thu gom (cùng bảng màu STATUS_COLOR của đơn). */
+const RECYCLING_TONE_BG: Record<RecyclingTone, string> = {
+  progress: 'var(--primary-50)',
+  success: 'var(--leaf-50)',
+  warning: 'var(--clay-50)',
+  muted: 'var(--neutral-100)',
+};
+const RECYCLING_TONE_FG: Record<RecyclingTone, string> = {
+  progress: 'var(--primary-700)',
+  success: 'var(--leaf-700)',
+  warning: 'var(--clay-700)',
+  muted: 'var(--neutral-600)',
+};
 
 export default function OrderDetailPage() {
   const { code } = useParams<{ code: string }>();
@@ -101,7 +115,11 @@ export default function OrderDetailPage() {
   const color = STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!;
   // Bỏ entry shape cũ ({at,data} trước khi chuẩn hoá) — chỉ hiện mốc có trạng thái/mã.
   const journey = (o.shippingHistory ?? []).filter((e) => e && (e.status || e.code));
-  const canCancel = o.status === 'PENDING_PAYMENT' || o.status === 'CONFIRMED';
+  // Đơn thu gom tái chế mà bưu tá đã lấy hàng: BE chặn khách tự huỷ → ẩn nút (liên hệ Zalo OA).
+  const canCancel =
+    (o.status === 'PENDING_PAYMENT' || o.status === 'CONFIRMED') &&
+    !(o.hasRecyclingPickup && isRecyclingPickedUp(o.gomdonStatus));
+  const recycling = o.hasRecyclingPickup ? recyclingPickupView(o) : null;
   // Đơn chuyển khoản chưa trả tiền: trước đây màn QR (/bank-payment/:code) CHỈ tới được đúng
   // một lần ngay sau khi đặt hàng (checkout.tsx). Rời khỏi đó là mất luôn mã QR/số tài khoản —
   // khách muốn trả tiền cũng không có đường quay lại, chỉ còn cách huỷ đơn rồi đặt lại.
@@ -312,6 +330,69 @@ export default function OrderDetailPage() {
               </Button>
             )}
           </Box>
+        </Box>
+      )}
+
+      {/* ── Thu gom vật liệu tái chế (nếu khách chọn) — trạng thái thật theo gomdonStatus ── */}
+      {recycling && (
+        <Box id="order-recycling" p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+          <Box flex alignItems="center" style={{ gap: 10 }}>
+            <Box
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--leaf-50)',
+                display: 'grid',
+                placeItems: 'center',
+                flex: '0 0 auto',
+              }}
+            >
+              <Recycle size={18} color="var(--leaf-600)" />
+            </Box>
+            <Box style={{ flex: 1 }}>
+              <Text bold size="small" style={{ color: 'var(--neutral-900)' }}>
+                Thu gom vật liệu tái chế
+              </Text>
+              <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 2 }}>
+                Tubu Tree tài trợ 100% phí thu gom
+              </Text>
+            </Box>
+          </Box>
+          <Box
+            mt={2}
+            p={2}
+            style={{
+              background: RECYCLING_TONE_BG[recycling.tone],
+              borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            <Text bold size="xSmall" style={{ color: RECYCLING_TONE_FG[recycling.tone] }}>
+              {recycling.title}
+            </Text>
+            <Text size="xSmall" style={{ color: 'var(--neutral-700)', marginTop: 2, lineHeight: '18px' }}>
+              {recycling.detail}
+            </Text>
+            {recycling.waybill && (
+              <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
+                Mã vận đơn BestExpress: <b>{recycling.waybill}</b>
+              </Text>
+            )}
+          </Box>
+          {o.recyclingNote && (
+            <Box
+              mt={2}
+              p={2}
+              style={{
+                background: 'var(--neutral-50)',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              <Text size="xSmall" style={{ color: 'var(--neutral-700)' }}>
+                <b>Vật dụng gửi:</b> {o.recyclingNote}
+              </Text>
+            </Box>
+          )}
         </Box>
       )}
 

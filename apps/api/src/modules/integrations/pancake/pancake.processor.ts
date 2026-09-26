@@ -1,9 +1,10 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
-import type { Job } from 'bullmq';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { Logger, Optional } from '@nestjs/common';
+import type { Job, Queue } from 'bullmq';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
-import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
+import { QUEUE_GOMDON_PUSH, QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
+import { enqueueGomdonPush } from '../gomdon/gomdon-queue';
 import { mapPancakeStatus } from './pancake-status.map';
 import { isPancakeOrderPaid } from './pancake-payment.util';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
@@ -27,6 +28,9 @@ export class PancakeProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly orderStatus: OrderStatusService,
+    // Optional để test/call site cũ dựng tay 3 tham số vẫn chạy. Đơn thu gom tái chế chuyển khoản:
+    // tiền về (lật PAID) mới được đặt vận đơn Gomdon — enqueue ở onPaymentReconcile.
+    @Optional() @InjectQueue(QUEUE_GOMDON_PUSH) private readonly gomdonQueue?: Queue,
   ) {
     super();
   }
@@ -167,6 +171,13 @@ export class PancakeProcessor extends WorkerHost {
     });
     if (flip.count > 0) {
       this.logger.log(`Pancake xác nhận thanh toán đơn ${order.code} → PAID`);
+      if (order.hasRecyclingPickup && this.gomdonQueue) {
+        // Đơn thu gom đang AWAITING_PAYMENT → giờ mới đặt bưu tá. Lỗi enqueue không được làm hỏng
+        // event (đã lật PAID) — GomdonReconcileService quét AWAITING_PAYMENT+PAID và enqueue lại.
+        await enqueueGomdonPush(this.gomdonQueue, order.id).catch((err) =>
+          this.logger.error(`Enqueue vận đơn Gomdon sau thanh toán lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`),
+        );
+      }
       await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
     }
   }
@@ -186,6 +197,19 @@ export class PancakeProcessor extends WorkerHost {
     const waybillS = str(waybill);
     const shipStatusS = str(shipStatus);
     const linkS = str(trackingLink);
+
+    // Đơn có vận đơn Gomdon (thu gom tái chế): Gomdon là nguồn DUY NHẤT của shippingCode/Partner/
+    // Status/History (webhook Gomdon ghi, kèm chặn lùi trạng thái). Pancake không ghi đè — trước đây
+    // "ai ghi sau thắng": khách thấy mã vận đơn hãng này với trạng thái của hãng kia. Pancake báo MỘT
+    // mã vận đơn KHÁC → nhiều khả năng kho đã đặt thêm hãng vận chuyển (giao/thu COD 2 lần) → cảnh báo.
+    if (order.gomdonOrderId || order.gomdonPartnerCode) {
+      if (waybillS && waybillS !== order.gomdonPartnerCode && waybillS !== order.shippingCode) {
+        this.logger.error(
+          `Đơn ${order.code} đã có vận đơn Gomdon ${order.gomdonPartnerCode ?? order.gomdonOrderId} nhưng Pancake báo vận đơn khác ${waybillS} (${carrierS ?? '?'}) — KIỂM TRA TRÙNG VẬN ĐƠN.`,
+        );
+      }
+      return;
+    }
 
     const history = Array.isArray(order.shippingHistory) ? order.shippingHistory : [];
     // Ghi mốc khi TRẠNG THÁI hoặc MÃ VẬN ĐƠN đổi (gán waybill cũng là 1 mốc) — tránh ghi trùng.

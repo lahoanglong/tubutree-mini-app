@@ -11,6 +11,9 @@ export const PUBLIC_CONFIG_FALLBACK: PublicConfig = {
   affiliateWalletMultiplier: 1.5,
   affiliateMinWithdrawBank: 50_000,
   cashbackHoldDays: 30,
+  // Tắt cho tới khi server xác nhận (Gomdon đã cấu hình + admin bật) — không hứa dịch vụ thu gom
+  // khi chưa biết backend có làm được không.
+  recyclingEnabled: false,
 };
 
 /**

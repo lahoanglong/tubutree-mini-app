@@ -8,6 +8,7 @@ import { PricingService } from '../pricing/pricing.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
+import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { CoinsService } from '../wallet/coins.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -28,6 +29,7 @@ export class CheckoutService {
     private readonly loyalty: LoyaltyService,
     private readonly notifications: NotificationsService,
     private readonly pancakeOrder: PancakeOrderService,
+    private readonly gomdonOrder: GomdonOrderService,
     private readonly affiliate: AffiliateService,
     private readonly coins: CoinsService,
     private readonly config: SystemConfigService,
@@ -65,6 +67,12 @@ export class CheckoutService {
     if (idempotencyKey) {
       const existing = await this.prisma.order.findUnique({ where: { idempotencyKey } });
       if (existing) return this.replayIdempotentOrder(existing, userId, dto);
+    }
+
+    // Thu gom tái chế chỉ nhận khi tính năng đang bật (Gomdon đã cấu hình + admin bật công tắc) —
+    // FE cũ/tự gửi hasRecyclingPickup=true khi tính năng tắt không được hứa thu gom mà không ai đi thu.
+    if (dto.hasRecyclingPickup === true && !(await this.gomdonOrder.isRecyclingEnabled())) {
+      throw new BadRequestException('Tính năng gửi lại vật liệu tái chế hiện chưa mở, vui lòng tải lại trang.');
     }
 
     // Attribution: ưu tiên referralCode/slug của phiên hiện tại; nếu phiên mất nhưng còn
@@ -165,6 +173,8 @@ export class CheckoutService {
             invoiceRequest: dto.invoiceRequest ? (dto.invoiceRequest as object) : undefined,
             invoiceStatus: dto.invoiceRequest ? 'REQUESTED' : 'NOT_REQUESTED',
             note: dto.note,
+            hasRecyclingPickup: dto.hasRecyclingPickup === true,
+            recyclingNote: dto.hasRecyclingPickup === true ? dto.recyclingNote?.trim() || null : null,
             items: {
               // Combo: trừ phần giảm phân bổ vào total từng dòng → hoa hồng (đọc OrderItem.total)
               // tính trên giá thực trả sau giảm combo (§7.2).
@@ -248,10 +258,25 @@ export class CheckoutService {
     // kho + trừ tiền khách, nhưng kho vật lý không bao giờ thấy đơn (P0-2,
     // docs/2026-09-08-review-progress.md). enqueuePush() chỉ thêm job vào Redis — nếu việc
     // ĐÓ cũng lỗi (Redis blip), cron PancakePushReconcileService quét lại sau.
-    try {
-      await this.pancakeOrder.enqueuePush(order.id);
-    } catch (err) {
-      this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
+    //
+    // Đơn thu gom tái chế → queue Gomdon (GomdonOrderService.pushOrder tự quyết: đơn chưa thanh toán thì
+    // đẩy Pancake ngay và CHỜ tiền về mới đặt bưu tá; đã thanh toán/COD thì tạo vận đơn rồi mới đẩy
+    // Pancake kèm mã). Enqueue lỗi: KHÔNG đẩy thẳng Pancake (trước đây làm vậy: nếu job Gomdon thực ra
+    // đã vào Redis thì vừa có vận đơn Gomdon vừa có note "tạo vận đơn tay" → giao 2 lần). Cron
+    // GomdonReconcileService quét đơn thu gom gomdonStatus=null và enqueue lại; quá 60 phút thì
+    // PancakePushReconcileService chốt FAILED rồi đẩy Pancake.
+    if (order.hasRecyclingPickup) {
+      try {
+        await this.gomdonOrder.enqueuePush(order.id);
+      } catch (err) {
+        this.logger.error(`Xếp hàng đẩy Gomdon lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
+      }
+    } else {
+      try {
+        await this.pancakeOrder.enqueuePush(order.id);
+      } catch (err) {
+        this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
+      }
     }
     if (referrerUserId) {
       await this.affiliate.createCommissionForOrder(order.id).catch((err) =>
@@ -287,7 +312,13 @@ export class CheckoutService {
    * `shippingAddress` — dựng lại snapshot từ addressId mới rồi so với snapshot đã lưu lúc tạo).
    */
   private async replayIdempotentOrder(
-    existing: { id: string; userId: string; paymentMethod: string; shippingAddress: Prisma.JsonValue },
+    existing: {
+      id: string;
+      userId: string;
+      paymentMethod: string;
+      shippingAddress: Prisma.JsonValue;
+      hasRecyclingPickup?: boolean;
+    },
     userId: string,
     dto: PlaceOrderDto,
   ) {
@@ -295,10 +326,12 @@ export class CheckoutService {
       throw new BadRequestException('Idempotency-Key không hợp lệ.');
     }
     const paymentChanged = existing.paymentMethod !== dto.paymentMethod;
+    // Bật/tắt thu gom tái chế giữa 2 lần gửi cùng key cũng là "yêu cầu khác" — không trả đơn cũ.
+    const recyclingChanged = Boolean(existing.hasRecyclingPickup) !== (dto.hasRecyclingPickup === true);
     const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
     const addressChanged =
       !address || JSON.stringify(this.addressSnapshot(address)) !== JSON.stringify(existing.shippingAddress);
-    if (paymentChanged || addressChanged) {
+    if (paymentChanged || addressChanged || recyclingChanged) {
       throw new BadRequestException('Yêu cầu trước đó với thông tin khác đã được xử lý, vui lòng tải lại trang.');
     }
     return this.findOrderResponse(existing.id);

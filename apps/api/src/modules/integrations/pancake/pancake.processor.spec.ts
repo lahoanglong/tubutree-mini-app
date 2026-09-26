@@ -15,10 +15,11 @@ import type { CouponsService } from '../../coupons/coupons.service';
  * $transaction interactive thật sự gọi callback — khác `jest.fn().mockResolvedValue([])`
  * đơn thuần, để assertTransition + atomic flip + side-effect chạy đúng như production.
  */
-function setup(order: Record<string, unknown> | null) {
+function setup(order: Record<string, unknown> | null, gomdonQueue?: { getJob: jest.Mock; add: jest.Mock }) {
   const orderFindFirst = jest.fn().mockResolvedValue(order);
   const orderFindUniqueOrThrow = jest.fn().mockResolvedValue(order);
   const orderUpdateMany = jest.fn().mockResolvedValue({ count: 1 }); // onPaymentReconcile gọi TRỰC TIẾP, không qua $transaction
+  const orderUpdate = jest.fn().mockResolvedValue({}); // onShippingUpdated gọi trực tiếp order.update
   const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const txUserUpdate = jest.fn().mockResolvedValue({});
   const txCoinCreate = jest.fn().mockResolvedValue({});
@@ -34,7 +35,12 @@ function setup(order: Record<string, unknown> | null) {
     }),
   );
   const prisma = {
-    order: { findFirst: orderFindFirst, findUniqueOrThrow: orderFindUniqueOrThrow, updateMany: orderUpdateMany },
+    order: {
+      findFirst: orderFindFirst,
+      findUniqueOrThrow: orderFindUniqueOrThrow,
+      updateMany: orderUpdateMany,
+      update: orderUpdate,
+    },
     pancakeWebhookEvent: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction,
@@ -52,15 +58,27 @@ function setup(order: Record<string, unknown> | null) {
   const flashSale = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
   const coupons = { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService;
   const reversal = new OrderReversalService(flashSale, coupons);
-  const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal);
-  const proc = new PancakeProcessor(prisma, notifications, orderStatus) as unknown as {
+  const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal, gomdonQueue as never);
+  const proc = new PancakeProcessor(prisma, notifications, orderStatus, gomdonQueue as never) as unknown as {
     onStatusUpdated(d: Record<string, unknown>): Promise<void>;
     onCancelled(d: Record<string, unknown>): Promise<void>;
     onPaymentReconcile(d: Record<string, unknown>): Promise<void>;
+    onShippingUpdated(d: Record<string, unknown>): Promise<void>;
     extractOrderCode(d: Record<string, unknown>): string | null;
     process(job: { data: { eventId: string } }): Promise<void>;
   };
-  return { proc, prisma, notifications, loyalty, affiliate, txUpdateMany, txUserUpdate, txExecuteRaw, orderUpdateMany };
+  return {
+    proc,
+    prisma,
+    notifications,
+    loyalty,
+    affiliate,
+    txUpdateMany,
+    txUserUpdate,
+    txExecuteRaw,
+    orderUpdateMany,
+    orderUpdate,
+  };
 }
 
 describe('PancakeProcessor.extractOrderCode', () => {
@@ -284,6 +302,177 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
   });
 });
 
+describe('PancakeProcessor.onShippingUpdated', () => {
+  it('nhận payload Pancake POS chuẩn (partner object): cập nhật hãng VC, mã vận đơn, trạng thái và link tracking', async () => {
+    const { proc, orderUpdate } = setup({
+      id: 'o1',
+      code: 'TUBU1',
+      userId: 'u1',
+      status: 'SHIPPING',
+      shippingPartner: null,
+      shippingCode: null,
+      shippingStatus: null,
+      trackingLink: null,
+      shippingHistory: [],
+    });
+
+    const payload = {
+      id: 'p1',
+      partner: {
+        partner_name: 'Giao Hàng Nhanh',
+        extend_code: 'GHN123456789',
+        partner_status: 'ready_to_pick',
+        printed_form: 'https://tracking.ghn.vn/?code=GHN123456789',
+      },
+    };
+
+    await proc.onShippingUpdated(payload);
+
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: 'o1' },
+      data: expect.objectContaining({
+        shippingPartner: 'Giao Hàng Nhanh',
+        shippingCode: 'GHN123456789',
+        shippingStatus: 'ready_to_pick',
+        trackingLink: 'https://tracking.ghn.vn/?code=GHN123456789',
+        shippingHistory: expect.arrayContaining([
+          expect.objectContaining({
+            carrier: 'Giao Hàng Nhanh',
+            code: 'GHN123456789',
+            status: 'ready_to_pick',
+          }),
+        ]),
+      }),
+    });
+  });
+
+  it('fallback nhận payload phẳng cũ (partner_name, tracking_number, shipping_status, tracking_link)', async () => {
+    const { proc, orderUpdate } = setup({
+      id: 'o1',
+      code: 'TUBU1',
+      userId: 'u1',
+      status: 'SHIPPING',
+      shippingPartner: null,
+      shippingCode: null,
+      shippingStatus: null,
+      trackingLink: null,
+      shippingHistory: [],
+    });
+
+    const payload = {
+      id: 'p1',
+      partner_name: 'Viettel Post',
+      tracking_number: 'VT987654321',
+      shipping_status: 'delivering',
+      tracking_link: 'https://viettelpost.vn/tracking/VT987654321',
+    };
+
+    await proc.onShippingUpdated(payload);
+
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: 'o1' },
+      data: expect.objectContaining({
+        shippingPartner: 'Viettel Post',
+        shippingCode: 'VT987654321',
+        shippingStatus: 'delivering',
+        trackingLink: 'https://viettelpost.vn/tracking/VT987654321',
+        shippingHistory: expect.arrayContaining([
+          expect.objectContaining({
+            carrier: 'Viettel Post',
+            code: 'VT987654321',
+            status: 'delivering',
+          }),
+        ]),
+      }),
+    });
+  });
+
+  it('tích luỹ timeline nhiều mốc (shippingHistory) khi trạng thái thay đổi', async () => {
+    const initialHistory = [
+      { at: '2026-09-18T10:00:00.000Z', status: 'ready_to_pick', carrier: 'GHN', code: 'GHN001' },
+    ];
+    const { proc, orderUpdate } = setup({
+      id: 'o1',
+      code: 'TUBU1',
+      userId: 'u1',
+      status: 'SHIPPING',
+      shippingPartner: 'GHN',
+      shippingCode: 'GHN001',
+      shippingStatus: 'ready_to_pick',
+      trackingLink: null,
+      shippingHistory: initialHistory,
+    });
+
+    const payload = {
+      id: 'p1',
+      partner: {
+        partner_name: 'GHN',
+        extend_code: 'GHN001',
+        partner_status: 'delivering',
+      },
+    };
+
+    await proc.onShippingUpdated(payload);
+
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: 'o1' },
+      data: expect.objectContaining({
+        shippingStatus: 'delivering',
+        shippingHistory: expect.arrayContaining([
+          initialHistory[0],
+          expect.objectContaining({
+            status: 'delivering',
+            code: 'GHN001',
+            carrier: 'GHN',
+          }),
+        ]),
+      }),
+    });
+  });
+
+  it('không thêm mốc trùng lặp vào shippingHistory nếu status và code không đổi', async () => {
+    const initialHistory = [
+      { at: '2026-09-18T10:00:00.000Z', status: 'delivering', carrier: 'GHN', code: 'GHN001' },
+    ];
+    const { proc, orderUpdate } = setup({
+      id: 'o1',
+      code: 'TUBU1',
+      userId: 'u1',
+      status: 'SHIPPING',
+      shippingPartner: 'GHN',
+      shippingCode: 'GHN001',
+      shippingStatus: 'delivering',
+      trackingLink: null,
+      shippingHistory: initialHistory,
+    });
+
+    // Cùng status & code với mốc cuối
+    const payload = {
+      id: 'p1',
+      partner: {
+        partner_name: 'GHN',
+        extend_code: 'GHN001',
+        partner_status: 'delivering',
+      },
+    };
+
+    await proc.onShippingUpdated(payload);
+
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: 'o1' },
+      data: expect.objectContaining({
+        shippingHistory: initialHistory, // giữ nguyên, không push thêm
+      }),
+    });
+  });
+
+  it('đơn hàng không tồn tại → bỏ qua không ném lỗi', async () => {
+    const { proc, orderUpdate } = setup(null);
+    await proc.onShippingUpdated({ id: 'nonexistent-p1', partner: { partner_name: 'GHN' } });
+    expect(orderUpdate).not.toHaveBeenCalled();
+  });
+});
+
 describe('PancakeProcessor.process', () => {
   it('event đã PROCESSED → bỏ qua', async () => {
     const { proc, prisma, notifications } = setup(null);
@@ -353,5 +542,57 @@ describe('PancakeProcessor.process', () => {
     (loyalty.creditOrderPoints as jest.Mock).mockRejectedValue(new Error('boom'));
     await expect(proc.process({ data: { eventId: 'e1' } })).rejects.toThrow('boom');
     expect((prisma.pancakeWebhookEvent.update as jest.Mock).mock.calls[0][0].data.status).toBe('FAILED');
+  });
+});
+
+describe('PancakeProcessor — đơn thu gom tái chế (Gomdon)', () => {
+  const gomdonQueue = () => ({ getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) });
+
+  it('chuyển khoản về (UNPAID→PAID) cho đơn thu gom → enqueue tạo vận đơn Gomdon (lúc này mới đặt bưu tá)', async () => {
+    const q = gomdonQueue();
+    const { proc } = setup(
+      { id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, hasRecyclingPickup: true },
+      q,
+    );
+    await proc.onPaymentReconcile({ id: 'p1', is_paid: true });
+    expect(q.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, { jobId: 'o1' });
+  });
+
+  it('đơn thường (không thu gom) → không enqueue Gomdon; enqueue lỗi không làm hỏng event đã lật PAID', async () => {
+    const q = gomdonQueue();
+    const { proc } = setup(
+      { id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, hasRecyclingPickup: false },
+      q,
+    );
+    await proc.onPaymentReconcile({ id: 'p1', is_paid: true });
+    expect(q.add).not.toHaveBeenCalled();
+
+    const q2 = gomdonQueue();
+    q2.add.mockRejectedValueOnce(new Error('redis'));
+    const b = setup(
+      { id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, hasRecyclingPickup: true },
+      q2,
+    );
+    await expect(b.proc.onPaymentReconcile({ id: 'p1', is_paid: true })).resolves.toBeUndefined();
+    expect(b.notifications.notify).toHaveBeenCalled();
+  });
+
+  it('Pancake huỷ đơn thu gom (onCancelled → OrderStatusService) → enqueue huỷ vận đơn Gomdon', async () => {
+    const q = gomdonQueue();
+    const { proc } = setup(
+      { id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 100000, pointsUsed: 0, items: [], hasRecyclingPickup: true, gomdonOrderId: '77' },
+      q,
+    );
+    await proc.onCancelled({ id: 'p1' });
+    expect(q.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, { jobId: 'cancel-o1' });
+  });
+
+  it('đơn đã có vận đơn Gomdon → onShippingUpdated KHÔNG ghi đè shippingCode/Partner/Status (Gomdon là nguồn duy nhất)', async () => {
+    const { proc, orderUpdate } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'SHIPPING', hasRecyclingPickup: true,
+      gomdonOrderId: '77', gomdonPartnerCode: 'BE77', shippingCode: 'BE77', shippingPartner: 'BestExpress', shippingStatus: 'Đang đi giao hàng', shippingHistory: [],
+    });
+    await proc.onShippingUpdated({ id: 'p1', partner: { partner_name: 'GHN', extend_code: 'GHN999', partner_status: 'picking' } });
+    expect(orderUpdate).not.toHaveBeenCalled();
   });
 });

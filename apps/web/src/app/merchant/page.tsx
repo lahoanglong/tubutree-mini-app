@@ -1184,7 +1184,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                       <div className="space-y-1">
                         {o.items?.map((it) => (
                           <div key={it.id} className="text-xs text-neutral-700">
-                            • {it.productTitle} <span className="font-semibold">x{it.quantity}</span> ({formatVnd(it.price)})
+                            • {it.productName}{it.variationName ? ` (${it.variationName})` : ''} <span className="font-semibold">x{it.quantity}</span> ({formatVnd(it.unitPrice)})
                           </div>
                         ))}
                       </div>

@@ -59,6 +59,7 @@ export interface CartLine {
   unitPrice: number;
   quantity: number;
   stock: number;
+  weight?: number | null;
   total: number;
   /** Đang áp giá giờ vàng — dùng để cảnh báo khi giá/suất thay đổi trước khi đặt. */
   isFlash?: boolean;
@@ -115,6 +116,11 @@ export interface PublicConfig {
   affiliateMinWithdrawBank: number;
   /** Số ngày giữ trước khi hoàn tiền sàn ngoài về Ví. */
   cashbackHoldDays: number;
+  /**
+   * Hiện lựa chọn "Gửi lại vật liệu tái chế" ở checkout — true chỉ khi Gomdon đã cấu hình VÀ admin
+   * bật. Optional: API bản cũ không trả field này → coi như tắt.
+   */
+  recyclingEnabled?: boolean;
 }
 export const getPublicConfig = () =>
   api.get<PublicConfig>('/config/public').then((r) => r.data);
@@ -260,6 +266,8 @@ export const placeOrder = (
     referralCode?: string;
     storefrontSlug?: string;
     itemIds?: string[];
+    hasRecyclingPickup?: boolean;
+    recyclingNote?: string;
   },
   idempotencyKey: string,
 ) =>

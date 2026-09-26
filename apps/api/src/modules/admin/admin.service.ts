@@ -10,6 +10,12 @@ import { paginated, skipTake } from '../../common/pagination';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { RbacService } from '../staff/rbac/rbac.service';
+import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
+import { GomdonClient } from '../integrations/gomdon/gomdon.client';
+import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
+import { buildAdminOrderWhere, type RecyclingFilter } from './admin-order-filter';
+import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
+import { validateAdminConfigValue } from './admin-config-rules';
 
 @Injectable()
 export class AdminService {
@@ -24,6 +30,8 @@ export class AdminService {
     private readonly reversal: OrderReversalService,
     private readonly orderStatus: OrderStatusService,
     private readonly rbac: RbacService,
+    private readonly gomdonOrder: GomdonOrderService,
+    private readonly gomdonClient: GomdonClient,
   ) {}
 
   // ── Đổi/trả (§6.4) ──
@@ -364,17 +372,14 @@ export class AdminService {
     };
   }
 
-  async listOrders(page: number, limit: number, status?: string, search?: string) {
-    const where: Prisma.OrderWhereInput = {};
-    if (status) where.status = status as never;
-    if (search && search.trim()) {
-      const s = search.trim();
-      where.OR = [
-        { code: { contains: s, mode: 'insensitive' } },
-        { user: { phone: { contains: s } } },
-        { user: { fullName: { contains: s, mode: 'insensitive' } } },
-      ];
-    }
+  /**
+   * Danh sách đơn cho admin. `include` (không `select`) nên trả ĐỦ cột vô hướng của Order — gồm
+   * hasRecyclingPickup/recyclingNote/gomdonStatus/gomdonPartnerCode/gomdonCancelStatus/deliveredAt mà
+   * web admin cần để hiện thu gom. `recycling='attention'` = hàng đợi "Cần xử lý thu gom"
+   * (xem admin-order-filter.ts).
+   */
+  async listOrders(page: number, limit: number, status?: string, search?: string, recycling?: RecyclingFilter) {
+    const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
@@ -421,16 +426,98 @@ export class AdminService {
     });
   }
 
-  // ── SystemConfig ──
-  getConfig(category?: string) {
-    return category
-      ? this.config.getByCategory(category)
-      : this.prisma.systemConfig.findMany({ orderBy: { category: 'asc' } });
+  // ── Vận đơn thu gom Gomdon (thao tác admin) ──
+  //
+  // KHÔNG tự viết lại logic: GomdonOrderService.retryPush/cancelWaybill đã có claim nguyên tử + luật
+  // "không tạo vận đơn thứ hai khi vận đơn cũ còn sống". Ở đây chỉ tìm đơn theo id HOẶC mã (như
+  // updateOrderStatus), ghi vết ai bấm, và để nguyên lỗi của service (message tiếng Việt, đúng mã HTTP)
+  // đi thẳng ra web — admin cần đọc đúng lý do bị từ chối.
+
+  private async resolveOrderRef(idOrCode: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
+      select: { id: true, code: true, gomdonStatus: true, gomdonPartnerCode: true },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    return order;
   }
 
+  async retryGomdonPush(adminId: string, idOrCode: string, confirmedNoWaybill?: boolean) {
+    const order = await this.resolveOrderRef(idOrCode);
+    try {
+      const res = await this.gomdonOrder.retryPush(order.id, { confirmedNoWaybill: confirmedNoWaybill === true });
+      this.logger.warn(
+        `Admin ${adminId} tạo lại vận đơn Gomdon đơn ${order.code} (trạng thái trước: ${order.gomdonStatus ?? 'null'}` +
+          `${confirmedNoWaybill ? ', đã xác nhận KHÔNG có vận đơn trên Gomdon' : ''}).`,
+      );
+      return res;
+    } catch (err) {
+      this.logger.warn(
+        `Admin ${adminId} tạo lại vận đơn Gomdon đơn ${order.code} bị từ chối: ${err instanceof Error ? err.message : err}`,
+      );
+      throw err;
+    }
+  }
+
+  async cancelGomdonWaybill(adminId: string, idOrCode: string) {
+    const order = await this.resolveOrderRef(idOrCode);
+    try {
+      const res = await this.gomdonOrder.cancelWaybill(order.id);
+      this.logger.warn(
+        `Admin ${adminId} huỷ vận đơn Gomdon ${order.gomdonPartnerCode ?? '(chưa có mã)'} đơn ${order.code}: ${res.result}.`,
+      );
+      return res;
+    } catch (err) {
+      this.logger.warn(
+        `Admin ${adminId} huỷ vận đơn Gomdon đơn ${order.code} bị từ chối: ${err instanceof Error ? err.message : err}`,
+      );
+      throw err;
+    }
+  }
+
+  /**
+   * Tình trạng tích hợp Gomdon cho màn cấu hình — CHỈ boolean, không bao giờ trả tài khoản/mật khẩu.
+   * Để admin thấy vì sao bật công tắc mà khách vẫn không thấy lựa chọn thu gom (thiếu env).
+   */
+  async gomdonStatus() {
+    const [cfg, toggle, enabled] = await Promise.all([
+      this.gomdonClient.getConfig(),
+      this.config.get<unknown>(GOMDON_RECYCLING_TOGGLE_KEY, false),
+      this.gomdonOrder.isRecyclingEnabled(),
+    ]);
+    return {
+      baseUrlSet: Boolean(cfg.baseUrl),
+      credentialsSet: Boolean(cfg.phone && cfg.password),
+      configured: Boolean(cfg.baseUrl && cfg.phone && cfg.password),
+      webhookSecretSet: Boolean(process.env.GOMDON_WEBHOOK_SECRET?.trim()),
+      recyclingToggle: toggle === true,
+      recyclingEnabled: enabled,
+    };
+  }
+
+  // ── SystemConfig ──
+  /**
+   * Đọc config cho admin — MỌI khoá/field khớp /password|secret|token/i bị che (đệ quy trong JSON),
+   * xem config-redaction.ts. Trước đây trả nguyên văn, kể cả mật khẩu Gomdon bản WIP lưu trong
+   * shipping.gomdon.config.
+   */
+  async getConfig(category?: string) {
+    if (category) return redactConfigRows(await this.config.getByCategory(category));
+    return redactConfigRows(await this.prisma.systemConfig.findMany({ orderBy: { category: 'asc' } }));
+  }
+
+  /**
+   * Ghi config. GET đã che bí mật nên form JSON thô gửi lại chuỗi che khi admin bấm Lưu — khôi phục giá
+   * trị thật ở đúng chỗ đó (restoreRedactedSecrets) thay vì ghi đè mật khẩu bằng "••••". Khoá có form
+   * riêng (Gomdon, tích điểm) được kiểm luật trước khi ghi (admin-config-rules.ts).
+   */
   async setConfig(adminId: string, key: string, value: object | string | number | boolean) {
-    await this.config.set(key, value, adminId);
-    return { ok: true, key, value };
+    const existing = await this.prisma.systemConfig.findUnique({ where: { key }, select: { value: true } });
+    const restored = restoreRedactedSecrets(key, value, existing?.value) as object | string | number | boolean;
+    validateAdminConfigValue(key, restored);
+    await this.config.set(key, restored, adminId);
+    this.logger.warn(`Admin ${adminId} cập nhật cấu hình ${key}.`);
+    return { ok: true, key, value: redactValueForKey(key, restored) };
   }
 
   // ── Coupons ──

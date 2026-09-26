@@ -171,3 +171,31 @@ describe('SystemConfigService.set — biên đơn vị cho khoá nhạy cảm', 
     expect(tx.systemConfig.upsert).toHaveBeenCalled();
   });
 });
+
+describe('SystemConfigService.set — biên cho khoá hạn ngày (đúng tên khoá code đọc)', () => {
+  function mk() {
+    const tx = {
+      systemConfig: { findUnique: jest.fn().mockResolvedValue({ value: 7 }), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+
+  it("returns.window_days (khoá orders/affiliate đọc) bị giới hạn 0–365", async () => {
+    await expect(mk().svc.set('returns.window_days', 400, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    const ok = mk();
+    await ok.svc.set('returns.window_days', 10, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+  });
+
+  it('dealer.reward_claim_grace_days bị giới hạn 0–366', async () => {
+    await expect(mk().svc.set('dealer.reward_claim_grace_days', -1, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mk().svc.set('dealer.reward_claim_grace_days', 367, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    const ok = mk();
+    await ok.svc.set('dealer.reward_claim_grace_days', 30, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+  });
+});

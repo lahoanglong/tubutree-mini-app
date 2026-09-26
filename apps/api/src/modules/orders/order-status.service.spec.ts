@@ -218,3 +218,81 @@ describe('OrderStatusService', () => {
  * chuỗi note nối thêm, không có actor. Một tài khoản admin bị chiếm chuyển 50 đơn đã giao sang
  * CANCELLED là mỗi đơn tự động hoàn tổng tiền vào ví khách, mà sau đó không truy được ai làm gì.
  */
+
+describe('OrderStatusService — huỷ đơn thu gom tái chế → huỷ vận đơn Gomdon', () => {
+  function make(order: Record<string, unknown>, queueAdd = jest.fn().mockResolvedValue({})) {
+    const tx = {
+      order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      order: { findFirst: jest.fn().mockResolvedValue(order), findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
+    };
+    const queue = { getJob: jest.fn().mockResolvedValue(undefined), add: queueAdd };
+    const svc = new OrderStatusService(
+      prisma as unknown as PrismaService,
+      { creditOrderPoints: jest.fn(), reverseOrderPoints: jest.fn().mockResolvedValue(undefined) } as unknown as LoyaltyService,
+      {
+        lockCommissionsForOrder: jest.fn(),
+        grantReferralReward: jest.fn(),
+        reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AffiliateService,
+      { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+      { reverseFinancials: jest.fn().mockResolvedValue(undefined) } as unknown as OrderReversalService,
+      queue as never,
+    );
+    return { svc, queue };
+  }
+
+  it('admin/merchant/Pancake huỷ đơn thu gom → enqueue job huỷ vận đơn (jobId cancel-<id>)', async () => {
+    const { svc, queue } = make(makeOrder({ hasRecyclingPickup: true, gomdonOrderId: '77' }));
+    await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' });
+    expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, { jobId: 'cancel-o1' });
+  });
+
+  it('đơn thường / chuyển sang trạng thái khác CANCELLED → không enqueue', async () => {
+    const a = make(makeOrder({ hasRecyclingPickup: false }));
+    await a.svc.setStatus('o1', 'CANCELLED' as never);
+    expect(a.queue.add).not.toHaveBeenCalled();
+    const b = make(makeOrder({ hasRecyclingPickup: true }));
+    await b.svc.setStatus('o1', 'PACKED' as never);
+    expect(b.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('enqueue lỗi (Redis) → đơn vẫn CANCELLED, không ném (cron Gomdon quét lại)', async () => {
+    const { svc } = make(makeOrder({ hasRecyclingPickup: true }), jest.fn().mockRejectedValue(new Error('redis')));
+    await expect(svc.setStatus('o1', 'CANCELLED' as never)).resolves.toBeDefined();
+  });
+});
+
+describe('OrderStatusService — ghi deliveredAt khi lật DELIVERED (mốc hạn đổi/trả)', () => {
+  it('DELIVERED → data có deliveredAt; trạng thái khác → không', async () => {
+    const tx = {
+      order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const order = makeOrder({ status: 'SHIPPING' });
+    const prisma = {
+      order: { findFirst: jest.fn().mockResolvedValue(order), findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
+    };
+    const svc = new OrderStatusService(
+      prisma as unknown as PrismaService,
+      { creditOrderPoints: jest.fn().mockResolvedValue(undefined), reverseOrderPoints: jest.fn() } as unknown as LoyaltyService,
+      {
+        lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+        grantReferralReward: jest.fn().mockResolvedValue(undefined),
+        reverseCommissionsForOrder: jest.fn(),
+      } as unknown as AffiliateService,
+      { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+      { reverseFinancials: jest.fn() } as unknown as OrderReversalService,
+    );
+    await svc.setStatus('o1', 'DELIVERED' as never);
+    expect(tx.order.updateMany.mock.calls[0][0].data.deliveredAt).toBeInstanceOf(Date);
+
+    prisma.order.findFirst.mockResolvedValue(makeOrder({ status: 'CONFIRMED' }));
+    await svc.setStatus('o1', 'PACKED' as never);
+    expect(tx.order.updateMany.mock.calls[1][0].data.deliveredAt).toBeUndefined();
+  });
+});

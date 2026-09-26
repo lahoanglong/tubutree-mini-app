@@ -1,4 +1,5 @@
 import type { AdminOrder, AdminUser } from './admin-client';
+import { gomdonStatusLabel } from './recycling';
 
 /** Ký tự mở đầu khiến Excel/Google Sheets coi ô là CÔNG THỨC. */
 const FORMULA_START = /^[=+\-@\t\r]/;
@@ -32,9 +33,16 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   COD: 'COD (Tiền mặt)',
   ZALOPAY: 'ZaloPay',
+  BANK_TRANSFER: 'Chuyển khoản',
   WALLET: 'Ví Tubu',
   XU: 'Xu Tubu',
 };
+
+/** "Có · <trạng thái vận đơn> · <mã BestExpress>" — để kho/CSKH lọc đơn thu gom trong Excel. */
+function recyclingCell(o: AdminOrder): string {
+  if (!o.hasRecyclingPickup) return '';
+  return ['Có', gomdonStatusLabel(o.gomdonStatus).label, o.gomdonPartnerCode ?? ''].filter(Boolean).join(' · ');
+}
 
 export function generateOrdersCsvString(orders: AdminOrder[]): string {
   const headers = [
@@ -47,6 +55,7 @@ export function generateOrdersCsvString(orders: AdminOrder[]): string {
     'Ghi chú',
     'Số sản phẩm',
     'Ngày tạo',
+    'Thu gom tái chế',
   ];
 
   const rows = orders.map((o) => {
@@ -61,6 +70,7 @@ export function generateOrdersCsvString(orders: AdminOrder[]): string {
       escapeCsvCell(o.note ?? ''),
       escapeCsvCell(itemCount),
       escapeCsvCell(new Date(o.createdAt).toLocaleString('vi-VN')),
+      escapeCsvCell(recyclingCell(o)),
     ].join(',');
   });
 

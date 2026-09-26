@@ -23,6 +23,10 @@ import {
   payCredit,
   getQuarterlyReport,
   getDealerRewards,
+  claimDealerReward,
+  rewardClaimView,
+  type DealerRewardsView,
+  type RewardClaimTone,
   getTemplates,
   saveTemplate,
   deleteTemplate,
@@ -835,8 +839,13 @@ function DealerReport() {
           {formatVnd(d.revenue)}
         </Text>
         <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
-          {d.orderCount} đơn · Thưởng hiện tại {d.bonusPct}% = <b style={{ color: 'var(--leaf-400)' }}>{formatVnd(d.bonusAmount)}</b>
+          {d.orderCount} đơn đã chốt · Thưởng hiện tại {d.bonusPct}% = <b style={{ color: 'var(--leaf-400)' }}>{formatVnd(d.bonusAmount)}</b>
         </Text>
+        {d.pendingRevenue > 0 && (
+          <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
+            + {formatVnd(d.pendingRevenue)} ({d.pendingOrderCount} đơn) chờ thanh toán/đóng gói — chưa tính thưởng
+          </Text>
+        )}
         {d.nextTier && (
           <Box style={{ marginTop: 12 }}>
             <Box style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 99, height: 8 }}>
@@ -868,7 +877,7 @@ function DealerReport() {
           );
         })}
         <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
-          Thưởng tính trên tổng đơn đại lý (không tính đơn huỷ/trả) trong quý. Chốt cuối quý.
+          Thưởng tính trên đơn đại lý đặt trong quý đã thanh toán (hoặc ghi công nợ) và đã đóng gói/giao — không tính đơn chờ xử lý, huỷ, trả. Thưởng quý được cộng vào công nợ khoảng ngày 10 của quý kế tiếp.
         </Text>
       </Box>
 
@@ -877,15 +886,52 @@ function DealerReport() {
   );
 }
 
-/** Phần thưởng đại lý (tour/quà): hiển thị điều kiện + tiến trình đạt mốc. Trao thưởng admin làm offline. */
+/** Phần thưởng đại lý (tour/quà): điều kiện + tiến trình đạt mốc + yêu cầu nhận thưởng (lưu thật, admin duyệt). */
 function DealerRewardsCard() {
+  const { openSnackbar } = useSnackbar();
+  const qc = useQueryClient();
   const q = useQuery({ queryKey: ['dealer-rewards'], queryFn: getDealerRewards });
   const rewards = q.data?.rewards ?? [];
+
+  const claimMut = useMutation({
+    mutationFn: (v: { rewardId: string; periodKey: string }) => claimDealerReward(v.rewardId, v.periodKey),
+    onSuccess: (res, v) => {
+      haptic('heavy');
+      openSnackbar({ text: res.message, type: res.alreadyClaimed ? 'info' : 'success' });
+      // Cập nhật ngay trạng thái dòng vừa gửi: không để nút bật lại trong lúc chờ refetch.
+      qc.setQueryData<DealerRewardsView>(['dealer-rewards'], (old) =>
+        old
+          ? {
+              ...old,
+              rewards: old.rewards.map((r) =>
+                r.id === v.rewardId && r.periodKey === v.periodKey
+                  ? { ...r, claimStatus: res.claimStatus, claimId: res.claim.id, canClaim: false }
+                  : r,
+              ),
+            }
+          : old,
+      );
+      void qc.invalidateQueries({ queryKey: ['dealer-rewards'] });
+    },
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Hết hạn / tụt doanh số... → tải lại để nút và trạng thái khớp backend.
+      void qc.invalidateQueries({ queryKey: ['dealer-rewards'] });
+    },
+  });
+
   if (!rewards.length) return null;
   const RewardIcon = ({ type }: { type: string }) => {
     const Icon = type === 'TOUR' ? Plane : type === 'GIFT' ? Gift : Award;
     return <Icon size={14} color="var(--dealer-ink)" style={{ flexShrink: 0 }} />;
   };
+  const TONE: Record<RewardClaimTone, { bg: string; fg: string }> = {
+    info: { bg: 'var(--primary-50)', fg: 'var(--primary-700)' },
+    success: { bg: 'var(--leaf-50)', fg: 'var(--leaf-700)' },
+    danger: { bg: 'var(--danger-bg)', fg: 'var(--danger)' },
+    muted: { bg: 'var(--neutral-100)', fg: 'var(--neutral-500)' },
+  };
+  const pendingKey = claimMut.isPending ? `${claimMut.variables?.rewardId}|${claimMut.variables?.periodKey}` : null;
   return (
     <Box p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
       <Text size="small" bold style={{ marginBottom: 8 }}>
@@ -894,8 +940,10 @@ function DealerRewardsCard() {
       {rewards.map((r) => {
         // Guard chia-0: threshold=0 (admin cho phép @Min(0)) → 0/0=NaN → width:'NaN%'. Đạt ngay = 100%.
         const pct = r.threshold > 0 ? Math.min(100, Math.round((r.volume / r.threshold) * 100)) : 100;
+        const view = rewardClaimView(r);
+        const rowKey = `${r.id}|${r.periodKey}`;
         return (
-          <Box key={r.id} py={2} style={{ borderBottom: '1px solid var(--neutral-100)' }}>
+          <Box key={rowKey} py={2} style={{ borderBottom: '1px solid var(--neutral-100)' }}>
             <Box flex justifyContent="space-between" alignItems="center" style={{ gap: 8 }}>
               <Box flex alignItems="center" style={{ gap: 6, minWidth: 0 }}>
                 <RewardIcon type={r.type} />
@@ -907,18 +955,61 @@ function DealerRewardsCard() {
                 {formatVnd(r.threshold)}/{r.period === 'YEAR' ? 'năm' : 'quý'}
               </Text>
             </Box>
+            {!r.isCurrentPeriod && (
+              <Text size="xSmall" bold style={{ color: 'var(--dealer-ink)' }}>
+                Kỳ trước · {r.periodLabel}
+              </Text>
+            )}
             {r.description && (
               <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>{r.description}</Text>
             )}
             <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 6, marginTop: 6, overflow: 'hidden' }}>
-              <Box style={{ width: `${pct}%`, height: 6, background: r.achieved ? 'var(--leaf-500)' : 'var(--primary-400)', borderRadius: 99 }} />
+              <Box style={{ width: `${pct}%`, height: 6, background: r.achieved ? 'var(--leaf-600)' : 'var(--primary-400)', borderRadius: 99 }} />
             </Box>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-              {r.achieved ? 'Đã đạt — Tubu sẽ liên hệ trao thưởng' : `Còn ${formatVnd(r.toGo)} để đạt`}
-            </Text>
+            <Box mt={2} flex alignItems="center" justifyContent="space-between" style={{ gap: 8, flexWrap: 'wrap' }}>
+              <Text size="xSmall" style={{ color: 'var(--neutral-500)', flex: '1 1 140px', minWidth: 0 }}>
+                {view.hint}
+              </Text>
+              {view.badge && (
+                <Box
+                  style={{
+                    background: TONE[view.badge.tone].bg,
+                    borderRadius: 'var(--radius-full)',
+                    padding: '2px 8px',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Text size="xSmall" bold style={{ color: TONE[view.badge.tone].fg, fontSize: 11 }}>
+                    {view.badge.label}
+                  </Text>
+                </Box>
+              )}
+              {view.showClaimButton && (
+                <Button
+                  size="small"
+                  disabled={claimMut.isPending}
+                  loading={claimMut.isPending && pendingKey === rowKey}
+                  onClick={() => claimMut.mutate({ rewardId: r.id, periodKey: r.periodKey })}
+                  style={{
+                    borderRadius: 'var(--radius-full)',
+                    background: 'var(--dealer-ink)',
+                    color: 'var(--neutral-0)',
+                    padding: '4px 12px',
+                    fontSize: 12,
+                    flexShrink: 0,
+                  }}
+                >
+                  Yêu cầu nhận thưởng
+                </Button>
+              )}
+            </Box>
           </Box>
         );
       })}
+      <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
+        Chỉ tính đơn đã thanh toán/ghi công nợ và đã đóng gói. Mốc đạt trong kỳ vẫn gửi yêu cầu được trong{' '}
+        {q.data?.claimGraceDays ?? 30} ngày sau khi kỳ kết thúc.
+      </Text>
     </Box>
   );
 }

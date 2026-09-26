@@ -55,11 +55,16 @@ describe('DealerService.pricelist', () => {
 });
 
 describe('DealerService.quarterlyReport (thưởng doanh số quý)', () => {
+  // Doanh số quý = đơn ĐÃ CHỐT (đã thanh toán + đã giao) — xem dealer-reward-claim.spec.ts cho
+  // các ca đơn chưa thanh toán / còn tự huỷ được.
   function prismaForReport(revenue: number) {
     return {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
-      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: revenue }, _count: 3 }) },
+      order: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'o1', total: revenue, status: 'DELIVERED', paymentStatus: 'PAID' }]),
+      },
+      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue([]) },
     } as unknown as PrismaService;
   }
 
@@ -96,16 +101,24 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
   function prismaForPayout(over: Record<string, unknown> = {}) {
     const base: Record<string, unknown> = {
       user: { findMany: jest.fn().mockResolvedValue([]) },
-      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 }, _count: 0 }) },
-      dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+      order: { findMany: jest.fn().mockResolvedValue([]) },
+      dealerCreditLedger: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({}),
+      },
     };
     return { ...base, ...over } as unknown as PrismaService;
   }
+  /** Đơn quý trước đã chốt (đã thanh toán + đã giao) tổng `total`. */
+  const settledOrders = (total: number) => ({
+    findMany: jest.fn().mockResolvedValue([{ id: 'o1', total, status: 'DELIVERED', paymentStatus: 'PAID' }]),
+  });
 
   it('đại lý đạt mốc → cộng thưởng (delta âm = giảm công nợ) + thông báo', async () => {
     const prisma = prismaForPayout({
       user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
-      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 120_000_000 }, _count: 5 }) },
+      order: settledOrders(120_000_000),
     });
     const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
     const r = await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS }), notifications as never).payoutQuarterlyBonuses(NOW);
@@ -118,7 +131,7 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
   it('doanh số dưới mốc thấp nhất → KHÔNG cộng thưởng', async () => {
     const prisma = prismaForPayout({
       user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
-      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 10_000_000 }, _count: 1 }) },
+      order: settledOrders(10_000_000),
     });
     const r = await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS })).payoutQuarterlyBonuses(NOW);
     expect(r.paid).toBe(0);
@@ -128,8 +141,8 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
   it('đã trả thưởng quý này rồi → idempotent skip', async () => {
     const prisma = prismaForPayout({
       user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
-      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 120_000_000 }, _count: 5 }) },
-      dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue({ id: 'existing' }), create: jest.fn().mockResolvedValue({}) },
+      order: settledOrders(120_000_000),
+      dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue({ id: 'existing' }), findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}) },
     });
     const r = await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS })).payoutQuarterlyBonuses(NOW);
     expect(r.paid).toBe(0);
@@ -147,10 +160,10 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
     const p2002 = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' });
     const prisma = prismaForPayout({
       user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
-      order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 120_000_000 }, _count: 5 }) },
+      order: settledOrders(120_000_000),
       // findFirst vẫn trả null (pre-check chưa thấy — lượt kia chưa commit lúc pre-check chạy),
       // nhưng create() đụng unique constraint do lượt kia đã thắng race.
-      dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockRejectedValue(p2002) },
+      dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockRejectedValue(p2002) },
     });
     const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
     const r = await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS }), notifications as never).payoutQuarterlyBonuses(NOW);
@@ -321,22 +334,28 @@ describe('DealerService.rewardsProgress (hiển thị điều kiện + tiến tr
   const NOW = new Date('2026-08-15T00:00:00Z'); // Q3/2026
 
   it('map period: QUARTER dùng doanh số quý, YEAR dùng năm; achieved/toGo đúng', async () => {
-    const aggregate = jest
-      .fn()
-      .mockResolvedValueOnce({ _sum: { total: 30_000_000 } }) // quý
-      .mockResolvedValueOnce({ _sum: { total: 120_000_000 } }); // năm
+    // 30tr trong Q3 + 90tr trong Q1 → quý (Q3) = 30tr, năm = 120tr. Lọc theo khung createdAt như DB.
+    const rows = [
+      { id: 'o-q3', total: 30_000_000, status: 'DELIVERED', paymentStatus: 'PAID', createdAt: new Date('2026-08-01T03:00:00Z') },
+      { id: 'o-q1', total: 90_000_000, status: 'DELIVERED', paymentStatus: 'PAID', createdAt: new Date('2026-02-01T03:00:00Z') },
+    ];
+    const findMany = jest.fn(async ({ where }: { where: { createdAt: { gte: Date; lt: Date } } }) =>
+      rows.filter((o) => o.createdAt >= where.createdAt.gte && o.createdAt < where.createdAt.lt),
+    );
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
       dealerTier: { findUnique: jest.fn() },
-      order: { aggregate },
+      order: { findMany },
+      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue([]) },
+      dealerRewardClaim: { findMany: jest.fn().mockResolvedValue([]) },
       dealerReward: { findMany: jest.fn().mockResolvedValue([
         { id: 'r1', type: 'TOUR', title: 'Tour', description: null, threshold: 50_000_000, period: 'QUARTER', sortOrder: 0 },
         { id: 'r2', type: 'GIFT', title: 'Quà năm', description: null, threshold: 100_000_000, period: 'YEAR', sortOrder: 1 },
       ]) },
     } as unknown as PrismaService;
     const out = await new DealerService(prisma, makeConfig()).rewardsProgress('d1', NOW);
-    const r1 = out.rewards.find((r) => r.id === 'r1')!;
-    const r2 = out.rewards.find((r) => r.id === 'r2')!;
+    const r1 = out.rewards.find((r) => r.id === 'r1' && r.isCurrentPeriod)!;
+    const r2 = out.rewards.find((r) => r.id === 'r2' && r.isCurrentPeriod)!;
     expect(r1.volume).toBe(30_000_000);
     expect(r1.achieved).toBe(false);
     expect(r1.toGo).toBe(20_000_000);
@@ -350,6 +369,8 @@ describe('DealerService.rewardsProgress (hiển thị điều kiện + tiến tr
     await expect(new DealerService(prisma, makeConfig()).rewardsProgress('u1', NOW)).rejects.toThrow();
   });
 });
+
+// DealerService.claimReward: xem dealer-reward-claim.spec.ts (lưu claim, idempotent, gia hạn, admin duyệt).
 
 /**
  * Đơn đại lý là đường tạo đơn DUY NHẤT không trừ tồn kho — trong khi đường HUỶ đơn dùng chung

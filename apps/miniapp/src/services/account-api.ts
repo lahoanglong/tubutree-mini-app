@@ -4,6 +4,11 @@ import type { AddressDTO } from './shop-api';
 /** Loyalty overview (§6.6) — hạng hiện tại, tiến độ lên hạng kế. */
 export interface LoyaltyOverview {
   pointsBalance: number;
+  /**
+   * Điểm XÉT HẠNG 12 tháng (chỉ điểm từ mua hàng — không gồm điểm danh, tích tại quầy, hoàn điểm
+   * đã dùng). nextTier.pointsToGo tính theo số này. Optional: API cũ chưa trả.
+   */
+  tierPoints?: number;
   tier: { id: string; name: string; multiplier: number; perks: unknown } | null;
   nextTier: { id: string; name: string; minPoints: number; pointsToGo: number } | null;
   tiers: { id: string; name: string; minPoints: number; multiplier: number }[];
@@ -84,10 +89,132 @@ export const completeOnboarding = (segments: string[]) =>
   api.post<MeProfile>('/me/onboarding', { segments }).then((r) => r.data);
 
 // Loyalty
+export interface RewardItem {
+  id: string;
+  title: string;
+  description: string;
+  pointsCost: number;
+  type: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
+  value: number;
+  minOrder?: number | null;
+  maxDiscount?: number | null;
+  badge?: string;
+  canRedeem: boolean;
+}
+
+export interface RewardCatalogResponse {
+  pointsBalance: number;
+  rewards: RewardItem[];
+}
+
+export interface RedeemRewardResult {
+  success: boolean;
+  message: string;
+  pointsSpent: number;
+  remainingPoints: number;
+  coupon: CouponDTO;
+}
+
+export interface CheckInReward {
+  day: number;
+  points: number;
+  claimed: boolean;
+  isToday: boolean;
+}
+
+/** GET /me/loyalty/check-in — điểm danh Điểm Xanh (tách riêng với điểm danh hạt giống Vườn Xanh). */
+export interface CheckInStatusResponse {
+  checkedInToday: boolean;
+  /** Chuỗi ngày liên tiếp tới hôm qua (chưa điểm danh) hoặc tới hôm nay (đã điểm danh); đứt = 0. */
+  streakDays: number;
+  /** Ô 1..7 của hôm nay: ô SẼ được trả khi bấm (chưa điểm danh) hoặc ô vừa nhận (đã điểm danh). */
+  currentCycleDay: number;
+  /** Điểm của ô hôm nay. Optional: API cũ chưa trả. */
+  todayPoints?: number;
+  rewards: CheckInReward[];
+}
+
+export interface CheckInResult {
+  success: boolean;
+  cycleDay: number;
+  streakDays: number;
+  pointsEarned: number;
+  totalPoints: number;
+  message: string;
+}
+
+/**
+ * GET /me/loyalty/member-card. memberCode ("TUBU" + mã giới thiệu duy nhất) là payload DUY NHẤT
+ * của QR trên thẻ và là đúng chuỗi mà nhân viên nhập/quét ở /loyalty/staff/scan-member.
+ */
+export interface MemberCardResponse {
+  memberCode: string;
+  name: string;
+  phone: string | null;
+  tierName: string;
+  tierMultiplier: number;
+  pointsBalance: number;
+  /** false → tích điểm hoá đơn tại cửa hàng đang TẮT ở backend: UI không được hứa tính năng này. */
+  posCreditEnabled: boolean;
+}
+
 export const getLoyalty = () => api.get<LoyaltyOverview>('/me/loyalty').then((r) => r.data);
 export const getPointsTransactions = () =>
   api.get<PointsTxn[]>('/me/points/transactions').then((r) => r.data);
 export const getCoupons = () => api.get<CouponDTO[]>('/me/coupons').then((r) => r.data);
+export const getLoyaltyRewards = () => api.get<RewardCatalogResponse>('/me/loyalty/rewards').then((r) => r.data);
+export const redeemLoyaltyReward = (rewardId: string) =>
+  api
+    .post<RedeemRewardResult>(`/me/loyalty/rewards/${encodeURIComponent(rewardId)}/redeem`)
+    .then((r) => r.data);
+export const getDailyCheckInStatus = () => api.get<CheckInStatusResponse>('/me/loyalty/check-in').then((r) => r.data);
+export const postDailyCheckIn = () => api.post<CheckInResult>('/me/loyalty/check-in').then((r) => r.data);
+export const getMemberCard = () => api.get<MemberCardResponse>('/me/loyalty/member-card').then((r) => r.data);
+
+// ── View helper thuần cho trang Hạng thành viên (test: account-api.spec.ts) ──
+
+/** Nhãn tiếng Việt cho `reason` của sổ Điểm Xanh — không bao giờ hiện mã kỹ thuật thô. */
+export function pointsReasonLabel(reason: string): string {
+  if (reason.startsWith('DAILY_CHECKIN')) return 'Điểm danh hằng ngày';
+  if (reason.startsWith('POS_OFFLINE_ORDER')) return 'Tích điểm mua tại cửa hàng';
+  if (reason.startsWith('LOYALTY_REDEEM_VOUCHER')) return 'Đổi điểm lấy voucher';
+  if (reason.startsWith('ORDER_DELIVERED')) return 'Tích điểm từ đơn hàng';
+  if (reason.startsWith('ORDER_REDEEM')) return 'Dùng điểm khi thanh toán';
+  if (reason.startsWith('ORDER_REVERSED')) return 'Hoàn ngược điểm (hủy/trả)';
+  if (reason.startsWith('ORDER_REFUND_POINTS')) return 'Hoàn lại điểm đã dùng';
+  if (reason.startsWith('POINTS_EXPIRED')) return 'Điểm hết hạn';
+  if (reason.startsWith('GAME') || reason.startsWith('SEASONPASS')) return 'Phần thưởng Vườn Xanh';
+  if (reason.startsWith('REVIEW')) return 'Đánh giá sản phẩm';
+  return 'Điều chỉnh Điểm Xanh';
+}
+
+/** Nút điểm danh: ghi đúng số điểm của ô hôm nay (ô backend sẽ trả khi bấm). */
+export function checkInView(s: CheckInStatusResponse): { canCheckIn: boolean; buttonLabel: string } {
+  if (s.checkedInToday) return { canCheckIn: false, buttonLabel: 'Đã điểm danh' };
+  const pts = s.todayPoints ?? s.rewards.find((r) => r.isToday)?.points ?? 0;
+  return { canCheckIn: true, buttonLabel: pts > 0 ? `Điểm danh +${pts}` : 'Điểm danh' };
+}
+
+/**
+ * % tiến độ từ SÀN điểm hạng hiện tại → ngưỡng hạng kế, theo điểm XÉT HẠNG (tierPoints) — cùng
+ * con số backend dùng cho pointsToGo. Tính theo số dư (có điểm danh/POS) sẽ vẽ thanh gần đầy trong
+ * khi backend không bao giờ cho lên hạng.
+ */
+export function tierProgressPercent(ov: LoyaltyOverview): number {
+  const next = ov.nextTier;
+  if (!next) return 100;
+  const curMin = ov.tiers.find((t) => t.id === ov.tier?.id)?.minPoints ?? 0;
+  if (next.minPoints <= curMin) return 100;
+  const pts = ov.tierPoints ?? ov.pointsBalance;
+  return Math.min(100, Math.max(0, Math.round(((pts - curMin) / (next.minPoints - curMin)) * 100)));
+}
+
+/** Lời nhắc dưới QR thẻ thành viên — chỉ hứa tích điểm tại quầy khi backend thật sự bật. */
+export function memberCardHint(card: Pick<MemberCardResponse, 'posCreditEnabled'>): string {
+  return card.posCreditEnabled
+    ? 'Đưa mã QR này cho thu ngân khi thanh toán tại cửa hàng Tubu để được tích Điểm Xanh.'
+    : 'Đây là mã thành viên của bạn. Tích Điểm Xanh khi mua tại cửa hàng chưa được áp dụng — hiện điểm được tích khi mua hàng online.';
+}
 
 // Wallet
 export const getWallet = () => api.get<WalletSummary>('/me/wallet').then((r) => r.data);

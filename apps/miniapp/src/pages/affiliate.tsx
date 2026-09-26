@@ -11,8 +11,12 @@ import {
   requestPayout,
   getStorefrontAnalytics,
   getProductBreakdown,
+  getCtvTiers,
+  getCtvMilestones,
+  claimCtvMilestone,
   type Commission,
   type CommissionStatus,
+  type CtvMilestoneItem,
 } from '../services/affiliate-api';
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
@@ -22,7 +26,15 @@ import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
-import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap } from 'lucide-react';
+import {
+  formatXu,
+  milestoneStatusText,
+  monthLabel,
+  progressPct,
+  revenueRuleText,
+  tierRewardLabel,
+} from '../components/affiliate/milestone-copy';
+import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap, Trophy, ChevronDown, ChevronUp } from 'lucide-react';
 import { vi } from '../i18n/vi';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { copyText } from '../utils/clipboard';
@@ -155,8 +167,99 @@ function Dashboard() {
   const commQ = useQuery({ queryKey: ['affiliate-commissions'], queryFn: getCommissions });
   const sfQ = useQuery({ queryKey: ['affiliate-sf-analytics'], queryFn: getStorefrontAnalytics });
   const pbQ = useQuery({ queryKey: ['affiliate-product-breakdown'], queryFn: getProductBreakdown });
+  const ctvTiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers });
+  const milestonesQ = useQuery({ queryKey: ['affiliate-milestones'], queryFn: getCtvMilestones });
+  const [showAllTiers, setShowAllTiers] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [ctvOrdering, setCtvOrdering] = useState(false);
+
+  // Thưởng mốc cộng Tubu Xu (coinsBalance) — làm mới số dư xu ở Ví (['coins'] + ['wallet'] vì
+  // GET /me/wallet cũng trả coinsBalance). `month` = tháng của mốc (tháng này hoặc tháng trước).
+  const claimMilestoneMut = useMutation({
+    mutationFn: (v: { id: string; month: string }) => claimCtvMilestone(v.id, v.month),
+    onSuccess: (res) => {
+      haptic('heavy');
+      openSnackbar({ text: res.message || 'Đã nhận thưởng mốc thành công!', type: 'success' });
+      void qc.invalidateQueries({ queryKey: ['affiliate-milestones'] });
+      void qc.invalidateQueries({ queryKey: ['coins'] });
+      void qc.invalidateQueries({ queryKey: ['wallet'] });
+    },
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Lỗi "đã nhận"/"chưa đạt" → trạng thái trên máy đã cũ, tải lại để nút khớp backend.
+      void qc.invalidateQueries({ queryKey: ['affiliate-milestones'] });
+    },
+  });
+
+  const renderMilestone = (m: CtvMilestoneItem, month: string, confirmedRevenue: number) => (
+    <Box
+      key={`${month}:${m.id}`}
+      p={3}
+      style={{
+        borderRadius: 'var(--radius-md)',
+        background: m.canClaim ? 'var(--leaf-50)' : 'var(--neutral-50)',
+        border: m.canClaim ? '1px solid var(--leaf-300)' : '1px solid var(--neutral-200)',
+      }}
+    >
+      <Box flex alignItems="flex-start" justifyContent="space-between">
+        <Box style={{ flex: 1 }}>
+          <Box flex alignItems="center" style={{ gap: 6 }}>
+            <Text bold size="small">{m.title}</Text>
+            {m.claimed && (
+              <Box px={1.5} py={0.2} style={{ background: 'var(--neutral-200)', borderRadius: 'var(--radius-full)' }}>
+                <Text size="xSmall" style={{ color: 'var(--neutral-600)', fontSize: 10 }}>Đã nhận</Text>
+              </Box>
+            )}
+          </Box>
+          <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
+            {m.description}
+          </Text>
+        </Box>
+        <Text bold size="small" style={{ color: 'var(--primary-700)', marginLeft: 8 }}>
+          +{formatXu(m.rewardXu)}
+        </Text>
+      </Box>
+
+      {/* Thanh tiến độ mốc (backend tính: chưa đạt tối đa 99%) */}
+      <Box mt={2}>
+        <Box style={{ height: 6, background: 'var(--neutral-200)', borderRadius: 99, overflow: 'hidden' }}>
+          <Box
+            style={{
+              width: `${m.progressPct}%`,
+              height: '100%',
+              background: m.claimed ? 'var(--neutral-400)' : m.achieved ? 'var(--leaf-600)' : 'var(--primary-600)',
+            }}
+          />
+        </Box>
+      </Box>
+
+      <Box mt={2} flex alignItems="center" justifyContent="space-between">
+        <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+          {milestoneStatusText(m, confirmedRevenue)}
+        </Text>
+
+        <Button
+          size="small"
+          disabled={!m.canClaim || claimMilestoneMut.isPending}
+          loading={
+            claimMilestoneMut.isPending &&
+            claimMilestoneMut.variables?.id === m.id &&
+            claimMilestoneMut.variables?.month === month
+          }
+          onClick={() => claimMilestoneMut.mutate({ id: m.id, month })}
+          style={{
+            borderRadius: 'var(--radius-full)',
+            background: m.canClaim ? 'var(--leaf-600)' : 'var(--neutral-200)',
+            color: m.canClaim ? 'var(--neutral-0)' : 'var(--neutral-500)',
+            padding: '4px 12px',
+            fontSize: 12,
+          }}
+        >
+          {m.claimed ? 'Đã nhận ✓' : m.canClaim ? 'Nhận thưởng' : 'Chưa đạt'}
+        </Button>
+      </Box>
+    </Box>
+  );
 
   const createLink = useMutation({
     mutationFn: () => createAffiliateLink('HOMEPAGE'),
@@ -213,7 +316,7 @@ function Dashboard() {
         )}
       </Box>
 
-      {/* Bậc doanh số tháng (§6.8.2) */}
+      {/* Bậc doanh số tháng (§6.8.2) & Danh sách 5 bậc CTV */}
       {d?.tier && (
         <Box mx={4} mb={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }}>
           <Box flex alignItems="center" justifyContent="space-between">
@@ -222,12 +325,12 @@ function Dashboard() {
               <Box>
                 <Text bold>CTV {d.tier.name}</Text>
                 <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-                  Bonus +{d.tier.bonusPct}% hoa hồng tháng này
+                  Bậc theo doanh số đã chốt tháng này
                 </Text>
               </Box>
             </Box>
             <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-              DS: {formatVnd(d.monthRevenue)}
+              Đã chốt: {formatVnd(d.monthRevenue)}
             </Text>
           </Box>
           {d.tier.nextName && d.tier.nextThreshold && (
@@ -235,17 +338,120 @@ function Dashboard() {
               <Box style={{ height: 8, background: 'var(--neutral-100)', borderRadius: 99, overflow: 'hidden' }}>
                 <Box
                   style={{
-                    width: `${Math.min(100, Math.round((d.monthRevenue / d.tier.nextThreshold) * 100))}%`,
+                    width: `${progressPct(d.monthRevenue, d.tier.nextThreshold)}%`,
                     height: '100%',
                     background: 'var(--primary-600)',
                   }}
                 />
               </Box>
               <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
-                Còn <b>{formatVnd(d.tier.toNext)}</b> doanh số để lên bậc {d.tier.nextName}
+                Còn <b>{formatVnd(d.tier.toNext)}</b> doanh số đã chốt để lên bậc {d.tier.nextName}
               </Text>
             </Box>
           )}
+
+          {/* Toggle mở rộng danh sách 5 bậc CTV */}
+          <Box
+            mt={3}
+            pt={2}
+            style={{ borderTop: '1px solid var(--neutral-100)', cursor: 'pointer' }}
+            flex
+            alignItems="center"
+            justifyContent="space-between"
+            onClick={() => {
+              haptic('light');
+              setShowAllTiers(!showAllTiers);
+            }}
+          >
+            <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
+              Bảng 5 bậc CTV & thưởng mốc Tubu Xu
+            </Text>
+            {showAllTiers ? <ChevronUp size={16} color="var(--primary-700)" /> : <ChevronDown size={16} color="var(--primary-700)" />}
+          </Box>
+
+          {showAllTiers && ctvTiersQ.data && (
+            <Box mt={3} flex flexDirection="column" style={{ gap: 6 }}>
+              {ctvTiersQ.data.allTiers.map((t) => {
+                const isCurrent = t.name === d.tier.name;
+                return (
+                  <Box
+                    key={t.name}
+                    p={2}
+                    flex
+                    alignItems="center"
+                    justifyContent="space-between"
+                    style={{
+                      borderRadius: 'var(--radius-md)',
+                      background: isCurrent ? 'var(--primary-50)' : 'var(--neutral-50)',
+                      border: isCurrent ? '1px solid var(--primary-300)' : '1px solid transparent',
+                    }}
+                  >
+                    <Box flex alignItems="center" style={{ gap: 6 }}>
+                      <Text style={{ fontSize: 16 }}>{t.emoji}</Text>
+                      <Text size="xSmall" bold={isCurrent} style={{ color: isCurrent ? 'var(--primary-800)' : 'var(--neutral-800)' }}>
+                        {t.name} {isCurrent ? '(Hiện tại)' : ''}
+                      </Text>
+                    </Box>
+                    <Box style={{ textAlign: 'right' }}>
+                      <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
+                        {tierRewardLabel(t)}
+                      </Text>
+                      <Text size="xSmall" style={{ color: 'var(--neutral-500)', fontSize: 10 }}>
+                        {t.min === 0 ? 'Mặc định' : `DS từ ${formatVnd(t.min)}`}
+                      </Text>
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {/* Thưởng mốc doanh số tháng — thưởng bằng Tubu Xu (tiêu trong app, không rút được) */}
+      {milestonesQ.data && milestonesQ.data.milestones.length > 0 && (
+        <Box mx={4} mb={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }}>
+          <Box flex alignItems="center" justifyContent="space-between" mb={2}>
+            <Box flex alignItems="center" style={{ gap: 8 }}>
+              <Box style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--primary-50)', display: 'grid', placeItems: 'center' }}>
+                <Trophy size={18} color="var(--primary-700)" />
+              </Box>
+              <Box>
+                <Text bold size="small">Thưởng Mốc Doanh Số Tháng</Text>
+                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                  {monthLabel(milestonesQ.data.monthKey)} · Đã chốt {formatVnd(milestonesQ.data.currentRevenue)}
+                </Text>
+              </Box>
+            </Box>
+          </Box>
+
+          <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginBottom: 4 }}>
+            {revenueRuleText(milestonesQ.data.holdDays)}
+          </Text>
+          {milestonesQ.data.pendingRevenue > 0 && (
+            <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginBottom: 8 }}>
+              Đang chờ chốt: <b>{formatVnd(milestonesQ.data.pendingRevenue)}</b> (đơn chưa giao hoặc đang trong thời gian giữ đổi/trả — chưa tính vào mốc)
+            </Text>
+          )}
+
+          {milestonesQ.data.previousMonth && (
+            <Box mb={3}>
+              <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', marginBottom: 6 }}>
+                Còn thưởng {monthLabel(milestonesQ.data.previousMonth.monthKey)} chưa nhận — nhận trước khi hết {monthLabel(milestonesQ.data.monthKey)}
+              </Text>
+              <Box flex flexDirection="column" style={{ gap: 10 }}>
+                {milestonesQ.data.previousMonth.milestones.map((m) =>
+                  renderMilestone(m, milestonesQ.data!.previousMonth!.monthKey, milestonesQ.data!.previousMonth!.revenue),
+                )}
+              </Box>
+            </Box>
+          )}
+
+          <Box flex flexDirection="column" style={{ gap: 10 }}>
+            {milestonesQ.data.milestones.map((m) =>
+              renderMilestone(m, milestonesQ.data!.monthKey, milestonesQ.data!.currentRevenue),
+            )}
+          </Box>
         </Box>
       )}
 

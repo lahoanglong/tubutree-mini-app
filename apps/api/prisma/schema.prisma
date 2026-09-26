@@ -246,6 +246,7 @@ model User {
   coinTransactions       CoinTransaction[]
   affiliateLinks         AffiliateLink[]
   commissions            Commission[]
+  ctvMilestoneClaims     CtvMilestoneClaim[]
   storefronts            Storefront[]
   payouts                Payout[]
   cashbackClicks         CashbackClick[]
@@ -275,6 +276,9 @@ model User {
   communityReports       CommunityReport[]       @relation("CommunityReports")
   communityProfile       CommunityProfile?       @relation("CommunityProfile")
   reputationEvents       ReputationEvent[]       @relation("ReputationEvents")
+  loyaltyCheckIns        LoyaltyCheckIn[]
+  posCreditsReceived     PosPointCredit[]        @relation("PosCreditMember")
+  posCreditsGiven        PosPointCredit[]        @relation("PosCreditStaff")
 
   @@index([referredById])
   @@map("users")
@@ -455,21 +459,61 @@ enum DealerRewardType {
 }
 
 model DealerReward {
-  id          String           @id @default(cuid())
+  id          String              @id @default(cuid())
   brandId     String?
-  brand       Brand?           @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  brand       Brand?              @relation(fields: [brandId], references: [id], onDelete: Cascade)
   type        DealerRewardType
   title       String
   description String?
   threshold   Int
-  period      String           @default("QUARTER")
-  isActive    Boolean          @default(true)
-  sortOrder   Int              @default(0)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  period      String              @default("QUARTER")
+  isActive    Boolean             @default(true)
+  sortOrder   Int                 @default(0)
+  claims      DealerRewardClaim[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
 
   @@index([brandId, isActive])
   @@map("dealer_rewards")
+}
+
+/// Vòng đời yêu cầu nhận thưởng mốc đại lý: PENDING → APPROVED | REJECTED; APPROVED → PAID.
+enum DealerRewardClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+/// Yêu cầu nhận thưởng mốc DealerReward (tour/quà) của 1 đại lý cho 1 kỳ (quý/năm, giờ VN).
+/// Unique (userId, periodKey, rewardId) → bấm lại / 2 request đồng thời chỉ tạo đúng 1 yêu cầu.
+/// Snapshot tiêu đề/loại/ngưỡng lúc yêu cầu — admin sửa hoặc xoá DealerReward sau đó không làm
+/// mất dấu nghĩa vụ trao thưởng (xoá reward → rewardId SET NULL, claim vẫn còn).
+model DealerRewardClaim {
+  id              String                  @id @default(cuid())
+  userId          String // đại lý
+  rewardId        String?
+  reward          DealerReward?           @relation(fields: [rewardId], references: [id], onDelete: SetNull)
+  periodKey       String // 'Q3/2026' (reward QUARTER) | '2026' (reward YEAR)
+  rewardTitle     String
+  rewardType      DealerRewardType
+  rewardPeriod    String // QUARTER | YEAR tại thời điểm yêu cầu
+  threshold       Int
+  volumeAtClaim   Int // doanh số ĐÃ CHỐT của kỳ lúc gửi yêu cầu
+  note            String? // ghi chú của đại lý
+  status          DealerRewardClaimStatus @default(PENDING)
+  reviewedBy      String? // adminId duyệt/từ chối
+  reviewedAt      DateTime?
+  rejectionReason String?
+  paidBy          String? // adminId xác nhận đã trao thưởng
+  paidAt          DateTime?
+  adminNote       String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@unique([userId, periodKey, rewardId])
+  @@index([status, createdAt])
+  @@map("dealer_reward_claims")
 }
 
 model ReferralTouch {
@@ -780,6 +824,21 @@ model Order {
   commission        Int            @default(0)
   couponCode        String?
   note              String?
+  // Thu gom vật liệu tái chế (Gomdon đơn đổi hàng)
+  hasRecyclingPickup Boolean        @default(false)
+  recyclingNote      String?
+  gomdonOrderId      String?
+  gomdonPartnerCode  String?
+  /// Trạng thái vận đơn Gomdon: mã số Gomdon ("1".."12") HOẶC trạng thái nội bộ
+  /// (AWAITING_PAYMENT | CREATING | NEEDS_MANUAL_CHECK | FAILED | NOT_CONFIGURED) — xem gomdon-status.ts.
+  gomdonStatus       String?
+  /// Thời điểm (created_time từ Gomdon) của trạng thái Gomdon đang lưu — chặn webhook tới trễ lùi trạng thái.
+  gomdonStatusAt     DateTime?
+  /// Kết quả huỷ vận đơn Gomdon khi đơn bị huỷ: CANCELLED | FAILED | TOO_LATE | NOT_NEEDED (null = chưa xử lý).
+  gomdonCancelStatus String?
+  /// Thời điểm đơn chuyển DELIVERED (OrderStatusService.setStatus) — mốc tính hạn đổi/trả. Trước đây
+  /// dùng updatedAt: mọi lần ghi sau đó (webhook vận chuyển, yêu cầu hoá đơn…) kéo dài hạn đổi/trả.
+  deliveredAt        DateTime?
   items             OrderItem[]
   commissions       Commission[]
   paymentAttempts   PaymentAttempt[]
@@ -792,6 +851,10 @@ model Order {
   // Admin order listing lọc theo status, sort createdAt desc (admin.service.ts listOrders) —
   // không trùng prefix với [userId, status] ở trên (userId không có trong where của admin).
   @@index([status, createdAt])
+  @@index([gomdonOrderId])
+  @@index([gomdonPartnerCode])
+  // Cron cứu hộ Gomdon (gomdon-reconcile.service.ts) quét đơn thu gom theo gomdonStatus.
+  @@index([hasRecyclingPickup, gomdonStatus])
   @@map("orders")
 }
 
@@ -841,7 +904,55 @@ model PointsTransaction {
   // Cron loyalty-expiry.service.ts (expirePoints/remindExpiringPoints) quét
   // WHERE delta>0 AND expiresAt <=/BETWEEN now — không có index này sẽ full-scan bảng lớn mỗi đêm.
   @@index([expiresAt])
+  // Partial unique (thêm bằng SQL tay, Prisma không khai báo được WHERE — migration
+  // 20260926120000_loyalty_checkin_pos):
+  //  - "points_transactions_checkin_day_key" ON ("userId","refId") WHERE refType='CHECKIN'
+  //    (refId = ngày VN 'YYYY-MM-DD') → tối đa 1 dòng điểm danh/user/ngày.
+  //  - "points_transactions_pos_ref_key" ON ("refId") WHERE refType='POS'
+  //    (refId = PosPointCredit.id) → 1 lần tích POS chỉ sinh đúng 1 dòng điểm.
   @@map("points_transactions")
+}
+
+/// Điểm danh hằng ngày nhận Điểm Xanh ở trang Hạng thành viên (loyalty.service.ts dailyCheckIn).
+/// TÁCH HẲN khỏi điểm danh Vườn Xanh (GameProfile.lastCheckInAt/streakDays do
+/// game-economy.service.ts quản, có vé giữ lửa + hồi sinh chuỗi): trước đây loyalty dùng chung
+/// 2 cột đó → điểm danh bên này chặn bên kia trong ngày và vòng 7 ngày ghi đè chuỗi game.
+/// Unique (userId, dayKey) là chốt chặn cứng: 2 request song song cùng ngày thì request thứ hai
+/// ăn P2002 TRƯỚC khi kịp cộng điểm.
+model LoyaltyCheckIn {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayKey     String // 'YYYY-MM-DD' theo giờ Việt Nam (UTC+7)
+  cycleDay   Int // 1..7 trong vòng thưởng 7 ngày
+  streakDays Int // số ngày liên tiếp (không giới hạn, chỉ để hiển thị)
+  points     Int // điểm đã cộng lần này (theo loyalty.checkin_points tại thời điểm điểm danh)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, dayKey])
+  @@map("loyalty_check_ins")
+}
+
+/// Sổ ghi vết tích điểm hoá đơn tại quầy (POS) do nhân viên nhập — ai cộng, cho ai, hoá đơn nào,
+/// bao nhiêu. receiptId unique = khoá idempotency: 1 hoá đơn chỉ tích điểm 1 lần (retry mạng/bấm
+/// đúp trả lại kết quả cũ). dayKey để cộng dồn trần điểm/ngày theo nhân viên và theo thành viên.
+model PosPointCredit {
+  id          String   @id @default(cuid())
+  receiptId   String   @unique
+  memberId    String
+  member      User     @relation("PosCreditMember", fields: [memberId], references: [id])
+  staffUserId String
+  staff       User     @relation("PosCreditStaff", fields: [staffUserId], references: [id])
+  orderTotal  Int
+  points      Int
+  multiplier  Decimal
+  note        String?
+  dayKey      String // 'YYYY-MM-DD' theo giờ Việt Nam (UTC+7)
+  createdAt   DateTime @default(now())
+
+  @@index([staffUserId, dayKey])
+  @@index([memberId, dayKey])
+  @@map("pos_point_credits")
 }
 
 // Mỗi lần bấm thanh toán cổng (ZaloPay...) = 1 dòng. Trước đây chỉ có Order.paymentTxnId lưu
@@ -1000,6 +1111,9 @@ model Commission {
   orderId         String
   order           Order            @relation(fields: [orderId], references: [id])
   orderTotal      Int
+  // Nền doanh số CTV cho bậc/mốc thưởng tháng: tổng item.total của các dòng CÓ hưởng hoa hồng
+  // (rate > 0) — loại hàng affiliateBlocked, hàng rate 0 và phí ship (mirror cách tính amount).
+  commissionableTotal Int          @default(0)
   rate            Decimal
   amount          Int
   status          CommissionStatus @default(PENDING)
@@ -1014,6 +1128,24 @@ model Commission {
   // orderId trên mỗi chuyển trạng thái đơn — không có index riêng cho orderId trước đây.
   @@index([orderId])
   @@map("commissions")
+}
+
+// Thưởng mốc doanh số tháng CTV đã nhận (AffiliateService.claimMilestone). Xu cộng qua
+// CoinsService.grantCoins (coinsBalance + CoinTransaction refType AFFILIATE_MILESTONE, refId=id).
+// @@unique(userId, milestoneId, monthKey) là khoá idempotency: 2 request claim đồng thời → request
+// thua ăn P2002 trên insert → rollback cả tx cấp xu → không bao giờ cộng 2 lần.
+model CtvMilestoneClaim {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  milestoneId String // id trong CTV_MONTHLY_MILESTONES (vd 'milestone-3m')
+  monthKey    String // 'YYYY-MM' theo giờ VN
+  rewardXu    Int
+  revenue     Int // doanh số đã chốt tại lúc nhận (đối soát)
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, milestoneId, monthKey])
+  @@map("ctv_milestone_claims")
 }
 
 enum PayoutStatus {
@@ -1897,6 +2029,31 @@ model PancakeWebhookEvent {
   error       String?
 
   @@map("pancake_webhook_events")
+}
+
+/// Webhook Gomdon (vận đơn đổi hàng thu gom tái chế) — lưu MỌI lần gọi đã qua xác thực để
+/// audit/replay; xử lý async qua queue gomdon-events (retry) + cron cứu hộ event kẹt.
+model GomdonWebhookEvent {
+  id            String    @id @default(cuid())
+  /// order_id|order_code|order_customer_id + status + created_time — Gomdon gửi lại cùng sự kiện
+  /// thì trùng key → không xử lý 2 lần.
+  dedupeKey     String    @unique
+  gomdonOrderId String?
+  orderCode     String?
+  gomdonStatus  Int?
+  eventTime     DateTime?
+  rawPayload    Json
+  receivedAt    DateTime  @default(now())
+  processedAt   DateTime?
+  /// RECEIVED | PROCESSED | IGNORED | FAILED
+  status        String
+  attempts      Int       @default(0)
+  error         String?
+  orderId       String?
+
+  @@index([status, receivedAt])
+  @@index([gomdonOrderId])
+  @@map("gomdon_webhook_events")
 }
 
 // ============================================================

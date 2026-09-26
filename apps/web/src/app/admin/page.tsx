@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
@@ -72,7 +72,15 @@ import {
   type AdminQuickReply,
   listCashbackTxns,
   reviewCashbackTxn,
+  countRecyclingAttention,
+  listDealerRewardClaims,
+  type RecyclingFilter,
 } from '@/lib/admin-client';
+import { RecyclingBadge, RecyclingPanel } from '@/components/admin/recycling-panel';
+import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
+import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
+import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
+import { PosCreditsTab } from '@/components/admin/pos-credits-tab';
 import {
   exportOrdersToCsv,
   exportUsersToCsv,
@@ -83,6 +91,7 @@ import {
 type Tab =
   | 'dashboard'
   | 'dealers'
+  | 'dealerClaims'
   | 'orders'
   | 'returns'
   | 'users'
@@ -95,13 +104,16 @@ type Tab =
   | 'academy'
   | 'quickReplies'
   | 'merchantProducts'
-  | 'cashback';
+  | 'cashback'
+  | 'posCredits';
 const TABS: { k: Tab; label: string }[] = [
   { k: 'dashboard', label: 'Tổng quan KPI' },
   { k: 'dealers', label: 'Đại lý' },
+  { k: 'dealerClaims', label: 'Thưởng đại lý' },
   { k: 'orders', label: 'Đơn hàng' },
   { k: 'returns', label: 'Đổi / Trả' },
   { k: 'cashback', label: 'Hoàn tiền sàn ngoài' },
+  { k: 'posCredits', label: 'Tích điểm tại quầy' },
   { k: 'users', label: 'Người dùng' },
   { k: 'config', label: 'Cấu hình' },
   { k: 'coupons', label: 'Voucher' },
@@ -114,9 +126,57 @@ const TABS: { k: Tab; label: string }[] = [
   { k: 'quickReplies', label: 'CSKH mẫu tin nhanh' },
 ];
 
+const TAB_KEYS = new Set<string>(TABS.map((t) => t.k));
+
+/**
+ * Tab + bộ lọc đơn nằm trên URL (`/admin?tab=orders&recycling=attention`) để gửi link cho đồng nghiệp,
+ * F5 không mất chỗ đang xem. Đọc window.location sau khi mount (không dùng useSearchParams — trang
+ * client thuần, tránh bắt buộc Suspense boundary khi build).
+ */
+function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | '' } {
+  if (typeof window === 'undefined') return { tab: null, recycling: '' };
+  const sp = new URLSearchParams(window.location.search);
+  const t = sp.get('tab');
+  const r = sp.get('recycling');
+  return {
+    tab: t && TAB_KEYS.has(t) ? (t as Tab) : null,
+    recycling: r === 'attention' || r === 'all' ? r : '',
+  };
+}
+
+function writeUrlState(tab: Tab, recycling: RecyclingFilter | '') {
+  if (typeof window === 'undefined') return;
+  const sp = new URLSearchParams();
+  if (tab !== 'dashboard') sp.set('tab', tab);
+  if (tab === 'orders' && recycling) sp.set('recycling', recycling);
+  const qs = sp.toString();
+  window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+}
+
 export default function AdminPage() {
   const { user, status, initialized } = useAuth();
-  const [tab, setTab] = useState<Tab>('dashboard');
+  const [tab, setTabState] = useState<Tab>('dashboard');
+  const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
+
+  useEffect(() => {
+    const u = readUrlState();
+    if (u.tab) setTabState(u.tab);
+    if (u.recycling) setOrdersRecycling(u.recycling);
+  }, []);
+
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    writeUrlState(t, t === 'orders' ? ordersRecycling : '');
+  };
+  const openRecyclingQueue = () => {
+    setOrdersRecycling('attention');
+    setTabState('orders');
+    writeUrlState('orders', 'attention');
+  };
+  const onRecyclingFilterChange = (r: RecyclingFilter | '') => {
+    setOrdersRecycling(r);
+    writeUrlState('orders', r);
+  };
 
   // Chờ lượt khôi phục phiên chạy xong: render đầu tiên luôn là 'idle' (xem AuthState.initialized),
   // không chờ thì màn "Cần đăng nhập quản trị" chớp lên mỗi lần F5.
@@ -133,7 +193,12 @@ export default function AdminPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <h1 className="text-xl font-bold">Quản trị Tubu Tree</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-bold">Quản trị Tubu Tree</h1>
+        <Link href="/admin/pos" className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50">
+          Màn thu ngân (tích điểm tại quầy)
+        </Link>
+      </div>
       <div className="mt-4 flex gap-2 overflow-x-auto border-b border-neutral-100">
         {TABS.map((t) => (
           <button
@@ -148,11 +213,13 @@ export default function AdminPage() {
         ))}
       </div>
       <div className="mt-4">
-        {tab === 'dashboard' && <DashboardTab onSelectTab={setTab} />}
+        {tab === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} />}
         {tab === 'dealers' && <DealersTab />}
-        {tab === 'orders' && <OrdersTab />}
+        {tab === 'dealerClaims' && <DealerClaimsTab />}
+        {tab === 'orders' && <OrdersTab recycling={ordersRecycling} onRecyclingChange={onRecyclingFilterChange} />}
         {tab === 'returns' && <ReturnsTab />}
         {tab === 'cashback' && <CashbackTab />}
+        {tab === 'posCredits' && <PosCreditsTab />}
         {tab === 'users' && <UsersTab />}
         {tab === 'config' && <ConfigTab />}
         {tab === 'coupons' && <CouponsTab />}
@@ -249,8 +316,19 @@ function OrderStatusBadge({ status }: { status: string }) {
   return <span className={`inline-block rounded px-2 py-0.5 text-xs ${color}`}>{label}</span>;
 }
 
-function DashboardTab({ onSelectTab }: { onSelectTab: (tab: Tab) => void }) {
+function DashboardTab({
+  onSelectTab,
+  onOpenRecyclingQueue,
+}: {
+  onSelectTab: (tab: Tab) => void;
+  onOpenRecyclingQueue: () => void;
+}) {
   const q = useQuery({ queryKey: ['admin-dashboard-stats'], queryFn: getDashboardStats });
+  const recyclingQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
+  const pendingClaimsQ = useQuery({
+    queryKey: ['admin-dealer-claims', 'PENDING', 'count'],
+    queryFn: () => listDealerRewardClaims('PENDING', 1, 1).then((r) => r.meta.total),
+  });
 
   if (q.isLoading) return <p className="text-sm text-neutral-500">Đang tải số liệu tổng quan…</p>;
   if (q.isError || !q.data) return <p className="text-sm text-red-600">Không tải được số liệu tổng quan KPI.</p>;
@@ -259,6 +337,30 @@ function DashboardTab({ onSelectTab }: { onSelectTab: (tab: Tab) => void }) {
 
   return (
     <div className="space-y-6">
+      {(recyclingQ.data ?? 0) > 0 && (
+        <button
+          type="button"
+          onClick={onOpenRecyclingQueue}
+          className="flex w-full items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100"
+        >
+          <span>
+            ♻ <b>{recyclingQ.data}</b> đơn thu gom tái chế cần xử lý (vận đơn Gomdon lỗi / hoàn / huỷ không được)
+          </span>
+          <span className="font-semibold">Xử lý ngay →</span>
+        </button>
+      )}
+      {(pendingClaimsQ.data ?? 0) > 0 && (
+        <button
+          type="button"
+          onClick={() => onSelectTab('dealerClaims')}
+          className="flex w-full items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900 hover:bg-amber-100"
+        >
+          <span>
+            🏆 <b>{pendingClaimsQ.data}</b> yêu cầu nhận thưởng đại lý đang chờ duyệt
+          </span>
+          <span className="font-semibold">Xem →</span>
+        </button>
+      )}
       {/* 4 KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Doanh thu */}
@@ -362,7 +464,19 @@ function DashboardTab({ onSelectTab }: { onSelectTab: (tab: Tab) => void }) {
   );
 }
 
-function OrdersTab() {
+const RECYCLING_FILTERS: { k: RecyclingFilter | ''; label: string }[] = [
+  { k: '', label: 'Mọi đơn' },
+  { k: 'all', label: '♻ Có thu gom' },
+  { k: 'attention', label: 'Cần xử lý thu gom' },
+];
+
+function OrdersTab({
+  recycling,
+  onRecyclingChange,
+}: {
+  recycling: RecyclingFilter | '';
+  onRecyclingChange: (r: RecyclingFilter | '') => void;
+}) {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
@@ -371,9 +485,10 @@ function OrdersTab() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const q = useQuery({
-    queryKey: ['admin-orders', page, status, search],
-    queryFn: () => listOrders(page, status || undefined, search || undefined),
+    queryKey: ['admin-orders', page, status, search, recycling],
+    queryFn: () => listOrders(page, status || undefined, search || undefined, recycling || undefined),
   });
+  const attentionQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
 
   const updateStatusMut = useMutation({
     mutationFn: ({ id, newStatus }: { id: string; newStatus: string }) =>
@@ -381,6 +496,7 @@ function OrdersTab() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['admin-orders'] });
       void qc.invalidateQueries({ queryKey: ['admin-dashboard-stats'] });
+      void qc.invalidateQueries({ queryKey: ['admin-recycling-count'] });
     },
   });
 
@@ -404,7 +520,7 @@ function OrdersTab() {
         <form onSubmit={handleSearchSubmit} className="flex min-w-[260px] flex-1 items-center gap-2">
           <input
             type="text"
-            placeholder="Tìm theo mã đơn, SĐT hoặc tên khách..."
+            placeholder="Tìm theo mã đơn, mã vận đơn, SĐT hoặc tên khách..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="w-full rounded border border-neutral-200 px-3 py-1.5 text-sm focus:border-green-600 focus:outline-none"
@@ -458,8 +574,51 @@ function OrdersTab() {
         </div>
       </div>
 
+      {/* Bộ lọc thu gom tái chế (Gomdon) */}
+      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Lọc đơn thu gom tái chế">
+        {RECYCLING_FILTERS.map((f) => {
+          const active = recycling === f.k;
+          const count = f.k === 'attention' ? attentionQ.data : undefined;
+          return (
+            <button
+              key={f.k || 'none'}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => {
+                setPage(1);
+                setExpandedId(null);
+                onRecyclingChange(f.k);
+              }}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                active
+                  ? f.k === 'attention'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-green-600 text-white'
+                  : f.k === 'attention' && (count ?? 0) > 0
+                    ? 'bg-red-50 text-red-700 ring-1 ring-red-200'
+                    : 'bg-neutral-100 text-neutral-700'
+              }`}
+            >
+              {f.label}
+              {count !== undefined && ` (${count})`}
+            </button>
+          );
+        })}
+        {recycling === 'attention' && (
+          <span className="text-xs text-neutral-500">
+            Vận đơn Gomdon tạo lỗi / cần kiểm tra / chưa cấu hình, hoặc Gomdon báo huỷ-hoàn-thất bại khi đơn còn mở; đơn huỷ mà huỷ vận đơn
+            không được.
+          </span>
+        )}
+      </div>
+
       {/* Orders Table */}
-      {q.isError && <p className="text-sm text-red-600">Không tải được danh sách đơn hàng.</p>}
+      {q.isError && (
+        <p className="text-sm text-red-600">
+          Không tải được danh sách đơn hàng{q.error instanceof Error ? `: ${q.error.message}` : '.'}
+        </p>
+      )}
       {q.isLoading && <p className="text-sm text-neutral-500">Đang tải danh sách đơn hàng…</p>}
 
       {q.data && (
@@ -489,7 +648,12 @@ function OrdersTab() {
                   return (
                     <React.Fragment key={o.id || o.code}>
                       <tr className="border-t border-neutral-100 hover:bg-neutral-50/50">
-                        <td className="px-3 py-3 font-semibold text-neutral-800">{o.code}</td>
+                        <td className="px-3 py-3">
+                          <div className="font-semibold text-neutral-800">{o.code}</div>
+                          <div className="mt-0.5">
+                            <RecyclingBadge order={o} />
+                          </div>
+                        </td>
                         <td className="px-3 py-3">
                           <div className="font-medium text-neutral-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
                           {o.user?.phone && <div className="text-xs text-neutral-500">{o.user.phone}</div>}
@@ -535,12 +699,11 @@ function OrdersTab() {
                                     {o.items.map((it) => (
                                       <div key={it.id} className="flex items-center justify-between px-3 py-2 text-xs">
                                         <div>
-                                          <span className="font-medium text-neutral-800">{it.productTitle}</span>
-                                          {it.variationTitle && <span className="text-neutral-500"> ({it.variationTitle})</span>}
-                                          {it.sku && <span className="text-neutral-400"> - SKU: {it.sku}</span>}
+                                          <span className="font-medium text-neutral-800">{it.productName}</span>
+                                          {it.variationName && <span className="text-neutral-500"> ({it.variationName})</span>}
                                         </div>
                                         <div className="text-right">
-                                          <span className="text-neutral-500">{it.quantity} x {formatVnd(it.price)}</span>
+                                          <span className="text-neutral-500">{it.quantity} x {formatVnd(it.unitPrice)}</span>
                                           <span className="ml-3 font-semibold text-neutral-800">{formatVnd(it.total)}</span>
                                         </div>
                                       </div>
@@ -556,6 +719,15 @@ function OrdersTab() {
                                   <span className="font-semibold">Ghi chú từ khách:</span> {o.note}
                                 </div>
                               )}
+
+                              {(o.shippingCode || o.shippingStatus) && !o.hasRecyclingPickup && (
+                                <div className="text-xs text-neutral-600">
+                                  <span className="font-semibold">Vận chuyển:</span> {o.shippingPartner ?? ''} {o.shippingCode ?? ''}
+                                  {o.shippingStatus ? ` · ${o.shippingStatus}` : ''}
+                                </div>
+                              )}
+
+                              <RecyclingPanel order={o} />
 
                               {/* Quick status transitions */}
                               <div className="flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-2">
@@ -603,7 +775,11 @@ function OrdersTab() {
                                 {o.status !== 'CANCELLED' && o.status !== 'RETURNED' && (
                                   <button
                                     onClick={() => {
-                                      if (window.confirm(`Xác nhận hủy đơn ${o.code}?`)) {
+                                      const gomdonNote =
+                                        o.hasRecyclingPickup && o.gomdonOrderId
+                                          ? ` Vận đơn thu gom Gomdon ${o.gomdonPartnerCode ?? ''} sẽ được huỷ tự động (nếu bưu tá chưa lấy hàng).`
+                                          : '';
+                                      if (window.confirm(`Xác nhận hủy đơn ${o.code}?${gomdonNote}`)) {
                                         updateStatusMut.mutate({ id: o.id || o.code, newStatus: 'CANCELLED' });
                                       }
                                     }}
@@ -1048,8 +1224,20 @@ function ConfigTab() {
   const q = useQuery({ queryKey: ['admin-config'], queryFn: () => getConfig() });
   if (q.isError) return <p className="text-sm text-red-600">Không tải được danh sách cấu hình.</p>;
   return (
-    <div className="space-y-2">
-      {q.data?.map((c) => <ConfigItem key={c.key} row={c} onSaved={() => qc.invalidateQueries({ queryKey: ['admin-config'] })} />)}
+    <div className="space-y-4">
+      <GomdonConfigCard rows={q.data} />
+      <LoyaltyConfigCard rows={q.data} />
+      <div>
+        <h3 className="text-sm font-semibold text-neutral-900">Tất cả tham số (JSON)</h3>
+        <p className="mt-0.5 text-xs text-neutral-500">
+          Giá trị có tên chứa password/secret/token luôn hiện dạng ••••••••; giữ nguyên chuỗi đó khi lưu thì giá trị thật không đổi.
+        </p>
+        <div className="mt-2 space-y-2">
+          {q.data?.map((c) => (
+            <ConfigItem key={`${c.key}:${JSON.stringify(c.value)}`} row={c} onSaved={() => qc.invalidateQueries({ queryKey: ['admin-config'] })} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1067,7 +1255,10 @@ function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => void }) {
       }
       return setConfig(row.key, parsed);
     },
-    onSuccess: onSaved,
+    onSuccess: () => {
+      setErr(null);
+      onSaved();
+    },
     onError: (e) => setErr(e instanceof Error ? e.message : 'Lỗi'),
   });
   return (
@@ -1076,7 +1267,16 @@ function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => void }) {
       {row.description && <div className="text-xs text-neutral-400">{row.description}</div>}
       <div className="mt-1 flex gap-2">
         <input value={val} onChange={(e) => setVal(e.target.value)} className="flex-1 rounded border border-neutral-200 px-2 py-1 font-mono text-sm" />
-        <button onClick={() => save.mutate()} className="rounded bg-green-600 px-3 py-1 text-sm text-white">Lưu</button>
+        <button
+          onClick={() => {
+            setErr(null);
+            save.mutate();
+          }}
+          disabled={save.isPending}
+          className="rounded bg-green-600 px-3 py-1 text-sm text-white disabled:bg-neutral-300"
+        >
+          {save.isPending ? 'Đang lưu…' : 'Lưu'}
+        </button>
       </div>
       {err && <div className="text-xs text-red-600">{err}</div>}
     </div>
