@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "allowImportingTsExtensions": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    // Mock trong tests/support/mock-api.ts được type-check theo ĐÚNG type của miniapp services
+    // (import type từ apps/miniapp/src/services/**). Các file đó import '@tubutree/shared-types' —
+    // trỏ thẳng src để không phụ thuộc bản build dist.
+    "paths": {
+      "@tubutree/shared-types": ["../../packages/shared-types/src/index.ts"]
+    }
+  },
+  "include": ["playwright.config.ts", "global-setup.ts", "tests/**/*.ts"]
+}

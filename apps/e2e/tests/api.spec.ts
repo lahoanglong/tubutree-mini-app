@@ -7,6 +7,9 @@ import { test, expect } from '@playwright/test';
  * Token này ký đúng JWT_ACCESS_SECRET thật → qua được JwtAuthGuard, chạm đến business logic.
  *
  * Nếu DB không chạy → E2E_API_TOKEN rỗng → test nhận 401, vẫn có warning rõ ràng.
+ *
+ * Path KHÔNG có "/" đầu: baseURL của project API là `http://localhost:<PORT>/api/` (playwright.config.ts).
+ * Viết '/checkout/quote' sẽ bỏ mất tiền tố /api → NestJS trả 404 và test pass vô nghĩa.
  */
 test.describe('API E2E Tests - Checkout Flow', () => {
   let token: string;
@@ -24,7 +27,7 @@ test.describe('API E2E Tests - Checkout Flow', () => {
   test('POST /checkout/quote - Trả về lỗi nghiệp vụ khi giỏ hàng trống', async ({ request }) => {
     test.skip(!token, 'Bỏ qua: E2E_API_TOKEN chưa được tạo (DB chưa chạy)');
 
-    const res = await request.post('/checkout/quote', {
+    const res = await request.post('checkout/quote', {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         addressId: 'address-does-not-exist',
@@ -60,7 +63,7 @@ test.describe('API E2E Tests - Checkout Flow', () => {
     };
 
     // Gọi lần 1
-    const res1 = await request.post('/checkout/place-order', { headers, data: body });
+    const res1 = await request.post('checkout/place-order', { headers, data: body });
     const status1 = res1.status();
     const responseBody1 = await res1.json() as unknown;
 
@@ -69,7 +72,7 @@ test.describe('API E2E Tests - Checkout Flow', () => {
     expect(status1).toBeLessThan(500);
 
     // Gọi lần 2 với CÙNG idempotency-key
-    const res2 = await request.post('/checkout/place-order', { headers, data: body });
+    const res2 = await request.post('checkout/place-order', { headers, data: body });
     const status2 = res2.status();
     const responseBody2 = await res2.json() as unknown;
 

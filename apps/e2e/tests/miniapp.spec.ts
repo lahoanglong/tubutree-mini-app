@@ -1,9 +1,11 @@
-import { test, expect } from '@playwright/test';
+import type { CartSummary, PageResponse, ProductCard, ProductDetail } from '../../miniapp/src/services/shop-api';
+import { test, expect, makeUser, mockSession } from './support/mock-api';
+import { publicConfig } from './support/checkout-mocks';
 
 /**
  * Zalo Mini App E2E - Luồng mua hàng Guest
  *
- * Codebase thực tế (miniapp/src/services/):
+ * Codebase thực tế (miniapp/src/services/shop-api.ts ↔ catalog.controller.ts / cart.controller.ts):
  *   - GET /api/products?limit=...       → fetchProducts()
  *   - GET /api/products/:slug           → fetchProduct()
  *   - GET /api/brands                   → fetchBrands()
@@ -14,13 +16,7 @@ import { test, expect } from '@playwright/test';
  * Nút giỏ hàng trên TopBar:  aria-label="Giỏ hàng"
  */
 test.describe('Zalo Mini App E2E - Luồng Đặt hàng Guest', () => {
-  test.use({
-    viewport: { width: 390, height: 844 },
-    userAgent:
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
-  });
-
-  const MOCK_PRODUCT = {
+  const MOCK_PRODUCT: ProductCard = {
     id: 'prod-1',
     slug: 'nuoc-rua-chen-tubu',
     brand: 'Tubu',
@@ -33,88 +29,84 @@ test.describe('Zalo Mini App E2E - Luồng Đặt hàng Guest', () => {
     sold: 120,
   };
 
-  test.beforeEach(async ({ page }) => {
-    // 1. Mock Guest Login → trả access token
-    await page.route('**/api/auth/guest', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          accessToken: 'mock-guest-token',
-          refreshToken: 'mock-guest-refresh',
-          user: { id: 'guest-1', role: 'GUEST', fullName: null, pointsBalance: 0 },
-        }),
-      });
-    });
+  const PRODUCT_DETAIL: ProductDetail = {
+    id: 'prod-1',
+    slug: 'nuoc-rua-chen-tubu',
+    brand: 'Tubu',
+    name: 'Nước Rửa Chén Sinh Học Tubu',
+    shortDesc: 'Sạch bong, an toàn cho da tay',
+    description: '<p>Nước rửa chén sinh học.</p>',
+    images: [],
+    thumbnail: null,
+    basePrice: 50000,
+    salePrice: 45000,
+    certifications: [],
+    variations: [
+      {
+        id: 'var-1',
+        sku: 'NRC-500',
+        name: '500ml',
+        attributes: {},
+        retailPrice: 50000,
+        salePrice: 45000,
+        stock: 30,
+      },
+    ],
+  };
 
-    // 2. Mock GET /api/products (tất cả variant query) → danh sách sản phẩm
-    await page.route('**/api/products*', async (route) => {
-      if (route.request().method() === 'GET') {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            data: [MOCK_PRODUCT],
-            meta: { page: 1, limit: 6, total: 1 },
-          }),
-        });
-      } else {
-        await route.continue();
-      }
-    });
+  const EMPTY_CART: CartSummary = {
+    items: [],
+    couponCode: null,
+    subtotal: 0,
+    discount: 0,
+    freeship: false,
+    freeshipThreshold: 300000,
+    itemCount: 0,
+  };
 
-    // 3. Mock GET /api/brands
-    await page.route('**/api/brands*', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([{ brand: 'Tubu', count: 10 }]),
-      });
-    });
-
-    // 4. Mock GET /api/cart → giỏ trống
-    await page.route('**/api/cart*', async (route) => {
-      if (route.request().method() === 'GET') {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            items: [],
-            couponCode: null,
-            subtotal: 0,
-            discount: 0,
-            freeship: false,
-            freeshipThreshold: 300000,
-            itemCount: 0,
-          }),
-        });
-      } else {
-        await route.continue();
-      }
-    });
+  test.beforeEach(async ({ api }) => {
+    mockSession(api, makeUser({ id: 'guest-1', role: 'CUSTOMER', fullName: null, phone: null }));
+    const page1: PageResponse<ProductCard> = { data: [MOCK_PRODUCT], meta: { page: 1, limit: 6, total: 1 } };
+    api.get('/products', page1);
+    api.get('/products/:slug', PRODUCT_DETAIL);
+    api.get('/brands', [{ brand: 'Tubu', count: 10 }]);
+    api.get('/cart', EMPTY_CART);
+    // Các khối phụ của trang chủ / trang sản phẩm (flash sale, gợi ý, yêu thích, thông báo,
+    // đánh giá…) — trả rỗng đúng shape để không có lời gọi nào rơi vào 404 E2E_UNMOCKED.
+    api.get('/flash-sales/active', []);
+    api.get('/flash-sales/upcoming', []);
+    api.get('/products/for-you', []);
+    api.get('/me/notifications', []);
+    api.get('/me/wishlist/ids', []);
+    api.get('/me/coupons', []);
+    api.get('/affiliate/me', { isAffiliate: false, referralCode: '', walletBalance: 0 });
+    api.get('/products/:slug/related', []);
+    api.get('/products/:slug/bought-together', []);
+    api.get('/products/:slug/reviews', { average: 0, count: 0, items: [] });
+    api.get('/products/:slug/reviews/can-review', { canReview: false, reason: 'NOT_PURCHASED' });
+    api.get('/config/public', publicConfig());
   });
 
   test('Trang chủ hiển thị sản phẩm và điều hướng', async ({ page }) => {
     await page.goto('/');
 
     // ProductCard render với aria-label = product.name
-    await expect(page.locator('[aria-label="Nước Rửa Chén Sinh Học Tubu"]').first()).toBeVisible({
-      timeout: 10000,
-    });
+    const card = page.locator('[aria-label="Nước Rửa Chén Sinh Học Tubu"]').first();
+    await expect(card).toBeVisible({ timeout: 15_000 });
 
     // Bấm vào sản phẩm → navigate /product/:slug
-    await page.click('[aria-label="Nước Rửa Chén Sinh Học Tubu"]');
-    await expect(page).toHaveURL(/\/product\/nuoc-rua-chen-tubu/, { timeout: 5000 });
+    await card.click();
+    await expect(page).toHaveURL(/\/product\/nuoc-rua-chen-tubu/, { timeout: 5_000 });
+    // Trang chi tiết render từ GET /products/:slug (catalog.controller.ts).
+    await expect(page.getByText(PRODUCT_DETAIL.shortDesc ?? '')).toBeVisible({ timeout: 10_000 });
   });
 
   test('Icon Giỏ hàng điều hướng đến /cart', async ({ page }) => {
     await page.goto('/');
 
-    // Chờ trang load xong (có logo hoặc icon)
-    await page.waitForLoadState('networkidle');
-
-    // Bấm icon Giỏ hàng trên TopBar (aria-label="Giỏ hàng")
-    await page.click('[aria-label="Giỏ hàng"]');
-    await expect(page).toHaveURL(/\/cart/, { timeout: 5000 });
+    const cartIcon = page.locator('[aria-label="Giỏ hàng"]');
+    await expect(cartIcon).toBeVisible({ timeout: 15_000 });
+    await cartIcon.click();
+    await expect(page).toHaveURL(/\/cart/, { timeout: 5_000 });
   });
 });
