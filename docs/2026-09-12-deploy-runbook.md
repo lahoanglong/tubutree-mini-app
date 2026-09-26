@@ -278,3 +278,23 @@ giữ chỗ đã nhả (kẹp 0, không âm) · dữ liệu cũ chỉ ghi mốc 
 dòng bị sửa · số Pancake tụt sâu thì `stock` kẹp 0. Dữ liệu thử đã xoá.
 
 Dữ liệu smoke đã dọn sạch sau khi kiểm tra (5 bài thử + 3 bình luận thử).
+
+---
+
+## 7. Đợt kế tiếp (2026-09-27): hoàn thiện WIP, nhánh `feat/complete-wip-2026-09`
+
+Đợt deploy sau đợt này (commit `b756c4a`, gồm cả `3abddcf` đã lên prod ngày 26/09 rồi rollback) có
+ghi chú riêng: **`docs/2026-09-27-wip-completion-deploy-notes.md`**. Đọc file đó trước khi deploy. Các
+điểm lệch so với runbook này:
+
+- **7 migration mới**, từ `20260918190013_storefront_last_reminder_at` đến
+  `20260927100000_dealer_bonus_adjusted_template`. Có hai backfill (`orders.deliveredAt`,
+  `commissions.commissionableTotal`) và có chèn dòng cấu hình và mẫu thông báo. Câu kiểm trước và SQL
+  chạy lại sau rollout nằm ở mục 3 của file mới.
+- **Mục 2 ở trên ("seed lại cấu hình") không còn nên làm trên prod có dữ liệu thật.** Migration đã tự
+  chèn các dòng cần thiết. Seed vẫn ghi đè sản phẩm, hạng và mọi khoá không đánh dấu `createOnly`. Chỉ
+  cần chèn tay mẫu `STOREFRONT_TRENDING_PRODUCTS`.
+- **Bốn biến môi trường `GOMDON_*` mới.** Đặt `GOMDON_PHONE` + `GOMDON_PASSWORD` mà thiếu
+  `GOMDON_WEBHOOK_SECRET` thì API production không boot.
+- **Cron thưởng quý đại lý chuyển từ ngày 1 sang ngày 10.** Nếu 04:00 ngày 01/10 prod vẫn chạy
+  `22e36d4`, Q3 sẽ được trả theo luật cũ, và code mới không tính lại.

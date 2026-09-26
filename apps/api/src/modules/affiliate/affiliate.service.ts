@@ -165,7 +165,9 @@ export class AffiliateService {
       totalClicks: links._sum.clicks ?? 0,
       totalConversions: links._sum.conversions ?? 0,
       monthRevenue,
-      tier: this.monthlyTier(monthRevenue),
+      // bonusPct: 0 CHỈ để tương thích bản miniapp cũ còn trên Zalo (render "Bonus +{bonusPct}%" —
+      // thiếu field sẽ hiện "+undefined%"). Luôn 0 vì không có luồng nào trả khoản này; bản mới không đọc.
+      tier: { ...this.monthlyTier(monthRevenue), bonusPct: 0 },
     };
   }
 

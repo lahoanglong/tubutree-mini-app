@@ -374,6 +374,12 @@ describe('AffiliateService.dashboard (doanh số tháng = doanh số ĐÃ CHỐT
     });
   });
 
+  it('dashboard.tier.bonusPct = 0 (tương thích miniapp cũ render "Bonus +X%") — không hứa khoản không trả', async () => {
+    const { svc } = build();
+    const d = await svc.dashboard('u1', NOW);
+    expect(d.tier.bonusPct).toBe(0);
+  });
+
   it('hoa hồng hôm nay/tháng này tính từ 00:00 giờ VN (không theo TZ máy chủ UTC)', async () => {
     const { svc, commissionAggregate } = build();
     await svc.dashboard('u1', NOW);
