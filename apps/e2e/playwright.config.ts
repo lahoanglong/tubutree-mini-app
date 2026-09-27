@@ -82,7 +82,10 @@ const allProjects: NonNullable<PlaywrightTestConfig['projects']> = [
   {
     name: 'Web Admin',
     use: { ...devices['Desktop Chrome'], baseURL: WEB_URL },
-    testMatch: /.*admin\.spec\.ts/,
+    // Mảng: "admin.spec.ts" (spec gốc) + "admin-analytics.spec.ts" (Task 21) — regex đơn trước đây
+    // chỉ khớp đúng "admin.spec.ts" nên file spec admin mới thứ 2 bị bỏ sót hoàn toàn (không match
+    // project nào cả → CI `playwright test` không chạy, không báo lỗi).
+    testMatch: [/.*admin\.spec\.ts/, /.*admin-analytics\.spec\.ts/],
   },
   {
     name: 'Zalo Mini App',
