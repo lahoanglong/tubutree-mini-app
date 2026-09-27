@@ -35,7 +35,7 @@ so được trước/sau. Hiện trạng: **0 SDK analytics, 0 request log**, s�
 ## Quyết định nghiệp vụ (chốt trong phiên brainstorming 2026-09-27)
 
 1. **Đơn CTV "lên đơn hộ"**: tính vào north-star cho **khách nhận hàng**, quy theo
-   `endCustomerKey` (hash SĐT người nhận), không tính cho CTV.
+   `endCustomerKey` (SĐT người nhận đã chuẩn hoá — chỉ số, không phải hash mật mã), không tính cho CTV.
 2. **Đơn đại lý (DEALER)**: **loại khỏi** north-star — kênh B2B khác bản chất mua lẻ.
 3. **Mua tại quầy (POS, `pos_point_credits`)**: **có tính** là một đơn hợp lệ trong north-star.
 4. **Gộp guest→Zalo**: tự động theo thiết bị — **đã có sẵn** (xem mục trên), không cần quyết định
@@ -114,7 +114,7 @@ source          String?   // checkout | buy_now | repurchase | subscription | ct
 platform        String?   // miniapp | web | pos — null cho đơn cũ (không backfill được chính xác)
 paidAt          DateTime? // lúc paymentStatus chuyển sang PAID — set tại nơi lật trạng thái, không suy ra từ updatedAt
 subscriptionId  String?   // gắn khi đơn được tạo từ subscriptions.service chạy kỳ
-endCustomerKey  String?   // hash SĐT người nhận — CHỈ set khi placedForCustomer = true
+endCustomerKey  String?   // SĐT người nhận đã chuẩn hoá (chỉ số) — CHỈ set khi placedForCustomer = true
 ```
 
 Cả 5 cột nullable, migration additive — deploy không cần backfill trước, không chặn ghi đơn mới.

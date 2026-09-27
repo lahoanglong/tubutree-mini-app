@@ -104,7 +104,7 @@ dòng `commission Int @default(0)` (dòng 831):
   platform          String?        // miniapp | web — null cho đơn cũ trước migration này
   paidAt            DateTime?      // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
   subscriptionId    String?        // gắn khi đơn tạo từ subscriptions.service (cron chạy kỳ)
-  endCustomerKey    String?        // hash SĐT người nhận — CHỈ set khi placedForCustomer = true
+  endCustomerKey    String?        // SĐT người nhận đã chuẩn hoá (chỉ số) — CHỈ set khi placedForCustomer = true
 ```
 
 Đây là scalar thường (không phải Prisma relation) — không cần sửa `model Subscription`.
@@ -1101,10 +1101,68 @@ git commit -m "feat(analytics): engagement_action cho game/loyalty/cộng đồn
 
 ---
 
-## Task 10: `referral_touched`
+## Task 10: `referral_touched` + `order_placed` cho đơn CTV "lên đơn hộ"
 
 **Files:**
-- Modify: `apps/api/src/modules/affiliate/affiliate.service.ts` (`recordTouch`, dòng ~75-101)
+- Modify: `apps/api/src/modules/affiliate/affiliate.service.ts` (`recordTouch` dòng ~75-101,
+  `placeOrderForCustomer` dòng ~234-367)
+
+**Phát hiện khi verify lại plan (2026-09-27, trong lúc chờ Task 5):** `placeOrderForCustomer()` là
+một đường tạo `Order` HOÀN TOÀN RIÊNG, không đi qua `checkout.service.ts` (đã sửa ở Task 4). Nếu
+không thêm việc này vào đây, đơn CTV lên đơn hộ sẽ KHÔNG BAO GIỜ phát `order_placed`, và 3 cột mới
+(`source`/`platform`/`endCustomerKey`) sẽ KHÔNG BAO GIỜ được set cho loại đơn này — đúng loại đơn
+mà quyết định nghiệp vụ "tính cho khách nhận hàng qua endCustomerKey" (đã chốt lúc brainstorm) áp
+dụng. Thiếu bước này thì quyết định đó lặng lẽ không có hiệu lực (customer_key rơi về `userId` =
+CTV, đúng lỗi cũ audit đã cảnh báo). Sửa lại thuật ngữ: `endCustomerKey` KHÔNG PHẢI hash mật mã —
+là SĐT người nhận đã CHUẨN HOÁ (chỉ giữ chữ số), CÙNG kiểu chuẩn hoá với `regexp_replace(phone,
+'\D','','g')` mà Task 14 dùng cho `user.phone` — để 2 giá trị có thể so khớp trực tiếp nếu sau này
+người nhận đó cũng là một tài khoản thật.
+
+- [ ] **Step 0 (MỚI): `placeOrderForCustomer()` — set 3 cột mới + phát `order_placed`**
+
+Đọc lại hàm thật trước khi sửa (chữ ký, transaction, biến `order`/`code`/`storefrontSlug` đã có sẵn
+trong scope — xác nhận khớp với đoạn dưới, KHÔNG đoán nếu có sai khác).
+
+Thêm 3 trường vào khối `data: {...}` của `tx.order.create` (ngay sau dòng `placedForCustomer:
+true,`):
+
+```typescript
+            source: 'ctv_assisted',
+            platform: 'miniapp',
+            endCustomerKey: dto.customer.phone.replace(/\D/g, '') || null,
+```
+
+Đổi khối transaction từ `return tx.order.create({...});` (dòng cuối callback) sang chép kết quả
+vào biến rồi phát sự kiện TRƯỚC KHI return (vẫn trong cùng `tx`, atomic với đơn):
+
+```typescript
+        const created = await tx.order.create({
+          data: {
+            // ... y hệt các trường đã có, cộng 3 trường mới ở trên ...
+          },
+        });
+        await this.analytics.record(tx, {
+          eventName: 'order_placed',
+          userId: ctvId,
+          platform: 'miniapp',
+          storefrontSlug,
+          props: {
+            orderId: created.id,
+            total,
+            subtotal: goods,
+            discount: 0,
+            shippingFee,
+            itemCount: lines.length,
+            paymentMethod: dto.paymentMethod,
+            orderSource: 'ctv_assisted',
+          },
+        });
+        return created;
+```
+
+Không cần phát `order_paid` ở đây — đơn CTV chỉ dùng COD (không PAID lúc tạo, xem Task 6 đã phủ
+qua `order-status.service.ts` chung cho mọi đơn) hoặc chuyển khoản (Pancake reconcile, đã phủ ở
+Task 5 — hoạt động cho MỌI đơn bất kể service nào tạo ra, không cần sửa gì thêm ở đây).
 
 - [ ] **Step 1: Thêm sau `referralTouch.upsert` thành công**
 
