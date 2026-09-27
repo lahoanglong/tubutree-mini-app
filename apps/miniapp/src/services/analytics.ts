@@ -59,12 +59,19 @@ export async function flushEventQueue(): Promise<void> {
 
 export function flushEventQueueOnHide(): void {
   if (queue.length === 0) return;
-  const body = JSON.stringify({ events: queue.splice(0, MAX_BATCH) });
+  // Lấy batch ra khỏi queue MỘT LẦN rồi giữ biến cục bộ — KHÔNG được gọi flushEventQueue() ở
+  // nhánh dự phòng bên dưới vì queue module-level đã rỗng ngay sau splice() này (phát hiện ở
+  // review Task 17: gọi lại flushEventQueue() sau khi đã splice queue rỗng khiến nhánh dự
+  // phòng — chính xác lúc sendBeacon thất bại/không có — là no-op câm lặng, mất trắng dữ liệu).
+  const batch = queue.splice(0, MAX_BATCH);
+  const body = JSON.stringify({ events: batch });
   if (typeof navigator !== 'undefined' && 'sendBeacon' in navigator) {
     const ok = navigator.sendBeacon('/api/events', body);
     if (ok) return;
   }
-  void flushEventQueue();
+  // sendBeacon không khả dụng hoặc thất bại — gửi lại bằng chính `batch` đã lấy ra ở trên qua
+  // fetch thường (best-effort, không throw).
+  void api.post('/events', { events: batch }).catch(() => {});
 }
 
 export function __resetQueueForTest(): void {
