@@ -2314,7 +2314,10 @@ trước, vì effect tham chiếu các biến đó.
 - [ ] **Step 3: `checkout.tsx` — lần quote thành công đầu tiên**
 
 Thêm `useRef<boolean>(false)` đánh dấu đã phát chưa (tránh phát lại mỗi lần quote refetch), phát
-trong effect khi `quote.isSuccess` chuyển từ false→true lần đầu:
+trong effect khi `quote.isSuccess` chuyển từ false→true lần đầu. Đã verify lại thật (2026-09-27):
+`cart` ở trang này cũng là kết quả `useQuery` (giống `product-detail.tsx`) — giỏ hàng nằm ở
+`cart.data.items`, KHÔNG PHẢI `cart.items` trực tiếp; `itemIds`/`quote` là 2 biến thật đã xác nhận
+(dòng ~100, ~116):
 
 ```typescript
   const trackedCheckoutStarted = useRef(false);
@@ -2322,7 +2325,7 @@ trong effect khi `quote.isSuccess` chuyển từ false→true lần đầu:
     if (!quote.isSuccess || trackedCheckoutStarted.current) return;
     trackedCheckoutStarted.current = true;
     void trackEvent('checkout_started', 'miniapp', {
-      itemCount: cart.items.length,
+      itemCount: itemIds?.length ?? cart.data?.items?.length ?? 0,
       subtotal: quote.data?.subtotal ?? 0,
       entry: itemIds ? 'buy_now' : 'cart',
     });
