@@ -2294,16 +2294,21 @@ cần build sạch + smoke test thủ công ở Task 21.
 Đặt effect này SAU khi `selected`/`flashItem`/`price` đã được khai báo (dòng ~130-203) — không đặt
 trước, vì effect tham chiếu các biến đó.
 
-- [ ] **Step 2: `browse.tsx` — khi trang 1 trả về với `debouncedQ`**
+- [ ] **Step 2: `browse.tsx` — khi trang 1 trả về với `debouncedQ`. Đã verify lại thật
+      (2026-09-27): tên biến query là `products` (`useInfiniteQuery`, dòng ~90), KHÔNG PHẢI
+      `data`; kiểu trang là `PageResponse<T> = { data: T[]; meta: { page, limit, total } }`
+      (`shop-api.ts:5-7`) — mảng SP nằm ở field `data`, KHÔNG PHẢI `items`, và `meta.total` luôn
+      có sẵn (không cần fallback `?.length`).**
 
 ```typescript
   useEffect(() => {
-    if (!debouncedQ || !data?.pages?.[0]) return;
+    const firstPage = products.data?.pages?.[0];
+    if (!debouncedQ || !firstPage) return;
     void trackEvent('search_performed', 'miniapp', {
       q: debouncedQ,
-      resultsCount: data.pages[0].meta?.total ?? data.pages[0].items?.length ?? 0,
+      resultsCount: firstPage.meta.total,
     });
-  }, [debouncedQ, data?.pages?.[0]]);
+  }, [debouncedQ, products.data?.pages]);
 ```
 
 - [ ] **Step 3: `checkout.tsx` — lần quote thành công đầu tiên**
