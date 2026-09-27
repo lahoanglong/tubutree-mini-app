@@ -2017,8 +2017,14 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   if (accessToken) {
     config.headers.set('Authorization', `Bearer ${accessToken}`);
   }
+  // Guard riêng (không dùng chung khối try/catch của authReady phía trên) — nếu bridge storage
+  // lỗi (zmp-sdk phiên bản cũ, quota, bridge chưa sẵn sàng...) thì CHỈ mất header thiết bị (dữ
+  // liệu phân tích), KHÔNG được làm hỏng TOÀN BỘ request mạng của app (phát hiện ở review Task
+  // 16: trước đây getDeviceId() chỉ chạy trong luồng đăng nhập khách, có try/catch riêng; giờ
+  // chạy ở MỌI request nên bán kính ảnh hưởng nếu lỗi lớn hơn hẳn).
   const { getDeviceId } = await import('../store/auth');
-  config.headers.set('X-Device-Id', await getDeviceId());
+  const deviceId = await getDeviceId().catch(() => undefined);
+  if (deviceId) config.headers.set('X-Device-Id', deviceId);
   config.headers.set('X-Client-Platform', 'miniapp');
   return config;
 });
