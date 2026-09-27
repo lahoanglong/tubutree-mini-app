@@ -998,8 +998,16 @@ git commit -m "feat(analytics): subscription_changed + order_placed cho đơn đ
 
 Với MỖI file trên: đọc method thật trước, thêm `AnalyticsEventsService` vào constructor + import
 `'../analytics/analytics-events.service'` (đường dẫn tương đối 1 cấp `../` vì cùng độ sâu
-`modules/<name>/`), rồi thêm lời gọi `recordBestEffort` NGAY SAU khi ghi DB chính thành công
-(không cần transaction — đây là tín hiệu retention, không phải tiền).
+`modules/<name>/`). **Đã verify lại trực tiếp trên nhánh (2026-09-27, trong lúc chờ Task 5) 6
+method thật — 3/6 đã CÓ SẴN `$transaction`, không phải best-effort như phỏng đoán ban đầu:**
+`game-economy.checkIn` (không có tx — `recordBestEffort` đúng), `game.service.spin` (**CÓ**
+`$transaction`, dòng ~113 `return this.prisma.$transaction(async (tx) => {...})` — dùng
+`record(tx,...)`), `game.service.waterTree` (có tx, đã đúng ở Step 3), `loyalty.dailyCheckIn`
+(**CÓ** `$transaction`, dòng ~756 — dùng `record(tx,...)`), `community-feed.toggleReaction`/
+`addComment` (không có tx — `recordBestEffort` đúng), `reviews.create` (**CÓ** `$transaction`,
+dòng ~70 `review = await this.prisma.$transaction(async (tx) => {...})` — dùng `record(tx,...)`).
+Nguyên tắc: có tx sẵn trong scope thì LUÔN dùng `record(tx,...)` (miễn phí, atomic hơn) thay vì
+`recordBestEffort` — chỉ dùng `recordBestEffort` khi thật sự không có transaction bao quanh.
 
 - [ ] **Step 1: `game-economy.service.ts` — sau `gameProfile.updateMany` guard `lastCheckInAt`
       thành công (count > 0)**
@@ -1013,14 +1021,16 @@ Với MỖI file trên: đọc method thật trước, thêm `AnalyticsEventsSer
       });
 ```
 
-- [ ] **Step 2: `game.service.ts` `spin()` — sau khi ghi kết quả quay thành công**
+- [ ] **Step 2: `game.service.ts` `spin()` — bên trong `$transaction` đã có (dòng ~113), NGAY SAU
+      `tx.gameSpin.create(...)` và TRƯỚC `return { prize: {...} };` cuối callback, dùng `tx`
+      không phải `recordBestEffort`**
 
 ```typescript
-      await this.analytics.recordBestEffort({
+      await this.analytics.record(tx, {
         eventName: 'engagement_action',
         userId,
         platform: 'miniapp',
-        props: { action: 'spin', refId: spinResult.id ?? null },
+        props: { action: 'spin', prizeId: prize.id, rewardType: prize.rewardType, rewardRefId },
       });
 ```
 
@@ -1036,14 +1046,16 @@ Với MỖI file trên: đọc method thật trước, thêm `AnalyticsEventsSer
       });
 ```
 
-- [ ] **Step 4: `loyalty.service.ts` `dailyCheckIn()` — sau khi ghi `LoyaltyCheckIn` thành công**
+- [ ] **Step 4: `loyalty.service.ts` `dailyCheckIn()` — bên trong `$transaction` đã có (dòng
+      ~756), NGAY TRƯỚC câu `return { success: true, cycleDay, ... };` cuối callback (dòng
+      ~782-792), dùng `tx` không phải `recordBestEffort`**
 
 ```typescript
-      await this.analytics.recordBestEffort({
+      await this.analytics.record(tx, {
         eventName: 'engagement_action',
         userId,
         platform: 'miniapp',
-        props: { action: 'loyalty_checkin' },
+        props: { action: 'loyalty_checkin', cycleDay, streakDays, pointsEarned: points },
       });
 ```
 
@@ -1059,14 +1071,16 @@ Với MỖI file trên: đọc method thật trước, thêm `AnalyticsEventsSer
       });
 ```
 
-- [ ] **Step 6: `reviews.service.ts` `create()` — sau khi ghi `Review` thành công**
+- [ ] **Step 6: `reviews.service.ts` `create()` — bên trong `$transaction` đã có (dòng ~70), NGAY
+      TRƯỚC `return r;` cuối callback (sau `this.recomputeRating(product.id, tx)`, dòng ~93-94),
+      dùng `tx` không phải `recordBestEffort`**
 
 ```typescript
-      await this.analytics.recordBestEffort({
+      await this.analytics.record(tx, {
         eventName: 'engagement_action',
         userId,
         platform: 'miniapp',
-        props: { action: 'review_created', productSlug: slug },
+        props: { action: 'review_created', productSlug: slug, pointsEarned },
       });
 ```
 
