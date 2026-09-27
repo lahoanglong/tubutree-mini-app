@@ -1547,7 +1547,7 @@ git commit -m "feat(analytics): POST /events — ingest lô sự kiện FE, thro
 ```typescript
 // apps/api/scripts/backfill-analytics-2026-09.ts
 // Chạy 1 LẦN sau khi đã áp migration analytics_foundation. KHÔNG chạy trong CI/migrate deploy.
-// Usage: cd apps/api && npx ts-node scripts/backfill-analytics-2026-09.ts
+// Usage: cd apps/api && npx tsx scripts/backfill-analytics-2026-09.ts
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -1653,7 +1653,7 @@ main()
 - [ ] **Step 2: Chạy thử trên DB dev/staging (KHÔNG chạy thẳng prod ở bước này)**
 
 ```bash
-cd apps/api && npx ts-node scripts/backfill-analytics-2026-09.ts
+cd apps/api && npx tsx scripts/backfill-analytics-2026-09.ts
 ```
 
 Expected: exit 0, in ra bảng `baseline` (có thể rỗng nếu DB dev chưa có đơn nào đủ 30 ngày tuổi —
@@ -2694,7 +2694,7 @@ Thêm đoạn:
 - Migration mới: `analytics_foundation` (bảng `analytics_events`, `retention_daily_snapshot`,
   `cohort_repeat_snapshot`, `funnel_daily_snapshot` + 5 cột `Order`) — additive, an toàn deploy.
 - Sau khi `prisma migrate deploy`: chạy **1 lần**
-  `npx ts-node apps/api/scripts/backfill-analytics-2026-09.ts` để backfill `source`/`platform`/
+  `npx tsx apps/api/scripts/backfill-analytics-2026-09.ts` để backfill `source`/`platform`/
   `paidAt` lịch sử + in baseline NS-1 ra log (lưu lại log này làm baseline tuần đầu).
   Đây là backfill dữ liệu, không phải migration — không chạy tự động trong `migrate deploy`.
 - Cron `AnalyticsAggregationService.runNightly()` chạy `0 3 * * *` theo giờ hệ thống (chưa ép
