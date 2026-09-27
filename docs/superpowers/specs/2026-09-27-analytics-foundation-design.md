@@ -179,17 +179,16 @@ dòng sự kiện trong `analytics_events` chính là lịch sử (mỗi lần �
 `engagement_action`, không cần sửa `game-economy.service.ts`/`game.service.ts` để giữ history).
 
 Điểm phát BE (10 sự kiện, ghi trong transaction sẵn có — xem file:line trong audit §7.4 để định vị,
-verify lại lúc code): `add_to_cart` (cart.service), `checkout_started`/`order_placed`/
-`order_place_failed` (checkout.service), `order_paid` (zalopay.service, pancake.processor,
-dealer.service, hoặc lúc COD→DELIVERED), `order_status_changed` (order-status.service),
-`notification_sent` (notifications.service), `subscription_changed` (subscriptions.service),
-`engagement_action` (game-economy/game/loyalty/feed/reviews/flash-sale service), `coupon_applied`
-(cart.service + CouponRedemption), `referral_touched` (affiliate.service).
+verify lại lúc code): `add_to_cart` (cart.service), `order_placed`/`order_place_failed`
+(checkout.service), `order_paid` (zalopay.service, pancake.processor, dealer.service, hoặc lúc
+COD→DELIVERED), `order_status_changed` (order-status.service), `notification_sent`
+(notifications.service), `subscription_changed` (subscriptions.service), `engagement_action`
+(game-economy/game/loyalty/feed/reviews/flash-sale service), `coupon_applied` (cart.service +
+CouponRedemption), `referral_touched` (affiliate.service).
 
 Điểm phát FE (8 sự kiện, qua `POST /events` gộp lô): `app_opened`, `screen_viewed`,
-`product_viewed`, `search_performed`, `checkout_started` (bản ghi ý định — trùng tên với bản BE ở
-bước quote thành công đầu tiên, khác nguồn), `notification_opened`, `share_clicked`,
-`client_error`.
+`product_viewed`, `search_performed`, `checkout_started` (khi quote thành công lần đầu ở
+`pages/checkout.tsx`), `notification_opened`, `share_clicked`, `client_error`.
 
 ## Module & luồng dữ liệu
 
