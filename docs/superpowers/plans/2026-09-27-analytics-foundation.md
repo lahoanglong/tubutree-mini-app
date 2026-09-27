@@ -1568,9 +1568,14 @@ async function main() {
     UPDATE orders SET source = 'dealer', platform = 'web'
     WHERE type = 'DEALER' AND source IS NULL
   `;
+  // "ctv_assisted" gồm 2 luồng khác nhau (phân biệt được qua placedForCustomer nếu cần phân
+  // tích sâu hơn sau này): khách tự chọn mua trên gian hàng CTV (storefrontSlug có giá trị) HOẶC
+  // CTV tự lên đơn hộ khách (placedForCustomer=true — CTV cũ có thể CHƯA có gian hàng riêng nên
+  // storefrontSlug vẫn null, riêng điều kiện storefrontSlug sẽ bỏ sót nhóm này — phát hiện ở
+  // review Task 10).
   await prisma.$executeRaw`
     UPDATE orders SET source = 'ctv_assisted', platform = 'miniapp'
-    WHERE "storefrontSlug" IS NOT NULL AND source IS NULL
+    WHERE ("storefrontSlug" IS NOT NULL OR "placedForCustomer" = true) AND source IS NULL
   `;
   await prisma.$executeRaw`
     UPDATE orders SET source = 'checkout', platform = 'miniapp'
@@ -1586,10 +1591,19 @@ async function main() {
 
   // 2b) endCustomerKey cho đơn CTV lên-đơn-hộ CŨ (trước khi Task 10 kịp set cho đơn mới) — lấy
   //     từ shippingAddress->>'phone' (JSON snapshot luôn có field `phone`, xem
-  //     checkout.service.ts addressSnapshot() / affiliate.service.ts customerSnapshot()), chuẩn
-  //     hoá CÙNG kiểu với customer_key ở mục 3 bên dưới và ở Task 14 (chỉ giữ chữ số).
+  //     checkout.service.ts addressSnapshot() / affiliate.service.ts customerSnapshot()).
+  //     QUAN TRỌNG (phát hiện ở review Task 10): CTV order-sheet FE chấp nhận CẢ 2 dạng nhập
+  //     `0xxxxxxxxx` VÀ `+84xxxxxxxxx` — nếu chỉ strip ký tự không phải số thì SĐT dạng `84...`
+  //     (11 chữ số) sẽ KHÔNG khớp `user.phone` (luôn ở dạng `0...`, 10 chữ số — xem
+  //     zalo.service.ts/loyalty.service.ts đã tự quy đổi 84→0). Phải quy đổi CÙNG kiểu ở đây,
+  //     khớp đúng helper `normalizeToLocalPhone()` Task 10 đã thêm vào affiliate.service.ts.
   await prisma.$executeRaw`
-    UPDATE orders SET "endCustomerKey" = NULLIF(regexp_replace("shippingAddress"->>'phone', '\\D', '', 'g'), '')
+    UPDATE orders SET "endCustomerKey" = NULLIF(
+      regexp_replace(
+        regexp_replace("shippingAddress"->>'phone', '\\D', '', 'g'),
+        '^84(\\d{9})$', '0\\1'
+      ), ''
+    )
     WHERE "placedForCustomer" = true AND "endCustomerKey" IS NULL AND "shippingAddress"->>'phone' IS NOT NULL
   `;
 
