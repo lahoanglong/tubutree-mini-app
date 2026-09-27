@@ -9,6 +9,7 @@ import { PancakeOrderService } from '../integrations/pancake/pancake-order.servi
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { reserveVariationStock } from '../catalog/variation-stock';
 import { CoinsService } from '../wallet/coins.service';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { paginated, skipTake } from '../../common/pagination';
 import {
   CONFIRMED_COMMISSION_STATUSES,
@@ -41,6 +42,7 @@ export class AffiliateService {
     private readonly pricing: PricingService,
     private readonly pancakeOrder: PancakeOrderService,
     private readonly coins: CoinsService,
+    private readonly analytics: AnalyticsEventsService,
   ) {}
 
   async register(userId: string) {
@@ -102,6 +104,16 @@ export class AffiliateService {
       where: { userId },
       update: data,
       create: { userId, ...data },
+    });
+    // Best-effort (không tx nào đang chạy ở đây) — mất 1 event referral_touched không đáng để
+    // chặn/hủy việc ghi "chạm" giới thiệu thật (đường tiền).
+    await this.analytics.recordBestEffort({
+      eventName: 'referral_touched',
+      userId,
+      platform: 'miniapp',
+      refCode: dto.referralCode ?? null,
+      storefrontSlug: dto.storefrontSlug ?? null,
+      props: { kind: dto.kind ?? 'ctv' },
     });
     return { ok: true };
   }
@@ -303,7 +315,7 @@ export class AffiliateService {
             throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
           }
         }
-        return tx.order.create({
+        const created = await tx.order.create({
           data: {
             code,
             userId: ctvId,
@@ -321,6 +333,15 @@ export class AffiliateService {
             referrerUserId: ctvId,
             storefrontSlug,
             placedForCustomer: true,
+            source: 'ctv_assisted',
+            platform: 'miniapp',
+            // KHÔNG PHẢI hash mật mã — chỉ giữ lại chữ số của SĐT người nhận (cùng kiểu chuẩn hoá
+            // regexp_replace(phone, '\D', '', 'g') mà truy vấn analytics dùng cho user.phone) để 2
+            // giá trị so khớp trực tiếp được nếu người nhận sau này cũng là 1 tài khoản thật. Đơn
+            // CTV lên hộ tạo Order qua nhánh RIÊNG này (không qua checkout.service.ts) nên đây là
+            // nơi DUY NHẤT set 3 cột này cho loại đơn "lên đơn hộ" — thiếu bước này thì quyết định
+            // "tính doanh số cho khách nhận hàng qua endCustomerKey" lặng lẽ không có hiệu lực.
+            endCustomerKey: dto.customer.phone.replace(/\D/g, '') || null,
             note: dto.note,
             idempotencyKey: key ?? null,
             items: {
@@ -336,6 +357,27 @@ export class AffiliateService {
             },
           },
         });
+        // order_placed atomic với đơn (cùng tx) — mirror checkout.service.ts (Task 4), nhưng bắt
+        // buộc phát RIÊNG ở đây vì placeOrderForCustomer tạo Order qua nhánh hoàn toàn khác, không
+        // đi qua checkout.service.ts. Không phát order_paid: đơn CTV chỉ COD (không PAID lúc tạo)
+        // hoặc chuyển khoản (phủ bởi Pancake reconcile chung cho mọi đơn, Task 5).
+        await this.analytics.record(tx, {
+          eventName: 'order_placed',
+          userId: ctvId,
+          platform: 'miniapp',
+          storefrontSlug,
+          props: {
+            orderId: created.id,
+            total,
+            subtotal: goods,
+            discount: 0,
+            shippingFee,
+            itemCount: lines.length,
+            paymentMethod: dto.paymentMethod,
+            orderSource: 'ctv_assisted',
+          },
+        });
+        return created;
       });
     } catch (err) {
       // Race idempotency: 2 request cùng key chạy đồng thời — request thua ăn unique-violation

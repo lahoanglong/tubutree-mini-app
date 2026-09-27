@@ -7,6 +7,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { PricingService } from '../pricing/pricing.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
+import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 
@@ -14,7 +15,13 @@ function makeService(prisma: unknown, coins?: unknown) {
   const pricing = {} as unknown as PricingService;
   const pancake = {} as unknown as PancakeOrderService;
   const coinsSvc = (coins ?? { grantCoins: jest.fn().mockResolvedValue(undefined) }) as CoinsService;
-  return new AffiliateService(prisma as PrismaService, config, pricing, pancake, coinsSvc);
+  // Không test nào ở file này chạm recordTouch/placeOrderForCustomer (chỉ getCtvTiers/
+  // getMilestones/claimMilestone) — no-op mặc định, chỉ để đủ tham số bắt buộc thứ 6 (Task 10).
+  const analytics = {
+    record: jest.fn().mockResolvedValue(undefined),
+    recordBestEffort: jest.fn().mockResolvedValue(undefined),
+  } as unknown as AnalyticsEventsService;
+  return new AffiliateService(prisma as PrismaService, config, pricing, pancake, coinsSvc, analytics);
 }
 
 function p2002() {
