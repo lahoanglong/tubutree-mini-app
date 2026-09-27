@@ -9,6 +9,7 @@ import { PancakeOrderService } from '../integrations/pancake/pancake-order.servi
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
 import { reserveAvailableVariationStock } from '../catalog/variation-stock';
 import { paginated, skipTake } from '../../common/pagination';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 interface BonusTier {
   min: number;
@@ -77,6 +78,9 @@ export class DealerService {
     // Thiếu wiring thì log cảnh báo to, KHÔNG im lặng bỏ qua — chính việc im lặng đã khiến
     // đơn đại lý không bao giờ tới kho mà không ai biết (P1-4).
     @Optional() private readonly pancakeOrder?: PancakeOrderService,
+    // @Optional cùng lý do notifications/pancakeOrder ở trên — AnalyticsModule là @Global() nên
+    // app thật luôn wiring được.
+    @Optional() private readonly analytics?: AnalyticsEventsService,
   ) {}
 
   async apply(userId: string, dto: ApplyDealerDto) {
@@ -991,7 +995,8 @@ export class DealerService {
    *  - Guard atomic: updateMany where paymentStatus=UNPAID + status đúng như vừa đọc → webhook /
    *    huỷ đơn / admin khác chen giữa thì count=0, không ghi gì.
    *  - Ghi vết ai/lúc nào: 1 dòng order_status_history (actorType ADMIN, actorId, createdAt, note kèm
-   *    mã giao dịch ngân hàng) trong CÙNG transaction + log. Bảng orders không có cột paidAt.
+   *    mã giao dịch ngân hàng) trong CÙNG transaction + log. Cũng set `paidAt` (cột đã có từ Task 1
+   *    analytics-foundation) + ghi event `order_paid` ATOMIC trong cùng transaction (Task 5).
    */
   async confirmDealerOrderPayment(adminId: string, id: string, dto: { bankRef?: string; note?: string } = {}) {
     const order = await this.prisma.order.findFirst({
@@ -1028,10 +1033,22 @@ export class DealerService {
     await this.prisma.$transaction(async (tx) => {
       const flip = await tx.order.updateMany({
         where: { id: order.id, type: 'DEALER', paymentStatus: 'UNPAID', status: order.status },
-        data: { paymentStatus: 'PAID', ...(toStatus !== order.status ? { status: 'CONFIRMED' as const } : {}) },
+        data: {
+          paymentStatus: 'PAID',
+          paidAt: new Date(),
+          ...(toStatus !== order.status ? { status: 'CONFIRMED' as const } : {}),
+        },
       });
       if (flip.count === 0) {
         throw new BadRequestException('Đơn vừa thay đổi trạng thái (thanh toán/huỷ) — vui lòng tải lại rồi thử lại.');
+      }
+      if (this.analytics) {
+        await this.analytics.record(tx, {
+          eventName: 'order_paid',
+          userId: order.userId,
+          platform: 'web',
+          props: { orderId: order.id, method: 'BANK_TRANSFER', amount: order.total, orderSource: 'dealer' },
+        });
       }
       await tx.orderStatusHistory.create({
         data: {

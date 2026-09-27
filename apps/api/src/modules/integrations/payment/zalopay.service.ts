@@ -16,6 +16,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import type { Env } from '../../../config/env.validation';
 import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import { enqueueGomdonPush } from '../gomdon/gomdon-queue';
+import { AnalyticsEventsService } from '../../analytics/analytics-events.service';
 
 /**
  * ZaloPay v2 (Build Spec §10.1). Tạo đơn → trả order_url + zp_trans_token cho SDK mini app.
@@ -37,6 +38,9 @@ export class ZalopayService {
     // Optional: test dựng tay 3 tham số vẫn chạy. Đơn thu gom tái chế trả ZaloPay: chỉ đặt vận đơn
     // Gomdon (bưu tá tới lấy hàng) SAU khi tiền về.
     @Optional() @InjectQueue(QUEUE_GOMDON_PUSH) private readonly gomdonQueue?: Queue,
+    // @Optional cùng lý do notifications/gomdonQueue ở trên: nhiều test dựng ZalopayService tay
+    // không truyền tham số này — AnalyticsModule là @Global() nên app thật luôn wiring được.
+    @Optional() private readonly analytics?: AnalyticsEventsService,
   ) {
     this.appId = config.get('ZALOPAY_APP_ID', { infer: true });
     this.key1 = config.get('ZALOPAY_KEY1', { infer: true });
@@ -147,16 +151,30 @@ export class ZalopayService {
       // đã bị hủy ở giữa 2 lần đọc/ghi thành CONFIRMED+PAID sau khi kho đã nhả bán chỗ đó cho đơn
       // khác. Mirror pattern onPaymentReconcile (pancake.processor.ts): updateMany guard cả
       // paymentStatus:'UNPAID' lẫn status not-in CANCELLED/RETURNED, chỉ notify khi count>0.
-      const flip = await this.prisma.order.updateMany({
-        where: {
-          id: order.id,
-          paymentStatus: 'UNPAID',
-          status: { notIn: ['CANCELLED', 'RETURNED'] },
-        },
-        data: {
-          paymentStatus: 'PAID',
-          ...(order.status === 'PENDING_PAYMENT' ? { status: 'CONFIRMED' } : {}),
-        },
+      // order_paid phải ghi ATOMIC cùng lần lật PAID (Task 5, docs analytics-foundation): bọc
+      // updateMany trong $transaction, chỉ ghi event khi count>0 (guard where thật sự khớp).
+      const flip = await this.prisma.$transaction(async (tx) => {
+        const r = await tx.order.updateMany({
+          where: {
+            id: order.id,
+            paymentStatus: 'UNPAID',
+            status: { notIn: ['CANCELLED', 'RETURNED'] },
+          },
+          data: {
+            paymentStatus: 'PAID',
+            paidAt: new Date(),
+            ...(order.status === 'PENDING_PAYMENT' ? { status: 'CONFIRMED' } : {}),
+          },
+        });
+        if (r.count > 0 && this.analytics) {
+          await this.analytics.record(tx, {
+            eventName: 'order_paid',
+            userId: order.userId,
+            platform: order.platform === 'web' ? 'web' : 'miniapp',
+            props: { orderId: order.id, method: 'ZALOPAY', amount: order.total },
+          });
+        }
+        return r;
       });
       if (flip.count > 0) {
         this.logger.log(`ZaloPay xác nhận thanh toán đơn ${order.code} → PAID`);

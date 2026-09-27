@@ -11,6 +11,7 @@ import { mapPancakeStatus } from './pancake-status.map';
 import { isPancakeOrderPaid } from './pancake-payment.util';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { applyPancakeStock } from '../../catalog/variation-stock';
+import { AnalyticsEventsService } from '../../analytics/analytics-events.service';
 
 interface EventData {
   event?: string;
@@ -43,6 +44,9 @@ export class PancakeProcessor extends WorkerHost {
     // PancakeModule tự provide GomdonAlertService (chỉ phụ thuộc Prisma + Notifications) — không import
     // GomdonModule nên không có vòng module. Call site dựng tay thiếu tham số → tự dựng, vẫn báo thật.
     @Optional() alerts?: GomdonAlertService,
+    // @Optional cùng lý do gomdonQueue/alerts ở trên: nhiều test dựng PancakeProcessor tay không
+    // truyền tham số này — AnalyticsModule là @Global() nên app thật luôn wiring được.
+    @Optional() private readonly analytics?: AnalyticsEventsService,
   ) {
     super();
     this.alerts = alerts ?? new GomdonAlertService(prisma, notifications);
@@ -177,15 +181,39 @@ export class PancakeProcessor extends WorkerHost {
     // Guard theo trạng thái HIỆN TẠI trong DB (không theo ảnh chụp `order` đọc ở trên): khách huỷ
     // chen giữa lúc đọc và lúc lật (đơn đã hoàn kho) thì KHÔNG được "hồi sinh" thành PAID+CONFIRMED.
     // paymentStatus='UNPAID' trong where → 2 webhook song song chỉ lật 1 lần.
-    let flip = await this.prisma.order.updateMany({
-      where: { id: order.id, paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
-      data: { paymentStatus: 'PAID', status: 'CONFIRMED' },
+    // order_paid phải ghi ATOMIC cùng lần lật PAID (Task 5, docs analytics-foundation): bọc từng
+    // updateMany trong $transaction, chỉ ghi event khi count>0 (guard where thật sự khớp).
+    let flip = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.order.updateMany({
+        where: { id: order.id, paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
+        data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: new Date() },
+      });
+      if (r.count > 0 && this.analytics) {
+        await this.analytics.record(tx, {
+          eventName: 'order_paid',
+          userId: order.userId,
+          platform: order.platform === 'web' ? 'web' : 'miniapp',
+          props: { orderId: order.id, method: order.paymentMethod, amount: order.total },
+        });
+      }
+      return r;
     });
     if (flip.count === 0) {
       // Đơn đã xác nhận trước khi tiền về (vd admin/merchant CONFIRMED) → chỉ lật thanh toán.
-      flip = await this.prisma.order.updateMany({
-        where: { id: order.id, paymentStatus: 'UNPAID', status: { notIn: ['CANCELLED', 'RETURNED', 'PENDING_PAYMENT'] } },
-        data: { paymentStatus: 'PAID' },
+      flip = await this.prisma.$transaction(async (tx) => {
+        const r = await tx.order.updateMany({
+          where: { id: order.id, paymentStatus: 'UNPAID', status: { notIn: ['CANCELLED', 'RETURNED', 'PENDING_PAYMENT'] } },
+          data: { paymentStatus: 'PAID', paidAt: new Date() },
+        });
+        if (r.count > 0 && this.analytics) {
+          await this.analytics.record(tx, {
+            eventName: 'order_paid',
+            userId: order.userId,
+            platform: order.platform === 'web' ? 'web' : 'miniapp',
+            props: { orderId: order.id, method: order.paymentMethod, amount: order.total },
+          });
+        }
+        return r;
       });
     }
     if (flip.count === 0) {
