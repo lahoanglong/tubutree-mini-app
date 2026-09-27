@@ -4,6 +4,7 @@ import type { SystemConfigService } from '../system-config/system-config.service
 import type { PricingService } from '../pricing/pricing.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
+import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 /** Stub tối thiểu cho các test không quan tâm việc đẩy Pancake. */
 const pancakeStub = () => ({ enqueuePush: jest.fn().mockResolvedValue(undefined) }) as unknown as PancakeOrderService;
@@ -14,14 +15,38 @@ const pricing = {} as unknown as PricingService;
 const loyalty = {} as unknown as LoyaltyService;
 const notifications = {} as unknown as NotificationsService;
 
+/** Mock mới cho mỗi test — record/recordBestEffort là jest.fn() để assert riêng từng test. */
+function makeAnalytics() {
+  return {
+    record: jest.fn().mockResolvedValue(undefined),
+    recordBestEffort: jest.fn().mockResolvedValue(undefined),
+  } as unknown as AnalyticsEventsService;
+}
+
 function makeService(opts: { variation?: unknown; address?: unknown; create?: jest.Mock } = {}) {
   const create = opts.create ?? jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data }));
   const prisma = {
     variation: { findUnique: jest.fn().mockResolvedValue(opts.variation ?? { id: 'v1', isActive: true }) },
     address: { findUnique: jest.fn().mockResolvedValue(opts.address ?? { id: 'a1', userId: 'u1' }) },
     subscription: { create },
+    // create() giờ chạy trong $transaction (subscription.create + event atomic) — mock chạy
+    // callback với chính prisma mock (đủ subscription.create cho test).
+    $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
   } as unknown as PrismaService;
-  return { svc: new SubscriptionsService(prisma, config, pricing, loyalty, notifications, { enqueuePush: jest.fn() } as unknown as PancakeOrderService), create };
+  const analytics = makeAnalytics();
+  return {
+    svc: new SubscriptionsService(
+      prisma,
+      config,
+      pricing,
+      loyalty,
+      notifications,
+      { enqueuePush: jest.fn() } as unknown as PancakeOrderService,
+      analytics,
+    ),
+    create,
+    analytics,
+  };
 }
 
 const dto = (over = {}) => ({ variationId: 'v1', quantity: 2, intervalWeeks: 4, addressId: 'a1', ...over });
@@ -52,31 +77,68 @@ describe('SubscriptionsService.create', () => {
     expect(data.quantity).toBe(2);
     expect(data.intervalWeeks).toBe(6);
   });
+
+  it('phát subscription_changed action=created trong cùng transaction', async () => {
+    const { svc, analytics } = makeService();
+    await svc.create('u1', dto({ intervalWeeks: 6 }));
+    expect(analytics.record).toHaveBeenCalledTimes(1);
+    expect(analytics.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventName: 'subscription_changed',
+        userId: 'u1',
+        platform: 'miniapp',
+        props: expect.objectContaining({
+          subscriptionId: 's1',
+          action: 'created',
+          variationId: 'v1',
+          intervalWeeks: 6,
+        }),
+      }),
+    );
+  });
 });
 
 describe('SubscriptionsService.processDue (claim chống double-order)', () => {
   type Tier = { minActive: number; pct: number };
   function makeProcess(
     claimCount: number,
-    opts: { activeCount?: number; tiers?: Tier[]; stockCount?: number } = {},
+    opts: {
+      activeCount?: number;
+      tiers?: Tier[];
+      stockCount?: number;
+      variationInactive?: boolean;
+      addressInvalid?: boolean;
+    } = {},
   ) {
     const due = [{ id: 's1', userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4 }];
     const updateMany = jest.fn().mockResolvedValue({ count: claimCount });
     const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
+    const subUpdate = jest.fn().mockResolvedValue({});
     // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
     const stockExecuteRaw = jest.fn().mockResolvedValue(opts.stockCount ?? 1);
     const prisma = {
       subscription: {
         findMany: jest.fn().mockResolvedValue(due),
         updateMany,
-        update: jest.fn().mockResolvedValue({}),
+        update: subUpdate,
         count: jest.fn().mockResolvedValue(opts.activeCount ?? 1),
       },
       variation: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P' } }),
+        findUnique: jest.fn().mockResolvedValue(
+          opts.variationInactive
+            ? { id: 'v1', isActive: false, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P' } }
+            : { id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P' } },
+        ),
       },
       $executeRaw: stockExecuteRaw,
-      address: { findUnique: jest.fn().mockResolvedValue({ id: 'a1', userId: 'u1', recipient: 'R', phone: '09', province: 'p', district: 'd', ward: 'w', street: 's', provinceCode: '1', districtCode: '2', wardCode: '3' }) },
+      address: {
+        findUnique: jest.fn().mockResolvedValue(
+          opts.addressInvalid
+            ? null
+            : { id: 'a1', userId: 'u1', recipient: 'R', phone: '09', province: 'p', district: 'd', ward: 'w', street: 's', provinceCode: '1', districtCode: '2', wardCode: '3' },
+        ),
+      },
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', tierId: null }) },
       order: { create: orderCreate, findUnique: jest.fn().mockResolvedValue(null) },
       // Tạo đơn định kỳ giờ chạy trong $transaction (trừ stock atomic + order.create) — mock
@@ -96,7 +158,17 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     const nt = { notify } as unknown as NotificationsService;
     const enqueuePush = jest.fn().mockResolvedValue(undefined);
     const pancake = { enqueuePush } as unknown as PancakeOrderService;
-    return { svc: new SubscriptionsService(prisma, cfg, pr, ly, nt, pancake), updateMany, orderCreate, stockExecuteRaw, notify, enqueuePush };
+    const analytics = makeAnalytics();
+    return {
+      svc: new SubscriptionsService(prisma, cfg, pr, ly, nt, pancake, analytics),
+      updateMany,
+      orderCreate,
+      stockExecuteRaw,
+      notify,
+      enqueuePush,
+      analytics,
+      subUpdate,
+    };
   }
 
   it('claim thành công (count=1) → tạo đơn định kỳ', async () => {
@@ -105,6 +177,35 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     // claim advance nextRunAt với điều kiện status ACTIVE + đến hạn
     expect(updateMany.mock.calls[0][0].where).toMatchObject({ id: 's1', status: 'ACTIVE' });
     expect(orderCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('tạo đơn thành công → phát order_placed + subscription_changed action=order_created (cùng tx)', async () => {
+    const { svc, orderCreate, analytics } = makeProcess(1);
+    await svc.processDue();
+    expect(orderCreate).toHaveBeenCalledTimes(1);
+    expect(analytics.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventName: 'order_placed',
+        userId: 'u1',
+        platform: 'system',
+        props: expect.objectContaining({ orderId: 'o1', orderSource: 'subscription', subscriptionId: 's1' }),
+      }),
+    );
+    expect(analytics.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventName: 'subscription_changed',
+        userId: 'u1',
+        platform: 'system',
+        props: expect.objectContaining({ subscriptionId: 's1', action: 'order_created', orderId: 'o1' }),
+      }),
+    );
+    // order.create() nhận đủ source/platform/subscriptionId để gắn đơn về đúng subscription.
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.source).toBe('subscription');
+    expect(data.platform).toBe('system');
+    expect(data.subscriptionId).toBe('s1');
   });
 
   it('instance khác đã claim (count=0) → KHÔNG tạo đơn trùng', async () => {
@@ -134,6 +235,49 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     const { svc, notify } = makeProcess(1, { stockCount: 0 });
     await svc.processDue();
     expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.any(Object));
+  });
+
+  it('hết stock → phát subscription_changed action=order_failed reason=out_of_stock (best-effort, ngoài tx đã rollback)', async () => {
+    const { svc, analytics } = makeProcess(1, { stockCount: 0 });
+    await svc.processDue();
+    expect(analytics.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'subscription_changed',
+        userId: 'u1',
+        platform: 'system',
+        props: expect.objectContaining({ subscriptionId: 's1', action: 'order_failed', reason: 'out_of_stock' }),
+      }),
+    );
+  });
+
+  it('SP ngừng bán → tạm dừng lịch + phát subscription_changed action=order_failed reason=inactive_product', async () => {
+    const { svc, analytics, subUpdate, orderCreate } = makeProcess(1, { variationInactive: true });
+    await svc.processDue();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(subUpdate).toHaveBeenCalledWith({ where: { id: 's1' }, data: { status: 'PAUSED' } });
+    expect(analytics.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'subscription_changed',
+        userId: 'u1',
+        platform: 'system',
+        props: expect.objectContaining({ subscriptionId: 's1', action: 'order_failed', reason: 'inactive_product' }),
+      }),
+    );
+  });
+
+  it('địa chỉ không hợp lệ → tạm dừng lịch + phát subscription_changed action=order_failed reason=invalid_address', async () => {
+    const { svc, analytics, subUpdate, orderCreate } = makeProcess(1, { addressInvalid: true });
+    await svc.processDue();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(subUpdate).toHaveBeenCalledWith({ where: { id: 's1' }, data: { status: 'PAUSED' } });
+    expect(analytics.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'subscription_changed',
+        userId: 'u1',
+        platform: 'system',
+        props: expect.objectContaining({ subscriptionId: 's1', action: 'order_failed', reason: 'invalid_address' }),
+      }),
+    );
   });
 
   it('user chỉ có 1 subscription ACTIVE → giảm bậc cơ bản 12%', async () => {
@@ -190,7 +334,15 @@ describe('SubscriptionsService.effectiveDiscountPct', () => {
       get: async <T>(k: string, fb?: T): Promise<T> =>
         k === 'subscribe.discount_tiers' ? (tiers as unknown as T) : (fb as T),
     } as unknown as SystemConfigService;
-    return new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, { enqueuePush: jest.fn() } as unknown as PancakeOrderService);
+    return new SubscriptionsService(
+      prisma,
+      cfg,
+      pricing,
+      loyalty,
+      notifications,
+      { enqueuePush: jest.fn() } as unknown as PancakeOrderService,
+      makeAnalytics(),
+    );
   }
 
   it.each([
@@ -220,7 +372,7 @@ describe('SubscriptionsService.skipCycle', () => {
         update,
       },
     } as unknown as PrismaService;
-    const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub());
+    const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), makeAnalytics());
     return { svc, update };
   }
 
@@ -249,6 +401,76 @@ describe('SubscriptionsService.skipCycle', () => {
   });
 });
 
+describe('SubscriptionsService.setStatus', () => {
+  function makeSetStatus(sub: unknown) {
+    const update = jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data }));
+    const prisma = {
+      subscription: {
+        findUnique: jest.fn().mockResolvedValue(sub),
+        update,
+      },
+      // setStatus() giờ chạy trong $transaction (subscription.update + event atomic) — mock
+      // chạy callback với chính prisma mock (đủ subscription.update cho test).
+      $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
+    } as unknown as PrismaService;
+    const analytics = makeAnalytics();
+    const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), analytics);
+    return { svc, update, analytics };
+  }
+
+  it('không tìm thấy lịch → NotFound', async () => {
+    const { svc } = makeSetStatus(null);
+    await expect(svc.setStatus('u1', 's1', 'PAUSED')).rejects.toThrow('Không tìm thấy lịch đặt định kỳ.');
+  });
+
+  it('không phải chủ sở hữu → NotFound', async () => {
+    const { svc } = makeSetStatus({ id: 's1', userId: 'other', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: new Date() });
+    await expect(svc.setStatus('u1', 's1', 'PAUSED')).rejects.toThrow('Không tìm thấy lịch đặt định kỳ.');
+  });
+
+  it('PAUSED → cập nhật status + phát subscription_changed action=paused (cùng transaction)', async () => {
+    const { svc, update, analytics } = makeSetStatus({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: new Date(Date.now() + 999_999_999) });
+    await svc.setStatus('u1', 's1', 'PAUSED');
+    expect(update.mock.calls[0][0].where).toEqual({ id: 's1' });
+    expect(update.mock.calls[0][0].data.status).toBe('PAUSED');
+    expect(analytics.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventName: 'subscription_changed',
+        userId: 'u1',
+        platform: 'miniapp',
+        props: expect.objectContaining({ subscriptionId: 's1', action: 'paused' }),
+      }),
+    );
+  });
+
+  it('CANCELLED → phát subscription_changed action=cancelled', async () => {
+    const { svc, analytics } = makeSetStatus({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: new Date(Date.now() + 999_999_999) });
+    await svc.setStatus('u1', 's1', 'CANCELLED');
+    expect(analytics.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        props: expect.objectContaining({ subscriptionId: 's1', action: 'cancelled' }),
+      }),
+    );
+  });
+
+  it('ACTIVE (bật lại từ PAUSED, đã quá hạn) → dời nextRunAt + phát subscription_changed action=resumed', async () => {
+    const pastRunAt = new Date(Date.now() - 999_999_999);
+    const { svc, update, analytics } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 4, nextRunAt: pastRunAt });
+    await svc.setStatus('u1', 's1', 'ACTIVE');
+    const data = update.mock.calls[0][0].data;
+    expect(data.status).toBe('ACTIVE');
+    expect((data.nextRunAt as Date).getTime()).toBeGreaterThan(pastRunAt.getTime());
+    expect(analytics.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        props: expect.objectContaining({ subscriptionId: 's1', action: 'resumed' }),
+      }),
+    );
+  });
+});
+
 describe('SubscriptionsService.list', () => {
   it('trả về effectiveDiscountPct theo số subscription ACTIVE của user', async () => {
     const tiers = [{ minActive: 1, pct: 0.12 }, { minActive: 3, pct: 0.14 }, { minActive: 5, pct: 0.15 }];
@@ -269,7 +491,7 @@ describe('SubscriptionsService.list', () => {
       get: async <T>(k: string, fb?: T): Promise<T> =>
         k === 'subscribe.discount_tiers' ? (tiers as unknown as T) : (fb as T),
     } as unknown as SystemConfigService;
-    const svc = new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, pancakeStub());
+    const svc = new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, pancakeStub(), makeAnalytics());
     const result = await svc.list('u1');
     expect(result[0]?.effectiveDiscountPct).toBe(0.14);
   });

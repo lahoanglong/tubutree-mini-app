@@ -9,6 +9,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { reserveVariationStock } from '../catalog/variation-stock';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 interface CreateSubInput {
   variationId: string;
@@ -42,6 +43,7 @@ export class SubscriptionsService {
     private readonly loyalty: LoyaltyService,
     private readonly notifications: NotificationsService,
     private readonly pancakeOrder: PancakeOrderService,
+    private readonly analytics: AnalyticsEventsService,
   ) {}
 
   async create(userId: string, dto: CreateSubInput) {
@@ -53,15 +55,29 @@ export class SubscriptionsService {
     const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
     if (!address || address.userId !== userId) throw new BadRequestException('Địa chỉ không hợp lệ.');
 
-    return this.prisma.subscription.create({
-      data: {
+    return this.prisma.$transaction(async (tx) => {
+      const sub = await tx.subscription.create({
+        data: {
+          userId,
+          variationId: dto.variationId,
+          quantity: Math.max(1, dto.quantity),
+          intervalWeeks: dto.intervalWeeks,
+          addressId: dto.addressId,
+          nextRunAt: this.addWeeks(new Date(), dto.intervalWeeks),
+        },
+      });
+      await this.analytics.record(tx, {
+        eventName: 'subscription_changed',
         userId,
-        variationId: dto.variationId,
-        quantity: Math.max(1, dto.quantity),
-        intervalWeeks: dto.intervalWeeks,
-        addressId: dto.addressId,
-        nextRunAt: this.addWeeks(new Date(), dto.intervalWeeks),
-      },
+        platform: 'miniapp',
+        props: {
+          subscriptionId: sub.id,
+          action: 'created',
+          variationId: dto.variationId,
+          intervalWeeks: dto.intervalWeeks,
+        },
+      });
+      return sub;
     });
   }
 
@@ -121,7 +137,19 @@ export class SubscriptionsService {
       status === 'ACTIVE' && sub.nextRunAt < new Date()
         ? this.addWeeks(new Date(), sub.intervalWeeks)
         : sub.nextRunAt;
-    return this.prisma.subscription.update({ where: { id }, data: { status, nextRunAt } });
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.subscription.update({ where: { id }, data: { status, nextRunAt } });
+      await this.analytics.record(tx, {
+        eventName: 'subscription_changed',
+        userId,
+        platform: 'miniapp',
+        props: {
+          subscriptionId: id,
+          action: status === 'ACTIVE' ? 'resumed' : status === 'PAUSED' ? 'paused' : 'cancelled',
+        },
+      });
+      return updated;
+    });
   }
 
   /**
@@ -189,12 +217,24 @@ export class SubscriptionsService {
       // SP ngừng bán → tạm dừng lịch + báo user.
       await this.prisma.subscription.update({ where: { id: sub.id }, data: { status: 'PAUSED' } });
       await this.notifications.notify(sub.userId, 'SUBSCRIPTION_PAUSED', {}).catch(() => undefined);
+      await this.analytics.recordBestEffort({
+        eventName: 'subscription_changed',
+        userId: sub.userId,
+        platform: 'system',
+        props: { subscriptionId: sub.id, action: 'order_failed', reason: 'inactive_product' },
+      });
       return;
     }
     const addr = await this.prisma.address.findUnique({ where: { id: sub.addressId } });
     if (!addr || addr.userId !== sub.userId) {
       await this.prisma.subscription.update({ where: { id: sub.id }, data: { status: 'PAUSED' } });
       await this.notifications.notify(sub.userId, 'SUBSCRIPTION_PAUSED', {}).catch(() => undefined);
+      await this.analytics.recordBestEffort({
+        eventName: 'subscription_changed',
+        userId: sub.userId,
+        platform: 'system',
+        props: { subscriptionId: sub.id, action: 'order_failed', reason: 'invalid_address' },
+      });
       return;
     }
     const address: Prisma.InputJsonValue = {
@@ -236,7 +276,7 @@ export class SubscriptionsService {
             `Sản phẩm "${variation.product.name}" không đủ tồn kho cho đơn định kỳ.`,
           );
         }
-        return tx.order.create({
+        const created = await tx.order.create({
           data: {
             code,
             userId: sub.userId,
@@ -251,6 +291,9 @@ export class SubscriptionsService {
             paymentStatus: 'UNPAID',
             shippingAddress: address,
             note: 'Đơn đặt định kỳ (Subscribe & Save)',
+            source: 'subscription',
+            platform: 'system',
+            subscriptionId: sub.id,
             items: {
               create: [
                 {
@@ -266,6 +309,19 @@ export class SubscriptionsService {
             },
           },
         });
+        await this.analytics.record(tx, {
+          eventName: 'order_placed',
+          userId: sub.userId,
+          platform: 'system',
+          props: { orderId: created.id, orderSource: 'subscription', subscriptionId: sub.id, total },
+        });
+        await this.analytics.record(tx, {
+          eventName: 'subscription_changed',
+          userId: sub.userId,
+          platform: 'system',
+          props: { subscriptionId: sub.id, action: 'order_created', orderId: created.id },
+        });
+        return created;
       });
     } catch (err) {
       if (err instanceof SubscriptionOutOfStockError) {
@@ -274,6 +330,12 @@ export class SubscriptionsService {
         await this.notifications
           .notify(sub.userId, 'SUBSCRIPTION_ORDER_FAILED', { reason: 'Hết hàng tạm thời' })
           .catch(() => undefined);
+        await this.analytics.recordBestEffort({
+          eventName: 'subscription_changed',
+          userId: sub.userId,
+          platform: 'system',
+          props: { subscriptionId: sub.id, action: 'order_failed', reason: 'out_of_stock' },
+        });
       }
       throw err; // giữ nguyên hành vi cũ: processDue() log lỗi + đếm là chu kỳ bị bỏ qua.
     }
