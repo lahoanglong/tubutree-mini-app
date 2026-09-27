@@ -1454,6 +1454,7 @@ export class AnalyticsController {
 
 ```typescript
 // apps/api/src/modules/analytics/analytics.controller.spec.ts
+import type { JwtPayload } from '@tubutree/shared-types';
 import { AnalyticsController } from './analytics.controller';
 import type { AnalyticsEventsService } from './analytics-events.service';
 
@@ -1464,7 +1465,7 @@ describe('AnalyticsController.ingest', () => {
     const ctrl = new AnalyticsController(svc);
 
     const res = await ctrl.ingest(
-      { sub: 'u1' } as never,
+      { sub: 'u1', role: 'CUSTOMER' } as JwtPayload,
       {
         events: [
           { eventId: 'e1', eventName: 'app_opened', occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp' },
