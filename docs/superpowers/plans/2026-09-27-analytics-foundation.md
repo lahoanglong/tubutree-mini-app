@@ -2269,24 +2269,30 @@ thêm lời gọi `trackEvent(...)` tương ứng với thuộc tính đúng b�
 điểm là 1 bước, KHÔNG viết test riêng cho từng điểm phát (đã test kỹ `trackEvent` ở Task 17) — chỉ
 cần build sạch + smoke test thủ công ở Task 21.
 
-- [ ] **Step 1: `product-detail.tsx` — trong effect đọc `product.isSuccess`**
+- [ ] **Step 1: `product-detail.tsx` — đã verify lại thật (2026-09-27, trong lúc chờ Task 5):
+      KHÔNG dùng `product.data.variations?.[0]` (biến thể ĐẦU danh sách) — component đã tự tính
+      sẵn biến thể ĐANG CHỌN đúng (`selected`, dòng ~124-130: ưu tiên `selectedId`, else biến thể
+      còn hàng đầu tiên, else phần tử đầu) và giá flash đã resolve sẵn (`flashItem`/`price`, dòng
+      ~133/203) — dùng LẠI các biến này, không tính lại. `VariationDetail` (`shop-api.ts:25-33`)
+      KHÔNG có field `flashPrice` (giá flash nằm ở `flashItem.flashPrice`, một object riêng từ
+      `flashQ`, không phải thuộc tính tĩnh của variation).**
 
 ```typescript
   useEffect(() => {
-    if (!product.isSuccess || !product.data) return;
+    if (!product.isSuccess || !product.data || !selected) return;
     void trackEvent('product_viewed', 'miniapp', {
       productId: product.data.id,
-      variationId: product.data.variations?.[0]?.id ?? null,
-      price: product.data.variations?.[0]?.retailPrice ?? null,
-      isFlash: Boolean(product.data.variations?.[0]?.flashPrice),
-      inStock: (product.data.variations?.[0]?.stock ?? 0) > 0,
+      variationId: selected.id,
+      price,
+      isFlash: Boolean(flashItem),
+      inStock: selected.stock > 0,
       listSource: (location.state as { listSource?: string } | null)?.listSource ?? 'browse',
     });
-  }, [product.isSuccess, product.data]);
+  }, [product.isSuccess, product.data, selected, flashItem, price]);
 ```
 
-(đọc lại field thật của `product.data`/`variations` trong file — tên field ở trên là suy từ schema
-Prisma đã biết, khớp lại nếu type FE đặt tên khác).
+Đặt effect này SAU khi `selected`/`flashItem`/`price` đã được khai báo (dòng ~130-203) — không đặt
+trước, vì effect tham chiếu các biến đó.
 
 - [ ] **Step 2: `browse.tsx` — khi trang 1 trả về với `debouncedQ`**
 
