@@ -2815,25 +2815,87 @@ git commit -m "feat(analytics): dashboard admin — tab Retention & North-star"
 **Files:**
 - Create: `apps/e2e/tests/admin-analytics.spec.ts`
 
-- [ ] **Step 1: Đọc `apps/e2e/tests/admin.spec.ts` để lấy đúng pattern login/setup đã có (helper
-      đăng nhập admin, base URL, fixture) rồi viết test mới theo cùng khuôn**
+**Đã verify lại thật (2026-09-27, trong lúc chờ Task 5) — bản nháp ban đầu của brief này giả định
+SAI:** `apps/e2e/tests/admin.spec.ts` KHÔNG có helper kiểu `loginAsAdmin(page)`. Bộ test e2e ở đây
+dùng 1 fixture mock-api dùng chung (`./support/mock-api`): MỌI request `/api/**` phải được mock
+tường minh, không khớp mock nào → fixture tự FAIL test (404 `E2E_UNMOCKED`) thay vì âm thầm gọi ra
+API dev thật. "Đăng nhập" ở đây thực chất là mock `POST /auth/refresh` trả về user ADMIN + đặt cờ
+`tubu_web_session` vào `localStorage` TRƯỚC khi trang tải (qua `addInitScript`), không phải điền
+form đăng nhập thật.
+
+- [ ] **Step 1: Viết test theo ĐÚNG pattern thật của `admin.spec.ts` (đã đọc trực tiếp file đó) —
+      không dùng helper không tồn tại**
 
 ```typescript
 // apps/e2e/tests/admin-analytics.spec.ts
-import { test, expect } from '@playwright/test';
-// import đúng helper đăng nhập admin đã có trong admin.spec.ts (tên thật đọc từ file đó,
-// ví dụ loginAsAdmin(page) — khớp lại tên/đường dẫn thật khi viết).
+import { test, expect, type MockApi } from './support/mock-api';
+import type { RetentionDailyRow } from '../../web/src/lib/admin-client';
+
+const ADMIN_LOGIN = {
+  accessToken: 'mock-admin-access-token',
+  refreshToken: 'mock-admin-refresh-token',
+  user: {
+    id: 'admin-1',
+    role: 'ADMIN',
+    fullName: 'Test Admin',
+    avatarUrl: null,
+    pointsBalance: 0,
+    walletBalance: 0,
+    referralCode: 'ADMIN1',
+  },
+};
+
+/** Phiên admin giả — cùng cơ chế `mockAdminSession` đã dùng trong admin.spec.ts (không export
+ *  được nên chép lại tối thiểu ở đây, không import chéo giữa 2 file test). */
+function mockAdminSession(api: MockApi) {
+  api.post('/auth/refresh', ADMIN_LOGIN);
+  api.get('/cart', {
+    items: [],
+    couponCode: null,
+    subtotal: 0,
+    discount: 0,
+    freeship: false,
+    freeshipThreshold: 0,
+    itemCount: 0,
+  });
+}
 
 test.describe('Admin — tab Retention & North-star', () => {
-  test('tải được trang, không crash khi snapshot rỗng', async ({ page }) => {
-    // await loginAsAdmin(page); — dùng lại helper thật của admin.spec.ts
-    await page.goto('/admin?tab=analytics');
-    await expect(page.getByText('Retention & North-star')).toBeVisible();
-    // Chấp nhận CẢ 2 trạng thái: có dữ liệu (thấy "Khách mới hôm qua") hoặc rỗng (thấy thông báo
-    // "Chưa có snapshot nào") — môi trường test/staging có thể chưa chạy cron đêm nào.
-    const hasData = await page.getByText('Khách mới hôm qua').isVisible().catch(() => false);
-    const isEmpty = await page.getByText('Chưa có snapshot nào').isVisible().catch(() => false);
-    expect(hasData || isEmpty).toBe(true);
+  test.beforeEach(async ({ page: p, api }) => {
+    mockAdminSession(api);
+    await p.addInitScript(() => {
+      window.localStorage.setItem('tubu_web_session', '1');
+    });
+  });
+
+  test('có snapshot → hiển thị số liệu ngày mới nhất', async ({ page: p, api }) => {
+    const rows: RetentionDailyRow[] = [
+      {
+        date: '2026-09-26T00:00:00.000Z',
+        newBuyers: 5,
+        activeBuyers: 8,
+        ordersCount: 12,
+        ordersPerBuyerMtd: 4.1,
+        dauProxyRefreshToken: 30,
+        dauEventBased: null,
+      },
+    ];
+    api.get('/admin/analytics/retention-daily', rows);
+
+    await p.goto('/admin?tab=analytics');
+
+    await expect(p.getByText('Retention & North-star')).toBeVisible();
+    await expect(p.getByText('Khách mới hôm qua')).toBeVisible();
+    await expect(p.getByText('5', { exact: true })).toBeVisible();
+  });
+
+  test('snapshot rỗng (cron chưa chạy lần nào) → hiện thông báo, KHÔNG crash', async ({ page: p, api }) => {
+    api.get('/admin/analytics/retention-daily', []);
+
+    await p.goto('/admin?tab=analytics');
+
+    await expect(p.getByText('Retention & North-star')).toBeVisible();
+    await expect(p.getByText('Chưa có snapshot nào')).toBeVisible();
   });
 });
 ```
@@ -2844,8 +2906,9 @@ test.describe('Admin — tab Retention & North-star', () => {
 cd apps/e2e && npx playwright test admin-analytics.spec.ts --project="Web Admin"
 ```
 
-Expected: PASS 1/1 (điều chỉnh selector/helper login theo đúng thứ đã có trong `admin.spec.ts` nếu
-khác với giả định ở Step 1).
+Expected: PASS 2/2. Nếu fixture báo `E2E_UNMOCKED` cho một request khác (vd trang admin còn gọi
+thêm API nào đó lúc mount ngoài `/auth/refresh`, `/cart`, `/admin/analytics/retention-daily`), đọc
+log lỗi để biết đúng path cần mock thêm — KHÔNG nới lỏng fixture, chỉ thêm mock còn thiếu.
 
 - [ ] **Step 3: Commit**
 
