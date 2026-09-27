@@ -18,7 +18,7 @@ const REFRESH_KEY = 'tubu_refresh_token';
 const DEVICE_KEY = 'tubu_device_id';
 
 /** ID thiết bị ổn định cho đăng nhập khách (tạo 1 lần, lưu ZMP storage). */
-async function getDeviceId(): Promise<string> {
+export async function getDeviceId(): Promise<string> {
   const res = await getStorage({ keys: [DEVICE_KEY] });
   const existing = (res as Record<string, unknown>)[DEVICE_KEY];
   if (typeof existing === 'string' && existing.length > 0) return existing;
