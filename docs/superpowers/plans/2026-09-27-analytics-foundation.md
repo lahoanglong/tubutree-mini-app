@@ -1608,7 +1608,7 @@ export class AnalyticsAggregationService {
 
     const dauRows = await this.prisma.$queryRawUnsafe<Array<{ dau: bigint }>>(`
       SELECT COUNT(DISTINCT "userId") AS dau FROM refresh_tokens
-      WHERE ((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Ho_Chi_Minh')::date = $1
+      WHERE (("createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Ho_Chi_Minh')::date = $1
     `, dateKey);
     const dau = dauRows[0]?.dau ?? 0n;
 
