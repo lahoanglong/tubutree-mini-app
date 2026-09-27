@@ -10,6 +10,7 @@ import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OrderReversalService } from './order-reversal.service';
 import { assertTransition, canTransition, InvalidOrderTransitionError } from './order-transition';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 /**
  * Nguồn ghi Order.status DUY NHẤT cho mọi nơi KHÔNG PHẢI là luồng khách tự hủy
@@ -36,6 +37,9 @@ export class OrderStatusService {
     // Optional: test/call site cũ dựng tay 5 tham số vẫn chạy. Huỷ đơn thu gom tái chế → huỷ luôn
     // vận đơn Gomdon (queue gomdon-push job 'cancel', retry) — không import GomdonModule để tránh vòng.
     @Optional() @InjectQueue(QUEUE_GOMDON_PUSH) private readonly gomdonQueue?: Queue,
+    // Optional (như gomdonQueue ở trên): giữ nguyên các test/call site dựng tay constructor
+    // bằng positional args không truyền analytics vẫn chạy được (undefined → bỏ qua ghi event).
+    @Optional() private readonly analytics?: AnalyticsEventsService,
   ) {}
 
   /** true nếu transition hợp lệ — dùng để webhook/cron bỏ qua êm thay vì throw. */
@@ -98,6 +102,21 @@ export class OrderStatusService {
           note: opts.note ?? null,
         },
       });
+
+      if (this.analytics) {
+        await this.analytics.record(tx, {
+          eventName: 'order_status_changed',
+          userId: order.userId,
+          platform: 'system',
+          props: {
+            orderId: order.id,
+            from: order.status,
+            to: targetStatus,
+            actorType: opts.actorType ?? 'SYSTEM',
+            reason: opts.note ?? null,
+          },
+        });
+      }
 
       if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
         await this.reversal.reverseFinancials(tx, order);
