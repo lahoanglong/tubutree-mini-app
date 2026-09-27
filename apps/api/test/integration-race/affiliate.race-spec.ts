@@ -8,6 +8,7 @@ import { CTV_MONTHLY_MILESTONES } from '../../src/modules/affiliate/ctv-mileston
 import { CoinsService } from '../../src/modules/wallet/coins.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
+import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { createOrder, createUser, summarize, warmPool } from './helpers';
 
 /** AffiliateService.claimMilestone trên Postgres thật — CoinsService thật, chỉ stub Pricing/Pancake (không dùng). */
@@ -22,6 +23,12 @@ describe('AffiliateService.claimMilestone race (real Postgres)', () => {
       providers: [
         SystemConfigService,
         CoinsService,
+        // Real class (Task 10) — AffiliateService giờ đòi analytics là tham số BẮT BUỘC.
+        // AnalyticsModule là @Global() nên app thật luôn wiring được; ở đây khai module không
+        // import nó (chỉ PrismaModule) nên phải khai trực tiếp, giống CoinsService/AffiliateService.
+        // AnalyticsEventsService.record() ghi analytics_events — bảng đã có sau migration, không
+        // cần mock.
+        AnalyticsEventsService,
         AffiliateService,
         { provide: PricingService, useValue: { calcShippingFee: jest.fn().mockResolvedValue(0) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },

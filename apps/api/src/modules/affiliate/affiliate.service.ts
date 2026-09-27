@@ -111,7 +111,9 @@ export class AffiliateService {
       eventName: 'referral_touched',
       userId,
       platform: 'miniapp',
-      refCode: dto.referralCode ?? null,
+      // Không cần `?? null`: guard `if (!dto.referralCode) return` ở đầu hàm đã đảm bảo non-empty
+      // string tới đây.
+      refCode: dto.referralCode,
       storefrontSlug: dto.storefrontSlug ?? null,
       props: { kind: dto.kind ?? 'ctv' },
     });
@@ -335,13 +337,14 @@ export class AffiliateService {
             placedForCustomer: true,
             source: 'ctv_assisted',
             platform: 'miniapp',
-            // KHÔNG PHẢI hash mật mã — chỉ giữ lại chữ số của SĐT người nhận (cùng kiểu chuẩn hoá
-            // regexp_replace(phone, '\D', '', 'g') mà truy vấn analytics dùng cho user.phone) để 2
-            // giá trị so khớp trực tiếp được nếu người nhận sau này cũng là 1 tài khoản thật. Đơn
-            // CTV lên hộ tạo Order qua nhánh RIÊNG này (không qua checkout.service.ts) nên đây là
-            // nơi DUY NHẤT set 3 cột này cho loại đơn "lên đơn hộ" — thiếu bước này thì quyết định
-            // "tính doanh số cho khách nhận hàng qua endCustomerKey" lặng lẽ không có hiệu lực.
-            endCustomerKey: dto.customer.phone.replace(/\D/g, '') || null,
+            // KHÔNG PHẢI hash mật mã — SĐT người nhận chuẩn hoá về DẠNG NỘI ĐỊA 0xxxxxxxxx (xem
+            // normalizeToLocalPhone ở dưới), CÙNG dạng User.phone luôn lưu, để 2 giá trị so khớp
+            // trực tiếp được nếu người nhận sau này cũng là 1 tài khoản thật. Đơn CTV lên hộ tạo
+            // Order qua nhánh RIÊNG này (không qua checkout.service.ts) nên đây là nơi DUY NHẤT
+            // set 3 cột này cho loại đơn "lên đơn hộ" — thiếu bước này (hoặc chuẩn hoá sai dạng)
+            // thì quyết định "tính doanh số cho khách nhận hàng qua endCustomerKey" lặng lẽ không
+            // có hiệu lực / gộp sai người.
+            endCustomerKey: this.normalizeToLocalPhone(dto.customer.phone),
             note: dto.note,
             idempotencyKey: key ?? null,
             items: {
@@ -420,6 +423,20 @@ export class AffiliateService {
       if (!exists) return code;
     }
     return `TUBU${Date.now()}`;
+  }
+
+  /**
+   * Chuẩn hoá SĐT người nhận về CÙNG dạng nội địa 0xxxxxxxxx mà User.phone luôn lưu (mirror
+   * zalo.service.ts:normalizePhone / loyalty.service.ts:normalizeVnPhone — quy tắc 84→0 dùng
+   * chung toàn repo). Form lên đơn hộ (ctv-order-sheet.tsx) nhận CẢ 0xxxxxxxxx lẫn +84xxxxxxxxx —
+   * chỉ strip ký tự không phải số (bỏ qua bước 84→0) sẽ tách 1 khách hàng thật thành 2
+   * endCustomerKey khác nhau tuỳ CTV gõ SĐT kiểu nào, làm hỏng chính quyết định nghiệp vụ
+   * "gộp theo endCustomerKey" mà cột này tồn tại để phục vụ.
+   */
+  private normalizeToLocalPhone(raw: string): string | null {
+    const digits = raw.replace(/\D/g, '');
+    const local = digits.replace(/^84(\d{9})$/, '0$1');
+    return local || null;
   }
 
   /** Snapshot địa chỉ người nhận (khách của CTV) → lưu Order.shippingAddress. */

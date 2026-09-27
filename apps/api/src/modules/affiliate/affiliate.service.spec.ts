@@ -374,15 +374,19 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
   // Task 10 Step 0: placeOrderForCustomer tạo Order qua nhánh RIÊNG (không đi qua
   // checkout.service.ts) — nếu thiếu 3 cột này + event thì quyết định "tính cho khách nhận hàng
   // qua endCustomerKey" lặng lẽ không có hiệu lực cho loại đơn CTV lên hộ.
-  it('order_placed: set 3 cột mới (source/platform/endCustomerKey) + phát event ĐÚNG props, SĐT chuẩn hoá chỉ giữ chữ số', async () => {
+  it('order_placed: set 3 cột mới (source/platform/endCustomerKey) + phát event ĐÚNG props (orderId từ đơn VỪA TẠO, không phải lookup khác)', async () => {
     const { svc, orderCreate, analyticsLocal } = build({ shippingFee: 19000 });
+    // id KHÁC hẳn id cố định ('o1') mà findUniqueOrThrow của build() trả — chứng minh props.orderId
+    // lấy từ `created` (kết quả orderCreate NGAY TRONG tx), không phải từ một lookup nào khác sau đó.
+    orderCreate.mockResolvedValueOnce({ id: 'o-created' });
     await svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, phone: '090-123 4567' } }) as never);
 
     const data = orderCreate.mock.calls[0][0].data;
     expect(data.source).toBe('ctv_assisted');
     expect(data.platform).toBe('miniapp');
-    // Cùng kiểu chuẩn hoá regexp_replace(phone,'\D','','g') dùng cho user.phone (Task 14) — CHỈ
-    // giữ chữ số, KHÔNG PHẢI hash.
+    // Cùng kiểu chuẩn hoá 84→0xxxxxxxxx mà User.phone luôn lưu (zalo.service.ts normalizePhone /
+    // loyalty.service.ts normalizeVnPhone), KHÔNG PHẢI hash — SĐT không có mã +84 cũng phải qua
+    // được (chỉ strip ký tự không phải số ở đây).
     expect(data.endCustomerKey).toBe('0901234567');
 
     expect(analyticsLocal.record).toHaveBeenCalledTimes(1);
@@ -394,7 +398,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
         platform: 'miniapp',
         storefrontSlug: 'ctv-shop',
         props: expect.objectContaining({
-          orderId: 'o1',
+          orderId: 'o-created',
           total: 219000, // goods 200000 (100000*2) + ship 19000
           subtotal: 200000,
           discount: 0,
@@ -411,6 +415,17 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const { svc, orderCreate } = build();
     await svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, phone: '---' } }) as never);
     expect(orderCreate.mock.calls[0][0].data.endCustomerKey).toBeNull();
+  });
+
+  // P0 (review Task 10): ctv-order-sheet.tsx (FE) nhận CẢ 0xxxxxxxxx lẫn +84xxxxxxxxx cho SĐT
+  // người nhận. User.phone luôn lưu dạng 0xxxxxxxxx (zalo.service.ts/loyalty.service.ts). Nếu
+  // endCustomerKey chỉ strip ký tự không phải số (không đổi 84→0) thì CTV gõ '+84...' cho ĐÚNG
+  // khách đã có tài khoản '0...' sẽ tạo ra 2 endCustomerKey khác nhau cho CÙNG 1 người — hỏng
+  // quyết định nghiệp vụ "gộp doanh số theo endCustomerKey".
+  it('endCustomerKey: SĐT dạng +84xxxxxxxxx phải chuẩn hoá về CÙNG dạng 0xxxxxxxxx như SĐT gõ kiểu 0xxxxxxxxx (không tách 1 khách thành 2 key)', async () => {
+    const { svc, orderCreate } = build();
+    await svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, phone: '+84 90 123 4567' } }) as never);
+    expect(orderCreate.mock.calls[0][0].data.endCustomerKey).toBe('0901234567');
   });
 
   it('order_placed được ghi bằng ĐÚNG object `tx` của $transaction, không phải this.prisma ở ngoài (chứng minh atomic thật — mirror dealer-order-payment.spec.ts)', async () => {
