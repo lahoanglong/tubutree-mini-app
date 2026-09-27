@@ -12,6 +12,8 @@ import ErrorBoundary from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch } from '../services/affiliate-api';
+import { useScreenTracker } from '../hooks/use-screen-tracker';
+import { trackEvent } from '../services/analytics';
 
 import { applyFontScale } from '../utils/font-scale';
 
@@ -105,6 +107,13 @@ function RouteFallback() {
   );
 }
 
+/** Phát `screen_viewed` mỗi khi route đổi. Phải render BÊN TRONG `<ZMPRouter>` vì
+ * `useScreenTracker()` dùng `useLocation()`, cần Router context — không gọi được ở `MyApp`. */
+function ScreenTracker() {
+  useScreenTracker();
+  return null;
+}
+
 export default function MyApp() {
   const restore = useAuthStore((s) => s.restore);
   const authed = useAuthStore((s) => s.status === 'authenticated');
@@ -117,6 +126,12 @@ export default function MyApp() {
     void restore(); // silent login từ refresh token đã lưu
     applySavedFontScale();
   }, [restore]);
+
+  // Phát đúng 1 lần lúc mở app (deps rỗng — không phụ thuộc state nào nên không chạy lại
+  // khi re-render).
+  useEffect(() => {
+    void trackEvent('app_opened', 'miniapp', { entrySource: 'organic' });
+  }, []);
 
   // Attribution 3 ngày: khi đã đăng nhập + có ngữ cảnh giới thiệu (ref/slug từ link),
   // ghi "chạm" server-side (fire-and-forget). Mọi đường vào (/, /s/:slug, /brand/:slug) đều
@@ -150,6 +165,7 @@ export default function MyApp() {
         <App>
           <SnackbarProvider>
             <ZMPRouter>
+              <ScreenTracker />
               <Suspense fallback={<RouteFallback />}>
                 <AnimationRoutes>
                   <Route path="/" element={<HomePage />} />
