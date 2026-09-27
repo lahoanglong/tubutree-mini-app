@@ -56,7 +56,7 @@ describe('DealerService.confirmDealerOrderPayment (admin xác nhận đã nhận
     const res = await svc.confirmDealerOrderPayment('admin1', 'DLR1', { bankRef: ' FT26270001 ', note: 'VCB 27/09' });
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: 'o1', type: 'DEALER', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
-      data: { paymentStatus: 'PAID', status: 'CONFIRMED' },
+      data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date) },
     });
     expect(historyCreate).toHaveBeenCalledTimes(1);
     const h = historyCreate.mock.calls[0]![0].data;
@@ -73,7 +73,7 @@ describe('DealerService.confirmDealerOrderPayment (admin xác nhận đã nhận
     await svc.confirmDealerOrderPayment('admin1', 'o1', {});
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: 'o1', type: 'DEALER', paymentStatus: 'UNPAID', status: 'SHIPPING' },
-      data: { paymentStatus: 'PAID' },
+      data: { paymentStatus: 'PAID', paidAt: expect.any(Date) },
     });
     expect(historyCreate.mock.calls[0]![0].data).toMatchObject({ fromStatus: 'SHIPPING', toStatus: 'SHIPPING', actorId: 'admin1' });
   });

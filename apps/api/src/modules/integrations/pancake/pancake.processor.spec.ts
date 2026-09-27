@@ -22,9 +22,14 @@ function setup(
 ) {
   const orderFindFirst = jest.fn().mockResolvedValue(order);
   const orderFindUniqueOrThrow = jest.fn().mockResolvedValue(order);
-  const orderUpdateMany = jest.fn().mockResolvedValue({ count: 1 }); // onPaymentReconcile gọi TRỰC TIẾP, không qua $transaction
+  const orderUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const orderUpdate = jest.fn().mockResolvedValue({}); // onShippingUpdated gọi trực tiếp order.update
-  const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+  // onPaymentReconcile giờ bọc updateMany trong $transaction (Task 5, docs analytics-foundation) —
+  // txUpdateMany delegate CHÍNH jest.fn() orderUpdateMany, để tx.order.updateMany vẫn là đúng mock
+  // mà các test onPaymentReconcile bên dưới đã assert (không tạo mock tx tách biệt riêng cho case
+  // này) — trong khi onStatusUpdated/onCancelled (qua OrderStatusService, không đổi ở Task 5) vẫn
+  // nhìn thấy đúng cùng lịch sử gọi qua tên `txUpdateMany`.
+  const txUpdateMany = orderUpdateMany;
   const txUserUpdate = jest.fn().mockResolvedValue({});
   const txCoinCreate = jest.fn().mockResolvedValue({});
   /** Tồn kho (hoàn kho khi huỷ) đi bằng SQL thô — xem catalog/variation-stock.ts. */
@@ -271,7 +276,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     // Guard theo trạng thái HIỆN TẠI trong DB: chỉ lật CONFIRMED khi đơn còn PENDING_PAYMENT.
     expect(orderUpdateMany).toHaveBeenCalledWith({
       where: { id: 'o1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
-      data: { paymentStatus: 'PAID', status: 'CONFIRMED' },
+      data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date) },
     });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
   });
@@ -300,7 +305,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     await proc.onPaymentReconcile(paidPayload);
     expect(orderUpdateMany).toHaveBeenLastCalledWith({
       where: { id: 'o1', paymentStatus: 'UNPAID', status: { notIn: ['CANCELLED', 'RETURNED', 'PENDING_PAYMENT'] } },
-      data: { paymentStatus: 'PAID' },
+      data: { paymentStatus: 'PAID', paidAt: expect.any(Date) },
     });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
   });

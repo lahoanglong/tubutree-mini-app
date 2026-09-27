@@ -27,6 +27,18 @@ function sign(rawData: string): string {
   return createHmac('sha256', KEY2).update(rawData).digest('hex');
 }
 
+/**
+ * handleCallback bọc updateMany trong `$transaction` (Task 5, docs analytics-foundation) — gắn
+ * `$transaction` lên mock prisma sao cho `tx` trả về CHÍNH object này, để `tx.order.updateMany`
+ * vẫn là đúng jest.fn() mà các test đã assert ở top-level (không tạo mock tx tách biệt).
+ */
+function withTx<T extends object>(prismaLike: T): T {
+  (prismaLike as unknown as { $transaction: unknown }).$transaction = jest.fn((cb: (tx: unknown) => unknown) =>
+    cb(prismaLike),
+  );
+  return prismaLike;
+}
+
 describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
   const order = { id: 'o1', code: 'TUBU1', userId: 'u1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' };
 
@@ -37,10 +49,10 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const findFirst = jest.fn().mockResolvedValue(order);
     const attemptFindUnique = jest.fn().mockResolvedValue(null);
-    const prisma = {
+    const prisma = withTx({
       order: { findFirst, update, updateMany },
       paymentAttempt: { findUnique: attemptFindUnique, create: jest.fn().mockResolvedValue({}) },
-    } as unknown as PrismaService;
+    }) as unknown as PrismaService;
     const notify = jest.fn().mockResolvedValue(undefined);
     const notifications = { notify } as unknown as NotificationsService;
     const svc = new ZalopayService(prisma, notifications, makeConfig(true) as never);
@@ -80,11 +92,11 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
     // gọi (code không tự kiểm tra paymentStatus trước, để DB làm trọng tài) nhưng count:0 →
     // không notify. Mock phải mô phỏng đúng hành vi WHERE-không-khớp của Postgres thật.
     const updateMany = jest.fn().mockResolvedValue({ count: 0 });
-    const prisma = {
+    const prisma = withTx({
       order: { findFirst: jest.fn().mockResolvedValue({ ...order, paymentStatus: 'PAID' }), update: jest.fn(), updateMany },
       // Đơn tạo TRƯỚC bản vá PaymentAttempt: không có dòng attempt nào → fallback paymentTxnId.
       paymentAttempt: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
-    } as unknown as PrismaService;
+    }) as unknown as PrismaService;
     const notify = jest.fn();
     const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never);
     const raw = JSON.stringify({ app_trans_id: '250101_TUBU1' });
@@ -148,13 +160,13 @@ describe('ZalopayService — nhiều lần thử thanh toán (PaymentAttempt)', 
     // update() dùng bởi createPayment (paymentTxnId); updateMany() dùng bởi handleCallback.
     const update = jest.fn().mockResolvedValue({});
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
-    const prisma = {
+    const prisma = withTx({
       order: { findFirst: jest.fn().mockResolvedValue(null), findUnique: jest.fn().mockResolvedValue(orderRow), update, updateMany },
       paymentAttempt: {
         findUnique: jest.fn().mockResolvedValue(attempt),
         create: jest.fn().mockResolvedValue({}),
       },
-    } as unknown as PrismaService;
+    }) as unknown as PrismaService;
     const notify = jest.fn().mockResolvedValue(undefined);
     const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never);
     return { svc, update, updateMany, prisma, notify };
@@ -203,10 +215,10 @@ describe('ZalopayService — nhiều lần thử thanh toán (PaymentAttempt)', 
 describe('ZalopayService — đơn thu gom tái chế: chỉ đặt vận đơn Gomdon SAU khi tiền về', () => {
   function setup(order: Record<string, unknown>, count = 1) {
     const updateMany = jest.fn().mockResolvedValue({ count });
-    const prisma = {
+    const prisma = withTx({
       order: { findFirst: jest.fn().mockResolvedValue(order), update: jest.fn(), updateMany },
       paymentAttempt: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() },
-    } as unknown as PrismaService;
+    }) as unknown as PrismaService;
     const gomdonQueue = { getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) };
     const notify = jest.fn().mockResolvedValue(undefined);
     const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never, gomdonQueue as never);
