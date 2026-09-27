@@ -658,15 +658,54 @@ khách không tự huỷ được.
   điều hành host, không cần chỉnh gì thêm khi deploy.
 - Dashboard: `/admin?tab=analytics` — cần ≥1 lần cron chạy mới có dữ liệu, trang không crash khi
   rỗng (đã có Playwright test cho cả 2 trạng thái, Task 21).
-- **Giới hạn đã biết (không chặn deploy, cần biết trước khi đọc số liệu):**
+- **Giới hạn đã biết (không chặn deploy, cần biết trước khi đọc số liệu — phát hiện ở review
+  cuối toàn nhánh, 2026-09-28):**
+  - **`RetentionDailySnapshot` đang chạy CHỈ có NS-2 (đơn/khách/tháng) + DAU proxy, CHƯA có NS-1**
+    (% khách có đơn 2 ≤30 ngày) — NS-1 hiện chỉ có ở baseline log một-lần của script backfill
+    (§ trên), KHÔNG có trên dashboard `/admin?tab=analytics`. `CohortRepeatSnapshot`/
+    `FunnelDailySnapshot` (nơi NS-1 + phễu từng bước sẽ nằm) mới có schema, CHƯA có cron tính —
+    cần một dự án con/task riêng để hoàn thiện trước khi dùng dashboard này thay baseline log.
+  - **North-star CHƯA gộp mua tại quầy (POS).** Quyết định nghiệp vụ đã chốt là "có tính" đơn POS
+    (`pos_point_credits`) vào north-star, nhưng cả cron lẫn script backfill hiện chỉ đọc bảng
+    `orders` — `pos_point_credits` chưa được JOIN vào bất kỳ đâu. Số liệu hiện tại KHÔNG đếm mua
+    tại quầy. Cần một task riêng để nối bảng này vào (cấu trúc dữ liệu khác — không có
+    order_status_history, không có dòng hàng — nên không đơn giản chỉ thêm 1 UNION).
+  - **Đơn PENDING_PAYMENT/UNPAID vẫn được tính là "đơn hợp lệ" trong north-star.** Một đơn thanh
+    toán online bị bỏ dở (khách thoát giữa chừng) rồi đặt lại đơn khác trong 30 ngày sẽ bị đếm
+    thành "có đơn 2", làm NS-1 cao hơn thực tế. Đây là hệ quả của một lỗ hổng có sẵn KHÔNG liên
+    quan tới dự án con này: hệ thống chưa có cron hết hạn đơn PENDING_PAYMENT (xem comment ở
+    `checkout.dto.ts` dòng ~26-27). Chưa sửa ở đây vì sửa đúng cần quyết định nghiệp vụ riêng (hết
+    hạn sau bao lâu, ai duyệt) — đọc số liệu NS-1/NS-2 sớm nên biết trước sai lệch này.
+  - **COD chưa từng ghi `Order.paidAt`/phát `order_paid` khi giao hàng thành công** (chỉ online
+    payment mới có `order_paid` qua webhook, xem Task 5). Không ảnh hưởng dashboard hiện tại (số
+    liệu không dùng `paidAt`), nhưng backfill's bước gán `paidAt := deliveredAt` cho đơn COD cũ
+    (§ trên) sẽ không có tác dụng cho đơn COD MỚI phát sinh sau deploy — cần vá ở
+    `order-status.service.ts` (nhánh set `deliveredAt`) nếu sau này có phân tích cần `paidAt` cho
+    COD.
+  - **Thiếu sự kiện `share_clicked`** (1 trong 18 sự kiện tối thiểu ở audit/spec) — sót khỏi phạm
+    vi Task 19 khi viết plan, không phát hiện ra tới tận review cuối. Chưa đo được chia sẻ → chạm
+    → đơn đầu của người được mời.
+  - **`order_status_changed` không phủ được các đường ghi `Order.status` KHÔNG đi qua
+    `OrderStatusService.setStatus()`** — cụ thể: khách tự huỷ đơn (`orders.service.ts`), admin
+    duyệt trả hàng (`admin.service.ts`), đại lý tự xác nhận (`dealer.service.ts`). 3 đường này CỐ
+    Ý tách riêng khỏi `setStatus()` từ TRƯỚC dự án con 2 (xem comment gốc trong
+    `order-status.service.ts` giải thích lý do — không phải lỗ hổng Task 6 để sót, mà là kiến
+    trúc có sẵn). Phễu trạng thái đơn trên dashboard vì vậy thiếu vài nhánh chuyển trạng thái.
   - `checkout_started.entry` chưa phân biệt được "Mua ngay" với "checkout một phần giỏ" (cả 2 đều
     gắn nhãn `buy_now`) — đã thêm `isSubset` làm tín hiệu phụ, xem ghi chú PARKED trong lịch sử
     review Task 19 nếu muốn làm đúng hẳn (cần sửa thêm `cart.tsx` + `utils/checkout-selection.ts`).
-  - `CohortRepeatSnapshot`/`FunnelDailySnapshot` (repeat 30/60/90 theo cohort + phễu từng bước)
-    mới có schema, CHƯA có cron tính — chỉ `RetentionDailySnapshot` (NS-1/NS-2/DAU) đang chạy.
   - Phát hiện ngoài phạm vi dự án con này: `apps/e2e/tests/admin.spec.ts` có 1 test lỗi từ TRƯỚC
     (không liên quan tới thay đổi của dự án con 2) — không phải regression mới, nhưng nên xử lý
     riêng.
+  - **Đã vá ở review cuối (không còn là giới hạn, chỉ ghi lại để biết đã từng có):** `/events`
+    trước đó vẫn bị giới hạn theo IP dù đã có guard riêng theo thiết bị (2 guard độc lập cùng chạy,
+    guard theo IP không bị tắt) — sửa lại dùng 1 `getTracker` duy nhất trên `@Throttle` của route
+    thay vì 2 guard riêng biệt. `flushEventQueueOnHide` trước đó không bao giờ được gọi (chưa gắn
+    listener `visibilitychange`) và nhánh `sendBeacon` không thể xác thực được (endpoint yêu cầu
+    JWT, `sendBeacon` không gắn được header) — bỏ hẳn `sendBeacon`, chỉ dùng `api.post` (đã có
+    Authorization qua interceptor) khi trang bị ẩn. Lỗi phân loại `classifyOrderError` gắn nhầm
+    lỗi hết lượt coupon thành `PRICE_CHANGED` (khớp nhầm chữ "giá" trong "giảm giá") — bỏ điều
+    kiện khớp chuỗi con, chỉ nhận đúng literal `'PRICE_CHANGED'`.
 
 ---
 

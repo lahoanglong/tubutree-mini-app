@@ -13,7 +13,7 @@ import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch } from '../services/affiliate-api';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
-import { trackEvent } from '../services/analytics';
+import { trackEvent, flushEventQueueOnHide } from '../services/analytics';
 
 import { applyFontScale } from '../utils/font-scale';
 
@@ -140,6 +140,11 @@ export default function MyApp() {
     });
     window.addEventListener('unhandledrejection', (e) => {
       void trackEvent('client_error', 'miniapp', { kind: 'api', messageHash: hashMessage(String(e.reason)) });
+    });
+    // Xả nốt hàng đợi sự kiện khi app bị ẩn (chuyển app/khoá màn hình) — trước đây hàm này tồn
+    // tại nhưng không có listener nào gọi tới, là dead code (phát hiện ở review cuối).
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushEventQueueOnHide();
     });
   }, []);
 

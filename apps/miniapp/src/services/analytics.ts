@@ -58,20 +58,14 @@ export async function flushEventQueue(): Promise<void> {
 }
 
 export function flushEventQueueOnHide(): void {
-  if (queue.length === 0) return;
-  // Lấy batch ra khỏi queue MỘT LẦN rồi giữ biến cục bộ — KHÔNG được gọi flushEventQueue() ở
-  // nhánh dự phòng bên dưới vì queue module-level đã rỗng ngay sau splice() này (phát hiện ở
-  // review Task 17: gọi lại flushEventQueue() sau khi đã splice queue rỗng khiến nhánh dự
-  // phòng — chính xác lúc sendBeacon thất bại/không có — là no-op câm lặng, mất trắng dữ liệu).
-  const batch = queue.splice(0, MAX_BATCH);
-  const body = JSON.stringify({ events: batch });
-  if (typeof navigator !== 'undefined' && 'sendBeacon' in navigator) {
-    const ok = navigator.sendBeacon('/api/events', body);
-    if (ok) return;
+  // sendBeacon KHÔNG dùng được ở đây: endpoint /events yêu cầu JWT Bearer token, mà
+  // navigator.sendBeacon() không cho gắn header tuỳ ý (không thể gửi Authorization) — mọi lần
+  // gọi sendBeacon tới endpoint này sẽ luôn bị BE từ chối 401 (phát hiện ở review cuối). Dùng
+  // THẲNG api.post (đã có Authorization qua interceptor), lặp tới khi rỗng để không bỏ sót nếu
+  // hàng đợi đang có hơn MAX_BATCH sự kiện lúc trang bị ẩn.
+  while (queue.length > 0) {
+    void flushEventQueue();
   }
-  // sendBeacon không khả dụng hoặc thất bại — gửi lại bằng chính `batch` đã lấy ra ở trên qua
-  // fetch thường (best-effort, không throw).
-  void api.post('/events', { events: batch }).catch(() => {});
 }
 
 export function __resetQueueForTest(): void {

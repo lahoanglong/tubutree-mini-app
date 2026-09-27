@@ -1,17 +1,30 @@
-import { Body, Controller, Headers, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Headers, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { AnalyticsEventsService } from './analytics-events.service';
 import { IngestEventsDto } from './dto/ingest-events.dto';
-import { DeviceThrottlerGuard } from './device-throttler.guard';
 
 @Controller('events')
-@UseGuards(DeviceThrottlerGuard)
 export class AnalyticsController {
   constructor(private readonly analytics: AnalyticsEventsService) {}
 
-  @Throttle({ default: { ttl: 60_000, limit: 200 } })
+  // Track theo X-Device-Id thay vì IP — Wi-Fi cửa hàng/CGNAT dùng chung IP không được lấy hết
+  // hạn mức của nhau ở endpoint này (A7-02). getTracker được ĐỌC bởi guard APP_GUARD toàn cục có
+  // sẵn (ThrottlerGuard trong app.module.ts) — không cần một guard riêng chồng lên (guard riêng
+  // trước đây chạy SONG SONG với guard IP toàn cục chứ không thay thế, nên throttle theo IP vẫn
+  // áp dụng — phát hiện ở review cuối).
+  @Throttle({
+    default: {
+      ttl: 60_000,
+      limit: 200,
+      getTracker: (req: Record<string, any>) => {
+        const deviceId = req.headers?.['x-device-id'];
+        if (typeof deviceId === 'string' && deviceId.length > 0) return deviceId;
+        return req.user?.sub ?? req.ip ?? 'unknown';
+      },
+    },
+  })
   @Post()
   async ingest(
     @CurrentUser() user: JwtPayload | undefined,

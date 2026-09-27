@@ -43,42 +43,31 @@ describe('trackEvent / flushEventQueue', () => {
 
 describe('flushEventQueueOnHide', () => {
   beforeEach(() => __resetQueueForTest());
-  afterEach(() => {
-    vi.clearAllMocks();
-    vi.unstubAllGlobals();
-  });
+  afterEach(() => vi.clearAllMocks());
 
-  it('sendBeacon thành công → KHÔNG gọi api.post (đã gửi bằng beacon)', () => {
-    const sendBeacon = vi.fn().mockReturnValue(true);
-    vi.stubGlobal('navigator', { sendBeacon });
-    trackEvent('client_error', 'miniapp', {});
-
+  it('hàng đợi rỗng → không gọi api.post', () => {
     flushEventQueueOnHide();
-
-    expect(sendBeacon).toHaveBeenCalledTimes(1);
     expect(api.post).not.toHaveBeenCalled();
   });
 
-  it('sendBeacon thất bại (trả false) → PHẢI gửi lại batch đã lấy ra qua api.post, không rơi mất', () => {
-    const sendBeacon = vi.fn().mockReturnValue(false);
-    vi.stubGlobal('navigator', { sendBeacon });
+  it('có sự kiện trong hàng đợi → gửi qua api.post (không dùng sendBeacon)', () => {
     trackEvent('client_error', 'miniapp', { foo: 'bar' });
 
     flushEventQueueOnHide();
 
-    expect(sendBeacon).toHaveBeenCalledTimes(1);
     expect(api.post).toHaveBeenCalledTimes(1);
     const body = (api.post as ReturnType<typeof vi.fn>).mock.calls[0]?.[1];
     expect(body.events).toHaveLength(1);
     expect(body.events[0].props).toEqual({ foo: 'bar' });
   });
 
-  it('không có navigator.sendBeacon (môi trường không hỗ trợ) → gửi thẳng qua api.post', () => {
-    vi.stubGlobal('navigator', {});
-    trackEvent('client_error', 'miniapp', {});
+  it('hơn 50 sự kiện (2 lô) → xả hết qua nhiều lần gọi flushEventQueue, không rơi mất', () => {
+    for (let i = 0; i < 75; i++) trackEvent('screen_viewed', 'miniapp', { i });
 
     flushEventQueueOnHide();
 
-    expect(api.post).toHaveBeenCalledTimes(1);
+    const calls = (api.post as ReturnType<typeof vi.fn>).mock.calls;
+    const totalSent = calls.reduce((sum, call) => sum + call[1].events.length, 0);
+    expect(totalSent).toBe(75);
   });
 });

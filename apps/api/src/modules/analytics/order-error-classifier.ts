@@ -7,9 +7,9 @@ export type OrderErrorCode = 'OUT_OF_STOCK' | 'PRICE_CHANGED' | 'ADDRESS_INVALID
 
 export function classifyOrderError(message: string): OrderErrorCode {
   if (message.includes('tồn kho')) return 'OUT_OF_STOCK';
-  if (message === 'PRICE_CHANGED' || message.includes('giá')) return 'PRICE_CHANGED';
+  if (message === 'PRICE_CHANGED') return 'PRICE_CHANGED';
   if (message.includes('Địa chỉ giao hàng')) return 'ADDRESS_INVALID';
-  if (message.includes('Số dư') || message.includes('điểm Xanh') || message.includes('COD')) {
+  if (message.includes('Số dư') || message.toLowerCase().includes('điểm xanh') || message.includes('COD')) {
     return 'BALANCE';
   }
   return 'VALIDATION';
