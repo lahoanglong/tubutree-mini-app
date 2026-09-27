@@ -77,6 +77,7 @@ export class CheckoutService {
       subtotal: cart.subtotal,
       discount: computed.discount,
       comboDiscount: computed.comboDiscount,
+      tierDiscount: computed.tierDiscount,
       pointsUsed: computed.pointsUsed,
       pointsDiscount: computed.pointsDiscount,
       shippingFee: computed.shippingFee,
@@ -186,7 +187,9 @@ export class CheckoutService {
             type: 'RETAIL',
             status,
             subtotal: cart.subtotal,
-            discount: computed.discount + computed.comboDiscount + computed.pointsDiscount,
+            // P0 A3-05: gồm cả tierDiscount (giảm hạng tự động) — 4 nguồn giảm giá đã tách riêng
+            // (combo/coupon/hạng/điểm) đều cộng vào cùng 1 cột Order.discount để hiển thị/đối soát.
+            discount: computed.discount + computed.comboDiscount + computed.pointsDiscount + computed.tierDiscount,
             shippingFee: computed.shippingFee,
             total: computed.total,
             pointsEarned,
@@ -457,8 +460,26 @@ export class CheckoutService {
       }
     }
     const goodsAfterCoupon = Math.max(0, goodsAfterCombo - discount);
-    // Điểm áp trên TOÀN đơn (gồm flash): base = phần non-flash sau coupon + flashSubtotal.
-    const redeemBase = goodsAfterCoupon + flashSubtotal;
+
+    // 3) Quyền lợi hạng thành viên (P0 A3-05, docs/audit-2026-09/03-retention-loops.md): hạng hứa
+    // "giảm X% mọi đơn" (VD Cổ Thụ 5%, seed.ts TIERS[].perks + MembershipTier.discountPct) phải TỰ
+    // ĐỘNG áp — khác coupon (cần mã, Tubu tài trợ) và điểm (khách tự chọn tiêu). Đặt SAU coupon,
+    // KHÔNG đặt trước combo/coupon: coupon.validateAndCompute nhận goodsAfterCombo làm base kiểm
+    // minOrder — nếu trừ giảm-hạng TRƯỚC coupon, base đó bị thu nhỏ và có thể đánh rớt minOrder một
+    // coupon lẽ ra hợp lệ (đổi hành vi coupon đã có, ngoài phạm vi fix này). Đặt TRƯỚC điểm Xanh vì
+    // điểm là lựa chọn TỰ NGUYỆN của khách tại checkout, quy ước tính SAU CÙNG trên phần còn lại nhỏ
+    // nhất (giữ nguyên vị trí đã có từ trước fix này). Thứ tự cuối: combo → coupon → hạng → điểm.
+    // Loại flash khỏi base (đồng bộ combo/coupon ở trên): giá flash là giá đặc biệt
+    // server-authoritative, không cộng dồn thêm giảm giá hạng lên trên nó.
+    const tier = user.tierId
+      ? await this.prisma.membershipTier.findUnique({ where: { id: user.tierId }, select: { discountPct: true } })
+      : null;
+    const tierDiscountPct = tier ? Number(tier.discountPct) : 0;
+    const tierDiscount = this.pricing.calcTierDiscount(goodsAfterCoupon, tierDiscountPct);
+    const goodsAfterTierDiscount = Math.max(0, goodsAfterCoupon - tierDiscount);
+
+    // Điểm áp trên TOÀN đơn (gồm flash): base = phần non-flash sau coupon+hạng + flashSubtotal.
+    const redeemBase = goodsAfterTierDiscount + flashSubtotal;
     // Trần điểm = số DÙNG ĐƯỢC (số dư − điểm đơn còn có thể bị đảo), không phải số dư — cùng luật
     // LoyaltyService.redeemReward. Đọc ngoài tx ở đây chỉ để báo giá/kẹp; placeOrder kiểm lại trong tx.
     const lockedPoints =
@@ -490,6 +511,7 @@ export class CheckoutService {
         couponApplied,
         comboDiscount: combo.total,
         comboPerLine: combo.perLine,
+        tierDiscount,
         pointsUsed: redemption.pointsUsed,
         pointsDiscount: redemption.discount,
         redeemablePoints,

@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('zmp-ui', () => ({ Box: () => null, Page: () => null, Text: () => null, Button: () => null, useNavigate: () => () => undefined }));
 vi.mock('zmp-sdk/apis', () => ({ vibrate: () => undefined, setStorage: async () => ({}), getStorage: async () => ({}), removeStorage: async () => ({}) }));
 
-import { notificationMeta, notificationOrderLink } from './notifications';
+import { notificationMeta, notificationOrderLink, reorderReminderTarget } from './notifications';
 
 /**
  * Nhãn nhóm thông báo theo templateCode. Trước đây mọi mã DEALER_* (thưởng doanh số quý, yêu cầu
@@ -31,6 +31,38 @@ describe('notificationMeta', () => {
     expect(notificationMeta('ORDER_CANCELLED').title).toBe('Cập nhật đơn hàng');
     expect(notificationMeta('FLASH_REMINDER').title).toBe('Ưu đãi giờ vàng');
     expect(notificationMeta('SOMETHING_NEW').title).toBe('Thông báo');
+  });
+
+  // A1-01=A2-06=A3-02: trước đây REORDER_REMINDER rơi về nhãn chung "Thông báo" (Bell) — khách
+  // không phân biệt được đây là nhắc mua lại với mọi thông báo chung chung khác.
+  it('REORDER_REMINDER → nhóm Nhắc mua lại', () => {
+    expect(notificationMeta('REORDER_REMINDER').title).toBe('Nhắc mua lại');
+  });
+});
+
+describe('reorderReminderTarget (CTA "Mua lại ngay" — A1-01=A2-06=A3-02)', () => {
+  it('có product_slug trong payload → điều hướng thẳng tới trang sản phẩm', () => {
+    expect(reorderReminderTarget({ product_slug: 'dau-goi-visante-500ml' })).toBe('/product/dau-goi-visante-500ml');
+  });
+
+  it('không có slug (đơn cũ trước khi OrderItem có cột productSlug) → về trang chủ thay vì link hỏng /product/', () => {
+    expect(reorderReminderTarget({ product: 'Dầu gội Visante 500ml' })).toBe('/');
+    expect(reorderReminderTarget(undefined)).toBe('/');
+  });
+
+  it('slug có ký tự cần encode → encodeURIComponent đúng (mirror flashSlug cùng file)', () => {
+    expect(reorderReminderTarget({ product_slug: 'sữa tắm/đặc biệt' })).toBe(
+      `/product/${encodeURIComponent('sữa tắm/đặc biệt')}`,
+    );
+  });
+});
+
+describe('REORDER_REMINDER không vô tình khớp CTA khác (isGame/isCart/isLoyalty heuristic theo body text)', () => {
+  // Body thật (seed.ts nt-reorder): '{{product}} của bạn dự kiến sắp hết. Đặt lại ngay để không
+  // gián đoạn nhé! 🛒' — emoji 🛒 KHÔNG phải chữ "giỏ" nên isCart (/giỏ/i) không khớp nhầm.
+  it('body mẫu thật của REORDER_REMINDER không chứa từ khoá "giỏ"', () => {
+    const body = 'Dầu gội Visante 500ml của bạn dự kiến sắp hết. Đặt lại ngay để không gián đoạn nhé! 🛒';
+    expect(/giỏ/i.test(body)).toBe(false);
   });
 });
 

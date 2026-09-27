@@ -89,6 +89,65 @@ describe('VouchersService.grant', () => {
   });
 });
 
+// P0 A3-05 (phần voucher sinh nhật): seed hứa Lộc Biếc 50k, Đại Thụ 150k, Cổ Thụ 300k
+// (`prisma/seed.ts` TIERS[].perks) nhưng cron trước đây cấp DUY NHẤT 1 mức cho mọi hạng.
+describe('VouchersService.birthdayVouchers (P0 A3-05 — theo hạng thành viên)', () => {
+  function setup(rows: { id: string; tierId: string | null }[], tierAmounts: Record<string, number | null> = {}) {
+    const create = jest.fn().mockResolvedValue({});
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue(rows),
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create },
+      membershipTier: {
+        findMany: jest.fn().mockResolvedValue(
+          Object.entries(tierAmounts).map(([id, birthdayVoucherAmount]) => ({ id, birthdayVoucherAmount })),
+        ),
+      },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    return { svc: new VouchersService(prisma, makeConfig(), notify), create, prisma };
+  }
+
+  it('hạng có mức riêng (Cổ Thụ 300k) → cấp ĐÚNG mức của hạng, không phải mức chung', async () => {
+    const { svc, create } = setup([{ id: 'u1', tierId: 'CO_THU' }], { CO_THU: 300000, DAI_THU: 150000, LOC_BIEC: 50000 });
+    await svc.birthdayVouchers();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0].data.value).toBe(300000);
+  });
+
+  it('hạng Đại Thụ → 150k (khác Cổ Thụ, khác mặc định)', async () => {
+    const { svc, create } = setup([{ id: 'u1', tierId: 'DAI_THU' }], { CO_THU: 300000, DAI_THU: 150000, LOC_BIEC: 50000 });
+    await svc.birthdayVouchers();
+    expect(create.mock.calls[0][0].data.value).toBe(150000);
+  });
+
+  it('không có hạng (tierId null) → dùng mức mặc định chung (voucher.birthday_amount, 50k)', async () => {
+    const { svc, create } = setup([{ id: 'u1', tierId: null }], { CO_THU: 300000 });
+    await svc.birthdayVouchers();
+    expect(create.mock.calls[0][0].data.value).toBe(50000);
+  });
+
+  it('hạng chưa cấu hình mức riêng (birthdayVoucherAmount null, vd Mầm Xanh) → dùng mức mặc định chung', async () => {
+    const { svc, create } = setup([{ id: 'u1', tierId: 'MAM_XANH' }], { MAM_XANH: null, CO_THU: 300000 });
+    await svc.birthdayVouchers();
+    expect(create.mock.calls[0][0].data.value).toBe(50000);
+  });
+
+  it('nhiều user nhiều hạng cùng ngày → mỗi người đúng mức của hạng mình', async () => {
+    const { svc, create } = setup(
+      [
+        { id: 'u1', tierId: 'CO_THU' },
+        { id: 'u2', tierId: 'LOC_BIEC' },
+      ],
+      { CO_THU: 300000, DAI_THU: 150000, LOC_BIEC: 50000 },
+    );
+    await svc.birthdayVouchers();
+    expect(create).toHaveBeenCalledTimes(2);
+    const byUser = Object.fromEntries(create.mock.calls.map((c) => [c[0].data.scopeMeta.userId, c[0].data.value]));
+    expect(byUser['u1']).toBe(300000);
+    expect(byUser['u2']).toBe(50000);
+  });
+});
+
 describe('VouchersService.milestoneVouchers (§6.6)', () => {
   function setup(rows: { userId: string; spent: bigint }[]) {
     const create = jest.fn().mockResolvedValue({});

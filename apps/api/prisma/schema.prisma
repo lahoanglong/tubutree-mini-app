@@ -305,6 +305,10 @@ model MembershipTier {
   minSpending     Int?
   discountPct     Decimal @default(0)
   pointMultiplier Decimal @default(1)
+  /// Mức voucher sinh nhật riêng của hạng (VNĐ) — null = dùng `voucher.birthday_amount` chung
+  /// (P0 A3-05: seed hứa Lộc Biếc 50k/Đại Thụ 150k/Cổ Thụ 300k nhưng cron trước đây cấp 1 mức
+  /// cho mọi hạng, xem vouchers.service.ts birthdayVouchers()).
+  birthdayVoucherAmount Int?
   perks           Json
   badgeImageUrl   String?
   sortOrder       Int     @default(0)
@@ -1886,6 +1890,31 @@ enum ReturnStatus {
   REJECTED
 }
 
+// A1-03 (audit 2026-09): nút "Gửi yêu cầu xoá tài khoản" trong miniapp trước đây chỉ hiện snackbar
+// giả, không gọi API nào — BE không có endpoint xoá tài khoản dù chính sách bảo mật hứa xoá được.
+// Đây KHÔNG phải xoá thật (cascade/ẩn danh hoá dữ liệu là quyết định nghiệp vụ lớn hơn phạm vi vá
+// lỗi này) — chỉ là một YÊU CẦU được ghi nhận thật + báo admin xử lý qua CSKH, mirror cấu trúc tối
+// giản của ReturnRequest (không FK cứng, chỉ userId + index để admin truy vấn).
+model AccountDeletionRequest {
+  id         String                       @id @default(cuid())
+  userId     String
+  reason     String?
+  status     AccountDeletionRequestStatus @default(PENDING)
+  adminNote  String?
+  reviewedBy String?
+  reviewedAt DateTime?
+  createdAt  DateTime                     @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@map("account_deletion_requests")
+}
+
+enum AccountDeletionRequestStatus {
+  PENDING
+  RESOLVED
+}
+
 // Nhắc mua lại theo chu kỳ (§6.14.7 Lifecycle Reminder).
 // Cron tính từ đơn DELIVERED cuối của (user × variation); remindedAt chống spam.
 model ReorderReminder {
@@ -1961,15 +1990,22 @@ model Mission {
   @@map("missions")
 }
 
+// A1-02 (audit 2026-09): trước migration này bảng tồn tại trong schema nhưng KHÔNG nơi nào đọc/ghi
+// — thẻ nhiệm vụ Vườn Xanh hứa thưởng nhưng không có đường cộng. Giờ là khoá idempotency THẬT cho
+// GameService.claimMission: 1 dòng = 1 (mission, chu kỳ) ĐÃ NHẬN. cycleKey phân biệt các lượt nhận
+// lặp lại của nhiệm vụ isRepeatable (vd CHECKIN_7 mỗi 7 ngày streak mới) — nhiệm vụ không lặp lại
+// dùng cycleKey cố định '0'. Unique thay cho @@index cũ: chặn double-claim dưới đồng thời bằng
+// P2002 (insert-trước-cộng-thưởng), không phải check đọc-rồi-ghi (mirror CtvMilestoneClaim).
 model MissionProgress {
   id          String    @id @default(cuid())
   userId      String
   missionId   String
+  cycleKey    String    @default("0")
   progress    Int       @default(0)
   goal        Int
   completedAt DateTime?
 
-  @@index([userId])
+  @@unique([userId, missionId, cycleKey])
   @@map("mission_progress")
 }
 

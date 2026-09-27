@@ -390,6 +390,21 @@ describe('AffiliateService.dashboard (doanh số tháng = doanh số ĐÃ CHỐT
     // 00:00 1/10 VN = 17:00 30/9 UTC — vừa là đầu ngày vừa là đầu tháng.
     expect(sinces).toEqual(['2026-09-30T17:00:00.000Z', '2026-09-30T17:00:00.000Z']);
   });
+
+  // A5-11 (docs/audit-2026-09/05-ctv-dealer-staff.md): "Hoa hồng tháng này/Hôm nay" trước đây cộng
+  // CẢ commission đã REJECTED (đơn huỷ/trả) — số lớn nhất màn hình không bao giờ giảm khi đơn bị
+  // huỷ. Tiền không thực sự mất (reverseCommissionsForOrder chỉ REJECT commission còn PENDING/
+  // LOCKED — chưa bao giờ tới APPROVED/PAID nên chưa từng rút được), đây là lỗi hiển thị/niềm tin.
+  it('A5-11: todayCommission/monthCommission loại REJECTED, PENDING/LOCKED/APPROVED/PAID vẫn cộng như cũ', async () => {
+    const { svc, commissionAggregate } = build();
+    await svc.dashboard('u1', NOW);
+    // 2 lệnh gọi đầu (today, month) là sumCommission() — where phải loại REJECTED.
+    const sumCalls = commissionAggregate.mock.calls.filter((c) => c[0]?.where?.createdAt);
+    expect(sumCalls).toHaveLength(2);
+    for (const call of sumCalls) {
+      expect(call[0].where.status).toEqual({ not: 'REJECTED' });
+    }
+  });
 });
 
 describe('AffiliateService.monthlyTier (Build Spec §6.8.2)', () => {
@@ -821,6 +836,22 @@ describe('AffiliateService analytics', () => {
       expect.objectContaining({
         where: expect.objectContaining({ affiliateUserId: 'u1', order: { storefrontSlug: 'linh' } }),
       }),
+    );
+  });
+
+  // P0 A5-11 (cùng họ lỗi với dashboard — commAgg ở đây cộng CẢ commission đã REJECTED, xem
+  // AffiliateService.storefrontAnalytics): số "hoa hồng" theo từng gian hàng không giảm khi
+  // đơn của gian hàng đó bị huỷ/trả.
+  it('storefrontAnalytics: hoa hồng theo gian hàng LOẠI commission đã REJECTED (P0 A5-11)', async () => {
+    const commissionAggregate = jest.fn().mockResolvedValue({ _sum: { amount: 72000 } });
+    const prisma = {
+      storefront: { findMany: jest.fn().mockResolvedValue([{ slug: 'linh', title: 'Cửa hàng Linh' }]) },
+      order: { aggregate: jest.fn().mockResolvedValue({ _count: { _all: 3 }, _sum: { total: 900000 } }) },
+      commission: { aggregate: commissionAggregate },
+    } as unknown as PrismaService;
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins).storefrontAnalytics('u1');
+    expect(commissionAggregate).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ status: { not: 'REJECTED' } }) }),
     );
   });
 

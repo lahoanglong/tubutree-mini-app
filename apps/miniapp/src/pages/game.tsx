@@ -15,6 +15,7 @@ import {
   buyTree,
   getLeaderboard,
   getMissions,
+  claimMission,
   getForest,
   getCommunity,
   getCollection,
@@ -229,6 +230,16 @@ export default function GamePage() {
       void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
       void queryClient.invalidateQueries({ queryKey: ['coins'] });
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+    },
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+  const claimMissionM = useMutation({
+    mutationFn: (code: string) => claimMission(code),
+    onSuccess: (r) => {
+      haptic('medium');
+      openSnackbar({ text: vi.game.missions.claimOk(r.rewardPoints), type: 'success' });
+      void queryClient.invalidateQueries({ queryKey: ['game', 'missions'] });
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -952,15 +963,20 @@ export default function GamePage() {
               : (m.progress ?? 0);
             const progress = Math.min(goal, rawProgress);
             const isDone = m.completed || progress >= goal;
+            // A1-02: trước đây "đạt điều kiện" (isDone) và "đã nhận thưởng" bị coi là một — thẻ
+            // hiện ✓ và +Nđ ngay khi đạt điều kiện nhưng KHÔNG có đường cộng thưởng nào. Giờ tách
+            // rõ: ✓ chỉ khi đã claimed (thưởng THẬT đã vào Điểm Xanh); đạt điều kiện nhưng chưa
+            // nhận thì hiện nút "Nhận thưởng" (mirror pattern claim của Season Pass).
+            const canClaim = isDone && !m.claimed;
 
             return (
               <Box key={m.code} style={{ padding: '8px 0', borderBottom: '1px solid var(--neutral-100)' }}>
                 <Box flex alignItems="center" justifyContent="space-between">
-                  <Text size="small" bold={!isDone} style={{ color: isDone ? 'var(--neutral-400)' : 'var(--neutral-900)' }}>
-                    {isDone ? '✓ ' : ''}{m.title}
+                  <Text size="small" bold={!m.claimed} style={{ color: m.claimed ? 'var(--neutral-400)' : 'var(--neutral-900)' }}>
+                    {m.claimed ? '✓ ' : ''}{m.title}
                   </Text>
                   <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-                    +{m.rewardPoints}đ
+                    +{m.rewardPoints} Điểm Xanh
                   </Text>
                 </Box>
                 {m.description && (
@@ -980,6 +996,18 @@ export default function GamePage() {
                 <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
                   {progress}/{goal}
                 </Text>
+                {canClaim && (
+                  <Button
+                    fullWidth
+                    size="small"
+                    loading={claimMissionM.isPending && claimMissionM.variables === m.code}
+                    disabled={claimMissionM.isPending && claimMissionM.variables === m.code}
+                    onClick={() => claimMissionM.mutate(m.code)}
+                    style={{ marginTop: 6, background: 'var(--leaf-600)' }}
+                  >
+                    {vi.game.missions.claim}
+                  </Button>
+                )}
               </Box>
             );
           })

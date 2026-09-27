@@ -100,6 +100,15 @@ export const updateMe = (data: { fullName?: string; email?: string; avatarUrl?: 
 export const completeOnboarding = (segments: string[]) =>
   api.post<MeProfile>('/me/onboarding', { segments }).then((r) => r.data);
 
+/** A1-03: yêu cầu xoá tài khoản (KHÔNG phải xoá thật — CSKH xử lý thủ công, xem UsersService). */
+export interface AccountDeletionRequestResult {
+  alreadyRequested: boolean;
+  createdAt: string;
+  message: string;
+}
+export const requestAccountDeletion = (reason?: string) =>
+  api.post<AccountDeletionRequestResult>('/me/deletion-request', { reason }).then((r) => r.data);
+
 // Loyalty
 export interface RewardItem {
   id: string;

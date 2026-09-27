@@ -205,6 +205,14 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'remarketing.cart_abandon_max_hours', value: 72, category: 'remarketing', description: 'Không nhắc giỏ cũ quá N giờ' },
   { key: 'remarketing.voucher_expiry_days', value: 3, category: 'remarketing', description: 'Nhắc voucher cá nhân sắp hết hạn trong N ngày tới' },
 
+  // Reorder reminder (§6.14.7, cron LifecycleService.sendReorderReminders) — trước đây 2 số này
+  // hardcode fallback 60/0.85 (≈51 ngày), TRỄ HƠN cửa sổ north-star "đơn thứ 2 trong 30 ngày".
+  // createOnly: admin tự tinh chỉnh theo tốc độ tiêu dùng thật của ngành hàng — deploy lại KHÔNG
+  // được reset về mặc định. Mặc định mới 30×0.8 = nhắc ở ngày 24, còn dư ~6 ngày để khách đặt lại
+  // trước khi hết cửa sổ 30 ngày (thay vì trễ 21 ngày như trước).
+  { key: 'reorder.default_cycle_days', value: 30, category: 'reorder', description: 'Số ngày chu kỳ tiêu dùng mặc định (mọi SKU) dùng để tính hạn nhắc mua lại', createOnly: true },
+  { key: 'reorder.remind_ratio', value: 0.8, category: 'reorder', description: 'Tỉ lệ của chu kỳ tại đó gửi nhắc (0.8 × cycle_days = ngày nhắc)', createOnly: true },
+
   // RBAC nhân sự (Phase A) — SĐT admin thật cấp qua hub/DB; giữ rỗng để không cấp nhầm.
   { key: 'rbac.admin_phones', value: [], category: 'rbac', description: 'Danh sách SĐT admin gán sẵn (tham chiếu; grant thực nằm ở role_grants)' },
 
@@ -233,6 +241,7 @@ const TIERS = [
     pointMultiplier: new Prisma.Decimal(1),
     discountPct: new Prisma.Decimal(0),
     perks: ['Tích điểm 1x'],
+    birthdayVoucherAmount: null,
     sortOrder: 0,
   },
   {
@@ -243,6 +252,7 @@ const TIERS = [
     pointMultiplier: new Prisma.Decimal(1.2),
     discountPct: new Prisma.Decimal(0),
     perks: ['Tích điểm 1.2x', 'Freeship đơn ≥ 99k', 'Voucher sinh nhật 50k'],
+    birthdayVoucherAmount: 50000,
     sortOrder: 1,
   },
   {
@@ -253,6 +263,7 @@ const TIERS = [
     pointMultiplier: new Prisma.Decimal(1.5),
     discountPct: new Prisma.Decimal(0),
     perks: ['Tích điểm 1.5x', 'Freeship toàn shop', 'Ưu tiên hotline', 'Beta tester', 'Voucher sinh nhật 150k + 1 sample'],
+    birthdayVoucherAmount: 150000,
     sortOrder: 2,
   },
   {
@@ -263,6 +274,7 @@ const TIERS = [
     pointMultiplier: new Prisma.Decimal(2),
     discountPct: new Prisma.Decimal(0.05),
     perks: ['Tích điểm 2x', 'Freeship + giảm 5% mọi đơn', 'Quà sinh nhật cá nhân hóa', 'Voucher sinh nhật 300k + hộp quà'],
+    birthdayVoucherAmount: 300000,
     sortOrder: 3,
   },
 ];
@@ -679,6 +691,9 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },
   { id: 'nt-points-expiring', code: 'POINTS_EXPIRING', channel: 'INAPP', bodyTemplate: '⏳ Bạn có {{points}} điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿' },
   { id: 'nt-storefront-trending', code: 'STOREFRONT_TRENDING_PRODUCTS', channel: 'INAPP', bodyTemplate: '✨ Có {{count}} sản phẩm nổi bật (như {{sample}}) bạn chưa thêm vào gian hàng — thêm ngay để không bỏ lỡ khách quan tâm!' },
+  // A1-03 (docs/audit-2026-09/01-ia-navigation.md): báo admin khi khách gửi yêu cầu xoá tài khoản
+  // (UsersService.requestAccountDeletion) — mirror nt-dealer-credit-reported (chỉ gửi ADMIN).
+  { id: 'nt-account-deletion-requested', code: 'ACCOUNT_DELETION_REQUESTED', channel: 'INAPP', bodyTemplate: '🗑️ Khách {{user}} (SĐT {{phone}}) yêu cầu xoá tài khoản. Vào trang quản trị (Tài khoản → Yêu cầu xoá) để xử lý.', createOnly: true },
 ];
 
 const QUIZZES = [

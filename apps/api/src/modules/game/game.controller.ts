@@ -73,6 +73,11 @@ export class GameController {
   @Get('missions')
   missions(@CurrentUser('sub') userId: string) { return this.game.getMissions(userId); }
 
+  @Post('missions/:code/claim')
+  claimMission(@CurrentUser('sub') userId: string, @Param('code') code: string) {
+    return this.game.claimMission(userId, code);
+  }
+
   @Get('forest')
   forest(@CurrentUser('sub') userId: string) { return this.game.getForest(userId); }
 

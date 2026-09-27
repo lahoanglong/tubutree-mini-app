@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { Box, Page, Text, Button, Sheet, useSnackbar } from 'zmp-ui';
+import { useMutation } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
+import { requestAccountDeletion } from '../services/account-api';
+import { getErrorMessage } from '../services/api';
+import { openOAChat, hasOA } from '../services/zmp-bridge';
 
 const FAQ_CATS = ['Tất cả', 'Chung', 'Mua sắm', 'Điểm & Vườn', 'Đổi trả'] as const;
 type FaqCat = (typeof FAQ_CATS)[number];
@@ -61,6 +65,19 @@ export default function AboutPage() {
   const [open, setOpen] = useState<number | null>(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [faqCat, setFaqCat] = useState<FaqCat>('Tất cả');
+
+  // A1-03: nút này trước đây chỉ hiện snackbar giả, không gọi API nào. Giờ ghi nhận yêu cầu THẬT
+  // (KHÔNG xoá ngay — CSKH xử lý thủ công) + mở sẵn Zalo OA để khách có thể trao đổi trực tiếp
+  // luôn, thay vì chỉ chờ hotline gọi lại.
+  const deleteM = useMutation({
+    mutationFn: () => requestAccountDeletion(),
+    onSuccess: (res) => {
+      openSnackbar({ text: res.message, type: 'info' });
+      if (hasOA) void openOAChat('Tôi muốn xoá tài khoản Tubu Tree');
+      setConfirmDelete(false);
+    },
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
   const [policy, setPolicy] = useState<keyof typeof POLICIES | null>(null);
   const shownFaq = FAQ.filter((f) => faqCat === 'Tất cả' || f.cat === faqCat);
 
@@ -206,8 +223,8 @@ export default function AboutPage() {
               Xóa tài khoản vĩnh viễn?
             </Text>
             <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
-              Toàn bộ điểm, ví, lịch sử đơn sẽ bị xóa và không khôi phục được. Vui lòng liên hệ hotline
-              để hoàn tất yêu cầu xóa theo quy định.
+              Gửi yêu cầu để CSKH liên hệ xác minh và xử lý xóa tài khoản theo quy định — tài khoản
+              CHƯA bị xóa ngay khi bạn bấm nút này.
             </Text>
             <Box flex style={{ gap: 8, marginTop: 12 }}>
               <Button size="small" variant="secondary" onClick={() => setConfirmDelete(false)} style={{ flex: 1 }}>
@@ -215,10 +232,9 @@ export default function AboutPage() {
               </Button>
               <Button
                 size="small"
-                onClick={() => {
-                  openSnackbar({ text: 'Đã ghi nhận. Hotline sẽ liên hệ xác minh trong 24h.', type: 'info' });
-                  setConfirmDelete(false);
-                }}
+                loading={deleteM.isPending}
+                disabled={deleteM.isPending}
+                onClick={() => deleteM.mutate()}
                 style={{ flex: 1, background: 'var(--danger)' }}
               >
                 Gửi yêu cầu xóa

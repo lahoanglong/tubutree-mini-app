@@ -49,6 +49,106 @@ describe('CatalogService.boughtTogether (§6.12 thường mua kèm)', () => {
   });
 });
 
+describe('CatalogService.getBySlug — chỉ hiện SP APPROVED (P0 A2-03=A5-06=A6-04)', () => {
+  const product = (approvalStatus: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED') => ({
+    id: 'p1',
+    slug: 'tinh-dau',
+    isActive: true,
+    approvalStatus,
+    soldExternal: 0,
+    soldApp: 0,
+  });
+
+  it('PENDING_REVIEW (chưa duyệt) → NotFound dù isActive=true', async () => {
+    const prisma = {
+      product: { findUnique: jest.fn().mockResolvedValue(product('PENDING_REVIEW')) },
+    } as unknown as PrismaService;
+    await expect(new CatalogService(prisma).getBySlug('tinh-dau')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('REJECTED (kể cả từng APPROVED rồi bị từ chối lại) → NotFound', async () => {
+    const prisma = {
+      product: { findUnique: jest.fn().mockResolvedValue(product('REJECTED')) },
+    } as unknown as PrismaService;
+    await expect(new CatalogService(prisma).getBySlug('tinh-dau')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('APPROVED → trả về sản phẩm bình thường', async () => {
+    const prisma = {
+      product: { findUnique: jest.fn().mockResolvedValue(product('APPROVED')) },
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).getBySlug('tinh-dau');
+    expect(r.id).toBe('p1');
+  });
+});
+
+describe('CatalogService.related/boughtTogether/getForYou/suggest — luôn lọc approvalStatus=APPROVED', () => {
+  it('related(): where lọc approvalStatus APPROVED', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      product: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'p1', brand: 'b' }),
+        findMany,
+      },
+    } as unknown as PrismaService;
+    await new CatalogService(prisma).related('tinh-dau');
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ isActive: true, approvalStatus: 'APPROVED' }) }),
+    );
+  });
+
+  it('boughtTogether(): where lọc approvalStatus APPROVED', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      product: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'p1', slug: 'tinh-dau' }),
+        findMany,
+      },
+      $queryRaw: jest.fn().mockResolvedValue([{ productId: 'p2' }]),
+    } as unknown as PrismaService;
+    await new CatalogService(prisma).boughtTogether('tinh-dau');
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ isActive: true, approvalStatus: 'APPROVED' }) }),
+    );
+  });
+
+  it('getForYou(): cả nhánh gợi ý theo lịch sử lẫn nhánh fallback isFeatured đều lọc approvalStatus APPROVED', async () => {
+    const productFindMany = jest
+      .fn()
+      .mockResolvedValueOnce([{ categoryIds: ['C'] }])
+      .mockResolvedValueOnce([card('p2')]);
+    const prisma = {
+      orderItem: { findMany: jest.fn().mockResolvedValue([{ variationId: 'v1' }]) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }]) },
+      brandFollow: { findMany: jest.fn().mockResolvedValue([]) },
+      product: { findMany: productFindMany },
+    } as unknown as PrismaService;
+    await new CatalogService(prisma).getForYou('u1');
+    // call[1] = nhánh gợi ý theo danh mục đã mua
+    expect(productFindMany.mock.calls[1]![0].where).toMatchObject({ isActive: true, approvalStatus: 'APPROVED' });
+
+    const fallbackFindMany = jest.fn().mockResolvedValue([]);
+    const prisma2 = {
+      orderItem: { findMany: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      brandFollow: { findMany: jest.fn().mockResolvedValue([]) },
+      product: { findMany: fallbackFindMany },
+    } as unknown as PrismaService;
+    await new CatalogService(prisma2).getForYou('u2');
+    // nhánh fallback isFeatured
+    expect(fallbackFindMany.mock.calls[0]![0].where).toMatchObject({ isActive: true, isFeatured: true, approvalStatus: 'APPROVED' });
+  });
+
+  it('suggest(): where lọc approvalStatus APPROVED', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { product: { findMany } } as unknown as PrismaService;
+    await new CatalogService(prisma).suggest('tinh dau');
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ isActive: true, approvalStatus: 'APPROVED' }) }),
+    );
+  });
+});
+
 describe('CatalogService.brands cache 60s', () => {
   it('gọi 2 lần liên tiếp chỉ hit DB 1 lần (TTL chưa hết)', async () => {
     const groupBy = jest.fn().mockResolvedValue([{ brand: 'TuBu', _count: { _all: 3 } }]);
@@ -265,6 +365,20 @@ describe('CatalogService.list (Multi-brand filtering)', () => {
       expect.objectContaining({
         where: expect.objectContaining({ brand: 'Pơ Lang' }),
       }),
+    );
+  });
+
+  it('luôn lọc approvalStatus=APPROVED (P0 A2-03=A5-06=A6-04: SP chưa duyệt/bị từ chối không được lộ ra catalog công khai)', async () => {
+    const findMany = jest.fn().mockResolvedValue([card('p1')]);
+    const prisma = {
+      product: { findMany, count: jest.fn().mockResolvedValue(1) },
+      $transaction: jest.fn().mockResolvedValue([[card('p1')], 1]),
+    } as unknown as PrismaService;
+
+    await new CatalogService(prisma).list({ page: 1, limit: 10 });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ isActive: true, approvalStatus: 'APPROVED' }) }),
     );
   });
 

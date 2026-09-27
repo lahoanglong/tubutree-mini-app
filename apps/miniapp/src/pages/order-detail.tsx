@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Page, Text, Button, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, MessageSquare, Recycle } from 'lucide-react';
-import { fetchOrder, cancelOrder, repurchaseOrder, requestReturn, fetchMyReturns } from '../services/shop-api';
+import { fetchOrder, fetchOrders, cancelOrder, repurchaseOrder, requestReturn, fetchMyReturns } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
@@ -10,7 +10,16 @@ import { ErrorState } from '../components/ui/empty-state';
 import { MultiImageUpload } from '../components/image-upload';
 import { formatVnd, addressLine, isRecyclingPickedUp, recyclingPickupView, type RecyclingTone } from '../utils/format';
 import { STATUS_COLOR, TIMELINE_STEPS, timelineIndex } from '../utils/order-status';
-import { openOAChat, openExternal, hasOA } from '../services/zmp-bridge';
+import {
+  openOAChat,
+  openExternal,
+  hasOA,
+  followOA,
+  requestNotifyPermission,
+  getOaPromptState,
+  setOaPromptState,
+  shouldShowFollowOaPrompt,
+} from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
@@ -52,6 +61,60 @@ export default function OrderDetailPage() {
     queryFn: fetchMyReturns,
     enabled: !!order.data && order.data.status === 'DELIVERED',
   });
+
+  // ── Mời theo dõi OA sau đơn đầu tiên (finding A3-01 nửa 2 — xem shouldShowFollowOaPrompt) ──
+  // Mặc định seen=true để KHÔNG nháy hiện thẻ rồi ẩn ngay trong lúc chờ đọc cờ đã lưu trên máy.
+  const [oaPromptSeen, setOaPromptSeen] = useState(true);
+  const [oaPromptReady, setOaPromptReady] = useState(false);
+  const [oaBusy, setOaBusy] = useState(false);
+
+  useEffect(() => {
+    if (!hasOA) return;
+    let alive = true;
+    void getOaPromptState().then((s) => {
+      if (!alive) return;
+      setOaPromptSeen(s.promptSeen);
+      setOaPromptReady(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Chỉ cần biết TỔNG số đơn (limit=1) để suy ra đây có phải đơn đầu tiên hay không — không tải
+  // danh sách đầy đủ. Chỉ gọi khi còn khả năng hiện thẻ (chưa hỏi bao giờ + đã đọc xong cờ máy),
+  // tránh gọi API thừa mỗi lần khách mở lại một đơn cũ sau khi đã được hỏi.
+  const ordersTotalQ = useQuery({
+    queryKey: ['orders-total-for-oa-prompt'],
+    queryFn: () => fetchOrders(undefined, 1, 1),
+    enabled: hasOA && oaPromptReady && !oaPromptSeen && !!order.data,
+  });
+
+  const showOaPrompt = shouldShowFollowOaPrompt({
+    hasOA,
+    promptSeen: oaPromptSeen,
+    ordersTotal: ordersTotalQ.data?.meta.total,
+  });
+
+  const handleFollowOaPrompt = async () => {
+    setOaBusy(true);
+    const followed = await followOA();
+    if (followed) await requestNotifyPermission().catch(() => false);
+    await setOaPromptState({ promptSeen: true, followed });
+    setOaBusy(false);
+    setOaPromptSeen(true);
+    haptic(followed ? 'medium' : 'light');
+    openSnackbar(
+      followed
+        ? { text: 'Đã theo dõi Tubu Tree trên Zalo!', type: 'success' }
+        : { text: 'Không theo dõi được lúc này — bạn có thể thử lại trong Cài đặt.', type: 'error' },
+    );
+  };
+
+  const handleDismissOaPrompt = () => {
+    void setOaPromptState({ promptSeen: true });
+    setOaPromptSeen(true);
+  };
 
   const cancel = useMutation({
     mutationFn: () => cancelOrder(code!),
@@ -138,6 +201,44 @@ export default function OrderDetailPage() {
           {vi.orderStatus[o.status] ?? o.status}
         </Text.Title>
       </Box>
+
+      {/* ── Mời theo dõi OA (đơn đầu tiên) — finding A3-01 nửa 2, xem shouldShowFollowOaPrompt.
+          Đúng lúc thiện chí cao nhất (vừa đặt xong đơn đầu), không hỏi lúc mở app nguội. ── */}
+      {showOaPrompt && (
+        <Box
+          mx={4}
+          mt={2}
+          p={3}
+          style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--leaf-100)' }}
+        >
+          <Text bold size="small" style={{ color: 'var(--leaf-800)' }}>
+            Theo dõi Tubu Tree trên Zalo
+          </Text>
+          <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
+            Nhận thông báo cập nhật đơn hàng và ưu đãi mới — không bỏ lỡ tin quan trọng.
+          </Text>
+          <Box flex style={{ gap: 8, marginTop: 10 }}>
+            <Button
+              size="small"
+              loading={oaBusy}
+              disabled={oaBusy}
+              onClick={() => void handleFollowOaPrompt()}
+              style={{ background: 'var(--leaf-600)' }}
+            >
+              Theo dõi ngay
+            </Button>
+            <Button
+              size="small"
+              variant="tertiary"
+              disabled={oaBusy}
+              onClick={handleDismissOaPrompt}
+              style={{ color: 'var(--neutral-500)' }}
+            >
+              Để sau
+            </Button>
+          </Box>
+        </Box>
+      )}
 
       {/* ── Timeline (DI #9) ── */}
       {timelineIndex(o.status) >= 0 && (

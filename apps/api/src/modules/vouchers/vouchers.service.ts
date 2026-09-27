@@ -135,17 +135,24 @@ export class VouchersService {
       const today = new Date();
       const mm = today.getMonth() + 1;
       const dd = today.getDate();
-      // Lọc theo tháng/ngày của dob (Postgres EXTRACT qua raw).
-      const users = await this.prisma.$queryRaw<{ id: string }[]>`
-        SELECT id FROM users
+      // Lọc theo tháng/ngày của dob (Postgres EXTRACT qua raw). Lấy kèm tierId để cấp ĐÚNG mức
+      // hạng đã hứa (P0 A3-05: trước đây mọi hạng cùng nhận 1 mức, dù seed hứa Lộc Biếc 50k/
+      // Đại Thụ 150k/Cổ Thụ 300k — xem prisma/seed.ts TIERS[].perks).
+      const users = await this.prisma.$queryRaw<{ id: string; tierId: string | null }[]>`
+        SELECT id, "tierId" FROM users
         WHERE dob IS NOT NULL
           AND EXTRACT(MONTH FROM dob) = ${mm}
           AND EXTRACT(DAY FROM dob) = ${dd}
         LIMIT 500`;
-      const value = await this.config.get<number>('voucher.birthday_amount', 50000);
+      const defaultValue = await this.config.get<number>('voucher.birthday_amount', 50000);
+      // Mức riêng theo hạng (birthdayVoucherAmount null = hạng chưa có/không hứa mức riêng →
+      // dùng mặc định chung, không phải 0 — không tự ý cắt quyền lợi hạng cơ bản đang có).
+      const tiers = await this.prisma.membershipTier.findMany({ select: { id: true, birthdayVoucherAmount: true } });
+      const amountByTier = new Map(tiers.map((t) => [t.id, t.birthdayVoucherAmount]));
       const reason = `BIRTHDAY-${today.getFullYear()}-${mm}`;
       let granted = 0;
       for (const u of users) {
+        const value = (u.tierId ? amountByTier.get(u.tierId) : null) ?? defaultValue;
         if (await this.grant({ userId: u.id, reason, type: 'AMOUNT', value, validDays: 30, templateCode: 'BIRTHDAY_VOUCHER' })) granted++;
       }
       if (granted) this.logger.log(`Birthday vouchers granted: ${granted}`);

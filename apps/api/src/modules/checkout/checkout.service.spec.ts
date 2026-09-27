@@ -3,7 +3,10 @@ import { CheckoutService } from './checkout.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { CartService } from '../cart/cart.service';
 import type { CouponsService } from '../coupons/coupons.service';
-import type { PricingService } from '../pricing/pricing.service';
+// P0 A3-05 (quyền lợi hạng): các test "tier perks" bên dưới dựng PricingService THẬT (không mock)
+// để khẳng định khách THẬT SỰ nhận đúng số tiền hứa, không chỉ "hàm được gọi đúng tham số" — nên cần
+// import giá trị (class), không chỉ type.
+import { PricingService } from '../pricing/pricing.service';
 import { LoyaltyService, type LockedPoints } from '../loyalty/loyalty.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
@@ -40,6 +43,12 @@ function build(
     pointsBalance?: number;
     /** Điểm Xanh còn có thể bị đảo (LoyaltyService.lockedOrderPoints) — mặc định 0. */
     locked?: number;
+    /** P0 A3-05: hạng của user đặt đơn (mặc định null = chưa có hạng, giữ hành vi cũ). */
+    tierId?: string | null;
+    /** P0 A3-05: row MembershipTier trả về khi checkout tra `discountPct` theo tierId — mặc định null. */
+    tier?: { discountPct: number } | null;
+    /** P0 A3-05: dùng PricingService THẬT thay vì mock cứng — cho test end-to-end freeship/giảm % hạng. */
+    pricing?: PricingService;
   } = {},
 ) {
   const total = opts.total ?? 100;
@@ -50,10 +59,13 @@ function build(
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(null), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }), create: orderCreate },
     user: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, coinsBalance: opts.coinsBalance ?? 1000, pointsBalance: opts.pointsBalance ?? 1000, tierId: null }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, coinsBalance: opts.coinsBalance ?? 1000, pointsBalance: opts.pointsBalance ?? 1000, tierId: opts.tierId ?? null }),
       findUnique: jest.fn().mockResolvedValue(null),
       updateMany,
     },
+    // P0 A3-05: checkout.compute() tra MembershipTier.discountPct theo user.tierId để áp giảm giá
+    // hạng tự động — mặc định null (không hạng/không giảm), test tier perks override qua opts.tier.
+    membershipTier: { findUnique: jest.fn().mockResolvedValue(opts.tier ?? null) },
     $executeRaw: executeRaw,
     // SELECT … FOR UPDATE khoá dòng users trước khi trừ điểm (xem placeOrder).
     $queryRaw: jest.fn().mockResolvedValue([{ id: 'u1' }]),
@@ -70,11 +82,20 @@ function build(
     validateAndCompute:
       opts.validateAndCompute ?? jest.fn().mockResolvedValue({ discount: 0, freeship: false }),
   } as unknown as CouponsService;
-  const pricing = {
-    resolvePointsRedemption: jest.fn().mockResolvedValue({ pointsUsed: opts.pointsUsed ?? 0, discount: 0 }),
-    calcShippingFee: jest.fn().mockResolvedValue(0),
-    calcPointsEarned: jest.fn().mockResolvedValue(10),
-  } as unknown as PricingService;
+  const pricing =
+    opts.pricing ??
+    ({
+      resolvePointsRedemption: jest.fn().mockResolvedValue({ pointsUsed: opts.pointsUsed ?? 0, discount: 0 }),
+      calcShippingFee: jest.fn().mockResolvedValue(0),
+      calcPointsEarned: jest.fn().mockResolvedValue(10),
+      // P0 A3-05: mock cứng vẫn cần triển khai calcTierDiscount thật (không phải jest.fn() rỗng) —
+      // compute() GỌI hàm này cho MỌI đơn (kể cả tierId=null/discountPct=0), nên thiếu nó sẽ làm
+      // vỡ toàn bộ các test cũ trong file này với lỗi "calcTierDiscount is not a function". Với
+      // opts.tier mặc định null → discountPct 0 → luôn trả 0, giữ hành vi/số liệu các test cũ y hệt.
+      calcTierDiscount: jest.fn().mockImplementation((goodsValue: number, pct: number) =>
+        pct > 0 && goodsValue > 0 ? Math.floor(goodsValue * pct) : 0,
+      ),
+    } as unknown as PricingService);
   const lock: LockedPoints = { locked: opts.locked ?? 0, lockedReturn: 0, lockedUntil: null };
   const loyalty = {
     getTierMultiplier: jest.fn().mockResolvedValue(1),
@@ -800,5 +821,131 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
       svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', hasRecyclingPickup: true } as never, 'key-r'),
     ).rejects.toThrow('thông tin khác');
     expect(orderCreate).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * P0 A3-05 (docs/audit-2026-09/03-retention-loops.md, MASTER-SUMMARY P0 table): hạng thành viên
+ * hiển thị cho khách (seed.ts TIERS) hứa "Cổ Thụ: Freeship + giảm 5% mọi đơn" nhưng
+ * `pricing.service.ts` không hề đọc `MembershipTier.discountPct` — mọi hạng nhận giá GIỐNG HỆT
+ * nhau. Freeship theo hạng (`shipping.tier_freeship_overrides`) hoá ra ĐÃ được nối đúng từ trước
+ * (xem pricing.service.spec.ts) — các test freeship dưới đây là REGRESSION GUARD xác nhận điều đó
+ * vẫn đúng sau khi thêm giảm % hạng, không phải một fix mới. Phần THỰC SỰ thiếu và được thêm ở đây
+ * là giảm % tự động theo `discountPct`.
+ *
+ * Dùng PricingService THẬT (không mock) để khẳng định số tiền cuối cùng đúng bằng tay tính, không
+ * chỉ "đúng hàm được gọi" — đây là code tính tiền đơn thật.
+ */
+describe('CheckoutService — quyền lợi hạng thành viên tự động (P0 A3-05)', () => {
+  const TIER_PRICING_CONFIG = {
+    'shipping.free_threshold': 200000,
+    'shipping.flat_fee_below_threshold': 19000,
+    'shipping.tier_freeship_overrides': { LOC_BIEC: 99000, DAI_THU: 0, CO_THU: 0 },
+    'loyalty.vnd_per_point': 10000,
+    'loyalty.vnd_per_point_redeem': 1000,
+    'loyalty.max_redeem_pct': 0.2,
+  };
+  function realPricing(): PricingService {
+    const values = TIER_PRICING_CONFIG as Record<string, unknown>;
+    const config = { get: async <T>(k: string, fb?: T): Promise<T> => (k in values ? (values[k] as T) : (fb as T)) };
+    return new PricingService(config as never);
+  }
+
+  const SMALL_CART = {
+    items: [{ variationId: 'v1', productId: 'p1', productName: 'P', variationName: 'V', unitPrice: 100000, quantity: 1, total: 100000 }],
+    subtotal: 100000, discount: 0, freeship: false, couponCode: null,
+  };
+  const MED_CART = {
+    items: [{ variationId: 'v1', productId: 'p1', productName: 'P', variationName: 'V', unitPrice: 300000, quantity: 1, total: 300000 }],
+    subtotal: 300000, discount: 0, freeship: false, couponCode: null,
+  };
+
+  it('regression: KHÔNG có hạng (tierId null) → pricing giữ NGUYÊN như trước fix (ship 19k, không giảm)', async () => {
+    const { svc, orderCreate } = build({ cartData: SMALL_CART, tierId: null, pricing: realPricing() });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(19000); // đơn 100k < ngưỡng freeship chung 200k, không hạng nào che
+    expect(q.total).toBe(119000);
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.shippingFee).toBe(19000);
+    expect(data.discount).toBe(0);
+    expect(data.total).toBe(119000);
+  });
+
+  it('Lộc Biếc (freeship ≥99k, discountPct=0): freeship áp nhưng KHÔNG giảm % (đúng như seed hứa)', async () => {
+    const { svc, orderCreate } = build({
+      cartData: SMALL_CART, // subtotal 100k ≥ ngưỡng riêng 99k của Lộc Biếc
+      tierId: 'LOC_BIEC',
+      tier: { discountPct: 0 },
+      pricing: realPricing(),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(0);
+    expect(q.total).toBe(100000); // không giảm % — Lộc Biếc chỉ hứa freeship, không hứa giảm giá
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(orderCreate.mock.calls[0][0].data.discount).toBe(0);
+  });
+
+  it('Cổ Thụ (freeship toàn shop + giảm 5% mọi đơn): quote() VÀ placeOrder() đều trả shippingFee=0 và giảm đúng 5%', async () => {
+    const { svc, orderCreate } = build({
+      cartData: MED_CART, // subtotal 300.000đ, không coupon/điểm/combo
+      tierId: 'CO_THU',
+      tier: { discountPct: 0.05 },
+      pricing: realPricing(),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(0); // freeship toàn shop, kể cả đơn nhỏ
+    // 300.000 × 5% = 15.000 → total = 300.000 - 15.000 + ship(0) = 285.000
+    expect(q.total).toBe(285000);
+
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.shippingFee).toBe(0);
+    expect(data.discount).toBe(15000);
+    expect(data.total).toBe(285000);
+    // Điểm tích vẫn tính trên giá trị hàng SAU giảm hạng (đồng bộ coupon/combo/điểm hiện có).
+    expect(data.subtotal).toBe(300000);
+  });
+
+  it('STACKING toàn phần: combo + coupon + giảm hạng (Cổ Thụ 5%) + điểm Xanh cùng lúc → tổng đúng theo thứ tự combo → coupon → hạng → điểm, không âm, không giảm chồng 2 lần cùng 1 đồng', async () => {
+    // subtotal 500.000 → combo (shop tài trợ) giảm 50.000 → 450.000
+    //   → coupon (Tubu tài trợ, tính trên base SAU combo) giảm 45.000 → 405.000
+    //   → giảm hạng Cổ Thụ 5% trên phần CÒN LẠI sau coupon (không phải trên subtotal gốc): 405.000×5%=20.250 → 384.750
+    //   → điểm Xanh (khách TỰ CHỌN dùng, luôn tính SAU CÙNG trên phần nhỏ nhất còn lại): trần 20%×384.750=76.950
+    //     → tối đa 76 điểm (1.000đ/điểm); user có 1000 điểm, xin dùng 1000 → chỉ dùng được 76 → giảm 76.000
+    // goodsAfterAll = 384.750 - 76.000 = 308.750; freeship (Cổ Thụ) nên total = 308.750
+    const STACK_CART = {
+      items: [{ variationId: 'v1', productId: 'p1', productName: 'P', variationName: 'V', unitPrice: 500000, quantity: 1, total: 500000 }],
+      subtotal: 500000, discount: 0, freeship: false, couponCode: 'SALE10',
+    };
+    const combo = { computeForStorefront: jest.fn().mockResolvedValue({ total: 50000, perLine: { v1: 50000 } }) };
+    const validateAndCompute = jest.fn().mockResolvedValue({ discount: 45000, freeship: false });
+    const { svc, orderCreate } = build({
+      cartData: STACK_CART,
+      combo,
+      validateAndCompute,
+      tierId: 'CO_THU',
+      tier: { discountPct: 0.05 },
+      pricing: realPricing(),
+      pointsBalance: 1000,
+    });
+
+    await svc.placeOrder(
+      'u1',
+      { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop', pointsToUse: 1000 } as never,
+    );
+    const data = orderCreate.mock.calls[0][0].data;
+
+    expect(validateAndCompute).toHaveBeenCalledWith('SALE10', 'u1', 450000); // coupon vẫn thấy base ĐÚNG NHƯ TRƯỚC (không bị hạng thu nhỏ trước)
+    expect(data.pointsUsed).toBe(76);
+    expect(data.shippingFee).toBe(0);
+    // discount field gộp cả 4 nguồn: combo 50.000 + coupon 45.000 + điểm 76.000 + hạng 20.250 = 191.250
+    expect(data.discount).toBe(191250);
+    expect(data.total).toBe(308750);
+    // Bất biến an toàn tiền: không âm, không vượt subtotal, và discount+total khớp đúng subtotal
+    // (không có flash trong test này nên không lệch phần flash).
+    expect(data.total).toBeGreaterThan(0);
+    expect(data.discount).toBeLessThan(data.subtotal);
+    expect(data.discount + data.total).toBe(data.subtotal);
   });
 });

@@ -3,7 +3,7 @@ import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
-  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, type LucideIcon,
+  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, type LucideIcon,
 } from 'lucide-react';
 import {
   getNotifications,
@@ -28,6 +28,10 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
   if (code.startsWith('BIRTHDAY') || code.startsWith('VOUCHER')) return { Icon: Gift, title: 'Ưu đãi cho bạn' };
   if (code.startsWith('POINTS')) return { Icon: Leaf, title: 'Điểm Xanh' };
   if (code.startsWith('STOREFRONT')) return { Icon: Store, title: 'Gian hàng của bạn' };
+  // REORDER_REMINDER (§6.14.7, LifecycleService.sendReorderReminders) — nhắc mua lại khi 1 SP đã
+  // qua ~chu kỳ tiêu dùng kể từ đơn DELIVERED gần nhất. Trước đây rơi về nhãn chung "Thông báo"
+  // (A1-01=A2-06=A3-02, cùng cụm lỗi với CTA thiếu ở dưới).
+  if (code.startsWith('REORDER_REMINDER')) return { Icon: Repeat, title: 'Nhắc mua lại' };
   // Trong app mục này tên là "Ưu đãi giờ vàng" (vi.flashSale.sectionTitle) — thông báo gọi
   // "Flash Sale" khiến khách vào app tìm mục không tồn tại.
   if (code.startsWith('FLASH')) return { Icon: Zap, title: 'Ưu đãi giờ vàng' };
@@ -43,6 +47,19 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
  * Có hiện nút "Xem chi tiết đơn hàng" không. Báo động OPS_* mang order_code của đơn KHÁCH KHÁC —
  * GET /orders/:code chỉ trả đơn của chính người xem (404 với admin), nên nút đó chỉ dẫn tới màn lỗi.
  */
+/**
+ * Đích điều hướng cho CTA "Mua lại ngay" của REORDER_REMINDER (A1-01=A2-06=A3-02). Tách riêng
+ * khỏi JSX để test được logic chọn đích mà không cần dựng cả trang (component còn phụ thuộc
+ * react-query/zustand/zmp-ui — repo này chưa có test harness dựng toàn trang, xem
+ * notifications.spec.ts: chỉ test các hàm thuần export như notificationMeta/notificationOrderLink).
+ * Có slug (đơn mới, OrderItem.productSlug đã snapshot) → thẳng trang sản phẩm để đặt lại; đơn cũ
+ * chưa có slug → về trang chủ thay vì dựng link hỏng `/product/`.
+ */
+export function reorderReminderTarget(data: Record<string, string> | undefined): string {
+  const slug = data?.product_slug ?? data?.productSlug;
+  return slug ? `/product/${encodeURIComponent(String(slug))}` : '/';
+}
+
 export function notificationOrderLink(templateCode: string, orderCode: unknown): boolean {
   if (templateCode.startsWith('OPS_')) return false;
   return templateCode.startsWith('ORDER') || !!orderCode;
@@ -241,6 +258,12 @@ export default function NotificationsPage() {
               // đổi cao nhất lại bắt đi vòng (P1-6 audit mạch lạc).
               const isFlash = selectedNotif.templateCode.startsWith('FLASH');
               const flashSlug = selectedNotif.payload.data?.product_slug ?? selectedNotif.payload.data?.productSlug;
+              // REORDER_REMINDER (A1-01=A2-06=A3-02): trước đây payload chỉ có "product" (tên) nên
+              // không nhánh CTA nào ở đây khớp được — khách đọc xong nhắc mua lại rồi phải tự đi
+              // tìm lại sản phẩm, đúng lúc ý định mua cao nhất lại bắt đi vòng. Nay BE
+              // (lifecycle.service.ts) gửi kèm product_slug khi có, mirror đúng field FLASH đã
+              // dùng ở trên.
+              const isReorder = selectedNotif.templateCode.startsWith('REORDER_REMINDER');
               const isStorefront = selectedNotif.templateCode.startsWith('STOREFRONT');
 
               return (
@@ -303,7 +326,20 @@ export default function NotificationsPage() {
                       Xem ưu đãi giờ vàng ⚡
                     </Button>
                   )}
-                  {isGame && !isOrder && !isFlash && (
+                  {isReorder && !isOrder && !isFlash && (
+                    <Button
+                      fullWidth
+                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
+                      onClick={() => {
+                        haptic('light');
+                        setSelectedNotif(null);
+                        navigate(reorderReminderTarget(selectedNotif.payload.data));
+                      }}
+                    >
+                      Mua lại ngay 🛒
+                    </Button>
+                  )}
+                  {isGame && !isOrder && !isFlash && !isReorder && (
                     <Button
                       fullWidth
                       style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
@@ -316,7 +352,7 @@ export default function NotificationsPage() {
                       Đến Vườn Xanh 🌿
                     </Button>
                   )}
-                  {isCart && !isOrder && !isGame && (
+                  {isCart && !isOrder && !isGame && !isReorder && (
                     <Button
                       fullWidth
                       style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
@@ -329,7 +365,7 @@ export default function NotificationsPage() {
                       Xem giỏ hàng 🛒
                     </Button>
                   )}
-                  {isLoyalty && !isOrder && !isGame && !isCart && (
+                  {isLoyalty && !isOrder && !isGame && !isCart && !isReorder && (
                     <Button
                       fullWidth
                       style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
@@ -342,7 +378,7 @@ export default function NotificationsPage() {
                       Xem ưu đãi 🎁
                     </Button>
                   )}
-                  {isStorefront && !isOrder && !isGame && !isCart && !isLoyalty && (
+                  {isStorefront && !isOrder && !isGame && !isCart && !isLoyalty && !isReorder && (
                     <Button
                       fullWidth
                       style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}

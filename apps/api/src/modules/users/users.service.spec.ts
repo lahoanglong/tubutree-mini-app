@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import type { PrismaService } from '../../prisma/prisma.service';
+import type { NotificationsService } from '../notifications/notifications.service';
 
 function prismaWithUpdate(updateSpy: jest.Mock, updateManySpy: jest.Mock = jest.fn().mockResolvedValue({ count: 1 })) {
   return { user: { update: updateSpy, updateMany: updateManySpy } } as unknown as PrismaService;
@@ -174,5 +175,77 @@ describe('UsersService.updateAddress', () => {
     const svc = new UsersService(prisma);
     await svc.updateAddress('u1', 'a1', { isDefault: true } as never);
     expect(txSpy).toHaveBeenCalledWith({ isolationLevel: 'Serializable' });
+  });
+});
+
+// A1-03 (docs/audit-2026-09/01-ia-navigation.md): nút "Gửi yêu cầu xoá tài khoản" trước đây chỉ
+// hiện snackbar giả, không gọi API nào. Giờ ghi nhận YÊU CẦU thật (KHÔNG xoá thật) + báo admin.
+describe('UsersService.requestAccountDeletion', () => {
+  function makePrisma(over: Record<string, unknown> = {}) {
+    return {
+      accountDeletionRequest: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'req1', createdAt: new Date('2026-09-27T00:00:00Z') }),
+      },
+      user: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', fullName: 'Nguyễn Văn A', phone: '0900000000' }),
+        findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]),
+      },
+      ...over,
+    } as unknown as PrismaService;
+  }
+
+  it('chưa từng gửi yêu cầu → tạo mới, báo TẤT CẢ admin, message KHÔNG hứa "đã xoá"', async () => {
+    const notify = jest.fn().mockResolvedValue(undefined);
+    const prisma = makePrisma();
+    const svc = new UsersService(prisma, { notify } as unknown as NotificationsService);
+
+    const res = await svc.requestAccountDeletion('u1', 'Không dùng nữa');
+
+    expect(res.alreadyRequested).toBe(false);
+    expect(res.message).not.toMatch(/đã xoá|đã xóa/i); // honest: KHÔNG được nói đã xoá xong
+    expect(prisma.accountDeletionRequest.create).toHaveBeenCalledWith({
+      data: { userId: 'u1', reason: 'Không dùng nữa' },
+    });
+    expect(notify).toHaveBeenCalledWith('admin1', 'ACCOUNT_DELETION_REQUESTED', {
+      user: 'Nguyễn Văn A',
+      phone: '0900000000',
+    });
+  });
+
+  it('đã có yêu cầu PENDING → trả lại yêu cầu cũ, KHÔNG tạo dòng mới, KHÔNG báo admin lại (idempotent)', async () => {
+    const notify = jest.fn();
+    const existing = { id: 'req0', createdAt: new Date('2026-09-01T00:00:00Z'), status: 'PENDING' };
+    const create = jest.fn();
+    const prisma = makePrisma({ accountDeletionRequest: { findFirst: jest.fn().mockResolvedValue(existing), create } });
+    const svc = new UsersService(prisma, { notify } as unknown as NotificationsService);
+
+    const res = await svc.requestAccountDeletion('u1');
+
+    expect(res.alreadyRequested).toBe(true);
+    expect(res.createdAt).toBe(existing.createdAt);
+    expect(create).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('không có NotificationsService wiring → vẫn ghi nhận yêu cầu thành công (không throw)', async () => {
+    const prisma = makePrisma();
+    const svc = new UsersService(prisma); // không truyền notifications (Optional)
+
+    const res = await svc.requestAccountDeletion('u1');
+
+    expect(res.alreadyRequested).toBe(false);
+    expect(prisma.accountDeletionRequest.create).toHaveBeenCalled();
+  });
+
+  it('không còn tài khoản ADMIN nào → vẫn ghi nhận yêu cầu, không throw', async () => {
+    const notify = jest.fn();
+    const prisma = makePrisma({ user: { findUniqueOrThrow: jest.fn().mockResolvedValue(fakeUser), findMany: jest.fn().mockResolvedValue([]) } });
+    const svc = new UsersService(prisma, { notify } as unknown as NotificationsService);
+
+    const res = await svc.requestAccountDeletion('u1');
+
+    expect(res.alreadyRequested).toBe(false);
+    expect(notify).not.toHaveBeenCalled();
   });
 });

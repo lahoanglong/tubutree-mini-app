@@ -7,6 +7,10 @@ import {
   openShareSheet,
   openWebview,
   openChat,
+  followOA as zmpFollowOA,
+  requestSendNotification as zmpRequestSendNotification,
+  getStorage,
+  setStorage,
 } from 'zmp-sdk/apis';
 import { copyText } from '../utils/clipboard';
 
@@ -133,6 +137,93 @@ export const hasOA = Boolean(OA_ID);
 export async function openOAChat(message?: string) {
   if (!OA_ID) return;
   await openChat({ type: 'oa', id: OA_ID, message });
+}
+
+/**
+ * Yêu cầu khách theo dõi Official Account Tubu Tree (finding A3-01 nửa 2 — kênh ZNS thật vẫn
+ * cần duyệt mẫu ở Zalo, nhưng follow OA thì gọi được ngay, không cần duyệt).
+ *
+ * Không bao giờ throw: OA chưa cấu hình (`oaId` rỗng — mặc định lấy từ `OA_ID`/VITE_ZALO_OA_ID),
+ * chạy ngoài Zalo, hoặc khách bấm từ chối (code -201) đều rơi về `false` — mirror
+ * `requestZaloPhoneToken`/`requestZaloLocation` ở trên (không chặn luồng gọi).
+ */
+export async function followOA(oaId: string = OA_ID): Promise<boolean> {
+  if (!oaId) return false; // OA chưa cấu hình → no-op, tránh mở dialog theo dõi một OA rỗng
+  try {
+    await zmpFollowOA({ id: oaId });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Xin quyền gửi thông báo qua OA Mini App (ZMA — khác ZNS, không cần duyệt mẫu trước).
+ * Cùng cách xử lý lỗi với `followOA` ở trên: không throw, `false` nếu ngoài Zalo/bị từ chối.
+ */
+export async function requestNotifyPermission(): Promise<boolean> {
+  try {
+    await zmpRequestSendNotification({});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const OA_PROMPT_STORAGE_KEY = 'tubu_oa_prompt';
+
+export interface OaPromptState {
+  /** Đã hỏi theo dõi OA rồi (khách bấm theo dõi HOẶC bấm "Để sau") — không hỏi lại nữa. */
+  promptSeen: boolean;
+  /**
+   * `followOA()` từng gọi thành công ít nhất 1 lần — CHỈ để hiển thị tham khảo ở màn Cài đặt.
+   * Zalo Mini App SDK không có API đọc lại trạng thái theo dõi OA thật của khách, nên đây không
+   * phải nguồn sự thật (khách có thể unfollow ở Zalo sau đó mà app không biết được).
+   */
+  followed: boolean;
+}
+const DEFAULT_OA_PROMPT_STATE: OaPromptState = { promptSeen: false, followed: false };
+
+/** Đọc cờ đã-hỏi-theo-dõi-OA lưu trên máy (per-device, không đồng bộ server). */
+export async function getOaPromptState(): Promise<OaPromptState> {
+  try {
+    const res = await getStorage({ keys: [OA_PROMPT_STORAGE_KEY] });
+    const raw = (res as Record<string, unknown>)[OA_PROMPT_STORAGE_KEY];
+    if (typeof raw === 'string') {
+      return { ...DEFAULT_OA_PROMPT_STATE, ...(JSON.parse(raw) as Partial<OaPromptState>) };
+    }
+  } catch {
+    /* ngoài Zalo / lỗi storage → coi như chưa hỏi lần nào, không chặn luồng */
+  }
+  return DEFAULT_OA_PROMPT_STATE;
+}
+
+/** Ghi cờ (merge với giá trị cũ) — gọi sau khi khách bấm theo dõi HOẶC bấm "Để sau". */
+export async function setOaPromptState(patch: Partial<OaPromptState>): Promise<void> {
+  try {
+    const cur = await getOaPromptState();
+    const next = { ...cur, ...patch };
+    await setStorage({ data: { [OA_PROMPT_STORAGE_KEY]: JSON.stringify(next) } });
+  } catch {
+    /* ghi thất bại thì thôi — không chặn luồng UI vì việc này */
+  }
+}
+
+/**
+ * Điều kiện hiện thẻ mời theo dõi OA ngay sau đơn đầu tiên (xem order-detail.tsx). Tách hàm
+ * thuần để unit test không cần dựng cả trang (mirror cách notifications.spec.ts test
+ * notificationMeta/notificationOrderLink thay vì render toàn trang).
+ *
+ * Chỉ hiện khi CẢ BA: (a) đã cấu hình OA, (b) chưa từng hỏi/bị bỏ qua trên máy này, (c) đây là
+ * đơn DUY NHẤT của khách (tức đơn đầu tiên) — KHÔNG hiện lại từ đơn thứ 2 trở đi, tránh làm phiền
+ * khách quen (audit khuyến nghị không hỏi lúc cold app-open, chỉ hỏi đúng lúc thiện chí cao nhất).
+ */
+export function shouldShowFollowOaPrompt(params: {
+  hasOA: boolean;
+  promptSeen: boolean;
+  ordersTotal: number | undefined;
+}): boolean {
+  return params.hasOA && !params.promptSeen && params.ordersTotal === 1;
 }
 
 /**

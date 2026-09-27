@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsString } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UsersService } from './users.service';
 import { UpdateMeDto } from './dto/update-me.dto';
@@ -7,6 +7,10 @@ import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
 
 class OnboardingDto {
   @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) segments!: string[];
+}
+
+class DeletionRequestDto {
+  @IsOptional() @IsString() @MaxLength(500) reason?: string;
 }
 
 @Controller()
@@ -26,6 +30,11 @@ export class UsersController {
   @Post('me/onboarding')
   onboarding(@CurrentUser('sub') userId: string, @Body() dto: OnboardingDto) {
     return this.users.completeOnboarding(userId, dto.segments);
+  }
+
+  @Post('me/deletion-request')
+  requestDeletion(@CurrentUser('sub') userId: string, @Body() dto: DeletionRequestDto) {
+    return this.users.requestAccountDeletion(userId, dto.reason);
   }
 
   @Get('me/addresses')

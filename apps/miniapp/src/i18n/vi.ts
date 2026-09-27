@@ -431,6 +431,10 @@ export const vi = {
         r.type === 'SEEDS' ? `${r.amount} 💧` : `${r.amount.toLocaleString('vi-VN')} xu`,
       claimOk: 'Đã nhận thưởng chặng mùa! 🎉',
     },
+    missions: {
+      claim: 'Nhận thưởng',
+      claimOk: (points: number) => `Đã nhận +${points} Điểm Xanh! 🌿`,
+    },
   },
 
   academy: {

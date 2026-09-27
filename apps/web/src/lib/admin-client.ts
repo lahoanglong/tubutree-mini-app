@@ -643,8 +643,14 @@ export interface AdminPendingProduct {
   }[];
 }
 
-export const listPendingMerchantProducts = () =>
-  apiFetch<AdminPendingProduct[]>('/admin/merchant-products/pending');
+// P0 A6-07 (docs/audit-2026-09/06-web.md): API trả {data, meta} (paginated(), xem
+// admin.service.ts listPendingMerchantProducts) nhưng bản cũ khai kiểu mảng trần rồi gọi `.map`
+// thẳng lên response — TypeError, cả trang admin rơi vào app/error.tsx. Sửa ĐÚNG theo pattern đã
+// dùng cho tab Đại lý/Đổi-Trả (asPage() + Page<T>), không tự nghĩ ra cách khác.
+export const listPendingMerchantProducts = (page = 1, limit = ADMIN_QUEUE_PAGE_SIZE) =>
+  apiFetch<AdminPendingProduct[] | Page<AdminPendingProduct>>(
+    `/admin/merchant-products/pending?page=${page}&limit=${limit}`,
+  ).then((res) => asPage(res, page, limit));
 
 export const reviewMerchantProduct = (
   productId: string,

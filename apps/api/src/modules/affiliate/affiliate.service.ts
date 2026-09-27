@@ -753,8 +753,10 @@ export class AffiliateService {
           where: { storefrontSlug: s.slug, referrerUserId: userId },
           _count: { _all: true }, _sum: { total: true },
         }),
+        // P0 A5-11 (cùng họ lỗi với dashboard()): loại commission đã REJECTED (đơn huỷ/trả) —
+        // trước đây cộng cả REJECTED nên hoa hồng theo gian hàng không giảm khi đơn bị huỷ.
         this.prisma.commission.aggregate({
-          where: { affiliateUserId: userId, order: { storefrontSlug: s.slug } },
+          where: { affiliateUserId: userId, order: { storefrontSlug: s.slug }, status: { not: CommissionStatus.REJECTED } },
           _sum: { amount: true },
         }),
       ]);
@@ -802,9 +804,18 @@ export class AffiliateService {
   }
 
   // ── Helpers ──
+  /**
+   * A5-11 (audit 2026-09): "Hoa hồng tháng này/Hôm nay" trên dashboard CTV — trước đây cộng CẢ
+   * commission đã REJECTED (đơn huỷ/trả), nên con số lớn nhất màn hình không bao giờ giảm khi đơn
+   * bị huỷ dù "Đang chờ"/"Có thể rút" vẫn giảm đúng, gây lệch không giải thích được. Loại REJECTED
+   * — nhưng KHÔNG chỉ còn APPROVED/PAID như confirmedRevenue() (đó là "đã chốt" dùng cho bậc/mốc):
+   * ở đây PENDING/LOCKED vẫn phải cộng như cũ, vì CTV cần thấy hoa hồng mới phát sinh ngay cả khi
+   * đơn chưa giao xong. Mirror filter đã dùng ở productCommissionBreakdown() — định nghĩa DUY NHẤT
+   * cho "còn sống" (đối lập REJECTED) trong file này.
+   */
   private async sumCommission(userId: string, since: Date): Promise<number> {
     const agg = await this.prisma.commission.aggregate({
-      where: { affiliateUserId: userId, createdAt: { gte: since } },
+      where: { affiliateUserId: userId, createdAt: { gte: since }, status: { not: CommissionStatus.REJECTED } },
       _sum: { amount: true },
     });
     return agg._sum.amount ?? 0;

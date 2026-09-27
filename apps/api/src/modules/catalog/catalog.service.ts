@@ -53,7 +53,14 @@ export class CatalogService {
 
   async list(query: ProductQuery) {
     const { page, limit, brand, category, segment, q, sort } = query;
-    const where: Prisma.ProductWhereInput = { isActive: true };
+    // P0 A2-03 = A5-06 = A6-04 (docs/audit-2026-09): SP đối tác được tạo với isActive:true ngay cả
+    // khi approvalStatus:'PENDING_REVIEW' (merchant.service.ts createProduct) — và bị REJECTED cũng
+    // không tự tắt isActive (admin.service.ts reviewMerchantProduct chỉ đổi approvalStatus). Trước
+    // đây MỌI truy vấn catalog công khai dưới đây chỉ lọc isActive nên SP chưa duyệt/đã bị từ chối
+    // vẫn hiện & mua được. Đi theo đúng quy ước đã có trong addResellProduct() (merchant.service.ts)
+    // và storefront.service.ts:258 — giữ isActive là cờ vòng đời riêng, gác thêm approvalStatus ở
+    // MỌI nơi công khai thay vì đổi ý nghĩa isActive.
+    const where: Prisma.ProductWhereInput = { isActive: true, approvalStatus: 'APPROVED' };
     if (brand) {
       const brandList = brand.split(',').map((b) => b.trim()).filter(Boolean);
       if (brandList.length === 1) {
@@ -99,7 +106,11 @@ export class CatalogService {
         },
       },
     });
-    if (!product || !product.isActive) throw new NotFoundException('Không tìm thấy sản phẩm.');
+    // P0 A2-03=A5-06=A6-04: SP chưa duyệt (PENDING_REVIEW) hoặc bị từ chối (REJECTED, kể cả từng
+    // APPROVED rồi bị duyệt lại thành từ chối) không được lộ qua PDP công khai.
+    if (!product || !product.isActive || product.approvalStatus !== 'APPROVED') {
+      throw new NotFoundException('Không tìm thấy sản phẩm.');
+    }
     return { ...product, sold: product.soldExternal + product.soldApp };
   }
 
@@ -107,7 +118,7 @@ export class CatalogService {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
     const items = await this.prisma.product.findMany({
-      where: { isActive: true, brand: product.brand, id: { not: product.id } },
+      where: { isActive: true, approvalStatus: 'APPROVED', brand: product.brand, id: { not: product.id } },
       take: 8,
       include: { variations: { where: { isActive: true } } },
     });
@@ -139,7 +150,7 @@ export class CatalogService {
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.productId);
     const products = await this.prisma.product.findMany({
-      where: { id: { in: ids }, isActive: true },
+      where: { id: { in: ids }, isActive: true, approvalStatus: 'APPROVED' },
       include: { variations: { where: { isActive: true } } },
     });
     const byId = new Map(products.map((p) => [p.id, p]));
@@ -192,7 +203,7 @@ export class CatalogService {
       const or: Prisma.ProductWhereInput[] = [];
       if (categorySet.length > 0) or.push({ categoryIds: { hasSome: categorySet } });
       if (followedBrandIds.length > 0) or.push({ brandId: { in: followedBrandIds } });
-      const where: Prisma.ProductWhereInput = { isActive: true, OR: or };
+      const where: Prisma.ProductWhereInput = { isActive: true, approvalStatus: 'APPROVED', OR: or };
       if (purchasedProductIds.length) where.id = { notIn: purchasedProductIds };
       items = await this.prisma.product.findMany({
         where,
@@ -205,7 +216,7 @@ export class CatalogService {
 
     if (items.length === 0) {
       items = await this.prisma.product.findMany({
-        where: { isActive: true, isFeatured: true },
+        where: { isActive: true, approvalStatus: 'APPROVED', isFeatured: true },
         take: 200,
         include: { variations: { where: { isActive: true } } },
       });
@@ -243,7 +254,7 @@ export class CatalogService {
   async suggest(q: string) {
     if (!q || q.length < 1) return [];
     const products = await this.prisma.product.findMany({
-      where: { isActive: true, name: { contains: q, mode: 'insensitive' } },
+      where: { isActive: true, approvalStatus: 'APPROVED', name: { contains: q, mode: 'insensitive' } },
       take: 8,
       select: { slug: true, name: true, thumbnail: true, basePrice: true },
     });

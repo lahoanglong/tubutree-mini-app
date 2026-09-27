@@ -71,6 +71,13 @@ export interface MissionItem {
   progress: number;
   goal: number;
   completed: boolean;
+  /** A1-02: đã nhận thưởng cho chu kỳ hiện tại chưa (mission_progress). */
+  claimed: boolean;
+}
+export interface ClaimMissionResult {
+  claimed: boolean;
+  rewardPoints: number;
+  couponCode: string | null;
 }
 
 export const getGameProfile = () => api.get<GameProfile>('/game/profile').then((r) => r.data);
@@ -106,6 +113,9 @@ export const buyTree = () =>
   api.post<{ certificateCode: string; treeType: string; cost: number }>('/game/tree/buy').then((r) => r.data);
 export const getLeaderboard = () => api.get<LeaderRow[]>('/game/leaderboard').then((r) => r.data);
 export const getMissions = () => api.get<MissionItem[]>('/game/missions').then((r) => r.data);
+/** A1-02: nhận thưởng nhiệm vụ đã đạt điều kiện (idempotent — server chặn nhận trùng). */
+export const claimMission = (code: string) =>
+  api.post<ClaimMissionResult>(`/game/missions/${code}/claim`).then((r) => r.data);
 
 export interface PlantedTreeItem {
   certificateCode: string;

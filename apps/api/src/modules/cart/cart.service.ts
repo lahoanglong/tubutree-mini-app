@@ -110,8 +110,17 @@ export class CartService {
 
   async addItem(userId: string, dto: AddItemDto) {
     const cartId = await this.ensureCart(userId);
-    const variation = await this.prisma.variation.findUnique({ where: { id: dto.variationId } });
-    if (!variation || !variation.isActive) throw new NotFoundException('Sản phẩm không khả dụng.');
+    const variation = await this.prisma.variation.findUnique({
+      where: { id: dto.variationId },
+      include: { product: { select: { approvalStatus: true } } },
+    });
+    // P0 A2-03=A5-06=A6-04 (phần còn sót ngoài catalog, xem CatalogService): SP đối tác chưa
+    // duyệt/bị từ chối không còn tìm thấy qua catalog/search/related/for-you, nhưng ai đã có sẵn
+    // variationId (link cũ lưu trước khi bị từ chối, đơn "lên đơn hộ"...) vẫn thêm được vào giỏ
+    // nếu chỉ kiểm isActive — phải kiểm cả approvalStatus của Product cha.
+    if (!variation || !variation.isActive || variation.product.approvalStatus !== 'APPROVED') {
+      throw new NotFoundException('Sản phẩm không khả dụng.');
+    }
 
     const existing = await this.prisma.cartItem.findUnique({
       where: { cartId_variationId: { cartId, variationId: dto.variationId } },

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Optional } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -383,9 +383,29 @@ export class GameService {
   }
 
   // ── Missions & leaderboard ─────────────────────────
-  async getMissions(userId: string) {
-    const [missions, profile, ordersCount, reviewsCount, referralsCount] = await Promise.all([
-      this.prisma.mission.findMany(),
+  /** Chỉ số THÔ (không cap theo goal) đằng sau tiến trình nhiệm vụ — dùng chung cho getMissions
+   * (hiển thị, cap tại đây) VÀ claimMission (tính cycleKey của nhiệm vụ lặp lại). Tách ra để 2 nơi
+   * không lệch định nghĩa "đạt điều kiện" (trước đây chỉ getMissions có logic này). */
+  private missionRawProgress(
+    code: string,
+    metrics: { streakDays: number; ordersCount: number; reviewsCount: number; referralsCount: number },
+  ): number {
+    switch (code) {
+      case 'CHECKIN_7':
+        return metrics.streakDays;
+      case 'FIRST_ORDER':
+        return metrics.ordersCount;
+      case 'REVIEW_3':
+        return metrics.reviewsCount;
+      case 'INVITE_3':
+        return metrics.referralsCount;
+      default:
+        return 0;
+    }
+  }
+
+  private async missionMetrics(userId: string) {
+    const [profile, ordersCount, reviewsCount, referralsCount] = await Promise.all([
       this.prisma.gameProfile.findUnique({ where: { userId } }),
       this.prisma.order.count({
         where: { userId, status: { in: ['DELIVERED', 'CONFIRMED', 'SHIPPING', 'PACKED'] } },
@@ -397,41 +417,104 @@ export class GameService {
         where: { referredById: userId },
       }),
     ]);
+    return { streakDays: profile?.streakDays ?? 0, ordersCount, reviewsCount, referralsCount };
+  }
 
-    const streakDays = profile?.streakDays ?? 0;
+  /** Nhiệm vụ không lặp lại: 1 chu kỳ duy nhất, cố định '0'. Nhiệm vụ lặp lại (isRepeatable, vd
+   * CHECKIN_7): mỗi lần chỉ số thô vượt thêm 1 lần `goal` là một chu kỳ mới có thể nhận lại (streak
+   * 7 → 14 → 21…) — mirror cách CtvMilestoneClaim dùng monthKey phân biệt các lượt nhận lặp lại. */
+  private missionCycleKey(mission: { isRepeatable: boolean }, rawProgress: number, targetGoal: number): string {
+    if (!mission.isRepeatable) return '0';
+    return String(Math.floor(rawProgress / Math.max(1, targetGoal)));
+  }
+
+  async getMissions(userId: string) {
+    const [missions, metrics] = await Promise.all([this.prisma.mission.findMany(), this.missionMetrics(userId)]);
+
+    const missionIds = missions.map((m) => m.id);
+    // A1-02: mission_progress giờ là khoá "đã nhận" thật (trước đây tồn tại trong schema nhưng
+    // không nơi nào đọc/ghi) — 1 dòng ứng với 1 (mission, chu kỳ) ĐÃ NHẬN thưởng.
+    const claims =
+      missionIds.length > 0
+        ? await this.prisma.missionProgress.findMany({ where: { userId, missionId: { in: missionIds } } })
+        : [];
+    const claimedKeys = new Set(claims.map((c) => `${c.missionId}:${c.cycleKey}`));
 
     return missions.map((m) => {
-      let currentProgress = 0;
       const targetGoal = m.goal > 0 ? m.goal : 1;
-
-      switch (m.code) {
-        case 'CHECKIN_7':
-          currentProgress = Math.min(targetGoal, streakDays);
-          break;
-        case 'FIRST_ORDER':
-          currentProgress = Math.min(targetGoal, ordersCount);
-          break;
-        case 'REVIEW_3':
-          currentProgress = Math.min(targetGoal, reviewsCount);
-          break;
-        case 'INVITE_3':
-          currentProgress = Math.min(targetGoal, referralsCount);
-          break;
-        default:
-          currentProgress = 0;
-          break;
-      }
+      const raw = this.missionRawProgress(m.code, metrics);
+      const progress = Math.min(targetGoal, raw);
+      const completed = raw >= targetGoal;
+      const cycleKey = this.missionCycleKey(m, raw, targetGoal);
+      const claimed = claimedKeys.has(`${m.id}:${cycleKey}`);
 
       return {
         code: m.code,
         title: m.title,
         description: m.description,
         rewardPoints: m.rewardPoints,
-        progress: currentProgress,
+        progress,
         goal: targetGoal,
-        completed: currentProgress >= targetGoal,
+        completed,
+        claimed,
       };
     });
+  }
+
+  /**
+   * Nhận thưởng nhiệm vụ (A1-02): trước đây thẻ nhiệm vụ hứa "+20đ/+30đ/+50đ" và hiện ✓ khi đạt
+   * điều kiện, nhưng KHÔNG có đường cộng nào — `MissionProgress` được định nghĩa trong schema
+   * nhưng không nơi nào đọc/ghi. Idempotent + atomic, mirror SeasonPassService.claim /
+   * AffiliateService.claimMilestone: insert dòng mission_progress (khoá unique userId+missionId+
+   * cycleKey) TRƯỚC khi cộng thưởng — request thua race ăn P2002 → rollback cả tx, không cộng 2 lần.
+   * Thưởng cộng vào pointsBalance (Điểm Xanh) — "đ" trong copy game.tsx KHÔNG phải VNĐ, đúng ledger
+   * dùng bởi mọi nguồn cộng điểm khác (đơn giao, đánh giá, điểm danh, vòng quay — xem creditPoints).
+   */
+  async claimMission(userId: string, code: string) {
+    const mission = await this.prisma.mission.findUnique({ where: { code } });
+    if (!mission) throw new NotFoundException(`Nhiệm vụ "${code}" không tồn tại.`);
+
+    const metrics = await this.missionMetrics(userId);
+    const targetGoal = mission.goal > 0 ? mission.goal : 1;
+    const raw = this.missionRawProgress(mission.code, metrics);
+    if (raw < targetGoal) {
+      throw new BadRequestException('Chưa đủ điều kiện để nhận thưởng nhiệm vụ này.');
+    }
+    const cycleKey = this.missionCycleKey(mission, raw, targetGoal);
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // Insert claim TRƯỚC khi cộng thưởng — khoá idempotency thật là unique của mission_progress,
+        // không phải check đọc-rồi-ghi (TOCTOU dưới đồng thời).
+        await tx.missionProgress.create({
+          data: {
+            userId,
+            missionId: mission.id,
+            cycleKey,
+            progress: Math.min(targetGoal, raw),
+            goal: targetGoal,
+            completedAt: new Date(),
+          },
+        });
+
+        await this.creditPoints(userId, mission.rewardPoints, `MISSION:${mission.code}:${cycleKey}`, tx);
+
+        // rewardCoupon (schema) chưa được seed dùng ở nhiệm vụ nào hiện tại — hỗ trợ sẵn để nhiệm
+        // vụ tương lai cấu hình coupon không bị lặp lại lỗi "hứa mà không trả" như A1-02.
+        let couponCode: string | null = null;
+        const couponAmount = mission.rewardCoupon ? Number(mission.rewardCoupon) : NaN;
+        if (Number.isFinite(couponAmount) && couponAmount > 0) {
+          couponCode = await this.grantCoupon(userId, couponAmount, tx);
+        }
+
+        return { claimed: true, rewardPoints: mission.rewardPoints, couponCode };
+      });
+    } catch (err) {
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
+        throw new BadRequestException('Bạn đã nhận thưởng nhiệm vụ này rồi.');
+      }
+      throw err;
+    }
   }
 
   async getLeaderboard() {

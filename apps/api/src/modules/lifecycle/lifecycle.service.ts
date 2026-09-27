@@ -8,6 +8,11 @@ interface ReorderRow {
   userId: string;
   variationId: string;
   productName: string;
+  /** Snapshot slug tại đơn mua gần nhất — nullable (đơn cũ trước khi OrderItem có cột này, xem
+   * schema.prisma OrderItem.productSlug). Không có slug thì payload bỏ qua field này thay vì gửi
+   * chuỗi rỗng (CTA "Mua lại ngay" ở notifications.tsx phải coi thiếu field = ẩn nút, không phải
+   * link hỏng tới `/product/`). */
+  productSlug: string | null;
   lastOrderAt: Date;
 }
 
@@ -21,6 +26,23 @@ interface ReorderRow {
 export class LifecycleService {
   /** Trần người nhận mỗi lần báo giảm giá — hàm chạy trong cron đồng bộ nên không được kéo dài. */
   private static readonly PRICE_DROP_MAX_RECIPIENTS = 2_000;
+
+  /**
+   * Trần số cặp (user×variation) THỰC SỰ xử lý (claim+notify)/lượt chạy — giữ nguyên 500 như cũ.
+   * Audit A2-07=A3-03=A6-31: trước đây đây CŨNG là LIMIT của câu SQL, không ORDER BY, không loại
+   * cặp đã nhắc trong SQL → khi backlog vượt 500, cùng 500 dòng (có thể toàn cặp cũ) được trả về
+   * MỖI LẦN chạy, khách mới không bao giờ tới lượt. Nay tách hẳn khỏi QUERY_FETCH_CAP bên dưới.
+   */
+  private static readonly BATCH_SIZE = 500;
+
+  /**
+   * Trần phòng thủ cho SQL fetch (KHÔNG phải trần xử lý) — SQL giờ ORDER BY quá hạn nhất trước +
+   * loại cặp đã nhắc ngay trong WHERE, nên phần dư ra ngoài BATCH_SIZE chỉ dùng để BÁO CÁO backlog
+   * (log), không xử lý trong lượt này; lượt cron kế tiếp (chạy hằng ngày) tự động lấy tiếp phần
+   * còn lại vì các cặp vừa claim ở lượt này đã có remindedAt mới, bị SQL loại khỏi lượt sau —
+   * remindedAt đóng vai trò con trỏ (cursor) tự nhiên, không cần bảng cursor riêng.
+   */
+  private static readonly QUERY_FETCH_CAP = 5_000;
 
   private readonly logger = new Logger(LifecycleService.name);
 
@@ -41,22 +63,46 @@ export class LifecycleService {
   @Cron('0 4 * * *')
   async sendReorderReminders(): Promise<void> {
     try {
-      const cycleDays = await this.config.get<number>('reorder.default_cycle_days', 60);
-      const ratio = await this.config.get<number>('reorder.remind_ratio', 0.85);
+      // Mặc định mới 30 ngày × 0,8 = nhắc ở ngày 24: SP tiêu dùng phổ thông (dầu gội/tắm/tẩy rửa
+      // — phần lớn danh mục hiện tại) thường dùng hết trong ~30 ngày; nhắc ở 80% chu kỳ chừa ~6
+      // ngày để khách đặt lại TRƯỚC khi hết cửa sổ north-star "đơn thứ 2 trong 30 ngày" (mặc định
+      // cũ 60×0,85≈51 ngày đã trễ hơn chính cửa sổ cần đo). Chưa có field per-product/category
+      // "chu kỳ tiêu dùng" nào trong Product/Variation (đã kiểm tra schema.prisma) nên vẫn 1 hằng
+      // số toàn cục — nhưng nay đọc thật từ SystemConfig (seed.ts, createOnly) thay vì chỉ là
+      // fallback không ai set, để business tinh chỉnh theo dữ liệu tiêu dùng thật mà không cần
+      // redeploy.
+      const cycleDays = await this.config.get<number>('reorder.default_cycle_days', 30);
+      const ratio = await this.config.get<number>('reorder.remind_ratio', 0.8);
       const threshold = new Date(Date.now() - cycleDays * ratio * 864e5);
 
-      // Đơn DELIVERED cuối của mỗi (user, variation) đã cũ hơn ngưỡng.
-      const rows = await this.prisma.$queryRaw<ReorderRow[]>`
+      // Đơn DELIVERED cuối của mỗi (user, variation) đã cũ hơn ngưỡng, CHƯA từng nhắc cho chu kỳ
+      // này. Trước đây việc loại cặp đã nhắc chỉ làm ở JS SAU KHI fetch (dưới), nên LIMIT 500
+      // (không ORDER BY) có thể toàn bộ là cặp cũ đã nhắc — lãng phí cả lô, cặp mới ngoài 500 dòng
+      // đó không bao giờ tới lượt (A2-07=A3-03=A6-31). Nay LEFT JOIN reorder_reminders + loại
+      // ngay trong HAVING, và ORDER BY quá hạn nhất trước để backlog được xử lý FIFO thay vì tuỳ
+      // ý. LIMIT dùng QUERY_FETCH_CAP (>> BATCH_SIZE thật sự xử lý) để còn biết size backlog cho
+      // log — xem slice bên dưới.
+      const dueRows = await this.prisma.$queryRaw<ReorderRow[]>`
         SELECT o."userId",
                oi."variationId",
                (ARRAY_AGG(oi."productName" ORDER BY o."createdAt" DESC))[1] AS "productName",
+               (ARRAY_AGG(oi."productSlug" ORDER BY o."createdAt" DESC))[1] AS "productSlug",
                MAX(o."createdAt") AS "lastOrderAt"
         FROM order_items oi
         JOIN orders o ON o.id = oi."orderId"
+        LEFT JOIN reorder_reminders rr
+          ON rr."userId" = o."userId" AND rr."variationId" = oi."variationId"
         WHERE o.status::text = 'DELIVERED'
         GROUP BY o."userId", oi."variationId"
         HAVING MAX(o."createdAt") <= ${threshold}
-        LIMIT 500`;
+           AND (MAX(rr."remindedAt") IS NULL OR MAX(rr."remindedAt") < MAX(o."createdAt"))
+        ORDER BY MAX(o."createdAt") ASC
+        LIMIT ${LifecycleService.QUERY_FETCH_CAP}`;
+
+      // Chỉ THỰC SỰ xử lý (claim+notify) BATCH_SIZE cặp quá hạn nhất/lượt — phần còn lại (nếu có)
+      // để lượt cron ngày mai (remindedAt mới ghi ở lượt này tự loại chúng khỏi truy vấn trên,
+      // đóng vai trò cursor) chứ không xử lý dồn trong 1 lượt để tránh job chạy quá lâu.
+      const rows = dueRows.slice(0, LifecycleService.BATCH_SIZE);
 
       let sent = 0;
       for (const r of rows) {
@@ -100,7 +146,14 @@ export class LifecycleService {
         if (!claimed) continue;
 
         try {
-          await this.notifications.notify(r.userId, 'REORDER_REMINDER', { product: r.productName });
+          // A1-01=A2-06=A3-02: trước đây payload chỉ có product (tên) → notifications.tsx không
+          // nhánh CTA nào khớp được (không slug/variationId thì không dựng nổi link "Mua lại
+          // ngay"). product_slug bỏ qua hẳn field (không gửi chuỗi rỗng) khi đơn cũ chưa có slug
+          // (OrderItem.productSlug nullable) — nhánh render phải coi thiếu field = ẩn nút, không
+          // phải link hỏng tới `/product/`.
+          const data: Record<string, string> = { product: r.productName, variation_id: r.variationId };
+          if (r.productSlug) data.product_slug = r.productSlug;
+          await this.notifications.notify(r.userId, 'REORDER_REMINDER', data);
           sent++;
         } catch (err) {
           // Đã CLAIM trước khi gửi (mirror RemarketingService) — nuốt lỗi ở đây là mất hẳn lần
@@ -119,7 +172,19 @@ export class LifecycleService {
             .catch(() => undefined);
         }
       }
-      if (sent) this.logger.log(`Reorder reminders sent: ${sent}`);
+      // A2-07=A3-03=A6-31: lý do lỗi cũ không ai phát hiện là "không log gì cả" khi backlog vượt
+      // trần. Luôn báo cáo số đã xử lý/tổng thấy được + phần còn lại (nếu QUERY_FETCH_CAP bị chạm,
+      // backlog thật có thể còn NHIỀU HƠN số này — ghi rõ để không hiểu lầm là "hết backlog").
+      if (dueRows.length > 0) {
+        const backlog = Math.max(0, dueRows.length - rows.length);
+        const cappedNote =
+          dueRows.length === LifecycleService.QUERY_FETCH_CAP
+            ? ' (đã chạm trần truy vấn — backlog thật có thể còn nhiều hơn)'
+            : '';
+        this.logger.log(
+          `Reorder reminders: xử lý ${rows.length}/${dueRows.length} cặp tới hạn (gửi thành công ${sent}); còn lại ${backlog} cặp chưa xử lý${cappedNote}.`,
+        );
+      }
     } catch (err) {
       this.logger.error(`sendReorderReminders lỗi: ${err instanceof Error ? err.message : err}`);
     }

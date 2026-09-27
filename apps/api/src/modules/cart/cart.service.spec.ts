@@ -19,10 +19,36 @@ describe('CartService guard tồn kho', () => {
     await expect(svc.addItem('u1', { variationId: 'v1', quantity: 1 })).rejects.toThrow('không khả dụng');
   });
 
+  // P0 A2-03=A5-06=A6-04 (phần còn sót ngoài catalog): SP PENDING_REVIEW/REJECTED không còn
+  // tìm thấy qua catalog/search/related/for-you (đã sửa ở CatalogService), nhưng ai đã có sẵn
+  // variationId (link cũ, đã lưu trước khi bị từ chối...) vẫn thêm được vào giỏ nếu chỉ kiểm
+  // variation.isActive — phải kiểm cả product.approvalStatus.
+  it('addItem: chặn SP đối tác CHƯA DUYỆT/BỊ TỪ CHỐI dù đã có sẵn variationId (approvalStatus)', async () => {
+    const prisma = {
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
+      variation: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { approvalStatus: 'PENDING_REVIEW' } }),
+      },
+    } as unknown as PrismaService;
+    const svc = new CartService(prisma, coupons, config, flash);
+    await expect(svc.addItem('u1', { variationId: 'v1', quantity: 1 })).rejects.toThrow('không khả dụng');
+    const rejected = {
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
+      variation: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { approvalStatus: 'REJECTED' } }),
+      },
+    } as unknown as PrismaService;
+    await expect(new CartService(rejected, coupons, config, flash).addItem('u1', { variationId: 'v1', quantity: 1 })).rejects.toThrow(
+      'không khả dụng',
+    );
+  });
+
   it('addItem: chặn khi tổng số lượng vượt tồn kho', async () => {
     const prisma = {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
-      variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3 }) },
+      variation: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { approvalStatus: 'APPROVED' } }),
+      },
       cartItem: { findUnique: jest.fn().mockResolvedValue({ quantity: 2 }), upsert: jest.fn() },
     } as unknown as PrismaService;
     const svc = new CartService(prisma, coupons, config, flash);

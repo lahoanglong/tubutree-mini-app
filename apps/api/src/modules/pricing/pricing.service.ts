@@ -71,4 +71,22 @@ export class PricingService {
     const pointsUsed = Math.max(0, Math.min(pointsToUse, pointsBalance, maxPointsByValue));
     return { pointsUsed, discount: pointsUsed * vndPerPointRedeem };
   }
+
+  /**
+   * Giảm giá TỰ ĐỘNG theo hạng thành viên (P0 A3-05 — audit `docs/audit-2026-09/03-retention-loops.md`:
+   * hạng hứa "Cổ Thụ: Freeship + giảm 5% mọi đơn" — cột `MembershipTier.discountPct` (seed.ts) đã có
+   * sẵn nhưng KHÔNG có chỗ nào trong pricing/checkout đọc nó trước fix này; mọi hạng nhận giá giống hệt
+   * nhau bất kể hứa gì trên UI).
+   *
+   * Hàm THUẦN (không đọc SystemConfig) — caller (CheckoutService.compute) tự tra `MembershipTier` theo
+   * `user.tierId` rồi truyền `discountPct` (0..1) vào đây. Tách riêng để test độc lập với DB/tier thật:
+   * chỉ cần đưa discountPct bất kỳ là kiểm được công thức, không phải dựng lại toàn bộ bảng hạng.
+   *
+   * Làm tròn XUỐNG (floor) như calcPointsEarned/calcMaxRedeemableValue — nhất quán "khách không bao giờ
+   * bị làm tròn thiệt thêm 1đ vì lẻ", và không bao giờ âm (guard goodsValue/discountPct <= 0).
+   */
+  calcTierDiscount(goodsValue: number, discountPct: number): number {
+    if (discountPct <= 0 || goodsValue <= 0) return 0;
+    return Math.floor(goodsValue * discountPct);
+  }
 }

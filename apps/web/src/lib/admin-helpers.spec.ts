@@ -251,6 +251,23 @@ describe('admin-client — endpoint mới gọi đúng đường dẫn/body', ()
     expect(f.mock.calls[4]![1]).toEqual(expect.objectContaining({ body: '{}' }));
   });
 
+  it('listPendingMerchantProducts (P0 A6-07): gọi kèm page/limit, chuẩn hoá {data,meta} lẫn mảng trần cũ về Page<T>', async () => {
+    const m = await import('./admin-client');
+    let f = stubFetch({ data: [{ id: 'p1' }], meta: { page: 1, limit: 100, total: 1 } });
+    await expect(m.listPendingMerchantProducts()).resolves.toEqual({
+      data: [{ id: 'p1' }],
+      meta: { page: 1, limit: 100, total: 1 },
+    });
+    expect(f.mock.calls[0]![0]).toContain('/admin/merchant-products/pending?page=1&limit=100');
+
+    // BE cũ (hoặc bản build khác) trả mảng trần — vẫn phải ra Page<T> hợp lệ, không .map thẳng lên mảng lỗi kiểu.
+    f = stubFetch([{ id: 'p2' }]);
+    await expect(m.listPendingMerchantProducts(1, 100)).resolves.toEqual({
+      data: [{ id: 'p2' }],
+      meta: { page: 1, limit: 100, total: 1 },
+    });
+  });
+
   it('POS: scan-member, pos-credit, sổ pos-credits có lọc', async () => {
     const m = await import('./admin-client');
     const f = stubFetch([]);

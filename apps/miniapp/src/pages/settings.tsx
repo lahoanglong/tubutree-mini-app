@@ -3,6 +3,7 @@ import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
 import { setStorage, getStorage } from 'zmp-sdk/apis';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
+import { hasOA, followOA, requestNotifyPermission, getOaPromptState, setOaPromptState } from '../services/zmp-bridge';
 
 const PREFS_KEY = 'tubu_prefs';
 
@@ -52,6 +53,7 @@ export default function SettingsPage() {
     <Page className="page" style={{ background: 'var(--neutral-50)' }}>
 
       <Section title="Thông báo">
+        {hasOA && <FollowOaRow />}
         <Toggle label="Cập nhật đơn hàng" on={prefs.notifyOrders} onToggle={() => update({ notifyOrders: !prefs.notifyOrders })} />
         <Toggle label="Khuyến mãi & voucher" on={prefs.notifyPromo} onToggle={() => update({ notifyPromo: !prefs.notifyPromo })} />
         <Toggle label="Nhắc nhở Vườn Xanh" on={prefs.notifyGarden} onToggle={() => update({ notifyGarden: !prefs.notifyGarden })} last />
@@ -154,6 +156,56 @@ function Toggle({ label, on, onToggle, last }: { label: string; on: boolean; onT
           }}
         />
       </Box>
+    </Box>
+  );
+}
+
+/**
+ * Trạng thái theo dõi OA + nút (theo lại) — finding A3-01 nửa 2. `followed` chỉ là ghi nhớ cục bộ
+ * (SDK không có API đọc lại trạng thái theo dõi thật của khách), nên chỉ hiển thị tham khảo.
+ */
+function FollowOaRow() {
+  const [ready, setReady] = useState(false);
+  const [followed, setFollowed] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void getOaPromptState().then((s) => {
+      setFollowed(s.followed);
+      setReady(true);
+    });
+  }, []);
+
+  const handleFollow = async () => {
+    setBusy(true);
+    const ok = await followOA();
+    if (ok) await requestNotifyPermission().catch(() => false);
+    await setOaPromptState({ followed: ok, promptSeen: true });
+    setFollowed(ok);
+    setBusy(false);
+    haptic(ok ? 'medium' : 'light');
+  };
+
+  if (!ready) return null; // tránh nháy sai trạng thái trước khi đọc xong cờ trên máy
+
+  return (
+    <Box
+      flex
+      alignItems="center"
+      justifyContent="space-between"
+      py={2}
+      style={{ borderBottom: '1px solid var(--neutral-100)' }}
+    >
+      <Text size="small">Theo dõi Zalo OA</Text>
+      {followed ? (
+        <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+          Đã theo dõi ✓
+        </Text>
+      ) : (
+        <Button size="small" loading={busy} disabled={busy} onClick={() => void handleFollow()} style={{ background: 'var(--leaf-600)' }}>
+          Theo dõi
+        </Button>
+      )}
     </Box>
   );
 }

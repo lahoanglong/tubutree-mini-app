@@ -64,4 +64,30 @@ describe('PricingService', () => {
       expect(r.discount).toBe(8000);
     });
   });
+
+  // P0 A3-05: MembershipTier.discountPct đã có sẵn trong DB (seed.ts: CO_THU=0.05) nhưng chưa từng
+  // được pricing/checkout đọc — hạng "Cổ Thụ" hứa "giảm 5% mọi đơn" nhưng thực tế nhận giá giống hệt
+  // Mầm Xanh. calcTierDiscount là hàm thuần CheckoutService.compute() dùng để áp phần trăm này.
+  describe('calcTierDiscount (P0 A3-05: hạng giảm % mọi đơn tự động)', () => {
+    it('Cổ Thụ 5% trên 300.000đ → giảm đúng 15.000đ', () => {
+      expect(svc.calcTierDiscount(300000, 0.05)).toBe(15000);
+    });
+
+    it('hạng không có discountPct (0, VD Mầm Xanh/Lộc Biếc/Đại Thụ) → không giảm gì (regression: hành vi cũ)', () => {
+      expect(svc.calcTierDiscount(300000, 0)).toBe(0);
+    });
+
+    it('làm tròn XUỐNG khi lẻ đồng (100.001 × 5% = 5.000,05 → 5.000)', () => {
+      expect(svc.calcTierDiscount(100001, 0.05)).toBe(5000);
+    });
+
+    it('giá trị hàng ≤ 0 → không giảm, không trả số âm', () => {
+      expect(svc.calcTierDiscount(0, 0.05)).toBe(0);
+      expect(svc.calcTierDiscount(-100, 0.05)).toBe(0);
+    });
+
+    it('discountPct âm (misconfig) → không giảm (không cộng ngược tiền vào đơn)', () => {
+      expect(svc.calcTierDiscount(300000, -0.05)).toBe(0);
+    });
+  });
 });
