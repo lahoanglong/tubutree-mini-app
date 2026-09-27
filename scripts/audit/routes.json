@@ -1,0 +1,936 @@
+{
+  "generatedAt": "2026-09-27T01:46:48.585Z",
+  "miniappBase": "http://localhost:3213",
+  "webBase": "http://localhost:3212",
+  "apiBase": "http://localhost:3201/api",
+  "notes": [
+    "Use hostname \"localhost\" (not 127.0.0.1): zmp-sdk storage and the web refresh cookie both depend on it.",
+    "Miniapp routes come from apps/miniapp/src/components/app.tsx (41 paths + \"*\" catch-all = 42 <Route>s; /order/:code is listed twice here for the ctv variant).",
+    "Web routes come from apps/web/src/app/** (page.tsx files + robots/sitemap + not-found).",
+    "Query variants: /admin?tab=<tab> for every admin tab, /admin?tab=orders&recycling=attention|all."
+  ],
+  "params": {
+    "productSlug": "nuoc-giat-fuwa3e",
+    "productSlugAlt": "serum-duong-am-visante",
+    "outOfStockSlug": "nuoc-rua-chen-fuwa3e",
+    "ctvSlug": "b21b3de4",
+    "ctvSubdomain": "goc-xanh-nha-mai",
+    "dealerStoreSlug": "3b20557d",
+    "brandSlug": "fuwa3e",
+    "brandSlugAlt": "visante",
+    "unpublishedBrandSlug": "hector",
+    "postId": "c1lgnyqceizgct3tlnhe4ro6d",
+    "showcasePostId": "c12klq9omu5t0sshhon1uhpcq",
+    "pendingPostId": "c140agn8ym4p31f2z1f9r4xv4",
+    "courseId": "c1ehezsfi0oweckywlx5j3kd0",
+    "courseId2": "c1iv2j04f5fedrblqz6hff4vv",
+    "bankPaymentCode": "TUBU2026092757778",
+    "dealerBankPaymentCode": "DLR72789728669",
+    "orderCodes": {
+      "PENDING_PAYMENT": "TUBU2026092757778",
+      "CONFIRMED": "TUBU2026092782354",
+      "PACKED": "TUBU2026092598490",
+      "SHIPPING": "TUBU2026092401042",
+      "DELIVERED": "TUBU2026091973483",
+      "DELIVERED_OPEN_RETURN": "TUBU2026092117962",
+      "DELIVERED_OLD_REVIEWED": "TUBU2026071525525",
+      "DELIVERED_PAID_WITH_XU": "TUBU2026091266624",
+      "RETURNED": "TUBU2026090396492",
+      "CANCELLED": "TUBU2026091594964",
+      "RECYCLING_SHIPPING": "TUBU2026092592500",
+      "INVOICE_REQUESTED": "TUBU2026083007963"
+    },
+    "ctvOrderForCustomer": "TUBU2026092654911",
+    "dealerOrderCodes": {
+      "backorder": "DLR72789728669",
+      "creditOpen": "DLR44389728861",
+      "creditDelivered": "DLR35954350698",
+      "paidDelivered": "DLR83478459603"
+    },
+    "recyclingAttentionOrder": "TUBU2026092647802"
+  },
+  "miniapp": [
+    {
+      "pattern": "/",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/",
+        "/?s=b21b3de4",
+        "/?ref=B21B3DE4"
+      ]
+    },
+    {
+      "pattern": "/browse",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/browse",
+        "/browse?brand=Fuwa3e",
+        "/browse?brand=Visante,Cobote",
+        "/browse?segment=mom_baby",
+        "/browse?focus=search"
+      ]
+    },
+    {
+      "pattern": "/product/:slug",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/product/nuoc-giat-fuwa3e",
+        "/product/serum-duong-am-visante",
+        "/product/nuoc-rua-chen-fuwa3e"
+      ],
+      "notes": "nuoc-giat-fuwa3e has a live flash price + open group buy; serum-duong-am-visante has reviews; nuoc-rua-chen-fuwa3e has the sold-out \"Can 5L\" variation."
+    },
+    {
+      "pattern": "/cart",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/cart"
+      ],
+      "notes": "active_customer and ctv have items; new_customer empty."
+    },
+    {
+      "pattern": "/checkout",
+      "personas": [
+        "active_customer",
+        "new_customer",
+        "ctv"
+      ],
+      "examples": [
+        "/checkout"
+      ],
+      "notes": "Reached from /cart; active_customer has 2 addresses + points + wallet + xu."
+    },
+    {
+      "pattern": "/bank-payment/:code",
+      "personas": [
+        "active_customer"
+      ],
+      "examples": [
+        "/bank-payment/TUBU2026092757778"
+      ],
+      "notes": "PENDING_PAYMENT bank-transfer order (VietQR)."
+    },
+    {
+      "pattern": "/orders",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/orders"
+      ],
+      "notes": "Status tabs are local UI state (click them)."
+    },
+    {
+      "pattern": "/order/:code",
+      "personas": [
+        "active_customer"
+      ],
+      "examples": [
+        "/order/TUBU2026092757778",
+        "/order/TUBU2026092782354",
+        "/order/TUBU2026092598490",
+        "/order/TUBU2026092401042",
+        "/order/TUBU2026091973483",
+        "/order/TUBU2026092117962",
+        "/order/TUBU2026071525525",
+        "/order/TUBU2026091266624",
+        "/order/TUBU2026090396492",
+        "/order/TUBU2026091594964",
+        "/order/TUBU2026092592500",
+        "/order/TUBU2026083007963"
+      ],
+      "orderCodesByStatus": {
+        "PENDING_PAYMENT": "TUBU2026092757778",
+        "CONFIRMED": "TUBU2026092782354",
+        "PACKED": "TUBU2026092598490",
+        "SHIPPING": "TUBU2026092401042",
+        "DELIVERED": "TUBU2026091973483",
+        "DELIVERED_OPEN_RETURN": "TUBU2026092117962",
+        "DELIVERED_OLD_REVIEWED": "TUBU2026071525525",
+        "DELIVERED_PAID_WITH_XU": "TUBU2026091266624",
+        "RETURNED": "TUBU2026090396492",
+        "CANCELLED": "TUBU2026091594964",
+        "RECYCLING_SHIPPING": "TUBU2026092592500",
+        "INVOICE_REQUESTED": "TUBU2026083007963"
+      },
+      "notes": "One order per status + open return + recycling (Gomdon waybill) + XU-paid + VAT invoice requested."
+    },
+    {
+      "pattern": "/order/:code (ctv)",
+      "personas": [
+        "ctv"
+      ],
+      "examples": [
+        "/order/TUBU2026092654911"
+      ],
+      "notes": "CTV \"lên đơn hộ khách\" order."
+    },
+    {
+      "pattern": "/game",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/game"
+      ],
+      "notes": "active_customer: streak 12, tree progress 410/600, extra plot, season pass."
+    },
+    {
+      "pattern": "/feed",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/feed"
+      ]
+    },
+    {
+      "pattern": "/feed/leaderboard",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/feed/leaderboard"
+      ]
+    },
+    {
+      "pattern": "/feed/events",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/feed/events"
+      ]
+    },
+    {
+      "pattern": "/feed/:id",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/feed/c1lgnyqceizgct3tlnhe4ro6d",
+        "/feed/c12klq9omu5t0sshhon1uhpcq"
+      ],
+      "notes": "Question with accepted expert answer + product tag; showcase entered in the open event."
+    },
+    {
+      "pattern": "/ai-advisor",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/ai-advisor"
+      ],
+      "notes": "AI keys are blank in the audit env → graceful \"not available\" state."
+    },
+    {
+      "pattern": "/group-buy",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/group-buy"
+      ]
+    },
+    {
+      "pattern": "/refill",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/refill"
+      ]
+    },
+    {
+      "pattern": "/beta",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/beta"
+      ]
+    },
+    {
+      "pattern": "/profile",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/profile"
+      ]
+    },
+    {
+      "pattern": "/loyalty",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/loyalty"
+      ]
+    },
+    {
+      "pattern": "/wallet",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/wallet"
+      ]
+    },
+    {
+      "pattern": "/addresses",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/addresses"
+      ],
+      "notes": "Add-address geo picker proxies Pancake → unavailable in audit env."
+    },
+    {
+      "pattern": "/notifications",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/notifications"
+      ]
+    },
+    {
+      "pattern": "/affiliate",
+      "personas": [
+        "ctv",
+        "active_customer",
+        "admin"
+      ],
+      "examples": [
+        "/affiliate"
+      ],
+      "notes": "ctv = full dashboard; customers see the sign-up pitch."
+    },
+    {
+      "pattern": "/academy",
+      "personas": [
+        "ctv",
+        "admin"
+      ],
+      "examples": [
+        "/academy"
+      ]
+    },
+    {
+      "pattern": "/academy/:courseId",
+      "personas": [
+        "ctv",
+        "admin"
+      ],
+      "examples": [
+        "/academy/c1ehezsfi0oweckywlx5j3kd0",
+        "/academy/c1iv2j04f5fedrblqz6hff4vv"
+      ]
+    },
+    {
+      "pattern": "/cashback",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/cashback"
+      ],
+      "notes": "active_customer has PAID/CONFIRMED/PENDING cashback."
+    },
+    {
+      "pattern": "/dealer",
+      "personas": [
+        "dealer",
+        "active_customer"
+      ],
+      "examples": [
+        "/dealer"
+      ],
+      "notes": "dealer: tier DEALER_2, credit ledger, backorder, reward claims (PENDING/APPROVED/REJECTED/PAID); customers see the application form."
+    },
+    {
+      "pattern": "/about",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/about"
+      ]
+    },
+    {
+      "pattern": "/wishlist",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/wishlist"
+      ]
+    },
+    {
+      "pattern": "/edit-profile",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/edit-profile"
+      ]
+    },
+    {
+      "pattern": "/settings",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/settings"
+      ]
+    },
+    {
+      "pattern": "/brand-story",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/brand-story"
+      ]
+    },
+    {
+      "pattern": "/subscriptions",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/subscriptions"
+      ],
+      "notes": "active_customer: 1 ACTIVE + 1 PAUSED."
+    },
+    {
+      "pattern": "/storefront",
+      "personas": [
+        "ctv",
+        "admin"
+      ],
+      "examples": [
+        "/storefront"
+      ],
+      "notes": "Storefront builder (CTV)."
+    },
+    {
+      "pattern": "/s/:slug",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/s/b21b3de4",
+        "/s/goc-xanh-nha-mai",
+        "/s/3b20557d"
+      ]
+    },
+    {
+      "pattern": "/brand/:slug",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/brand/fuwa3e",
+        "/brand/visante",
+        "/brand/hector"
+      ],
+      "notes": "hector is unpublished → not-found state."
+    },
+    {
+      "pattern": "/brand-owner",
+      "personas": [
+        "brand_owner",
+        "active_customer"
+      ],
+      "examples": [
+        "/brand-owner"
+      ],
+      "notes": "brand_owner owns Fuwa3e; others get \"not granted\"."
+    },
+    {
+      "pattern": "/admin",
+      "personas": [
+        "admin",
+        "staff"
+      ],
+      "examples": [
+        "/admin"
+      ],
+      "notes": "HR admin (grants, shift approvals, attendance, payroll) — ADMIN only."
+    },
+    {
+      "pattern": "/admin/community",
+      "personas": [
+        "admin",
+        "staff"
+      ],
+      "examples": [
+        "/admin/community"
+      ],
+      "notes": "Pending post c140agn8ym4p31f2z1f9r4xv4 + 2 open reports."
+    },
+    {
+      "pattern": "/staff",
+      "personas": [
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/staff"
+      ]
+    },
+    {
+      "pattern": "/my-payroll",
+      "personas": [
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/my-payroll"
+      ]
+    },
+    {
+      "pattern": "*",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/khong-ton-tai"
+      ],
+      "notes": "NotFound page."
+    }
+  ],
+  "web": [
+    {
+      "pattern": "/",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/"
+      ]
+    },
+    {
+      "pattern": "/san-pham/[slug]",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/san-pham/nuoc-giat-fuwa3e",
+        "/san-pham/serum-duong-am-visante",
+        "/san-pham/khong-ton-tai"
+      ]
+    },
+    {
+      "pattern": "/brand/[slug]",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/brand/fuwa3e",
+        "/brand/visante"
+      ]
+    },
+    {
+      "pattern": "/s/[slug]",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/s/b21b3de4",
+        "/s/3b20557d"
+      ],
+      "subdomainVariant": "http://goc-xanh-nha-mai.localhost:3212/ (middleware rewrites / → /s/goc-xanh-nha-mai)"
+    },
+    {
+      "pattern": "/gio-hang",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/gio-hang"
+      ]
+    },
+    {
+      "pattern": "/thanh-toan",
+      "personas": [
+        "active_customer",
+        "new_customer"
+      ],
+      "examples": [
+        "/thanh-toan"
+      ]
+    },
+    {
+      "pattern": "/tai-khoan",
+      "personas": [
+        "guest",
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/tai-khoan"
+      ]
+    },
+    {
+      "pattern": "/dang-nhap",
+      "personas": [
+        "guest"
+      ],
+      "examples": [
+        "/dang-nhap"
+      ],
+      "notes": "Zalo OAuth start needs NEXT_PUBLIC_ZALO_APP_ID (unset in audit) → shows config error on click."
+    },
+    {
+      "pattern": "/dang-nhap/callback",
+      "personas": [
+        "guest"
+      ],
+      "examples": [
+        "/dang-nhap/callback?code=invalid&state=x"
+      ],
+      "notes": "Error state (state mismatch)."
+    },
+    {
+      "pattern": "/merchant",
+      "personas": [
+        "ctv",
+        "dealer",
+        "admin",
+        "active_customer"
+      ],
+      "examples": [
+        "/merchant"
+      ],
+      "notes": "DEALER/AFFILIATE/ADMIN only; customer sees access notice."
+    },
+    {
+      "pattern": "/admin",
+      "personas": [
+        "admin",
+        "staff",
+        "active_customer"
+      ],
+      "examples": [
+        "/admin",
+        "/admin?tab=dealers",
+        "/admin?tab=dealerClaims",
+        "/admin?tab=orders",
+        "/admin?tab=returns",
+        "/admin?tab=cashback",
+        "/admin?tab=posCredits",
+        "/admin?tab=users",
+        "/admin?tab=config",
+        "/admin?tab=coupons",
+        "/admin?tab=brands",
+        "/admin?tab=merchantProducts",
+        "/admin?tab=flashSales",
+        "/admin?tab=faqs",
+        "/admin?tab=contentKit",
+        "/admin?tab=academy",
+        "/admin?tab=quickReplies",
+        "/admin?tab=orders&recycling=attention",
+        "/admin?tab=orders&recycling=all"
+      ],
+      "tabs": [
+        "dashboard",
+        "dealers",
+        "dealerClaims",
+        "orders",
+        "returns",
+        "cashback",
+        "posCredits",
+        "users",
+        "config",
+        "coupons",
+        "brands",
+        "merchantProducts",
+        "flashSales",
+        "faqs",
+        "contentKit",
+        "academy",
+        "quickReplies"
+      ],
+      "notes": "ADMIN only (staff/customer see \"no permission\"). Recycling attention order: TUBU2026092647802."
+    },
+    {
+      "pattern": "/admin/pos",
+      "personas": [
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/admin/pos"
+      ],
+      "notes": "POS enabled in audit config (loyalty.pos_credit_enabled=true). Member code for active_customer: TUBU46688D52"
+    },
+    {
+      "pattern": "/robots.txt",
+      "personas": [
+        "guest"
+      ],
+      "examples": [
+        "/robots.txt"
+      ]
+    },
+    {
+      "pattern": "/sitemap.xml",
+      "personas": [
+        "guest"
+      ],
+      "examples": [
+        "/sitemap.xml"
+      ]
+    },
+    {
+      "pattern": "not-found",
+      "personas": [
+        "guest"
+      ],
+      "examples": [
+        "/trang-khong-ton-tai"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,956 @@
+{
+  "generatedAt": "2026-09-27T01:46:48.583Z",
+  "db": "tubutree_audit",
+  "api": "http://localhost:3201/api",
+  "miniapp": "http://localhost:3213",
+  "web": "http://localhost:3212",
+  "warning": "LOCAL TEST TOKENS for the isolated audit DB only (signed with the dedicated audit JWT secret in .audit/api.env). Re-running seed-audit-personas.ts revokes and re-mints them.",
+  "personas": [
+    {
+      "name": "guest",
+      "userId": null,
+      "role": null,
+      "description": "Anonymous visitor. Miniapp: no storage → restore() finds no refresh token, Zalo login fails outside Zalo, app falls back to POST /auth/guest and CREATES a new guest user (onboarding quiz overlay shows). Web: no cookie/marker → logged-out pages.",
+      "miniapp": {
+        "origin": "http://localhost:3213",
+        "localStorage": {},
+        "variantOnboardedGuest": {
+          "note": "Optional: reuse a pre-seeded, already-onboarded guest (no onboarding overlay). POST /auth/guest resolves deviceId → this user.",
+          "userId": "c1cf25lqy7di4u32cdz1vi4cu",
+          "localStorage": {
+            "tubu_device_id": "JTIyZF9hdWRpdF9ndWVzdF9vbmJvYXJkZWRfMDAwMSUyMg=="
+          }
+        }
+      },
+      "web": {
+        "origin": "http://localhost:3212",
+        "localStorage": {},
+        "cookies": []
+      }
+    },
+    {
+      "name": "new_customer",
+      "userId": "c1jtz6f12j54gpvbctpr34iot",
+      "role": "CUSTOMER",
+      "fullName": "Trần Minh Khoa",
+      "phone": "0900000001",
+      "referralCode": "9EE9D68C",
+      "tokens": {
+        "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMWp0ejZmMTJqNTRncHZiY3RwcjM0aW90Iiwicm9sZSI6IkNVU1RPTUVSIiwiemFsb0lkIjoiODg5NjAxNjA1MTUxMTk3ODk5MCIsImFmZmlsaWF0ZUVuYWJsZWQiOmZhbHNlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA3LCJleHAiOjE3OTEwNzg0MDd9.Kr6gBfk-V0GCS2i98uuWWjklT-Fi5vqBjBDY-ehgXTw",
+        "accessTokenExpiresAt": "2026-10-04T01:46:47.000Z",
+        "refreshTokens": [
+          "AgTjVwt92dMixmzGUczEbtZ5wRXLI4XllOKzAF8HYus-0e7LJ8yRgU4RaP_gkWAp",
+          "pyGfycFIm-i-cppjeVcvscfzz1goJoBa8Cld0ioC3upGJ_5ihVOvHXus2wXkEPOw",
+          "mu_d5ke6UOH8Mvu-9He0OMMgHhlJx36daPrhsPBGiSV8WMpTK5uhjRRixqz_Mpyt",
+          "wTr7pSXwD4dsfV365DjY9FcHG-zekt4s-DofoBMDQDS3TM6ZD1U5HJGxsBuHpyOd",
+          "MBcJ8LkCi7gBEM5pfRK3pejglYfiawWVXsazX-lv5crc_IQ5fsavXtIQq1XXQ2Il",
+          "NOPQFqOaIccezsX2CNUhIXh6yOtTBZgdtmUeCdWtsxLSHj5WcG3y8aLGbHIKjpzq",
+          "LfEWHWDmELJI3wm7UyFNfoPjoy_G1SFBI_4UInhCKR6gIbfwW-2dQBv6QZDaoTxQ",
+          "FCD7HzzwvuZHm6MR-_IEQLpvayOioZ_xKAKlcb4BDYEqipj40OKrWoMYhHONZcZI",
+          "ckhEy5rpthBoeeAOxUglDkG5L4vN4W6s3EXRgWAZNMi4VOZ2Fn1qHAR57-UG_9Jl",
+          "EYv0Qij_on5AnkIeV44Q-xfsTxh-ESsUksBD7QC6xMfm1FljpvEFO0vcIojb1kMl",
+          "7TULbizTqpF2O91ny9J9ptJ-TCdoYOroElHC7sg0fYQNO6G3Uy-d9UATifHiA6qY",
+          "GWyTkrIlKPTXCDmHY3oi4oKvPRQtEt6Co_L-Q5tKPYrWpmcHzVp4dT81pZA_wC1j",
+          "5YDu5hsZw8_3VDCMpo5qo2mxOJbaie1SpYCLfJRUTRe-hBQRkZ6kV-0yVQb0B7z6",
+          "4knlMvDJwEYG0KyNQ-CFJ5-hWBVSsyHC644Dx7Koetp-fJ0UehoGk4l-6iC33Uj6",
+          "uavJ4UW-uTxy0pg9MNeWnzia7NHxFb5LqHfhAH-ZLuvrA-jPECruIe3tl0y0p_QV",
+          "h8PaEzTCVrP27HPHAYO6tpfwjyEheXUms8XVcK4CGLNEsCDAnqOFurtAK3Hc3EMv",
+          "9Z07nc90ZgH3E5Y5T3ShO7r8i2GA2HNYa9Wb9M45cuTANtSDVJS7yn2RGiKET8Cr",
+          "2BDZN-kB1_cA3OqvHL1UXY2yGsIz0w2_xjiVvWsIntNcND5baVllzHbNh90LjEWF",
+          "4r-8Z2W9oZ_gFOniBhkE3IAxajp-NR59_XW10Jhik78TBgizEc0Yh96KF6XvTkok",
+          "rhVRXvMIOhRP4u5s9qSi7Pt-lvN-807yymuQU_oN1CPl5Y-7NUKpAD5vtKMmZ3LL",
+          "uxuYBj49OfYJE_k-D8tBGoqu2ozFjZLNaEhBIvUJWKvjWqffDnVr3zeNuUifo7Ww",
+          "EPZ7HPbbgiXXTB39lsVXWURKXaTnpYTREuSxz6XCD65QffJOf5bs0FA31G0zG8d1",
+          "ULo6kemAsRm1iwCfKXy5xNy-94KXcHDp7_qrNJIR-0dFOfgWEyAO6pz7sp171X5X",
+          "taFG0TKb6KMJKoJCxOsWR3pBYCouXw8pTb8_E74Tv02xHPtlJpkU3apt_6toKzFm",
+          "r8CNVfx-k1rUVS9t9wONqZq7nyMLSQ3wDj0W6UxOpknpSmcfXfpYO0TrP0diFk88"
+        ],
+        "refreshTokensExpireAt": "2026-10-27T01:46:47.193Z",
+        "note": "Refresh tokens are SINGLE-USE (rotated by POST /auth/refresh; presenting a used one revokes ALL of this user's sessions). Use a fresh one per new browser context, or keep one context per persona. Re-run the seed to re-mint."
+      },
+      "authUser": {
+        "id": "c1jtz6f12j54gpvbctpr34iot",
+        "zaloId": "8896016051511978990",
+        "phone": "0900000001",
+        "email": null,
+        "fullName": "Trần Minh Khoa",
+        "avatarUrl": null,
+        "role": "CUSTOMER",
+        "tierId": null,
+        "referralCode": "9EE9D68C",
+        "pointsBalance": 0,
+        "walletBalance": 0,
+        "coinsBalance": 0
+      },
+      "miniapp": {
+        "origin": "http://localhost:3213",
+        "mustUseHostname": "localhost (zmp-sdk only enables storage when location.hostname includes \"localhost\")",
+        "localStorageKey": "tubu_refresh_token",
+        "localStorageValueEncoding": "btoa(encodeURIComponent(JSON.stringify(refreshToken)))",
+        "localStorage": {
+          "tubu_refresh_token": "JTIyQWdUalZ3dDkyZE1peG16R1VjekVidFo1d1JYTEk0WGxsT0t6QUY4SFl1cy0wZTdMSjh5UmdVNFJhUF9na1dBcCUyMg=="
+        },
+        "localStorageForPoolIndex": "replace tubu_refresh_token with zmpEncode(tokens.refreshTokens[i]) for a new context",
+        "sessionStorage": {},
+        "interceptAlternative": {
+          "note": "Parallel-safe alternative: fulfil POST {api}/auth/refresh yourself with this body (keep a dummy tubu_refresh_token in storage so the app calls refresh). Every other API call is real.",
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMWp0ejZmMTJqNTRncHZiY3RwcjM0aW90Iiwicm9sZSI6IkNVU1RPTUVSIiwiemFsb0lkIjoiODg5NjAxNjA1MTUxMTk3ODk5MCIsImFmZmlsaWF0ZUVuYWJsZWQiOmZhbHNlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA3LCJleHAiOjE3OTEwNzg0MDd9.Kr6gBfk-V0GCS2i98uuWWjklT-Fi5vqBjBDY-ehgXTw",
+            "refreshToken": "audit-static-refresh",
+            "user": {
+              "id": "c1jtz6f12j54gpvbctpr34iot",
+              "zaloId": "8896016051511978990",
+              "phone": "0900000001",
+              "email": null,
+              "fullName": "Trần Minh Khoa",
+              "avatarUrl": null,
+              "role": "CUSTOMER",
+              "tierId": null,
+              "referralCode": "9EE9D68C",
+              "pointsBalance": 0,
+              "walletBalance": 0,
+              "coinsBalance": 0
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3213",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      },
+      "web": {
+        "origin": "http://localhost:3212",
+        "localStorage": {
+          "tubu_web_session": "1"
+        },
+        "sessionStorage": {},
+        "cookies": [
+          {
+            "name": "tubu_rt",
+            "value": "pyGfycFIm-i-cppjeVcvscfzz1goJoBa8Cld0ioC3upGJ_5ihVOvHXus2wXkEPOw",
+            "domain": "localhost",
+            "path": "/api/auth",
+            "httpOnly": true,
+            "secure": false,
+            "sameSite": "Lax",
+            "expires": 1793065607
+          }
+        ],
+        "cookieNote": "HttpOnly refresh cookie normally set by the API (localhost:3201) — same-site with localhost:3212, sent by fetch(credentials:\"include\") to /api/auth/*. Use a DIFFERENT pool token than the miniapp.",
+        "interceptAlternative": {
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMWp0ejZmMTJqNTRncHZiY3RwcjM0aW90Iiwicm9sZSI6IkNVU1RPTUVSIiwiemFsb0lkIjoiODg5NjAxNjA1MTUxMTk3ODk5MCIsImFmZmlsaWF0ZUVuYWJsZWQiOmZhbHNlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA3LCJleHAiOjE3OTEwNzg0MDd9.Kr6gBfk-V0GCS2i98uuWWjklT-Fi5vqBjBDY-ehgXTw",
+            "refreshToken": "",
+            "user": {
+              "id": "c1jtz6f12j54gpvbctpr34iot",
+              "fullName": "Trần Minh Khoa",
+              "avatarUrl": null,
+              "role": "CUSTOMER",
+              "pointsBalance": 0,
+              "walletBalance": 0,
+              "referralCode": "9EE9D68C"
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3212",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      }
+    },
+    {
+      "name": "active_customer",
+      "userId": "c088z0e3am2l27af0ioojq47z",
+      "role": "CUSTOMER",
+      "fullName": "Nguyễn Thị Thu Hà",
+      "phone": "0900000002",
+      "referralCode": "46688D52",
+      "tokens": {
+        "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMDg4ejBlM2FtMmwyN2FmMGlvb2pxNDd6Iiwicm9sZSI6IkNVU1RPTUVSIiwiemFsb0lkIjoiODM5NTA0Njc4MzcwNTEyMjIxOCIsImFmZmlsaWF0ZUVuYWJsZWQiOmZhbHNlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA3LCJleHAiOjE3OTEwNzg0MDd9.gPcbLvPJs5s0jyNgWiWbmkVkKUewx6NZYihhSb-uoyg",
+        "accessTokenExpiresAt": "2026-10-04T01:46:47.000Z",
+        "refreshTokens": [
+          "9ZLaMG2jX-Bu64INsHrUtx0eGZH5g0szjHv7INSbnqP873_TEAgvfLBDR1jjaV-i",
+          "_R47ArfIwdoR1JsFwsl3R8tWMCx-1wDoIw7QTIMryfK8fNaE37BwT_h3BF2DW_0X",
+          "YXBZ4iJR46mc5jdMu2vB58Y52zW6Em2nUSzx_szrMYam-T-BYaGlRRn9s28kRT-w",
+          "1deN3vaYHfCRCjMRVy2YArGAdDe7M9GsgSvHZF7ST7sHqZRM9RDbKbb2rEd5c5s4",
+          "d5zrb5K32neLgkWo0l2IeZRq6pZ1L5BGTamNa1HEq6ElAP10S_PU5HcIGQV8GzG5",
+          "u9Qsa_4IAdiSMET0oillmuOYJ4O6Gft5jM6Kot57ykMIjIvOFzZFHjfsCTMaudce",
+          "4xvycLz16W6NUCqqeLX8tJRwq_9LP79G9tYrvL5ekBn-W1Z15cyjQm6RgGkgjmXr",
+          "vLeBQPZMrrRBzfsVf3WZ1VpEhaPKkriidWZw6A_AGgh8KUskPUcX490d8VGjBUNE",
+          "fP2NIrd1_Z6O6Nu2N-JjIWZIfRqPU6YNTMnMcEYIS-BMeAOytyuRNjzz3oaF6MRa",
+          "sfgI-Vs_rtt4DWdGXlZ8z3hPoFcJa0gmFxusHW2LEQWyq9s2SXsCDZdPXBqRSE5k",
+          "FPsr-CBfIH2qbA9LZnmMe8Lkz1FdtdYwEr6BJk-8eX_VLo7BrG39XLVp9XSOFQzM",
+          "EAkWj2Q8vJ7QhDksRYAzdJu2s3JwFkg_4oHsF0Zc4F4tJNeLbpt3vOABzD8GbUI_",
+          "qVsX8LUT_UQur7uNm57Qacpe2WXObxfzflxx7JE3IKdCzkwqAa99Z5p8viOimCWa",
+          "_vv-3tqSah3VMFoGUTF75oLFfL6lJvQI6xI1vPukGSKYS3bYyZnZrPyujP4bVBsj",
+          "b8A5VLDM1Hi0nQBkHieoWnBUFl-JrdZO6ciqJdlf5cLeyZmvEEyIl40O0HsakzsR",
+          "IKpGW_8a8HZM9qnHzJrMvxO_V_jYlglOyezOOmmBf02FApTu1j64Q9L99Q7PclZ8",
+          "uNyGYHYfAage1L67Frd5bWopflgiZs8nG5UPpi1Tbw0acOJx5N--WT3Qe0CwvAu9",
+          "1PFGfmui1qnLkjgvZa9z5e_dpGyEw0Rr1j6XDAf8fpjWmnjZhj8O7S0qcsVQlIrN",
+          "dGeR9KIevSNdkAewGJVdyXZDjQ9Y1s7G4X_40GkaQNEN8uPPuxGGdyyq03uzIcpz",
+          "7RfiP3UYrVhUUlCUhNOHNnup7X3gUfjWortWkBmoxe792dEOTUJMrQIKSS82uPtq",
+          "aUsbU5-TTszHmkWU0qvHWcpLy4ETX2u9h5vYKvC3q0yHaooWQTg8a3wnP5BIPK1v",
+          "vr1PcP3elZSHFMvKrJFMYXPClSjYhfDClufwKqQaZQMVXr8MVKqt1tP6nvSIK-OK",
+          "Q794DUcU8Qh7uL5_Fdbk-xc6kQklUXlTcEcVaKu7zcoYsUlHLuvnHGUgICfqY2gV",
+          "voHUKoGn9cYEXGr2OnJhTYb7zgvGmfFvzbMxHZn-LruaPDoXiVqDG5dxMSKXlpcw",
+          "lw1GIWJe1--HPXo0PhwTDdqZ3sScWEU2fFOZ3gsdvdyQKnmWtcga3PXlGlFf-FKh"
+        ],
+        "refreshTokensExpireAt": "2026-10-27T01:46:47.442Z",
+        "note": "Refresh tokens are SINGLE-USE (rotated by POST /auth/refresh; presenting a used one revokes ALL of this user's sessions). Use a fresh one per new browser context, or keep one context per persona. Re-run the seed to re-mint."
+      },
+      "authUser": {
+        "id": "c088z0e3am2l27af0ioojq47z",
+        "zaloId": "8395046783705122218",
+        "phone": "0900000002",
+        "email": "thuha.audit@example.com",
+        "fullName": "Nguyễn Thị Thu Hà",
+        "avatarUrl": null,
+        "role": "CUSTOMER",
+        "tierId": "LOC_BIEC",
+        "referralCode": "46688D52",
+        "pointsBalance": 452,
+        "walletBalance": 96500,
+        "coinsBalance": 61100
+      },
+      "miniapp": {
+        "origin": "http://localhost:3213",
+        "mustUseHostname": "localhost (zmp-sdk only enables storage when location.hostname includes \"localhost\")",
+        "localStorageKey": "tubu_refresh_token",
+        "localStorageValueEncoding": "btoa(encodeURIComponent(JSON.stringify(refreshToken)))",
+        "localStorage": {
+          "tubu_refresh_token": "JTIyOVpMYU1HMmpYLUJ1NjRJTnNIclV0eDBlR1pINWcwc3pqSHY3SU5TYm5xUDg3M19URUFndmZMQkRSMWpqYVYtaSUyMg=="
+        },
+        "localStorageForPoolIndex": "replace tubu_refresh_token with zmpEncode(tokens.refreshTokens[i]) for a new context",
+        "sessionStorage": {},
+        "interceptAlternative": {
+          "note": "Parallel-safe alternative: fulfil POST {api}/auth/refresh yourself with this body (keep a dummy tubu_refresh_token in storage so the app calls refresh). Every other API call is real.",
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMDg4ejBlM2FtMmwyN2FmMGlvb2pxNDd6Iiwicm9sZSI6IkNVU1RPTUVSIiwiemFsb0lkIjoiODM5NTA0Njc4MzcwNTEyMjIxOCIsImFmZmlsaWF0ZUVuYWJsZWQiOmZhbHNlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA3LCJleHAiOjE3OTEwNzg0MDd9.gPcbLvPJs5s0jyNgWiWbmkVkKUewx6NZYihhSb-uoyg",
+            "refreshToken": "audit-static-refresh",
+            "user": {
+              "id": "c088z0e3am2l27af0ioojq47z",
+              "zaloId": "8395046783705122218",
+              "phone": "0900000002",
+              "email": "thuha.audit@example.com",
+              "fullName": "Nguyễn Thị Thu Hà",
+              "avatarUrl": null,
+              "role": "CUSTOMER",
+              "tierId": "LOC_BIEC",
+              "referralCode": "46688D52",
+              "pointsBalance": 452,
+              "walletBalance": 96500,
+              "coinsBalance": 61100
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3213",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      },
+      "web": {
+        "origin": "http://localhost:3212",
+        "localStorage": {
+          "tubu_web_session": "1"
+        },
+        "sessionStorage": {},
+        "cookies": [
+          {
+            "name": "tubu_rt",
+            "value": "_R47ArfIwdoR1JsFwsl3R8tWMCx-1wDoIw7QTIMryfK8fNaE37BwT_h3BF2DW_0X",
+            "domain": "localhost",
+            "path": "/api/auth",
+            "httpOnly": true,
+            "secure": false,
+            "sameSite": "Lax",
+            "expires": 1793065607
+          }
+        ],
+        "cookieNote": "HttpOnly refresh cookie normally set by the API (localhost:3201) — same-site with localhost:3212, sent by fetch(credentials:\"include\") to /api/auth/*. Use a DIFFERENT pool token than the miniapp.",
+        "interceptAlternative": {
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMDg4ejBlM2FtMmwyN2FmMGlvb2pxNDd6Iiwicm9sZSI6IkNVU1RPTUVSIiwiemFsb0lkIjoiODM5NTA0Njc4MzcwNTEyMjIxOCIsImFmZmlsaWF0ZUVuYWJsZWQiOmZhbHNlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA3LCJleHAiOjE3OTEwNzg0MDd9.gPcbLvPJs5s0jyNgWiWbmkVkKUewx6NZYihhSb-uoyg",
+            "refreshToken": "",
+            "user": {
+              "id": "c088z0e3am2l27af0ioojq47z",
+              "fullName": "Nguyễn Thị Thu Hà",
+              "avatarUrl": null,
+              "role": "CUSTOMER",
+              "pointsBalance": 452,
+              "walletBalance": 96500,
+              "referralCode": "46688D52"
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3212",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      }
+    },
+    {
+      "name": "ctv",
+      "userId": "c0ctof27a7vs90ymriv7l9n57",
+      "role": "AFFILIATE",
+      "fullName": "Lê Hoàng Mai",
+      "phone": "0900000003",
+      "referralCode": "B21B3DE4",
+      "tokens": {
+        "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMGN0b2YyN2E3dnM5MHltcml2N2w5bjU3Iiwicm9sZSI6IkFGRklMSUFURSIsInphbG9JZCI6Ijg2MjU4OTQ3NzY0MDAyMDg5OTMiLCJhZmZpbGlhdGVFbmFibGVkIjp0cnVlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA3LCJleHAiOjE3OTEwNzg0MDd9.ZeoIylkj3F11yGsGKvSsZow4zIVRuegh7qIkU4RBSPU",
+        "accessTokenExpiresAt": "2026-10-04T01:46:47.000Z",
+        "refreshTokens": [
+          "U7W--4BgUStZ_F_cVmfut7F5aiySeMaJKY0FfWPE5S7o1dFVPkjyZW1ouzoOBxQ9",
+          "byu3HaruXRUpIjKgwjwYby90GHG3i56D0JuMpxoeWmdXd9kPzXS8qDBikiQihshP",
+          "iP5_oeqXQmCMtykE8mGk32_rJmtNGEIZjuZDQSRiPcAetjlCz6h-932sJ8hVekxf",
+          "SbqUThEUGcrG7PGlX-tZVcXqnM6tdP3ueVCC8-GbBJ-B5-LiedsGJ755divOOmWP",
+          "IEe-SDvW0RwjSXneWyHLeqDq4M8fyDurVrUWnel3KINSyHLVJVeRQjE-8IKBNDcI",
+          "33oGbSQlOmTXeRdHlUaa21nUShxHWdfTXloomW418wsROkUhW2I3L2eGplB_gV1q",
+          "fN1lPKjsV3mYyveN0F_b7dOdHIqCEnBJ1EzuDxvxSWChY5DR4Yr8XB4ZyFOHWZ29",
+          "qiKrKgtI7fYzmLPist-FUwRjtjNWs3Mw4ZZ4l-YDKSlSmzxOklVsvnNioJ6Q2jHr",
+          "vwzUYf5krXFB6lmjabqtOaGCTl_WBPhs9F63sb5V6CWoLzkVq1r1jeDkFqjEjM98",
+          "msoaKNnVTb4gLeHv3nnyYckaccSNwkvyGktgC11L1RBFoeREsxOywpXh8y8-fuzK",
+          "KcjPDC5AfXHMDN26J6RLYbGh3m34xppTcKdD-pgbb3X4zylppq1l6A73zWOHHY85",
+          "1lUminMCBtDrh0gSh-_YfrXxMzM9ffaLk42tFPM0Q6vPDWU7RLV6m1YnWW69n179",
+          "DuHDDhMyAMSwy1cKmDi1jNNyH3l65u8yVrToln6-ExcfrGJzq-LizkprcNvKywAv",
+          "ZPPG1VUb_SLxDOalymNoa7AromnyYuiJTTERWBZL_KlfSSBjLgjWfFpD0VZg8dot",
+          "I-cZxqYHaJkPpy3r5zwesAP3DOkCo64o-SeRwlD1CSC8ruclYqQqtXzNlVkucc0O",
+          "Le0_uimzxv7ovpt2eowSdKEr14lG-ZFHmkAeoC-JL26ssUcTfqkaV5PfzyUr7J1v",
+          "tk9GuJ61maDv7FFqUjs29KBOc2uvH3wpeUEXU4VEvUj28dY5jeqJJHAyTgJRqWJv",
+          "v88c073IaOws5LXSlwkIegC5SENpjT_3EEBSYOBZUkMmi2Lu5_HQj3ggex6dXOdW",
+          "IQD_-c7WYJfBz0QjkzDmzrvxXgs26zZxJwLayQyuqSEJNIICQlKgE00L9cNuGsZI",
+          "GFU8mLG4ll1o2RXcuXFM59JtuV7qda2k0adtf3s6V4R4SORVAZo71s8ehD4ag5LM",
+          "UH0Hf7eyL2El2bLv4Qfc3lXFK7BLSjuPh4E_UzNB5WqEcqiKaT0ilJk2Lw3peHUi",
+          "9gEVw8zDxvwSH0_Do8fnzaeAePt9yL8-63C5fzs7_haBRYmjjOan1KwiwD0KBzoC",
+          "jStb9lBRvOykY17_GRH_Dw8v3YkGzgKJP7Quj9hb9nSJ1CBsyvhL8TDuFKdFZUuy",
+          "yip6i7PsXhtWDIMmhLxSN47mpfdfC4hj1Nzitf5bQIrKfnG2E1_fAwBbYsVj4_qd",
+          "PZkgqhHI3rL6V5ofRDy7uV81I9NwM0hEOUUg3era0kih-DnkAFkenYSyyQ6_jQ8z"
+        ],
+        "refreshTokensExpireAt": "2026-10-27T01:46:47.670Z",
+        "note": "Refresh tokens are SINGLE-USE (rotated by POST /auth/refresh; presenting a used one revokes ALL of this user's sessions). Use a fresh one per new browser context, or keep one context per persona. Re-run the seed to re-mint."
+      },
+      "authUser": {
+        "id": "c0ctof27a7vs90ymriv7l9n57",
+        "zaloId": "8625894776400208993",
+        "phone": "0900000003",
+        "email": "hoangmai.ctv@example.com",
+        "fullName": "Lê Hoàng Mai",
+        "avatarUrl": null,
+        "role": "AFFILIATE",
+        "tierId": "MAM_XANH",
+        "referralCode": "B21B3DE4",
+        "pointsBalance": 0,
+        "walletBalance": 85000,
+        "coinsBalance": 30300
+      },
+      "miniapp": {
+        "origin": "http://localhost:3213",
+        "mustUseHostname": "localhost (zmp-sdk only enables storage when location.hostname includes \"localhost\")",
+        "localStorageKey": "tubu_refresh_token",
+        "localStorageValueEncoding": "btoa(encodeURIComponent(JSON.stringify(refreshToken)))",
+        "localStorage": {
+          "tubu_refresh_token": "JTIyVTdXLS00QmdVU3RaX0ZfY1ZtZnV0N0Y1YWl5U2VNYUpLWTBGZldQRTVTN28xZEZWUGtqeVpXMW91em9PQnhROSUyMg=="
+        },
+        "localStorageForPoolIndex": "replace tubu_refresh_token with zmpEncode(tokens.refreshTokens[i]) for a new context",
+        "sessionStorage": {},
+        "interceptAlternative": {
+          "note": "Parallel-safe alternative: fulfil POST {api}/auth/refresh yourself with this body (keep a dummy tubu_refresh_token in storage so the app calls refresh). Every other API call is real.",
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMGN0b2YyN2E3dnM5MHltcml2N2w5bjU3Iiwicm9sZSI6IkFGRklMSUFURSIsInphbG9JZCI6Ijg2MjU4OTQ3NzY0MDAyMDg5OTMiLCJhZmZpbGlhdGVFbmFibGVkIjp0cnVlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA3LCJleHAiOjE3OTEwNzg0MDd9.ZeoIylkj3F11yGsGKvSsZow4zIVRuegh7qIkU4RBSPU",
+            "refreshToken": "audit-static-refresh",
+            "user": {
+              "id": "c0ctof27a7vs90ymriv7l9n57",
+              "zaloId": "8625894776400208993",
+              "phone": "0900000003",
+              "email": "hoangmai.ctv@example.com",
+              "fullName": "Lê Hoàng Mai",
+              "avatarUrl": null,
+              "role": "AFFILIATE",
+              "tierId": "MAM_XANH",
+              "referralCode": "B21B3DE4",
+              "pointsBalance": 0,
+              "walletBalance": 85000,
+              "coinsBalance": 30300
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3213",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      },
+      "web": {
+        "origin": "http://localhost:3212",
+        "localStorage": {
+          "tubu_web_session": "1"
+        },
+        "sessionStorage": {},
+        "cookies": [
+          {
+            "name": "tubu_rt",
+            "value": "byu3HaruXRUpIjKgwjwYby90GHG3i56D0JuMpxoeWmdXd9kPzXS8qDBikiQihshP",
+            "domain": "localhost",
+            "path": "/api/auth",
+            "httpOnly": true,
+            "secure": false,
+            "sameSite": "Lax",
+            "expires": 1793065607
+          }
+        ],
+        "cookieNote": "HttpOnly refresh cookie normally set by the API (localhost:3201) — same-site with localhost:3212, sent by fetch(credentials:\"include\") to /api/auth/*. Use a DIFFERENT pool token than the miniapp.",
+        "interceptAlternative": {
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMGN0b2YyN2E3dnM5MHltcml2N2w5bjU3Iiwicm9sZSI6IkFGRklMSUFURSIsInphbG9JZCI6Ijg2MjU4OTQ3NzY0MDAyMDg5OTMiLCJhZmZpbGlhdGVFbmFibGVkIjp0cnVlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA3LCJleHAiOjE3OTEwNzg0MDd9.ZeoIylkj3F11yGsGKvSsZow4zIVRuegh7qIkU4RBSPU",
+            "refreshToken": "",
+            "user": {
+              "id": "c0ctof27a7vs90ymriv7l9n57",
+              "fullName": "Lê Hoàng Mai",
+              "avatarUrl": null,
+              "role": "AFFILIATE",
+              "pointsBalance": 0,
+              "walletBalance": 85000,
+              "referralCode": "B21B3DE4"
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3212",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      }
+    },
+    {
+      "name": "dealer",
+      "userId": "c05eyt7l3q99xkzdra8mlhaxh",
+      "role": "DEALER",
+      "fullName": "Phạm Văn Đức",
+      "phone": "0900000004",
+      "referralCode": "3B20557D",
+      "tokens": {
+        "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMDVleXQ3bDNxOTl4a3pkcmE4bWxoYXhoIiwicm9sZSI6IkRFQUxFUiIsInphbG9JZCI6Ijg2NTE0ODU4MTkxOTYxNTAxMzkiLCJhZmZpbGlhdGVFbmFibGVkIjpmYWxzZSwiZGVhbGVyRW5hYmxlZCI6dHJ1ZSwiaWF0IjoxNzkwNDczNjA3LCJleHAiOjE3OTEwNzg0MDd9.590plUar56we6h7UqhJ-S1RQM_N77F532TwWvOHdiEs",
+        "accessTokenExpiresAt": "2026-10-04T01:46:47.000Z",
+        "refreshTokens": [
+          "w-kj1kn-Krg2DR0n4jxouU_4LntHByV2MXYgMOMuU4aSnmJpexUIve9nVbGExoda",
+          "e9WgaFhFeTJGKe86X_5_n1hDSNBWRhxcYZxDWolZL86mmerhJMUpbNs4Tz9VuJvw",
+          "YTecYp_Xwa3DDFgB-9lrv0R9kXLde_NGsEkPDVakXk3eAOdSP5_TsA2bFQpZQD7z",
+          "ORGmvrd5GD9ahsMHTHo8DSbkdKw4Ks_0Jcjtu8pELpC2rNn6MAJyuMoyEej1HGch",
+          "4tpsn-LzqCLiNCpOexZE6i_gLNCEBw_z-qoHy5ffOi6Uj4Sh8wvdr_qUTtAZJMAn",
+          "v_QYDrtLPCMDGhF6covVBU5tX3_JB9LNS469M99zdKFYGZ0K8WJqndKgcP9QRMON",
+          "bTuCzV7yw5txdrQXJ1yOpcq4Ma2G7bkkTTY8HmNyMvvm0dE5hQUQeKlFrgdjWVRW",
+          "wgy-O-89LRuGFOR7mtuY3-aifJB3uLMfwvUBnRUuWYrhhP5aJjzSmhsIyybNEO9d",
+          "8RuaDhULlGcPb5BY6tErbVNXJ734FpEJVwIvYjzvbbxY8o6wUsRuDXq2SQlcbqfY",
+          "bnTql76tTMUOg9MXpur-vnghM5hB_ZTJDOgvlOf3zBvAFLufWdRkBddlPrfidx6b",
+          "2p8RWkEiIsBNycc3wvP1I2dgdcsxNVg6Qn-6hJewAD0XVwnEbthacwG1XPBjav9n",
+          "i9VEhZ7msQeLZQcxpSe_BnGHBle7ikGUMmwjztAM8ejPJbcZIoFBpPD25W5z_Q1U",
+          "hNU8ILxtpiXxfM0eo6HICp79Ca_d7B9QRb9hlzCv254i0HtObyr5p4QxQMMSNu1g",
+          "5h7we3NsDj3x95o6-aX4mR8kHqwQsRuiYLgzCwcYqf-m5k_vEIT-T6j5J6kpBZVU",
+          "QPkSsnAGoygTIWR85DaX2A4Qm1dvAiv7w2wcxc1m80cXuOO-Qi2xahjs8pE_Z2PP",
+          "QEShImWCtMbaF-h960B7VpzvS6mVrz6f95AUCM3KhAEUVfgmFF7PeQuHP69s2OUS",
+          "tLcThNNXpa2bBvIlVcnI7vtJ8sWthdkFqRPKP99JDw-7SHj_t59_vEh-3ZIFAFHA",
+          "Gg2mDUnZvCZBjqc7UGti3hAScq0x7_T_ddOW8iyXF_bjvJySzSygZj1zVFGoczN-",
+          "dst_31JI-KsIMmtVfHJK3W42_iG8LZxZMqXaFfPseRSk8LdmOdWJ5vZqWvFMKMIL",
+          "dKbsU9aNQGtn_e9IORec0CPGYEmCxPe_lZ6G87mACQd10sGTJVmygY_3mQK46FBJ",
+          "Ovl-X7-YOBg0qMh6wwGA4D3ehSDRGwwX-AWSqXhmyBgSpPGdf-TDLnLp3nuS0U2O",
+          "3-PvFoWN7sCAV3qYLJnuU4SNeI3W-I9MntYuxAWyunYnThJBzoinnXdYN5Jibcpd",
+          "UjmYRAd1eC9m436-pT0ZgYGItjILDJjOVOCLVCQPvDoiBmnb58c1rS35pAeh-vpK",
+          "C51aj4tkoYEdwifukuD6ZDOlDSoYWVeaAaIBaDQLdbq71JfSpLq5H3GGtlklh9tq",
+          "y9euZb1rNWpDeFx0NhSM0TW90Xu60tKeh1-tWW-2M-J31KtKpqgXTWfokYl3am-M"
+        ],
+        "refreshTokensExpireAt": "2026-10-27T01:46:47.870Z",
+        "note": "Refresh tokens are SINGLE-USE (rotated by POST /auth/refresh; presenting a used one revokes ALL of this user's sessions). Use a fresh one per new browser context, or keep one context per persona. Re-run the seed to re-mint."
+      },
+      "authUser": {
+        "id": "c05eyt7l3q99xkzdra8mlhaxh",
+        "zaloId": "8651485819196150139",
+        "phone": "0900000004",
+        "email": null,
+        "fullName": "Phạm Văn Đức",
+        "avatarUrl": null,
+        "role": "DEALER",
+        "tierId": null,
+        "referralCode": "3B20557D",
+        "pointsBalance": 0,
+        "walletBalance": 0,
+        "coinsBalance": 0
+      },
+      "miniapp": {
+        "origin": "http://localhost:3213",
+        "mustUseHostname": "localhost (zmp-sdk only enables storage when location.hostname includes \"localhost\")",
+        "localStorageKey": "tubu_refresh_token",
+        "localStorageValueEncoding": "btoa(encodeURIComponent(JSON.stringify(refreshToken)))",
+        "localStorage": {
+          "tubu_refresh_token": "JTIydy1rajFrbi1LcmcyRFIwbjRqeG91VV80TG50SEJ5VjJNWFlnTU9NdVU0YVNubUpwZXhVSXZlOW5WYkdFeG9kYSUyMg=="
+        },
+        "localStorageForPoolIndex": "replace tubu_refresh_token with zmpEncode(tokens.refreshTokens[i]) for a new context",
+        "sessionStorage": {},
+        "interceptAlternative": {
+          "note": "Parallel-safe alternative: fulfil POST {api}/auth/refresh yourself with this body (keep a dummy tubu_refresh_token in storage so the app calls refresh). Every other API call is real.",
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMDVleXQ3bDNxOTl4a3pkcmE4bWxoYXhoIiwicm9sZSI6IkRFQUxFUiIsInphbG9JZCI6Ijg2NTE0ODU4MTkxOTYxNTAxMzkiLCJhZmZpbGlhdGVFbmFibGVkIjpmYWxzZSwiZGVhbGVyRW5hYmxlZCI6dHJ1ZSwiaWF0IjoxNzkwNDczNjA3LCJleHAiOjE3OTEwNzg0MDd9.590plUar56we6h7UqhJ-S1RQM_N77F532TwWvOHdiEs",
+            "refreshToken": "audit-static-refresh",
+            "user": {
+              "id": "c05eyt7l3q99xkzdra8mlhaxh",
+              "zaloId": "8651485819196150139",
+              "phone": "0900000004",
+              "email": null,
+              "fullName": "Phạm Văn Đức",
+              "avatarUrl": null,
+              "role": "DEALER",
+              "tierId": null,
+              "referralCode": "3B20557D",
+              "pointsBalance": 0,
+              "walletBalance": 0,
+              "coinsBalance": 0
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3213",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      },
+      "web": {
+        "origin": "http://localhost:3212",
+        "localStorage": {
+          "tubu_web_session": "1"
+        },
+        "sessionStorage": {},
+        "cookies": [
+          {
+            "name": "tubu_rt",
+            "value": "e9WgaFhFeTJGKe86X_5_n1hDSNBWRhxcYZxDWolZL86mmerhJMUpbNs4Tz9VuJvw",
+            "domain": "localhost",
+            "path": "/api/auth",
+            "httpOnly": true,
+            "secure": false,
+            "sameSite": "Lax",
+            "expires": 1793065607
+          }
+        ],
+        "cookieNote": "HttpOnly refresh cookie normally set by the API (localhost:3201) — same-site with localhost:3212, sent by fetch(credentials:\"include\") to /api/auth/*. Use a DIFFERENT pool token than the miniapp.",
+        "interceptAlternative": {
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMDVleXQ3bDNxOTl4a3pkcmE4bWxoYXhoIiwicm9sZSI6IkRFQUxFUiIsInphbG9JZCI6Ijg2NTE0ODU4MTkxOTYxNTAxMzkiLCJhZmZpbGlhdGVFbmFibGVkIjpmYWxzZSwiZGVhbGVyRW5hYmxlZCI6dHJ1ZSwiaWF0IjoxNzkwNDczNjA3LCJleHAiOjE3OTEwNzg0MDd9.590plUar56we6h7UqhJ-S1RQM_N77F532TwWvOHdiEs",
+            "refreshToken": "",
+            "user": {
+              "id": "c05eyt7l3q99xkzdra8mlhaxh",
+              "fullName": "Phạm Văn Đức",
+              "avatarUrl": null,
+              "role": "DEALER",
+              "pointsBalance": 0,
+              "walletBalance": 0,
+              "referralCode": "3B20557D"
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3212",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      }
+    },
+    {
+      "name": "brand_owner",
+      "userId": "c1wc4j914qck2fl6h7n2jjji9",
+      "role": "CUSTOMER",
+      "fullName": "Võ Thanh Tâm",
+      "phone": "0900000005",
+      "referralCode": "1632A78F",
+      "tokens": {
+        "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMXdjNGo5MTRxY2syZmw2aDduMmpqamk5Iiwicm9sZSI6IkNVU1RPTUVSIiwiemFsb0lkIjoiODI5NTE0NTEzOTIzOTQ3MDM4NSIsImFmZmlsaWF0ZUVuYWJsZWQiOmZhbHNlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA4LCJleHAiOjE3OTEwNzg0MDh9._kwWFwBpS-xRrXPK2dTjcBoBSx21QB78yoPzdKAt7fo",
+        "accessTokenExpiresAt": "2026-10-04T01:46:48.000Z",
+        "refreshTokens": [
+          "a963Yl4rHkU_QLY7145OwrF2rd4beSPv4KMKXEtNazAQ-DJ33RQ1QBsrh7ecXMQl",
+          "MerhFu7XmbEisoP8T_V7xIkMwGmbEaADeWJPZ-0zPHtU_rv2yJtWJKRum8WWqc5I",
+          "6Y1jqPn3Bs1raa91cAty0w-K8GytHaAoldCLUDumWehLgzAO7NOcmUsQ7atHd7J8",
+          "-gsaDRIKVFJOVS_NZLt-yafUB6gFXjNC5wy7Kko7ZhD7Cvm61foh0hoAW3bwO-Dy",
+          "pvOkbqUHu9B4WxfvMdl6uAe7IlZFwczaP5FqBZhJdG90Q1t1u8WXDJk1EuhGUQyO",
+          "bcalcOzFilMz9EooU9-32fLzteOPwdQKeZCowrr3AXmlgZa8oyOnMy_FyV5I0JFr",
+          "ldRi0YUAn7B13RI11jyWLirVIBGLCA842FjszXMf2nO_34ez2el_r02W1NNInyRb",
+          "x_L5zGCVwFFzs8k1QKf2VV8AOsdTFSE2gTiXayO5SIlCuuLblU9A1cvreGUzV4_I",
+          "TElzW-23XQOM0su2tiTDEyzk_b77qZnVTMxjzMdae_d5Yi8ZnaL9xRcwqaF52NEX",
+          "yEylUMyhSIZCOMXQLcKuUkBv9MUJ85AwnjviPjB4PEiJ2RLX9qXTMZC6OGygZvUF",
+          "LPDr52mOpg1tDCjsdbJrj1ZhPDWfHlgn8HIyo7rcqPvZuopZIapIFyBFKSaoovKC",
+          "edpfY-C3rT1bzBa6VZQh0Xb6rbgZDFBDm4MUmxEWpSlZApjo1k0_NiYSk3vqLxvT",
+          "3BklWeN1pe_iQP4fwaGfUeg2xqSmnEl87EB--OoDpP7Z7WIaqbNJqV3wWZGkWfcl",
+          "Xzewz9fMUhUJ9Fxxu7mLsJOxTTDn9E8PJolHXPmmBFNgrPIPp6ZLlrbH2GOh4EZm",
+          "8TXx7QnISXlmgcSDf2TziknInjfYhSsa0LV2WfqHGKPc5hgYOmDycLrKzT1PguUu",
+          "OvZmmiPY6xX-rhgvowAHUHqTBEnovL_18dOR-iy5HCX1Mt7c946mKxOwQTYdRvXy",
+          "AXviKn9MOETeO9xn54vR8NxXhj17Vl-Bt9PxtdTCsn4qaeI6oGRZ_A1VSmAdV9Ya",
+          "lSMcvZ0M0TKrTXhpTYvSQzhlV5DgoIcENPmzooOayIKfo7jRTFBm3IQ87TH_Xdb4",
+          "KzJDUUGjyR2Ule7s65Tllv5X19wOhU-eSNa8Tzw_Yy4U0__tgTw_6lOUVTwgq6me",
+          "3DE_S7Zju-JjbyuWt45-UDekJLg2hbDukmW6MFGTyvRDinKNQV6TYenBXNdXHgmN",
+          "C8GgFOf-MAkxviENOBYAHz-f1S0Bb8egm-aaaaSPv1j5w-K0sxdy3vcN19ZIk2Rt",
+          "OSjtJ3r4UCKkLZaSeZWjD0vaRhDucc9dDjRfDu-hD5YRxpzefKWGPYs9tExaxLNR",
+          "F0C8L9QD8BGnpUh9eKLIlMaG1bg_-oy4dZmzmDluKeYEiSzBhNt40RcPnNVQCLm5",
+          "_wMkNQo9LImtURGUhXCCnY8jF7nJHFIQpXfMWsnX5D2jLFcG0Vpm9U95B5c5JN68",
+          "qZqNZ2kWfsgdXbZ3O3h8l7Sb0_DrkrmbktIxaMuaq9t_nSzMKxmuwvNNH2gOAqp8"
+        ],
+        "refreshTokensExpireAt": "2026-10-27T01:46:48.059Z",
+        "note": "Refresh tokens are SINGLE-USE (rotated by POST /auth/refresh; presenting a used one revokes ALL of this user's sessions). Use a fresh one per new browser context, or keep one context per persona. Re-run the seed to re-mint."
+      },
+      "authUser": {
+        "id": "c1wc4j914qck2fl6h7n2jjji9",
+        "zaloId": "8295145139239470385",
+        "phone": "0900000005",
+        "email": null,
+        "fullName": "Võ Thanh Tâm",
+        "avatarUrl": null,
+        "role": "CUSTOMER",
+        "tierId": null,
+        "referralCode": "1632A78F",
+        "pointsBalance": 0,
+        "walletBalance": 0,
+        "coinsBalance": 0
+      },
+      "miniapp": {
+        "origin": "http://localhost:3213",
+        "mustUseHostname": "localhost (zmp-sdk only enables storage when location.hostname includes \"localhost\")",
+        "localStorageKey": "tubu_refresh_token",
+        "localStorageValueEncoding": "btoa(encodeURIComponent(JSON.stringify(refreshToken)))",
+        "localStorage": {
+          "tubu_refresh_token": "JTIyYTk2M1lsNHJIa1VfUUxZNzE0NU93ckYycmQ0YmVTUHY0S01LWEV0TmF6QVEtREozM1JRMVFCc3JoN2VjWE1RbCUyMg=="
+        },
+        "localStorageForPoolIndex": "replace tubu_refresh_token with zmpEncode(tokens.refreshTokens[i]) for a new context",
+        "sessionStorage": {},
+        "interceptAlternative": {
+          "note": "Parallel-safe alternative: fulfil POST {api}/auth/refresh yourself with this body (keep a dummy tubu_refresh_token in storage so the app calls refresh). Every other API call is real.",
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMXdjNGo5MTRxY2syZmw2aDduMmpqamk5Iiwicm9sZSI6IkNVU1RPTUVSIiwiemFsb0lkIjoiODI5NTE0NTEzOTIzOTQ3MDM4NSIsImFmZmlsaWF0ZUVuYWJsZWQiOmZhbHNlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA4LCJleHAiOjE3OTEwNzg0MDh9._kwWFwBpS-xRrXPK2dTjcBoBSx21QB78yoPzdKAt7fo",
+            "refreshToken": "audit-static-refresh",
+            "user": {
+              "id": "c1wc4j914qck2fl6h7n2jjji9",
+              "zaloId": "8295145139239470385",
+              "phone": "0900000005",
+              "email": null,
+              "fullName": "Võ Thanh Tâm",
+              "avatarUrl": null,
+              "role": "CUSTOMER",
+              "tierId": null,
+              "referralCode": "1632A78F",
+              "pointsBalance": 0,
+              "walletBalance": 0,
+              "coinsBalance": 0
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3213",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      },
+      "web": {
+        "origin": "http://localhost:3212",
+        "localStorage": {
+          "tubu_web_session": "1"
+        },
+        "sessionStorage": {},
+        "cookies": [
+          {
+            "name": "tubu_rt",
+            "value": "MerhFu7XmbEisoP8T_V7xIkMwGmbEaADeWJPZ-0zPHtU_rv2yJtWJKRum8WWqc5I",
+            "domain": "localhost",
+            "path": "/api/auth",
+            "httpOnly": true,
+            "secure": false,
+            "sameSite": "Lax",
+            "expires": 1793065608
+          }
+        ],
+        "cookieNote": "HttpOnly refresh cookie normally set by the API (localhost:3201) — same-site with localhost:3212, sent by fetch(credentials:\"include\") to /api/auth/*. Use a DIFFERENT pool token than the miniapp.",
+        "interceptAlternative": {
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMXdjNGo5MTRxY2syZmw2aDduMmpqamk5Iiwicm9sZSI6IkNVU1RPTUVSIiwiemFsb0lkIjoiODI5NTE0NTEzOTIzOTQ3MDM4NSIsImFmZmlsaWF0ZUVuYWJsZWQiOmZhbHNlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA4LCJleHAiOjE3OTEwNzg0MDh9._kwWFwBpS-xRrXPK2dTjcBoBSx21QB78yoPzdKAt7fo",
+            "refreshToken": "",
+            "user": {
+              "id": "c1wc4j914qck2fl6h7n2jjji9",
+              "fullName": "Võ Thanh Tâm",
+              "avatarUrl": null,
+              "role": "CUSTOMER",
+              "pointsBalance": 0,
+              "walletBalance": 0,
+              "referralCode": "1632A78F"
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3212",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      }
+    },
+    {
+      "name": "staff",
+      "userId": "c0s39gedvkr9tf7fask2sja2b",
+      "role": "STAFF",
+      "fullName": "Đặng Ngọc Lan",
+      "phone": "0900000006",
+      "referralCode": "757B9B8D",
+      "tokens": {
+        "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMHMzOWdlZHZrcjl0ZjdmYXNrMnNqYTJiIiwicm9sZSI6IlNUQUZGIiwiemFsb0lkIjoiODI1ODUzNjMyNzk2OTI2MDEyMSIsImFmZmlsaWF0ZUVuYWJsZWQiOmZhbHNlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA4LCJleHAiOjE3OTEwNzg0MDh9.bJNDZQKmBOkJvPV3aJp_xL_Z82YKLgIat46D9G7l19I",
+        "accessTokenExpiresAt": "2026-10-04T01:46:48.000Z",
+        "refreshTokens": [
+          "nTrzsOzte9FNaZNv7TpdsOtbvl-WCE5BxOMbQTN6tOHE8juv8qvFLnHq51XV9pge",
+          "0mg-UBGyzSGtMhtBfzZWYr0ebZ4IOqq4mf6t0e3SmWoXksnWOqm9HNgB8QSDfml6",
+          "WKIFgfLb7dpwqWb-JyHAoSPCwiLFOpJjtUpzPJ5PyrLdJmQLZGG3dQdwT42yMpMz",
+          "Bi18dxQaQt6jzMtQLOQxNtUdILszHJQErvt7igXCuDPaIfqUxr79JcXvkWiZP-if",
+          "17zBEdo84u_3kVzpj1-rKYvXNNauAG3BL_gjNkqsNsib3Y4JMCMbTwwcAYlrYSKX",
+          "cT1_tg9znWm_8G1s-SOZRjVI4zYavv1Z0L6D9lGgpmyTR_ay51EXI0Z1JM5OI04O",
+          "W1RFDADtY3AGn_ckT3Zxj_cgJOS0RUFwG9-JAy9z_UcGVVAJUMZEvg7CnkvCnCye",
+          "MTjdVZo_CqYtYkI8PJBdxvbO4xnSiPske_WMVWvKBMOAb1OMr6E3npRXb-63BZZO",
+          "dwfKf9UDjKDFgv4Gic-MRyj7kcWYfz6EW3iyTALQmsZUP0RChIFBzr8eUyaoJxtI",
+          "SpAVGnfVRFJkcr2T5Q45Hvx6HwJkXMO1mt9bPYrhMnDLfxEmbib9AmPmYTcKEQpP",
+          "rdCk-tDmV98k9mIi1OIxB1H04NjnluebGeyh_R7W0toNOQBv2g2h8NgemVo76kQV",
+          "6EWxajRMDjRE-XiFQmUfuCoY_RMq7o1gJhleMumNKhhuWyqN6zZzscaUAs_QMdVx",
+          "oBE7F6jMMLd7t3i-CHsCzrpOCesdCdIjVNB3zbTisdvRkuYcSuUHioQ_TI__xmVb",
+          "I2bELLJqSOZxYDRmHn4C3kbutsBOOjWRDdo3MyRoYqhkvELtK1uYzkdCO_Hcq7d3",
+          "LQwZLXjeBppVEkBQK1C1HHBwt4QK23YZvqfEQ2XScW_VoK_NcfBxQKDUrosNQ58M",
+          "Xts1EZMueKEiA0EHzcZgIX4FQ4rm3bBi0lWG4nHiNikRwcCAhSxldVf-M7HEjCQM",
+          "hBZ7QnpknRsIkBGiqZp2z-JboUkL6yvw4axYNlI6Is1720Okq0ojxisXwDea0EiP",
+          "tKMAhsDS4VcjjYlAbIahjg7XZEwrlwvE3wCGS1D1ldCs8NdyinSyg4nV27sc-GHE",
+          "ssahkRFJ4j-0l_lw0eQDm1H2yAQQHndyGOiPCL7YoVO4hZs_XU6_ALySJSxCwOYS",
+          "WzIp2yguqF2bs1SiUaqysDCtjdyR0cPCmuzjfcgtkB2KROLfkuZMN_Yqh50qe6uO",
+          "phvP9GCHzg7lugxAFku14S8hibSAFUM6h_oQGB3JULE6z9snMEACoi_UzlUus_OC",
+          "zi_hSgCBev21z34goaaVIb_2rDzNIOa7OIbJfQzM2_c8vtm4giRqqsSltx2tzk_5",
+          "iesdpGuNXpwElIUn-tc_A1vp4WYhTyQmTBa5GVXx_UJcDBptWRVD_i0gbOqfioYL",
+          "4M4vsAqGOLTclB0dGmRuUgLpSE3tmz2xzSkf5zzwANIbSQwOnqsfvH4FYcFF5osM",
+          "4T3rArhLox5rlS6zg9iTfHWMFJjiakrk3Il1XicNTirXHbQkMATjFaMtK2pDZBxq"
+        ],
+        "refreshTokensExpireAt": "2026-10-27T01:46:48.262Z",
+        "note": "Refresh tokens are SINGLE-USE (rotated by POST /auth/refresh; presenting a used one revokes ALL of this user's sessions). Use a fresh one per new browser context, or keep one context per persona. Re-run the seed to re-mint."
+      },
+      "authUser": {
+        "id": "c0s39gedvkr9tf7fask2sja2b",
+        "zaloId": "8258536327969260121",
+        "phone": "0900000006",
+        "email": null,
+        "fullName": "Đặng Ngọc Lan",
+        "avatarUrl": null,
+        "role": "STAFF",
+        "tierId": "MAM_XANH",
+        "referralCode": "757B9B8D",
+        "pointsBalance": 0,
+        "walletBalance": 0,
+        "coinsBalance": 800
+      },
+      "miniapp": {
+        "origin": "http://localhost:3213",
+        "mustUseHostname": "localhost (zmp-sdk only enables storage when location.hostname includes \"localhost\")",
+        "localStorageKey": "tubu_refresh_token",
+        "localStorageValueEncoding": "btoa(encodeURIComponent(JSON.stringify(refreshToken)))",
+        "localStorage": {
+          "tubu_refresh_token": "JTIyblRyenNPenRlOUZOYVpOdjdUcGRzT3RidmwtV0NFNUJ4T01iUVRONnRPSEU4anV2OHF2RkxuSHE1MVhWOXBnZSUyMg=="
+        },
+        "localStorageForPoolIndex": "replace tubu_refresh_token with zmpEncode(tokens.refreshTokens[i]) for a new context",
+        "sessionStorage": {},
+        "interceptAlternative": {
+          "note": "Parallel-safe alternative: fulfil POST {api}/auth/refresh yourself with this body (keep a dummy tubu_refresh_token in storage so the app calls refresh). Every other API call is real.",
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMHMzOWdlZHZrcjl0ZjdmYXNrMnNqYTJiIiwicm9sZSI6IlNUQUZGIiwiemFsb0lkIjoiODI1ODUzNjMyNzk2OTI2MDEyMSIsImFmZmlsaWF0ZUVuYWJsZWQiOmZhbHNlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA4LCJleHAiOjE3OTEwNzg0MDh9.bJNDZQKmBOkJvPV3aJp_xL_Z82YKLgIat46D9G7l19I",
+            "refreshToken": "audit-static-refresh",
+            "user": {
+              "id": "c0s39gedvkr9tf7fask2sja2b",
+              "zaloId": "8258536327969260121",
+              "phone": "0900000006",
+              "email": null,
+              "fullName": "Đặng Ngọc Lan",
+              "avatarUrl": null,
+              "role": "STAFF",
+              "tierId": "MAM_XANH",
+              "referralCode": "757B9B8D",
+              "pointsBalance": 0,
+              "walletBalance": 0,
+              "coinsBalance": 800
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3213",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      },
+      "web": {
+        "origin": "http://localhost:3212",
+        "localStorage": {
+          "tubu_web_session": "1"
+        },
+        "sessionStorage": {},
+        "cookies": [
+          {
+            "name": "tubu_rt",
+            "value": "0mg-UBGyzSGtMhtBfzZWYr0ebZ4IOqq4mf6t0e3SmWoXksnWOqm9HNgB8QSDfml6",
+            "domain": "localhost",
+            "path": "/api/auth",
+            "httpOnly": true,
+            "secure": false,
+            "sameSite": "Lax",
+            "expires": 1793065608
+          }
+        ],
+        "cookieNote": "HttpOnly refresh cookie normally set by the API (localhost:3201) — same-site with localhost:3212, sent by fetch(credentials:\"include\") to /api/auth/*. Use a DIFFERENT pool token than the miniapp.",
+        "interceptAlternative": {
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMHMzOWdlZHZrcjl0ZjdmYXNrMnNqYTJiIiwicm9sZSI6IlNUQUZGIiwiemFsb0lkIjoiODI1ODUzNjMyNzk2OTI2MDEyMSIsImFmZmlsaWF0ZUVuYWJsZWQiOmZhbHNlLCJkZWFsZXJFbmFibGVkIjpmYWxzZSwiaWF0IjoxNzkwNDczNjA4LCJleHAiOjE3OTEwNzg0MDh9.bJNDZQKmBOkJvPV3aJp_xL_Z82YKLgIat46D9G7l19I",
+            "refreshToken": "",
+            "user": {
+              "id": "c0s39gedvkr9tf7fask2sja2b",
+              "fullName": "Đặng Ngọc Lan",
+              "avatarUrl": null,
+              "role": "STAFF",
+              "pointsBalance": 0,
+              "walletBalance": 0,
+              "referralCode": "757B9B8D"
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3212",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      }
+    },
+    {
+      "name": "admin",
+      "userId": "c0vmh2mq2ikp9unhy8kfi01bs",
+      "role": "ADMIN",
+      "fullName": "Bùi Quốc Anh",
+      "phone": "0900000007",
+      "referralCode": "A86BF60A",
+      "tokens": {
+        "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMHZtaDJtcTJpa3A5dW5oeThrZmkwMWJzIiwicm9sZSI6IkFETUlOIiwiemFsb0lkIjoiODk5NDY3OTExMTA1OTY5OTkxOSIsImFmZmlsaWF0ZUVuYWJsZWQiOnRydWUsImRlYWxlckVuYWJsZWQiOmZhbHNlLCJpYXQiOjE3OTA0NzM2MDgsImV4cCI6MTc5MTA3ODQwOH0.fBzlldl5EfRFYYUs1D1gWn-6X9ReMVU_gFObGKSRpKo",
+        "accessTokenExpiresAt": "2026-10-04T01:46:48.000Z",
+        "refreshTokens": [
+          "kBxP6-nZyGQEOopOs2MRflTBAN0RMK7-kSQPe2L3QSJKX2kxnIDUfDRRQZfMRJ0Q",
+          "GICD8YCdK-s_wsolUFw441ld6lfTqiOYQiuSjYZESczyElM3EZ4WR6uu_4J_QwKL",
+          "Ax9hqandU_GEhS54ObkLgaOB0RuosZkAQFPnE2LG1c89PvsrFLI-gBcZchT_bsda",
+          "zVdH_75d1WVWtQqTbRhTu8HV9X7jfSX6WyXPAJcTysell2EiMjVTscbmrEFXKuLP",
+          "H7_FNeeqCoEtWnufy3B75Ie_0Vpxcx6x3xerVkGIviKfStEGUexsdrxdO3br-sAA",
+          "llV4MWWh4GY3W3idhMJ7AiXjJVkVYwTbC433cjMbbZu6CReIDfswtJszBf-aWLgd",
+          "DLqDomwGZkfZPF1xocUSc4-pUCix1Rnn32VDSAORwqD2W_g7ttMm6VXm1nrW4BSr",
+          "RC-LgYOhNmCRN4uvq82RTB5O93IYlXYfLAD7rLYA3N33SblefEVo6o6FedtJfDQM",
+          "HqReHZX9rvvC-oYXkMbMiVXJvA-6WCdBGwbyHiWhCOLSlhOK2FaHjfWqJzfTI7y8",
+          "Loc1z46UfvmGAN0tnG9VzUPH0y87afy1ndXQq6UZyB3a-Gu3i-K0z-LWB-Pc1Li8",
+          "kT5P1nTBp9NOA6fSiI9ki_g311yq_r7FB9sekimiU8MTsB07kCm4kDDj0VX4xR8H",
+          "rDqIu_gtMYtcTsPd_zYsViEp9Npg-Qi60aLj4XtJIiOrcVQr1GNn6A3b7yN2GjFX",
+          "mN_Pso7LFMld5ckym7UDjGS92crDSj3P1oqd4X84HVbLwZqYlREB6-nVZWUNOVq8",
+          "PEM5izQMY0faz6ImkOGRhJZydsrf8qlwFKqqQ758IPSylocthq-W34fsJEm3FyJA",
+          "XU7ihAqf50jTM3dCQz57TB69hjAfsZe2DZ5q7jsJFp20FAa9WcLUCc1wMOJstl5l",
+          "KUk31kXEIQtPG9Y_vLUMiWyU34pVTJ5gNsEiSh-pdRFDuOlP8ot2sN8PG_3aHcOR",
+          "L7NBcblhZPJpd09QMy3YwQNzwoK0T_nli0IobKmbr_stowz6saJvBrW37Foaqz69",
+          "hMKuZIaDsSEKHqADh_aO_P3ma-xH8aYngZkHZueNkyOaTACpUzd2bEdPtt8S6eAR",
+          "tcEArfnv9wlbpd1PaCUt24mMAJ58Eou1dCpMwsMkZcZl23GX3-G5o8b6sh7q4Bcf",
+          "_6uiMVzPrk9RVhcXQFqLbHSGqjVNI3yC7Mqp8hZw2Xq87GD9ZOjN7Kw0dsE-zCZp",
+          "o6oWyNe01i13BMswXboruB2bUJy67gppTmgkdO3PFexZiMrG8cENiA_yPCc5w9Ic",
+          "MzO9aOyg2o3BdmhH9HvdRIrNXNXFYram7-NiBTiXYqB-lwfhvrKK6D3h6GxVl2mA",
+          "4FyZzJAn2euORU71oAxr2u_O2fmGKR2hqWxqM8DUixdFpP2tC61pgmRiKOYFp7oN",
+          "4m2Y378V321sYPT3ItMrbl1V3Bkj2EEsCeyJZTiJcFjdbFPp09mJWQ6FOgwlxJkE",
+          "JIdQHQDcRcwmJ1cXK7U5soOOKvIkrhLim-22dOWMnZ_QzBqROiGN1_PjirtX8_vu"
+        ],
+        "refreshTokensExpireAt": "2026-10-27T01:46:48.429Z",
+        "note": "Refresh tokens are SINGLE-USE (rotated by POST /auth/refresh; presenting a used one revokes ALL of this user's sessions). Use a fresh one per new browser context, or keep one context per persona. Re-run the seed to re-mint."
+      },
+      "authUser": {
+        "id": "c0vmh2mq2ikp9unhy8kfi01bs",
+        "zaloId": "8994679111059699919",
+        "phone": "0900000007",
+        "email": null,
+        "fullName": "Bùi Quốc Anh",
+        "avatarUrl": null,
+        "role": "ADMIN",
+        "tierId": null,
+        "referralCode": "A86BF60A",
+        "pointsBalance": 0,
+        "walletBalance": 0,
+        "coinsBalance": 0
+      },
+      "miniapp": {
+        "origin": "http://localhost:3213",
+        "mustUseHostname": "localhost (zmp-sdk only enables storage when location.hostname includes \"localhost\")",
+        "localStorageKey": "tubu_refresh_token",
+        "localStorageValueEncoding": "btoa(encodeURIComponent(JSON.stringify(refreshToken)))",
+        "localStorage": {
+          "tubu_refresh_token": "JTIya0J4UDYtblp5R1FFT29wT3MyTVJmbFRCQU4wUk1LNy1rU1FQZTJMM1FTSktYMmt4bklEVWZEUlJRWmZNUkowUSUyMg=="
+        },
+        "localStorageForPoolIndex": "replace tubu_refresh_token with zmpEncode(tokens.refreshTokens[i]) for a new context",
+        "sessionStorage": {},
+        "interceptAlternative": {
+          "note": "Parallel-safe alternative: fulfil POST {api}/auth/refresh yourself with this body (keep a dummy tubu_refresh_token in storage so the app calls refresh). Every other API call is real.",
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMHZtaDJtcTJpa3A5dW5oeThrZmkwMWJzIiwicm9sZSI6IkFETUlOIiwiemFsb0lkIjoiODk5NDY3OTExMTA1OTY5OTkxOSIsImFmZmlsaWF0ZUVuYWJsZWQiOnRydWUsImRlYWxlckVuYWJsZWQiOmZhbHNlLCJpYXQiOjE3OTA0NzM2MDgsImV4cCI6MTc5MTA3ODQwOH0.fBzlldl5EfRFYYUs1D1gWn-6X9ReMVU_gFObGKSRpKo",
+            "refreshToken": "audit-static-refresh",
+            "user": {
+              "id": "c0vmh2mq2ikp9unhy8kfi01bs",
+              "zaloId": "8994679111059699919",
+              "phone": "0900000007",
+              "email": null,
+              "fullName": "Bùi Quốc Anh",
+              "avatarUrl": null,
+              "role": "ADMIN",
+              "tierId": null,
+              "referralCode": "A86BF60A",
+              "pointsBalance": 0,
+              "walletBalance": 0,
+              "coinsBalance": 0
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3213",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      },
+      "web": {
+        "origin": "http://localhost:3212",
+        "localStorage": {
+          "tubu_web_session": "1"
+        },
+        "sessionStorage": {},
+        "cookies": [
+          {
+            "name": "tubu_rt",
+            "value": "GICD8YCdK-s_wsolUFw441ld6lfTqiOYQiuSjYZESczyElM3EZ4WR6uu_4J_QwKL",
+            "domain": "localhost",
+            "path": "/api/auth",
+            "httpOnly": true,
+            "secure": false,
+            "sameSite": "Lax",
+            "expires": 1793065608
+          }
+        ],
+        "cookieNote": "HttpOnly refresh cookie normally set by the API (localhost:3201) — same-site with localhost:3212, sent by fetch(credentials:\"include\") to /api/auth/*. Use a DIFFERENT pool token than the miniapp.",
+        "interceptAlternative": {
+          "url": "http://localhost:3201/api/auth/refresh",
+          "responseBody": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMHZtaDJtcTJpa3A5dW5oeThrZmkwMWJzIiwicm9sZSI6IkFETUlOIiwiemFsb0lkIjoiODk5NDY3OTExMTA1OTY5OTkxOSIsImFmZmlsaWF0ZUVuYWJsZWQiOnRydWUsImRlYWxlckVuYWJsZWQiOmZhbHNlLCJpYXQiOjE3OTA0NzM2MDgsImV4cCI6MTc5MTA3ODQwOH0.fBzlldl5EfRFYYUs1D1gWn-6X9ReMVU_gFObGKSRpKo",
+            "refreshToken": "",
+            "user": {
+              "id": "c0vmh2mq2ikp9unhy8kfi01bs",
+              "fullName": "Bùi Quốc Anh",
+              "avatarUrl": null,
+              "role": "ADMIN",
+              "pointsBalance": 0,
+              "walletBalance": 0,
+              "referralCode": "A86BF60A"
+            }
+          },
+          "corsHeaders": {
+            "access-control-allow-origin": "http://localhost:3212",
+            "access-control-allow-credentials": "true"
+          }
+        }
+      }
+    }
+  ]
+}

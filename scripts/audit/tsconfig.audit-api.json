@@ -1,0 +1,10 @@
+{
+  "//": "Audit-only build of apps/api into .audit/api-dist (never touches apps/api/dist used by the owner's dev server).",
+  "extends": "../../apps/api/tsconfig.build.json",
+  "compilerOptions": {
+    "outDir": "../../.audit/api-dist",
+    "incremental": false,
+    "sourceMap": true,
+    "noEmitOnError": false
+  }
+}
