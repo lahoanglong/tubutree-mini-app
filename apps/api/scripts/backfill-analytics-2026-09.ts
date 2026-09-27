@@ -1,6 +1,6 @@
 // apps/api/scripts/backfill-analytics-2026-09.ts
 // Chạy 1 LẦN sau khi đã áp migration analytics_foundation. KHÔNG chạy trong CI/migrate deploy.
-// Usage: cd apps/api && npx ts-node scripts/backfill-analytics-2026-09.ts
+// Usage: cd apps/api && npx tsx scripts/backfill-analytics-2026-09.ts
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
