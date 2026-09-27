@@ -11,10 +11,8 @@ import {
   Truck,
   RotateCcw,
   Sparkles,
-  QrCode,
 } from 'lucide-react';
 import { getStorefront, formatVnd, formatSold } from '@/lib/api';
-import { CopyButton } from '@/components/copy-button';
 import { StorefrontTracker } from '@/components/storefront-tracker';
 
 export const revalidate = 300;
@@ -187,46 +185,14 @@ export default async function StorefrontPage({
             )}
           </div>
         )}
-
-        {/* Direct VietQR Payment Card */}
-        {sf.bankBin && sf.bankAccountNo && (
-          <div className="mt-4 rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/70 to-teal-50/40 p-4 text-xs text-neutral-700 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5 font-bold text-emerald-900">
-                  <CreditCard className="h-4 w-4 text-emerald-700" />
-                  <span>Thanh toán trực tiếp cho Đối tác (VietQR Napas247 - 0đ phí)</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-neutral-700">
-                  <span>Ngân hàng: <strong className="text-neutral-900">{sf.bankName || 'NHTM'}</strong></span>
-                  <span>·</span>
-                  <span className="flex items-center gap-1.5">
-                    STK: <strong className="font-mono text-sm font-bold text-neutral-900">{sf.bankAccountNo}</strong>
-                    <CopyButton text={sf.bankAccountNo} label="Sao chép" />
-                  </span>
-                  {sf.bankAccountName && <span>({sf.bankAccountName})</span>}
-                </div>
-                <p className="text-[11px] text-emerald-800/80">
-                  ✓ Tiền về trực tiếp tài khoản đối tác, xử lý và xuất kho thần tốc.
-                </p>
-              </div>
-
-              {/* QR Code thumbnail */}
-              <div className="shrink-0 flex items-center gap-2 sm:flex-col sm:items-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`https://img.vietqr.io/image/${sf.bankBin}-${sf.bankAccountNo}-compact.png?addInfo=DONHANG_${sf.slug}`}
-                  alt="VietQR Đối tác"
-                  className="h-16 w-16 sm:h-20 sm:w-20 rounded-xl border border-white bg-white p-1 shadow-sm"
-                  loading="lazy"
-                />
-                <span className="text-[10px] font-semibold text-emerald-800 flex items-center gap-1">
-                  <QrCode className="h-3 w-3" /> Quét VietQR
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Đã BỎ card "Thanh toán trực tiếp cho Đối tác" (VietQR thẳng vào bankBin/bankAccountNo
+         * của storefront) — audit A2-01=A5-02=A6-03 (2026-09-27): mã QR này không gắn với đơn
+         * hàng/số tiền nào (chỉ addInfo=DONHANG_<slug>, không phải mã đơn thật), nên khách quét
+         * và chuyển khoản xong là MẤT DẤU VẾT hoàn toàn — không đơn nào được tạo, không cách nào
+         * đối soát. Quyết định: MỌI thanh toán chuyển khoản đều phải đi qua checkout thật (nhận
+         * tiền vào tài khoản Tubu, xem bank-transfer.service.ts) để có đơn + đối soát; không
+         * storefront nào (CTV/dealer/brand) được nhận tiền trực tiếp cho tới khi có một hệ thống
+         * đối tác-tự-thu-tiền thật sự (xem A5-34, còn mở). */}
       </div>
 
       {/* ── Trust Ribbon ── */}

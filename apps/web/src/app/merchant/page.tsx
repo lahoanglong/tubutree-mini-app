@@ -1127,6 +1127,12 @@ function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuc
 // ── Tab 5: Đơn Hàng Xuất Kho ──
 function OrdersTab({ store }: { store: MerchantStore }) {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  // P0 A5-03=A6-02 & A5-04=A6-36 (docs/audit-2026-09): BE giờ chỉ trả tên/SĐT/địa chỉ đầy đủ VÀ
+  // chỉ cho tự chuyển trạng thái đơn khi caller là ADMIN — CTV/đại lý không thực sự giao hàng (mọi
+  // đơn đều do kho Tubu xử lý qua Pancake, xem A5-34) nên không có tín hiệu nào để tin lời tự khai
+  // "đã giao". FE ẩn hẳn nút chuyển trạng thái + hiện ghi chú thay vì để bấm rồi báo lỗi 403.
+  const isAdmin = user?.role === 'ADMIN';
   const [status, setStatusState] = useState('');
   const [page, setPage] = useState(1);
   const setStatus = (s: string) => {
@@ -1166,6 +1172,13 @@ function OrdersTab({ store }: { store: MerchantStore }) {
       {updateError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {updateError}
+        </div>
+      )}
+      {!isAdmin && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-800">
+          Đơn do kho Tubu Tree xử lý giao nhận nên hệ thống ẩn bớt tên/SĐT đầy đủ và địa chỉ chi
+          tiết của khách, chỉ hiện khu vực (Phường/Quận/Tỉnh). Trạng thái đơn cũng do kho Tubu tự
+          cập nhật — bạn chỉ xem, không tự chuyển trạng thái tại đây được.
         </div>
       )}
       <div className="flex items-center justify-between">
@@ -1214,10 +1227,17 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                       <div className="text-xs text-neutral-500">{o.user?.phone}</div>
                       {/* Địa chỉ giao: BE vẫn trả `shippingAddress` trong đơn, nhưng bảng này
                           chỉ hiện tên + SĐT → đối tác mở tab để ĐÓNG GÓI mà không có địa chỉ
-                          ghi vận đơn, phải hỏi lại Tubu từng đơn. */}
+                          ghi vận đơn, phải hỏi lại Tubu từng đơn.
+                          Với caller không phải ADMIN, BE đã bỏ hẳn recipient/phone/street (A5-04=
+                          A6-36) — chỉ còn ward/district/province, nên dòng "recipient · phone"
+                          chỉ hiện khi còn ít nhất 1 trong 2 (tránh hiện trơ " · "). */}
                       {o.shippingAddress && (
                         <div className="mt-1 text-xs text-neutral-600">
-                          <div>{o.shippingAddress.recipient} · {o.shippingAddress.phone}</div>
+                          {(o.shippingAddress.recipient || o.shippingAddress.phone) && (
+                            <div>
+                              {[o.shippingAddress.recipient, o.shippingAddress.phone].filter(Boolean).join(' · ')}
+                            </div>
+                          )}
                           <div>
                             {[
                               o.shippingAddress.street,
@@ -1251,35 +1271,41 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                       </span>
                     </td>
                     <td className="px-3 py-3 text-right">
-                      <div className="inline-flex gap-1.5">
-                        {o.status === 'CONFIRMED' && (
-                          <button
-                            onClick={() => updateMut.mutate({ id: o.id, newStatus: 'PACKED' })}
-                            disabled={updateMut.isPending}
-                            className="rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                          >
-                            Đã đóng gói
-                          </button>
-                        )}
-                        {o.status === 'PACKED' && (
-                          <button
-                            onClick={() => updateMut.mutate({ id: o.id, newStatus: 'SHIPPING' })}
-                            disabled={updateMut.isPending}
-                            className="rounded bg-purple-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-purple-700 disabled:opacity-50"
-                          >
-                            Bắt đầu giao
-                          </button>
-                        )}
-                        {o.status === 'SHIPPING' && (
-                          <button
-                            onClick={() => updateMut.mutate({ id: o.id, newStatus: 'DELIVERED' })}
-                            disabled={updateMut.isPending}
-                            className="rounded bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                          >
-                            Đã giao
-                          </button>
-                        )}
-                      </div>
+                      {isAdmin ? (
+                        <div className="inline-flex gap-1.5">
+                          {o.status === 'CONFIRMED' && (
+                            <button
+                              onClick={() => updateMut.mutate({ id: o.id, newStatus: 'PACKED' })}
+                              disabled={updateMut.isPending}
+                              className="rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                            >
+                              Đã đóng gói
+                            </button>
+                          )}
+                          {o.status === 'PACKED' && (
+                            <button
+                              onClick={() => updateMut.mutate({ id: o.id, newStatus: 'SHIPPING' })}
+                              disabled={updateMut.isPending}
+                              className="rounded bg-purple-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+                            >
+                              Bắt đầu giao
+                            </button>
+                          )}
+                          {o.status === 'SHIPPING' && (
+                            <button
+                              onClick={() => updateMut.mutate({ id: o.id, newStatus: 'DELIVERED' })}
+                              disabled={updateMut.isPending}
+                              className="rounded bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                            >
+                              Đã giao
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        // P0 A5-03=A6-02: BE đã chặn hẳn self-transition cho DEALER/AFFILIATE (403) —
+                        // ẩn nút thay vì để đối tác bấm rồi nhận lỗi.
+                        <span className="text-xs italic text-neutral-400">Do kho Tubu xử lý</span>
+                      )}
                     </td>
                   </tr>
                 ))

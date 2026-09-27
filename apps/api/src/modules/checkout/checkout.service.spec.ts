@@ -277,6 +277,19 @@ describe('CheckoutService.placeOrder — storefrontSlug attribution (Lớp 2)', 
     expect(data.referrerUserId).toBe('ctv9');
     expect(data.storefrontSlug).toBeNull();
   });
+
+  // P0 A5-01 (đường CHÍNH, không phải fallback touch 3 ngày): slug gian hàng CTV mở trong Zalo
+  // là referralCode viết THƯỜNG (storefront.service.ts sinh slug = referralCode.toLowerCase()),
+  // trong khi User.referralCode luôn lưu HOA — resolveReferrer tra khớp phân biệt hoa/thường nên
+  // referrer luôn null, CTV không bao giờ được ghi nhận hoa hồng cho khách mua ngay trong Zalo.
+  it('P0 A5-01: referralCode viết THƯỜNG (từ slug gian hàng mở trong Zalo) vẫn khớp User.referralCode viết HOA', async () => {
+    const getActiveTouch = jest.fn().mockResolvedValue(null);
+    const { svc, prisma, orderCreate } = build({ stockCount: 1, getActiveTouch });
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'ctv9', referralCode: 'ABCD1234' });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', referralCode: 'abcd1234' } as never);
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { referralCode: 'ABCD1234' } });
+    expect(orderCreate.mock.calls[0][0].data.referrerUserId).toBe('ctv9');
+  });
 });
 
 describe('CheckoutService.placeOrder — combo discount (§7.2)', () => {

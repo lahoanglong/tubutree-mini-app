@@ -139,6 +139,21 @@ export const placeOrder = (
 export const fetchOrders = () =>
   apiFetch<{ data: OrderDTO[]; meta: unknown }>('/orders').then((r) => r.data);
 
+// Thanh toán chuyển khoản (VietQR) — A2-02 = A6-01 (docs/audit-2026-09): web chọn được
+// BANK_TRANSFER nhưng trước đây không có cách nào gọi endpoint này nên khách không bao giờ thấy
+// QR/STK để trả tiền. Cùng contract BE với apps/miniapp/src/services/payment-api.ts
+// (GET /payments/bank-qr/:code — xem bank-transfer.service.ts).
+export interface BankQrDTO {
+  orderCode: string;
+  amount: number;
+  paymentStatus: 'UNPAID' | 'PAID' | 'REFUNDED' | 'FAILED';
+  bank: { bin: string; name: string; accountNo: string; accountName: string };
+  memo: string;
+  qrString: string;
+  qrImageUrl: string;
+}
+export const getBankQr = (code: string) => apiFetch<BankQrDTO>(`/payments/bank-qr/${code}`);
+
 export function formatVnd(n: number): string {
   return `${n.toLocaleString('vi-VN')}đ`;
 }

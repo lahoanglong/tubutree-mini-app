@@ -32,6 +32,55 @@ function slugify(str: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+/**
+ * Cùng công thức che SĐT với `maskPhone` ở loyalty.service.ts (giữ 3 số đầu + 3 số cuối) — không
+ * import trực tiếp từ đó (module khác, tránh đụng file agent khác có thể đang sửa song song), chỉ
+ * lặp lại ĐÚNG công thức để nhất quán quy ước che dữ liệu toàn hệ thống.
+ */
+function maskPhoneNumber(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  if (phone.length <= 6) return '***';
+  return `${phone.slice(0, 3)}****${phone.slice(-3)}`;
+}
+
+/**
+ * Cùng công thức che tên với `maskName` ở game.service.ts/game-gift.service.ts/game-season.service.ts
+ * (chỉ giữ từ cuối — trong tiếng Việt là "tên gọi" — phần còn lại thay bằng "***").
+ */
+function maskFullName(name: string | null | undefined): string {
+  if (!name || !name.trim()) return 'Khách Tubu';
+  const parts = name.trim().split(/\s+/);
+  return `${parts[parts.length - 1]}***`;
+}
+
+type MaskableShippingAddress = {
+  recipient?: unknown;
+  phone?: unknown;
+  street?: unknown;
+  ward?: unknown;
+  district?: unknown;
+  province?: unknown;
+};
+
+/**
+ * A5-04 = A6-36 (docs/audit-2026-09): CTV/đại lý không thực sự giao hàng — MỌI đơn (kể cả đơn "SP
+ * đối tác"/gian hàng MERCHANT) vẫn bị đẩy Pancake về kho Tubu xử lý vô điều kiện (xem A5-34,
+ * checkout.service.ts không rẽ nhánh theo storefront/product nguồn gốc) — nên không có nhu cầu
+ * chính đáng với SĐT/tên đầy đủ hay địa chỉ tới cấp số nhà/người nhận. Chỉ giữ khu vực
+ * (phường/quận/tỉnh) để biết phạm vi giao, đủ cho CTV tư vấn khách mà không lộ định danh.
+ */
+function maskShippingAddress(
+  raw: unknown,
+): { ward: string | null; district: string | null; province: string | null } | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const addr = raw as MaskableShippingAddress;
+  return {
+    ward: typeof addr.ward === 'string' ? addr.ward : null,
+    district: typeof addr.district === 'string' ? addr.district : null,
+    province: typeof addr.province === 'string' ? addr.province : null,
+  };
+}
+
 export interface UpdateStoreDto {
   title?: string;
   headerNote?: string;
@@ -74,6 +123,16 @@ export class MerchantService {
     private readonly prisma: PrismaService,
     private readonly orderStatus: OrderStatusService,
   ) {}
+
+  /**
+   * Vai trò thật của caller — dùng để gác các quyết định "ai được tin" (P0 A5-03/A5-04/A5-05,
+   * docs/audit-2026-09): tách riêng khỏi getOrCreateStore() vì hàm đó phục vụ CẢ luồng auto-tạo
+   * gian hàng (không nên đổi contract trả về của nó chỉ để lấy thêm role).
+   */
+  private async getCallerRole(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { role: true } });
+    return user.role;
+  }
 
   async getOrCreateStore(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
@@ -276,7 +335,7 @@ export class MerchantService {
   // giờ xem hết được sản phẩm của chính mình (và danh sách bán lại). Nay phân trang thật, dùng
   // chung page/limit cho cả 2 danh sách (own + resell) vì cả 2 đến từ 1 request/1 màn hình.
   async listMyProducts(userId: string, page = 1, limit = 20) {
-    const store = await this.getOrCreateStore(userId);
+    const [store, role] = await Promise.all([this.getOrCreateStore(userId), this.getCallerRole(userId)]);
     const { skip, take } = skipTake(page, limit);
 
     const ownWhere: Prisma.ProductWhereInput = { storefrontId: store.id };
@@ -309,11 +368,26 @@ export class MerchantService {
       }),
     ]);
 
+    const resellProducts = resellItems.map((item) => item.product);
+    // P0 A5-05 (docs/audit-2026-09): đăng ký CTV (AFFILIATE) chỉ 1 chạm, không duyệt — không được
+    // đọc dealerPrices (giá sỉ theo bậc đại lý) hay affiliateRate (%) của BẤT KỲ sản phẩm nào.
+    // DEALER (hồ sơ admin duyệt) và ADMIN vẫn cần các trường này (đại lý xem giá sỉ là tính năng
+    // có chủ đích ở /dealer) nên chỉ ẩn với đúng role AFFILIATE.
+    const shouldHidePricingInternals = role === 'AFFILIATE';
+
     return {
-      ownProducts,
-      resellProducts: resellItems.map((item) => item.product),
+      ownProducts: shouldHidePricingInternals ? this.stripPricingInternals(ownProducts) : ownProducts,
+      resellProducts: shouldHidePricingInternals ? this.stripPricingInternals(resellProducts) : resellProducts,
       meta: { page, limit, ownTotal, resellTotal },
     };
+  }
+
+  /** Bỏ hẳn key dealerPrices/affiliateRate (không chỉ set null) khỏi variations — xem A5-05. */
+  private stripPricingInternals<P extends { variations: Array<Record<string, unknown>> }>(products: P[]) {
+    return products.map((p) => ({
+      ...p,
+      variations: p.variations.map(({ dealerPrices: _dealerPrices, affiliateRate: _affiliateRate, ...safe }) => safe),
+    }));
   }
 
   async addResellProduct(userId: string, productId: string, collectionId?: string) {
@@ -402,7 +476,10 @@ export class MerchantService {
   // Bug 3: `take: 50` không kèm `skip` — merchant có trên 50 đơn không bao giờ xem được đơn cũ
   // hơn. Nay phân trang thật kèm meta {total, page, limit}.
   async listMerchantOrders(userId: string, status?: string, page = 1, limit = 20) {
-    const filter = await this.resolveMerchantOrderFilter(userId);
+    const [filter, role] = await Promise.all([
+      this.resolveMerchantOrderFilter(userId),
+      this.getCallerRole(userId),
+    ]);
     const where: Prisma.OrderWhereInput = {
       ...filter,
       ...(status ? { status: status as never } : {}),
@@ -423,10 +500,44 @@ export class MerchantService {
       }),
     ]);
 
-    return paginated(data, page, limit, total);
+    // P0 A5-04 = A6-36 (docs/audit-2026-09): chỉ ADMIN mới thấy tên/SĐT/địa chỉ đầy đủ của khách —
+    // xem lý do đầy đủ ở maskShippingAddress() và updateMerchantOrderStatus() (không có tín hiệu
+    // nào trong schema hiện tại phân biệt "đối tác tự giao hàng thật" khỏi "CTV referral, kho Tubu
+    // giao" — A5-34). DEALER/AFFILIATE đều bị che như nhau.
+    const shaped =
+      role === 'ADMIN'
+        ? data
+        : data.map((order) => ({
+            ...order,
+            user: order.user
+              ? { ...order.user, fullName: maskFullName(order.user.fullName), phone: maskPhoneNumber(order.user.phone) }
+              : order.user,
+            shippingAddress: maskShippingAddress(order.shippingAddress),
+          }));
+
+    return paginated(shaped, page, limit, total);
   }
 
   async updateMerchantOrderStatus(userId: string, orderId: string, status: string) {
+    // P0 A5-03 = A6-02 (docs/audit-2026-09/05-ctv-dealer-staff.md, 06-web.md): CTV/đại lý tự bấm
+    // chuyển đơn "Đã đóng gói→Đang giao→Đã giao" (cả CANCELLED/RETURNED) cho MỌI đơn gắn gian hàng
+    // của mình — kể cả đơn do kho Tubu thật sự xử lý (mọi đơn đều bị đẩy Pancake vô điều kiện, xem
+    // A5-34: checkout.service.ts không rẽ nhánh theo storefront/product nguồn gốc), khoá hoa hồng +
+    // cộng điểm Xanh dựa trên lời tự khai "đã giao" có thể giả. Không có cờ "tự giao hàng đã xác
+    // minh" nào trong schema hiện tại để phân biệt "đối tác thật sự tự đóng gói & giao" khỏi "đơn
+    // CTV referral, kho Tubu giao" — mặc định AN TOÀN là chặn hẳn tự chuyển trạng thái qua cổng
+    // /merchant cho DEALER lẫn AFFILIATE. ADMIN vẫn được (đã có toàn quyền qua /admin sẵn, không
+    // phải bên tự-báo-cáo có lợi ích tài chính trong đơn).
+    // TODO(nghiệp vụ, cần thiết kế riêng — KHÔNG tự thêm cờ/migration trong bản vá khẩn cấp này):
+    // nếu sau này có nhãn/đại lý THẬT SỰ tự giao hàng, cần một cờ do admin bật rõ ràng (ví dụ trên
+    // Storefront hoặc Brand) rồi thay điều kiện dưới đây bằng kiểm tra cờ đó.
+    const role = await this.getCallerRole(userId);
+    if (role !== 'ADMIN') {
+      throw new ForbiddenException(
+        'Đơn hàng do kho Tubu Tree xử lý giao nhận; đối tác không thể tự chuyển trạng thái tại đây.',
+      );
+    }
+
     const ALLOWED = ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'RETURNED', 'CANCELLED'];
     if (!ALLOWED.includes(status)) {
       throw new BadRequestException(`Trạng thái "${status}" không hợp lệ.`);

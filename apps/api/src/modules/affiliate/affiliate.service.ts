@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { CommissionStatus, type Prisma } from '@prisma/client';
+import { CommissionStatus, type PayoutStatus, type Prisma } from '@prisma/client';
 import { randomBytes, randomInt } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -9,6 +9,7 @@ import { PancakeOrderService } from '../integrations/pancake/pancake-order.servi
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { reserveVariationStock } from '../catalog/variation-stock';
 import { CoinsService } from '../wallet/coins.service';
+import { paginated, skipTake } from '../../common/pagination';
 import {
   CONFIRMED_COMMISSION_STATUSES,
   CTV_MONTHLY_MILESTONES,
@@ -77,8 +78,15 @@ export class AffiliateService {
     now: Date = new Date(),
   ): Promise<{ ok: boolean }> {
     if (!dto.referralCode) return { ok: false };
+    // P0 FIX (audit A5-01, 2026-09-27): User.referralCode LUÔN lưu chữ HOA (auth.service.ts sinh
+    // bằng toUpperCase — mirror resolveReferrerId ở đó). Gian hàng CTV mở TRONG ZALO dùng slug làm
+    // referralCode (storefront.service.ts sinh slug = referralCode.toLowerCase(); miniapp
+    // storefront-view.tsx/app.tsx forward thẳng slug đó, KHÔNG hoa hoá lại) → so khớp CHÍNH XÁC
+    // trước đây luôn trượt (Postgres phân biệt hoa/thường), referrer luôn null, CTV bán qua gian
+    // hàng trong Zalo không bao giờ được ghi hoa hồng. Chuẩn hoá NGAY TẠI LỚP SO KHỚP này — không
+    // dựa vào việc mọi nơi gọi (kể cả các luồng tương lai) tự nhớ hoa hoá trước khi gửi lên.
     const ref = await this.prisma.user.findUnique({
-      where: { referralCode: dto.referralCode },
+      where: { referralCode: dto.referralCode.toUpperCase() },
       select: { id: true },
     });
     if (!ref || ref.id === userId) return { ok: false };
@@ -524,7 +532,15 @@ export class AffiliateService {
     idempotencyKey?: string,
   ) {
     const minWithdraw = await this.config.get<number>('affiliate.min_withdraw_bank', 50000);
-    const multiplier = await this.config.get<number>('affiliate.tubu_wallet_multiplier', 1.5);
+    // P0 FIX (audit A5-07, 2026-09-27): KHÔNG đọc `affiliate.tubu_wallet_multiplier` ở đây nữa —
+    // walletBalance là tiền VND rút được 1:1 ra ngân hàng thật (wallet.service.ts:withdraw, trừ phí
+    // cố định), nên nhân hệ số ở đường quy đổi hoa hồng→Ví là in tiền thật (1.000.000đ hoa hồng →
+    // 1.497.000đ rút được ở hệ số mặc định cũ 1.5). Rút về Ví giờ LUÔN là quy đổi 1:1 (credited =
+    // total), bất kể SystemConfig còn seed giá trị gì cho key này. Key này vẫn tồn tại/được đọc bởi
+    // `system-config` (public config — ngoài phạm vi sửa của bản vá này) và miniapp đã ngừng hiển
+    // thị "×hệ số" (affiliate.tsx); nếu tương lai thật sự cần một khoản "bonus" khi đổi hoa hồng
+    // sang Ví, khoản đó PHẢI trả bằng TubuXu (không rút được), KHÔNG BAO GIỜ cộng thẳng vào
+    // walletBalance bằng hệ số nhân > 1.
 
     // Chuẩn hoá '' / khoảng trắng → undefined (mirror wallet.withdraw / checkout.placeOrder /
     // placeOrderForCustomer ở trên) — tránh ghi '' vào payouts.idempotencyKey (unique) rồi lần
@@ -541,7 +557,7 @@ export class AffiliateService {
               ok: true,
               method: existing.method,
               credited: existing.amount,
-              note: `Đã cộng ${existing.amount}đ vào Ví Tubu (×${multiplier}).`,
+              note: `Đã cộng ${existing.amount}đ vào Ví Tubu.`,
             }
           : { ok: true, payoutId: existing.id, status: existing.status };
       }
@@ -598,7 +614,8 @@ export class AffiliateService {
           if (marked.count !== rows.length) {
             throw new ConflictException('Dữ liệu hoa hồng đã thay đổi, vui lòng thử lại.');
           }
-          const credited = Math.floor(total * multiplier);
+          // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm.
+          const credited = total;
           await tx.user.update({ where: { id: userId }, data: { walletBalance: { increment: credited } } });
           await tx.payout.create({
             data: { userId, amount: credited, method, status: 'PAID', paidAt: new Date(), idempotencyKey: key },
@@ -616,7 +633,7 @@ export class AffiliateService {
               ok: true,
               method: existing.method,
               credited: existing.amount,
-              note: `Đã cộng ${existing.amount}đ vào Ví Tubu (×${multiplier}).`,
+              note: `Đã cộng ${existing.amount}đ vào Ví Tubu.`,
             };
           }
         }
@@ -626,7 +643,7 @@ export class AffiliateService {
         ok: true,
         method,
         credited: result.credited,
-        note: `Đã cộng ${result.credited}đ vào Ví Tubu (×${multiplier}).`,
+        note: `Đã cộng ${result.credited}đ vào Ví Tubu.`,
       };
     }
 
@@ -913,5 +930,129 @@ export class AffiliateService {
       }
       throw err;
     }
+  }
+
+  // ── Admin: hàng đợi Payout (P0 A5-08 = A6-05) ──
+  //
+  // Payout method=BANK REQUESTED có 2 NGUỒN khác nhau, hoàn tiền phải xử lý đúng nguồn:
+  //  1) wallet.service.ts:withdraw() — trừ THẲNG user.walletBalance (gross = amount + fee, vì
+  //     Payout.amount lưu NET đã trừ phí). KHÔNG đụng gì tới Commission.
+  //  2) requestPayout() nhánh BANK ở trên — KHÔNG đụng walletBalance; thay vào đó đánh dấu các
+  //     dòng Commission APPROVED liên quan là PAID + gán payoutBatchId = payout.id.
+  // Phân biệt 2 nguồn dựa trên DỮ LIỆU THẬT (có Commission nào đang payoutBatchId=payout.id
+  // không) — KHÔNG thêm cột "nguồn" mới, để không phải sửa wallet.service.ts (ngoài phạm vi).
+
+  private static readonly PAYOUT_STATUSES: readonly PayoutStatus[] = ['REQUESTED', 'APPROVED', 'PAID', 'REJECTED'];
+
+  /** Danh sách Payout cho admin xử lý, lọc theo trạng thái + phân trang (mirror dealer-admin). */
+  async listPayouts(status: string | undefined, page: number, limit: number) {
+    if (status && !AffiliateService.PAYOUT_STATUSES.includes(status as PayoutStatus)) {
+      throw new BadRequestException('Trạng thái lệnh rút không hợp lệ.');
+    }
+    const where: Prisma.PayoutWhereInput = status ? { status: status as PayoutStatus } : {};
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.payout.findMany({ where, orderBy: { requestedAt: 'desc' }, ...skipTake(page, limit) }),
+      this.prisma.payout.count({ where }),
+    ]);
+    const userIds = [...new Set(items.map((p) => p.userId))];
+    const users = userIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, fullName: true, phone: true, referralCode: true },
+        })
+      : [];
+    const userOf = new Map(users.map((u) => [u.id, u]));
+    return paginated(
+      items.map((p) => ({ ...p, user: userOf.get(p.userId) ?? null })),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  /** Duyệt lệnh rút NH: REQUESTED → APPROVED. Chưa chuyển tiền — chỉ xác nhận sẽ xử lý thủ công. */
+  async approvePayout(adminId: string, id: string, note?: string) {
+    const res = await this.prisma.payout.updateMany({
+      where: { id, status: 'REQUESTED' },
+      data: {
+        status: 'APPROVED',
+        reviewedBy: adminId,
+        reviewedAt: new Date(),
+        ...(note?.trim() ? { adminNote: note.trim() } : {}),
+      },
+    });
+    if (res.count === 0) {
+      throw new BadRequestException(
+        'Lệnh rút không ở trạng thái "Yêu cầu" hoặc vừa được xử lý bởi người khác — vui lòng tải lại.',
+      );
+    }
+    this.logger.log(`Admin ${adminId} duyệt lệnh rút ${id}.`);
+    return this.prisma.payout.findUniqueOrThrow({ where: { id } });
+  }
+
+  /**
+   * Từ chối lệnh rút NH: REQUESTED → REJECTED (bắt buộc lý do) + HOÀN tiền/commission đã bị khoá.
+   * MONEY-CRITICAL: atomic updateMany(status-guard) TRƯỚC, rồi đọc lại + hoàn tiền TRONG CÙNG
+   * transaction — count=0 (đã được admin khác xử lý) thì throw ngay, không hoàn gì cả.
+   */
+  async rejectPayout(adminId: string, id: string, reason: string) {
+    const why = reason?.trim();
+    if (!why) throw new BadRequestException('Vui lòng nhập lý do từ chối.');
+
+    return this.prisma.$transaction(async (tx) => {
+      const marked = await tx.payout.updateMany({
+        where: { id, status: 'REQUESTED' },
+        data: { status: 'REJECTED', reviewedBy: adminId, reviewedAt: new Date(), rejectionReason: why },
+      });
+      if (marked.count === 0) {
+        throw new BadRequestException(
+          'Lệnh rút không ở trạng thái "Yêu cầu" hoặc vừa được xử lý bởi người khác — vui lòng tải lại.',
+        );
+      }
+      const payout = await tx.payout.findUniqueOrThrow({ where: { id } });
+
+      const linkedCommissions = await tx.commission.findMany({
+        where: { payoutBatchId: id, status: 'PAID' },
+        select: { id: true },
+      });
+      if (linkedCommissions.length > 0) {
+        // Nguồn 2 (requestPayout nhánh BANK): trả các commission liên quan về APPROVED, gỡ batch
+        // → CTV rút lại được. KHÔNG đụng walletBalance (chưa từng cộng/trừ gì ở đó cho payout này).
+        await tx.commission.updateMany({
+          where: { id: { in: linkedCommissions.map((c) => c.id) }, payoutBatchId: id, status: 'PAID' },
+          data: { status: 'APPROVED', payoutBatchId: null, paidAt: null },
+        });
+      } else {
+        // Nguồn 1 (wallet.service.ts:withdraw): hoàn GROSS đã bị trừ — Payout.amount lưu NET
+        // (amount = gross - fee), nên gross = amount + fee (xem wallet.service.ts:withdraw).
+        await tx.user.update({
+          where: { id: payout.userId },
+          data: { walletBalance: { increment: payout.amount + payout.fee } },
+        });
+      }
+      this.logger.log(`Admin ${adminId} từ chối lệnh rút ${id}: ${why}`);
+      return tx.payout.findUniqueOrThrow({ where: { id } });
+    });
+  }
+
+  /** Xác nhận đã chuyển khoản: APPROVED → PAID (ghi mã giao dịch NH / ghi chú). */
+  async markPayoutPaid(adminId: string, id: string, opts: { bankRef?: string; note?: string } = {}) {
+    const res = await this.prisma.payout.updateMany({
+      where: { id, status: 'APPROVED' },
+      data: {
+        status: 'PAID',
+        paidBy: adminId,
+        paidAt: new Date(),
+        ...(opts.bankRef?.trim() ? { bankRef: opts.bankRef.trim() } : {}),
+        ...(opts.note?.trim() ? { adminNote: opts.note.trim() } : {}),
+      },
+    });
+    if (res.count === 0) {
+      throw new BadRequestException(
+        'Lệnh rút không ở trạng thái "Đã duyệt" hoặc vừa được xử lý bởi người khác — vui lòng tải lại.',
+      );
+    }
+    this.logger.log(`Admin ${adminId} xác nhận đã chuyển khoản lệnh rút ${id}.`);
+    return this.prisma.payout.findUniqueOrThrow({ where: { id } });
   }
 }

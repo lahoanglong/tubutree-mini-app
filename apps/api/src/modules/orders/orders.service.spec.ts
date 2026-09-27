@@ -237,16 +237,23 @@ describe('OrdersService.cancel — atomic flip+refund (B1)', () => {
     );
   });
 
-  it('COD+UNPAID: chỉ flip status, KHÔNG đụng tới user.update walletBalance', async () => {
+  it('COD+UNPAID huỷ TRƯỚC khi giao (status snapshot=CONFIRMED): chỉ flip status, KHÔNG thử guard hoàn tiền, KHÔNG đụng walletBalance', async () => {
     const { svc, $transaction, userUpdate, updateMany, row } = makeService({
       ...baseOrder,
+      status: 'CONFIRMED',
       paymentMethod: 'COD',
       paymentStatus: 'UNPAID',
     });
     await svc.cancel('u1', 'TUBU1');
     expect($transaction).toHaveBeenCalledTimes(1);
-    // Guard hoàn tiền vẫn được thử trong tx — DB (UNPAID) trả count=0 nên không chi gì.
-    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'o1', paymentStatus: 'PAID' }, data: { paymentStatus: 'REFUNDED' } });
+    // A6-06 (docs/audit-2026-09/06-web.md): COD chỉ coi là "đã thu tiền" khi status snapshot TRƯỚC
+    // lần đảo là DELIVERED (xem OrderReversalService.reverseFinancials) — khách tự huỷ đơn COD chỉ
+    // được phép khi còn PENDING_PAYMENT/CONFIRMED (chưa giao), nên ở đây KHÔNG được thử bất kỳ guard
+    // hoàn tiền nào (khác bản cũ: luôn thử guard PAID rồi thua). Chỉ có 1 lệnh updateMany — flip status.
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'o1', status: 'CONFIRMED' }, data: { status: 'CANCELLED' } }),
+    );
     expect(userUpdate).not.toHaveBeenCalled();
     expect(row).toMatchObject({ status: 'CANCELLED', paymentStatus: 'UNPAID' });
   });

@@ -12,6 +12,7 @@ vi.mock('../services/api', () => ({
   loginGuest: vi.fn(),
   loginZaloMiniApp: vi.fn(),
   refreshTokens: vi.fn(),
+  ensurePhoneApi: vi.fn(),
 }));
 vi.mock('../services/zmp-bridge', () => ({
   getZaloAccessToken: vi.fn(),
@@ -20,8 +21,8 @@ vi.mock('../services/zmp-bridge', () => ({
 }));
 
 import { getStorage, setStorage, removeStorage } from 'zmp-sdk/apis';
-import { loginGuest, loginZaloMiniApp, refreshTokens, setUnauthorizedHandler } from '../services/api';
-import { getZaloAccessToken } from '../services/zmp-bridge';
+import { loginGuest, loginZaloMiniApp, refreshTokens, setUnauthorizedHandler, ensurePhoneApi } from '../services/api';
+import { getZaloAccessToken, requestZaloPhoneToken } from '../services/zmp-bridge';
 import type { LoginResponse, AuthUser } from '@tubutree/shared-types';
 import { useAuthStore, setLogoutCleanup } from './auth';
 
@@ -33,18 +34,21 @@ const mockedLoginZalo = vi.mocked(loginZaloMiniApp);
 const mockedRefresh = vi.mocked(refreshTokens);
 const mockedSetUnauthorizedHandler = vi.mocked(setUnauthorizedHandler);
 const mockedGetZaloAccessToken = vi.mocked(getZaloAccessToken);
+const mockedRequestZaloPhoneToken = vi.mocked(requestZaloPhoneToken);
+const mockedEnsurePhoneApi = vi.mocked(ensurePhoneApi);
 
 // auth.ts đăng ký handler 401 1 LẦN lúc module load (top-level side effect), TRƯỚC
 // beforeEach đầu tiên — chụp lại ngay bây giờ, vì vi.clearAllMocks() trong beforeEach
 // sẽ xoá sạch lịch sử gọi mock (kể cả lần gọi lúc load module này).
 const unauthorizedHandler = mockedSetUnauthorizedHandler.mock.calls[0]?.[0];
 
-function loginResponse(id: string): LoginResponse {
+function loginResponse(id: string, zaloId?: string): LoginResponse {
   return {
     accessToken: `access-${id}`,
     refreshToken: `refresh-${id}`,
     user: {
       id,
+      zaloId,
       role: 'CUSTOMER',
       referralCode: 'REF1',
       pointsBalance: 0,
@@ -52,6 +56,12 @@ function loginResponse(id: string): LoginResponse {
       coinsBalance: 0,
     } as AuthUser,
   };
+}
+
+/** Flush cả microtask lẫn 1 vòng macrotask — dùng khi cần chờ một promise "chạy nền" (không được
+ *  await trực tiếp, vd upgradeGuestSilently()) tiến thêm vài bước trước khi assert. */
+async function flush(): Promise<void> {
+  await new Promise((r) => setTimeout(r, 0));
 }
 
 beforeEach(() => {
@@ -139,6 +149,108 @@ describe('useAuthStore.restore — refresh dedup', () => {
     expect(mockedRemoveStorage).not.toHaveBeenCalled();
     expect(useAuthStore.getState().status).toBe('authenticated');
     expect(useAuthStore.getState().user?.id).toBe('u4');
+  });
+});
+
+describe('useAuthStore.restore — nâng cấp ngầm phiên khách sang Zalo (A7-01)', () => {
+  it('refresh() trả về phiên KHÁCH (zaloId guest_*) → restore() trả về NGAY (không chặn UI) nhưng đã bắt đầu thử nâng cấp NỀN qua ensurePhoneApi (không xin SĐT); nâng cấp xong thì tự chuyển sang danh tính Zalo thật', async () => {
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh' });
+    mockedRefresh.mockResolvedValue(loginResponse('guest-1', 'guest_dev1'));
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c1', accessToken: 'zalo-at' });
+    let resolveEnsure!: (v: LoginResponse) => void;
+    mockedEnsurePhoneApi.mockReturnValue(
+      new Promise<LoginResponse>((resolve) => {
+        resolveEnsure = resolve;
+      }),
+    );
+
+    await useAuthStore.getState().restore();
+
+    // restore() không chờ nâng cấp nền — nhưng đã BẮT ĐẦU nó (gọi Zalo silent) trước khi return.
+    expect(useAuthStore.getState().status).toBe('authenticated');
+    expect(useAuthStore.getState().user?.id).toBe('guest-1');
+    expect(mockedGetZaloAccessToken).toHaveBeenCalledTimes(1);
+
+    await flush();
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledWith('c1', 'zalo-at'); // KHÔNG kèm phoneToken — không xin SĐT
+    expect(mockedRequestZaloPhoneToken).not.toHaveBeenCalled();
+
+    // Nâng cấp nền xong (thành công) → tự chuyển sang danh tính Zalo thật, không cần mở lại app.
+    resolveEnsure(loginResponse('real-1', 'z-real'));
+    await flush();
+    expect(useAuthStore.getState().user?.id).toBe('real-1');
+  });
+
+  it('refresh() trả về phiên ĐÃ LÀ Zalo thật (zaloId không có tiền tố guest_) → KHÔNG thử nâng cấp lại (tránh gọi Zalo thừa mỗi lần mở app)', async () => {
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh' });
+    mockedRefresh.mockResolvedValue(loginResponse('u5', 'z-real-5'));
+
+    await useAuthStore.getState().restore();
+    await flush();
+
+    expect(mockedGetZaloAccessToken).not.toHaveBeenCalled();
+    expect(mockedEnsurePhoneApi).not.toHaveBeenCalled();
+  });
+
+  it('nâng cấp ngầm thất bại (Zalo trên máy vẫn chưa khả dụng) → giữ nguyên phiên khách, không lỗi/crash, thử lại ở lần mở app sau', async () => {
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh' });
+    mockedRefresh.mockResolvedValue(loginResponse('guest-2', 'guest_dev2'));
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+
+    await useAuthStore.getState().restore();
+    await flush();
+
+    expect(useAuthStore.getState().status).toBe('authenticated');
+    expect(useAuthStore.getState().user?.id).toBe('guest-2'); // vẫn là khách, không đổi, không sập app
+  });
+});
+
+describe('useAuthStore.ensurePhone — A7-01: không tự đăng nhập lại từ đầu, dùng endpoint an toàn ensurePhoneApi', () => {
+  it('user hiện tại đã có phone → trả về ngay, không gọi Zalo/API nào', async () => {
+    useAuthStore.setState({ user: { id: 'u1', phone: '0900000000' } as AuthUser, status: 'authenticated' });
+
+    const phone = await useAuthStore.getState().ensurePhone();
+
+    expect(phone).toBe('0900000000');
+    expect(mockedRequestZaloPhoneToken).not.toHaveBeenCalled();
+  });
+
+  it('user từ chối chia sẻ SĐT (getPhoneNumber trả null) → trả null, không gọi Zalo login/ensurePhoneApi', async () => {
+    useAuthStore.setState({ user: { id: 'guest-1' } as AuthUser, status: 'authenticated' });
+    mockedRequestZaloPhoneToken.mockResolvedValue(null);
+
+    const phone = await useAuthStore.getState().ensurePhone();
+
+    expect(phone).toBeNull();
+    expect(mockedEnsurePhoneApi).not.toHaveBeenCalled();
+  });
+
+  it('gọi ensurePhoneApi() (KHÔNG loginZaloMiniApp — đường login-từ-đầu cũ) — dù BE trả về MỘT USER KHÁC (đã nâng cấp/gộp), FE chỉ tin theo kết quả BE, không tự so sánh/giữ id cũ', async () => {
+    useAuthStore.setState({ user: { id: 'guest-1' } as AuthUser, status: 'authenticated' });
+    mockedRequestZaloPhoneToken.mockResolvedValue('phone-token');
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c1', accessToken: 'zalo-at' });
+    const upgraded = loginResponse('real-1', 'z-real');
+    upgraded.user = { ...upgraded.user, phone: '0911111111' };
+    mockedEnsurePhoneApi.mockResolvedValue(upgraded);
+
+    const phone = await useAuthStore.getState().ensurePhone();
+
+    expect(mockedLoginZalo).not.toHaveBeenCalled(); // KHÔNG dùng đường login-từ-đầu (A7-01)
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledWith('c1', 'zalo-at', 'phone-token');
+    expect(useAuthStore.getState().user?.id).toBe('real-1'); // FE chuyển đúng theo quyết định của BE
+    expect(phone).toBe('0911111111');
+  });
+
+  it('ensurePhoneApi lỗi (mạng/BE từ chối vd ConflictException) → trả null, không crash, không đổi user hiện tại', async () => {
+    useAuthStore.setState({ user: { id: 'guest-1' } as AuthUser, status: 'authenticated' });
+    mockedRequestZaloPhoneToken.mockResolvedValue('phone-token');
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c1', accessToken: 'zalo-at' });
+    mockedEnsurePhoneApi.mockRejectedValue(new Error('network'));
+
+    const phone = await useAuthStore.getState().ensurePhone();
+
+    expect(phone).toBeNull();
+    expect(useAuthStore.getState().user?.id).toBe('guest-1');
   });
 });
 

@@ -21,7 +21,7 @@ import {
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
 import { useAuthStore } from '../store/auth';
-import { formatVnd, formatVndShort, formatMultiplier } from '../utils/format';
+import { formatVnd, formatVndShort } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -99,7 +99,9 @@ function RegisterGate() {
     { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi click & chuyển đổi' },
     {
       Icon: Landmark,
-      text: `Rút về ngân hàng (tối thiểu ${formatVndShort(cfg.affiliateMinWithdrawBank)}) hoặc Ví Tubu ×${formatMultiplier(cfg.affiliateWalletMultiplier)}`,
+      // P0 FIX (A5-07, 2026-09-27): bỏ quảng cáo "×hệ số" — rút về Ví Tubu giờ luôn là quy đổi 1:1
+      // (Ví là tiền VND rút được ra ngân hàng thật, không phải phần thưởng nội bộ).
+      text: `Rút về ngân hàng (tối thiểu ${formatVndShort(cfg.affiliateMinWithdrawBank)}) hoặc quy đổi 1:1 vào Ví Tubu`,
     },
     { Icon: TrendingUp, text: 'Dashboard hoa hồng realtime, minh bạch' },
   ];
@@ -790,11 +792,8 @@ function WithdrawForm({
   onDone: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
-  const {
-    affiliateWalletMultiplier: walletMultiplier,
-    affiliateMinWithdrawBank: minBank,
-    isLoaded: cfgLoaded,
-  } = usePublicConfig();
+  // P0 FIX (A5-07): KHÔNG còn đọc affiliateWalletMultiplier — rút về Ví Tubu là quy đổi 1:1.
+  const { affiliateMinWithdrawBank: minBank, isLoaded: cfgLoaded } = usePublicConfig();
   const [method, setMethod] = useState<'BANK' | 'WALLET_BALANCE'>('WALLET_BALANCE');
   const [amount, setAmount] = useState(String(max));
   const [bank, setBank] = useState({ bankName: '', accountNumber: '', accountName: '' });
@@ -836,8 +835,8 @@ function WithdrawForm({
       <Box flex style={{ gap: 8, marginBottom: 12 }}>
         <MethodChip
           active={method === 'WALLET_BALANCE'}
-          title={`Ví Tubu ×${formatMultiplier(walletMultiplier)}`}
-          sub="Nhận ngay, mua sắm"
+          title="Ví Tubu"
+          sub="Quy đổi 1:1, nhận ngay"
           onClick={() => setMethod('WALLET_BALANCE')}
         />
         <MethodChip
@@ -886,7 +885,7 @@ function WithdrawForm({
         style={{ marginTop: 20, background: 'var(--primary-600)' }}
       >
         {method === 'WALLET_BALANCE'
-          ? `Nhận ${formatVnd(Math.round(amountNum * walletMultiplier))} vào Ví`
+          ? `Nhận ${formatVnd(amountNum)} vào Ví`
           : `Rút ${formatVnd(amountNum)}`}
       </Button>
     </Box>

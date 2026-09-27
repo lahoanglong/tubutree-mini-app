@@ -22,6 +22,7 @@ import { recyclingCheckoutFields } from '@/lib/recycling';
 import { checkoutPointsOffer } from '@/lib/checkout-points';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
+import { BankTransferPanel } from './bank-transfer-panel';
 
 const VN_PHONE = /^(0|\+84)\d{9}$/;
 // Tỉnh/phường chọn qua GeoPicker (mã Pancake thật, hệ 2 cấp — không còn quận/huyện);
@@ -148,6 +149,12 @@ export default function CheckoutPage() {
               Tiếp tục mua sắm
             </Link>
           </div>
+        </div>
+        {/* A2-02 = A6-01: đơn CHUYỂN KHOẢN phải hiện QR/STK/nội dung CK NGAY TẠI ĐÂY — chưa có
+            trang chi tiết đơn trên web (`/tai-khoan` chỉ là danh sách), nên đây là nơi DUY NHẤT
+            khách có thể thấy lại thông tin thanh toán nếu không lưu/chụp màn hình. */}
+        <div className="mx-auto max-w-md">
+          <BankTransferPanel order={placed} />
         </div>
       </Shell>
     );

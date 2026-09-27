@@ -18,6 +18,7 @@ import {
 import { ZaloMiniAppLoginDto } from './dto/zalo-login.dto';
 import { ZaloOAuthDto } from './dto/zalo-oauth.dto';
 import { RefreshTokenDto } from './dto/refresh.dto';
+import { EnsurePhoneDto } from './dto/ensure-phone.dto';
 
 class GuestLoginDto {
   // deviceId là thứ DUY NHẤT xác thực tài khoản khách (xem apps/miniapp/src/utils/idempotency.ts
@@ -127,5 +128,25 @@ export class AuthController {
   async me(@CurrentUser() user: JwtPayload) {
     const dbUser = await this.prisma.user.findUniqueOrThrow({ where: { id: user.sub } });
     return this.auth.toAuthUser(dbUser);
+  }
+
+  /**
+   * POST /api/auth/ensure-phone — yêu cầu JWT (guard mặc định, KHÔNG @Public()). A7-01: khác
+   * /auth/zalo-mini-app (public, không biết phiên hiện tại là ai), route này luôn có
+   * `@CurrentUser()` từ JWT đã xác thực nên AuthService biết chính xác đang là ai và không bao
+   * giờ âm thầm đổi sang user khác. Dùng cho cả 2 nơi: checkout xin SĐT (kèm phoneToken) và
+   * nâng cấp ngầm phiên khách ở store/auth.ts restore() (không kèm phoneToken).
+   */
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Post('ensure-phone')
+  @HttpCode(HttpStatus.OK)
+  async ensurePhone(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: EnsurePhoneDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponse> {
+    const r = await this.auth.ensurePhoneForCurrentUser(user.sub, dto.code, dto.accessToken, dto.phoneToken);
+    return this.withRefreshDelivery(req, res, r);
   }
 }

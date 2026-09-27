@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
@@ -69,5 +69,44 @@ export class DealerOrderAdminController {
   @Post(':id/confirm-payment')
   confirmPayment(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ConfirmDealerPaymentDto) {
     return this.dealer.confirmDealerOrderPayment(adminId, id, dto);
+  }
+}
+
+export class RecordDealerCreditPaymentDto {
+  @IsInt() @Min(1) amount!: number;
+  /** Mã giao dịch ngân hàng (vd FT26270…) — lưu vào ghi chú sổ công nợ để đối soát. */
+  @IsOptional() @IsString() @MaxLength(100) bankRef?: string;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
+/**
+ * A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): admin xác nhận đã nhận chuyển khoản trả nợ
+ * của MỘT đại lý (`:userId`) — nguồn DUY NHẤT được phép giảm DealerCreditLedger ngoài các luồng hệ
+ * thống, thay cho việc đại lý tự bấm "Báo đã CK" trừ nợ ngay (nay chỉ còn báo, xem
+ * DealerController.payment → DealerService.reportCreditPayment). Trần theo dư nợ TẠI LÚC DUYỆT,
+ * atomic (Serializable) — xem DealerService.adminRecordCreditPayment.
+ */
+@Roles('ADMIN')
+@Controller('admin/dealers')
+export class DealerCreditAdminController {
+  constructor(private readonly dealer: DealerService) {}
+
+  @Get(':userId/credit-ledger')
+  ledger(@Param('userId') userId: string) {
+    return this.dealer.creditLedger(userId);
+  }
+
+  @Post(':userId/credit-payment')
+  recordPayment(
+    @CurrentUser('sub') adminId: string,
+    @Param('userId') userId: string,
+    @Body() dto: RecordDealerCreditPaymentDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.dealer.adminRecordCreditPayment(adminId, userId, dto.amount, {
+      note: dto.note,
+      bankRef: dto.bankRef,
+      idempotencyKey,
+    });
   }
 }

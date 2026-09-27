@@ -64,6 +64,10 @@ function makeOrder(overrides: Record<string, unknown> = {}) {
     total: 150000,
     paymentMethod: 'WALLET',
     paymentStatus: 'PAID',
+    // Trạng thái NGAY TRƯỚC lần đảo này (ảnh chụp mà caller truyền vào — xem OrderStatusService.
+    // setStatus/admin.reviewReturn). Mặc định DELIVERED vì phần lớn test ở đây mô phỏng cảnh
+    // huỷ/trả SAU khi giao; test COD "chưa giao" bên dưới tự override giá trị này.
+    status: 'DELIVERED',
     couponCode: null,
     items: [
       { id: 'i1', variationId: 'v1', quantity: 2, flashSaleItemId: null, backorderedQty: 0 },
@@ -137,28 +141,57 @@ describe('OrderReversalService', () => {
     expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
   });
 
-  it('KHÔNG hoàn tiền cho đơn COD còn UNPAID (chưa thu tiền) — DB quyết qua guard, không phải ảnh chụp', async () => {
-    const order = makeOrder({ paymentMethod: 'COD', paymentStatus: 'UNPAID' });
-    const tx = makeTx(order); // DB cũng UNPAID → guard paymentStatus:'PAID' count=0
+  // A6-06 (docs/audit-2026-09/06-web.md): KHÔNG có đường code nào trong hệ thống từng lật
+  // paymentStatus của đơn COD sang PAID (xem comment lớn ở đầu nhánh COD trong reverseFinancials) —
+  // paymentStatus COD LUÔN là UNPAID, kể cả khi tiền đã thu xong lúc giao. Tín hiệu ĐÚNG là
+  // order.status (ảnh chụp TRƯỚC lần đảo), không phải paymentStatus.
+  it('COD huỷ TRƯỚC khi giao (status snapshot != DELIVERED, tiền chưa từng thu) → KHÔNG hoàn, KHÔNG đụng guard payment', async () => {
+    const order = makeOrder({ paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'SHIPPING' });
+    const tx = makeTx(order);
     await service.reverseFinancials(tx as never, order);
-    expect(tx.order.updateMany).toHaveBeenCalledWith({
-      where: { id: 'o1', paymentStatus: 'PAID' },
-      data: { paymentStatus: 'REFUNDED' },
-    });
+    // isRefundableChannel=false cho case này — không được thử bất kỳ guard hoàn tiền nào.
+    expect(tx.order.updateMany).not.toHaveBeenCalled();
     expect(tx.user.update).not.toHaveBeenCalled();
     expect(tx.coinTransaction.create).not.toHaveBeenCalled();
     expect(tx.row.paymentStatus).toBe('UNPAID');
   });
 
+  it('COD trả hàng SAU khi đã DELIVERED (status snapshot=DELIVERED, tiền COD đã thu) → hoàn ví đúng 1 lần, flip UNPAID→REFUNDED', async () => {
+    const order = makeOrder({ paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'DELIVERED' });
+    const tx = makeTx(order); // DB cũng UNPAID (thực tế COD luôn vậy) — guard riêng cho COD phải khớp
+    const result = await service.reverseFinancials(tx as never, order);
+    expect(tx.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', paymentMethod: 'COD', paymentStatus: 'UNPAID' },
+      data: { paymentStatus: 'REFUNDED' },
+    });
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { walletBalance: { increment: 150000 } },
+    });
+    expect(tx.coinTransaction.create).not.toHaveBeenCalled();
+    expect(tx.row.paymentStatus).toBe('REFUNDED');
+    expect(result).toEqual({ moneyRefunded: true });
+  });
+
+  it('COD trả hàng: gọi reverseFinancials 2 lần cho CÙNG đơn (double-processing) → KHÔNG hoàn ví lần 2', async () => {
+    const order = makeOrder({ paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'DELIVERED' });
+    const tx = makeTx(order);
+    await service.reverseFinancials(tx as never, order);
+    await service.reverseFinancials(tx as never, order);
+    expect(tx.user.update).toHaveBeenCalledTimes(1);
+  });
+
   // RACE (tiền): caller đọc đơn NGOÀI tx (ảnh chụp UNPAID), rồi admin xác nhận chuyển khoản
   // (POST /admin/dealer-orders/:id/confirm-payment) / webhook Pancake/ZaloPay lật PAID TRƯỚC khi tx huỷ
   // chạy. Bản cũ chỉ thử hoàn khi ẢNH CHỤP là PAID → đơn bị huỷ mà tiền khách đã trả mất trắng.
+  // COD KHÔNG nằm trong danh sách này: không có webhook/admin nào lật COD sang PAID một cách độc lập
+  // với order.status (xem 2 test COD dành riêng ở trên) — race kiểu "ảnh chụp UNPAID, DB đã PAID"
+  // không xảy ra trong thực tế cho COD.
   it.each([
     ['BANK_TRANSFER', 'walletBalance'],
     ['ZALOPAY', 'walletBalance'],
     ['VNPAY', 'walletBalance'],
     ['WALLET', 'walletBalance'],
-    ['COD', 'walletBalance'],
   ])('ảnh chụp UNPAID nhưng DB đã PAID (%s) → vẫn hoàn ĐÚNG 1 lần vào %s', async (paymentMethod, field) => {
     const order = makeOrder({ paymentMethod, paymentStatus: 'UNPAID' });
     const tx = makeTx(order, 'PAID');
@@ -186,16 +219,6 @@ describe('OrderReversalService', () => {
     const tx = makeTx(order, 'REFUNDED');
     await service.reverseFinancials(tx as never, order);
     expect(tx.user.update).not.toHaveBeenCalled();
-  });
-
-  it('hoàn ví cho COD đã PAID (thu hộ khi giao, trả hàng sau DELIVERED)', async () => {
-    const order = makeOrder({ paymentMethod: 'COD', paymentStatus: 'PAID' });
-    const tx = makeTx(order);
-    await service.reverseFinancials(tx as never, order);
-    expect(tx.user.update).toHaveBeenCalledWith({
-      where: { id: 'u1' },
-      data: { walletBalance: { increment: 150000 } },
-    });
   });
 
   it('đơn không có item flash-sale thì không gọi flashSale.restore', async () => {
@@ -474,7 +497,9 @@ describe('OrderReversalService — thu hồi thưởng quý đại lý', () => {
     const service = await build(undefined);
     const order = makeOrder({ type: 'DEALER', paymentStatus: 'UNPAID' });
     const tx = makeTx(order);
-    await expect(service.reverseFinancials(tx as never, order)).resolves.toBeUndefined();
+    // Đơn DEALER mặc định paymentMethod='WALLET' (fixture) + paymentStatus UNPAID → guard PAID
+    // thua (count=0) → không có gì được hoàn.
+    await expect(service.reverseFinancials(tx as never, order)).resolves.toEqual({ moneyRefunded: false });
     expect(error).toHaveBeenCalledWith(expect.stringContaining('thưởng quý'));
     error.mockRestore();
   });

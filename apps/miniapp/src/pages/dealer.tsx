@@ -715,17 +715,23 @@ function DealerCredit() {
   const ledgerQ = useQuery({ queryKey: ['dealer-credit'], queryFn: getCreditLedger });
   const [amount, setAmount] = useState('');
 
-  // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lần báo đã chuyển khoản (double-tap/
-  // timeout mạng) → BE không trừ công nợ đôi; regenerate sau khi báo thành công (mirror orderKey
-  // ở PriceAndOrder / wallet.withdraw).
+  // A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): "Báo đã CK" KHÔNG còn tự trừ nợ — chỉ tạo
+  // thông báo cho admin xác nhận (DealerService.reportCreditPayment). Sổ công nợ CHỈ giảm sau khi
+  // admin tự kiểm tra sao kê ngân hàng và xác nhận. Giữ Idempotency-Key để tương thích payCredit()
+  // hiện có (BE không còn dùng để trừ nợ, chỉ có tác dụng nếu tương lai cần dedupe thông báo).
   const payKey = useRef(newIdempotencyKey());
   const pay = useMutation({
     mutationFn: () => payCredit(Number(amount), payKey.current, 'Báo đã chuyển khoản'),
-    onSuccess: () => {
+    onSuccess: (res) => {
       haptic('medium');
-      openSnackbar({ text: 'Đã ghi nhận thanh toán công nợ.', type: 'success' });
+      openSnackbar({
+        text: (res as { message?: string })?.message ?? 'Đã báo cho quản trị viên — chờ xác nhận đã nhận được tiền.',
+        type: 'success',
+      });
       payKey.current = newIdempotencyKey();
       setAmount('');
+      // Sổ công nợ CHƯA đổi ngay (chỉ đổi khi admin xác nhận) — vẫn refetch để đồng bộ nếu admin
+      // đã xử lý một khoản khác trong lúc này.
       void qc.invalidateQueries({ queryKey: ['dealer-credit'] });
       void qc.invalidateQueries({ queryKey: ['dealer-me'] });
     },
@@ -782,6 +788,10 @@ function DealerCredit() {
             </Text>
           </Box>
         )}
+        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6 }}>
+          "Báo đã CK" chỉ gửi thông báo cho Tubu Tree — dư nợ chỉ giảm sau khi admin kiểm tra sao kê
+          ngân hàng và xác nhận.
+        </Text>
       </Box>
 
       <Text bold style={{ margin: '16px 0 8px' }}>

@@ -2,21 +2,52 @@ import { BadRequestException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
-function prismaWithUpdate(updateSpy: jest.Mock) {
-  return { user: { update: updateSpy } } as unknown as PrismaService;
+function prismaWithUpdate(updateSpy: jest.Mock, updateManySpy: jest.Mock = jest.fn().mockResolvedValue({ count: 1 })) {
+  return { user: { update: updateSpy, updateMany: updateManySpy } } as unknown as PrismaService;
 }
 const fakeUser = { id: 'u1', zaloId: null, phone: null, email: null, fullName: 'A', dob: null, avatarUrl: null, role: 'CUSTOMER', tierId: null, referralCode: 'R', pointsBalance: 0, walletBalance: 0, cashbackPending: 0, metadata: null, tier: null };
 
 describe('UsersService.updateMe', () => {
-  it('ép dob "YYYY-MM-DD" về Date trước khi ghi Prisma', async () => {
+  it('ép dob "YYYY-MM-DD" về Date trước khi ghi Prisma (qua updateMany có khoá dob:null, không phải update)', async () => {
     const update = jest.fn().mockResolvedValue(fakeUser);
-    const svc = new UsersService(prismaWithUpdate(update));
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const svc = new UsersService(prismaWithUpdate(update, updateMany));
     await svc.updateMe('u1', { dob: '1995-03-20', fullName: 'Tester' });
 
+    const guardArgs = updateMany.mock.calls[0][0];
+    expect(guardArgs.where).toEqual({ id: 'u1', dob: null });
+    expect(guardArgs.data.dob).toBeInstanceOf(Date);
+    expect((guardArgs.data.dob as Date).toISOString().slice(0, 10)).toBe('1995-03-20');
+
     const data = update.mock.calls[0][0].data;
-    expect(data.dob).toBeInstanceOf(Date);
-    expect((data.dob as Date).toISOString().slice(0, 10)).toBe('1995-03-20');
+    expect('dob' in data).toBe(false); // dob đã ghi qua updateMany ở trên, không lặp lại ở đây
     expect(data.fullName).toBe('Tester');
+  });
+
+  // A3-04 (audit 2026-09): dob trước đây sửa được tự do bất kỳ lúc nào → khách đổi dob sang
+  // "ngày mai" mỗi tháng để cày voucher sinh nhật (50k, không minOrder). Khoá: dob chỉ ĐẶT
+  // ĐƯỢC MỘT LẦN.
+  it('A3-04: user ĐÃ có dob (khác null) → sửa lần 2 bị chặn, thông báo rõ ràng hướng dẫn CSKH, KHÔNG ghi update', async () => {
+    const update = jest.fn();
+    // where dob:null không khớp dòng nào (dob hiện đã khác null) → count=0.
+    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const svc = new UsersService(prismaWithUpdate(update, updateMany));
+
+    await expect(svc.updateMe('u1', { dob: '1995-03-20' })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.updateMe('u1', { dob: '1995-03-20' })).rejects.toThrow(/CSKH/);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('A3-04: user MỚI (dob chưa từng đặt) → đặt lần đầu thành công, trả dob đã set', async () => {
+    const update = jest.fn().mockResolvedValue({ ...fakeUser, dob: new Date('1995-03-20T00:00:00Z') });
+    // where dob:null khớp đúng 1 dòng (dob đang null) → count=1, cho phép set.
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const svc = new UsersService(prismaWithUpdate(update, updateMany));
+
+    const res = await svc.updateMe('u1', { dob: '1995-03-20' });
+
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'u1', dob: null }, data: { dob: expect.any(Date) } });
+    expect(res.dob).toBe('1995-03-20');
   });
 
   it('không gắn dob khi không gửi', async () => {

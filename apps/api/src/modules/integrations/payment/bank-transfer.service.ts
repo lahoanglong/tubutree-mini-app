@@ -30,34 +30,28 @@ export class BankTransferService {
       throw new BadRequestException('Đơn đã hủy/trả, không thể thanh toán.');
     }
 
-    let bin = '';
-    let accountNo = '';
-    let accountName = '';
-    let bankName = '';
-
-    if (order.storefrontSlug) {
-      const store = await this.prisma.storefront?.findFirst({
-        where: {
-          OR: [{ slug: order.storefrontSlug }, { subdomain: order.storefrontSlug }],
-        },
-        select: { bankBin: true, bankAccountNo: true, bankAccountName: true, bankName: true },
-      });
-      if (store?.bankBin && store?.bankAccountNo) {
-        bin = store.bankBin;
-        accountNo = store.bankAccountNo;
-        accountName = store.bankAccountName ?? '';
-        bankName = store.bankName ?? '';
-      }
-    }
-
-    if (!bin || !accountNo) {
-      [bin, accountNo, accountName, bankName] = await Promise.all([
-        this.config.get<string>('payment.bank_bin', ''),
-        this.config.get<string>('payment.bank_account_no', ''),
-        this.config.get<string>('payment.bank_account_name', ''),
-        this.config.get<string>('payment.bank_name', ''),
-      ]);
-    }
+    // A2-01 = A5-02 = A6-03 (docs/audit-2026-09/00-MASTER-SUMMARY.md + 02/05/06 chi tiết): TRƯỚC
+    // ĐÂY, đơn có `storefrontSlug` (gắn gian hàng CTV/đối tác) ưu tiên dùng bankBin/bankAccountNo
+    // mà CHÍNH gian hàng đó tự khai trong trình dựng gian hàng (storefront-builder.tsx) — tiền
+    // khách chuyển khoản chảy thẳng vào TK CÁ NHÂN của CTV/đối tác thay vì Tubu. Đối soát Pancake
+    // chỉ chạy trên TK Tubu nên đơn không bao giờ lên PAID dù khách đã trả tiền thật.
+    //
+    // Đã rà checkout.service.ts, pancake-order.service.ts và các luồng đơn ở admin: KHÔNG có loại
+    // gian hàng nào (CTV, MERCHANT tự đăng ký qua /merchant, hay BRAND) hiện có một quy trình đối
+    // soát/xác nhận-đã-thanh-toán nào hoạt động thật cho đơn BANK_TRANSFER gắn storefrontSlug. Vì
+    // vậy: MỌI đơn chuyển khoản luôn dùng đúng MỘT tài khoản do Tubu cấu hình (payment.bank_*),
+    // bất kể order.storefrontSlug trỏ tới gian hàng nào hay gian hàng đó có tự khai TK ngân hàng
+    // hay không. CTV/đối tác được trả hoa hồng riêng qua hệ thống payout (affiliate/dealer) —
+    // không bao giờ được thu tiền khách trực tiếp qua QR này.
+    //
+    // (Nếu sau này có mô hình đối tác tự thu tiền có hợp đồng + đối soát riêng, đó là một hệ
+    // thống mới cần thiết kế/xây riêng — nằm ngoài phạm vi bản vá khẩn cấp này.)
+    const [bin, accountNo, accountName, bankName] = await Promise.all([
+      this.config.get<string>('payment.bank_bin', ''),
+      this.config.get<string>('payment.bank_account_no', ''),
+      this.config.get<string>('payment.bank_account_name', ''),
+      this.config.get<string>('payment.bank_name', ''),
+    ]);
     if (!bin || !accountNo) {
       throw new BadRequestException('Chưa cấu hình tài khoản ngân hàng nhận chuyển khoản.');
     }

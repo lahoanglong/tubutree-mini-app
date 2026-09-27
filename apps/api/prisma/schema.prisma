@@ -1170,6 +1170,15 @@ model Payout {
   idempotencyKey String?      @unique // chống double-submit rút tiền (double-tap/retry timeout)
   requestedAt    DateTime     @default(now())
   paidAt         DateTime?
+  // Hàng đợi xử lý admin (P0 A5-08=A6-05, 2026-09-27): duyệt/từ chối/đã trả — mirror
+  // DealerRewardClaim (reviewedBy/reviewedAt/rejectionReason/paidBy/adminNote); bankRef riêng cho
+  // payout (mã giao dịch ngân hàng lúc mark-paid).
+  reviewedBy      String? // adminId duyệt (APPROVED) hoặc từ chối (REJECTED)
+  reviewedAt      DateTime?
+  rejectionReason String? // bắt buộc khi REJECTED — hiển thị lại cho CTV
+  paidBy          String? // adminId xác nhận đã chuyển khoản (mark-paid)
+  bankRef         String? // mã giao dịch ngân hàng khi mark-paid
+  adminNote       String?
 
   @@index([userId])
   @@map("payouts")

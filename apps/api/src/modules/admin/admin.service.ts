@@ -109,6 +109,12 @@ export class AdminService {
       where: { id: req.orderId },
       select: { id: true, userId: true, code: true },
     });
+    // A6-06 (phần thông báo, docs/audit-2026-09/06-web.md): trước đây LUÔN gửi "Tiền đã hoàn vào
+    // Ví Tubu" bất kể reverseFinancials có thực sự chi tiền hay không (vd đơn chưa từng thanh toán
+    // thật dù đã DELIVERED — xem A5-03/A6-02 "giao ảo" — hoặc đã bị hoàn bởi một đường khác trước
+    // đó). moneyRefunded lấy TRỰC TIẾP từ guard hoàn tiền trong CÙNG transaction, không phải suy
+    // đoán ở ngoài, nên phản ánh đúng có tiền thực sự được chi hay không.
+    let moneyRefunded = false;
     await this.prisma.$transaction(async (tx) => {
       const approved = await tx.returnRequest.updateMany({
         where: { id, status: 'REQUESTED' },
@@ -147,13 +153,17 @@ export class AdminService {
       // Hoàn đúng KÊNH thanh toán + restock + release flash quota — logic dùng chung với
       // orders.service.cancel/OrderStatusService (xem order-reversal.service.ts), tránh
       // 3 bản chép tay lệch nhau (P0-4 trong docs/2026-09-08-review-progress.md).
-      await this.reversal.reverseFinancials(tx, order);
+      ({ moneyRefunded } = await this.reversal.reverseFinancials(tx, order));
     });
     // Reverse điểm Xanh + commission CTV + notify (idempotent — để ngoài tx an toàn).
     await this.loyalty.reverseOrderPoints(orderForReturn.id);
     await this.affiliate.reverseCommissionsForOrder(orderForReturn.id);
+    // KHÔNG được báo "đã hoàn tiền" nếu thực tế không có khoản hoàn nào được chi (xem comment ở
+    // trên) — dùng template trung tính, chỉ xác nhận đã duyệt trả hàng.
     await this.notifications
-      .notify(orderForReturn.userId, 'RETURN_APPROVED', { order_code: orderForReturn.code })
+      .notify(orderForReturn.userId, moneyRefunded ? 'RETURN_APPROVED' : 'RETURN_APPROVED_NO_REFUND', {
+        order_code: orderForReturn.code,
+      })
       .catch(() => undefined);
     return this.withReturnContext(await this.prisma.returnRequest.findUnique({ where: { id } }));
   }

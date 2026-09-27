@@ -10,6 +10,7 @@ import {
   EMPTY_WAREHOUSE,
 } from './admin-config-forms';
 import { CLAIM_STATUS_LABEL, claimActions, rejectReasonError } from './dealer-claims';
+import { PAYOUT_STATUS_LABEL, payoutActions, rejectPayoutReasonError } from './payout-admin';
 
 describe('POS — kiểm tra input trước khi gọi API (khớp DTO BE)', () => {
   it('mã hoá đơn: bắt buộc, 3–64 ký tự, chỉ [A-Za-z0-9._-/#]', () => {
@@ -131,6 +132,31 @@ describe('Yêu cầu nhận thưởng đại lý', () => {
   });
 });
 
+// P0 A5-08=A6-05: hàng đợi xử lý Payout (rút hoa hồng CTV / Ví Tubu về ngân hàng).
+describe('Duyệt yêu cầu rút tiền (Payout)', () => {
+  it('nhãn tiếng Việt đúng yêu cầu', () => {
+    expect(PAYOUT_STATUS_LABEL).toEqual({
+      REQUESTED: 'Đang chờ duyệt',
+      APPROVED: 'Đã duyệt, chờ chuyển khoản',
+      PAID: 'Đã chuyển khoản',
+      REJECTED: 'Bị từ chối (đã hoàn)',
+    });
+  });
+
+  it('thao tác theo trạng thái: REQUESTED duyệt/từ chối; APPROVED đánh dấu đã chuyển khoản; còn lại không', () => {
+    expect(payoutActions('REQUESTED')).toEqual({ approve: true, reject: true, markPaid: false });
+    expect(payoutActions('APPROVED')).toEqual({ approve: false, reject: false, markPaid: true });
+    expect(payoutActions('PAID')).toEqual({ approve: false, reject: false, markPaid: false });
+    expect(payoutActions('REJECTED')).toEqual({ approve: false, reject: false, markPaid: false });
+  });
+
+  it('lý do từ chối bắt buộc, tối đa 500 ký tự', () => {
+    expect(rejectPayoutReasonError('  ')).not.toBeNull();
+    expect(rejectPayoutReasonError('x'.repeat(501))).toMatch(/500/);
+    expect(rejectPayoutReasonError('Sai số tài khoản')).toBeNull();
+  });
+});
+
 describe('admin-client — endpoint mới gọi đúng đường dẫn/body', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -203,6 +229,26 @@ describe('admin-client — endpoint mới gọi đúng đường dẫn/body', ()
     await m.markDealerRewardClaimPaid('c1');
     expect(f.mock.calls[3]![0]).toContain('/mark-paid');
     expect(f.mock.calls[3]![1]).toEqual(expect.objectContaining({ body: '{}' }));
+  });
+
+  it('payouts (P0 A5-08=A6-05): list/approve/reject/mark-paid gọi đúng đường dẫn/body', async () => {
+    const m = await import('./admin-client');
+    const f = stubFetch({ data: [], meta: { page: 1, limit: 20, total: 0 } });
+    await m.listPayouts('REQUESTED', 2);
+    expect(f.mock.calls[0]![0]).toContain('/admin/payouts?page=2&limit=20&status=REQUESTED');
+    await m.approvePayout('p1', ' ok ');
+    expect(f.mock.calls[1]![0]).toContain('/admin/payouts/p1/approve');
+    expect(f.mock.calls[1]![1]).toEqual(expect.objectContaining({ method: 'POST', body: JSON.stringify({ note: 'ok' }) }));
+    await m.rejectPayout('p1', ' sai STK ');
+    expect(f.mock.calls[2]![0]).toContain('/admin/payouts/p1/reject');
+    expect(f.mock.calls[2]![1]).toEqual(expect.objectContaining({ body: JSON.stringify({ reason: 'sai STK' }) }));
+    await m.markPayoutPaid('p1', ' FT2627 ', ' đã đối soát ');
+    expect(f.mock.calls[3]![0]).toContain('/admin/payouts/p1/mark-paid');
+    expect(f.mock.calls[3]![1]).toEqual(
+      expect.objectContaining({ body: JSON.stringify({ bankRef: 'FT2627', note: 'đã đối soát' }) }),
+    );
+    await m.markPayoutPaid('p1');
+    expect(f.mock.calls[4]![1]).toEqual(expect.objectContaining({ body: '{}' }));
   });
 
   it('POS: scan-member, pos-credit, sổ pos-credits có lọc', async () => {

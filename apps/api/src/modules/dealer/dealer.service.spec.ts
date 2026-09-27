@@ -234,27 +234,8 @@ describe('DealerService.apply (Việc 3 — TOCTOU khi đăng ký đại lý)', 
   });
 });
 
-describe('DealerService.creditPayment (an authenticated non-dealer must not be able to fabricate a paid-down debt)', () => {
-  it('chặn user không phải DEALER (trước đây thiếu check, cho phép tự ghi delta âm vào ledger của mình)', async () => {
-    const prisma = {
-      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER', metadata: null }) },
-      dealerCreditLedger: { create: jest.fn() },
-    } as unknown as PrismaService;
-    await expect(new DealerService(prisma, makeConfig()).creditPayment('u1', 50_000, 'note')).rejects.toThrow();
-    expect((prisma as unknown as { dealerCreditLedger: { create: jest.Mock } }).dealerCreditLedger.create).not.toHaveBeenCalled();
-  });
-
-  it('đại lý hợp lệ → ghi delta âm bình thường', async () => {
-    const ledgerCreate = jest.fn().mockResolvedValue({});
-    const prisma = {
-      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
-      dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
-      dealerCreditLedger: { create: ledgerCreate, findMany: jest.fn().mockResolvedValue([]) },
-    } as unknown as PrismaService;
-    await new DealerService(prisma, makeConfig()).creditPayment('d1', 50_000, 'note');
-    expect(ledgerCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ userId: 'd1', delta: -50_000 }) }));
-  });
-});
+// DealerService.reportCreditPayment / adminRecordCreditPayment (A5-09 — đại lý "Báo đã CK" không
+// còn tự trừ nợ): xem dealer-credit-payment.spec.ts.
 
 /**
  * Mock cho `reserveAvailableVariationStock` (catalog/variation-stock.ts): luôn giữ được ĐỦ số

@@ -31,6 +31,7 @@ describe('AuthController — giao refresh token theo client', () => {
     loginWithZaloOAuth: jest.fn(),
     refresh: jest.fn(),
     logout: jest.fn(),
+    ensurePhoneForCurrentUser: jest.fn(),
   };
   const prisma = { user: { findUniqueOrThrow: jest.fn() } };
   const config = { get: jest.fn().mockReturnValue(30) };
@@ -115,6 +116,17 @@ describe('AuthController — giao refresh token theo client', () => {
       await c.logout({}, webReq(), res);
       expect(auth.logout).not.toHaveBeenCalled();
       expect(cleared).toEqual([REFRESH_COOKIE]);
+    });
+  });
+
+  describe('ensurePhone — A7-01: lấy userId từ JWT phiên hiện tại (@CurrentUser), không cho client tự khai', () => {
+    it('gọi ensurePhoneForCurrentUser với user.sub từ JWT + đúng field DTO', async () => {
+      auth.ensurePhoneForCurrentUser.mockResolvedValue(LOGIN);
+      const { res } = makeRes();
+      const jwtUser = { sub: 'guest1', role: 'CUSTOMER' } as never;
+      const out = await c.ensurePhone(jwtUser, { code: 'c', accessToken: 'at', phoneToken: 'pt' } as never, makeReq(), res);
+      expect(auth.ensurePhoneForCurrentUser).toHaveBeenCalledWith('guest1', 'c', 'at', 'pt');
+      expect(out.accessToken).toBe('at');
     });
   });
 

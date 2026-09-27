@@ -301,6 +301,45 @@ export const confirmDealerOrderPayment = (orderId: string, input: { bankRef?: st
     body: { ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}) },
   });
 };
+
+// ── Công nợ đại lý (A5-09): "Báo đã CK" của đại lý giờ chỉ là thông báo, sổ công nợ CHỈ giảm khi
+// ADMIN tự đối chiếu sao kê rồi xác nhận ở đây — xem DealerService.adminRecordCreditPayment. ──
+export interface DealerCreditLedgerEntry {
+  id: string;
+  delta: number;
+  refType: string;
+  refId: string | null;
+  note: string | null;
+  createdAt: string;
+}
+export interface DealerCreditLedger {
+  /** Dư nợ hiện tại = tổng delta (âm = đang nợ). */
+  balance: number;
+  entries: DealerCreditLedgerEntry[];
+}
+export const getDealerCreditLedger = (userId: string) =>
+  apiFetch<DealerCreditLedger>(`/admin/dealers/${encodeURIComponent(userId)}/credit-ledger`);
+
+export interface RecordDealerCreditPaymentResult {
+  balance: number;
+}
+/**
+ * POST /admin/dealers/:userId/credit-payment — GHI GIẢM sổ công nợ, trần theo dư nợ TẠI LÚC DUYỆT
+ * (Serializable). `idempotencyKey` nên là mã giao dịch ngân hàng nếu có, tránh ghi trùng khi bấm lặp.
+ */
+export const recordDealerCreditPayment = (
+  userId: string,
+  input: { amount: number; bankRef?: string; note?: string },
+  idempotencyKey?: string,
+) => {
+  const bankRef = input.bankRef?.trim().slice(0, DEALER_BANK_REF_MAX) || undefined;
+  const note = input.note?.trim().slice(0, DEALER_PAYMENT_NOTE_MAX) || undefined;
+  return apiFetch<RecordDealerCreditPaymentResult>(`/admin/dealers/${encodeURIComponent(userId)}/credit-payment`, {
+    method: 'POST',
+    body: { amount: input.amount, ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}) },
+    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+  });
+};
 export interface GomdonIntegrationStatus {
   baseUrlSet: boolean;
   credentialsSet: boolean;
@@ -684,6 +723,48 @@ export const markDealerRewardClaimPaid = (id: string, note?: string) =>
   apiFetch<AdminDealerRewardClaim>(`/admin/dealer-reward-claims/${encodeURIComponent(id)}/mark-paid`, {
     method: 'POST',
     body: note?.trim() ? { note: note.trim() } : {},
+  });
+
+// ── Duyệt yêu cầu rút tiền (P0 A5-08 = A6-05): hoa hồng CTV / Ví Tubu → ngân hàng ──
+export type AdminPayoutStatus = 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';
+export interface AdminPayout {
+  id: string;
+  userId: string;
+  /** Số thực nhận (đã trừ phí) — xem wallet.service.ts:withdraw / affiliate.service.ts:requestPayout. */
+  amount: number;
+  fee: number;
+  method: string;
+  bankInfo: { bankName?: string; accountNumber?: string; accountName?: string } | null;
+  status: AdminPayoutStatus;
+  requestedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  paidBy: string | null;
+  paidAt: string | null;
+  bankRef: string | null;
+  adminNote: string | null;
+  user: { id: string; fullName: string | null; phone: string | null; referralCode: string | null } | null;
+}
+export const listPayouts = (status?: AdminPayoutStatus, page = 1, limit = 20) =>
+  apiFetch<Page<AdminPayout>>(`/admin/payouts?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`);
+export const approvePayout = (id: string, note?: string) =>
+  apiFetch<AdminPayout>(`/admin/payouts/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
+    body: note?.trim() ? { note: note.trim() } : {},
+  });
+export const rejectPayout = (id: string, reason: string) =>
+  apiFetch<AdminPayout>(`/admin/payouts/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    body: { reason: reason.trim() },
+  });
+export const markPayoutPaid = (id: string, bankRef?: string, note?: string) =>
+  apiFetch<AdminPayout>(`/admin/payouts/${encodeURIComponent(id)}/mark-paid`, {
+    method: 'POST',
+    body: {
+      ...(bankRef?.trim() ? { bankRef: bankRef.trim() } : {}),
+      ...(note?.trim() ? { note: note.trim() } : {}),
+    },
   });
 
 // ── Tích điểm tại quầy (POS) ──

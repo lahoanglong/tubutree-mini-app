@@ -76,13 +76,16 @@ import {
   reviewCashbackTxn,
   countRecyclingAttention,
   listDealerRewardClaims,
+  listPayouts,
   type RecyclingFilter,
 } from '@/lib/admin-client';
 import { RecyclingBadge, RecyclingPanel } from '@/components/admin/recycling-panel';
 import { DealerPaymentPanel } from '@/components/admin/dealer-payment-panel';
+import { DealerCreditPanel } from '@/components/admin/dealer-credit-panel';
 import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
 import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
+import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
 import { PosCreditsTab } from '@/components/admin/pos-credits-tab';
 import {
   exportOrdersToCsv,
@@ -95,6 +98,7 @@ type Tab =
   | 'dashboard'
   | 'dealers'
   | 'dealerClaims'
+  | 'payouts'
   | 'orders'
   | 'returns'
   | 'users'
@@ -113,6 +117,7 @@ const TABS: { k: Tab; label: string }[] = [
   { k: 'dashboard', label: 'Tổng quan KPI' },
   { k: 'dealers', label: 'Đại lý' },
   { k: 'dealerClaims', label: 'Thưởng đại lý' },
+  { k: 'payouts', label: 'Duyệt yêu cầu rút tiền' },
   { k: 'orders', label: 'Đơn hàng' },
   { k: 'returns', label: 'Đổi / Trả' },
   { k: 'cashback', label: 'Hoàn tiền sàn ngoài' },
@@ -219,6 +224,7 @@ export default function AdminPage() {
         {tab === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} />}
         {tab === 'dealers' && <DealersTab />}
         {tab === 'dealerClaims' && <DealerClaimsTab />}
+        {tab === 'payouts' && <PayoutAdminTab />}
         {tab === 'orders' && <OrdersTab recycling={ordersRecycling} onRecyclingChange={onRecyclingFilterChange} />}
         {tab === 'returns' && <ReturnsTab />}
         {tab === 'cashback' && <CashbackTab />}
@@ -387,6 +393,12 @@ function DashboardTab({
     queryKey: ['admin-dealer-claims', 'PENDING', 'count'],
     queryFn: () => listDealerRewardClaims('PENDING', 1, 1).then((r) => r.meta.total),
   });
+  // P0 A5-08=A6-05: trước đây Payout REQUESTED không hiện ở đâu cả — tiền "biến mất" khỏi mọi
+  // hàng đợi xử lý được. Badge này là lối vào chính để admin biết có lệnh rút đang chờ.
+  const pendingPayoutsQ = useQuery({
+    queryKey: ['admin-payouts', 'REQUESTED', 'count'],
+    queryFn: () => listPayouts('REQUESTED', 1, 1).then((r) => r.meta.total),
+  });
 
   if (q.isLoading) return <p className="text-sm text-neutral-500">Đang tải số liệu tổng quan…</p>;
   if (q.isError || !q.data) return <p className="text-sm text-red-600">Không tải được số liệu tổng quan KPI.</p>;
@@ -415,6 +427,18 @@ function DashboardTab({
         >
           <span>
             🏆 <b>{pendingClaimsQ.data}</b> yêu cầu nhận thưởng đại lý đang chờ duyệt
+          </span>
+          <span className="font-semibold">Xem →</span>
+        </button>
+      )}
+      {(pendingPayoutsQ.data ?? 0) > 0 && (
+        <button
+          type="button"
+          onClick={() => onSelectTab('payouts')}
+          className="flex w-full items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900 hover:bg-amber-100"
+        >
+          <span>
+            💸 <b>{pendingPayoutsQ.data}</b> lệnh rút tiền (hoa hồng CTV / Ví) đang chờ duyệt
           </span>
           <span className="font-semibold">Xem →</span>
         </button>
@@ -799,6 +823,9 @@ function OrdersTab({
 
                               {/* Đơn đại lý trả trước chờ chuyển khoản: admin xác nhận đã nhận tiền (tự ẩn khi không đủ điều kiện). */}
                               <DealerPaymentPanel order={o} />
+
+                              {/* Sổ công nợ đại lý (mọi đơn ĐẠI LÝ, không riêng đơn ghi công nợ) — A5-09. */}
+                              <DealerCreditPanel order={o} />
 
                               {/* Quick status transitions */}
                               <div className="flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-2">

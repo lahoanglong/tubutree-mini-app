@@ -303,57 +303,155 @@ export class DealerService {
   }
 
   /**
-   * Đại lý tự báo "đã chuyển khoản" để trừ công nợ — KHÔNG có xác nhận ngân hàng thật, nên
-   * double-submit/retry mạng (mất kết nối giữa lúc chờ response, double-tap nút) trước đây có
-   * thể trừ nợ 2 LẦN cho đúng 1 lần chuyển khoản thật. Idempotency-Key bắt buộc từ FE (mirror
-   * wallet.withdraw/convertToXu): dedupe theo (userId, refType='PAYMENT', refId=key) — unique
-   * constraint đã sẵn có ở schema (migration 20260902020200_dealer_credit_ledger_ref_unique,
-   * @@unique([userId, refType, refId])); NULL không tự đụng nên client cũ không gửi key (hoặc
-   * gọi service trực tiếp không qua HTTP, xem test) vẫn tạo dòng PAYMENT bình thường như trước.
-   * Key trùng nhưng SỐ TIỀN khác → throw rõ ràng thay vì âm thầm trả kết quả cũ (có thể che giấu
-   * nhầm lẫn số tiền báo); giống số tiền → coi là replay, trả lại sổ công nợ hiện tại.
+   * A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): trước đây đại lý tự bấm "Báo đã CK" là TRỪ
+   * NỢ NGAY LẬP TỨC (creditPayment cũ) — KHÔNG có xác nhận ngân hàng thật, và không chặn số tiền
+   * báo vượt dư nợ hiện tại. Một đại lý có thể tự xoá nợ vô hạn lần bằng chính lời tự khai của
+   * mình. Hành động này giờ CHỈ CÒN LÀ THÔNG BÁO cho admin — không đụng DealerCreditLedger ở đâu
+   * cả. Sổ công nợ CHỈ giảm qua adminRecordCreditPayment (admin tự kiểm tra sao kê ngân hàng rồi
+   * xác nhận, có trần theo dư nợ TẠI LÚC DUYỆT — xem method đó).
    */
-  async creditPayment(userId: string, amount: number, note?: string, idempotencyKey?: string) {
-    // Chặn nếu chưa phải đại lý (mirror mọi method công nợ/đơn hàng khác) — thiếu check này
-    // trước đây cho phép BẤT KỲ user đã đăng nhập nào tự ghi "đã thanh toán" (delta âm) vào
-    // DealerCreditLedger của chính mình, tạo công nợ ảo âm nếu sau này họ được duyệt làm đại lý.
+  async reportCreditPayment(userId: string, amount: number, note?: string) {
+    // Chặn nếu chưa phải đại lý (mirror mọi method công nợ/đơn hàng khác).
     await this.dealerContext(userId);
-    if (amount <= 0) throw new BadRequestException('Số tiền không hợp lệ.');
-    // Chuẩn hoá '' / khoảng trắng → undefined (mirror wallet.withdraw/convertToXu, dealer.placeOrder).
-    const key = idempotencyKey?.trim() || undefined;
+    if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('Số tiền không hợp lệ.');
+    // Chặn sớm cho UX (đại lý biết ngay số báo có hợp lý không) — đây KHÔNG phải trần thật: trần
+    // thật được admin re-check tại lúc duyệt (adminRecordCreditPayment), vì dư nợ có thể đổi giữa
+    // lúc báo và lúc admin xử lý (đại lý vừa đặt đơn ghi nợ mới, hoặc một khoản báo khác vừa được
+    // admin duyệt trước).
+    const { balance } = await this.creditLedger(userId);
+    if (amount > balance) {
+      throw new BadRequestException(`Số tiền báo (${vnd(amount)}) vượt dư nợ hiện tại của bạn (${vnd(balance)}).`);
+    }
+    await this.notifyAdminsOfCreditReport(userId, amount, note).catch((e) =>
+      this.logger.warn(`Báo admin đại lý ${userId} đã chuyển khoản lỗi: ${(e as Error).message}`),
+    );
+    return {
+      ok: true,
+      message: `Đã báo cho quản trị viên là bạn đã chuyển khoản ${vnd(amount)}. Sổ công nợ sẽ CHỈ cập nhật sau khi admin xác nhận đã nhận được tiền.`,
+    };
+  }
 
+  /** Báo mọi tài khoản ADMIN đại lý vừa báo đã chuyển khoản (thông báo in-app/ZNS theo template
+   * DEALER_CREDIT_PAYMENT_REPORTED) — mirror notifyAdminsOfClaim. */
+  private async notifyAdminsOfCreditReport(userId: string, amount: number, note?: string) {
+    if (!this.notifications) {
+      this.logger.warn(`NotificationsService chưa wiring — không báo được admin đại lý ${userId} báo đã chuyển khoản.`);
+      return;
+    }
+    const [admins, dealer] = await Promise.all([
+      this.prisma.user.findMany({ where: { role: 'ADMIN', isBlocked: false }, select: { id: true }, take: 20 }),
+      this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true, phone: true } }),
+    ]);
+    if (admins.length === 0) {
+      this.logger.warn(`Không có tài khoản ADMIN nào để báo đại lý ${userId} đã chuyển khoản.`);
+      return;
+    }
+    const data = {
+      dealer: dealer?.fullName || dealer?.phone || userId,
+      amount: amount.toLocaleString('vi-VN'),
+      note: note?.trim() ?? '',
+    };
+    const results = await Promise.allSettled(
+      admins.map((a) => this.notifications!.notify(a.id, 'DEALER_CREDIT_PAYMENT_REPORTED', data)),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    if (failed > 0) this.logger.warn(`Báo admin đại lý ${userId} đã chuyển khoản: lỗi ${failed}/${admins.length}.`);
+  }
+
+  /**
+   * ADMIN xác nhận đã nhận chuyển khoản trả nợ của đại lý — nguồn DUY NHẤT được phép GIẢM
+   * DealerCreditLedger ngoài các luồng hệ thống (ORDER_CANCEL, QUARTER_BONUS...). Thay cho
+   * DealerService.creditPayment cũ (đại lý tự trừ nợ không cần ai xác nhận — A5-09). Admin tự
+   * kiểm tra sao kê ngân hàng rồi gọi endpoint này (thường sau khi nhận DEALER_CREDIT_PAYMENT_REPORTED).
+   *  - Trần: `amount` không được vượt dư nợ HIỆN TẠI — kiểm tra lại NGAY TRONG transaction
+   *    Serializable (mirror DealerService.placeOrder nhánh onCredit) vì dư nợ có thể đã đổi giữa
+   *    lúc admin xem màn hình và lúc bấm duyệt (đại lý vừa đặt đơn ghi nợ mới, hoặc một admin khác
+   *    vừa duyệt một khoản khác cho CÙNG đại lý này).
+   *  - Chống double-processing: Idempotency-Key optional → refId; unique (userId,refType,refId) đã
+   *    có sẵn ở schema (@@unique([userId, refType, refId])) chặn tạo trùng — bấm đúp/retry mạng trả
+   *    lại sổ công nợ hiện tại thay vì trừ 2 lần (mirror creditPayment cũ / wallet.withdraw).
+   */
+  async adminRecordCreditPayment(
+    adminId: string,
+    dealerUserId: string,
+    amount: number,
+    opts: { note?: string; bankRef?: string; idempotencyKey?: string } = {},
+  ) {
+    if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('Số tiền không hợp lệ.');
+    const dealer = await this.prisma.user.findUnique({
+      where: { id: dealerUserId },
+      select: { id: true, role: true, fullName: true, phone: true },
+    });
+    if (!dealer || dealer.role !== 'DEALER') throw new NotFoundException('Không tìm thấy đại lý.');
+
+    const key = opts.idempotencyKey?.trim() || undefined;
     if (key) {
       const existing = await this.prisma.dealerCreditLedger.findFirst({
-        where: { userId, refType: 'PAYMENT', refId: key },
+        where: { userId: dealerUserId, refType: 'PAYMENT', refId: key },
       });
       if (existing) {
         if (existing.delta !== -amount) {
           throw new BadRequestException('Idempotency-Key đã được sử dụng với số tiền khác, vui lòng thử lại.');
         }
-        return this.creditLedger(userId);
+        return this.creditLedger(dealerUserId);
       }
     }
 
     try {
-      await this.prisma.dealerCreditLedger.create({
-        data: {
-          userId,
-          delta: -amount,
-          refType: 'PAYMENT',
-          note: note ?? 'Thanh toán công nợ',
-          ...(key ? { refId: key } : {}),
+      await this.prisma.$transaction(
+        async (tx) => {
+          // Re-check TRONG transaction Serializable — dư nợ có thể đã đổi kể từ lúc admin xem màn
+          // hình (đơn CREDIT mới / khoản báo khác vừa được duyệt). 2 admin duyệt đồng thời cho
+          // cùng đại lý sẽ khiến 1 bên serialization-fail (P2034) thay vì cùng qua check.
+          const agg = await tx.dealerCreditLedger.aggregate({ where: { userId: dealerUserId }, _sum: { delta: true } });
+          const debt = agg._sum.delta ?? 0;
+          if (amount > debt) {
+            throw new BadRequestException(
+              `Số tiền (${vnd(amount)}) vượt dư nợ hiện tại của đại lý (${vnd(debt)}).`,
+            );
+          }
+          await tx.dealerCreditLedger.create({
+            data: {
+              userId: dealerUserId,
+              delta: -amount,
+              refType: 'PAYMENT',
+              note: [
+                `Admin ${adminId} xác nhận đã nhận chuyển khoản`,
+                opts.bankRef?.trim() ? `Mã GD ${opts.bankRef.trim()}` : null,
+                opts.note?.trim() || null,
+              ]
+                .filter(Boolean)
+                .join(' · '),
+              ...(key ? { refId: key } : {}),
+            },
+          });
         },
-      });
+        { isolationLevel: 'Serializable' },
+      );
     } catch (err) {
+      // P2034: serialization failure — 2 lần duyệt công nợ của CÙNG đại lý chạm nhau.
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+        throw new BadRequestException('Hệ thống đang bận xử lý công nợ đại lý này, vui lòng thử lại.');
+      }
       // Race 2 request cùng key: kẻ thua ăn P2002 trên unique (userId,refType,refId) → coi như
-      // replay của cùng 1 lần báo, trả kết quả hiện tại thay vì lỗi 500 (mirror
-      // wallet.withdraw/convertToXu/payoutQuarterlyBonuses).
+      // replay của cùng 1 lần xác nhận, trả kết quả hiện tại thay vì lỗi 500.
       if (key && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        return this.creditLedger(userId);
+        return this.creditLedger(dealerUserId);
       }
       throw err;
     }
-    return this.creditLedger(userId);
+
+    this.logger.warn(
+      `Admin ${adminId} xác nhận đại lý ${dealerUserId} đã trả nợ ${vnd(amount)}` +
+        (opts.bankRef ? ` (mã GD ${opts.bankRef})` : '') +
+        '.',
+    );
+    if (this.notifications) {
+      await this.notifications
+        .notify(dealerUserId, 'DEALER_CREDIT_PAYMENT_CONFIRMED', { amount: amount.toLocaleString('vi-VN') })
+        .catch((e) => this.logger.warn(`notify DEALER_CREDIT_PAYMENT_CONFIRMED lỗi (${dealerUserId}): ${(e as Error).message}`));
+    }
+    return this.creditLedger(dealerUserId);
   }
 
   /** Chênh lệch giờ VN (UTC+7) so với UTC — mốc quý/năm tính theo giờ tường VN, độc lập TZ máy chủ. */

@@ -137,3 +137,22 @@ export async function refreshTokens(refreshToken: string): Promise<LoginResponse
   const { data } = await api.post<LoginResponse>('/auth/refresh', { refreshToken });
   return data;
 }
+
+/**
+ * POST /auth/ensure-phone (A7-01, audit 2026-09) — khác loginZaloMiniApp(): gửi kèm access
+ * token CỦA PHIÊN HIỆN TẠI (interceptor tự đính Authorization) nên BE biết chính xác đang là ai
+ * và không bao giờ âm thầm trả token của một user khác. Dùng cho cả checkout ensurePhone() (kèm
+ * phoneToken) lẫn nâng cấp ngầm phiên khách ở store/auth.ts restore() (không kèm phoneToken).
+ */
+export async function ensurePhoneApi(
+  code: string,
+  zaloAccessToken: string,
+  phoneToken?: string,
+): Promise<LoginResponse> {
+  const { data } = await api.post<LoginResponse>('/auth/ensure-phone', {
+    code,
+    accessToken: zaloAccessToken,
+    phoneToken,
+  });
+  return data;
+}

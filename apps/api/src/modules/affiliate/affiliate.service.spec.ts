@@ -578,7 +578,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     ).rejects.toThrow('không đủ');
   });
 
-  it('WALLET_BALANCE → credit ×1.5 theo TỔNG THỰC các row APPROVED (không mất tiền) + mark PAID', async () => {
+  it('WALLET_BALANCE → quy đổi 1:1 (KHÔNG nhân hệ số) theo TỔNG THỰC các row APPROVED + mark PAID (P0 A5-07 fix)', async () => {
     const { prisma, userUpdate, payoutCreate } = makePrisma({
       available: 100_000,
       rows: [
@@ -588,9 +588,97 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     });
     // amount PHẢI === available (rút toàn bộ, xem Bug 2 fix) — request đúng 100k.
     const r = await new AffiliateService(prisma, config, pricing, pancakeOrder, coins).requestPayout('u1', 100_000, 'WALLET_BALANCE');
-    expect(r.credited).toBe(150_000);
-    expect(userUpdate.mock.calls[0][0].data.walletBalance).toEqual({ increment: 150_000 });
+    // P0 A5-07: walletBalance là tiền VND rút được 1:1 ra ngân hàng thật (wallet.service.ts:withdraw)
+    // — nhân hệ số ở đường này tương đương in tiền thật (1tr hoa hồng → 1,497tr rút được trước khi
+    // vá). credited PHẢI đúng bằng total, không hơn không kém.
+    expect(r.credited).toBe(100_000);
+    expect(userUpdate.mock.calls[0][0].data.walletBalance).toEqual({ increment: 100_000 });
     expect(payoutCreate.mock.calls[0][0].data.status).toBe('PAID');
+    // Không còn quảng cáo hệ số nhân (đã bỏ) trong thông báo cho CTV.
+    expect(r.note).not.toContain('×');
+  });
+
+  it('WALLET_BALANCE: SystemConfig affiliate.tubu_wallet_multiplier còn seed giá trị >1 (dữ liệu cũ) → KHÔNG được đọc/áp dụng ở đường tiền thật này nữa (P0 A5-07)', async () => {
+    const { prisma, userUpdate } = makePrisma({ available: 100_000, rows: [{ id: 'c1', amount: 100_000 }] });
+    const cfgWithStaleMultiplier = {
+      get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.tubu_wallet_multiplier' ? ((5 as unknown) as T) : (fb as T)),
+    } as unknown as SystemConfigService;
+    const r = await new AffiliateService(prisma, cfgWithStaleMultiplier, pricing, pancakeOrder, coins).requestPayout(
+      'u1',
+      100_000,
+      'WALLET_BALANCE',
+    );
+    expect(r.credited).toBe(100_000); // KHÔNG phải 500_000 dù config (nếu còn ai đọc) sẽ trả 5
+    expect(userUpdate.mock.calls[0][0].data.walletBalance).toEqual({ increment: 100_000 });
+  });
+
+  it('2 lệnh requestPayout(WALLET_BALANCE) đồng thời cho CÙNG bộ commission → chỉ cộng ví ĐÚNG 1 LẦN, đúng 1:1 (race an toàn, P0 A5-07)', async () => {
+    const commissionRows: Array<{ id: string; amount: number; status: string; payoutBatchId: string | null }> = [
+      { id: 'c1', amount: 60_000, status: 'APPROVED', payoutBatchId: null },
+      { id: 'c2', amount: 40_000, status: 'APPROVED', payoutBatchId: null },
+    ];
+    let wallet = 0;
+    let payoutSeq = 0;
+    const prisma = {
+      commission: {
+        aggregate: jest.fn(async () => ({
+          _sum: {
+            amount: commissionRows
+              .filter((r) => r.status === 'APPROVED' && r.payoutBatchId === null)
+              .reduce((s, r) => s + r.amount, 0),
+          },
+        })),
+        findMany: jest.fn(async () =>
+          commissionRows
+            .filter((r) => r.status === 'APPROVED' && r.payoutBatchId === null)
+            .map((r) => ({ id: r.id, amount: r.amount })),
+        ),
+        updateMany: jest.fn(
+          async ({
+            where,
+            data,
+          }: {
+            where: { id: { in: string[] }; status: string; payoutBatchId: null };
+            data: { status: string; paidAt: Date };
+          }) => {
+            let count = 0;
+            for (const row of commissionRows) {
+              if (
+                where.id.in.includes(row.id) &&
+                row.status === where.status &&
+                row.payoutBatchId === where.payoutBatchId
+              ) {
+                row.status = data.status;
+                count++;
+              }
+            }
+            return { count };
+          },
+        ),
+      },
+      user: {
+        update: jest.fn(async ({ data }: { data: { walletBalance: { increment: number } } }) => {
+          wallet += data.walletBalance.increment;
+          return {};
+        }),
+      },
+      payout: {
+        create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: `payout-${++payoutSeq}`, ...data })),
+      },
+    } as unknown as PrismaService;
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
+      .fn()
+      .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
+
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins);
+    const results = await Promise.allSettled([
+      svc.requestPayout('u1', 100_000, 'WALLET_BALANCE'),
+      svc.requestPayout('u1', 100_000, 'WALLET_BALANCE'),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    // KHÔNG phải 200_000 (double-credit) và KHÔNG phải 150_000 (nếu hệ số nhân lọt vào).
+    expect(wallet).toBe(100_000);
   });
 
   it('amount KHÁC available (rút một phần) → BadRequest rõ ràng, KHÔNG âm thầm rút hết (Bug 2 fix)', async () => {
@@ -830,5 +918,217 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 3 ngày)', 
     (prisma as any).referralTouch.findUnique.mockResolvedValue({ referrerUserId: 'ctv1', storefrontSlug: null, kind: 'ctv', expiresAt: new Date(NOW.getTime() - 1000) });
     const t = await new AffiliateService(prisma, config, pricing, pancakeOrder, coins).getActiveTouch('buyer1', NOW);
     expect(t).toBeNull();
+  });
+
+  // P0 A5-01: gian hàng CTV mở TRONG ZALO dùng slug (storefront.service.ts sinh = referralCode.toLowerCase())
+  // làm luôn referralCode cho attribution (storefront-view.tsx/app.tsx miniapp KHÔNG hoa hoá lại).
+  // User.referralCode luôn lưu chữ HOA (auth.service.ts). So khớp CHÍNH XÁC trước đây luôn trượt
+  // (Postgres phân biệt hoa/thường) → referrer luôn null → CTV bán qua gian hàng trong Zalo không
+  // bao giờ được ghi hoa hồng.
+  it('recordTouch: referralCode chữ THƯỜNG (slug gian hàng CTV mở trong Zalo) phải được chuẩn hoá hoa TRƯỚC khi so khớp (P0 A5-01)', async () => {
+    const prisma = makePrisma();
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1' });
+    const r = await new AffiliateService(prisma, config, pricing, pancakeOrder, coins).recordTouch(
+      'buyer1',
+      { referralCode: 'linh', storefrontSlug: 'linh', kind: 'ctv' },
+      NOW,
+    );
+    expect(r.ok).toBe(true);
+    // Lookup PHẢI dùng mã đã hoa hoá — gửi thẳng 'linh' sẽ luôn trượt trên Postgres thật (referralCode
+    // lưu 'LINH', so khớp phân biệt hoa/thường), dù mock ở trên không tự mô phỏng việc đó.
+    expect((prisma as any).user.findUnique).toHaveBeenCalledWith({ where: { referralCode: 'LINH' }, select: { id: true } });
+    const call = (prisma as any).referralTouch.upsert.mock.calls[0][0];
+    expect(call.create.referrerUserId).toBe('ctv1');
+    // storefrontSlug giữ NGUYÊN chữ thường — quy ước của slug khác với referralCode, không đổi ở đây.
+    expect(call.create.storefrontSlug).toBe('linh');
+  });
+
+  it('P0 A5-01 — tái hiện: khách mở gian hàng CTV trong Zalo (slug/referralCode chữ THƯỜNG) → "chạm" giới thiệu được ghi nhận đúng CTV, còn hạn cho checkout dùng làm fallback (trước đây referrer luôn null)', async () => {
+    let stored: { referrerUserId: string; storefrontSlug: string | null; kind: string; expiresAt: Date } | null = null;
+    const prisma = {
+      // Mô phỏng ĐÚNG hành vi Postgres thật: User.referralCode lưu 'LINH' (chữ hoa), so khớp
+      // phân biệt hoa/thường — chỉ khớp khi lookup ĐÃ được chuẩn hoá hoa TRƯỚC khi gọi tới đây.
+      user: {
+        findUnique: jest
+          .fn()
+          .mockImplementation(({ where }: { where: { referralCode: string } }) =>
+            Promise.resolve(where.referralCode === 'LINH' ? { id: 'ctv1' } : null),
+          ),
+      },
+      referralTouch: {
+        upsert: jest.fn().mockImplementation(({ create }: { create: typeof stored }) => {
+          stored = create;
+          return Promise.resolve(create);
+        }),
+        findUnique: jest.fn().mockImplementation(() => Promise.resolve(stored)),
+      },
+    } as unknown as PrismaService;
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins);
+
+    // 1) Khách mở gian hàng CTV trong Zalo: FE gửi referralCode = slug gian hàng (chữ THƯỜNG), y hệt
+    //    storefront-view.tsx (referralCode: sf.slug) + app.tsx (recordReferralTouch) thật.
+    const touchResult = await svc.recordTouch('buyer1', { referralCode: 'linh', storefrontSlug: 'linh', kind: 'ctv' }, NOW);
+    expect(touchResult.ok).toBe(true);
+
+    // 2) Vài phút sau, checkout mất phiên storefront-context → fallback đọc "chạm" còn hạn (3 ngày)
+    //    — phải thấy ĐÚNG referrerUserId (không phải null như trước khi vá).
+    const touch = await svc.getActiveTouch('buyer1', new Date(NOW.getTime() + 60_000));
+    expect(touch?.referrerUserId).toBe('ctv1');
+    expect(touch?.storefrontSlug).toBe('linh');
+  });
+});
+
+// P0 A5-08 = A6-05: Payout BANK tạo REQUESTED (wallet.service.ts:withdraw hoặc
+// affiliate.service.ts:requestPayout nhánh BANK) nhưng trước đây KHÔNG có endpoint/màn admin nào
+// để xem/duyệt/từ chối/đánh dấu đã trả — tiền bị trừ khỏi số dư CTV rồi "biến mất" khỏi mọi hàng
+// đợi xử lý được. Thêm listPayouts/approvePayout/rejectPayout/markPayoutPaid, atomic updateMany
+// (status-guard), không bao giờ check-then-write.
+describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
+  function makePrisma(
+    payout: Record<string, unknown>,
+    opts: { linkedCommissions?: Array<{ id: string }> } = {},
+  ) {
+    const payoutUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const payoutFindUniqueOrThrow = jest.fn().mockResolvedValue(payout);
+    const commissionFindMany = jest.fn().mockResolvedValue(opts.linkedCommissions ?? []);
+    const commissionUpdateMany = jest.fn().mockResolvedValue({ count: opts.linkedCommissions?.length ?? 0 });
+    const userUpdate = jest.fn().mockResolvedValue({});
+    const prisma = {
+      payout: {
+        updateMany: payoutUpdateMany,
+        findUniqueOrThrow: payoutFindUniqueOrThrow,
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      commission: { findMany: commissionFindMany, updateMany: commissionUpdateMany },
+      user: { update: userUpdate },
+    } as unknown as PrismaService;
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
+      .fn()
+      .mockImplementation(async (arg: unknown) =>
+        typeof arg === 'function' ? (arg as (tx: unknown) => unknown)(prisma) : Promise.all(arg as Promise<unknown>[]),
+      );
+    return { prisma, payoutUpdateMany, payoutFindUniqueOrThrow, commissionFindMany, commissionUpdateMany, userUpdate };
+  }
+
+  it('listPayouts: trạng thái không hợp lệ → BadRequest', async () => {
+    const prisma = {} as unknown as PrismaService;
+    await expect(
+      new AffiliateService(prisma, config, pricing, pancakeOrder, coins).listPayouts('BOGUS', 1, 20),
+    ).rejects.toThrow();
+  });
+
+  it('approvePayout: REQUESTED → APPROVED (atomic updateMany theo status-guard)', async () => {
+    const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1', status: 'APPROVED' });
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins).approvePayout('admin1', 'p1', 'ok');
+    expect(payoutUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'p1', status: 'REQUESTED' },
+      data: expect.objectContaining({ status: 'APPROVED', reviewedBy: 'admin1', adminNote: 'ok' }),
+    });
+  });
+
+  it('approvePayout: đã bị xử lý bởi người khác (count=0) → BadRequest, không check-then-write', async () => {
+    const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1' });
+    payoutUpdateMany.mockResolvedValue({ count: 0 });
+    await expect(
+      new AffiliateService(prisma, config, pricing, pancakeOrder, coins).approvePayout('admin1', 'p1'),
+    ).rejects.toThrow('tải lại');
+  });
+
+  it('rejectPayout: thiếu lý do → BadRequest, KHÔNG đổi trạng thái/hoàn tiền', async () => {
+    const { prisma, payoutUpdateMany, userUpdate } = makePrisma({ id: 'p1' });
+    await expect(
+      new AffiliateService(prisma, config, pricing, pancakeOrder, coins).rejectPayout('admin1', 'p1', '   '),
+    ).rejects.toThrow('lý do');
+    expect(payoutUpdateMany).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejectPayout: Payout từ wallet.service.ts:withdraw() (KHÔNG có commission gắn payoutBatchId) → hoàn GROSS (amount+fee, KHÔNG phải net) vào walletBalance, KHÔNG đụng commission', async () => {
+    const { prisma, userUpdate, commissionUpdateMany } = makePrisma(
+      { id: 'p1', userId: 'u1', amount: 97_000, fee: 3_000, method: 'BANK' },
+      { linkedCommissions: [] },
+    );
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins).rejectPayout('admin1', 'p1', 'Sai STK');
+    // gross = net (97k) + fee (3k) = đúng số đã bị trừ khỏi walletBalance lúc withdraw().
+    expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { walletBalance: { increment: 100_000 } } });
+    expect(commissionUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejectPayout: Payout từ affiliate.service.ts:requestPayout() nhánh BANK (CÓ commission gắn payoutBatchId) → trả commission về APPROVED (rút lại được), KHÔNG đụng walletBalance', async () => {
+    const { prisma, userUpdate, commissionUpdateMany } = makePrisma(
+      { id: 'p1', userId: 'u1', amount: 100_000, fee: 0, method: 'BANK' },
+      { linkedCommissions: [{ id: 'c1' }, { id: 'c2' }] },
+    );
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins).rejectPayout('admin1', 'p1', 'Sai STK');
+    expect(commissionUpdateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['c1', 'c2'] }, payoutBatchId: 'p1', status: 'PAID' },
+      data: { status: 'APPROVED', payoutBatchId: null, paidAt: null },
+    });
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejectPayout: đã bị xử lý bởi người khác (count=0) → BadRequest, KHÔNG hoàn tiền/đổi commission', async () => {
+    const { prisma, userUpdate, commissionUpdateMany, payoutUpdateMany } = makePrisma({ id: 'p1' });
+    payoutUpdateMany.mockResolvedValue({ count: 0 });
+    await expect(
+      new AffiliateService(prisma, config, pricing, pancakeOrder, coins).rejectPayout('admin1', 'p1', 'lý do'),
+    ).rejects.toThrow();
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(commissionUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('2 lệnh reject đồng thời cho CÙNG payout (nguồn wallet.withdraw, không commission gắn batch) → chỉ hoàn ví ĐÚNG 1 LẦN', async () => {
+    let payoutRow: Record<string, unknown> = { id: 'p1', userId: 'u1', amount: 97_000, fee: 3_000, method: 'BANK', status: 'REQUESTED' };
+    let wallet = 0;
+    const prisma = {
+      payout: {
+        updateMany: jest.fn(async ({ where, data }: { where: { id: string; status: string }; data: Record<string, unknown> }) => {
+          if (payoutRow.id === where.id && payoutRow.status === where.status) {
+            payoutRow = { ...payoutRow, ...data };
+            return { count: 1 };
+          }
+          return { count: 0 };
+        }),
+        findUniqueOrThrow: jest.fn(async () => payoutRow),
+      },
+      commission: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn() },
+      user: {
+        update: jest.fn(async ({ data }: { data: { walletBalance: { increment: number } } }) => {
+          wallet += data.walletBalance.increment;
+          return {};
+        }),
+      },
+    } as unknown as PrismaService;
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
+      .fn()
+      .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins);
+    const results = await Promise.allSettled([
+      svc.rejectPayout('admin1', 'p1', 'lý do A'),
+      svc.rejectPayout('admin2', 'p1', 'lý do B'),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect(wallet).toBe(100_000); // hoàn ĐÚNG 1 lần (100k), không phải 200k
+  });
+
+  it('markPayoutPaid: APPROVED → PAID, ghi bankRef + paidBy (atomic updateMany theo status-guard)', async () => {
+    const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1' });
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins).markPayoutPaid('admin1', 'p1', {
+      bankRef: 'FT26270001',
+    });
+    expect(payoutUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'p1', status: 'APPROVED' },
+      data: expect.objectContaining({ status: 'PAID', paidBy: 'admin1', bankRef: 'FT26270001' }),
+    });
+  });
+
+  it('markPayoutPaid: đã bị xử lý bởi người khác (count=0) → BadRequest', async () => {
+    const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1' });
+    payoutUpdateMany.mockResolvedValue({ count: 0 });
+    await expect(
+      new AffiliateService(prisma, config, pricing, pancakeOrder, coins).markPayoutPaid('admin1', 'p1', {}),
+    ).rejects.toThrow('tải lại');
   });
 });

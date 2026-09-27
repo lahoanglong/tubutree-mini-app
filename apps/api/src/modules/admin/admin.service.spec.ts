@@ -217,6 +217,13 @@ type Order = {
   total: number;
   paymentMethod: 'COD' | 'WALLET' | 'ZALOPAY' | 'XU';
   paymentStatus: 'PAID' | 'UNPAID';
+  // Trạng thái đơn NGAY TRƯỚC lần duyệt trả hàng này. Mặc định 'DELIVERED' — guard atomic của
+  // reviewReturn (order.updateMany where status='DELIVERED') chỉ cho approve tiếp khi đúng vậy,
+  // nên đây LUÔN là giá trị thật ở production. OrderReversalService.reverseFinancials dùng field
+  // này (không phải paymentStatus) để biết đơn COD đã thu tiền hay chưa (A6-06) — KHÔNG tách rời
+  // khỏi `order` như bản test cũ (orderRow riêng có status hardcode), vì admin.service.ts đọc
+  // `order` thật trong tx rồi mới flip, nên 2 giá trị này luôn bằng nhau tại thời điểm gọi.
+  status?: string;
   items: Array<{ variationId: string; quantity: number; flashSaleItemId?: string | null; backorderedQty?: number }>;
 };
 type ReturnReq = { id: string; orderId: string; status: 'REQUESTED' | 'APPROVED' | 'REJECTED' } | null;
@@ -228,14 +235,17 @@ function makeReturnPrisma(opts: {
 } = {}) {
   const returnReq: ReturnReq =
     opts.returnReq === undefined ? { id: 'r1', orderId: 'o1', status: 'REQUESTED' } : opts.returnReq;
-  const rawOrder: Order = opts.order ?? {
-    id: 'o1',
-    code: 'TUBU1',
-    userId: 'u1',
-    total: 250000,
-    paymentMethod: 'COD',
-    paymentStatus: 'UNPAID',
-    items: [{ variationId: 'v1', quantity: 1 }],
+  const rawOrder: Order = {
+    status: 'DELIVERED',
+    ...(opts.order ?? {
+      id: 'o1',
+      code: 'TUBU1',
+      userId: 'u1',
+      total: 250000,
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
+      items: [{ variationId: 'v1', quantity: 1 }],
+    }),
   };
   // Đơn thường luôn backorderedQty=0 (OrderReversalService đọc field này để chỉ hoàn đúng phần
   // đã giữ) — fixture cũ không khai báo field mới này, chuẩn hoá 1 chỗ thay vì sửa từng literal.
@@ -246,7 +256,7 @@ function makeReturnPrisma(opts: {
   // Phản ánh ĐÚNG guard của Postgres: chỉ count=1 khi `where` khớp dòng đang nằm trong DB (đơn
   // DELIVERED + paymentStatus như fixture). Bản cũ trả count=1 cho MỌI câu, nên guard hoàn tiền
   // PAID→REFUNDED "thắng" cả với đơn COD UNPAID — OrderReversalService giờ luôn thử guard đó trong tx.
-  const orderRow: Record<string, unknown> = { status: 'DELIVERED', ...order };
+  const orderRow: Record<string, unknown> = { ...order };
   const orderUpdate = jest.fn(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
     if (!Object.entries(where).every(([k, v]) => orderRow[k] === v)) return { count: 0 };
     Object.assign(orderRow, data);
@@ -287,6 +297,7 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     (loyalty.reverseOrderPoints as jest.Mock).mockClear();
     (affiliate.reverseCommissionsForOrder as jest.Mock).mockClear();
     (flash.restore as jest.Mock).mockClear();
+    (notifications.notify as jest.Mock).mockClear();
   });
 
   it('yêu cầu không tồn tại → NotFound', async () => {
@@ -294,7 +305,10 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     await expect(mkAdmin(prisma).reviewReturn('a1', 'x', true)).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('APPROVE với COD UNPAID → đơn RETURNED, KHÔNG hoàn walletBalance, restock đủ', async () => {
+  // A6-06 (docs/audit-2026-09/06-web.md): trước đây COD DELIVERED bị trả hàng KHÔNG được hoàn tiền
+  // (guard cũ chỉ xét paymentStatus='PAID', mà COD không có đường nào lật PAID). Đơn ở đây đã
+  // DELIVERED (mặc định fixture) → tiền COD ĐÃ được tài xế thu — phải hoàn ví đúng 1 lần.
+  it('APPROVE với COD UNPAID nhưng ĐÃ DELIVERED (tiền COD đã thu) → hoàn walletBalance đúng 1 lần, restock đủ, báo "đã hoàn tiền"', async () => {
     const { prisma, returnUpdateMany, orderUpdate, userUpdate, stockExecuteRaw } = makeReturnPrisma({
       order: {
         id: 'o1',
@@ -321,8 +335,15 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
       where: { id: 'o1', status: 'DELIVERED' },
       data: { status: 'RETURNED' },
     });
-    // COD UNPAID — khách chưa trả → KHÔNG hoàn ví.
-    expect(userUpdate).not.toHaveBeenCalled();
+    // COD đã DELIVERED = tài xế đã thu tiền mặt → PHẢI hoàn ví (A6-06), guard riêng cho COD.
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: 'o1', paymentMethod: 'COD', paymentStatus: 'UNPAID' },
+      data: { paymentStatus: 'REFUNDED' },
+    });
+    expect(userUpdate).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { walletBalance: { increment: 300000 } },
+    });
     // Restock cả 2 item.
     expect(stockExecuteRaw).toHaveBeenCalledTimes(2);
     // Tham số câu UPDATE hoàn kho: (số lượng, số lượng, variationId).
@@ -330,6 +351,8 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     expect(stockExecuteRaw.mock.calls[1]!.slice(1)).toEqual([3, 3, 'v2']);
     expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
+    // Tiền đã thực sự được hoàn → được phép báo "đã hoàn tiền".
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED', { order_code: 'TUBU1' });
   });
 
   it('APPROVE với item có flashSaleItemId → gọi flash.restore(tx, itemId, order.userId, qty)', async () => {
@@ -441,7 +464,7 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     );
   });
 
-  it('paymentStatus flip THUA race (count=0, đã refund nơi khác) → KHÔNG hoàn xu lần 2', async () => {
+  it('paymentStatus flip THUA race (count=0, đã refund nơi khác) → KHÔNG hoàn xu lần 2, KHÔNG báo "đã hoàn tiền" (A6-06)', async () => {
     const { prisma, orderUpdate, userUpdate, coinCreate } = makeReturnPrisma({
       order: { id: 'o1', code: 'TUBU1', userId: 'u1', total: 120000, paymentMethod: 'XU', paymentStatus: 'PAID', items: [{ variationId: 'v1', quantity: 1 }] },
     });
@@ -450,6 +473,9 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
     expect(userUpdate).not.toHaveBeenCalled();
     expect(coinCreate).not.toHaveBeenCalled();
+    // Không có khoản hoàn nào thực sự được chi → KHÔNG được nói "đã hoàn tiền" cho khách.
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_NO_REFUND', { order_code: 'TUBU1' });
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'RETURN_APPROVED', expect.anything());
   });
 
   it('race 2 admin approve cùng request → bên thua (updateMany count=0) throw, không hoàn ví/restock', async () => {

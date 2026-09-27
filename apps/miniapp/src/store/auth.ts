@@ -4,6 +4,7 @@ import { newDeviceId } from '../utils/idempotency';
 import { setStorage, getStorage, removeStorage } from 'zmp-sdk/apis';
 import type { AuthUser, LoginResponse } from '@tubutree/shared-types';
 import {
+  ensurePhoneApi,
   loginGuest,
   loginZaloMiniApp,
   refreshTokens,
@@ -79,6 +80,28 @@ function refreshSession(): Promise<LoginResponse | null> {
   return refreshInFlight;
 }
 
+/**
+ * Nâng cấp NGẦM một phiên khách sang Zalo thật khi Zalo giờ đã khả dụng (A7-01) — chạy NỀN sau
+ * khi app đã vào được với phiên khách, KHÔNG chặn UI, KHÔNG xin SĐT (không gọi requestZaloPhoneToken()).
+ * Dùng chung endpoint an toàn với ensurePhone(): BE (AuthService.ensurePhoneForCurrentUser) tự
+ * quyết định nâng cấp tại chỗ / gộp / từ chối — không bao giờ âm thầm đổi sang MỘT USER KHÁC bỏ
+ * lại giỏ/địa chỉ/điểm của phiên khách. Lỗi (Zalo vẫn chưa khả dụng, mất mạng...) bị nuốt — giữ
+ * nguyên phiên khách hiện tại, không ảnh hưởng trải nghiệm, thử lại ở lần mở app kế tiếp.
+ */
+function upgradeGuestSilently(): Promise<void> {
+  return (async () => {
+    try {
+      const { code, accessToken } = await getZaloAccessToken();
+      const res = await ensurePhoneApi(code, accessToken);
+      setAccessToken(res.accessToken);
+      await persistRefresh(res.refreshToken);
+      useAuthStore.setState({ user: res.user, status: 'authenticated' });
+    } catch {
+      /* Zalo vẫn chưa khả dụng / lỗi khác — giữ nguyên phiên khách, thử lại ở lần mở app sau. */
+    }
+  })();
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   // 'loading' ngay từ đầu: app luôn restore() khi mở → tránh nháy màn đăng nhập trước khi restore xong.
@@ -124,6 +147,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           setAccessToken(res.accessToken);
           await persistRefresh(res.refreshToken);
           set({ user: res.user, status: 'authenticated' });
+          // A7-01 (audit 2026-09): trước đây restore() ưu tiên refresh token khách đã lưu và
+          // KHÔNG BAO GIỜ thử lại Zalo một khi đã có phiên khách hợp lệ (nhánh dưới "đăng nhập
+          // ngầm bằng Zalo" chỉ chạy khi refreshSession() KHÔNG trả về gì) → thiết bị kẹt ở
+          // tài khoản khách vĩnh viễn dù Zalo giờ đã đăng nhập được. Chạy NỀN (không chặn UI,
+          // không xin SĐT) mỗi lần mở app với phiên khách để tự "tốt nghiệp" sang Zalo thật
+          // ngay khi có thể — an toàn vì dùng chung endpoint không bao giờ âm thầm đổi user.
+          if (res.user.zaloId?.startsWith('guest_')) void upgradeGuestSilently();
           return;
         }
       } catch (err) {
@@ -162,7 +192,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  // Xin SĐT (sheet native) rồi đính vào tài khoản qua login lại kèm phoneToken.
+  // Xin SĐT (sheet native) rồi đính vào tài khoản hiện tại.
   ensurePhone: async (): Promise<string | null> => {
     const current = get().user;
     if (current?.phone) return current.phone;
@@ -170,7 +200,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!phoneToken) return null;
     try {
       const { code, accessToken } = await getZaloAccessToken();
-      const res = await loginZaloMiniApp(code, accessToken, phoneToken);
+      // A7-01 (audit 2026-09): KHÔNG gọi loginZaloMiniApp() ở đây — đó là đăng nhập TỪ ĐẦU,
+      // không biết phiên hiện tại là ai nên có thể âm thầm trả token của MỘT USER KHÁC (đúng
+      // lỗi đang vá: khách bị đổi sang tài khoản Zalo khác đang đăng nhập trên máy, bỏ lại
+      // giỏ/địa chỉ/điểm của phiên khách). ensurePhoneApi() gửi kèm access token CỦA PHIÊN
+      // HIỆN TẠI (interceptor tự đính Authorization) — BE biết chính xác đang là ai và chỉ đổi
+      // danh tính khi an toàn (nâng cấp tại chỗ hoặc gộp khách→Zalo), không bao giờ âm thầm.
+      const res = await ensurePhoneApi(code, accessToken, phoneToken);
       setAccessToken(res.accessToken);
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });

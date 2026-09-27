@@ -38,9 +38,9 @@ export class OrderReversalService {
     @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
-  async reverseFinancials(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<void> {
-    // Hoàn tiền — guard paymentStatus:'PAID' bằng updateMany, count=1 mới thực sự chi tiền,
-    // tránh hoàn 2 lần nếu bị gọi lại (dù caller đã guard status, phòng thủ 2 lớp cho tiền).
+  async reverseFinancials(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<{ moneyRefunded: boolean }> {
+    // Hoàn tiền — guard bằng updateMany, count=1 mới thực sự chi tiền, tránh hoàn 2 lần nếu bị
+    // gọi lại (dù caller đã guard status, phòng thủ 2 lớp cho tiền).
     //
     // KHÔNG xét ảnh chụp `order.paymentStatus`: mọi caller đọc đơn NGOÀI tx (orders.cancel/detail,
     // OrderStatusService.setStatus, admin.reviewReturn), và giữa lần đọc đó với tx huỷ, admin xác nhận
@@ -48,25 +48,56 @@ export class OrderReversalService {
     // đã lật UNPAID → PAID. Bản cũ chỉ thử hoàn khi ảnh chụp là PAID → đơn bị huỷ mà tiền khách đã trả
     // KHÔNG được hoàn. Giờ LUÔN thử guard PAID→REFUNDED trong tx: DB (không phải ảnh chụp) quyết định có
     // hoàn hay không; đơn thật sự UNPAID thì count=0, không chi gì.
-    const isRefundableChannel =
+    const isPrepaidRefundable =
       order.paymentMethod === 'WALLET' ||
       order.paymentMethod === 'ZALOPAY' ||
       order.paymentMethod === 'BANK_TRANSFER' ||
       order.paymentMethod === 'VNPAY' ||
-      order.paymentMethod === 'XU' ||
-      // COD đã thu hộ (paymentStatus PAID lúc DELIVERED) — trả hàng vẫn phải hoàn ví.
-      order.paymentMethod === 'COD';
-    // Đơn có THỰC SỰ đang PAID ngay trước lần đảo không — guard PAID→REFUNDED thắng (count=1) là
-    // bằng chứng trong CÙNG tx; ảnh chụp `order.paymentStatus` đọc trước đó có thể đã cũ. Dùng cho
-    // thu hồi thưởng quý đại lý (đơn trả trước chỉ được tính doanh số khi đã PAID). Phương thức lạ
-    // (ngoài danh sách hoàn tự động) chỉ còn ảnh chụp để dựa vào.
+      order.paymentMethod === 'XU';
+
+    // COD (A6-06, docs/audit-2026-09/06-web.md): đọc TOÀN BỘ hệ thống xác nhận KHÔNG có đường code
+    // nào từng lật paymentStatus của đơn COD sang 'PAID' — OrderStatusService.setStatus cố ý BỎ
+    // việc force-PAID khi DELIVERED (xem comment "P2-3" ở admin.service.updateOrderStatus: "Cũng bỏ
+    // luôn việc tự ý force paymentStatus:'PAID' khi DELIVERED"), và PancakeProcessor.onPaymentReconcile
+    // chỉ xử lý paymentMethod==='BANK_TRANSFER'. paymentStatus của đơn COD vì vậy LUÔN LÀ 'UNPAID',
+    // kể cả sau khi tài xế đã thu đủ tiền mặt lúc giao — dùng nó làm điều kiện hoàn tiền (như bản cũ
+    // ở trên) nghĩa là đơn COD KHÔNG BAO GIỜ được hoàn khi trả hàng, dù khách đã trả tiền thật.
+    //
+    // Tín hiệu ĐÚNG cho "tiền COD đã thực sự về tay Tubu" là chính `order.status` NGAY TRƯỚC lần
+    // đảo này — không phải paymentStatus. Tham số `order` ở đây LUÔN là ảnh chụp state-trước-
+    // transition: cả OrderStatusService.setStatus và admin.reviewReturn đều đọc đơn rồi atomic-flip
+    // status bằng updateMany có guard (where status = giá trị vừa đọc), và CHỈ gọi reverseFinancials
+    // SAU KHI lần flip đó thắng — nên `order.status` ở đây chắc chắn đúng bằng trạng thái thật ngay
+    // trước lần đảo (không thể bị một request khác tráo giữa chừng, vì chính guard đó đã chặn).
+    // Theo bảng chuyển trạng thái (order-transition.ts), DELIVERED chỉ có 1 đường tiếp là RETURNED —
+    // nên order.status==='DELIVERED' ở đây tương đương "tài xế đã thu tiền COD". Huỷ đơn COD từ bất
+    // kỳ mốc nào TRƯỚC DELIVERED (PENDING_PAYMENT..SHIPPING) thì tiền chưa từng thu — đúng là không
+    // có gì để hoàn.
+    const isCodCollected = order.paymentMethod === 'COD' && order.status === 'DELIVERED';
+    const isRefundableChannel = isPrepaidRefundable || isCodCollected;
+
+    // Đơn có THỰC SỰ đang PAID ngay trước lần đảo không — guard thắng (count=1) là bằng chứng
+    // trong CÙNG tx; ảnh chụp `order.paymentStatus` đọc trước đó có thể đã cũ. Dùng cho thu hồi
+    // thưởng quý đại lý (đơn trả trước chỉ được tính doanh số khi đã PAID) — đơn đại lý luôn
+    // BANK_TRANSFER, không bao giờ COD, nên nhánh COD dưới đây không ảnh hưởng gì tới nó. Phương
+    // thức lạ (ngoài danh sách hoàn tự động) chỉ còn ảnh chụp để dựa vào.
     let paidBeforeReversal = !isRefundableChannel && order.paymentStatus === 'PAID';
+    // true khi lần đảo NÀY thực sự chuyển tiền vào ví/xu khách — caller (vd admin.reviewReturn) dùng
+    // để quyết định có được báo khách "đã hoàn tiền" hay không (A6-06 phần thông báo): không được
+    // báo đã hoàn tiền nếu guard dưới đây thua (không có gì thực sự được chi).
+    let moneyRefunded = false;
     if (isRefundableChannel) {
       const refunded = await tx.order.updateMany({
-        where: { id: order.id, paymentStatus: 'PAID' },
+        where: isCodCollected
+          ? // COD không có "PAID" thật để guard theo — dùng chính paymentStatus='UNPAID' (trạng
+            // thái COD luôn giữ cho tới đây) làm điều kiện một-lần: gọi lại sau khi đã REFUNDED sẽ
+            // count=0, không hoàn 2 lần. paymentMethod='COD' thêm vào cho chắc (phòng thủ 2 lớp).
+            { id: order.id, paymentMethod: 'COD', paymentStatus: 'UNPAID' }
+          : { id: order.id, paymentStatus: 'PAID' },
         data: { paymentStatus: 'REFUNDED' },
       });
       paidBeforeReversal = refunded.count === 1;
+      moneyRefunded = refunded.count === 1;
       if (refunded.count === 1) {
         if (order.paymentMethod === 'XU') {
           await tx.user.update({
@@ -83,6 +114,9 @@ export class OrderReversalService {
             },
           });
         } else {
+          // WALLET/ZALOPAY/BANK_TRANSFER/VNPAY/COD đều hoàn về Ví — COD không có "kênh gốc" nào
+          // khác để hoàn lại (khách trả tiền mặt, không có tài khoản/ví điện tử gốc lưu ở đây); Ví
+          // Tubu là đích hoàn nhất quán duy nhất, giống mọi kênh khác trong nhánh này.
           await tx.user.update({
             where: { id: order.userId },
             data: { walletBalance: { increment: order.total } },
@@ -147,6 +181,7 @@ export class OrderReversalService {
         );
       }
     }
+    return { moneyRefunded };
   }
 
   private resolveDealer(): DealerService | undefined {

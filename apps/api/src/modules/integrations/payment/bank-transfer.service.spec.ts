@@ -73,16 +73,29 @@ describe('BankTransferService.getBankQr', () => {
     );
   });
 
-  it('đơn có storefrontSlug với TK ngân hàng đối tác → ưu tiên sinh VietQR về tài khoản đối tác', async () => {
-    const merchantPrisma = {
+  // A2-01 = A5-02 = A6-03 (docs/audit-2026-09): TRƯỚC ĐÂY đơn có storefrontSlug ưu tiên dùng
+  // bankBin/bankAccountNo do CHÍNH gian hàng (CTV) tự khai trong storefront-builder.tsx — tiền
+  // khách chuyển khoản chảy thẳng vào TK CÁ NHÂN của CTV thay vì Tubu, và đối soát Pancake (chỉ
+  // chạy trên TK Tubu) không bao giờ khớp nên đơn kẹt "Chờ thanh toán" dù khách đã trả tiền.
+  // Từ nay: MỌI đơn BANK_TRANSFER luôn dùng đúng TK Tubu cấu hình (payment.bank_*), bất kể
+  // storefrontSlug trỏ tới gian hàng loại gì (CTV/MERCHANT/BRAND) hay gian hàng đó có tự khai TK
+  // ngân hàng hay không — không có loại gian hàng nào hiện có quy trình đối soát/xác nhận thanh
+  // toán trực tiếp nào hoạt động thật (đã rà checkout.service.ts, pancake-order.service.ts, các
+  // luồng đơn admin). CTV/đối tác được trả hoa hồng riêng qua hệ thống payout (affiliate/dealer),
+  // không bao giờ thu tiền khách trực tiếp qua QR này.
+  it('đơn gắn gian hàng CTV (storefront.type=CTV, ownerUserId set) dù TỰ KHAI đủ TK ngân hàng → VẪN dùng TK Tubu, KHÔNG dùng TK CTV', async () => {
+    const prisma = {
       order: {
         findUnique: jest.fn().mockResolvedValue({
           ...ORDER,
-          storefrontSlug: 'organic-store',
+          storefrontSlug: 'ctv-hoa',
         }),
       },
       storefront: {
         findFirst: jest.fn().mockResolvedValue({
+          type: 'CTV',
+          ownerUserId: 'ctv-user-1',
+          brandId: null,
           bankBin: '970436',
           bankAccountNo: '001122334455',
           bankAccountName: 'NGUYEN VAN A',
@@ -91,13 +104,72 @@ describe('BankTransferService.getBankQr', () => {
       },
     } as unknown as PrismaService;
 
-    const r = await new BankTransferService(merchantPrisma, makeConfig()).getBankQr('TUBU250625001', 'u1');
+    const r = await new BankTransferService(prisma, makeConfig()).getBankQr('TUBU250625001', 'u1');
     expect(r.bank).toMatchObject({
-      bin: '970436',
-      accountNo: '001122334455',
-      name: 'Vietcombank',
-      accountName: 'NGUYEN VAN A',
+      bin: '970407',
+      accountNo: '9984606774',
+      name: 'Techcombank',
+      accountName: 'CONG TY TUBU TREE',
     });
-    expect(r.qrString).toContain('001122334455');
+    expect(r.qrString).toContain('9984606774');
+    expect(r.qrString).not.toContain('001122334455');
+  });
+
+  it('đơn gắn gian hàng MERCHANT tự đăng ký (storefront.type=MERCHANT, ownerUserId set) có TK ngân hàng → VẪN dùng TK Tubu (chưa có cờ đối tác đã ký hợp đồng + đối soát riêng)', async () => {
+    const prisma = {
+      order: {
+        findUnique: jest.fn().mockResolvedValue({
+          ...ORDER,
+          storefrontSlug: 'dealer-shop',
+        }),
+      },
+      storefront: {
+        findFirst: jest.fn().mockResolvedValue({
+          type: 'MERCHANT',
+          ownerUserId: 'dealer-user-1',
+          brandId: null,
+          bankBin: '970418',
+          bankAccountNo: '999888777',
+          bankAccountName: 'TRAN VAN B',
+          bankName: 'BIDV',
+        }),
+      },
+    } as unknown as PrismaService;
+
+    const r = await new BankTransferService(prisma, makeConfig()).getBankQr('TUBU250625001', 'u1');
+    expect(r.bank).toMatchObject({ bin: '970407', accountNo: '9984606774' });
+    expect(r.qrString).not.toContain('999888777');
+  });
+
+  it('đơn gắn gian hàng BRAND (storefront.type=BRAND, brandId set) có TK ngân hàng → VẪN dùng TK Tubu (brand không có quy trình đối soát thanh toán trực tiếp nào hoạt động)', async () => {
+    const prisma = {
+      order: {
+        findUnique: jest.fn().mockResolvedValue({
+          ...ORDER,
+          storefrontSlug: 'thuong-hieu-xyz',
+        }),
+      },
+      storefront: {
+        findFirst: jest.fn().mockResolvedValue({
+          type: 'BRAND',
+          ownerUserId: null,
+          brandId: 'brand-1',
+          bankBin: '970422',
+          bankAccountNo: '555666777',
+          bankAccountName: 'CONG TY XYZ',
+          bankName: 'MB Bank',
+        }),
+      },
+    } as unknown as PrismaService;
+
+    const r = await new BankTransferService(prisma, makeConfig()).getBankQr('TUBU250625001', 'u1');
+    expect(r.bank).toMatchObject({ bin: '970407', accountNo: '9984606774' });
+    expect(r.qrString).not.toContain('555666777');
+  });
+
+  it('đơn không gắn storefrontSlug nào → dùng TK Tubu như bình thường (không đổi hành vi)', async () => {
+    const prisma = makePrisma({ ...ORDER, storefrontSlug: null });
+    const r = await new BankTransferService(prisma, makeConfig()).getBankQr('TUBU250625001', 'u1');
+    expect(r.bank).toMatchObject({ bin: '970407', accountNo: '9984606774' });
   });
 });

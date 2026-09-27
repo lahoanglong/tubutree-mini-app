@@ -635,6 +635,11 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-ops-gomdon', code: 'OPS_GOMDON_ALERT', channel: 'INAPP', bodyTemplate: '⚠️ Vận đơn thu gom đơn {{order_code}}: {{message}}' },
   { id: 'nt-return-req', code: 'RETURN_REQUESTED', channel: 'INAPP', bodyTemplate: 'Đã nhận yêu cầu đổi/trả đơn {{order_code}}. Tubu sẽ phản hồi trong 24h.' },
   { id: 'nt-return-ok', code: 'RETURN_APPROVED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu 🌿' },
+  // A6-06 (docs/audit-2026-09/06-web.md, phần thông báo): dùng khi admin.reviewReturn duyệt trả
+  // hàng nhưng reverseFinancials KHÔNG thực sự chi khoản hoàn nào (vd đơn chưa từng thanh toán
+  // thật dù đã DELIVERED, hoặc đã được hoàn bởi một đường khác trước đó) — KHÔNG được nói "đã hoàn
+  // tiền" trong trường hợp này. createOnly: thêm sau lần seed đầu, không ghi đè nếu admin đã sửa.
+  { id: 'nt-return-ok-no-refund', code: 'RETURN_APPROVED_NO_REFUND', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt.', createOnly: true },
   { id: 'nt-cashback-paid', code: 'CASHBACK_PAID', channel: 'INAPP', bodyTemplate: 'Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu 🌿 Đổi sang TubuXu để nhận thêm 20% nhé!' },
   { id: 'nt-reorder', code: 'REORDER_REMINDER', channel: 'INAPP', bodyTemplate: '{{product}} của bạn dự kiến sắp hết. Đặt lại ngay để không gián đoạn nhé! 🛒' },
   { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá! Xem ngay 💚' },
@@ -661,6 +666,10 @@ const NOTIFICATION_TEMPLATES = [
   // cùng mã/nội dung với migration 20260927100000_dealer_bonus_adjusted_template. createOnly: admin sửa nội
   // dung rồi thì chạy lại seed KHÔNG ghi đè.
   { id: 'nt-dealer-bonus-adjusted', code: 'DEALER_BONUS_ADJUSTED', channel: 'INAPP', bodyTemplate: 'Thưởng doanh số {{quarter}} đã được điều chỉnh do đơn {{order_code}} bị huỷ/trả: thu hồi {{amount}}đ (cộng lại vào công nợ đại lý). Thưởng {{quarter}} còn lại: {{remaining}}đ. Cần hỗ trợ, bạn nhắn Zalo OA Tubu Tree nhé.', createOnly: true },
+  // A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): đại lý "Báo đã CK" giờ CHỈ tạo thông báo cho
+  // admin xác nhận, không tự trừ nợ (DealerService.reportCreditPayment/adminRecordCreditPayment).
+  { id: 'nt-dealer-credit-reported', code: 'DEALER_CREDIT_PAYMENT_REPORTED', channel: 'INAPP', bodyTemplate: '📥 Đại lý {{dealer}} báo đã chuyển khoản {{amount}}đ trả nợ. Vào trang quản trị (Đại lý → Công nợ) để kiểm tra sao kê và xác nhận.', createOnly: true },
+  { id: 'nt-dealer-credit-confirmed', code: 'DEALER_CREDIT_PAYMENT_CONFIRMED', channel: 'INAPP', bodyTemplate: '✅ Tubu Tree đã xác nhận nhận {{amount}}đ trả nợ của bạn — công nợ đã được cập nhật. Cảm ơn bạn 🌿', createOnly: true },
   { id: 'nt-comm-answer', code: 'COMMUNITY_NEW_ANSWER', channel: 'INAPP', bodyTemplate: '💬 {{author}} vừa trả lời câu hỏi "{{title}}" của bạn.' },
   { id: 'nt-comm-expert', code: 'COMMUNITY_EXPERT_REPLIED', channel: 'INAPP', bodyTemplate: '🌿 Chuyên gia Tubu vừa trả lời câu hỏi "{{title}}" của bạn.' },
   { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm TubuXu thưởng.' },

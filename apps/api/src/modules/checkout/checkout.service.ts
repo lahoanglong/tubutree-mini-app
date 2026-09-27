@@ -54,9 +54,17 @@ export class CheckoutService {
   ) {}
 
   /** Map mã giới thiệu → userId CTV (khác người mua). */
+  /**
+   * P0 A5-01 (đường CHÍNH — không phải fallback touch 3 ngày): slug gian hàng CTV mở trong Zalo
+   * là referralCode viết THƯỜNG (storefront.service.ts sinh slug = referralCode.toLowerCase()),
+   * còn User.referralCode luôn lưu HOA. Postgres so khớp `=` phân biệt hoa/thường nên trước đây
+   * referrer luôn null — CTV không bao giờ được ghi hoa hồng cho khách mua ngay trong Zalo (chỉ
+   * fallback touch 3 ngày ở dưới còn hoạt động). Chuẩn hoá HOA trước khi tra, mirror đúng
+   * auth.service.ts:resolveReferrerId().
+   */
   private async resolveReferrer(referralCode: string | undefined, buyerId: string): Promise<string | null> {
     if (!referralCode) return null;
-    const ref = await this.prisma.user.findUnique({ where: { referralCode } });
+    const ref = await this.prisma.user.findUnique({ where: { referralCode: referralCode.toUpperCase() } });
     if (!ref || ref.id === buyerId) return null;
     return ref.id;
   }

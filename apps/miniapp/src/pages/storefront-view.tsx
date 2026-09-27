@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Page, Text, Button, useParams, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { Share2, Sprout, MessageSquare, MapPin, CreditCard, CheckCircle2 } from 'lucide-react';
+import { Share2, Sprout, MessageSquare, MapPin, CheckCircle2 } from 'lucide-react';
 import { getPublicStorefront } from '../services/storefront-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd, formatSold } from '../utils/format';
@@ -52,12 +52,9 @@ export default function StorefrontViewPage() {
               Kho: {sf.warehouseCity}
             </Text>
           )}
-          {sf.bankBin && sf.bankAccountNo && (
-            <Text size="xSmall" style={{ background: 'var(--primary-100)', color: 'var(--primary-900)', padding: '3px 9px', borderRadius: 'var(--radius-full)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <CreditCard size={12} />
-              VietQR trực tiếp
-            </Text>
-          )}
+          {/* Đã bỏ nhãn "VietQR trực tiếp" — audit A2-01=A5-02=A6-03 (2026-09-27): mọi thanh
+           * toán chuyển khoản đều đi qua checkout thật (tài khoản Tubu), không storefront nào
+           * tự nhận tiền trực tiếp, nên nhãn quảng cáo khả năng không còn tồn tại này là sai. */}
         </Box>
       </Box>
 

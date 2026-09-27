@@ -75,13 +75,12 @@ export class DealerController {
     return this.dealer.creditLedger(userId);
   }
 
+  // A5-09: đại lý tự bấm "Báo đã CK" KHÔNG còn tự trừ nợ (xem DealerService.reportCreditPayment) —
+  // chỉ tạo thông báo cho admin; sổ công nợ chỉ giảm qua admin xác nhận (DealerService.
+  // adminRecordCreditPayment, DealerCreditAdminController).
   @Post('credit-payment')
-  payment(
-    @CurrentUser('sub') userId: string,
-    @Body() dto: CreditPaymentDto,
-    @Headers('idempotency-key') idempotencyKey?: string,
-  ) {
-    return this.dealer.creditPayment(userId, dto.amount, dto.note, idempotencyKey);
+  payment(@CurrentUser('sub') userId: string, @Body() dto: CreditPaymentDto) {
+    return this.dealer.reportCreditPayment(userId, dto.amount, dto.note);
   }
 
   @Get('quarterly-report')

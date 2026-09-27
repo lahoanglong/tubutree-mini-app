@@ -18,7 +18,7 @@ export class UsersService {
   async updateMe(userId: string, dto: UpdateMeDto) {
     // dob đến dạng "YYYY-MM-DD" → ép về Date (Prisma DateTime không nhận date-only string).
     const { dob, ...rest } = dto;
-    const data: { fullName?: string; email?: string; avatarUrl?: string; dob?: Date } = { ...rest };
+    const data: { fullName?: string; email?: string; avatarUrl?: string } = { ...rest };
     if (dob !== undefined) {
       const parsed = new Date(dob);
       // DTO chỉ khớp SHAPE "YYYY-MM-DD" bằng regex, KHÔNG kiểm tra ngày có thật tồn tại.
@@ -31,7 +31,24 @@ export class UsersService {
       if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dob) {
         throw new BadRequestException('dob không phải một ngày hợp lệ.');
       }
-      data.dob = parsed;
+
+      // A3-04 (audit 2026-09): dob trước đây sửa được tự do bất kỳ lúc nào → khách đổi dob
+      // sang "ngày mai" mỗi tháng để cày voucher sinh nhật (50.000đ, KHÔNG minOrder — xem
+      // vouchers.service.ts birthdayVouchers()). Khoá idempotency của cron cấp voucher chỉ
+      // chặn theo `BIRTHDAY-<năm>-<tháng>-<userId>`, KHÔNG chặn theo việc dob có thật hay có
+      // đứng yên đủ lâu không — mỗi tháng đổi dob là một reason mới, không bị chặn trùng.
+      // Fix đơn giản và chắc: dob chỉ ĐẶT ĐƯỢC MỘT LẦN; sửa lại (đính chính) phải qua CSKH,
+      // không tự phục vụ. Đây là đánh đổi chấp nhận được cho một tính năng giá trị thấp.
+      // updateMany + where dob:null (thay vì findUnique rồi update riêng) để 2 request ghi
+      // đồng thời không cùng đọc thấy null rồi cùng lọt qua — Postgres khoá theo dòng nên chỉ
+      // request nào TỚI TRƯỚC mới khớp where, request sau đọc lại thấy dob đã khác null.
+      const guarded = await this.prisma.user.updateMany({ where: { id: userId, dob: null }, data: { dob: parsed } });
+      if (guarded.count === 0) {
+        throw new BadRequestException(
+          'Ngày sinh chỉ có thể đặt một lần và không tự sửa lại được. Vui lòng liên hệ CSKH nếu cần đính chính.',
+        );
+      }
+      // Đã ghi dob ở updateMany trên — KHÔNG gắn lại vào `data` (tránh update() ghi đè lần 2).
     }
 
     const user = await this.prisma.user.update({
