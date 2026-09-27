@@ -1,6 +1,7 @@
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger, Optional } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { QUEUE_GOMDON_PUSH, QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
@@ -181,39 +182,17 @@ export class PancakeProcessor extends WorkerHost {
     // Guard theo trạng thái HIỆN TẠI trong DB (không theo ảnh chụp `order` đọc ở trên): khách huỷ
     // chen giữa lúc đọc và lúc lật (đơn đã hoàn kho) thì KHÔNG được "hồi sinh" thành PAID+CONFIRMED.
     // paymentStatus='UNPAID' trong where → 2 webhook song song chỉ lật 1 lần.
-    // order_paid phải ghi ATOMIC cùng lần lật PAID (Task 5, docs analytics-foundation): bọc từng
-    // updateMany trong $transaction, chỉ ghi event khi count>0 (guard where thật sự khớp).
-    let flip = await this.prisma.$transaction(async (tx) => {
-      const r = await tx.order.updateMany({
-        where: { id: order.id, paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
-        data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: new Date() },
-      });
-      if (r.count > 0 && this.analytics) {
-        await this.analytics.record(tx, {
-          eventName: 'order_paid',
-          userId: order.userId,
-          platform: order.platform === 'web' ? 'web' : 'miniapp',
-          props: { orderId: order.id, method: order.paymentMethod, amount: order.total },
-        });
-      }
-      return r;
-    });
+    let flip = await this.flipPaidWithEvent(
+      order,
+      { id: order.id, paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
+      { status: 'CONFIRMED' },
+    );
     if (flip.count === 0) {
       // Đơn đã xác nhận trước khi tiền về (vd admin/merchant CONFIRMED) → chỉ lật thanh toán.
-      flip = await this.prisma.$transaction(async (tx) => {
-        const r = await tx.order.updateMany({
-          where: { id: order.id, paymentStatus: 'UNPAID', status: { notIn: ['CANCELLED', 'RETURNED', 'PENDING_PAYMENT'] } },
-          data: { paymentStatus: 'PAID', paidAt: new Date() },
-        });
-        if (r.count > 0 && this.analytics) {
-          await this.analytics.record(tx, {
-            eventName: 'order_paid',
-            userId: order.userId,
-            platform: order.platform === 'web' ? 'web' : 'miniapp',
-            props: { orderId: order.id, method: order.paymentMethod, amount: order.total },
-          });
-        }
-        return r;
+      flip = await this.flipPaidWithEvent(order, {
+        id: order.id,
+        paymentStatus: 'UNPAID',
+        status: { notIn: ['CANCELLED', 'RETURNED', 'PENDING_PAYMENT'] },
       });
     }
     if (flip.count === 0) {
@@ -236,6 +215,36 @@ export class PancakeProcessor extends WorkerHost {
       }
       await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
     }
+  }
+
+  /**
+   * 1 lần thử lật PAID (updateMany guard atomic) + ghi event `order_paid` ATOMIC trong CÙNG
+   * transaction khi count>0 (Task 5, docs analytics-foundation) — dùng chung cho 2 nhánh thử
+   * (guard PENDING_PAYMENT→CONFIRMED và guard trạng thái khác) của `onPaymentReconcile`.
+   * `paidAt` (cột DB) và `occurredAt` (event) dùng CHUNG 1 `new Date()` để không lệch mili-giây.
+   */
+  private async flipPaidWithEvent(
+    order: { id: string; userId: string; total: number; paymentMethod: string; platform: string | null },
+    where: Prisma.OrderWhereInput,
+    extraData: Prisma.OrderUpdateManyMutationInput = {},
+  ): Promise<{ count: number }> {
+    return this.prisma.$transaction(async (tx) => {
+      const paidAt = new Date();
+      const r = await tx.order.updateMany({
+        where,
+        data: { paymentStatus: 'PAID', paidAt, ...extraData },
+      });
+      if (r.count > 0 && this.analytics) {
+        await this.analytics.record(tx, {
+          eventName: 'order_paid',
+          userId: order.userId,
+          platform: order.platform === 'web' ? 'web' : 'miniapp',
+          occurredAt: paidAt,
+          props: { orderId: order.id, method: order.paymentMethod, amount: order.total },
+        });
+      }
+      return r;
+    });
   }
 
   private async onShippingUpdated(data: Record<string, unknown>): Promise<void> {

@@ -1031,11 +1031,14 @@ export class DealerService {
     const adminNote = dto.note?.trim() || null;
     const toStatus = order.status === 'PENDING_PAYMENT' ? 'CONFIRMED' : order.status;
     await this.prisma.$transaction(async (tx) => {
+      // paidAt (cột DB) và occurredAt (event) phải là CÙNG một mốc thời gian — 1 `new Date()` duy
+      // nhất, không phải 2 lời gọi riêng có thể lệch vài mili-giây.
+      const paidAt = new Date();
       const flip = await tx.order.updateMany({
         where: { id: order.id, type: 'DEALER', paymentStatus: 'UNPAID', status: order.status },
         data: {
           paymentStatus: 'PAID',
-          paidAt: new Date(),
+          paidAt,
           ...(toStatus !== order.status ? { status: 'CONFIRMED' as const } : {}),
         },
       });
@@ -1047,6 +1050,7 @@ export class DealerService {
           eventName: 'order_paid',
           userId: order.userId,
           platform: 'web',
+          occurredAt: paidAt,
           props: { orderId: order.id, method: 'BANK_TRANSFER', amount: order.total, orderSource: 'dealer' },
         });
       }

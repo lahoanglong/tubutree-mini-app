@@ -69,7 +69,10 @@ function setup(
   const coupons = { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService;
   const reversal = new OrderReversalService(flashSale, coupons);
   const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal, gomdonQueue as never);
-  const proc = new PancakeProcessor(prisma, notifications, orderStatus, gomdonQueue as never, alerts as never) as unknown as {
+  // record() mock — Task 5 review finding: không test nào từng truyền analytics nên
+  // if(this.analytics) luôn no-op; giờ wiring thật để có assert flip⇒event có xảy ra.
+  const analytics = { record: jest.fn().mockResolvedValue(undefined) };
+  const proc = new PancakeProcessor(prisma, notifications, orderStatus, gomdonQueue as never, alerts as never, analytics as never) as unknown as {
     onStatusUpdated(d: Record<string, unknown>): Promise<void>;
     onCancelled(d: Record<string, unknown>): Promise<void>;
     onPaymentReconcile(d: Record<string, unknown>): Promise<void>;
@@ -88,6 +91,7 @@ function setup(
     txExecuteRaw,
     orderUpdateMany,
     orderUpdate,
+    analytics,
   };
 }
 
@@ -267,8 +271,8 @@ describe('PancakeProcessor.onCancelled', () => {
 describe('PancakeProcessor.onPaymentReconcile', () => {
   const paidPayload = { id: 'p1', is_paid: true };
 
-  it('đơn BANK_TRANSFER UNPAID nhận xác nhận thanh toán → lật PAID + notify', async () => {
-    const { proc, orderUpdateMany, notifications } = setup({
+  it('đơn BANK_TRANSFER UNPAID nhận xác nhận thanh toán → lật PAID + notify + ghi order_paid ATOMIC (đúng tx)', async () => {
+    const { proc, orderUpdateMany, notifications, analytics } = setup({
       id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT',
       paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
     });
@@ -279,10 +283,47 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date) },
     });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
+    // flip count>0 ⇒ order_paid PHẢI được ghi, đúng 1 lần, đúng field.
+    expect(analytics.record).toHaveBeenCalledTimes(1);
+    expect(analytics.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventName: 'order_paid',
+        userId: 'u1',
+        props: expect.objectContaining({ orderId: 'o1', method: 'BANK_TRANSFER', amount: 100000 }),
+      }),
+    );
+    // occurredAt (event) phải TRÙNG paidAt (DB) — cùng 1 new Date(), không lệch mili-giây.
+    const dataArg = (orderUpdateMany as jest.Mock).mock.calls[0][0].data;
+    const eventArg = (analytics.record as jest.Mock).mock.calls[0][1];
+    expect(eventArg.occurredAt).toEqual(dataArg.paidAt);
   });
 
-  it('RACE: đọc thấy PENDING_PAYMENT nhưng khách vừa HUỶ (đã hoàn kho) trước khi lật → KHÔNG hồi sinh đơn thành PAID+CONFIRMED', async () => {
-    const { proc, orderUpdateMany, notifications } = setup({
+  it('order_paid được ghi bằng ĐÚNG object `tx` của $transaction, không phải this.prisma ở ngoài (chứng minh atomic thật)', async () => {
+    // setup() ở file này cho tx.order.updateMany delegate CHÍNH mock top-level (để không phải viết
+    // lại mọi assertion updateMany cũ) — test này dựng RIÊNG 1 $transaction trả về tx KHÁC hẳn
+    // con trỏ `prisma`, để chứng minh code thật sự gọi record(tx, ...) trong callback $transaction.
+    const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const txMarker = { order: { updateMany: txUpdateMany } };
+    const $transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(txMarker));
+    const order = { id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000 };
+    const prisma = {
+      order: { findFirst: jest.fn().mockResolvedValue(order) },
+      $transaction,
+    } as unknown as PrismaService;
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const analytics = { record: jest.fn().mockResolvedValue(undefined) };
+    const proc = new PancakeProcessor(prisma, notifications, {} as never, undefined, undefined, analytics as never) as unknown as {
+      onPaymentReconcile(d: Record<string, unknown>): Promise<void>;
+    };
+    await proc.onPaymentReconcile(paidPayload);
+    expect(analytics.record).toHaveBeenCalledTimes(1);
+    expect(analytics.record.mock.calls[0][0]).toBe(txMarker);
+    expect(analytics.record.mock.calls[0][0]).not.toBe(prisma);
+  });
+
+  it('RACE: đọc thấy PENDING_PAYMENT nhưng khách vừa HUỶ (đã hoàn kho) trước khi lật → KHÔNG hồi sinh đơn thành PAID+CONFIRMED, KHÔNG ghi order_paid', async () => {
+    const { proc, orderUpdateMany, notifications, analytics } = setup({
       id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT',
       paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
     });
@@ -294,10 +335,12 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       expect(st === 'PENDING_PAYMENT' || (st?.notIn?.includes('CANCELLED') && st.notIn.includes('RETURNED'))).toBe(true);
     }
     expect(notifications.notify).not.toHaveBeenCalled();
+    // Cả 2 lần thử đều count:0 (guard where không khớp) ⇒ KHÔNG lần nào được ghi order_paid.
+    expect(analytics.record).not.toHaveBeenCalled();
   });
 
-  it('đơn đã CONFIRMED (xác nhận trước khi tiền về) → chỉ lật PAID, KHÔNG đụng status, guard loại đơn huỷ/trả', async () => {
-    const { proc, orderUpdateMany, notifications } = setup({
+  it('đơn đã CONFIRMED (xác nhận trước khi tiền về) → chỉ lật PAID, KHÔNG đụng status, guard loại đơn huỷ/trả, ghi order_paid ĐÚNG 1 LẦN (không phải 2)', async () => {
+    const { proc, orderUpdateMany, notifications, analytics } = setup({
       id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED',
       paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
     });
@@ -308,28 +351,37 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       data: { paymentStatus: 'PAID', paidAt: expect.any(Date) },
     });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
+    // Nhánh 1 (count:0, guard PENDING_PAYMENT trượt) KHÔNG ghi event; chỉ nhánh 2 (count:1) ghi —
+    // tổng phải ĐÚNG 1 LẦN, không phải 0 (bug bỏ sót) hay 2 (bug ghi trùng cả 2 nhánh).
+    expect(analytics.record).toHaveBeenCalledTimes(1);
+    expect(analytics.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ eventName: 'order_paid', props: expect.objectContaining({ orderId: 'o1', amount: 100000 }) }),
+    );
   });
 
   // P1-3 (docs/2026-09-08-review-progress.md): tiền chuyển khoản tới SAU khi đơn đã hủy/trả
   // trước đây vẫn bị lật PAID êm — đơn đứng CANCELLED/RETURNED + PAID, không ai tự hoàn tiền
   // thật cho khách.
-  it('đơn ĐÃ HỦY nhận xác nhận thanh toán trễ → KHÔNG lật PAID, không notify', async () => {
-    const { proc, orderUpdateMany, notifications } = setup({
+  it('đơn ĐÃ HỦY nhận xác nhận thanh toán trễ → KHÔNG lật PAID, không notify, không ghi order_paid', async () => {
+    const { proc, orderUpdateMany, notifications, analytics } = setup({
       id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CANCELLED',
       paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
     });
     await proc.onPaymentReconcile(paidPayload);
     expect(orderUpdateMany).not.toHaveBeenCalled();
     expect(notifications.notify).not.toHaveBeenCalled();
+    expect(analytics.record).not.toHaveBeenCalled();
   });
 
   it('đơn ĐÃ TRẢ HÀNG nhận xác nhận thanh toán trễ → KHÔNG lật PAID', async () => {
-    const { proc, orderUpdateMany } = setup({
+    const { proc, orderUpdateMany, analytics } = setup({
       id: 'o1', code: 'TUBU1', userId: 'u1', status: 'RETURNED',
       paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
     });
     await proc.onPaymentReconcile(paidPayload);
     expect(orderUpdateMany).not.toHaveBeenCalled();
+    expect(analytics.record).not.toHaveBeenCalled();
   });
 
   it('đơn không phải BANK_TRANSFER → bỏ qua', async () => {

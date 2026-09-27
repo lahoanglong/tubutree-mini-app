@@ -154,6 +154,9 @@ export class ZalopayService {
       // order_paid phải ghi ATOMIC cùng lần lật PAID (Task 5, docs analytics-foundation): bọc
       // updateMany trong $transaction, chỉ ghi event khi count>0 (guard where thật sự khớp).
       const flip = await this.prisma.$transaction(async (tx) => {
+        // paidAt (cột DB) và occurredAt (event) phải là CÙNG một mốc thời gian — 1 `new Date()`
+        // duy nhất, không phải 2 lời gọi riêng có thể lệch vài mili-giây.
+        const paidAt = new Date();
         const r = await tx.order.updateMany({
           where: {
             id: order.id,
@@ -162,7 +165,7 @@ export class ZalopayService {
           },
           data: {
             paymentStatus: 'PAID',
-            paidAt: new Date(),
+            paidAt,
             ...(order.status === 'PENDING_PAYMENT' ? { status: 'CONFIRMED' } : {}),
           },
         });
@@ -171,6 +174,7 @@ export class ZalopayService {
             eventName: 'order_paid',
             userId: order.userId,
             platform: order.platform === 'web' ? 'web' : 'miniapp',
+            occurredAt: paidAt,
             props: { orderId: order.id, method: 'ZALOPAY', amount: order.total },
           });
         }
