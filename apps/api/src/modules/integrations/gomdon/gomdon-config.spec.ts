@@ -6,7 +6,7 @@ import {
   resolveGomdonBaseUrl,
 } from './gomdon-config';
 import { recyclingWeight } from './gomdon-weight';
-import { gomdonRank, isGomdonPickedUp, isGomdonPayable, isGomdonTerminal } from './gomdon-status';
+import { GOMDON_STATUS_TEXT, gomdonRank, isGomdonPickedUp, isGomdonPayable, isGomdonTerminal } from './gomdon-status';
 import type { SystemConfigService } from '../../system-config/system-config.service';
 
 function cfg(values: Record<string, unknown> = {}): Pick<SystemConfigService, 'get'> {
@@ -90,6 +90,23 @@ describe('recyclingWeight (dùng chung Gomdon + Pancake)', () => {
 });
 
 describe('gomdon-status', () => {
+  it('bảng mã trạng thái đúng tài liệu Gomdon (1–12, không thiếu không thừa)', () => {
+    expect(GOMDON_STATUS_TEXT).toEqual({
+      1: 'Tạo đơn thành công',
+      2: 'Đơn hủy',
+      3: 'Đã lấy hàng',
+      4: 'Đang vận chuyển đến bưu cục nhận',
+      5: 'Đang đi giao hàng',
+      6: 'Đang chuyển hoàn',
+      7: 'Giao thành công',
+      8: 'Đã hoàn hàng',
+      9: 'Đơn hỏng, mất hàng',
+      10: 'Đơn lấy hàng không thành công',
+      11: 'Đơn giao hàng thất bại',
+      12: 'Đơn hoàn hàng thất bại',
+    });
+  });
+
   it('thứ bậc: không lùi 7 → 3, 10 trước 3, mốc cuối không bị ghi đè', () => {
     expect(gomdonRank('3')).toBeGreaterThan(gomdonRank('1'));
     expect(gomdonRank('3')).toBeGreaterThan(gomdonRank('10'));

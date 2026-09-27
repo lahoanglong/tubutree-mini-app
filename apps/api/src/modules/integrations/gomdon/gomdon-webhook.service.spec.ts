@@ -53,6 +53,29 @@ function build(opts: { orders?: (Record<string, unknown> | null)[] } = {}) {
   return { svc, prisma, orderStatus, alerts, eventsQueue, pushQueue };
 }
 
+/**
+ * Payload đúng mẫu tài liệu Gomdon (mục Webhook): order_id = mã số đơn Gomdon, order_code = mã vận đơn
+ * (SỐ trong JSON mẫu), order_customer_id = mã đơn của ta, created_time = unix GIÂY, cân nặng gram, kích
+ * thước mm, phí VND. KHÔNG có tracking_link. Giá trị giả.
+ */
+const DOC_PAYLOAD = {
+  status: 7,
+  product_price: 250000,
+  collect_amount: 250000,
+  weight: 2400,
+  height: 0,
+  width: 0,
+  length: 0,
+  order_id: 55,
+  order_code: 84850000000055,
+  order_customer_id: 'TUBU1001',
+  customer_total_fee: 23000,
+  customer_delivery_fee: 23000,
+  customer_cod_fee: 0,
+  customer_insurance_fee: 0,
+  created_time: 1758330000,
+};
+
 /** Chạy processEvent với payload như thể event vừa được lưu. */
 async function process(ctx: ReturnType<typeof build>, payload: GomdonWebhookPayload) {
   ctx.prisma.gomdonWebhookEvent.findUnique.mockResolvedValueOnce({ id: 'ev1', status: 'RECEIVED', rawPayload: payload });
@@ -97,6 +120,14 @@ describe('GomdonWebhookService.receive — lưu event + dedupe', () => {
     const ctx = build();
     ctx.eventsQueue.add.mockRejectedValueOnce(new Error('redis'));
     await expect(ctx.svc.receive(payload)).resolves.toEqual({ result: true });
+  });
+
+  it('payload đúng mẫu tài liệu (order_code dạng SỐ) → lưu event, dedupeKey order_id|status|created_time', async () => {
+    const ctx = build();
+    await expect(ctx.svc.receive(DOC_PAYLOAD)).resolves.toEqual({ result: true });
+    const data = ctx.prisma.gomdonWebhookEvent.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ dedupeKey: '55|7|1758330000', gomdonOrderId: '55', orderCode: 'TUBU1001', gomdonStatus: 7 });
+    expect(data.eventTime).toEqual(new Date(1758330000 * 1000));
   });
 
   it('dedupeKey: cùng payload → cùng key; khác created_time → khác key; thiếu created_time → băm payload', () => {
@@ -158,11 +189,44 @@ describe('GomdonWebhookService.processEvent — áp dụng trạng thái', () =>
     expect(ctx.alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('không tự chuyển DELIVERED'));
   });
 
-  it('status 3 cho đơn CONFIRMED → SHIPPING; trackingLink http(s) được lưu', async () => {
+  it('payload đúng mẫu tài liệu: order_code SỐ khớp mã vận đơn đã lưu dạng chuỗi, created_time unix giây → DELIVERED', async () => {
+    const ctx = build({ orders: [{ gomdonPartnerCode: '84850000000055', shippingCode: '84850000000055' }] });
+    const data = await process(ctx, DOC_PAYLOAD);
+    expect(ctx.prisma.order.findFirst.mock.calls[0][0].where).toEqual({
+      hasRecyclingPickup: true,
+      OR: [{ gomdonOrderId: '55' }, { gomdonPartnerCode: '84850000000055' }],
+    });
+    const upd = ctx.prisma.order.updateMany.mock.calls[0][0].data;
+    expect(upd.gomdonStatus).toBe('7');
+    expect(upd.gomdonStatusAt).toEqual(new Date(1758330000 * 1000));
+    expect(ctx.orderStatus.setStatus).toHaveBeenCalledWith('o1', 'DELIVERED', expect.objectContaining({ actorType: 'SYSTEM' }));
+    expect(data.status).toBe('PROCESSED');
+  });
+
+  it('status 3 cho đơn CONFIRMED → SHIPPING; tracking_link/tracking_url KHÔNG có trong tài liệu → không lưu link tuỳ ý', async () => {
     const ctx = build({ orders: [{ status: 'CONFIRMED', gomdonStatus: '1' }] });
-    await process(ctx, { order_id: 55, status: 3, tracking_link: 'https://track.best/BE55' });
+    await process(ctx, { order_id: 55, status: 3, tracking_link: 'https://evil.example/BE55', tracking_url: 'https://evil.example/x' });
     expect(ctx.orderStatus.setStatus).toHaveBeenCalledWith('o1', 'SHIPPING', expect.anything());
-    expect(ctx.prisma.order.updateMany.mock.calls[0][0].data.trackingLink).toBe('https://track.best/BE55');
+    expect(ctx.prisma.order.updateMany.mock.calls[0][0].data).not.toHaveProperty('trackingLink');
+  });
+
+  it('mã vận đơn đang là id tạm (Gomdon không trả partner_code lúc tạo) → webhook mang order_code thay bằng mã vận đơn thật', async () => {
+    const ctx = build({
+      orders: [{ status: 'CONFIRMED', gomdonOrderId: '55', gomdonPartnerCode: '55', shippingCode: '55', gomdonStatus: '1' }],
+    });
+    await process(ctx, { order_id: 55, order_code: 84850000000055, status: 3, created_time: 1758330000 });
+    const upd = ctx.prisma.order.updateMany.mock.calls[0][0];
+    expect(upd.where).toEqual({ id: 'o1', gomdonStatus: '1' });
+    expect(upd.data).toMatchObject({ gomdonPartnerCode: '84850000000055', shippingCode: '84850000000055', gomdonStatus: '3' });
+    expect(upd.data.shippingHistory.at(-1)).toMatchObject({ code: '84850000000055' });
+  });
+
+  it('đã có mã vận đơn thật → webhook KHÔNG đổi gomdonPartnerCode dù order_code khác', async () => {
+    const ctx = build({ orders: [{ status: 'CONFIRMED', gomdonStatus: '1' }] });
+    await process(ctx, { order_id: 55, order_code: 84850000000099, status: 3 });
+    const upd = ctx.prisma.order.updateMany.mock.calls[0][0].data;
+    expect(upd.gomdonPartnerCode).toBeUndefined();
+    expect(upd.shippingCode).toBeUndefined();
   });
 
   it('webhook tới trễ không lùi trạng thái: đang 7, nhận 5 → bỏ qua, không ghi gì', async () => {

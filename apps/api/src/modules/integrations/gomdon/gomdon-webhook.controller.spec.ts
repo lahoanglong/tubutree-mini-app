@@ -1,4 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
+import { HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import type { ConfigService } from '@nestjs/config';
 import { GomdonWebhookController } from './gomdon-webhook.controller';
 import type { GomdonWebhookService } from './gomdon-webhook.service';
@@ -53,6 +54,11 @@ describe('GomdonWebhookController — xác thực token chia sẻ', () => {
     await expect(controller.handle(body, 'anything', undefined)).rejects.toBeInstanceOf(UnauthorizedException);
     await expect(controller.handleWithPathToken('anything', body, undefined)).rejects.toBeInstanceOf(UnauthorizedException);
     expect(webhook.receive).not.toHaveBeenCalled();
+  });
+
+  it('tài liệu: Gomdon chỉ coi HTTP 200 là nhận thành công (khác 200 → gửi lại sau 30 giây, tối đa 3 lần) → cả 2 route trả 200', () => {
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, GomdonWebhookController.prototype.handle)).toBe(200);
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, GomdonWebhookController.prototype.handleWithPathToken)).toBe(200);
   });
 
   it('dev/test chưa đặt secret → cho qua (có cảnh báo) để thử nghiệm', async () => {

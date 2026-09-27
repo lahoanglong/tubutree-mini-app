@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { UnrecoverableError, type Queue } from 'bullmq';
 import { GomdonOrderService } from './gomdon-order.service';
-import { GomdonAmbiguousError, GomdonRejectedError } from './gomdon.errors';
+import { GomdonAmbiguousError, GomdonDuplicateOrderError, GomdonRejectedError } from './gomdon.errors';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { GomdonClient } from './gomdon.client';
 import type { PancakeOrderService } from '../pancake/pancake-order.service';
@@ -148,6 +148,96 @@ describe('GomdonOrderService.pushOrder', () => {
     });
     expect(persist.data.shippingHistory).toHaveLength(1);
     expect(pancake.enqueuePush).toHaveBeenCalledWith('o1');
+  });
+
+  it('body tạo đơn đúng hợp đồng tài liệu: đủ và chỉ các trường đã mô tả, đơn vị gram/mm/VND', async () => {
+    const { svc, client } = build();
+    await svc.pushOrder('o1');
+    const sent = client.createOrder.mock.calls[0][0];
+    expect(Object.keys(sent).sort()).toEqual(
+      [
+        'order_customer_id',
+        'product_name',
+        'product_price',
+        'product_number',
+        'collect_amount',
+        'type',
+        'pickup_type',
+        'service_id',
+        'weight',
+        'width',
+        'height',
+        'length',
+        'note',
+        'source_province',
+        'source_district',
+        'source_ward',
+        'source_address',
+        'source_phone',
+        'source_name',
+        'dest_province',
+        'dest_district',
+        'dest_ward',
+        'dest_address',
+        'dest_phone',
+        'dest_name',
+      ].sort(),
+    );
+    // type 3 = đơn đổi hàng; pickup_type 2 = nhân viên tới lấy tại địa chỉ gửi (kho); 12491 = giao tiết kiệm.
+    expect(sent).toMatchObject({ type: 3, pickup_type: 2, service_id: 12491, product_number: 1, product_price: 250000 });
+    // weight: số nguyên gram; width/height/length: mm (không khai kích thước → 0 như mẫu tài liệu).
+    expect(Number.isInteger(sent.weight)).toBe(true);
+    expect(sent).toMatchObject({ width: 0, height: 0, length: 0 });
+    // Tài liệu bắt buộc đủ tỉnh/quận/phường/địa chỉ/SĐT/tên cho cả người gửi (kho) lẫn người nhận.
+    for (const k of ['province', 'district', 'ward', 'address', 'phone', 'name']) {
+      expect(sent[`source_${k}`]).toBeTruthy();
+      expect(sent[`dest_${k}`]).toBeTruthy();
+    }
+  });
+
+  it('tài liệu: response có id (số) + code (mã nội bộ) + partner_code (mã vận đơn) → lưu id + partner_code, KHÔNG dùng code', async () => {
+    const { svc, client, updateMany } = build();
+    client.createOrder.mockResolvedValueOnce({
+      result: true,
+      data: { id: 900001, code: '900001-11-shop_demo', partner_code: '84850000000001', status: 1 },
+    });
+    expect(await svc.pushOrder('o1')).toBe('84850000000001');
+    expect(updateMany.mock.calls[1][0].data).toMatchObject({
+      gomdonOrderId: '900001',
+      gomdonPartnerCode: '84850000000001',
+      shippingCode: '84850000000001',
+    });
+  });
+
+  it('thiếu partner_code nhưng có id → dùng tạm id số làm mã (không lấy data.code — đó là mã nội bộ Gomdon, không phải vận đơn)', async () => {
+    const { svc, client, updateMany } = build();
+    client.createOrder.mockResolvedValueOnce({ result: true, data: { id: 900001, code: '900001-11-shop_demo', status: 1 } });
+    expect(await svc.pushOrder('o1')).toBe('900001');
+    const persist = updateMany.mock.calls[1][0];
+    expect(persist.data).toMatchObject({ gomdonOrderId: '900001', gomdonPartnerCode: '900001', shippingCode: '900001' });
+  });
+
+  it('chỉ có data.code (không id, không partner_code) → NEEDS_MANUAL_CHECK (webhook tự lành theo mã đơn điền id + mã vận đơn sau)', async () => {
+    const { svc, client, updateMany, alerts } = build();
+    client.createOrder.mockResolvedValueOnce({ result: true, data: { code: '900001-11-shop_demo', status: 1 } });
+    await expect(svc.pushOrder('o1')).resolves.toBeNull();
+    expect(wroteStatus(updateMany, 'NEEDS_MANUAL_CHECK')).toBe(true);
+    expect(updateMany.mock.calls.some(([a]) => a?.data?.gomdonPartnerCode === '900001-11-shop_demo')).toBe(false);
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('KIỂM TRA GOMDON'));
+  });
+
+  it('Gomdon báo trùng order_customer_id (đã có đơn) → NEEDS_MANUAL_CHECK, giữ claim, KHÔNG ném (không retry), báo rõ "đã có vận đơn"', async () => {
+    const { svc, client, updateMany, alerts, pancake } = build();
+    client.createOrder.mockRejectedValueOnce(
+      new GomdonDuplicateOrderError('Gomdon báo mã đơn (order_customer_id) đã có đơn: The order customer id has already been taken.'),
+    );
+    await expect(svc.pushOrder('o1')).resolves.toBeNull();
+    // Không nhả claim về null (nhả = BullMQ retry → hết lượt FAILED → kho tạo vận đơn tay = giao trùng).
+    expect(updateMany.mock.calls.some(([a]) => a?.data?.gomdonStatus === null)).toBe(false);
+    expect(wroteStatus(updateMany, 'NEEDS_MANUAL_CHECK')).toBe(true);
+    expect(pancake.enqueuePush).toHaveBeenCalledWith('o1');
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('ĐÃ CÓ đơn'));
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('KHÔNG tạo vận đơn tay'));
   });
 
   it('WALLET đã thanh toán → collect_amount = 0', async () => {

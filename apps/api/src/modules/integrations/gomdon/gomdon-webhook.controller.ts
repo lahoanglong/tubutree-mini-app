@@ -19,14 +19,17 @@ import type { GomdonWebhookPayload } from './gomdon.types';
 import { GomdonWebhookService } from './gomdon-webhook.service';
 
 /**
- * Nhận webhook trạng thái vận đơn Gomdon. URL đăng ký trên Gomdon (ưu tiên header nếu Gomdon cho
- * cấu hình header; nếu chỉ cho nhập URL thì dùng dạng token trong đường dẫn):
+ * Nhận webhook trạng thái vận đơn Gomdon. Tài liệu Gomdon: webhook do quản trị Gomdon cấu hình giúp (liên
+ * hệ Gomdon), KHÔNG mô tả chữ ký hay header tuỳ chỉnh — nên nhận cả 3 dạng, dùng header nếu Gomdon cho
+ * đặt header, không thì token trong đường dẫn (docs/integrations/gomdon.md):
  *   https://<api>/api/webhooks/gomdon            + header x-webhook-token: <GOMDON_WEBHOOK_SECRET>
  *   https://<api>/api/webhooks/gomdon/<secret>   (hoặc ?token=<secret>)
  *
  * Quy trình (như PancakeWebhookController): xác thực token chia sẻ (timingSafeEqual) TRƯỚC mọi truy
- * vấn DB → lưu event (dedupe) → enqueue → trả 200 ngay. Fail-closed ở production khi chưa cấu hình
- * secret. Có throttle riêng (không @SkipThrottle) — endpoint public, trước đây không giới hạn.
+ * vấn DB → lưu event (dedupe) → enqueue → trả 200 ngay. Tài liệu: Gomdon chỉ coi HTTP 200 là thành công,
+ * khác 200 thì gửi lại sau 30 giây, tối đa 3 lần rồi BỎ — 401 (sai/thiếu secret) hay API sập quá ~2 phút
+ * là mất event vĩnh viễn (Gomdon không có API tra cứu trạng thái để đối soát lại). Fail-closed ở production
+ * khi chưa cấu hình secret. Có throttle riêng (không @SkipThrottle) — endpoint public.
  */
 @Throttle({ default: { limit: 120, ttl: 60_000 } })
 @Controller('webhooks/gomdon')

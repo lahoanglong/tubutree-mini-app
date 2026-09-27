@@ -18,12 +18,31 @@ import {
 } from './gomdon-config';
 import {
   GomdonAmbiguousError,
+  GomdonDuplicateOrderError,
   GomdonRejectedError,
   classifyGomdonCreateError,
   looksLikeAuthFailure,
+  looksLikeDuplicateOrder,
 } from './gomdon.errors';
 
 export { GOMDON_CONFIG_KEY };
+
+/** Giữ token tối đa 24 giờ kể cả khi Gomdon trả expires_at = null (token không tự hết hạn). */
+const TOKEN_MAX_CACHE_MS = 24 * 3600_000;
+/** Đăng nhập lại trước mốc expires_at một khoảng để không gửi request sát giờ hết hạn. */
+const TOKEN_EXPIRY_BUFFER_MS = 5 * 60_000;
+const TOKEN_MIN_CACHE_MS = 60_000;
+
+/**
+ * Thời gian giữ token theo `data.expires_at` của API đăng nhập (tài liệu: null, hoặc thời điểm kiểu
+ * Laravel "2026-09-27T00:10:00.000000Z"). Không đọc được → 24 giờ; 401 luôn kéo đăng nhập lại.
+ */
+function tokenCacheMs(expiresAt: unknown, now: number): number {
+  if (typeof expiresAt !== 'string' || !expiresAt.trim()) return TOKEN_MAX_CACHE_MS;
+  const at = Date.parse(expiresAt);
+  if (Number.isNaN(at)) return TOKEN_MAX_CACHE_MS;
+  return Math.min(TOKEN_MAX_CACHE_MS, Math.max(at - now - TOKEN_EXPIRY_BUFFER_MS, TOKEN_MIN_CACHE_MS));
+}
 
 /** Giá trị mặc định của phần cấu hình KHÔNG bí mật (seed + fallback). */
 export const DEFAULT_GOMDON_CONFIG = {
@@ -104,10 +123,9 @@ export class GomdonClient {
       }
 
       const token = res.data.data.access_token;
-      // Cache token trong 24 giờ (hoặc expires_in nếu có), trừ 5 phút buffer.
-      const expiresInSeconds = res.data.data.expires_in ?? 86400;
+      const now = Date.now();
       this.cachedToken = token;
-      this.tokenExpiresAt = Date.now() + Math.max(expiresInSeconds - 300, 60) * 1000;
+      this.tokenExpiresAt = now + tokenCacheMs(res.data.data.expires_at, now);
       return token;
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
@@ -132,11 +150,13 @@ export class GomdonClient {
   }
 
   /**
-   * Tạo đơn đổi hàng Gomdon (POST /api/v2/order/create, multipart/form-data).
+   * Tạo đơn đổi hàng Gomdon (POST /api/v2/order/create, multipart/form-data, header Bearer).
    *
    * Lỗi được PHÂN LOẠI để caller không tạo trùng vận đơn:
    *  - GomdonRejectedError: chắc chắn chưa tạo (lỗi đăng nhập, 4xx, result:false, chưa gửi được) → retry an toàn.
+   *  - GomdonDuplicateOrderError: Gomdon báo order_customer_id đã có đơn → ĐÃ có vận đơn, KHÔNG retry.
    *  - GomdonAmbiguousError: có thể đã tạo (timeout, rớt kết nối, 5xx, result:true thiếu data) → KHÔNG retry.
+   * Gomdon không có API tra cứu đơn (theo id hay order_customer_id) nên không tự đối soát được — kiểm tra tay.
    */
   async createOrder(body: GomdonCreateOrderBody): Promise<GomdonCreateOrderResponse> {
     let token: string;
@@ -190,7 +210,8 @@ export class GomdonClient {
     }
 
     if (!res.data?.result) {
-      // Một số API trả 200 + result:false khi token hết hạn (không phải 401) — đăng nhập lại 1 lần.
+      // Tài liệu: token sai → HTTP 401 (nhánh trên). Phòng khi Gomdon trả 200 + result:false kèm thông
+      // điệp token (không phải 401) — đăng nhập lại 1 lần; result:false nghĩa là chưa tạo nên gửi lại an toàn.
       if (!retriedAuth && looksLikeAuthFailure(res.data?.message)) {
         this.logger.warn(`Gomdon báo lỗi xác thực (${res.data?.message}) — đăng nhập lại và thử lại...`);
         token = await reLogin();
@@ -202,7 +223,13 @@ export class GomdonClient {
         if (res.data?.result && res.data.data) return res.data;
       }
       if (!res.data?.result) {
-        throw new GomdonRejectedError(`Gomdon trả về lỗi tạo đơn: ${res.data?.message ?? JSON.stringify(res.data)}`);
+        const detail = res.data?.message ?? JSON.stringify(res.data);
+        // order_customer_id "dùng để check unique" (tài liệu): bị từ chối vì trùng = Gomdon ĐÃ CÓ đơn này.
+        if (looksLikeDuplicateOrder(res.data?.message)) {
+          throw new GomdonDuplicateOrderError(`Gomdon báo mã đơn (order_customer_id) đã có đơn: ${detail}`);
+        }
+        // Lỗi validate/nghiệp vụ của Gomdon trả HTTP 200 + result:false (tài liệu) → chắc chắn chưa tạo.
+        throw new GomdonRejectedError(`Gomdon trả về lỗi tạo đơn: ${detail}`);
       }
     }
     if (!res.data.data) {
@@ -212,7 +239,9 @@ export class GomdonClient {
   }
 
   /**
-   * Hủy đơn Gomdon (POST /api/v2/order/cancel/{id}). Idempotent phía caller (gomdonCancelStatus).
+   * Hủy đơn Gomdon (POST /api/v2/order/cancel/{id}, id = mã số đơn Gomdon = data.id lúc tạo, form rỗng).
+   * Tài liệu: chỉ huỷ được đơn CHƯA lấy hàng; kết quả luôn HTTP 200 + result true/false + message
+   * (vd "Không tìm thấy đơn hàng"). Idempotent phía caller (gomdonCancelStatus).
    * 401 → đăng nhập lại 1 lần. result:false → { ok:false } để caller retry/báo CSKH.
    */
   async cancelOrder(gomdonOrderId: string | number): Promise<GomdonCancelResult> {

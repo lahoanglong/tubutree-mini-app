@@ -15,7 +15,7 @@ import type { GomdonCreateOrderBody, GomdonCreateOrderResponse } from './gomdon.
 import { PancakeOrderService } from '../pancake/pancake-order.service';
 import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import { GomdonAlertService } from './gomdon-alert.service';
-import { GomdonRejectedError } from './gomdon.errors';
+import { GomdonDuplicateOrderError, GomdonRejectedError } from './gomdon.errors';
 import { enqueueGomdonCancel, enqueueGomdonPush } from './gomdon-queue';
 import { recyclingWeight } from './gomdon-weight';
 import {
@@ -44,6 +44,12 @@ type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
 const DEAD_STATUSES = ['CANCELLED', 'RETURNED'] as const;
 const isDead = (status: string) => (DEAD_STATUSES as readonly string[]).includes(status);
+/** Giá trị số/chuỗi từ response Gomdon → chuỗi đã trim; rỗng/null → null. */
+const nonEmpty = (v: unknown): string | null => {
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim();
+  return s === '' ? null : s;
+};
 
 /**
  * Trạng thái "đã chốt, không tự tạo vận đơn nữa" — kho đã/ sẽ được báo tạo tay hoặc kiểm tra tay, hoặc
@@ -215,18 +221,31 @@ export class GomdonOrderService {
         });
         throw err;
       }
+      if (err instanceof GomdonDuplicateOrderError) {
+        // order_customer_id là khoá duy nhất bên Gomdon: bị từ chối vì trùng = Gomdon ĐÃ CÓ đơn cho mã này
+        // (lần tạo trước mất response, hoặc vận đơn cũ đã huỷ vẫn giữ mã). Không retry, không báo "tạo tay".
+        await this.markNeedsManualCheck(
+          order,
+          `Gomdon báo ĐÃ CÓ đơn mang mã ${order.code} (order_customer_id phải duy nhất): ${err.message}`,
+          `Tra Gomdon theo mã đơn ${order.code}: vận đơn còn chạy thì KHÔNG tạo vận đơn tay (webhook Gomdon tự gắn mã vận đơn); ` +
+            'vận đơn đó đã huỷ thì tạo vận đơn tay trên Gomdon rồi bấm "Đã xử lý tay".',
+        );
+        return null;
+      }
       await this.markNeedsManualCheck(order, `Không rõ Gomdon đã tạo vận đơn chưa: ${err instanceof Error ? err.message : err}`);
       return null;
     }
 
-    const gomdonId = res.data?.id != null && res.data.id !== '' ? String(res.data.id) : null;
-    const partnerCode = res.data?.partner_code
-      ? String(res.data.partner_code)
-      : res.data?.code
-        ? String(res.data.code)
-        : gomdonId;
+    // Tài liệu Gomdon: data.id = mã số đơn Gomdon (API huỷ /order/cancel/{id} dùng số này), data.partner_code
+    // = mã vận đơn của hãng (trùng order_code trong webhook). data.code là mã NỘI BỘ Gomdon dạng
+    // "<id>-<user>-<tên>" — không phải vận đơn, không lưu (lưu vào gomdonPartnerCode thì webhook không bao
+    // giờ khớp theo mã vận đơn, khách thấy sai mã).
+    const gomdonId = nonEmpty(res.data?.id);
+    // Thiếu partner_code mà có id → tạm dùng id: ghi chú Pancake vẫn là "ĐÃ CÓ VẬN ĐƠN" (không để kho tạo
+    // thêm), webhook mang order_code sẽ thay bằng mã vận đơn thật.
+    const partnerCode = nonEmpty(res.data?.partner_code) ?? gomdonId;
     if (!partnerCode) {
-      await this.markNeedsManualCheck(order, 'Gomdon báo tạo thành công nhưng không trả mã vận đơn');
+      await this.markNeedsManualCheck(order, 'Gomdon báo tạo thành công nhưng không trả id đơn/mã vận đơn');
       return null;
     }
 
@@ -645,8 +664,11 @@ export class GomdonOrderService {
     });
   }
 
-  /** CREATING → NEEDS_MANUAL_CHECK + đẩy Pancake (ghi chú "kiểm tra Gomdon") + báo CSKH. */
-  private async markNeedsManualCheck(order: OrderWithItems, reason: string): Promise<void> {
+  /**
+   * CREATING → NEEDS_MANUAL_CHECK + đẩy Pancake (ghi chú "kiểm tra Gomdon") + báo CSKH. `advice` thay câu
+   * hướng dẫn mặc định ở cuối báo động (đơn còn hiệu lực).
+   */
+  private async markNeedsManualCheck(order: OrderWithItems, reason: string, advice?: string): Promise<void> {
     try {
       await this.prisma.order.updateMany({
         where: { id: order.id, gomdonOrderId: null, gomdonPartnerCode: null, gomdonStatus: GOMDON_STATE.CREATING },
@@ -664,7 +686,7 @@ export class GomdonOrderService {
       return;
     }
     if (!order.pancakeOrderId) await this.pancakeOrder.enqueuePush(order.id);
-    await this.alerts.alert(order.code, `${reason}. KIỂM TRA GOMDON (mã đơn ${order.code}) trước khi tạo vận đơn tay.`);
+    await this.alerts.alert(order.code, `${reason}. ${advice ?? `KIỂM TRA GOMDON (mã đơn ${order.code}) trước khi tạo vận đơn tay.`}`);
   }
 
   /**

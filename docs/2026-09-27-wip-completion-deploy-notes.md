@@ -512,19 +512,36 @@ phải là `14.225.207.177`.
    tới tối đa 20 tài khoản ADMIN và chỉ xem được trong mục **Thông báo của Mini App** (đăng nhập bằng
    tài khoản ADMIN) cùng log API. Web admin không có hộp thông báo.
 
-### 7.1. Hợp đồng API Gomdon: chưa xác nhận, cần hỏi Gomdon
+### 7.1. Hợp đồng API Gomdon: đã đối chiếu tài liệu (27/09), còn vài điểm phải hỏi Gomdon
 
-Code viết theo tài liệu và giả định, chưa đối chiếu với môi trường thật của Gomdon:
+Đã đối chiếu code với tài liệu Postman công khai "GOMDON API" mà chủ shop gửi. Chưa gọi API thật nào vì
+chưa có tài khoản. Bảng đầy đủ, cách đăng ký webhook và danh sách còn mở nằm ở
+[`docs/integrations/gomdon.md`](integrations/gomdon.md).
 
-| Điểm | Code đang giả định | Nơi |
+| Điểm | Theo tài liệu | Kết quả |
 |---|---|---|
-| Tên trường webhook | `order_id` (id Gomdon), `order_code` (mã BestExpress), `order_customer_id` (mã đơn của ta), `status` (1–12), `created_time`, `tracking_link`/`tracking_url` | `gomdon.types.ts`, `gomdon-webhook.service.ts` |
-| Đơn vị `created_time` | Nhận cả unix giây, mili-giây (> 1e12) và chuỗi ngày. Trường này dùng cho khoá chống trùng và chống lùi trạng thái | `parseEventTime` trong `gomdon-webhook.service.ts` |
-| Đường huỷ vận đơn | `POST /api/v2/order/cancel/{id}` với id số | `gomdon.client.ts` |
-| Đăng nhập | `POST /api/v2/auth/login` (form `phone`, `password`), `expires_in` tính bằng giây, mặc định 86400 | `gomdon.client.ts` |
-| Tạo đơn | `POST /api/v2/order/create` (multipart/form-data) | `gomdon.client.ts` |
-| Bảng mã trạng thái | 1 Tạo đơn … 7 Giao thành công … 12 Hoàn hàng thất bại | `gomdon-status.ts` |
-| Có cho cấu hình header webhook không | Chưa biết, nên hỗ trợ cả ba dạng | `gomdon-webhook.controller.ts` |
+| Địa chỉ gốc | `https://admin.gomdon.com.vn/api/v2/…`. **Không có sandbox** | Khớp. Đặt `GOMDON_BASE_URL` là tạo vận đơn thật |
+| Đăng nhập | `POST /api/v2/auth/login`, form `phone` + `password`. Token ở `data.access_token` (Bearer), thời hạn ở `data.expires_at` (mẫu `null`). Không có `expires_in` | **Đã sửa**: đọc `expires_at`, giữ token tối đa 24 giờ |
+| Tạo đơn | `POST /api/v2/order/create`, form-data. Trường `type` = 3 (đổi hàng), `pickup_type` = 2 (nhân viên tới lấy tại kho), `service_id` = 12491, cân nặng tính **gram**, kích thước tính **mm**, đủ `source_*`/`dest_*` (quận/huyện bắt buộc) | Khớp hết tên trường và đơn vị |
+| Mã trong response tạo đơn | `data.id` là mã số Gomdon, dùng để huỷ. `data.partner_code` là mã vận đơn, trùng `order_code` của webhook. `data.code` chỉ là mã nội bộ | **Đã sửa**: không còn lấy `data.code` làm mã vận đơn |
+| Trùng `order_customer_id` | Gomdon dùng trường này để kiểm tra trùng | **Đã sửa**: bị từ chối vì trùng giờ ra `NEEDS_MANUAL_CHECK` ("đã có vận đơn"), không còn thành `FAILED` + "tạo vận đơn tay" (trước đây sẽ gây giao trùng) |
+| Huỷ vận đơn | `POST /api/v2/order/cancel/{id số}`, form rỗng, chỉ huỷ được đơn chưa lấy hàng. Luôn HTTP 200 + `result` true/false | Khớp |
+| API tra cứu đơn/hành trình | **Không có** | Không thể kiểm lại trạng thái trước khi DELIVERED, hay tra đơn kẹt theo mã đơn. Giữ nguyên các chốt chặn hiện có |
+| Payload webhook | `order_id`, `order_code` (**số** trong JSON mẫu), `order_customer_id`, `status`, `created_time` (unix **giây**), cân nặng gram, kích thước mm, 4 trường phí. **Không có** `tracking_link` | Khớp. **Đã sửa**: bỏ đọc `tracking_link`/`tracking_url` |
+| Bảng mã trạng thái | 12 mã, từ 1 "Tạo đơn thành công" tới 12 "Đơn hoàn hàng thất bại" | Khớp cả 12, API/web/miniapp không đổi nhãn. Tài liệu không nói mã nào là mốc cuối |
+| Đăng ký webhook, header/secret | Chỉ ghi "liên hệ quản trị Gomdon". Không nhắc tới header hay chữ ký | Chưa biết Gomdon cho đặt header không, nên code vẫn nhận cả ba dạng. Nhiều khả năng phải dùng `https://api.tubutree.com/api/webhooks/gomdon/<secret>` (lưu ý cho bước 2 ở trên) |
+| Gửi lại webhook | Chỉ HTTP 200 là thành công. Không thì gửi lại sau 30 giây, **tối đa 3 lần** | Khớp (trả 200). Sai secret hoặc API sập quá khoảng 2 phút thì **mất event**, phải đối chiếu tay trên cổng Gomdon |
+
+**Cần hỏi Gomdon trước khi bật cho khách:**
+
+- thông điệp lỗi khi trùng `order_customer_id`, và việc kiểm trùng có tính cả đơn đã huỷ không (ảnh hưởng
+  nút "Tạo lại vận đơn" sau khi vận đơn cũ bị huỷ);
+- có cho đặt header webhook không, và webhook gửi từ IP nào;
+- chuỗi trạng thái của đơn đổi hàng: chiều vật liệu tái chế về kho có báo 6/8 sau mã 7 không;
+- có nhận địa chỉ hai cấp không (ta gửi tên phường vào ô quận/huyện);
+- khung thời gian của giới hạn 600 request.
+
+Chi tiết từng điểm ở mục 5 của `docs/integrations/gomdon.md`.
 
 ---
 
@@ -839,8 +856,12 @@ mục 5, rồi xoá 7 dòng `_prisma_migrations`. Gỡ bảng đồng nghĩa v�
 
 ## 11. Còn mở, cần chủ shop
 
-1. **Hợp đồng API Gomdon chưa xác nhận**: tên trường webhook, đơn vị `created_time`, đường huỷ vận đơn
-   (bảng 7.1). Cần hỏi Gomdon trước khi bật cho khách.
+1. **Hợp đồng API Gomdon đã đối chiếu với tài liệu Postman chính thức (27/09)**: tên trường webhook, đơn
+   vị `created_time` (giây unix), đường huỷ vận đơn, bảng trạng thái 1–12 đều khớp; 4 chỗ lệch đã sửa (xem
+   mục 7.1 và `docs/integrations/gomdon.md`). **Còn phải hỏi Gomdon**: cách đăng ký webhook (tài liệu chỉ
+   ghi "liên hệ admin Gomdon", không nói có đặt header/secret được không — nên đăng ký URL dạng
+   `/api/webhooks/gomdon/<secret>`), thông điệp khi trùng `order_customer_id`, chuỗi trạng thái của đơn đổi
+   hàng sau khi giao. Gomdon không có môi trường thử nghiệm.
 2. **Pancake không sửa được ghi chú sau khi đơn đã lên Pancake.** Với đơn trả trước, Pancake nhận đơn lúc
    còn chờ thanh toán; vận đơn Gomdon chỉ tạo sau khi tiền về. Vì Pancake không có API sửa note, hệ thống
    gửi báo động `OPS_GOMDON_ALERT` để nhân viên tự ghi mã vận đơn vào Pancake ("KHÔNG tạo vận đơn khác").
@@ -878,6 +899,6 @@ mục 5, rồi xoá 7 dòng `_prisma_migrations`. Gỡ bảng đồng nghĩa v�
 - **DNS hiện tại** của `api.tubutree.com`. Lần kiểm cuối (26/09) nó vẫn trỏ IP GCP cũ.
 - **Bản Mini App production trên Zalo được build từ commit nào.** Điều này quyết định khách có thấy dòng
   "Bonus +0%" của bản cũ không.
-- **Hợp đồng Gomdon** (mục 7.1).
+- **Hợp đồng Gomdon**: phần còn lại chưa có trong tài liệu (mục 7.1, `docs/integrations/gomdon.md`).
 - **Số test** ở mục 2 đã chạy lại sau khi viết tài liệu (27/09): 2061 API, 179 miniapp, 135 web, 39 e2e
   miniapp, 16 race test Postgres thật — xanh hết.

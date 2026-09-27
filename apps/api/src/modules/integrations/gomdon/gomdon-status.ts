@@ -63,6 +63,7 @@ export const GOMDON_CANCEL = {
   NOT_NEEDED: 'NOT_NEEDED',
 } as const;
 
+/** Bảng mã trạng thái — đã đối chiếu tài liệu Gomdon (mục Webhook), khớp cả 12 mã. */
 export const GOMDON_STATUS_TEXT: Record<number, string> = {
   1: 'Tạo đơn thành công',
   2: 'Đơn hủy',
@@ -88,6 +89,8 @@ export const GOMDON_PROBLEM_STATUSES = new Set([2, 6, 8, 9, 10, 11, 12]);
  * Thứ bậc tiến trình để webhook không lùi trạng thái. Mốc cuối (2/7/8/9) không bị ghi đè.
  * 10 (lấy không thành công) đứng TRƯỚC 3 vì bưu tá có thể lấy lại thành công sau đó;
  * 11 (giao thất bại) cùng bậc với 5 vì có thể giao lại (so tiếp theo created_time).
+ * Tài liệu Gomdon chỉ liệt kê ý nghĩa từng mã, KHÔNG nói mã nào là mốc cuối hay thứ tự chuyển — bảng
+ * bậc này là suy luận của ta (xem docs/integrations/gomdon.md, mục "Chưa kiểm chứng").
  */
 const RANK: Record<number, number> = {
   1: 10,

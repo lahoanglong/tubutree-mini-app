@@ -6,7 +6,11 @@ export const GOMDON_CONFIG_KEY = 'shipping.gomdon.config';
 /** Công tắc admin bật/tắt lựa chọn "gửi lại vật liệu tái chế" ở checkout (mặc định TẮT). */
 export const GOMDON_RECYCLING_TOGGLE_KEY = 'shipping.gomdon.recycling_enabled';
 
-/** Base URL production của Gomdon — chỉ dùng mặc định khi NODE_ENV=production. */
+/**
+ * Base URL production của Gomdon (tài liệu: mọi API nằm dưới https://admin.gomdon.com.vn/api/v2/...) — chỉ
+ * dùng mặc định khi NODE_ENV=production. Tài liệu KHÔNG có môi trường sandbox/test riêng: GOMDON_BASE_URL
+ * chỉ để trỏ sang môi trường Gomdon cấp riêng (nếu có) — không có URL thử nào an toàn để đặt sẵn.
+ */
 export const GOMDON_PRODUCTION_BASE_URL = 'https://admin.gomdon.com.vn';
 
 export const DEFAULT_GOMDON_WAREHOUSE: GomdonWarehouseConfig = {

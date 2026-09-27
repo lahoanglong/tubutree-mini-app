@@ -30,13 +30,15 @@ export const GOMDON_EVENT_STATUS = {
 } as const;
 
 export interface ParsedGomdonEvent {
+  /** order_id — mã số đơn Gomdon (trùng data.id lúc tạo). */
   gomdonOrderId: string | null;
+  /** order_code — mã vận đơn (trùng data.partner_code lúc tạo; JSON mẫu của Gomdon để dạng SỐ). */
   partnerCode: string | null;
+  /** order_customer_id — mã đơn của ta (order.code). */
   orderCode: string | null;
   status: number | null;
   eventTime: Date | null;
   rawCreatedTime: string | null;
-  trackingLink: string | null;
 }
 
 interface Outcome {
@@ -47,7 +49,10 @@ interface Outcome {
 
 const str = (v: unknown): string | null => (v === undefined || v === null || String(v).trim() === '' ? null : String(v).trim());
 
-/** created_time Gomdon: unix giây / mili-giây (số hoặc chuỗi số) hoặc chuỗi ngày. */
+/**
+ * created_time: tài liệu Gomdon ghi "thời gian thay đổi" kiểu int = unix GIÂY (trùng created_at của đơn).
+ * Vẫn nhận mili-giây (> 1e12) và chuỗi ngày cho an toàn — không làm sai giá trị giây hợp lệ nào.
+ */
 function parseEventTime(v: unknown): Date | null {
   const s = str(v);
   if (!s) return null;
@@ -60,9 +65,13 @@ function parseEventTime(v: unknown): Date | null {
   return Number.isNaN(t) ? null : new Date(t);
 }
 
+/**
+ * Đọc payload webhook theo đúng các trường tài liệu Gomdon mô tả. Payload tài liệu KHÔNG có link tra cứu
+ * (tracking_link/tracking_url) — không đọc trường ngoài hợp đồng để không lưu link tuỳ ý vào nút "Tra cứu
+ * hành trình" của khách.
+ */
 export function parseGomdonPayload(body: GomdonWebhookPayload): ParsedGomdonEvent {
   const statusNum = Number(body.status);
-  const link = str(body['tracking_link'] ?? body['tracking_url']);
   return {
     gomdonOrderId: str(body.order_id),
     partnerCode: str(body.order_code),
@@ -70,8 +79,6 @@ export function parseGomdonPayload(body: GomdonWebhookPayload): ParsedGomdonEven
     status: body.status !== undefined && body.status !== null && Number.isInteger(statusNum) ? statusNum : null,
     eventTime: parseEventTime(body.created_time),
     rawCreatedTime: str(body.created_time),
-    // Chỉ nhận link http(s) — không lưu chuỗi tuỳ ý vào nút "Tra cứu hành trình" của khách.
-    trackingLink: link && /^https?:\/\//i.test(link) ? link : null,
   };
 }
 
@@ -238,7 +245,17 @@ export class GomdonWebhookService {
     const newStatus = String(p.status);
     const cur = order.gomdonStatus;
     const statusChanged = cur !== newStatus;
-    const partnerCode = order.gomdonPartnerCode ?? p.partnerCode ?? p.gomdonOrderId;
+    // Lúc tạo Gomdon không trả partner_code → pushOrder tạm lưu id số làm mã (gomdonPartnerCode === gomdonOrderId).
+    // Đơn đã khớp đúng theo order_id → order_code của webhook là mã vận đơn thật: thay mã tạm.
+    const upgradeCode =
+      !backfill &&
+      !!order.gomdonPartnerCode &&
+      order.gomdonPartnerCode === order.gomdonOrderId &&
+      !!p.partnerCode &&
+      p.partnerCode !== order.gomdonPartnerCode
+        ? p.partnerCode
+        : null;
+    const partnerCode = upgradeCode ?? order.gomdonPartnerCode ?? p.partnerCode ?? p.gomdonOrderId;
     // Đơn đã gắn vận đơn theo mã BestExpress nhưng CHƯA có id số Gomdon (Gomdon không trả id lúc tạo) →
     // điền id từ payload: API huỷ vận đơn (/order/cancel/{id}) chỉ nhận id số. Tự lành đã điền riêng.
     const fillId = !backfill && !order.gomdonOrderId && p.gomdonOrderId ? p.gomdonOrderId : null;
@@ -288,13 +305,13 @@ export class GomdonWebhookService {
     } else if (fillId) {
       data.gomdonOrderId = fillId;
     }
+    if (upgradeCode) data.gomdonPartnerCode = upgradeCode;
     // Đơn có vận đơn Gomdon: Gomdon là nguồn DUY NHẤT của shippingCode/Partner/Status/History
     // (pancake.processor onShippingUpdated không ghi đè các field này — xem ở đó).
     if (partnerCode && order.shippingCode !== partnerCode) {
       data.shippingCode = partnerCode;
       data.shippingPartner = 'BestExpress';
     }
-    if (p.trackingLink && p.trackingLink !== order.trackingLink) data.trackingLink = p.trackingLink;
 
     if (Object.keys(data).length > 0) {
       // Optimistic concurrency theo gomdonStatus: 2 webhook song song cho cùng đơn → bên thua retry
