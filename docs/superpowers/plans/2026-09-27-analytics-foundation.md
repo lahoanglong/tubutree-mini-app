@@ -1155,16 +1155,39 @@ git commit -m "feat(analytics): referral_touched khi ghi nhận chạm giới th
   addSource?: string;
 ```
 
-- [ ] **Step 2: Đọc lại `addItem(userId, dto)` hiện tại (3 lệnh Prisma tuần tự: `findUnique`
-      variation → `findUnique` existing item → `cartItem.upsert`), bọc cả 3 vào `$transaction` và
-      thêm event ở cuối**
+- [ ] **Step 2: Đã verify lại `addItem(userId, dto)` thật (2026-09-27, trong lúc chờ Task 5) —
+      KHÁC với phỏng đoán ban đầu của brief này: hàm KHÔNG chỉ có 3 lệnh Prisma tuần tự, nó còn
+      gọi `this.ensureCart(userId)` đầu hàm và kết thúc bằng `return this.getCart(userId);` (một
+      view giỏ hàng đầy đủ, KHÔNG PHẢI kết quả thô của `upsert`). Bọc CẢ HÀM vào `$transaction`
+      như dự tính ban đầu sẽ làm sai giá trị trả về (vỡ hợp đồng API). Chỉ bọc ĐÚNG lệnh
+      `cartItem.upsert` + sự kiện analytics vào một transaction nhỏ, giữ nguyên 100% phần còn lại
+      (thứ tự gọi, `ensureCart`, 2 lệnh đọc, `getCart` cuối hàm) y hệt bản gốc:**
 
 ```typescript
   async addItem(userId: string, dto: AddItemDto) {
-    return this.prisma.$transaction(async (tx) => {
-      // giữ NGUYÊN 3 bước hiện có (findUnique variation, findUnique existing, upsert) — chỉ đổi
-      // `this.prisma.` thành `tx.` cho cả 3 lệnh, KHÔNG đổi logic/điều kiện.
-      const item = /* kết quả upsert, tên biến thật đọc từ file gốc */;
+    const cartId = await this.ensureCart(userId);
+    const variation = await this.prisma.variation.findUnique({
+      where: { id: dto.variationId },
+      include: { product: { select: { approvalStatus: true } } },
+    });
+    if (!variation || !variation.isActive || variation.product.approvalStatus !== 'APPROVED') {
+      throw new NotFoundException('Sản phẩm không khả dụng.');
+    }
+
+    const existing = await this.prisma.cartItem.findUnique({
+      where: { cartId_variationId: { cartId, variationId: dto.variationId } },
+    });
+    const newQty = (existing?.quantity ?? 0) + dto.quantity;
+    if (newQty > variation.stock) {
+      throw new BadRequestException(`Chỉ còn ${variation.stock} sản phẩm trong kho.`);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.cartItem.upsert({
+        where: { cartId_variationId: { cartId, variationId: dto.variationId } },
+        update: { quantity: { increment: dto.quantity } },
+        create: { cartId, variationId: dto.variationId, quantity: dto.quantity },
+      });
       await this.analytics.record(tx, {
         eventName: 'add_to_cart',
         userId,
@@ -1175,10 +1198,13 @@ git commit -m "feat(analytics): referral_touched khi ghi nhận chạm giới th
           addSource: dto.addSource ?? 'pdp',
         },
       });
-      return item;
     });
+    return this.getCart(userId);
   }
 ```
+
+Toàn bộ code trên (trừ khối `$transaction` mới) đã được chép NGUYÊN VĂN từ file thật — không cần
+đoán tên biến nữa. Chỉ áp dụng thay đổi ở khối `$transaction` cho đúng `cartItem.upsert` hiện có.
 
 - [ ] **Step 3: Constructor + import**
 
