@@ -2934,15 +2934,27 @@ Thêm đoạn:
 
 - Migration mới: `analytics_foundation` (bảng `analytics_events`, `retention_daily_snapshot`,
   `cohort_repeat_snapshot`, `funnel_daily_snapshot` + 5 cột `Order`) — additive, an toàn deploy.
+  Chạy `prisma migrate deploy` TRƯỚC khi restart API — `AnalyticsAggregationService` chạm bảng
+  `retention_daily_snapshot` ngay từ lần cron đầu tiên sau khi service khởi động.
 - Sau khi `prisma migrate deploy`: chạy **1 lần**
-  `npx tsx apps/api/scripts/backfill-analytics-2026-09.ts` để backfill `source`/`platform`/
-  `paidAt` lịch sử + in baseline NS-1 ra log (lưu lại log này làm baseline tuần đầu).
+  `npx tsx apps/api/scripts/backfill-analytics-2026-09.ts` (KHÔNG dùng `ts-node` — không chạy
+  được trong repo này, xem comment đầu file script) để backfill `source`/`platform`/`paidAt`/
+  `endCustomerKey` lịch sử + in baseline NS-1 ra log (lưu lại log này làm baseline tuần đầu).
   Đây là backfill dữ liệu, không phải migration — không chạy tự động trong `migrate deploy`.
-- Cron `AnalyticsAggregationService.runNightly()` chạy `0 3 * * *` theo giờ hệ thống (chưa ép
-  timezone Asia/Ho_Chi_Minh — VERIFY giờ hệ thống VPS trước khi tin số liệu "hôm qua" đúng ngày
-  VN, sửa `@Cron('0 3 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })` nếu VPS không chạy giờ VN).
+- Cron `AnalyticsAggregationService.runNightly()` đã chốt cứng
+  `@Cron('0 3 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })` — chạy đúng 3h sáng giờ VN BẤT KỂ giờ hệ
+  điều hành host, không cần chỉnh gì thêm khi deploy.
 - Dashboard: `/admin?tab=analytics` — cần ≥1 lần cron chạy mới có dữ liệu, trang không crash khi
-  rỗng.
+  rỗng (đã có Playwright test cho cả 2 trạng thái, Task 21).
+- **Giới hạn đã biết (không chặn deploy, cần biết trước khi đọc số liệu):**
+  - `checkout_started.entry` chưa phân biệt được "Mua ngay" với "checkout một phần giỏ" (cả 2 đều
+    gắn nhãn `buy_now`) — đã thêm `isSubset` làm tín hiệu phụ, xem ghi chú PARKED trong lịch sử
+    review Task 19 nếu muốn làm đúng hẳn (cần sửa thêm `cart.tsx` + `utils/checkout-selection.ts`).
+  - `CohortRepeatSnapshot`/`FunnelDailySnapshot` (repeat 30/60/90 theo cohort + phễu từng bước)
+    mới có schema, CHƯA có cron tính — chỉ `RetentionDailySnapshot` (NS-1/NS-2/DAU) đang chạy.
+  - Phát hiện ngoài phạm vi dự án con này: `apps/e2e/tests/admin.spec.ts` có 1 test lỗi từ TRƯỚC
+    (không liên quan tới thay đổi của dự án con 2) — không phải regression mới, nhưng nên xử lý
+    riêng.
 ```
 
 - [ ] **Step 2: Commit**
