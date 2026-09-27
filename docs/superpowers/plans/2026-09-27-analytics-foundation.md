@@ -2069,7 +2069,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('./api', () => ({ api: { post: vi.fn().mockResolvedValue({ data: { accepted: 1 } }) } }));
 
-import { trackEvent, flushEventQueue, __resetQueueForTest } from './analytics';
+import { trackEvent, flushEventQueue, flushEventQueueOnHide, __resetQueueForTest } from './analytics';
 import { api } from './api';
 
 describe('trackEvent / flushEventQueue', () => {
@@ -2085,7 +2085,7 @@ describe('trackEvent / flushEventQueue', () => {
     trackEvent('screen_viewed', 'miniapp', { route: '/home' });
     await flushEventQueue();
     expect(api.post).toHaveBeenCalledTimes(1);
-    const body = (api.post as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const body = (api.post as ReturnType<typeof vi.fn>).mock.calls[0]?.[1];
     expect(body.events).toHaveLength(1);
     expect(body.events[0].eventName).toBe('screen_viewed');
     expect(body.events[0].eventId).toMatch(/^[0-9a-f-]{36}$/);
@@ -2101,10 +2101,52 @@ describe('trackEvent / flushEventQueue', () => {
     expect(api.post).toHaveBeenCalledTimes(1);
   });
 
-  it('flush lỗi mạng → không throw ra ngoài, hàng đợi không bị mất im lặng (giữ lại để lần sau)', async () => {
+  it('flush lỗi mạng → không throw ra ngoài (best-effort, CHẤP NHẬN mất lô này, không giữ lại)', async () => {
     (api.post as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('network'));
     trackEvent('client_error', 'miniapp', {});
     await expect(flushEventQueue()).resolves.toBeUndefined();
+  });
+});
+
+describe('flushEventQueueOnHide', () => {
+  beforeEach(() => __resetQueueForTest());
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('sendBeacon thành công → KHÔNG gọi api.post (đã gửi bằng beacon)', () => {
+    const sendBeacon = vi.fn().mockReturnValue(true);
+    vi.stubGlobal('navigator', { sendBeacon });
+    trackEvent('client_error', 'miniapp', {});
+
+    flushEventQueueOnHide();
+
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('sendBeacon thất bại (trả false) → PHẢI gửi lại batch đã lấy ra qua api.post, không rơi mất', () => {
+    const sendBeacon = vi.fn().mockReturnValue(false);
+    vi.stubGlobal('navigator', { sendBeacon });
+    trackEvent('client_error', 'miniapp', { foo: 'bar' });
+
+    flushEventQueueOnHide();
+
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledTimes(1);
+    const body = (api.post as ReturnType<typeof vi.fn>).mock.calls[0]?.[1];
+    expect(body.events).toHaveLength(1);
+    expect(body.events[0].props).toEqual({ foo: 'bar' });
+  });
+
+  it('không có navigator.sendBeacon (môi trường không hỗ trợ) → gửi thẳng qua api.post', () => {
+    vi.stubGlobal('navigator', {});
+    trackEvent('client_error', 'miniapp', {});
+
+    flushEventQueueOnHide();
+
+    expect(api.post).toHaveBeenCalledTimes(1);
   });
 });
 ```
@@ -2182,12 +2224,19 @@ export async function flushEventQueue(): Promise<void> {
 
 export function flushEventQueueOnHide(): void {
   if (queue.length === 0) return;
-  const body = JSON.stringify({ events: queue.splice(0, MAX_BATCH) });
+  // Lấy batch ra khỏi queue MỘT LẦN rồi giữ biến cục bộ — KHÔNG được gọi flushEventQueue() ở
+  // nhánh dự phòng bên dưới vì queue module-level đã rỗng ngay sau splice() này (phát hiện ở
+  // review Task 17: gọi lại flushEventQueue() sau khi đã splice queue rỗng khiến nhánh dự
+  // phòng — chính xác lúc sendBeacon thất bại/không có — là no-op câm lặng, mất trắng dữ liệu).
+  const batch = queue.splice(0, MAX_BATCH);
+  const body = JSON.stringify({ events: batch });
   if (typeof navigator !== 'undefined' && 'sendBeacon' in navigator) {
     const ok = navigator.sendBeacon('/api/events', body);
     if (ok) return;
   }
-  void flushEventQueue();
+  // sendBeacon không khả dụng hoặc thất bại — gửi lại bằng chính `batch` đã lấy ra ở trên qua
+  // fetch thường (best-effort, không throw).
+  void api.post('/events', { events: batch }).catch(() => {});
 }
 
 export function __resetQueueForTest(): void {
@@ -2203,7 +2252,7 @@ export function __resetQueueForTest(): void {
 cd apps/miniapp && npx vitest run src/services/analytics.spec.ts
 ```
 
-Expected: PASS 5/5.
+Expected: PASS 8/8 (5 test cũ + 3 test mới cho `flushEventQueueOnHide`).
 
 - [ ] **Step 5: `tsc --noEmit`**
 
@@ -2220,13 +2269,20 @@ git add apps/miniapp/src/services/analytics.ts apps/miniapp/src/services/analyti
 git commit -m "feat(analytics): hàng đợi gộp lô sự kiện FE miniapp"
 ```
 
-**Rủi ro kỹ thuật cần xác minh khi có thiết bị Zalo thật** (không chặn merge): `sendBeacon` gọi
-thẳng `/api/events` (path tuyệt đối) trong khi `api.ts` dùng `baseURL` cấu hình riêng — sửa lại
-URL trong `flushEventQueueOnHide` để dùng ĐÚNG base URL thật (đọc từ cùng nguồn `services/api.ts`
-dùng, không hard-code `/api/events`) TRƯỚC khi bật tính năng này trên production; nếu Zalo webview
-không hỗ trợ `sendBeacon`, nhánh `void flushEventQueue()` (fetch thường) vẫn chạy được nhưng có
-thể bị trình duyệt huỷ giữa chừng lúc trang ẩn — chấp nhận mất một phần sự kiện cuối phiên (đã là
-best-effort).
+**Đã sửa ở review Task 17:** nhánh dự phòng khi `sendBeacon` thất bại/không có giờ gửi THẲNG
+`batch` đã lấy ra qua `api.post()` (dùng đúng `baseURL` cấu hình của `api.ts`) thay vì gọi lại
+`flushEventQueue()` trên `queue` module-level đã bị splice rỗng — trước đó là mất trắng dữ liệu
+câm lặng ở đúng nhánh này.
+
+**Rủi ro kỹ thuật còn lại, cần xác minh khi có thiết bị Zalo thật** (không chặn merge):
+`sendBeacon` (khi thật sự gọi được) vẫn dùng path tuyệt đối hard-code `/api/events` — `sendBeacon`
+không dùng được instance axios của `api.ts` (cần 1 chuỗi URL, không phải request qua axios), nên
+không thể tái dùng `baseURL` trực tiếp; cần đọc `baseURL` thật (biến môi trường `VITE_API_BASE_URL`
+mà `api.ts` dùng) rồi ghép thủ công thành URL đầy đủ TRƯỚC khi bật tính năng này trên production.
+Nếu Zalo webview không hỗ trợ `sendBeacon` (thường gặp), nhánh `api.post` fallback đã sửa vẫn chạy
+được nhưng bản thân đó là 1 request bất đồng bộ có thể bị trình duyệt huỷ giữa chừng lúc trang ẩn
+(hạn chế vốn có của kiến trúc "gửi lúc unload", không phải bug riêng của code này) — chấp nhận mất
+một phần sự kiện cuối phiên (đã là best-effort).
 
 ---
 
