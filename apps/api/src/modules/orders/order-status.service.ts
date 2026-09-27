@@ -116,6 +116,13 @@ export class OrderStatusService {
             reason: opts.note ?? null,
           },
         });
+      } else {
+        // Không nên xảy ra trong app thật (AnalyticsModule @Global() luôn cấp được) — chỉ
+        // rơi vào nhánh này khi test/call site dựng constructor bằng tay không truyền.
+        // Cảnh báo để lộ ra ngay nếu một ngày DI thật sự thiếu, thay vì no-op câm lặng.
+        this.logger.warn(
+          `AnalyticsEventsService không được inject — bỏ qua ghi event order_status_changed cho đơn ${order.code}.`,
+        );
       }
 
       if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {

@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 function makeOrder(overrides: Record<string, unknown> = {}) {
   return {
@@ -36,6 +37,11 @@ describe('OrderStatusService', () => {
   };
   let notifications: { notify: jest.Mock };
   let reversal: { reverseFinancials: jest.Mock };
+  // Task 6 review finding: nếu không wiring thật, this.analytics luôn undefined trong mọi test
+  // (@Optional() no-op câm lặng) → không test nào từng chứng minh order_status_changed thật sự
+  // ghi đúng from/to trên nhánh thắng race. Mock record() thật để assert được (giống fix Task 5
+  // cho PancakeProcessor, xem pancake.processor.spec.ts:72-73).
+  let analytics: { record: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -50,6 +56,7 @@ describe('OrderStatusService', () => {
     };
     notifications = { notify: jest.fn().mockResolvedValue(undefined) };
     reversal = { reverseFinancials: jest.fn().mockResolvedValue(undefined) };
+    analytics = { record: jest.fn().mockResolvedValue(undefined) };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -59,6 +66,7 @@ describe('OrderStatusService', () => {
         { provide: AffiliateService, useValue: affiliate },
         { provide: NotificationsService, useValue: notifications },
         { provide: OrderReversalService, useValue: reversal },
+        { provide: AnalyticsEventsService, useValue: analytics },
       ],
     }).compile();
     service = module.get(OrderStatusService);
@@ -103,6 +111,36 @@ describe('OrderStatusService', () => {
     });
   });
 
+  /**
+   * Task 6 review finding: trước đây this.analytics luôn undefined trong test (không wiring),
+   * nên if(this.analytics) no-op câm lặng và không ai chứng minh được from/to không bị đảo
+   * ngược (tsc không bắt được vì cả hai đều cùng kiểu OrderStatus). Test này wiring analytics
+   * thật (mock ở beforeEach) để assert đúng from = status GỐC (CONFIRMED, trước khi lật), to =
+   * targetStatus, ghi trong CÙNG tx với lần lật status.
+   */
+  it('ghi order_status_changed đúng from/to (không đảo ngược) trên nhánh thắng race', async () => {
+    const order = makeOrder({ status: 'CONFIRMED' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'PACKED' });
+    const tx = mockTx();
+
+    await service.setStatus('o1', 'PACKED' as never, { actorType: 'ADMIN', note: 'gói xong' });
+
+    expect(analytics.record).toHaveBeenCalledTimes(1);
+    expect(analytics.record).toHaveBeenCalledWith(tx, {
+      eventName: 'order_status_changed',
+      userId: 'u1',
+      platform: 'system',
+      props: {
+        orderId: 'o1',
+        from: 'CONFIRMED',
+        to: 'PACKED',
+        actorType: 'ADMIN',
+        reason: 'gói xong',
+      },
+    });
+  });
+
   it('không truyền actor (webhook/cron) → SYSTEM, vẫn có vết', async () => {
     const order = makeOrder({ status: 'CONFIRMED' });
     prisma.order.findFirst.mockResolvedValue(order);
@@ -126,6 +164,10 @@ describe('OrderStatusService', () => {
     await service.setStatus('o1', 'PACKED' as never);
 
     expect(tx.orderStatusHistory.create).not.toHaveBeenCalled();
+    // Task 6 review finding: nhánh thua race không được ghi order_status_changed — trước đây
+    // không test nào chứng minh được vì analytics luôn undefined (no-op câm lặng che mất cả
+    // 2 khả năng: "không gọi" và "gọi nhưng bị nuốt lỗi").
+    expect(analytics.record).not.toHaveBeenCalled();
   });
 
   it('DELIVERED: credit điểm + lock hoa hồng + refer-reward, KHÔNG gọi reversal', async () => {
