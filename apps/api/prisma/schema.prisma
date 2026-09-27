@@ -168,8 +168,8 @@ model PayrollAdjustment {
   createdBy String?
   createdAt DateTime       @default(now())
 
-  @@index([staffId, workDate])
   @@unique([shiftId, type])
+  @@index([staffId, workDate])
   @@map("payroll_adjustments")
 }
 
@@ -299,20 +299,20 @@ model RefreshToken {
 }
 
 model MembershipTier {
-  id              String  @id
-  name            String
-  minPoints       Int
-  minSpending     Int?
-  discountPct     Decimal @default(0)
-  pointMultiplier Decimal @default(1)
+  id                    String  @id
+  name                  String
+  minPoints             Int
+  minSpending           Int?
+  discountPct           Decimal @default(0)
+  pointMultiplier       Decimal @default(1)
   /// Mức voucher sinh nhật riêng của hạng (VNĐ) — null = dùng `voucher.birthday_amount` chung
   /// (P0 A3-05: seed hứa Lộc Biếc 50k/Đại Thụ 150k/Cổ Thụ 300k nhưng cron trước đây cấp 1 mức
   /// cho mọi hạng, xem vouchers.service.ts birthdayVouchers()).
   birthdayVoucherAmount Int?
-  perks           Json
-  badgeImageUrl   String?
-  sortOrder       Int     @default(0)
-  users           User[]
+  perks                 Json
+  badgeImageUrl         String?
+  sortOrder             Int     @default(0)
+  users                 User[]
 
   @@map("membership_tiers")
 }
@@ -342,27 +342,27 @@ model Address {
 // ============================================================
 
 model Product {
-  id               String             @id @default(cuid())
-  pancakeId        String             @unique
+  id               String                @id @default(cuid())
+  pancakeId        String                @unique
   brand            String
   brandId          String?
-  brandRef         Brand?             @relation(fields: [brandId], references: [id])
-  affiliateBlocked Boolean            @default(false)
-  slug             String             @unique
+  brandRef         Brand?                @relation(fields: [brandId], references: [id])
+  affiliateBlocked Boolean               @default(false)
+  slug             String                @unique
   name             String
-  description      String             @db.Text
+  description      String                @db.Text
   shortDesc        String?
   images           String[]
   thumbnail        String?
   categoryIds      String[]
   tags             String[]
-  isActive         Boolean            @default(true)
-  isFeatured       Boolean            @default(false)
-  isCombo          Boolean            @default(false)
-  ratingAvg        Float              @default(0) // denormalized từ reviews (cập nhật khi tạo review)
-  reviewCount      Int                @default(0)
-  soldExternal     Int                @default(0) // admin nhập — tổng đã bán gom từ các sàn TMĐT ngoài
-  soldApp          Int                @default(0) // system — đơn DELIVERED trong app (cron recompute). Hiển thị = soldExternal + soldApp
+  isActive         Boolean               @default(true)
+  isFeatured       Boolean               @default(false)
+  isCombo          Boolean               @default(false)
+  ratingAvg        Float                 @default(0) // denormalized từ reviews (cập nhật khi tạo review)
+  reviewCount      Int                   @default(0)
+  soldExternal     Int                   @default(0) // admin nhập — tổng đã bán gom từ các sàn TMĐT ngoài
+  soldApp          Int                   @default(0) // system — đơn DELIVERED trong app (cron recompute). Hiển thị = soldExternal + soldApp
   basePrice        Int
   salePrice        Int?
   metaTitle        String?
@@ -380,8 +380,8 @@ model Product {
   rejectReason     String?
   communityTags    PostProductTag[]
   contentKit       ProductContentKit?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
 
   @@index([brand])
   @@index([brandId])
@@ -797,42 +797,47 @@ enum InvoiceStatus {
 }
 
 model Order {
-  id                String         @id @default(cuid())
-  code              String         @unique
-  idempotencyKey    String?        @unique // chống double-submit place-order (§12.1)
-  pancakeOrderId    String?        @unique
-  userId            String
-  user              User           @relation(fields: [userId], references: [id])
-  type              OrderType
-  status            OrderStatus
-  subtotal          Int
-  discount          Int            @default(0)
-  shippingFee       Int            @default(0)
-  total             Int
-  pointsEarned      Int            @default(0)
-  pointsUsed        Int            @default(0)
-  paymentMethod     PaymentMethod
-  paymentStatus     PaymentStatus
-  paymentTxnId      String?
-  shippingAddress   Json
-  shippingPartner   String?
-  shippingCode      String?
-  shippingStatus    String?
-  trackingLink      String?
-  shippingHistory   Json?
-  invoiceRequest    Json?
-  invoiceUrl        String?
-  invoiceStatus     InvoiceStatus? @default(NOT_REQUESTED)
-  referrerUserId    String?
-  storefrontSlug    String?
+  id                 String           @id @default(cuid())
+  code               String           @unique
+  idempotencyKey     String?          @unique // chống double-submit place-order (§12.1)
+  pancakeOrderId     String?          @unique
+  userId             String
+  user               User             @relation(fields: [userId], references: [id])
+  type               OrderType
+  status             OrderStatus
+  subtotal           Int
+  discount           Int              @default(0)
+  shippingFee        Int              @default(0)
+  total              Int
+  pointsEarned       Int              @default(0)
+  pointsUsed         Int              @default(0)
+  paymentMethod      PaymentMethod
+  paymentStatus      PaymentStatus
+  paymentTxnId       String?
+  shippingAddress    Json
+  shippingPartner    String?
+  shippingCode       String?
+  shippingStatus     String?
+  trackingLink       String?
+  shippingHistory    Json?
+  invoiceRequest     Json?
+  invoiceUrl         String?
+  invoiceStatus      InvoiceStatus?   @default(NOT_REQUESTED)
+  referrerUserId     String?
+  storefrontSlug     String?
   // Đơn CTV "lên đơn hộ khách": userId==referrerUserId (CTV) nhưng VẪN được hưởng hoa hồng
   // (cho phép self-referral có kiểm soát — xem affiliate.createCommissionForOrder).
-  placedForCustomer Boolean        @default(false)
-  commission        Int            @default(0)
-  couponCode        String?
-  note              String?
+  placedForCustomer  Boolean          @default(false)
+  commission         Int              @default(0)
+  source             String? // checkout | buy_now | ctv_assisted | subscription | dealer
+  platform           String? // miniapp | web — null cho đơn cũ trước migration này
+  paidAt             DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
+  subscriptionId     String? // gắn khi đơn tạo từ subscriptions.service (cron chạy kỳ)
+  endCustomerKey     String? // hash SĐT người nhận — CHỈ set khi placedForCustomer = true
+  couponCode         String?
+  note               String?
   // Thu gom vật liệu tái chế (Gomdon đơn đổi hàng)
-  hasRecyclingPickup Boolean        @default(false)
+  hasRecyclingPickup Boolean          @default(false)
   recyclingNote      String?
   gomdonOrderId      String?
   gomdonPartnerCode  String?
@@ -846,11 +851,11 @@ model Order {
   /// Thời điểm đơn chuyển DELIVERED (OrderStatusService.setStatus) — mốc tính hạn đổi/trả. Trước đây
   /// dùng updatedAt: mọi lần ghi sau đó (webhook vận chuyển, yêu cầu hoá đơn…) kéo dài hạn đổi/trả.
   deliveredAt        DateTime?
-  items             OrderItem[]
-  commissions       Commission[]
-  paymentAttempts   PaymentAttempt[]
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  items              OrderItem[]
+  commissions        Commission[]
+  paymentAttempts    PaymentAttempt[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   @@index([userId, status])
   @@index([referrerUserId])
@@ -1112,23 +1117,23 @@ enum CollectionLayout {
 }
 
 model Commission {
-  id              String           @id @default(cuid())
-  affiliateUserId String
-  user            User             @relation(fields: [affiliateUserId], references: [id])
-  orderId         String
-  order           Order            @relation(fields: [orderId], references: [id])
-  orderTotal      Int
+  id                  String           @id @default(cuid())
+  affiliateUserId     String
+  user                User             @relation(fields: [affiliateUserId], references: [id])
+  orderId             String
+  order               Order            @relation(fields: [orderId], references: [id])
+  orderTotal          Int
   // Nền doanh số CTV cho bậc/mốc thưởng tháng: tổng item.total của các dòng CÓ hưởng hoa hồng
   // (rate > 0) — loại hàng affiliateBlocked, hàng rate 0 và phí ship (mirror cách tính amount).
-  commissionableTotal Int          @default(0)
-  rate            Decimal
-  amount          Int
-  status          CommissionStatus @default(PENDING)
-  lockedAt        DateTime? // thời điểm đơn DELIVERED, bắt đầu đếm hold
-  approvedAt      DateTime?
-  paidAt          DateTime?
-  payoutBatchId   String?
-  createdAt       DateTime         @default(now())
+  commissionableTotal Int              @default(0)
+  rate                Decimal
+  amount              Int
+  status              CommissionStatus @default(PENDING)
+  lockedAt            DateTime? // thời điểm đơn DELIVERED, bắt đầu đếm hold
+  approvedAt          DateTime?
+  paidAt              DateTime?
+  payoutBatchId       String?
+  createdAt           DateTime         @default(now())
 
   @@index([affiliateUserId, status])
   // lockCommissionsForOrder/reverseCommissionsForOrder (affiliate.service.ts) updateMany theo
@@ -1163,17 +1168,17 @@ enum PayoutStatus {
 }
 
 model Payout {
-  id             String       @id @default(cuid())
-  userId         String
-  user           User         @relation(fields: [userId], references: [id])
-  amount         Int // số thực nhận (đã trừ phí)
-  fee            Int          @default(0) // phí chuyển khoản ngân hàng
-  method         String
-  bankInfo       Json?
-  status         PayoutStatus @default(REQUESTED)
-  idempotencyKey String?      @unique // chống double-submit rút tiền (double-tap/retry timeout)
-  requestedAt    DateTime     @default(now())
-  paidAt         DateTime?
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id])
+  amount          Int // số thực nhận (đã trừ phí)
+  fee             Int          @default(0) // phí chuyển khoản ngân hàng
+  method          String
+  bankInfo        Json?
+  status          PayoutStatus @default(REQUESTED)
+  idempotencyKey  String?      @unique // chống double-submit rút tiền (double-tap/retry timeout)
+  requestedAt     DateTime     @default(now())
+  paidAt          DateTime?
   // Hàng đợi xử lý admin (P0 A5-08=A6-05, 2026-09-27): duyệt/từ chối/đã trả — mirror
   // DealerRewardClaim (reviewedBy/reviewedAt/rejectionReason/paidBy/adminNote); bankRef riêng cho
   // payout (mã giao dịch ngân hàng lúc mark-paid).
@@ -2274,4 +2279,72 @@ model OaGreetedUser {
   greetedAt  DateTime @default(now())
 
   @@map("oa_greeted_users")
+}
+
+// ============================================================
+// 19. Analytics — Event tracking + retention metrics
+// ============================================================
+
+model AnalyticsEvent {
+  id             String   @id @default(cuid())
+  eventId        String   @unique
+  eventName      String
+  occurredAt     DateTime
+  receivedAt     DateTime @default(now())
+  userId         String?
+  anonymousId    String?
+  sessionId      String?
+  platform       String
+  appVersion     String?
+  entrySource    String?
+  notificationId String?
+  refCode        String?
+  storefrontSlug String?
+  props          Json
+
+  @@index([eventName, occurredAt])
+  @@index([userId, occurredAt])
+  @@index([anonymousId])
+  @@map("analytics_events")
+}
+
+model RetentionDailySnapshot {
+  date                 DateTime @id
+  newBuyers            Int
+  activeBuyers         Int
+  ordersCount          Int
+  ordersPerBuyerMtd    Decimal
+  dauProxyRefreshToken Int
+  dauEventBased        Int?
+  computedAt           DateTime @default(now())
+
+  @@map("retention_daily_snapshot")
+}
+
+model CohortRepeatSnapshot {
+  id                      String   @id @default(cuid())
+  cohortMonth             DateTime
+  newBuyersInCohort       Int
+  repeat30dCount          Int
+  repeat30dComplete       Boolean
+  repeat60dCount          Int
+  repeat60dComplete       Boolean
+  repeat90dCount          Int
+  repeat90dComplete       Boolean
+  medianDaysToSecondOrder Decimal?
+  computedAt              DateTime @default(now())
+
+  @@unique([cohortMonth])
+  @@map("cohort_repeat_snapshot")
+}
+
+model FunnelDailySnapshot {
+  id          String   @id @default(cuid())
+  date        DateTime
+  step        String
+  entrySource String?
+  count       Int
+
+  @@unique([date, step, entrySource])
+  @@map("funnel_daily_snapshot")
 }
