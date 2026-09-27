@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { trackEvent } from '../services/analytics';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -6,6 +7,19 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   hasError: boolean;
+}
+
+/**
+ * Hash chuỗi đơn giản (không cần crypto mạnh) — chỉ để gom nhóm các lỗi giống nhau trong
+ * analytics dài hạn mà KHÔNG lộ message lỗi thật (có thể chứa dữ liệu nhạy cảm) ra event log.
+ * Ổn định (cùng input luôn ra cùng output) và ngắn gọn (base36).
+ */
+export function hashMessage(message: string): string {
+  let hash = 0;
+  for (let i = 0; i < message.length; i++) {
+    hash = (hash * 31 + message.charCodeAt(i)) | 0;
+  }
+  return hash.toString(36);
 }
 
 /**
@@ -25,6 +39,11 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
 
   override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error('[ErrorBoundary] Lỗi render chưa bắt:', error, errorInfo);
+    void trackEvent('client_error', 'miniapp', {
+      kind: 'render',
+      route: window.location.pathname,
+      messageHash: hashMessage(error.message),
+    });
   }
 
   private handleRetry = (): void => {

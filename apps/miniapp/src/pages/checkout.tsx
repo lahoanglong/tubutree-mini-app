@@ -6,6 +6,7 @@ import type { OrderDTO } from '@tubutree/shared-types';
 import { getAddresses, getCart, checkoutQuote, placeOrder } from '../services/shop-api';
 import { getWallet, getLoyalty } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
+import { trackEvent } from '../services/analytics';
 import { useAuthStore } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
@@ -128,6 +129,19 @@ export default function CheckoutPage() {
       setPayment('COD');
     }
   }, [payment, quote.data, walletBalanceLive, coinsBalanceLive]);
+
+  // Phát 'checkout_started' đúng 1 LẦN cho lần quote thành công đầu tiên (không phát lại mỗi
+  // khi quote refetch — vd đổi địa chỉ/mã giảm giá làm quote chạy lại nhiều lần trong 1 phiên).
+  const trackedCheckoutStarted = useRef(false);
+  useEffect(() => {
+    if (!quote.isSuccess || trackedCheckoutStarted.current) return;
+    trackedCheckoutStarted.current = true;
+    void trackEvent('checkout_started', 'miniapp', {
+      itemCount: itemIds?.length ?? cart.data?.items?.length ?? 0,
+      subtotal: quote.data?.subtotal ?? 0,
+      entry: itemIds ? 'buy_now' : 'cart',
+    });
+  }, [quote.isSuccess]);
 
   const order = useMutation({
     mutationFn: () =>

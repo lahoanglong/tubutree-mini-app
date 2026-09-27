@@ -3,6 +3,7 @@ import { Box, Page, Text, Button, Input, useLocation, useNavigate } from 'zmp-ui
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { fetchProducts, fetchBrands, getCart } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
+import { trackEvent } from '../services/analytics';
 import ProductCard from '../components/product-card';
 import { ProductGridSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -105,6 +106,16 @@ export default function BrowsePage() {
       return page * limit < total ? page + 1 : undefined;
     },
   });
+
+  // Phát 'search_performed' khi trang 1 của kết quả tìm kiếm (debouncedQ) trả về.
+  useEffect(() => {
+    const firstPage = products.data?.pages?.[0];
+    if (!debouncedQ || !firstPage) return;
+    void trackEvent('search_performed', 'miniapp', {
+      q: debouncedQ,
+      resultsCount: firstPage.meta.total,
+    });
+  }, [debouncedQ, products.data?.pages]);
 
   const SORTS = [
     { key: undefined, label: 'Gợi ý' },

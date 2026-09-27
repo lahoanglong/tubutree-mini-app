@@ -11,6 +11,7 @@ import {
   type NotificationDTO,
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
+import { trackEvent } from '../services/analytics';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
@@ -119,6 +120,7 @@ export default function NotificationsPage() {
   };
 
   const onTap = (n: NotificationDTO) => {
+    void trackEvent('notification_opened', 'miniapp', { notificationId: n.id, templateCode: n.templateCode });
     haptic('light');
     if (n.status !== 'READ') readMut.mutate(n.id);
     setSelectedNotif(n);

@@ -21,6 +21,7 @@ import { ReviewsSection, Stars } from '../components/reviews-section';
 import { WishlistHeart } from '../components/wishlist-heart';
 import { SubscribeSheet } from '../components/subscribe-sheet';
 import { fetchReviews } from '../services/shop-api';
+import { trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { QuantitySelector } from '../components/ui/quantity-selector';
@@ -68,7 +69,7 @@ export default function ProductDetailPage() {
   // Thẻ "Ưu đãi giờ vàng" truyền variationId qua state để PDP mở đúng phân loại đang giảm;
   // không có state (vào từ lưới sản phẩm/deep link) thì giữ hành vi cũ là tự chọn phân loại
   // đầu tiên còn hàng.
-  const navState = useLocation().state as { variationId?: string } | null;
+  const navState = useLocation().state as { variationId?: string; listSource?: string } | null;
   const [selectedId, setSelectedId] = useState<string | null>(navState?.variationId ?? null);
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
@@ -139,6 +140,27 @@ export default function ProductDetailPage() {
       setQuantity(Math.max(1, selected.stock));
     }
   }, [selected, quantity]);
+
+  // Phát 'product_viewed' khi đã tải xong sản phẩm + đã xác định phân loại đang chọn.
+  // ĐẶT Ở ĐÂY (trước early-return loading/error bên dưới), KHÔNG đặt cạnh biến `price` (được
+  // khai báo sau early-return, dòng ~203) — hook không được gọi có điều kiện, nếu đặt sau
+  // early-return thì render đầu (đang loading) sẽ bỏ qua hẳn lời gọi hook này còn render sau
+  // (đã có data) thì gọi, khiến số lượng hook đổi giữa các lần render (React sẽ throw). Vì vậy
+  // tính lại công thức giá y hệt `price` ở dưới, dùng `product.data` (đã guard non-null) thay
+  // vì biến `p`.
+  useEffect(() => {
+    if (!product.isSuccess || !product.data || !selected) return;
+    const baseSelectedPrice = selected.salePrice ?? selected.retailPrice ?? product.data.basePrice;
+    const viewPrice = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
+    void trackEvent('product_viewed', 'miniapp', {
+      productId: product.data.id,
+      variationId: selected.id,
+      price: viewPrice,
+      isFlash: Boolean(flashItem),
+      inStock: selected.stock > 0,
+      listSource: navState?.listSource ?? 'browse',
+    });
+  }, [product.isSuccess, product.data, selected, flashItem]);
 
   const addMutation = useMutation({
     mutationFn: (input: { variation: VariationDetail; qty: number }) =>

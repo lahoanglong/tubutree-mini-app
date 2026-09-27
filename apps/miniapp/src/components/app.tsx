@@ -8,7 +8,7 @@ import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
 import BackButton from './back-button';
 import { OnboardingGate } from './onboarding';
-import ErrorBoundary from './error-boundary';
+import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch } from '../services/affiliate-api';
@@ -128,9 +128,16 @@ export default function MyApp() {
   }, [restore]);
 
   // Phát đúng 1 lần lúc mở app (deps rỗng — không phụ thuộc state nào nên không chạy lại
-  // khi re-render).
+  // khi re-render). Cùng effect này gắn luôn global error handler (window.onerror +
+  // unhandledrejection) — chỉ đăng ký 1 lần cho suốt vòng đời app, KHÔNG tạo effect thứ 2.
   useEffect(() => {
     void trackEvent('app_opened', 'miniapp', { entrySource: 'organic' });
+    window.onerror = (message) => {
+      void trackEvent('client_error', 'miniapp', { kind: 'render', messageHash: hashMessage(String(message)) });
+    };
+    window.addEventListener('unhandledrejection', (e) => {
+      void trackEvent('client_error', 'miniapp', { kind: 'api', messageHash: hashMessage(String(e.reason)) });
+    });
   }, []);
 
   // Attribution 3 ngày: khi đã đăng nhập + có ngữ cảnh giới thiệu (ref/slug từ link),
