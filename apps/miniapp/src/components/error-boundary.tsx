@@ -39,10 +39,17 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
 
   override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error('[ErrorBoundary] Lỗi render chưa bắt:', error, errorInfo);
+    // KHÔNG dùng error.message trực tiếp — React truyền NGUYÊN VĂN bất kỳ giá trị nào bị throw,
+    // không chỉ instance Error thật (vd `throw 'chuỗi lỗi'`, `throw undefined`). Nếu error không
+    // phải Error, `.message` là undefined và hashMessage(undefined) throw ngay TRONG
+    // componentDidCatch — lỗi trong chính error boundary duy nhất của app sẽ đẩy lên React, làm
+    // unmount CẢ CÂY, tức đúng màn hình trắng mà component này được viết ra để tránh (phát hiện ở
+    // review Task 19). Luôn ép về string trước khi hash, giống cách 2 global handler ở app.tsx
+    // đã làm với String(...).
     void trackEvent('client_error', 'miniapp', {
       kind: 'render',
       route: window.location.pathname,
-      messageHash: hashMessage(error.message),
+      messageHash: hashMessage(error instanceof Error ? error.message : String(error)),
     });
   }
 

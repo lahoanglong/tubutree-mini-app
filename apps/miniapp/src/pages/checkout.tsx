@@ -139,7 +139,15 @@ export default function CheckoutPage() {
     void trackEvent('checkout_started', 'miniapp', {
       itemCount: itemIds?.length ?? cart.data?.items?.length ?? 0,
       subtotal: quote.data?.subtotal ?? 0,
+      // Hạn chế đã biết (review 2026-09-28, CHẤP NHẬN cho MVP): `entry` không phân biệt được
+      // "Mua ngay" (PDP) với "checkout MỘT PHẦN giỏ" (trang Giỏ bỏ chọn vài món) — cả 2 đều có
+      // `itemIds` nên đều bị gắn nhãn 'buy_now'. Phân biệt đúng cần thêm cờ `checkoutEntry`
+      // truyền qua navigation state ở CẢ product-detail.tsx lẫn cart.tsx + mở rộng
+      // utils/checkout-selection.ts để sống sót qua reload — phạm vi rộng hơn task này, để dành
+      // cho whole-branch review. `isSubset` là bước trung gian rẻ tiền: tối thiểu phân biệt
+      // được "có chọn tập con" hay không.
       entry: itemIds ? 'buy_now' : 'cart',
+      isSubset: !!itemIds,
     });
   }, [quote.isSuccess]);
 

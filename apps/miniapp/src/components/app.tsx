@@ -132,9 +132,12 @@ export default function MyApp() {
   // unhandledrejection) — chỉ đăng ký 1 lần cho suốt vòng đời app, KHÔNG tạo effect thứ 2.
   useEffect(() => {
     void trackEvent('app_opened', 'miniapp', { entrySource: 'organic' });
-    window.onerror = (message) => {
-      void trackEvent('client_error', 'miniapp', { kind: 'render', messageHash: hashMessage(String(message)) });
-    };
+    // addEventListener('error', ...) chứ KHÔNG gán window.onerror = ... — gán trực tiếp GHI ĐÈ
+    // bất kỳ handler nào khác đã/sẽ gán vào window.onerror (kể cả của thư viện bên thứ 3),
+    // addEventListener cho phép nhiều listener cùng tồn tại (phát hiện ở review Task 19).
+    window.addEventListener('error', (e) => {
+      void trackEvent('client_error', 'miniapp', { kind: 'render', messageHash: hashMessage(String(e.message)) });
+    });
     window.addEventListener('unhandledrejection', (e) => {
       void trackEvent('client_error', 'miniapp', { kind: 'api', messageHash: hashMessage(String(e.reason)) });
     });

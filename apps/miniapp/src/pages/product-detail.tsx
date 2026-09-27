@@ -148,8 +148,18 @@ export default function ProductDetailPage() {
   // (đã có data) thì gọi, khiến số lượng hook đổi giữa các lần render (React sẽ throw). Vì vậy
   // tính lại công thức giá y hệt `price` ở dưới, dùng `product.data` (đã guard non-null) thay
   // vì biến `p`.
+  const trackedViewKey = useRef<string | null>(null);
   useEffect(() => {
-    if (!product.isSuccess || !product.data || !selected) return;
+    // `flashQ` refetch mỗi 60s (giờ vàng) và tạo object `flashItem` MỚI mỗi lần `soldCount` đổi
+    // dù khách không thao tác gì — nếu phát theo tham chiếu `flashItem` thì khách đứng yên trên
+    // trang giờ vàng vẫn bị phát `product_viewed` lặp lại mỗi phút, sai tỉ lệ chuyển đổi PDP→giỏ
+    // của đúng nhóm hàng giờ vàng cần đo nhất (review 2026-09-28). Chờ `flashQ.isPending` xong
+    // (tránh race: phát `isFlash:false` trước rồi phát thêm lần 2 `isFlash:true` khi flashQ
+    // resolve) và chỉ phát 1 LẦN cho mỗi cặp (sản phẩm, biến thể) bằng khoá `viewKey`.
+    if (!product.isSuccess || !product.data || !selected || flashQ.isPending) return;
+    const viewKey = `${product.data.id}:${selected.id}`;
+    if (trackedViewKey.current === viewKey) return;
+    trackedViewKey.current = viewKey;
     const baseSelectedPrice = selected.salePrice ?? selected.retailPrice ?? product.data.basePrice;
     const viewPrice = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
     void trackEvent('product_viewed', 'miniapp', {
@@ -160,7 +170,7 @@ export default function ProductDetailPage() {
       inStock: selected.stock > 0,
       listSource: navState?.listSource ?? 'browse',
     });
-  }, [product.isSuccess, product.data, selected, flashItem]);
+  }, [product.isSuccess, product.data, selected, flashItem, flashQ.isPending]);
 
   const addMutation = useMutation({
     mutationFn: (input: { variation: VariationDetail; qty: number }) =>

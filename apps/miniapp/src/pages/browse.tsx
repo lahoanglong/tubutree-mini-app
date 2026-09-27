@@ -108,6 +108,11 @@ export default function BrowsePage() {
   });
 
   // Phát 'search_performed' khi trang 1 của kết quả tìm kiếm (debouncedQ) trả về.
+  // Dep theo PHẦN TỬ trang 1 (`pages?.[0]`), KHÔNG phải cả mảng `pages` — `fetchNextPage` tạo
+  // mảng `pages` MỚI mỗi lần nối thêm trang dù trang 1 bên trong không đổi, nếu dep theo cả
+  // mảng thì mỗi lần bấm "Xem thêm" sẽ phát lại sự kiện cho cùng 1 lượt tìm (review 2026-09-28).
+  // React Query giữ nguyên tham chiếu các trang đã tải khi chỉ nối thêm, nên trang 1 chỉ đổi
+  // tham chiếu khi chính nó thật sự refetch.
   useEffect(() => {
     const firstPage = products.data?.pages?.[0];
     if (!debouncedQ || !firstPage) return;
@@ -115,7 +120,7 @@ export default function BrowsePage() {
       q: debouncedQ,
       resultsCount: firstPage.meta.total,
     });
-  }, [debouncedQ, products.data?.pages]);
+  }, [debouncedQ, products.data?.pages?.[0]]);
 
   const SORTS = [
     { key: undefined, label: 'Gợi ý' },
