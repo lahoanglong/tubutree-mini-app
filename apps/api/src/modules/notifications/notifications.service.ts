@@ -4,6 +4,7 @@ import type { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ZnsClient } from '../integrations/zns/zns.client';
 import { QUEUE_NOTIFICATIONS } from '../../jobs/queues';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 /** Nội dung dùng khi template chưa được seed — tuyệt đối không in mã code ra cho khách. */
 const MISSING_TEMPLATE_BODY = 'Tubu Tree có cập nhật mới cho bạn. Mở mục liên quan trong app để xem chi tiết nhé 🌿';
@@ -29,7 +30,8 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly zns: ZnsClient,
-    // Optional: giữ tương thích test/call site cũ khởi tạo trực tiếp `new NotificationsService(prisma, zns)`
+    private readonly analytics: AnalyticsEventsService,
+    // Optional: giữ tương thích test/call site cũ khởi tạo trực tiếp `new NotificationsService(prisma, zns, analytics)`
     // (không qua DI, không truyền queue) — notify() vẫn chạy đúng, chỉ bỏ qua bước enqueue retry.
     @InjectQueue(QUEUE_NOTIFICATIONS) private readonly notificationsQueue?: Queue,
   ) {}
@@ -50,8 +52,15 @@ export class NotificationsService {
       this.logger.warn(`Thiếu NotificationTemplate "${templateCode}" — đã gửi nội dung mặc định.`);
     }
     const body = tpl ? this.render(tpl.bodyTemplate, data) : MISSING_TEMPLATE_BODY;
-    await this.prisma.notificationLog.create({
+    const inAppLog = await this.prisma.notificationLog.create({
       data: { userId, templateCode, channel: 'INAPP', payload: { body, data }, status: 'SENT' },
+    });
+    await this.analytics.recordBestEffort({
+      eventName: 'notification_sent',
+      userId,
+      platform: 'system',
+      notificationId: inAppLog.id,
+      props: { templateCode, channel: 'INAPP' },
     });
 
     // ZNS nếu template là kênh ZNS + user có phone.
@@ -65,6 +74,13 @@ export class NotificationsService {
           payload: { data },
           status: ok ? 'SENT' : 'FAILED',
         },
+      });
+      await this.analytics.recordBestEffort({
+        eventName: 'notification_sent',
+        userId,
+        platform: 'system',
+        notificationId: log.id,
+        props: { templateCode, channel: 'ZNS' },
       });
       // Trước đây gửi ZNS lỗi mạng 1 lần là mất thông báo vĩnh viễn (chỉ ghi FAILED rồi thôi,
       // không ai gửi lại). Enqueue job retry qua BullMQ (5 lần, backoff exponential — xem
