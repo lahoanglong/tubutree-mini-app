@@ -85,6 +85,7 @@ import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
 import { MerchantProductsTab } from '@/components/admin/merchant-products-tab';
 import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
 import { PosCreditsTab } from '@/components/admin/pos-credits-tab';
+import { AnalyticsTab } from './analytics-tab';
 import {
   exportOrdersToCsv,
   exportUsersToCsv,
@@ -110,7 +111,8 @@ type Tab =
   | 'quickReplies'
   | 'merchantProducts'
   | 'cashback'
-  | 'posCredits';
+  | 'posCredits'
+  | 'analytics';
 const TABS: { k: Tab; label: string }[] = [
   { k: 'dashboard', label: 'Tổng quan KPI' },
   { k: 'dealers', label: 'Đại lý' },
@@ -130,6 +132,7 @@ const TABS: { k: Tab; label: string }[] = [
   { k: 'contentKit', label: 'Content Kit CTV' },
   { k: 'academy', label: 'Academy' },
   { k: 'quickReplies', label: 'CSKH mẫu tin nhanh' },
+  { k: 'analytics', label: 'Retention & North-star' },
 ];
 
 const TAB_KEYS = new Set<string>(TABS.map((t) => t.k));
@@ -237,6 +240,7 @@ export default function AdminPage() {
         {tab === 'contentKit' && <ContentKitTab />}
         {tab === 'academy' && <AcademyTab />}
         {tab === 'quickReplies' && <QuickReplyTab />}
+        {tab === 'analytics' && <AnalyticsTab />}
       </div>
     </main>
   );

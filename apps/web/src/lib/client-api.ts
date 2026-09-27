@@ -102,6 +102,11 @@ export async function apiFetch<T>(
   _retried = false,
 ): Promise<T> {
   const headers: Record<string, string> = { ...opts.headers };
+  // Đánh dấu "tôi là web" cho BE phân biệt nguồn gọi (vd checkout.controller.ts dùng để gắn
+  // đúng platform cho đơn đặt qua web thay vì mặc định nhầm thành 'miniapp'). KHÔNG phải
+  // WEB_CLIENT_HEADER ở trên — đó là header CSRF/cookie-gating riêng cho /auth/*, header này là
+  // header thường nên không tốn thêm preflight (Authorization ở dưới đã ép preflight rồi).
+  headers['X-Client-Platform'] = 'web';
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   if (opts.auth !== false && accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
   // Chỉ gắn header tuỳ biến cho /auth/* — header lạ ép trình duyệt preflight, gắn cho MỌI

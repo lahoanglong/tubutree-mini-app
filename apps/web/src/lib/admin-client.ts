@@ -820,3 +820,16 @@ export const listPosCredits = (q: { day?: string; staffUserId?: string; memberId
   const qs = params.toString();
   return apiFetch<AdminPosCredit[]>(`/admin/loyalty/pos-credits${qs ? `?${qs}` : ''}`);
 };
+
+// ── Retention & North-star (Task 14 cron + Task 20 dashboard) ──
+export interface RetentionDailyRow {
+  date: string;
+  newBuyers: number;
+  activeBuyers: number;
+  ordersCount: number;
+  ordersPerBuyerMtd: number;
+  dauProxyRefreshToken: number;
+  dauEventBased: number | null;
+}
+export const getRetentionDaily = (days = 30) =>
+  apiFetch<RetentionDailyRow[]>(`/admin/analytics/retention-daily?days=${days}`);
