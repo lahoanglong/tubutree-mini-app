@@ -47,3 +47,7 @@ coverage/
 apps/e2e/playwright-report/
 apps/e2e/test-results/
 apps/e2e/*.png
+
+# Môi trường audit cục bộ (dự án con 1, DB tubutree_audit riêng): log, PID, token test, ảnh chụp
+# màn hình — tái tạo được bằng scripts/audit/, không phải nguồn.
+.audit/
