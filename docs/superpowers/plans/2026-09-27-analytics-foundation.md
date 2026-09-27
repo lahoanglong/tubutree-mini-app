@@ -2414,28 +2414,61 @@ cần build sạch + smoke test thủ công ở Task 21.
       KHÔNG có field `flashPrice` (giá flash nằm ở `flashItem.flashPrice`, một object riêng từ
       `flashQ`, không phải thuộc tính tĩnh của variation).**
 
+**Sửa lại sau review (2026-09-28) — 2 vấn đề thật đều liên quan tới VỊ TRÍ đặt effect và tần suất
+phát:**
+
+1. **Rules of Hooks:** trang có early-return loading/error TRƯỚC chỗ khai báo `price` (dòng
+   ~203-220 → `price` khai báo sau) — đặt hook sau early-return làm số lượng hook đổi giữa các lần
+   render, React sẽ throw. Phải đặt effect TRƯỚC 2 early-return đó, và tính lại công thức giá y hệt
+   `price` bằng chính `product.data`/`selected`/`flashItem` (đều đã có trong scope ở vị trí đó),
+   KHÔNG dùng biến `price`/`location` (biến `location` cũng không tồn tại trong file — chỉ có
+   `navState` từ `useLocation().state`).
+2. **Phát trùng/phát sai do `flashQ` refetch mỗi 60s:** `flashQ` (giờ vàng) có
+   `refetchInterval: 60_000`, mỗi lần trả về vẫn tạo object `flashItem` MỚI (React Query structural
+   sharing đổi khi `soldCount` đổi) dù người dùng không thao tác gì — nếu deps effect theo tham
+   chiếu `flashItem` thì khách đứng yên trên trang giờ vàng vẫn phát `product_viewed` lặp lại mỗi
+   phút, làm sai tỉ lệ chuyển đổi PDP→giỏ của đúng nhóm hàng giờ vàng cần đo nhất. Kèm race lúc vào
+   trang lần đầu: nếu `flashQ` chưa có cache, sự kiện đầu tiên phát `isFlash:false`, rồi phát thêm
+   lần 2 `isFlash:true` khi `flashQ` resolve. Sửa: chờ `flashQ.isPending` xong mới phát, và chỉ phát
+   1 LẦN cho mỗi cặp (sản phẩm, biến thể) bằng một `useRef` khoá theo `${productId}:${variationId}`.
+
 ```typescript
+  const trackedViewKey = useRef<string | null>(null);
   useEffect(() => {
-    if (!product.isSuccess || !product.data || !selected) return;
+    // ĐẶT Ở ĐÂY (trước early-return loading/error bên dưới), KHÔNG đặt cạnh biến `price` (khai
+    // báo sau early-return) — xem lý do Rules of Hooks ở trên. Tính lại công thức giá y hệt
+    // `price`, dùng `product.data` (đã guard non-null) thay vì biến `p`.
+    if (!product.isSuccess || !product.data || !selected || flashQ.isPending) return;
+    const viewKey = `${product.data.id}:${selected.id}`;
+    if (trackedViewKey.current === viewKey) return;
+    trackedViewKey.current = viewKey;
+    const baseSelectedPrice = selected.salePrice ?? selected.retailPrice ?? product.data.basePrice;
+    const viewPrice = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
     void trackEvent('product_viewed', 'miniapp', {
       productId: product.data.id,
       variationId: selected.id,
-      price,
+      price: viewPrice,
       isFlash: Boolean(flashItem),
       inStock: selected.stock > 0,
-      listSource: (location.state as { listSource?: string } | null)?.listSource ?? 'browse',
+      listSource: navState?.listSource ?? 'browse',
     });
-  }, [product.isSuccess, product.data, selected, flashItem, price]);
+  }, [product.isSuccess, product.data, selected, flashItem, flashQ.isPending]);
 ```
-
-Đặt effect này SAU khi `selected`/`flashItem`/`price` đã được khai báo (dòng ~130-203) — không đặt
-trước, vì effect tham chiếu các biến đó.
 
 - [ ] **Step 2: `browse.tsx` — khi trang 1 trả về với `debouncedQ`. Đã verify lại thật
       (2026-09-27): tên biến query là `products` (`useInfiniteQuery`, dòng ~90), KHÔNG PHẢI
       `data`; kiểu trang là `PageResponse<T> = { data: T[]; meta: { page, limit, total } }`
       (`shop-api.ts:5-7`) — mảng SP nằm ở field `data`, KHÔNG PHẢI `items`, và `meta.total` luôn
       có sẵn (không cần fallback `?.length`).**
+
+**Sửa lại sau review (2026-09-28):** deps theo cả mảng `products.data?.pages` phát lại mỗi lần
+khách bấm "Xem thêm" (`fetchNextPage` tạo mảng `pages` MỚI khi nối thêm trang, dù trang 1 bên trong
+không đổi) — làm phồng số liệu tìm kiếm thành công (đúng nhóm tìm ra kết quả và cuộn thêm), trong
+khi KPI chính của sự kiện này (tỉ lệ tìm KHÔNG ra kết quả, §7.4) không bao giờ phân trang nên không
+bị ảnh hưởng — nhưng vẫn nên phát đúng 1 lần/lượt tìm. Sửa deps sang PHẦN TỬ trang 1
+(`products.data?.pages?.[0]`), không phải cả mảng — React Query giữ nguyên tham chiếu các trang đã
+tải khi `fetchNextPage` chỉ nối thêm, nên trang 1 không đổi tham chiếu qua các lần cuộn thêm, chỉ
+đổi khi chính trang 1 thật sự refetch:
 
 ```typescript
   useEffect(() => {
@@ -2445,7 +2478,7 @@ trước, vì effect tham chiếu các biến đó.
       q: debouncedQ,
       resultsCount: firstPage.meta.total,
     });
-  }, [debouncedQ, products.data?.pages]);
+  }, [debouncedQ, products.data?.pages?.[0]]);
 ```
 
 - [ ] **Step 3: `checkout.tsx` — lần quote thành công đầu tiên**
@@ -2465,9 +2498,22 @@ trong effect khi `quote.isSuccess` chuyển từ false→true lần đầu. Đã
       itemCount: itemIds?.length ?? cart.data?.items?.length ?? 0,
       subtotal: quote.data?.subtotal ?? 0,
       entry: itemIds ? 'buy_now' : 'cart',
+      isSubset: !!itemIds,
     });
   }, [quote.isSuccess]);
 ```
+
+**Hạn chế đã biết, CHẤP NHẬN cho MVP này (phát hiện ở review 2026-09-28, không sửa trong task
+này):** `entry: itemIds ? 'buy_now' : 'cart'` không phân biệt được "Mua ngay" (PDP, luôn có
+`itemIds` 1 phần tử) với "checkout MỘT PHẦN giỏ" (trang Giỏ, khách bỏ chọn vài món — `cart.tsx`
+cũng gửi `itemIds` khi `!allSelected`) — cả 2 đều có `itemIds` nên đều bị gắn nhãn `buy_now`. Muốn
+phân biệt đúng cần thêm 1 cờ tường minh (`checkoutEntry`) truyền qua navigation state ở CẢ 2 nơi
+điều hướng tới `/checkout` (`product-detail.tsx` nút "Mua ngay" VÀ `cart.tsx` nút "Thanh toán"),
+cộng thêm việc mở rộng `utils/checkout-selection.ts` để cờ đó sống sót qua reload trang (giống cơ
+chế `rememberCheckoutSelection`/`recallCheckoutSelection` đã có cho `itemIds`) — phạm vi rộng hơn 1
+task, để dành cho whole-branch review hoặc 1 task riêng nếu quyết định làm. Trường `isSubset` thêm
+ở trên là bước trung gian rẻ tiền: tối thiểu phân biệt được "có chọn tập con" hay không, dù nhãn
+`entry` tự nó vẫn chưa hoàn toàn chính xác.
 
 - [ ] **Step 4: `notifications.tsx` — khi chạm 1 thông báo**
 
@@ -2482,10 +2528,17 @@ Tìm handler `onClick`/`onPress` hiện có của item thông báo, thêm ngay �
 Trong `componentDidCatch(error, info)` (đã có `console.error`), thêm ngay sau:
 
 ```typescript
+    // KHÔNG dùng error.message trực tiếp — React truyền NGUYÊN VĂN bất kỳ giá trị nào bị throw,
+    // không chỉ instance Error thật (vd `throw 'chuỗi lỗi'`, `throw undefined`). Nếu error không
+    // phải Error, `.message` là undefined và hashMessage(undefined) throw ngay TRONG
+    // componentDidCatch — lỗi trong chính error boundary duy nhất của app sẽ đẩy lên React, làm
+    // unmount CẢ CÂY, tức đúng màn hình trắng mà component này được viết ra để tránh (phát hiện ở
+    // review Task 19). Luôn ép về string trước khi hash, giống cách 2 global handler bên dưới đã
+    // làm với String(...).
     void trackEvent('client_error', 'miniapp', {
       kind: 'render',
       route: window.location.pathname,
-      messageHash: hashMessage(error.message),
+      messageHash: hashMessage(error instanceof Error ? error.message : String(error)),
     });
 ```
 
@@ -2506,9 +2559,12 @@ Thêm global handler ở file khởi tạo app (`components/app.tsx`, trong `use
 Task 18 Step 2):
 
 ```typescript
-    window.onerror = (message) => {
-      void trackEvent('client_error', 'miniapp', { kind: 'render', messageHash: hashMessage(String(message)) });
-    };
+    // window.addEventListener('error', ...) chứ KHÔNG gán window.onerror = ... — gán trực tiếp
+    // GHI ĐÈ bất kỳ handler nào khác đã/sẽ gán vào window.onerror (kể cả của thư viện bên thứ 3),
+    // addEventListener cho phép nhiều listener cùng tồn tại (phát hiện ở review Task 19).
+    window.addEventListener('error', (e) => {
+      void trackEvent('client_error', 'miniapp', { kind: 'render', messageHash: hashMessage(String(e.message)) });
+    });
     window.addEventListener('unhandledrejection', (e) => {
       void trackEvent('client_error', 'miniapp', { kind: 'api', messageHash: hashMessage(String(e.reason)) });
     });
