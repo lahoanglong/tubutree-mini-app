@@ -16,6 +16,8 @@ import { ComboService } from '../storefront/combo.service';
 import { FlashSaleService, FLASH_OVER_LIMIT_MSG } from '../flash-sale/flash-sale.service';
 import { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 import { reserveVariationStock } from '../catalog/variation-stock';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { classifyOrderError } from '../analytics/order-error-classifier';
 
 /**
  * `JSON.stringify` sắp khoá theo thứ tự chèn — Postgres `jsonb` thì KHÔNG (tự sắp lại theo độ
@@ -51,6 +53,7 @@ export class CheckoutService {
     private readonly config: SystemConfigService,
     private readonly combo: ComboService,
     private readonly flashSale: FlashSaleService,
+    private readonly analytics: AnalyticsEventsService,
   ) {}
 
   /** Map mã giới thiệu → userId CTV (khác người mua). */
@@ -71,6 +74,27 @@ export class CheckoutService {
 
   /** Tính tạm đơn (ship + giảm + điểm) cho màn checkout. */
   async quote(userId: string, dto: QuoteDto) {
+    try {
+      return await this.quoteInner(userId, dto);
+    } catch (err) {
+      if (err instanceof BadRequestException) {
+        const message = typeof err.getResponse() === 'string'
+          ? (err.getResponse() as string)
+          : (err.getResponse() as { message?: string }).message ?? err.message;
+        // quote() không tạo đơn — chỉ tín hiệu chất lượng, không phải dữ liệu tiền, nên
+        // platform cố định 'miniapp' là đủ (không cần truyền xuống từ controller).
+        await this.analytics.recordBestEffort({
+          eventName: 'order_place_failed',
+          userId,
+          platform: 'miniapp',
+          props: { step: 'quote', errorCode: classifyOrderError(message) },
+        });
+      }
+      throw err;
+    }
+  }
+
+  private async quoteInner(userId: string, dto: QuoteDto) {
     const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, dto.storefrontSlug, dto.itemIds);
     if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
     return {
@@ -92,7 +116,36 @@ export class CheckoutService {
     };
   }
 
-  async placeOrder(userId: string, dto: PlaceOrderDto, idempotencyKey?: string) {
+  async placeOrder(
+    userId: string,
+    dto: PlaceOrderDto,
+    idempotencyKey?: string,
+    platform: 'miniapp' | 'web' = 'miniapp',
+  ) {
+    try {
+      return await this.placeOrderInner(userId, dto, idempotencyKey, platform);
+    } catch (err) {
+      if (err instanceof BadRequestException) {
+        const message = typeof err.getResponse() === 'string'
+          ? (err.getResponse() as string)
+          : (err.getResponse() as { message?: string }).message ?? err.message;
+        await this.analytics.recordBestEffort({
+          eventName: 'order_place_failed',
+          userId,
+          platform,
+          props: { step: 'place', errorCode: classifyOrderError(message) },
+        });
+      }
+      throw err;
+    }
+  }
+
+  private async placeOrderInner(
+    userId: string,
+    dto: PlaceOrderDto,
+    idempotencyKey?: string,
+    platform: 'miniapp' | 'web' = 'miniapp',
+  ) {
     if (idempotencyKey) {
       const existing = await this.prisma.order.findUnique({ where: { idempotencyKey } });
       if (existing) return this.replayIdempotentOrder(existing, userId, dto);
@@ -149,6 +202,7 @@ export class CheckoutService {
     const earnPointsOnXu = (await this.config.get<boolean>('loyalty.earn_points_on_xu', false)) === true;
     const pointsEarned =
       dto.paymentMethod === 'XU' && !earnPointsOnXu ? 0 : computed.pointsEarned;
+    const orderSource = storefrontSlug ? 'ctv_assisted' : dto.itemIds?.length ? 'buy_now' : 'checkout';
     const code = await this.generateCode();
 
     let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
@@ -199,6 +253,9 @@ export class CheckoutService {
             shippingAddress: this.addressSnapshot(address),
             referrerUserId,
             storefrontSlug,
+            source: orderSource,
+            platform,
+            paidAt: paid ? new Date() : null,
             // Chỉ gắn coupon khi THỰC SỰ áp (subset không đạt điều kiện → couponApplied=false).
             couponCode: computed.couponApplied ? cart.couponCode : null,
             invoiceRequest: dto.invoiceRequest ? (dto.invoiceRequest as object) : undefined,
@@ -275,6 +332,44 @@ export class CheckoutService {
         // sẽ throw → rollback toàn bộ order/stock/ví/điểm, đảm bảo không bị "đặt nửa".
         if (cart.couponCode && computed.couponApplied) {
           await this.coupons.redeem(cart.couponCode, userId, created.id, tx);
+          await this.analytics.record(tx, {
+            eventName: 'coupon_applied',
+            userId,
+            platform,
+            props: {
+              couponCode: cart.couponCode,
+              orderId: created.id,
+              discount: computed.discount,
+            },
+          });
+        }
+
+        await this.analytics.record(tx, {
+          eventName: 'order_placed',
+          userId,
+          platform,
+          storefrontSlug: storefrontSlug ?? null,
+          refCode: dto.referralCode ?? null,
+          props: {
+            orderId: created.id,
+            total: computed.total,
+            subtotal: cart.subtotal,
+            discount: computed.discount + computed.comboDiscount + computed.pointsDiscount + computed.tierDiscount,
+            shippingFee: computed.shippingFee,
+            itemCount: cart.items.length,
+            paymentMethod: dto.paymentMethod,
+            couponCode: computed.couponApplied ? cart.couponCode : null,
+            pointsUsed: computed.pointsUsed,
+            orderSource,
+          },
+        });
+        if (paid) {
+          await this.analytics.record(tx, {
+            eventName: 'order_paid',
+            userId,
+            platform,
+            props: { orderId: created.id, method: dto.paymentMethod, amount: computed.total, secsFromPlaced: 0 },
+          });
         }
         return created;
       });

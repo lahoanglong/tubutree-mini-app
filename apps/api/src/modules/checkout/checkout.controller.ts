@@ -19,7 +19,9 @@ export class CheckoutController {
     @CurrentUser('sub') userId: string,
     @Body() dto: PlaceOrderDto,
     @Headers('idempotency-key') idempotencyKey?: string,
+    @Headers('x-client-platform') clientPlatform?: string,
   ) {
-    return this.checkout.placeOrder(userId, dto, idempotencyKey);
+    const platform = clientPlatform === 'web' ? 'web' : 'miniapp';
+    return this.checkout.placeOrder(userId, dto, idempotencyKey, platform);
   }
 }

@@ -15,6 +15,7 @@ import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { CoinsService } from '../wallet/coins.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { ComboService } from '../storefront/combo.service';
+import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 const ADDRESS = {
   id: 'addr1', userId: 'u1', recipient: 'A', phone: '09', province: 'HN', district: 'BD',
@@ -123,9 +124,16 @@ function build(
     consumeQuota: jest.fn().mockResolvedValue(undefined),
     resolveEffective: jest.fn().mockResolvedValue(new Map()),
   }) as any;
+  // analytics: record/recordBestEffort no-op — không assert trong test cũ (Task 4 chỉ thêm
+  // dependency mới, chưa viết test riêng cho sự kiện; atomicity + sự kiện thật kiểm ở Task 15
+  // với Postgres thật). Cần mock để constructor gọi được (analytics.record bên trong tx).
+  const analytics = {
+    record: jest.fn().mockResolvedValue(undefined),
+    recordBestEffort: jest.fn().mockResolvedValue(undefined),
+  } as unknown as AnalyticsEventsService;
 
-  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, coins, config, combo, flashSale);
-  return { svc, prisma, updateMany, orderCreate, executeRaw, total, coins, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty };
+  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, coins, config, combo, flashSale, analytics);
+  return { svc, prisma, updateMany, orderCreate, executeRaw, total, coins, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics };
 }
 
 describe('CheckoutService.placeOrder — money safety', () => {
