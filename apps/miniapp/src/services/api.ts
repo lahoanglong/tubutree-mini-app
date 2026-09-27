@@ -65,7 +65,8 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
     config.headers.set('Authorization', `Bearer ${accessToken}`);
   }
   const { getDeviceId } = await import('../store/auth');
-  config.headers.set('X-Device-Id', await getDeviceId());
+  const deviceId = await getDeviceId().catch(() => undefined);
+  if (deviceId) config.headers.set('X-Device-Id', deviceId);
   config.headers.set('X-Client-Platform', 'miniapp');
   return config;
 });
