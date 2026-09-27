@@ -937,30 +937,84 @@ Hàm hiện không có transaction (1 lệnh `subscription.create`). Bọc lại
   }
 ```
 
-- [ ] **Step 3: `createOrderFor(sub)` (dòng 177-292) — thêm vào transaction ĐÃ CÓ (dòng 232-269)**
-
-Ngay sau `tx.order.create` (dòng 239), thêm 3 trường vào `data` của order (giống Task 4 Step 3):
-`source: 'subscription'`, `subscriptionId: sub.id`, `platform: 'system'`. Sau khi tạo order xong
-(vẫn trong cùng tx), thêm:
+- [ ] **Step 3: `createOrderFor(sub)` (dòng 177-292) — đã verify lại thật (2026-09-27): transaction
+      hiện có ở dòng 232-269 return TRỰC TIẾP `tx.order.create({...})` (không có biến trung
+      gian). Đổi sang chép kết quả ra biến rồi phát sự kiện TRƯỚC KHI return, y hệt pattern đã áp
+      dụng ở Task 10 Step 0:**
 
 ```typescript
-      await this.analytics.record(tx, {
-        eventName: 'order_placed',
-        userId: sub.userId,
-        platform: 'system',
-        props: { orderId: newOrder.id, orderSource: 'subscription', subscriptionId: sub.id }, // `newOrder` = tên biến thật giữ kết quả tx.order.create ở trên
-      });
-      await this.analytics.record(tx, {
-        eventName: 'subscription_changed',
-        userId: sub.userId,
-        platform: 'system',
-        props: { subscriptionId: sub.id, action: 'order_created', orderId: newOrder.id },
+      order = await this.prisma.$transaction(async (tx) => {
+        const stockHit = await reserveVariationStock(tx, variation.id, sub.quantity);
+        if (!stockHit) {
+          throw new SubscriptionOutOfStockError(
+            `Sản phẩm "${variation.product.name}" không đủ tồn kho cho đơn định kỳ.`,
+          );
+        }
+        const created = await tx.order.create({
+          data: {
+            code,
+            userId: sub.userId,
+            type: 'RETAIL',
+            status: 'CONFIRMED',
+            subtotal,
+            discount,
+            shippingFee,
+            total,
+            pointsEarned,
+            paymentMethod: 'COD',
+            paymentStatus: 'UNPAID',
+            shippingAddress: address,
+            note: 'Đơn đặt định kỳ (Subscribe & Save)',
+            source: 'subscription',
+            platform: 'system',
+            subscriptionId: sub.id,
+            items: {
+              create: [
+                {
+                  variationId: variation.id,
+                  productName: variation.product.name,
+                  productSlug: variation.product.slug,
+                  variationName: variation.name,
+                  unitPrice,
+                  quantity: sub.quantity,
+                  total: subtotal,
+                },
+              ],
+            },
+          },
+        });
+        await this.analytics.record(tx, {
+          eventName: 'order_placed',
+          userId: sub.userId,
+          platform: 'system',
+          props: { orderId: created.id, orderSource: 'subscription', subscriptionId: sub.id, total },
+        });
+        await this.analytics.record(tx, {
+          eventName: 'subscription_changed',
+          userId: sub.userId,
+          platform: 'system',
+          props: { subscriptionId: sub.id, action: 'order_created', orderId: created.id },
+        });
+        return created;
       });
 ```
 
-Nếu nhánh lỗi (hết hàng/thất bại) có throw hoặc early-return trước khi tạo order thành công, thêm
-`subscription_changed` với `action: 'order_failed'` ở nhánh đó (best-effort, ngoài transaction vì
-transaction đã rollback).
+(chỉ đổi khối `data:` và phần cuối callback so với bản gốc — 2 lệnh `notifications.notify`/
+`pancakeOrder.enqueuePush` sau `catch` giữ nguyên 100%, không đụng tới).
+
+Nhánh lỗi (hết hàng — throw `SubscriptionOutOfStockError`, bắt ở `catch` dòng 270-279; hoặc SP/địa
+chỉ không hợp lệ — early `return` ở dòng 188-199 trước khi vào transaction) đã tự rollback/không
+tạo order, thêm `subscription_changed` action `order_failed` ở catch/early-return đó (best-effort
+qua `recordBestEffort`, ngoài transaction vì transaction đã rollback hoặc chưa từng mở):
+
+```typescript
+      await this.analytics.recordBestEffort({
+        eventName: 'subscription_changed',
+        userId: sub.userId,
+        platform: 'system',
+        props: { subscriptionId: sub.id, action: 'order_failed', reason: 'out_of_stock' }, // hoặc 'inactive_product'/'invalid_address' tuỳ nhánh
+      });
+```
 
 - [ ] **Step 4: Constructor + import**
 
@@ -1499,9 +1553,15 @@ const prisma = new PrismaClient();
 
 async function main() {
   // 1) source/platform best-effort cho đơn cũ — không chính xác 100%, xem spec §Rollout.
+  //    LƯU Ý: KHÔNG dùng `"subscriptionId" IS NOT NULL` để nhận diện đơn định kỳ CŨ — cột này
+  //    chỉ được Task 8 set cho đơn TẠO SAU migration, nên với dữ liệu lịch sử luôn NULL và điều
+  //    kiện đó khớp 0 dòng (verify lại code thật lúc soát plan: subscriptions.service.ts luôn
+  //    hard-code `note: 'Đơn đặt định kỳ (Subscribe & Save)'`, đó mới là dấu hiệu nhận diện được
+  //    cho đơn cũ). Đơn tạo SAU migration đã có `subscriptionId` set trực tiếp bởi Task 8, không
+  //    cần dòng UPDATE này chạm tới.
   await prisma.$executeRaw`
     UPDATE orders SET source = 'subscription', platform = 'system'
-    WHERE "subscriptionId" IS NOT NULL AND source IS NULL
+    WHERE note = 'Đơn đặt định kỳ (Subscribe & Save)' AND source IS NULL
   `;
   await prisma.$executeRaw`
     UPDATE orders SET source = 'dealer', platform = 'web'
