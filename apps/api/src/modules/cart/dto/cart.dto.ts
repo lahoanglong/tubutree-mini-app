@@ -1,8 +1,11 @@
-import { IsInt, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class AddItemDto {
   @IsString() variationId!: string;
   @IsInt() @Min(1) @Max(999) quantity!: number;
+  @IsOptional()
+  @IsIn(['pdp', 'buy_now', 'repurchase', 'wishlist', 'ctv_sheet', 'reorder_notification'])
+  addSource?: string;
 }
 
 export class UpdateItemDto {

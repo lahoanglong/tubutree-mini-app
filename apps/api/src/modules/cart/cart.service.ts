@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { AddItemDto } from './dto/cart.dto';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class CartService {
     private readonly coupons: CouponsService,
     private readonly config: SystemConfigService,
     private readonly flashSale: FlashSaleService,
+    private readonly analytics: AnalyticsEventsService,
   ) {}
 
   private async ensureCart(userId: string): Promise<string> {
@@ -134,10 +136,25 @@ export class CartService {
     // đồng thời (double-tap/2 tab) cho cùng variation đều đọc `existing` trước khi request kia
     // ghi xong sẽ mất 1 lần cộng dồn nếu dùng `update: { quantity: newQty }`. Cùng pattern với
     // refill.service.ts / flash-sale.service.ts.
-    await this.prisma.cartItem.upsert({
-      where: { cartId_variationId: { cartId, variationId: dto.variationId } },
-      update: { quantity: { increment: dto.quantity } },
-      create: { cartId, variationId: dto.variationId, quantity: dto.quantity },
+    // Bọc upsert + sự kiện add_to_cart trong CÙNG transaction nhỏ (Task 11) — ghi event ATOMIC
+    // với thay đổi giỏ hàng, không dùng recordBestEffort (best-effort ngoài tx sẽ ghi sự kiện dù
+    // upsert rollback nếu có lỗi hạ tầng giữa chừng).
+    await this.prisma.$transaction(async (tx) => {
+      await tx.cartItem.upsert({
+        where: { cartId_variationId: { cartId, variationId: dto.variationId } },
+        update: { quantity: { increment: dto.quantity } },
+        create: { cartId, variationId: dto.variationId, quantity: dto.quantity },
+      });
+      await this.analytics.record(tx, {
+        eventName: 'add_to_cart',
+        userId,
+        platform: 'miniapp',
+        props: {
+          variationId: dto.variationId,
+          quantity: dto.quantity,
+          addSource: dto.addSource ?? 'pdp',
+        },
+      });
     });
     return this.getCart(userId);
   }
