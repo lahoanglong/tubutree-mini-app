@@ -1583,6 +1583,15 @@ async function main() {
     WHERE "paymentMethod" = 'COD' AND "paymentStatus" = 'PAID' AND "deliveredAt" IS NOT NULL AND "paidAt" IS NULL
   `;
 
+  // 2b) endCustomerKey cho đơn CTV lên-đơn-hộ CŨ (trước khi Task 10 kịp set cho đơn mới) — lấy
+  //     từ shippingAddress->>'phone' (JSON snapshot luôn có field `phone`, xem
+  //     checkout.service.ts addressSnapshot() / affiliate.service.ts customerSnapshot()), chuẩn
+  //     hoá CÙNG kiểu với customer_key ở mục 3 bên dưới và ở Task 14 (chỉ giữ chữ số).
+  await prisma.$executeRaw`
+    UPDATE orders SET "endCustomerKey" = NULLIF(regexp_replace("shippingAddress"->>'phone', '\\D', '', 'g'), '')
+    WHERE "placedForCustomer" = true AND "endCustomerKey" IS NULL AND "shippingAddress"->>'phone' IS NOT NULL
+  `;
+
   // 3) baseline NS-1/repeat theo cohort — CHỈ ĐỌC, in ra console để lưu snapshot tay lần đầu.
   const baseline = await prisma.$queryRaw<Array<{ cohort: Date; new_buyers: bigint; repeat_30d: number }>>`
     WITH v AS (
