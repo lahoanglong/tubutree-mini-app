@@ -2,6 +2,15 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { AxiosAdapter, InternalAxiosRequestConfig } from 'axios';
 import { api, setAccessToken, setAuthReady } from './api';
 
+// Interceptor của api.ts dynamic-import '../store/auth' để lấy getDeviceId() (X-Device-Id header).
+// Mock ở đây để tránh interceptor thật kéo theo zmp-sdk/apis thật (module đó đọc `window` ngay lúc
+// import — vỡ dưới environment 'node' mặc định của *.spec.ts, xem vitest.config.mts). Cùng lý do
+// store/auth.spec.ts đã mock 'zmp-sdk/apis' — ở đây mock thẳng '../store/auth' vì đó là thứ được
+// import động, không cần chạm tới zmp-sdk.
+vi.mock('../store/auth', () => ({
+  getDeviceId: vi.fn().mockResolvedValue('test-device-id'),
+}));
+
 /**
  * Mở app từ push/deeplink: trang đích fetch NGAY trong khi restore() còn đang chạy. Nếu request
  * bay đi lúc chưa có access token thì BE trả 401, và React Query (retry:false cho 4xx) kẹt luôn
