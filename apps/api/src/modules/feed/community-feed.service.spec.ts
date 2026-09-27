@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CommunityFeedService, containsBannedContent, levelFromReputation, levelName, slugifyTag } from './community-feed.service';
 import type { PrismaService } from '../../prisma/prisma.service';
+import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 function makePrisma(over: Record<string, unknown> = {}) {
   const base: Record<string, unknown> = {
@@ -80,13 +81,26 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * Analytics mock — mặc định luôn FRESH mỗi lần makeSvc() được gọi (default param, không phải
+ * biến module-scope dùng chung) để các test không vô tình cộng dồn call count của nhau. Wiring
+ * THẬT (không @Optional() no-op câm lặng) ở mọi construction (Task 9).
+ */
+function makeAnalytics() {
+  return {
+    record: jest.fn().mockResolvedValue(undefined),
+    recordBestEffort: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 function makeSvc(
   prisma: PrismaService,
   reward: any = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() },
   notify?: { notify: jest.Mock },
   config: any = makeConfig(),
+  analytics: any = makeAnalytics(),
 ) {
-  return new CommunityFeedService(prisma, reward, config, notify as any);
+  return new CommunityFeedService(prisma, reward, config, analytics, notify as any);
 }
 
 // Dùng chung cho cả getFeed + getPost (row hình dạng Prisma trả về, đã include đủ quan hệ).
@@ -353,6 +367,42 @@ describe('CommunityFeedService.toggleReaction', () => {
     (prisma.feedReaction.create as jest.Mock).mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' }));
     await expect(makeSvc(prisma).toggleReaction('u1', 'p1')).resolves.toEqual({ liked: true });
   });
+
+  describe('Task 9 analytics (engagement_action) — chỉ phát khi TẠO, không phát khi toggle-off', () => {
+    it('chưa thả tim → thả tim (create) → recordBestEffort đúng eventName/action/props', async () => {
+      const prisma = makePrisma();
+      (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', status: 'PUBLISHED' });
+      (prisma.feedReaction.findUnique as jest.Mock).mockResolvedValue(null);
+      const analytics = makeAnalytics();
+      await makeSvc(prisma, undefined, undefined, undefined, analytics).toggleReaction('u1', 'p1');
+      expect(analytics.recordBestEffort).toHaveBeenCalledTimes(1);
+      expect(analytics.recordBestEffort).toHaveBeenCalledWith({
+        eventName: 'engagement_action',
+        userId: 'u1',
+        platform: 'miniapp',
+        props: { action: 'feed_reaction', postId: 'p1' },
+      });
+    });
+
+    it('đã thả tim → bỏ tim (delete) → KHÔNG phát sự kiện', async () => {
+      const prisma = makePrisma();
+      (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', status: 'PUBLISHED' });
+      (prisma.feedReaction.findUnique as jest.Mock).mockResolvedValue({ id: 'r1' });
+      const analytics = makeAnalytics();
+      await makeSvc(prisma, undefined, undefined, undefined, analytics).toggleReaction('u1', 'p1');
+      expect(analytics.recordBestEffort).not.toHaveBeenCalled();
+    });
+
+    it('hai thiết bị bấm cùng lúc (P2002 — thiết bị KIA mới là người tạo) → request này KHÔNG phát sự kiện', async () => {
+      const prisma = makePrisma();
+      (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', status: 'PUBLISHED' });
+      (prisma.feedReaction.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.feedReaction.create as jest.Mock).mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' }));
+      const analytics = makeAnalytics();
+      await makeSvc(prisma, undefined, undefined, undefined, analytics).toggleReaction('u1', 'p1');
+      expect(analytics.recordBestEffort).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('CommunityFeedService.addComment', () => {
@@ -400,6 +450,20 @@ describe('CommunityFeedService.addComment', () => {
     await makeSvc(prisma).addComment('u1', 'CUSTOMER', 'p1', '  tuyệt vời  ');
     const data = (prisma.feedComment.create as jest.Mock).mock.calls[0][0].data;
     expect(data).toMatchObject({ userId: 'u1', postId: 'p1', body: 'tuyệt vời' });
+  });
+
+  it('Task 9: bình luận tạo thành công → recordBestEffort đúng eventName/action/props (addComment luôn TẠO, không có nhánh xoá)', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'SHOWCASE', status: 'PUBLISHED' });
+    const analytics = makeAnalytics();
+    await makeSvc(prisma, undefined, undefined, undefined, analytics).addComment('u1', 'CUSTOMER', 'p1', 'tuyệt vời');
+    expect(analytics.recordBestEffort).toHaveBeenCalledTimes(1);
+    expect(analytics.recordBestEffort).toHaveBeenCalledWith({
+      eventName: 'engagement_action',
+      userId: 'u1',
+      platform: 'miniapp',
+      props: { action: 'feed_comment', postId: 'p1' },
+    });
   });
 });
 

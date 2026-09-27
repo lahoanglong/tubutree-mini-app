@@ -2,6 +2,18 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { GameService } from './game.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
+
+/**
+ * Mock analytics dùng chung cho các test không assert riêng — wiring THẬT (không @Optional()
+ * no-op câm lặng) ở mọi construction để lộ lỗi ngay nếu sau này thêm event mà quên/gọi sai chữ
+ * ký (Task 9). Các test riêng cho spin()/waterTree() dựng mock analytics + tx RIÊNG bên dưới để
+ * assert đúng eventName/props VÀ tx-identity (khác instance prisma top-level).
+ */
+const analytics = {
+  record: jest.fn().mockResolvedValue(undefined),
+  recordBestEffort: jest.fn().mockResolvedValue(undefined),
+} as unknown as AnalyticsEventsService;
 
 /** Config mock: trả override theo key, nếu không có thì trả fallback. */
 function makeConfig(overrides: Record<string, unknown> = {}): SystemConfigService {
@@ -68,7 +80,7 @@ describe('GameService.spin', () => {
   it('không đủ điểm → ném lỗi, không trừ điểm', async () => {
     const prisma = makePrisma();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 5 });
-    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10 }));
+    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10 }), analytics);
     await expect(svc.spin('u1')).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.gameSpin.create).not.toHaveBeenCalled();
   });
@@ -76,7 +88,7 @@ describe('GameService.spin', () => {
   it('chưa cấu hình giải → ném lỗi (sau khi đã hoàn điểm? không — kiểm tra trước trừ)', async () => {
     const prisma = makePrisma();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
-    const svc = new GameService(prisma, makeConfig({ 'game.spin_prizes': [] }));
+    const svc = new GameService(prisma, makeConfig({ 'game.spin_prizes': [] }), analytics);
     await expect(svc.spin('u1')).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled(); // chưa trừ điểm
   });
@@ -85,7 +97,7 @@ describe('GameService.spin', () => {
     const prisma = makePrisma();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
     jest.spyOn(Math, 'random').mockReturnValue(0.1); // r = 0.1*100 = 10 → giải 'a' (weight 70)
-    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }));
+    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }), analytics);
     const r = await svc.spin('u1');
     expect(r.prize.id).toBe('a');
     // cost trừ atomic qua updateMany (where gte cost), thưởng POINTS qua creditPoints ($transaction)
@@ -100,22 +112,59 @@ describe('GameService.spin', () => {
     const prisma = makePrisma();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
     (prisma.user.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
-    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }));
+    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }), analytics);
     await expect(svc.spin('u1')).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.gameSpin.create).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Task 9: quay xong → engagement_action ghi qua record(tx,...) — PHẢI dùng đúng `tx` của
+   * transaction đang chạy (atomic cùng transaction), KHÔNG phải recordBestEffort. Dựng tx RIÊNG
+   * (khác instance với `prisma` top-level) để chứng minh code truyền đúng tx thật vào record(),
+   * không phải lén truyền this.prisma (lesson (b) — điểm yếu nhất được review flag ở task trước).
+   */
+  it('quay xong → ghi engagement_action qua record(tx,...) với ĐÚNG tx (khác instance prisma top-level)', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
+    jest.spyOn(Math, 'random').mockReturnValue(0.1); // → giải 'a' (POINTS, weight 70)
+    const tx = {
+      user: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), update: jest.fn().mockResolvedValue({}) },
+      pointsTransaction: { create: jest.fn().mockResolvedValue({}) },
+      gameProfile: { update: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      gameSpin: { create: jest.fn().mockResolvedValue({}) },
+      coupon: { create: jest.fn().mockResolvedValue({}) },
+    };
+    (prisma.$transaction as jest.Mock).mockImplementation((cb: (t: unknown) => unknown) => cb(tx));
+    const spy = { record: jest.fn().mockResolvedValue(undefined), recordBestEffort: jest.fn().mockResolvedValue(undefined) };
+    const svc = new GameService(
+      prisma,
+      makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }),
+      spy as unknown as AnalyticsEventsService,
+    );
+    await svc.spin('u1');
+    expect(tx).not.toBe(prisma); // tx RIÊNG, không phải cùng instance với prisma top-level
+    expect(spy.record).toHaveBeenCalledTimes(1);
+    expect(spy.record).toHaveBeenCalledWith(tx, {
+      eventName: 'engagement_action',
+      userId: 'u1',
+      platform: 'miniapp',
+      props: { action: 'spin', prizeId: 'a', rewardType: 'POINTS', rewardRefId: null },
+    });
+    expect(spy.recordBestEffort).not.toHaveBeenCalled();
+    (Math.random as jest.Mock).mockRestore();
   });
 });
 
 describe('GameService.waterTree', () => {
   it('số giọt <= 0 → ném lỗi', async () => {
     const prisma = makePrisma();
-    await expect(new GameService(prisma, makeConfig()).waterTree('u1', 0)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(new GameService(prisma, makeConfig(), analytics).waterTree('u1', 0)).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('không đủ giọt nước → ném lỗi', async () => {
     const prisma = makePrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 5 }));
-    await expect(new GameService(prisma, makeConfig()).waterTree('u1', 20)).rejects.toBeInstanceOf(
+    await expect(new GameService(prisma, makeConfig(), analytics).waterTree('u1', 20)).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });
@@ -125,7 +174,7 @@ describe('GameService.waterTree', () => {
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
       profile({ totalSeeds: 100, ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 0 } }),
     );
-    const r = await new GameService(prisma, makeConfig()).waterTree('u1', 20);
+    const r = await new GameService(prisma, makeConfig(), analytics).waterTree('u1', 20);
     expect(r.harvested).toBe(false);
     expect(r.progress).toBe(120);
     expect(r.treesPlanted).toBe(0);
@@ -137,7 +186,7 @@ describe('GameService.waterTree', () => {
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
       profile({ totalSeeds: 100, ecoImpact: { progress: 590, target: 600, treeType: 't', treesPlanted: 2 } }),
     );
-    const r = await new GameService(prisma, makeConfig()).waterTree('u1', 20); // 590+20=610 → harvest, dư 10
+    const r = await new GameService(prisma, makeConfig(), analytics).waterTree('u1', 20); // 590+20=610 → harvest, dư 10
     expect(r.harvested).toBe(true);
     expect(r.progress).toBe(10); // carry-over, KHÔNG về 0
     expect(r.treesPlanted).toBe(3);
@@ -154,7 +203,7 @@ describe('GameService.waterTree', () => {
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
       profile({ totalSeeds: 100, ecoImpact: { progress: 0, target: 30, treeType: 't', treesPlanted: 0 } }),
     );
-    const r = await new GameService(prisma, makeConfig()).waterTree('u1', 70); // 70/30 = 2 cây, dư 10
+    const r = await new GameService(prisma, makeConfig(), analytics).waterTree('u1', 70); // 70/30 = 2 cây, dư 10
     expect(r.harvested).toBe(true);
     expect(r.treesPlanted).toBe(2);
     expect(r.progress).toBe(10);
@@ -172,7 +221,7 @@ describe('GameService.waterTree', () => {
       profile({ totalSeeds: 100, ecoImpact: { progress: 0, target: 30, treeType: 't', treesPlanted: 0 } }),
     );
     (prisma.coupon.count as jest.Mock).mockResolvedValue(3); // đã đủ trần mặc định (3/ngày)
-    const r = await new GameService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 })).waterTree('u1', 70); // vẫn đủ 2 lần harvest
+    const r = await new GameService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 }), analytics).waterTree('u1', 70); // vẫn đủ 2 lần harvest
     expect(r.harvested).toBe(true);
     expect(r.treesPlanted).toBe(2);
     expect(prisma.plantedTree.create).toHaveBeenCalledTimes(2);
@@ -186,7 +235,7 @@ describe('GameService.waterTree', () => {
       profile({ totalSeeds: 100, ecoImpact: { progress: 0, target: 30, treeType: 't', treesPlanted: 0 } }),
     );
     (prisma.coupon.count as jest.Mock).mockResolvedValue(2); // còn đúng 1 suất trước khi chạm trần 3
-    const r = await new GameService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 })).waterTree('u1', 70); // 2 lần harvest trong lần gọi này
+    const r = await new GameService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 }), analytics).waterTree('u1', 70); // 2 lần harvest trong lần gọi này
     expect(r.treesPlanted).toBe(2);
     expect(prisma.plantedTree.create).toHaveBeenCalledTimes(2); // cây vẫn trồng đủ cả 2
     expect(prisma.coupon.create).toHaveBeenCalledTimes(1); // chỉ 1 coupon (suất còn lại) — lần 2 chạm trần
@@ -201,7 +250,7 @@ describe('GameService.waterTree', () => {
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
       profile({ totalSeeds: 100, ecoImpact: { progress: 0, target: 0, treeType: 't', treesPlanted: 0 } }),
     );
-    await expect(new GameService(prisma, makeConfig()).waterTree('u1', 20)).rejects.toBeInstanceOf(
+    await expect(new GameService(prisma, makeConfig(), analytics).waterTree('u1', 20)).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });
@@ -214,9 +263,40 @@ describe('GameService.waterTree', () => {
     (prisma.$transaction as jest.Mock).mockRejectedValue(
       Object.assign(new Error('could not serialize access'), { code: 'P2034' }),
     );
-    await expect(new GameService(prisma, makeConfig()).waterTree('u1', 20)).rejects.toBeInstanceOf(
+    await expect(new GameService(prisma, makeConfig(), analytics).waterTree('u1', 20)).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+
+  /**
+   * Task 9: tưới xong (thành công) → engagement_action ghi qua record(tx,...) trong CÙNG
+   * transaction Serializable, dùng ĐÚNG `tx` (không phải recordBestEffort, không phải lén
+   * truyền this.prisma — lesson (b), dựng tx RIÊNG khác instance với prisma top-level).
+   */
+  it('tưới xong → ghi engagement_action qua record(tx,...) với ĐÚNG tx (khác instance prisma top-level)', async () => {
+    const prisma = makePrisma();
+    const tx = {
+      gameProfile: {
+        findUnique: jest.fn().mockResolvedValue(
+          profile({ totalSeeds: 100, ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 0 } }),
+        ),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      coupon: { count: jest.fn().mockResolvedValue(0) },
+    };
+    (prisma.$transaction as jest.Mock).mockImplementation((cb: (t: unknown) => unknown) => cb(tx));
+    const spy = { record: jest.fn().mockResolvedValue(undefined), recordBestEffort: jest.fn().mockResolvedValue(undefined) };
+    const svc = new GameService(prisma, makeConfig(), spy as unknown as AnalyticsEventsService);
+    await svc.waterTree('u1', 20);
+    expect(tx).not.toBe(prisma); // tx RIÊNG, không phải cùng instance với prisma top-level
+    expect(spy.record).toHaveBeenCalledTimes(1);
+    expect(spy.record).toHaveBeenCalledWith(tx, {
+      eventName: 'engagement_action',
+      userId: 'u1',
+      platform: 'miniapp',
+      props: { action: 'water_tree', drops: 20 },
+    });
+    expect(spy.recordBestEffort).not.toHaveBeenCalled();
   });
 });
 
@@ -227,7 +307,7 @@ describe('GameService.waterTree — auto-post Community Feed (§6.14.12)', () =>
       profile({ totalSeeds: 100, ecoImpact: { progress: 590, target: 600, treeType: 't', treesPlanted: 0 } }),
     );
     const feed = { createAchievementPost: jest.fn().mockResolvedValue({}) };
-    const svc = new GameService(prisma, makeConfig(), undefined, undefined, undefined, feed as never);
+    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, feed as never);
     await svc.waterTree('u1', 20);
     expect(feed.createAchievementPost).toHaveBeenCalledWith('u1', 'HARVEST', expect.any(String), expect.any(Object));
   });
@@ -238,7 +318,7 @@ describe('GameService.waterTree — auto-post Community Feed (§6.14.12)', () =>
       profile({ totalSeeds: 100, ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 0 } }),
     );
     const feed = { createAchievementPost: jest.fn() };
-    const svc = new GameService(prisma, makeConfig(), undefined, undefined, undefined, feed as never);
+    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, feed as never);
     await svc.waterTree('u1', 20);
     expect(feed.createAchievementPost).not.toHaveBeenCalled();
   });
@@ -249,7 +329,7 @@ describe('GameService.waterTree — auto-post Community Feed (§6.14.12)', () =>
       profile({ totalSeeds: 100, ecoImpact: { progress: 590, target: 600, treeType: 't', treesPlanted: 0 } }),
     );
     const feed = { createAchievementPost: jest.fn().mockRejectedValue(new Error('feed down')) };
-    const svc = new GameService(prisma, makeConfig(), undefined, undefined, undefined, feed as never);
+    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, feed as never);
     const r = await svc.waterTree('u1', 20);
     expect(r.harvested).toBe(true);
   });
@@ -262,7 +342,7 @@ describe('GameService.getForest (Khu rừng của tôi §6.7.7)', () => {
       { certificateCode: 'TUBU-AAA', treeType: 't', status: 'PLANTED', region: 'Sơn La', pledgedAt: new Date(), plantedAt: new Date() },
       { certificateCode: 'TUBU-BBB', treeType: 't', status: 'PLEDGED', region: null, pledgedAt: new Date(), plantedAt: null },
     ]);
-    const r = await new GameService(prisma, makeConfig()).getForest('u1');
+    const r = await new GameService(prisma, makeConfig(), analytics).getForest('u1');
     expect(r.count).toBe(2);
     expect(r.plantedCount).toBe(1);
     expect(r.trees[0]!.certificateCode).toBe('TUBU-AAA');
@@ -270,7 +350,7 @@ describe('GameService.getForest (Khu rừng của tôi §6.7.7)', () => {
 
   it('rừng trống → count 0', async () => {
     const prisma = makePrisma();
-    const r = await new GameService(prisma, makeConfig()).getForest('u1');
+    const r = await new GameService(prisma, makeConfig(), analytics).getForest('u1');
     expect(r.count).toBe(0);
     expect(r.plantedCount).toBe(0);
   });
@@ -281,7 +361,7 @@ describe('GameService.treeHealth (§6.7.3 héo/chết)', () => {
   async function health(extra: Record<string, unknown>) {
     const prisma = makePrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile(extra));
-    const r = (await new GameService(prisma, makeConfig()).getProfile('u1')) as { treeHealth: string };
+    const r = (await new GameService(prisma, makeConfig(), analytics).getProfile('u1')) as { treeHealth: string };
     return r.treeHealth;
   }
 
@@ -306,7 +386,7 @@ describe('GameService.getProfile — streak repair (hồi sinh chuỗi đã mấ
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
       profile({ brokenStreakDays: 5, brokenStreakAt: new Date(Date.now() - DAYMS), lastStreakRepairAt: null }),
     );
-    const r = (await new GameService(prisma, makeConfig({ 'game.streak_repair_cost': 150 })).getProfile('u1')) as {
+    const r = (await new GameService(prisma, makeConfig({ 'game.streak_repair_cost': 150 }), analytics).getProfile('u1')) as {
       brokenStreakDays: number; streakRepairCost: number; streakRepairable: boolean;
     };
     expect(r.brokenStreakDays).toBe(5);
@@ -319,7 +399,7 @@ describe('GameService.getProfile — streak repair (hồi sinh chuỗi đã mấ
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
       profile({ brokenStreakDays: 0, brokenStreakAt: null }),
     );
-    const r = (await new GameService(prisma, makeConfig()).getProfile('u1')) as { streakRepairable: boolean };
+    const r = (await new GameService(prisma, makeConfig(), analytics).getProfile('u1')) as { streakRepairable: boolean };
     expect(r.streakRepairable).toBe(false);
   });
 
@@ -328,7 +408,7 @@ describe('GameService.getProfile — streak repair (hồi sinh chuỗi đã mấ
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
       profile({ brokenStreakDays: 5, brokenStreakAt: new Date(Date.now() - 49 * 3600 * 1000) }),
     );
-    const r = (await new GameService(prisma, makeConfig({ 'game.streak_repair_window_hours': 48 })).getProfile('u1')) as { streakRepairable: boolean };
+    const r = (await new GameService(prisma, makeConfig({ 'game.streak_repair_window_hours': 48 }), analytics).getProfile('u1')) as { streakRepairable: boolean };
     expect(r.streakRepairable).toBe(false);
   });
 
@@ -340,7 +420,7 @@ describe('GameService.getProfile — streak repair (hồi sinh chuỗi đã mấ
         lastStreakRepairAt: new Date(Date.now() - 10 * DAYMS),
       }),
     );
-    const r = (await new GameService(prisma, makeConfig({ 'game.streak_repair_cooldown_days': 30 })).getProfile('u1')) as { streakRepairable: boolean };
+    const r = (await new GameService(prisma, makeConfig({ 'game.streak_repair_cooldown_days': 30 }), analytics).getProfile('u1')) as { streakRepairable: boolean };
     expect(r.streakRepairable).toBe(false);
   });
 });
@@ -351,7 +431,7 @@ describe('GameService.waterTree — cây chết mất tiến trình (§6.7.3)', 
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
       profile({ totalSeeds: 100, lastWateredAt: new Date(Date.now() - 8 * 86400000), ecoImpact: { progress: 500, target: 600, treeType: 't', treesPlanted: 1 } }),
     );
-    const r = (await new GameService(prisma, makeConfig()).waterTree('u1', 20)) as { progress: number; revivedFromDead: boolean; harvested: boolean };
+    const r = (await new GameService(prisma, makeConfig(), analytics).waterTree('u1', 20)) as { progress: number; revivedFromDead: boolean; harvested: boolean };
     expect(r.revivedFromDead).toBe(true);
     expect(r.progress).toBe(20); // 500 bị reset về 0 rồi +20
     expect(r.harvested).toBe(false);
@@ -362,7 +442,7 @@ describe('GameService.waterTree — cây chết mất tiến trình (§6.7.3)', 
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
       profile({ totalSeeds: 100, lastWateredAt: new Date(Date.now() - 1 * 86400000), ecoImpact: { progress: 500, target: 600, treeType: 't', treesPlanted: 0 } }),
     );
-    const r = (await new GameService(prisma, makeConfig()).waterTree('u1', 20)) as { progress: number; revivedFromDead: boolean };
+    const r = (await new GameService(prisma, makeConfig(), analytics).waterTree('u1', 20)) as { progress: number; revivedFromDead: boolean };
     expect(r.revivedFromDead).toBe(false);
     expect(r.progress).toBe(520);
   });
@@ -383,7 +463,7 @@ describe('GameService.buySeeds / buyTree (mua bằng TubuXu)', () => {
     const prisma = buyPrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 100 }));
     const coins = coinsStub();
-    const svc = new GameService(prisma, makeConfig(), undefined, undefined, coins as never);
+    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, coins as never);
     const r = await svc.buySeeds('u1', 50);
     expect(r).toMatchObject({ seeds: 50, cost: 50, totalSeeds: 150 });
     expect(coins.spendCoins).toHaveBeenCalledWith('u1', 50, 'GAME_BUY_SEEDS', 'GAME', undefined, prisma);
@@ -398,7 +478,7 @@ describe('GameService.buySeeds / buyTree (mua bằng TubuXu)', () => {
     const prisma = buyPrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 480 }));
     const coins = coinsStub();
-    const svc = new GameService(prisma, makeConfig({ 'game.tank_capacity': 500 }), undefined, undefined, coins as never);
+    const svc = new GameService(prisma, makeConfig({ 'game.tank_capacity': 500 }), analytics, undefined, undefined, coins as never);
     await expect(svc.buySeeds('u1', 50)).rejects.toThrow('Bình chứa');
     expect(coins.spendCoins).not.toHaveBeenCalled();
   });
@@ -408,7 +488,7 @@ describe('GameService.buySeeds / buyTree (mua bằng TubuXu)', () => {
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 100 }));
     (prisma.gameProfile.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
     const coins = coinsStub();
-    const svc = new GameService(prisma, makeConfig({ 'game.tank_capacity': 500 }), undefined, undefined, coins as never);
+    const svc = new GameService(prisma, makeConfig({ 'game.tank_capacity': 500 }), analytics, undefined, undefined, coins as never);
     // Vượt cap atomic → throw → tx rollback (xu vừa trừ được hoàn lại do rollback).
     await expect(svc.buySeeds('u1', 50)).rejects.toThrow('Bình chứa');
   });
@@ -416,7 +496,7 @@ describe('GameService.buySeeds / buyTree (mua bằng TubuXu)', () => {
   it('mua cây thật: trừ xu (tree_xu_price) + tạo PlantedTree có chứng nhận', async () => {
     const prisma = buyPrisma();
     const coins = coinsStub();
-    const svc = new GameService(prisma, makeConfig({ 'game.tree_xu_price': 50000 }), undefined, undefined, coins as never);
+    const svc = new GameService(prisma, makeConfig({ 'game.tree_xu_price': 50000 }), analytics, undefined, undefined, coins as never);
     const r = await svc.buyTree('u1');
     expect(r.cost).toBe(50000);
     expect(r.certificateCode).toMatch(/^TUBU-/);
@@ -442,7 +522,7 @@ describe('GameService.getMissions', () => {
       mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
       missionProgress: { findMany: jest.fn().mockResolvedValue([]) },
     });
-    const svc = new GameService(prisma, makeConfig());
+    const svc = new GameService(prisma, makeConfig(), analytics);
     const res = await svc.getMissions('u1');
     expect(res).toEqual([
       { code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: undefined, rewardPoints: 30, progress: 3, goal: 7, completed: false, claimed: false },
@@ -461,7 +541,7 @@ describe('GameService.getMissions', () => {
       mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
       missionProgress: { findMany: jest.fn().mockResolvedValue([{ missionId: 'm2', cycleKey: '0' }]) },
     });
-    const svc = new GameService(prisma, makeConfig());
+    const svc = new GameService(prisma, makeConfig(), analytics);
     const res = await svc.getMissions('u1');
     const firstOrder = res.find((m) => m.code === 'FIRST_ORDER')!;
     expect(firstOrder.completed).toBe(true);
@@ -477,7 +557,7 @@ describe('GameService.getMissions', () => {
       mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
       missionProgress: { findMany: jest.fn().mockResolvedValue([{ missionId: 'm1', cycleKey: '0' }]) },
     });
-    const svc = new GameService(prisma, makeConfig());
+    const svc = new GameService(prisma, makeConfig(), analytics);
     const res = await svc.getMissions('u1');
     const checkin = res.find((m) => m.code === 'CHECKIN_7')!;
     expect(checkin.completed).toBe(true);
@@ -502,7 +582,7 @@ describe('GameService.claimMission', () => {
 
   it('nhiệm vụ không tồn tại → NotFoundException', async () => {
     const prisma = missionsPrisma({ mission: { findUnique: jest.fn().mockResolvedValue(null) } });
-    const svc = new GameService(prisma, makeConfig());
+    const svc = new GameService(prisma, makeConfig(), analytics);
     await expect(svc.claimMission('u1', 'NOPE')).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -514,7 +594,7 @@ describe('GameService.claimMission', () => {
       missionProgress: { create: missionProgressCreate },
       pointsTransaction: { create: pointsCreate },
     });
-    const svc = new GameService(prisma, makeConfig());
+    const svc = new GameService(prisma, makeConfig(), analytics);
     await expect(svc.claimMission('u1', 'FIRST_ORDER')).rejects.toThrow(BadRequestException);
     expect(missionProgressCreate).not.toHaveBeenCalled();
     expect(pointsCreate).not.toHaveBeenCalled();
@@ -529,7 +609,7 @@ describe('GameService.claimMission', () => {
       pointsTransaction: { create: pointsCreate },
       user: { count: jest.fn().mockResolvedValue(0), update: userUpdate },
     });
-    const svc = new GameService(prisma, makeConfig());
+    const svc = new GameService(prisma, makeConfig(), analytics);
     const res = await svc.claimMission('u1', 'FIRST_ORDER');
 
     expect(res).toEqual({ claimed: true, rewardPoints: 20, couponCode: null });
@@ -549,7 +629,7 @@ describe('GameService.claimMission', () => {
       missionProgress: { create: missionProgressCreate },
       pointsTransaction: { create: pointsCreate },
     });
-    const svc = new GameService(prisma, makeConfig());
+    const svc = new GameService(prisma, makeConfig(), analytics);
 
     await expect(svc.claimMission('u1', 'FIRST_ORDER')).rejects.toThrow(/đã nhận/i);
     expect(pointsCreate).not.toHaveBeenCalled();
@@ -607,7 +687,7 @@ describe('GameService.claimMission', () => {
     };
 
     const prisma = missionsPrisma({ $transaction });
-    const svc = new GameService(prisma, makeConfig());
+    const svc = new GameService(prisma, makeConfig(), analytics);
 
     const results = await Promise.allSettled([svc.claimMission('u1', 'FIRST_ORDER'), svc.claimMission('u1', 'FIRST_ORDER')]);
     const ok = results.filter((r) => r.status === 'fulfilled');
@@ -627,7 +707,7 @@ describe('GameService.claimMission', () => {
       gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 7 }) },
       missionProgress: { create: missionProgressCreate },
     });
-    const svc = new GameService(prisma, makeConfig());
+    const svc = new GameService(prisma, makeConfig(), analytics);
     await svc.claimMission('u1', 'CHECKIN_7');
     expect(missionProgressCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ cycleKey: '1' }) }),
@@ -639,7 +719,7 @@ describe('GameService.pickWeighted (phân phối theo trọng số)', () => {
   type Prize = { id: string; name: string; weight: number; rewardType: string; value: number };
   const pick = (prizes: Prize[], rand: number) => {
     jest.spyOn(Math, 'random').mockReturnValue(rand);
-    const svc = new GameService(makePrisma(), makeConfig()) as unknown as { pickWeighted(p: Prize[]): Prize };
+    const svc = new GameService(makePrisma(), makeConfig(), analytics) as unknown as { pickWeighted(p: Prize[]): Prize };
     const out = svc.pickWeighted(prizes);
     (Math.random as jest.Mock).mockRestore();
     return out;

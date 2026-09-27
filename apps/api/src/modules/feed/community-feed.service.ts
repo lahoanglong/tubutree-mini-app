@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CommunityRewardService } from './community-reward.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { authorBadge } from './author-badge';
 
 const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];
@@ -171,6 +172,7 @@ export class CommunityFeedService {
     private readonly prisma: PrismaService,
     private readonly reward: CommunityRewardService,
     private readonly config: SystemConfigService,
+    private readonly analytics: AnalyticsEventsService,
     // Optional: thông báo trả lời/best-answer/duyệt bài — không chặn hành động chính nếu thiếu/lỗi.
     @Optional() private readonly notifications?: NotificationsService,
   ) {}
@@ -613,6 +615,14 @@ export class CommunityFeedService {
     }
     try {
       await this.prisma.feedReaction.create({ data: { postId, userId } });
+      // Task 9: chỉ phát khi THẬT SỰ tạo được reaction ở request này — nhánh P2002 bên dưới nghĩa
+      // là thiết bị khác đã tạo trước, không phải hành động của request này.
+      await this.analytics.recordBestEffort({
+        eventName: 'engagement_action',
+        userId,
+        platform: 'miniapp',
+        props: { action: 'feed_reaction', postId },
+      });
     } catch (err) {
       // P2002 = thiết bị kia vừa tạo xong. Kết quả cuối cùng vẫn là "đã thích".
       if ((err as { code?: string } | null)?.code !== 'P2002') throw err;
@@ -631,6 +641,13 @@ export class CommunityFeedService {
     // duyệt được. Xu tiêu thẳng được ở thanh toán nên đây là mất hàng thật.
     if (!post || post.status !== 'PUBLISHED') throw new NotFoundException('Bài viết không tồn tại.');
     const comment = await this.prisma.feedComment.create({ data: { userId, postId, body: text } });
+    // Task 9: addComment luôn TẠO mới (không có nhánh xoá/toggle-off) — phát ngay sau khi ghi thành công.
+    await this.analytics.recordBestEffort({
+      eventName: 'engagement_action',
+      userId,
+      platform: 'miniapp',
+      props: { action: 'feed_comment', postId },
+    });
     if (post.kind === 'QUESTION') {
       try {
         await this.reward.rewardAnswer(userId, post.userId, comment.id);

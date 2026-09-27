@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { SeasonPassService } from './season-pass.service';
 import { DEFAULT_TREE_TYPE } from './game.constants';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 const DAY = 864e5;
 
@@ -12,6 +13,7 @@ export class GameEconomyService {
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
     private readonly seasonPass: SeasonPassService,
+    private readonly analytics: AnalyticsEventsService,
   ) {}
 
   private dayKey(d: Date): string {
@@ -114,6 +116,13 @@ export class GameEconomyService {
       },
     });
     if (res.count === 0) throw new BadRequestException('Hôm nay bạn đã điểm danh rồi 🌿');
+    // Task 9: sự kiện engagement — best-effort (không transaction bao quanh checkIn).
+    await this.analytics.recordBestEffort({
+      eventName: 'engagement_action',
+      userId,
+      platform: 'miniapp',
+      props: { action: 'garden_checkin', streakDays },
+    });
     await this.prisma.gameProfile.updateMany({
       where: { userId, totalSeeds: { gt: tankCap } },
       data: { totalSeeds: tankCap },

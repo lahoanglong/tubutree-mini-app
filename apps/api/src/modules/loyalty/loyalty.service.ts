@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { MembershipTier, PosPointCredit, Prisma } from '@prisma/client';
@@ -13,6 +14,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible } from '../coupons/coupon-scope';
 import { decideTier } from './tier-policy';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 /**
  * Loyalty core (Build Spec §6.6). Phase 1 dùng cho vòng đời đơn:
@@ -34,6 +36,10 @@ export class LoyaltyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    // Optional: loyalty-features.spec.ts dựng LoyaltyService 2 tham số (không wiring analytics) ở
+    // rất nhiều test không liên quan tới dailyCheckIn — @Optional() + guard `?.` ở call site để
+    // không phải sửa hàng loạt test đó (ngoài phạm vi Task 9).
+    @Optional() private readonly analytics?: AnalyticsEventsService,
   ) {}
 
   /**
@@ -778,6 +784,15 @@ export class LoyaltyService {
           const u = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { pointsBalance: true } });
           totalPoints = u.pointsBalance;
         }
+
+        // Task 9: điểm danh xong → engagement_action, atomic CÙNG tx (analytics optional — xem
+        // ghi chú constructor).
+        await this.analytics?.record(tx, {
+          eventName: 'engagement_action',
+          userId,
+          platform: 'miniapp',
+          props: { action: 'loyalty_checkin', cycleDay, streakDays, pointsEarned: points },
+        });
 
         return {
           success: true,

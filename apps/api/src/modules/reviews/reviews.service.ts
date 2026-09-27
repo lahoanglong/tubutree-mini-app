@@ -2,12 +2,16 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateReviewDto } from './dto/review.dto';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
 @Injectable()
 export class ReviewsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly analytics: AnalyticsEventsService,
+  ) {}
 
   /**
    * Người dùng có được đánh giá sản phẩm này không — để FE hỏi TRƯỚC khi mở ô soạn.
@@ -91,6 +95,12 @@ export class ReviewsService {
         // Cập nhật rating denormalized cho Product (hiển thị sao trên card/PDP) — trong
         // cùng transaction để tránh lệch dữ liệu nếu bước này lỗi sau khi review đã tạo.
         await this.recomputeRating(product.id, tx);
+        await this.analytics.record(tx, {
+          eventName: 'engagement_action',
+          userId,
+          platform: 'miniapp',
+          props: { action: 'review_created', productSlug: slug, pointsEarned },
+        });
         return r;
       });
     } catch (err) {

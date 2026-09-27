@@ -1,7 +1,9 @@
+import { BadRequestException } from '@nestjs/common';
 import { MembershipTier, Prisma } from '@prisma/client';
 import { LoyaltyService } from './loyalty.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 function makeConfig(): SystemConfigService {
   return { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
@@ -476,5 +478,75 @@ describe('LoyaltyService.recalcAllTiers (tránh N+1)', () => {
     const n = await new LoyaltyService(prisma, makeConfig()).recalcAllTiers();
     expect(n).toBe(3);
     expect(findMany).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LoyaltyService.dailyCheckIn — Task 9 analytics (engagement_action)', () => {
+  function makeAnalytics() {
+    return {
+      record: jest.fn().mockResolvedValue(undefined),
+      recordBestEffort: jest.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  /**
+   * analytics là @Optional() ở LoyaltyService (loyalty-features.spec.ts dựng LoyaltyService 2
+   * tham số ở rất nhiều test không liên quan tới dailyCheckIn — không sửa hàng loạt test đó,
+   * ngoài phạm vi Task 9). Test này wiring mock THẬT để chứng minh record(tx,...) được gọi đúng
+   * — dựng tx RIÊNG (khác instance với prisma top-level) để assert tx-identity (lesson (b)).
+   */
+  it('điểm danh thành công (lần đầu) → record(tx,...) đúng eventName/props, dùng ĐÚNG tx (khác instance prisma top-level)', async () => {
+    const tx = {
+      loyaltyCheckIn: { create: jest.fn().mockResolvedValue({}) },
+      pointsTransaction: { create: jest.fn().mockResolvedValue({}) },
+      user: { update: jest.fn().mockResolvedValue({ pointsBalance: 101 }), findUniqueOrThrow: jest.fn() },
+    };
+    const prisma = {
+      loyaltyCheckIn: { findFirst: jest.fn().mockResolvedValue(null) },
+      $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    const analytics = makeAnalytics();
+    const svc = new LoyaltyService(prisma, makeConfig(), analytics as unknown as AnalyticsEventsService);
+
+    const r = await svc.dailyCheckIn('u1');
+
+    expect(tx).not.toBe(prisma); // tx RIÊNG, không phải cùng instance với prisma top-level
+    expect(analytics.record).toHaveBeenCalledTimes(1);
+    expect(analytics.record).toHaveBeenCalledWith(tx, {
+      eventName: 'engagement_action',
+      userId: 'u1',
+      platform: 'miniapp',
+      props: { action: 'loyalty_checkin', cycleDay: 1, streakDays: 1, pointsEarned: 1 },
+    });
+    expect(r).toMatchObject({ success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1 });
+  });
+
+  it('đã điểm danh hôm nay → BadRequest TRƯỚC khi vào transaction, KHÔNG gọi analytics', async () => {
+    const analytics = makeAnalytics();
+    const prisma = {
+      loyaltyCheckIn: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
+    } as unknown as PrismaService;
+    const svc = new LoyaltyService(prisma, makeConfig(), analytics as unknown as AnalyticsEventsService);
+    const today = (svc as unknown as { getVnDayKey(d: Date): string }).getVnDayKey(new Date());
+    (prisma.loyaltyCheckIn.findFirst as jest.Mock).mockResolvedValue({ dayKey: today });
+
+    await expect(svc.dailyCheckIn('u1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(analytics.record).not.toHaveBeenCalled();
+  });
+
+  it('KHÔNG wiring analytics (undefined, giống các test loyalty-features.spec.ts khác) → dailyCheckIn vẫn chạy bình thường, không throw', async () => {
+    const tx = {
+      loyaltyCheckIn: { create: jest.fn().mockResolvedValue({}) },
+      pointsTransaction: { create: jest.fn().mockResolvedValue({}) },
+      user: { update: jest.fn().mockResolvedValue({ pointsBalance: 1 }), findUniqueOrThrow: jest.fn() },
+    };
+    const prisma = {
+      loyaltyCheckIn: { findFirst: jest.fn().mockResolvedValue(null) },
+      $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    const svc = new LoyaltyService(prisma, makeConfig()); // KHÔNG truyền analytics — @Optional()
+    await expect(svc.dailyCheckIn('u1')).resolves.toMatchObject({ success: true });
   });
 });

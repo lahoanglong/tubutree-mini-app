@@ -8,6 +8,7 @@ import { GameCollectionService } from './game-collection.service';
 import { CoinsService } from '../wallet/coins.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
 import { DEFAULT_TREE_TYPE } from './game.constants';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 interface SpinPrize {
   id: string;
@@ -30,6 +31,7 @@ export class GameService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    private readonly analytics: AnalyticsEventsService,
     // Optional: hồ cộng đồng Phase 2. Tests dựng GameService 2 tham số → bỏ qua góp hồ.
     @Optional() private readonly community?: GameCommunityService,
     // Optional: sổ tay loài Phase 3. Thu hoạch → sưu tập 1 loài.
@@ -155,6 +157,13 @@ export class GameService {
         },
       });
 
+      await this.analytics.record(tx, {
+        eventName: 'engagement_action',
+        userId,
+        platform: 'miniapp',
+        props: { action: 'spin', prizeId: prize.id, rewardType: prize.rewardType, rewardRefId },
+      });
+
       return { prize: { id: prize.id, name: prize.name, rewardType: prize.rewardType, value: prize.value } };
     });
   }
@@ -253,6 +262,13 @@ export class GameService {
           if (dec.count === 0) {
             throw new BadRequestException('Không đủ giọt nước.');
           }
+
+          await this.analytics.record(tx, {
+            eventName: 'engagement_action',
+            userId,
+            platform: 'miniapp',
+            props: { action: 'water_tree', drops },
+          });
         },
         { isolationLevel: 'Serializable' },
       );
