@@ -30,9 +30,14 @@ export function Field({ label, error, children }: FieldProps) {
   );
 }
 
+// `minWidth` (không chỉ `minHeight`) là bắt buộc: khi Checkbox/Radio/Switch đứng làm flex item
+// trong một hàng flex (vd dòng giỏ hàng) mà không có `label`/`children` hiển thị, flex item mặc
+// định co theo nội dung (flex-shrink, không tự giãn ngang) — hộp chạm thực tế co lại còn đúng
+// bề rộng control gốc (24px medium/16px small), dưới ngưỡng 44px dù minHeight đã đủ (audit
+// A4-14 phát hiện khi migrate cart.tsx dùng lại component này — Task 25).
 function hitArea(testId: string, children: ReactNode) {
   return (
-    <div data-testid={testId} style={{ minHeight: 44, display: 'flex', alignItems: 'center' }}>
+    <div data-testid={testId} style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center' }}>
       {children}
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Page, Text, Button, useNavigate, useSnackbar } from 'zmp-ui';
+import type { CSSProperties } from 'react';
+import { Box, Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight, AlertTriangle } from 'lucide-react';
 import {
@@ -23,9 +24,23 @@ import { recompute } from '../utils/cart-rules';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
+import { PageHeader } from '../components/ui/page-header';
+import { Checkbox } from '../components/ui/form';
+import { IconButton } from '../components/ui/icon-button';
+import { KeyValueRow } from '../components/ui/key-value-row';
+import { StickyActionBar } from '../components/ui/sticky-action-bar';
+import { Button } from '../components/ui/button';
+import { PriceTag } from '../components/ui/price-tag';
 
 const UNDO_WINDOW_MS = 3500;
 const CART_KEY = ['cart'] as const;
+
+// Ẩn về mặt hình ảnh nhưng vẫn trong cây accessibility — dùng làm accessible name cho checkbox
+// từng dòng (không có nhãn hiện ra, khác với "Chọn tất cả" đã có label hiển thị của riêng nó).
+const srOnly: CSSProperties = {
+  position: 'absolute', width: 1, height: 1, padding: 0, margin: -1,
+  overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0,
+};
 
 /**
  * Mutation giỏ hàng kiểu optimistic (AD-005):
@@ -171,8 +186,8 @@ export default function CartPage() {
   };
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 190 }}>
-
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 190 }}>
+      <PageHeader title="Giỏ hàng" />
       <StorefrontContextBar />
       {empty ? (
         <EmptyState
@@ -185,9 +200,8 @@ export default function CartPage() {
       ) : (
         <>
           {/* Chọn tất cả */}
-          <Box px={3} pt={2} flex alignItems="center" style={{ gap: 10 }}>
-            <Checkbox checked={allSelected} onToggle={toggleAll} ariaLabel="Chọn tất cả" />
-            <Text size="small" className="tubu-press" onClick={toggleAll}>Chọn tất cả</Text>
+          <Box px={3} pt={2}>
+            <Checkbox checked={allSelected} onChange={toggleAll} label="Chọn tất cả" />
           </Box>
           <Box p={3} pt={2} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {summary.items.map((line) => (
@@ -216,8 +230,8 @@ export default function CartPage() {
             bottom: empty ? 80 : 156,
             left: 12,
             right: 12,
-            background: 'var(--neutral-900)',
-            borderRadius: 'var(--radius-md)',
+            background: 'var(--color-bg-inverse)',
+            borderRadius: 'var(--radius-control)',
             padding: '10px 14px',
             display: 'flex',
             alignItems: 'center',
@@ -233,7 +247,7 @@ export default function CartPage() {
             size="small"
             bold
             onClick={handleUndo}
-            style={{ color: 'var(--sun-300)', padding: '8px 6px' }}
+            style={{ color: 'var(--forest-200)', padding: '8px 6px' }}
           >
             {vi.common.undo}
           </Text>
@@ -253,30 +267,10 @@ export default function CartPage() {
   );
 }
 
-/** Checkbox tròn dùng chung cho chọn món trong giỏ. */
-function Checkbox({ checked, onToggle, ariaLabel }: { checked: boolean; onToggle: () => void; ariaLabel: string }) {
-  return (
-    <Box
-      role="checkbox"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      className="tubu-press"
-      onClick={onToggle}
-      style={{
-        width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-        border: `2px solid ${checked ? 'var(--primary-600)' : 'var(--neutral-300)'}`,
-        background: checked ? 'var(--primary-600)' : 'transparent',
-        display: 'grid', placeItems: 'center',
-      }}
-    >
-      {checked && <span style={{ color: '#fff', fontSize: 13, fontWeight: 700, lineHeight: 1 }}>✓</span>}
-    </Box>
-  );
-}
-
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title="Giỏ hàng" />
       {children}
     </Page>
   );
@@ -316,15 +310,17 @@ function CartLineRow({
     <Box
       p={3}
       style={{
-        background: 'var(--neutral-0)',
-        borderRadius: 'var(--radius-lg)',
+        background: 'var(--color-bg-surface)',
+        borderRadius: 'var(--radius-card)',
         display: 'flex',
         gap: 12,
         alignItems: 'center',
-        boxShadow: 'var(--shadow-card)',
+        boxShadow: 'var(--elevation-1)',
       }}
     >
-      <Checkbox checked={selected} onToggle={onToggleSelect} ariaLabel={`Chọn ${line.productName}`} />
+      <Checkbox checked={selected} onChange={onToggleSelect}>
+        <span style={srOnly}>{`Chọn ${line.productName}`}</span>
+      </Checkbox>
       <Box
         role="button"
         aria-label={line.productName}
@@ -332,9 +328,9 @@ function CartLineRow({
         style={{
           width: 64,
           height: 64,
-          borderRadius: 'var(--radius-md)',
+          borderRadius: 'var(--radius-media)',
           overflow: 'hidden',
-          background: 'var(--leaf-50)',
+          background: 'var(--color-bg-subtle)',
           flex: '0 0 auto',
           display: 'flex',
           alignItems: 'center',
@@ -350,7 +346,7 @@ function CartLineRow({
           />
         ) : (
           <svg width="28" height="28" viewBox="0 0 48 48" fill="none" aria-hidden>
-            <path d="M14 36c-1.5-14 8-26 24-27 1 16-7 27-20 28-2 .2-3.4-.4-4-1z" fill="var(--leaf-200)" />
+            <path d="M14 36c-1.5-14 8-26 24-27 1 16-7 27-20 28-2 .2-3.4-.4-4-1z" fill="var(--forest-200)" />
           </svg>
         )}
       </Box>
@@ -360,15 +356,15 @@ function CartLineRow({
           {line.productName}
         </Text>
         {line.variationName && (
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+          <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
             {typeof line.variationName === 'object' && line.variationName !== null
               ? (line.variationName as { name?: string }).name ?? ''
               : String(line.variationName)}
           </Text>
         )}
-        <Text bold style={{ color: 'var(--primary-700)', marginTop: 4 }}>
-          {formatVnd(line.unitPrice)}
-        </Text>
+        <Box style={{ marginTop: 4 }}>
+          <PriceTag value={line.unitPrice} size="sm" />
+        </Box>
         {line.isFlash && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 4 }}>
             <span
@@ -376,7 +372,7 @@ function CartLineRow({
                 display: 'inline-block',
                 background: 'var(--clay-50)',
                 color: 'var(--clay-700)',
-                borderRadius: 'var(--radius-full)',
+                borderRadius: 'var(--radius-pill)',
                 padding: '2px 8px',
                 fontSize: 11,
                 fontWeight: 700,
@@ -385,7 +381,7 @@ function CartLineRow({
               {vi.flashSale.badge}
             </span>
             {line.soldPct != null && Number.isFinite(line.soldPct) && (
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                 {vi.flashSale.soldPct(line.soldPct)}
               </Text>
             )}
@@ -393,8 +389,8 @@ function CartLineRow({
         )}
         {overStock && (
           <Box flex alignItems="center" style={{ gap: 4, marginTop: 2 }}>
-            <AlertTriangle size={13} color="var(--warning)" aria-hidden />
-            <Text size="xSmall" style={{ color: 'var(--warning)' }}>
+            <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />
+            <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
               {vi.cart.stockLimited(line.stock)}
             </Text>
           </Box>
@@ -406,21 +402,8 @@ function CartLineRow({
             max={Math.max(1, line.stock)}
             onChange={setLocalQty}
           />
-          <Box
-            role="button"
-            aria-label={`Bỏ ${line.productName} khỏi giỏ`}
-            className="tubu-press"
-            onClick={onRemove}
-            style={{
-              marginLeft: 'auto',
-              width: 40,
-              height: 40,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Trash2 size={18} color="var(--neutral-400)" strokeWidth={1.8} />
+          <Box style={{ marginLeft: 'auto' }}>
+            <IconButton icon={Trash2} label={`Xoá ${line.productName}`} onPress={onRemove} />
           </Box>
         </Box>
       </Box>
@@ -442,13 +425,13 @@ function CouponBlock({ summary, selectedSubtotal }: { summary: CartSummary; sele
           setSheetOpen(true);
         }}
         style={{
-          background: 'var(--neutral-0)',
-          borderRadius: 'var(--radius-lg)',
+          background: 'var(--color-bg-surface)',
+          borderRadius: 'var(--radius-card)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           cursor: 'pointer',
-          boxShadow: 'var(--shadow-xs)',
+          boxShadow: 'var(--elevation-1)',
         }}
       >
         <Box flex alignItems="center" style={{ gap: 10 }}>
@@ -456,7 +439,7 @@ function CouponBlock({ summary, selectedSubtotal }: { summary: CartSummary; sele
             style={{
               width: 36,
               height: 36,
-              borderRadius: 'var(--radius-md)',
+              borderRadius: 'var(--radius-control)',
               background: 'var(--clay-50)',
               display: 'grid',
               placeItems: 'center',
@@ -466,7 +449,7 @@ function CouponBlock({ summary, selectedSubtotal }: { summary: CartSummary; sele
             <Ticket size={20} color="var(--clay-700)" />
           </Box>
           <Box>
-            <Text size="small" bold style={{ color: 'var(--neutral-900)' }}>
+            <Text size="small" bold style={{ color: 'var(--color-text-primary)' }}>
               Mã giảm giá
             </Text>
             {summary.couponCode ? (
@@ -475,7 +458,7 @@ function CouponBlock({ summary, selectedSubtotal }: { summary: CartSummary; sele
                   style={{
                     background: 'var(--clay-50)',
                     border: '1px dashed var(--clay-500)',
-                    borderRadius: 'var(--radius-sm)',
+                    borderRadius: 'var(--radius-control)',
                     padding: '2px 6px',
                     color: 'var(--clay-700)',
                     fontSize: 11,
@@ -485,24 +468,24 @@ function CouponBlock({ summary, selectedSubtotal }: { summary: CartSummary; sele
                   {summary.couponCode}
                 </span>
                 {summary.discount > 0 && (
-                  <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                  <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
                     -{formatVnd(summary.discount)}
                   </Text>
                 )}
               </Box>
             ) : (
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                 Chọn hoặc nhập mã ưu đãi
               </Text>
             )}
           </Box>
         </Box>
 
-        <Box flex alignItems="center" style={{ gap: 4, color: 'var(--primary-700)' }}>
-          <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
+        <Box flex alignItems="center" style={{ gap: 4, color: 'var(--color-text-brand)' }}>
+          <Text size="xSmall" bold style={{ color: 'var(--color-text-brand)' }}>
             {summary.couponCode ? 'Thay đổi' : 'Chọn mã'}
           </Text>
-          <ChevronRight size={16} color="var(--primary-700)" />
+          <ChevronRight size={16} color="var(--color-text-brand)" />
         </Box>
       </Box>
 
@@ -542,75 +525,55 @@ function StickySummary({
   const discount = allSelected ? summary.discount : 0;
 
   return (
-    <Box
-      style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        background: 'var(--neutral-0)',
-        boxShadow: 'var(--shadow-lg)',
-        padding: '12px 16px calc(12px + var(--safe-bottom))',
-        borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0',
-      }}
-    >
-      <Box style={{ marginBottom: 10 }}>
-        <Text size="xSmall" style={{ color: reached ? 'var(--leaf-700)' : 'var(--neutral-600)' }}>
-          {reached ? vi.cart.freeshipReached : vi.cart.freeshipProgress(formatVnd(remaining))}
-        </Text>
-        <Box
-          aria-hidden
-          style={{
-            height: 5,
-            background: 'var(--neutral-100)',
-            borderRadius: 'var(--radius-full)',
-            marginTop: 5,
-            overflow: 'hidden',
-          }}
-        >
-          <Box
-            style={{
-              width: `${progressPct}%`,
-              height: '100%',
-              background: reached
-                ? 'var(--leaf-400)'
-                : 'linear-gradient(90deg, var(--primary-200), var(--primary-600))',
-              borderRadius: 'var(--radius-full)',
-              transition: 'width var(--dur-slow) var(--ease-out)',
-            }}
-          />
-        </Box>
-      </Box>
+    <StickyActionBar
+      summary={
+        <>
+          <Box style={{ marginBottom: 2 }}>
+            <Text size="xSmall" style={{ color: reached ? 'var(--color-text-success)' : 'var(--color-text-secondary)' }}>
+              {reached ? vi.cart.freeshipReached : vi.cart.freeshipProgress(formatVnd(remaining))}
+            </Text>
+            <Box
+              aria-hidden
+              style={{
+                height: 5,
+                background: 'var(--stone-200)',
+                borderRadius: 'var(--radius-pill)',
+                marginTop: 5,
+                overflow: 'hidden',
+              }}
+            >
+              <Box
+                style={{
+                  width: `${progressPct}%`,
+                  height: '100%',
+                  background: reached
+                    ? 'var(--forest-400)'
+                    : 'linear-gradient(90deg, var(--forest-200), var(--color-action-primary-bg))',
+                  borderRadius: 'var(--radius-pill)',
+                  transition: 'width var(--dur-slow) var(--ease-out)',
+                }}
+              />
+            </Box>
+          </Box>
 
-      {discount > 0 && (
-        <Box flex justifyContent="space-between">
-          <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-            {vi.cart.discount}
-          </Text>
-          <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-            -{formatVnd(discount)}
-          </Text>
-        </Box>
-      )}
-      <Box flex justifyContent="space-between" alignItems="baseline">
-        {/* Con số này ĐÃ trừ giảm giá và CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán
-            là tiền hàng gộp chưa trừ gì — cùng một nhãn, hai số khác nhau, khách tưởng bị đội
-            giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn. */}
-        <Text size="small" style={{ color: 'var(--neutral-600)' }}>
-          {vi.cart.subtotalAfterDiscount}
-        </Text>
-        <Text bold style={{ fontSize: 18, color: 'var(--primary-700)', fontFamily: 'var(--font-display)' }}>
-          {formatVnd(Math.max(0, selectedSubtotal - discount))}
-        </Text>
-      </Box>
-      <Button
-        fullWidth
-        disabled={selectedCount === 0}
-        onClick={onCheckout}
-        style={{ background: 'var(--primary-600)', marginTop: 8, minHeight: 48, fontWeight: 600, borderRadius: 'var(--radius-full)' }}
-      >
-        {vi.cart.checkout(selectedCount)}
-      </Button>
-    </Box>
+          {discount > 0 && (
+            <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" />
+          )}
+          {/* Con số này ĐÃ trừ giảm giá và CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán
+              là tiền hàng gộp chưa trừ gì — cùng một nhãn, hai số khác nhau, khách tưởng bị đội
+              giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn. */}
+          <KeyValueRow
+            label={vi.cart.subtotalAfterDiscount}
+            value={formatVnd(Math.max(0, selectedSubtotal - discount))}
+            emphasis
+          />
+        </>
+      }
+      primary={
+        <Button fullWidth disabled={selectedCount === 0} onPress={onCheckout}>
+          {vi.cart.checkout(selectedCount)}
+        </Button>
+      }
+    />
   );
 }
