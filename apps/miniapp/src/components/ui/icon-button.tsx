@@ -15,7 +15,6 @@ export interface IconButtonProps {
 /** Nút chỉ-icon — vùng chạm LUÔN 44x44 dù nhìn nhỏ hơn (audit A4-14: 31 vòng icon 32-40px cũ).
  * `label` bắt buộc ở kiểu (TS) VÀ ở lint (Task 6) — hai lớp phòng thủ cho cùng một lỗi A4-16. */
 export function IconButton({ icon: IconCmp, label, size = 'md', onPress, badge, className, style }: IconButtonProps) {
-  const visualSize = size === 'md' ? 36 : 32;
   return (
     <button
       type="button"
@@ -26,9 +25,6 @@ export function IconButton({ icon: IconCmp, label, size = 'md', onPress, badge, 
         position: 'relative',
         minWidth: 44,
         minHeight: 44,
-        width: visualSize,
-        height: visualSize,
-        margin: (44 - visualSize) / 2,
         borderRadius: 'var(--radius-pill)',
         border: 'none',
         background: 'transparent',
