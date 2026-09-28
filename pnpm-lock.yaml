@@ -291,6 +291,22 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.19)(jsdom@30.0.1)(sass@1.100.0)(terser@5.48.0)
 
+  packages/design-tokens:
+    dependencies:
+      tailwindcss:
+        specifier: ^3.4.0
+        version: 3.4.19(tsx@4.22.4)
+    devDependencies:
+      '@tubutree/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.19)(jsdom@30.0.1)(sass@1.100.0)(terser@5.48.0)
+
   packages/eslint-config:
     dependencies:
       '@eslint/js':

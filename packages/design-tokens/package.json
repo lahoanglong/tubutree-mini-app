@@ -1,0 +1,14 @@
+{
+  "name": "@tubutree/design-tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": { ".": "./src/index.ts", "./css": "./src/tokens.css" },
+  "devDependencies": {
+    "@tubutree/typescript-config": "workspace:*",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  },
+  "peerDependencies": { "tailwindcss": "^3.4.0" }
+}

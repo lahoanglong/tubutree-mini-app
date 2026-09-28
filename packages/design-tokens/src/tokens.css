@@ -1,0 +1,221 @@
+/* packages/design-tokens/src/tokens.css — Design System v2. Single source of truth for
+ * color/type/space/radius/motion/z-index. Layer 1 (primitive) below is NEVER referenced
+ * outside this file — pages/components use Layer 2 (semantic) only. */
+:root {
+  /* ── Layer 1: PRIMITIVE ─────────────────────────────────────────────────── */
+  --forest-50: #EEF4EF;
+  --forest-100: #D6E6DA;
+  --forest-200: #B1CFB9;
+  --forest-300: #86B293;
+  --forest-400: #5B9170;
+  --forest-500: #3B7552;
+  --forest-600: #245E3E;
+  --forest-700: #1B4B31;
+  --forest-800: #143A26;
+  --forest-900: #0D291B;
+
+  --sage-50: #F2F5EC;
+  --sage-100: #E3EBD8;
+  --sage-600: #4A6135;
+  --sage-700: #3E5129;
+
+  --stone-0: #FFFFFF;
+  --stone-25: #FBFAF7;
+  --stone-50: #F6F4EF;
+  --stone-100: #EFEBE2;
+  --stone-200: #E0DACB;
+  --stone-300: #CBC5B8;
+  --stone-400: #9E978A;
+  --stone-450: #938B7E;
+  --stone-500: #746D61;
+  --stone-600: #5A544A;
+  --stone-700: #423D34;
+  --stone-800: #2B2721;
+  --stone-900: #1C1A16;
+
+  --clay-50: #FAF1EA;
+  --clay-100: #F2DFD0;
+  --clay-500: #C2410C;
+  --clay-600: #9C532C;
+  --clay-700: #7E4222;
+
+  --honey-500: #B07A00;
+  --honey-600: #96650A;
+  --terracotta-50: #FFF1E8;
+  --terracotta-600: #C2410C;
+
+  --tubu-orange: #E08C1C; /* logo/illustration ONLY — never a UI action color */
+
+  --red-50: #FBEAE8;
+  --red-600: #B3362F;
+  --red-700: #8F2B25;
+  --amber-50: #FFF4E0;
+  --amber-600: #8A5300;
+  --blue-50: #E8F0F7;
+  --blue-600: #2E6391;
+  --blue-700: #245075;
+
+  --p-space-0: 0px;
+  --p-space-1: 2px;
+  --p-space-2: 4px;
+  --p-space-3: 8px;
+  --p-space-4: 12px;
+  --p-space-5: 16px;
+  --p-space-6: 20px;
+  --p-space-7: 24px;
+  --p-space-8: 32px;
+  --p-space-9: 40px;
+  --p-space-10: 48px;
+  --p-space-11: 64px;
+
+  --p-radius-0: 0px;
+  --p-radius-1: 4px;
+  --p-radius-2: 8px;
+  --p-radius-3: 12px;
+  --p-radius-4: 16px;
+  --p-radius-5: 24px;
+  --p-radius-full: 9999px;
+
+  --p-dur-tap: 100ms;
+  --p-dur-enter: 220ms;
+  --p-dur-exit: 150ms;
+  --p-dur-emphasize: 350ms;
+  --p-ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --p-ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  /* ── Layer 2: SEMANTIC — the only layer pages/components may reference ──── */
+  --color-bg-canvas: var(--stone-50);
+  --color-bg-surface: var(--stone-0);
+  --color-bg-subtle: var(--sage-50);
+  --color-bg-inverse: var(--stone-900);
+  --color-bg-scrim: rgba(28, 26, 22, 0.6);
+
+  --color-text-primary: var(--stone-900);
+  --color-text-secondary: var(--stone-600);
+  --color-text-tertiary: var(--stone-500);
+  --color-text-disabled: var(--stone-400);
+  --color-text-inverse: var(--stone-0);
+  --color-text-brand: var(--forest-600);
+  --color-text-link: var(--forest-600);
+  --color-text-price: var(--stone-900);
+  --color-text-price-compare: var(--stone-400);
+  --color-text-success: #2F7A48;
+  --color-text-warning: var(--amber-600);
+  --color-text-danger: var(--red-600);
+
+  --color-border-subtle: var(--stone-200);
+  --color-border-default: var(--stone-300);
+  --color-border-strong: var(--stone-450);
+  --color-border-focus: var(--forest-600);
+  --color-border-selected: var(--forest-600);
+
+  --color-action-primary-bg: var(--forest-600);
+  --color-action-primary-bg-pressed: var(--forest-700);
+  --color-action-primary-bg-disabled: var(--stone-200);
+  --color-action-primary-fg: #fff;
+  --color-action-primary-fg-disabled: var(--stone-400);
+
+  --color-action-secondary-bg: var(--forest-50);
+  --color-action-secondary-bg-pressed: var(--forest-100);
+  --color-action-secondary-fg: var(--forest-700);
+  --color-action-secondary-border: var(--forest-200, var(--forest-100));
+
+  --color-action-ghost-fg: var(--forest-600);
+  --color-action-ghost-bg-pressed: var(--sage-50);
+
+  --color-action-danger-bg: var(--red-600);
+  --color-action-danger-bg-pressed: var(--red-700);
+  --color-action-danger-fg: var(--stone-0);
+
+  --color-status-success-fg: #2F7A48;
+  --color-status-success-bg: #EAF4EC;
+  --color-status-warning-fg: var(--amber-600);
+  --color-status-warning-bg: var(--amber-50);
+  --color-status-danger-fg: var(--red-600);
+  --color-status-danger-bg: var(--red-50);
+  --color-status-info-fg: var(--blue-600);
+  --color-status-info-bg: var(--blue-50);
+  --color-status-neutral-fg: var(--stone-600);
+  --color-status-neutral-bg: var(--stone-100);
+
+  --color-promo-fg: var(--clay-700);
+  --color-promo-bg: var(--clay-50);
+  --color-promo-solid-bg: var(--clay-600);
+  --color-promo-solid-fg: var(--stone-0);
+
+  --color-flash-solid-bg: var(--terracotta-600);
+  --color-flash-solid-fg: var(--stone-0);
+  --color-flash-fg: var(--terracotta-600);
+  --color-flash-bg: var(--terracotta-50);
+
+  --color-rating: var(--honey-500);
+
+  --space-inline-xs: var(--p-space-1);
+  --space-inline-sm: var(--p-space-3);
+  --space-inline-md: var(--p-space-4);
+  --space-inline-lg: var(--p-space-5);
+  --space-stack-xs: var(--p-space-2);
+  --space-stack-sm: var(--p-space-3);
+  --space-stack-md: var(--p-space-5);
+  --space-stack-lg: var(--p-space-7);
+  --space-stack-xl: var(--p-space-8);
+  --space-inset-card: var(--p-space-4);
+  --space-inset-page: var(--p-space-5);
+  --space-gutter: var(--p-space-5);
+  --space-section: var(--p-space-7);
+
+  --radius-control: var(--p-radius-3);
+  --radius-card: var(--p-radius-4);
+  --radius-media: var(--p-radius-3);
+  --radius-sheet: var(--p-radius-5);
+  --radius-pill: var(--p-radius-full);
+
+  --elevation-1: 0 1px 2px rgba(28, 26, 22, 0.06), 0 2px 8px rgba(28, 26, 22, 0.05);
+  --elevation-2: 0 4px 16px rgba(28, 26, 22, 0.08);
+  --elevation-3: 0 -8px 24px rgba(28, 26, 22, 0.10);
+  --elevation-4: 0 16px 40px rgba(28, 26, 22, 0.16);
+
+  --motion-tap: var(--p-dur-tap) var(--p-ease-out);
+  --motion-enter: var(--p-dur-enter) var(--p-ease-out);
+  --motion-exit: var(--p-dur-exit) var(--p-ease-in);
+  --motion-emphasize: var(--p-dur-emphasize) var(--p-ease-out);
+
+  --z-base: 0;
+  --z-sticky: 20;
+  --z-nav: 100;
+  --z-back: 110;
+  --z-overlay: 900;
+  --z-sheet: 1000;
+  --z-dialog: 1100;
+  --z-toast: 1200;
+  --z-onboarding: 1300;
+
+  /* Type scale — line-heights are the RATIO (unitless), applied via component, not raw px,
+   * so the accessibility font-scale multiplier (Task 3/miniapp app-shell, out of this plan's
+   * scope) can safely multiply font-size without breaking line-height. */
+  --type-display-lg-size: 32px; --type-display-lg-lh: 1.25; --type-display-lg-weight: 600;
+  --type-display-md-size: 28px; --type-display-md-lh: 1.29; --type-display-md-weight: 600;
+  --type-title-lg-size: 22px; --type-title-lg-lh: 1.36; --type-title-lg-weight: 600;
+  --type-title-md-size: 18px; --type-title-md-lh: 1.44; --type-title-md-weight: 600;
+  --type-title-sm-size: 16px; --type-title-sm-lh: 1.5; --type-title-sm-weight: 600;
+  --type-body-lg-size: 16px; --type-body-lg-lh: 1.5; --type-body-lg-weight: 400;
+  --type-body-md-size: 15px; --type-body-md-lh: 1.47; --type-body-md-weight: 400;
+  --type-body-sm-size: 14px; --type-body-sm-lh: 1.57; --type-body-sm-weight: 400;
+  --type-caption-size: 13px; --type-caption-lh: 1.54; --type-caption-weight: 400;
+  --type-label-size: 12px; --type-label-lh: 1.33; --type-label-weight: 600;
+  --type-price-xl-size: 24px; --type-price-xl-lh: 1.33; --type-price-xl-weight: 700;
+  --type-price-lg-size: 20px; --type-price-lg-lh: 1.4; --type-price-lg-weight: 700;
+  --type-price-md-size: 16px; --type-price-md-lh: 1.375; --type-price-md-weight: 600;
+  --type-price-sm-size: 14px; --type-price-sm-lh: 1.43; --type-price-sm-weight: 600;
+
+  --font-display: 'Fraunces', 'Georgia', serif;
+  --font-ui: 'Inter', system-ui, sans-serif;
+}
+
+/* Dealer (B2B) theme — overrides ONLY semantic action colors, per spec §Theme. Not applied to
+ * any page in this plan (dealer pages are out of scope) — the mechanism just needs to exist. */
+[data-theme='dealer'] {
+  --color-action-primary-bg: var(--stone-800);
+  --color-action-primary-bg-pressed: var(--stone-900);
+  --color-text-brand: var(--stone-800);
+}
