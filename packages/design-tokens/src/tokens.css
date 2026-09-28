@@ -112,7 +112,7 @@
   --color-action-primary-bg: var(--forest-600);
   --color-action-primary-bg-pressed: var(--forest-700);
   --color-action-primary-bg-disabled: var(--stone-200);
-  --color-action-primary-fg: #fff;
+  --color-action-primary-fg: var(--stone-0);
   --color-action-primary-fg-disabled: var(--stone-400);
 
   --color-action-secondary-bg: var(--forest-50);

@@ -15,7 +15,7 @@ describe('design-tokens/tokens.css', () => {
   it('defines semantic color.action.primary tokens pointing at forest-600/700', () => {
     expect(css).toMatch(/--color-action-primary-bg:\s*var\(--forest-600\)/);
     expect(css).toMatch(/--color-action-primary-bg-pressed:\s*var\(--forest-700\)/);
-    expect(css).toMatch(/--color-action-primary-fg:\s*#fff/i);
+    expect(css).toMatch(/--color-action-primary-fg:\s*var\(--stone-0\)/);
   });
 
   it('defines the warm stone neutral scale (replaces old cool neutral-*)', () => {
