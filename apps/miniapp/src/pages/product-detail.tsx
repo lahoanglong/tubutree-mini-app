@@ -863,7 +863,10 @@ function RelatedTile({ product, flashSales }: { product: ProductCardData; flashS
       variant="rail"
       priceOverride={{ price }}
       badge={
-        hasSale ? (
+        // Y hệt ProductCard cũ: KHÔNG hiện badge giảm giá khi đã hết hàng — overlay "tạm hết
+        // hàng" của ProductTile là lớp phủ TRONG SUỐT (72% opacity), badge % có thể lộ ra dưới
+        // lớp phủ nếu không chặn ở đây (review fix, Task 24).
+        hasSale && product.inStock ? (
           <Badge
             tone="promo"
             size="sm"
