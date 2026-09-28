@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { Btn, StickyActionBar, Txt } from './primitives';
+import { Btn, Txt } from './primitives';
 
 describe('Btn', () => {
   it('loading → tự disable (chặn double-tap gửi 2 lần)', () => {
@@ -48,18 +48,5 @@ describe('Txt — tone theo Ý NGHĨA', () => {
   it('tone mặc định là chữ chính', () => {
     const { container } = render(<Txt>x</Txt>);
     expect((container.firstElementChild as HTMLElement).style.color).toContain('--neutral-900');
-  });
-});
-
-describe('StickyActionBar', () => {
-  it('luôn chừa safe-area đáy (nút không bị thanh home của máy che)', () => {
-    const { container } = render(
-      <StickyActionBar>
-        <Btn>Mua ngay</Btn>
-      </StickyActionBar>,
-    );
-    const bar = container.firstElementChild as HTMLElement;
-    expect(bar.style.paddingBottom).toContain('--safe-bottom');
-    expect(bar.style.position).toBe('fixed');
   });
 });

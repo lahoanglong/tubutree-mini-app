@@ -155,37 +155,3 @@ export function Btn({
     </ZButton>
   );
 }
-
-// ── Thanh hành động dính đáy ───────────────────────────────────────────────────
-/**
- * Thanh CTA dính đáy màn hình. Tự chừa safe-area (tai thỏ/home bar) — trước đây mỗi trang tự
- * gõ `calc(16px + var(--safe-bottom))`, sót một chỗ là nút bị thanh home của máy che mất.
- */
-export function StickyActionBar({
-  children,
-  style,
-}: {
-  children: ReactNode;
-  style?: CSSProperties;
-}) {
-  return (
-    <Box
-      flex
-      style={{
-        position: 'fixed',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        gap: 10,
-        padding: 16,
-        paddingBottom: 'calc(16px + var(--safe-bottom))',
-        background: 'var(--neutral-0)',
-        boxShadow: 'var(--shadow-lg)',
-        zIndex: 10,
-        ...style,
-      }}
-    >
-      {children}
-    </Box>
-  );
-}
