@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Page, Text, Button, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, MessageSquare, Recycle } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, repurchaseOrder, requestReturn, fetchMyReturns } from '../services/shop-api';
@@ -23,19 +23,26 @@ import {
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
+import { PageHeader } from '../components/ui/page-header';
+import { Badge } from '../components/ui/badge';
+import { KeyValueRow } from '../components/ui/key-value-row';
+import { StickyActionBar } from '../components/ui/sticky-action-bar';
+import { Button } from '../components/ui/button';
 
-/** Màu ô trạng thái thu gom (cùng bảng màu STATUS_COLOR của đơn). */
+/** Màu ô trạng thái thu gom — cùng bảng màu STATUS_COLOR của đơn (order-status.ts): 'progress'
+ * dùng cùng cặp token với CONFIRMED/PACKED, 'success' với DELIVERED, 'warning' với PENDING_PAYMENT,
+ * 'muted' với RETURNED. */
 const RECYCLING_TONE_BG: Record<RecyclingTone, string> = {
-  progress: 'var(--primary-50)',
-  success: 'var(--leaf-50)',
-  warning: 'var(--clay-50)',
-  muted: 'var(--neutral-100)',
+  progress: 'var(--color-action-secondary-bg)',
+  success: 'var(--color-status-success-bg)',
+  warning: 'var(--color-status-warning-bg)',
+  muted: 'var(--color-status-neutral-bg)',
 };
 const RECYCLING_TONE_FG: Record<RecyclingTone, string> = {
-  progress: 'var(--primary-700)',
-  success: 'var(--leaf-700)',
-  warning: 'var(--clay-700)',
-  muted: 'var(--neutral-600)',
+  progress: 'var(--color-action-secondary-fg)',
+  success: 'var(--color-status-success-fg)',
+  warning: 'var(--color-status-warning-fg)',
+  muted: 'var(--color-status-neutral-fg)',
 };
 
 export default function OrderDetailPage() {
@@ -156,21 +163,21 @@ export default function OrderDetailPage() {
 
   if (authStatus === 'loading' || order.isLoading) {
     return (
-      <Page style={{ background: 'var(--neutral-50)' }}>
+      <Shell>
         <Box p={4} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Skeleton height={64} radius="var(--radius-lg)" />
+          <Skeleton height={64} radius="var(--radius-card)" />
           <LineItemSkeleton />
-          <Skeleton height={120} radius="var(--radius-lg)" />
+          <Skeleton height={120} radius="var(--radius-card)" />
         </Box>
-      </Page>
+      </Shell>
     );
   }
 
   if (order.isError || !order.data) {
     return (
-      <Page style={{ background: 'var(--neutral-50)' }}>
+      <Shell>
         <ErrorState message={getErrorMessage(order.error)} onRetry={() => void order.refetch()} />
-      </Page>
+      </Shell>
     );
   }
 
@@ -190,7 +197,8 @@ export default function OrderDetailPage() {
   const isDone = o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.status === 'RETURNED';
 
   return (
-    <Page className="page page-bleed" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
+      <PageHeader title="Chi tiết đơn hàng" subtitle={o.code} />
 
       {/* ── Status hero ── */}
       <Box p={4} style={{ background: color.bg }}>
@@ -209,31 +217,19 @@ export default function OrderDetailPage() {
           mx={4}
           mt={2}
           p={3}
-          style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--leaf-100)' }}
+          style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)', border: '1px solid var(--forest-200)' }}
         >
-          <Text bold size="small" style={{ color: 'var(--leaf-800)' }}>
+          <Text bold size="small" style={{ color: 'var(--forest-800)' }}>
             Theo dõi Tubu Tree trên Zalo
           </Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
+          <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Nhận thông báo cập nhật đơn hàng và ưu đãi mới — không bỏ lỡ tin quan trọng.
           </Text>
           <Box flex style={{ gap: 8, marginTop: 10 }}>
-            <Button
-              size="small"
-              loading={oaBusy}
-              disabled={oaBusy}
-              onClick={() => void handleFollowOaPrompt()}
-              style={{ background: 'var(--leaf-600)' }}
-            >
+            <Button size="md" loading={oaBusy} onPress={() => void handleFollowOaPrompt()}>
               Theo dõi ngay
             </Button>
-            <Button
-              size="small"
-              variant="tertiary"
-              disabled={oaBusy}
-              onClick={handleDismissOaPrompt}
-              style={{ color: 'var(--neutral-500)' }}
-            >
+            <Button size="md" variant="ghost" disabled={oaBusy} onPress={handleDismissOaPrompt} style={{ color: 'var(--color-text-tertiary)' }}>
               Để sau
             </Button>
           </Box>
@@ -242,7 +238,7 @@ export default function OrderDetailPage() {
 
       {/* ── Timeline (DI #9) ── */}
       {timelineIndex(o.status) >= 0 && (
-        <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text bold size="small" style={{ marginBottom: 12 }}>
             {vi.orders.timeline}
           </Text>
@@ -251,7 +247,7 @@ export default function OrderDetailPage() {
       )}
 
       {/* ── Sản phẩm ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Text bold size="small" style={{ marginBottom: 8 }}>
           {vi.orders.products}
         </Text>
@@ -260,7 +256,7 @@ export default function OrderDetailPage() {
             <Box flex justifyContent="space-between" style={{ gap: 12 }}>
               <Text size="small" style={{ flex: 1 }}>
                 {it.productName} · {it.variationName}{' '}
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)', display: 'inline' }}>
+                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', display: 'inline' }}>
                   ×{it.quantity}
                 </Text>
               </Text>
@@ -271,15 +267,9 @@ export default function OrderDetailPage() {
             {/* Đơn đại lý đặt vượt tồn kho hiện tại — phần này chờ nhập hàng, chưa xuất kho
                 (DealerBackorderService lấp dần theo tồn về, FIFO theo đơn cũ trước). */}
             {it.backorderedQty > 0 && (
-              <Text
-                size="xSmall"
-                style={{
-                  color: 'var(--warning)', background: 'var(--warning-bg)',
-                  display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--radius-full)', marginTop: 4,
-                }}
-              >
+              <Badge tone="warning" size="sm" style={{ display: 'inline-block', marginTop: 4 }}>
                 Đặt trước {it.backorderedQty}/{it.quantity} — chờ hàng về
-              </Text>
+              </Badge>
             )}
             {/* Lối vào đánh giá: trước đây nhận hàng xong KHÔNG có đường nào để đánh giá —
                 chữ "đánh giá" chỉ tồn tại ở trang sản phẩm, mà từ đơn không mở được trang đó
@@ -289,7 +279,7 @@ export default function OrderDetailPage() {
                 size="xSmall"
                 bold
                 className="tubu-press"
-                style={{ color: 'var(--primary-700)', marginTop: 2, display: 'inline-block' }}
+                style={{ color: 'var(--color-text-brand)', marginTop: 2, display: 'inline-block' }}
                 onClick={() => {
                   haptic('light');
                   navigate(`/product/${it.productSlug}`);
@@ -303,21 +293,23 @@ export default function OrderDetailPage() {
       </Box>
 
       {/* ── Tóm tắt tiền ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
-        <Row label={vi.cart.subtotal} value={formatVnd(o.subtotal)} />
-        {o.discount > 0 && <Row label={vi.cart.discount} value={`-${formatVnd(o.discount)}`} accent />}
+      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+        <KeyValueRow label={vi.cart.subtotal} value={formatVnd(o.subtotal)} />
+        {o.discount > 0 && <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(o.discount)}`} tone="success" />}
         {/* BE gộp voucher + combo + điểm vào cùng cột `discount`; nếu không tách dòng này thì
             khách tiêu điểm Xanh xong không thấy điểm mình đi đâu (checkout có tách, chi tiết đơn thì không). */}
-        {o.pointsUsed > 0 && <Row label={vi.orders.pointsUsed} value={`${o.pointsUsed.toLocaleString('vi-VN')} điểm`} />}
-        <Row
+        {o.pointsUsed > 0 && (
+          <KeyValueRow label={vi.orders.pointsUsed} value={`${o.pointsUsed.toLocaleString('vi-VN')} điểm`} />
+        )}
+        <KeyValueRow
           label={vi.checkout.shippingFee}
           value={o.shippingFee === 0 ? vi.common.freeShip : formatVnd(o.shippingFee)}
-          accent={o.shippingFee === 0}
+          tone={o.shippingFee === 0 ? 'success' : 'primary'}
         />
-        <Row label={vi.checkout.total} value={formatVnd(o.total)} bold />
-        <Row label={vi.orders.paymentLabel} value={vi.paymentMethod[o.paymentMethod] ?? o.paymentMethod} />
+        <KeyValueRow label={vi.checkout.total} value={formatVnd(o.total)} emphasis />
+        <KeyValueRow label={vi.orders.paymentLabel} value={vi.paymentMethod[o.paymentMethod] ?? o.paymentMethod} />
         {o.pointsEarned > 0 && o.status !== 'CANCELLED' && (
-          <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 4 }}>
+          <Text size="xSmall" style={{ color: 'var(--color-text-success)', marginTop: 4 }}>
             🌱 {vi.checkout.pointsEarn(o.pointsEarned)}
           </Text>
         )}
@@ -325,7 +317,7 @@ export default function OrderDetailPage() {
 
       {/* ── Vận chuyển (hãng VC + mã vận đơn + tra cứu + hành trình) §6.4 ── */}
       {(o.shippingCode || journey.length > 0) && (
-        <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text bold size="small" style={{ marginBottom: 6 }}>
             Vận chuyển
           </Text>
@@ -333,21 +325,20 @@ export default function OrderDetailPage() {
             <Box style={{ flex: 1 }}>
               {o.shippingPartner && <Text size="small">{o.shippingPartner}</Text>}
               {o.shippingCode && (
-                <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
                   Mã vận đơn: <b>{o.shippingCode}</b>
                 </Text>
               )}
               {o.shippingStatus && (
-                <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
                   {o.shippingStatus}
                 </Text>
               )}
             </Box>
             {o.shippingCode && (
               <Button
-                size="small"
                 variant="secondary"
-                onClick={() => {
+                onPress={() => {
                   haptic('light');
                   void copyText(o.shippingCode!).then((ok) =>
                     openSnackbar(
@@ -365,11 +356,10 @@ export default function OrderDetailPage() {
 
           {o.trackingLink && (
             <Button
-              size="small"
               variant="secondary"
               fullWidth
               style={{ marginTop: 10 }}
-              onClick={() => {
+              onPress={() => {
                 haptic('light');
                 void openExternal(o.trackingLink!).catch(() =>
                   openSnackbar({ text: 'Không mở được liên kết tra cứu.', type: 'error' }),
@@ -393,26 +383,26 @@ export default function OrderDetailPage() {
                           width: 9,
                           height: 9,
                           borderRadius: '50%',
-                          background: i === 0 ? 'var(--leaf-600)' : 'var(--neutral-300)',
+                          background: i === 0 ? 'var(--color-action-primary-bg)' : 'var(--stone-300)',
                           marginTop: 4,
                         }}
                       />
                       {i < journey.length - 1 && (
-                        <span style={{ width: 2, flex: 1, background: 'var(--neutral-200)', marginTop: 2 }} />
+                        <span style={{ width: 2, flex: 1, background: 'var(--color-border-subtle)', marginTop: 2 }} />
                       )}
                     </Box>
                     <Box style={{ flex: 1, paddingBottom: 12 }}>
                       <Text
                         size="xSmall"
                         style={{
-                          color: i === 0 ? 'var(--neutral-900)' : 'var(--neutral-600)',
+                          color: i === 0 ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
                           fontWeight: i === 0 ? 600 : 400,
                         }}
                       >
                         {ev.status ?? '—'}
                       </Text>
                       {ev.at && (
-                        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                        <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                           {new Date(ev.at).toLocaleString('vi-VN')}
                         </Text>
                       )}
@@ -426,12 +416,12 @@ export default function OrderDetailPage() {
 
       {/* ── Hoá đơn VAT (nếu có) ── */}
       {o.invoiceStatus && o.invoiceStatus !== 'NOT_REQUESTED' && (
-        <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text bold size="small" style={{ marginBottom: 4 }}>
             Hoá đơn VAT
           </Text>
           <Box flex alignItems="center" justifyContent="space-between">
-            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+            <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
               {o.invoiceStatus === 'ISSUED'
                 ? 'Đã phát hành'
                 : o.invoiceStatus === 'REQUESTED'
@@ -439,7 +429,7 @@ export default function OrderDetailPage() {
                   : 'Phát hành lỗi — vui lòng liên hệ hỗ trợ'}
             </Text>
             {o.invoiceUrl && (
-              <Button size="small" variant="secondary" onClick={() => void openExternal(o.invoiceUrl!)}>
+              <Button variant="secondary" onPress={() => void openExternal(o.invoiceUrl!)}>
                 Tải PDF
               </Button>
             )}
@@ -449,26 +439,26 @@ export default function OrderDetailPage() {
 
       {/* ── Thu gom vật liệu tái chế (nếu khách chọn) — trạng thái thật theo gomdonStatus ── */}
       {recycling && (
-        <Box id="order-recycling" p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Box id="order-recycling" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Box flex alignItems="center" style={{ gap: 10 }}>
             <Box
               style={{
                 width: 32,
                 height: 32,
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--leaf-50)',
+                borderRadius: 'var(--radius-control)',
+                background: 'var(--color-bg-subtle)',
                 display: 'grid',
                 placeItems: 'center',
                 flex: '0 0 auto',
               }}
             >
-              <Recycle size={18} color="var(--leaf-600)" />
+              <Recycle size={18} color="var(--color-text-brand)" />
             </Box>
             <Box style={{ flex: 1 }}>
-              <Text bold size="small" style={{ color: 'var(--neutral-900)' }}>
+              <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
                 Thu gom vật liệu tái chế
               </Text>
-              <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 2 }}>
+              <Text size="xSmall" style={{ color: 'var(--color-text-success)', marginTop: 2 }}>
                 Tubu Tree tài trợ 100% phí thu gom
               </Text>
             </Box>
@@ -478,17 +468,17 @@ export default function OrderDetailPage() {
             p={2}
             style={{
               background: RECYCLING_TONE_BG[recycling.tone],
-              borderRadius: 'var(--radius-sm)',
+              borderRadius: 'var(--radius-control)',
             }}
           >
             <Text bold size="xSmall" style={{ color: RECYCLING_TONE_FG[recycling.tone] }}>
               {recycling.title}
             </Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-700)', marginTop: 2, lineHeight: '18px' }}>
+            <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 2, lineHeight: '18px' }}>
               {recycling.detail}
             </Text>
             {recycling.waybill && (
-              <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
+              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 4 }}>
                 Mã vận đơn BestExpress: <b>{recycling.waybill}</b>
               </Text>
             )}
@@ -498,11 +488,11 @@ export default function OrderDetailPage() {
               mt={2}
               p={2}
               style={{
-                background: 'var(--neutral-50)',
-                borderRadius: 'var(--radius-sm)',
+                background: 'var(--color-bg-canvas)',
+                borderRadius: 'var(--radius-control)',
               }}
             >
-              <Text size="xSmall" style={{ color: 'var(--neutral-700)' }}>
+              <Text size="xSmall" style={{ color: 'var(--stone-700)' }}>
                 <b>Vật dụng gửi:</b> {o.recyclingNote}
               </Text>
             </Box>
@@ -519,24 +509,24 @@ export default function OrderDetailPage() {
         const hasContact = !!(addr.recipient || addr.phone);
         if (!hasContact && !line) {
           return addr.note ? (
-            <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+            <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
               <Text bold size="small" style={{ marginBottom: 4 }}>
                 {vi.checkout.address}
               </Text>
-              <Text size="small" style={{ color: 'var(--neutral-600)' }}>
+              <Text size="small" style={{ color: 'var(--color-text-secondary)' }}>
                 {addr.note}
               </Text>
             </Box>
           ) : null;
         }
         return (
-          <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+          <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
             <Text bold size="small" style={{ marginBottom: 4 }}>
               {vi.checkout.address}
             </Text>
             <Text size="small">{[addr.recipient, addr.phone].filter(Boolean).join(' · ')}</Text>
             {line && (
-              <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
                 {line}
               </Text>
             )}
@@ -555,15 +545,15 @@ export default function OrderDetailPage() {
                 : ret.status === 'REJECTED'
                   ? `❌ Đổi/trả bị từ chối${ret.adminNote ? `: ${ret.adminNote}` : ''}`
                   : '⏳ Yêu cầu đổi/trả đang xử lý (trong 24h)';
-            const color =
+            const retColor =
               ret.status === 'APPROVED'
-                ? 'var(--leaf-700)'
+                ? 'var(--color-text-success)'
                 : ret.status === 'REJECTED'
-                  ? 'var(--danger)'
-                  : 'var(--neutral-600)';
+                  ? 'var(--color-text-danger)'
+                  : 'var(--color-text-secondary)';
             return (
-              <Box mx={4} mt={2} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-md)' }}>
-                <Text size="xSmall" style={{ color }}>
+              <Box mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
+                <Text size="xSmall" style={{ color: retColor }}>
                   {label}
                 </Text>
               </Box>
@@ -572,9 +562,9 @@ export default function OrderDetailPage() {
           return (
             <Box px={4} mt={2} style={{ textAlign: 'center' }}>
               <Button
-                variant="tertiary"
-                onClick={() => setReturnOpen(true)}
-                style={{ color: 'var(--neutral-600)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                variant="ghost"
+                onPress={() => setReturnOpen(true)}
+                style={{ color: 'var(--color-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
                 <RotateCcw size={15} strokeWidth={2} aria-hidden />
                 Yêu cầu đổi/trả (lỗi nhà sản xuất)
@@ -586,103 +576,83 @@ export default function OrderDetailPage() {
       <Box p={4} style={{ textAlign: 'center' }}>
         {hasOA ? (
           <Button
-            variant="tertiary"
-            onClick={() => void openOAChat(`Hỗ trợ đơn ${o.code}`)}
-            style={{ color: 'var(--primary-700)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            variant="ghost"
+            onPress={() => void openOAChat(`Hỗ trợ đơn ${o.code}`)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <MessageSquare size={16} strokeWidth={2} aria-hidden />
             Yêu cầu hỗ trợ qua Zalo OA
           </Button>
         ) : (
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+          <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
             {vi.orders.support}
           </Text>
         )}
       </Box>
 
-      {/* ── Action bar ── */}
-      <Box
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          background: 'var(--neutral-0)',
-          boxShadow: 'var(--shadow-lg)',
-          padding: '10px 16px calc(10px + var(--safe-bottom))',
-          display: 'flex',
-          gap: 10,
-        }}
-      >
-        {canCancel && (
-          <Button
-            variant="secondary"
-            onClick={() => {
-              haptic('light');
-              setConfirmCancel(true);
-            }}
-            style={{ minHeight: 48, color: 'var(--danger)', borderColor: 'var(--neutral-200)', flex: 1 }}
-          >
-            {vi.orders.cancelOrder}
-          </Button>
-        )}
-        {canPayNow && (
-          /* Hành động CHÍNH của đơn chờ chuyển khoản — đặt sau nút Huỷ để nằm bên phải (vị trí
-             ngón cái) và tô đặc, tránh việc "Huỷ đơn" là nút nổi bật duy nhất. */
-          <Button
-            onClick={() => {
-              haptic('light');
-              navigate(`/bank-payment/${o.code}`);
-            }}
-            style={{ background: 'var(--primary-600)', minHeight: 48, fontWeight: 700, flex: 1 }}
-          >
-            {vi.orders.payNow}
-          </Button>
-        )}
-        {isDone && (
-          <Button
-            loading={repurchase.isPending} disabled={repurchase.isPending}
-            onClick={() => repurchase.mutate()}
-            style={{ background: 'var(--primary-600)', minHeight: 48, fontWeight: 600, flex: 1 }}
-          >
-            {vi.orders.repurchase}
-          </Button>
-        )}
-        {!canCancel && !isDone && (
-          <Button
-            fullWidth
-            variant="tertiary"
-            onClick={() => navigate('/orders')}
-            style={{ color: 'var(--primary-700)', minHeight: 48 }}
-          >
-            {/* Nút này đi tới DANH SÁCH đơn — trước đây dùng nhãn "Về trang chủ" nên bấm xong
-                khách rơi lại vào danh sách đơn thay vì trang chủ như chữ hứa. */}
-            {vi.orders.viewAllOrders}
-          </Button>
-        )}
-      </Box>
+      {/* ── Action bar — 4 tổ hợp gốc: (huỷ+thanh toán ngay) / (chỉ huỷ) / (chỉ mua lại) /
+          (chỉ xem tất cả đơn) — giữ nguyên 4 điều kiện gốc, chỉ đổi vỏ trình bày. ── */}
+      <StickyActionBar
+        primary={
+          <Box flex style={{ gap: 10 }}>
+            {canCancel && (
+              <Button
+                variant="secondary"
+                onPress={() => {
+                  haptic('light');
+                  setConfirmCancel(true);
+                }}
+                style={{ flex: 1, color: 'var(--color-text-danger)' }}
+              >
+                {vi.orders.cancelOrder}
+              </Button>
+            )}
+            {canPayNow && (
+              /* Hành động CHÍNH của đơn chờ chuyển khoản — đặt sau nút Huỷ để nằm bên phải (vị trí
+                 ngón cái) và tô đặc, tránh việc "Huỷ đơn" là nút nổi bật duy nhất. */
+              <Button
+                onPress={() => {
+                  haptic('light');
+                  navigate(`/bank-payment/${o.code}`);
+                }}
+                style={{ flex: 1, fontWeight: 700 }}
+              >
+                {vi.orders.payNow}
+              </Button>
+            )}
+            {isDone && (
+              <Button loading={repurchase.isPending} onPress={() => repurchase.mutate()} style={{ flex: 1, fontWeight: 600 }}>
+                {vi.orders.repurchase}
+              </Button>
+            )}
+            {!canCancel && !isDone && (
+              <Button variant="ghost" fullWidth onPress={() => navigate('/orders')}>
+                {/* Nút này đi tới DANH SÁCH đơn — trước đây dùng nhãn "Về trang chủ" nên bấm xong
+                    khách rơi lại vào danh sách đơn thay vì trang chủ như chữ hứa. */}
+                {vi.orders.viewAllOrders}
+              </Button>
+            )}
+          </Box>
+        }
+      />
 
       {/* ── Confirm hủy (DI #10): giữ đơn là primary ── */}
       <Sheet visible={confirmCancel} onClose={() => setConfirmCancel(false)} autoHeight>
         <Box p={5} style={{ textAlign: 'center' }}>
           <Text.Title size="small">{vi.orders.cancelConfirmTitle}</Text.Title>
-          <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
+          <Text size="small" style={{ color: 'var(--color-text-secondary)', marginTop: 6 }}>
             {vi.orders.cancelConfirmBody}
           </Text>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
-            <Button
-              fullWidth
-              onClick={() => setConfirmCancel(false)}
-              style={{ background: 'var(--primary-600)', minHeight: 48, fontWeight: 600 }}
-            >
+            <Button fullWidth onPress={() => setConfirmCancel(false)}>
               {vi.orders.cancelKeep}
             </Button>
             <Button
               fullWidth
-              variant="tertiary"
-              loading={cancel.isPending} disabled={cancel.isPending}
-              onClick={() => cancel.mutate()}
-              style={{ color: 'var(--danger)', minHeight: 44 }}
+              variant="ghost"
+              loading={cancel.isPending}
+              onPress={() => cancel.mutate()}
+              style={{ color: 'var(--color-text-danger)' }}
             >
               {vi.orders.cancelYes}
             </Button>
@@ -693,7 +663,7 @@ export default function OrderDetailPage() {
       <Sheet visible={returnOpen} onClose={() => setReturnOpen(false)} autoHeight>
         <Box p={5}>
           <Text.Title size="small">Yêu cầu đổi/trả</Text.Title>
-          <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
+          <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 6 }}>
             Chỉ áp dụng khi lỗi nhà sản xuất (hỏng bao bì, sai hạn dùng, sai mã, không đúng mô tả).
             Trong 7 ngày từ khi nhận hàng. Tubu phản hồi trong 24h.
           </Text>
@@ -706,29 +676,38 @@ export default function OrderDetailPage() {
               width: '100%',
               marginTop: 12,
               padding: 10,
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--neutral-200)',
+              borderRadius: 'var(--radius-control)',
+              border: '1px solid var(--color-border-subtle)',
               fontSize: 14,
               fontFamily: 'inherit',
               resize: 'vertical',
               boxSizing: 'border-box',
             }}
           />
-          <Text size="xSmall" bold style={{ marginTop: 12, display: 'block', color: 'var(--neutral-600)' }}>
+          <Text size="xSmall" bold style={{ marginTop: 12, display: 'block', color: 'var(--color-text-secondary)' }}>
             Ảnh minh chứng (khuyến khích, tối đa 3)
           </Text>
           <MultiImageUpload value={returnImages} onChange={setReturnImages} max={3} />
           <Button
             fullWidth
             loading={returnReq.isPending}
-            disabled={returnReason.trim().length < 5 || returnReq.isPending}
-            onClick={() => returnReq.mutate()}
-            style={{ background: 'var(--primary-600)', minHeight: 48, marginTop: 14, fontWeight: 600 }}
+            disabled={returnReason.trim().length < 5}
+            onPress={() => returnReq.mutate()}
+            style={{ marginTop: 14 }}
           >
             Gửi yêu cầu
           </Button>
         </Box>
       </Sheet>
+    </Page>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title="Chi tiết đơn hàng" />
+      {children}
     </Page>
   );
 }
@@ -750,8 +729,8 @@ function Timeline({ current }: { current: number }) {
                   height: 18,
                   borderRadius: '50%',
                   flex: '0 0 auto',
-                  background: done || active ? 'var(--primary-600)' : 'var(--neutral-100)',
-                  border: `2px solid ${done || active ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
+                  background: done || active ? 'var(--color-action-primary-bg)' : 'var(--stone-100)',
+                  border: `2px solid ${done || active ? 'var(--color-action-primary-bg)' : 'var(--stone-200)'}`,
                   boxSizing: 'border-box',
                   display: 'flex',
                   alignItems: 'center',
@@ -769,7 +748,7 @@ function Timeline({ current }: { current: number }) {
                   style={{
                     width: 2,
                     flex: 1,
-                    background: done ? 'var(--primary-600)' : 'var(--neutral-200)',
+                    background: done ? 'var(--color-action-primary-bg)' : 'var(--stone-200)',
                     marginTop: 2,
                     marginBottom: 2,
                   }}
@@ -780,7 +759,7 @@ function Timeline({ current }: { current: number }) {
               size="small"
               bold={active}
               style={{
-                color: active ? 'var(--primary-700)' : done ? 'var(--neutral-900)' : 'var(--neutral-400)',
+                color: active ? 'var(--color-text-brand)' : done ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
                 paddingTop: 0,
               }}
             >
@@ -789,26 +768,6 @@ function Timeline({ current }: { current: number }) {
           </Box>
         );
       })}
-    </Box>
-  );
-}
-
-function Row({ label, value, bold, accent }: { label: string; value: string; bold?: boolean; accent?: boolean }) {
-  return (
-    <Box flex justifyContent="space-between" style={{ padding: '4px 0' }}>
-      <Text size="small" style={{ color: 'var(--neutral-600)' }}>
-        {label}
-      </Text>
-      <Text
-        size="small"
-        bold={bold}
-        style={{
-          color: accent ? 'var(--leaf-700)' : bold ? 'var(--primary-700)' : undefined,
-          fontSize: bold ? 16 : undefined,
-        }}
-      >
-        {value}
-      </Text>
     </Box>
   );
 }
