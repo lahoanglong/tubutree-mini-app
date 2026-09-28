@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./css": "./src/tokens.css",
-    "./src/tokens.css": "./src/tokens.css"
+    "./src/tokens.css": "./src/tokens.css",
+    "./src/fonts.css": "./src/fonts.css"
   },
   "devDependencies": {
     "@tubutree/typescript-config": "workspace:*",
