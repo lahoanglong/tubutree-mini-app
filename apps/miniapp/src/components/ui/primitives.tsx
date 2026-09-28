@@ -95,41 +95,6 @@ export function Row({
   );
 }
 
-// ── Thẻ ────────────────────────────────────────────────────────────────────────
-export interface CardProps {
-  children: ReactNode;
-  /** Đổ bóng nhẹ + bo góc (mặc định). `flat` cho thẻ nằm trong nền đã tách lớp. */
-  variant?: 'raised' | 'flat';
-  padding?: 0 | 8 | 12 | 16;
-  onClick?: () => void;
-  className?: string;
-  style?: CSSProperties;
-}
-
-/** Mặt phẳng nội dung tiêu chuẩn — thay cho bộ ba background + borderRadius + boxShadow gõ tay. */
-export function Card({ children, variant = 'raised', padding = 12, onClick, className, style }: CardProps) {
-  const interactive = typeof onClick === 'function';
-  return (
-    <Box
-      // `tubu-card` đã gói sẵn nền/bo góc/bóng + hiệu ứng nhấn (css/tokens.css).
-      className={[variant === 'raised' ? 'tubu-card' : '', interactive ? 'tubu-press' : '', className ?? '']
-        .filter(Boolean)
-        .join(' ')}
-      role={interactive ? 'button' : undefined}
-      onClick={onClick}
-      style={{
-        padding,
-        ...(variant === 'flat'
-          ? { background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }
-          : {}),
-        ...style,
-      }}
-    >
-      {children}
-    </Box>
-  );
-}
-
 // ── Nút ────────────────────────────────────────────────────────────────────────
 export type BtnVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 

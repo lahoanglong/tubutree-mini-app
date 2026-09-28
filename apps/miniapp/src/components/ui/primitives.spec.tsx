@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { Badge, Btn, Card, Chip, StickyActionBar, Txt } from './primitives';
+import { Badge, Btn, Chip, StickyActionBar, Txt } from './primitives';
 
 describe('Btn', () => {
   it('loading → tự disable (chặn double-tap gửi 2 lần)', () => {
@@ -48,20 +48,6 @@ describe('Txt — tone theo Ý NGHĨA', () => {
   it('tone mặc định là chữ chính', () => {
     const { container } = render(<Txt>x</Txt>);
     expect((container.firstElementChild as HTMLElement).style.color).toContain('--neutral-900');
-  });
-});
-
-describe('Card', () => {
-  it('có onClick → là vùng bấm được (role=button) + có phản hồi chạm', () => {
-    const onClick = vi.fn();
-    render(<Card onClick={onClick}>nội dung</Card>);
-    const el = screen.getByRole('button');
-    expect(el.className).toContain('tubu-press');
-  });
-
-  it('không có onClick → KHÔNG gắn role=button (không đánh lừa trình đọc màn hình)', () => {
-    render(<Card>nội dung</Card>);
-    expect(screen.queryByRole('button')).toBeNull();
   });
 });
 
