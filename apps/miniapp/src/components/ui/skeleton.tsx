@@ -14,7 +14,7 @@ export function Skeleton({ width = '100%', height = 16, radius, style }: Skeleto
     <div
       className="tubu-skeleton"
       aria-hidden
-      style={{ width, height, borderRadius: radius ?? 'var(--radius-md)', ...style }}
+      style={{ width, height, borderRadius: radius ?? 'var(--radius-control)', ...style }}
     />
   );
 }
@@ -24,10 +24,10 @@ export function ProductCardSkeleton() {
   return (
     <div
       style={{
-        background: 'var(--neutral-0)',
-        borderRadius: 'var(--radius-lg)',
+        background: 'var(--color-bg-surface)',
+        borderRadius: 'var(--radius-card)',
         overflow: 'hidden',
-        boxShadow: 'var(--shadow-sm)',
+        boxShadow: 'var(--elevation-1)',
       }}
     >
       <Skeleton height="auto" radius="0" style={{ aspectRatio: '1 / 1' }} />
@@ -57,8 +57,8 @@ export function LineItemSkeleton() {
   return (
     <div
       style={{
-        background: 'var(--neutral-0)',
-        borderRadius: 'var(--radius-lg)',
+        background: 'var(--color-bg-surface)',
+        borderRadius: 'var(--radius-card)',
         padding: 12,
         display: 'flex',
         gap: 12,
