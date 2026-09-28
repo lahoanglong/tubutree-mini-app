@@ -54,6 +54,15 @@ const SIZE_CONFIG: Record<BottomSheetSize, SheetSizeConfig> = {
  * API thật của ZaUI `Sheet` (đọc `node_modules/zmp-ui/sheet/index.d.ts`, KHÔNG đoán): props đúng
  * là `visible`/`onClose`/`height` như brief giả định (khớp cách `share-sheet.tsx` và
  * `checkout/voucher-sheet.tsx` đã dùng) — không có `open`/`onDismiss` nào khác.
+ *
+ * VÒNG ĐỜI ĐÓNG/MỞ: KHÔNG `if (!open) return null` — làm vậy sẽ unmount cả cây DOM ngay trong
+ * cùng 1 render, bỏ qua animation trượt-xuống mà ZaUI tự chạy khi đóng (mọi sheet hiện có trong
+ * app, vd `share-sheet.tsx`/`voucher-sheet.tsx`, đều giữ `<Sheet visible>` mounted và chỉ đổi
+ * `visible` để animation này chạy). Thay vào đó truyền `unmountOnClose` cho `Sheet` — đọc
+ * `esm/components/sheet/sheet.js`: khi `unmountOnClose`, `contentVisible` khởi tạo `false` nên
+ * lần đầu `open=false` Sheet tự trả `null` (không có gì trong DOM, giống hệt hành vi trước đây),
+ * còn khi `open` chuyển true→false thì Sheet vẫn giữ nội dung mounted đủ lâu để chạy hết animation
+ * trượt xuống (200ms, `ANIMATION_DURATION`) rồi mới thực sự gỡ khỏi DOM.
  */
 export function BottomSheet({
   open,
@@ -65,11 +74,11 @@ export function BottomSheet({
   dismissible = true,
   children,
 }: BottomSheetProps) {
-  if (!open) return null;
   const sizeConfig = SIZE_CONFIG[size];
   return (
     <Sheet
       visible={open}
+      unmountOnClose
       onClose={dismissible ? onClose : undefined}
       maskClosable={dismissible}
       swipeToClose={dismissible}
@@ -79,7 +88,9 @@ export function BottomSheet({
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           {title && <Heading variant="title-md" as="h2">{title}</Heading>}
-          <IconButton icon={X} label="Đóng" onPress={onClose} />
+          {/* dismissible=false phải chặn CẢ nút X, không chỉ mask-tap/swipe — nút X vẫn hiện mà
+              vẫn gọi được onClose thì "dismissible" chỉ là nửa vời, phá vỡ đúng mục đích của prop. */}
+          {dismissible && <IconButton icon={X} label="Đóng" onPress={onClose} />}
         </div>
         {description && <Text variant="body-sm" tone="secondary">{description}</Text>}
       </div>

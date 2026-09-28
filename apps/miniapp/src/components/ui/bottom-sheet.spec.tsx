@@ -48,6 +48,21 @@ describe('BottomSheet', () => {
     expect(mask).toBeTruthy();
   });
 
+  it('dismissible=false also hides the header X button — otherwise a "mandatory" sheet still has a working close control', () => {
+    render(<BottomSheet open title="t" onClose={() => {}} dismissible={false}>y</BottomSheet>);
+    expect(screen.queryByRole('button', { name: /đóng/i })).toBeNull();
+  });
+
+  it('closing (open true→false) does not instantly unmount — ZaUI must get the chance to play its slide-down exit animation, matching every other sheet in the app (share-sheet.tsx, voucher-sheet.tsx) which keep <Sheet visible> mounted and just toggle `visible`', () => {
+    const { rerender } = render(<BottomSheet open onClose={() => {}}>Nội dung</BottomSheet>);
+    expect(screen.getByText('Nội dung')).toBeInTheDocument();
+    rerender(<BottomSheet open={false} onClose={() => {}}>Nội dung</BottomSheet>);
+    // Ngay sau khi open chuyển false, nội dung PHẢI còn trong DOM — ZaUI (nhờ `unmountOnClose`)
+    // chỉ tự gỡ khỏi DOM SAU khi chạy xong animation trượt xuống (~200ms). Nếu bị gỡ ngay lập
+    // tức ở đây thì lỗi "if (!open) return null" đã quay lại.
+    expect(screen.getByText('Nội dung')).toBeInTheDocument();
+  });
+
   it('size="auto" hugs content (ZaUI autoHeight class), size="half"/"full" get explicit vh height', () => {
     const { container: autoC } = render(<BottomSheet open onClose={() => {}} size="auto">y</BottomSheet>);
     expect(autoC.querySelector('.zaui-sheet-content')?.className).toContain('hug-content');
