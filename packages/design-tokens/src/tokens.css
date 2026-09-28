@@ -89,6 +89,9 @@
   --color-bg-subtle: var(--sage-50);
   --color-bg-inverse: var(--stone-900);
   --color-bg-scrim: rgba(28, 26, 22, 0.6);
+  /* Lớp phủ SÁNG (= stone-50 72% alpha) — dùng cho overlay "tạm hết hàng" đè lên ảnh sản phẩm;
+     khác --color-bg-scrim (tối, dùng cho backdrop modal/sheet). Thêm ở Task 23 (ProductTile). */
+  --color-bg-scrim-light: rgba(246, 244, 239, 0.72);
 
   --color-text-primary: var(--stone-900);
   --color-text-secondary: var(--stone-600);
