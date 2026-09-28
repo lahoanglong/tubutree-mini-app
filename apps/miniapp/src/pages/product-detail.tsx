@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Page, Text, Button, useNavigate, useParams, useSnackbar, useLocation } from 'zmp-ui';
+import { Box, Page, Text, useNavigate, useParams, useSnackbar, useLocation } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone } from 'lucide-react';
 import {
@@ -10,13 +10,14 @@ import {
   addToCart,
   fetchActiveFlashSales,
   type VariationDetail,
+  type ProductCard as ProductCardData,
+  type FlashSaleActiveItem,
 } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { getCoupons, type CouponDTO } from '../services/account-api';
 import { createGroupBuy } from '../services/groupbuy-api';
 import { useAuthStore } from '../store/auth';
 import { shareLink } from '../services/zmp-bridge';
-import ProductCard from '../components/product-card';
 import { ReviewsSection, Stars } from '../components/reviews-section';
 import { WishlistHeart } from '../components/wishlist-heart';
 import { SubscribeSheet } from '../components/subscribe-sheet';
@@ -37,6 +38,11 @@ import { getAffiliateMe } from '../services/affiliate-api';
 import { ContentKitSheet } from '../components/content-kit-sheet';
 import { CartBadge } from '../components/ui/cart-badge';
 import { copyText } from '../utils/clipboard';
+import { Button } from '../components/ui/button';
+import { StickyActionBar } from '../components/ui/sticky-action-bar';
+import { PriceTag } from '../components/ui/price-tag';
+import { Badge } from '../components/ui/badge';
+import { ProductTile } from '../components/ui/product-tile';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -223,7 +229,7 @@ export default function ProductDetailPage() {
   if (product.isLoading) return <PdpSkeleton />;
   if (product.isError || !product.data) {
     return (
-      <Page style={{ background: 'var(--neutral-50)' }}>
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <ErrorState message={getErrorMessage(product.error)} onRetry={() => void product.refetch()} />
       </Page>
     );
@@ -234,7 +240,6 @@ export default function ProductDetailPage() {
   const baseSelectedPrice = selected?.salePrice ?? selected?.retailPrice ?? p.basePrice;
   const price = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
   const originalPrice = selected ? selected.retailPrice : p.basePrice;
-  const hasSale = price < originalPrice;
   // % badge tính từ giá THỰC hiển thị (price/originalPrice) — không dùng flashItem.retailPrice (snapshot cũ).
   const flashPct = originalPrice > 0 ? Math.round((1 - price / originalPrice) * 100) : 0;
   const inStock = (selected?.stock ?? 0) > 0;
@@ -274,19 +279,19 @@ export default function ProductDetailPage() {
   };
 
   return (
-    <Page className="page page-bleed" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
+    <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
 
       <StorefrontContextBar />
       <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} alt={p.name} />
 
       {/* ── Info chính ── */}
-      <Box p={4} style={{ background: 'var(--neutral-0)' }}>
+      <Box p={4} style={{ background: 'var(--color-bg-surface)' }}>
         <Box flex alignItems="center" style={{ gap: 6 }}>
           <span
             aria-hidden
             style={{ width: 8, height: 8, borderRadius: '50%', background: brandAccent(p.brand) }}
           />
-          <Text size="xSmall" bold style={{ color: 'var(--neutral-600)' }}>
+          <Text size="xSmall" bold style={{ color: 'var(--color-text-secondary)' }}>
             {p.brand}
           </Text>
           <Box style={{ marginLeft: 'auto' }}>
@@ -305,7 +310,7 @@ export default function ProductDetailPage() {
               justifyContent: 'center',
             }}
           >
-            <Share2 size={20} color="var(--primary-700)" strokeWidth={2} />
+            <Share2 size={20} color="var(--color-text-brand)" strokeWidth={2} />
           </Box>
         </Box>
 
@@ -316,54 +321,29 @@ export default function ProductDetailPage() {
         {reviews.data && reviews.data.count > 0 && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 6 }}>
             <Stars value={reviews.data.average} size={14} />
-            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+            <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
               {reviews.data.average.toFixed(1)} · {reviews.data.count} đánh giá
             </Text>
           </Box>
         )}
 
         <Box flex alignItems="baseline" style={{ gap: 8, marginTop: 8 }}>
-          <Text bold style={{ color: 'var(--primary-700)', fontSize: 24 }}>
-            {formatVnd(price)}
-          </Text>
-          {hasSale && (
-            <Text size="small" style={{ color: 'var(--neutral-400)', textDecoration: 'line-through' }}>
-              {formatVnd(originalPrice)}
-            </Text>
-          )}
+          <PriceTag value={price} compareAt={originalPrice} size="xl" />
           {formatSold(p.sold) && (
-            <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginLeft: 'auto' }}>{formatSold(p.sold)}</Text>
+            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginLeft: 'auto' }}>{formatSold(p.sold)}</Text>
           )}
         </Box>
 
         {/* Giờ vàng cho phân loại đang chọn — badge % + đếm ngược êm + đã bán bao nhiêu%. */}
         {flashItem && (
           <Box flex alignItems="center" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-            <Text
-              size="xSmall"
-              bold
-              style={{
-                background: 'var(--clay-500)',
-                color: 'var(--neutral-0)',
-                padding: '2px 8px',
-                borderRadius: 'var(--radius-full)',
-              }}
-            >
+            <Badge tone="promo" size="sm" style={{ background: 'var(--color-flash-solid-bg)', color: 'var(--color-flash-solid-fg)' }}>
               -{flashPct}%
-            </Text>
-            <Text
-              size="xSmall"
-              bold
-              style={{
-                background: 'var(--clay-50)',
-                color: 'var(--clay-700)',
-                padding: '2px 10px',
-                borderRadius: 'var(--radius-full)',
-              }}
-            >
+            </Badge>
+            <Badge tone="promo" size="sm">
               {vi.flashSale.endsIn(flashLeft)}
-            </Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+            </Badge>
+            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
               {vi.flashSale.soldPct(flashItem.quota > 0 ? Math.round((flashItem.soldCount / flashItem.quota) * 100) : 0)}
             </Text>
           </Box>
@@ -376,7 +356,7 @@ export default function ProductDetailPage() {
         )}
 
         {p.shortDesc && (
-          <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 8 }}>
+          <Text size="small" style={{ color: 'var(--color-text-secondary)', marginTop: 8 }}>
             {p.shortDesc}
           </Text>
         )}
@@ -384,8 +364,8 @@ export default function ProductDetailPage() {
         {/* Badge freeship — tín hiệu vận chuyển ở nơi ra quyết định mua (trước đây chỉ có ở giỏ). */}
         {config.isLoaded && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
-            <Truck size={15} color="var(--leaf-700)" strokeWidth={2} aria-hidden />
-            <Text size="xSmall" style={{ color: 'var(--leaf-700)', fontWeight: 600 }}>
+            <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden />
+            <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
               Miễn phí vận chuyển cho đơn từ {formatVnd(config.freeshipThreshold)}
             </Text>
           </Box>
@@ -398,10 +378,10 @@ export default function ProductDetailPage() {
                 key={c}
                 size="xSmall"
                 style={{
-                  background: 'var(--leaf-50)',
-                  color: 'var(--leaf-700)',
+                  background: 'var(--color-bg-subtle)',
+                  color: 'var(--color-text-brand)',
                   padding: '3px 10px',
-                  borderRadius: 'var(--radius-full)',
+                  borderRadius: 'var(--radius-pill)',
                   fontWeight: 500,
                 }}
               >
@@ -441,7 +421,7 @@ export default function ProductDetailPage() {
                   gap: 2,
                   background: 'var(--clay-50)',
                   border: '1px dashed var(--clay-500)',
-                  borderRadius: 'var(--radius-md)',
+                  borderRadius: 'var(--radius-control)',
                   padding: '6px 12px',
                   minHeight: 44,
                   justifyContent: 'center',
@@ -452,7 +432,7 @@ export default function ProductDetailPage() {
                   {c.code} · {couponLabel(c)}
                 </Text>
                 {c.minOrder ? (
-                  <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Đơn từ {formatVnd(c.minOrder)}</Text>
+                  <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>Đơn từ {formatVnd(c.minOrder)}</Text>
                 ) : null}
               </Box>
             ))}
@@ -477,23 +457,23 @@ export default function ProductDetailPage() {
               gap: 8,
               marginTop: 12,
               padding: '10px 12px',
-              borderRadius: 'var(--radius-md)',
-              border: '1px dashed var(--leaf-600)',
-              background: 'var(--leaf-50)',
+              borderRadius: 'var(--radius-control)',
+              border: '1px dashed var(--color-border-selected)',
+              background: 'var(--color-bg-subtle)',
             }}
           >
-            <Repeat size={18} color="var(--leaf-700)" strokeWidth={1.9} />
-            <Text size="small" bold style={{ color: 'var(--leaf-700)', flex: 1 }}>
+            <Repeat size={18} color="var(--color-text-brand)" strokeWidth={1.9} />
+            <Text size="small" bold style={{ color: 'var(--color-text-brand)', flex: 1 }}>
               Đặt định kỳ — tiết kiệm {Math.round(config.subscribeDiscountPct * 100)}%
             </Text>
-            <ChevronRight size={18} color="var(--leaf-700)" strokeWidth={2} />
+            <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
           </Box>
         )}
       </Box>
 
       {/* ── Phân loại ── */}
       {variations.length > 1 && (
-        <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text bold size="small">
             {vi.product.variations}
           </Text>
@@ -514,7 +494,7 @@ export default function ProductDetailPage() {
       )}
 
       {/* ── Số lượng ── */}
-      <Box p={4} mt={2} flex alignItems="center" justifyContent="space-between" style={{ background: 'var(--neutral-0)' }}>
+      <Box p={4} mt={2} flex alignItems="center" justifyContent="space-between" style={{ background: 'var(--color-bg-surface)' }}>
         <Text bold size="small">
           {vi.product.quantity}
         </Text>
@@ -546,25 +526,25 @@ export default function ProductDetailPage() {
           groupBuyMutation.mutate(p.id);
         }}
         style={{
-          background: 'var(--neutral-0)',
+          background: 'var(--color-bg-surface)',
           display: 'flex',
           alignItems: 'center',
           gap: 12,
           opacity: groupBuyMutation.isPending ? 0.6 : 1,
         }}
       >
-        <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
-          <Users size={20} color="var(--leaf-700)" strokeWidth={2} />
+        <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center' }}>
+          <Users size={20} color="var(--color-text-brand)" strokeWidth={2} />
         </Box>
         <Box style={{ flex: 1 }}>
-          <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
+          <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
             {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — giá tốt hơn'}
           </Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+          <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
             Rủ bạn bè cho đủ nhóm, cả nhóm cùng được giảm giá
           </Text>
         </Box>
-        <ChevronRight size={18} color="var(--leaf-700)" strokeWidth={2} />
+        <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
       </Box>
 
       {isAffiliate && (
@@ -578,26 +558,26 @@ export default function ProductDetailPage() {
             haptic('light');
             setShowContentKit(true);
           }}
-          style={{ background: 'var(--neutral-0)', display: 'flex', alignItems: 'center', gap: 12 }}
+          style={{ background: 'var(--color-bg-surface)', display: 'flex', alignItems: 'center', gap: 12 }}
         >
-          <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--primary-50)', display: 'grid', placeItems: 'center' }}>
-            <Megaphone size={20} color="var(--primary-700)" strokeWidth={2} />
+          <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-action-secondary-bg)', display: 'grid', placeItems: 'center' }}>
+            <Megaphone size={20} color="var(--color-text-brand)" strokeWidth={2} />
           </Box>
           <Box style={{ flex: 1 }}>
-            <Text size="small" bold style={{ color: 'var(--primary-700)' }}>
+            <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
               {vi.contentKit.sheetTitle}
             </Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
               Bài mẫu đã gắn sẵn link giới thiệu của bạn — copy là đăng được
             </Text>
           </Box>
-          <ChevronRight size={18} color="var(--primary-700)" strokeWidth={2} />
+          <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
         </Box>
       )}
 
       {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}
       {p.ingredients && p.ingredients.length > 0 && (
-        <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text bold size="small" style={{ marginBottom: 10 }}>
             Thành phần
           </Text>
@@ -606,7 +586,7 @@ export default function ProductDetailPage() {
               <Box key={i} flex style={{ gap: 10 }}>
                 <span
                   aria-hidden
-                  style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--leaf-600)', marginTop: 6, flex: '0 0 auto' }}
+                  style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-text-brand)', marginTop: 6, flex: '0 0 auto' }}
                 />
                 <Box style={{ flex: 1 }}>
                   <Box flex alignItems="center" style={{ gap: 6 }}>
@@ -616,14 +596,14 @@ export default function ProductDetailPage() {
                     {ing.percentage && (
                       <Text
                         size="xSmall"
-                        style={{ background: 'var(--leaf-50)', color: 'var(--leaf-700)', padding: '1px 6px', borderRadius: 'var(--radius-full)' }}
+                        style={{ background: 'var(--color-bg-subtle)', color: 'var(--color-text-brand)', padding: '1px 6px', borderRadius: 'var(--radius-pill)' }}
                       >
                         {ing.percentage}
                       </Text>
                     )}
                   </Box>
                   {ing.benefit && (
-                    <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+                    <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
                       {ing.benefit}
                     </Text>
                   )}
@@ -635,13 +615,13 @@ export default function ProductDetailPage() {
       )}
 
       {/* ── Cam kết / chính sách (tín hiệu an tâm trước mua — trước đây PDP không có) ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Text bold size="small" style={{ marginBottom: 8 }}>Cam kết Tubu</Text>
         <Box flex flexDirection="column" style={{ gap: 6 }}>
           {['Hàng chính hãng — nguồn gốc rõ ràng', 'Đổi trả trong 7 ngày nếu lỗi', 'Sản phẩm xanh, an lành cho cả nhà'].map((t) => (
             <Box key={t} flex alignItems="center" style={{ gap: 8 }}>
-              <span style={{ color: 'var(--leaf-600)', fontWeight: 700, flexShrink: 0 }}>✓</span>
-              <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>{t}</Text>
+              <span style={{ color: 'var(--color-text-brand)', fontWeight: 700, flexShrink: 0 }}>✓</span>
+              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>{t}</Text>
             </Box>
           ))}
         </Box>
@@ -674,7 +654,7 @@ export default function ProductDetailPage() {
       {(boughtTogether.data?.length ?? 0) > 0 && (
         <>
           <Box pt={4} pb={2} px={4} flex alignItems="center" style={{ gap: 6 }}>
-            <ShoppingCart size={18} color="var(--neutral-800)" strokeWidth={1.9} />
+            <ShoppingCart size={18} color="var(--color-text-primary)" strokeWidth={1.9} />
             <Text.Title size="small">Thường mua kèm</Text.Title>
           </Box>
           <Box
@@ -685,7 +665,7 @@ export default function ProductDetailPage() {
           >
             {boughtTogether.data?.map((bp) => (
               <Box key={bp.id} style={{ flex: '0 0 150px' }}>
-                <ProductCard product={bp} />
+                <RelatedTile product={bp} flashSales={flashQ.data ?? []} />
               </Box>
             ))}
           </Box>
@@ -706,7 +686,7 @@ export default function ProductDetailPage() {
           >
             {related.data?.map((rp) => (
               <Box key={rp.id} style={{ flex: '0 0 150px' }}>
-                <ProductCard product={rp} />
+                <RelatedTile product={rp} flashSales={flashQ.data ?? []} />
               </Box>
             ))}
           </Box>
@@ -714,72 +694,62 @@ export default function ProductDetailPage() {
       )}
 
       {/* ── Sticky CTA ── */}
-      <Box
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          padding: '10px 12px calc(10px + var(--safe-bottom))',
-          background: 'var(--neutral-0)',
-          boxShadow: 'var(--shadow-lg)',
-          display: 'flex',
-          gap: 10,
-          alignItems: 'center',
-        }}
-      >
-        <Box
-          role="button"
-          aria-label={vi.product.viewCart}
-          className="tubu-press"
-          onClick={() => navigate('/cart')}
-          onAnimationEnd={() => setBadgeBounce(false)}
-          style={{
-            position: 'relative',
-            width: 48,
-            height: 48,
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--primary-200)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flex: '0 0 auto',
-          }}
-        >
-          <CartIcon />
-          <CartBadge count={cartCount} bounce={badgeBounce} />
-        </Box>
-        {inStock ? (
-          <>
-            {/* CTA đôi kiểu Shopee: Thêm giỏ (viền) + Mua ngay (đặc, tới thẳng checkout). */}
-            <Button
-              variant="secondary"
-              loading={addMutation.isPending}
-              disabled={!selected || addMutation.isPending}
-              onClick={handleAdd}
-              style={{ flex: 1, minHeight: 48, fontWeight: 600 }}
-            >
-              {vi.product.addToCart}
-            </Button>
-            <Button
-              loading={buyNowMutation.isPending}
-              disabled={!selected || buyNowMutation.isPending}
-              onClick={handleBuyNow}
-              style={{ flex: 1, background: 'var(--primary-600)', minHeight: 48, fontWeight: 700 }}
-            >
-              Mua ngay · {formatVnd(price * quantity)}
-            </Button>
-          </>
-        ) : (
-          <Button
-            fullWidth
-            disabled
-            style={{ background: 'var(--neutral-200)', minHeight: 48, fontWeight: 600 }}
+      <StickyActionBar
+        secondary={
+          <Box
+            role="button"
+            aria-label={vi.product.viewCart}
+            className="tubu-press"
+            onClick={() => navigate('/cart')}
+            onAnimationEnd={() => setBadgeBounce(false)}
+            style={{
+              position: 'relative',
+              width: 48,
+              height: 48,
+              borderRadius: 'var(--radius-control)',
+              border: '1px solid var(--color-action-secondary-border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: '0 0 auto',
+            }}
           >
-            {vi.product.outOfStock}
-          </Button>
-        )}
-      </Box>
+            <CartIcon />
+            <CartBadge count={cartCount} bounce={badgeBounce} />
+          </Box>
+        }
+        primary={
+          inStock ? (
+            // CTA đôi kiểu Shopee: Thêm giỏ (viền) + Mua ngay (đặc, tới thẳng checkout).
+            <Box flex style={{ gap: 10 }}>
+              <Button
+                variant="secondary"
+                size="lg"
+                loading={addMutation.isPending}
+                disabled={!selected}
+                onPress={handleAdd}
+                style={{ flex: 1 }}
+              >
+                {vi.product.addToCart}
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
+                loading={buyNowMutation.isPending}
+                disabled={!selected}
+                onPress={handleBuyNow}
+                style={{ flex: 1 }}
+              >
+                Mua ngay · {formatVnd(price * quantity)}
+              </Button>
+            </Box>
+          ) : (
+            <Button variant="primary" size="lg" fullWidth disabled>
+              {vi.product.outOfStock}
+            </Button>
+          )
+        }
+      />
     </Page>
   );
 }
@@ -794,15 +764,15 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
       <Box
         style={{
           aspectRatio: '1 / 1',
-          background: 'var(--leaf-50)',
+          background: 'var(--color-bg-subtle)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
         <svg width="72" height="72" viewBox="0 0 48 48" fill="none" aria-hidden>
-          <path d="M14 36c-1.5-14 8-26 24-27 1 16-7 27-20 28-2 .2-3.4-.4-4-1z" fill="var(--leaf-200)" />
-          <path d="M17 34c4-10 12-18 19-22" stroke="var(--leaf-600)" strokeWidth="1.6" strokeLinecap="round" fill="none" />
+          <path d="M14 36c-1.5-14 8-26 24-27 1 16-7 27-20 28-2 .2-3.4-.4-4-1z" fill="var(--forest-200)" />
+          <path d="M17 34c4-10 12-18 19-22" stroke="var(--color-text-brand)" strokeWidth="1.6" strokeLinecap="round" fill="none" />
         </svg>
       </Box>
     );
@@ -862,16 +832,53 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
               style={{
                 width: i === index ? 16 : 6,
                 height: 6,
-                borderRadius: 'var(--radius-full)',
-                background: i === index ? 'var(--primary-600)' : 'rgba(255,255,255,0.85)',
+                borderRadius: 'var(--radius-pill)',
+                background: i === index ? 'var(--color-action-primary-bg)' : 'rgba(255,255,255,0.85)',
                 transition: 'width var(--dur-base) var(--ease-out)',
-                boxShadow: 'var(--shadow-xs)',
+                boxShadow: 'var(--elevation-1)',
               }}
             />
           ))}
         </Box>
       )}
     </Box>
+  );
+}
+
+/** Card sản phẩm ở dải "Thường mua kèm"/"Cùng nhà {brand}" — dùng chung ProductTile (Task 23),
+ * tự tính giá theo đúng quy tắc flash>sale>base y hệt ProductCard cũ (giữ nguyên logic điều hướng
+ * + giá giờ vàng, chỉ đổi lớp trình bày — audit A4-06/A4-19). */
+function RelatedTile({ product, flashSales }: { product: ProductCardData; flashSales: FlashSaleActiveItem[] }) {
+  const navigate = useNavigate();
+  const flash = flashSales.find((f) => f.productSlug === product.slug);
+  const standing = product.salePrice ?? product.basePrice;
+  // Giá flash chỉ thắng khi thực sự rẻ hơn giá đang bán (đúng quy tắc BE dùng ở giỏ hàng).
+  const price = flash && flash.flashPrice < standing ? flash.flashPrice : standing;
+  const isFlash = price !== standing;
+  const hasSale = price < product.basePrice;
+  const salePct = hasSale ? Math.round((1 - price / product.basePrice) * 100) : 0;
+  return (
+    <ProductTile
+      product={product}
+      variant="rail"
+      priceOverride={{ price }}
+      badge={
+        hasSale ? (
+          <Badge
+            tone="promo"
+            size="sm"
+            style={isFlash ? { background: 'var(--color-flash-solid-bg)', color: 'var(--color-flash-solid-fg)' } : undefined}
+          >
+            -{salePct}%
+          </Badge>
+        ) : undefined
+      }
+      onPress={() => {
+        haptic('light');
+        // Mở đúng phân loại đang giảm giờ vàng (SP nhiều phân loại: flash chỉ gắn vào một).
+        navigate(`/product/${product.slug}`, flash ? { state: { variationId: flash.variationId } } : undefined);
+      }}
+    />
   );
 }
 
@@ -896,9 +903,9 @@ function VariationChip({
       onClick={out ? undefined : onClick}
       style={{
         padding: '8px 14px',
-        borderRadius: 'var(--radius-md)',
-        border: `1.5px solid ${active ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
-        background: active ? 'var(--primary-50)' : 'var(--neutral-0)',
+        borderRadius: 'var(--radius-control)',
+        border: `1.5px solid ${active ? 'var(--color-border-selected)' : 'var(--color-border-subtle)'}`,
+        background: active ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
         opacity: out ? 0.55 : 1,
         minHeight: 44,
         boxSizing: 'border-box',
@@ -908,13 +915,13 @@ function VariationChip({
         size="small"
         bold={active}
         style={{
-          color: active ? 'var(--primary-700)' : 'var(--neutral-900)',
+          color: active ? 'var(--color-text-brand)' : 'var(--color-text-primary)',
           textDecoration: out ? 'line-through' : 'none',
         }}
       >
         {variation.name}
       </Text>
-      <Text size="xSmall" style={{ color: active ? 'var(--primary-700)' : 'var(--neutral-400)' }}>
+      <Text size="xSmall" style={{ color: active ? 'var(--color-text-brand)' : 'var(--color-text-disabled)' }}>
         {out ? vi.product.outOfStock : formatVnd(variation.salePrice ?? variation.retailPrice)}
       </Text>
     </Box>
@@ -926,14 +933,14 @@ function CollapsibleDescription({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = text.length > 220;
   return (
-    <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+    <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
       <Text bold size="small">
         {vi.product.description}
       </Text>
       <Text
         size="small"
         style={{
-          color: 'var(--neutral-600)',
+          color: 'var(--color-text-secondary)',
           marginTop: 6,
           whiteSpace: 'pre-line',
           ...(expanded || !isLong
@@ -954,7 +961,7 @@ function CollapsibleDescription({ text }: { text: string }) {
           size="small"
           bold
           onClick={() => setExpanded((e) => !e)}
-          style={{ color: 'var(--primary-700)', marginTop: 8, padding: '8px 0' }}
+          style={{ color: 'var(--color-text-brand)', marginTop: 8, padding: '8px 0' }}
         >
           {expanded ? vi.product.descriptionLess : vi.product.descriptionMore}
         </Text>
@@ -964,22 +971,22 @@ function CollapsibleDescription({ text }: { text: string }) {
 }
 
 function CartIcon() {
-  return <ShoppingCart size={22} color="var(--primary-700)" strokeWidth={1.9} />;
+  return <ShoppingCart size={22} color="var(--color-text-brand)" strokeWidth={1.9} />;
 }
 
 /** Skeleton match layout PDP. */
 function PdpSkeleton() {
   return (
-    <Page style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
       <Skeleton height="auto" radius="0" style={{ aspectRatio: '1 / 1' }} />
-      <Box p={4} style={{ background: 'var(--neutral-0)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Box p={4} style={{ background: 'var(--color-bg-surface)', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Skeleton width={70} height={12} />
         <Skeleton width="85%" height={18} />
         <Skeleton width={120} height={24} />
         <Skeleton width="100%" height={13} />
         <Skeleton width="70%" height={13} />
       </Box>
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)', display: 'flex', gap: 8 }}>
+      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)', display: 'flex', gap: 8 }}>
         <Skeleton width={92} height={44} />
         <Skeleton width={92} height={44} />
         <Skeleton width={92} height={44} />
