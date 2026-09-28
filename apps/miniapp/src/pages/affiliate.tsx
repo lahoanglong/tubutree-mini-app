@@ -21,13 +21,12 @@ import {
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
 import { useAuthStore } from '../store/auth';
-import { formatVnd, formatVndShort } from '../utils/format';
+import { formatVnd, formatVndShort, formatXu } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
 import {
-  formatXu,
   milestoneStatusText,
   monthLabel,
   progressPct,

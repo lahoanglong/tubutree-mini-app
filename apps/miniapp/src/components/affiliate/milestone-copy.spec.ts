@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { formatXu } from '../../utils/format';
 import {
-  formatXu,
   milestoneStatusText,
   monthLabel,
   progressPct,

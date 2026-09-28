@@ -1,4 +1,4 @@
-import { formatVnd } from '../../utils/format';
+import { formatVnd, formatXu } from '../../utils/format';
 
 /**
  * Chữ hiển thị cho bậc/mốc thưởng CTV (affiliate.tsx). Tách thuần để test được và để mọi chỗ
@@ -7,11 +7,6 @@ import { formatVnd } from '../../utils/format';
  * - Bậc CTV không kèm "+X% bonus hoa hồng" — backend không trả khoản đó.
  * - Doanh số tính mốc là doanh số ĐÃ CHỐT (đơn đã giao + hết thời gian giữ đổi/trả).
  */
-
-/** 50000 → "50.000 xu". */
-export function formatXu(n: number): string {
-  return `${n.toLocaleString('vi-VN')} xu`;
-}
 
 /** "2026-09" → "tháng 9/2026" (chuỗi lạ giữ nguyên). */
 export function monthLabel(monthKey: string): string {

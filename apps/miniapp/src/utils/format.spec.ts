@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatRatePct, formatPoints, formatVndShort, formatMultiplier } from './format';
+import { formatRatePct, formatPoints, formatXu, formatVndShort, formatMultiplier } from './format';
 
 // Seed lưu baseRate dạng phân số: Shopee 0.035, Lazada 0.042, TikTok 0.049.
 describe('formatRatePct — tỉ lệ hoàn tiền (DB lưu phân số, hiển thị phần trăm)', () => {
@@ -38,6 +38,19 @@ describe('formatPoints — điểm Xanh hiển thị thống nhất', () => {
     expect(formatPoints(null)).toBe('0 điểm');
     expect(formatPoints(undefined)).toBe('0 điểm');
     expect(formatPoints(Number('x'))).toBe('0 điểm');
+  });
+});
+
+// Trước đây formatXu bị định nghĩa lặp ở milestone-copy.ts và wallet.tsx — gộp về đây (A4-10).
+describe('formatXu — Tubu Xu hiển thị thống nhất', () => {
+  it('luôn có dấu phân cách nghìn + đơn vị "xu"', () => {
+    expect(formatXu(50_000)).toBe('50.000 xu');
+  });
+
+  it('null/undefined/rác → 0 xu, không ra NaN', () => {
+    expect(formatXu(null)).toBe('0 xu');
+    expect(formatXu(undefined)).toBe('0 xu');
+    expect(formatXu(Number('x'))).toBe('0 xu');
   });
 });
 

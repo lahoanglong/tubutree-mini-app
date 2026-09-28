@@ -49,6 +49,17 @@ export function formatPoints(n: number | null | undefined): string {
 }
 
 /**
+ * Tubu Xu: LUÔN có dấu phân cách nghìn + đơn vị "xu".
+ * Trước đây `formatXu` bị định nghĩa lặp độc lập ở 2 nơi (milestone-copy.ts, wallet.tsx) — cùng
+ * một công thức nhưng tách rời nên có thể trôi khác nhau theo thời gian. Gộp về MỘT định nghĩa
+ * canonical ở đây (audit A4-10), 2 nơi kia import lại thay vì tự định nghĩa.
+ */
+export function formatXu(n: number | null | undefined): string {
+  const v = Number(n ?? 0);
+  return `${(Number.isFinite(v) ? v : 0).toLocaleString('vi-VN')} xu`;
+}
+
+/**
  * VND rút gọn cho câu chữ marketing: 50000 → "50k", 1500000 → "1,5tr".
  * Số lẻ không tròn nghìn thì trả về dạng đầy đủ để không nói sai con số.
  */

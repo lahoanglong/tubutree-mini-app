@@ -9,12 +9,10 @@ import { shareLink } from '../services/zmp-bridge';
 import { useAuthStore } from '../store/auth';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { canWithdraw as canWithdrawRule, canConvertToXu } from '../utils/wallet-rules';
-import { formatVnd, formatPoints } from '../utils/format';
+import { formatVnd, formatPoints, formatXu } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { vi } from '../i18n/vi';
-
-const formatXu = (n: number) => `${n.toLocaleString('vi-VN')} xu`;
 
 export default function WalletPage() {
   const { openSnackbar } = useSnackbar();
