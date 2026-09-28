@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Ticket, ChevronRight, X, Sprout, AlertCircle, Recycle } from 'lucide-react';
+import { Ticket, ChevronRight, Sprout, AlertCircle, Recycle } from 'lucide-react';
 import type { OrderDTO } from '@tubutree/shared-types';
 import { getAddresses, getCart, checkoutQuote, placeOrder } from '../services/shop-api';
 import { getWallet, getLoyalty } from '../services/account-api';
@@ -27,6 +27,12 @@ import {
 } from '../utils/checkout-selection';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { PageHeader } from '../components/ui/page-header';
+import { BottomSheet } from '../components/ui/bottom-sheet';
+import { Radio, Checkbox } from '../components/ui/form';
+import { KeyValueRow } from '../components/ui/key-value-row';
+import { StickyActionBar } from '../components/ui/sticky-action-bar';
+import { Button } from '../components/ui/button';
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -222,7 +228,7 @@ export default function CheckoutPage() {
   // ── Success screen ──
   if (placed) {
     return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+      <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
         <OrderSuccess
           order={placed}
           onTrack={() => navigate(`/order/${placed.code}`, { replace: true })}
@@ -264,7 +270,13 @@ export default function CheckoutPage() {
 
   const walletBalance = walletBalanceLive;
   const total = quote.data?.total ?? 0;
-  const canPlace = !!addressId && quote.isSuccess && !order.isPending && !!invoiceValid && !submitting;
+  // Lý do THẬT khiến "Đặt hàng" không bấm được (chưa chọn địa chỉ / quote chưa sẵn sàng / hoá đơn
+  // VAT chưa hợp lệ) — KHÔNG gồm order.isPending/submitting: 2 cờ đó là trạng thái ĐANG XỬ LÝ, đã
+  // truyền riêng qua Button's `loading` bên dưới. Button (Task 10, components/ui/button.tsx) tự
+  // chặn bấm-2-lần khi `loading` bất kể `disabled`, và handler onPress cũng tự kiểm `submitting`
+  // trước khi mutate — gộp lại `disabled` chỉ khiến spinner không hiện trong lúc đặt hàng (đúng
+  // bug audit A4-01/A4-02/A4-04 mà lần migrate này phải sửa), không thêm được lớp bảo vệ nào mới.
+  const canPlace = !!addressId && quote.isSuccess && !!invoiceValid;
 
   const coinsBalance = coinsBalanceLive;
   const paymentMethods = [
@@ -292,7 +304,8 @@ export default function CheckoutPage() {
   const maxRecycleKg = recyclingMaxKg(shownItems);
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 110 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
+      <PageHeader title="Thanh toán" />
 
       <AddressSection
         addresses={addresses.data ?? []}
@@ -307,7 +320,7 @@ export default function CheckoutPage() {
           : (cart.data?.items ?? []);
         const shownCount = shownItems.reduce((s, it) => s + it.quantity, 0);
         return shownItems.length > 0 ? (
-        <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text bold size="small" style={{ marginBottom: 10 }}>
             Sản phẩm ({shownCount})
           </Text>
@@ -317,18 +330,18 @@ export default function CheckoutPage() {
                 <img
                   src={it.thumbnail ?? undefined}
                   alt={it.productName}
-                  style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', background: 'var(--neutral-100)', flexShrink: 0 }}
+                  style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', background: 'var(--color-bg-subtle)', flexShrink: 0 }}
                 />
                 <Box style={{ flex: 1, minWidth: 0 }}>
                   <Text size="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.productName}</Text>
                   {it.variationName && (
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                    <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                       {typeof it.variationName === 'object' && it.variationName !== null
                         ? (it.variationName as { name?: string }).name ?? ''
                         : String(it.variationName)}
                     </Text>
                   )}
-                  <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                  <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                     {formatVnd(it.unitPrice)} × {it.quantity}
                   </Text>
                 </Box>
@@ -341,7 +354,7 @@ export default function CheckoutPage() {
       })()}
 
       {/* ── Mã giảm giá ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Box
           className="tubu-press"
           onClick={() => {
@@ -358,7 +371,7 @@ export default function CheckoutPage() {
               style={{
                 width: 36,
                 height: 36,
-                borderRadius: 'var(--radius-md)',
+                borderRadius: 'var(--radius-control)',
                 background: 'var(--clay-50)',
                 display: 'grid',
                 placeItems: 'center',
@@ -368,7 +381,7 @@ export default function CheckoutPage() {
               <Ticket size={20} color="var(--clay-700)" />
             </Box>
             <Box>
-              <Text bold size="small" style={{ color: 'var(--neutral-900)' }}>
+              <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
                 Mã giảm giá
               </Text>
               {cart.data?.couponCode ? (
@@ -377,7 +390,7 @@ export default function CheckoutPage() {
                     style={{
                       background: 'var(--clay-50)',
                       border: '1px dashed var(--clay-500)',
-                      borderRadius: 'var(--radius-sm)',
+                      borderRadius: 'var(--radius-control)',
                       padding: '2px 6px',
                       color: 'var(--clay-700)',
                       fontSize: 11,
@@ -387,30 +400,30 @@ export default function CheckoutPage() {
                     {cart.data.couponCode}
                   </span>
                   {quote.data && quote.data.discount > 0 && (
-                    <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                    <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
                       -{formatVnd(quote.data.discount)}
                     </Text>
                   )}
                 </Box>
               ) : (
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                   Chọn hoặc nhập mã ưu đãi
                 </Text>
               )}
             </Box>
           </Box>
 
-          <Box flex alignItems="center" style={{ gap: 4, color: 'var(--primary-700)' }}>
-            <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
+          <Box flex alignItems="center" style={{ gap: 4, color: 'var(--color-text-brand)' }}>
+            <Text size="xSmall" bold style={{ color: 'var(--color-text-brand)' }}>
               {cart.data?.couponCode ? 'Thay đổi' : 'Xem mã'}
             </Text>
-            <ChevronRight size={16} color="var(--primary-700)" />
+            <ChevronRight size={16} color="var(--color-text-brand)" />
           </Box>
         </Box>
       </Box>
 
       {/* ── Thanh toán ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Text bold size="small" style={{ marginBottom: 8 }}>
           {vi.checkout.payment}
         </Text>
@@ -430,7 +443,13 @@ export default function CheckoutPage() {
             alignItems="center"
             style={{ gap: 10, padding: '12px 0', minHeight: 44, opacity: m.disabled ? 0.45 : 1, boxSizing: 'border-box' }}
           >
-            <RadioDot active={payment === m.value} />
+            {/* Radio (Task 19) là thị giác thuần tuý ở đây — logic chọn phương thức thanh toán
+                VẪN nằm nguyên trong onClick của Box cha ở trên (không đổi). onChange rỗng chỉ để
+                thoả điều kiện "controlled input cần onChange" của React; input thật của Radio nằm
+                ĐÈ lên đúng vùng chấm tròn (zaui checkbox/radio input position:absolute che kín ô
+                24x24) nên 1 chạm tại đó chỉ phát sinh đúng 1 sự kiện click nổi bọt lên Box cha —
+                không có nguy cơ gọi setPayment 2 lần. */}
+            <Radio checked={payment === m.value} disabled={m.disabled} onChange={() => {}} />
             <Text size="small">{m.label}</Text>
           </Box>
         ))}
@@ -438,7 +457,7 @@ export default function CheckoutPage() {
 
       {/* ── Điểm Xanh ── */}
       {user && (
-        <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Box
             role="checkbox"
             aria-checked={usePoints && points.usable > 0}
@@ -458,24 +477,26 @@ export default function CheckoutPage() {
               <Text bold size="small">
                 {vi.checkout.points}
               </Text>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                 {points.usable > 0 && usePoints && quote.data
                   ? vi.checkout.pointsUse(quote.data.pointsUsed, formatVnd(quote.data.pointsDiscount))
                   : (points.label ?? vi.checkout.pointsNone)}
               </Text>
               {points.lockNote && (
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                   {points.lockNote}
                 </Text>
               )}
             </Box>
-            <ToggleVisual on={usePoints && points.usable > 0} disabled={points.usable <= 0} />
+            {/* Checkbox (Task 19) thị giác thuần tuý — cùng lý do như Radio ở trên: logic bật/tắt
+                dùng điểm vẫn nằm nguyên trong onClick của Box cha, onChange rỗng chỉ để thoả React. */}
+            <Checkbox checked={usePoints && points.usable > 0} disabled={points.usable <= 0} onChange={() => {}} />
           </Box>
         </Box>
       )}
 
       {/* ── Ghi chú ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Text bold size="small" style={{ marginBottom: 8 }}>
           {vi.checkout.note}
         </Text>
@@ -484,7 +505,7 @@ export default function CheckoutPage() {
 
       {/* ── Thu gom vật liệu tái chế (Eco-Card) — chỉ khi tính năng đang bật ── */}
       {recyclingEnabled && (
-        <Box id="checkout-recycling" p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+        <Box id="checkout-recycling" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Box
             role="checkbox"
             aria-label="Gửi lại vật liệu tái chế"
@@ -504,25 +525,26 @@ export default function CheckoutPage() {
                 style={{
                   width: 36,
                   height: 36,
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--leaf-50)',
+                  borderRadius: 'var(--radius-control)',
+                  background: 'var(--color-bg-subtle)',
                   display: 'grid',
                   placeItems: 'center',
                   flex: '0 0 auto',
                 }}
               >
-                <Recycle size={20} color="var(--leaf-600)" />
+                <Recycle size={20} color="var(--color-text-brand)" />
               </Box>
               <Box>
-                <Text bold size="small" style={{ color: 'var(--neutral-900)' }}>
+                <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
                   Gửi lại vật liệu tái chế (Bảo vệ môi trường)
                 </Text>
-                <Text size="xSmall" style={{ color: 'var(--leaf-700)', fontWeight: 600, marginTop: 2 }}>
+                <Text size="xSmall" style={{ color: 'var(--color-text-success)', fontWeight: 600, marginTop: 2 }}>
                   Thu gom tối đa ~{maxRecycleKg} kg
                 </Text>
               </Box>
             </Box>
-            <ToggleVisual on={hasRecyclingPickup} />
+            {/* Checkbox thị giác thuần tuý — logic bật/tắt thu gom vẫn ở onClick của Box cha. */}
+            <Checkbox checked={hasRecyclingPickup} onChange={() => {}} />
           </Box>
 
           {hasRecyclingPickup && (
@@ -530,17 +552,17 @@ export default function CheckoutPage() {
               <Box
                 p={3}
                 style={{
-                  background: 'var(--leaf-50)',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--leaf-200)',
+                  background: 'var(--color-bg-subtle)',
+                  borderRadius: 'var(--radius-control)',
+                  border: '1px solid var(--forest-200)',
                 }}
               >
-                <Text size="xSmall" style={{ color: 'var(--leaf-900)', lineHeight: '18px' }}>
+                <Text size="xSmall" style={{ color: 'var(--forest-800)', lineHeight: '18px' }}>
                   Chúng tôi sẽ thu gom lại các vật liệu tái chế được đóng gói gọn gàng như bọc nilong, hoặc quần áo cũ, pin, vỏ sữa làm sạch -&gt; giúp bảo vệ môi trường. Số kg thu gom tối đa bằng số kg của đơn hàng (~{maxRecycleKg} kg).
                 </Text>
               </Box>
               {payment !== 'COD' && payment !== 'WALLET' && payment !== 'XU' && (
-                <Text size="xSmall" style={{ color: 'var(--neutral-600)', lineHeight: '18px' }}>
+                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', lineHeight: '18px' }}>
                   Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.
                 </Text>
               )}
@@ -556,7 +578,7 @@ export default function CheckoutPage() {
       )}
 
       {/* ── Hoá đơn VAT (spec §6.3) ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
+      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Box
           role="checkbox"
           aria-checked={wantInvoice}
@@ -573,7 +595,8 @@ export default function CheckoutPage() {
           <Text bold size="small">
             Yêu cầu xuất hoá đơn VAT
           </Text>
-          <ToggleVisual on={wantInvoice} />
+          {/* Checkbox thị giác thuần tuý — logic bật/tắt yêu cầu hoá đơn vẫn ở onClick của Box cha. */}
+          <Checkbox checked={wantInvoice} onChange={() => {}} />
         </Box>
         {wantInvoice && (
           <Box flex flexDirection="column" style={{ gap: 10, marginTop: 10 }}>
@@ -599,8 +622,8 @@ export default function CheckoutPage() {
             />
             {!invoiceValid && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
-                <AlertCircle size={13} color="var(--danger)" aria-hidden />
-                <Text size="xSmall" style={{ color: 'var(--danger)' }}>
+                <AlertCircle size={13} color="var(--color-text-danger)" aria-hidden />
+                <Text size="xSmall" style={{ color: 'var(--color-text-danger)' }}>
                   Vui lòng điền đủ MST, tên công ty, địa chỉ và email hợp lệ.
                 </Text>
               </Box>
@@ -618,17 +641,17 @@ export default function CheckoutPage() {
           haptic('light');
           setSummarySheetOpen(true);
         }}
-        style={{ background: 'var(--neutral-0)', cursor: 'pointer' }}
+        style={{ background: 'var(--color-bg-surface)', cursor: 'pointer' }}
       >
         <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 10 }}>
-          <Text bold size="small" style={{ color: 'var(--neutral-900)' }}>
+          <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
             {vi.checkout.summary}
           </Text>
-          <Box flex alignItems="center" style={{ gap: 4, color: 'var(--primary-700)' }}>
-            <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
+          <Box flex alignItems="center" style={{ gap: 4, color: 'var(--color-text-brand)' }}>
+            <Text size="xSmall" bold style={{ color: 'var(--color-text-brand)' }}>
               Chi tiết
             </Text>
-            <ChevronRight size={16} color="var(--primary-700)" />
+            <ChevronRight size={16} color="var(--color-text-brand)" />
           </Box>
         </Box>
 
@@ -641,40 +664,40 @@ export default function CheckoutPage() {
         ) : quote.isError ? (
           <Box flex alignItems="center" justifyContent="space-between">
             <Box flex alignItems="center" style={{ gap: 4 }}>
-              <AlertCircle size={13} color="var(--danger)" aria-hidden />
-              <Text size="xSmall" style={{ color: 'var(--danger)' }}>
+              <AlertCircle size={13} color="var(--color-text-danger)" aria-hidden />
+              <Text size="xSmall" style={{ color: 'var(--color-text-danger)' }}>
                 {getErrorMessage(quote.error)}
               </Text>
             </Box>
-            <Text role="button" size="xSmall" bold onClick={(e) => { e.stopPropagation(); void quote.refetch(); }} style={{ color: 'var(--primary-700)', padding: 8 }}>
+            <Text role="button" size="xSmall" bold onClick={(e) => { e.stopPropagation(); void quote.refetch(); }} style={{ color: 'var(--color-text-brand)', padding: 8 }}>
               {vi.common.retry}
             </Text>
           </Box>
         ) : quote.data ? (
           <>
-            <Row label={vi.cart.subtotal} value={formatVnd(quote.data.subtotal)} />
+            <KeyValueRow label={vi.cart.subtotal} value={formatVnd(quote.data.subtotal)} />
             {quote.data.discount > 0 && (
-              <Row label={vi.cart.discount} value={`-${formatVnd(quote.data.discount)}`} accent="leaf" />
+              <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(quote.data.discount)}`} tone="success" />
             )}
             {quote.data.comboDiscount > 0 && (
-              <Row label="Ưu đãi combo" value={`-${formatVnd(quote.data.comboDiscount)}`} accent="leaf" />
+              <KeyValueRow label="Ưu đãi combo" value={`-${formatVnd(quote.data.comboDiscount)}`} tone="success" />
             )}
             {quote.data.pointsDiscount > 0 && (
-              <Row label={vi.checkout.points} value={`-${formatVnd(quote.data.pointsDiscount)}`} accent="leaf" />
+              <KeyValueRow label={vi.checkout.points} value={`-${formatVnd(quote.data.pointsDiscount)}`} tone="success" />
             )}
-            <Row
+            <KeyValueRow
               label={vi.checkout.shippingFee}
               value={quote.data.shippingFee === 0 ? vi.common.freeShip : formatVnd(quote.data.shippingFee)}
-              accent={quote.data.shippingFee === 0 ? 'leaf' : undefined}
+              tone={quote.data.shippingFee === 0 ? 'success' : 'primary'}
             />
-            <Row label={vi.checkout.total} value={formatVnd(quote.data.total)} bold />
+            <KeyValueRow label={vi.checkout.total} value={formatVnd(quote.data.total)} emphasis />
             {/* Đơn trả bằng TubuXu KHÔNG tích điểm (checkout.service.ts đặt pointsEarned=0 khi
                 paymentMethod='XU'), nhưng /checkout/quote không nhận paymentMethod nên vẫn trả
                 số điểm mặc định → nếu hiện nguyên, khách chọn XU sẽ được hứa điểm rồi không có. */}
             {payment !== 'XU' && quote.data.pointsEarned > 0 && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
-                <Sprout size={13} color="var(--leaf-700)" aria-hidden />
-                <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                <Sprout size={13} color="var(--color-text-success)" aria-hidden />
+                <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
                   {vi.checkout.pointsEarn(quote.data.pointsEarned)}
                 </Text>
               </Box>
@@ -683,68 +706,56 @@ export default function CheckoutPage() {
         ) : (
           /* Fallback preview summary when addressId is missing/unselected */
           <>
-            <Row label={vi.cart.subtotal} value={formatVnd(previewSubtotal)} />
+            <KeyValueRow label={vi.cart.subtotal} value={formatVnd(previewSubtotal)} />
             {previewDiscount > 0 && (
-              <Row label={vi.cart.discount} value={`-${formatVnd(previewDiscount)}`} accent="leaf" />
+              <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(previewDiscount)}`} tone="success" />
             )}
-            <Row
+            <KeyValueRow
               label={vi.checkout.shippingFee}
               value={addressId ? 'Đang tính...' : 'Cần chọn địa chỉ giao hàng'}
             />
-            <Row label={vi.checkout.total} value={formatVnd(Math.max(0, previewSubtotal - previewDiscount))} bold />
+            <KeyValueRow label={vi.checkout.total} value={formatVnd(Math.max(0, previewSubtotal - previewDiscount))} emphasis />
           </>
         )}
       </Box>
 
       {/* ── Sticky CTA ── */}
-      <Box
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          background: 'var(--neutral-0)',
-          boxShadow: 'var(--shadow-lg)',
-          padding: '12px 16px calc(12px + var(--safe-bottom))',
-        }}
-      >
-        <Button
-          fullWidth
-          loading={order.isPending || submitting}
-          disabled={!canPlace || submitting}
-          onClick={async () => {
-            if (submitting) return;
-            setSubmitting(true);
-            try {
-              // Xin SĐT đúng lúc đặt hàng (như Homefarm) nếu tài khoản chưa có — không chặn nếu user từ chối.
-              await useAuthStore.getState().ensurePhone().catch(() => undefined);
-              order.mutate(undefined, { onSettled: () => setSubmitting(false) });
-            } catch {
-              setSubmitting(false);
-            }
-          }}
-          style={{ background: 'var(--primary-600)', minHeight: 48, fontWeight: 600 }}
-        >
-          {order.isPending
-            ? vi.checkout.placing
-            : quote.data
-              ? vi.checkout.placeOrderWith(formatVnd(quote.data.total))
-              : vi.checkout.placeOrder}
-        </Button>
-      </Box>
-
-      <Sheet visible={priceChanged} onClose={() => setPriceChanged(false)} autoHeight>
-        <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-          <Text bold size="large">
-            {vi.flashSale.priceChangedTitle}
-          </Text>
-          <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 8 }}>
-            {vi.flashSale.priceChangedBody}
-          </Text>
+      <StickyActionBar
+        primary={
           <Button
             fullWidth
-            style={{ marginTop: 16 }}
-            onClick={() => {
+            loading={order.isPending || submitting}
+            disabled={!canPlace}
+            onPress={async () => {
+              if (submitting) return;
+              setSubmitting(true);
+              try {
+                // Xin SĐT đúng lúc đặt hàng (như Homefarm) nếu tài khoản chưa có — không chặn nếu user từ chối.
+                await useAuthStore.getState().ensurePhone().catch(() => undefined);
+                order.mutate(undefined, { onSettled: () => setSubmitting(false) });
+              } catch {
+                setSubmitting(false);
+              }
+            }}
+          >
+            {order.isPending
+              ? vi.checkout.placing
+              : quote.data
+                ? vi.checkout.placeOrderWith(formatVnd(quote.data.total))
+                : vi.checkout.placeOrder}
+          </Button>
+        }
+      />
+
+      <BottomSheet
+        open={priceChanged}
+        onClose={() => setPriceChanged(false)}
+        title={vi.flashSale.priceChangedTitle}
+        description={vi.flashSale.priceChangedBody}
+        footer={
+          <Button
+            fullWidth
+            onPress={() => {
               setPriceChanged(false);
               void queryClient.invalidateQueries({ queryKey: ['cart'] });
               void queryClient.invalidateQueries({ queryKey: ['quote'] });
@@ -753,8 +764,10 @@ export default function CheckoutPage() {
           >
             {vi.flashSale.priceChangedCta}
           </Button>
-        </Box>
-      </Sheet>
+        }
+      >
+        {null}
+      </BottomSheet>
 
       <VoucherSheet
         visible={voucherSheetOpen}
@@ -767,200 +780,85 @@ export default function CheckoutPage() {
         }}
       />
 
-      <Sheet visible={summarySheetOpen} onClose={() => setSummarySheetOpen(false)} autoHeight mask style={{ zIndex: 1000 }}>
-        <Box p={4} style={{ paddingBottom: 'calc(20px + var(--safe-bottom))' }}>
-          <Box flex alignItems="center" justifyContent="space-between" mb={3}>
-            <Text bold size="normal" style={{ color: 'var(--neutral-900)' }}>
-              Chi tiết tính tiền đơn hàng
-            </Text>
-            <button
-              type="button"
-              aria-label="Đóng"
-              className="tubu-press"
-              onClick={() => setSummarySheetOpen(false)}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                border: 'none',
-                background: 'var(--neutral-100)',
-                display: 'grid',
-                placeItems: 'center',
-                cursor: 'pointer',
-              }}
-            >
-              <X size={18} color="var(--neutral-600)" />
-            </button>
-          </Box>
-
-          <Box p={3} style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-lg)' }}>
-            <Row label="Tạm tính tiền hàng" value={formatVnd(quote.data?.subtotal ?? previewSubtotal)} />
-
-            {(quote.data?.discount ?? previewDiscount) > 0 && (
-              <Row label="Giảm giá voucher" value={`-${formatVnd(quote.data?.discount ?? previewDiscount)}`} accent="leaf" />
-            )}
-
-            {quote.data && quote.data.comboDiscount > 0 && (
-              <Row label="Giảm giá combo" value={`-${formatVnd(quote.data.comboDiscount)}`} accent="leaf" />
-            )}
-
-            {quote.data && quote.data.pointsDiscount > 0 && (
-              <Row label="Giảm giá điểm Xanh" value={`-${formatVnd(quote.data.pointsDiscount)}`} accent="leaf" />
-            )}
-
-            <Row
-              label="Phí vận chuyển"
-              value={
-                quote.data
-                  ? quote.data.shippingFee === 0
-                    ? vi.common.freeShip
-                    : formatVnd(quote.data.shippingFee)
-                  : addressId
-                    ? 'Đang tính...'
-                    : 'Cần chọn địa chỉ giao hàng'
-              }
-              accent={quote.data?.shippingFee === 0 ? 'leaf' : undefined}
-            />
-
-            <div style={{ height: 1, background: 'var(--neutral-200)', margin: '8px 0' }} />
-
-            <Row
-              label="Tổng thanh toán"
-              value={formatVnd(quote.data?.total ?? Math.max(0, previewSubtotal - previewDiscount))}
-              bold
-            />
-
-            {payment !== 'XU' && (quote.data?.pointsEarned ?? 0) > 0 && (
-              <Box flex alignItems="center" justifyContent="flex-end" style={{ gap: 4, marginTop: 6 }}>
-                <Sprout size={13} color="var(--leaf-700)" aria-hidden />
-                <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-                  Tích lũy +{quote.data!.pointsEarned} điểm Xanh khi giao thành công
-                </Text>
-              </Box>
-            )}
-          </Box>
-
-          <Button
-            fullWidth
-            onClick={() => setSummarySheetOpen(false)}
-            style={{ background: 'var(--primary-600)', marginTop: 16, minHeight: 44, fontWeight: 600 }}
-          >
+      <BottomSheet
+        open={summarySheetOpen}
+        onClose={() => setSummarySheetOpen(false)}
+        title="Chi tiết tính tiền đơn hàng"
+        footer={
+          <Button fullWidth onPress={() => setSummarySheetOpen(false)}>
             Đã hiểu
           </Button>
+        }
+      >
+        <Box p={3} style={{ background: 'var(--color-bg-canvas)', borderRadius: 'var(--radius-card)' }}>
+          <KeyValueRow label="Tạm tính tiền hàng" value={formatVnd(quote.data?.subtotal ?? previewSubtotal)} />
+
+          {(quote.data?.discount ?? previewDiscount) > 0 && (
+            <KeyValueRow label="Giảm giá voucher" value={`-${formatVnd(quote.data?.discount ?? previewDiscount)}`} tone="success" />
+          )}
+
+          {quote.data && quote.data.comboDiscount > 0 && (
+            <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(quote.data.comboDiscount)}`} tone="success" />
+          )}
+
+          {quote.data && quote.data.pointsDiscount > 0 && (
+            <KeyValueRow label="Giảm giá điểm Xanh" value={`-${formatVnd(quote.data.pointsDiscount)}`} tone="success" />
+          )}
+
+          <KeyValueRow
+            label="Phí vận chuyển"
+            value={
+              quote.data
+                ? quote.data.shippingFee === 0
+                  ? vi.common.freeShip
+                  : formatVnd(quote.data.shippingFee)
+                : addressId
+                  ? 'Đang tính...'
+                  : 'Cần chọn địa chỉ giao hàng'
+            }
+            tone={quote.data?.shippingFee === 0 ? 'success' : 'primary'}
+          />
+
+          <div style={{ height: 1, background: 'var(--color-border-subtle)', margin: '8px 0' }} />
+
+          <KeyValueRow
+            label="Tổng thanh toán"
+            value={formatVnd(quote.data?.total ?? Math.max(0, previewSubtotal - previewDiscount))}
+            emphasis
+          />
+
+          {payment !== 'XU' && (quote.data?.pointsEarned ?? 0) > 0 && (
+            <Box flex alignItems="center" justifyContent="flex-end" style={{ gap: 4, marginTop: 6 }}>
+              <Sprout size={13} color="var(--color-text-success)" aria-hidden />
+              <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
+                Tích lũy +{quote.data!.pointsEarned} điểm Xanh khi giao thành công
+              </Text>
+            </Box>
+          )}
         </Box>
-      </Sheet>
+      </BottomSheet>
     </Page>
   );
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title="Thanh toán" />
       {children}
     </Page>
-  );
-}
-
-function Row({
-  label,
-  value,
-  bold,
-  accent,
-}: {
-  label: string;
-  value: string;
-  bold?: boolean;
-  accent?: 'leaf';
-}) {
-  return (
-    <Box flex justifyContent="space-between" style={{ padding: '4px 0' }}>
-      <Text size="small" style={{ color: 'var(--neutral-600)' }}>
-        {label}
-      </Text>
-      <Text
-        size="small"
-        bold={bold}
-        style={{
-          color: accent === 'leaf' ? 'var(--leaf-700)' : bold ? 'var(--primary-700)' : undefined,
-          fontSize: bold ? 16 : undefined,
-        }}
-      >
-        {value}
-      </Text>
-    </Box>
-  );
-}
-
-function RadioDot({ active }: { active: boolean }) {
-  return (
-    <span
-      aria-hidden
-      style={{
-        width: 20,
-        height: 20,
-        borderRadius: '50%',
-        border: `2px solid ${active ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        transition: 'border-color var(--dur-fast) var(--ease-out)',
-        flex: '0 0 auto',
-      }}
-    >
-      <span
-        style={{
-          width: 10,
-          height: 10,
-          borderRadius: '50%',
-          background: active ? 'var(--primary-600)' : 'transparent',
-          transition: 'background var(--dur-fast) var(--ease-out)',
-        }}
-      />
-    </span>
-  );
-}
-
-function ToggleVisual({ on, disabled }: { on: boolean; disabled?: boolean }) {
-  return (
-    <span
-      aria-hidden
-      style={{
-        width: 44,
-        height: 26,
-        borderRadius: 'var(--radius-full)',
-        background: on ? 'var(--primary-600)' : 'var(--neutral-200)',
-        opacity: disabled ? 0.5 : 1,
-        position: 'relative',
-        transition: 'background var(--dur-base) var(--ease-out)',
-        flex: '0 0 auto',
-      }}
-    >
-      <span
-        style={{
-          position: 'absolute',
-          top: 3,
-          left: on ? 21 : 3,
-          width: 20,
-          height: 20,
-          borderRadius: '50%',
-          background: 'white',
-          boxShadow: 'var(--shadow-sm)',
-          transition: 'left var(--dur-base) var(--ease-out)',
-        }}
-      />
-    </span>
   );
 }
 
 function CheckoutSkeleton() {
   return (
     <Shell>
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Skeleton width={120} height={14} />
         <Skeleton height={64} />
         <Skeleton height={64} />
       </Box>
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Skeleton width={150} height={14} />
         <Skeleton height={40} />
         <Skeleton height={40} />
