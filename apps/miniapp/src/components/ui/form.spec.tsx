@@ -35,7 +35,14 @@ describe('Field', () => {
 describe('Checkbox', () => {
   it('has a 44px min touch target wrapper', () => {
     render(<Checkbox label="Đồng ý điều khoản" checked={false} onChange={() => {}} />);
-    expect(screen.getByRole('checkbox').closest('[data-testid="checkbox-hit-area"]')).toHaveStyle({ minHeight: '44px' });
+    // minWidth matters just as much as minHeight: as a flex item with no visible label/children
+    // (the common case for a standalone selection checkbox in a row), the wrapper shrinks to the
+    // control's own content width (24px) unless minWidth is set explicitly — regression coverage
+    // for the real 44x24 hit-area bug found while migrating cart.tsx (Task 25).
+    expect(screen.getByRole('checkbox').closest('[data-testid="checkbox-hit-area"]')).toHaveStyle({
+      minHeight: '44px',
+      minWidth: '44px',
+    });
   });
 
   it('does not require a value prop for standalone use', () => {
