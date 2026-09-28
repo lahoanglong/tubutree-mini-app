@@ -7,7 +7,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Alias TẠM THỜI — các class .tubu-*/.page bên dưới vẫn dùng tên biến cũ, chưa migrate hết.
+/* Alias TẠM THỜI — các class .tubu-* và .page bên dưới vẫn dùng tên biến cũ, chưa migrate hết.
  * Xoá dần từng dòng khi các Task sau thay class tương ứng bằng component DS v2.
  * KHÔNG alias --shadow-clay/--font-mono: grep toàn bộ apps/miniapp/src xác nhận 0 nơi dùng
  * .tubu-card-clay/.t-mono (claymorphism bị bỏ hẳn theo redesign này, JetBrains Mono bị bỏ
