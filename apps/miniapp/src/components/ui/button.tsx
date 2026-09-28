@@ -30,18 +30,28 @@ export interface ButtonProps {
 /** Nút thống nhất — thay 255 zmp Button + 218 nút tự chế + Btn cũ (audit A4-07). KHÔNG BAO GIỜ
  * đẩy `loading` vào `disabled` của ZaUI: đó chính là lý do 96/110 nút cũ không hiện spinner
  * (Z/esm/components/button/index.js — chỉ vẽ spinner khi loading && !disabled). `disabled` ở
- * đây CHỈ đến từ prop `disabled` tường minh của caller. */
+ * đây CHỈ đến từ prop `disabled` tường minh của caller.
+ *
+ * Chặn double-tap khi đang loading vẫn PHẢI có — zmp-ui Button gọi onClick bất kể `loading`,
+ * chỉ `disabled` (thuộc tính DOM) mới thật sự chặn. Thay vì bắt mọi caller tự nhớ truyền thêm
+ * `disabled={cùngBiếnPending}` (và vô tình tắt luôn spinner vì loading && !disabled), guard nằm
+ * NGAY TRONG Button: bỏ qua press khi loading đang true, độc lập với `disabled`. Mọi nơi gọi
+ * Button đều được chặn double-tap miễn phí, spinner vẫn hiện bình thường. */
 export function Button({
   children, variant = 'primary', size = 'md', loading, disabled, icon: IconCmp, fullWidth, onPress, className, style,
 }: ButtonProps) {
   const toneStyle = variant === 'flash' ? FLASH_STYLE : variant === 'danger' ? DANGER_STYLE : undefined;
+  const handlePress = () => {
+    if (loading) return; // đã đang xử lý — chặn double-tap ngay trong Button, không cần disabled
+    onPress?.();
+  };
   return (
     <ZButton
       variant={ZAUI_VARIANT[variant]}
       loading={loading}
       disabled={disabled}
       fullWidth={fullWidth}
-      onClick={onPress}
+      onClick={handlePress}
       prefixIcon={IconCmp ? <Icon icon={IconCmp} size="sm" tone={variant === 'secondary' || variant === 'ghost' ? 'brand' : 'inverse'} /> : undefined}
       className={className}
       style={{ minHeight: size === 'lg' ? 48 : 44, borderRadius: 'var(--radius-control)', fontWeight: 600, ...toneStyle, ...style }}

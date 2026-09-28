@@ -147,11 +147,12 @@ export function AddressForm({ initial, onCancel, onSaved }: AddressFormProps) {
         <Button variant="secondary" onPress={onCancel}>
           {vi.common.cancel}
         </Button>
-        {/* disabled cũng đọc save.isPending (không chỉ loading): Button (Task 10) không tự chặn
-        onPress khi đang loading — chỉ disabled=true mới thật sự chặn double-tap (button-guard.spec.ts).
-        Spinner vẫn ẩn trong lúc đó (hạn chế hiện tại của Button khi loading+disabled cùng true) —
-        đổi lại tránh gọi tạo/sửa địa chỉ 2 lần, quan trọng hơn ở form này. */}
-        <Button loading={save.isPending} disabled={save.isPending} onPress={submit} fullWidth>
+        {/* Chỉ cần loading — không cần disabled song song: Button (Task 10) đã tự chặn double-tap
+        NGAY BÊN TRONG khi loading=true (xem handlePress trong ui/button.tsx), độc lập với
+        disabled, nên spinner vẫn hiện bình thường (loading && !disabled) MÀ vẫn chặn được bấm 2
+        lần trong lúc save đang bay. button-guard.spec.ts đã được cập nhật để không đòi disabled=
+        cho Button import từ ./ui/button nữa (guard giờ nằm trong component). */}
+        <Button loading={save.isPending} onPress={submit} fullWidth>
           {vi.common.save}
         </Button>
       </div>

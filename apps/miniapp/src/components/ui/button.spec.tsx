@@ -31,6 +31,24 @@ describe('Button', () => {
     expect(onPress).not.toHaveBeenCalled();
   });
 
+  it('guards double-tap internally: a press while loading=true is ignored WITHOUT the caller passing disabled', () => {
+    const onPress = vi.fn();
+    // Mô phỏng đúng vòng đời thật: bấm lần 1 lúc chưa loading (onPress chạy, thường sẽ set
+    // loading=true ở caller) → rerender với loading=true (chưa kịp xong request) → bấm lần 2
+    // trong lúc đó. Không truyền disabled — guard phải tự nằm trong Button.
+    const { rerender } = render(<Button loading={false} onPress={onPress}>Lưu</Button>);
+    fireEvent.click(screen.getByText('Lưu'));
+    rerender(<Button loading onPress={onPress}>Lưu</Button>);
+    fireEvent.click(screen.getByText('Lưu'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('loading=true still shows the spinner with disabled absent (re-confirm after the internal guard change)', () => {
+    const { container } = render(<Button loading onPress={() => {}}>Đang xử lý</Button>);
+    expect(container.querySelector('.zaui-btn')?.className).toContain('loading');
+    expect(container.querySelector('.zaui-btn')?.getAttribute('disabled')).toBeNull();
+  });
+
   it('size md is minHeight 44, lg is 48', () => {
     const { rerender, container } = render(<Button size="md">A</Button>);
     expect((container.querySelector('.zaui-btn') as HTMLElement).style.minHeight).toBe('44px');
