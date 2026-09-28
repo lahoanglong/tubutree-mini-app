@@ -156,40 +156,6 @@ export function Btn({
   );
 }
 
-/** Chip lọc/chọn — dùng cho hàng danh mục, khoảng giá, bộ lọc. */
-export function Chip({
-  children,
-  selected,
-  onClick,
-  style,
-}: {
-  children: ReactNode;
-  selected?: boolean;
-  onClick?: () => void;
-  style?: CSSProperties;
-}) {
-  return (
-    <span
-      role="button"
-      aria-pressed={selected}
-      className="tubu-press"
-      onClick={onClick}
-      style={{
-        background: selected ? 'var(--primary-600)' : 'var(--neutral-100)',
-        color: selected ? 'var(--neutral-0)' : 'var(--neutral-700)',
-        fontSize: 13,
-        fontWeight: selected ? 600 : 500,
-        padding: '7px 14px',
-        borderRadius: 'var(--radius-full)',
-        whiteSpace: 'nowrap',
-        ...style,
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
 // ── Tiêu đề mục ────────────────────────────────────────────────────────────────
 /** Tiêu đề một mục nội dung + hành động phụ bên phải ("Xem tất cả"). */
 export function SectionHeader({

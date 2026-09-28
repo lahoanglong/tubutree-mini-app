@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { Btn, Chip, StickyActionBar, Txt } from './primitives';
+import { Btn, StickyActionBar, Txt } from './primitives';
 
 describe('Btn', () => {
   it('loading → tự disable (chặn double-tap gửi 2 lần)', () => {
@@ -48,13 +48,6 @@ describe('Txt — tone theo Ý NGHĨA', () => {
   it('tone mặc định là chữ chính', () => {
     const { container } = render(<Txt>x</Txt>);
     expect((container.firstElementChild as HTMLElement).style.color).toContain('--neutral-900');
-  });
-});
-
-describe('Chip', () => {
-  it('Chip báo trạng thái chọn cho trình đọc màn hình (aria-pressed)', () => {
-    render(<Chip selected>Cho mẹ & bé</Chip>);
-    expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe('true');
   });
 });
 
