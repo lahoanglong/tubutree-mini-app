@@ -7,7 +7,7 @@ import { AlertTriangle } from 'lucide-react';
 export default function GlobalError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
     <html lang="vi">
-      <body className="font-sans">
+      <body className="font-ui">
         <main className="mx-auto max-w-3xl px-4 py-24 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 shadow-sm ring-8 ring-amber-50/50">
             <AlertTriangle className="h-8 w-8 text-amber-600" />

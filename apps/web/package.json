@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.7",
+    "@tubutree/design-tokens": "workspace:*",
     "@tubutree/shared-types": "workspace:*",
     "lucide-react": "^1.18.0",
     "next": "^14.2.18",

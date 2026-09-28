@@ -8,6 +8,8 @@ export default defineConfig({
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   test: {
     environment: 'node',
-    include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx'],
+    // Also picks up tailwind.config.spec.ts at the package root (outside src/) — a narrow,
+    // explicit entry rather than a broad root-level glob, to avoid sweeping in other workspaces.
+    include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx', 'tailwind.config.spec.ts'],
   },
 });
