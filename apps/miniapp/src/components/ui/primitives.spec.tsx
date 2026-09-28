@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { Badge, Btn, Chip, StickyActionBar, Txt } from './primitives';
+import { Btn, Chip, StickyActionBar, Txt } from './primitives';
 
 describe('Btn', () => {
   it('loading → tự disable (chặn double-tap gửi 2 lần)', () => {
@@ -51,14 +51,7 @@ describe('Txt — tone theo Ý NGHĨA', () => {
   });
 });
 
-describe('Badge / Chip', () => {
-  it('mỗi tone có cặp nền/chữ riêng, không trùng nhau', () => {
-    const { container: ok } = render(<Badge tone="success">Đã giao</Badge>);
-    const { container: bad } = render(<Badge tone="danger">Đã hủy</Badge>);
-    const bg = (c: HTMLElement) => (c.firstElementChild as HTMLElement).style.background;
-    expect(bg(ok)).not.toBe(bg(bad));
-  });
-
+describe('Chip', () => {
   it('Chip báo trạng thái chọn cho trình đọc màn hình (aria-pressed)', () => {
     render(<Chip selected>Cho mẹ & bé</Chip>);
     expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe('true');

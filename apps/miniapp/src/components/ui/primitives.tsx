@@ -156,47 +156,6 @@ export function Btn({
   );
 }
 
-// ── Nhãn trạng thái ────────────────────────────────────────────────────────────
-export type BadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'brand';
-
-const BADGE_STYLE: Record<BadgeTone, { bg: string; fg: string }> = {
-  success: { bg: 'var(--success-bg)', fg: 'var(--leaf-700)' },
-  warning: { bg: 'var(--warning-bg)', fg: 'var(--warning)' },
-  danger: { bg: 'var(--danger-bg)', fg: 'var(--danger)' },
-  info: { bg: 'var(--info-bg)', fg: 'var(--info)' },
-  neutral: { bg: 'var(--neutral-100)', fg: 'var(--neutral-600)' },
-  brand: { bg: 'var(--primary-50)', fg: 'var(--primary-700)' },
-};
-
-/** Nhãn trạng thái nhỏ (đơn hàng, hoa hồng, kiểm duyệt...). Nền nhạt + chữ đậm cùng tông. */
-export function Badge({
-  children,
-  tone = 'neutral',
-  style,
-}: {
-  children: ReactNode;
-  tone?: BadgeTone;
-  style?: CSSProperties;
-}) {
-  const c = BADGE_STYLE[tone];
-  return (
-    <span
-      style={{
-        background: c.bg,
-        color: c.fg,
-        fontSize: 11,
-        fontWeight: 600,
-        padding: '3px 8px',
-        borderRadius: 'var(--radius-full)',
-        whiteSpace: 'nowrap',
-        ...style,
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
 /** Chip lọc/chọn — dùng cho hàng danh mục, khoảng giá, bộ lọc. */
 export function Chip({
   children,

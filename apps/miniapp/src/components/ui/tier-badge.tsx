@@ -1,4 +1,4 @@
-import { Badge } from './primitives';
+import { Badge } from './badge';
 
 /**
  * Huy hiệu bậc CTV hiển thị công khai trên trang gian hàng — dữ liệu đến từ
