@@ -14,5 +14,8 @@ export default defineConfig({
     // quét test trong node_modules của các package workspace khác.
     include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx', 'tailwind.config.spec.ts'],
     globals: true,
+    // Nạp jest-dom cho mọi test (kể cả environment 'node') — module chỉ extend `expect`,
+    // không đụng DOM lúc import nên an toàn với test logic thuần.
+    setupFiles: ['./src/vitest-setup.ts'],
   },
 });
