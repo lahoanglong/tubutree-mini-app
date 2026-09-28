@@ -9,7 +9,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     environmentMatchGlobs: [['**/*.spec.tsx', 'jsdom']],
-    include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx'],
+    // tailwind.config.spec.ts sống ở root (cạnh tailwind.config.ts nó test) chứ không phải
+    // dưới src/ — thêm riêng lẻ thay vì nới include thành '**/*.spec.ts' để không vô tình
+    // quét test trong node_modules của các package workspace khác.
+    include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx', 'tailwind.config.spec.ts'],
     globals: true,
   },
 });

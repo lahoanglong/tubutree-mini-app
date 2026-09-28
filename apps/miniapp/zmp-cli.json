@@ -2,5 +2,5 @@
   "name": "tubutree",
   "framework": "react",
   "cssPreprocessor": "css",
-  "includeTailwindCSS": false
+  "includeTailwindCSS": true
 }
