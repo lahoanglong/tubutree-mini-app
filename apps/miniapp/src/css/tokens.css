@@ -7,6 +7,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Alias TẠM THỜI — các class .tubu-*/.page bên dưới vẫn dùng tên biến cũ, chưa migrate hết.
+ * Xoá dần từng dòng khi các Task sau thay class tương ứng bằng component DS v2.
+ * KHÔNG alias --shadow-clay/--font-mono: grep toàn bộ apps/miniapp/src xác nhận 0 nơi dùng
+ * .tubu-card-clay/.t-mono (claymorphism bị bỏ hẳn theo redesign này, JetBrains Mono bị bỏ
+ * theo spec) — để 2 biến đó "vỡ" là đúng chủ đích, không phải sót. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --radius-lg: var(--radius-card);
+  --shadow-card: var(--elevation-1);
+  --dur-fast: var(--p-dur-tap);
+  --dur-base: var(--p-dur-enter);
+  --dur-slow: var(--p-dur-emphasize);
+  --ease-out: var(--p-ease-out);
+  --font-body: var(--font-ui);
+}
+
 /* Dynamic Font Scale (Accessibility) */
 html[data-font-scale='small'] {
   zoom: 0.92;
