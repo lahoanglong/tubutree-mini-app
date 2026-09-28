@@ -1,0 +1,102 @@
+/* apps/miniapp/src/css/zaui-bridge.css
+ * Loaded AFTER zmp-ui/zaui.css so these overrides win the cascade. Fixes audit A4-01:
+ * 137/255 zmp-ui <Button> (and every Input/Spinner/Checkbox/Radio/Switch/Tabs) rendered Zalo
+ * blue #006AF5 because tokens.css never overrode any --zaui-* variable (0/307). */
+:root {
+  --zaui-light-color-primary: var(--color-action-primary-bg);
+
+  --zaui-light-button-primary-background: var(--color-action-primary-bg);
+  --zaui-light-button-primary-background-pressed: var(--color-action-primary-bg-pressed);
+  --zaui-light-button-primary-text: var(--color-action-primary-fg);
+  --zaui-light-button-primary-icon: var(--color-action-primary-fg);
+  --zaui-light-button-primary-danger-background: var(--color-action-danger-bg);
+  --zaui-light-button-primary-danger-background-pressed: var(--color-action-danger-bg-pressed);
+  --zaui-light-button-primary-danger-text: var(--color-action-danger-fg);
+
+  --zaui-light-button-secondary-background: var(--color-action-secondary-bg);
+  --zaui-light-button-secondary-background-pressed: var(--color-action-secondary-bg-pressed);
+  --zaui-light-button-secondary-text: var(--color-action-secondary-fg);
+  --zaui-light-button-secondary-icon: var(--color-action-secondary-fg);
+  --zaui-light-button-secondary-neutral-background: var(--stone-100);
+  --zaui-light-button-secondary-neutral-background-pressed: var(--stone-200);
+  --zaui-light-button-secondary-neutral-text: var(--color-text-primary);
+  --zaui-light-button-secondary-neutral-icon: var(--color-text-primary);
+  --zaui-light-button-secondary-danger-background: var(--color-status-danger-bg);
+  --zaui-light-button-secondary-danger-background-pressed: var(--red-50);
+  --zaui-light-button-secondary-danger-text: var(--color-action-danger-bg);
+  --zaui-light-button-secondary-danger-icon: var(--color-action-danger-bg);
+
+  --zaui-light-button-tertiary-text: var(--color-action-ghost-fg);
+  --zaui-light-button-tertiary-icon: var(--color-action-ghost-fg);
+  --zaui-light-button-tertiary-background-pressed: var(--color-action-ghost-bg-pressed);
+  --zaui-light-button-tertiary-neutral-text: var(--color-text-secondary);
+  --zaui-light-button-tertiary-neutral-icon: var(--color-text-secondary);
+  --zaui-light-button-tertiary-neutral-background-pressed: var(--stone-100);
+  --zaui-light-button-tertiary-danger-text: var(--color-action-danger-bg);
+  --zaui-light-button-tertiary-danger-icon: var(--color-action-danger-bg);
+  --zaui-light-button-tertiary-danger-background-pressed: var(--color-status-danger-bg);
+
+  --zaui-light-button-background-disabled: var(--color-action-primary-bg-disabled);
+  --zaui-light-button-text-disabled: var(--color-action-primary-fg-disabled);
+  --zaui-light-button-icon-disabled: var(--color-action-primary-fg-disabled);
+
+  --zaui-light-input-background-color: var(--color-bg-surface);
+  --zaui-light-input-border-color: var(--color-border-default);
+  --zaui-light-input-hover-border-color: var(--color-border-focus);
+  --zaui-light-input-text-color: var(--color-text-primary);
+  --zaui-light-input-placeholder-color: var(--color-text-tertiary);
+  --zaui-light-input-disabled-color: var(--color-text-disabled);
+  --zaui-light-input-disabled-background-color: var(--stone-50);
+  --zaui-light-input-clear-icon-color: var(--color-text-tertiary);
+  --zaui-light-input-helper-text-color: var(--color-text-tertiary);
+  --zaui-light-input-status-error: var(--color-status-danger-fg);
+  --zaui-light-input-error-text-color: var(--color-status-danger-fg);
+  --zaui-light-input-error-icon-background-color: var(--color-status-danger-bg);
+  --zaui-light-input-helper-icon-background-color: var(--color-status-info-bg);
+  --zaui-light-input-status-success-icon-color: var(--color-status-success-fg);
+  --zaui-light-input-status-success-icon-focus-visible-color: var(--color-status-success-fg);
+
+  --zaui-light-checkbox-border-color: var(--color-border-default);
+  --zaui-light-checkbox-uncheck-background: var(--color-bg-surface);
+  --zaui-light-checkbox-checked-background: var(--color-action-primary-bg);
+  --zaui-light-checkbox-checked-mark-color: var(--color-action-primary-fg);
+  --zaui-light-checkbox-disabled-uncheck-background: var(--stone-50);
+  --zaui-light-checkbox-disabled-checked-background: var(--stone-200);
+  --zaui-light-checkbox-disabled-checked-mark-color: var(--stone-0);
+  --zaui-light-checkbox-disabled-label: var(--color-text-disabled);
+
+  --zaui-light-radio-border-color: var(--color-border-default);
+  --zaui-light-radio-uncheck-background: var(--color-bg-surface);
+  --zaui-light-radio-checked-background: var(--color-action-primary-bg);
+  --zaui-light-radio-checked-mark-color: var(--color-action-primary-fg);
+  --zaui-light-radio-disabled-uncheck-background: var(--stone-50);
+  --zaui-light-radio-disabled-checked-background: var(--stone-200);
+  --zaui-light-radio-disabled-checked-mark-color: var(--stone-0);
+  --zaui-light-radio-disabled-label: var(--color-text-disabled);
+
+  --zaui-light-switch-bg-color: var(--color-action-primary-bg);
+  --zaui-light-switch-off-bg-color: var(--stone-200);
+  --zaui-light-switch-handler-bg-color: var(--stone-0);
+  --zaui-light-switch-disabled-bg-color: var(--stone-100);
+  --zaui-light-switch-off-disabled-bg-color: var(--stone-100);
+  --zaui-light-switch-handler-disabled-bg-color: var(--stone-50);
+  --zaui-light-switch-label-color: var(--color-text-primary);
+  --zaui-light-switch-label-disabled-color: var(--color-text-disabled);
+
+  --zaui-light-spinner-dot-color: var(--color-action-primary-bg);
+  --zaui-light-spinner-border-color: var(--stone-200);
+
+  --zaui-light-tabbar-background: var(--color-bg-surface);
+  --zaui-light-tabbar-divider: var(--color-border-subtle);
+  --zaui-light-tabbar-label: var(--color-text-tertiary);
+  --zaui-light-tabbar-label-active: var(--color-text-brand);
+  --zaui-light-tabbar-active-line: var(--color-action-primary-bg);
+
+  --zaui-light-progress-background: var(--stone-200);
+  --zaui-light-progress-completed: var(--color-action-primary-bg);
+
+  --zaui-light-bottom-navigation-background-color: var(--color-bg-surface);
+  --zaui-light-bottom-navigation-color: var(--color-text-tertiary);
+  --zaui-light-bottom-navigation-active-color: var(--color-text-brand);
+  --zaui-light-bottom-navigation-divider-color: var(--color-border-subtle);
+}
