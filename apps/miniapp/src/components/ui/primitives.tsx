@@ -156,33 +156,6 @@ export function Btn({
   );
 }
 
-// ── Tiêu đề mục ────────────────────────────────────────────────────────────────
-/** Tiêu đề một mục nội dung + hành động phụ bên phải ("Xem tất cả"). */
-export function SectionHeader({
-  title,
-  actionLabel,
-  onAction,
-  style,
-}: {
-  title: string;
-  actionLabel?: string;
-  onAction?: () => void;
-  style?: CSSProperties;
-}) {
-  return (
-    <Row justify="space-between" style={{ marginBottom: 8, ...style }}>
-      <Text bold className="t-h3">
-        {title}
-      </Text>
-      {actionLabel && onAction && (
-        <span role="button" className="tubu-press" onClick={onAction} style={{ color: 'var(--primary-700)', fontSize: 13, fontWeight: 600 }}>
-          {actionLabel}
-        </span>
-      )}
-    </Row>
-  );
-}
-
 // ── Thanh hành động dính đáy ───────────────────────────────────────────────────
 /**
  * Thanh CTA dính đáy màn hình. Tự chừa safe-area (tai thỏ/home bar) — trước đây mỗi trang tự
@@ -214,47 +187,5 @@ export function StickyActionBar({
     >
       {children}
     </Box>
-  );
-}
-
-// ── Dòng danh sách ─────────────────────────────────────────────────────────────
-/** Dòng trong danh sách cài đặt/menu: icon + tiêu đề + mô tả + phần bên phải. */
-export function ListRow({
-  icon,
-  title,
-  subtitle,
-  right,
-  onClick,
-  style,
-}: {
-  icon?: ReactNode;
-  title: ReactNode;
-  subtitle?: ReactNode;
-  right?: ReactNode;
-  onClick?: () => void;
-  style?: CSSProperties;
-}) {
-  return (
-    <Row
-      className={onClick ? 'tubu-press' : undefined}
-      justify="space-between"
-      style={{ padding: '12px 0', minHeight: 44, ...style }}
-      {...(onClick ? { } : {})}
-    >
-      <Row gap={10} style={{ flex: 1, minWidth: 0 }}>
-        {icon}
-        <Box style={{ flex: 1, minWidth: 0 }} onClick={onClick} role={onClick ? 'button' : undefined}>
-          <Text size="small" bold>
-            {title}
-          </Text>
-          {subtitle && (
-            <Txt tone="subtle" size="xSmall" style={{ marginTop: 2 }}>
-              {subtitle}
-            </Txt>
-          )}
-        </Box>
-      </Row>
-      {right}
-    </Row>
   );
 }
