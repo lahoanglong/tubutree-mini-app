@@ -53,6 +53,10 @@ design_handoff/
 
 ---
 
+> ⚠️ **LỖI THỜI (2026-09-28)** — Phần "Design System — Tokens cần implement" ở dưới đây đã bị thay thế bởi spec mới. Vui lòng tham khảo `docs/superpowers/specs/2026-09-28-design-system-v2-design.md` là nguồn duy nhất chuẩn cho design tokens. Phần này giữ lại cho tham khảo lịch sử.
+
+---
+
 ## 🎨 Design System — Tokens cần implement
 
 ### Màu sắc (đọc từ M1/M2 prototype)

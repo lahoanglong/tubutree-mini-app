@@ -1777,6 +1777,8 @@ model UserReorderEstimate {
 6. **Thumb-reach** — CTA chính nằm ở 1/3 dưới mobile.
 7. **Tự hào Việt** — Be Vietnam Pro font, ngôn ngữ Việt chuẩn, KHÔNG emoji thô tre/nón lá.
 
+> ⚠️ **LỖI THỜI (2026-09-28)** — Phần "Design Tokens" ở dưới đây đã bị thay thế bởi spec mới. Vui lòng tham khảo `docs/superpowers/specs/2026-09-28-design-system-v2-design.md` là nguồn duy nhất chuẩn cho design tokens. Phần này giữ lại cho tham khảo lịch sử.
+
 ### 7.2 Design Tokens (copy thẳng vào tailwind.config.js)
 
 ```javascript
