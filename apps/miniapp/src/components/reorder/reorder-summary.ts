@@ -16,7 +16,13 @@ export function summarizeReorder(res: RepurchaseResponse, lines: ReorderLine[], 
     const units = selections.reduce((s, x) => s + x.quantity, 0);
     return { addedLines: selections.length, skippedLines: 0, addedUnits: units, hasProblems: false, message: vi.reorder.addedGeneric };
   }
-  const nameOf = (key: string) => lines.find((l) => l.key === key)?.productName ?? vi.reorder.unknownProduct;
+  // Cùng tên sản phẩm lặp lại trong đơn (khác phân loại) → kèm tên phân loại để biết dòng nào bị bỏ.
+  const nameOf = (key: string) => {
+    const l = lines.find((x) => x.key === key);
+    if (!l) return vi.reorder.unknownProduct;
+    const repeated = lines.filter((x) => x.productName === l.productName).length > 1;
+    return repeated && l.variationName ? `${l.productName} - ${l.variationName}` : l.productName;
+  };
   const addedUnits = res.results.reduce((s, r) => s + r.addedQuantity, 0);
   const addedLines = res.results.filter((r) => r.status !== 'skipped').length;
   const skippedLines = res.results.filter((r) => r.status === 'skipped').length;
@@ -28,6 +34,9 @@ export function summarizeReorder(res: RepurchaseResponse, lines: ReorderLine[], 
       ? problems.length > 0
         ? `${vi.reorder.added(addedUnits)}. ${vi.reorder.notFullyAdded}: ${problems.join(', ')}`
         : vi.reorder.added(addedUnits)
-      : `${vi.reorder.nothingAdded}: ${problems.join(', ')}`;
-  return { addedLines, skippedLines, addedUnits, hasProblems: problems.length > 0, message };
+      : problems.length > 0
+        ? `${vi.reorder.nothingAdded}: ${problems.join(', ')}`
+        : vi.reorder.nothingAdded;
+  // Không thêm được đơn vị nào thì luôn là "có vấn đề", kể cả khi server không nêu dòng lỗi.
+  return { addedLines, skippedLines, addedUnits, hasProblems: problems.length > 0 || addedUnits === 0, message };
 }

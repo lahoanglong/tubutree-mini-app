@@ -55,4 +55,23 @@ describe('reorder-types', () => {
     const out = itemReorderTarget(purchased({ stock: 0, inStock: false }));
     expect(selectedLines(out, { v1: { checked: true, quantity: 1 } })).toEqual([]);
   });
+
+  it('trần số lượng 99: tồn kho lớn hơn 99 vẫn kẹp 99 (đơn cũ và SP đã mua)', () => {
+    expect(lineFromOrderItem(orderItem({ stock: 500, available: true, quantity: 300 }))).toMatchObject({ maxQuantity: 99, defaultQuantity: 99 });
+    const p = itemReorderTarget(purchased({ stock: 500 }));
+    expect(p.kind === 'item' && p.line.maxQuantity).toBe(99);
+    expect(selectedLines(p, { v1: { checked: true, quantity: 250 } })).toEqual([{ key: 'v1', variationId: 'v1', quantity: 99 }]);
+  });
+
+  it('selectionTotals bỏ qua dòng không khả dụng dù bị tick', () => {
+    const t = orderReorderTarget({
+      code: 'TUBU2',
+      items: [
+        orderItem({ id: 'a', stock: 10, available: true, currentPrice: 10000, quantity: 1 }),
+        orderItem({ id: 'b', stock: 0, available: false, currentPrice: 99000, quantity: 3 }),
+      ],
+    });
+    const sel = { a: { checked: true, quantity: 1 }, b: { checked: true, quantity: 3 } };
+    expect(selectionTotals(t, sel)).toEqual({ units: 1, subtotal: 10000 });
+  });
 });
