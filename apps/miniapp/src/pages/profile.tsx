@@ -24,7 +24,6 @@ interface MenuItem {
  * thay vì điều hướng tới trang trắng. Mở khóa dần theo từng vòng phát triển.
  */
 const READY = new Set([
-  '/orders',
   '/loyalty',
   '/wallet',
   '/addresses',
@@ -36,7 +35,6 @@ const READY = new Set([
   '/wishlist',
   '/settings',
   '/edit-profile',
-  '/subscriptions',
   '/brand-owner',
   '/storefront',
   '/feed',
