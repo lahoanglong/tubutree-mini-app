@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 
 // Trang kéo zmp-ui/zmp-sdk (cần môi trường Zalo/DOM) — test chỉ nhắm helper thuần nên thay bằng stub rỗng.
-vi.mock('zmp-ui', () => ({ Box: () => null, Page: () => null, Text: () => null, Button: () => null, useNavigate: () => () => undefined }));
+vi.mock('zmp-ui', () => ({
+  Box: () => null, Page: () => null, Text: () => null, Button: () => null, Sheet: () => null,
+  Checkbox: () => null, Radio: () => null, Switch: () => null,
+  useNavigate: () => () => undefined,
+  useSnackbar: () => ({ openSnackbar: () => undefined, closeSnackbar: () => undefined }),
+}));
 vi.mock('zmp-sdk/apis', () => ({ vibrate: () => undefined, setStorage: async () => ({}), getStorage: async () => ({}), removeStorage: async () => ({}) }));
 
 import { notificationMeta, notificationOrderLink, reorderReminderTarget } from './notifications';
@@ -45,9 +50,9 @@ describe('reorderReminderTarget (CTA "Mua lại ngay" — A1-01=A2-06=A3-02)', (
     expect(reorderReminderTarget({ product_slug: 'dau-goi-visante-500ml' })).toBe('/product/dau-goi-visante-500ml');
   });
 
-  it('không có slug (đơn cũ trước khi OrderItem có cột productSlug) → về trang chủ thay vì link hỏng /product/', () => {
-    expect(reorderReminderTarget({ product: 'Dầu gội Visante 500ml' })).toBe('/');
-    expect(reorderReminderTarget(undefined)).toBe('/');
+  it('không có slug (đơn cũ trước khi OrderItem có cột productSlug) → /orders (spec 4a.4) thay vì link hỏng /product/', () => {
+    expect(reorderReminderTarget({ product: 'Dầu gội Visante 500ml' })).toBe('/orders');
+    expect(reorderReminderTarget(undefined)).toBe('/orders');
   });
 
   it('slug có ký tự cần encode → encodeURIComponent đúng (mirror flashSlug cùng file)', () => {

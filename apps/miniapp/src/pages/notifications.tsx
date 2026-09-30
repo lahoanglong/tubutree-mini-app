@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -16,6 +16,14 @@ import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
 import { useAuthStore } from '../store/auth';
+import { vi } from '../i18n/vi';
+import { fetchPurchasedItems, type PurchasedItem } from '../services/shop-api';
+import { trackReorderReminderCta } from '../services/buy-flow-events';
+// zmp-ui Button vẫn dùng cho các CTA loại khác (nợ migrate); CTA nhắc mua lại dùng DS v2 (spec 4a.4).
+import { Button as DsButton } from '../components/ui/button';
+import { ReorderSheet } from '../components/reorder/reorder-sheet';
+import { itemReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
+import { reminderFallbackPath, reorderReminderAction } from '../components/reorder/reorder-reminder';
 
 /** Icon + nhãn nhóm theo templateCode (§4.10). */
 export function notificationMeta(code: string): { Icon: LucideIcon; title: string } {
@@ -54,11 +62,10 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
  * react-query/zustand/zmp-ui — repo này chưa có test harness dựng toàn trang, xem
  * notifications.spec.ts: chỉ test các hàm thuần export như notificationMeta/notificationOrderLink).
  * Có slug (đơn mới, OrderItem.productSlug đã snapshot) → thẳng trang sản phẩm để đặt lại; đơn cũ
- * chưa có slug → về trang chủ thay vì dựng link hỏng `/product/`.
+ * chưa có slug → về tab Đơn hàng thay vì dựng link hỏng `/product/`.
  */
 export function reorderReminderTarget(data: Record<string, string> | undefined): string {
-  const slug = data?.product_slug ?? data?.productSlug;
-  return slug ? `/product/${encodeURIComponent(String(slug))}` : '/';
+  return reminderFallbackPath(data);
 }
 
 export function notificationOrderLink(templateCode: string, orderCode: unknown): boolean {
@@ -82,6 +89,9 @@ export default function NotificationsPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [selectedNotif, setSelectedNotif] = useState<NotificationDTO | null>(null);
+  const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
+  const [reminderBusy, setReminderBusy] = useState(false);
+  const reminderBusyRef = useRef(false); // chặn double-tap đồng bộ (state chỉ cập nhật sau render)
 
   // Trang này là CỬA VÀO từ push của Zalo: mở app từ thông báo thì restore() chưa kịp xong,
   // fetch ngay sẽ 401 và (retry:false cho 4xx) kẹt màn lỗi vĩnh viễn dù ~200ms sau đã có phiên.
@@ -117,6 +127,29 @@ export default function NotificationsPage() {
     } else {
       setSelectedNotif(null);
     }
+  };
+
+  // Tra đúng variation trong payload qua purchased-items (đơn DELIVERED của chính khách). Lỗi / API cũ
+  // 404 → coi như không tìm thấy, rơi về điều hướng dự phòng (Ruling 8).
+  const openReorderReminder = async (n: NotificationDTO) => {
+    if (reminderBusyRef.current) return;
+    reminderBusyRef.current = true;
+    trackReorderReminderCta(n.id);
+    haptic('light');
+    setReminderBusy(true);
+    const variationId = n.payload.data?.variation_id;
+    let item: PurchasedItem | null = null;
+    if (variationId) {
+      item = await fetchPurchasedItems({ variationId, limit: 1 })
+        .then((p) => p.items[0] ?? null)
+        .catch(() => null);
+    }
+    reminderBusyRef.current = false;
+    setReminderBusy(false);
+    const action = reorderReminderAction(n.payload.data, item);
+    setSelectedNotif(null);
+    if (action.kind === 'sheet') setReorderTarget(itemReorderTarget(action.item));
+    else navigate(action.to);
   };
 
   const onTap = (n: NotificationDTO) => {
@@ -329,17 +362,15 @@ export default function NotificationsPage() {
                     </Button>
                   )}
                   {isReorder && !isOrder && !isFlash && (
-                    <Button
+                    <DsButton
                       fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        navigate(reorderReminderTarget(selectedNotif.payload.data));
-                      }}
+                      size="lg"
+                      loading={reminderBusy}
+                      onPress={() => void openReorderReminder(selectedNotif)}
+                      style={{ marginTop: 8 }}
                     >
-                      Mua lại ngay 🛒
-                    </Button>
+                      {vi.reorder.reminderCta}
+                    </DsButton>
                   )}
                   {isGame && !isOrder && !isFlash && !isReorder && (
                     <Button
@@ -399,6 +430,9 @@ export default function NotificationsPage() {
           </Box>
         </Box>
       )}
+
+      {/* Nhắc mua lại → sheet mua lại 1 SP (addSource=reorder_notification). */}
+      <ReorderSheet target={reorderTarget} source="notification" onClose={() => setReorderTarget(null)} />
     </Page>
   );
 }
