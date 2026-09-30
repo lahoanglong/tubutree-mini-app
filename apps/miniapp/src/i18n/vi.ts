@@ -173,6 +173,12 @@ export const vi = {
     support: 'Cần hỗ trợ? Nhắn Tubu qua Zalo OA',
   },
 
+  nav: {
+    main: 'Điều hướng chính',
+    activeOrders: (n: number) => `${n} đơn đang xử lý`,
+    tabWithActiveOrders: (label: string, n: number) => `${label}, ${n} đơn đang xử lý`,
+  },
+
   orderStatus: {
     PENDING_PAYMENT: 'Chờ thanh toán',
     CONFIRMED: 'Đã xác nhận',

@@ -1,7 +1,7 @@
 import { Box, Page, Text, Button, Avatar, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Package, Repeat, Heart, MapPin, Leaf, Wallet, Users, BadgePercent, Pencil,
+  Heart, MapPin, Leaf, Wallet, Users, BadgePercent, Pencil,
   Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, ShieldCheck, CalendarClock, Sprout, Recycle, Sparkles, BookOpen, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
@@ -49,12 +49,10 @@ const READY = new Set([
   '/brand-story',
 ]);
 
-const MENU: { group: string; items: MenuItem[] }[] = [
+export const MENU: { group: string; items: MenuItem[] }[] = [
   {
     group: 'Mua sắm',
     items: [
-      { Icon: Package, label: 'Đơn hàng của tôi', to: '/orders' },
-      { Icon: Repeat, label: 'Đặt định kỳ', to: '/subscriptions' },
       { Icon: Users, label: 'Mua chung nhóm', to: '/group-buy', hint: 'Tiết kiệm đến 30%' },
       { Icon: Recycle, label: 'Trạm Refill & Đổi vỏ', to: '/refill', hint: 'Tích giọt nước xanh' },
       { Icon: Sparkles, label: 'Trợ lý AI 24/7', to: '/ai-advisor', hint: 'Tư vấn sản phẩm' },

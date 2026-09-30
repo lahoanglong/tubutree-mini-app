@@ -1,39 +1,32 @@
 import { useNavigate, useLocation } from 'zmp-ui';
-import { Home, LayoutGrid, Sprout, Wallet, User, type LucideIcon } from 'lucide-react';
 import { haptic } from '../utils/haptic';
+import { vi } from '../i18n/vi';
+import { useActiveOrderCount } from '../hooks/use-active-order-count';
+import { NAV_TABS, isRootPath, type NavTab } from './nav-config';
+import { Icon } from './ui/icon';
+import { Text } from './ui/text';
+import { CountBadge } from './ui/cart-badge';
 
 /**
- * Bottom tab bar tuỳ biến theo design M1 (§ TabBar): 5 tab, Vườn Xanh là nút TRÒN
- * NỔI ở giữa. Trang chủ · Danh mục · Vườn Xanh · Ví & HH · Cá nhân.
- * Icon: bộ Lucide line đồng bộ toàn app. Active = xanh lá brand.
+ * Tab bar 5 tab (spec 4a.1): Trang chủ · Danh mục · Vườn Xanh (nút tròn nổi giữa) · Đơn hàng
+ * (badge đơn đang xử lý) · Cá nhân. Dữ liệu tab lấy từ nav-config.ts. Ẩn ở trang con.
  */
-const ACTIVE = 'var(--leaf-600)';
-const IDLE = 'var(--neutral-400)';
-
-interface Tab {
-  key: string;
-  label: string;
-  center?: boolean;
-  Icon: LucideIcon;
-}
-const TABS: Tab[] = [
-  { key: '/', label: 'Trang chủ', Icon: Home },
-  { key: '/browse', label: 'Danh mục', Icon: LayoutGrid },
-  { key: '/game', label: 'Vườn Xanh', center: true, Icon: Sprout },
-  { key: '/wallet', label: 'Ví & HH', Icon: Wallet },
-  { key: '/profile', label: 'Cá nhân', Icon: User },
-];
-
-const ROOTS = TABS.map((t) => t.key) as string[];
-
 export default function BottomNav() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const path = location.pathname;
-  if (!ROOTS.includes(path)) return null; // ẩn ở trang con
+  const { pathname } = useLocation();
+  const isRoot = isRootPath(pathname);
+  const activeOrders = useActiveOrderCount(isRoot);
+  if (!isRoot) return null;
+
+  const go = (t: NavTab) => {
+    if (pathname === t.path) return;
+    haptic('light');
+    navigate(t.path);
+  };
 
   return (
-    <div
+    <nav
+      aria-label={vi.nav.main}
       style={{
         position: 'fixed',
         left: 0,
@@ -41,33 +34,45 @@ export default function BottomNav() {
         bottom: 0,
         height: 'calc(60px + var(--safe-bottom))',
         paddingBottom: 'var(--safe-bottom)',
-        background: 'var(--neutral-0)',
-        borderTop: '1px solid var(--neutral-100)',
-        boxShadow: '0 -2px 12px rgba(92,52,10,0.06)',
+        background: 'var(--color-bg-surface)',
+        borderTop: '1px solid var(--color-border-subtle)',
+        boxShadow: 'var(--elevation-3)',
         display: 'flex',
         alignItems: 'stretch',
         zIndex: 100,
       }}
     >
-      {TABS.map((t) => {
-        const active = path === t.key;
-        const color = active ? ACTIVE : IDLE;
-        if (t.center) {
-          return (
-            <div
-              key={t.key}
-              role="button"
-              aria-label={t.label}
-              className="tubu-press"
-              onClick={() => {
-                if (path !== t.key) {
-                  haptic('light');
-                  navigate(t.key);
-                }
-              }}
-              style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 6 }}
-            >
-              <div
+      {NAV_TABS.map((t) => {
+        const active = pathname === t.path;
+        const count = t.badge === 'active-orders' ? activeOrders : 0;
+        return (
+          <button
+            key={t.path}
+            type="button"
+            aria-label={count > 0 ? vi.nav.tabWithActiveOrders(t.label, count) : t.label}
+            aria-current={active ? 'page' : undefined}
+            className="tubu-press"
+            onClick={() => go(t)}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              minHeight: 44,
+              position: 'relative',
+              border: 'none',
+              padding: 0,
+              paddingBottom: t.center ? 6 : 0,
+              background: 'transparent',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: t.center ? 'flex-end' : 'center',
+              gap: 3,
+            }}
+          >
+            {t.center ? (
+              <span
+                aria-hidden
                 style={{
                   position: 'absolute',
                   top: -22,
@@ -75,41 +80,28 @@ export default function BottomNav() {
                   transform: 'translateX(-50%)',
                   width: 54,
                   height: 54,
-                  borderRadius: '50%',
-                  background: 'var(--leaf-600)',
+                  borderRadius: 'var(--radius-pill)',
+                  background: 'var(--color-action-primary-bg)',
+                  border: '3px solid var(--color-bg-surface)',
+                  boxShadow: 'var(--elevation-2)',
                   display: 'grid',
                   placeItems: 'center',
-                  boxShadow: '0 4px 12px rgba(80,144,24,0.4)',
-                  border: '3px solid var(--neutral-0)',
                 }}
               >
-                <t.Icon size={26} color="var(--neutral-0)" strokeWidth={2} absoluteStrokeWidth />
-              </div>
-              <span style={{ fontSize: 10.5, color, fontWeight: active ? 700 : 500 }}>
-                {t.label}
+                <Icon icon={t.Icon} size="lg" tone="inverse" />
               </span>
-            </div>
-          );
-        }
-        return (
-          <div
-            key={t.key}
-            role="button"
-            aria-label={t.label}
-            className="tubu-press"
-            onClick={() => {
-              if (path !== t.key) {
-                haptic('light');
-                navigate(t.key);
-              }
-            }}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3 }}
-          >
-            <t.Icon size={23} color={color} strokeWidth={active ? 2.2 : 1.8} absoluteStrokeWidth />
-            <span style={{ fontSize: 10.5, color, fontWeight: active ? 700 : 500 }}>{t.label}</span>
-          </div>
+            ) : (
+              <span aria-hidden style={{ position: 'relative', display: 'grid', placeItems: 'center' }}>
+                <Icon icon={t.Icon} size="lg" tone={active ? 'brand' : 'muted'} />
+                <CountBadge count={count} label={vi.nav.activeOrders(count)} />
+              </span>
+            )}
+            <Text variant="caption" tone={active ? 'brand' : 'tertiary'} style={{ fontWeight: active ? 700 : 500 }}>
+              {t.label}
+            </Text>
+          </button>
         );
       })}
-    </div>
+    </nav>
   );
 }

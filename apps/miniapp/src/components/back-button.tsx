@@ -2,18 +2,17 @@ import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'zmp-ui';
 import { ChevronLeft } from 'lucide-react';
 import { useStorefrontContext } from '../store/storefront-context';
+import { isRootPath } from './nav-config';
 
 /**
  * Nút back NỔI cho trang con. Vì đã ẩn actionBar gốc Zalo (immersive, content tràn
  * viền lên), trang con không còn nút back native → component này thay thế.
  * Đặt top-LEFT để tránh capsule (⋯ ✕) của Zalo luôn nằm top-right.
- * Ẩn ở các tab gốc (đã có BottomNav).
+ * Ẩn ở các tab gốc (nav-config.ts — đã có BottomNav).
  *
  * Khi hiện, gắn class `with-back-btn` lên <body> để CSS đệm thêm đỉnh cho .page
  * (nội dung không bị nút back đè) — trừ trang hero full-bleed (.page-bleed).
  */
-const ROOTS = ['/', '/browse', '/game', '/wallet', '/profile'];
-
 export default function BackButton() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -21,7 +20,7 @@ export default function BackButton() {
   const sfKind = useStorefrontContext((s) => s.kind);
   const rawFrom = (location.state as { from?: string } | null)?.from;
   const fromPath = typeof rawFrom === 'string' && rawFrom !== location.pathname ? rawFrom : undefined;
-  const show = !ROOTS.includes(location.pathname) || Boolean(fromPath);
+  const show = !isRootPath(location.pathname) || Boolean(fromPath);
 
   useEffect(() => {
     document.body.classList.toggle('with-back-btn', show);
@@ -54,8 +53,8 @@ export default function BackButton() {
         height: 44,
         borderRadius: '50%',
         border: 'none',
-        background: 'rgba(255,255,255,0.92)',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+        background: 'var(--color-bg-surface)',
+        boxShadow: 'var(--elevation-2)',
         display: 'grid',
         placeItems: 'center',
         padding: 0,

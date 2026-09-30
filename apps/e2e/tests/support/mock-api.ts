@@ -348,6 +348,10 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
     segments: [],
   };
   api.get('/me', me);
+  // Mặc định cho khối dùng chung toàn app (dự án 4a): badge tab Đơn hàng gọi ở MỌI trang gốc.
+  // Spec cần số khác thì đăng ký lại SAU (đăng ký sau thắng) — và phải đăng ký SAU mọi mock
+  // '/orders/:code' vì pattern đó cũng khớp '/orders/active-count'.
+  api.get('/orders/active-count', { count: 0 });
   return user;
 }
 
