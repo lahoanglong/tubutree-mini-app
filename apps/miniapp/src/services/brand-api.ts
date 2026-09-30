@@ -24,6 +24,7 @@ export interface BrandProductView {
   ratingAvg: number;
   reviewCount: number;
   sold?: number;
+  inStock: boolean;
 }
 export interface DealerRewardView {
   id: string;
