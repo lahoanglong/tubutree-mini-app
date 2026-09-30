@@ -380,6 +380,8 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   // Spec cần số khác thì đăng ký lại SAU (đăng ký sau thắng) — và phải đăng ký SAU mọi mock
   // '/orders/:code' vì pattern đó cũng khớp '/orders/active-count'.
   api.get('/orders/active-count', { count: 0 });
+  // Kệ "Mua lại" (Home + tab Đơn hàng) — mặc định khách chưa mua gì.
+  api.get('/me/purchased-items', { items: [], nextCursor: null });
   return user;
 }
 

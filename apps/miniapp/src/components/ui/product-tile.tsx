@@ -172,19 +172,37 @@ export function ProductTile({
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
           <PriceTag value={price} compareAt={hasSale ? p.basePrice : undefined} size="sm" />
-          {action === 'rebuy' && (
-            // Cô lập click: Button.onPress (Task 10) là `() => void` — KHÔNG nhận native event,
-            // nên không thể tự stopPropagation từ bên trong onPress. Bọc một div riêng chặn click
-            // ở đây trước khi nó nổi bọt lên div ngoài cùng (role=button, onClick=onPress) — nếu
-            // không, tap "Mua lại" sẽ đồng thời điều hướng đi (đã verify empirically bằng test).
-            <div onClick={(e) => e.stopPropagation()}>
-              <Button size="md" variant="secondary" onPress={() => onAction?.()}>
-                Mua lại
-              </Button>
-            </div>
-          )}
+          {action === 'rebuy' && isLine && <RebuyButton onAction={onAction} />}
         </div>
+        {/* Thẻ dạng khối (kệ Mua lại 148px): nút xuống hàng riêng dưới giá, full width. */}
+        {action === 'rebuy' && !isLine && <RebuyButton block onAction={onAction} />}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Nút "Mua lại" của thẻ — dùng chung cho dạng dòng (cùng hàng với giá) và dạng khối (hàng riêng).
+ *
+ * Cô lập click: Button.onPress là `() => void` — KHÔNG nhận native event, nên không thể tự
+ * stopPropagation từ bên trong onPress. Bọc một div riêng chặn click ở đây trước khi nó nổi bọt
+ * lên div ngoài cùng (role=button, onClick=onPress) — nếu không, tap "Mua lại" sẽ đồng thời điều
+ * hướng đi (đã verify empirically bằng test).
+ *
+ * `block`: `.zaui-btn` có min-width 120px nên không vừa thẻ 148px → full width và bỏ min-width.
+ */
+function RebuyButton({ block = false, onAction }: { block?: boolean; onAction?: () => void }) {
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={block ? { marginTop: 8 } : undefined}>
+      <Button
+        size="md"
+        variant="secondary"
+        fullWidth={block}
+        style={block ? { minWidth: 0 } : undefined}
+        onPress={() => onAction?.()}
+      >
+        {vi.reorder.cardCta}
+      </Button>
     </div>
   );
 }

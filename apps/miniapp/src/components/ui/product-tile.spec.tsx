@@ -57,4 +57,10 @@ describe('ProductTile', () => {
     expect(screen.getByText(/tạm hết|hết hàng/i)).toBeInTheDocument();
     expect(screen.getByText('Mua lại')).toBeInTheDocument();
   });
+  it('rail + rebuy: nút "Mua lại" nằm hàng riêng, full width, không bị min-width 120px của ZaUI làm tràn thẻ 148px', () => {
+    renderTile(<ProductTile product={PRODUCT} variant="rail" action="rebuy" showWishlist={false} onPress={() => {}} onAction={() => {}} />);
+    const btn = screen.getByRole('button', { name: 'Mua lại' });
+    expect(btn.className).toContain('zaui-btn-full-width');
+    expect(btn).toHaveStyle({ minWidth: '0px' });
+  });
 });

@@ -15,6 +15,7 @@ import { haptic } from '../utils/haptic';
 import logo from '../assets/tubu-logo.png';
 import { getNotifications } from '../services/account-api';
 import { CartButton } from '../components/cart-button';
+import { PurchasedRail } from '../components/reorder/purchased-rail';
 
 const SECTION_LIMIT = 6;
 
@@ -135,6 +136,9 @@ export default function HomePage() {
           </Text>
         </Box>
       </Box>
+
+      {/* ── Mua lại (spec 4a.3) — khối ĐẦU TIÊN dưới ô tìm; khách mới/chưa mua không thấy. ── */}
+      <PurchasedRail source="home_rail" />
 
       {/* ── Quick actions: AI tư vấn + Mua chung — 1 HÀNG gọn (trước đây 2 banner full-width
           chiếm quá nhiều đầu trang, đẩy sản phẩm xuống sâu). 2 ô ngang, icon + nhãn ngắn. ── */}
