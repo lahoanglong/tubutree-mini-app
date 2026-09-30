@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { Box, Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight, AlertTriangle } from 'lucide-react';
@@ -26,6 +25,7 @@ import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { PageHeader } from '../components/ui/page-header';
 import { Checkbox } from '../components/ui/form';
+import { SR_ONLY } from '../components/ui/sr-only';
 import { IconButton } from '../components/ui/icon-button';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
@@ -34,13 +34,6 @@ import { PriceTag } from '../components/ui/price-tag';
 
 const UNDO_WINDOW_MS = 3500;
 const CART_KEY = ['cart'] as const;
-
-// Ẩn về mặt hình ảnh nhưng vẫn trong cây accessibility — dùng làm accessible name cho checkbox
-// từng dòng (không có nhãn hiện ra, khác với "Chọn tất cả" đã có label hiển thị của riêng nó).
-const srOnly: CSSProperties = {
-  position: 'absolute', width: 1, height: 1, padding: 0, margin: -1,
-  overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0,
-};
 
 /**
  * Mutation giỏ hàng kiểu optimistic (AD-005):
@@ -319,7 +312,7 @@ function CartLineRow({
       }}
     >
       <Checkbox checked={selected} onChange={onToggleSelect}>
-        <span style={srOnly}>{`Chọn ${line.productName}`}</span>
+        <span style={SR_ONLY}>{`Chọn ${line.productName}`}</span>
       </Checkbox>
       <Box
         role="button"
