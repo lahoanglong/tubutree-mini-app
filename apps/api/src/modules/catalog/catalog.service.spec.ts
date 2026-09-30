@@ -195,16 +195,16 @@ describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
     return { prisma, svc: new CatalogService(prisma) };
   }
 
-  it('có lịch sử mua ở danh mục C → gợi ý sản phẩm active cùng danh mục, LOẠI sản phẩm đã mua, sắp theo đã bán giảm dần', async () => {
+  it('có lịch sử mua ở danh mục C → gợi ý cùng danh mục; SP ĐÃ MUA vẫn có mặt nhưng xếp SAU mọi SP chưa mua (spec 4a.3, A2-04)', async () => {
     const orderItemFindMany = jest.fn().mockResolvedValue([{ variationId: 'v1' }]);
     const variationFindMany = jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }]);
-    // Lần 1: lấy categoryIds của sản phẩm đã mua. Lần 2: query gợi ý (matched).
     const productFindMany = jest
       .fn()
       .mockResolvedValueOnce([{ categoryIds: ['C'] }])
       .mockResolvedValueOnce([
-        { ...card('p2'), soldExternal: 5, soldApp: 0 }, // sold = 5
-        { ...card('p3'), soldExternal: 10, soldApp: 20 }, // sold = 30
+        { ...card('p1'), soldExternal: 100, soldApp: 0 }, // đã mua, bán chạy nhất
+        { ...card('p2'), soldExternal: 5, soldApp: 0 },
+        { ...card('p3'), soldExternal: 10, soldApp: 20 },
       ]);
     const { prisma, svc } = setup({
       orderItem: { findMany: orderItemFindMany },
@@ -214,12 +214,28 @@ describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
 
     const r = await svc.getForYou('u1');
 
-    expect(r.map((c) => c.id)).toEqual(['p3', 'p2']); // p3 (sold 30) trước p2 (sold 5)
-    expect(r.map((c) => c.id)).not.toContain('p1'); // không gợi ý lại sản phẩm đã mua
-    // Query gợi ý phải loại trừ sản phẩm đã mua ngay ở DB, không chỉ lọc ở JS.
+    expect(r.map((c) => c.id)).toEqual(['p3', 'p2', 'p1']);
+    // Không còn loại ở DB — SP đã mua được phép xuất hiện.
     const candidateWhere = (prisma as any).product.findMany.mock.calls[1][0].where;
-    expect(candidateWhere.id).toEqual({ notIn: ['p1'] });
+    expect(candidateWhere.id).toBeUndefined();
     expect(candidateWhere.OR).toEqual(expect.arrayContaining([{ categoryIds: { hasSome: ['C'] } }]));
+  });
+
+  it('nhánh fallback isFeatured cũng xếp SP đã mua sau', async () => {
+    const productFindMany = jest
+      .fn()
+      .mockResolvedValueOnce([{ categoryIds: [] }])
+      .mockResolvedValueOnce([
+        { ...card('p1'), isFeatured: true, soldExternal: 50, soldApp: 0 },
+        { ...card('pf'), isFeatured: true, soldExternal: 1, soldApp: 0 },
+      ]);
+    const { svc } = setup({
+      orderItem: { findMany: jest.fn().mockResolvedValue([{ variationId: 'v1' }]) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }]) },
+      product: { findMany: productFindMany },
+    });
+    const r = await svc.getForYou('u1');
+    expect(r.map((c) => c.id)).toEqual(['pf', 'p1']);
   });
 
   it('user chưa có lịch sử mua & chưa theo dõi nhãn nào → fallback sản phẩm nổi bật (isFeatured)', async () => {

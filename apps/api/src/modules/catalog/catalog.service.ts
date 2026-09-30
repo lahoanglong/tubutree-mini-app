@@ -160,8 +160,9 @@ export class CatalogService {
   /**
    * Feed "Dành cho bạn" — gợi ý cá nhân hoá rule-based (không ML):
    * 1) Lấy danh mục từ lịch sử mua gần đây (20 order item cuối) + nhãn đang theo dõi.
-   * 2) Gợi ý sản phẩm active trùng danh mục HOẶC thuộc nhãn theo dõi, loại sản phẩm đã mua,
-   *    sắp theo tổng đã bán (soldApp + soldExternal) giảm dần.
+   * 2) Gợi ý sản phẩm active trùng danh mục HOẶC thuộc nhãn theo dõi; sản phẩm ĐÃ MUA vẫn có thể
+   *    xuất hiện nhưng luôn xếp sau sản phẩm chưa mua (spec 4a.3), trong mỗi nhóm sắp theo tổng đã bán
+   *    (soldApp + soldExternal) giảm dần.
    * 3) Không có lịch sử/không match → fallback sản phẩm isFeatured (sắp theo đã bán).
    */
   async getForYou(userId: string) {
@@ -204,7 +205,6 @@ export class CatalogService {
       if (categorySet.length > 0) or.push({ categoryIds: { hasSome: categorySet } });
       if (followedBrandIds.length > 0) or.push({ brandId: { in: followedBrandIds } });
       const where: Prisma.ProductWhereInput = { isActive: true, approvalStatus: 'APPROVED', OR: or };
-      if (purchasedProductIds.length) where.id = { notIn: purchasedProductIds };
       items = await this.prisma.product.findMany({
         where,
         // take:200 — trước đây không giới hạn nên load HẾT sản phẩm khớp rồi mới sort+cắt 10
@@ -222,9 +222,13 @@ export class CatalogService {
       });
     }
 
-    const sorted = [...items].sort(
-      (a, b) => b.soldExternal + b.soldApp - (a.soldExternal + a.soldApp),
-    );
+    const purchased = new Set(purchasedProductIds);
+    const sold = (p: { soldExternal: number; soldApp: number }) => p.soldExternal + p.soldApp;
+    const sorted = [...items].sort((a, b) => {
+      const pa = purchased.has(a.id) ? 1 : 0;
+      const pb = purchased.has(b.id) ? 1 : 0;
+      return pa !== pb ? pa - pb : sold(b) - sold(a);
+    });
     return sorted.slice(0, TAKE).map((p) => this.toCard(p));
   }
 
