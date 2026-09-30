@@ -8,6 +8,7 @@ import {
   mockPilotStorefront,
   OUT_OF_STOCK_NAME,
   PILOT_ORDER_CODE,
+  PILOT_PRODUCT,
   PILOT_PRODUCT_NAME,
   PILOT_SLUG,
   PILOT_STOREFRONT_SLUG,
@@ -24,7 +25,8 @@ import type { AddressDTO } from '../../miniapp/src/services/shop-api';
  *   3. Cart: bấm vào ảnh sản phẩm (xa chữ tên) vẫn mở trang sản phẩm.
  *   4. Storefront: hàng hết có overlay "tạm hết", hàng còn thì không (audit A4-06).
  *   5. Đơn đã giao: "Mua lại" hiện spinner rồi chuyển sang /cart.
- *   6-7. Component con CHƯA migrate trong luồng pilot (quantity-selector, address-section) vẫn
+ *   6. PDP 375px: thanh CTA dính đáy không tràn màn hình (còn hàng giá dài + hết hàng).
+ *   7-8. Component con CHƯA migrate trong luồng pilot (quantity-selector, address-section) vẫn
  *      có viền/nền thật nhờ khối alias v1 → v2 (final review C1: trước đó resolve ra "không gì").
  * Toàn bộ API được mock (tests/support/mock-api.ts) — không cần API/DB.
  */
@@ -95,6 +97,49 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     await posted;
     await expect(spinner).toHaveCount(0, { timeout: 10_000 });
     expect(api.callsTo('POST', '/cart/items')).toHaveLength(1);
+  });
+
+  test('PDP 375px: mọi nút trong thanh CTA dính đáy nằm trọn trong màn hình, "Mua ngay" + giá hiện đủ', async ({ page, api }) => {
+    // Bug cũ: hàng CTA đôi không co được (min-width:auto + nhãn nowrap + min-width 120 của ZaUI) →
+    // "Mua ngay · 65.000đ" tràn tới x=421 trên màn 375/390px. Giá dài (1.250.000đ) là ca xấu nhất.
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockPilotProduct(api);
+    api.get('/products/:slug', {
+      ...PILOT_PRODUCT,
+      basePrice: 1_250_000,
+      variations: PILOT_PRODUCT.variations.map((v) => ({ ...v, retailPrice: 1_250_000 })),
+    });
+
+    const assertBarFits = async () => {
+      const bar = page.getByTestId('sticky-bar');
+      const buttons = bar.locator('button, [role=button]');
+      const n = await buttons.count();
+      expect(n).toBeGreaterThan(0);
+      for (let i = 0; i < n; i++) {
+        const box = await buttons.nth(i).boundingBox();
+        expect(box, `nút #${i} trong sticky-bar`).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width, `nút #${i} tràn phải`).toBeLessThanOrEqual(375);
+      }
+    };
+
+    // Còn hàng: nút giỏ + "Thêm vào giỏ" + "Mua ngay".
+    await page.goto(`/product/${PILOT_SLUG}`);
+    const buy = page.getByRole('button', { name: 'Mua ngay · 1.250.000đ' });
+    await expect(buy).toBeVisible({ timeout: 15_000 });
+    await assertBarFits();
+    // Cả nhãn lẫn giá hiện đủ — không bị rút gọn "…".
+    for (const text of ['Mua ngay', '1.250.000đ']) {
+      const line = buy.getByText(text, { exact: true });
+      await expect(line).toBeVisible();
+      expect(await line.evaluate((el) => el.scrollWidth <= el.clientWidth), `"${text}" bị rút gọn`).toBe(true);
+    }
+
+    // Hết hàng: CTA đơn.
+    api.get('/products/:slug', { ...PILOT_PRODUCT, variations: PILOT_PRODUCT.variations.map((v) => ({ ...v, stock: 0 })) });
+    await page.goto(`/product/${PILOT_SLUG}`);
+    await expect(page.getByTestId('sticky-bar').getByRole('button', { name: /hết/i })).toBeVisible({ timeout: 15_000 });
+    await assertBarFits();
   });
 
   test('Giỏ hàng: bấm vào ảnh sản phẩm (xa chữ tên, sát mép trái) vẫn mở trang chi tiết', async ({ page, api }) => {

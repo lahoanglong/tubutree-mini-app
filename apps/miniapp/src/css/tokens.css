@@ -409,3 +409,40 @@ body.with-back-btn .page.page-bleed {
   min-height: 44px !important;
 }
 
+
+/*
+ * DS Button (components/ui/button.tsx gắn class .tubu-btn) — co giãn an toàn trong hàng chật.
+ * CSS ZaUI gốc: .zaui-btn{white-space:nowrap} + .zaui-btn-large{min-width:120px} + container
+ * inline-flex nowrap → nút KHÔNG BAO GIỜ co nhỏ hơn nhãn, nên hàng CTA đôi ở PDP tràn khỏi màn
+ * hình 320-390px. Ở đây: container không vượt bề rộng nút, nhãn chữ được rút gọn "…" thay vì
+ * tràn, icon không bị bóp.
+ */
+.tubu-btn {
+  max-width: 100%;
+}
+.tubu-btn .zaui-btn-container {
+  max-width: 100%;
+}
+.tubu-btn .zaui-btn-container > span:not(.zaui-btn-icon):not(.zaui-btn-loading-container) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tubu-btn .zaui-btn-icon {
+  flex-shrink: 0;
+}
+/* Trong StickyActionBar: bỏ min-width 120px của ZaUI (để 2 nút + nút giỏ vừa 320px) và thu đệm
+ * ngang 24 → 12px (nhãn có thêm 24px mỗi nút trước khi phải rút gọn). */
+.tubu-sticky-bar .tubu-btn {
+  min-width: 0;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+/* Máy rất hẹp (320-359px): 2 nút CTA chỉ còn ~110px — thu đệm ngang còn 6px để nhãn phổ biến
+ * ("Thêm vào giỏ", "Thanh toán ngay") vẫn hiện đủ, không bị "…" (đo thực tế: thiếu 11px / 5px). */
+@media (max-width: 359px) {
+  .tubu-sticky-bar .tubu-btn {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+}

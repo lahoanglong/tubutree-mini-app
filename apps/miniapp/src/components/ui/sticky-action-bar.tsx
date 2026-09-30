@@ -12,6 +12,7 @@ export function StickyActionBar({ primary, secondary, summary }: StickyActionBar
   return (
     <div
       data-testid="sticky-bar"
+      className="tubu-sticky-bar"
       style={{
         position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 20,
         background: 'var(--color-bg-surface)', boxShadow: 'var(--elevation-3)',
@@ -22,7 +23,10 @@ export function StickyActionBar({ primary, secondary, summary }: StickyActionBar
       {summary}
       <div style={{ display: 'flex', gap: 10 }}>
         {secondary}
-        <div style={{ flex: 1 }}>{primary}</div>
+        {/* minWidth 0: flex item mặc định min-width:auto = bề rộng nội dung → hàng CTA không co được
+            và tràn khỏi màn hình ở 320-390px (PDP "Mua ngay · giá" chạm 421px). Nút bên trong co/rút
+            gọn nhờ .tubu-sticky-bar .tubu-btn (css/tokens.css). */}
+        <div style={{ flex: 1, minWidth: 0 }}>{primary}</div>
       </div>
     </div>
   );

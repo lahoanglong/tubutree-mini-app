@@ -68,7 +68,7 @@ export function Button({
       fullWidth={fullWidth}
       onClick={handlePress}
       prefixIcon={IconCmp ? <Icon icon={IconCmp} size="sm" tone={variant === 'secondary' || variant === 'ghost' ? 'brand' : 'inverse'} /> : undefined}
-      className={className}
+      className={className ? `tubu-btn ${className}` : 'tubu-btn'}
       style={{ minHeight: size === 'lg' ? 48 : 44, borderRadius: 'var(--radius-control)', fontWeight: 600, ...toneStyle, ...style }}
     >
       {children}

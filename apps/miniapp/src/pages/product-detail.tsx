@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Box, Page, Text, useNavigate, useParams, useSnackbar, useLocation } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone } from 'lucide-react';
@@ -732,15 +732,22 @@ export default function ProductDetailPage() {
               >
                 {vi.product.addToCart}
               </Button>
+              {/* 2 dòng (nhãn + giá): "Mua ngay · 1.250.000đ" một dòng cần ~170px, trong khi mỗi nút
+                  chỉ còn ~110-140px ở 320-390px → trước đây tràn khỏi màn hình. aria-label giữ
+                  nguyên câu một dòng cho trình đọc màn hình (và cả lúc loading — I1). */}
               <Button
                 variant="primary"
                 size="lg"
                 loading={buyNowMutation.isPending}
                 disabled={!selected}
                 onPress={handleBuyNow}
-                style={{ flex: 1 }}
+                aria-label={`Mua ngay · ${formatVnd(price * quantity)}`}
+                style={{ flex: 1, paddingTop: 6, paddingBottom: 6 }}
               >
-                Mua ngay · {formatVnd(price * quantity)}
+                <span style={BUY_NOW_LINE}>Mua ngay</span>
+                <span style={{ ...BUY_NOW_LINE, fontSize: 'var(--type-caption-size)', fontWeight: 500 }}>
+                  {formatVnd(price * quantity)}
+                </span>
               </Button>
             </Box>
           ) : (
@@ -753,6 +760,15 @@ export default function ProductDetailPage() {
     </Page>
   );
 }
+
+/** Một dòng của nhãn 2 dòng trên nút "Mua ngay" (thanh CTA dính đáy). */
+const BUY_NOW_LINE: CSSProperties = {
+  display: 'block',
+  lineHeight: 1.2,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
 
 /** Carousel ảnh scroll-snap + dots — không cần lib ngoài. */
 function Gallery({ images, alt }: { images: string[]; alt: string }) {
