@@ -68,7 +68,8 @@ describe('SubscriptionsPanel', () => {
     fireEvent.click(cancelBtn);
     expect(await screen.findByText('Giữ lại lịch định kỳ?', {}, { timeout: 5000 })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Vẫn hủy' }, { timeout: 5000 }));
-    await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'CANCELLED'), { timeout: 5000 });}, 20_000);
+    await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'CANCELLED'), { timeout: 5000 });
+  }, 20_000);
 
   it('lịch đang tạm dừng: hiện "Đang tạm dừng", "Tiếp tục" gọi đổi trạng thái ACTIVE', async () => {
     const paused = { ...SUB, status: 'PAUSED' as const };
