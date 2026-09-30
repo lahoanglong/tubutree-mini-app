@@ -34,3 +34,16 @@ export class RepurchaseDto {
   @IsIn(['repurchase', 'reorder_notification'])
   addSource?: 'repurchase' | 'reorder_notification';
 }
+
+export class PurchasedItemsQuery {
+  @IsOptional() @IsString() @MaxLength(200) cursor?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit = 20;
+
+  @IsOptional() @IsString() @MaxLength(64) variationId?: string;
+}

@@ -1,5 +1,5 @@
 import { ValidationPipe } from '@nestjs/common';
-import { OrderListQuery, RepurchaseDto } from './orders.dto';
+import { OrderListQuery, PurchasedItemsQuery, RepurchaseDto } from './orders.dto';
 
 // Cùng cấu hình ValidationPipe với main.ts — forbidNonWhitelisted: field lạ bị từ chối.
 const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
@@ -47,5 +47,15 @@ describe('RepurchaseDto', () => {
     ['field lạ', { foo: 1 }],
   ])('từ chối %s', async (_l, body) => {
     await expect(asBody(RepurchaseDto, body)).rejects.toThrow();
+  });
+});
+
+describe('PurchasedItemsQuery', () => {
+  it('mặc định limit=20; ép kiểu limit chuỗi', async () => {
+    await expect(asQuery(PurchasedItemsQuery, {})).resolves.toMatchObject({ limit: 20 });
+    await expect(asQuery(PurchasedItemsQuery, { limit: '10', variationId: 'v1' })).resolves.toMatchObject({ limit: 10, variationId: 'v1' });
+  });
+  it.each([[{ limit: '51' }], [{ limit: '0' }], [{ userId: 'u2' }]])('từ chối %p (không nhận userId từ client)', async (q) => {
+    await expect(asQuery(PurchasedItemsQuery, q)).rejects.toThrow();
   });
 });

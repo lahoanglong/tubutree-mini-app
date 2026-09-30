@@ -3,13 +3,15 @@ import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { OrderReversalService } from './order-reversal.service';
 import { OrderStatusService } from './order-status.service';
+import { PurchasedItemsService } from './purchased-items.service';
+import { PurchasedItemsController } from './purchased-items.controller';
 import { CartModule } from '../cart/cart.module';
 import { FlashSaleModule } from '../flash-sale/flash-sale.module';
 
 @Module({
   imports: [CartModule, FlashSaleModule],
-  controllers: [OrdersController],
-  providers: [OrdersService, OrderReversalService, OrderStatusService],
+  controllers: [OrdersController, PurchasedItemsController],
+  providers: [OrdersService, OrderReversalService, OrderStatusService, PurchasedItemsService],
   // Xuất cho AdminModule/MerchantModule/PancakeModule — nguồn ghi Order.status
   // dùng chung để không lặp lại khối restock/refund + guard chuyển trạng thái.
   exports: [OrderReversalService, OrderStatusService],
