@@ -191,6 +191,17 @@ describe('SystemConfigService.set — biên cho khoá hạn ngày (đúng tên k
     expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
   });
 
+  it.each(['shipping.eta_min_days', 'shipping.eta_max_days'])('%s (ETA đặt hàng thành công) bị giới hạn 0–60', async (key) => {
+    await expect(mk().svc.set(key, -1, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mk().svc.set(key, 61, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mk().svc.set(key, '3', 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    for (const v of [0, 3, 60]) {
+      const ok = mk();
+      await ok.svc.set(key, v, 'admin1');
+      expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    }
+  });
+
   it('dealer.reward_claim_grace_days bị giới hạn 0–366', async () => {
     await expect(mk().svc.set('dealer.reward_claim_grace_days', -1, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
     await expect(mk().svc.set('dealer.reward_claim_grace_days', 367, 'admin1')).rejects.toBeInstanceOf(BadRequestException);

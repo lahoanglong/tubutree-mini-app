@@ -72,6 +72,10 @@ export class SystemConfigService {
     // ghi 'return.window_days' (không ai đọc) nên giới hạn này chưa bao giờ áp vào khoá thật.
     'returns.window_days': { min: 0, max: 365, note: 'số ngày' },
     'dealer.reward_claim_grace_days': { min: 0, max: 366, note: 'số ngày' },
+    // ETA giao hàng trên trang đặt hàng thành công (buy-flow 4a): số nguyên ngày, gõ nhầm (vd 300) sẽ
+    // bị từ chối lúc ghi thay vì âm thầm ẩn dòng ETA (toShippingEta bỏ giá trị ngoài 0–60).
+    'shipping.eta_min_days': { min: 0, max: 60, note: 'số ngày' },
+    'shipping.eta_max_days': { min: 0, max: 60, note: 'số ngày' },
   };
 
   private assertInRange(key: string, value: unknown): void {

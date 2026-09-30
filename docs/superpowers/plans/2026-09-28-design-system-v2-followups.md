@@ -37,5 +37,7 @@ Carried over from the sub-project 3 review ledger (deleted after completion).
 
 ## Deploy notes
 - New public field `inStock` on storefront/brand product payloads (additive; miniapp treats a missing field as in stock). Deploy API before miniapp.
+- Order-success ETA line (spec 4a.5) is OFF until the owner sets two config keys; there is deliberately no seed default (Ruling 9) and the admin "Cấu hình" tab only lists existing rows, so set them with the admin config write (ADMIN role, JWT): `PUT /api/admin/config` with body `{"key":"shipping.eta_min_days","value":2}` and again with `{"key":"shipping.eta_max_days","value":4}` (example values; the owner decides). Rules: integer days, 0-60 (the API rejects anything outside; `SystemConfigService.RANGES`), both keys required and `min <= max`, otherwise the public config returns `shippingEta: null` and the miniapp hides the line. Deploy the API (public config `shippingEta` + RANGES) before the miniapp.
+- The 4a miniapp sends `group=processing|closed` to `GET /orders` for the "Đang xử lý" and "Đã hủy/hoàn" tabs. An API older than 4a answers 400 (global ValidationPipe `forbidNonWhitelisted`), so those two tabs show the error state. Deploy the API first, and do NOT roll the API back below 4a while the 4a miniapp is live.
 - Web keeps its old palette and default Tailwind spacing; the shared preset no longer overrides spacing.
 - Branch is not pushed or deployed.
