@@ -67,6 +67,8 @@ interface RouteDef {
   pattern: string;
   regex: RegExp;
   keys: string[];
+  /** Số đoạn path cố định (không phải `:param`) — route cụ thể hơn thắng route có `:param` cùng dạng path. */
+  literals: number;
   handler: MockHandler;
 }
 
@@ -87,6 +89,11 @@ function compile(pattern: string): { regex: RegExp; keys: string[] } {
   return { regex: new RegExp(`^${src}/?$`), keys };
 }
 
+/** Số đoạn path cố định (không phải `:param`) của path mẫu. */
+function literalCount(pattern: string): number {
+  return pattern.split('/').filter((seg) => seg !== '' && !seg.startsWith(':')).length;
+}
+
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1', '0.0.0.0']);
 
 export class MockApi {
@@ -94,6 +101,8 @@ export class MockApi {
   private readonly allowed = new Set<string>();
   private readonly waiters: { method: string; regex: RegExp; resolve: (c: MockCall) => void }[] = [];
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
+  /** Độ cụ thể (số đoạn cố định) của route ĐÃ trả lời mỗi lời gọi — để callsTo không đếm nhầm. */
+  private readonly servedLiterals = new WeakMap<MockCall, number>();
   /** Mọi lời gọi ĐÃ được mock trả lời (theo thứ tự). */
   readonly calls: MockCall[] = [];
   /** Lời gọi không có mock (đã trả 404 E2E_UNMOCKED), dạng "GET /path". */
@@ -101,10 +110,15 @@ export class MockApi {
   /** Lỗi ném ra từ chính hàm mock (bug của spec) — fixture fail nếu khác rỗng. */
   readonly handlerErrors: string[] = [];
 
-  /** Đăng ký mock. Đăng ký SAU thắng đăng ký trước (ghi đè mặc định của beforeEach trong từng test). */
+  /**
+   * Đăng ký mock. Route CỤ THỂ HƠN thắng (nhiều đoạn path cố định hơn: `/orders/active-count` thắng
+   * `/orders/:code` dù đăng ký trước hay sau); cùng độ cụ thể thì đăng ký SAU thắng (ghi đè mặc định
+   * của beforeEach trong từng test).
+   */
   on(method: string, pattern: string, handler: MockHandler): this {
     const { regex, keys } = compile(pattern);
-    this.routes.push({ method: method.toUpperCase(), pattern, regex, keys, handler });
+    const literals = literalCount(pattern);
+    this.routes.push({ method: method.toUpperCase(), pattern, regex, keys, literals, handler });
     return this;
   }
   get(pattern: string, handler: MockHandler): this {
@@ -129,11 +143,15 @@ export class MockApi {
     return this;
   }
 
-  /** Các lời gọi đã mock khớp method + path mẫu (vd `callsTo('POST', '/orders/:code/cancel')`). */
+  /**
+   * Các lời gọi đã mock khớp method + path mẫu (vd `callsTo('POST', '/orders/:code/cancel')`).
+   * Lời gọi do route CỤ THỂ HƠN trả lời (vd `/orders/active-count` so với `/orders/:code`) không tính.
+   */
   callsTo(method: string, pattern: string): MockCall[] {
     const { regex } = compile(pattern);
     const m = method.toUpperCase();
-    return this.calls.filter((c) => c.method === m && regex.test(c.path));
+    const literals = literalCount(pattern);
+    return this.calls.filter((c) => c.method === m && regex.test(c.path) && (this.servedLiterals.get(c) ?? 0) <= literals);
   }
 
   /**
@@ -187,6 +205,17 @@ export class MockApi {
     return this.calls.map((c) => `${c.method} ${c.path}`).join(', ') || '(chưa có)';
   }
 
+  /** Route khớp method + path: nhiều đoạn cố định nhất, hoà thì đăng ký sau cùng. */
+  private pickRoute(method: string, path: string): { route: RouteDef; match: RegExpExecArray } | undefined {
+    let best: { route: RouteDef; match: RegExpExecArray } | undefined;
+    for (const r of this.routes) {
+      if (r.method !== method) continue;
+      const match = r.regex.exec(path);
+      if (match && (!best || r.literals >= best.route.literals)) best = { route: r, match };
+    }
+    return best;
+  }
+
   async handle(route: Route): Promise<void> {
     const request = route.request();
     const url = new URL(request.url());
@@ -212,11 +241,9 @@ export class MockApi {
     }
     const call: MockCall = { method, path, query: url.searchParams, body, headers };
 
-    for (let i = this.routes.length - 1; i >= 0; i--) {
-      const r = this.routes[i]!;
-      if (r.method !== method) continue;
-      const match = r.regex.exec(path);
-      if (!match) continue;
+    const best = this.pickRoute(method, path);
+    if (best) {
+      const { route: r, match } = best;
       const params: Record<string, string> = {};
       r.keys.forEach((k, idx) => {
         params[k] = decodeURIComponent(match[idx + 1] ?? '');
@@ -236,6 +263,7 @@ export class MockApi {
       }
       const res = isReply(out) ? out : { status: 200, json: out };
       this.calls.push(call);
+      this.servedLiterals.set(call, r.literals);
       for (let w = this.waiters.length - 1; w >= 0; w--) {
         const waiter = this.waiters[w]!;
         if (waiter.method === method && waiter.regex.test(path)) {

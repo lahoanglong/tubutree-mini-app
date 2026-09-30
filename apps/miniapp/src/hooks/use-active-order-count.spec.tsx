@@ -7,11 +7,13 @@ const mocks = vi.hoisted(() => ({ fetchActiveOrderCount: vi.fn(), status: 'authe
 vi.mock('../services/shop-api', () => ({ fetchActiveOrderCount: mocks.fetchActiveOrderCount }));
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
 
-import { useActiveOrderCount } from './use-active-order-count';
+import { ACTIVE_ORDER_COUNT_KEY, useActiveOrderCount } from './use-active-order-count';
 
-const wrapper = ({ children }: { children: ReactNode }) => (
-  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{children}</QueryClientProvider>
-);
+function makeWrapper() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return { client, wrapper };
+}
 
 describe('useActiveOrderCount', () => {
   beforeEach(() => {
@@ -20,19 +22,29 @@ describe('useActiveOrderCount', () => {
   });
   it('trả số đơn đang xử lý', async () => {
     mocks.fetchActiveOrderCount.mockResolvedValue(2);
+    const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useActiveOrderCount(true), { wrapper });
     await waitFor(() => expect(result.current).toBe(2));
   });
-  it('trang con (enabled=false) hoặc chưa đăng nhập → không gọi API, 0', () => {
-    renderHook(() => useActiveOrderCount(false), { wrapper });
-    mocks.status = 'loading';
-    renderHook(() => useActiveOrderCount(true), { wrapper });
+  it('trang con (enabled=false) → không gọi API, 0', () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useActiveOrderCount(false), { wrapper });
+    expect(result.current).toBe(0);
     expect(mocks.fetchActiveOrderCount).not.toHaveBeenCalled();
   });
-  it('API cũ 404 → 0, không ném', async () => {
-    mocks.fetchActiveOrderCount.mockRejectedValue(Object.assign(new Error('404'), { isAxiosError: true, response: { status: 404 } }));
+  it('chưa đăng nhập → không gọi API, 0', () => {
+    mocks.status = 'loading';
+    const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useActiveOrderCount(true), { wrapper });
-    await waitFor(() => expect(mocks.fetchActiveOrderCount).toHaveBeenCalled());
+    expect(result.current).toBe(0);
+    expect(mocks.fetchActiveOrderCount).not.toHaveBeenCalled();
+  });
+  it('API cũ 404 → query kết thúc ở trạng thái lỗi nhưng hook vẫn trả 0, không ném', async () => {
+    mocks.fetchActiveOrderCount.mockRejectedValue(Object.assign(new Error('404'), { isAxiosError: true, response: { status: 404 } }));
+    const { client, wrapper } = makeWrapper();
+    const { result } = renderHook(() => useActiveOrderCount(true), { wrapper });
+    await waitFor(() => expect(client.getQueryState(ACTIVE_ORDER_COUNT_KEY)?.status).toBe('error'));
+    expect(mocks.fetchActiveOrderCount).toHaveBeenCalledTimes(1);
     expect(result.current).toBe(0);
   });
 });
