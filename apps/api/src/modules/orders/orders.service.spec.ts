@@ -484,3 +484,55 @@ describe('OrdersService.requestReturn — hạn đổi/trả tính từ mốc gi
     expect(create).not.toHaveBeenCalled();
   });
 });
+
+describe('OrdersService.list / activeCount — nhóm trạng thái (tab Đơn hàng)', () => {
+  function makeListService() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = {
+      order: { findMany, count },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), findMany, count };
+  }
+
+  it('group=processing → CONFIRMED + PACKED', async () => {
+    const { svc, findMany, count } = makeListService();
+    await svc.list('u1', { group: 'processing' }, 1, 20);
+    const where = { userId: 'u1', status: { in: ['CONFIRMED', 'PACKED'] } };
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where }));
+    expect(count).toHaveBeenCalledWith({ where });
+  });
+
+  it('group=closed → CANCELLED + RETURNED (trước đây RETURNED chỉ thấy ở "Tất cả" — A2-47)', async () => {
+    const { svc, findMany } = makeListService();
+    await svc.list('u1', { group: 'closed' }, 1, 20);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'u1', status: { in: ['CANCELLED', 'RETURNED'] } } }),
+    );
+  });
+
+  it('status đơn lẻ thắng group; phân trang giữ nguyên', async () => {
+    const { svc, findMany } = makeListService();
+    await svc.list('u1', { status: 'SHIPPING', group: 'closed' }, 2, 10);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'u1', status: 'SHIPPING' }, skip: 10, take: 10 }),
+    );
+  });
+
+  it('không lọc → chỉ theo userId', async () => {
+    const { svc, findMany } = makeListService();
+    await svc.list('u1', {}, 1, 20);
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 'u1' } }));
+  });
+
+  it('activeCount đếm 4 trạng thái đang xử lý của chính user', async () => {
+    const { svc, count } = makeListService();
+    count.mockResolvedValue(2);
+    await expect(svc.activeCount('u1')).resolves.toEqual({ count: 2 });
+    expect(count).toHaveBeenCalledWith({
+      where: { userId: 'u1', status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] } },
+    });
+  });
+});

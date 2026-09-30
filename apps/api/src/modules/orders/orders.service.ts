@@ -14,6 +14,18 @@ import { OrderReversalService } from './order-reversal.service';
 import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
 import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';
 import { isGomdonPickedUp } from '../integrations/gomdon/gomdon-status';
+import { ACTIVE_ORDER_STATUSES, ORDER_STATUS_GROUPS, type OrderStatusGroup } from './order-status-groups';
+
+export interface OrderListFilter {
+  status?: OrderStatus;
+  group?: OrderStatusGroup;
+}
+
+function statusWhere(filter: OrderListFilter): Prisma.OrderWhereInput {
+  if (filter.status) return { status: filter.status };
+  if (filter.group) return { status: { in: [...ORDER_STATUS_GROUPS[filter.group]] } };
+  return {};
+}
 
 @Injectable()
 export class OrdersService {
@@ -31,8 +43,8 @@ export class OrdersService {
     @Optional() @InjectQueue(QUEUE_GOMDON_PUSH) private readonly gomdonQueue?: Queue,
   ) {}
 
-  async list(userId: string, status: OrderStatus | undefined, page: number, limit: number) {
-    const where = { userId, ...(status ? { status } : {}) };
+  async list(userId: string, filter: OrderListFilter, page: number, limit: number) {
+    const where: Prisma.OrderWhereInput = { userId, ...statusWhere(filter) };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
@@ -43,6 +55,14 @@ export class OrdersService {
       this.prisma.order.count({ where }),
     ]);
     return paginated(items, page, limit, total);
+  }
+
+  /** Số đơn đang xử lý — endpoint nhẹ cho badge tab Đơn hàng. */
+  async activeCount(userId: string): Promise<{ count: number }> {
+    const count = await this.prisma.order.count({
+      where: { userId, status: { in: [...ACTIVE_ORDER_STATUSES] } },
+    });
+    return { count };
   }
 
   async detail(userId: string, code: string) {

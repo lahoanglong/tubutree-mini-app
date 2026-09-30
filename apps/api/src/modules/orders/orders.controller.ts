@@ -1,15 +1,8 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import type { OrderStatus } from '@tubutree/shared-types';
+import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { PaginationQuery } from '../../common/pagination';
+import { OrderListQuery } from './dto/orders.dto';
 import { OrdersService } from './orders.service';
-
-class OrderListQuery extends PaginationQuery {
-  @IsOptional()
-  @IsIn(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'RETURNED', 'CANCELLED'])
-  status?: OrderStatus;
-}
 
 class ReturnRequestDto {
   @IsString() @MinLength(5) @MaxLength(500) reason!: string;
@@ -22,7 +15,14 @@ export class OrdersController {
 
   @Get()
   list(@CurrentUser('sub') userId: string, @Query() query: OrderListQuery) {
-    return this.orders.list(userId, query.status, query.page, query.limit);
+    return this.orders.list(userId, { status: query.status, group: query.group }, query.page, query.limit);
+  }
+
+  // PHẢI đứng TRƯỚC @Get(':code'): Express khớp route theo thứ tự khai báo — đặt sau thì
+  // "active-count" bị coi là mã đơn → 404 "Không tìm thấy đơn hàng", badge tab im lặng về 0.
+  @Get('active-count')
+  activeCount(@CurrentUser('sub') userId: string) {
+    return this.orders.activeCount(userId);
   }
 
   @Get(':code')
