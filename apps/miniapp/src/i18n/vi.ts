@@ -179,6 +179,33 @@ export const vi = {
     tabWithActiveOrders: (label: string, n: number) => `${label}, ${n} đơn đang xử lý`,
   },
 
+  reorder: {
+    railTitle: 'Mua lại',
+    timesBought: (n: number) => `Đã mua ${n} lần`,
+    sheetTitle: 'Mua lại',
+    fromOrder: (code: string) => `Từ đơn ${code}`,
+    selectLine: (name: string) => `Chọn ${name}`,
+    unavailable: 'Tạm hết hàng',
+    subtotal: 'Tạm tính',
+    priceNote: 'Giá theo hiện tại, xem chính xác ở giỏ hàng.',
+    addCta: (n: number) => `Thêm vào giỏ (${n})`,
+    added: (n: number) => `Đã thêm ${n} món vào giỏ`,
+    addedGeneric: 'Đã thêm vào giỏ',
+    notFullyAdded: 'Chưa thêm đủ',
+    nothingAdded: 'Chưa thêm được món nào vào giỏ',
+    partial: (n: number) => `chỉ thêm được ${n}`,
+    unknownProduct: 'Sản phẩm',
+    reasons: {
+      OUT_OF_STOCK: 'hết hàng',
+      INACTIVE: 'ngừng bán',
+      NOT_APPROVED: 'ngừng bán',
+      EXCEEDS_STOCK: 'không đủ hàng',
+    },
+    viewCart: 'Xem giỏ',
+    cardCta: 'Mua lại',
+    reminderCta: 'Mua lại ngay',
+  },
+
   orderStatus: {
     PENDING_PAYMENT: 'Chờ thanh toán',
     CONFIRMED: 'Đã xác nhận',
