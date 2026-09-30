@@ -24,7 +24,7 @@ import type { AddressDTO } from '../../miniapp/src/services/shop-api';
  *      không vẽ spinner — audit A4-07).
  *   3. Cart: bấm vào ảnh sản phẩm (xa chữ tên) vẫn mở trang sản phẩm.
  *   4. Storefront: hàng hết có overlay "tạm hết", hàng còn thì không (audit A4-06).
- *   5. Đơn đã giao: "Mua lại" hiện spinner rồi chuyển sang /cart.
+ *   5. Đơn đã giao: "Mua lại đơn này" mở sheet; CTA trong sheet hiện spinner rồi chuyển sang /cart.
  *   6. PDP 375px: thanh CTA dính đáy không tràn màn hình (còn hàng giá dài + hết hàng).
  *   7-8. Component con CHƯA migrate trong luồng pilot (quantity-selector, address-section) vẫn
  *      có viền/nền thật nhờ khối alias v1 → v2 (final review C1: trước đó resolve ra "không gì").
@@ -252,21 +252,24 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     await expect(page.getByText(overlay)).toHaveCount(1);
   });
 
-  test('Đơn đã giao: "Mua lại" hiện spinner rồi chuyển sang /cart', async ({ page, api }) => {
+  test('Đơn đã giao: "Mua lại đơn này" mở sheet; CTA trong sheet hiện spinner rồi chuyển sang /cart', async ({ page, api }) => {
     mockPilotDeliveredOrder(api, { repurchaseDelayMs: 1500 });
     await page.goto(`/order/${PILOT_ORDER_CODE}`);
 
-    const rebuy = page.getByRole('button', { name: /^Mua lại/ }); // khớp cả lúc loading — xem test PDP
+    const rebuy = page.getByRole('button', { name: 'Mua lại đơn này' });
     await expect(rebuy).toBeVisible({ timeout: 15_000 });
-    await expect(rebuy).toBeEnabled();
-
-    // waitForCall resolve sau khi mock trả lời (hết độ trễ) → kiểm spinner TRƯỚC, await sau.
-    const posted = api.waitForCall('POST', '/orders/:code/repurchase');
     await rebuy.click();
 
-    await expect(rebuy.locator('.zaui-btn-loading-icon')).toBeVisible();
-    await expect(rebuy).toHaveAttribute('aria-busy', 'true');
-    await posted;
+    // makeOrder: 1 dòng SL 2, API mock cũ không trả stock → coi như còn hàng (Ruling 19).
+    const cta = page.getByRole('button', { name: 'Thêm vào giỏ (2)' });
+    await expect(cta).toBeEnabled();
+    const posted = api.waitForCall('POST', '/orders/:code/repurchase');
+    await cta.click();
+
+    await expect(cta.locator('.zaui-btn-loading-icon')).toBeVisible();
+    await expect(cta).toHaveAttribute('aria-busy', 'true');
+    const call = await posted;
+    expect(call.body).toEqual({ items: [{ orderItemId: `item-${PILOT_ORDER_CODE}`, quantity: 2 }], addSource: 'repurchase' });
     await expect(page).toHaveURL(/\/cart$/, { timeout: 10_000 });
     expect(api.callsTo('POST', '/orders/:code/repurchase')).toHaveLength(1);
   });

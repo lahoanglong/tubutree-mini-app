@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, MessageSquare, Recycle } from 'lucide-react';
-import { fetchOrder, fetchOrders, cancelOrder, repurchaseOrder, requestReturn, fetchMyReturns } from '../services/shop-api';
+import { fetchOrder, fetchOrders, cancelOrder, requestReturn, fetchMyReturns } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { MultiImageUpload } from '../components/image-upload';
 import { formatVnd, addressLine, isRecyclingPickedUp, recyclingPickupView, type RecyclingTone } from '../utils/format';
-import { STATUS_COLOR, TIMELINE_STEPS, timelineIndex } from '../utils/order-status';
+import { STATUS_COLOR, TIMELINE_STEPS, timelineIndex, isReorderable } from '../utils/order-status';
 import {
   openOAChat,
   openExternal,
@@ -28,6 +28,8 @@ import { Badge } from '../components/ui/badge';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
+import { ReorderSheet } from '../components/reorder/reorder-sheet';
+import { orderReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
 
 /** Màu ô trạng thái thu gom — cùng bảng màu STATUS_COLOR của đơn (order-status.ts): 'progress'
  * dùng cùng cặp token với CONFIRMED/PACKED, 'success' với DELIVERED, 'warning' với PENDING_PAYMENT,
@@ -54,6 +56,8 @@ export default function OrderDetailPage() {
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
   const [returnImages, setReturnImages] = useState<string[]>([]);
+  // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
+  const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
   const authStatus = useAuthStore((s) => s.status);
 
   // Guard auth: tránh gọi /orders/:code khi chưa silent-login xong (deeplink từ thông báo
@@ -125,8 +129,10 @@ export default function OrderDetailPage() {
 
   const cancel = useMutation({
     mutationFn: () => cancelOrder(code!),
-    onSuccess: (o) => {
-      queryClient.setQueryData(['order', code], o);
+    onSuccess: () => {
+      // Không ghi đè cache bằng phản hồi huỷ: nó không kèm ảnh/tồn kho các dòng nên ReorderSheet sẽ
+      // coi mọi dòng còn hàng. Refetch để có đủ dữ liệu.
+      void queryClient.invalidateQueries({ queryKey: ['order', code] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
       setConfirmCancel(false);
       haptic('medium');
@@ -136,16 +142,6 @@ export default function OrderDetailPage() {
       setConfirmCancel(false);
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
-  });
-
-  const repurchase = useMutation({
-    mutationFn: () => repurchaseOrder(code!),
-    onSuccess: (r) => {
-      queryClient.setQueryData(['cart'], r.cart);
-      haptic('medium');
-      navigate('/cart');
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
   const returnReq = useMutation({
@@ -620,8 +616,14 @@ export default function OrderDetailPage() {
                 {vi.orders.payNow}
               </Button>
             )}
-            {isDone && (
-              <Button loading={repurchase.isPending} onPress={() => repurchase.mutate()} style={{ flex: 1, fontWeight: 600 }}>
+            {isReorderable(o.status) && (
+              <Button
+                onPress={() => {
+                  haptic('light');
+                  setReorderTarget(orderReorderTarget(o));
+                }}
+                style={{ flex: 1, fontWeight: 600 }}
+              >
                 {vi.orders.repurchase}
               </Button>
             )}
@@ -699,6 +701,9 @@ export default function OrderDetailPage() {
           </Button>
         </Box>
       </Sheet>
+
+      {/* Mua lại cả đơn qua sheet dùng chung (spec §3.3) — chọn dòng, dòng hết hàng bị khoá. */}
+      <ReorderSheet target={reorderTarget} source="order_detail" navigateToCart onClose={() => setReorderTarget(null)} />
     </Page>
   );
 }

@@ -60,7 +60,13 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
   });
 
   test('Khách tự huỷ đơn hàng khi đơn chưa giao (CONFIRMED)', async ({ page, api }) => {
-    api.post('/orders/:code/cancel', { ...ORDER_CONFIRMED, status: 'CANCELLED' });
+    // Sau khi huỷ, GET /orders/:code phải trả đơn đã huỷ (màn chi tiết refetch thay vì dùng phản hồi huỷ).
+    let cancelledOnServer = false;
+    api.get('/orders/:code', () => (cancelledOnServer ? { ...ORDER_CONFIRMED, status: 'CANCELLED' } : ORDER_CONFIRMED));
+    api.post('/orders/:code/cancel', () => {
+      cancelledOnServer = true;
+      return { ...ORDER_CONFIRMED, status: 'CANCELLED' };
+    });
 
     await page.goto(`/order/${ORDER_CONFIRMED.code}`);
     await expect(page.getByText('Đã xác nhận').first()).toBeVisible({ timeout: 15_000 });
@@ -79,7 +85,7 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
     const call = await cancelled;
     expect(call.path).toBe(`/orders/${ORDER_CONFIRMED.code}/cancel`);
 
-    // UI dùng đơn BE trả về (setQueryData) → hero "Đã hủy", snackbar xác nhận, hết nút huỷ.
+    // UI refetch đơn sau khi huỷ → hero "Đã hủy", snackbar xác nhận, hết nút huỷ.
     await expect(page.getByText('Đã hủy đơn cho bạn')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('Đã hủy', { exact: true }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Hủy đơn', exact: true })).toHaveCount(0);
