@@ -33,6 +33,19 @@ export type OrderView = Omit<OrderWithItems, 'items'> & { items: OrderItemView[]
 
 const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, currentPrice: null };
 
+export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
+export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
+export interface RepurchaseLineResult {
+  orderItemId: string;
+  status: 'added' | 'partial' | 'skipped';
+  reason?: RepurchaseSkipReason;
+  addedQuantity: number;
+}
+export interface RepurchaseInput {
+  items?: { orderItemId: string; quantity: number }[];
+  addSource?: RepurchaseAddSource;
+}
+
 function statusWhere(filter: OrderListFilter): Prisma.OrderWhereInput {
   if (filter.status) return { status: filter.status };
   if (filter.group) return { status: { in: [...ORDER_STATUS_GROUPS[filter.group]] } };
@@ -207,18 +220,66 @@ export class OrdersService {
     }
   }
 
-  async repurchase(userId: string, code: string) {
+  /**
+   * Mua lại đơn (spec §3.2). Mỗi dòng xử lý ĐỘC LẬP — một dòng hết hàng/ngừng bán/vượt tồn không
+   * dừng vòng lặp (bản cũ: addItem ném giữa vòng lặp → 400 sau khi đã thêm một phần, A2-05).
+   * Response giữ các trường giỏ ở top-level (bản miniapp cũ: setQueryData(['cart'], res)) + `cart`
+   * (spec §3.2) + `results` từng dòng.
+   */
+  async repurchase(userId: string, code: string, input: RepurchaseInput = {}) {
     const order = await this.detail(userId, code);
-    for (const item of order.items) {
-      const variation = await this.prisma.variation.findUnique({ where: { id: item.variationId } });
-      if (variation && variation.isActive && variation.stock > 0) {
-        await this.cart.addItem(userId, {
-          variationId: item.variationId,
-          quantity: Math.min(item.quantity, variation.stock),
-        });
+    const requested = input.items ? new Map(input.items.map((i) => [i.orderItemId, i.quantity])) : null;
+    if (requested) {
+      const known = new Set(order.items.map((i) => i.id));
+      if ([...requested.keys()].some((id) => !known.has(id))) {
+        throw new BadRequestException('Có dòng hàng không thuộc đơn này.');
       }
     }
-    return this.cart.getCart(userId);
+    const lines = requested ? order.items.filter((i) => requested.has(i.id)) : order.items;
+    const [variations, cartRow] = await Promise.all([
+      this.prisma.variation.findMany({
+        where: { id: { in: [...new Set(lines.map((l) => l.variationId))] } },
+        select: { id: true, stock: true, isActive: true, product: { select: { isActive: true, approvalStatus: true } } },
+      }),
+      this.prisma.cart.findUnique({
+        where: { userId },
+        select: { items: { select: { variationId: true, quantity: true } } },
+      }),
+    ]);
+    const byId = new Map(variations.map((v) => [v.id, v]));
+    const inCart = new Map<string, number>((cartRow?.items ?? []).map((ci) => [ci.variationId, ci.quantity]));
+    const addSource = input.addSource ?? 'repurchase';
+    const results: RepurchaseLineResult[] = [];
+
+    for (const line of lines) {
+      const skip = (reason: RepurchaseSkipReason) =>
+        results.push({ orderItemId: line.id, status: 'skipped', reason, addedQuantity: 0 });
+      const v = byId.get(line.variationId);
+      if (!v || !v.isActive || !v.product.isActive) { skip('INACTIVE'); continue; }
+      if (v.product.approvalStatus !== 'APPROVED') { skip('NOT_APPROVED'); continue; }
+      if (v.stock <= 0) { skip('OUT_OF_STOCK'); continue; }
+      const room = v.stock - (inCart.get(v.id) ?? 0);
+      if (room <= 0) { skip('EXCEEDS_STOCK'); continue; }
+      const want = requested?.get(line.id) ?? line.quantity;
+      const qty = Math.min(want, room);
+      try {
+        await this.cart.addItem(userId, { variationId: v.id, quantity: qty, addSource });
+      } catch (err) {
+        // Lỗi nghiệp vụ của RIÊNG dòng này (tồn kho đổi giữa lúc đọc và ghi, SP vừa bị ẩn) → bỏ qua
+        // dòng; lỗi hạ tầng ném ra (mỗi addItem là một tx riêng nên giỏ không lệch).
+        if (err instanceof BadRequestException) { skip('EXCEEDS_STOCK'); continue; }
+        if (err instanceof NotFoundException) { skip('INACTIVE'); continue; }
+        throw err;
+      }
+      inCart.set(v.id, (inCart.get(v.id) ?? 0) + qty);
+      results.push(
+        qty < want
+          ? { orderItemId: line.id, status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: qty }
+          : { orderItemId: line.id, status: 'added', addedQuantity: qty },
+      );
+    }
+    const cart = await this.cart.getCart(userId);
+    return { ...cart, cart, results };
   }
 
   async issueInvoice(userId: string, code: string) {

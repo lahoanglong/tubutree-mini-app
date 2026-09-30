@@ -1,10 +1,12 @@
 import { ValidationPipe } from '@nestjs/common';
-import { OrderListQuery } from './orders.dto';
+import { OrderListQuery, RepurchaseDto } from './orders.dto';
 
 // Cùng cấu hình ValidationPipe với main.ts — forbidNonWhitelisted: field lạ bị từ chối.
 const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
 const asQuery = (metatype: new () => object, value: Record<string, unknown>) =>
   pipe.transform(value, { type: 'query', metatype, data: undefined });
+const asBody = (metatype: new () => object, value: Record<string, unknown>) =>
+  pipe.transform(value, { type: 'body', metatype, data: undefined });
 
 describe('OrderListQuery', () => {
   it('nhận group=processing và group=closed', async () => {
@@ -22,5 +24,28 @@ describe('OrderListQuery', () => {
       page: 2,
       limit: 5,
     });
+  });
+});
+
+describe('RepurchaseDto', () => {
+  it('body rỗng hợp lệ (client cũ không gửi gì)', async () => {
+    await expect(asBody(RepurchaseDto, {})).resolves.toBeDefined();
+  });
+
+  it('nhận items + addSource hợp lệ', async () => {
+    await expect(
+      asBody(RepurchaseDto, { items: [{ orderItemId: 'oi1', quantity: 2 }], addSource: 'reorder_notification' }),
+    ).resolves.toMatchObject({ items: [{ orderItemId: 'oi1', quantity: 2 }], addSource: 'reorder_notification' });
+  });
+
+  it.each([
+    ['items rỗng', { items: [] }],
+    ['quantity 0', { items: [{ orderItemId: 'oi1', quantity: 0 }] }],
+    ['quantity 1000', { items: [{ orderItemId: 'oi1', quantity: 1000 }] }],
+    ['thiếu orderItemId', { items: [{ quantity: 1 }] }],
+    ['addSource lạ', { addSource: 'pdp' }],
+    ['field lạ', { foo: 1 }],
+  ])('từ chối %s', async (_l, body) => {
+    await expect(asBody(RepurchaseDto, body)).rejects.toThrow();
   });
 });

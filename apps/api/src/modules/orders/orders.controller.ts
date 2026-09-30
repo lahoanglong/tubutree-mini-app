@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { OrderListQuery } from './dto/orders.dto';
+import { OrderListQuery, RepurchaseDto } from './dto/orders.dto';
 import { OrdersService } from './orders.service';
 
 class ReturnRequestDto {
@@ -36,8 +36,8 @@ export class OrdersController {
   }
 
   @Post(':code/repurchase')
-  repurchase(@CurrentUser('sub') userId: string, @Param('code') code: string) {
-    return this.orders.repurchase(userId, code);
+  repurchase(@CurrentUser('sub') userId: string, @Param('code') code: string, @Body() dto: RepurchaseDto) {
+    return this.orders.repurchase(userId, code, { items: dto?.items, addSource: dto?.addSource });
   }
 
   @Post(':code/issue-invoice')

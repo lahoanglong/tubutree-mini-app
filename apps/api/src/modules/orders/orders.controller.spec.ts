@@ -28,4 +28,12 @@ describe('OrdersController', () => {
     await ctrl.detail('u1', 'A');
     expect(detailView).toHaveBeenCalledWith('u1', 'A');
   });
+  it('repurchase chuyển items + addSource trong body; body thiếu → input rỗng', async () => {
+    const repurchase = jest.fn().mockResolvedValue({ items: [], results: [] });
+    const ctrl = new OrdersController({ repurchase } as unknown as OrdersService);
+    await ctrl.repurchase('u1', 'A', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' });
+    expect(repurchase).toHaveBeenLastCalledWith('u1', 'A', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' });
+    await ctrl.repurchase('u1', 'A', undefined as never);
+    expect(repurchase).toHaveBeenLastCalledWith('u1', 'A', { items: undefined, addSource: undefined });
+  });
 });
