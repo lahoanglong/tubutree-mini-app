@@ -6,10 +6,10 @@
 
 @layer base {
   body {
-    /* stone-50/stone-900 — the shared preset's semantic bg-canvas/text-primary equivalents
-     * (packages/design-tokens/src/tokens.css), replacing the old hand-duplicated neutral-*. */
-    background: theme('colors.stone.50');
-    color: theme('colors.stone.900');
+    /* Legacy v1 neutral — web is not migrated to DS v2 in sub-project 3 (final review C2),
+     * so it keeps its production colors (tailwind.config.ts legacy block). */
+    background: theme('colors.neutral.50');
+    color: theme('colors.neutral.900');
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -18,11 +18,11 @@
 
 @layer components {
   .tubu-card {
-    @apply rounded-xl border border-stone-200/70 bg-white shadow-sm transition-all duration-200 hover:shadow-md;
+    @apply rounded-xl border border-neutral-200/70 bg-white shadow-sm transition-all duration-200 hover:shadow-md;
   }
 
   .tubu-glass {
-    @apply bg-white/90 backdrop-blur-md border border-stone-200/60 shadow-sm;
+    @apply bg-white/90 backdrop-blur-md border border-neutral-200/60 shadow-sm;
   }
 
   .tubu-badge {

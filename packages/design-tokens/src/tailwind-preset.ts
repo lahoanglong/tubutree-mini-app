@@ -1,9 +1,10 @@
 // packages/design-tokens/src/tailwind-preset.ts
 import type { Config } from 'tailwindcss';
 
-/** Mirrors tokens.css's semantic layer as Tailwind theme values, so both apps/web (Tailwind
- * already) and apps/miniapp (Tailwind added in Task 3) style from ONE source instead of hand-
- * copying hex (the exact drift audit A4-27/A4-28 found between the two apps). */
+/** Exposes tokens.css's PRIMITIVE color scales (forest/sage/stone/clay/honey/terracotta), fonts
+ * and semantic radii as Tailwind theme values, so apps/web and apps/miniapp style from ONE
+ * source instead of hand-copying hex (the drift audit A4-27/A4-28 found between the two apps).
+ * It extends — never re-keys — Tailwind's stock scales (see the `spacing` note below). */
 export const tailwindPreset: Partial<Config> = {
   theme: {
     extend: {
@@ -44,10 +45,11 @@ export const tailwindPreset: Partial<Config> = {
         display: ['Fraunces', 'Georgia', 'serif'],
         ui: ['Inter', 'system-ui', 'sans-serif'],
       },
-      spacing: {
-        0: '0px', 1: '2px', 2: '4px', 3: '8px', 4: '12px', 5: '16px', 6: '20px', 7: '24px',
-        8: '32px', 9: '40px', 10: '48px', 11: '64px',
-      },
+      // NO `spacing` key here, on purpose (final review C2). Re-keying Tailwind's numeric scale
+      // (p-4 = 12px instead of 16px, h-10 = 48px instead of 40px...) silently re-scaled ~1,700
+      // utilities in apps/web, the only Tailwind-utility consumer. Spacing semantics live in
+      // tokens.css (--space-*). An app that truly needs a custom scale defines it in its OWN
+      // tailwind.config.ts. Guarded by tailwind-preset.spec.ts.
       borderRadius: { control: '12px', card: '16px', media: '12px', sheet: '24px' },
     },
   },
