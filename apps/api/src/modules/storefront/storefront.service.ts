@@ -211,6 +211,9 @@ export class StorefrontService {
                     id: true, name: true, slug: true, thumbnail: true, brand: true,
                     basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, isActive: true,
                     affiliateBlocked: true, soldExternal: true, soldApp: true, approvalStatus: true,
+                    // Chỉ để tính inStock (audit A4-06: lưới gian hàng chưa từng biết SP hết hàng
+                    // hay chưa, ProductTile giờ cần cờ này để hiện overlay "tạm hết hàng").
+                    variations: { select: { stock: true } },
                   },
                 },
               },
@@ -264,6 +267,7 @@ export class StorefrontService {
               brand: i.product.brand, basePrice: i.product.basePrice, salePrice: i.product.salePrice,
               ratingAvg: i.product.ratingAvg, reviewCount: i.product.reviewCount,
               sold: i.product.soldExternal + i.product.soldApp,
+              inStock: (i.product.variations ?? []).some((v) => v.stock > 0),
             },
           })),
       })),

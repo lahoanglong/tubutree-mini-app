@@ -592,6 +592,26 @@ describe('StorefrontService.getPublicBySlug', () => {
     expect(JSON.stringify(r)).not.toContain('affiliateBlocked');
   });
 
+  it('tính inStock từ variations.stock (audit A4-06 — lưới gian hàng trước đây không biết SP hết hàng)', async () => {
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'linh', title: 'Shop', isPublished: true,
+        collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'CAROUSEL', sortOrder: 0,
+          items: [
+            { id: 'i1', isHidden: false, isPinned: false, sortOrder: 0, note: null, variationId: null,
+              product: { id: 'p1', name: 'Còn hàng', slug: 'p1', thumbnail: 't', brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 0, reviewCount: 0, isActive: true, affiliateBlocked: false, variations: [{ stock: 0 }, { stock: 5 }] } },
+            { id: 'i2', isHidden: false, isPinned: false, sortOrder: 1, note: null, variationId: null,
+              product: { id: 'p2', name: 'Hết hàng', slug: 'p2', thumbnail: 't', brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 0, reviewCount: 0, isActive: true, affiliateBlocked: false, variations: [{ stock: 0 }] } },
+          ] }],
+      }) },
+    });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    const r = await svc.getPublicBySlug('linh');
+    const items = r.collections[0]!.items;
+    expect(items.find((i) => i.id === 'i1')!.product.inStock).toBe(true);
+    expect(items.find((i) => i.id === 'i2')!.product.inStock).toBe(false);
+  });
+
   it('gian hàng CTV → trả ownerTier (tên+icon), gọi affiliate.getPublicTier đúng ownerUserId', async () => {
     const getPublicTier = jest.fn().mockResolvedValue({ name: 'Bạc', emoji: '🌳' });
     const prisma = makePrisma({

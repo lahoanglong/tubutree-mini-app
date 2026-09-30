@@ -86,6 +86,20 @@ describe('BrandService.getPublicBySlug', () => {
     expect(JSON.stringify(out)).not.toMatch(/affiliateRate|commission/i);
   });
 
+  it('tính inStock từ variations.stock (audit A4-06 — lưới trang nhãn trước đây không biết SP hết hàng)', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });
+    prisma.product.findMany.mockResolvedValue([
+      { id: 'p1', name: 'Còn hàng', slug: 'p1', thumbnail: null, basePrice: 100000, salePrice: null, ratingAvg: 0, reviewCount: 0, soldExternal: 0, soldApp: 0, variations: [{ stock: 0 }, { stock: 3 }] },
+      { id: 'p2', name: 'Hết hàng', slug: 'p2', thumbnail: null, basePrice: 100000, salePrice: null, ratingAvg: 0, reviewCount: 0, soldExternal: 0, soldApp: 0, variations: [{ stock: 0 }] },
+    ]);
+    const svc = new BrandService(prisma);
+    const out = await svc.getPublicBySlug('sachi', NOW);
+    expect(out.products.find((p) => p.id === 'p1')!.inStock).toBe(true);
+    expect(out.products.find((p) => p.id === 'p2')!.inStock).toBe(false);
+    expect(JSON.stringify(out)).not.toContain('variations');
+  });
+
   it('gộp dealerReward của nhãn + toàn shop (brandId null)', async () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });
