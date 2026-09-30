@@ -10,8 +10,10 @@
 //    phải tham chiếu CSS thật.
 //  - Mảnh template literal `var(--type-${variant}-size)`: tên biến chỉ có ở runtime, không kiểm
 //    tĩnh được (các biến --type-*-size/lh/weight thật đều định nghĩa trong design-tokens).
-//  - `--zaui-*`: biến runtime do zmp-ui tự đặt (vd --zaui-safe-area-inset-bottom), không nằm
-//    trong 3 file định nghĩa của repo.
+//  - `--zaui-safe-area-*`: biến runtime do zmp-ui tự đặt (vd --zaui-safe-area-inset-bottom), không
+//    nằm trong 3 file định nghĩa. CHỈ cho qua đúng họ này — trước đây cho qua mọi `--zaui-*` nên tên
+//    biến theme ZaUI gõ sai (vd --zaui-light-buton-...) cũng lọt. Biến --zaui-light-* hợp lệ đã được
+//    định nghĩa trong zaui-bridge.css nên vẫn qua như thường.
 // Khi trích định nghĩa, comment CSS bị bỏ trước — nếu không, một câu chú thích kiểu
 // "--font-mono: ..." sẽ bị tính nhầm là đã định nghĩa (đã từng xảy ra).
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -23,7 +25,7 @@ const DEFINITION_FILES = [
   'apps/miniapp/src/css/zaui-bridge.css',
 ];
 
-const RUNTIME_PREFIXES = ['zaui-'];
+const RUNTIME_PREFIXES = ['zaui-safe-area-'];
 const SKIP_FILE = /\.(spec|test)\.[cm]?[jt]sx?$/;
 
 function walk(dir, exts, out = []) {

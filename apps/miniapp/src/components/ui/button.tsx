@@ -45,7 +45,8 @@ export interface ButtonProps extends AriaAttributes {
  * accessible name của nút thành RỖNG. Vì vậy khi loading: `aria-busy` + `aria-disabled` (nút
  * không bị `disabled` thật — xem trên — nên phải báo cho trình đọc màn hình là đang bận/không
  * bấm được), và `aria-label` giữ nguyên nhãn: lấy từ prop `aria-label` nếu có, không thì suy
- * từ children dạng chữ/số. Children là JSX phức tạp → caller nên truyền `aria-label`. */
+ * từ children dạng chữ/số. Children là JSX phức tạp → caller nên truyền `aria-label`. Caller truyền `aria-busy`/`aria-disabled`
+ * tường minh thì thắng giá trị suy từ `loading`. */
 export function Button({
   children, variant = 'primary', size = 'md', loading, disabled, icon: IconCmp, fullWidth, onPress, className, style,
   ...aria
@@ -58,10 +59,10 @@ export function Button({
   const label = aria['aria-label'] ?? (loading ? textOf(children) : undefined);
   return (
     <ZButton
-      {...aria}
-      aria-label={label}
       aria-busy={loading || undefined}
       aria-disabled={loading || disabled || undefined}
+      {...aria}
+      aria-label={label}
       variant={ZAUI_VARIANT[variant]}
       loading={loading}
       disabled={disabled}

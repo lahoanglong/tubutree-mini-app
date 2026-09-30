@@ -427,6 +427,10 @@ body.with-back-btn .page.page-bleed {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* overflow:hidden cắt đỉnh chữ hoa hai dấu ("Ẩ", "Ổ") ~1,3px — đệm 3px rồi bù margin âm để
+   * chiều cao nút không đổi (follow-up dự án 3). */
+  padding-block: 3px;
+  margin-block: -3px;
 }
 .tubu-btn .zaui-btn-icon {
   flex-shrink: 0;

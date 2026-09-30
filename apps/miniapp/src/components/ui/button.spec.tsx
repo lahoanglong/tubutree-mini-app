@@ -93,6 +93,13 @@ describe('Button', () => {
       expect(btn).toHaveAttribute('aria-describedby', 'hint-1');
       expect(btn).toHaveAttribute('aria-expanded', 'false');
     });
+
+    it('caller-provided aria-busy / aria-disabled win over the loading-derived defaults (followups: aria order)', () => {
+      render(<Button loading aria-busy={false} aria-disabled={false}>Lưu</Button>);
+      const btn = screen.getByRole('button', { name: 'Lưu' });
+      expect(btn).toHaveAttribute('aria-busy', 'false');
+      expect(btn).toHaveAttribute('aria-disabled', 'false');
+    });
   });
 
   it('size md is minHeight 44, lg is 48', () => {
