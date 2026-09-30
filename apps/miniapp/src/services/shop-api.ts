@@ -390,12 +390,18 @@ export interface RepurchaseLineResult {
 export interface RepurchaseResponse {
   cart: CartSummary;
   results: RepurchaseLineResult[];
-  /** API cũ (trước dự án 4a) trả giỏ trơn, không có results. */
+  /** Response không có kết quả từng dòng (API trước dự án 4a trả giỏ trơn). */
   legacy: boolean;
 }
-/** API v2 trả giỏ ở top-level + `results` (để bản miniapp cũ vẫn đọc được giỏ) — tách lại ở đây. */
-export function normalizeRepurchaseResponse(raw: CartSummary & { results?: RepurchaseLineResult[] }): RepurchaseResponse {
-  const { results, ...cart } = raw;
+/**
+ * API v2 trả `{ ...giỏ, cart, results }`: giỏ ở top-level (để bản miniapp cũ vẫn đọc được) và khoá `cart`
+ * tường minh. Ưu tiên khoá `cart`; nếu thiếu thì dùng phần top-level — luôn bỏ `results`/`cart` lồng ra khỏi giỏ.
+ */
+export function normalizeRepurchaseResponse(
+  raw: CartSummary & { cart?: CartSummary; results?: RepurchaseLineResult[] },
+): RepurchaseResponse {
+  const { results, cart: nested, ...top } = raw;
+  const cart: CartSummary = nested ?? top;
   return Array.isArray(results) ? { cart, results, legacy: false } : { cart, results: [], legacy: true };
 }
 export const repurchaseOrder = (
@@ -403,7 +409,7 @@ export const repurchaseOrder = (
   body: { items?: { orderItemId: string; quantity: number }[]; addSource?: RepurchaseAddSource } = {},
 ) =>
   api
-    .post<CartSummary & { results?: RepurchaseLineResult[] }>(`/orders/${code}/repurchase`, body)
+    .post<CartSummary & { cart?: CartSummary; results?: RepurchaseLineResult[] }>(`/orders/${code}/repurchase`, body)
     .then((r) => normalizeRepurchaseResponse(r.data));
 export const requestReturn = (code: string, reason: string, images?: string[]) =>
   api.post(`/orders/${code}/return-request`, { reason, images }).then((r) => r.data);

@@ -25,13 +25,22 @@ describe('shop-api — buy-flow 4a', () => {
     expect(normalizeRepurchaseResponse({ ...CART, results })).toEqual({ cart: CART, results, legacy: false });
   });
 
+  it('normalizeRepurchaseResponse: API v2 thật ({...giỏ, cart, results}) → cart đúng bằng giỏ, không lồng khoá cart', () => {
+    const results = [{ orderItemId: 'i1', status: 'added' as const, addedQuantity: 1 }];
+    const r = normalizeRepurchaseResponse({ ...CART, cart: CART, results } as CartSummary & { results: typeof results });
+    expect(r.cart).toEqual(CART);
+    expect(r.cart).not.toHaveProperty('cart');
+    expect(r).toEqual({ cart: CART, results, legacy: false });
+  });
+
   it('normalizeRepurchaseResponse: API cũ (chỉ giỏ) → legacy=true, results rỗng', () => {
     expect(normalizeRepurchaseResponse(CART)).toEqual({ cart: CART, results: [], legacy: true });
   });
 
   it('repurchaseOrder gửi body items + addSource', async () => {
-    post.mockResolvedValue({ data: { ...CART, results: [] } });
-    await repurchaseOrder('TUBU1', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' });
+    post.mockResolvedValue({ data: { ...CART, cart: CART, results: [] } });
+    const r = await repurchaseOrder('TUBU1', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' });
+    expect(r).toEqual({ cart: CART, results: [], legacy: false });
     expect(post).toHaveBeenCalledWith('/orders/TUBU1/repurchase', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' });
   });
 
