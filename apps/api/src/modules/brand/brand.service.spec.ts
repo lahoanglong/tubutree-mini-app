@@ -98,6 +98,20 @@ describe('BrandService.getPublicBySlug', () => {
     expect(out.products.find((p) => p.id === 'p1')!.inStock).toBe(true);
     expect(out.products.find((p) => p.id === 'p2')!.inStock).toBe(false);
     expect(JSON.stringify(out)).not.toContain('variations');
+    // Chỉ tính variation đang bán: variation ngừng bán còn tồn kho KHÔNG được làm SP "còn hàng".
+    expect(prisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({ variations: { where: { isActive: true }, select: { stock: true } } }),
+    }));
+  });
+
+  it('SP chỉ còn tồn kho ở variation ngừng bán → inStock=false (DB lọc isActive nên mảng rỗng)', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });
+    prisma.product.findMany.mockResolvedValue([
+      { id: 'p3', name: 'Chỉ còn hàng ở bản ngừng bán', slug: 'p3', thumbnail: null, basePrice: 1, salePrice: null, ratingAvg: 0, reviewCount: 0, soldExternal: 0, soldApp: 0, variations: [] },
+    ]);
+    const out = await new BrandService(prisma).getPublicBySlug('sachi', NOW);
+    expect(out.products[0]!.inStock).toBe(false);
   });
 
   it('gộp dealerReward của nhãn + toàn shop (brandId null)', async () => {

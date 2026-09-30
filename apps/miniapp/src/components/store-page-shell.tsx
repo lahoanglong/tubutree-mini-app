@@ -20,8 +20,9 @@ export interface StorePageShellProps {
  * trang như `children` — xem "Plan refinement" trong Task 28 vì sao không gộp toàn bộ. */
 export function StorePageShell({ coverUrl, coverHeight, avatarUrl, avatarFallback, avatarSize, title, badges, children, stickyBar }: StorePageShellProps) {
   return (
-    <div style={{ background: 'var(--color-bg-canvas)', paddingBottom: stickyBar ? 90 : 24 }}>
-      <div style={{ height: coverHeight, background: coverUrl ? `url(${coverUrl}) center/cover` : 'var(--forest-700)' }} />
+    <div style={{ background: 'var(--color-bg-canvas)', paddingBottom: stickyBar ? 'calc(90px + var(--safe-bottom))' : 24 }}>
+      {/* Ngoặc kép quanh URL + mã hoá ký tự phá chuỗi (", \, xuống dòng) để URL lạ không thoát khỏi url(). */}
+      <div style={{ height: coverHeight, background: coverUrl ? `url("${coverUrl.replace(/["\\\r\n]/g, encodeURIComponent)}") center/cover` : 'var(--forest-700)' }} />
       <div style={{ padding: '0 16px', marginTop: -(avatarSize / 2) }}>
         <div style={{
           width: avatarSize, height: avatarSize, borderRadius: '50%', background: 'var(--color-action-primary-bg)',

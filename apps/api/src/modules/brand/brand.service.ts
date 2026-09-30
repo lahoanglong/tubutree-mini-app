@@ -58,7 +58,7 @@ export class BrandService {
         take: 30,
         // variations chỉ để tính inStock (audit A4-06 — lưới trang nhãn chưa từng biết SP hết
         // hàng hay chưa); ProductTile cần cờ này để hiện overlay "tạm hết hàng".
-        select: { id: true, name: true, slug: true, thumbnail: true, basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, soldExternal: true, soldApp: true, variations: { select: { stock: true } } },
+        select: { id: true, name: true, slug: true, thumbnail: true, basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, soldExternal: true, soldApp: true, variations: { where: { isActive: true }, select: { stock: true } } },
       }),
       this.prisma.dealerReward.findMany({
         where: { OR: [{ brandId: brand.id }, { brandId: null }], isActive: true },

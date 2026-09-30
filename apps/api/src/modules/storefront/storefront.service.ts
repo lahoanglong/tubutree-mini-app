@@ -213,7 +213,7 @@ export class StorefrontService {
                     affiliateBlocked: true, soldExternal: true, soldApp: true, approvalStatus: true,
                     // Chỉ để tính inStock (audit A4-06: lưới gian hàng chưa từng biết SP hết hàng
                     // hay chưa, ProductTile giờ cần cờ này để hiện overlay "tạm hết hàng").
-                    variations: { select: { stock: true } },
+                    variations: { where: { isActive: true }, select: { stock: true } },
                   },
                 },
               },

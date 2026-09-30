@@ -23,6 +23,11 @@ describe('ProductTile', () => {
     renderTile(<ProductTile product={{ ...PRODUCT, inStock: false }} variant="grid" onPress={() => {}} />);
     expect(screen.getByText(/tạm hết|hết hàng/i)).toBeInTheDocument();
   });
+  it('missing inStock (old API without the field) does NOT show the out-of-stock overlay', () => {
+    const { inStock: _omit, ...noStock } = PRODUCT;
+    renderTile(<ProductTile product={noStock as unknown as typeof PRODUCT} variant="grid" onPress={() => {}} />);
+    expect(screen.queryByText(/tạm hết|hết hàng/i)).not.toBeInTheDocument();
+  });
   it('flash priceOverride wins over salePrice/basePrice and shows a flash badge', () => {
     renderTile(<ProductTile product={{ ...PRODUCT, salePrice: 45000 }} priceOverride={{ price: 39000 }} variant="grid" onPress={() => {}} />);
     expect(screen.getByText('39.000đ')).toBeInTheDocument();

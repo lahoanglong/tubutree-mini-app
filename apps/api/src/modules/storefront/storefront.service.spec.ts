@@ -610,6 +610,23 @@ describe('StorefrontService.getPublicBySlug', () => {
     const items = r.collections[0]!.items;
     expect(items.find((i) => i.id === 'i1')!.product.inStock).toBe(true);
     expect(items.find((i) => i.id === 'i2')!.product.inStock).toBe(false);
+    // Chỉ tính variation đang bán (isActive) — variation ngừng bán còn tồn kho không làm SP "còn hàng".
+    const arg = (prisma.storefront.findFirst as jest.Mock).mock.calls[0][0];
+    expect(arg.include.collections.include.items.include.product.select.variations)
+      .toEqual({ where: { isActive: true }, select: { stock: true } });
+  });
+
+  it('SP chỉ còn tồn kho ở variation ngừng bán → inStock=false (DB lọc isActive nên mảng rỗng)', async () => {
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'linh', title: 'Shop', isPublished: true,
+        collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'GRID', sortOrder: 0,
+          items: [{ id: 'i1', isHidden: false, isPinned: false, sortOrder: 0, note: null, variationId: null,
+            product: { id: 'p1', name: 'P', slug: 'p1', thumbnail: 't', brand: 'B', basePrice: 1, salePrice: null, ratingAvg: 0, reviewCount: 0, isActive: true, affiliateBlocked: false, variations: [] } }] }],
+      }) },
+    });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('linh');
+    expect(r.collections[0]!.items[0]!.product.inStock).toBe(false);
   });
 
   it('gian hàng CTV → trả ownerTier (tên+icon), gọi affiliate.getPublicTier đúng ownerUserId', async () => {

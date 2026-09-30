@@ -97,7 +97,7 @@ export function ProductTile({
         )}
         {badge && <div style={{ position: 'absolute', top: 8, left: 8 }}>{badge}</div>}
         {showWishlist && !isLine && <WishlistHeart productId={p.id} floating size={18} />}
-        {!p.inStock && (
+        {p.inStock === false && (
           <div
             style={{
               position: 'absolute',
