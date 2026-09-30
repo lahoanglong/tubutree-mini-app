@@ -9,9 +9,7 @@
 
 /* Alias TẠM THỜI — các class .tubu-* và .page bên dưới vẫn dùng tên biến cũ, chưa migrate hết.
  * Xoá dần từng dòng khi các Task sau thay class tương ứng bằng component DS v2.
- * KHÔNG alias --shadow-clay/--font-mono: grep toàn bộ apps/miniapp/src xác nhận 0 nơi dùng
- * .tubu-card-clay/.t-mono (claymorphism bị bỏ hẳn theo redesign này, JetBrains Mono bị bỏ
- * theo spec) — để 2 biến đó "vỡ" là đúng chủ đích, không phải sót. */
+ * (Claymorphism .tubu-card-clay và .t-mono/--font-mono đã bị bỏ hẳn — 0 nơi dùng.) */
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -22,6 +20,99 @@
   --dur-slow: var(--p-dur-emphasize);
   --ease-out: var(--p-ease-out);
   --font-body: var(--font-ui);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+ * LEGACY v1 → v2 ALIAS — TẠM THỜI (xoá dần ở dự án con 4, khi migrate hết các trang còn lại).
+ *
+ * Vì sao có: Task 3 xoá toàn bộ palette v1 (:root cũ) nhưng mới migrate 8 trang pilot → ~1.700
+ * tham chiếu tới --neutral-*, --primary-*, --leaf-*, --danger, --radius-md, --shadow-sm... ở ~35
+ * trang + các component con NẰM TRONG luồng pilot (address-section, quantity-selector,
+ * voucher-sheet, order-success, reviews-section...) resolve ra "không có gì" → viền biến mất,
+ * nền trong suốt, chữ đen #000 (final review C1, đã verify bằng Chromium).
+ *
+ * Quy tắc:
+ *  - Map sang token v2 (primitive/semantic) — KHÔNG trả lại hex cũ: ZaUI bridge đã nhuộm mọi
+ *    zmp Button sang forest, để --primary-* cam cũ cạnh nút forest sẽ lệch tông (và cam-trên-
+ *    trắng cũ trượt AA). Ngoại lệ duy nhất: --dealer-* giữ hex cũ (dealer ngoài phạm vi DS v2).
+ *  - TUYỆT ĐỐI không khai báo lại tên v2 đã sở hữu (--stone-*, --clay-50/100/500/600/700,
+ *    --forest-*, --radius-card/control...): file này nạp SAU design-tokens nên sẽ đè token v2.
+ *  - Code MỚI không được dùng các tên dưới đây — dùng token semantic --color-* / --radius-* /
+ *    --elevation-*. `pnpm lint:vars` chỉ kiểm "có định nghĩa", không chặn dùng alias.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* Neutral v1 → stone cùng bậc (neutral-150 không có bậc stone tương ứng → stone-100) */
+  --neutral-0: var(--stone-0);
+  --neutral-50: var(--stone-50);
+  --neutral-100: var(--stone-100);
+  --neutral-150: var(--stone-100);
+  --neutral-200: var(--stone-200);
+  --neutral-300: var(--stone-300);
+  --neutral-400: var(--stone-400);
+  --neutral-500: var(--stone-500);
+  --neutral-600: var(--stone-600);
+  --neutral-700: var(--stone-700);
+  --neutral-800: var(--stone-800);
+  --neutral-900: var(--stone-900);
+
+  /* Primary v1 (cam logo) → forest cùng bậc — màu hành động của DS v2 */
+  --primary-50: var(--forest-50);
+  --primary-100: var(--forest-100);
+  --primary-200: var(--forest-200);
+  --primary-300: var(--forest-300);
+  --primary-400: var(--forest-400);
+  --primary-500: var(--forest-500);
+  --primary-600: var(--forest-600);
+  --primary-700: var(--forest-700);
+  --primary-800: var(--forest-800);
+  --primary-900: var(--forest-900);
+
+  /* Leaf v1 (xanh lá logo) → sage (tint/đậm) + forest (giữa thang) */
+  --leaf-50: var(--sage-50);
+  --leaf-100: var(--sage-100);
+  --leaf-200: var(--forest-200);
+  --leaf-300: var(--forest-300);
+  --leaf-400: var(--forest-400);
+  --leaf-500: var(--forest-500);
+  --leaf-600: var(--sage-600);
+  --leaf-700: var(--sage-700);
+  --leaf-800: var(--forest-800);
+  --leaf-900: var(--forest-900);
+
+  /* Trạng thái v1 → semantic status */
+  --success: var(--color-status-success-fg);
+  --warning: var(--color-status-warning-fg);
+  --danger: var(--color-status-danger-fg);
+  --info: var(--color-status-info-fg);
+  --success-bg: var(--color-status-success-bg);
+  --warning-bg: var(--color-status-warning-bg);
+  --danger-bg: var(--color-status-danger-bg);
+  --info-bg: var(--color-status-info-bg);
+
+  /* Nắng v1 (rating/hạng) → honey; đất sét v1 bậc không còn trong v2 → bậc gần nhất */
+  --sun-300: var(--honey-500);
+  --sun-500: var(--honey-500);
+  --sun-700: var(--honey-600);
+  --clay-200: var(--clay-100);
+  --clay-800: var(--clay-700);
+
+  /* Radius v1 (6/10/24/full) → v2 (8/12/24/full). --radius-lg đã alias ở khối trên. */
+  --radius-sm: var(--p-radius-2);
+  --radius-md: var(--radius-control);
+  --radius-xl: var(--p-radius-5);
+  --radius-full: var(--p-radius-full);
+
+  /* Shadow v1 → elevation v2 */
+  --shadow-xs: var(--elevation-1);
+  --shadow-sm: var(--elevation-1);
+  --shadow-md: var(--elevation-2);
+  --shadow-lg: var(--elevation-4);
+
+  /* Dealer (B2B) — giữ nguyên hex v1: trang dealer ngoài phạm vi DS v2 (spec §3 dealer theme
+   * chưa được thiết kế lại), đổi màu ở đây là quyết định thiết kế chưa ai duyệt. */
+  --dealer-ink: #1f2a44;
+  --dealer-ink-soft: #2e3b5e;
+  --dealer-bg: #f4f6f9;
 }
 
 /* Dynamic Font Scale (Accessibility) */
@@ -41,8 +132,8 @@ html[data-font-scale='large'] {
 body {
   margin: 0;
   font-family: var(--font-ui);
-  background: var(--neutral-50);
-  color: var(--neutral-900);
+  background: var(--color-bg-canvas);
+  color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -96,9 +187,6 @@ body.with-back-btn .page.page-bleed {
   font-size: 12px;
   font-weight: 500;
 }
-.t-mono {
-  font-family: var(--font-mono);
-}
 /* Body dài (mô tả sản phẩm, điều khoản) dùng Inter cho dễ đọc. */
 .t-body {
   font-family: var(--font-body);
@@ -117,20 +205,13 @@ body.with-back-btn .page.page-bleed {
 
 /* ── Card tiêu chuẩn & Claymorphism — UI/UX Pro Max ── */
 .tubu-card {
-  background: var(--neutral-0);
+  background: var(--color-bg-surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   transition: box-shadow var(--dur-base) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .tubu-card:active {
   transform: scale(0.99);
-}
-
-.tubu-card-clay {
-  background: var(--neutral-0);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-clay);
-  border: 1px solid rgba(255, 255, 255, 0.7);
 }
 
 /* ── Vùng chạm tối thiểu (>=44x44pt) cho a11y & mobile ergonomics ── */

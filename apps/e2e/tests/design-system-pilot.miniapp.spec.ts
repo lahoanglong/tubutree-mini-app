@@ -12,6 +12,8 @@ import {
   PILOT_SLUG,
   PILOT_STOREFRONT_SLUG,
 } from './support/pilot-mocks';
+import { CHECKOUT_ADDRESS, mockCheckout } from './support/checkout-mocks';
+import type { AddressDTO } from '../../miniapp/src/services/shop-api';
 
 /**
  * Zalo Mini App E2E — Design System v2, luồng pilot (product-detail, cart, storefront-view,
@@ -22,6 +24,8 @@ import {
  *   3. Cart: bấm vào ảnh sản phẩm (xa chữ tên) vẫn mở trang sản phẩm.
  *   4. Storefront: hàng hết có overlay "tạm hết", hàng còn thì không (audit A4-06).
  *   5. Đơn đã giao: "Mua lại" hiện spinner rồi chuyển sang /cart.
+ *   6-7. Component con CHƯA migrate trong luồng pilot (quantity-selector, address-section) vẫn
+ *      có viền/nền thật nhờ khối alias v1 → v2 (final review C1: trước đó resolve ra "không gì").
  * Toàn bộ API được mock (tests/support/mock-api.ts) — không cần API/DB.
  */
 
@@ -112,6 +116,71 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
 
     await page.mouse.click(clickX, clickY);
     await expect(page).toHaveURL(new RegExp(`/product/${PILOT_SLUG}$`), { timeout: 10_000 });
+  });
+
+  test('Giỏ hàng: nút "−" ở qty=1 có viền + nền disabled khác nút "+" (alias v1 → v2 resolve)', async ({ page, api }) => {
+    mockPilotCart(api);
+    await page.goto('/cart');
+
+    const minus = page.getByRole('button', { name: 'Giảm số lượng' }).first();
+    const plus = page.getByRole('button', { name: 'Tăng số lượng' }).first();
+    await expect(minus).toBeVisible({ timeout: 15_000 });
+    await expect(minus).toHaveAttribute('aria-disabled', 'true');
+
+    const style = (el: Element) => {
+      const s = getComputedStyle(el);
+      return { bw: s.borderTopWidth, bs: s.borderTopStyle, bg: s.backgroundColor, color: s.color };
+    };
+    const m = await minus.evaluate(style);
+    const p = await plus.evaluate(style);
+    // Bug C1: var(--neutral-200) không định nghĩa → border-style none / width 0, nền trong suốt.
+    expect(m.bs).toBe('solid');
+    expect(m.bw).toBe('1px');
+    expect(m.bg).toBe(await resolveToken(page, '--stone-100'));
+    expect(p.bg).toBe(await resolveToken(page, '--stone-0'));
+    expect(m.color).not.toBe(p.color);
+  });
+
+  test('Checkout: thẻ địa chỉ đang chọn có viền + nền khác hẳn thẻ không chọn', async ({ page, api }) => {
+    mockCheckout(api);
+    const other: AddressDTO = {
+      ...CHECKOUT_ADDRESS,
+      id: 'addr-other-2',
+      recipient: 'Trần Thị B',
+      phone: '0907654321',
+      street: '45 Nguyễn Huệ',
+      isDefault: false,
+    };
+    api.get('/me/addresses', [CHECKOUT_ADDRESS, other]); // đăng ký sau → thắng route của mockCheckout
+    await page.goto('/checkout');
+
+    const selected = page.getByRole('radio', { name: new RegExp(CHECKOUT_ADDRESS.recipient) });
+    const unselected = page.getByRole('radio', { name: new RegExp(other.recipient) });
+    await expect(selected).toHaveAttribute('aria-checked', 'true', { timeout: 15_000 });
+    await expect(unselected).toHaveAttribute('aria-checked', 'false');
+
+    const style = (el: Element) => {
+      const s = getComputedStyle(el);
+      return { bw: s.borderTopWidth, bs: s.borderTopStyle, bc: s.borderTopColor, bg: s.backgroundColor };
+    };
+    const sel = await selected.evaluate(style);
+    const uns = await unselected.evaluate(style);
+
+    // Bug C1: var(--primary-600)/(--primary-50) không định nghĩa → không viền, nền trong suốt,
+    // 2 thẻ trông y hệt nhau (chỉ aria-checked khác).
+    expect(sel.bs).toBe('solid');
+    expect(uns.bs).toBe('solid');
+    expect(parseFloat(sel.bw)).toBeGreaterThan(0);
+    expect(sel.bc).toBe(await resolveToken(page, '--forest-600'));
+    expect(sel.bg).toBe(await resolveToken(page, '--forest-50'));
+    expect(uns.bg).toBe(await resolveToken(page, '--stone-0'));
+    expect(sel.bc).not.toBe(uns.bc);
+    expect(sel.bg).not.toBe(uns.bg);
+    expect(sel.bg).not.toBe('rgba(0, 0, 0, 0)');
+
+    // Canvas body = --color-bg-canvas (trước đây var(--neutral-50) không định nghĩa → trắng/trong suốt).
+    const bodyBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    expect(bodyBg).toBe(await resolveToken(page, '--color-bg-canvas'));
   });
 
   test('Storefront CTV: chỉ sản phẩm hết hàng có overlay "tạm hết"', async ({ page, api }) => {
