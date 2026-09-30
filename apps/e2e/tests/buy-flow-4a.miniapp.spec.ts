@@ -183,6 +183,34 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page).toHaveURL(/\/cart$/, { timeout: 10_000 });
   });
 
+  test('Thẻ đơn: chạm vùng trống cạnh "Mua lại" mở chi tiết đơn; chạm đúng nút mở sheet và KHÔNG chuyển trang', async ({ page, api }) => {
+    mockBuyFlowSession(api);
+    mockOrdersTab(api);
+    api.get('/orders/:code', ({ params }) => makeOrder({ code: params.code!, status: 'DELIVERED', paymentStatus: 'PAID' }));
+    api.get('/orders/me/returns', []);
+    await page.goto('/orders');
+
+    const card = page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` });
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    const button = card.getByRole('button', { name: 'Mua lại', exact: true });
+
+    // Chạm nút → sheet mở, vẫn ở /orders.
+    await button.click();
+    await expect(page.getByRole('checkbox', { name: 'Chọn Xà Phòng Tubu Đã Hết' })).toBeDisabled();
+    await expect(page).toHaveURL(/\/orders$/);
+    await page.getByRole('button', { name: 'Đóng', exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: 'Chọn Xà Phòng Tubu Đã Hết' })).toHaveCount(0);
+
+    // Chạm cạnh nút (mép trái của hàng nút, cách nút xa) → mở chi tiết đơn.
+    const row = card.getByTestId('order-card-actions');
+    await row.scrollIntoViewIfNeeded();
+    const rowBox = (await row.boundingBox())!;
+    const btnBox = (await button.boundingBox())!;
+    expect(btnBox.x - rowBox.x).toBeGreaterThan(40); // có vùng trống thật bên trái nút
+    await page.mouse.click(rowBox.x + 12, rowBox.y + rowBox.height / 2);
+    await expect(page).toHaveURL(new RegExp(`/order/${DELIVERED_CODE}$`), { timeout: 10_000 });
+  });
+
   test('/subscriptions là redirect thay thế (replace): không vòng lặp, nút Back về trang trước, không về /subscriptions', async ({ page, api }) => {
     mockBuyFlowSession(api);
     mockOrdersTab(api);

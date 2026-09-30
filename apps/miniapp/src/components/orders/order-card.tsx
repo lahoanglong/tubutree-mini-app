@@ -82,10 +82,13 @@ export function OrderCard({ order: o, onOpen, onReorder }: OrderCardProps) {
       </div>
       {canReorder && (
         // Chặn nổi bọt: bấm "Mua lại" không được mở chi tiết đơn (cùng cách ProductTile).
-        <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <Button size="md" variant="secondary" onPress={onReorder} style={{ minWidth: 0 }}>
-            {vi.reorder.cardCta}
-          </Button>
+        <div data-testid="order-card-actions" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          {/* Chỉ bọc đúng nút: vùng trống cạnh nút vẫn mở chi tiết đơn (không có vùng chết full-width). */}
+          <div onClick={(e) => e.stopPropagation()}>
+            <Button size="md" variant="secondary" onPress={onReorder} style={{ minWidth: 0 }}>
+              {vi.reorder.cardCta}
+            </Button>
+          </div>
         </div>
       )}
     </div>

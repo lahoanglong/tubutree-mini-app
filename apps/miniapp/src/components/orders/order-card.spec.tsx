@@ -33,6 +33,23 @@ describe('OrderCard', () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
+  it('bấm vào vùng trống cạnh "Mua lại" mở chi tiết đơn (không có vùng chết), chỉ nút mới bị chặn nổi bọt', () => {
+    const onOpen = vi.fn();
+    const onReorder = vi.fn();
+    render(<OrderCard order={ORDER} onOpen={onOpen} onReorder={onReorder} />);
+    const row = screen.getByTestId('order-card-actions');
+    fireEvent.click(row);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onReorder).not.toHaveBeenCalled();
+    // Vùng chặn nổi bọt chỉ bọc đúng nút: cha trực tiếp của nút không phải là hàng full-width.
+    const button = screen.getByRole('button', { name: 'Mua lại' });
+    expect(button.parentElement).not.toBe(row);
+    expect(row.children).toHaveLength(1);
+    fireEvent.click(button);
+    expect(onReorder).toHaveBeenCalledTimes(1);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
   it('đơn đang giao → không có "Mua lại"; không ảnh → icon thay thế', () => {
     render(<OrderCard order={{ ...ORDER, status: 'SHIPPING', items: [{ ...ORDER.items[1]! }] } as OrderView} onOpen={() => {}} onReorder={() => {}} />);
     expect(screen.queryByRole('button', { name: 'Mua lại' })).toBeNull();
