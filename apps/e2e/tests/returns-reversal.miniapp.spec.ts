@@ -60,9 +60,20 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
   });
 
   test('Khách tự huỷ đơn hàng khi đơn chưa giao (CONFIRMED)', async ({ page, api }) => {
-    // Sau khi huỷ, GET /orders/:code phải trả đơn đã huỷ (màn chi tiết refetch thay vì dùng phản hồi huỷ).
+    // Sau khi huỷ, GET /orders/:code trả đơn đã huỷ NHƯNG bị giữ lại (cổng `releaseRefetch`): màn chi tiết phải
+    // đổi trạng thái NGAY từ phản hồi huỷ, không chờ refetch (cửa sổ cũ vẫn hiện "Hủy đơn" + trạng thái cũ).
     let cancelledOnServer = false;
-    api.get('/orders/:code', () => (cancelledOnServer ? { ...ORDER_CONFIRMED, status: 'CANCELLED' } : ORDER_CONFIRMED));
+    let refetchStarted = false;
+    let releaseRefetch: () => void = () => undefined;
+    const refetchGate = new Promise<void>((resolve) => {
+      releaseRefetch = resolve;
+    });
+    api.get('/orders/:code', async () => {
+      if (!cancelledOnServer) return ORDER_CONFIRMED;
+      refetchStarted = true;
+      await refetchGate;
+      return { ...ORDER_CONFIRMED, status: 'CANCELLED' };
+    });
     api.post('/orders/:code/cancel', () => {
       cancelledOnServer = true;
       return { ...ORDER_CONFIRMED, status: 'CANCELLED' };
@@ -85,12 +96,42 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
     const call = await cancelled;
     expect(call.path).toBe(`/orders/${ORDER_CONFIRMED.code}/cancel`);
 
-    // UI refetch đơn sau khi huỷ → hero "Đã hủy", snackbar xác nhận, hết nút huỷ.
+    // Refetch còn đang treo: hero đã "Đã hủy", hết nút huỷ, snackbar xác nhận.
     await expect(page.getByText('Đã hủy đơn cho bạn')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('Đã hủy', { exact: true }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Hủy đơn', exact: true })).toHaveCount(0);
+    // Xác nhận refetch THẬT SỰ đang treo (không phải chưa kịp chạy) khi các khẳng định trên đúng.
+    await expect.poll(() => refetchStarted, { timeout: 5_000 }).toBe(true);
+
+    // Thả refetch → dữ liệu đầy đủ, vẫn hết nút huỷ, có "Mua lại đơn này".
+    releaseRefetch();
     await expect(page.getByRole('button', { name: 'Mua lại đơn này' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Hủy đơn', exact: true })).toHaveCount(0);
     expect(api.callsTo('POST', '/orders/:code/cancel')).toHaveLength(1);
+  });
+
+  test('Huỷ đơn thành công nhưng refetch lỗi: trang KHÔNG bị thay bằng màn lỗi', async ({ page, api }) => {
+    let cancelledOnServer = false;
+    api.get('/orders/:code', () => (cancelledOnServer ? reply(500, { message: 'Lỗi máy chủ tạm thời' }) : ORDER_CONFIRMED));
+    api.post('/orders/:code/cancel', () => {
+      cancelledOnServer = true;
+      return { ...ORDER_CONFIRMED, status: 'CANCELLED' };
+    });
+
+    await page.goto(`/order/${ORDER_CONFIRMED.code}`);
+    await expect(page.getByText('Đã xác nhận').first()).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Hủy đơn', exact: true }).click();
+    const sheet = page.locator('.zaui-sheet').filter({ hasText: 'Bạn muốn hủy đơn này?' });
+    await expect(sheet.getByText('Bạn muốn hủy đơn này?')).toBeVisible({ timeout: 5_000 });
+    await sheet.getByRole('button', { name: 'Hủy đơn', exact: true }).click();
+
+    await expect(page.getByText('Đã hủy đơn cho bạn')).toBeVisible({ timeout: 5_000 });
+    // Chờ refetch lỗi thật sự xảy ra (query mặc định có thể retry) rồi mới khẳng định trang còn nguyên.
+    await expect.poll(() => api.callsTo('GET', '/orders/:code').length, { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
+    await page.waitForTimeout(1_500);
+    await expect(page.getByText('Đã hủy', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Hủy đơn', exact: true })).toHaveCount(0);
+    await expect(page.getByText('Lỗi máy chủ tạm thời')).toHaveCount(0);
   });
 
   test('Đơn đã giao (DELIVERED): gửi yêu cầu đổi/trả và hiện trạng thái đang xử lý', async ({ page, api }) => {

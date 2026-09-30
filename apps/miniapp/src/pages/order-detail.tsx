@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, MessageSquare, Recycle } from 'lucide-react';
-import { fetchOrder, fetchOrders, cancelOrder, requestReturn, fetchMyReturns } from '../services/shop-api';
+import { fetchOrder, fetchOrders, cancelOrder, requestReturn, fetchMyReturns, type OrderView } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
@@ -129,9 +129,11 @@ export default function OrderDetailPage() {
 
   const cancel = useMutation({
     mutationFn: () => cancelOrder(code!),
-    onSuccess: () => {
-      // Không ghi đè cache bằng phản hồi huỷ: nó không kèm ảnh/tồn kho các dòng nên ReorderSheet sẽ
-      // coi mọi dòng còn hàng. Refetch để có đủ dữ liệu.
+    onSuccess: (cancelled) => {
+      // Gộp phản hồi huỷ vào cache NGAY (trạng thái mới → ẩn "Hủy đơn"/"Thanh toán ngay" tức thì) nhưng GIỮ
+      // `items` cũ: phản hồi huỷ không kèm ảnh/tồn kho các dòng nên ghi đè cả object sẽ làm ReorderSheet
+      // coi mọi dòng còn hàng. Sau đó refetch để có đủ dữ liệu.
+      queryClient.setQueryData<OrderView>(['order', code], (old) => (old ? { ...old, ...cancelled, items: old.items } : old));
       void queryClient.invalidateQueries({ queryKey: ['order', code] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
       setConfirmCancel(false);
@@ -169,7 +171,8 @@ export default function OrderDetailPage() {
     );
   }
 
-  if (order.isError || !order.data) {
+  // Chỉ thay cả trang bằng màn lỗi khi KHÔNG có dữ liệu: refetch lỗi sau khi huỷ thành công không được làm trắng trang.
+  if (!order.data) {
     return (
       <Shell>
         <ErrorState message={getErrorMessage(order.error)} onRetry={() => void order.refetch()} />
