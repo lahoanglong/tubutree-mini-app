@@ -194,6 +194,7 @@ export const vi = {
     notFullyAdded: 'Chưa thêm đủ',
     nothingAdded: 'Chưa thêm được món nào vào giỏ',
     partial: (n: number) => `chỉ thêm được ${n}`,
+    noSelection: 'Chưa chọn sản phẩm',
     unknownProduct: 'Sản phẩm',
     reasons: {
       OUT_OF_STOCK: 'hết hàng',
