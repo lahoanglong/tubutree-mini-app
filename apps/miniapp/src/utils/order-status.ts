@@ -42,3 +42,15 @@ export const TIMELINE_STEPS = [
 export function timelineIndex(status: string): number {
   return TIMELINE_STEPS.indexOf(status as (typeof TIMELINE_STEPS)[number]);
 }
+
+/** Trạng thái hiện nút "Mua lại" — cùng điều kiện `isDone` của chi tiết đơn (order-detail.tsx). */
+export const REORDERABLE_STATUSES = ['DELIVERED', 'CANCELLED', 'RETURNED'] as const;
+
+export function isReorderable(status: string): boolean {
+  return (REORDERABLE_STATUSES as readonly string[]).includes(status);
+}
+
+/** Số MÓN của đơn (tổng số lượng) — trước đây thẻ đơn đếm số dòng (A2-47). */
+export function orderUnitCount(items: { quantity: number }[]): number {
+  return items.reduce((s, it) => s + it.quantity, 0);
+}
