@@ -8,6 +8,7 @@ import type {
 import type { LoyaltyOverview, WalletSummary } from '../../../miniapp/src/services/account-api';
 import type { BankQr } from '../../../miniapp/src/services/payment-api';
 import { makeOrder, makeUser, mockSession, type MockApi } from './mock-api';
+import { PILOT_PRODUCT } from './pilot-mocks';
 
 /**
  * Mock đủ cho màn /checkout (apps/miniapp/src/pages/checkout.tsx) — mọi path khớp route NestJS:
@@ -150,4 +151,7 @@ export function mockCheckout(api: MockApi, opts: { recyclingEnabled?: boolean } 
   api.post('/checkout/quote', CHECKOUT_QUOTE);
   api.post('/checkout/place-order', ({ call }) => placedOrderFor((call.body ?? {}) as Record<string, unknown>));
   api.get('/payments/bank-qr/:code', BANK_QR);
+  // Màn đặt hàng thành công (dự án 4a) đọc sản phẩm của đơn để quyết định gợi ý "Đặt định kỳ"
+  // (cùng điều kiện PDP). makeOrder dùng slug 'nuoc-rua-chen-tubu' + variation 'var-1' = PILOT_PRODUCT.
+  api.get('/products/:slug', PILOT_PRODUCT);
 }
