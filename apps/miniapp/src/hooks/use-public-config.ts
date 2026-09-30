@@ -14,6 +14,8 @@ export const PUBLIC_CONFIG_FALLBACK: PublicConfig = {
   // Tắt cho tới khi server xác nhận (Gomdon đã cấu hình + admin bật) — không hứa dịch vụ thu gom
   // khi chưa biết backend có làm được không.
   recyclingEnabled: false,
+  // Không hứa ngày giao khi server chưa xác nhận cấu hình (dự án 4a, Ruling 9).
+  shippingEta: null,
 };
 
 /**

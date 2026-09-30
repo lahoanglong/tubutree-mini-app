@@ -93,7 +93,7 @@ export default function OrderDetailPage() {
   // tránh gọi API thừa mỗi lần khách mở lại một đơn cũ sau khi đã được hỏi.
   const ordersTotalQ = useQuery({
     queryKey: ['orders-total-for-oa-prompt'],
-    queryFn: () => fetchOrders(undefined, 1, 1),
+    queryFn: () => fetchOrders({}, 1, 1),
     enabled: hasOA && oaPromptReady && !oaPromptSeen && !!order.data,
   });
 
@@ -140,8 +140,8 @@ export default function OrderDetailPage() {
 
   const repurchase = useMutation({
     mutationFn: () => repurchaseOrder(code!),
-    onSuccess: (c) => {
-      queryClient.setQueryData(['cart'], c);
+    onSuccess: (r) => {
+      queryClient.setQueryData(['cart'], r.cart);
       haptic('medium');
       navigate('/cart');
     },

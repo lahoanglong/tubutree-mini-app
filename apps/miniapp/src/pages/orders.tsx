@@ -44,7 +44,7 @@ export default function OrdersPage() {
   // Doi sang useInfiniteQuery (cung pattern voi apps/miniapp/src/pages/browse.tsx) + nut "Xem them".
   const orders = useInfiniteQuery({
     queryKey: ['orders', tab],
-    queryFn: ({ pageParam }) => fetchOrders(tab, pageParam, PAGE_LIMIT),
+    queryFn: ({ pageParam }) => fetchOrders(tab ? { status: tab } : {}, pageParam, PAGE_LIMIT),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const { page, limit, total } = lastPage.meta;

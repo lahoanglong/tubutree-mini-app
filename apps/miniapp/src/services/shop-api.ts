@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { OrderDTO } from '@tubutree/shared-types';
+import type { OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
 
 /** Shape phân trang backend trả về (§12.1): { data, meta }. */
 export interface PageResponse<T> {
@@ -106,6 +106,10 @@ export interface AddressDTO {
 }
 
 // Catalog (public)
+export interface ShippingEta {
+  minDays: number;
+  maxDays: number;
+}
 export interface PublicConfig {
   freeshipThreshold: number;
   /** Tỉ lệ giảm khi đặt định kỳ, dạng phân số (0.12 = 12%). */
@@ -121,6 +125,8 @@ export interface PublicConfig {
    * bật. Optional: API bản cũ không trả field này → coi như tắt.
    */
   recyclingEnabled?: boolean;
+  /** Khoảng ngày giao dự kiến — null/thiếu khi chủ shop chưa cấu hình (hoặc API cũ) → ẩn. */
+  shippingEta?: ShippingEta | null;
 }
 export const getPublicConfig = () =>
   api.get<PublicConfig>('/config/public').then((r) => r.data);
@@ -231,8 +237,11 @@ export const cancelFlashReminder = (itemId: string) =>
 
 // Cart
 export const getCart = () => api.get<CartSummary>('/cart').then((r) => r.data);
-export const addToCart = (variationId: string, quantity: number) =>
-  api.post<CartSummary>('/cart/items', { variationId, quantity }).then((r) => r.data);
+export type AddToCartSource = 'pdp' | 'buy_now' | 'repurchase' | 'wishlist' | 'ctv_sheet' | 'reorder_notification';
+export const addToCart = (variationId: string, quantity: number, addSource?: AddToCartSource) =>
+  api
+    .post<CartSummary>('/cart/items', { variationId, quantity, ...(addSource ? { addSource } : {}) })
+    .then((r) => r.data);
 export const updateCartItem = (id: string, quantity: number) =>
   api.patch<CartSummary>(`/cart/items/${id}`, { quantity }).then((r) => r.data);
 export const removeCartItem = (id: string) =>
@@ -312,18 +321,90 @@ export const createReview = (
 ) => api.post<ReviewItem>(`/products/${slug}/reviews`, data).then((r) => r.data);
 
 // Orders
+/** Ảnh/tồn kho từng dòng do API join theo variationId (dự án 4a). Optional: API cũ không trả. */
+export interface OrderItemMedia {
+  thumbnail?: string | null;
+  stock?: number;
+  available?: boolean;
+  currentPrice?: number | null;
+}
+export type OrderItemView = OrderItemDTO & OrderItemMedia;
+export type OrderView = Omit<OrderDTO, 'items'> & { items: OrderItemView[] };
+
+export type OrderStatusGroup = 'processing' | 'closed';
+export interface OrderListFilter {
+  status?: string;
+  group?: OrderStatusGroup;
+}
+
 // Bug 1 fix: truoc day khong truyen page/limit -> BE mac dinh page=1 limit=20, khach co >20 don
 // khong bao gio xem duoc don cu hon qua app. Nhan them page/limit de orders.tsx phan trang duoc.
-export const fetchOrders = (status?: string, page = 1, limit = 20) =>
+export const fetchOrders = (filter: OrderListFilter = {}, page = 1, limit = 20) =>
   api
-    .get<PageResponse<OrderDTO>>('/orders', { params: { ...(status ? { status } : {}), page, limit } })
+    .get<PageResponse<OrderView>>('/orders', {
+      params: {
+        ...(filter.status ? { status: filter.status } : filter.group ? { group: filter.group } : {}),
+        page,
+        limit,
+      },
+    })
     .then((r) => r.data);
 export const fetchOrder = (code: string) =>
-  api.get<OrderDTO>(`/orders/${code}`).then((r) => r.data);
+  api.get<OrderView>(`/orders/${code}`).then((r) => r.data);
+/** Badge tab Đơn hàng. Dữ liệu lạ (vd mock/route khác trả nhầm) → 0 thay vì NaN. */
+export const fetchActiveOrderCount = () =>
+  api.get<{ count?: unknown }>('/orders/active-count').then((r) => (typeof r.data?.count === 'number' ? r.data.count : 0));
+
+export interface PurchasedItem {
+  variationId: string;
+  productId: string;
+  slug: string;
+  productName: string;
+  variationName: string;
+  brand: string;
+  thumbnail: string | null;
+  price: number;
+  salePrice: number | null;
+  stock: number;
+  inStock: boolean;
+  timesBought: number;
+  lastPurchasedAt: string;
+}
+export interface PurchasedItemsPage {
+  items: PurchasedItem[];
+  nextCursor: string | null;
+}
+export const fetchPurchasedItems = (params: { cursor?: string; limit?: number; variationId?: string } = {}) =>
+  api.get<PurchasedItemsPage>('/me/purchased-items', { params }).then((r) => r.data);
+
 export const cancelOrder = (code: string) =>
   api.post<OrderDTO>(`/orders/${code}/cancel`).then((r) => r.data);
-export const repurchaseOrder = (code: string) =>
-  api.post<CartSummary>(`/orders/${code}/repurchase`).then((r) => r.data);
+export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
+export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
+export interface RepurchaseLineResult {
+  orderItemId: string;
+  status: 'added' | 'partial' | 'skipped';
+  reason?: RepurchaseSkipReason;
+  addedQuantity: number;
+}
+export interface RepurchaseResponse {
+  cart: CartSummary;
+  results: RepurchaseLineResult[];
+  /** API cũ (trước dự án 4a) trả giỏ trơn, không có results. */
+  legacy: boolean;
+}
+/** API v2 trả giỏ ở top-level + `results` (để bản miniapp cũ vẫn đọc được giỏ) — tách lại ở đây. */
+export function normalizeRepurchaseResponse(raw: CartSummary & { results?: RepurchaseLineResult[] }): RepurchaseResponse {
+  const { results, ...cart } = raw;
+  return Array.isArray(results) ? { cart, results, legacy: false } : { cart, results: [], legacy: true };
+}
+export const repurchaseOrder = (
+  code: string,
+  body: { items?: { orderItemId: string; quantity: number }[]; addSource?: RepurchaseAddSource } = {},
+) =>
+  api
+    .post<CartSummary & { results?: RepurchaseLineResult[] }>(`/orders/${code}/repurchase`, body)
+    .then((r) => normalizeRepurchaseResponse(r.data));
 export const requestReturn = (code: string, reason: string, images?: string[]) =>
   api.post(`/orders/${code}/return-request`, { reason, images }).then((r) => r.data);
 export interface ReturnRequestDTO {
