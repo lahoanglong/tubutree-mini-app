@@ -59,11 +59,16 @@ describe('SubscriptionsPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Hủy' }));
     expect(await screen.findByText('Giữ lại lịch định kỳ?')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Bỏ qua kỳ này' }));
-    await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1'));
-    fireEvent.click(await screen.findByRole('button', { name: 'Hủy' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Vẫn hủy' }));
-    await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'CANCELLED'));
-  });
+    await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1'), { timeout: 5000 });
+    // Chờ sheet đầu ĐÓNG hẳn (đang trượt xuống + nút thẻ còn bị khoá) rồi mới mở sheet thứ hai — nếu không,
+    // cú bấm "Hủy" thứ hai có thể rơi vào lúc sheet cũ chưa đóng và bị nuốt (flaky khi máy tải nặng).
+    await waitFor(() => expect(screen.queryByText('Giữ lại lịch định kỳ?')).not.toBeInTheDocument(), { timeout: 5000 });
+    const cancelBtn = await screen.findByRole('button', { name: 'Hủy' }, { timeout: 5000 });
+    await waitFor(() => expect(cancelBtn).toBeEnabled(), { timeout: 5000 });
+    fireEvent.click(cancelBtn);
+    expect(await screen.findByText('Giữ lại lịch định kỳ?', {}, { timeout: 5000 })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Vẫn hủy' }, { timeout: 5000 }));
+    await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'CANCELLED'), { timeout: 5000 });}, 20_000);
 
   it('lịch đang tạm dừng: hiện "Đang tạm dừng", "Tiếp tục" gọi đổi trạng thái ACTIVE', async () => {
     const paused = { ...SUB, status: 'PAUSED' as const };
