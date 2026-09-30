@@ -1,10 +1,20 @@
-import { test, expect } from './support/mock-api';
+import { test, expect, type MockApi } from './support/mock-api';
+import type { Page } from '@playwright/test';
 import { DELIVERED_CODE, THUMB, mockBuyFlowSession, mockOrdersTab } from './support/buy-flow-mocks';
 
 /**
  * Zalo Mini App E2E — Dự án 4a "Nhịp mua lại + tab bar + đặt hàng thành công"
  * (docs/superpowers/specs/2026-09-30-buy-flow-redesign-design.md §3-4). API mock toàn bộ.
  */
+/**
+ * Chờ kệ Mua lại ở trạng thái CUỐI (đã gọi /me/purchased-items và skeleton đã biến mất) — nếu không,
+ * "kệ vắng mặt" có thể đúng chỉ vì query còn bị tắt (chờ đăng nhập) chứ chưa nhận phản hồi.
+ */
+async function waitRailSettled(page: Page, api: MockApi): Promise<void> {
+  await expect.poll(() => api.callsTo('GET', '/me/purchased-items').length, { timeout: 15_000 }).toBeGreaterThan(0);
+  await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
+}
+
 test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
   test('Home: kệ "Mua lại" là khối đầu tiên dưới ô tìm; mua lại 1 SP đúng 2 chạm, ở lại trang chủ', async ({ page, api }) => {
     mockBuyFlowSession(api);
@@ -33,14 +43,16 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
   test('Khách mới (chưa có đơn giao) → không có kệ Mua lại', async ({ page, api }) => {
     mockBuyFlowSession(api, { purchased: { items: [], nextCursor: null } });
     await page.goto('/');
-    await expect(page.locator('[aria-label="Xà Phòng Thảo Mộc Tubu"]').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Xà Phòng Thảo Mộc Tubu' }).first()).toBeVisible({ timeout: 15_000 });
+    await waitRailSettled(page, api);
     await expect(page.getByRole('region', { name: 'Mua lại' })).toHaveCount(0);
   });
 
   test('API cũ (purchased-items 404) → kệ ẩn im lặng, không có "Thử lại"', async ({ page, api }) => {
     mockBuyFlowSession(api, { purchased: 'not-found' });
     await page.goto('/');
-    await expect(page.locator('[aria-label="Xà Phòng Thảo Mộc Tubu"]').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Xà Phòng Thảo Mộc Tubu' }).first()).toBeVisible({ timeout: 15_000 });
+    await waitRailSettled(page, api);
     await expect(page.getByRole('region', { name: 'Mua lại' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Thử lại' })).toHaveCount(0);
   });
@@ -76,7 +88,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` })).toBeVisible();
     const tabs = page.getByRole('tablist');
     for (const t of ['Tất cả', 'Chờ thanh toán', 'Đang xử lý', 'Đang giao', 'Đã giao', 'Đã hủy/hoàn', 'Định kỳ']) {
-      await expect(tabs.getByRole('tab', { name: t, exact: true })).toBeAttached();
+      await expect(tabs.getByRole('tab', { name: t, exact: true })).toBeVisible();
     }
 
     const filtered = api.waitForCall('GET', '/orders');
@@ -84,6 +96,14 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     const call = await filtered;
     expect(call.query.get('group')).toBe('processing');
     expect(call.query.get('status')).toBeNull();
+    // Mock lọc theo group: đơn đã giao không thuộc "Đang xử lý" → danh sách phải làm mới thành rỗng.
+    await expect(page.getByText('Không có đơn nào ở mục này')).toBeVisible();
+    await expect(page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` })).toHaveCount(0);
+
+    const delivered = api.waitForCall('GET', '/orders');
+    await tabs.getByRole('tab', { name: 'Đã giao' }).click();
+    expect((await delivered).query.get('status')).toBe('DELIVERED');
+    await expect(page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` })).toBeVisible();
 
     await tabs.getByRole('tab', { name: 'Định kỳ' }).click();
     await expect(page.getByText('Nước Xả Vải Tubu')).toBeVisible();
@@ -123,6 +143,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
 
     // Mô phỏng điều hướng trong app tới link cũ /subscriptions (react-router lắng nghe popstate).
+    const historyBefore = await page.evaluate(() => history.length);
     await page.evaluate(() => {
       history.pushState({}, '', '/subscriptions');
       window.dispatchEvent(new PopStateEvent('popstate'));
@@ -131,11 +152,8 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByRole('tab', { name: 'Định kỳ' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByText('Nước Xả Vải Tubu')).toBeVisible();
 
-    // Không có vòng lặp redirect: URL đứng yên và lịch sử chỉ thêm ĐÚNG 1 mục (replace, không push).
-    const historyLen = await page.evaluate(() => history.length);
-    await page.waitForTimeout(800);
-    await expect(page).toHaveURL(/\/orders\?tab=subscriptions$/);
-    expect(await page.evaluate(() => history.length)).toBe(historyLen);
+    // Redirect là replace: lịch sử chỉ thêm ĐÚNG 1 mục (pushState của chính test), không thêm mục cho /orders.
+    expect(await page.evaluate(() => history.length)).toBe(historyBefore + 1);
 
     await page.goBack();
     await expect(page).toHaveURL(/\/$/);
@@ -144,34 +162,41 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByRole('button', { name: 'Bạn đang tìm gì hôm nay?' })).toBeVisible();
   });
 
-  test('Analytics: reorder_clicked bắn đúng 1 lần mỗi chạm {source:home_rail, variationId}, không bắn lại khi re-render', async ({ page, api }) => {
+  test('Analytics: reorder_clicked bắn đúng 1 lần MỖI chạm {source:home_rail, variationId}, không bắn lại khi re-render', async ({ page, api }) => {
     mockBuyFlowSession(api);
     api.post('/events', { accepted: 1 });
     await page.goto('/');
 
     const rail = page.getByRole('region', { name: 'Mua lại' });
     await expect(rail).toBeVisible({ timeout: 15_000 });
-    await rail.getByRole('button', { name: 'Mua lại', exact: true }).first().click();
     const addBtn = page.getByRole('button', { name: 'Thêm vào giỏ (1)' });
+
+    // Chạm 1: mở sheet rồi thêm vào giỏ (sheet đóng; state sheet + giỏ cập nhật → nhiều lần re-render).
+    await rail.getByRole('button', { name: 'Mua lại', exact: true }).first().click();
     await expect(addBtn).toBeVisible();
-    // Thêm vào giỏ = nhiều lần re-render (state sheet, giỏ cập nhật) sau cú chạm.
     const added = api.waitForCall('POST', '/cart/items');
     await addBtn.click();
     await added;
     await expect(page.getByText('Đã thêm 1 món vào giỏ')).toBeVisible();
+    await expect(addBtn).toBeHidden();
 
-    // Hàng đợi sự kiện chỉ xả khi app bị ẩn — mô phỏng để đọc lô /events.
-    const flushed = api.waitForCall('POST', '/events');
+    // Chạm 2: mở lại sheet (target mới) rồi để nguyên — sheet mở lại phải tính thêm ĐÚNG 1 lần.
+    await rail.getByRole('button', { name: 'Mua lại', exact: true }).first().click();
+    await expect(addBtn).toBeVisible();
+
+    // Hàng đợi sự kiện chỉ xả khi app bị ẩn (hoặc mỗi 10s) — ép xả rồi gom mọi lô /events đã tới.
     await page.evaluate(() => {
       Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
       document.dispatchEvent(new Event('visibilitychange'));
     });
-    await flushed;
-    const events = api
-      .callsTo('POST', '/events')
-      .flatMap((c) => (c.body as { events: { eventName: string; props: Record<string, unknown> }[] }).events);
-    const clicked = events.filter((e) => e.eventName === 'reorder_clicked');
-    expect(clicked).toHaveLength(1);
-    expect(clicked[0]!.props).toEqual({ source: 'home_rail', variationId: 'var-1' });
+    const reorderClicks = () =>
+      api
+        .callsTo('POST', '/events')
+        .flatMap((c) => (c.body as { events: { eventName: string; props: Record<string, unknown> }[] }).events)
+        .filter((e) => e.eventName === 'reorder_clicked');
+    await expect.poll(() => reorderClicks().length).toBeGreaterThanOrEqual(2);
+    const clicks = reorderClicks();
+    expect(clicks).toHaveLength(2);
+    for (const c of clicks) expect(c.props).toEqual({ source: 'home_rail', variationId: 'var-1' });
   });
 });

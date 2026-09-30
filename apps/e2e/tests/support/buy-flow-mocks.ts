@@ -106,10 +106,19 @@ export const SUBSCRIPTION: SubscriptionDTO = {
 
 /** Trang Đơn hàng + điều hướng sang giỏ sau khi mua lại cả đơn. */
 export function mockOrdersTab(api: MockApi): void {
-  api.get('/orders', (): PageResponse<OrderView> => ({ data: [deliveredOrder()], meta: { page: 1, limit: 20, total: 1 } }));
+  // Lọc như API thật cho các tab: đơn mẫu là DELIVERED nên chỉ khớp không lọc / status=DELIVERED;
+  // mọi group (processing, closed) và status khác → rỗng.
+  api.get('/orders', ({ call }): PageResponse<OrderView> => {
+    const status = call.query.get('status');
+    const group = call.query.get('group');
+    const match = group === null && (status === null || status === 'DELIVERED');
+    const data = match ? [deliveredOrder()] : [];
+    return { data, meta: { page: 1, limit: 20, total: data.length } };
+  });
   api.get('/me/subscriptions', [SUBSCRIPTION]);
   api.post('/orders/:code/repurchase', {
     ...CART_AFTER_ADD,
+    cart: CART_AFTER_ADD,
     results: [{ orderItemId: 'oi-avail', status: 'added', addedQuantity: 2 }],
   });
   // Trang giỏ (sau khi mua lại) gọi thêm mã giảm giá / voucher — không liên quan nội dung test.
