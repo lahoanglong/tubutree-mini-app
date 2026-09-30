@@ -18,4 +18,8 @@ describe('SegmentedTabs', () => {
     render(<SegmentedTabs items={items} value="all" onChange={() => {}} />);
     expect(screen.getByText('3')).toBeInTheDocument();
   });
+  it('mỗi tab cao ≥44px (vùng chạm tối thiểu)', () => {
+    render(<SegmentedTabs items={[{ key: 'a', label: 'A' }]} value="a" onChange={() => {}} />);
+    expect(screen.getByRole('tab', { name: 'A' })).toHaveStyle({ minHeight: '44px' });
+  });
 });

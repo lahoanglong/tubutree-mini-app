@@ -174,6 +174,7 @@ export const vi = {
     tabClosed: 'Đã hủy/hoàn',
     tabSubscriptions: 'Định kỳ',
     emptyTabHeading: 'Không có đơn nào ở mục này',
+    loadMore: 'Xem thêm',
     itemCount: (n: number) => `${n} món`,
     cancelOrder: 'Hủy đơn',
     cancelConfirmTitle: 'Bạn muốn hủy đơn này?',

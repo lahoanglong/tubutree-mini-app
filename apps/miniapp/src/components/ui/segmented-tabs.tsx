@@ -37,7 +37,7 @@ export function SegmentedTabs({ items, value, onChange, scroll }: SegmentedTabsP
             onClick={() => onChange(it.key)}
             style={{
               flex: scroll ? undefined : 1,
-              minHeight: 40,
+              minHeight: 44,
               border: 'none',
               borderRadius: 'var(--radius-control)',
               background: active ? 'var(--color-bg-surface)' : 'transparent',
