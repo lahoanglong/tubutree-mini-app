@@ -28,10 +28,11 @@ Carried over from the sub-project 3 review ledger (deleted after completion).
 - Notifications reminder minors: a stale async action can still resolve after navigation, the ref guard should reset in try/finally, and the lookup should use `items.find(variationId)`.
 - Purchased-rail sheet unmounts if the refetch empties the rail while the sheet is open.
 - `TILE_HEIGHT = 337` in `purchased-rail.tsx` is a magic number tied to the tile layout; derive it or re-measure when the tile changes.
-- Flaky-under-load unit specs (`subscriptions-panel` "Hủy" sheet test, `cart-button`): raise the timeouts or split the tests.
+- Flaky-under-load unit specs: `subscriptions-panel` "Hủy" sheet test fixed in 4a; `cart-button` spec may still flake under load — raise its timeouts.
 - Optional: prefetch the Orders route chunk on `/orders` navigation intent.
 - For-you candidate query uses `take: 200` over an unordered window; add an ordering or a bounded, deterministic window.
-- `RANGES` validation for the `shipping.eta_min_days` / `shipping.eta_max_days` config keys is missing.
+- `RANGES` for `shipping.eta_min_days` / `shipping.eta_max_days` is `{0..60}` but does not enforce integers: a value like 2.5 is accepted and the ETA line then stays hidden (`toShippingEta` returns null). Enforce integers at write time.
+- Pre-existing (also at `fdd5550`): the floating `BackButton` (fixed, z-index 200) overlaps the notification detail overlay's own "Quay lại" button and intercepts the pointer; the overlay's `pushState({notifDetail:true})` replaces the router history state so `BackButton` navigates Home instead of closing the overlay, and the reminder CTA path calls `setSelectedNotif(null)` without `history.back()` (orphan history entry).
 - The Button `useRef` double-tap lock half (see "Must-do") is still open.
 - Pre-existing, unrelated to 4a: `order-cancel.race-spec.ts` case (b) fails intermittently with Prisma P2028 (transaction start timeout) when 20 concurrent transactions hit the local pool; reproduced on the pre-4a baseline `fdd5550`.
 
