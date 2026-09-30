@@ -28,6 +28,10 @@ describe('design-tokens/tokens.css', () => {
     expect(css).toMatch(/--tubu-orange:\s*#E08C1C/i);
   });
 
+  it('compare-at (strikethrough) price is informative text: stone-500 (AA), not the disabled stone-400', () => {
+    expect(css).toMatch(/--color-text-price-compare:\s*var\(--stone-500\)/);
+  });
+
   it('keeps a dealer theme override block scoped to [data-theme="dealer"], touching only semantic layer', () => {
     expect(css).toMatch(/\[data-theme=['"]dealer['"]\]\s*\{/);
   });

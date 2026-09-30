@@ -101,7 +101,7 @@
   --color-text-brand: var(--forest-600);
   --color-text-link: var(--forest-600);
   --color-text-price: var(--stone-900);
-  --color-text-price-compare: var(--stone-400);
+  --color-text-price-compare: var(--stone-500); /* 5.12:1 on surface — informative text (WCAG 1.4.3), not "disabled" */
   --color-text-success: #2F7A48;
   --color-text-warning: var(--amber-600);
   --color-text-danger: var(--red-600);
