@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { VARIATION_ID_RE } from './variation-id';
 
 export interface PurchasedItem {
   variationId: string;
@@ -32,9 +33,6 @@ interface PurchasedRow {
   timesBought: number;
   lastPurchasedAt: Date;
 }
-
-/** Định dạng id hợp lệ (cuid / id do hệ thống sinh): chỉ chữ, số, `_`, `-`, tối đa 64 ký tự. */
-export const VARIATION_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;

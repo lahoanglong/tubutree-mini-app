@@ -3,7 +3,7 @@ import { Type } from 'class-transformer';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PaginationQuery } from '../../../common/pagination';
 import { ORDER_STATUS_GROUP_KEYS, type OrderStatusGroup } from '../order-status-groups';
-import { VARIATION_ID_RE } from '../purchased-items.service';
+import { VARIATION_ID_RE } from '../variation-id';
 
 export class OrderListQuery extends PaginationQuery {
   @IsOptional()
@@ -47,5 +47,5 @@ export class PurchasedItemsQuery {
   limit = 20;
 
   /** Chỉ ký tự id (cuid/slug) — chặn NUL/ký tự lạ trước khi tới SQL thô. */
-  @IsOptional() @IsString() @MaxLength(64) @Matches(VARIATION_ID_RE) variationId?: string;
+  @IsOptional() @IsString() @MaxLength(64) @Matches(VARIATION_ID_RE, { message: 'variationId không hợp lệ.' }) variationId?: string;
 }

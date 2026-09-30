@@ -148,6 +148,7 @@ describe('Buy-flow 4a — repurchase v2 + purchased-items (real Postgres)', () =
 
     const res = await orders.repurchase(user.id, order.code);
 
+    expect(res.results).toHaveLength(5);
     expect(res.results).toEqual(
       expect.arrayContaining([
         { orderItemId: lOk.id, status: 'added', addedQuantity: 3 },
@@ -171,6 +172,20 @@ describe('Buy-flow 4a — repurchase v2 + purchased-items (real Postgres)', () =
     const events = await prisma.analyticsEvent.findMany({ where: { userId: user.id, eventName: 'add_to_cart' } });
     const sources = events.map((e) => (e.props as { addSource?: string }).addSource).sort();
     expect(sources).toEqual(['pdp', 'repurchase', 'repurchase']);
+  });
+
+  it('(a2) repurchase: giỏ đã giữ MỘT PHẦN tồn → kẹp phần còn lại (tồn 5, giỏ 3, yêu cầu 3 → thêm 2)', async () => {
+    const user = await createUser(prisma);
+    const v = await createVariation({ stock: 5 });
+    const order = await createOrder(prisma, { userId: user.id, status: 'DELIVERED' });
+    const line = await addLine(order.id, v, 3);
+    await cart.addItem(user.id, { variationId: v.id, quantity: 3 });
+
+    const res = await orders.repurchase(user.id, order.code);
+
+    expect(res.results).toEqual([{ orderItemId: line.id, status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: 2 }]);
+    const row = await prisma.cartItem.findFirst({ where: { variationId: v.id, cart: { userId: user.id } } });
+    expect(row?.quantity).toBe(5);
   });
 
   it('(b) purchased-items: chỉ DELIVERED của chính user, loại SP ngừng bán, mới nhất trước, cursor ổn định khi trùng mốc', async () => {
@@ -260,22 +275,25 @@ describe('Buy-flow 4a — repurchase v2 + purchased-items (real Postgres)', () =
     expect(again.items[0]).toMatchObject({ variationId: good.id, timesBought: 2, lastPurchasedAt: '2026-09-20T00:00:00.000Z' });
   });
 
-  it('(d) cursor: mili-giây .999 / .001 và hoà mốc — duyệt hết mọi limit, không lặp, không sót, khớp thứ tự SQL COLLATE "C"', async () => {
+  it('(d) cursor: mili-giây .999 / .001 (trang kết thúc ngay trên hàng .001 khi còn hàng sau) và hoà mốc — duyệt hết mọi limit, không lặp, không sót, khớp thứ tự SQL COLLATE "C"', async () => {
     const me = await createUser(prisma);
     const vid = idSet();
     const v = {
       a: await createVariation({ stock: 1, id: vid('a') }),
       b: await createVariation({ stock: 1, id: vid('b') }),
       c: await createVariation({ stock: 1, id: vid('c') }),
+      // `c0` > `c` dưới mọi collation (c là tiền tố của c0) → xếp TRƯỚC c khi DESC: trang có thể dừng ngay trên hàng .001 (c0) khi còn c.
+      c0: await createVariation({ stock: 1, id: vid('c0') }),
       d: await createVariation({ stock: 1, id: vid('d') }),
       e: await createVariation({ stock: 1, id: vid('e') }),
     };
-    // .999 ms (a, b hoà), .001 ms (c), giây tròn liền sau .999 (d, e hoà) — biên làm tròn/cắt ms.
+    // .999 ms (a, b hoà), .001 ms (c0, c hoà), giây tròn liền sau .999 (d, e hoà) — biên làm tròn/cắt ms.
     const o999 = await createOrder(prisma, { userId: me.id, status: 'DELIVERED', createdAt: new Date('2026-09-15T10:00:00.999Z') });
     await addLine(o999.id, v.a, 1);
     await addLine(o999.id, v.b, 1);
     const o001 = await createOrder(prisma, { userId: me.id, status: 'DELIVERED', createdAt: new Date('2026-09-15T10:00:00.001Z') });
     await addLine(o001.id, v.c, 1);
+    await addLine(o001.id, v.c0, 1);
     const oNext = await createOrder(prisma, { userId: me.id, status: 'DELIVERED', createdAt: new Date('2026-09-15T10:00:01.000Z') });
     await addLine(oNext.id, v.d, 1);
     await addLine(oNext.id, v.e, 1);
@@ -288,10 +306,11 @@ describe('Buy-flow 4a — repurchase v2 + purchased-items (real Postgres)', () =
       GROUP BY oi."variationId"
       ORDER BY MAX(o."createdAt") DESC, oi."variationId" COLLATE "C" DESC`;
     const expected = ref.map((r) => r.variationId);
-    // Kiểm chéo bằng tay: e,d (01.000) -> b,a (00.999) -> c (00.001).
-    expect(expected).toEqual([v.e.id, v.d.id, v.b.id, v.a.id, v.c.id]);
+    // Kiểm chéo bằng tay: e,d (01.000) -> b,a (00.999) -> c0,c (00.001).
+    expect(expected).toEqual([v.e.id, v.d.id, v.b.id, v.a.id, v.c0.id, v.c.id]);
 
-    for (const limit of [1, 2, 3, 4, 5]) {
+    // limit 1..5: có ít nhất một kích cỡ trang kết thúc trên c0 (.001) khi c còn ở trang sau → cursor .001 được mã hoá/giải mã thật.
+    for (const limit of [1, 2, 3, 4, 5, 6]) {
       expect(await pageThrough(me.id, limit)).toEqual(expected);
     }
 
@@ -301,6 +320,7 @@ describe('Buy-flow 4a — repurchase v2 + purchased-items (real Postgres)', () =
       '2026-09-15T10:00:01.000Z',
       '2026-09-15T10:00:00.999Z',
       '2026-09-15T10:00:00.999Z',
+      '2026-09-15T10:00:00.001Z',
       '2026-09-15T10:00:00.001Z',
     ]);
   });

@@ -61,6 +61,11 @@ describe('PurchasedItemsQuery', () => {
       await expect(asQuery(PurchasedItemsQuery, q)).rejects.toThrow();
     },
   );
+  it('thông báo lỗi variationId bằng tiếng Việt', async () => {
+    await expect(asQuery(PurchasedItemsQuery, { variationId: 'a b' })).rejects.toMatchObject({
+      response: { message: expect.arrayContaining(['variationId không hợp lệ.']) },
+    });
+  });
   it('nhận variationId dạng cuid / id có gạch', async () => {
     await expect(asQuery(PurchasedItemsQuery, { variationId: 'clx0abc123_DEF-9' })).resolves.toMatchObject({ variationId: 'clx0abc123_DEF-9' });
   });
