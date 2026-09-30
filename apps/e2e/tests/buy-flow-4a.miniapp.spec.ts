@@ -1,6 +1,6 @@
 import { test, expect, type MockApi } from './support/mock-api';
 import type { Page } from '@playwright/test';
-import { DELIVERED_CODE, THUMB, mockBuyFlowSession, mockOrdersTab } from './support/buy-flow-mocks';
+import { DELIVERED_CODE, PURCHASED_PAGE, THUMB, mockBuyFlowSession, mockOrdersTab } from './support/buy-flow-mocks';
 
 /**
  * Zalo Mini App E2E — Dự án 4a "Nhịp mua lại + tab bar + đặt hàng thành công"
@@ -38,6 +38,35 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByText('Đã thêm 1 món vào giỏ')).toBeVisible();
     await expect(page.getByText('Xem giỏ')).toBeVisible();
     await expect(page).toHaveURL(/\/$/);
+  });
+
+  test('Skeleton kệ Mua lại cao xấp xỉ kệ thật (≤ 16px) → dữ liệu về không đẩy nội dung bên dưới', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    mockBuyFlowSession(api);
+    // Giữ phản hồi purchased-items để skeleton đứng yên cho tới khi ta cho nó về.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    api.get('/me/purchased-items', async () => {
+      await gate;
+      return PURCHASED_PAGE;
+    });
+    await page.goto('/');
+
+    const skeleton = page.getByTestId('purchased-rail-loading');
+    await expect(skeleton).toBeVisible({ timeout: 15_000 });
+    const skeletonBox = await skeleton.boundingBox();
+    const aiBefore = await page.getByRole('button', { name: 'Hỏi trợ lý AI 24/7' }).boundingBox();
+    release();
+
+    const rail = page.getByRole('region', { name: 'Mua lại' });
+    await expect(rail).toBeVisible({ timeout: 15_000 });
+    await expect(skeleton).toHaveCount(0);
+    const railBox = await rail.boundingBox();
+    const aiAfter = await page.getByRole('button', { name: 'Hỏi trợ lý AI 24/7' }).boundingBox();
+
+    expect(Math.abs(skeletonBox!.height - railBox!.height), `skeleton ${skeletonBox!.height}px vs kệ ${railBox!.height}px`).toBeLessThanOrEqual(16);
+    // Hệ quả người dùng thấy: khối bên dưới (nút "Hỏi trợ lý AI") gần như không nhảy vị trí.
+    expect(Math.abs(aiAfter!.y - aiBefore!.y), 'khối bên dưới bị đẩy').toBeLessThanOrEqual(16);
   });
 
   test('Khách mới (chưa có đơn giao) → không có kệ Mua lại', async ({ page, api }) => {

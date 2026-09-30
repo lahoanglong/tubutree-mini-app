@@ -11,6 +11,13 @@ import { ReorderSheet } from './reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 
 const TILE_WIDTH = 148;
+// Đo trên trình duyệt thật ở 320/375/390px (đều cho cùng số vì tile cố định 148px): tile 337px, tiêu đề 24px.
+// Đổi ProductTile "rail" thì đo lại — e2e buy-flow-4a kiểm skeleton lệch kệ thật <= 16px.
+const TILE_HEIGHT = 337;
+const HEADING_HEIGHT = 24;
+const HEADING_PAD_TOP = 4;
+const HEADING_PAD_BOTTOM = 8;
+const RAIL_PADDING_BOTTOM = 12;
 const RAIL_LIMIT = 10;
 
 export function toTileProduct(p: PurchasedItem): ProductTileProduct {
@@ -43,11 +50,17 @@ export function PurchasedRail({ source }: PurchasedRailProps) {
   const [target, setTarget] = useState<ReorderTarget | null>(null);
 
   if (q.isLoading) {
+    // Khớp đúng khung kệ thật (tiêu đề + hàng tile + đệm dưới) để dữ liệu về không đẩy nội dung bên dưới.
     return (
-      <div data-testid="purchased-rail-loading" aria-hidden="true" className="scroll-x" style={{ display: 'flex', gap: 10, padding: '4px 16px 12px' }}>
-        {[0, 1, 2].map((i) => (
-          <Skeleton key={i} width={TILE_WIDTH} height={236} radius="var(--radius-card)" style={{ flex: '0 0 auto' }} />
-        ))}
+      <div data-testid="purchased-rail-loading" aria-hidden="true" style={{ paddingBottom: RAIL_PADDING_BOTTOM }}>
+        <div style={{ padding: `${HEADING_PAD_TOP}px 16px ${HEADING_PAD_BOTTOM}px` }}>
+          <Skeleton width={96} height={HEADING_HEIGHT} />
+        </div>
+        <div className="scroll-x" style={{ display: 'flex', gap: 10, padding: '0 16px' }}>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} width={TILE_WIDTH} height={TILE_HEIGHT} radius="var(--radius-card)" style={{ flex: '0 0 auto' }} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -55,8 +68,8 @@ export function PurchasedRail({ source }: PurchasedRailProps) {
   if (q.isError || items.length === 0) return null;
 
   return (
-    <section aria-label={vi.reorder.railTitle} style={{ paddingBottom: 12 }}>
-      <div style={{ padding: '4px 16px 8px' }}>
+    <section aria-label={vi.reorder.railTitle} style={{ paddingBottom: RAIL_PADDING_BOTTOM }}>
+      <div style={{ padding: `${HEADING_PAD_TOP}px 16px ${HEADING_PAD_BOTTOM}px` }}>
         <Heading variant="title-sm" as="h2">
           {vi.reorder.railTitle}
         </Heading>
