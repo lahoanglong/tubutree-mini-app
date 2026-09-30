@@ -388,6 +388,15 @@ test.describe('Buy-flow 4a — nhắc mua lại, đặt hàng thành công, bố
       await card.getByRole('button', { name: 'Mua lại', exact: true }).click();
       const cta = page.getByRole('button', { name: 'Thêm vào giỏ (2)' });
       await expect(cta).toBeVisible();
+      // Sheet trượt vào ~200ms: đợi nó dừng hẳn (CTA nằm trọn trong viewport và đứng yên) rồi mới đo/chụp.
+      await expect
+        .poll(async () => {
+          const b1 = await cta.boundingBox();
+          await page.waitForTimeout(150);
+          const b2 = await cta.boundingBox();
+          return !!b1 && !!b2 && b1.y === b2.y && b2.y + b2.height <= 740;
+        }, { timeout: 5_000, message: 'CTA của sheet phải dừng và nằm trọn trong viewport' })
+        .toBe(true);
       const ctaBox = await cta.boundingBox();
       expect(ctaBox!.x).toBeGreaterThanOrEqual(0);
       expect(ctaBox!.x + ctaBox!.width).toBeLessThanOrEqual(width);
