@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { App, ZMPRouter, AnimationRoutes, SnackbarProvider, Box, Spinner } from 'zmp-ui';
-import { Route } from 'react-router-dom';
+import { Navigate, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { getStorage } from 'zmp-sdk/apis';
@@ -64,7 +64,6 @@ const WishlistPage = lazy(() => import('../pages/wishlist'));
 const EditProfilePage = lazy(() => import('../pages/edit-profile'));
 const SettingsPage = lazy(() => import('../pages/settings'));
 const BrandStoryPage = lazy(() => import('../pages/brand-story'));
-const SubscriptionsPage = lazy(() => import('../pages/subscriptions'));
 const StorefrontBuilderPage = lazy(() => import('../pages/storefront-builder'));
 const StorefrontViewPage = lazy(() => import('../pages/storefront-view'));
 const BrandViewPage = lazy(() => import('../pages/brand-view'));
@@ -217,7 +216,8 @@ export default function MyApp() {
                   <Route path="/edit-profile" element={<EditProfilePage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/brand-story" element={<BrandStoryPage />} />
-                  <Route path="/subscriptions" element={<SubscriptionsPage />} />
+                  {/* "Đặt định kỳ" nay là tab "Định kỳ" của trang Đơn hàng (spec 4a.2) — giữ route cũ cho link đã lưu. */}
+                  <Route path="/subscriptions" element={<Navigate to="/orders?tab=subscriptions" replace />} />
                   <Route path="/storefront" element={<StorefrontBuilderPage />} />
                   <Route path="/s/:slug" element={<StorefrontViewPage />} />
                   <Route path="/brand/:slug" element={<BrandViewPage />} />

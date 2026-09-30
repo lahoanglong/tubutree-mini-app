@@ -81,6 +81,18 @@ export const vi = {
     skipCta: 'Bỏ qua kỳ này',
     confirmCancelCta: 'Vẫn hủy',
     skipOk: 'Đã bỏ qua kỳ này, hẹn kỳ sau nhé 🌿',
+    intro: (pct: number) => `Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${pct}% mỗi đơn, hủy bất kỳ lúc nào.`,
+    perCycle: (weeks: number, price: string) => `Mỗi ${weeks} tuần · ${price}`,
+    nextRun: (date: string) => `Lần kế: ${date}`,
+    scheduling: 'Đang lên lịch',
+    pausedLine: 'Đang tạm dừng',
+    pause: 'Tạm dừng',
+    resume: 'Tiếp tục',
+    cancel: 'Hủy',
+    statusLabel: { ACTIVE: 'Đang chạy', PAUSED: 'Tạm dừng', CANCELLED: 'Đã hủy' },
+    emptyHeading: 'Chưa có lịch đặt định kỳ',
+    emptyBody: 'Mở một sản phẩm và chọn "Đặt định kỳ" để bắt đầu.',
+    emptyCta: 'Khám phá sản phẩm',
   },
 
   cart: {
