@@ -1,8 +1,9 @@
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PaginationQuery } from '../../../common/pagination';
 import { ORDER_STATUS_GROUP_KEYS, type OrderStatusGroup } from '../order-status-groups';
+import { VARIATION_ID_RE } from '../purchased-items.service';
 
 export class OrderListQuery extends PaginationQuery {
   @IsOptional()
@@ -45,5 +46,6 @@ export class PurchasedItemsQuery {
   @Max(50)
   limit = 20;
 
-  @IsOptional() @IsString() @MaxLength(64) variationId?: string;
+  /** Chỉ ký tự id (cuid/slug) — chặn NUL/ký tự lạ trước khi tới SQL thô. */
+  @IsOptional() @IsString() @MaxLength(64) @Matches(VARIATION_ID_RE) variationId?: string;
 }

@@ -55,6 +55,15 @@ describe('PurchasedItemsQuery', () => {
     await expect(asQuery(PurchasedItemsQuery, {})).resolves.toMatchObject({ limit: 20 });
     await expect(asQuery(PurchasedItemsQuery, { limit: '10', variationId: 'v1' })).resolves.toMatchObject({ limit: 10, variationId: 'v1' });
   });
+  it.each([[{ variationId: 'a\u0000b' }], [{ variationId: 'a b' }], [{ variationId: "x';--" }], [{ variationId: 'a'.repeat(65) }], [{ variationId: '' }]])(
+    'từ chối variationId sai định dạng %p',
+    async (q) => {
+      await expect(asQuery(PurchasedItemsQuery, q)).rejects.toThrow();
+    },
+  );
+  it('nhận variationId dạng cuid / id có gạch', async () => {
+    await expect(asQuery(PurchasedItemsQuery, { variationId: 'clx0abc123_DEF-9' })).resolves.toMatchObject({ variationId: 'clx0abc123_DEF-9' });
+  });
   it.each([[{ limit: '51' }], [{ limit: '0' }], [{ userId: 'u2' }]])('từ chối %p (không nhận userId từ client)', async (q) => {
     await expect(asQuery(PurchasedItemsQuery, q)).rejects.toThrow();
   });

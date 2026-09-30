@@ -33,6 +33,9 @@ interface PurchasedRow {
   lastPurchasedAt: Date;
 }
 
+/** Định dạng id hợp lệ (cuid / id do hệ thống sinh): chỉ chữ, số, `_`, `-`, tối đa 64 ký tự. */
+export const VARIATION_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 
@@ -47,7 +50,8 @@ export function decodePurchasedCursor(cursor: string): { ms: number; variationId
   const sep = raw.indexOf('|');
   const ms = Number(raw.slice(0, sep));
   const variationId = raw.slice(sep + 1);
-  if (sep <= 0 || !Number.isSafeInteger(ms) || ms < 0 || variationId.length === 0) {
+  // variationId đi thẳng vào SQL thô: NUL / ký tự lạ làm Postgres ném lỗi → 500 thay vì 400.
+  if (sep <= 0 || !Number.isSafeInteger(ms) || ms < 0 || !VARIATION_ID_RE.test(variationId)) {
     throw new BadRequestException('Con trỏ phân trang không hợp lệ.');
   }
   return { ms, variationId };

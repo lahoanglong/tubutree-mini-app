@@ -78,6 +78,18 @@ describe('PurchasedItemsService.list', () => {
     await expect(svc.list('u1', { cursor: 'không-phải-cursor' })).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  // `MXwA` = base64url("1|\0"): variationId chứa NUL làm Postgres ném 22021 → 500 nếu lọt tới SQL.
+  it.each([
+    ['MXwA', 'NUL trong variationId'],
+    [Buffer.from('1|abc def', 'utf8').toString('base64url'), 'khoảng trắng trong variationId'],
+    [Buffer.from(`1|${'a'.repeat(65)}`, 'utf8').toString('base64url'), 'variationId dài quá 64 ký tự'],
+    [Buffer.from("1|x';--", 'utf8').toString('base64url'), 'ký tự ngoài [A-Za-z0-9_-]'],
+  ])('cursor %s (%s) → 400, không chạm DB', async (cursor) => {
+    const { svc, queryRaw } = setup([], []);
+    await expect(svc.list('u1', { cursor })).rejects.toBeInstanceOf(BadRequestException);
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+
   it('lọc variationId (tra nhanh cho thông báo nhắc mua lại)', async () => {
     const { svc, queryRaw } = setup([], []);
     await svc.list('u1', { variationId: 'v7' });
