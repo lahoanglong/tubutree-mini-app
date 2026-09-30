@@ -89,4 +89,40 @@ describe('SystemConfigController.publicConfig', () => {
       expect(out.freeshipThreshold).toBe(200000);
     });
   });
+
+  describe('shippingEta — ngày giao dự kiến (chỉ khi chủ shop đã cấu hình)', () => {
+    it('chưa cấu hình → null (FE ẩn dòng "Giao dự kiến", không hứa ngày)', async () => {
+      const out = await new SystemConfigController(makeConfig()).publicConfig();
+      expect(out.shippingEta).toBeNull();
+    });
+
+    it('2 và 4 → { minDays: 2, maxDays: 4 }', async () => {
+      const out = await new SystemConfigController(
+        makeConfig({ 'shipping.eta_min_days': 2, 'shipping.eta_max_days': 4 }),
+      ).publicConfig();
+      expect(out.shippingEta).toEqual({ minDays: 2, maxDays: 4 });
+    });
+
+    it.each([
+      [5, 2],
+      [1.5, 3],
+      [-1, 2],
+      [2, 90],
+      ['2', 4],
+      [2, null],
+    ])('giá trị sai (%p, %p) → null', async (min, max) => {
+      const out = await new SystemConfigController(
+        makeConfig({ 'shipping.eta_min_days': min, 'shipping.eta_max_days': max }),
+      ).publicConfig();
+      expect(out.shippingEta).toBeNull();
+    });
+
+    it('đọc 2 khoá với fallback null (không ném NotFound khi thiếu khoá)', async () => {
+      const config = makeConfig();
+      await new SystemConfigController(config).publicConfig();
+      const get = (config as unknown as { get: jest.Mock }).get;
+      expect(get).toHaveBeenCalledWith('shipping.eta_min_days', null);
+      expect(get).toHaveBeenCalledWith('shipping.eta_max_days', null);
+    });
+  });
 });

@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { SystemConfigService } from './system-config.service';
 import { isGomdonRecyclingEnabled } from '../integrations/gomdon/gomdon-config';
+import { toShippingEta } from './shipping-eta';
 
 /**
  * Config hiển thị an toàn cho client (public) — WHITELIST rõ ràng, KHÔNG dùng getByCategory
@@ -27,6 +28,8 @@ export class SystemConfigController {
       affiliateMinWithdrawBank,
       cashbackHoldDays,
       recyclingEnabled,
+      etaMinDays,
+      etaMaxDays,
     ] = await Promise.all([
       this.config.get<number>('shipping.free_threshold', 200000),
       this.config.get<number>('subscribe.discount_pct', 0.12),
@@ -36,6 +39,8 @@ export class SystemConfigController {
       // Chỉ trả boolean — KHÔNG lộ cấu hình/tài khoản Gomdon. true khi Gomdon đã cấu hình VÀ admin
       // bật shipping.gomdon.recycling_enabled; miniapp chỉ hiện lựa chọn thu gom khi true.
       isGomdonRecyclingEnabled(this.config).catch(() => false),
+      this.config.get<number | null>('shipping.eta_min_days', null),
+      this.config.get<number | null>('shipping.eta_max_days', null),
     ]);
     return {
       freeshipThreshold,
@@ -44,6 +49,7 @@ export class SystemConfigController {
       affiliateMinWithdrawBank,
       cashbackHoldDays,
       recyclingEnabled,
+      shippingEta: toShippingEta(etaMinDays, etaMaxDays),
     };
   }
 }
