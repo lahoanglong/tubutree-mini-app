@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import { StatTile, FlashBadge, CountdownChip, Avatar } from './tiles';
+import { StatTile, FlashBadge, Avatar } from './tiles';
 
 describe('small tiles', () => {
   it('StatTile shows label and value', () => {
