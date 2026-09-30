@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Page, Text, Button, Input, useLocation, useNavigate } from 'zmp-ui';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
-import { fetchProducts, fetchBrands, getCart } from '../services/shop-api';
+import { fetchProducts, fetchBrands } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { trackEvent } from '../services/analytics';
 import ProductCard from '../components/product-card';
@@ -12,9 +12,7 @@ import { brandAccent } from '../utils/brands';
 import { useDebounced } from '../utils/use-debounced';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
-import { ShoppingCart } from 'lucide-react';
-import { useAuthStore } from '../store/auth';
-import { CartBadge } from '../components/ui/cart-badge';
+import { CartButton } from '../components/cart-button';
 
 const PAGE_LIMIT = 30;
 const SEGMENT_LABELS: Record<string, string> = {
@@ -48,9 +46,6 @@ function pushRecent(term: string): string[] {
 }
 
 export default function BrowsePage() {
-  // Badge giỏ dùng chung query ['cart'] với trang chủ/PDP — không phát sinh request mới.
-  const authed = useAuthStore((st) => st.status === 'authenticated');
-  const cartCount = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: authed }).data?.itemCount ?? 0;
   const location = useLocation();
   const navigate = useNavigate();
   const initialBrands = useMemo(() => {
@@ -180,28 +175,7 @@ export default function BrowsePage() {
         {/* Trang này KHÔNG có lối nào tới giỏ (bottom nav cũng không có tab giỏ): khách thêm
             vài món rồi cuộn tiếp thì phải quay về trang chủ hoặc mở lại một trang sản phẩm
             mới thấy giỏ đâu (P2-8 audit mạch lạc). */}
-        <Box
-          role="button"
-          aria-label="Giỏ hàng"
-          className="tubu-press"
-          onClick={() => {
-            haptic('light');
-            navigate('/cart');
-          }}
-          style={{
-            position: 'relative',
-            width: 40,
-            height: 40,
-            flex: '0 0 auto',
-            borderRadius: '50%',
-            background: 'var(--leaf-50)',
-            display: 'grid',
-            placeItems: 'center',
-          }}
-        >
-          <ShoppingCart size={20} color="var(--leaf-700)" strokeWidth={1.8} />
-          <CartBadge count={cartCount} />
-        </Box>
+        <CartButton />
       </Box>
 
       {/* Lưới Danh mục — hiện khi ở trạng thái duyệt gốc (chưa gõ/chưa lọc). Trước đây tab

@@ -1,7 +1,7 @@
 import { Box, Page, Text, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, ShoppingCart, Search, ChevronRight, Baby, SprayCan, Droplets, Recycle, Map, Sparkles, Users, MessagesSquare, type LucideIcon } from 'lucide-react';
-import { fetchProducts, fetchBrands, fetchForYou, getCart } from '../services/shop-api';
+import { Bell, Search, ChevronRight, Baby, SprayCan, Droplets, Recycle, Map, Sparkles, Users, MessagesSquare, type LucideIcon } from 'lucide-react';
+import { fetchProducts, fetchBrands, fetchForYou } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import ProductCard from '../components/product-card';
@@ -14,7 +14,7 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import logo from '../assets/tubu-logo.png';
 import { getNotifications } from '../services/account-api';
-import { CartBadge } from '../components/ui/cart-badge';
+import { CartButton } from '../components/cart-button';
 
 const SECTION_LIMIT = 6;
 
@@ -30,8 +30,6 @@ export default function HomePage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const authed = useAuthStore((s) => s.status === 'authenticated');
-  // Badge số lượng giỏ trên header (gate theo auth — tránh 401 lúc chưa login xong).
-  const cartCount = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: authed }).data?.itemCount ?? 0;
   // Chuông ở đây trước đây trơ, không báo gì — trong khi voucher sinh nhật, nhắc giỏ, hoa hồng
   // duyệt đều nằm trong Thông báo. Khách quay lại app không có tín hiệu nào, phải vào tận trang
   // Cá nhân mới thấy badge (P1-8 audit mạch lạc). Dùng chung queryKey với trang Thông báo.
@@ -103,16 +101,7 @@ export default function HomePage() {
               </span>
             )}
           </Box>
-          <Box
-            role="button"
-            aria-label="Giỏ hàng"
-            className="tubu-press"
-            onClick={() => navigate('/cart')}
-            style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}
-          >
-            <ShoppingCart size={20} color="var(--leaf-700)" strokeWidth={1.8} />
-            <CartBadge count={cartCount} />
-          </Box>
+          <CartButton />
         </Box>
       </Box>
 

@@ -100,6 +100,9 @@ export const vi = {
     freeshipReached: 'Bạn được miễn phí ship 🌿',
     freeshipProgress: (amount: string) => `Mua thêm ${amount} để được miễn phí ship`,
     stockLimited: (n: number) => `Chỉ còn ${n} sản phẩm`,
+    buttonLabel: 'Giỏ hàng',
+    buttonLabelWithCount: (n: number) => `Giỏ hàng, ${n} sản phẩm`,
+    badgeLabel: (n: number) => `${n} sản phẩm trong giỏ`,
   },
 
   checkout: {
