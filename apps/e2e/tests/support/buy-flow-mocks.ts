@@ -111,7 +111,8 @@ export function mockOrdersTab(api: MockApi): void {
   api.get('/orders', ({ call }): PageResponse<OrderView> => {
     const status = call.query.get('status');
     const group = call.query.get('group');
-    const match = group === null && (status === null || status === 'DELIVERED');
+    // API thật: `status` thắng `group` (orders.service statusWhere) — nên có status thì bỏ qua group.
+    const match = status ? status === 'DELIVERED' : group === null;
     const data = match ? [deliveredOrder()] : [];
     return { data, meta: { page: 1, limit: 20, total: data.length } };
   });
