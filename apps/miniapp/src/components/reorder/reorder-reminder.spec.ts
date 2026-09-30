@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PurchasedItem } from '../../services/shop-api';
-import { reminderFallbackPath, reorderReminderAction } from './reorder-reminder';
+import { pickReminderItem, reminderFallbackPath, reorderReminderAction } from './reorder-reminder';
 
 const ITEM: PurchasedItem = {
   variationId: 'v1', productId: 'p1', slug: 'dau-goi', productName: 'Dầu gội', variationName: '500ml', brand: 'Visante',
@@ -20,5 +20,20 @@ describe('reorderReminderAction (spec 4a.4 + Ruling 8)', () => {
   });
   it('slug được encode', () => {
     expect(reminderFallbackPath({ product_slug: 'sữa tắm/đặc biệt' })).toBe(`/product/${encodeURIComponent('sữa tắm/đặc biệt')}`);
+  });
+});
+
+describe('pickReminderItem (deploy-skew: API bỏ qua bộ lọc variationId)', () => {
+  const OTHER: PurchasedItem = { ...ITEM, variationId: 'v-other', productName: 'Sản phẩm khác' };
+  it('chọn đúng dòng có variationId khớp, không lấy dòng đầu', () => {
+    expect(pickReminderItem([OTHER, ITEM], 'v1')).toBe(ITEM);
+  });
+  it('kết quả chỉ chứa variation khác → null (rơi về điều hướng dự phòng, không mở sheet sai SP)', () => {
+    expect(pickReminderItem([OTHER], 'v1')).toBeNull();
+    expect(reorderReminderAction({ product_slug: 'dau-goi' }, pickReminderItem([OTHER], 'v1'))).toEqual({ kind: 'navigate', to: '/product/dau-goi' });
+  });
+  it('rỗng / thiếu variationId → null', () => {
+    expect(pickReminderItem([], 'v1')).toBeNull();
+    expect(pickReminderItem([ITEM], undefined)).toBeNull();
   });
 });

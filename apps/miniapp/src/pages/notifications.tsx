@@ -17,13 +17,13 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
-import { fetchPurchasedItems, type PurchasedItem } from '../services/shop-api';
+import { fetchPurchasedItems } from '../services/shop-api';
 import { trackReorderReminderCta } from '../services/buy-flow-events';
 // zmp-ui Button vẫn dùng cho các CTA loại khác (nợ migrate); CTA nhắc mua lại dùng DS v2 (spec 4a.4).
 import { Button as DsButton } from '../components/ui/button';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
-import { reminderFallbackPath, reorderReminderAction } from '../components/reorder/reorder-reminder';
+import { pickReminderItem, reorderReminderAction } from '../components/reorder/reorder-reminder';
 
 /** Icon + nhãn nhóm theo templateCode (§4.10). */
 export function notificationMeta(code: string): { Icon: LucideIcon; title: string } {
@@ -56,18 +56,6 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
  * Có hiện nút "Xem chi tiết đơn hàng" không. Báo động OPS_* mang order_code của đơn KHÁCH KHÁC —
  * GET /orders/:code chỉ trả đơn của chính người xem (404 với admin), nên nút đó chỉ dẫn tới màn lỗi.
  */
-/**
- * Đích điều hướng cho CTA "Mua lại ngay" của REORDER_REMINDER (A1-01=A2-06=A3-02). Tách riêng
- * khỏi JSX để test được logic chọn đích mà không cần dựng cả trang (component còn phụ thuộc
- * react-query/zustand/zmp-ui — repo này chưa có test harness dựng toàn trang, xem
- * notifications.spec.ts: chỉ test các hàm thuần export như notificationMeta/notificationOrderLink).
- * Có slug (đơn mới, OrderItem.productSlug đã snapshot) → thẳng trang sản phẩm để đặt lại; đơn cũ
- * chưa có slug → về tab Đơn hàng thay vì dựng link hỏng `/product/`.
- */
-export function reorderReminderTarget(data: Record<string, string> | undefined): string {
-  return reminderFallbackPath(data);
-}
-
 export function notificationOrderLink(templateCode: string, orderCode: unknown): boolean {
   if (templateCode.startsWith('OPS_')) return false;
   return templateCode.startsWith('ORDER') || !!orderCode;
@@ -92,12 +80,22 @@ export default function NotificationsPage() {
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
   const [reminderBusy, setReminderBusy] = useState(false);
   const reminderBusyRef = useRef(false); // chặn double-tap đồng bộ (state chỉ cập nhật sau render)
+  // Kết quả tra cứu về muộn phải bỏ qua nếu khách đã rời chi tiết thông báo (hoặc rời trang) trong lúc chờ.
+  const selectedIdRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Trang này là CỬA VÀO từ push của Zalo: mở app từ thông báo thì restore() chưa kịp xong,
   // fetch ngay sẽ 401 và (retry:false cho 4xx) kẹt màn lỗi vĩnh viễn dù ~200ms sau đã có phiên.
   // Mọi trang /me/* khác đều đã gate như vậy; riêng đây bị sót.
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const notifQ = useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: authed });
+  selectedIdRef.current = selectedNotif?.id ?? null;
 
   const readMut = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
@@ -134,22 +132,27 @@ export default function NotificationsPage() {
   const openReorderReminder = async (n: NotificationDTO) => {
     if (reminderBusyRef.current) return;
     reminderBusyRef.current = true;
-    trackReorderReminderCta(n.id);
-    haptic('light');
-    setReminderBusy(true);
-    const variationId = n.payload.data?.variation_id;
-    let item: PurchasedItem | null = null;
-    if (variationId) {
-      item = await fetchPurchasedItems({ variationId, limit: 1 })
-        .then((p) => p.items[0] ?? null)
-        .catch(() => null);
+    try {
+      trackReorderReminderCta(n.id);
+      haptic('light');
+      setReminderBusy(true);
+      const variationId = n.payload.data?.variation_id;
+      const item = variationId
+        ? await fetchPurchasedItems({ variationId, limit: 1 })
+            .then((p) => pickReminderItem(p.items, variationId))
+            .catch(() => null)
+        : null;
+      // Khách đã đóng chi tiết / đổi sang thông báo khác / rời trang trong lúc tra cứu → không mở sheet hay điều hướng muộn.
+      if (!mountedRef.current || selectedIdRef.current !== n.id) return;
+      const action = reorderReminderAction(n.payload.data, item);
+      setSelectedNotif(null);
+      if (action.kind === 'sheet') setReorderTarget(itemReorderTarget(action.item));
+      else navigate(action.to);
+    } finally {
+      // Luôn trả cờ bận (kể cả khi tracking/haptic ném lỗi) để CTA không chết vĩnh viễn.
+      reminderBusyRef.current = false;
+      if (mountedRef.current) setReminderBusy(false);
     }
-    reminderBusyRef.current = false;
-    setReminderBusy(false);
-    const action = reorderReminderAction(n.payload.data, item);
-    setSelectedNotif(null);
-    if (action.kind === 'sheet') setReorderTarget(itemReorderTarget(action.item));
-    else navigate(action.to);
   };
 
   const onTap = (n: NotificationDTO) => {

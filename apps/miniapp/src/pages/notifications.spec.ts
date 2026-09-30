@@ -9,7 +9,8 @@ vi.mock('zmp-ui', () => ({
 }));
 vi.mock('zmp-sdk/apis', () => ({ vibrate: () => undefined, setStorage: async () => ({}), getStorage: async () => ({}), removeStorage: async () => ({}) }));
 
-import { notificationMeta, notificationOrderLink, reorderReminderTarget } from './notifications';
+import { notificationMeta, notificationOrderLink } from './notifications';
+import { reminderFallbackPath } from '../components/reorder/reorder-reminder';
 
 /**
  * Nhãn nhóm thông báo theo templateCode. Trước đây mọi mã DEALER_* (thưởng doanh số quý, yêu cầu
@@ -45,18 +46,18 @@ describe('notificationMeta', () => {
   });
 });
 
-describe('reorderReminderTarget (CTA "Mua lại ngay" — A1-01=A2-06=A3-02)', () => {
+describe('đích dự phòng của CTA "Mua lại ngay" (reminderFallbackPath — A1-01=A2-06=A3-02)', () => {
   it('có product_slug trong payload → điều hướng thẳng tới trang sản phẩm', () => {
-    expect(reorderReminderTarget({ product_slug: 'dau-goi-visante-500ml' })).toBe('/product/dau-goi-visante-500ml');
+    expect(reminderFallbackPath({ product_slug: 'dau-goi-visante-500ml' })).toBe('/product/dau-goi-visante-500ml');
   });
 
   it('không có slug (đơn cũ trước khi OrderItem có cột productSlug) → /orders (spec 4a.4) thay vì link hỏng /product/', () => {
-    expect(reorderReminderTarget({ product: 'Dầu gội Visante 500ml' })).toBe('/orders');
-    expect(reorderReminderTarget(undefined)).toBe('/orders');
+    expect(reminderFallbackPath({ product: 'Dầu gội Visante 500ml' })).toBe('/orders');
+    expect(reminderFallbackPath(undefined)).toBe('/orders');
   });
 
   it('slug có ký tự cần encode → encodeURIComponent đúng (mirror flashSlug cùng file)', () => {
-    expect(reorderReminderTarget({ product_slug: 'sữa tắm/đặc biệt' })).toBe(
+    expect(reminderFallbackPath({ product_slug: 'sữa tắm/đặc biệt' })).toBe(
       `/product/${encodeURIComponent('sữa tắm/đặc biệt')}`,
     );
   });

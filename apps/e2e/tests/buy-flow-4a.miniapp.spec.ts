@@ -345,12 +345,44 @@ test.describe('Buy-flow 4a — nhắc mua lại, đặt hàng thành công, bố
     expect(eventsNamed(api, 'reorder_clicked')).toHaveLength(1);
   });
 
+  test('Rời màn chi tiết thông báo khi đang tra cứu: không mở sheet/không điều hướng muộn; CTA không bị kẹt', async ({ page, api }) => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let first = true;
+    mockReminder(api, async () => {
+      if (first) {
+        first = false;
+        await gate;
+      }
+      return PURCHASED_PAGE;
+    });
+    await page.goto('/notifications');
+    await openReminderDetail(page);
+
+    const lookup = api.waitForCall('GET', '/me/purchased-items');
+    await page.getByRole('button', { name: 'Mua lại ngay' }).click();
+    // Tra cứu đang treo → khách bấm Back (đóng chi tiết), rồi phản hồi mới về.
+    await page.goBack(); // cử chỉ/nút Back của Zalo → popstate đóng lớp chi tiết
+    await expect(page.getByRole('button', { name: 'Mua lại ngay' })).toHaveCount(0);
+    release();
+    await lookup;
+    await page.waitForTimeout(500);
+    await expect(page.getByRole('button', { name: 'Thêm vào giỏ (1)' })).toHaveCount(0);
+    await expect(page).toHaveURL(/\/notifications$/);
+
+    // Cờ bận đã được trả: mở lại thông báo → CTA hoạt động ngay (tra cứu lần 2 mở sheet).
+    await openReminderDetail(page);
+    await page.getByRole('button', { name: 'Mua lại ngay' }).click();
+    await expect(page.getByRole('button', { name: 'Thêm vào giỏ (1)' })).toBeVisible({ timeout: 10_000 });
+  });
+
   const EMPTY_PAGE = { items: [], nextCursor: null };
   const noSheetCases = [
     { name: 'tra cứu 404 (API cũ) + có slug → trang sản phẩm', purchased: NOT_FOUND, slug: true, to: PDP_SLUG_PATH },
     { name: 'SP không còn trong danh sách đã mua + có slug → trang sản phẩm', purchased: EMPTY_PAGE, slug: true, to: PDP_SLUG_PATH },
     { name: 'tra cứu 404 (API cũ) + thiếu slug → tab Đơn hàng', purchased: NOT_FOUND, slug: false, to: '/orders' },
     { name: 'SP không còn trong danh sách đã mua + thiếu slug → tab Đơn hàng', purchased: EMPTY_PAGE, slug: false, to: '/orders' },
+    { name: 'API bỏ qua bộ lọc variationId và trả SP KHÁC + có slug → trang sản phẩm (không mở sheet sai SP)', purchased: { items: [{ ...PURCHASED, variationId: 'var-other', productName: 'Sản phẩm khác hẳn' }], nextCursor: null }, slug: true, to: PDP_SLUG_PATH },
     { name: 'SP còn trong danh sách nhưng hết hàng + có slug → trang sản phẩm', purchased: { items: [{ ...PURCHASED, inStock: false, stock: 0 }], nextCursor: null }, slug: true, to: PDP_SLUG_PATH },
   ];
   for (const c of noSheetCases) {

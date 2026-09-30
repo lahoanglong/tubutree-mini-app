@@ -16,3 +16,10 @@ export function reorderReminderAction(data: Record<string, string> | undefined, 
   if (item && item.inStock) return { kind: 'sheet', item };
   return { kind: 'navigate', to: reminderFallbackPath(data) };
 }
+
+/** Chọn đúng dòng của variation trong payload từ kết quả purchased-items — KHÔNG lấy phần tử đầu:
+ * API cũ/lệch phiên có thể bỏ qua bộ lọc `variationId` và trả SP khác (sheet sẽ hiện nhầm SP). */
+export function pickReminderItem(items: PurchasedItem[], variationId: string | undefined): PurchasedItem | null {
+  if (!variationId) return null;
+  return items.find((i) => i.variationId === variationId) ?? null;
+}
