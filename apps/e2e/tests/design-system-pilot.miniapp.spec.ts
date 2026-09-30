@@ -63,12 +63,13 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
   });
 
   test('PDP: "Thêm vào giỏ" hiện spinner khi request đang chờ, rồi tắt khi xong', async ({ page, api }) => {
-    mockPilotProduct(api, { addToCartDelayMs: 1500 });
+    // 3s (trước 1,5s): khi máy tải nặng, request mock từng xong trước lúc đo boundingBox → flaky.
+    mockPilotProduct(api, { addToCartDelayMs: 3000 });
     await page.goto(`/product/${PILOT_SLUG}`);
 
-    // Locator theo text (không theo role+name): khi loading, ZaUI vẽ span role=img rỗng làm accessible
-    // name của nút thành rỗng nên getByRole(name) mất khớp đúng lúc cần xác nhận spinner.
-    const addBtn = page.locator('button', { hasText: 'Thêm vào giỏ' });
+    // getByRole(name) PHẢI khớp cả lúc loading: CSS ZaUI ẩn nhãn (visibility:hidden) nên trước fix I1
+    // accessible name thành rỗng; Button DS v2 giờ giữ aria-label = nhãn khi loading.
+    const addBtn = page.getByRole('button', { name: 'Thêm vào giỏ' });
     await expect(addBtn).toBeEnabled({ timeout: 15_000 });
     await expect(addBtn.locator('.zaui-btn-loading-icon')).toHaveCount(0);
 
@@ -83,8 +84,12 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     const box = await spinner.boundingBox();
     expect(box?.width ?? 0).toBeGreaterThan(4);
     expect(box?.height ?? 0).toBeGreaterThan(4);
-    // Không được tắt bằng thuộc tính disabled (nguyên nhân gốc của bug cũ).
-    await expect(addBtn).not.toBeDisabled();
+    // Không được tắt bằng THUỘC TÍNH DOM disabled (nguyên nhân gốc của bug cũ). Không dùng
+    // not.toBeDisabled(): Playwright tính cả aria-disabled="true" (cố ý bật khi loading — I1).
+    await expect(addBtn).not.toHaveAttribute('disabled');
+    // Báo bận cho trình đọc màn hình (nút không disabled thật nên phải có aria-*).
+    await expect(addBtn).toHaveAttribute('aria-busy', 'true');
+    await expect(addBtn).toHaveAttribute('aria-disabled', 'true');
 
     // Xong request → spinner biến mất.
     await posted;
@@ -206,7 +211,7 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     mockPilotDeliveredOrder(api, { repurchaseDelayMs: 1500 });
     await page.goto(`/order/${PILOT_ORDER_CODE}`);
 
-    const rebuy = page.locator('button', { hasText: 'Mua lại' }); // theo text — xem ghi chú ở test PDP
+    const rebuy = page.getByRole('button', { name: /^Mua lại/ }); // khớp cả lúc loading — xem test PDP
     await expect(rebuy).toBeVisible({ timeout: 15_000 });
     await expect(rebuy).toBeEnabled();
 
@@ -215,6 +220,7 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     await rebuy.click();
 
     await expect(rebuy.locator('.zaui-btn-loading-icon')).toBeVisible();
+    await expect(rebuy).toHaveAttribute('aria-busy', 'true');
     await posted;
     await expect(page).toHaveURL(/\/cart$/, { timeout: 10_000 });
     expect(api.callsTo('POST', '/orders/:code/repurchase')).toHaveLength(1);
