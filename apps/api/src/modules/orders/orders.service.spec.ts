@@ -536,3 +536,78 @@ describe('OrdersService.list / activeCount — nhóm trạng thái (tab Đơn h�
     });
   });
 });
+
+describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo variationId, không thêm cột)', () => {
+  const line = (id: string, variationId: string, quantity = 1) => ({
+    id, orderId: 'o1', variationId, productName: `SP ${id}`, productSlug: null, variationName: 'Mặc định',
+    unitPrice: 50000, quantity, total: 50000 * quantity, flashSaleItemId: null, backorderedQty: 0,
+  });
+  const v = (id: string, over: Record<string, unknown> = {}, product: Record<string, unknown> = {}) => ({
+    id, stock: 5, isActive: true, retailPrice: 60000, salePrice: null, ...over,
+    product: { thumbnail: `https://img.test/${id}.jpg`, images: [], isActive: true, approvalStatus: 'APPROVED', ...product },
+  });
+
+  function makeMediaService(orders: Record<string, unknown>[], variations: Record<string, unknown>[]) {
+    const variationFindMany = jest.fn().mockResolvedValue(variations);
+    const prisma = {
+      order: {
+        findMany: jest.fn().mockResolvedValue(orders),
+        count: jest.fn().mockResolvedValue(orders.length),
+        findUnique: jest.fn().mockResolvedValue(orders[0] ?? null),
+      },
+      variation: { findMany: variationFindMany },
+      $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), variationFindMany };
+  }
+
+  it('list: MỘT truy vấn variation cho cả trang; mỗi dòng có thumbnail/stock/available/currentPrice', async () => {
+    const orders = [
+      { ...baseOrder, id: 'o1', code: 'A', items: [line('i1', 'v1'), line('i2', 'v2')] },
+      { ...baseOrder, id: 'o2', code: 'B', items: [line('i3', 'v1')] },
+    ];
+    const { svc, variationFindMany } = makeMediaService(orders, [v('v1', { salePrice: 55000 }), v('v2', { stock: 0 })]);
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(variationFindMany).toHaveBeenCalledTimes(1);
+    expect(variationFindMany.mock.calls[0]![0].where).toEqual({ id: { in: ['v1', 'v2'] } });
+    expect(res.data[0]!.items[0]).toMatchObject({ id: 'i1', thumbnail: 'https://img.test/v1.jpg', stock: 5, available: true, currentPrice: 55000 });
+    expect(res.data[0]!.items[1]).toMatchObject({ id: 'i2', stock: 0, available: false, currentPrice: 60000 });
+    expect(res.data[1]!.items[0]).toMatchObject({ id: 'i3', available: true });
+  });
+
+  it.each([
+    ['variation tắt', { isActive: false }, {}],
+    ['sản phẩm tắt', {}, { isActive: false }],
+    ['sản phẩm chưa duyệt', {}, { approvalStatus: 'PENDING_REVIEW' }],
+    ['sản phẩm bị từ chối', {}, { approvalStatus: 'REJECTED' }],
+  ])('available=false khi %s', async (_label, vOver, pOver) => {
+    const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1', vOver, pOver)]);
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data[0]!.items[0]!.available).toBe(false);
+  });
+
+  it('variation đã bị xoá → thumbnail null, stock 0, available false, currentPrice null', async () => {
+    const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'gone')] }], []);
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data[0]!.items[0]).toMatchObject({ thumbnail: null, stock: 0, available: false, currentPrice: null });
+  });
+
+  it('thumbnail rơi về images[0] khi product.thumbnail null', async () => {
+    const { svc } = makeMediaService(
+      [{ ...baseOrder, items: [line('i1', 'v1')] }],
+      [v('v1', {}, { thumbnail: null, images: ['https://img.test/first.jpg'] })],
+    );
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data[0]!.items[0]!.thumbnail).toBe('https://img.test/first.jpg');
+  });
+
+  it('detailView: gắn media cho đơn của chính user; đơn không có dòng nào → không truy vấn variation', async () => {
+    const withItems = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1')]);
+    const view = await withItems.svc.detailView('u1', 'TUBU1');
+    expect(view.items[0]).toMatchObject({ id: 'i1', available: true, stock: 5 });
+
+    const empty = makeMediaService([{ ...baseOrder, items: [] }], []);
+    await empty.svc.detailView('u1', 'TUBU1');
+    expect(empty.variationFindMany).not.toHaveBeenCalled();
+  });
+});

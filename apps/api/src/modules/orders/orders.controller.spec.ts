@@ -22,4 +22,10 @@ describe('OrdersController', () => {
     await expect(ctrl.activeCount('u1')).resolves.toEqual({ count: 3 });
     expect(activeCount).toHaveBeenCalledWith('u1');
   });
+  it('GET :code dùng detailView (có ảnh/tồn kho), không phải detail thô', async () => {
+    const detailView = jest.fn().mockResolvedValue({ code: 'A', items: [] });
+    const ctrl = new OrdersController({ detailView } as unknown as OrdersService);
+    await ctrl.detail('u1', 'A');
+    expect(detailView).toHaveBeenCalledWith('u1', 'A');
+  });
 });

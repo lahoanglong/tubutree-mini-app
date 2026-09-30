@@ -21,6 +21,18 @@ export interface OrderListFilter {
   group?: OrderStatusGroup;
 }
 
+export interface OrderItemMedia {
+  thumbnail: string | null;
+  stock: number;
+  available: boolean;
+  currentPrice: number | null;
+}
+export type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
+export type OrderItemView = OrderWithItems['items'][number] & OrderItemMedia;
+export type OrderView = Omit<OrderWithItems, 'items'> & { items: OrderItemView[] };
+
+const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, currentPrice: null };
+
 function statusWhere(filter: OrderListFilter): Prisma.OrderWhereInput {
   if (filter.status) return { status: filter.status };
   if (filter.group) return { status: { in: [...ORDER_STATUS_GROUPS[filter.group]] } };
@@ -54,7 +66,7 @@ export class OrdersService {
       }),
       this.prisma.order.count({ where }),
     ]);
-    return paginated(items, page, limit, total);
+    return paginated(await this.attachItemMedia(items), page, limit, total);
   }
 
   /** Số đơn đang xử lý — endpoint nhẹ cho badge tab Đơn hàng. */
@@ -72,6 +84,45 @@ export class OrdersService {
     });
     if (!order || order.userId !== userId) throw new NotFoundException('Không tìm thấy đơn hàng.');
     return order;
+  }
+
+  /** Chi tiết đơn cho màn khách (GET /orders/:code) — kèm ảnh/tồn kho từng dòng. Các luồng nội bộ
+   * (cancel/repurchase/requestReturn/track) vẫn dùng detail() thô, không tốn thêm truy vấn. */
+  async detailView(userId: string, code: string): Promise<OrderView> {
+    const order = await this.detail(userId, code);
+    const [view] = await this.attachItemMedia([order]);
+    return view!;
+  }
+
+  /** Ảnh + tồn kho + còn bán được của từng dòng, join theo variationId (OrderItem không có FK/ảnh —
+   * spec §3.2 không thêm cột). Một truy vấn cho cả trang đơn. */
+  private async attachItemMedia(orders: OrderWithItems[]): Promise<OrderView[]> {
+    const ids = [...new Set(orders.flatMap((o) => o.items.map((it) => it.variationId)))];
+    const variations = ids.length
+      ? await this.prisma.variation.findMany({
+          where: { id: { in: ids } },
+          select: {
+            id: true,
+            stock: true,
+            isActive: true,
+            retailPrice: true,
+            salePrice: true,
+            product: { select: { thumbnail: true, images: true, isActive: true, approvalStatus: true } },
+          },
+        })
+      : [];
+    const byId = new Map(variations.map((v) => [v.id, v]));
+    const media = (variationId: string): OrderItemMedia => {
+      const v = byId.get(variationId);
+      if (!v) return MISSING_MEDIA;
+      return {
+        thumbnail: v.product.thumbnail ?? v.product.images[0] ?? null,
+        stock: v.stock,
+        available: v.isActive && v.product.isActive && v.product.approvalStatus === 'APPROVED' && v.stock > 0,
+        currentPrice: v.salePrice ?? v.retailPrice,
+      };
+    };
+    return orders.map((o) => ({ ...o, items: o.items.map((it) => ({ ...it, ...media(it.variationId) })) }));
   }
 
   async cancel(userId: string, code: string) {

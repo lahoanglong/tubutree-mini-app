@@ -27,7 +27,7 @@ export class OrdersController {
 
   @Get(':code')
   detail(@CurrentUser('sub') userId: string, @Param('code') code: string) {
-    return this.orders.detail(userId, code);
+    return this.orders.detailView(userId, code);
   }
 
   @Post(':code/cancel')
