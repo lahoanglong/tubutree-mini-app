@@ -34,7 +34,7 @@ function renderSuccess(props: Partial<Parameters<typeof OrderSuccess>[0]> = {}) 
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const utils = render(
     <QueryClientProvider client={qc}>
-      <OrderSuccess order={ORDER} onTrack={props.onTrack ?? vi.fn()} onContinue={props.onContinue ?? vi.fn()} />
+      <OrderSuccess order={props.order ?? ORDER} onTrack={props.onTrack ?? vi.fn()} onContinue={props.onContinue ?? vi.fn()} />
     </QueryClientProvider>,
   );
   return { ...utils, qc };
@@ -67,16 +67,36 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     expect(mocks.copyText).toHaveBeenCalledWith('TUBU-COD-12345');
   });
 
-  it('ngày giao dự kiến chỉ hiện khi đã cấu hình', async () => {
+  it('ngày giao dự kiến hiện đúng khoảng ngày khi đã cấu hình', async () => {
     renderSuccess();
     expect(await screen.findByText('Giao dự kiến')).toBeInTheDocument();
+    expect(screen.getByText(/^\d{2}\/\d{2} – \d{2}\/\d{2}$/)).toBeInTheDocument();
   });
 
-  it('chưa cấu hình ETA (null) → không có dòng giao dự kiến', async () => {
+  it('chưa cấu hình ETA (null) → không có dòng giao dự kiến (sau khi config đã tải xong)', async () => {
     mocks.getPublicConfig.mockResolvedValue({ ...CONFIG, shippingEta: null });
+    const { qc } = renderSuccess();
+    // Phải chờ config THẬT SỰ về: trước đó "Giao dự kiến" vốn đã vắng mặt nên assertion sẽ đúng dù
+    // guard `cfg.shippingEta` bị xoá. Sau khi settle, nếu guard sai thì ETA sẽ hiện (hoặc crash).
+    await waitFor(() => expect(qc.getQueryState(['public-config'])?.status).toBe('success'));
+    expect(screen.queryByText('Giao dự kiến')).toBeNull();
+  });
+
+  it('config tải xong mà máy chủ cũ không trả shippingEta (undefined) → cũng không có dòng giao dự kiến', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ ...CONFIG });
+    const { qc } = renderSuccess();
+    await waitFor(() => expect(qc.getQueryState(['public-config'])?.status).toBe('success'));
+    expect(screen.queryByText('Giao dự kiến')).toBeNull();
+  });
+
+  it('sao chép thất bại → snackbar báo kèm mã đơn để khách tự chép', async () => {
+    mocks.copyText.mockResolvedValue(false);
     renderSuccess();
-    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
-    await waitFor(() => expect(screen.queryByText('Giao dự kiến')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã đơn' }));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Không sao chép được — mã đơn: TUBU-COD-12345', type: 'info' })),
+    );
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã sao chép mã đơn' }));
   });
 
   it('gợi ý "Đặt định kỳ" khi variation còn hàng (cùng điều kiện PDP) → mở SubscribeSheet đúng variation', async () => {
@@ -93,6 +113,43 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     // sẽ xuất hiện ngay sau bước này và assertion bên dưới fail.
     await waitFor(() => expect(qc.getQueryState(['product', 'nrc'])?.status).toBe('success'));
     expect(screen.queryByRole('button', { name: 'Đặt định kỳ' })).toBeNull();
+  });
+
+  it('tải sản phẩm lỗi (404/mạng) → ẩn gợi ý định kỳ, màn vẫn dùng được', async () => {
+    mocks.fetchProduct.mockRejectedValue(new Error('404'));
+    const { qc } = renderSuccess();
+    await waitFor(() => expect(qc.getQueryState(['product', 'nrc'])?.status).toBe('error'));
+    expect(screen.queryByRole('button', { name: 'Đặt định kỳ' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Theo dõi đơn' })).toBeInTheDocument();
+  });
+
+  it('đơn không có productSlug → không gọi fetchProduct và không gợi ý', async () => {
+    const noSlug = { ...ORDER, items: [{ ...ORDER.items[0], productSlug: null }] } as unknown as OrderDTO;
+    const { qc } = renderSuccess({ order: noSlug });
+    await waitFor(() => expect(qc.getQueryState(['public-config'])?.status).toBe('success'));
+    expect(mocks.fetchProduct).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Đặt định kỳ' })).toBeNull();
+  });
+
+  it('chỉ kiểm tra tối đa 3 slug khác nhau đầu tiên của đơn', async () => {
+    const item = (slug: string, i: number) => ({ ...ORDER.items[0], id: `i${i}`, productSlug: slug, variationId: `v-${slug}` });
+    const many = { ...ORDER, items: ['a', 'a', 'b', 'c', 'd', 'e'].map(item) } as unknown as OrderDTO;
+    mocks.fetchProduct.mockImplementation(async (slug: string) => ({ slug, variations: [{ id: `v-${slug}`, stock: 0 }] }));
+    const { qc } = renderSuccess({ order: many });
+    await waitFor(() => {
+      for (const slug of ['a', 'b', 'c']) expect(qc.getQueryState(['product', slug])?.status).toBe('success');
+    });
+    expect(mocks.fetchProduct.mock.calls.map((c) => c[0])).toEqual(['a', 'b', 'c']);
+  });
+
+  it('gợi ý định kỳ nằm SAU hai CTA để không đẩy nút "Theo dõi đơn" khi sản phẩm tải xong', async () => {
+    renderSuccess();
+    const track = screen.getByRole('button', { name: 'Theo dõi đơn' });
+    const keep = screen.getByRole('button', { name: 'Tiếp tục mua sắm' });
+    const offer = await screen.findByRole('button', { name: 'Đặt định kỳ' });
+    for (const cta of [track, keep]) {
+      expect(cta.compareDocumentPosition(offer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
   });
 
   it('CTA chính "Theo dõi đơn", phụ "Tiếp tục mua sắm"', () => {

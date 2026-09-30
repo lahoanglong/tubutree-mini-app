@@ -88,6 +88,8 @@ export function OrderSuccess({
     );
   };
 
+  // Cấu hình công khai đã được trang checkout tải sẵn (cùng queryKey) nên dòng ETA có ngay ở lần vẽ
+  // đầu; gợi ý định kỳ nằm DƯỚI hai CTA để lúc sản phẩm tải xong không đẩy nút "Theo dõi đơn" đi chỗ khác.
   const eta = cfg.isLoaded && cfg.shippingEta ? shippingEtaLabel(cfg.shippingEta) : null;
 
   return (
@@ -173,6 +175,15 @@ export function OrderSuccess({
         </ol>
       </section>
 
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Button fullWidth size="lg" onPress={onTrack}>
+          {vi.success.trackOrder}
+        </Button>
+        <Button fullWidth variant="ghost" onPress={handleContinue}>
+          {vi.success.keepShopping}
+        </Button>
+      </div>
+
       {candidate && (
         <Card variant="flat" padding={12}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -191,15 +202,6 @@ export function OrderSuccess({
           </Button>
         </Card>
       )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Button fullWidth size="lg" onPress={onTrack}>
-          {vi.success.trackOrder}
-        </Button>
-        <Button fullWidth variant="ghost" onPress={handleContinue}>
-          {vi.success.keepShopping}
-        </Button>
-      </div>
 
       {candidate && (
         <SubscribeSheet

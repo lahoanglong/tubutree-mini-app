@@ -274,39 +274,6 @@ body.with-back-btn .page.page-bleed {
   animation: tubu-rise var(--dur-slow) var(--ease-out) both;
 }
 
-/* ── Checkmark draw (order success) ── */
-@keyframes tubu-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-.tubu-check-path {
-  stroke-dasharray: 60;
-  stroke-dashoffset: 60;
-  animation: tubu-draw 600ms var(--ease-out) 200ms forwards;
-}
-
-/* ── Lá rơi (success screen) ── */
-@keyframes tubu-leaf-fall {
-  0% {
-    transform: translateY(-20px) rotate(0deg);
-    opacity: 0;
-  }
-  15% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(220px) rotate(300deg);
-    opacity: 0;
-  }
-}
-.tubu-leaf {
-  position: absolute;
-  top: 0;
-  animation: tubu-leaf-fall 2.6s var(--ease-out) both;
-  pointer-events: none;
-}
-
 /* ── Pulse nhẹ cho bước timeline hiện tại ── */
 @keyframes tubu-pulse {
   0%,

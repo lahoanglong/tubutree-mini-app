@@ -9,4 +9,17 @@ describe('shippingEtaLabel', () => {
   it('min = max → một ngày', () => {
     expect(shippingEtaLabel({ minDays: 1, maxDays: 1 }, now)).toBe('01/10');
   });
+  it('cuối năm → sang tháng 1 (31/12 + 3 ngày = 03/01)', () => {
+    const dec = new Date(2026, 11, 30, 12, 0, 0);
+    expect(shippingEtaLabel({ minDays: 1, maxDays: 4 }, dec)).toBe('31/12 – 03/01');
+  });
+  it('minDays 0 → hôm nay', () => {
+    expect(shippingEtaLabel({ minDays: 0, maxDays: 2 }, now)).toBe('30/09 – 02/10');
+    expect(shippingEtaLabel({ minDays: 0, maxDays: 0 }, now)).toBe('30/09');
+  });
+  it('cuối tháng: 31/01 + 1 ngày = 01/02 (không tràn sang tháng sai)', () => {
+    const jan31 = new Date(2026, 0, 31, 12, 0, 0);
+    expect(shippingEtaLabel({ minDays: 1, maxDays: 1 }, jan31)).toBe('01/02');
+    expect(shippingEtaLabel({ minDays: 1, maxDays: 30 }, jan31)).toBe('01/02 – 02/03');
+  });
 });
