@@ -602,3 +602,76 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     await expect(svc.suggest('  ')).resolves.toEqual([]);
   });
 });
+
+describe('CatalogService.list — best_seller (dự án 4b)', () => {
+  const RANKED = [
+    { id: 'c', soldApp: 0, soldExternal: 15 },
+    { id: 'a', soldApp: 5, soldExternal: 10 },
+    { id: 'b', soldApp: 20, soldExternal: 0 },
+    { id: 'd', soldApp: 0, soldExternal: 0 },
+  ];
+  function setup(pageRows: ReturnType<typeof card>[]) {
+    const findMany = jest.fn().mockResolvedValueOnce(RANKED).mockResolvedValueOnce(pageRows);
+    const $transaction = jest.fn();
+    const prisma = { product: { findMany, count: jest.fn() }, $transaction } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), findMany, $transaction };
+  }
+
+  it('xếp theo soldApp + soldExternal giảm dần, hoà thì id tăng dần; giữ thứ tự dù DB trả lộn xộn', async () => {
+    const { svc, findMany } = setup([card('a'), card('b')]);
+    const r = await svc.list({ page: 1, limit: 2, sort: 'best_seller' });
+    expect(r.data.map((c) => c.id)).toEqual(['b', 'a']);
+    expect(r.meta).toEqual({ page: 1, limit: 2, total: 4 });
+    expect(findMany.mock.calls[0][0]).toEqual({
+      where: { isActive: true, approvalStatus: 'APPROVED' },
+      select: { id: true, soldApp: true, soldExternal: true },
+    });
+    expect(findMany.mock.calls[1][0]).toEqual({
+      where: { AND: [{ isActive: true, approvalStatus: 'APPROVED' }, { id: { in: ['b', 'a'] } }] },
+      include: { variations: { where: { isActive: true } } },
+    });
+  });
+
+  it('trang 2 nối tiếp đúng thứ tự, không trùng trang 1', async () => {
+    const { svc, findMany } = setup([card('d'), card('c')]);
+    const r = await svc.list({ page: 2, limit: 2, sort: 'best_seller' });
+    expect(r.data.map((c) => c.id)).toEqual(['c', 'd']);
+    expect(findMany.mock.calls[1][0].where.AND[1]).toEqual({ id: { in: ['c', 'd'] } });
+  });
+
+  it('trang vượt quá → data rỗng, total vẫn đúng, không gọi truy vấn thứ 2', async () => {
+    const { svc, findMany } = setup([]);
+    const r = await svc.list({ page: 9, limit: 2, sort: 'best_seller' });
+    expect(r).toEqual({ data: [], meta: { page: 9, limit: 2, total: 4 } });
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('giữ bộ lọc ở cả hai bước (vd brand + inStock); không dùng $transaction/count', async () => {
+    const { svc, findMany, $transaction } = setup([card('b')]);
+    await svc.list({ page: 1, limit: 1, sort: 'best_seller', brand: 'Tubu', inStock: true });
+    const where = { isActive: true, approvalStatus: 'APPROVED', brand: 'Tubu', variations: { some: { isActive: true, stock: { gt: 0 } } } };
+    expect(findMany.mock.calls[0][0].where).toEqual(where);
+    expect(findMany.mock.calls[1][0].where.AND[0]).toEqual(where);
+    expect($transaction).not.toHaveBeenCalled();
+  });
+
+  it('hoà điểm (kể cả khi tổng bằng nhau nhưng soldApp/soldExternal khác nhau) → id tăng dần, không phụ thuộc thứ tự DB trả', async () => {
+    const tied = [
+      { id: 'z', soldApp: 3, soldExternal: 7 },
+      { id: 'm', soldApp: 10, soldExternal: 0 },
+      { id: 'k', soldApp: 0, soldExternal: 10 },
+      { id: 'a', soldApp: 1, soldExternal: 0 },
+    ];
+    const findMany = jest.fn().mockResolvedValueOnce(tied).mockResolvedValueOnce([card('k'), card('m')]);
+    const prisma = { product: { findMany }, $transaction: jest.fn() } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).list({ page: 1, limit: 2, sort: 'best_seller' });
+    expect(findMany.mock.calls[1][0].where.AND[1]).toEqual({ id: { in: ['k', 'm'] } });
+    expect(r.data.map((c) => c.id)).toEqual(['k', 'm']);
+  });
+
+  it('SP bị ẩn giữa hai bước → bỏ khỏi trang, không lỗi', async () => {
+    const { svc } = setup([card('b')]); // 'a' vừa bị tắt
+    const r = await svc.list({ page: 1, limit: 2, sort: 'best_seller' });
+    expect(r.data.map((c) => c.id)).toEqual(['b']);
+  });
+});

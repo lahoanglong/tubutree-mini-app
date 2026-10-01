@@ -67,6 +67,7 @@ export class CatalogService {
   async list(query: ProductQuery) {
     const { page, limit, sort } = query;
     const where = await this.listWhere(query);
+    if (sort === 'best_seller') return this.listBestSellers(where, page, limit);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
         where,
@@ -79,6 +80,37 @@ export class CatalogService {
       this.prisma.product.count({ where }),
     ]);
     return paginated(items.map((p) => this.toCard(p)), page, limit, total);
+  }
+
+  /**
+   * "Bán chạy" = soldApp + soldExternal giảm dần, hoà thì id tăng dần (spec 5b.2, plan 4b Ruling 2).
+   * Prisma không orderBy được theo biểu thức → xếp hạng ở đây: lấy 3 cột nhỏ của MỌI SP khớp, sắp,
+   * cắt trang, rồi lấy thẻ đầy đủ đúng các id của trang (giữ thứ tự). total = số SP khớp.
+   * Đủ nhanh với catalog hiện tại (vài trăm SP). Vượt ~5k SP → chuyển sang cột soldTotal có index.
+   */
+  private async listBestSellers(where: Prisma.ProductWhereInput, page: number, limit: number) {
+    const ranked = await this.prisma.product.findMany({
+      where,
+      select: { id: true, soldApp: true, soldExternal: true },
+    });
+    ranked.sort((x, y) => {
+      const diff = y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal);
+      if (diff !== 0) return diff;
+      return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
+    });
+    const { skip, take } = skipTake(page, limit);
+    const pageIds = ranked.slice(skip, skip + take).map((r) => r.id);
+    if (pageIds.length === 0) return paginated([], page, limit, ranked.length);
+    const rows = await this.prisma.product.findMany({
+      where: { AND: [where, { id: { in: pageIds } }] },
+      include: { variations: { where: { isActive: true } } },
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const items = pageIds
+      .map((id) => byId.get(id))
+      .filter((p): p is NonNullable<typeof p> => Boolean(p))
+      .map((p) => this.toCard(p));
+    return paginated(items, page, limit, ranked.length);
   }
 
   /**
