@@ -106,3 +106,11 @@ describe('bộ lọc', () => {
     expect(activeFilterChips({ ...EMPTY_SEARCH_STATE, category: 'cat-a' }, {})).toEqual([]);
   });
 });
+
+describe('parseSearchState — giới hạn độ dài', () => {
+  it('q dài quá 100 ký tự bị cắt (và cắt khoảng trắng thừa ở đuôi)', () => {
+    expect(parse(`q=${'a'.repeat(150)}`).q).toBe('a'.repeat(100));
+    expect(parse(`q=${'a'.repeat(99)}+${'b'.repeat(50)}`).q).toBe('a'.repeat(99));
+    expect(parse(`q=${'a'.repeat(100)}`).q).toBe('a'.repeat(100));
+  });
+});

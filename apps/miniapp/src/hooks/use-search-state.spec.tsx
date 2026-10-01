@@ -1,12 +1,14 @@
 import { act, render, screen } from '@testing-library/react';
-import { MemoryRouter, useLocation, useNavigationType } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate, useNavigationType, type NavigateFunction } from 'react-router-dom';
 import { describe, it, expect } from 'vitest';
 import { EMPTY_SEARCH_STATE } from '../utils/search-state';
 import { useSearchState, type UseSearchState } from './use-search-state';
 
 let hook: UseSearchState;
+let navigate: NavigateFunction;
 function Probe() {
   hook = useSearchState();
+  navigate = useNavigate();
   const loc = useLocation();
   const nav = useNavigationType();
   return <div data-testid="loc" data-nav={nav}>{loc.pathname + loc.search}</div>;
@@ -71,5 +73,60 @@ describe('useSearchState', () => {
     expect(loc()).toHaveTextContent('/browse?q=nuoc&utm=zalo');
     expect(loc()).toHaveAttribute('data-nav', 'REPLACE');
     expect(hook.focusSearch).toBe(false);
+  });
+});
+
+describe('useSearchState — nhiều thao tác ghi trong cùng một nhịp (không mất cập nhật)', () => {
+  it('hai update liên tiếp trong một act: cả hai patch còn trong URL, vẫn REPLACE, giữ tham số lạ', () => {
+    renderAt('/browse?q=nuoc&utm=zalo&focus=search');
+    act(() => {
+      hook.update({ sort: 'best_seller' });
+      hook.update({ category: 'cat-a' });
+    });
+    expect(loc()).toHaveTextContent('/browse?q=nuoc&category=cat-a&sort=best_seller&utm=zalo');
+    expect(loc()).toHaveAttribute('data-nav', 'REPLACE');
+    expect(hook.state).toMatchObject({ q: 'nuoc', sort: 'best_seller', category: 'cat-a' });
+  });
+
+  it('consumeFocus rồi update trong một act: focus bị bỏ VÀ patch được giữ', () => {
+    renderAt('/browse?q=nuoc&focus=search&utm=zalo');
+    act(() => {
+      hook.consumeFocus();
+      hook.update({ sort: 'newest' });
+    });
+    expect(loc()).toHaveTextContent('/browse?q=nuoc&sort=newest&utm=zalo');
+    expect(loc()).toHaveAttribute('data-nav', 'REPLACE');
+    expect(hook.focusSearch).toBe(false);
+  });
+
+  it('update rồi consumeFocus trong một act: patch được giữ VÀ focus bị bỏ', () => {
+    renderAt('/browse?q=nuoc&focus=search&utm=zalo');
+    act(() => {
+      hook.update({ inStock: true });
+      hook.consumeFocus();
+    });
+    expect(loc()).toHaveTextContent('/browse?q=nuoc&inStock=1&utm=zalo');
+    expect(loc()).toHaveAttribute('data-nav', 'REPLACE');
+    expect(hook.focusSearch).toBe(false);
+  });
+
+  it('điều hướng ngoài (Back/link) đổi URL → lần ghi kế tiếp xuất phát từ URL mới, không phải URL cũ', () => {
+    renderAt('/browse?q=nuoc');
+    act(() => {
+      hook.update({ sort: 'newest' });
+    });
+    act(() => navigate('/browse?q=xa+phong&utm=zalo'));
+    act(() => hook.update({ inStock: true }));
+    expect(loc()).toHaveTextContent('/browse?q=xa+phong&inStock=1&utm=zalo');
+  });
+
+  it('sau một lô ghi, lô ghi kế tiếp (act khác) bắt đầu từ URL đã commit', () => {
+    renderAt('/browse?q=nuoc');
+    act(() => {
+      hook.update({ sort: 'newest' });
+      hook.update({ inStock: true });
+    });
+    act(() => hook.update({ sort: 'price_asc' }));
+    expect(loc()).toHaveTextContent('/browse?q=nuoc&inStock=1&sort=price_asc');
   });
 });

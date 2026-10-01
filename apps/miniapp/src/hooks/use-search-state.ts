@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { SEARCH_PARAM_KEYS, parseSearchState, serializeSearchState, type SearchState } from '../utils/search-state';
 
@@ -35,21 +35,35 @@ export function useSearchState(): UseSearchState {
   const urlKey = useMemo(() => serializeSearchState(state).toString(), [state]);
   const focusSearch = params.get('focus') === 'search';
 
-  const update = useCallback(
-    (patch: Partial<SearchState>) => setParams((prev) => withPatch(prev, patch), { replace: true }),
+  // `setSearchParams(fn)` của react-router gọi `fn` với searchParams của LẦN RENDER GẦN NHẤT (không xếp
+  // hàng như setState) → hai lần ghi trong cùng một nhịp cùng xuất phát từ nền cũ, lần sau đè lần trước.
+  // Nên mọi lần ghi tính từ `latestRef` (URL mới nhất đã ghi) rồi ghi lại vào ref TRƯỚC khi điều hướng.
+  // Ref chỉ được đồng bộ lại từ URL khi URL render thật sự đổi (điều hướng ngoài, hoặc lô ghi vừa
+  // commit): một lô ghi cùng nhịp commit đúng một lần với URL cuối nên ref không bao giờ lùi.
+  const latestRef = useRef(raw);
+  const renderedRef = useRef(raw);
+  if (renderedRef.current !== raw) {
+    renderedRef.current = raw;
+    latestRef.current = raw;
+  }
+
+  const write = useCallback(
+    (build: (prev: URLSearchParams) => URLSearchParams) => {
+      const next = build(new URLSearchParams(latestRef.current));
+      latestRef.current = next.toString();
+      setParams(next, { replace: true });
+    },
     [setParams],
   );
+  const update = useCallback((patch: Partial<SearchState>) => write((prev) => withPatch(prev, patch)), [write]);
   const consumeFocus = useCallback(
     () =>
-      setParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.delete('focus');
-          return next;
-        },
-        { replace: true },
-      ),
-    [setParams],
+      write((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('focus');
+        return next;
+      }),
+    [write],
   );
 
   return { state, urlKey, focusSearch, update, consumeFocus };

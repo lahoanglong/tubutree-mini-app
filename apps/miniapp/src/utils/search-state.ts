@@ -52,6 +52,9 @@ export const PRICE_RANGES: readonly PriceRange[] = [
 
 export const MIN_RATING_OPTION = 4;
 
+/** Độ dài tối đa của từ khoá tìm trong URL (API không giới hạn; chặn link dài bất thường). */
+export const MAX_QUERY_LENGTH = 100;
+
 /**
  * Các khoá URL mà `parseSearchState`/`serializeSearchState` sở hữu. Mọi khoá khác (utm, ref…) là
  * "tham số lạ": `useSearchState` giữ nguyên khi ghi lại URL (trừ `focus`, tham số dùng một lần).
@@ -68,7 +71,7 @@ export function parseSearchState(params: URLSearchParams): SearchState {
   const sort = params.get('sort');
   const rating = intParam(params.get('rating'));
   return {
-    q: (params.get('q') ?? '').trim(),
+    q: (params.get('q') ?? '').trim().slice(0, MAX_QUERY_LENGTH).trimEnd(),
     sort: sort && (CATALOG_SORTS as readonly string[]).includes(sort) ? (sort as CatalogSort) : undefined,
     category: params.get('category') || undefined,
     segment: params.get('segment') || undefined,
