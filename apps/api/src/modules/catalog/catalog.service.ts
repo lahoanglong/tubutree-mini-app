@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import type { Prisma } from '@prisma/client';
+import type { Category, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
@@ -18,6 +18,9 @@ function priceRange(min?: number, max?: number): { gte?: number; lte?: number } 
   return { ...(lo != null ? { gte: lo } : {}), ...(hi != null ? { lte: hi } : {}) };
 }
 
+/** Danh mục kèm số SP đang bán — miniapp chỉ hiện danh mục có hàng (plan 4b Ruling 4). */
+export type CategoryWithCount = Category & { productCount: number };
+
 @Injectable()
 export class CatalogService {
   private readonly logger = new Logger(CatalogService.name);
@@ -33,7 +36,7 @@ export class CatalogService {
   // Khi scale → chuyển sang Redis (đã có trong compose), hoặc emit event từ sync job
   // để gọi invalidate trên TẤT CẢ instance.
   private brandsCache: { value: unknown; expiresAt: number } | null = null;
-  private categoriesCache: { value: unknown; expiresAt: number } | null = null;
+  private categoriesCache: { value: CategoryWithCount[]; expiresAt: number } | null = null;
   private readonly TTL_MS = 60_000;
 
   // Mapper public-safe cho getBySlug() — endpoint /products/:slug là @Public() (không cần đăng
@@ -336,11 +339,27 @@ export class CatalogService {
     return value;
   }
 
-  async categories() {
+  /**
+   * Đồng bộ Pancake KHÔNG ghi `categoryIds` (chỉ SP seed/đối tác có) → danh mục seed có thể trống
+   * trên prod. Trả thêm `productCount` (field cộng thêm, client cũ bỏ qua) để miniapp ẩn danh mục
+   * trống và lùi về 4 phân khúc khi không còn danh mục nào có hàng.
+   */
+  async categories(): Promise<CategoryWithCount[]> {
     if (this.categoriesCache && this.categoriesCache.expiresAt > Date.now()) {
       return this.categoriesCache.value;
     }
-    const value = await this.prisma.category.findMany({ orderBy: { sortOrder: 'asc' } });
+    const [rows, products] = await Promise.all([
+      this.prisma.category.findMany({ orderBy: { sortOrder: 'asc' } }),
+      this.prisma.product.findMany({
+        where: { isActive: true, approvalStatus: 'APPROVED' },
+        select: { categoryIds: true },
+      }),
+    ]);
+    const counts = new Map<string, number>();
+    for (const p of products) {
+      for (const id of new Set(p.categoryIds)) counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    const value = rows.map((c) => ({ ...c, productCount: counts.get(c.id) ?? 0 }));
     this.categoriesCache = { value, expiresAt: Date.now() + this.TTL_MS };
     return value;
   }

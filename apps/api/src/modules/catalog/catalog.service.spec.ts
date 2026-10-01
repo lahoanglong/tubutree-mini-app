@@ -675,3 +675,38 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
     expect(r.data.map((c) => c.id)).toEqual(['b']);
   });
 });
+
+describe('CatalogService.categories — productCount (dự án 4b)', () => {
+  const CAT = (id: string, sortOrder: number) => ({ id, parentId: null, name: id, slug: id, image: null, sortOrder });
+
+  function setup() {
+    const categoryFindMany = jest.fn().mockResolvedValue([CAT('cat-a', 1), CAT('cat-b', 2)]);
+    const productFindMany = jest.fn().mockResolvedValue([
+      { categoryIds: ['cat-a'] },
+      { categoryIds: ['cat-a', 'cat-a'] }, // trùng id trong 1 SP → vẫn đếm 1
+      { categoryIds: [] },
+    ]);
+    const prisma = { category: { findMany: categoryFindMany }, product: { findMany: productFindMany } } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), categoryFindMany, productFindMany };
+  }
+
+  it('mỗi danh mục kèm số SP đang bán (active + APPROVED); danh mục trống → 0; giữ thứ tự sortOrder', async () => {
+    const { svc, productFindMany } = setup();
+    await expect(svc.categories()).resolves.toEqual([
+      { ...CAT('cat-a', 1), productCount: 2 },
+      { ...CAT('cat-b', 2), productCount: 0 },
+    ]);
+    expect(productFindMany).toHaveBeenCalledWith({
+      where: { isActive: true, approvalStatus: 'APPROVED' },
+      select: { categoryIds: true },
+    });
+  });
+
+  it('cache 60s vẫn áp dụng cho cả hai truy vấn', async () => {
+    const { svc, categoryFindMany, productFindMany } = setup();
+    await svc.categories();
+    await svc.categories();
+    expect(categoryFindMany).toHaveBeenCalledTimes(1);
+    expect(productFindMany).toHaveBeenCalledTimes(1);
+  });
+});
