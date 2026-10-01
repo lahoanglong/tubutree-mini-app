@@ -80,4 +80,20 @@ describe('ProductTile', () => {
     renderTile(<ProductTile product={{ ...PRODUCT, salePrice: 45000 }} priceOverride={{ price: 39000 }} variant="grid" onPress={() => {}} />);
     expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(/39.000/);
   });
+  it('Space bị chặn cuộn trang (preventDefault); phím giữ lặp (repeat) không bấm thẻ nhiều lần', () => {
+    const onPress = vi.fn();
+    renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={onPress} />);
+    const tile = screen.getByRole('button', { name: 'Serum Bã Trầu' });
+    expect(fireEvent.keyDown(tile, { key: ' ' })).toBe(false); // false = defaultPrevented
+    expect(fireEvent.keyDown(tile, { key: 'Enter' })).toBe(false);
+    expect(onPress).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(tile, { key: 'Enter', repeat: true });
+    expect(onPress).toHaveBeenCalledTimes(2);
+  });
+  it('bọc giá cho aria-describedby phải là display:flex: span thường tạo line box 24px làm thẻ cao hơn 4px so với skeleton 133px (pin chiều cao thật: e2e Task 26)', () => {
+    renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={() => {}} />);
+    const tile = screen.getByRole('button', { name: 'Serum Bã Trầu' });
+    const wrapper = document.getElementById(tile.getAttribute('aria-describedby')!)!;
+    expect(wrapper).toHaveStyle({ display: 'flex' });
+  });
 });

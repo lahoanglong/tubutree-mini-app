@@ -68,7 +68,7 @@ export function ProductTile({
   const priceId = useId();
   // Thẻ là div role=button → tự làm bàn phím: Enter/Space. Chỉ khi phím bấm TRÊN thẻ (không phải nút lồng bên trong như tim/Mua lại).
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.target !== e.currentTarget) return;
+    if (e.target !== e.currentTarget || e.repeat) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       onPress();
@@ -187,7 +187,8 @@ export function ProductTile({
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
-          <span id={priceId}>
+          {/* display:flex: span thường tạo line box (strut 24px) → cao hơn PriceTag 20px, thẻ phình 4px so với skeleton. */}
+          <span id={priceId} style={{ display: 'flex' }}>
             <PriceTag value={price} compareAt={hasSale ? p.basePrice : undefined} size="sm" />
           </span>
           {action === 'rebuy' && isLine && <RebuyButton onAction={onAction} />}
