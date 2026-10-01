@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, useLocation, useNavigationType } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate as useRouterNavigate, useNavigationType } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -29,6 +29,7 @@ import { SUGGEST_DEBOUNCE_MS } from '../hooks/use-suggest';
 import { SCROLL_KEY_PREFIX } from '../hooks/use-scroll-restoration';
 import { CATEGORY_COUNT_KEY } from '../hooks/use-categories';
 import { recordRecentlyViewed } from '../utils/recently-viewed';
+import { forgetTrackedSearch } from '../utils/search-tracking';
 import BrowsePage from './browse';
 
 const FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
@@ -56,6 +57,31 @@ function renderAt(url: string) {
     </QueryClientProvider>,
   );
 }
+/** Browse + một trang "sản phẩm" giả lập; nút điều khiển lịch sử như người dùng (đi PDP, Back, mở lại bằng PUSH). */
+function NavControls() {
+  const go = useRouterNavigate();
+  return (
+    <>
+      <button type="button" onClick={() => go('/product/x')}>to-pdp</button>
+      <button type="button" onClick={() => go(-1)}>history-back</button>
+      <button type="button" onClick={() => go('/browse?q=nuoc')}>push-search</button>
+    </>
+  );
+}
+function renderWithPdp(url: string) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={[url]} future={FUTURE}>
+        <Routes>
+          <Route path="/browse" element={<BrowsePage />} />
+          <Route path="/product/:slug" element={<div data-testid="pdp" />} />
+        </Routes>
+        <NavControls />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
 const loc = () => screen.getByTestId('loc').textContent;
 const navType = () => screen.getByTestId('nav-type').textContent;
 const catalogCalls = () => mocks.fetchCatalog.mock.calls.map(([q]) => q as Record<string, unknown>);
@@ -69,6 +95,7 @@ const wait = (ms: number) => act(() => new Promise<void>((r) => setTimeout(r, ms
 describe('BrowsePage (DS v2, spec 5b.2)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    forgetTrackedSearch();
     localStorage.clear();
     sessionStorage.clear();
     mocks.fetchCatalog.mockResolvedValue(pageOf([card('p1', 'Nước rửa chén'), card('p2', 'Xà phòng')]));
@@ -279,6 +306,109 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       expect(catalogCalls().map((q) => q.page)).toEqual([1, 2]);
       expect(screen.queryByRole('button', { name: 'Xem thêm' })).toBeNull(); // 3/31 đã tải hết trang cuối
       await waitFor(() => expect(mocks.trackSearchPerformed).toHaveBeenCalledTimes(1));
+    });
+  });
+
+  describe('search_performed — một quy tắc: mỗi khoá tìm (q + sắp xếp + lọc) ghi một lần', () => {
+    it('Back từ trang sản phẩm (Browse unmount rồi mount lại với cache cũ, cùng URL) KHÔNG ghi thêm; mở lại cùng từ khoá bằng PUSH thì ghi', async () => {
+      renderWithPdp('/browse?q=nuoc');
+      await listPainted();
+      await waitFor(() => expect(mocks.trackSearchPerformed).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole('button', { name: 'to-pdp' }));
+      await screen.findByTestId('pdp');
+      fireEvent.click(screen.getByRole('button', { name: 'history-back' }));
+      await listPainted(); // Browse đã mount lại và vẽ xong danh sách từ cache
+      expect(mocks.trackSearchPerformed).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByRole('button', { name: 'to-pdp' }));
+      await screen.findByTestId('pdp');
+      fireEvent.click(screen.getByRole('button', { name: 'push-search' }));
+      await listPainted();
+      await waitFor(() => expect(mocks.trackSearchPerformed).toHaveBeenCalledTimes(2));
+    });
+
+    it('cùng từ khoá, đổi sắp xếp → khoá mới → ghi lại (quy tắc nhất quán)', async () => {
+      renderAt('/browse?q=nuoc');
+      await listPainted();
+      await waitFor(() => expect(mocks.trackSearchPerformed).toHaveBeenCalledTimes(1));
+      fireEvent.click(screen.getByRole('button', { name: 'Mới nhất' }));
+      await waitFor(() => expect(loc()).toBe('/browse?q=nuoc&sort=newest'));
+      await waitFor(() => expect(mocks.trackSearchPerformed).toHaveBeenCalledTimes(2));
+      expect(mocks.trackSearchPerformed).toHaveBeenLastCalledWith({ q: 'nuoc', resultsCount: 2 });
+    });
+
+    it('xoá từ khoá rồi gõ lại đúng từ khoá cũ vẫn là một lượt tìm mới', async () => {
+      renderAt('/browse?q=nuoc');
+      await listPainted();
+      await waitFor(() => expect(mocks.trackSearchPerformed).toHaveBeenCalledTimes(1));
+      fireEvent.click(screen.getByRole('button', { name: 'Xoá từ khoá' }));
+      await waitFor(() => expect(loc()).toBe('/browse'));
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'nuoc' } });
+      fireEvent.submit(screen.getByRole('search'));
+      await waitFor(() => expect(loc()).toBe('/browse?q=nuoc'));
+      await waitFor(() => expect(mocks.trackSearchPerformed).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('chế độ gõ khi chưa có lịch sử tìm (khách mới) — nội dung duyệt KHÔNG biến mất', () => {
+    const contentVisible = async () => {
+      expect(await screen.findByRole('button', { name: 'Cho mẹ & bé' })).toBeInTheDocument();
+      expect(screen.getByRole('group', { name: 'Sắp xếp' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Nước rửa chén' })).toBeInTheDocument();
+    };
+
+    it('?focus=search (không có lịch sử): ô tìm được focus, có "Hủy", vẫn thấy lưới Danh mục, sắp xếp và sản phẩm', async () => {
+      renderAt('/browse?focus=search');
+      const input = screen.getByRole('searchbox', { name: 'Tìm sản phẩm' });
+      await waitFor(() => expect(document.activeElement).toBe(input));
+      await waitFor(() => expect(loc()).toBe('/browse'));
+      expect(screen.getByRole('button', { name: 'Hủy' })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Gợi ý tìm kiếm' })).toBeNull();
+      await contentVisible();
+    });
+
+    it('chạm vào ô tìm ở trang gốc (không có lịch sử) → nội dung vẫn hiện; gõ chữ đầu tiên mới chuyển sang gợi ý', async () => {
+      renderAt('/browse');
+      await listPainted();
+      fireEvent.focus(screen.getByRole('searchbox'));
+      expect(screen.getByRole('button', { name: 'Hủy' })).toBeInTheDocument();
+      await contentVisible();
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'nu' } });
+      expect(await screen.findByRole('region', { name: 'Gợi ý tìm kiếm' })).toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Sắp xếp' })).toBeNull();
+    });
+
+    it('có lịch sử + ô trống → vẫn hiện lịch sử (thay nội dung)', async () => {
+      localStorage.setItem('tubu_recent_searches', JSON.stringify(['nước rửa']));
+      renderAt('/browse');
+      await listPainted();
+      fireEvent.focus(screen.getByRole('searchbox'));
+      expect(await screen.findByRole('region', { name: 'Gợi ý tìm kiếm' })).toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Sắp xếp' })).toBeNull();
+    });
+  });
+
+  describe('lỗi khi đã có dữ liệu — giữ danh sách, thử lại ngay tại chỗ', () => {
+    it('"Xem thêm" lỗi: lưới giữ nguyên (không ErrorState toàn trang), có thông báo + "Thử lại" gọi lại đúng trang 2', async () => {
+      let failPage2 = true;
+      mocks.fetchCatalog.mockImplementation(async (q: { page: number }) => {
+        if (q.page === 1) return { data: [card('p1', 'Nước rửa chén'), card('p2', 'Xà phòng')], meta: { page: 1, limit: 30, total: 31 } };
+        if (failPage2) throw new Error('network');
+        return { data: [card('p3', 'Bột giặt')], meta: { page: 2, limit: 30, total: 31 } };
+      });
+      renderAt('/browse');
+      fireEvent.click(await screen.findByRole('button', { name: 'Xem thêm' }));
+      expect(await screen.findByText('Không tải thêm được sản phẩm')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Nước rửa chén' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Xà phòng' })).toBeInTheDocument();
+      expect(screen.getByRole('group', { name: 'Sắp xếp' })).toBeInTheDocument();
+
+      failPage2 = false;
+      fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+      expect(await screen.findByRole('button', { name: 'Bột giặt' })).toBeInTheDocument();
+      expect(catalogCalls().map((q) => q.page)).toEqual([1, 2, 2]);
+      expect(screen.queryByText('Không tải thêm được sản phẩm')).toBeNull();
     });
   });
 

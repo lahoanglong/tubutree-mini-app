@@ -290,6 +290,7 @@ export const vi = {
     noResultBody: 'Thử từ khóa khác hoặc bỏ bớt bộ lọc',
     noResultFiltered: 'Chưa có sản phẩm khớp bộ lọc',
     clearAll: 'Xoá tìm kiếm & bộ lọc',
+    loadMoreFailed: 'Không tải thêm được sản phẩm',
     emptyHeading: 'Chưa có sản phẩm',
     emptyBody: 'Tubu đang chuẩn bị thêm sản phẩm mới',
     loadMore: 'Xem thêm',

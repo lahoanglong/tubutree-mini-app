@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
+import { useNavigationType } from 'react-router-dom';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { fetchBrands, fetchCatalog, type ProductCard, type ProductSuggestion } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
@@ -14,6 +15,7 @@ import { ResultHeader } from '../components/catalog/result-header';
 import { SortChips } from '../components/catalog/sort-chips';
 import { SuggestList } from '../components/catalog/suggest-list';
 import { Button } from '../components/ui/button';
+import { Text } from '../components/ui/text';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { SearchField } from '../components/ui/search-field';
 import { segmentLabel, useCategories, type CategoryEntry } from '../hooks/use-categories';
@@ -22,6 +24,7 @@ import { useSearchState } from '../hooks/use-search-state';
 import { useSuggest } from '../hooks/use-suggest';
 import { vi } from '../i18n/vi';
 import { clearRecentSearches, pushRecentSearch, readRecentSearches } from '../utils/recent-searches';
+import { forgetTrackedSearch, shouldTrackSearch } from '../utils/search-tracking';
 import {
   CLEAR_SEARCH_PATCH, activeFilterChips, activeFilterCount, changedFilterTypes, isBrowseRoot, toCatalogQuery, type FilterDraft,
 } from '../utils/search-state';
@@ -80,14 +83,29 @@ export default function BrowsePage() {
   const firstPage = products.data?.pages[0];
   const list = products.data?.pages.flatMap((pg) => pg.data) ?? [];
 
-  // Phụ thuộc PHẦN TỬ trang 1, không phải cả mảng `pages` — "Xem thêm" tạo mảng mới mà trang 1 giữ
-  // nguyên tham chiếu, nên không bắn lại cho cùng một lượt tìm (review 2026-09-28).
+  // `search_performed` (quy tắc ở utils/search-tracking): mỗi khoá tìm ghi một lần. Trang Browse bị gỡ khi mở
+  // PDP và mount lại khi Back với trang 1 còn trong cache — đó KHÔNG phải lượt tìm mới. Mở mới bằng PUSH
+  // (khách chủ động mở lại, kể cả cùng từ khoá) thì quên khoá cũ; effect này khai báo TRƯỚC effect ghi nên chạy trước.
+  const mountedByPop = useRef(useNavigationType() === 'POP');
   useEffect(() => {
-    if (!state.q || !firstPage) return;
-    trackSearchPerformed({ q: state.q, resultsCount: firstPage.meta.total });
-  }, [state.q, firstPage]);
+    if (!mountedByPop.current) forgetTrackedSearch();
+  }, []);
+  // Phụ thuộc PHẦN TỬ trang 1, không phải cả mảng `pages` — "Xem thêm" tạo mảng mới mà trang 1 giữ
+  // nguyên tham chiếu (review 2026-09-28); khoá ghi nhớ còn chặn cả làm mới nền đổi tham chiếu trang 1.
+  useEffect(() => {
+    if (!state.q) {
+      forgetTrackedSearch(); // xoá từ khoá rồi gõ lại đúng từ khoá cũ vẫn là lượt tìm mới
+      return;
+    }
+    if (!firstPage) return;
+    if (shouldTrackSearch(urlKey)) trackSearchPerformed({ q: state.q, resultsCount: firstPage.meta.total });
+  }, [state.q, urlKey, firstPage]);
 
-  const { anchorRef } = useScrollRestoration(urlKey, !editing && list.length > 0);
+  // Chế độ gõ chỉ thay nội dung bằng gợi ý khi có gì để gợi ý (đang gõ chữ, hoặc ô trống nhưng có lịch sử tìm);
+  // khách mới bấm vào ô trống vẫn thấy nguyên Danh mục/danh sách thay vì một trang trắng.
+  const showSuggest = editing && (draft.trim() !== '' || recent.length > 0);
+
+  const { anchorRef } = useScrollRestoration(urlKey, !showSuggest && list.length > 0);
 
   const stopEditing = () => {
     setEditing(false);
@@ -158,7 +176,7 @@ export default function BrowsePage() {
         )}
       </div>
 
-      {editing ? (
+      {showSuggest ? (
         <SuggestList
           draft={draft}
           recent={recent}
@@ -197,7 +215,7 @@ export default function BrowsePage() {
           <div style={{ padding: '0 16px 24px' }}>
             {products.isLoading ? (
               <CatalogGridSkeleton count={6} />
-            ) : products.isError ? (
+            ) : products.isError && list.length === 0 ? (
               <ErrorState message={getErrorMessage(products.error)} onRetry={() => void products.refetch()} />
             ) : list.length === 0 ? (
               <EmptyState
@@ -210,7 +228,25 @@ export default function BrowsePage() {
             ) : (
               <>
                 <CatalogGrid products={list} listSource={state.q ? 'search' : 'browse'} onOpen={openResult} />
-                {products.hasNextPage && (
+                {/* Lỗi khi ĐÃ có dữ liệu ("Xem thêm" hoặc làm mới nền thất bại): giữ nguyên danh sách, báo và thử lại tại chỗ. */}
+                {products.isError && (
+                  <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', paddingTop: 16 }}>
+                    <Text variant="body-sm" tone="danger">
+                      {vi.browse.loadMoreFailed}
+                    </Text>
+                    <Button
+                      variant="secondary"
+                      loading={products.isFetching}
+                      onPress={() => {
+                        (products.isFetchNextPageError ? products.fetchNextPage() : products.refetch()).catch(() => undefined);
+                      }}
+                      style={{ minWidth: 0 }}
+                    >
+                      {vi.common.retry}
+                    </Button>
+                  </div>
+                )}
+                {products.hasNextPage && !products.isFetchNextPageError && (
                   <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 16 }}>
                     <Button
                       variant="secondary"
