@@ -54,6 +54,8 @@ export const vi = {
     groupBuyCard: 'Mua chung giá tốt',
     brandStoryTitle: 'Hành trình nguyên liệu',
     brandStoryBody: 'Khám phá 6 vùng đất làm nên sản phẩm Tubu',
+    seeAll: 'Xem tất cả',
+    seeAllLabel: (title: string) => `Xem tất cả ${title}`,
     strip: {
       title: 'Đơn của bạn',
       shipping: (code: string) => `Đơn ${code} đang giao`,
