@@ -67,12 +67,12 @@ describe('từng chữ cái tiếng Việt gấp về đúng chữ gốc (kỳ v
       if (ch === 'Đ' || ch === 'đ') { out.push({ ch, base: 'd' }); continue; }
       const nfd = ch.normalize('NFD');
       const marks = [...nfd.slice(1)].map((m) => m.codePointAt(0)!);
-      const base = nfd[0].toLowerCase();
+      const base = nfd.charAt(0).toLowerCase();
       if (nfd.length < 2 || !/^[aeiouy]$/.test(base)) continue;
       const tones = marks.filter((m) => TONES.has(m));
       const shapes = marks.filter((m) => SHAPES.has(m));
       if (tones.length + shapes.length !== marks.length || tones.length > 1 || shapes.length > 1) continue;
-      if (shapes.length === 1 && !(SHAPE_OF_BASE[base] ?? []).includes(shapes[0])) continue;
+      if (shapes.length === 1 && !(SHAPE_OF_BASE[base] ?? []).includes(shapes[0]!)) continue;
       out.push({ ch, base });
     }
     return out;
