@@ -44,6 +44,14 @@ export const VN_FOLD_FROM = FOLD.from;
 /** Tham số `to` của translate(): ngắn hơn `from` đúng 8 ký tự → Postgres xoá các dấu kết hợp. */
 export const VN_FOLD_TO = FOLD.to;
 
+/**
+ * Mẫu regex Postgres gom khoảng trắng của tên SP thành MỘT dấu cách, đối ứng với `/\s+/g` của
+ * `foldVietnamese`. `[[:space:]]` chỉ phủ khoảng trắng ASCII tuỳ collation (collation C không
+ * nhận NBSP) trong khi `\s` của JS luôn coi NBSP (U+00A0, tên Pancake hay dính) là khoảng trắng →
+ * liệt kê NBSP tường minh để hai phía luôn khớp. Truyền như tham số ràng buộc, không nối vào SQL.
+ */
+export const SQL_WHITESPACE_RE = '[[:space:] ]+';
+
 /** "  NƯỚC  Rửa " → "nuoc rua". Cùng bảng với SQL (xem đầu file). */
 export function foldVietnamese(input: string): string {
   let out = '';

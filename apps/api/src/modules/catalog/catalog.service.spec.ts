@@ -1,6 +1,7 @@
-import { NotFoundException } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { LIKE_ESCAPE, SQL_WHITESPACE_RE, VN_FOLD_FROM, VN_FOLD_TO } from './search-text';
 
 const card = (id: string) => ({
   id,
@@ -141,7 +142,7 @@ describe('CatalogService.related/boughtTogether/getForYou/suggest — luôn lọ
 
   it('suggest(): where lọc approvalStatus APPROVED', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    const prisma = { product: { findMany } } as unknown as PrismaService;
+    const prisma = { product: { findMany }, $queryRaw: jest.fn().mockResolvedValue([]) } as unknown as PrismaService;
     await new CatalogService(prisma).suggest('tinh dau');
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ isActive: true, approvalStatus: 'APPROVED' }) }),
@@ -483,5 +484,121 @@ describe('CatalogService.list — bộ lọc dự án 4b', () => {
     const { svc, findMany, count } = setup();
     await svc.list({ page: 1, limit: 20, minRating: 4, inStock: true });
     expect(count).toHaveBeenCalledWith({ where: argsOf(findMany).where });
+  });
+});
+
+describe('CatalogService — tìm không dấu (dự án 4b)', () => {
+  function setup(queryRaw: jest.Mock) {
+    const findMany = jest.fn().mockResolvedValue([card('p1')]);
+    const prisma = {
+      product: { findMany, count: jest.fn().mockResolvedValue(1) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+      $queryRaw: queryRaw,
+    } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), findMany };
+  }
+  const sqlOf = (queryRaw: jest.Mock) => {
+    const [strings, ...values] = queryRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+    return { sql: strings.join('?'), values };
+  };
+
+  it('q → SQL gấp dấu bằng translate(); where lọc theo id tìm được (AND, không đè OR khác)', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
+    const { svc, findMany } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: ' Nước rửa ' });
+    expect(findMany.mock.calls[0][0].where.AND).toEqual([{ id: { in: ['p1', 'p2'] } }]);
+    expect(findMany.mock.calls[0][0].where.OR).toBeUndefined();
+    const { sql, values } = sqlOf(queryRaw);
+    expect(sql).toContain('translate(p.name');
+    expect(LIKE_ESCAPE).toBe('!');
+    expect(sql).toContain("ESCAPE '!'");
+    expect(values).toEqual(expect.arrayContaining([VN_FOLD_FROM, VN_FOLD_TO, '%nuoc rua%', 'nước rửa']));
+  });
+
+  it('từ khoá chỉ đi vào SQL qua tham số ràng buộc, không nối chuỗi vào câu lệnh', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const { svc } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: "x'; DROP TABLE products;--" });
+    const { sql, values } = sqlOf(queryRaw);
+    expect(sql).not.toContain('DROP');
+    expect(values).toContain('%x\'; drop table products;--%');
+  });
+
+  it('% và _ trong từ khoá được escape (không thành ký tự đại diện)', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const { svc } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: '50%' });
+    expect(queryRaw.mock.calls[0]).toContain('%50!%%');
+  });
+
+  it('SQL cắt ứng viên có thứ tự xác định (ORDER BY) + trần TEXT_MATCH_LIMIT, và chỉ xét SP đang bán đã duyệt', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const { svc } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: 'nuoc' });
+    const { sql, values } = sqlOf(queryRaw);
+    expect(sql).toMatch(/ORDER BY[^]*p\.id[^]*LIMIT/);
+    expect(sql).toContain('"isActive" = true');
+    expect(sql).toContain("\"approvalStatus\" = 'APPROVED'");
+    expect(values[values.length - 1]).toBe(2000);
+  });
+
+  it('khoảng trắng không ngắt (NBSP) được gấp thành khoảng trắng thường ở phía SQL, giống foldVietnamese', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const { svc } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: 'nước rửa' });
+    const { values } = sqlOf(queryRaw);
+    expect(SQL_WHITESPACE_RE).toContain(' ');
+    expect(values).toContain(SQL_WHITESPACE_RE);
+    expect(values).toContain('%nuoc rua%');
+  });
+
+  it('SQL gấp dấu lỗi → lùi về contains như trước (mất tìm không dấu nhưng không sập trang)', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const queryRaw = jest.fn().mockRejectedValue(new Error('function translate does not exist'));
+    const { svc, findMany } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: 'Nước rửa' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+    expect(findMany.mock.calls[0][0].where.AND).toEqual([
+      { OR: [{ name: { contains: 'Nước rửa', mode: 'insensitive' } }, { tags: { has: 'nước rửa' } }] },
+    ]);
+  });
+
+  it('q chỉ có khoảng trắng → coi như không tìm (không gọi SQL)', async () => {
+    const queryRaw = jest.fn();
+    const { svc, findMany } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: '   ' });
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(findMany.mock.calls[0][0].where.AND).toBeUndefined();
+  });
+
+  it('không có q → không gọi SQL, where như trước', async () => {
+    const queryRaw = jest.fn();
+    const { svc, findMany } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20 });
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(findMany.mock.calls[0][0].where).toEqual({ isActive: true, approvalStatus: 'APPROVED' });
+  });
+
+  it('q kết hợp khoảng giá → cả hai nằm trong AND', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }]);
+    const { svc, findMany } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: 'nuoc', maxPrice: 100000 });
+    expect(findMany.mock.calls[0][0].where.AND).toEqual([
+      { id: { in: ['p1'] } },
+      { OR: [{ salePrice: { lte: 100000 } }, { salePrice: null, basePrice: { lte: 100000 } }] },
+    ]);
+  });
+
+  it('suggest dùng cùng cách khớp; giữ shape {slug,name,thumbnail,basePrice}, tối đa 8; q rỗng → []', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }]);
+    const { svc, findMany } = setup(queryRaw);
+    await svc.suggest('nuoc rua');
+    expect(findMany).toHaveBeenCalledWith({
+      where: { isActive: true, approvalStatus: 'APPROVED', AND: [{ id: { in: ['p1'] } }] },
+      take: 8,
+      select: { slug: true, name: true, thumbnail: true, basePrice: true },
+    });
+    await expect(svc.suggest('  ')).resolves.toEqual([]);
   });
 });
