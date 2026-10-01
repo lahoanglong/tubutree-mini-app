@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type KeyboardEvent, type ReactNode } from 'react';
 import { brandAccent } from '../../utils/brands';
 import { vi } from '../../i18n/vi';
 import { formatSold } from '../../utils/format';
@@ -20,6 +20,9 @@ export interface ProductTileProduct {
   ratingAvg?: number;
   sold?: number;
 }
+
+/** Chiều cao tối thiểu ô tên (2 dòng) — skeleton của CatalogGrid dựng từ cùng hằng số này. */
+export const TILE_NAME_MIN_HEIGHT = 44;
 
 export interface ProductTileProps {
   product: ProductTileProduct;
@@ -61,13 +64,26 @@ export function ProductTile({
   const price = priceOverride ? priceOverride.price : standing;
   const hasSale = price < p.basePrice;
   const isLine = variant === 'line' || variant === 'list';
+  // Tên truy cập = tên sản phẩm; giá (và giá gốc gạch) là mô tả truy cập của thẻ.
+  const priceId = useId();
+  // Thẻ là div role=button → tự làm bàn phím: Enter/Space. Chỉ khi phím bấm TRÊN thẻ (không phải nút lồng bên trong như tim/Mua lại).
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onPress();
+    }
+  };
 
   return (
     <div
       role="button"
       aria-label={p.name}
+      aria-describedby={priceId}
+      tabIndex={0}
       className="tubu-press"
       onClick={onPress}
+      onKeyDown={onKeyDown}
       style={{
         display: isLine ? 'flex' : 'block',
         gap: isLine ? 12 : 0,
@@ -142,7 +158,7 @@ export function ProductTile({
             WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
-            minHeight: 44,
+            minHeight: TILE_NAME_MIN_HEIGHT,
             marginTop: 2,
           }}
         >
@@ -171,7 +187,9 @@ export function ProductTile({
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
-          <PriceTag value={price} compareAt={hasSale ? p.basePrice : undefined} size="sm" />
+          <span id={priceId}>
+            <PriceTag value={price} compareAt={hasSale ? p.basePrice : undefined} size="sm" />
+          </span>
           {action === 'rebuy' && isLine && <RebuyButton onAction={onAction} />}
         </div>
         {/* Thẻ dạng khối (kệ Mua lại 148px): nút xuống hàng riêng dưới giá, full width. */}

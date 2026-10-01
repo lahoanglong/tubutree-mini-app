@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi } from 'vitest';
 import type { ReactElement } from 'react';
@@ -62,5 +62,22 @@ describe('ProductTile', () => {
     const btn = screen.getByRole('button', { name: 'Mua lại' });
     expect(btn.className).toContain('zaui-btn-full-width');
     expect(btn).toHaveStyle({ minWidth: '0px' });
+  });
+  it('bàn phím: thẻ nằm trong thứ tự Tab, Enter / Space gọi onPress; phím trên nút lồng bên trong KHÔNG kích hoạt thẻ', () => {
+    const onPress = vi.fn();
+    renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={onPress} />);
+    const tile = screen.getByRole('button', { name: 'Serum Bã Trầu' });
+    expect(tile.tabIndex).toBe(0);
+    fireEvent.keyDown(tile, { key: 'Enter' });
+    fireEvent.keyDown(tile, { key: ' ' });
+    expect(onPress).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(tile, { key: 'a' });
+    expect(onPress).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(screen.getByRole('button', { name: /yêu thích/i }), { key: 'Enter' });
+    expect(onPress).toHaveBeenCalledTimes(2);
+  });
+  it('tên truy cập = tên sản phẩm; giá đang hiển thị nằm trong mô tả truy cập', () => {
+    renderTile(<ProductTile product={{ ...PRODUCT, salePrice: 45000 }} priceOverride={{ price: 39000 }} variant="grid" onPress={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(/39.000/);
   });
 });
