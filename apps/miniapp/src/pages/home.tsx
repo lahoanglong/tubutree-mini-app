@@ -1,457 +1,156 @@
-import { Box, Page, Text, useNavigate } from 'zmp-ui';
-import { useQuery } from '@tanstack/react-query';
-import { Bell, Search, ChevronRight, Baby, SprayCan, Droplets, Recycle, Map, Sparkles, Users, MessagesSquare, type LucideIcon } from 'lucide-react';
-import { fetchProducts, fetchBrands, fetchForYou } from '../services/shop-api';
-import { getErrorMessage } from '../services/api';
+import { useMemo, type ReactNode } from 'react';
+import { Page, useNavigate } from 'zmp-ui';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Search } from 'lucide-react';
+import { fetchForYou, fetchProducts } from '../services/shop-api';
+import { getNotifications } from '../services/account-api';
 import { useAuthStore } from '../store/auth';
-import ProductCard from '../components/product-card';
-import { ProductGridSkeleton, Skeleton } from '../components/ui/skeleton';
-import { ErrorState } from '../components/ui/empty-state';
+import { useCategories } from '../hooks/use-categories';
+import { usePurchasedItems } from '../hooks/use-purchased-items';
 import { FlashSale, UpcomingFlashSales } from '../components/flash-sale';
 import { PullToRefresh } from '../components/pull-to-refresh';
-import { brandAccent } from '../utils/brands';
+import { CategoryGrid } from '../components/catalog/category-grid';
+import { RecentlyViewedRail } from '../components/catalog/recently-viewed-rail';
+import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '../components/reorder/purchased-rail';
+import { HomeExtras } from '../components/home/home-extras';
+import { HomeHeader } from '../components/home/home-header';
+import { HomeSection, type SectionQuery } from '../components/home/home-section';
+import { OrderStrip } from '../components/home/order-strip';
+import { customerKind, dedupeAgainst, homeBlockOrder, refreshHomeQueries, type HomeBlockId } from '../components/home/home-blocks';
+import { Icon } from '../components/ui/icon';
+import { Text } from '../components/ui/text';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
-import logo from '../assets/tubu-logo.png';
-import { getNotifications } from '../services/account-api';
-import { CartButton } from '../components/cart-button';
-import { PurchasedRail } from '../components/reorder/purchased-rail';
 
 const SECTION_LIMIT = 6;
 
-/** Phân khúc mua sắm — khớp design PA2; key = forSegment (API lọc has(segment)). */
-const SEGMENTS: { key: string; label: string; Icon: LucideIcon }[] = [
-  { key: 'mom_baby', label: 'Cho mẹ & bé', Icon: Baby },
-  { key: 'home_clean', label: 'Nhà bếp xanh', Icon: SprayCan },
-  { key: 'skincare', label: 'Chăm sóc cá nhân', Icon: Droplets },
-  { key: 'eco', label: 'Sống xanh', Icon: Recycle },
-];
-
+/**
+ * Trang chủ (spec 5b.1) — DS v2 toàn trang. Thứ tự khối theo khách cũ/mới (`homeBlockOrder`):
+ * khách cũ thấy "Mua lại" ngay dưới ô tìm; khách mới ưu tiên Flash + Bán chạy + Danh mục.
+ * Lưới SP đầu tiên nằm trong 5 khối đầu (trước đây là khối thứ 11 — A2-32). Ngoại lệ chấp nhận: khách cũ
+ * chưa có "Dành cho bạn" thì lưới SP đầu tiên là "Bán chạy" ở khối thứ 6.
+ * Khối lỗi tải tự ẩn (không ErrorState ở vùng nhìn thấy đầu tiên); kéo để làm mới là cách thử lại.
+ */
 export default function HomePage() {
   const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
+  const qc = useQueryClient();
   const authed = useAuthStore((s) => s.status === 'authenticated');
   // Chuông ở đây trước đây trơ, không báo gì — trong khi voucher sinh nhật, nhắc giỏ, hoa hồng
-  // duyệt đều nằm trong Thông báo. Khách quay lại app không có tín hiệu nào, phải vào tận trang
-  // Cá nhân mới thấy badge (P1-8 audit mạch lạc). Dùng chung queryKey với trang Thông báo.
+  // duyệt đều nằm trong Thông báo. Dùng chung queryKey với trang Thông báo (P1-8 audit mạch lạc).
   const unreadCount =
-    useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: authed }).data?.filter(
-      (n) => n.status !== 'READ',
-    ).length ?? 0;
+    useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: authed }).data?.filter((n) => n.status !== 'READ').length ?? 0;
 
-  const featured = useQuery({
-    queryKey: ['products', 'home-featured'],
-    queryFn: () => fetchProducts({ limit: SECTION_LIMIT }),
-  });
-  const newest = useQuery({
-    queryKey: ['products', 'home-newest'],
-    queryFn: () => fetchProducts({ limit: SECTION_LIMIT, sort: 'newest' }),
-  });
-  // Persona chính (mẹ & bé) — gợi ý ưu tiên theo segment (spec §6.2).
-  const momBaby = useQuery({
-    queryKey: ['products', 'home-mombaby'],
-    queryFn: () => fetchProducts({ limit: SECTION_LIMIT, segment: 'mom_baby' }),
-  });
-  // Brand/category chậm đổi (sync Pancake ~15p/lần) → cache 60s, override default 10s.
-  const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands, staleTime: 60_000 });
-  // Feed "Dành cho bạn" — cá nhân hoá theo lịch sử mua + nhãn theo dõi, cần đăng nhập.
-  // select() bọc lại thành { data } để tái dùng HomeSection/ProductCard chung với các mục khác.
-  const forYou = useQuery({
-    queryKey: ['for-you'],
-    queryFn: fetchForYou,
-    enabled: authed,
-    select: (data) => ({ data }),
-  });
+  // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới.
+  const purchased = usePurchasedItems(PURCHASED_RAIL_LIMIT);
+  const kind = customerKind(purchased.data?.items.length);
 
-  const goBrand = (brand?: string) => {
-    haptic('light');
-    navigate(brand ? `/browse?brand=${encodeURIComponent(brand)}` : '/browse');
+  const bestSellers = useQuery({
+    queryKey: ['products', 'home-best-seller'],
+    queryFn: () => fetchProducts({ limit: SECTION_LIMIT, sort: 'best_seller' }),
+  });
+  const featured = useQuery({ queryKey: ['products', 'home-featured'], queryFn: () => fetchProducts({ limit: SECTION_LIMIT }) });
+  const newest = useQuery({ queryKey: ['products', 'home-newest'], queryFn: () => fetchProducts({ limit: SECTION_LIMIT, sort: 'newest' }) });
+  // Feed "Dành cho bạn" cá nhân hoá, cần đăng nhập. select() bọc thành { data } để dùng chung HomeSection.
+  const forYou = useQuery({ queryKey: ['for-you'], queryFn: fetchForYou, enabled: authed, select: (data) => ({ data }) });
+  const categories = useCategories();
+
+  // A2-32: với khách chưa có lịch sử, "Dành cho bạn" rơi về SP nổi bật — trùng "Tubu chọn cho bạn".
+  const forYouIds = useMemo(() => new Set((forYou.data?.data ?? []).map((p) => p.id)), [forYou.data]);
+  const featuredQuery: SectionQuery = {
+    isLoading: featured.isLoading,
+    isError: featured.isError,
+    error: featured.error,
+    data: featured.data ? { data: dedupeAgainst(featured.data.data, forYouIds) } : undefined,
+  };
+
+  const blocks: Record<HomeBlockId, ReactNode> = {
+    search: <SearchShell />,
+    purchased: <PurchasedRail source="home_rail" />,
+    orderStrip: <OrderStrip />,
+    flash: (
+      <>
+        <FlashSale />
+        <UpcomingFlashSales />
+      </>
+    ),
+    forYou: authed ? <HomeSection title={vi.home.forYou} query={forYou} listSource="home_for_you" limit={SECTION_LIMIT} /> : null,
+    bestSellers: (
+      <HomeSection
+        title={vi.home.bestSellers}
+        query={bestSellers}
+        listSource="home_best_seller"
+        limit={SECTION_LIMIT}
+        seeAllTo="/browse?sort=best_seller"
+      />
+    ),
+    categories: (
+      <CategoryGrid
+        entries={categories.entries}
+        isLoading={categories.isLoading}
+        placeholderCount={categories.placeholderCount}
+        onSelect={(e) => {
+          haptic('light');
+          navigate(e.kind === 'category' ? `/browse?category=${encodeURIComponent(e.key)}` : `/browse?segment=${encodeURIComponent(e.key)}`);
+        }}
+      />
+    ),
+    recentlyViewed: <RecentlyViewedRail />,
+    featured: <HomeSection title={vi.home.featured} query={featuredQuery} listSource="home_featured" limit={SECTION_LIMIT} seeAllTo="/browse" />,
+    newArrivals: (
+      <HomeSection title={vi.home.newArrivals} query={newest} listSource="home_newest" limit={SECTION_LIMIT} seeAllTo="/browse?sort=newest" />
+    ),
+    extras: <HomeExtras />,
   };
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 72 }}>
-      <PullToRefresh onRefresh={() => Promise.all([featured.refetch(), newest.refetch(), momBaby.refetch(), brands.refetch()])} />
-      {/* ── Top bar: logo + actions (immersive — actionBar Zalo đã ẩn) ── */}
-      <Box
-        px={4}
-        flex
-        justifyContent="space-between"
-        alignItems="center"
-        style={{ paddingTop: 14, paddingBottom: 10 }}
-      >
-        <img src={logo} alt="Tubu Tree" style={{ height: 30, objectFit: 'contain' }} />
-        <Box flex alignItems="center" style={{ gap: 8 }}>
-          <Box
-            role="button"
-            aria-label="Thông báo"
-            className="tubu-press"
-            onClick={() => navigate('/notifications')}
-            style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}
-          >
-            <Bell size={20} color="var(--leaf-700)" strokeWidth={1.8} />
-            {unreadCount > 0 && (
-              <span
-                style={{
-                  position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18,
-                  borderRadius: 'var(--radius-full)', background: 'var(--clay-500)', color: 'var(--neutral-0)',
-                  fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box',
-                }}
-              >
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </span>
-            )}
-          </Box>
-          <CartButton />
-        </Box>
-      </Box>
-
-      {/* ── Search ── */}
-      <Box px={4} pb={3}>
-        <Box
-          role="button"
-          aria-label={vi.home.searchPlaceholder}
-          className="tubu-press"
-          onClick={() => {
-            haptic('light');
-            // Mở thẳng bàn phím ở ô tìm kiếm thật bên /browse — ô ở đây chỉ là vỏ.
-            navigate('/browse?focus=search');
-          }}
-          style={{
-            background: 'var(--neutral-0)',
-            border: '1px solid var(--neutral-200)',
-            borderRadius: 'var(--radius-full)',
-            padding: '11px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            boxShadow: 'var(--shadow-xs)',
-            minHeight: 46,
-            boxSizing: 'border-box',
-          }}
-        >
-          <Search size={18} color="var(--neutral-400)" strokeWidth={2} />
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            {vi.home.searchPlaceholder}
-          </Text>
-        </Box>
-      </Box>
-
-      {/* ── Mua lại (spec 4a.3) — khối ĐẦU TIÊN dưới ô tìm; khách mới/chưa mua không thấy. ── */}
-      <PurchasedRail source="home_rail" />
-
-      {/* ── Quick actions: AI tư vấn + Mua chung — 1 HÀNG gọn (trước đây 2 banner full-width
-          chiếm quá nhiều đầu trang, đẩy sản phẩm xuống sâu). 2 ô ngang, icon + nhãn ngắn. ── */}
-      <Box px={4} pb={3} flex style={{ gap: 10 }}>
-        <Box
-          role="button"
-          aria-label="Hỏi trợ lý AI 24/7"
-          className="tubu-press"
-          onClick={() => { haptic('light'); navigate('/ai-advisor'); }}
-          style={{
-            flex: 1,
-            background: 'linear-gradient(120deg, var(--leaf-50), var(--primary-50, #fdf3e3))',
-            border: '1px solid var(--leaf-400)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '10px 12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            minHeight: 44,
-            boxShadow: 'var(--shadow-card)',
-            boxSizing: 'border-box',
-          }}
-        >
-          <Sparkles size={18} color="var(--leaf-700)" strokeWidth={2} style={{ flexShrink: 0 }} />
-          <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', lineHeight: 1.2 }}>Trợ lý AI 24/7</Text>
-        </Box>
-
-        <Box
-          role="button"
-          aria-label="Mua chung giá tốt"
-          className="tubu-press"
-          onClick={() => { haptic('light'); navigate('/group-buy'); }}
-          style={{
-            flex: 1,
-            background: 'var(--neutral-0)',
-            border: '1px solid var(--neutral-200)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '10px 12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            minHeight: 44,
-            boxShadow: 'var(--shadow-card)',
-            boxSizing: 'border-box',
-          }}
-        >
-          <Users size={18} color="var(--primary-700)" strokeWidth={2} style={{ flexShrink: 0 }} />
-          <Text size="xSmall" bold style={{ color: 'var(--primary-700)', lineHeight: 1.2 }}>Mua chung giá tốt</Text>
-        </Box>
-      </Box>
-
-      {/* ── Hero card (green, bo tròn — design PA2) ── */}
-      <Box px={4} pb={1}>
-        <Box
-          style={{
-            background: 'linear-gradient(150deg, var(--primary-600), var(--primary-700))',
-            borderRadius: 'var(--radius-xl)',
-            padding: '20px 18px',
-            color: '#fff',
-            boxShadow: '0 10px 24px rgba(224, 140, 28, 0.22)',
-            overflow: 'hidden',
-          }}
-        >
-          <Text size="xSmall" bold style={{ color: 'var(--leaf-100)', letterSpacing: 1 }}>
-            SỐNG XANH AN LÀNH
-          </Text>
-          <Text.Title className="t-h1" style={{ color: '#fff', marginTop: 6, maxWidth: '80%' }}>
-            Thiên nhiên Việt cho cả nhà
-          </Text.Title>
-          {user && (
-            <Text size="xSmall" style={{ color: 'var(--primary-100)', marginTop: 6 }}>
-              {vi.home.greeting(user.fullName ?? vi.auth.greetingFallback)}
-              {user.pointsBalance != null ? ` · ${vi.home.pointsChip(user.pointsBalance)}` : ''}
-            </Text>
-          )}
-          <Box
-            role="button"
-            className="tubu-press"
-            onClick={() => {
-            haptic('light');
-            // Mở thẳng bàn phím ở ô tìm kiếm thật bên /browse — ô ở đây chỉ là vỏ.
-            navigate('/browse?focus=search');
-          }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              marginTop: 14,
-              background: '#fff',
-              color: 'var(--primary-700)',
-              borderRadius: 'var(--radius-full)',
-              padding: '9px 16px',
-              fontWeight: 700,
-              fontSize: 13.5,
-            }}
-          >
-            Khám phá vườn <ChevronRight size={16} strokeWidth={2.4} />
-          </Box>
-        </Box>
-      </Box>
-
-      {/* ── Segment pills (theo phân khúc — design PA2) ── */}
-      <Box
-        px={4}
-        pt={3}
-        className="scroll-x"
-        style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}
-      >
-        {SEGMENTS.map((s) => (
-          <Box
-            key={s.key}
-            role="button"
-            aria-label={s.label}
-            className="tubu-press"
-            onClick={() => {
-              haptic('light');
-              navigate(`/browse?segment=${s.key}`);
-            }}
-            style={{
-              flex: '0 0 auto',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'var(--leaf-50)',
-              border: '1px solid var(--leaf-100)',
-              borderRadius: 'var(--radius-full)',
-              padding: '8px 14px',
-              minHeight: 38,
-              boxSizing: 'border-box',
-            }}
-          >
-            <s.Icon size={16} color="var(--leaf-700)" strokeWidth={1.9} />
-            <Text size="xSmall" style={{ fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--leaf-700)' }}>
-              {s.label}
-            </Text>
-          </Box>
-        ))}
-      </Box>
-
-      {/* ── Brand strip ── */}
-      <Box pt={4} pb={1} px={4}>
-        <Text.Title className="t-h2" size="small">{vi.home.brandsTitle}</Text.Title>
-      </Box>
-      <Box
-        px={4}
-        pb={2}
-        className="scroll-x"
-        style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}
-      >
-        {brands.isLoading &&
-          Array.from({ length: 5 }, (_, i) => (
-            <Skeleton key={i} width={92} height={36} radius="var(--radius-full)" style={{ flex: '0 0 auto' }} />
-          ))}
-        {brands.data?.map((b) => (
-          <Box
-            key={b.brand}
-            role="button"
-            className="tubu-press"
-            onClick={() => goBrand(b.brand)}
-            style={{
-              flex: '0 0 auto',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 7,
-              background: 'var(--neutral-0)',
-              border: '1px solid var(--neutral-200)',
-              borderRadius: 'var(--radius-full)',
-              padding: '9px 14px',
-              minHeight: 36,
-              boxSizing: 'border-box',
-            }}
-          >
-            <span
-              aria-hidden
-              style={{ width: 9, height: 9, borderRadius: '50%', background: brandAccent(b.brand) }}
-            />
-            <Text size="xSmall" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
-              {b.brand}
-            </Text>
-          </Box>
-        ))}
-      </Box>
-
-      {/* ── Hành trình nguyên liệu ── */}
-      <Box px={4} pt={3}>
-        <Box
-          role="button"
-          className="tubu-press"
-          onClick={() => {
-            haptic('light');
-            navigate('/brand-story');
-          }}
-          flex
-          alignItems="center"
-          style={{
-            gap: 12,
-            padding: 14,
-            borderRadius: 'var(--radius-lg)',
-            background: 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))',
-            boxShadow: '0 6px 18px rgba(80, 144, 24, 0.22)',
-            color: '#fff',
-          }}
-        >
-          <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-            <Map size={22} color="#fff" strokeWidth={1.9} />
-          </Box>
-          <Box style={{ flex: 1 }}>
-            <Text bold style={{ color: '#fff' }}>
-              Hành trình nguyên liệu
-            </Text>
-            <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.85)' }}>
-              Khám phá 6 vùng đất làm nên sản phẩm Tubu
-            </Text>
-          </Box>
-          <ChevronRight size={20} color="#fff" strokeWidth={2} />
-        </Box>
-      </Box>
-
-      {/* ── Cộng đồng hỏi đáp (gắn kết + bán hàng) ── */}
-      <Box px={4} pt={3}>
-        <Box
-          role="button"
-          aria-label={vi.community.title}
-          className="tubu-press"
-          onClick={() => {
-            haptic('light');
-            navigate('/feed');
-          }}
-          flex
-          alignItems="center"
-          style={{
-            gap: 12,
-            padding: 14,
-            borderRadius: 'var(--radius-lg)',
-            background: 'var(--neutral-0)',
-            border: '1px solid var(--leaf-200)',
-            boxShadow: 'var(--shadow-card)',
-          }}
-        >
-          <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-            <MessagesSquare size={22} color="var(--leaf-700)" strokeWidth={1.9} />
-          </Box>
-          <Box style={{ flex: 1 }}>
-            <Text bold>{vi.community.title}</Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-              {vi.community.subtitle}
-            </Text>
-          </Box>
-          <ChevronRight size={20} color="var(--neutral-400)" strokeWidth={2} />
-        </Box>
-      </Box>
-
-      {/* ── Flash Sale hôm nay ── */}
-      <FlashSale />
-
-      {/* ── Sắp diễn ra — đặt nhắc trước khi mở bán ── */}
-      <UpcomingFlashSales />
-
-      {/* ── Dành cho bạn (cá nhân hoá — chỉ hiện khi đã đăng nhập & có gợi ý) ── */}
-      {authed && (
-        <HomeSection title={vi.home.forYou} query={forYou} onRetry={() => void forYou.refetch()} />
-      )}
-
-      {/* ── Tubu chọn cho bạn ── */}
-      <HomeSection
-        title={vi.home.featured}
-        query={featured}
-        onRetry={() => void featured.refetch()}
-      />
-
-      {/* ── Cho mẹ và bé (persona chính) ── */}
-      <HomeSection title="Cho mẹ và bé" query={momBaby} onRetry={() => void momBaby.refetch()} />
-
-      {/* ── Mới về vườn ── */}
-      <HomeSection title={vi.home.newArrivals} query={newest} onRetry={() => void newest.refetch()} />
+    // `.page` giữ đệm safe-top của chế độ immersive (actionBar Zalo đã ẩn).
+    <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
+      <PullToRefresh onRefresh={() => refreshHomeQueries(qc)} />
+      <HomeHeader unreadCount={unreadCount} />
+      {homeBlockOrder(kind).map((id) => (
+        <div key={id} data-home-block={id}>
+          {blocks[id]}
+        </div>
+      ))}
     </Page>
   );
 }
 
-interface SectionQuery {
-  isLoading: boolean;
-  isError: boolean;
-  error: unknown;
-  data?: { data: Parameters<typeof ProductCard>[0]['product'][] };
-}
-
-function HomeSection({
-  title,
-  query,
-  onRetry,
-}: {
-  title: string;
-  query: SectionQuery;
-  onRetry: () => void;
-}) {
-  if (!query.isLoading && !query.isError && (query.data?.data.length ?? 0) === 0) return null;
-
+/** Ô tìm ở Trang chủ chỉ là vỏ: mở thẳng bàn phím ở ô thật bên /browse (?focus=search). */
+function SearchShell() {
+  const navigate = useNavigate();
   return (
-    <>
-      <Box pt={4} pb={2} px={4}>
-        <Text.Title className="t-h2" size="small">{title}</Text.Title>
-      </Box>
-      <Box px={4}>
-        {query.isLoading ? (
-          <ProductGridSkeleton count={4} />
-        ) : query.isError ? (
-          <ErrorState message={getErrorMessage(query.error)} onRetry={onRetry} />
-        ) : (
-          <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {query.data?.data.map((p) => <ProductCard key={p.id} product={p} />)}
-          </Box>
-        )}
-      </Box>
-    </>
+    <div style={{ padding: '0 16px 12px' }}>
+      <button
+        type="button"
+        aria-label={vi.home.searchPlaceholder}
+        className="tubu-press"
+        onClick={() => {
+          haptic('light');
+          navigate('/browse?focus=search');
+        }}
+        style={{
+          width: '100%',
+          minHeight: 46,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '11px 16px',
+          borderRadius: 'var(--radius-pill)',
+          border: '1px solid var(--color-border-subtle)',
+          background: 'var(--color-bg-surface)',
+          boxShadow: 'var(--elevation-1)',
+          boxSizing: 'border-box',
+          cursor: 'pointer',
+          textAlign: 'left',
+          fontFamily: 'inherit',
+        }}
+      >
+        <Icon icon={Search} size="sm" tone="muted" />
+        <Text variant="body-sm" tone="tertiary">
+          {vi.home.searchPlaceholder}
+        </Text>
+      </button>
+    </div>
   );
 }

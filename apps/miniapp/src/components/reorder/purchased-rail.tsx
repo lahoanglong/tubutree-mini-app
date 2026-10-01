@@ -18,7 +18,8 @@ const HEADING_HEIGHT = 24;
 const HEADING_PAD_TOP = 4;
 const HEADING_PAD_BOTTOM = 8;
 const RAIL_PADDING_BOTTOM = 12;
-const RAIL_LIMIT = 10;
+/** Export để Trang chủ dùng CHUNG query key ['purchased-items', 10] khi quyết định thứ tự khối (plan 4b). */
+export const PURCHASED_RAIL_LIMIT = 10;
 
 export function toTileProduct(p: PurchasedItem): ProductTileProduct {
   return {
@@ -46,7 +47,7 @@ export interface PurchasedRailProps {
  */
 export function PurchasedRail({ source }: PurchasedRailProps) {
   const navigate = useNavigate();
-  const q = usePurchasedItems(RAIL_LIMIT);
+  const q = usePurchasedItems(PURCHASED_RAIL_LIMIT);
   const [target, setTarget] = useState<ReorderTarget | null>(null);
 
   if (q.isLoading) {

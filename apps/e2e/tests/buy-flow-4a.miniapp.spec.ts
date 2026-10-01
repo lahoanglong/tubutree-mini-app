@@ -225,7 +225,8 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     });
     await expect(page).toHaveURL(/\/orders\?tab=subscriptions$/, { timeout: 10_000 });
     await expect(page.getByRole('tab', { name: 'Định kỳ' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
-    await expect(page.getByText('Nước Xả Vải Tubu')).toBeVisible({ timeout: 15_000 });
+    // Trang chủ còn mount trong lúc chuyển cảnh và dải "kỳ định kỳ kế tiếp" của nó cũng in tên này; trang Đơn hàng mount sau cùng.
+    await expect(page.getByText('Nước Xả Vải Tubu').last()).toBeVisible({ timeout: 15_000 });
 
     // Redirect là replace: lịch sử chỉ thêm ĐÚNG 1 mục (pushState của chính test), không thêm mục cho /orders.
     expect(await page.evaluate(() => history.length)).toBe(historyBefore + 1);

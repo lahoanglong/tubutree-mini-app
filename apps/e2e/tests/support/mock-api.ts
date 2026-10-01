@@ -390,6 +390,11 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   api.get('/search/suggest', []);
   api.get('/brands', []);
   api.get('/products', { data: [], meta: { page: 1, limit: 30, total: 0 } });
+  // Trang chủ (dự án 4b): dải "Đơn đang giao / kỳ định kỳ" gọi danh sách đơn (chỉ khi badge > 0) và
+  // /me/subscriptions ở MỌI lần mở `/`. Mặc định: không có đơn, không có kỳ. Đăng ký '/orders' ở đây
+  // (literal) không đè '/orders/:code' hay '/orders/active-count' — router ưu tiên mẫu cụ thể hơn.
+  api.get('/orders', { data: [], meta: { page: 1, limit: 1, total: 0 } });
+  api.get('/me/subscriptions', []);
   return user;
 }
 
