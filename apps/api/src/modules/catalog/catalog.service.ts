@@ -5,6 +5,15 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
 
+/** Khoảng giá cho filter Prisma; min > max thì đổi chỗ (client không gửi vậy, nhưng không 400). */
+function priceRange(min?: number, max?: number): { gte?: number; lte?: number } | undefined {
+  if (min == null && max == null) return undefined;
+  let lo = min;
+  let hi = max;
+  if (lo != null && hi != null && lo > hi) [lo, hi] = [hi, lo];
+  return { ...(lo != null ? { gte: lo } : {}), ...(hi != null ? { lte: hi } : {}) };
+}
+
 @Injectable()
 export class CatalogService {
   private readonly logger = new Logger(CatalogService.name);
@@ -52,15 +61,33 @@ export class CatalogService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(query: ProductQuery) {
-    const { page, limit, brand, category, segment, q, sort } = query;
-    // P0 A2-03 = A5-06 = A6-04 (docs/audit-2026-09): SP đối tác được tạo với isActive:true ngay cả
-    // khi approvalStatus:'PENDING_REVIEW' (merchant.service.ts createProduct) — và bị REJECTED cũng
-    // không tự tắt isActive (admin.service.ts reviewMerchantProduct chỉ đổi approvalStatus). Trước
-    // đây MỌI truy vấn catalog công khai dưới đây chỉ lọc isActive nên SP chưa duyệt/đã bị từ chối
-    // vẫn hiện & mua được. Đi theo đúng quy ước đã có trong addResellProduct() (merchant.service.ts)
-    // và storefront.service.ts:258 — giữ isActive là cờ vòng đời riêng, gác thêm approvalStatus ở
-    // MỌI nơi công khai thay vì đổi ý nghĩa isActive.
+    const { page, limit, sort } = query;
+    const where = await this.listWhere(query);
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.product.findMany({
+        where,
+        // `id` làm tiêu chí phụ: chỉ sắp theo isFeatured/createdAt/giá thì các SP hoà nhau đổi thứ
+        // tự giữa hai lần query → cuộn vô hạn ở Browse hiện trùng hoặc sót SP giữa các trang.
+        orderBy: [this.orderBy(sort), { id: 'asc' }],
+        ...skipTake(page, limit),
+        include: { variations: { where: { isActive: true } } },
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+    return paginated(items.map((p) => this.toCard(p)), page, limit, total);
+  }
+
+  /**
+   * Bộ lọc công khai của catalog — MỘT nơi duy nhất (list + best_seller dùng chung).
+   * P0 A2-03 = A5-06 = A6-04 (docs/audit-2026-09): SP đối tác được tạo với isActive:true ngay cả
+   * khi approvalStatus:'PENDING_REVIEW' và bị REJECTED cũng không tự tắt isActive → mọi truy vấn
+   * công khai gác thêm approvalStatus, giữ isActive là cờ vòng đời riêng.
+   * Điều kiện cần `OR` (giá, từ khoá) đi vào `AND` để không đè nhau.
+   */
+  private async listWhere(query: ProductQuery): Promise<Prisma.ProductWhereInput> {
+    const { brand, category, segment, minPrice, maxPrice, inStock, minRating } = query;
     const where: Prisma.ProductWhereInput = { isActive: true, approvalStatus: 'APPROVED' };
+    const and: Prisma.ProductWhereInput[] = [];
     if (brand) {
       const brandList = brand.split(',').map((b) => b.trim()).filter(Boolean);
       if (brandList.length === 1) {
@@ -71,24 +98,21 @@ export class CatalogService {
     }
     if (category) where.categoryIds = { has: category };
     if (segment) where.forSegment = { has: segment };
-    if (q) {
+    if (query.q) {
       where.OR = [
-        { name: { contains: q, mode: 'insensitive' } },
-        { tags: { has: q.toLowerCase() } },
+        { name: { contains: query.q, mode: 'insensitive' } },
+        { tags: { has: query.q.toLowerCase() } },
       ];
     }
-
-    const orderBy = this.orderBy(sort);
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.product.findMany({
-        where,
-        orderBy,
-        ...skipTake(page, limit),
-        include: { variations: { where: { isActive: true } } },
-      }),
-      this.prisma.product.count({ where }),
-    ]);
-    return paginated(items.map((p) => this.toCard(p)), page, limit, total);
+    // Giá ĐANG BÁN = salePrice ?? basePrice — đúng giá `ProductTile` hiển thị (standing price).
+    const price = priceRange(minPrice, maxPrice);
+    if (price) and.push({ OR: [{ salePrice: price }, { salePrice: null, basePrice: price }] });
+    // Cùng quy tắc với `inStock` của thẻ (toCard): có phân loại đang bán còn tồn.
+    if (inStock) where.variations = { some: { isActive: true, stock: { gt: 0 } } };
+    // ratingAvg mặc định 0 → SP chưa có đánh giá không lọt "Từ 4★" (đúng ý bộ lọc).
+    if (minRating != null) where.ratingAvg = { gte: minRating };
+    if (and.length > 0) where.AND = and;
+    return where;
   }
 
   async getBySlug(slug: string) {

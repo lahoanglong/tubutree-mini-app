@@ -417,3 +417,71 @@ describe('CatalogService.list (Multi-brand filtering)', () => {
   });
 });
 
+describe('CatalogService.list — bộ lọc dự án 4b', () => {
+  function setup() {
+    const findMany = jest.fn().mockResolvedValue([card('p1')]);
+    const count = jest.fn().mockResolvedValue(1);
+    const prisma = {
+      product: { findMany, count },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), findMany, count };
+  }
+  const argsOf = (findMany: jest.Mock) => findMany.mock.calls[0][0];
+
+  it('khoảng giá lọc theo GIÁ ĐANG BÁN (salePrice nếu có, không thì basePrice) — đúng giá thẻ SP hiển thị', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, minPrice: 100000, maxPrice: 200000 });
+    const range = { gte: 100000, lte: 200000 };
+    expect(argsOf(findMany).where.AND).toEqual([{ OR: [{ salePrice: range }, { salePrice: null, basePrice: range }] }]);
+  });
+
+  it('chỉ minPrice → chỉ gte; min > max → tự đổi chỗ', async () => {
+    const a = setup();
+    await a.svc.list({ page: 1, limit: 20, minPrice: 500000 });
+    expect(argsOf(a.findMany).where.AND).toEqual([{ OR: [{ salePrice: { gte: 500000 } }, { salePrice: null, basePrice: { gte: 500000 } }] }]);
+    const b = setup();
+    await b.svc.list({ page: 1, limit: 20, minPrice: 300000, maxPrice: 100000 });
+    const range = { gte: 100000, lte: 300000 };
+    expect(argsOf(b.findMany).where.AND).toEqual([{ OR: [{ salePrice: range }, { salePrice: null, basePrice: range }] }]);
+  });
+
+  it('inStock → còn ít nhất 1 phân loại ĐANG BÁN có tồn > 0 (cùng quy tắc với inStock của thẻ)', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, inStock: true });
+    expect(argsOf(findMany).where.variations).toEqual({ some: { isActive: true, stock: { gt: 0 } } });
+  });
+
+  it('inStock=false → không lọc tồn kho', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, inStock: false });
+    expect(argsOf(findMany).where.variations).toBeUndefined();
+  });
+
+  it('minRating → ratingAvg >= minRating', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, minRating: 4 });
+    expect(argsOf(findMany).where.ratingAvg).toEqual({ gte: 4 });
+  });
+
+  it('không truyền tham số mới → where như trước (không AND/variations/ratingAvg)', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, brand: 'Tubu' });
+    expect(argsOf(findMany).where).toEqual({ isActive: true, approvalStatus: 'APPROVED', brand: 'Tubu' });
+  });
+
+  it('mọi kiểu sắp xếp (trừ best_seller) có id tăng dần làm tiêu chí phụ → phân trang không trùng/sót khi hoà', async () => {
+    const a = setup();
+    await a.svc.list({ page: 1, limit: 20 });
+    expect(argsOf(a.findMany).orderBy).toEqual([{ isFeatured: 'desc' }, { id: 'asc' }]);
+    const b = setup();
+    await b.svc.list({ page: 1, limit: 20, sort: 'newest' });
+    expect(argsOf(b.findMany).orderBy).toEqual([{ createdAt: 'desc' }, { id: 'asc' }]);
+  });
+
+  it('count dùng đúng where của findMany', async () => {
+    const { svc, findMany, count } = setup();
+    await svc.list({ page: 1, limit: 20, minRating: 4, inStock: true });
+    expect(count).toHaveBeenCalledWith({ where: argsOf(findMany).where });
+  });
+});
