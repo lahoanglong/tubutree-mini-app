@@ -110,6 +110,47 @@ describe('useSuggest', () => {
     expect(result.current.isFetching).toBe(false);
   });
 
+  it('đổi từ khoá (vẫn ≥2 ký tự) → giữ danh sách của từ khoá trước trong lúc tải, không nhấp nháy; có kết quả mới thì thay', async () => {
+    const second = deferred<typeof P[]>();
+    mocks.suggestProducts.mockImplementation((q: string) => (q === 'ab' ? Promise.resolve([P]) : second.promise));
+    const { result, rerender } = renderHook(({ d }) => useSuggest(d), { initialProps: { d: 'ab' }, wrapper });
+    await advance(SUGGEST_DEBOUNCE_MS);
+    expect(result.current.products).toEqual([P]);
+
+    rerender({ d: 'abc' });
+    await advance(SUGGEST_DEBOUNCE_MS); // đã gọi API cho "abc", chưa có phản hồi
+    expect(mocks.suggestProducts).toHaveBeenLastCalledWith('abc');
+    expect(result.current.isFetching).toBe(true);
+    expect(result.current.products).toEqual([P]);
+
+    second.resolve([Q]);
+    await advance(0);
+    expect(result.current.products).toEqual([Q]);
+    expect(result.current.isFetching).toBe(false);
+  });
+
+  it('xoá xuống dưới 2 ký tự rồi gõ từ khoá mới → KHÔNG hiện lại kết quả của từ khoá cũ trong lúc tải', async () => {
+    const second = deferred<typeof P[]>();
+    mocks.suggestProducts.mockImplementation((q: string) => (q === 'ab' ? Promise.resolve([P]) : second.promise));
+    const { result, rerender } = renderHook(({ d }) => useSuggest(d), { initialProps: { d: 'ab' }, wrapper });
+    await advance(SUGGEST_DEBOUNCE_MS);
+    expect(result.current.products).toEqual([P]);
+
+    rerender({ d: 'a' });
+    expect(result.current.products).toEqual([]);
+    await advance(SUGGEST_DEBOUNCE_MS + 100);
+    rerender({ d: 'xy' });
+    expect(result.current.products).toEqual([]);
+    await advance(SUGGEST_DEBOUNCE_MS);
+    expect(mocks.suggestProducts).toHaveBeenLastCalledWith('xy');
+    expect(result.current.isFetching).toBe(true);
+    expect(result.current.products).toEqual([]);
+
+    second.resolve([Q]);
+    await advance(0);
+    expect(result.current.products).toEqual([Q]);
+  });
+
   it('API lỗi → products rỗng, không ném', async () => {
     mocks.suggestProducts.mockRejectedValue(new Error('500'));
     const { result } = renderHook(() => useSuggest('nuoc'), { wrapper });
