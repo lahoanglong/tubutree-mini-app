@@ -49,7 +49,44 @@ describe('bảng translate', () => {
     expect(VN_FOLD_FROM.length - VN_FOLD_TO.length).toBe(8);
     expect(VN_FOLD_TO).toMatch(/^[a-z]+$/);
     expect(new Set(VN_FOLD_FROM).size).toBe(VN_FOLD_FROM.length);
-    expect(VN_FOLD_FROM.slice(-8)).toBe('̛̣̀́̃̉̂̆');
+    expect(VN_FOLD_FROM.slice(-8)).toBe('\u031B\u0323\u0300\u0301\u0303\u0309\u0302\u0306');
+  });
+});
+
+describe('từng chữ cái tiếng Việt gấp về đúng chữ gốc (kỳ vọng tính độc lập với bảng)', () => {
+  const TONES = new Set([0x300, 0x301, 0x303, 0x309, 0x323]); // huyền, sắc, ngã, hỏi, nặng
+  const SHAPES = new Set([0x302, 0x306, 0x31b]); // mũ, trăng, móc
+  /** Dấu hình dạng hợp lệ theo nguyên âm: â ê ô | ă | ơ ư. */
+  const SHAPE_OF_BASE: Record<string, number[]> = { a: [0x302, 0x306], e: [0x302], o: [0x302, 0x31b], u: [0x31b] };
+
+  /** Chữ Latin tiếng Việt có dấu, suy ra từ Unicode (NFD) chứ không từ bảng của code đang test. */
+  function vietnameseLetters(): Array<{ ch: string; base: string }> {
+    const out: Array<{ ch: string; base: string }> = [];
+    for (let cp = 0xc0; cp <= 0x1ef9; cp++) {
+      const ch = String.fromCodePoint(cp);
+      if (ch === 'Đ' || ch === 'đ') { out.push({ ch, base: 'd' }); continue; }
+      const nfd = ch.normalize('NFD');
+      const marks = [...nfd.slice(1)].map((m) => m.codePointAt(0)!);
+      const base = nfd[0].toLowerCase();
+      if (nfd.length < 2 || !/^[aeiouy]$/.test(base)) continue;
+      const tones = marks.filter((m) => TONES.has(m));
+      const shapes = marks.filter((m) => SHAPES.has(m));
+      if (tones.length + shapes.length !== marks.length || tones.length > 1 || shapes.length > 1) continue;
+      if (shapes.length === 1 && !(SHAPE_OF_BASE[base] ?? []).includes(shapes[0])) continue;
+      out.push({ ch, base });
+    }
+    return out;
+  }
+
+  it('đúng 134 chữ (67 thường + 67 HOA) và mỗi chữ gấp ra đúng chữ gốc ở cả TypeScript lẫn translate()', () => {
+    const letters = vietnameseLetters();
+    expect(letters).toHaveLength(134);
+    const wrong: string[] = [];
+    for (const { ch, base } of letters) {
+      if (foldVietnamese(ch) !== base) wrong.push(`ts ${ch}`);
+      if (pgTranslate(ch, VN_FOLD_FROM, VN_FOLD_TO).toLowerCase() !== base) wrong.push(`sql ${ch}`);
+    }
+    expect(wrong).toEqual([]);
   });
 });
 

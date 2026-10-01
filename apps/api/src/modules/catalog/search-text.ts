@@ -20,7 +20,7 @@ const LETTER_GROUPS: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /** Dấu kết hợp của tiếng Việt (dạng NFD): móc, nặng, huyền, sắc, ngã, hỏi, mũ, trăng. */
-const VN_COMBINING_MARKS = '̛̣̀́̃̉̂̆';
+const VN_COMBINING_MARKS = '\u031B\u0323\u0300\u0301\u0303\u0309\u0302\u0306';
 
 function buildFoldMap(): { from: string; to: string; map: Map<string, string> } {
   let from = '';
