@@ -33,6 +33,7 @@ import { haptic } from '../utils/haptic';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { getAffiliateMe } from '../services/affiliate-api';
 import { ContentKitSheet } from '../components/content-kit-sheet';
@@ -97,6 +98,8 @@ export default function ProductDetailPage() {
     queryFn: () => fetchProduct(slug!),
     enabled: !!slug,
   });
+  // "Đã xem gần đây" (spec 5b.4): ghi khi PDP mở THÀNH CÔNG. Đặt trước mọi early-return (luật hook).
+  useRecordRecentlyViewed(product.isSuccess ? product.data : undefined);
   const related = useQuery({
     queryKey: ['related', slug],
     queryFn: () => fetchRelated(slug!),
