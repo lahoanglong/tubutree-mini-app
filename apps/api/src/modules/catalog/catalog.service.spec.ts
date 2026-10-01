@@ -547,7 +547,7 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     const { svc } = setup(queryRaw);
     await svc.list({ page: 1, limit: 20, q: 'nước rửa' });
     const { values } = sqlOf(queryRaw);
-    expect(SQL_WHITESPACE_RE).toContain(' ');
+    expect(SQL_WHITESPACE_RE).toContain('\\u00a0');
     expect(values).toContain(SQL_WHITESPACE_RE);
     expect(values).toContain('%nuoc rua%');
   });

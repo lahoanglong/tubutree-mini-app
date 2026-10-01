@@ -1,4 +1,4 @@
-import { LIKE_ESCAPE, VN_FOLD_FROM, VN_FOLD_TO, escapeLike, foldVietnamese, likeContainsPattern } from './search-text';
+import { LIKE_ESCAPE, VN_FOLD_FROM, VN_FOLD_TO, escapeLike, foldVietnamese, likeContainsPattern, SQL_WHITESPACE_RE } from './search-text';
 
 /** Đúng ngữ nghĩa translate() của Postgres: ký tự của `from` không có cặp ở `to` thì bị XOÁ. */
 function pgTranslate(s: string, from: string, to: string): string {
@@ -98,5 +98,18 @@ describe('LIKE', () => {
 
   it('likeContainsPattern = %<gấp dấu + escape>%', () => {
     expect(likeContainsPattern('  Nước 50% ')).toBe('%nuoc 50!%%');
+  });
+});
+
+describe('SQL_WHITESPACE_RE', () => {
+  it('liệt kê tường minh các khoảng trắng Unicode của `\\s` (JS) mà [[:space:]] của DB bỏ sót', () => {
+    // Postgres 16 / UTF-8 thật: [[:space:]] thiếu U+00A0, U+1680, U+2007, U+202F, U+FEFF. Toàn bộ bộ
+    // `\s` được pin trên Postgres thật ở test/integration-race/buy-flow-4b.race-spec.ts; ở đây chỉ chặn
+    // ai đó rút bớt một escape khi sửa chuỗi.
+    for (const escape of ['\\u00a0', '\\u1680', '\\u2000-\\u200a', '\\u2028', '\\u2029', '\\u202f', '\\u205f', '\\u3000', '\\ufeff']) {
+      expect(SQL_WHITESPACE_RE).toContain(escape);
+    }
+    expect(SQL_WHITESPACE_RE.startsWith('[[:space:]')).toBe(true);
+    expect(SQL_WHITESPACE_RE.endsWith(']+')).toBe(true);
   });
 });

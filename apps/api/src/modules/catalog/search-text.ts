@@ -46,11 +46,15 @@ export const VN_FOLD_TO = FOLD.to;
 
 /**
  * Mẫu regex Postgres gom khoảng trắng của tên SP thành MỘT dấu cách, đối ứng với `/\s+/g` của
- * `foldVietnamese`. `[[:space:]]` chỉ phủ khoảng trắng ASCII tuỳ collation (collation C không
- * nhận NBSP) trong khi `\s` của JS luôn coi NBSP (U+00A0, tên Pancake hay dính) là khoảng trắng →
- * liệt kê NBSP tường minh để hai phía luôn khớp. Truyền như tham số ràng buộc, không nối vào SQL.
+ * `foldVietnamese`. `[[:space:]]` phụ thuộc collation của DB và KHÔNG phủ hết bộ `\s` của JS (đo trên
+ * Postgres 16 / UTF-8: thiếu U+00A0 NBSP — tên Pancake hay dính —, U+1680, U+2007, U+202F, U+FEFF).
+ * Nên liệt kê tường minh các ký tự đó cùng dải U+2000–200A, U+2028/9, U+205F, U+3000 để kết quả không
+ * đổi theo collation. Dùng escape `\uXXXX` của regex Postgres: chuỗi truyền như THAM SỐ ràng buộc
+ * (không nối vào SQL) nên hai ký tự `\` + `u` tới thẳng bộ regex. Pin trên Postgres thật ở
+ * test/integration-race/buy-flow-4b.race-spec.ts.
  */
-export const SQL_WHITESPACE_RE = '[[:space:] ]+';
+export const SQL_WHITESPACE_RE =
+  '[[:space:]\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+';
 
 /** "  NƯỚC  Rửa " → "nuoc rua". Cùng bảng với SQL (xem đầu file). */
 export function foldVietnamese(input: string): string {
