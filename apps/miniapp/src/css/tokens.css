@@ -223,6 +223,20 @@ body.with-back-btn .page.page-bleed {
   justify-content: center;
 }
 
+/* ── Vùng chạm 44px cho phần tử nhìn thấp hơn (Chip 36px): giãn theo chiều dọc, không đổi hình ── */
+.tubu-hit-44 {
+  position: relative;
+}
+.tubu-hit-44::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
+}
+
 /* ── Skeleton shimmer ── */
 .tubu-skeleton {
   position: relative;

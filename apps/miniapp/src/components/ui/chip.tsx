@@ -10,11 +10,16 @@ export interface ChipProps {
   count?: number;
   size?: 'sm' | 'md';
   variant?: 'filter' | 'choice' | 'info';
+  /** Tên truy cập riêng khi nhãn nhìn thấy không đủ nghĩa (vd "Bỏ lọc Tubu"). */
+  ariaLabel?: string;
   className?: string;
   style?: CSSProperties;
 }
 
-/** Chip lọc/chọn — thay 3 định nghĩa trùng lặp (browse.tsx/feed.tsx byte-for-byte, audit A4-19). */
+/** Chip lọc/chọn — thay 3 định nghĩa trùng lặp (browse.tsx/feed.tsx byte-for-byte, audit A4-19).
+ * Nhìn cao 36px nhưng vùng chạm 44px nhờ `.tubu-hit-44` (follow-up DS v2: "Chip under 44px").
+ * Hàng chip trong `.scroll-x` cần đệm dọc ≥ 4px để vùng chạm không bị overflow cắt.
+ * Là `<button>` thật nên Tab/Enter/Space hoạt động (không còn span role=button không bàn phím). */
 export function Chip({
   children,
   selected,
@@ -22,16 +27,22 @@ export function Chip({
   icon: IconCmp,
   count,
   size = 'md',
+  ariaLabel,
   className,
   style,
 }: ChipProps) {
   return (
-    <span
-      role="button"
+    <button
+      type="button"
       aria-pressed={selected}
-      className={['tubu-press', className].filter(Boolean).join(' ')}
+      aria-label={ariaLabel}
+      className={['tubu-press', 'tubu-hit-44', className].filter(Boolean).join(' ')}
       onClick={onPress}
       style={{
+        border: 'none',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        lineHeight: 'inherit',
         display: 'inline-flex',
         alignItems: 'center',
         gap: 4,
@@ -50,6 +61,6 @@ export function Chip({
       {IconCmp && <Icon icon={IconCmp} size="sm" tone={selected ? 'inverse' : 'muted'} />}
       {children}
       {typeof count === 'number' && <span style={{ opacity: 0.75 }}>({count})</span>}
-    </span>
+    </button>
   );
 }
