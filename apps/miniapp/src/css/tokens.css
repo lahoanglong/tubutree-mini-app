@@ -237,6 +237,17 @@ body.with-back-btn .page.page-bleed {
   transform: translateY(-50%);
 }
 
+/* ── Ô tìm kiếm (SearchField): ẩn nút "x" gốc của WebKit/Blink (trùng nút xoá của DS) + vòng focus
+   của khung (WCAG 2.4.7; ô nhập tự bỏ outline nên khung phải báo thay). Border nằm trong style
+   nội tuyến nên vòng focus dùng box-shadow. ── */
+[role="search"] input[type="search"]::-webkit-search-cancel-button {
+  display: none;
+  -webkit-appearance: none;
+}
+.tubu-search-field:focus-within {
+  box-shadow: 0 0 0 2px var(--color-border-focus);
+}
+
 /* ── Skeleton shimmer ── */
 .tubu-skeleton {
   position: relative;
