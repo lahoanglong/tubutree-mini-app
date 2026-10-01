@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Baby, Droplets, LayoutGrid, Recycle, SprayCan, type LucideIcon } from 'lucide-react';
 import { fetchCategories, type CategoryDTO } from '../services/shop-api';
 import { vi } from '../i18n/vi';
+import { browserStorage } from '../utils/recently-viewed';
 
 export interface CategoryEntry {
   kind: 'category' | 'segment';
@@ -39,10 +40,39 @@ export function categoryEntries(categories: CategoryDTO[] | undefined): Category
 }
 
 export const CATEGORIES_KEY = ['categories'] as const;
+/** Số ô lưới danh mục của lần tải thành công gần nhất — dựng khung chờ cùng số ô ở lần mở sau. */
+export const CATEGORY_COUNT_KEY = 'tubu_category_count';
+const MAX_PLACEHOLDER = 24;
 
-export function useCategories(): { entries: CategoryEntry[]; categories: CategoryDTO[]; isLoading: boolean } {
+function readCategoryCount(): number {
+  try {
+    const n = Number(browserStorage()?.getItem(CATEGORY_COUNT_KEY));
+    return Number.isInteger(n) && n >= 1 && n <= MAX_PLACEHOLDER ? n : SEGMENT_ENTRIES.length;
+  } catch {
+    return SEGMENT_ENTRIES.length;
+  }
+}
+
+export interface UseCategories {
+  entries: CategoryEntry[];
+  categories: CategoryDTO[];
+  isLoading: boolean;
+  /** Số ô khung chờ: số ô của lần tải thành công gần nhất (mặc định 4 = phân khúc dự phòng). Cố định trong một lần mount. */
+  placeholderCount: number;
+}
+
+export function useCategories(): UseCategories {
   // Danh mục đổi chậm (cache API 60s) — cùng staleTime với /brands.
   const q = useQuery({ queryKey: CATEGORIES_KEY, queryFn: fetchCategories, staleTime: 60_000, retry: false });
   const entries = useMemo(() => categoryEntries(q.data), [q.data]);
-  return { entries, categories: q.data ?? [], isLoading: q.isLoading };
+  const [placeholderCount] = useState(readCategoryCount);
+  useEffect(() => {
+    if (!q.isSuccess) return;
+    try {
+      browserStorage()?.setItem(CATEGORY_COUNT_KEY, String(Math.min(entries.length, MAX_PLACEHOLDER)));
+    } catch {
+      /* hết quota — chỉ mất độ khớp của khung chờ */
+    }
+  }, [q.isSuccess, entries.length]);
+  return { entries, categories: q.data ?? [], isLoading: q.isLoading, placeholderCount };
 }
