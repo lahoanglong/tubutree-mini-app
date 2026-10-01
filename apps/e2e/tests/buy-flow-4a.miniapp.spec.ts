@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 import { DELIVERED_CODE, PURCHASED, PURCHASED_PAGE, REMINDER, THUMB, mockBuyFlowSession, mockOrdersTab } from './support/buy-flow-mocks';
 import { mockCheckout, publicConfig, ORDER_CODE_COD } from './support/checkout-mocks';
 import { PILOT_PRODUCT, PILOT_SLUG } from './support/pilot-mocks';
+import { eventsNamed, flushEvents } from './support/events';
 
 /**
  * Zalo Mini App E2E — Dự án 4a "Nhịp mua lại + tab bar + đặt hàng thành công"
@@ -15,22 +16,6 @@ import { PILOT_PRODUCT, PILOT_SLUG } from './support/pilot-mocks';
 async function waitRailSettled(page: Page, api: MockApi): Promise<void> {
   await expect.poll(() => api.callsTo('GET', '/me/purchased-items').length, { timeout: 15_000 }).toBeGreaterThan(0);
   await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
-}
-
-/** Hàng đợi sự kiện chỉ xả khi app bị ẩn (hoặc mỗi 10s) — ép xả để các lô /events tới mock ngay. */
-async function flushEvents(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
-}
-
-/** Mọi sự kiện analytics đã tới mock (cần `api.post('/events', ...)`) có tên `eventName`. */
-function eventsNamed(api: MockApi, eventName: string): { eventName: string; props: Record<string, unknown>; notificationId?: string }[] {
-  return api
-    .callsTo('POST', '/events')
-    .flatMap((c) => (c.body as { events: { eventName: string; props: Record<string, unknown>; notificationId?: string }[] }).events)
-    .filter((e) => e.eventName === eventName);
 }
 
 test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
