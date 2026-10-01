@@ -122,6 +122,7 @@ function SuggestRow({ icon, subtitle, onPress, children }: { icon: ReactNode; su
         <Text variant="body-sm" as="span" style={{ ...ELLIPSIS, fontWeight: 600 }}>
           {children}
         </Text>
+        {subtitle && ' '}
         {subtitle}
       </span>
     </button>

@@ -123,6 +123,12 @@ describe('useSuggest', () => {
     expect(result.current.isFetching).toBe(true);
     expect(result.current.products).toEqual([P]);
 
+    // Cổng vẫn mở: render lại (không đổi gì / gõ thêm) trong lúc chờ vẫn giữ danh sách cũ.
+    rerender({ d: 'abc' });
+    expect(result.current.products).toEqual([P]);
+    rerender({ d: 'abcd' });
+    expect(result.current.products).toEqual([P]);
+
     second.resolve([Q]);
     await advance(0);
     expect(result.current.products).toEqual([Q]);
@@ -144,6 +150,14 @@ describe('useSuggest', () => {
     await advance(SUGGEST_DEBOUNCE_MS);
     expect(mocks.suggestProducts).toHaveBeenLastCalledWith('xy');
     expect(result.current.isFetching).toBe(true);
+    expect(result.current.products).toEqual([]);
+
+    // Render lại khi request còn đang bay (cùng từ khoá, rồi gõ thêm) vẫn không được lộ danh sách cũ.
+    rerender({ d: 'xy' });
+    expect(result.current.products).toEqual([]);
+    rerender({ d: 'xyz' });
+    expect(result.current.products).toEqual([]);
+    await advance(0);
     expect(result.current.products).toEqual([]);
 
     second.resolve([Q]);

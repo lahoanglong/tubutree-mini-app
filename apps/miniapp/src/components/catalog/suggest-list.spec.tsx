@@ -54,7 +54,8 @@ describe('SuggestList', () => {
     expect(recent.queryByRole('button', { name: 'Xoá lịch sử tìm' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Danh mục' })).toBeNull();
     const products = within(screen.getByRole('group', { name: 'Sản phẩm' })).getAllByRole('button');
-    expect(products.map((b) => b.textContent)).toEqual(['Nước rửa chén Tubu65.000đ', 'Nước rửa bình sữa90.000đ']);
+    expect(products.map((b) => b.textContent)).toEqual(['Nước rửa chén Tubu 65.000đ', 'Nước rửa bình sữa 90.000đ']);
+    expect(screen.getByRole('button', { name: 'Nước rửa bình sữa 90.000đ' })).toBeInTheDocument(); // tên + giá cách nhau bằng khoảng trắng
     fireEvent.click(screen.getByRole('button', { name: /Nước rửa bình sữa/ }));
     expect(p.onPickProduct).toHaveBeenCalledWith(PRODUCTS[1], 1);
   });
@@ -71,7 +72,7 @@ describe('SuggestList', () => {
       categories: [{ kind: 'category', key: 'c1', label: 'Nước giặt', icon: SprayCan }],
     });
     const rows = screen.getAllByRole('button');
-    expect(rows.map((b) => b.textContent)).toEqual(['Tìm “nuoc”', 'nước rửa', 'Nước giặt', 'Nước rửa chén Tubu65.000đ']);
+    expect(rows.map((b) => b.textContent)).toEqual(['Tìm “nuoc”', 'nước rửa', 'Nước giặt', 'Nước rửa chén Tubu 65.000đ']);
     for (const b of rows) {
       expect(b.tagName).toBe('BUTTON');
       expect(b).toHaveAttribute('type', 'button');
