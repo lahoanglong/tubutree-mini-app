@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios';
 import { api } from './api';
 import type { OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
 
@@ -200,6 +201,76 @@ export const fetchBoughtTogether = (slug: string) =>
 export interface ProductSuggestion { slug: string; name: string; thumbnail: string | null; basePrice: number; }
 export const suggestProducts = (q: string) =>
   api.get<ProductSuggestion[]>('/search/suggest', { params: { q } }).then((r) => r.data);
+
+// ── Catalog có bộ lọc (dự án 4b) ──
+export type CatalogSort = 'best_seller' | 'newest' | 'price_asc' | 'price_desc';
+export interface CatalogQuery {
+  page: number;
+  limit: number;
+  q?: string;
+  sort?: CatalogSort;
+  /** Danh sách thương hiệu, nối bằng dấu phẩy (như `?brand=` từ Trang chủ). */
+  brand?: string;
+  category?: string;
+  segment?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  inStock?: boolean;
+  minRating?: number;
+}
+export interface CatalogPage extends PageResponse<ProductCard> {
+  /** API cũ (trước 4b) từ chối bộ lọc mới → đã tải lại KHÔNG kèm bộ lọc; UI báo nhẹ. */
+  filtersIgnored: boolean;
+}
+
+/** Tham số mà API trước 4b không biết — ValidationPipe `forbidNonWhitelisted` trả 400 nếu gửi. */
+const EXTENDED_CATALOG_PARAMS = ['minPrice', 'maxPrice', 'inStock', 'minRating'] as const;
+
+/** Chỉ gửi tham số có giá trị — API cũ không bị 400 vì những bộ lọc khách không dùng. */
+export function catalogParams(query: CatalogQuery): Record<string, string | number> {
+  const params: Record<string, string | number> = { page: query.page, limit: query.limit };
+  const q = query.q?.trim();
+  if (q) params.q = q;
+  if (query.sort) params.sort = query.sort;
+  if (query.brand) params.brand = query.brand;
+  if (query.category) params.category = query.category;
+  if (query.segment) params.segment = query.segment;
+  if (query.minPrice != null) params.minPrice = query.minPrice;
+  if (query.maxPrice != null) params.maxPrice = query.maxPrice;
+  if (query.inStock) params.inStock = 'true';
+  if (query.minRating != null) params.minRating = query.minRating;
+  return params;
+}
+
+/**
+ * `GET /products` có bộ lọc. Lùi êm khi miniapp mới gặp API cũ (deploy sai thứ tự): 400 KHI có
+ * tham số mới → tải lại không kèm chúng, đánh dấu `filtersIgnored`. Lỗi khác (hoặc 400 mà không có
+ * tham số mới) vẫn ném ra để trang hiện ErrorState như thường.
+ */
+export async function fetchCatalog(query: CatalogQuery): Promise<CatalogPage> {
+  const params = catalogParams(query);
+  const extended = EXTENDED_CATALOG_PARAMS.some((k) => k in params);
+  try {
+    return { ...(await fetchProducts(params)), filtersIgnored: false };
+  } catch (err) {
+    if (!extended || !isAxiosError(err) || err.response?.status !== 400) throw err;
+    const legacy = { ...params };
+    for (const k of EXTENDED_CATALOG_PARAMS) delete legacy[k];
+    return { ...(await fetchProducts(legacy)), filtersIgnored: true };
+  }
+}
+
+export interface CategoryDTO {
+  id: string;
+  parentId: string | null;
+  name: string;
+  slug: string;
+  image: string | null;
+  sortOrder: number;
+  /** Số SP đang bán (API từ 4b). Thiếu = API cũ → miniapp dùng 4 phân khúc. */
+  productCount?: number;
+}
+export const fetchCategories = () => api.get<CategoryDTO[]>('/categories').then((r) => r.data);
 
 // Flash sale (public)
 export interface FlashSaleActiveItem {

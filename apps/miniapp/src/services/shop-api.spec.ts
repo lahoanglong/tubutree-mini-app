@@ -5,7 +5,10 @@ vi.mock('./api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 import { api } from './api';
 import {
   addToCart,
+  catalogParams,
   fetchActiveOrderCount,
+  fetchCatalog,
+  fetchCategories,
   fetchOrders,
   fetchPurchasedItems,
   normalizeRepurchaseResponse,
@@ -73,5 +76,49 @@ describe('shop-api — buy-flow 4a', () => {
     get.mockResolvedValue({ data: { items: [], nextCursor: null } });
     await fetchPurchasedItems({ variationId: 'v1', limit: 1 });
     expect(get).toHaveBeenCalledWith('/me/purchased-items', { params: { variationId: 'v1', limit: 1 } });
+  });
+});
+
+describe('shop-api — buy-flow 4b', () => {
+  beforeEach(() => vi.clearAllMocks());
+  const PAGE = { data: [], meta: { page: 1, limit: 30, total: 0 } };
+  const badRequest = () => Object.assign(new Error('400'), { isAxiosError: true, response: { status: 400 } });
+
+  it('catalogParams: chỉ gửi tham số có giá trị; q được trim; inStock=true; không gửi inStock=false', () => {
+    expect(catalogParams({ page: 1, limit: 30 })).toEqual({ page: 1, limit: 30 });
+    expect(catalogParams({ page: 2, limit: 30, q: '  nước ', sort: 'best_seller', brand: 'Tubu', category: 'cat-a', segment: 'eco', minPrice: 0, maxPrice: 200000, inStock: true, minRating: 4 })).toEqual({
+      page: 2, limit: 30, q: 'nước', sort: 'best_seller', brand: 'Tubu', category: 'cat-a', segment: 'eco', minPrice: 0, maxPrice: 200000, inStock: 'true', minRating: 4,
+    });
+    expect(catalogParams({ page: 1, limit: 30, q: '   ', inStock: false })).toEqual({ page: 1, limit: 30 });
+  });
+
+  it('fetchCatalog: thành công → filtersIgnored=false', async () => {
+    get.mockResolvedValue({ data: PAGE });
+    await expect(fetchCatalog({ page: 1, limit: 30, minPrice: 100000 })).resolves.toEqual({ ...PAGE, filtersIgnored: false });
+    expect(get).toHaveBeenCalledWith('/products', { params: { page: 1, limit: 30, minPrice: 100000 } });
+  });
+
+  it('fetchCatalog: API cũ trả 400 vì tham số mới → gọi lại KHÔNG có minPrice/maxPrice/inStock/minRating, filtersIgnored=true', async () => {
+    get.mockRejectedValueOnce(badRequest()).mockResolvedValueOnce({ data: PAGE });
+    const r = await fetchCatalog({ page: 1, limit: 30, q: 'nuoc', sort: 'best_seller', minPrice: 1, maxPrice: 2, inStock: true, minRating: 4 });
+    expect(r.filtersIgnored).toBe(true);
+    expect(get).toHaveBeenLastCalledWith('/products', { params: { page: 1, limit: 30, q: 'nuoc', sort: 'best_seller' } });
+  });
+
+  it('fetchCatalog: 400 khi KHÔNG có tham số mới → ném lỗi thật (không nuốt)', async () => {
+    get.mockRejectedValueOnce(badRequest());
+    await expect(fetchCatalog({ page: 1, limit: 30, q: 'nuoc' })).rejects.toThrow('400');
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('fetchCatalog: 500 khi có tham số mới → ném lỗi (chỉ 400 mới lùi)', async () => {
+    get.mockRejectedValueOnce(Object.assign(new Error('500'), { isAxiosError: true, response: { status: 500 } }));
+    await expect(fetchCatalog({ page: 1, limit: 30, inStock: true })).rejects.toThrow('500');
+  });
+
+  it('fetchCategories gọi GET /categories', async () => {
+    get.mockResolvedValue({ data: [{ id: 'cat-a', parentId: null, name: 'A', slug: 'a', image: null, sortOrder: 1, productCount: 3 }] });
+    await expect(fetchCategories()).resolves.toHaveLength(1);
+    expect(get).toHaveBeenCalledWith('/categories');
   });
 });
