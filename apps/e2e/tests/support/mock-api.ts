@@ -382,6 +382,14 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   api.get('/orders/active-count', { count: 0 });
   // Kệ "Mua lại" (Home + tab Đơn hàng) — mặc định khách chưa mua gì.
   api.get('/me/purchased-items', { items: [], nextCursor: null });
+  // Trang Danh mục/Tìm kiếm (dự án 4b) — mọi endpoint nó gọi, mặc định rỗng đúng shape để mở /browse
+  // không rơi vào E2E_UNMOCKED. `/categories` + `/search/suggest` chưa spec nào mock; `/products`
+  // (kể cả tham số lọc mới: sort, minPrice, inStock, rating…) và `/brands` bị spec ghi đè bằng
+  // dữ liệu riêng (đăng ký sau thắng).
+  api.get('/categories', []);
+  api.get('/search/suggest', []);
+  api.get('/brands', []);
+  api.get('/products', { data: [], meta: { page: 1, limit: 30, total: 0 } });
   return user;
 }
 
