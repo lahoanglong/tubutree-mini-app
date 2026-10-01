@@ -6,6 +6,7 @@ import { fetchForYou, fetchProducts } from '../services/shop-api';
 import { getNotifications } from '../services/account-api';
 import { useAuthStore } from '../store/auth';
 import { useCategories } from '../hooks/use-categories';
+import { useHomeCustomerKind } from '../hooks/use-home-customer-kind';
 import { usePurchasedItems } from '../hooks/use-purchased-items';
 import { FlashSale, UpcomingFlashSales } from '../components/flash-sale';
 import { PullToRefresh } from '../components/pull-to-refresh';
@@ -16,13 +17,15 @@ import { HomeExtras } from '../components/home/home-extras';
 import { HomeHeader } from '../components/home/home-header';
 import { HomeSection, type SectionQuery } from '../components/home/home-section';
 import { OrderStrip } from '../components/home/order-strip';
-import { customerKind, dedupeAgainst, homeBlockOrder, refreshHomeQueries, type HomeBlockId } from '../components/home/home-blocks';
+import { dedupeAgainst, homeBlockOrder, refreshHomeQueries, type HomeBlockId } from '../components/home/home-blocks';
 import { Icon } from '../components/ui/icon';
 import { Text } from '../components/ui/text';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 
 const SECTION_LIMIT = 6;
+// "Tubu chọn cho bạn" bỏ SP trùng "Dành cho bạn" rồi mới cắt về SECTION_LIMIT → xin dư để vẫn đủ ô sau khi bỏ trùng.
+const FEATURED_FETCH_LIMIT = SECTION_LIMIT * 2;
 
 /**
  * Trang chủ (spec 5b.1) — DS v2 toàn trang. Thứ tự khối theo khách cũ/mới (`homeBlockOrder`):
@@ -35,32 +38,36 @@ export default function HomePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const authed = useAuthStore((s) => s.status === 'authenticated');
+  const userId = useAuthStore((s) => s.user?.id);
   // Chuông ở đây trước đây trơ, không báo gì — trong khi voucher sinh nhật, nhắc giỏ, hoa hồng
   // duyệt đều nằm trong Thông báo. Dùng chung queryKey với trang Thông báo (P1-8 audit mạch lạc).
   const unreadCount =
     useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: authed }).data?.filter((n) => n.status !== 'READ').length ?? 0;
 
-  // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới.
+  // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới. Trong lúc tải dùng loại đã nhớ
+  // của tài khoản này để thứ tự khối không đổi sau khung hình đầu (useHomeCustomerKind).
   const purchased = usePurchasedItems(PURCHASED_RAIL_LIMIT);
-  const kind = customerKind(purchased.data?.items.length);
+  const kind = useHomeCustomerKind(authed, userId, purchased);
 
   const bestSellers = useQuery({
     queryKey: ['products', 'home-best-seller'],
     queryFn: () => fetchProducts({ limit: SECTION_LIMIT, sort: 'best_seller' }),
   });
-  const featured = useQuery({ queryKey: ['products', 'home-featured'], queryFn: () => fetchProducts({ limit: SECTION_LIMIT }) });
+  const featured = useQuery({ queryKey: ['products', 'home-featured'], queryFn: () => fetchProducts({ limit: FEATURED_FETCH_LIMIT }) });
   const newest = useQuery({ queryKey: ['products', 'home-newest'], queryFn: () => fetchProducts({ limit: SECTION_LIMIT, sort: 'newest' }) });
   // Feed "Dành cho bạn" cá nhân hoá, cần đăng nhập. select() bọc thành { data } để dùng chung HomeSection.
   const forYou = useQuery({ queryKey: ['for-you'], queryFn: fetchForYou, enabled: authed, select: (data) => ({ data }) });
   const categories = useCategories();
 
   // A2-32: với khách chưa có lịch sử, "Dành cho bạn" rơi về SP nổi bật — trùng "Tubu chọn cho bạn".
+  // Chỉ bỏ trùng được khi đã biết "Dành cho bạn" → chờ nó xong (isPending) thì mới hiện, để khối không đổi số ô lúc dữ liệu về;
+  // sau khi bỏ trùng mới cắt về SECTION_LIMIT.
   const forYouIds = useMemo(() => new Set((forYou.data?.data ?? []).map((p) => p.id)), [forYou.data]);
   const featuredQuery: SectionQuery = {
-    isLoading: featured.isLoading,
+    isLoading: featured.isLoading || (authed && forYou.isPending),
     isError: featured.isError,
     error: featured.error,
-    data: featured.data ? { data: dedupeAgainst(featured.data.data, forYouIds) } : undefined,
+    data: featured.data ? { data: dedupeAgainst(featured.data.data, forYouIds).slice(0, SECTION_LIMIT) } : undefined,
   };
 
   const blocks: Record<HomeBlockId, ReactNode> = {

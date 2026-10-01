@@ -16,7 +16,10 @@ export function HomeHeader({ unreadCount }: { unreadCount: number }) {
   const navigate = useNavigate();
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px' }}>
-      <img src={logo} alt="Tubu Tree" width={LOGO_WIDTH} height={LOGO_HEIGHT} style={{ height: LOGO_HEIGHT, width: LOGO_WIDTH, objectFit: 'contain' }} />
+      {/* h1 của trang: logo là tên trang (tên truy cập lấy từ alt) để trình đọc màn hình có điểm mốc tiêu đề. */}
+      <h1 style={{ margin: 0, fontSize: 0, lineHeight: 0 }}>
+        <img src={logo} alt="Tubu Tree" width={LOGO_WIDTH} height={LOGO_HEIGHT} style={{ height: LOGO_HEIGHT, width: LOGO_WIDTH, objectFit: 'contain', display: 'block' }} />
+      </h1>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ position: 'relative' }}>
           <IconButton

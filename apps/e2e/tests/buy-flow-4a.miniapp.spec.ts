@@ -87,6 +87,42 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     expect(Math.abs(aiAfter!.y - aiBefore!.y), 'khối bên dưới bị đẩy').toBeLessThanOrEqual(16);
   });
 
+  test('Home: khách cũ đã nhớ loại — "Bán chạy" không xê dịch khi purchased-items về (không nhảy khối "Dành cho bạn")', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    mockBuyFlowSession(api);
+    // "Dành cho bạn" có hàng: khách cũ thấy nó TRÊN "Bán chạy", khách mới thấy dưới → đổi thứ tự sẽ làm "Bán chạy" nhảy.
+    api.get('/products/for-you', [{
+      id: 'prod-fy', slug: 'danh-cho-ban', brand: 'Tubu', name: 'Gợi Ý Riêng Cho Bạn', thumbnail: null,
+      basePrice: 52000, salePrice: null, isFeatured: false, inStock: true, sold: 3,
+    }]);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    api.get('/me/purchased-items', async () => {
+      await gate;
+      return PURCHASED_PAGE;
+    });
+    // Lần mở trước đã ghi nhớ đây là khách cũ (key/dạng khớp use-home-customer-kind.ts; userId của mockBuyFlowSession).
+    await page.addInitScript(() => {
+      localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'user-4a', kind: 'returning' }));
+    });
+    await page.goto('/');
+
+    const forYou = page.getByRole('region', { name: 'Dành cho bạn' });
+    const best = page.getByRole('region', { name: 'Bán chạy' });
+    await expect(forYou).toBeVisible({ timeout: 15_000 });
+    await expect(best).toBeVisible();
+    await expect(page.getByTestId('purchased-rail-loading')).toBeVisible(); // purchased-items vẫn đang chờ
+    const forYouBefore = await forYou.boundingBox();
+    const bestBefore = await best.boundingBox();
+    expect(forYouBefore!.y, 'đúng thứ tự khách cũ ngay từ đầu: "Dành cho bạn" nằm trên "Bán chạy"').toBeLessThan(bestBefore!.y);
+
+    release();
+    await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
+    const bestAfter = await best.boundingBox();
+    expect(Math.abs(bestAfter!.y - bestBefore!.y), '"Bán chạy" bị đẩy khi purchased-items về').toBeLessThanOrEqual(2);
+  });
+
   test('Khách mới (chưa có đơn giao) → không có kệ Mua lại', async ({ page, api }) => {
     mockBuyFlowSession(api, { purchased: { items: [], nextCursor: null } });
     await page.goto('/');
@@ -225,8 +261,10 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     });
     await expect(page).toHaveURL(/\/orders\?tab=subscriptions$/, { timeout: 10_000 });
     await expect(page.getByRole('tab', { name: 'Định kỳ' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
-    // Trang chủ còn mount trong lúc chuyển cảnh và dải "kỳ định kỳ kế tiếp" của nó cũng in tên này; trang Đơn hàng mount sau cùng.
-    await expect(page.getByText('Nước Xả Vải Tubu').last()).toBeVisible({ timeout: 15_000 });
+    // Trang chủ còn mount trong lúc chuyển cảnh (zmp-ui giữ trang cũ trong TransitionGroup) và dải "kỳ định kỳ kế tiếp"
+    // của nó cũng in tên này → chỉ tìm TRONG trang chứa tab "Định kỳ" (trang Đơn hàng), không tìm trên toàn tài liệu.
+    const ordersPage = page.locator('.zaui-page', { has: page.getByRole('tab', { name: 'Định kỳ' }) });
+    await expect(ordersPage.getByText('Nước Xả Vải Tubu')).toBeVisible({ timeout: 15_000 });
 
     // Redirect là replace: lịch sử chỉ thêm ĐÚNG 1 mục (pushState của chính test), không thêm mục cho /orders.
     expect(await page.evaluate(() => history.length)).toBe(historyBefore + 1);
