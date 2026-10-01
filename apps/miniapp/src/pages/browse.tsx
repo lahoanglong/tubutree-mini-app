@@ -1,424 +1,239 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Page, Text, Button, Input, useLocation, useNavigate } from 'zmp-ui';
-import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
-import { fetchProducts, fetchBrands } from '../services/shop-api';
+import { useEffect, useRef, useState } from 'react';
+import { Page, useNavigate } from 'zmp-ui';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { fetchBrands, fetchCatalog, type ProductCard, type ProductSuggestion } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
-import { trackEvent } from '../services/analytics';
-import ProductCard from '../components/product-card';
-import { ProductGridSkeleton } from '../components/ui/skeleton';
-import { EmptyState, ErrorState } from '../components/ui/empty-state';
-import { PullToRefresh } from '../components/pull-to-refresh';
-import { brandAccent } from '../utils/brands';
-import { useDebounced } from '../utils/use-debounced';
-import { vi } from '../i18n/vi';
-import { haptic } from '../utils/haptic';
+import { trackFilterApplied, trackSearchPerformed, trackSearchResultClicked } from '../services/discovery-events';
 import { CartButton } from '../components/cart-button';
+import { PullToRefresh } from '../components/pull-to-refresh';
+import { CatalogGrid, CatalogGridSkeleton } from '../components/catalog/catalog-grid';
+import { CategoryGrid } from '../components/catalog/category-grid';
+import { FilterSheet } from '../components/catalog/filter-sheet';
+import { RecentlyViewedRail } from '../components/catalog/recently-viewed-rail';
+import { ResultHeader } from '../components/catalog/result-header';
+import { SortChips } from '../components/catalog/sort-chips';
+import { SuggestList } from '../components/catalog/suggest-list';
+import { Button } from '../components/ui/button';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { SearchField } from '../components/ui/search-field';
+import { segmentLabel, useCategories, type CategoryEntry } from '../hooks/use-categories';
+import { useScrollRestoration } from '../hooks/use-scroll-restoration';
+import { useSearchState } from '../hooks/use-search-state';
+import { useSuggest } from '../hooks/use-suggest';
+import { vi } from '../i18n/vi';
+import { clearRecentSearches, pushRecentSearch, readRecentSearches } from '../utils/recent-searches';
+import {
+  CLEAR_SEARCH_PATCH, activeFilterChips, activeFilterCount, changedFilterTypes, isBrowseRoot, toCatalogQuery, type FilterDraft,
+} from '../utils/search-state';
 
 const PAGE_LIMIT = 30;
-const SEGMENT_LABELS: Record<string, string> = {
-  mom_baby: '🍼 Cho mẹ & bé',
-  home_clean: '🧼 Nhà bếp xanh',
-  skincare: '🧴 Chăm sóc cá nhân',
-  eco: '♻️ Sống xanh',
-};
-const RECENT_KEY = 'tubu_recent_searches';
-const RECENT_MAX = 8;
 
-function readRecent(): string[] {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY);
-    const arr = raw ? (JSON.parse(raw) as unknown) : [];
-    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-function pushRecent(term: string): string[] {
-  const t = term.trim();
-  if (t.length < 2) return readRecent();
-  const next = [t, ...readRecent().filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, RECENT_MAX);
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-  } catch {
-    /* ignore quota */
-  }
-  return next;
-}
-
+/**
+ * Trang Danh mục / Tìm kiếm (spec 5b.2) — DS v2. Toàn bộ trạng thái (q, sắp xếp, lọc, danh mục,
+ * phân khúc, thương hiệu) nằm trong URL (`useSearchState`, replace) → quay lại từ PDP giữ nguyên,
+ * vị trí cuộn khôi phục theo khoá URL. Gõ chỉ hiện GỢI Ý; Enter / chạm gợi ý mới ghi `q`.
+ *
+ * Khôi phục cuộn: `anchorRef` luôn được vẽ (không đặt sau điều kiện) và `ready` = trang 1 của danh sách
+ * đã vẽ VÀ không đang ở chế độ gõ (gợi ý thay nội dung → trang ngắn, trình duyệt sẽ kẹp vị trí về gần 0
+ * và lượt khôi phục duy nhất bị dùng mất). Vị trí đã lưu có thể sâu hơn trang 1 (khách đã bấm "Xem thêm"):
+ * quay lại trong lúc cache React Query còn (gcTime mặc định 5 phút) thì MỌI trang đã tải vẫn hiện ngay
+ * nên khôi phục đủ sâu; hết cache thì chỉ có trang 1 và trình duyệt kẹp vị trí về cuối trang 1 —
+ * chấp nhận (không tải ngầm hàng loạt trang chỉ để cuộn).
+ */
 export default function BrowsePage() {
-  const location = useLocation();
   const navigate = useNavigate();
-  const initialBrands = useMemo(() => {
-    const raw = new URLSearchParams(location.search).get('brand');
-    return raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
-  }, [location.search]);
-  const initialSegment = useMemo(
-    () => new URLSearchParams(location.search).get('segment') ?? undefined,
-    [location.search],
-  );
+  const { state, urlKey, focusSearch, update, consumeFocus } = useSearchState();
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const [q, setQ] = useState('');
-  // Ô tìm kiếm ở Trang chủ chỉ là cái vỏ dẫn sang đây; nếu tới đây khách vẫn phải chạm thêm
-  // một lần nữa vào ô thật thì thao tác "tìm" tốn 2 chạm và đọc như bị nuốt mất cú chạm đầu.
-  // zmp-ui Box khai báo ref là MutableRefObject (không nhận null) → khởi tạo non-null giả.
-  const searchBoxRef = useRef<HTMLDivElement>(null!);
-  const wantsFocus = new URLSearchParams(location.search).get('focus') === 'search';
+  // Ô nhập theo `q` của URL mỗi khi URL đổi từ ngoài (Back, chạm từ khoá) — đặt trong render, không qua effect.
+  const [draft, setDraft] = useState(state.q);
+  const [syncedQ, setSyncedQ] = useState(state.q);
+  if (syncedQ !== state.q) {
+    setSyncedQ(state.q);
+    setDraft(state.q);
+  }
+  const [editing, setEditing] = useState(focusSearch);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [recent, setRecent] = useState<string[]>(() => readRecentSearches());
+
+  // Ô tìm ở Trang chủ chỉ là vỏ dẫn sang đây (?focus=search): focus thẳng ô thật rồi bỏ cờ khỏi URL
+  // — quay lại từ PDP sẽ không bật bàn phím lần nữa (plan 4b Ruling 7).
   useEffect(() => {
-    if (!wantsFocus) return;
-    const input = searchBoxRef.current?.querySelector('input');
-    input?.focus();
-  }, [wantsFocus]);
-  const [selectedBrands, setSelectedBrands] = useState<string[]>(initialBrands);
-  const [segment, setSegment] = useState<string | undefined>(initialSegment);
-  const [sort, setSort] = useState<string | undefined>(undefined);
-  const [recent, setRecent] = useState<string[]>(() => readRecent());
-  const debouncedQ = useDebounced(q, 300);
+    if (!focusSearch) return;
+    inputRef.current?.focus();
+    setEditing(true);
+    consumeFocus();
+  }, [focusSearch, consumeFocus]);
 
-  // Lưu từ khoá vào "tìm gần đây" khi user gõ một truy vấn có nghĩa (≥2 ký tự).
-  useEffect(() => {
-    if (debouncedQ.trim().length >= 2) setRecent(pushRecent(debouncedQ));
-  }, [debouncedQ]);
-
-  // Brand/category chậm đổi (sync Pancake ~15p/lần) → cache 60s, override default 10s.
+  // Brand/category đổi chậm (sync Pancake ~15p/lần) → cache 60s.
   const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands, staleTime: 60_000 });
+  const categories = useCategories();
+  // Chỉ gợi ý khi khách đang gõ: vào thẳng /browse?q=… (link, Back) không được bắn request gợi ý.
+  const suggest = useSuggest(editing ? draft : '');
 
-  const brandParam = selectedBrands.join(',');
-  // Infinite scroll (trước đây chỉ lấy 30 SP/1 lần → catalog >30 trong 1 bộ lọc bị giấu mất).
   const products = useInfiniteQuery({
-    queryKey: ['products', 'browse', debouncedQ, brandParam, segment, sort],
-    queryFn: ({ pageParam }) =>
-      fetchProducts({
-        page: pageParam,
-        limit: PAGE_LIMIT,
-        ...(debouncedQ ? { q: debouncedQ } : {}),
-        ...(brandParam ? { brand: brandParam } : {}),
-        ...(segment ? { segment } : {}),
-        ...(sort ? { sort } : {}),
-      }),
+    queryKey: ['products', 'browse', urlKey],
+    queryFn: ({ pageParam }) => fetchCatalog(toCatalogQuery(state, pageParam, PAGE_LIMIT)),
     initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      const { page, limit, total } = lastPage.meta;
-      return page * limit < total ? page + 1 : undefined;
-    },
+    getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
   });
-
-  // Phát 'search_performed' khi trang 1 của kết quả tìm kiếm (debouncedQ) trả về.
-  // Dep theo PHẦN TỬ trang 1 (`pages?.[0]`), KHÔNG phải cả mảng `pages` — `fetchNextPage` tạo
-  // mảng `pages` MỚI mỗi lần nối thêm trang dù trang 1 bên trong không đổi, nếu dep theo cả
-  // mảng thì mỗi lần bấm "Xem thêm" sẽ phát lại sự kiện cho cùng 1 lượt tìm (review 2026-09-28).
-  // React Query giữ nguyên tham chiếu các trang đã tải khi chỉ nối thêm, nên trang 1 chỉ đổi
-  // tham chiếu khi chính nó thật sự refetch.
-  useEffect(() => {
-    const firstPage = products.data?.pages?.[0];
-    if (!debouncedQ || !firstPage) return;
-    void trackEvent('search_performed', 'miniapp', {
-      q: debouncedQ,
-      resultsCount: firstPage.meta.total,
-    });
-  }, [debouncedQ, products.data?.pages?.[0]]);
-
-  const SORTS = [
-    { key: undefined, label: 'Gợi ý' },
-    { key: 'newest', label: 'Mới nhất' },
-    { key: 'price_asc', label: 'Giá thấp → cao' },
-    { key: 'price_desc', label: 'Giá cao → thấp' },
-  ] as const;
-
-  // Deeplink từ Home (?brand= / ?segment=) thay đổi khi trang còn mounted → sync vào state.
-  useEffect(() => {
-    if (selectedBrands.join(',') !== initialBrands.join(',')) {
-      setSelectedBrands(initialBrands);
-    }
-  }, [initialBrands, selectedBrands]);
-  useEffect(() => {
-    setSegment(initialSegment);
-  }, [initialSegment]);
-
-  const toggleBrand = (b?: string) => {
-    haptic('light');
-    let next: string[] = [];
-    if (b) {
-      if (selectedBrands.includes(b)) {
-        next = selectedBrands.filter((x) => x !== b);
-      } else {
-        next = [...selectedBrands, b];
-      }
-    } else {
-      next = [];
-    }
-    setSelectedBrands(next);
-
-    const params = new URLSearchParams(location.search);
-    if (next.length > 0) {
-      params.set('brand', next.join(','));
-    } else {
-      params.delete('brand');
-    }
-    const searchStr = params.toString();
-    navigate(searchStr ? `/browse?${searchStr}` : '/browse', { replace: true });
-  };
-
+  const firstPage = products.data?.pages[0];
   const list = products.data?.pages.flatMap((pg) => pg.data) ?? [];
 
+  // Phụ thuộc PHẦN TỬ trang 1, không phải cả mảng `pages` — "Xem thêm" tạo mảng mới mà trang 1 giữ
+  // nguyên tham chiếu, nên không bắn lại cho cùng một lượt tìm (review 2026-09-28).
+  useEffect(() => {
+    if (!state.q || !firstPage) return;
+    trackSearchPerformed({ q: state.q, resultsCount: firstPage.meta.total });
+  }, [state.q, firstPage]);
+
+  const { anchorRef } = useScrollRestoration(urlKey, !editing && list.length > 0);
+
+  const stopEditing = () => {
+    setEditing(false);
+    inputRef.current?.blur();
+  };
+  const commit = (term: string) => {
+    const t = term.trim();
+    stopEditing();
+    setDraft(t);
+    if (t.length >= 2) setRecent(pushRecentSearch(t));
+    update({ q: t });
+  };
+  const pickCategory = (e: CategoryEntry) => {
+    stopEditing();
+    update(e.kind === 'category' ? { category: e.key, segment: undefined, q: '' } : { segment: e.key, category: undefined, q: '' });
+  };
+  const pickSuggestion = (p: ProductSuggestion, index: number) => {
+    trackSearchResultClicked({ q: draft.trim(), position: index + 1, source: 'suggest', slug: p.slug });
+    stopEditing();
+    navigate(`/product/${p.slug}`, { state: { listSource: 'search_suggest' } });
+  };
+  const openResult = (p: ProductCard, index: number) => {
+    if (state.q) trackSearchResultClicked({ q: state.q, position: index + 1, source: 'results', slug: p.slug });
+  };
+  const applyFilters = (d: FilterDraft) => {
+    for (const t of changedFilterTypes(state, d)) trackFilterApplied(t);
+    setFiltersOpen(false);
+    update({ brands: d.brands, minPrice: d.minPrice, maxPrice: d.maxPrice, inStock: d.inStock, minRating: d.minRating });
+  };
+
+  const root = isBrowseRoot(state);
+  const categoryName = state.category ? categories.categories.find((c) => c.id === state.category)?.name : undefined;
+  const chips = activeFilterChips(state, { categoryName, segmentName: state.segment ? segmentLabel(state.segment) : undefined });
+  const noResults = !products.isLoading && !products.isError && list.length === 0;
+
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 72 }}>
+    <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
       <PullToRefresh onRefresh={() => Promise.all([products.refetch(), brands.refetch()])} />
-      <Box p={3} flex alignItems="center" style={{ gap: 10 }}>
-        <Box ref={searchBoxRef} style={{ flex: 1, minWidth: 0 }}>
-          <Input.Search
-            placeholder={vi.browse.searchPlaceholder}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            clearable
-          />
-        </Box>
-        {/* Trang này KHÔNG có lối nào tới giỏ (bottom nav cũng không có tab giỏ): khách thêm
-            vài món rồi cuộn tiếp thì phải quay về trang chủ hoặc mở lại một trang sản phẩm
-            mới thấy giỏ đâu (P2-8 audit mạch lạc). */}
-        <CartButton />
-      </Box>
-
-      {/* Lưới Danh mục — hiện khi ở trạng thái duyệt gốc (chưa gõ/chưa lọc). Trước đây tab
-          "Danh mục" chỉ là ô tìm kiếm, không có lối duyệt theo nhóm → thêm grid phân khúc. */}
-      {!q.trim() && !segment && selectedBrands.length === 0 && (
-        <Box px={3} pb={2}>
-          <Text size="xSmall" bold style={{ color: 'var(--neutral-600)', display: 'block', marginBottom: 8 }}>
-            Danh mục
-          </Text>
-          <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {Object.entries(SEGMENT_LABELS).map(([key, label]) => (
-              <Box
-                key={key}
-                role="button"
-                aria-label={label}
-                className="tubu-press"
-                onClick={() => {
-                  haptic('light');
-                  navigate(`/browse?segment=${key}`);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  background: 'var(--neutral-0)',
-                  border: '1px solid var(--neutral-150, var(--neutral-100))',
-                  borderRadius: 'var(--radius-lg)',
-                  padding: '12px 14px',
-                  minHeight: 48,
-                  boxSizing: 'border-box',
-                }}
-              >
-                <Text size="small" style={{ fontWeight: 600 }}>{label}</Text>
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      )}
-
-      {/* Tìm gần đây + Xu hướng — chỉ hiện khi chưa gõ gì (màn tìm kiếm §6.12). */}
-      {!q.trim() && (
-        <Box px={3} pb={1}>
-          {recent.length > 0 && (
-            <Box mb={2}>
-              <Box flex alignItems="center" justifyContent="space-between" mb={1}>
-                <Text size="xSmall" bold style={{ color: 'var(--neutral-600)' }}>
-                  Tìm gần đây
-                </Text>
-                <Text
-                  size="xSmall"
-                  className="tubu-press"
-                  onClick={() => {
-                    try {
-                      localStorage.removeItem(RECENT_KEY);
-                    } catch {
-                      /* ignore */
-                    }
-                    setRecent([]);
-                  }}
-                  style={{ color: 'var(--neutral-400)' }}
-                >
-                  Xoá
-                </Text>
-              </Box>
-              <Box style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {recent.map((t) => (
-                  <Chip key={t} label={`🕘 ${t}`} active={false} onClick={() => setQ(t)} />
-                ))}
-              </Box>
-            </Box>
-          )}
-          {(brands.data?.length ?? 0) > 0 && (
-            <Box>
-              <Text size="xSmall" bold style={{ color: 'var(--neutral-600)', display: 'block', marginBottom: 6 }}>
-                Xu hướng
-              </Text>
-              <Box style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {brands.data?.slice(0, 6).map((b) => (
-                  <Chip
-                    key={b.brand}
-                    label={`🔥 ${b.brand}`}
-                    dotColor={brandAccent(b.brand)}
-                    active={selectedBrands.includes(b.brand)}
-                    onClick={() => toggleBrand(b.brand)}
-                  />
-                ))}
-              </Box>
-            </Box>
-          )}
-        </Box>
-      )}
-
-      {segment && (
-        <Box px={3} pb={2}>
-          <Box
-            role="button"
-            className="tubu-press"
-            onClick={() => {
-              setSegment(undefined);
-              navigate('/browse', { replace: true });
+      <div ref={anchorRef} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px 8px' }}>
+        <SearchField
+          ref={inputRef}
+          value={draft}
+          onChange={setDraft}
+          onSubmit={commit}
+          onFocus={() => setEditing(true)}
+          onClear={() => {
+            setDraft('');
+            if (state.q) update({ q: '' });
+          }}
+          label={vi.browse.searchLabel}
+          clearLabel={vi.browse.clearSearch}
+          placeholder={vi.browse.searchPlaceholder}
+        />
+        {editing ? (
+          <Button
+            variant="ghost"
+            onPress={() => {
+              stopEditing();
+              setDraft(state.q);
             }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'var(--leaf-600)',
-              color: '#fff',
-              borderRadius: 'var(--radius-full)',
-              padding: '6px 12px',
-              fontSize: 12.5,
-              fontWeight: 600,
-            }}
+            style={{ minWidth: 0, padding: '0 8px' }}
           >
-            {SEGMENT_LABELS[segment] ?? segment} ✕
-          </Box>
-        </Box>
-      )}
-
-      {/* Lọc thương hiệu — CHỈ hiện khi có ≥1 brand (trước đây rỗng vẫn hiện mỗi chip "Tất cả"
-          đứng trơ 1 dòng, phí diện tích). "Tất cả" đi cùng danh sách brand để reset. */}
-      {(brands.data?.length ?? 0) > 0 && (
-        <Box px={3} className="scroll-x" style={{ gap: 8, paddingBottom: 10, minWidth: 0, maxWidth: '100%' }}>
-          <Chip label={vi.home.allBrands} active={selectedBrands.length === 0} onClick={() => toggleBrand(undefined)} />
-          {brands.data?.map((b) => (
-            <Chip
-              key={b.brand}
-              label={b.brand}
-              dotColor={brandAccent(b.brand)}
-              active={selectedBrands.includes(b.brand)}
-              onClick={() => toggleBrand(b.brand)}
-            />
-          ))}
-        </Box>
-      )}
-
-      {/* Sắp xếp (backend orderBy: newest/price_asc/price_desc/featured) */}
-      <Box px={3} className="scroll-x" style={{ gap: 8, paddingBottom: 10, minWidth: 0, maxWidth: '100%' }}>
-        {SORTS.map((s) => (
-          <Chip
-            key={s.label}
-            label={s.label}
-            active={sort === s.key}
-            onClick={() => {
-              haptic('light');
-              setSort(s.key);
-            }}
-          />
-        ))}
-      </Box>
-
-      <Box px={3} pb={6}>
-        {products.isLoading ? (
-          <ProductGridSkeleton count={6} />
-        ) : products.isError ? (
-          <ErrorState message={getErrorMessage(products.error)} onRetry={() => void products.refetch()} />
-        ) : list.length === 0 ? (
-          debouncedQ ? (
-            <EmptyState
-              art="search"
-              heading={vi.browse.noResultHeading(debouncedQ)}
-              body={vi.browse.noResultBody}
-              ctaLabel={vi.home.allBrands}
-              onCta={() => {
-                setQ('');
-                toggleBrand(undefined);
-              }}
-            />
-          ) : (
-            <EmptyState art="leaf" heading={vi.browse.emptyHeading} body={vi.browse.emptyBody} />
-          )
+            {vi.common.cancel}
+          </Button>
         ) : (
-          <>
-            <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {list.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </Box>
-            {products.hasNextPage && (
-              <Box flex justifyContent="center" pt={4}>
-                <Button
-                  variant="secondary"
-                  loading={products.isFetchingNextPage} disabled={products.isFetchingNextPage}
-                  onClick={() => void products.fetchNextPage()}
-                  style={{ minWidth: 160 }}
-                >
-                  Xem thêm
-                </Button>
-              </Box>
-            )}
-          </>
+          <CartButton />
         )}
-      </Box>
+      </div>
 
-    </Page>
-  );
-}
-
-function Chip({
-  label,
-  active,
-  onClick,
-  dotColor,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  dotColor?: string;
-}) {
-  return (
-    <Box
-      role="button"
-      aria-pressed={active}
-      className="tubu-press"
-      onClick={onClick}
-      style={{
-        whiteSpace: 'nowrap',
-        padding: '10px 14px',
-        borderRadius: 'var(--radius-full)',
-        fontSize: 13,
-        fontWeight: active ? 600 : 400,
-        background: active ? 'var(--primary-600)' : 'var(--neutral-0)',
-        border: `1px solid ${active ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
-        color: active ? 'white' : 'var(--neutral-600)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        minHeight: 40,
-        boxSizing: 'border-box',
-        flex: '0 0 auto',
-      }}
-    >
-      {dotColor && (
-        <span
-          aria-hidden
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: active ? 'white' : dotColor,
+      {editing ? (
+        <SuggestList
+          draft={draft}
+          recent={recent}
+          categories={categories.entries}
+          products={suggest.products}
+          loading={suggest.isFetching}
+          onPickKeyword={commit}
+          onPickCategory={pickCategory}
+          onPickProduct={pickSuggestion}
+          onClearRecent={() => {
+            clearRecentSearches();
+            setRecent([]);
           }}
         />
+      ) : (
+        <>
+          {root && (
+            <CategoryGrid
+              entries={categories.entries}
+              isLoading={categories.isLoading}
+              placeholderCount={categories.placeholderCount}
+              onSelect={pickCategory}
+            />
+          )}
+          {root && <RecentlyViewedRail />}
+          <SortChips value={state.sort} onChange={(sort) => update({ sort })} />
+          <ResultHeader
+            total={firstPage?.meta.total ?? 0}
+            isLoading={products.isLoading}
+            chips={chips}
+            filterCount={activeFilterCount(state)}
+            filtersIgnored={firstPage?.filtersIgnored ?? false}
+            onOpenFilters={() => setFiltersOpen(true)}
+            onPatch={update}
+          />
+          <div style={{ padding: '0 16px 24px' }}>
+            {products.isLoading ? (
+              <CatalogGridSkeleton count={6} />
+            ) : products.isError ? (
+              <ErrorState message={getErrorMessage(products.error)} onRetry={() => void products.refetch()} />
+            ) : list.length === 0 ? (
+              <EmptyState
+                art={state.q ? 'search' : 'leaf'}
+                heading={state.q ? vi.browse.noResultHeading(state.q) : root ? vi.browse.emptyHeading : vi.browse.noResultFiltered}
+                body={root ? vi.browse.emptyBody : vi.browse.noResultBody}
+                ctaLabel={root ? undefined : vi.browse.clearAll}
+                onCta={root ? undefined : () => update(CLEAR_SEARCH_PATCH)}
+              />
+            ) : (
+              <>
+                <CatalogGrid products={list} listSource={state.q ? 'search' : 'browse'} onOpen={openResult} />
+                {products.hasNextPage && (
+                  <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 16 }}>
+                    <Button
+                      variant="secondary"
+                      loading={products.isFetchingNextPage}
+                      onPress={() => {
+                        products.fetchNextPage().catch(() => undefined);
+                      }}
+                      style={{ minWidth: 160 }}
+                    >
+                      {vi.browse.loadMore}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          {/* Tìm/lọc không ra gì → vẫn cho khách lối đi tiếp ("Đã xem gần đây" tự ẩn khi chưa xem gì). Đặt NGOÀI
+              khối đệm 16px vì dải tự có đệm ngang; ở trang gốc dải đã hiện phía trên lưới. */}
+          {noResults && !root && <RecentlyViewedRail />}
+        </>
       )}
-      {label}
-    </Box>
+
+      <FilterSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} state={state} brands={brands.data ?? []} onApply={applyFilters} />
+    </Page>
   );
 }
