@@ -12,7 +12,7 @@ import { ListRow } from '../ui/list-row';
 import { Skeleton } from '../ui/skeleton';
 
 // Khung dải: section đệm 4/12 + Card outline (viền 1 + đệm 8) + ListRow đệm 8 (tiêu đề body-sm 14*1.57
-// + caption 13*1.54 + 2) ≈ 60px/dòng. Placeholder giữ chỗ MỘT dòng (trường hợp phổ biến); e2e Task 26 đo lại.
+// + caption 13*1.54 + 2) ≈ 60px/dòng. Placeholder giữ chỗ MỘT dòng; e2e Task 26 đo lại.
 const SECTION_PAD = '4px 16px 12px';
 const ROW_PADDING = '8px 4px';
 const PLACEHOLDER_ROW_HEIGHT = 60;
@@ -32,7 +32,10 @@ export function formatDayMonth(iso: string): string {
 /**
  * Dải "đơn đang giao / kỳ định kỳ kế tiếp" (spec 5b.1, plan 4b Ruling 9). Danh sách đơn chỉ tải khi
  * badge đơn đang xử lý (cùng query với tab bar) > 0. Khách chưa đăng nhập / không có gì / lỗi → ẩn.
- * Đang tải → placeholder giữ chỗ (spec §9) để dữ liệu về không đẩy nội dung bên dưới.
+ *
+ * Placeholder (spec §9) CHỈ giữ chỗ khi đang tải danh sách đơn SHIPPING (badge > 0 → nhiều khả năng có
+ * dòng "đang giao"). Cố ý KHÔNG giữ chỗ chỉ vì query định kỳ đang tải: đa số khách không có dải nào, giữ
+ * chỗ cho họ sẽ kéo toàn bộ nội dung bên dưới nhích lên khi tải xong; một dòng định kỳ hiện muộn là hại nhỏ hơn.
  */
 export function OrderStrip() {
   const navigate = useNavigate();
@@ -50,7 +53,7 @@ export function OrderStrip() {
   const subs = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions, enabled: authed, retry: false });
   if (!authed) return null;
 
-  if (subs.isLoading || (shippingEnabled && shipping.isLoading)) {
+  if (shippingEnabled && shipping.isLoading) {
     return (
       <div data-testid="order-strip-loading" aria-hidden="true" style={{ padding: SECTION_PAD }}>
         <Skeleton height={PLACEHOLDER_ROW_HEIGHT + 18} radius="var(--radius-card)" />

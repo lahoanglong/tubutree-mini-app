@@ -17,6 +17,7 @@ describe('homeBlockOrder (spec 5b.1, plan 4b Ruling 8)', () => {
     ]);
   });
 
+  // Chỉ ghim THỨ TỰ TĨNH; "Dành cho bạn" rỗng (khách cũ chưa có gợi ý) làm lưới đầu tiên trượt xuống khối 6 — ngoại lệ đã chấp nhận, do Task 21 xử lý.
   it('lưới SP đầu tiên nằm trong 5 khối đầu (đầu trang/logo không tính là khối)', () => {
     expect(firstGrid(homeBlockOrder('returning'))).toBeLessThanOrEqual(5);
     expect(firstGrid(homeBlockOrder('new'))).toBeLessThanOrEqual(5);
