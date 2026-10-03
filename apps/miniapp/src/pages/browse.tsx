@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
-import { useNavigationType } from 'react-router-dom';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { fetchBrands, fetchCatalog, type ProductCard, type ProductSuggestion } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
@@ -19,6 +18,7 @@ import { Text } from '../components/ui/text';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { SearchField } from '../components/ui/search-field';
 import { segmentLabel, useCategories, type CategoryEntry } from '../hooks/use-categories';
+import { useNavigationType } from '../hooks/use-navigation-type';
 import { useScrollRestoration } from '../hooks/use-scroll-restoration';
 import { useSearchState } from '../hooks/use-search-state';
 import { useSuggest } from '../hooks/use-suggest';

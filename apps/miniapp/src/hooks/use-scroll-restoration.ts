@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
-import { useNavigationType } from 'react-router-dom';
+import { useNavigationType } from './use-navigation-type';
 
 export const SCROLL_KEY_PREFIX = 'tubu_scroll:';
 const SAVE_DEBOUNCE_MS = 100;
