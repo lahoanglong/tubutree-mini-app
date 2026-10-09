@@ -1,0 +1,2013 @@
+[
+  {
+    "c": "C-001",
+    "ids": [
+      "A5N-01",
+      "A1-011 (phần ghi đơn dưới tên CTV)"
+    ],
+    "sev": "P0",
+    "title": "Đơn CTV lên hộ ghi userId=CTV: huỷ/trả hàng hoàn tiền vào ví CTV, khách đã trả tiền mất trắng",
+    "files": "apps/api/src/modules/orders/order-reversal.service.ts:104,121-122; apps/api/src/modules/affiliate/affiliate.service.ts:323-347",
+    "group": "api/orders+affiliate",
+    "kind": "tiền",
+    "effort": "L",
+    "model": "opus",
+    "verify_cmd": "Fixture: CTV POST /affiliate/orders BANK_TRANSFER -> UPDATE paymentStatus=PAID -> POST /orders/{code}/cancel -> SELECT walletBalance FROM users (CTV phải = 0). Vá nhanh (M): chặn CTV tự huỷ đơn placedForCustomer đã PAID; sửa gốc (L): userId = khách cuối",
+    "verifier": "XÁC NHẬN (A5 verifier x2; A1-011 verifier: một phần, phần ghi đơn dưới tên CTV đúng). Verifier A5 bổ sung: lỗi cũng xảy ra với trả hàng (reviewReturn) và COD đã giao bị trả",
+    "decision": "Q-01"
+  },
+  {
+    "c": "C-002",
+    "ids": [
+      "A2-005"
+    ],
+    "sev": "P1",
+    "title": "Hoa hồng CTV tạo ngoài transaction của đơn, nuốt lỗi, không unique, không cron bù",
+    "files": "apps/api/src/modules/checkout/checkout.service.ts:424-427; apps/api/src/modules/affiliate/affiliate.service.ts:458-503",
+    "group": "api/affiliate+checkout+prisma",
+    "kind": "tiền",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "SQL: SELECT o.code FROM orders o WHERE o.\"referrerUserId\" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM commissions c WHERE c.\"orderId\"=o.id); spec: commission.create ném lỗi -> đơn rollback hoặc cron bù tạo đúng 1 dòng",
+    "verifier": "XÁC NHẬN (A2 verifier x2)",
+    "decision": ""
+  },
+  {
+    "c": "C-003",
+    "ids": [
+      "A1-005"
+    ],
+    "sev": "P1",
+    "title": "3 chương trình giới thiệu; voucher REFER 50k+50k chạy ngầm và không thu hồi khi đơn bị trả",
+    "files": "apps/api/src/modules/affiliate/affiliate.service.ts:517-531; apps/api/src/modules/orders/order-status.service.ts:145-148",
+    "group": "api/affiliate+orders",
+    "kind": "tiền",
+    "effort": "M",
+    "model": "opus",
+    "verify_cmd": "grep -rn 'grantReferralReward\\|REFER-' apps/api/src --include=*.ts | grep -v spec; spec: DELIVERED rồi RETURNED -> coupon REFER-* bị vô hiệu",
+    "verifier": "XÁC NHẬN (A1 verifier x2)",
+    "decision": "Q-05"
+  },
+  {
+    "c": "C-004",
+    "ids": [
+      "A2-001",
+      "A5N-06",
+      "A3-014",
+      "A2-017 (phần gộp khách thiếu bảng)"
+    ],
+    "sev": "P1",
+    "title": "Gộp khách->Zalo (mergeGuestInto): nuốt P2002 trong tx làm kẹt phiên; số dư đọc ngoài tx; sót bảng",
+    "files": "apps/api/src/modules/auth/auth.service.ts:296-315; apps/api/src/modules/auth/auth.service.ts:324-327",
+    "group": "api/auth",
+    "kind": "dữ liệu",
+    "effort": "M",
+    "model": "opus",
+    "verify_cmd": "cd apps/api && DATABASE_URL=...tubutree_it npx jest -c test/integration-race/jest.config.js --runInBand -t merge (race-spec mới: guest+target cùng điểm danh 1 ngày -> ensurePhone trả token target, số dư cộng đúng)",
+    "verifier": "XÁC NHẬN (A2 verifier x2; tác động hiệu chỉnh: kẹt phiên khách, KHÔNG chặn đặt hàng). A5N-06 (đua cộng đôi) chưa kiểm động; A3-014, A2-017 chưa kiểm",
+    "decision": "Q-11"
+  },
+  {
+    "c": "C-005",
+    "ids": [
+      "A3-004"
+    ],
+    "sev": "P1",
+    "title": "Auth throttle 5 lần/phút/IP: người thứ 6 cùng wifi/CGNAT không đăng nhập hay refresh được",
+    "files": "apps/api/src/modules/auth/auth.controller.ts:53,67,80,93",
+    "group": "api/auth",
+    "kind": "hiệu năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "7 lần POST /api/auth/refresh cùng X-Forwarded-For: 401 x5 rồi 429 (đo trên API 3001); sau sửa kỳ vọng không 429 ở IP chung",
+    "verifier": "XÁC NHẬN (chi tiết sai: refresh có bộ đếm riêng, không tính chung với guest)",
+    "decision": "Q-22"
+  },
+  {
+    "c": "C-006",
+    "ids": [
+      "A1-013 (phần a)"
+    ],
+    "sev": "P1",
+    "title": "Khuyến mãi nhãn hàng lưu couponCode tự do, không kiểm mã có tồn tại; khách chép mã sai",
+    "files": "apps/api/src/modules/brand/brand.service.ts:195-210; apps/miniapp/src/pages/brand-view.tsx:178-206",
+    "group": "api/brand",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "sed -n '190,212p' apps/api/src/modules/brand/brand.service.ts; spec: couponCode không tồn tại -> 400",
+    "verifier": "XÁC NHẬN (A1 verifier x2)",
+    "decision": ""
+  },
+  {
+    "c": "C-007",
+    "ids": [
+      "A5N-04"
+    ],
+    "sev": "P1",
+    "title": "SP bị gỡ/chưa duyệt vẫn đặt được từ giỏ cũ, CTV lên hộ, gói định kỳ và đại lý",
+    "files": "apps/api/src/modules/cart/cart.service.ts:28-63; apps/api/src/modules/checkout/checkout.service.ts:499-505",
+    "group": "api/cart+checkout+affiliate+dealer+subscriptions",
+    "kind": "dữ liệu",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "Thêm SP vào giỏ -> UPDATE products SET approvalStatus='REJECTED',isActive=false -> POST /api/checkout/quote phải loại dòng/400. Thêm helper assertPurchasable dùng cho cả affiliate.service.ts:280, dealer.service.ts:177, subscriptions.service.ts:54,216",
+    "verifier": "XÁC NHẬN (A5 verifier x2; phạm vi RỘNG hơn báo cáo: SP PENDING_REVIEW vẫn isActive=true)",
+    "decision": "Q-14"
+  },
+  {
+    "c": "C-008",
+    "ids": [
+      "A5N-03"
+    ],
+    "sev": "P1",
+    "title": "Đại lý không có tier bỏ qua hạn mức công nợ: đặt CREDIT 1,6 tỷ vẫn 201",
+    "files": "apps/api/src/modules/dealer/dealer.service.ts:195,209",
+    "group": "api/dealer",
+    "kind": "tiền",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "JWT DEALER không tier -> POST /api/dealer/orders paymentMethod CREDIT 20000x80000 phải bị từ chối; setUserRole('DEALER') phải bắt buộc chọn tier",
+    "verifier": "XÁC NHẬN (x2; nguyên nhân đúng là admin cấp role DEALER trực tiếp qua POST /admin/users/role, không phải duyệt hồ sơ)",
+    "decision": "Q-07"
+  },
+  {
+    "c": "C-009",
+    "ids": [
+      "A1-002"
+    ],
+    "sev": "P1",
+    "title": "Rò tiền: 500đ Ví -> 600 xu -> 600 giọt nước -> coupon 30k (x60), tối đa 3 lần/ngày",
+    "files": "apps/api/src/modules/game/game.service.ts:338-365; apps/api/src/modules/game/game.service.ts:583-584",
+    "group": "api/game",
+    "kind": "tiền",
+    "effort": "S",
+    "model": "opus",
+    "verify_cmd": "psql: select key,value from system_configs where key in ('game.xu_per_seed','game.tree_default_target'); spec: mua 600 giọt -> tưới -> thu hoạch -> coupon.minOrder >= ngưỡng mới",
+    "verifier": "XÁC NHẬN (A1 verifier x2; rò có trần 3 coupon/ngày/người, lượt 2 'cân nhắc P2')",
+    "decision": "Q-02"
+  },
+  {
+    "c": "C-010",
+    "ids": [
+      "A1-007"
+    ],
+    "sev": "P1",
+    "title": "Hứa 'cây thật PanNature' và perk hạng (hotline ưu tiên, hộp quà) mà không có quy trình thực hiện",
+    "files": "apps/miniapp/src/pages/about.tsx:14-50; apps/api/src/modules/game/game.service.ts:369",
+    "group": "api/game+miniapp/pages/about",
+    "kind": "tính năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "grep -rn real_tree_ apps/api/src --include=*.ts (hiện 0); psql: select name,perks from membership_tiers (lệnh gốc dùng cột code là sai, cột đúng là name)",
+    "verifier": "XÁC NHẬN (A1 verifier lượt 1)",
+    "decision": "Q-16"
+  },
+  {
+    "c": "C-011",
+    "ids": [
+      "A2-002"
+    ],
+    "sev": "P1",
+    "title": "Reconcile đẩy sang Pancake đơn đại lý còn backorder sau 15 phút, trái thiết kế (đang chạy trên PROD)",
+    "files": "apps/api/src/modules/integrations/pancake/pancake-push-reconcile.service.ts:47-52; apps/api/src/modules/integrations/pancake/pancake-order.service.ts:79-84",
+    "group": "api/integrations/pancake",
+    "kind": "dữ liệu",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "grep -n backorderedQty apps/api/src/modules/integrations/pancake/pancake-push-reconcile.service.ts (phải có); spec: đơn DEALER item backorderedQty=3, createdAt 20 phút trước -> reconcile() không gọi enqueuePush",
+    "verifier": "XÁC NHẬN (A2 verifier x2; lỗi đang chạy trên PROD 22e36d4)",
+    "decision": "Q-08"
+  },
+  {
+    "c": "C-012",
+    "ids": [
+      "A3-001",
+      "A2-008 (phần coupon, A7-09)"
+    ],
+    "sev": "P1",
+    "title": "GET /me/coupons nạp mọi coupon còn hạn rồi lọc bằng JS: 742-913 ms/lần, 8 song song đứng API ~4 s",
+    "files": "apps/api/src/modules/loyalty/loyalty.service.ts:490-497",
+    "group": "api/loyalty+coupons",
+    "kind": "hiệu năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "bash scripts/loadtest/start-api.sh rồi node scripts/loadtest/coupon-probe.cjs && node scripts/loadtest/coupon-conc.cjs (kỳ vọng <30 ms, 8 song song <150 ms)",
+    "verifier": "XÁC NHẬN (EXPLAIN + code; số 742-913 ms chưa chạy lại; tác động tỉ lệ với số coupon cá nhân còn hạn trên PROD, chưa biết)",
+    "decision": "Q-21"
+  },
+  {
+    "c": "C-013",
+    "ids": [
+      "A5N-02"
+    ],
+    "sev": "P1",
+    "title": "/merchant/orders rò invoiceRequest (MST, email), note, userId, referrerUserId cho CTV",
+    "files": "apps/api/src/modules/merchant/merchant.service.ts:493-516",
+    "group": "api/merchant",
+    "kind": "bảo mật",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "JWT role AFFILIATE: GET /api/merchant/orders không còn các trường trên (nên chuyển include sang select tường minh)",
+    "verifier": "XÁC NHẬN (A5 verifier x2; bổ sung endCustomerKey)",
+    "decision": ""
+  },
+  {
+    "c": "C-014",
+    "ids": [
+      "A2-003"
+    ],
+    "sev": "P1",
+    "title": "Xoá địa chỉ làm xoá cứng gói giao định kỳ (FK ON DELETE CASCADE), đang chạy trên PROD",
+    "files": "apps/api/prisma/schema.prisma:2159-2160; apps/api/src/modules/users/users.service.ts:110-114",
+    "group": "api/prisma+users+subscriptions",
+    "kind": "dữ liệu",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "psql: select confdeltype from pg_constraint where conname='subscriptions_addressId_fkey' (phải ra 'r'); thêm test xoá địa chỉ đang gắn gói",
+    "verifier": "XÁC NHẬN (A2 verifier x2; đang chạy trên PROD)",
+    "decision": "Q-12"
+  },
+  {
+    "c": "C-015",
+    "ids": [
+      "A1-016"
+    ],
+    "sev": "P1",
+    "title": "Giao định kỳ: đơn đầu chậm một chu kỳ, chỉ COD, không sửa được số lượng/địa chỉ",
+    "files": "apps/api/src/modules/subscriptions/subscriptions.service.ts:66,290",
+    "group": "api/subscriptions+miniapp/orders",
+    "kind": "tính năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "grep -n 'nextRunAt\\|paymentMethod' apps/api/src/modules/subscriptions/subscriptions.service.ts",
+    "verifier": "XÁC NHẬN (A1 verifier x2)",
+    "decision": "Q-13"
+  },
+  {
+    "c": "C-016",
+    "ids": [
+      "A1-017"
+    ],
+    "sev": "P1",
+    "title": "Xoá tài khoản chỉ ghi yêu cầu, không có màn admin xử lý, không có hàm xoá/ẩn danh dữ liệu",
+    "files": "apps/api/src/modules/users/users.controller.ts:35; apps/api/src/modules/users/users.service.ts:142-173",
+    "group": "api/users+admin+web/admin",
+    "kind": "bảo mật",
+    "effort": "M",
+    "model": "opus",
+    "verify_cmd": "grep -rn deletion apps/web/src apps/api/src/modules/admin (hiện 0 kết quả)",
+    "verifier": "XÁC NHẬN (A1 verifier x2; hành vi trung thực, rủi ro là thiếu quy trình xử lý)",
+    "decision": ""
+  },
+  {
+    "c": "C-017",
+    "ids": [
+      "A1-003"
+    ],
+    "sev": "P1",
+    "title": "Không có cơ chế nào đẩy đơn thứ 2 trong 30 ngày và không có tin mời đánh giá sau giao",
+    "files": "apps/api/src/modules/vouchers/vouchers.service.ts:85-125; apps/api/src/modules/lifecycle/lifecycle.service.ts:68-76",
+    "group": "api/vouchers+lifecycle+game",
+    "kind": "tính năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "psql: select code from missions (không có đơn 2); spec vouchers.service.spec.ts: đơn đầu DELIVERED tạo coupon SECOND-*",
+    "verifier": "XÁC NHẬN (A1 verifier x2)",
+    "decision": ""
+  },
+  {
+    "c": "C-018",
+    "ids": [
+      "A1-010"
+    ],
+    "sev": "P1",
+    "title": "Quiz onboarding phủ mọi route (cả link CTV/sản phẩm), 'Để sau' không nhớ; hứa quà/gợi ý không có",
+    "files": "apps/miniapp/src/components/onboarding.tsx:66-69,124,224; apps/api/src/modules/users/users.service.ts:122-129",
+    "group": "miniapp/components/onboarding",
+    "kind": "UI",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "grep -rn segments apps/api/src/modules --include=*.ts | grep -v spec; e2e: mở /product/:slug lần đầu không bị quiz phủ",
+    "verifier": "XÁC NHẬN (A1 verifier lượt 1)",
+    "decision": ""
+  },
+  {
+    "c": "C-019",
+    "ids": [
+      "A1-008",
+      "A4-008"
+    ],
+    "sev": "P1",
+    "title": "Trang Về Tubu Tree: hotline 1900 1234 và email giữ chỗ, FAQ hard-code sai, FAQ admin không tới khách",
+    "files": "apps/miniapp/src/pages/about.tsx:181-183; apps/miniapp/src/pages/about.tsx:14-50",
+    "group": "miniapp/pages/about+api/faq",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "grep -n 1900 apps/miniapp/src/pages/about.tsx (phải rỗng); grep -rn '/faqs' apps/miniapp/src (phải có kết quả)",
+    "verifier": "XÁC NHẬN (A1 verifier x2, A4 verifier; số hotline có thật hay không: chưa kiểm chứng)",
+    "decision": "Q-17"
+  },
+  {
+    "c": "C-020",
+    "ids": [
+      "A1-012"
+    ],
+    "sev": "P1",
+    "title": "Caption CTV 'Nhập mã X khi mua' nhưng checkout không có ô nhập mã giới thiệu",
+    "files": "apps/miniapp/src/pages/affiliate.tsx:539-541; apps/miniapp/src/pages/checkout.tsx:178",
+    "group": "miniapp/pages/affiliate+checkout",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -n 'Nhập mã\\|qua mã\\|với mã' apps/miniapp/src/pages/affiliate.tsx (đổi sang link; hoặc thêm ô mã ở checkout: sonnet)",
+    "verifier": "XÁC NHẬN (A1 verifier x2)",
+    "decision": ""
+  },
+  {
+    "c": "C-021",
+    "ids": [
+      "A4-009 (phần Mini App + web khách)"
+    ],
+    "sev": "P1",
+    "title": "Vùng chạm <44px ở giỏ, checkout, storefront-builder, feed, dealer, about (cart 13/23)",
+    "files": "apps/miniapp/src/pages/cart.tsx; apps/miniapp/src/components/ui/quantity-selector.tsx",
+    "group": "miniapp/pages/cart+checkout+storefront-builder+feed",
+    "kind": "UI",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "node scripts/uiux/capture.mjs miniapp --only '^(cart|storefront-builder|feed|dealer|about)$' --vp 390 --states normal --force && node scripts/uiux/build-report-data.mjs metrics miniapp (cột tap<44 <=2)",
+    "verifier": "XÁC NHẬN (A4 verifier: giữ P1 cho cart/checkout/storefront-builder; điểm mù đo đã được báo cáo tự nêu)",
+    "decision": ""
+  },
+  {
+    "c": "C-022",
+    "ids": [
+      "A1-009"
+    ],
+    "sev": "P1",
+    "title": "Công tắc tắt thông báo khuyến mãi là giả: chỉ lưu localStorage, server không đọc (rủi ro pháp lý)",
+    "files": "apps/miniapp/src/pages/settings.tsx:8,12,58; apps/api/src/modules/notifications",
+    "group": "miniapp/pages/settings+api/notifications",
+    "kind": "tính năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "grep -rn notifyPromo apps/api/src (hiện 0; sau sửa phải có trong notifications)",
+    "verifier": "XÁC NHẬN (A1 verifier x2)",
+    "decision": ""
+  },
+  {
+    "c": "C-023",
+    "ids": [
+      "A4-006"
+    ],
+    "sev": "P1",
+    "title": "Tương phản chữ <4,5:1 diện rộng (text-disabled #9E978A, 131 nút) và CTA cam của web chỉ 2,64:1",
+    "files": "packages/design-tokens/src/tokens.css:28,99; apps/miniapp/src/components/ui/product-tile.tsx:174,179",
+    "group": "packages/design-tokens+miniapp/ui+web/tailwind",
+    "kind": "UI",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "node scripts/uiux/build-report-data.mjs contrast miniapp (không in dòng nào); tương tự contrast web",
+    "verifier": "XÁC NHẬN (A4 verifier, tính lại tỉ lệ WCAG)",
+    "decision": ""
+  },
+  {
+    "c": "C-024",
+    "ids": [
+      "A1-006",
+      "A4-007"
+    ],
+    "sev": "P1",
+    "title": "Đơn CK lẻ: không có 'Đã nhận tiền'; nút trạng thái sai; PENDING_PAYMENT->DELIVERED được; không huỷ",
+    "files": "apps/web/src/app/admin/page.tsx:835,862; apps/api/src/modules/admin/admin.service.ts:431-451",
+    "group": "web/admin/orders+api/admin",
+    "kind": "tiền",
+    "effort": "M",
+    "model": "opus",
+    "verify_cmd": "sed -n '830,890p' apps/web/src/app/admin/page.tsx; spec admin.service.spec.ts: đơn BANK_TRANSFER chưa PAID gọi DELIVERED phải ném lỗi",
+    "verifier": "XÁC NHẬN (A1 verifier x2). A4-007: BÁC BỎ phần 'lùi trạng thái' (API order-transition.ts chặn 400) nhưng PENDING_PAYMENT->DELIVERED vẫn hợp lệ nên phần tiền của A1-006 đứng",
+    "decision": "Q-06"
+  },
+  {
+    "c": "C-025",
+    "ids": [
+      "A1-014"
+    ],
+    "sev": "P1",
+    "title": "Web khách thiếu chi tiết đơn/QR trả lại, voucher, tìm kiếm, footer; dẫn khách vào 'Kênh Đối Tác'",
+    "files": "apps/web/src/app/thanh-toan/page.tsx:153-158; apps/web/src/components/site-header.tsx:50-55",
+    "group": "web/shop",
+    "kind": "tính năng",
+    "effort": "L",
+    "model": "sonnet",
+    "verify_cmd": "grep -rn merchant apps/web/src/components/site-header.tsx apps/web/src/app/page.tsx (phải rỗng sau sửa)",
+    "verifier": "XÁC NHẬN (A1 verifier x1)",
+    "decision": ""
+  },
+  {
+    "c": "C-026",
+    "ids": [
+      "A2-012"
+    ],
+    "sev": "P2",
+    "title": "Cron: 27/28 không timeZone, container không TZ (03:00 chạy 10:00 VN), mốc 'đầu ngày' lệch",
+    "files": "apps/api/src/modules/catalog/catalog.service.ts:473; docker-compose.vietnix.yml:47-70",
+    "group": "api (mọi module @Cron)+docker-compose+common",
+    "kind": "hạ tầng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "grep -rn '@Cron(' apps/api/src | grep -vc timeZone (phải = 0); grep -rn 'setHours(0, 0, 0, 0)' apps/api/src --include=*.ts | grep -v spec (phải rỗng). Gồm dealer.cron.ts:14 (A1 §7 #6)",
+    "verifier": "XÁC NHẬN (A2 verifier: 28 decorator, chỉ 1 có timeZone; compose/Dockerfile không có TZ)",
+    "decision": "Q-09"
+  },
+  {
+    "c": "C-027",
+    "ids": [
+      "A3-006"
+    ],
+    "sev": "P2",
+    "title": "Admin đơn và dashboard quét tuần tự bảng orders (không index createdAt; tìm kiếm ILIKE)",
+    "files": "apps/api/src/modules/admin/admin.service.ts:395-405; apps/api/src/modules/admin/admin-order-filter.ts:91-94",
+    "group": "api/admin+prisma(migration)",
+    "kind": "hiệu năng",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "docker exec -i tubu_pg psql -U tubu -d tubutree_perf -f scripts/loadtest/explain-cron.sql (mục C8) và EXPLAIN các câu #85/#97/#100",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-028",
+    "ids": [
+      "A1-011 (phần CTV tự giới thiệu)"
+    ],
+    "sev": "P2",
+    "title": "CTV nhập SĐT của chính mình làm khách nhận hàng để tự hưởng hoa hồng đơn hộ",
+    "files": "apps/api/src/modules/affiliate/affiliate.service.ts:403,463-465",
+    "group": "api/affiliate",
+    "kind": "tiền",
+    "effort": "S",
+    "model": "opus",
+    "verify_cmd": "sed -n '398,408p;460,466p' apps/api/src/modules/affiliate/affiliate.service.ts; spec: endCustomerKey == SĐT của CTV bị chặn hoặc không sinh hoa hồng",
+    "verifier": "MỘT PHẦN (A1 verifier: đơn mua thường đã chặn tự giới thiệu, hoa hồng đơn hộ là có chủ ý; chỗ hở chỉ là nhập SĐT của chính mình; hạ P2)",
+    "decision": "Q-01"
+  },
+  {
+    "c": "C-029",
+    "ids": [
+      "A1-038"
+    ],
+    "sev": "P2",
+    "title": "CTV không nhận thông báo khi có hoa hồng mới, được duyệt, đã rút",
+    "files": "apps/api/src/modules/affiliate/affiliate.service.ts",
+    "group": "api/affiliate+prisma(seed)",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "grep -n notify apps/api/src/modules/affiliate/affiliate.service.ts (hiện không có dòng)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-030",
+    "ids": [
+      "A2-007 (phần /events)",
+      "A5N-07"
+    ],
+    "sev": "P2",
+    "title": "POST /events: eventName/props không whitelist, throttle theo x-device-id; ghi được order_paid giả",
+    "files": "apps/api/src/modules/analytics/analytics.controller.ts:17-50,98; apps/api/src/modules/analytics/dto/ingest-events.dto.ts:7-20",
+    "group": "api/analytics",
+    "kind": "bảo mật",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "grep -n 'IsIn\\|MaxLength' apps/api/src/modules/analytics/dto/ingest-events.dto.ts; POST /api/events eventName=order_paid phải 400",
+    "verifier": "XÁC NHẬN (A2 verifier x2 cho phần throttle/body 10MB; A5N-07 chưa kiểm lượt verifier)",
+    "decision": "Q-24"
+  },
+  {
+    "c": "C-031",
+    "ids": [
+      "API-002"
+    ],
+    "sev": "P2",
+    "title": "2 lỗi lint API: any ở analytics.controller.ts và unused trong community-feed.service.spec.ts",
+    "files": "apps/api/src/modules/analytics/analytics.controller.ts; apps/api/src/modules/feed/community-feed.service.spec.ts",
+    "group": "api/analytics+feed",
+    "kind": "test",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "cd apps/api && npx eslint src (exit 0)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-032",
+    "ids": [
+      "A1-004"
+    ],
+    "sev": "P2",
+    "title": "Dashboard chưa đo north-star NS-1 (% khách có đơn 2 trong 30 ngày); chỉ có NS-2 và DAU",
+    "files": "apps/api/src/modules/analytics/analytics-aggregation.service.ts:13-15; apps/web/src/app/admin/page.tsx:135",
+    "group": "api/analytics+web/admin",
+    "kind": "tính năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "grep -n 'NS-1\\|ns1\\|secondOrder' apps/api/src/modules/analytics/*.ts (hiện 0)",
+    "verifier": "XÁC NHẬN (A1 verifier x2; đo lường, hạ P1->P2)",
+    "decision": ""
+  },
+  {
+    "c": "C-033",
+    "ids": [
+      "A3-002",
+      "A3-003"
+    ],
+    "sev": "P2",
+    "title": "Throttle 60/phút/route/IP: IP dùng chung dễ 429; miniapp không xử lý 429; SSR web notFound() khi 429",
+    "files": "apps/api/src/app.module.ts:58,109; apps/web/src/lib/api.ts:61-67",
+    "group": "api/app.module+web/lib+miniapp/services",
+    "kind": "hiệu năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "node scripts/loadtest/throttle-probe.cjs; web: build + node scripts/loadtest/web-crawl-probe.cjs (0 trang 404 giả)",
+    "verifier": "MỘT PHẦN (A3 verifier: khoá đếm theo class+handler+IP nên không phải 60/phút chung toàn IP; hạ P1->P2; phần miniapp không xử lý 429 và notFound() cho mọi lỗi vẫn đúng)",
+    "decision": "Q-22"
+  },
+  {
+    "c": "C-034",
+    "ids": [
+      "A1-013 (phần b)",
+      "A4-001"
+    ],
+    "sev": "P2",
+    "title": "Chủ nhãn không có màn xem đơn/doanh thu/đối soát (API chỉ có owner/me và khuyến mãi)",
+    "files": "apps/api/src/modules/brand/brand.controller.ts:39-59; apps/miniapp/src/pages/brand-owner.tsx",
+    "group": "api/brand+miniapp/pages/brand-owner",
+    "kind": "tính năng",
+    "effort": "L",
+    "model": "opus",
+    "verify_cmd": "grep -ci 'doanh thu' apps/miniapp/src/pages/brand-owner.tsx (>0); e2e chủ nhãn chỉ thấy đơn của nhãn mình, ẩn tên/SĐT khách",
+    "verifier": "XÁC NHẬN (A4 verifier: là thiếu tính năng, hạ P1->P2; A1 verifier giữ P1 cho cả A1-013 nên tách hai phần)",
+    "decision": "Q-18"
+  },
+  {
+    "c": "C-035",
+    "ids": [
+      "A1-037"
+    ],
+    "sev": "P2",
+    "title": "Sắp xếp theo giá dùng basePrice trong khi hiển thị/lọc dùng giá sale",
+    "files": "apps/api/src/modules/catalog/catalog.service.ts:379-382; apps/api/src/modules/catalog/catalog.service.ts:142-144",
+    "group": "api/catalog",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "sed -n '376,384p' apps/api/src/modules/catalog/catalog.service.ts (ORDER BY COALESCE(salePrice, basePrice))",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-036",
+    "ids": [
+      "A5N-08"
+    ],
+    "sev": "P2",
+    "title": "GET /products/:slug lộ pancakeId (ID nội bộ Pancake) ở product và variations",
+    "files": "apps/api/src/modules/catalog/catalog.service.ts:188",
+    "group": "api/catalog",
+    "kind": "bảo mật",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "curl -s http://localhost:3001/api/products/<slug> | grep -c pancakeId (phải 0)",
+    "verifier": "chưa kiểm (đã đo động bởi A5)",
+    "decision": ""
+  },
+  {
+    "c": "C-037",
+    "ids": [
+      "A3-009"
+    ],
+    "sev": "P2",
+    "title": "Mở Home tốn 17 request (16 song song): cần endpoint gộp BFF GET /home",
+    "files": "apps/api/src/modules/catalog; apps/miniapp/src/pages/home.tsx",
+    "group": "api/catalog+miniapp/pages/home+services",
+    "kind": "hiệu năng",
+    "effort": "L",
+    "model": "opus",
+    "verify_cmd": "PERF_BASE=... node scripts/loadtest/page-weight.cjs (đếm request Home); RAMP=2,4,8,16 node scripts/loadtest/scenarios.cjs home",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-038",
+    "ids": [
+      "A3-007",
+      "A5N-11"
+    ],
+    "sev": "P2",
+    "title": "Tìm kiếm không dấu quét tuần tự products bằng translate()+regexp_replace; suggest q không giới hạn",
+    "files": "apps/api/src/modules/catalog/catalog.service.ts:164-176; apps/api/src/modules/catalog/catalog.controller.ts:58",
+    "group": "api/catalog+prisma(migration)",
+    "kind": "hiệu năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "EXPLAIN câu #7 trong explain-all.json dùng index (<3 ms); curl suggest?q=<chuỗi dài> trả 400",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-039",
+    "ids": [
+      "A3-012"
+    ],
+    "sev": "P2",
+    "title": "API công khai không gắn Cache-Control; cache dữ liệu nóng chỉ nằm trong RAM một instance",
+    "files": "apps/api/src/modules/catalog/catalog.service.ts:38-40; apps/api/src/modules/system-config/system-config.service.ts:11-32",
+    "group": "api/catalog+system-config+flash-sale",
+    "kind": "hiệu năng",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "curl -I localhost:3301/api/categories có header Cache-Control",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-040",
+    "ids": [
+      "A2-013"
+    ],
+    "sev": "P2",
+    "title": "Logic trùng: sinh mã đơn x4 (ymd UTC), maskName x4, báo admin x3, chuẩn hoá SĐT x3, dayKey VN x7",
+    "files": "apps/api/src/modules/checkout/checkout.service.ts:621-632; apps/api/src/modules/dealer/dealer.service.ts:1426-1433",
+    "group": "api/common+checkout+affiliate+dealer+subscriptions+game",
+    "kind": "hạ tầng",
+    "effort": "M",
+    "model": "haiku",
+    "verify_cmd": "grep -rn 'private async generate.*Code\\|private maskName\\|function maskFullName\\|notifyAdminsOf' apps/api/src --include=*.ts | grep -v spec (chỉ còn định nghĩa trong common/)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-041",
+    "ids": [
+      "A2-014"
+    ],
+    "sev": "P2",
+    "title": "5 service >800 dòng ôm nhiều trách nhiệm (dealer 1.434, loyalty 1.297, affiliate 1.128, feed 1.099)",
+    "files": "apps/api/src/modules/dealer/dealer.service.ts; apps/api/src/modules/loyalty/loyalty.service.ts",
+    "group": "api/dealer+loyalty+affiliate+feed+integrations/gomdon",
+    "kind": "hạ tầng",
+    "effort": "L",
+    "model": "sonnet",
+    "verify_cmd": "find apps/api/src -name '*.service.ts' ! -name '*.spec.ts' -exec wc -l {} + | sort -rn | head (không file >800 dòng); toàn bộ 2.364 unit test còn pass. Làm SAU A2-015",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-042",
+    "ids": [
+      "A3-005"
+    ],
+    "sev": "P2",
+    "title": "Feed đếm reaction/comment bằng join gộp toàn bảng: 63-90 ms ở 20k bài, tăng tuyến tính",
+    "files": "apps/api/src/modules/feed/community-feed.service.ts:151,353",
+    "group": "api/feed+prisma",
+    "kind": "hiệu năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "node scripts/loadtest/explain-run.cjs (sau sql-capture.cjs); EXPLAIN câu feed <5 ms, không còn Seq Scan on feed_reactions",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-043",
+    "ids": [
+      "A1-024"
+    ],
+    "sev": "P2",
+    "title": "Vòng quay không trần lượt/ngày; khoá game.spin_buy_daily_limit không code nào đọc",
+    "files": "apps/api/src/modules/game/game.service.ts:104-125",
+    "group": "api/game",
+    "kind": "tiền",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "grep -rn spin_buy_daily_limit apps/api/src (hiện 0 kết quả)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-044",
+    "ids": [
+      "A1-025"
+    ],
+    "sev": "P2",
+    "title": "Season Pass chết từ 31/08, không có công cụ tạo mùa",
+    "files": "apps/api/src/modules/game/season-pass.service.ts:73,114-116; apps/miniapp/src/pages/game.tsx:411",
+    "group": "api/game+web/admin",
+    "kind": "tính năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "psql: select code,\"startAt\",\"endAt\" from seasons",
+    "verifier": "chưa kiểm",
+    "decision": "Q-16"
+  },
+  {
+    "c": "C-045",
+    "ids": [
+      "A2-010"
+    ],
+    "sev": "P2",
+    "title": "PancakeWebhookEvent không dedupe, không index, không cron cứu sự kiện FAILED (đơn kẹt trạng thái cũ)",
+    "files": "apps/api/prisma/schema.prisma:2074-2085; apps/api/src/modules/integrations/pancake/pancake.processor.ts:56-80",
+    "group": "api/integrations/pancake+prisma",
+    "kind": "dữ liệu",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "race-spec: gửi cùng payload 5 lần đồng thời chỉ có 1 dòng (mirror gomdon.race-spec.ts (g))",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-046",
+    "ids": [
+      "A2-007 (phần dọn log)",
+      "A3-008",
+      "A2-008 (index refresh_tokens)"
+    ],
+    "sev": "P2",
+    "title": "Bảng log phình không TTL: refresh_tokens, analytics_events, notification_logs, webhook events",
+    "files": "apps/api/src/modules/auth/auth.service.ts:338,432,442; apps/api/src/modules/notifications/notifications.service.ts:55-81",
+    "group": "api/jobs+auth+notifications+analytics+integrations",
+    "kind": "hạ tầng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "psql: SELECT relname,n_live_tup FROM pg_stat_user_tables ORDER BY n_live_tup DESC LIMIT 10 trước/sau; spec cho cron dọn; EXPLAIN C11/C6 trong scripts/loadtest/explain-cron.sql",
+    "verifier": "chưa kiểm (A2 verifier chỉ kiểm phần /events của A2-007)",
+    "decision": "Q-21"
+  },
+  {
+    "c": "C-047",
+    "ids": [
+      "A1-001"
+    ],
+    "sev": "P2",
+    "title": "Khách học 6 loại giá trị và ~6 thước tiến độ; Điểm Xanh và TubuXu trùng vai trò trừ tiền đơn",
+    "files": "apps/miniapp/src/pages/profile.tsx:288-294; apps/api/src/modules/checkout/checkout.service.ts:183-204",
+    "group": "api/loyalty+wallet+checkout",
+    "kind": "tính năng",
+    "effort": "L",
+    "model": "opus",
+    "verify_cmd": "grep -n 'pointsBalance\\|coinsBalance\\|walletBalance' apps/miniapp/src/pages/profile.tsx apps/miniapp/src/pages/checkout.tsx (hub chỉ còn <=3 số dư)",
+    "verifier": "XÁC NHẬN (A1 verifier lượt 1; là quyết định thiết kế, hạ P1->P2)",
+    "decision": "Q-03"
+  },
+  {
+    "c": "C-048",
+    "ids": [
+      "A3-011"
+    ],
+    "sev": "P2",
+    "title": "Node đơn tiến trình bão hoà ~16 kết nối; nhân bản instance chưa an toàn; chưa đặt pool Prisma",
+    "files": "apps/api/src/modules/catalog/catalog.service.ts:29-40; apps/api/src/main.ts",
+    "group": "api/main.ts+jobs+catalog+docker-compose",
+    "kind": "hạ tầng",
+    "effort": "L",
+    "model": "opus",
+    "verify_cmd": "RAMP=16,32,64,96 node scripts/loadtest/scenarios.cjs browse trước/sau; đặt connection_limit/pool_timeout theo cấu hình VPS",
+    "verifier": "chưa kiểm",
+    "decision": "Q-23"
+  },
+  {
+    "c": "C-049",
+    "ids": [
+      "A3-010"
+    ],
+    "sev": "P2",
+    "title": "ECONNRESET ~3,3% ở ~800 rps (kịch bản home), chưa rõ nguyên nhân phía server hay bộ phát tải",
+    "files": "apps/api/src/main.ts; scripts/loadtest/conn-probe2.cjs",
+    "group": "api/main.ts+scripts/loadtest",
+    "kind": "hiệu năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "node scripts/loadtest/conn-probe2.cjs; RAMP=16 FIX_SEC=12 node scripts/loadtest/scenarios.cjs home nhiều lần, so tỉ lệ lỗi",
+    "verifier": "chưa kiểm (nguyên nhân chưa kiểm chứng)",
+    "decision": ""
+  },
+  {
+    "c": "C-050",
+    "ids": [
+      "A5N-05"
+    ],
+    "sev": "P2",
+    "title": "Ảnh minh chứng đổi trả nhận URL javascript:/data: gây stored-XSS trong admin web",
+    "files": "apps/api/src/modules/orders/orders.controller.ts:9; apps/web/src/app/admin/page.tsx:1160-1167",
+    "group": "api/orders+web/admin",
+    "kind": "bảo mật",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "POST /orders/{code}/return-request images=['javascript:...'] phải 400; admin chỉ render src bắt đầu https://",
+    "verifier": "chưa kiểm (đã đo động bởi A5)",
+    "decision": ""
+  },
+  {
+    "c": "C-051",
+    "ids": [
+      "A2-017 (phần FK)"
+    ],
+    "sev": "P2",
+    "title": "Hơn 80 cột *Id không có FK (kể cả bảng tiền: dealer_credit_ledgers, coupon_redemptions...)",
+    "files": "apps/api/prisma/schema.prisma",
+    "group": "api/prisma",
+    "kind": "dữ liệu",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "SQL 'cột *Id không FK' trong phụ lục A2 phải ngắn lại; chạy tìm dòng mồ côi trên bản sao PROD trước khi thêm FK ON DELETE RESTRICT",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-052",
+    "ids": [
+      "A2-008"
+    ],
+    "sev": "P2",
+    "title": "Thiếu index cho truy vấn cron/inbox (notification_logs, cashback_transactions, commissions, tokens)",
+    "files": "apps/api/prisma/schema.prisma:2066; apps/api/src/modules/affiliate/affiliate.service.ts:767-774",
+    "group": "api/prisma(migration)",
+    "kind": "hiệu năng",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "EXPLAIN từng truy vấn trên tubutree_perf sau khi thêm index phải ra Index Scan (gộp chung migration với A3-006)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-053",
+    "ids": [
+      "A1-019"
+    ],
+    "sev": "P2",
+    "title": "Seed chưa áp: thiếu 8 mẫu thông báo, voucher sinh nhật NULL; tin ORDER_DELIVERED/WELCOME sai lời",
+    "files": "apps/api/prisma/seed.ts:639-641; apps/api/src/modules/notifications/notifications.service.ts:51-55",
+    "group": "api/prisma(seed)+docs/runbook",
+    "kind": "dữ liệu",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "psql: select code from notification_templates so với grep -o \"code: '[A-Z_]*'\" apps/api/prisma/seed.ts; thêm bước seed upsert vào runbook deploy",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-054",
+    "ids": [
+      "A1-032",
+      "A1-033",
+      "A1-043"
+    ],
+    "sev": "P2",
+    "title": "22 khoá config chết vẫn sửa được; khoá voucher chào mừng lệch tên; ETA không bật được; hệ số Ví 1,5",
+    "files": "apps/api/prisma/seed.ts:22-23; apps/api/src/modules/system-config/system-config.controller.ts:36,42-43",
+    "group": "api/prisma(seed)+system-config+web/admin",
+    "kind": "dữ liệu",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "for k in payment.cod_max_amount voucher.welcome_amount loyalty.welcome_voucher_amount; do grep -rn \"'$k'\" apps/api/src --include=*.ts | grep -v spec | wc -l; done; curl -s localhost:3001/api/config/public | grep -o 'affiliateWalletMultiplier[^,]*'",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-055",
+    "ids": [
+      "A2-009",
+      "A5N-10"
+    ],
+    "sev": "P2",
+    "title": "Cột Int 32-bit cho doanh số/ngưỡng tích luỹ và tổng đơn đại lý: >2,15 tỷ gây lỗi 500",
+    "files": "apps/api/prisma/schema.prisma:472,506,1067,1156; apps/api/src/modules/dealer/dealer.service.ts",
+    "group": "api/prisma+brand/dto+dealer",
+    "kind": "dữ liệu",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "POST tạo DealerReward threshold=3000000000 phải 400 hoặc 201, không 500; POST /api/dealer/orders CREDIT quantity 100000 phải 400",
+    "verifier": "chưa kiểm (A5N-10 đã đo động bởi A5, chưa qua verifier)",
+    "decision": "Q-10"
+  },
+  {
+    "c": "C-056",
+    "ids": [
+      "A1-036"
+    ],
+    "sev": "P2",
+    "title": "Chấm công: rớt vùng GPS một heartbeat là tự chấm ra, mất giờ công",
+    "files": "apps/api/src/modules/staff/attendance.service.ts:152-164",
+    "group": "api/staff",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "sed -n '150,166p' apps/api/src/modules/staff/attendance.service.ts (chỉ checkout sau 2-3 heartbeat liên tiếp)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-057",
+    "ids": [
+      "A2-011"
+    ],
+    "sev": "P2",
+    "title": "Tạo gói định kỳ không chống trùng: double-tap ra 2 gói, mỗi kỳ 2 đơn COD",
+    "files": "apps/api/src/modules/subscriptions/subscriptions.service.ts:49-80; apps/api/prisma/schema.prisma:2151-2170",
+    "group": "api/subscriptions+prisma",
+    "kind": "dữ liệu",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "race-spec: 3 lệnh create đồng thời chỉ có 1 gói",
+    "verifier": "chưa kiểm",
+    "decision": "Q-13"
+  },
+  {
+    "c": "C-058",
+    "ids": [
+      "A2-015"
+    ],
+    "sev": "P2",
+    "title": "Thiếu race test Postgres thật: checkout oversell, coupon, flash, ví/xu, groupbuy, backorder, định kỳ",
+    "files": "apps/api/test/integration-race/",
+    "group": "api/test/integration-race",
+    "kind": "test",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "cd apps/api && DATABASE_URL=...tubutree_it npx jest -c test/integration-race/jest.config.js --runInBand",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-059",
+    "ids": [
+      "A5N-09"
+    ],
+    "sev": "P2",
+    "title": "Voucher chào mừng/sinh nhật/winback cấp cho cả guest (farm); birthday LIMIT 500 không ORDER BY",
+    "files": "apps/api/src/modules/vouchers/vouchers.service.ts:143-146; apps/api/src/modules/auth/auth.controller.ts:28",
+    "group": "api/vouchers+auth",
+    "kind": "tiền",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "spec: guest chưa có zaloId/SĐT không nhận voucher; birthday cron có ORDER BY + phân trang",
+    "verifier": "chưa kiểm (chỉ đọc mã)",
+    "decision": "Q-05"
+  },
+  {
+    "c": "C-060",
+    "ids": [
+      "A2-004",
+      "A1-022"
+    ],
+    "sev": "P2",
+    "title": "Ví Tubu (tiền thật, rút được) không có sổ cái/lịch sử; 8 chỗ ghi số dư; khách và CTV không có sao kê",
+    "files": "apps/api/prisma/schema.prisma:232; apps/api/src/modules/wallet/wallet.service.ts:93,177",
+    "group": "api/wallet+affiliate+cashback+orders+checkout+auth",
+    "kind": "tiền",
+    "effort": "L",
+    "model": "opus",
+    "verify_cmd": "grep -n '^model WalletTransaction' apps/api/prisma/schema.prisma; SQL: users có walletBalance <> SUM(delta) phải = 0",
+    "verifier": "XÁC NHẬN (A2 verifier x2: câu 'không có lịch sử nào' nói quá, phần lớn dựng lại được từ payouts/cashback; hạ P1->P2; nâng lại P1 nếu mở rút tiền rộng)",
+    "decision": "Q-04"
+  },
+  {
+    "c": "C-061",
+    "ids": [
+      "A2-006"
+    ],
+    "sev": "P2",
+    "title": "Mẫu catch P2002 rồi đi tiếp trong interactive transaction (grantCoins, coupons.redeem): bẫy chờ nổ",
+    "files": "apps/api/src/modules/wallet/coins.service.ts:65-90; apps/api/src/modules/coupons/coupons.service.ts:144-157",
+    "group": "api/wallet+coupons",
+    "kind": "dữ liệu",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "grep -rn -B3 P2002 apps/api/src/modules --include=*.ts | grep -n 'tx\\.' (không còn catch-continue trong tx)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-062",
+    "ids": [
+      "E2E-001"
+    ],
+    "sev": "P2",
+    "title": "6 E2E miniapp fail: spec loyalty không mock POST /events (5 test); storefront CTV dính Vite 504",
+    "files": "apps/e2e/tests/loyalty.miniapp.spec.ts:154,176,210,227,255; apps/e2e/tests/design-system-pilot.miniapp.spec.ts:236",
+    "group": "apps/e2e/tests (miniapp)",
+    "kind": "test",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "cd apps/e2e && npx playwright test loyalty.miniapp.spec.ts (thêm api.allowUnmocked('POST /events') như buy-flow-mocks.ts:77); pilot:236 chạy lại trên Vite sạch",
+    "verifier": "XÁC NHẬN lỗi tái hiện 6/6; nguyên nhân là trôi mock (không phải lỗi sản phẩm); pilot:236 vẫn CHƯA RÕ (nghi môi trường); hạ P1->P2",
+    "decision": ""
+  },
+  {
+    "c": "C-063",
+    "ids": [
+      "E2E-003"
+    ],
+    "sev": "P2",
+    "title": "E2E admin dealer pagination fail: test cũ tìm 'hồ sơ cũ hơn', UI đã đổi thành 'mới hơn' (order=asc)",
+    "files": "apps/e2e/tests/admin.spec.ts:132; apps/web/src/app/admin/page.tsx:294-303",
+    "group": "apps/e2e/tests (web admin)",
+    "kind": "test",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "npx playwright test admin.spec.ts -g 'Dealer applications' (cập nhật mock và chuỗi 'mới hơn')",
+    "verifier": "XÁC NHẬN lỗi tái hiện; là test cũ, không phải lỗi UI (hạ P1->P2)",
+    "decision": ""
+  },
+  {
+    "c": "C-064",
+    "ids": [
+      "A4-025"
+    ],
+    "sev": "P2",
+    "title": "CTV lên đơn hộ: nhập tay toàn bộ (~13 chạm), đường vào sâu, nút còn màu v1",
+    "files": "apps/miniapp/src/components/affiliate/ctv-order-sheet.tsx:205-218,283,306; apps/miniapp/src/pages/affiliate.tsx:488-496",
+    "group": "miniapp/components/affiliate",
+    "kind": "UI",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "đếm lại luồng 3 (A4 mục 5); 'khách gần đây' tự điền",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-065",
+    "ids": [
+      "A4-024"
+    ],
+    "sev": "P2",
+    "title": "Form địa chỉ luôn trống: khách mới đặt đơn đầu mất ~12 chạm",
+    "files": "apps/miniapp/src/components/address-form.tsx:16-18; apps/miniapp/src/components/checkout/address-section.tsx",
+    "group": "miniapp/components/checkout",
+    "kind": "UI",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "đếm lại luồng 1 <=8 chạm (A4 mục 5)",
+    "verifier": "chưa kiểm",
+    "decision": "Q-27"
+  },
+  {
+    "c": "C-066",
+    "ids": [
+      "A4-023"
+    ],
+    "sev": "P2",
+    "title": "'Mua lại' ở Home không dẫn tới giỏ (5 chạm so với 3 qua PDP)",
+    "files": "apps/miniapp/src/components/reorder/purchased-rail.tsx:49,88,93",
+    "group": "miniapp/components/reorder",
+    "kind": "UI",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "e2e: Home 'Mua lại' -> URL /cart (hoặc snackbar 'Xem giỏ')",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-067",
+    "ids": [
+      "A4-028"
+    ],
+    "sev": "P2",
+    "title": "Chia sẻ lỗi bị nuốt im lặng (.catch(() => {})), CTV bấm chia sẻ mà không có phản hồi",
+    "files": "apps/miniapp/src/components/share-sheet.tsx:63; apps/miniapp/src/pages/affiliate.tsx:282-285",
+    "group": "miniapp/components/share-sheet+pages/affiliate",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "test mock shareLink reject thì có snackbar và sao chép liên kết dự phòng",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-068",
+    "ids": [
+      "A4-011"
+    ],
+    "sev": "P2",
+    "title": "Chip nhỏ hơn 44px (padding 6-8px, minHeight 32/36)",
+    "files": "apps/miniapp/src/components/ui/chip.tsx:53",
+    "group": "miniapp/components/ui",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "chip.spec.tsx thêm kiểm tra hit-44; đo lại orders tap<44 = 0",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-069",
+    "ids": [
+      "A4-012"
+    ],
+    "sev": "P2",
+    "title": "ui/primitives.tsx không file nào import (chỉ có spec)",
+    "files": "apps/miniapp/src/components/ui/primitives.tsx",
+    "group": "miniapp/components/ui",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -rn 'ui/primitives' apps/miniapp/src (chỉ còn spec trước khi xoá); pnpm --filter miniapp test và build xanh",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-070",
+    "ids": [
+      "A4-014"
+    ],
+    "sev": "P2",
+    "title": "Button chỉ khoá bấm đúp qua prop loading (không khoá đồng bộ useRef)",
+    "files": "apps/miniapp/src/components/ui/button.tsx:55-58",
+    "group": "miniapp/components/ui",
+    "kind": "UI",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "button-guard.spec.ts thêm ca bấm 2 lần đồng bộ onPress chỉ gọi 1 lần",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-071",
+    "ids": [
+      "A4-029"
+    ],
+    "sev": "P2",
+    "title": "Vùng cuộn ngang không focus được, không gợi ý cuộn (axe scrollable-region-focusable x16)",
+    "files": "apps/miniapp/src/components/ui/segmented-tabs.tsx; apps/miniapp/src/components/home",
+    "group": "miniapp/components/ui+home",
+    "kind": "UI",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "axe scrollable-region-focusable = 0",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-072",
+    "ids": [
+      "A4-015"
+    ],
+    "sev": "P2",
+    "title": "Thẻ sản phẩm là phần tử tương tác chứa nút tim/mua lại (nested-interactive x112)",
+    "files": "apps/miniapp/src/components/ui/product-tile.tsx; apps/miniapp/src/components/reorder/purchased-rail.tsx",
+    "group": "miniapp/components/ui+reorder",
+    "kind": "UI",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "node scripts/uiux/build-report-data.mjs axe miniapp không còn nested-interactive",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-073",
+    "ids": [
+      "A1-028"
+    ],
+    "sev": "P2",
+    "title": "Lời và danh mục cộng đồng nói về cây cảnh, trong khi hàng bán là mỹ phẩm, tẩy rửa, thực phẩm",
+    "files": "apps/miniapp/src/i18n/vi.ts:462-527; apps/api/prisma/seed.ts",
+    "group": "miniapp/i18n+api/prisma(seed)",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -n 'lưỡi hổ\\|sen đá\\|chăm cây' apps/miniapp/src/i18n/vi.ts apps/miniapp/src/pages/profile.tsx",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-074",
+    "ids": [
+      "A1-021",
+      "A4-019"
+    ],
+    "sev": "P2",
+    "title": "Thuật ngữ lẫn lộn (Mã giảm giá/Mã ưu đãi; Tubu Xu/TubuXu); kho voucher nằm khối thứ 7 của /loyalty",
+    "files": "apps/miniapp/src/i18n/vi.ts; apps/miniapp/src/pages/loyalty.tsx",
+    "group": "miniapp/i18n+pages/loyalty+profile+checkout",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -rn 'Tubu Xu\\|TubuXu' apps/miniapp/src | grep -v spec (còn đúng một dạng); grep -c 'mã giảm giá' apps/miniapp/src/i18n/vi.ts",
+    "verifier": "chưa kiểm",
+    "decision": "Q-26"
+  },
+  {
+    "c": "C-075",
+    "ids": [
+      "A4-004"
+    ],
+    "sev": "P2",
+    "title": "Viewport chặn phóng to (user-scalable=no) vi phạm WCAG 1.4.4",
+    "files": "apps/miniapp/index.html:7",
+    "group": "miniapp/index.html",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -n user-scalable apps/miniapp/index.html (phải rỗng); axe meta-viewport = 0",
+    "verifier": "XÁC NHẬN (A4 verifier: hạ P1->P2; WebView Zalo có tôn trọng thuộc tính hay không chưa kiểm chứng)",
+    "decision": "Q-28"
+  },
+  {
+    "c": "C-076",
+    "ids": [
+      "A4-002",
+      "A4-010",
+      "Miniapp-001",
+      "A4-020",
+      "A4-039"
+    ],
+    "sev": "P2",
+    "title": "DS v2 chưa xong: 30/40 trang còn alias legacy (1.616), 40/40 trộn ZaUI, ESLint miniapp đỏ 105 lỗi",
+    "files": "apps/miniapp/src/css/tokens.css:25-117; apps/miniapp/src/pages/brand-story.tsx",
+    "group": "miniapp/pages+components (DS v2)",
+    "kind": "UI",
+    "effort": "L",
+    "model": "sonnet",
+    "verify_cmd": "node scripts/uiux/static-scan.mjs (tổng alias legacy = 0); cd apps/miniapp && npx eslint src (exit 0). Chia 4 lô theo A4-002: game+loyalty, affiliate+dealer+storefront-builder, wallet+post-detail+feed, phần còn lại",
+    "verifier": "XÁC NHẬN (A4-002: hạ P1->P2, nợ có chủ đích; lint 105 lỗi: A4 và A6 cùng số, A6 chưa kiểm lại)",
+    "decision": ""
+  },
+  {
+    "c": "C-077",
+    "ids": [
+      "A4-005"
+    ],
+    "sev": "P2",
+    "title": "axe critical: nút icon không tên (7), ô nhập/radio thiếu nhãn (12), switch không tên (3), select (9)",
+    "files": "apps/miniapp/src/pages/settings.tsx:132; apps/miniapp/src/pages/checkout.tsx:433",
+    "group": "miniapp/pages+web/admin+web/merchant",
+    "kind": "UI",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "node scripts/uiux/capture.mjs miniapp --only '^(checkout|feed|refill|staff|my-payroll|edit-profile|brand-owner|settings|notifications)$' --vp 390 --states normal --force && node scripts/uiux/build-report-data.mjs axe miniapp",
+    "verifier": "MỘT PHẦN (A4 verifier: số đếm khớp, nhưng 'trình đọc không đọc được trang thanh toán' là phóng đại; hạ P1->P2)",
+    "decision": ""
+  },
+  {
+    "c": "C-078",
+    "ids": [
+      "A4-016",
+      "A4-033"
+    ],
+    "sev": "P2",
+    "title": "Text onClick không role/min-height (addresses ActionLink) và mũi tên ký tự '›' ở settings",
+    "files": "apps/miniapp/src/pages/addresses.tsx:178-200; apps/miniapp/src/pages/settings.tsx:223-225",
+    "group": "miniapp/pages/addresses+settings",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "axe + tap<44 của addresses; dùng ListRow/Button ghost và icon ChevronRight",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-079",
+    "ids": [
+      "A1-027"
+    ],
+    "sev": "P2",
+    "title": "'Hành trình nguyên liệu': 2/8 nút ra danh sách rỗng (lọc theo tên nhãn); trang nhãn mồ côi",
+    "files": "apps/miniapp/src/pages/brand-story.tsx:539; apps/miniapp/src/pages/product-detail.tsx:292-299",
+    "group": "miniapp/pages/brand-story+product-detail",
+    "kind": "UI",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "curl -s 'http://localhost:3001/api/products?brand=Le%20Plateau&limit=1' (sau sửa total > 0)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-080",
+    "ids": [
+      "A4-018"
+    ],
+    "sev": "P2",
+    "title": "Checkout: Ví/TubuXu bị làm mờ không nói lý do; '48/65000 điểm' không có dấu phân cách nghìn",
+    "files": "apps/miniapp/src/pages/checkout.tsx",
+    "group": "miniapp/pages/checkout",
+    "kind": "UI",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "ảnh checkout sau sửa; test thành phần checkout",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-081",
+    "ids": [
+      "A1-034"
+    ],
+    "sev": "P2",
+    "title": "Đại lý: giao diện chặn đặt trước (max=tồn kho) dù API hỗ trợ backorder; nhãn '-X%' là mặc định bậc",
+    "files": "apps/miniapp/src/pages/dealer.tsx:625; apps/api/src/modules/dealer/dealer.service.ts:145",
+    "group": "miniapp/pages/dealer+api/dealer",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "grep -n 'max={row.stock}' apps/miniapp/src/pages/dealer.tsx (phải rỗng)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-082",
+    "ids": [
+      "A1-023",
+      "A4-026"
+    ],
+    "sev": "P2",
+    "title": "Trang game 1.285 dòng/~20 khối, không điều hướng nội bộ; hai điểm danh (Điểm Xanh và Vườn) mỗi ngày",
+    "files": "apps/miniapp/src/pages/game.tsx; apps/api/src/modules/loyalty/loyalty.service.ts:1127-1143",
+    "group": "miniapp/pages/game+api/loyalty+game",
+    "kind": "UI",
+    "effort": "L",
+    "model": "opus",
+    "verify_cmd": "wc -l apps/miniapp/src/pages/game.tsx; ảnh game: 2 màn đầu chứa hành động chính; static-scan alias game = 0",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-083",
+    "ids": [
+      "A4-021"
+    ],
+    "sev": "P2",
+    "title": "Định dạng số không nhất quán (1250000, 65.000 xu, toLocaleString trực tiếp)",
+    "files": "apps/miniapp/src/pages/game.tsx:109-204,493,556-634; apps/miniapp/src/pages/order-detail.tsx:205,301,405",
+    "group": "miniapp/pages/game+home+order-detail",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -rn toLocaleString apps/miniapp/src/pages | wc -l (phải = 0)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-084",
+    "ids": [
+      "A4-017"
+    ],
+    "sev": "P2",
+    "title": "Home khi catalog lỗi mất khối im lặng, không thông báo và không nút thử lại",
+    "files": "apps/miniapp/src/pages/home.tsx; apps/miniapp/src/components/home",
+    "group": "miniapp/pages/home+components/home",
+    "kind": "UI",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "node scripts/uiux/capture.mjs miniapp --only '^home$' --states error --vp 390 --force rồi xem ảnh",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-085",
+    "ids": [
+      "A1-018"
+    ],
+    "sev": "P2",
+    "title": "Nút trong thông báo dẫn sai (regex theo nội dung); tin giảm giá/cộng đồng không có route",
+    "files": "apps/miniapp/src/pages/notifications.tsx:286-417; apps/api/src/modules/lifecycle/lifecycle.service.ts:210",
+    "group": "miniapp/pages/notifications+api/lifecycle",
+    "kind": "UI",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "grep -n 'cây|vườn' apps/miniapp/src/pages/notifications.tsx (hết regex); mọi tin gửi kèm data.route",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-086",
+    "ids": [
+      "A1-020",
+      "A1-026"
+    ],
+    "sev": "P2",
+    "title": "Hub Cá nhân 15 mục, set READY là code chết, thanh số dư thiếu xu/voucher; cashback còn trong hub",
+    "files": "apps/miniapp/src/pages/profile.tsx:26-48; apps/miniapp/src/pages/profile.tsx:288-294",
+    "group": "miniapp/pages/profile",
+    "kind": "UI",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "sed -n '26,48p' apps/miniapp/src/pages/profile.tsx; grep -n cashback apps/miniapp/src/pages/profile.tsx",
+    "verifier": "chưa kiểm",
+    "decision": "Q-15"
+  },
+  {
+    "c": "C-087",
+    "ids": [
+      "A1-029"
+    ],
+    "sev": "P2",
+    "title": "Đổi vỏ không có danh sách cửa hàng nhận; hai luồng tái chế (đổi vỏ và Gomdon) đều dở/tắt",
+    "files": "apps/miniapp/src/pages/refill.tsx:63",
+    "group": "miniapp/pages/refill+api/gomdon",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "grep -n 'cửa hàng' apps/miniapp/src/pages/refill.tsx",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-088",
+    "ids": [
+      "A3-013"
+    ],
+    "sev": "P2",
+    "title": "Bundle miniapp: entry 617 KB (196 KB gz) + CSS 125 KB, tăng 22% so với audit tháng 9",
+    "files": "apps/miniapp/vite.config.ts; apps/miniapp/src/store/auth.ts",
+    "group": "miniapp/vite.config+store/auth",
+    "kind": "hiệu năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "cd apps/miniapp && npx vite build && node scripts/loadtest/bundle-size.cjs apps/miniapp/www (mục tiêu entry <450 KB raw)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-089",
+    "ids": [
+      "A4-013"
+    ],
+    "sev": "P2",
+    "title": "Inter chỉ nạp weight 400/500 nhưng UI dùng 600/700 (đậm giả)",
+    "files": "packages/design-tokens/src/fonts.css; apps/miniapp/src/components/ui/chip.tsx:50",
+    "group": "packages/design-tokens",
+    "kind": "UI",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "DevTools Network có file weight 600/700; chụp lại home và so ảnh",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-090",
+    "ids": [
+      "A2-016",
+      "A5N-08 (liên quan)"
+    ],
+    "sev": "P2",
+    "title": "shared-types gần như không dùng (web 0 file); API trả thẳng entity Prisma, lộ cột nội bộ",
+    "files": "packages/shared-types/src; apps/api/src/modules/checkout/checkout.service.ts:658-662",
+    "group": "packages/shared-types+api controllers+web/lib+miniapp/services",
+    "kind": "hạ tầng",
+    "effort": "L",
+    "model": "sonnet",
+    "verify_cmd": "grep -rln '@tubutree/shared-types' apps/web/src | wc -l (>0); snapshot test /checkout/place-order không chứa idempotencyKey",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-091",
+    "ids": [
+      "A1-030"
+    ],
+    "sev": "P2",
+    "title": "Admin chia 2 nơi (web 19 tab và miniapp /admin); 6 endpoint admin có API mà không có UI",
+    "files": "apps/web/src/app/admin/page.tsx:117-137",
+    "group": "web/admin",
+    "kind": "tính năng",
+    "effort": "L",
+    "model": "sonnet",
+    "verify_cmd": "grep -rn 'attendance/live\\|manual-checkout\\|payroll/.*recompute' apps/web/src apps/miniapp/src (hiện 0)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-092",
+    "ids": [
+      "A1-031"
+    ],
+    "sev": "P2",
+    "title": "Admin đơn thiếu địa chỉ giao và lịch sử trạng thái; nhập ID thô; không duyệt đánh giá/định kỳ",
+    "files": "apps/web/src/app/admin/page.tsx:1891-1899; apps/web/src/app/admin/page.tsx:2257-2263",
+    "group": "web/admin",
+    "kind": "tính năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "grep -n 'shippingAddress\\|status-history' apps/web/src/app/admin/page.tsx",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-093",
+    "ids": [
+      "A4-027",
+      "A4-009 (phần admin web)"
+    ],
+    "sev": "P2",
+    "title": "Admin web: 19 tab trong một trang 2.714 dòng, tab cuộn ngang ở 390px, nút nhỏ 23-67/tab",
+    "files": "apps/web/src/app/admin/page.tsx:116-136",
+    "group": "web/admin",
+    "kind": "UI",
+    "effort": "L",
+    "model": "sonnet",
+    "verify_cmd": "ls apps/web/src/app/admin (có thư mục theo tab); chạy scripts/uiux metrics web: tap<44 giảm",
+    "verifier": "MỘT PHẦN (A4 verifier xác nhận số đo nút nhỏ, P2 cho phần admin web; A4-027 chưa kiểm)",
+    "decision": "Q-29"
+  },
+  {
+    "c": "C-094",
+    "ids": [
+      "A1-039"
+    ],
+    "sev": "P2",
+    "title": "Hoá đơn VAT: nhận yêu cầu lúc thanh toán nhưng không có nút xuất (issue-invoice không ai gọi)",
+    "files": "apps/api/src/modules/orders/orders.controller.ts:43; apps/web/src/app/admin/page.tsx",
+    "group": "web/admin+api/orders",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "grep -rn issue-invoice apps/web/src apps/miniapp/src (hiện 0)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-095",
+    "ids": [
+      "A1-015"
+    ],
+    "sev": "P2",
+    "title": "Tên miền lệch: SITE_URL mặc định shop. nhưng PROD/CORS dùng app.; middleware rewrite host shop.",
+    "files": "apps/web/src/lib/site.ts:7; apps/web/src/middleware.ts:29-30",
+    "group": "web/lib+middleware+miniapp/share",
+    "kind": "hạ tầng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "grep -rn 'shop.tubutree.com' apps --include=*.ts --include=*.tsx",
+    "verifier": "MỘT PHẦN (A1 verifier x2: khẳng định 'CORS chỉ có app.' SAI vì main.ts cho mọi *.tubutree.com; còn lại middleware và link chia sẻ; host PROD chưa kiểm chứng; hạ P2)",
+    "decision": "Q-20"
+  },
+  {
+    "c": "C-096",
+    "ids": [
+      "A1-035"
+    ],
+    "sev": "P2",
+    "title": "Cổng web /merchant trùng gian hàng miniapp và chỉ xem; TODO 'đối tác tự giao'",
+    "files": "apps/web/src/app/merchant/page.tsx:1273-1306; apps/api/src/modules/merchant/merchant.service.ts:531",
+    "group": "web/merchant+api/merchant",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "grep -n TODO apps/api/src/modules/merchant/merchant.service.ts",
+    "verifier": "chưa kiểm",
+    "decision": "Q-19"
+  },
+  {
+    "c": "C-097",
+    "ids": [
+      "A4-003"
+    ],
+    "sev": "P2",
+    "title": "Web chưa dùng palette DS v2: 0 lớp v2, 227 lần palette v1 cam/lá, 0 Fraunces (hai diện mạo)",
+    "files": "apps/web/tailwind.config.ts:24-33; apps/web/src/app/page.tsx:22,48",
+    "group": "web/tailwind+app",
+    "kind": "UI",
+    "effort": "L",
+    "model": "sonnet",
+    "verify_cmd": "node scripts/uiux/static-scan.mjs (web legacyPalette=0); node scripts/uiux/capture.mjs web --only '^home$' --vp 390 --force",
+    "verifier": "XÁC NHẬN (A4 verifier: P1 chỉ khi chủ dự án muốn đồng bộ thương hiệu, nếu không P2; chưa có quyết định nên xếp P2)",
+    "decision": "Q-25"
+  },
+  {
+    "c": "C-098",
+    "ids": [
+      "A1-042"
+    ],
+    "sev": "P3",
+    "title": "19 endpoint API không FE nào gọi (faqs, issue-invoice, redeem-points, status-history...)",
+    "files": "apps/api/src/modules (nhiều module)",
+    "group": "api (nhiều module)",
+    "kind": "tính năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "với mỗi path: grep -rn '<path>' apps/web/src apps/miniapp/src",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-099",
+    "ids": [
+      "A1-045"
+    ],
+    "sev": "P3",
+    "title": "Ghi nhận giới thiệu chỉ giữ 3 ngày (attribution_days); khoá last_click_window_days là khoá chết",
+    "files": "apps/api/src/modules/affiliate/affiliate.service.ts:95",
+    "group": "api/affiliate",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -n attribution_days apps/api/src/modules/affiliate/affiliate.service.ts",
+    "verifier": "chưa kiểm",
+    "decision": "Q-31"
+  },
+  {
+    "c": "C-100",
+    "ids": [
+      "A3-015"
+    ],
+    "sev": "P3",
+    "title": "Hai danh sách chưa giới hạn: affiliateLink.findMany và subscription.findMany theo user",
+    "files": "apps/api/src/modules/affiliate/affiliate.service.ts:141; apps/api/src/modules/subscriptions/subscriptions.service.ts:85",
+    "group": "api/affiliate+subscriptions",
+    "kind": "hiệu năng",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -n findMany <hai file> có take",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-101",
+    "ids": [
+      "A3-017"
+    ],
+    "sev": "P3",
+    "title": "Cron đêm retention quét toàn bộ đơn: 476 ms ở 200k đơn, tăng tuyến tính",
+    "files": "apps/api/src/modules/analytics/analytics-aggregation.service.ts:18-36",
+    "group": "api/analytics",
+    "kind": "hiệu năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "scripts/loadtest/explain-cron.sql mục C1",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-102",
+    "ids": [
+      "A2-023"
+    ],
+    "sev": "P3",
+    "title": "Tồn kho âm lọt qua forcePancakeStock/create làm reserveAvailable trả số âm",
+    "files": "apps/api/src/modules/catalog/variation-stock.ts:122-131,145-166; apps/api/src/modules/integrations/pancake/pancake-sync.service.ts:197",
+    "group": "api/catalog+integrations/pancake",
+    "kind": "dữ liệu",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "race-spec: stock=-3, reserveAvailableVariationStock(q=5) kết quả 0, reservedStock không giảm",
+    "verifier": "chưa kiểm (chưa kiểm chứng Pancake có trả số âm)",
+    "decision": ""
+  },
+  {
+    "c": "C-103",
+    "ids": [
+      "A2-025"
+    ],
+    "sev": "P3",
+    "title": "Flash sale: lần mua đầu đồng thời của cùng user nhận thông báo PRICE_CHANGED sai nghĩa",
+    "files": "apps/api/src/modules/flash-sale/flash-sale.service.ts:117-137; apps/api/src/modules/checkout/checkout.service.ts:219-232",
+    "group": "api/flash-sale+checkout",
+    "kind": "dữ liệu",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "race-spec flash (thuộc A2-015 mục 3)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-104",
+    "ids": [
+      "A3-016"
+    ],
+    "sev": "P3",
+    "title": "Cron sync Pancake và import giá đại lý truy vấn tuần tự từng biến thể (chục nghìn query/15 phút)",
+    "files": "apps/api/src/modules/integrations/pancake/pancake-sync.service.ts:169-178; apps/api/src/modules/admin/admin.service.ts:661-667",
+    "group": "api/integrations/pancake+admin",
+    "kind": "hiệu năng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "log thời gian một lượt sync trên dữ liệu Pancake giả lập",
+    "verifier": "chưa kiểm (chưa đo được vì thiếu khoá Pancake)",
+    "decision": ""
+  },
+  {
+    "c": "C-105",
+    "ids": [
+      "A2-019"
+    ],
+    "sev": "P3",
+    "title": "Trùng khái niệm dữ liệu: 2 sổ điểm/xu, 2 hệ điểm danh, lô vườn 2 dạng lưu, cờ 'đã nhắc' rải 6 nơi",
+    "files": "apps/api/prisma/schema.prisma:904,989,934,1374-1376",
+    "group": "api/loyalty+wallet+game+lifecycle+prisma",
+    "kind": "dữ liệu",
+    "effort": "L",
+    "model": "opus",
+    "verify_cmd": "không áp dụng (thiết kế); xong khi có ADR được duyệt; liên quan Q-03",
+    "verifier": "chưa kiểm",
+    "decision": "Q-03"
+  },
+  {
+    "c": "C-106",
+    "ids": [
+      "A2-021"
+    ],
+    "sev": "P3",
+    "title": "Vòng phụ thuộc mức thư mục (12 module); DealerService lấy qua ModuleRef, lỗi wiring chỉ log",
+    "files": "apps/api/src/modules/orders/order-reversal.service.ts:200-208",
+    "group": "api/orders+integrations/pancake+gomdon+dealer",
+    "kind": "hạ tầng",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "node cycles.cjs apps/api/src (script ở phụ lục A2): SCC lớn phải tách",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-107",
+    "ids": [
+      "A2-020"
+    ],
+    "sev": "P3",
+    "title": "Trạng thái kiểu String thay vì enum (Subscription.status, OrderStatusHistory...)",
+    "files": "apps/api/prisma/schema.prisma:2161,1862-1865",
+    "group": "api/prisma",
+    "kind": "dữ liệu",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -nE 'status +String' apps/api/prisma/schema.prisma (ngắn lại)",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-108",
+    "ids": [
+      "A2-018"
+    ],
+    "sev": "P3",
+    "title": "Bảng/cột chết hoặc chỉ ghi không đọc (CohortRepeatSnapshot, FunnelDailySnapshot, BetaFeedback...)",
+    "files": "apps/api/prisma/schema.prisma; apps/api/src/modules/analytics/analytics-aggregation.service.ts:13-16",
+    "group": "api/prisma+analytics+beta+affiliate",
+    "kind": "dữ liệu",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -rnw 'dauEventBased\\|badgeImageUrl\\|pancakeCustomerId' apps/*/src",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-109",
+    "ids": [
+      "A2-022"
+    ],
+    "sev": "P3",
+    "title": "13 partial unique index chốt tiền mà Prisma không thấy; db push sẽ làm mất chúng",
+    "files": "apps/api/prisma/migrations; CI",
+    "group": "api/prisma+CI",
+    "kind": "hạ tầng",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "docker exec tubu_pg psql -U tubu -d <db> -At -c \"select count(*) from pg_indexes where schemaname='public' and indexdef ilike '% where %'\" (phải ra 13)",
+    "verifier": "XÁC NHẬN (A2 verifier: pg_indexes trả đúng 13)",
+    "decision": ""
+  },
+  {
+    "c": "C-110",
+    "ids": [
+      "A2-024"
+    ],
+    "sev": "P3",
+    "title": "Review @@unique([userId, productId]) chặn đánh giá lại khi mua lại",
+    "files": "apps/api/prisma/schema.prisma:2037",
+    "group": "api/prisma+reviews",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "không áp dụng (quyết định nghiệp vụ)",
+    "verifier": "chưa kiểm",
+    "decision": "Q-30"
+  },
+  {
+    "c": "C-111",
+    "ids": [
+      "E2E-002"
+    ],
+    "sev": "P3",
+    "title": "E2E API quote: JWT của user không tồn tại nên API trả 'tham chiếu không hợp lệ' thay vì 'giỏ trống'",
+    "files": "apps/e2e/tests/api.spec.ts:47; apps/e2e/global-setup.ts:50-55",
+    "group": "apps/e2e (fixture)",
+    "kind": "test",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "npx playwright test api.spec.ts (seed user thật trong global-setup hoặc nới regex)",
+    "verifier": "XÁC NHẬN lỗi tái hiện; trôi fixture, không phải lỗi checkout (hạ P1->P3)",
+    "decision": ""
+  },
+  {
+    "c": "C-112",
+    "ids": [
+      "A4-036"
+    ],
+    "sev": "P3",
+    "title": "Tailwind preflight áp dụng toàn cục, có thể ghi đè kiểu ZaUI",
+    "files": "apps/miniapp/tailwind.config.ts; apps/web/tailwind.config.ts",
+    "group": "miniapp+web/tailwind",
+    "kind": "UI",
+    "effort": "M",
+    "model": "sonnet",
+    "verify_cmd": "so ảnh trước/sau trên 5 trang khi đặt corePlugins.preflight:false",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-113",
+    "ids": [
+      "A4-031"
+    ],
+    "sev": "P3",
+    "title": "Emoji dùng làm icon ngoài game/hạng (onboarding, reviews-section, post-card, bank-payment...)",
+    "files": "apps/miniapp/src/components/onboarding.tsx; apps/miniapp/src/pages/bank-payment.tsx",
+    "group": "miniapp/components+pages (nhiều file)",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "static-scan emoji của các file này = 0",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-114",
+    "ids": [
+      "A4-034"
+    ],
+    "sev": "P3",
+    "title": "Thiếu <main> và <h1> ở 34/41 trang Mini App; web 3 trang không h1",
+    "files": "apps/miniapp/src/components/ui/page-header.tsx",
+    "group": "miniapp/components/ui",
+    "kind": "UI",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "axe landmark-one-main và page-has-heading-one = 0",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-115",
+    "ids": [
+      "A1-041"
+    ],
+    "sev": "P3",
+    "title": "Màn đơn trống 'Mua đơn đầu - nhận 30k voucher' sai nghĩa (voucher cấp trước đơn đầu, từ 199k)",
+    "files": "apps/miniapp/src/i18n/vi.ts:204",
+    "group": "miniapp/i18n",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -n 'Mua đơn đầu' apps/miniapp/src/i18n/vi.ts",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-116",
+    "ids": [
+      "A4-038"
+    ],
+    "sev": "P3",
+    "title": "Chữ <12px nhiều (web home 86, brand-story 29, order-detail 20, product-detail 17)",
+    "files": "apps/miniapp/src/pages/brand-story.tsx; apps/web/src/app/page.tsx",
+    "group": "miniapp/pages+web/app",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "đo lại cột chữ <12px bằng build-report-data.mjs metrics",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-117",
+    "ids": [
+      "A1-044"
+    ],
+    "sev": "P3",
+    "title": "Đăng ký CTV một chạm, không có bước đồng ý điều khoản hoa hồng/thuế",
+    "files": "apps/miniapp/src/pages/affiliate.tsx:154",
+    "group": "miniapp/pages/affiliate",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "sonnet",
+    "verify_cmd": "sed -n '150,160p' apps/miniapp/src/pages/affiliate.tsx",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-118",
+    "ids": [
+      "A1-040"
+    ],
+    "sev": "P3",
+    "title": "Beta Tester không có tác dụng; góp ý beta không ai đọc",
+    "files": "apps/miniapp/src/pages/settings.tsx:95; apps/api/src/modules/beta/beta.service.ts:18",
+    "group": "miniapp/pages/beta+settings",
+    "kind": "tính năng",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -rn 'betaFeedback\\|BetaFeedback' apps/web/src apps/api/src/modules/admin (hiện 0)",
+    "verifier": "chưa kiểm",
+    "decision": "Q-19"
+  },
+  {
+    "c": "C-119",
+    "ids": [
+      "A4-032"
+    ],
+    "sev": "P3",
+    "title": "Trang 404: tiêu đề đè lên hình minh hoạ",
+    "files": "apps/miniapp/src/pages/not-found.tsx",
+    "group": "miniapp/pages/not-found",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "chụp lại not-found__normal__390.png",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-120",
+    "ids": [
+      "A4-022"
+    ],
+    "sev": "P3",
+    "title": "Lịch sử vận chuyển in nguyên chuỗi status của hãng vận chuyển, '—' khi rỗng",
+    "files": "apps/miniapp/src/pages/order-detail.tsx:186,401",
+    "group": "miniapp/pages/order-detail",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "test order-detail với status:'delivering' hiển thị nhãn tiếng Việt",
+    "verifier": "chưa kiểm (giá trị thực tế khi chạy chưa kiểm chứng)",
+    "decision": ""
+  },
+  {
+    "c": "C-121",
+    "ids": [
+      "A4-037"
+    ],
+    "sev": "P3",
+    "title": "Lỗi console khi chụp (game 4, beta 3, admin 3): chưa phân biệt lỗi do mock hay lỗi thật",
+    "files": "scripts/uiux/results/*.jsonl",
+    "group": "scripts/uiux (không sửa mã)",
+    "kind": "test",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "đọc trường errors trong results/*.jsonl, tách lỗi do mock với lỗi thật",
+    "verifier": "chưa kiểm (nguyên nhân chưa kiểm chứng)",
+    "decision": ""
+  },
+  {
+    "c": "C-122",
+    "ids": [
+      "A4-040"
+    ],
+    "sev": "P3",
+    "title": "Admin web dùng window.confirm gốc, không đồng bộ giao diện",
+    "files": "apps/web/src/app/admin/page.tsx:865,882,1307",
+    "group": "web/admin",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "grep -n 'window.confirm' apps/web/src/app/admin/page.tsx",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-123",
+    "ids": [
+      "A4-035"
+    ],
+    "sev": "P3",
+    "title": "Thứ tự heading sai ở 12 màn web (heading-order)",
+    "files": "apps/web/src/app",
+    "group": "web/app",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "axe heading-order = 0 trên web",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  },
+  {
+    "c": "C-124",
+    "ids": [
+      "A4-030"
+    ],
+    "sev": "P3",
+    "title": "Merchant web chuyển tab bằng state, không có URL (?tab=)",
+    "files": "apps/web/src/app/merchant/page.tsx:180,255",
+    "group": "web/merchant",
+    "kind": "UI",
+    "effort": "S",
+    "model": "haiku",
+    "verify_cmd": "reload trang giữ nguyên tab",
+    "verifier": "chưa kiểm",
+    "decision": ""
+  }
+]
