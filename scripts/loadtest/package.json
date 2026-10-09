@@ -1,0 +1,11 @@
+{
+  "name": "tubutree-loadtest",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Kịch bản đo tải / EXPLAIN cho Tubu Tree (chạy riêng, không thuộc pnpm workspace)",
+  "scripts": {},
+  "dependencies": {
+    "autocannon": "^8.0.0",
+    "pg": "^8.13.0"
+  }
+}
