@@ -2135,13 +2135,21 @@ model NotificationLog {
 model PancakeWebhookEvent {
   id          String    @id @default(cuid())
   eventType   String
+  /// eventType + sha256(payload chuẩn hoá thứ tự key) — Pancake gửi lại y hệt thì trùng key, không lưu/xử lý 2 lần.
+  /// Null ở các dòng nhận trước khi có cột (không backfill: dòng trùng cũ sẽ vỡ unique).
+  dedupeKey   String?   @unique
   rawPayload  Json
   receivedAt  DateTime  @default(now())
   processedAt DateTime?
+  /// RECEIVED | PROCESSING | PROCESSED | FAILED
   status      String
+  /// Số lần worker đã claim (tăng lúc claim, không phải lúc xong) — tiến trình chết giữa chừng vẫn bị tính.
   attempts    Int       @default(0)
+  /// Mốc worker claim PROCESSING — quá hạn thì coi như worker đã chết, được claim lại.
+  claimedAt   DateTime?
   error       String?
 
+  @@index([status, receivedAt])
   @@map("pancake_webhook_events")
 }
 

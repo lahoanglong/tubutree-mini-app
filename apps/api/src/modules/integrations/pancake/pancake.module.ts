@@ -6,6 +6,7 @@ import { PancakeOrderService } from './pancake-order.service';
 import { PancakeProcessor } from './pancake.processor';
 import { PancakePushProcessor } from './pancake-push.processor';
 import { PancakePushReconcileService } from './pancake-push-reconcile.service';
+import { PancakeEventsReconcileService } from './pancake-events-reconcile.service';
 import { PancakeWebhookController } from './pancake-webhook.controller';
 import { PancakeController } from './pancake.controller';
 import { GeoController } from './geo.controller';
@@ -34,6 +35,7 @@ import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
     PancakeProcessor,
     PancakePushProcessor,
     PancakePushReconcileService,
+    PancakeEventsReconcileService,
     GeoService,
     GomdonAlertService,
   ],

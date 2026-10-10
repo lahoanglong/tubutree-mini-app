@@ -51,7 +51,11 @@ function setup(
       updateMany: orderUpdateMany,
       update: orderUpdate,
     },
-    pancakeWebhookEvent: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
+    pancakeWebhookEvent: {
+      findUnique: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      update: jest.fn().mockResolvedValue({}),
+    },
     $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction,
   } as unknown as PrismaService;
@@ -571,6 +575,20 @@ describe('PancakeProcessor.process', () => {
     (prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'e1', status: 'PROCESSED' });
     await proc.process({ data: { eventId: 'e1' } });
     expect(notifications.notify).not.toHaveBeenCalled();
+    expect(prisma.pancakeWebhookEvent.update).not.toHaveBeenCalled();
+  });
+
+  it('worker khác đang giữ claim (updateMany count=0) → không chạy handler, không ghi đè trạng thái', async () => {
+    const { proc, prisma, txUpdateMany } = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'SHIPPING', note: null, items: [] });
+    (prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({
+      id: 'e1',
+      status: 'PROCESSING',
+      eventType: 'order.status_updated',
+      rawPayload: { event: 'order.status_updated', data: { id: 'p1', status: 'delivered' } },
+    });
+    (prisma.pancakeWebhookEvent.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    await proc.process({ data: { eventId: 'e1' } });
+    expect(txUpdateMany).not.toHaveBeenCalled();
     expect(prisma.pancakeWebhookEvent.update).not.toHaveBeenCalled();
   });
 
