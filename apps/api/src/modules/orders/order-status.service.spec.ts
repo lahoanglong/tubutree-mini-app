@@ -589,3 +589,54 @@ describe('OrderStatusService.markPaid', () => {
     await expect(svc.markPaid('nope', { actorType: 'ADMIN' })).rejects.toThrow(NotFoundException);
   });
 });
+
+describe('OrderStatusService.setStatus — onlyIfUnpaid (cron huỷ đơn quá hạn thanh toán, C-024)', () => {
+  function make(order: Record<string, unknown>, flipCount = 1) {
+    const tx = {
+      order: { updateMany: jest.fn().mockResolvedValue({ count: flipCount }) },
+      orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      order: { findFirst: jest.fn().mockResolvedValue(order), findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
+    };
+    const reversal = { reverseFinancials: jest.fn().mockResolvedValue({ moneyRefunded: false }) };
+    const notify = jest.fn().mockResolvedValue(undefined);
+    const svc = new OrderStatusService(
+      prisma as unknown as PrismaService,
+      { creditOrderPoints: jest.fn(), reverseOrderPoints: jest.fn().mockResolvedValue(undefined) } as unknown as LoyaltyService,
+      {
+        lockCommissionsForOrder: jest.fn(),
+        grantReferralReward: jest.fn(),
+        reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AffiliateService,
+      { notify } as unknown as NotificationsService,
+      reversal as unknown as OrderReversalService,
+    );
+    return { svc, prisma, tx, reversal, notify };
+  }
+
+  it('lật CANCELLED có guard paymentStatus=UNPAID trong where', async () => {
+    const { svc, tx, reversal } = make(makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }));
+    await svc.setStatus('o1', 'CANCELLED' as never, { onlyIfUnpaid: true });
+    expect(tx.order.updateMany.mock.calls[0][0].where).toEqual({ id: 'o1', status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' });
+    expect(reversal.reverseFinancials).toHaveBeenCalledTimes(1);
+  });
+
+  it('đơn đọc ra đã PAID → không mở tx, không huỷ, không báo khách', async () => {
+    const { svc, prisma, reversal, notify } = make(
+      makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' }),
+    );
+    const res = await svc.setStatus('o1', 'CANCELLED' as never, { onlyIfUnpaid: true });
+    expect(res.status).toBe('PENDING_PAYMENT');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(reversal.reverseFinancials).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('không truyền onlyIfUnpaid → where giữ nguyên như cũ', async () => {
+    const { svc, tx } = make(makeOrder({ status: 'CONFIRMED' }));
+    await svc.setStatus('o1', 'CANCELLED' as never);
+    expect(tx.order.updateMany.mock.calls[0][0].where).toEqual({ id: 'o1', status: 'CONFIRMED' });
+  });
+});

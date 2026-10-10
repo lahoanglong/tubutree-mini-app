@@ -78,6 +78,12 @@ export class OrderStatusService {
       /** Ai đổi — để lại vết trong order_status_history (mặc định SYSTEM). */
       actorType?: StatusActor;
       actorId?: string;
+      /**
+       * Chỉ đổi khi đơn vẫn UNPAID — guard nằm trong cùng câu lật trạng thái, nên tiền về (markPaid,
+       * callback ZaloPay/Pancake) chen giữa lúc đọc và lúc lật thì lần đổi này trượt thay vì huỷ đơn
+       * khách vừa trả.
+       */
+      onlyIfUnpaid?: boolean;
     } = {},
   ) {
     const order = await this.prisma.order.findFirst({
@@ -87,6 +93,7 @@ export class OrderStatusService {
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
 
     if (order.status === targetStatus) return order; // no-op idempotent (webhook lặp lại)
+    if (opts.onlyIfUnpaid && order.paymentStatus !== 'UNPAID') return order;
     assertTransition(order.status as OrderStatus, targetStatus);
     const paymentGated =
       requiresPaymentBefore(targetStatus) && isPrepaidMethod(order.paymentMethod) && order.paymentStatus !== 'PAID';
@@ -107,6 +114,7 @@ export class OrderStatusService {
           id: order.id,
           status: order.status,
           ...(requiresPaymentBefore(targetStatus) && order.paymentStatus === 'PAID' ? { paymentStatus: 'PAID' as const } : {}),
+          ...(opts.onlyIfUnpaid ? { paymentStatus: 'UNPAID' as const } : {}),
         },
         data: {
           status: targetStatus,
