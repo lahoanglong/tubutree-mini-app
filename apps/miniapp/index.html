@@ -4,9 +4,24 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <title>Tubu Tree</title>
+    <style>
+      /* Pinch-zoom stays on (WCAG 1.4.4); this only drops the double-tap-to-zoom delay on rapid taps. */
+      html {
+        touch-action: manipulation;
+      }
+      /* iOS WKWebView zooms the page when a field under 16px takes focus and keeps the zoom after blur.
+         !important because components set the font size inline (search-field.tsx). */
+      @supports (-webkit-touch-callout: none) {
+        input,
+        textarea,
+        select {
+          font-size: 16px !important;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>

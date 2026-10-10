@@ -27,7 +27,7 @@ export const tailwindPreset: Partial<Config> = {
         sage: { 50: '#F2F5EC', 100: '#E3EBD8', 600: '#4A6135', 700: '#3E5129' },
         stone: {
           0: '#FFFFFF', 25: '#FBFAF7', 50: '#F6F4EF', 100: '#EFEBE2', 200: '#E0DACB',
-          300: '#CBC5B8', 400: '#9E978A', 450: '#938B7E', 500: '#746D61', 600: '#5A544A',
+          300: '#CBC5B8', 400: '#9E978A', 450: '#938B7E', 500: '#6E675B', 600: '#5A544A',
           700: '#423D34', 800: '#2B2721', 900: '#1C1A16',
           // Tailwind's own stock `stone` scale defines a 950 shade we don't -- extend merges
           // per-shade (not a full replace of the `stone` family), so without this explicit

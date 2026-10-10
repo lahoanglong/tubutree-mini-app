@@ -8,6 +8,7 @@ import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
 import BackButton from './back-button';
 import { OnboardingGate } from './onboarding';
+import { MainLandmark } from './ui/main-landmark';
 import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
@@ -183,6 +184,7 @@ export default function MyApp() {
               <ScreenTracker />
               {/* Loại điều hướng thật cho trang con — useNavigationType của react-router luôn là POP trong AnimationRoutes. */}
               <NavigationTypeProvider>
+                <MainLandmark>
                 <Suspense fallback={<RouteFallback />}>
                   <AnimationRoutes>
                     <Route path="/" element={<HomePage />} />
@@ -232,6 +234,7 @@ export default function MyApp() {
                     <Route path="*" element={<NotFoundPage />} />
                   </AnimationRoutes>
                 </Suspense>
+                </MainLandmark>
               </NavigationTypeProvider>
               <BottomNav />
               <BackButton />

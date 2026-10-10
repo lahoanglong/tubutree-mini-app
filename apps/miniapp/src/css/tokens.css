@@ -48,7 +48,7 @@
   --neutral-150: var(--stone-100);
   --neutral-200: var(--stone-200);
   --neutral-300: var(--stone-300);
-  --neutral-400: var(--stone-400);
+  --neutral-400: var(--stone-500); /* hầu hết chỗ dùng là `color:` chữ phụ; stone-400 chỉ 2.6:1 (WCAG 1.4.3) */
   --neutral-500: var(--stone-500);
   --neutral-600: var(--stone-600);
   --neutral-700: var(--stone-700);
@@ -235,6 +235,56 @@ body.with-back-btn .page.page-bleed {
   top: 50%;
   height: 44px;
   transform: translateY(-50%);
+}
+
+/* ── Vùng chạm 44x44 cho nút vuông nhìn nhỏ hơn (QuantitySelector sm 36px): giãn cả hai chiều, không đổi hình ── */
+.tubu-hit-44-square {
+  position: relative;
+}
+.tubu-hit-44-square::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+/* ── Gợi ý cuộn ngang (ScrollRow / SegmentedTabs scroll): mờ mép phía còn nội dung bằng mask nên không
+   cần biết màu nền. Thuộc tính data-fade-* do use-scroll-hints.ts bật theo vị trí cuộn. ── */
+.tubu-scroll-fade[data-fade-end] {
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+}
+.tubu-scroll-fade[data-fade-start] {
+  -webkit-mask-image: linear-gradient(to left, black calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to left, black calc(100% - 28px), transparent);
+}
+.tubu-scroll-fade[data-fade-start][data-fade-end] {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent);
+}
+
+/* ── Thẻ sản phẩm (ProductTile): nút tên là phần tử bấm được duy nhất; ::after phủ kín vỏ thẻ
+   (position:relative) để chạm đâu trên thẻ cũng mở chi tiết, còn tim / Mua lại là anh em nổi lên
+   bằng z-index (không lồng phần tử tương tác — axe nested-interactive). Vòng focus vẽ trên lớp phủ
+   để bao cả thẻ thay vì chỉ dòng tên. ── */
+.tubu-tile-link::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: var(--radius-card);
+}
+.tubu-tile-link:focus-visible {
+  outline: none;
+}
+.tubu-tile-link:focus-visible::after {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
 }
 
 /* ── Ô tìm kiếm (SearchField): ẩn nút "x" gốc của WebKit/Blink (trùng nút xoá của DS) + vòng focus

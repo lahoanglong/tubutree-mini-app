@@ -22,13 +22,9 @@ function renderForm(ui: ReactElement) {
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
 }
 
-/** Field chỉ vẽ label làm <Text> anh em (không có htmlFor/aria-labelledby) nên getByLabelText
- * không match — tìm input đi kèm bằng chính label hiển thị, giống cách người dùng thật nhìn form. */
+/** Field gắn nhãn với control (label htmlFor) nên tìm ô nhập đúng như trình đọc màn hình. */
 function inputNear(labelText: string): HTMLInputElement {
-  const label = screen.getByText(labelText);
-  const input = label.parentElement?.querySelector('input');
-  if (!input) throw new Error(`Không tìm thấy input cạnh label "${labelText}"`);
-  return input;
+  return screen.getByLabelText(labelText) as HTMLInputElement;
 }
 
 describe('AddressForm', () => {

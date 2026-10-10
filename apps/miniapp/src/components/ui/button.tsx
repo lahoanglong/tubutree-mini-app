@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import type { AriaAttributes, CSSProperties, ReactNode } from 'react';
 import { Button as ZButton } from 'zmp-ui';
 import type { LucideIcon } from 'lucide-react';
@@ -24,6 +25,9 @@ export interface ButtonProps extends AriaAttributes {
   disabled?: boolean;
   icon?: LucideIcon;
   fullWidth?: boolean;
+  /** Kiểu `() => void` để nhận cả handler trả giá trị bất kỳ; nếu trả Promise thì Button khoá bấm lại tới khi Promise xong.
+   * Khoá chỉ thấy được Promise mà handler TRẢ VỀ: `() => submit()` được khoá, còn `() => { void submit(); }`
+   * trả `undefined` nên chỉ còn prop `loading` chặn bấm lại. Handler bất đồng bộ nên trả Promise (hoặc tự giữ ref khoá). */
   onPress?: () => void;
   className?: string;
   style?: CSSProperties;
@@ -52,9 +56,20 @@ export function Button({
   ...aria
 }: ButtonProps) {
   const toneStyle = variant === 'flash' ? FLASH_STYLE : variant === 'danger' ? DANGER_STYLE : undefined;
+  const inFlight = useRef(false);
   const handlePress = () => {
-    if (loading) return; // đã đang xử lý — chặn double-tap ngay trong Button, không cần disabled
-    onPress?.();
+    // `loading` chỉ đúng sau khi caller re-render; hai cú chạm sát nhau trước đó vẫn thấy loading=false,
+    // nên khoá đồng bộ bằng ref cho các onPress async. onPress đồng bộ không khoá (nút +/- phải bấm dồn được).
+    if (loading || inFlight.current) return;
+    const result: unknown = onPress?.();
+    if (isThenable(result)) {
+      inFlight.current = true;
+      // Ném lại lỗi để unhandledrejection toàn cục (app.tsx) vẫn thấy đúng như trước khi có khoá.
+      result.then(
+        () => { inFlight.current = false; },
+        (err: unknown) => { inFlight.current = false; throw err; },
+      );
+    }
   };
   const label = aria['aria-label'] ?? (loading ? textOf(children) : undefined);
   return (
@@ -75,6 +90,10 @@ export function Button({
       {children}
     </ZButton>
   );
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return typeof value === 'object' && value !== null && typeof (value as { then?: unknown }).then === 'function';
 }
 
 /** Nhãn chữ thuần của children (string/number hoặc mảng của chúng, vd `Đặt hàng · {price}`);

@@ -30,6 +30,7 @@ import { haptic } from '../utils/haptic';
 import { PageHeader } from '../components/ui/page-header';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Radio, Checkbox } from '../components/ui/form';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
@@ -431,6 +432,7 @@ export default function CheckoutPage() {
           <Box
             key={m.value}
             role="radio"
+            {...rowKeyboardProps()}
             aria-checked={payment === m.value}
             aria-disabled={m.disabled}
             className={m.disabled ? undefined : 'tubu-press'}
@@ -460,6 +462,7 @@ export default function CheckoutPage() {
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Box
             role="checkbox"
+            {...rowKeyboardProps()}
             aria-checked={usePoints && points.usable > 0}
             aria-disabled={points.usable <= 0}
             className={points.usable > 0 ? 'tubu-press' : undefined}
@@ -508,6 +511,7 @@ export default function CheckoutPage() {
         <Box id="checkout-recycling" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Box
             role="checkbox"
+            {...rowKeyboardProps()}
             aria-label="Gửi lại vật liệu tái chế"
             aria-checked={hasRecyclingPickup}
             className="tubu-press"
@@ -581,6 +585,7 @@ export default function CheckoutPage() {
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Box
           role="checkbox"
+          {...rowKeyboardProps()}
           aria-checked={wantInvoice}
           className="tubu-press"
           onClick={() => {

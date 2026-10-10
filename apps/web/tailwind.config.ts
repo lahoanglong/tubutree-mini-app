@@ -27,8 +27,10 @@ const legacyV1Colors = {
     100: '#FBE4C4',
     200: '#F4C98A',
     400: '#EBA94A',
-    600: '#E08C1C',
-    700: '#B86A10',
+    // 600/700 darkened from #E08C1C/#B86A10 (2.65:1 / 4.11:1 with white) so the CTA label and the
+    // orange text clear WCAG 1.4.3 (4.5:1); the logo orange stays in design-tokens as tubu-orange.
+    600: '#A35A0B',
+    700: '#8F4F08',
     900: '#5C3505',
   },
   leaf: {
@@ -42,6 +44,8 @@ const legacyV1Colors = {
   },
   clay: { 50: '#FBF4ED', 200: '#EDD4BD', 500: '#C97B4A', 700: '#8C4F2A' },
   sun: { 300: '#FDD96E', 500: '#F4B400' },
+  // Stock Tailwind green-700/800 shifted down one step: stock green-600 (#16A34A) under a white label is 3.3:1.
+  green: { 600: '#15803D', 700: '#166534' },
   neutral: {
     // Stock Tailwind neutral (what web got implicitly before this branch).
     ...stockColors.neutral,
@@ -50,7 +54,7 @@ const legacyV1Colors = {
     50: '#FAFAF8',
     100: '#F2F2EF',
     200: '#E5E5E0',
-    400: '#A8A8A0',
+    400: '#6B6B64', // was #A8A8A0 (2.39:1 as text on white); also fills grey status pills with white labels
     600: '#5F5F58',
     900: '#1A1A17',
   },

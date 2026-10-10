@@ -179,6 +179,22 @@ describe('HomeExtras', () => {
     expect(screen.queryAllByTestId('brand-chip-skeleton')).toHaveLength(0);
   });
 
+  it('C-071: dải thương hiệu là vùng cuộn ngang có tên riêng; đang tải (chỉ khung chờ, tràn ngang) thì focus được bằng bàn phím', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => 500 });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 300 });
+    try {
+      mocks.fetchBrands.mockReturnValue(new Promise(() => {}));
+      wrap(<HomeExtras />);
+      const rail = screen.getByRole('region', { name: 'Dải thương hiệu, vuốt ngang để xem thêm' });
+      expect(rail.className).toContain('scroll-x');
+      expect(rail).toHaveAttribute('tabindex', '0');
+      expect(rail).toHaveAttribute('data-fade-end', 'true');
+    } finally {
+      delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollWidth;
+      delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth;
+    }
+  });
+
   it('không có thương hiệu → ẩn cả dải (sau khi tải xong)', async () => {
     mocks.fetchBrands.mockResolvedValue([]);
     wrap(<HomeExtras />);

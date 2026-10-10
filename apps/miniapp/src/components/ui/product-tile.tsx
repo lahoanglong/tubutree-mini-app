@@ -1,4 +1,4 @@
-import { useId, type KeyboardEvent, type ReactNode } from 'react';
+import { useId, type CSSProperties, type ReactNode } from 'react';
 import { brandAccent } from '../../utils/brands';
 import { vi } from '../../i18n/vi';
 import { formatSold } from '../../utils/format';
@@ -24,6 +24,21 @@ export interface ProductTileProduct {
 /** Chiều cao tối thiểu ô tên (2 dòng) — skeleton của CatalogGrid dựng từ cùng hằng số này. */
 export const TILE_NAME_MIN_HEIGHT = 44;
 
+/** Nút tên thẻ trông như chữ thường. Cố ý KHÔNG đặt `position`: `.tubu-tile-link::after` phải định vị
+ * theo vỏ thẻ (position:relative) thì mới phủ kín cả thẻ. */
+const LINK_RESET: CSSProperties = {
+  display: 'block',
+  width: '100%',
+  margin: '2px 0 0',
+  padding: 0,
+  border: 'none',
+  background: 'none',
+  font: 'inherit',
+  color: 'inherit',
+  textAlign: 'left',
+  cursor: 'pointer',
+};
+
 export interface ProductTileProps {
   product: ProductTileProduct;
   variant?: 'grid' | 'rail' | 'list' | 'line' | 'compact';
@@ -47,6 +62,10 @@ export interface ProductTileProps {
  * Tương tự, `badge` là ReactNode caller tự dựng (badge giờ vàng/sale% hôm nay mỗi nơi hiển thị
  * hơi khác nhau — không gói cứng logic đó vào tile để tránh phải đoán ý từng trang).
  *
+ * Cấu trúc a11y: vỏ thẻ KHÔNG tương tác. Phần tử bấm được là nút tên (`.tubu-tile-link`, ::after phủ
+ * cả thẻ), tim yêu thích và "Mua lại" là anh em của nó chứ không phải con — nên không còn
+ * `role="button"` chứa nút lồng bên trong (axe nested-interactive, A4-015).
+ *
  * `mode` chưa rẽ nhánh style gì trong bản này — giữ trong props để Task 24-28 (storefront/brand/
  * dealer) truyền xuống ngay từ đầu mà không phải đổi chữ ký component sau này.
  */
@@ -66,25 +85,13 @@ export function ProductTile({
   const isLine = variant === 'line' || variant === 'list';
   // Tên truy cập = tên sản phẩm; giá (và giá gốc gạch) là mô tả truy cập của thẻ.
   const priceId = useId();
-  // Thẻ là div role=button → tự làm bàn phím: Enter/Space. Chỉ khi phím bấm TRÊN thẻ (không phải nút lồng bên trong như tim/Mua lại).
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.target !== e.currentTarget || e.repeat) return;
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onPress();
-    }
-  };
 
   return (
     <div
-      role="button"
-      aria-label={p.name}
-      aria-describedby={priceId}
-      tabIndex={0}
       className="tubu-press"
-      onClick={onPress}
-      onKeyDown={onKeyDown}
       style={{
+        position: 'relative',
+        isolation: 'isolate',
         display: isLine ? 'flex' : 'block',
         gap: isLine ? 12 : 0,
         background: 'var(--color-bg-surface)',
@@ -106,13 +113,12 @@ export function ProductTile({
         {p.thumbnail && (
           <img
             src={p.thumbnail}
-            alt={p.name}
+            alt=""
             loading="lazy"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />
         )}
         {badge && <div style={{ position: 'absolute', top: 8, left: 8 }}>{badge}</div>}
-        {showWishlist && !isLine && <WishlistHeart productId={p.id} floating size={18} />}
         {p.inStock === false && (
           <div
             style={{
@@ -150,20 +156,38 @@ export function ProductTile({
             {p.brand}
           </Text>
         </div>
-        <Text
-          variant="body-sm"
-          as="div"
-          style={{
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            minHeight: TILE_NAME_MIN_HEIGHT,
-            marginTop: 2,
-          }}
+        {/* aria-label trùng chữ hiển thị (không vi phạm "label in name"); giữ để mọi nơi tìm thẻ theo tên
+            truy cập (e2e, trình đọc màn hình) không phụ thuộc cấu trúc con. */}
+        <button
+          type="button"
+          className="tubu-tile-link"
+          aria-label={p.name}
+          aria-describedby={priceId}
+          onClick={onPress}
+          style={LINK_RESET}
         >
-          {p.name}
-        </Text>
+          <Text
+            variant="body-sm"
+            as="span"
+            style={{
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              minHeight: TILE_NAME_MIN_HEIGHT,
+            }}
+          >
+            {p.name}
+          </Text>
+        </button>
+        {/* Anh em của nút tên (không phải con) để không lồng phần tử tương tác. Đứng NGAY SAU nút tên trong DOM
+            để Tab/đọc đi tên rồi tới tim; vị trí thật do absolute theo vỏ thẻ (cha định vị gần nhất), khối 0x0
+            ở góc phải-trên giữ nguyên chỗ cũ của tim và nâng nó lên trên lớp phủ. */}
+        {showWishlist && !isLine && (
+          <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 1 }}>
+            <WishlistHeart productId={p.id} floating size={18} />
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, minHeight: 16 }}>
           {(p.reviewCount ?? 0) > 0 ? (
             <>
@@ -203,16 +227,15 @@ export function ProductTile({
 /**
  * Nút "Mua lại" của thẻ — dùng chung cho dạng dòng (cùng hàng với giá) và dạng khối (hàng riêng).
  *
- * Cô lập click: Button.onPress là `() => void` — KHÔNG nhận native event, nên không thể tự
- * stopPropagation từ bên trong onPress. Bọc một div riêng chặn click ở đây trước khi nó nổi bọt
- * lên div ngoài cùng (role=button, onClick=onPress) — nếu không, tap "Mua lại" sẽ đồng thời điều
- * hướng đi (đã verify empirically bằng test).
+ * Nó là anh em của nút tên (không lồng trong phần tử bấm được); `position:relative` + `zIndex:1` để
+ * nổi trên lớp phủ `.tubu-tile-link::after`. `stopPropagation` vẫn giữ vì thẻ có thể nằm trong một
+ * hàng cha tự bắt click (Button.onPress không nhận native event nên không tự chặn được).
  *
  * `block`: `.zaui-btn` có min-width 120px nên không vừa thẻ 148px → full width và bỏ min-width.
  */
 function RebuyButton({ block = false, onAction }: { block?: boolean; onAction?: () => void }) {
   return (
-    <div onClick={(e) => e.stopPropagation()} style={block ? { marginTop: 8 } : undefined}>
+    <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', zIndex: 1, marginTop: block ? 8 : undefined }}>
       <Button
         size="md"
         variant="secondary"
