@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { BrandSalesPeriod } from './dto/brand.dto';
 
 interface Cert {
   code: string;
@@ -34,6 +35,45 @@ export function slugifyVi(input: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+type PromotableCoupon = { scope: string | null; startAt: Date; endAt: Date; usageLimit: number | null; usedCount: number };
+
+/** Khách chạm sao chép mã trên trang nhãn rồi dán ở thanh toán: chỉ mã công khai, trong hạn, còn lượt mới dùng được. */
+function couponUsableNow(c: PromotableCoupon, now: Date): boolean {
+  if (c.scope != null && c.scope !== 'PUBLIC') return false;
+  if (now < c.startAt || now > c.endAt) return false;
+  return c.usageLimit == null || c.usedCount < c.usageLimit;
+}
+
+const VN_OFFSET_MS = 7 * 3600e3;
+const DAY_MS = 864e5;
+const SALES_TOP_PRODUCTS = 10;
+
+// Đơn nào tính là doanh thu của nhãn: đã qua bước chờ thanh toán, chưa huỷ/trả, chưa hoàn tiền/lỗi thanh toán.
+// Đơn COD vào thẳng CONFIRMED nên được tính ngay; đơn chuyển khoản chỉ tính sau khi đã trả.
+const SALES_ORDER_STATUS_EXCLUDED = ['PENDING_PAYMENT', 'CANCELLED', 'RETURNED'] as const;
+const SALES_ORDER_PAYMENT_EXCLUDED = ['REFUNDED', 'FAILED'] as const;
+
+/** Khoảng thời gian [from, to] của kỳ báo cáo; "tháng" tính theo lịch giờ VN (UTC+7, không có giờ mùa hè). */
+function brandSalesRange(period: BrandSalesPeriod, now: Date): { from: Date; to: Date } {
+  const vnNow = new Date(now.getTime() + VN_OFFSET_MS);
+  const monthStart = (year: number, month: number) => new Date(Date.UTC(year, month, 1) - VN_OFFSET_MS);
+  const y = vnNow.getUTCFullYear();
+  const m = vnNow.getUTCMonth();
+  switch (period) {
+    case '7d':
+      return { from: new Date(now.getTime() - 7 * DAY_MS), to: now };
+    case '90d':
+      return { from: new Date(now.getTime() - 90 * DAY_MS), to: now };
+    case 'month':
+      return { from: monthStart(y, m), to: now };
+    case 'prev_month':
+      return { from: monthStart(y, m - 1), to: new Date(monthStart(y, m).getTime() - 1) };
+    case '30d':
+    default:
+      return { from: new Date(now.getTime() - 30 * DAY_MS), to: now };
+  }
 }
 
 @Injectable()
@@ -71,6 +111,8 @@ export class BrandService {
       }),
     ]);
 
+    const publicPromotions = await this.hideUnusableCoupons(promotions, now);
+
     return {
       id: brand.id,
       slug: brand.slug,
@@ -84,7 +126,7 @@ export class BrandService {
       isVerified: brand.isVerified,
       followerCount: brand.followerCount,
       certifications: verifiedCerts,
-      promotions,
+      promotions: publicPromotions,
       products: products.map(({ soldExternal, soldApp, variations, ...p }) => ({
         ...p,
         sold: soldExternal + soldApp,
@@ -196,17 +238,60 @@ export class BrandService {
     return this.prisma.brandPromotion.findMany({ where: { brandId }, orderBy: { sortOrder: 'asc' } });
   }
 
-  createPromotion(
+  /**
+   * Chuẩn hoá mã giảm giá gắn vào khuyến mãi: phải là mã CÓ THẬT trong bảng Coupon, công khai, chưa
+   * hết hạn/hết lượt. Trả về đúng chuỗi `Coupon.code` (checkout so khớp chính xác), không phải chuỗi người nhập.
+   * Mã có hiệu lực từ ngày mai vẫn được gắn — chủ nhãn lên lịch chiến dịch trước.
+   */
+  private async resolvePromotionCoupon(raw: string | undefined | null, now: Date): Promise<string | null> {
+    const typed = raw?.trim();
+    if (!typed) return null;
+    const coupon = await this.prisma.coupon.findFirst({ where: { code: { in: [typed, typed.toUpperCase()] } } });
+    if (!coupon) {
+      throw new BadRequestException(`Mã giảm giá "${typed}" chưa có trong hệ thống. Nhờ Tubu tạo mã trước, rồi gắn vào khuyến mãi.`);
+    }
+    if (coupon.scope !== 'PUBLIC') {
+      throw new BadRequestException('Mã giảm giá này chỉ dành riêng cho một nhóm khách nên không thể đăng công khai trên trang nhãn.');
+    }
+    if (now > coupon.endAt) throw new BadRequestException('Mã giảm giá này đã hết hạn.');
+    if (coupon.usageLimit != null && coupon.usedCount >= coupon.usageLimit) {
+      throw new BadRequestException('Mã giảm giá này đã hết lượt sử dụng.');
+    }
+    return coupon.code;
+  }
+
+  /**
+   * Trang nhãn là bản sao công khai (cache): mã đã hết hạn/hết lượt/chưa hiệu lực, hoặc mã cũ lưu tự do
+   * từ trước khi có kiểm tra, không được hiện nút "chạm để chép" — khách dán vào thanh toán sẽ bị từ chối.
+   * Khuyến mãi vẫn hiện (chỉ mất mã); mã còn dùng được trả đúng chuỗi `Coupon.code`.
+   */
+  private async hideUnusableCoupons<T extends { couponCode: string | null }>(promotions: T[], now: Date): Promise<T[]> {
+    const typed = [...new Set(promotions.map((p) => p.couponCode).filter((c): c is string => !!c))];
+    if (typed.length === 0) return promotions;
+    const rows = await this.prisma.coupon.findMany({
+      where: { code: { in: [...new Set(typed.flatMap((c) => [c, c.toUpperCase()]))] } },
+      select: { code: true, scope: true, startAt: true, endAt: true, usageLimit: true, usedCount: true },
+    });
+    const usable = new Map(rows.filter((r) => couponUsableNow(r, now)).map((r) => [r.code, r.code]));
+    return promotions.map((p) => ({
+      ...p,
+      couponCode: p.couponCode ? (usable.get(p.couponCode) ?? usable.get(p.couponCode.toUpperCase()) ?? null) : null,
+    }));
+  }
+
+  async createPromotion(
     brandId: string,
     dto: { title: string; subtitle?: string; themeColor?: string; couponCode?: string; startAt: string; endAt: string; sortOrder?: number },
+    now: Date = new Date(),
   ) {
+    const couponCode = await this.resolvePromotionCoupon(dto.couponCode, now);
     return this.prisma.brandPromotion.create({
       data: {
         brandId,
         title: dto.title,
         subtitle: dto.subtitle ?? null,
         themeColor: dto.themeColor ?? null,
-        couponCode: dto.couponCode ?? null,
+        couponCode,
         startAt: new Date(dto.startAt),
         endAt: new Date(dto.endAt),
         sortOrder: dto.sortOrder ?? 0,
@@ -214,7 +299,7 @@ export class BrandService {
     });
   }
 
-  updatePromotion(
+  async updatePromotion(
     id: string,
     dto: {
       title?: string;
@@ -226,10 +311,24 @@ export class BrandService {
       isActive?: boolean;
       sortOrder?: number;
     },
+    now: Date = new Date(),
   ) {
     const data: Record<string, unknown> = { ...dto };
     if (typeof dto.startAt === 'string') data.startAt = new Date(dto.startAt);
     if (typeof dto.endAt === 'string') data.endAt = new Date(dto.endAt);
+    if (typeof dto.couponCode === 'string') {
+      const wanted = dto.couponCode.trim();
+      if (!wanted) {
+        data.couponCode = null;
+      } else {
+        // Giữ nguyên mã đang lưu thì không kiểm lại: sửa tiêu đề không được bị chặn chỉ vì mã đã hết hạn.
+        const current = await this.prisma.brandPromotion.findUnique({ where: { id }, select: { couponCode: true } });
+        data.couponCode =
+          current?.couponCode && current.couponCode.toUpperCase() === wanted.toUpperCase()
+            ? current.couponCode
+            : await this.resolvePromotionCoupon(wanted, now);
+      }
+    }
     return this.prisma.brandPromotion.update({ where: { id }, data });
   }
 
@@ -431,6 +530,80 @@ export class BrandService {
   async deleteOwnedPromotion(userId: string, promoId: string) {
     await this.assertOwnedPromotion(userId, promoId);
     return this.deletePromotion(promoId);
+  }
+
+  /**
+   * Doanh thu nhãn cho chính chủ nhãn xem (Q-18) — CHỈ ĐỌC và CHỈ SỐ TỔNG HỢP: số đơn, doanh thu,
+   * sản phẩm bán chạy. Không có truy vấn nào đọc bản ghi đơn nên không thể kéo tên/SĐT/địa chỉ khách.
+   * Quyền: nhãn lấy từ chính `Brand.ownerUserId` của người gọi — không nhận brandId từ client.
+   * Doanh thu = tổng `OrderItem.total` của các dòng thuộc SP của nhãn (giá bán gốc × số lượng, trước mã giảm
+   * giá toàn đơn và chưa gồm phí ship — giảm giá theo đơn không chia được cho từng nhãn một cách công bằng).
+   * Một đơn có hàng của nhiều nhãn chỉ tính phần dòng của nhãn này. `now` truyền vào để test tất định.
+   */
+  async getOwnedSales(userId: string, period: BrandSalesPeriod = '30d', now: Date = new Date()) {
+    const brand = await this.assertOwnedBrand(userId);
+    const { from, to } = brandSalesRange(period, now);
+    const base = { period, from: from.toISOString(), to: to.toISOString() };
+
+    const variations = await this.prisma.variation.findMany({
+      where: { product: { brandId: brand.id } },
+      select: { id: true, product: { select: { id: true, name: true, slug: true } } },
+    });
+    if (variations.length === 0) {
+      return { ...base, orderCount: 0, unitsSold: 0, revenue: 0, delivered: { orderCount: 0, revenue: 0 }, topProducts: [] };
+    }
+
+    const variationIds = variations.map((v) => v.id);
+    const productOf = new Map(variations.map((v) => [v.id, v.product]));
+    const orderWhere = {
+      createdAt: { gte: from, lte: to },
+      status: { notIn: [...SALES_ORDER_STATUS_EXCLUDED] },
+      paymentStatus: { notIn: [...SALES_ORDER_PAYMENT_EXCLUDED] },
+    } satisfies Prisma.OrderWhereInput;
+    const deliveredWhere = { ...orderWhere, status: 'DELIVERED' } satisfies Prisma.OrderWhereInput;
+    const hasBrandLine = { some: { variationId: { in: variationIds } } };
+
+    const [lines, orderCount, deliveredOrderCount, deliveredLines] = await Promise.all([
+      this.prisma.orderItem.groupBy({
+        by: ['variationId'],
+        where: { variationId: { in: variationIds }, order: orderWhere },
+        _sum: { quantity: true, total: true },
+      }),
+      this.prisma.order.count({ where: { ...orderWhere, items: hasBrandLine } }),
+      this.prisma.order.count({ where: { ...deliveredWhere, items: hasBrandLine } }),
+      this.prisma.orderItem.aggregate({
+        where: { variationId: { in: variationIds }, order: deliveredWhere },
+        _sum: { total: true },
+      }),
+    ]);
+
+    const byProduct = new Map<string, { productId: string; name: string; slug: string; quantity: number; revenue: number }>();
+    let revenue = 0;
+    let unitsSold = 0;
+    for (const line of lines) {
+      const product = productOf.get(line.variationId);
+      if (!product) continue;
+      const quantity = line._sum.quantity ?? 0;
+      const lineRevenue = line._sum.total ?? 0;
+      revenue += lineRevenue;
+      unitsSold += quantity;
+      const row = byProduct.get(product.id) ?? { productId: product.id, name: product.name, slug: product.slug, quantity: 0, revenue: 0 };
+      row.quantity += quantity;
+      row.revenue += lineRevenue;
+      byProduct.set(product.id, row);
+    }
+    const topProducts = [...byProduct.values()]
+      .sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity)
+      .slice(0, SALES_TOP_PRODUCTS);
+
+    return {
+      ...base,
+      orderCount,
+      unitsSold,
+      revenue,
+      delivered: { orderCount: deliveredOrderCount, revenue: deliveredLines._sum.total ?? 0 },
+      topProducts,
+    };
   }
 
   /** Trạng thái theo dõi của user với nhãn (cho FE hiện nút). */

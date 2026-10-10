@@ -1,6 +1,7 @@
 import { DealerService } from './dealer.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import { SELLABLE_VARIATION_WHERE } from '../cart/sellable';
 
 function makeConfig(values: Record<string, unknown> = {}): SystemConfigService {
   return {
@@ -52,6 +53,17 @@ describe('DealerService.pricelist', () => {
   it('chặn user không phải DEALER', async () => {
     const prisma = prismaForPricelist({ id: 'u1', role: 'CUSTOMER', metadata: null }, null, []);
     await expect(new DealerService(prisma, makeConfig()).pricelist('u1')).rejects.toThrow();
+  });
+
+  it('chỉ trả variation còn bán được: SP ngừng bán/chưa duyệt không vào bảng giá để khỏi mời đặt trước rồi bị PRODUCT_DISCONTINUED', async () => {
+    const prisma = prismaForPricelist(
+      { id: 'd1', role: 'DEALER', metadata: null },
+      null,
+      [variation('v1', 200000)],
+    );
+    await new DealerService(prisma, makeConfig()).pricelist('d1');
+    const findMany = (prisma as unknown as { variation: { findMany: jest.Mock } }).variation.findMany;
+    expect(findMany.mock.calls[0]![0].where).toEqual(SELLABLE_VARIATION_WHERE);
   });
 });
 

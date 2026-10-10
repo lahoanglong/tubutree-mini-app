@@ -96,8 +96,9 @@ export const claimCtvMilestone = (milestoneId: string, month?: string) =>
       month ? { month } : {},
     )
     .then((r) => r.data);
-export const registerAffiliate = () =>
-  api.post<{ ok: boolean; referralCode: string }>('/affiliate/register').then((r) => r.data);
+/** `termsVersion` = phiên bản điều khoản hoa hồng/thuế người dùng vừa tick đồng ý (máy chủ lưu lại). */
+export const registerAffiliate = (termsVersion?: string) =>
+  api.post<{ ok: boolean; referralCode: string }>('/affiliate/register', termsVersion ? { termsVersion } : {}).then((r) => r.data);
 export const getAffiliateDashboard = () =>
   api.get<AffiliateDashboard>('/affiliate/dashboard').then((r) => r.data);
 export const getAffiliateLinks = () =>

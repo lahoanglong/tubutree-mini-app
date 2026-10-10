@@ -3,12 +3,28 @@ import { Share2, Copy } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchContentKit } from '../services/affiliate-api';
 import { getErrorMessage } from '../services/api';
-import { shareLink } from '../services/zmp-bridge';
+import { useShareWithFallback } from './share-sheet';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { Skeleton } from './ui/skeleton';
 import { ErrorState } from './ui/empty-state';
 import { copyText } from '../utils/clipboard';
+
+/**
+ * `app.miniapp_base_url` chưa cấu hình thì API trả đường dẫn tương đối ('/product/..?ref=..'): dán
+ * vào Zalo/Facebook không mở được. Ghép domain web (cùng nguồn với share-sheet/affiliate).
+ */
+function absoluteLink(link: string): string {
+  if (!link.startsWith('/')) return link;
+  const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
+  return `${base}${link}`;
+}
+
+/** Bài mẫu do admin soạn tay có thể thiếu {link}: chép thiếu mã giới thiệu thì CTV mất hoa hồng. */
+function shareFallbackText(caption: string | undefined, link: string): string {
+  if (!caption) return link;
+  return caption.includes('ref=') ? caption : `${caption} ${link}`;
+}
 
 /**
  * "Bộ nội dung bán hàng" theo từng sản phẩm — CTV mở lên là copy/chia sẻ được ngay:
@@ -24,6 +40,7 @@ export function ContentKitSheet({
   productSlug: string;
 }) {
   const { openSnackbar } = useSnackbar();
+  const shareWithFallback = useShareWithFallback();
   const q = useQuery({
     queryKey: ['content-kit', productSlug],
     queryFn: () => fetchContentKit(productSlug),
@@ -43,6 +60,7 @@ export function ContentKitSheet({
   };
 
   const data = q.data;
+  const link = data ? absoluteLink(data.shareLink) : '';
   const hasContent =
     data && (data.captions.length > 0 || data.usps.length > 0 || data.faqs.length > 0 || data.videoUrls.length > 0);
 
@@ -82,12 +100,15 @@ export function ContentKitSheet({
               style={{ background: 'var(--primary-600)', marginBottom: 8 }}
               onClick={() => {
                 haptic('light');
-                void shareLink({
-                  title: data.productName,
-                  description: data.captions[0] ?? data.productName,
-                  thumbnail: data.images[0],
-                  path: data.shareLink,
-                }).catch(() => {});
+                void shareWithFallback(
+                  {
+                    title: data.productName,
+                    description: data.captions[0] ?? data.productName,
+                    thumbnail: data.images[0],
+                    path: data.shareLink,
+                  },
+                  shareFallbackText(data.captions[0], link),
+                );
               }}
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -95,7 +116,7 @@ export function ContentKitSheet({
                 {vi.contentKit.shareZalo}
               </span>
             </Button>
-            <Button fullWidth variant="secondary" style={{ marginBottom: 12 }} onClick={() => copy(data.shareLink)}>
+            <Button fullWidth variant="secondary" style={{ marginBottom: 12 }} onClick={() => copy(link)}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <Copy size={16} />
                 {vi.contentKit.copyLink}

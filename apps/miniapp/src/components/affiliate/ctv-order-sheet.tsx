@@ -1,8 +1,18 @@
 import { useState } from 'react';
-import { Box, Text, Button, Input, useSnackbar, useNavigate } from 'zmp-ui';
+import { Box, Text, Input, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Plus, Minus } from 'lucide-react';
+import { Trash2, Plus, Minus, UserPlus } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Chip } from '../ui/chip';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '../geo-picker';
+import {
+  loadRecentCustomers,
+  normalizeCustomerPhone,
+  recentCustomerLabel,
+  saveRecentCustomer,
+  type RecentCustomer,
+} from './recent-customers';
+import { useAuthStore } from '../../store/auth';
 import {
   suggestProducts,
   fetchProduct,
@@ -46,6 +56,25 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
   const [showErrors, setShowErrors] = useState(false);
   const [result, setResult] = useState<CtvOrderResult | null>(null);
   const navigate = useNavigate();
+  const userId = useAuthStore((s) => s.user?.id);
+  const [recents, setRecents] = useState<RecentCustomer[]>(() => loadRecentCustomers(userId));
+
+  const applyCustomer = (c: RecentCustomer) => {
+    haptic('light');
+    setRecipient(c.recipient);
+    setPhone(c.phone);
+    setStreet(c.street);
+    setGeo({ province: c.province, provinceCode: c.provinceCode, ward: c.ward, wardCode: c.wardCode });
+    setShowErrors(false);
+  };
+  const clearCustomer = () => {
+    haptic('light');
+    setRecipient('');
+    setPhone('');
+    setStreet('');
+    setGeo(EMPTY_GEO);
+    setShowErrors(false);
+  };
 
   const addLine = (v: VariationDetail, productName: string) => {
     haptic('light');
@@ -121,6 +150,17 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
     onSuccess: (r) => {
       haptic('medium');
       setResult(r);
+      saveRecentCustomer(userId, {
+        recipient: recipient.trim(),
+        phone: phoneClean,
+        street: street.trim(),
+        province: geo.province,
+        provinceCode: geo.provinceCode,
+        ward: geo.ward,
+        wardCode: geo.wardCode,
+        usedAt: Date.now(),
+      });
+      setRecents(loadRecentCustomers(userId));
       void qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] });
       void qc.invalidateQueries({ queryKey: ['affiliate-commissions'] });
       void qc.invalidateQueries({ queryKey: ['affiliate-product-breakdown'] });
@@ -151,11 +191,11 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
         {payment === 'BANK_TRANSFER' && (
           <Button
             fullWidth
-            onClick={() => {
+            onPress={() => {
               onClose();
               navigate(`/bank-payment/${result.code}`);
             }}
-            style={{ marginTop: 16, minHeight: 44, background: 'var(--primary-600)', fontWeight: 700 }}
+            style={{ marginTop: 16 }}
           >
             {t.openPayment}
           </Button>
@@ -163,26 +203,22 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
         <Box flex style={{ gap: 8, marginTop: payment === 'BANK_TRANSFER' ? 8 : 20 }}>
           <Button
             variant="secondary"
-            onClick={() => {
+            onPress={() => {
               setResult(null);
               setLines([]);
               setNote('');
             }}
-            style={{ flex: 1, minHeight: 44 }}
+            style={{ flex: 1 }}
           >
             {t.createAnother}
           </Button>
           <Button
-            variant={payment === 'BANK_TRANSFER' ? 'secondary' : undefined}
-            onClick={() => {
+            variant={payment === 'BANK_TRANSFER' ? 'secondary' : 'primary'}
+            onPress={() => {
               onClose();
               navigate(`/order/${result.code}`);
             }}
-            style={{
-              flex: 1,
-              minHeight: 44,
-              ...(payment === 'BANK_TRANSFER' ? {} : { background: 'var(--primary-600)' }),
-            }}
+            style={{ flex: 1 }}
           >
             {t.viewOrder}
           </Button>
@@ -196,6 +232,29 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       <Text bold size="large" style={{ marginBottom: 12 }}>
         {t.title}
       </Text>
+
+      {/* Khách gần đây: chạm một lần điền sẵn tên, SĐT và địa chỉ (thay cho ~5 lần nhập tay). */}
+      {recents.length > 0 && (
+        <Box style={{ marginBottom: 12 }}>
+          <Text size="xSmall" bold style={{ color: 'var(--neutral-500)', marginBottom: 2 }}>
+            {t.recentHeading}
+          </Text>
+          <div className="scroll-x" style={{ display: 'flex', gap: 8, padding: '4px 0' }}>
+            <Chip variant="choice" icon={UserPlus} onPress={clearCustomer}>
+              {t.newCustomer}
+            </Chip>
+            {recents.map((c) => (
+              <Chip
+                key={normalizeCustomerPhone(c.phone)}
+                selected={normalizeCustomerPhone(c.phone) === phoneClean}
+                onPress={() => applyCustomer(c)}
+              >
+                {recentCustomerLabel(c)}
+              </Chip>
+            ))}
+          </div>
+        </Box>
+      )}
 
       {/* Người nhận */}
       <Text size="xSmall" bold style={{ color: 'var(--neutral-500)', marginBottom: 6 }}>
@@ -250,8 +309,8 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
             className="tubu-press"
             onClick={() => removeLine(l.variationId)}
             style={{
-              width: 36,
-              height: 36,
+              width: 44,
+              height: 44,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -306,9 +365,9 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       <Button
         fullWidth
         loading={mut.isPending}
-        disabled={(showErrors && !valid) || mut.isPending}
-        onClick={submit}
-        style={{ marginTop: 12, background: 'var(--primary-600)' }}
+        disabled={showErrors && !valid}
+        onPress={submit}
+        style={{ marginTop: 12 }}
       >
         {t.submit}
       </Button>
@@ -347,9 +406,17 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
           <Text size="small" bold>
             {p?.name ?? t.chooseVariation}
           </Text>
-          <Text size="xSmall" bold style={{ color: 'var(--primary-700)', cursor: 'pointer' }} onClick={reset}>
-            {vi.common.close}
-          </Text>
+          <Box
+            role="button"
+            aria-label={vi.common.close}
+            className="tubu-press"
+            onClick={reset}
+            style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer' }}
+          >
+            <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
+              {vi.common.close}
+            </Text>
+          </Box>
         </Box>
         {detailQ.isLoading ? (
           <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
@@ -378,7 +445,7 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
                 flex
                 alignItems="center"
                 justifyContent="space-between"
-                style={{ padding: '8px 0', opacity: out ? 0.5 : 1, cursor: out ? 'not-allowed' : 'pointer' }}
+                style={{ padding: '8px 0', minHeight: 44, opacity: out ? 0.5 : 1, cursor: out ? 'not-allowed' : 'pointer' }}
               >
                 <Text size="small">{v.name}</Text>
                 <Text size="xSmall" bold style={{ color: out ? 'var(--neutral-400)' : 'var(--primary-700)' }}>
@@ -420,7 +487,7 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
                   onClick={() => setSlug(p.slug)}
                   flex
                   alignItems="center"
-                  style={{ gap: 8, padding: '6px 0', cursor: 'pointer' }}
+                  style={{ gap: 8, padding: '6px 0', minHeight: 44, cursor: 'pointer' }}
                 >
                   {p.thumbnail && (
                     <img src={p.thumbnail} alt="" width={32} height={32} style={{ borderRadius: 6, objectFit: 'cover', flex: '0 0 auto' }} />
@@ -482,8 +549,8 @@ function Stepper({ icon, label, onClick }: { icon: React.ReactNode; label: strin
       alignItems="center"
       justifyContent="center"
       style={{
-        width: 36,
-        height: 36,
+        width: 44,
+        height: 44,
         borderRadius: '50%',
         border: '1px solid var(--neutral-200)',
         color: 'var(--primary-700)',

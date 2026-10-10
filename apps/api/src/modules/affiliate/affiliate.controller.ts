@@ -4,6 +4,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { clampTake } from '../../common/pagination';
 import { AffiliateService } from './affiliate.service';
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
+import { RegisterAffiliateDto } from './dto/register-affiliate.dto';
 
 class CreateLinkDto {
   @IsIn(['PRODUCT', 'CATEGORY', 'HOMEPAGE', 'DEAL']) targetType!: string;
@@ -32,8 +33,8 @@ export class AffiliateController {
   constructor(private readonly affiliate: AffiliateService) {}
 
   @Post('register')
-  register(@CurrentUser('sub') userId: string) {
-    return this.affiliate.register(userId);
+  register(@CurrentUser('sub') userId: string, @Body() dto?: RegisterAffiliateDto) {
+    return this.affiliate.register(userId, dto?.termsVersion);
   }
 
   // Ghi "chạm" giới thiệu để attribution sống affiliate.attribution_days ngày (fallback khi phiên mất).

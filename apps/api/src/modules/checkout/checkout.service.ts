@@ -437,6 +437,14 @@ export class CheckoutService {
     } catch (err) {
       this.logger.error(`Gửi thông báo lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
     }
+    // CTV nhận tin có đơn mới từ link của mình — gửi sau commit vì hoa hồng được tạo trong tx của đơn.
+    if (referrerUserId) {
+      try {
+        await this.affiliate.notifyCommissionCreated(order.id);
+      } catch (err) {
+        this.logger.error(`Báo hoa hồng mới cho CTV lỗi, đơn ${code}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
 
     return this.findOrderResponse(order.id);
   }

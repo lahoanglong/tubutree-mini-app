@@ -1,10 +1,43 @@
-import { Box, Text, Button, Sheet, useSnackbar } from 'zmp-ui';
+import { useCallback } from 'react';
+import { Box, Text, Sheet, useSnackbar } from 'zmp-ui';
 import { Share2, Copy } from 'lucide-react';
+import { Button } from './ui/button';
 import { QrCode } from './qr-code';
 import { shareLink } from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
+
+type ShareParams = Parameters<typeof shareLink>[0];
+
+/** RESPONSE_CODE.USER_CANCEL của zmp-sdk: người dùng chủ động đóng hộp thoại, không phải lỗi. */
+const ZMP_USER_CANCEL = -2003;
+
+/**
+ * Chia sẻ qua Zalo, không nuốt lỗi: API Zalo từ chối (chưa cấp quyền, webview cũ...) thì CTV bấm
+ * nút mà không thấy gì xảy ra — mất cơ hội chia sẻ mà không biết vì sao.
+ * Lỗi thì chép sẵn `fallbackText` (đã gồm liên kết có mã giới thiệu) vào clipboard và báo bằng
+ * snackbar để họ dán gửi tay. Người dùng huỷ hộp thoại thì để yên: không ghi đè clipboard của họ.
+ */
+export function useShareWithFallback() {
+  const { openSnackbar } = useSnackbar();
+  return useCallback(
+    async (params: ShareParams, fallbackText: string) => {
+      try {
+        await shareLink(params);
+      } catch (err) {
+        if ((err as { code?: number } | null)?.code === ZMP_USER_CANCEL) return;
+        const copied = await copyText(fallbackText);
+        openSnackbar(
+          copied
+            ? { text: vi.shareFallback.failedCopied, type: 'warning' }
+            : { text: vi.shareFallback.failedManual, type: 'error' },
+        );
+      }
+    },
+    [openSnackbar],
+  );
+}
 
 export function ShareSheet({
   visible,
@@ -28,6 +61,7 @@ export function ShareSheet({
   captions?: string[];
 }) {
   const { openSnackbar } = useSnackbar();
+  const shareWithFallback = useShareWithFallback();
   const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
   const path = `/${pathPrefix}/${slug}`;
   // Mã giới thiệu PHẢI đi kèm ở CẢ 2 lối chia sẻ. Trước đây chỉ `url` (nút Sao chép link) có
@@ -57,22 +91,17 @@ export function ShareSheet({
         <Box flex justifyContent="center" mb={3}><QrCode value={url} /></Box>
         <Button
           fullWidth
-          style={{ background: 'var(--primary-600)', marginBottom: 8 }}
-          onClick={() => {
+          icon={Share2}
+          style={{ marginBottom: 8 }}
+          onPress={() => {
             haptic('light');
-            void shareLink({ title, description: captions[0] ?? '', thumbnail, path: sharePath }).catch(() => {});
+            void shareWithFallback({ title, description: captions[0] ?? '', thumbnail, path: sharePath }, url);
           }}
         >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Share2 size={16} />
-            {vi.storefront.shareZalo}
-          </span>
+          {vi.storefront.shareZalo}
         </Button>
-        <Button fullWidth variant="secondary" style={{ marginBottom: 12 }} onClick={() => copy(url)}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Copy size={16} />
-            {vi.storefront.copyLink}
-          </span>
+        <Button fullWidth variant="secondary" icon={Copy} style={{ marginBottom: 12 }} onPress={() => copy(url)}>
+          {vi.storefront.copyLink}
         </Button>
         <Text size="xSmall" bold style={{ marginBottom: 6 }}>{vi.storefront.captionHint}</Text>
         {captions.map((c, i) => (

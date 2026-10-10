@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getAffiliateMe,
@@ -19,10 +19,12 @@ import {
   type CtvMilestoneItem,
 } from '../services/affiliate-api';
 import { getErrorMessage } from '../services/api';
-import { shareLink } from '../services/zmp-bridge';
+import { useShareWithFallback } from '../components/share-sheet';
 import { useAuthStore } from '../store/auth';
 import { formatVnd, formatVndShort, formatXu } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { Button } from '../components/ui/button';
+import { Checkbox } from '../components/ui/form';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
@@ -82,8 +84,9 @@ export default function AffiliatePage() {
 function RegisterGate() {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
+  const [agreed, setAgreed] = useState(false);
   const reg = useMutation({
-    mutationFn: registerAffiliate,
+    mutationFn: () => registerAffiliate(vi.ctvTerms.version),
     onSuccess: () => {
       haptic('medium');
       openSnackbar({ text: 'Chào mừng CTV Tubu Tree! 🎉', type: 'success' });
@@ -144,15 +147,43 @@ function RegisterGate() {
           ))}
         </Box>
 
+        {/* Điều khoản hoa hồng/thuế: trước đây đăng ký một chạm, không có gì để viện dẫn khi
+            hoa hồng bị thu hồi hoặc phải khấu trừ thuế. Phiên bản + thời điểm đồng ý được máy
+            chủ lưu lại (User.metadata.affiliateTerms). */}
+        <Box
+          mt={4}
+          p={4}
+          style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }}
+        >
+          <Text bold size="small">
+            {vi.ctvTerms.heading}
+          </Text>
+          <ul style={{ margin: '8px 0 0', paddingLeft: 18, color: 'var(--neutral-700)' }}>
+            {vi.ctvTerms.items.map((item) => (
+              <li key={item} style={{ marginBottom: 6 }}>
+                <Text size="xSmall" style={{ color: 'var(--neutral-700)' }}>
+                  {item}
+                </Text>
+              </li>
+            ))}
+          </ul>
+          <Checkbox checked={agreed} onChange={() => setAgreed((v) => !v)} label={vi.ctvTerms.agree} />
+        </Box>
+
         <Button
           fullWidth
           loading={reg.isPending}
-          disabled={reg.isPending}
-          onClick={() => reg.mutate()}
-          style={{ marginTop: 24, background: 'var(--primary-600)' }}
+          disabled={!agreed}
+          onPress={() => reg.mutate()}
+          style={{ marginTop: 16 }}
         >
           Đăng ký miễn phí ngay
         </Button>
+        {!agreed && (
+          <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 6, textAlign: 'center', display: 'block' }}>
+            {vi.ctvTerms.mustAgree}
+          </Text>
+        )}
       </Box>
     </Page>
   );
@@ -240,21 +271,14 @@ function Dashboard() {
         </Text>
 
         <Button
-          size="small"
-          disabled={!m.canClaim || claimMilestoneMut.isPending}
+          variant={m.canClaim ? 'primary' : 'secondary'}
+          disabled={!m.canClaim}
           loading={
             claimMilestoneMut.isPending &&
             claimMilestoneMut.variables?.id === m.id &&
             claimMilestoneMut.variables?.month === month
           }
-          onClick={() => claimMilestoneMut.mutate({ id: m.id, month })}
-          style={{
-            borderRadius: 'var(--radius-full)',
-            background: m.canClaim ? 'var(--leaf-600)' : 'var(--neutral-200)',
-            color: m.canClaim ? 'var(--neutral-0)' : 'var(--neutral-500)',
-            padding: '4px 12px',
-            fontSize: 12,
-          }}
+          onPress={() => claimMilestoneMut.mutate({ id: m.id, month })}
         >
           {m.claimed ? 'Đã nhận ✓' : m.canClaim ? 'Nhận thưởng' : 'Chưa đạt'}
         </Button>
@@ -275,13 +299,15 @@ function Dashboard() {
   const d = dashQ.data;
   const referral = meQ.data?.referralCode ?? '';
 
+  const shareWithFallback = useShareWithFallback();
   const shareReferral = () => {
     haptic('light');
-    void shareLink({
-      title: 'Tubu Tree — Sống xanh An Lành',
-      description: `Mua sắm sản phẩm thiên nhiên cùng mình, dùng mã ${referral} nhé!`,
-      path: `/?ref=${referral}`,
-    }).catch(() => {});
+    const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
+    const description = `Mua sắm sản phẩm thiên nhiên cùng mình, dùng mã ${referral} nhé!`;
+    void shareWithFallback(
+      { title: 'Tubu Tree — Sống xanh An Lành', description, path: `/?ref=${referral}` },
+      `${description} ${base}/?ref=${referral}`,
+    );
   };
 
   return (
@@ -315,6 +341,24 @@ function Dashboard() {
             </Box>
           </Box>
         )}
+      </Box>
+
+      {/* Lối tắt "Lên đơn hộ" ngay dưới thẻ hoa hồng: việc CTV làm nhiều lần mỗi ngày, trước đây
+          nằm sau thẻ bậc, thưởng mốc và nút rút nên phải cuộn qua ~3 màn mới thấy. */}
+      <Box mx={4} mb={3}>
+        <Button
+          fullWidth
+          icon={Receipt}
+          onPress={() => {
+            haptic('light');
+            setCtvOrdering(true);
+          }}
+        >
+          {vi.ctvOrder.entry}
+        </Button>
+        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4, textAlign: 'center' }}>
+          {vi.ctvOrder.entryHint}
+        </Text>
       </Box>
 
       {/* Bậc doanh số tháng (§6.8.2) & Danh sách 5 bậc CTV */}
@@ -477,37 +521,20 @@ function Dashboard() {
           // Khi dashQ lỗi: cho phép mở WithdrawForm để BE tự validate số dư (CTV không bị kẹt
           // do dashboard lỗi tạm thời mà không rút được commission đã APPROVED).
           disabled={!dashQ.isError && (d?.withdrawableCommission ?? 0) <= 0}
-          onClick={() => setWithdrawing(true)}
+          onPress={() => setWithdrawing(true)}
         >
           Rút hoa hồng
         </Button>
       </Box>
 
       <Box mx={4} mb={3}>
-        <Button
-          fullWidth
-          prefixIcon={<Receipt size={16} />}
-          onClick={() => {
-            haptic('light');
-            setCtvOrdering(true);
-          }}
-          style={{ background: 'var(--primary-600)' }}
-        >
-          {vi.ctvOrder.entry}
-        </Button>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4, textAlign: 'center' }}>
-          {vi.ctvOrder.entryHint}
-        </Text>
-      </Box>
-
-      <Box mx={4} mb={3}>
-        <Button fullWidth variant="secondary" prefixIcon={<Store size={16} />} onClick={() => navigate('/storefront')}>
+        <Button fullWidth variant="secondary" icon={Store} onPress={() => navigate('/storefront')}>
           Gian hàng của tôi
         </Button>
       </Box>
 
       <Box mx={4} mb={3}>
-        <Button fullWidth variant="secondary" prefixIcon={<GraduationCap size={16} />} onClick={() => navigate('/academy')}>
+        <Button fullWidth variant="secondary" icon={GraduationCap} onPress={() => navigate('/academy')}>
           {vi.academy.entry}
         </Button>
         <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4, textAlign: 'center' }}>
@@ -527,9 +554,7 @@ function Dashboard() {
           <Text bold size="large" style={{ color: 'var(--primary-700)', letterSpacing: 1 }}>
             {referral}
           </Text>
-          <Button size="small" onClick={shareReferral} style={{ background: 'var(--primary-600)' }}>
-            Chia sẻ
-          </Button>
+          <Button onPress={shareReferral}>Chia sẻ</Button>
         </Box>
 
         {/* Caption gợi ý (§6.8.4) — chạm để copy */}
@@ -880,8 +905,8 @@ function WithdrawForm({
         fullWidth
         loading={mut.isPending}
         disabled={!valid}
-        onClick={() => mut.mutate()}
-        style={{ marginTop: 20, background: 'var(--primary-600)' }}
+        onPress={() => mut.mutate()}
+        style={{ marginTop: 20 }}
       >
         {method === 'WALLET_BALANCE'
           ? `Nhận ${formatVnd(amountNum)} vào Ví`
