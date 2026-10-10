@@ -281,6 +281,9 @@ model User {
   posCreditsGiven        PosPointCredit[]        @relation("PosCreditStaff")
 
   @@index([referredById])
+  // Tìm đơn admin theo SĐT/tên khách (LIKE/ILIKE '%x%') — trigram GIN, cần extension pg_trgm.
+  @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_phone_trgm_idx")
+  @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_fullName_trgm_idx")
   @@map("users")
 }
 
@@ -295,6 +298,8 @@ model RefreshToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+  // Thống kê DAU theo ngày tạo token (analytics-aggregation.service.ts).
+  @@index([createdAt])
   @@map("refresh_tokens")
 }
 
@@ -864,8 +869,13 @@ model Order {
   // Admin order listing lọc theo status, sort createdAt desc (admin.service.ts listOrders) —
   // không trùng prefix với [userId, status] ở trên (userId không có trong where của admin).
   @@index([status, createdAt])
+  // Danh sách đơn admin không lọc + đơn mới nhất của dashboard: ORDER BY createdAt DESC LIMIT n.
+  @@index([createdAt])
   @@index([gomdonOrderId])
   @@index([gomdonPartnerCode])
+  // Tìm đơn admin theo mã đơn / mã Gomdon (ILIKE '%x%') — trigram GIN, cần extension pg_trgm.
+  @@index([code(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_code_trgm_idx")
+  @@index([gomdonPartnerCode(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_gomdonPartnerCode_trgm_idx")
   // Cron cứu hộ Gomdon (gomdon-reconcile.service.ts) quét đơn thu gom theo gomdonStatus.
   @@index([hasRecyclingPickup, gomdonStatus])
   @@map("orders")
@@ -1142,6 +1152,8 @@ model Commission {
   @@index([orderId])
   // Khoá idempotency tạo hoa hồng (createCommissionForOrder: INSERT ... ON CONFLICT DO NOTHING).
   @@unique([orderId, affiliateUserId])
+  // Cron duyệt hoa hồng hết hold (approveDueCommissions): status = LOCKED AND lockedAt <= mốc.
+  @@index([status, lockedAt])
   @@map("commissions")
 }
 
@@ -1292,6 +1304,8 @@ model CashbackTransaction {
 
   @@unique([provider, merchantOrderId])
   @@index([userId, status])
+  // Cron settle hoàn tiền hết hold: status = CONFIRMED AND confirmedAt <= mốc.
+  @@index([status, confirmedAt])
   @@map("cashback_transactions")
 }
 
@@ -2101,7 +2115,11 @@ model NotificationLog {
   error        String?
   sentAt       DateTime @default(now())
 
-  @@index([userId])
+  // Inbox (userId + channel ORDER BY sentAt DESC) và chống nhắc lặp theo user (userId + sentAt) —
+  // prefix userId vẫn phục vụ mọi truy vấn chỉ lọc userId nên không giữ index [userId] riêng.
+  @@index([userId, sentAt])
+  // Cron nhắc theo mẫu trong N ngày gần nhất (game-reminder: templateCode + sentAt >= mốc).
+  @@index([templateCode, sentAt])
   @@map("notification_logs")
 }
 
