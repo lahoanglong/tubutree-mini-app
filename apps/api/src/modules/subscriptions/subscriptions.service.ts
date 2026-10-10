@@ -66,16 +66,25 @@ export class SubscriptionsService {
     if (!address || address.userId !== userId) throw new BadRequestException('Địa chỉ không hợp lệ.');
 
     return this.prisma.$transaction(async (tx) => {
-      const sub = await tx.subscription.create({
-        data: {
-          userId,
-          variationId: dto.variationId,
-          quantity: Math.max(1, dto.quantity),
-          intervalWeeks: dto.intervalWeeks,
-          addressId: dto.addressId,
-          nextRunAt: this.addWeeks(new Date(), dto.intervalWeeks),
-        },
-      });
+      const sub = await tx.subscription
+        .create({
+          data: {
+            userId,
+            variationId: dto.variationId,
+            quantity: Math.max(1, dto.quantity),
+            intervalWeeks: dto.intervalWeeks,
+            addressId: dto.addressId,
+            nextRunAt: this.addWeeks(new Date(), dto.intervalWeeks),
+          },
+        })
+        .catch((err: unknown) => {
+          // Địa chỉ bị xoá giữa lúc kiểm ở trên và lúc ghi gói: FK RESTRICT (C-014) báo P2003.
+          const e = err as { code?: string; meta?: { field_name?: string } };
+          if (e?.code === 'P2003' && String(e.meta?.field_name ?? '').includes('addressId')) {
+            throw new BadRequestException('Địa chỉ không hợp lệ.');
+          }
+          throw err;
+        });
       await this.analytics.record(tx, {
         eventName: 'subscription_changed',
         userId,

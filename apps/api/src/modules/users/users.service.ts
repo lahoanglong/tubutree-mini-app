@@ -4,6 +4,19 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
 
+/** Mã lỗi ổn định để FE nhận diện (message tiếng Việt có thể đổi câu chữ). */
+export const ADDRESS_IN_USE_BY_SUBSCRIPTION = 'ADDRESS_IN_USE_BY_SUBSCRIPTION';
+
+function addressInUseError(productNames: string[]): BadRequestException {
+  const which = productNames.length > 0 ? ` "${[...new Set(productNames)].join('", "')}"` : '';
+  return new BadRequestException({
+    statusCode: 400,
+    error: 'Bad Request',
+    code: ADDRESS_IN_USE_BY_SUBSCRIPTION,
+    message: `Địa chỉ đang dùng cho gói giao định kỳ${which}, hãy đổi địa chỉ của gói trước.`,
+  });
+}
+
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
@@ -107,9 +120,31 @@ export class UsersService {
     );
   }
 
+  /**
+   * Q-12 (C-014): địa chỉ đang dùng cho gói giao định kỳ ACTIVE/PAUSED thì KHÔNG cho xoá — khách đổi địa
+   * chỉ của gói trước. Gói đã huỷ không còn sinh đơn nên đi theo địa chỉ như trước (FK nay là RESTRICT).
+   */
   async deleteAddress(userId: string, id: string) {
     await this.assertOwner(userId, id);
-    await this.prisma.address.delete({ where: { id } });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // Khoá dòng địa chỉ: tạo gói song song (INSERT có FK cần FOR KEY SHARE) phải chờ tới khi xoá xong
+        // rồi thất bại vì FK, thay vì chen vào giữa lúc kiểm và lúc xoá.
+        await tx.$queryRaw`SELECT "id" FROM "addresses" WHERE "id" = ${id} FOR UPDATE`;
+        const inUse = await tx.subscription.findMany({
+          where: { addressId: id, status: { in: ['ACTIVE', 'PAUSED'] } },
+          select: { variation: { select: { product: { select: { name: true } } } } },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (inUse.length > 0) throw addressInUseError(inUse.map((s) => s.variation.product.name));
+        await tx.subscription.deleteMany({ where: { addressId: id, status: 'CANCELLED' } });
+        await tx.address.delete({ where: { id } });
+      });
+    } catch (err) {
+      // Lưới an toàn: có gói gắn vào địa chỉ mà bước kiểm không thấy thì FK RESTRICT chặn (P2003).
+      if ((err as { code?: string })?.code === 'P2003') throw addressInUseError([]);
+      throw err;
+    }
     return { ok: true };
   }
 
