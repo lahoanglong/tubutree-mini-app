@@ -108,6 +108,38 @@ describe('seed mẫu thông báo', () => {
     });
   });
 
+  describe('mẫu tin gói định kỳ + đơn thứ 2 (C-015, C-017): migration và seed nói cùng một câu', () => {
+    const MIGRATIONS_DIR = join(__dirname, '../../../prisma/migrations');
+    const CODES = ['SUBSCRIPTION_PAUSED', 'SUBSCRIPTION_ORDER_AWAITING_PAYMENT', 'SECOND_ORDER_VOUCHER', 'REVIEW_REQUEST'];
+
+    /** Lời tin của từng mã sau khi áp lần lượt mọi migration (INSERT rồi UPDATE theo thứ tự thư mục). */
+    function bodiesAfterMigrations(): Map<string, string> {
+      const out = new Map<string, string>();
+      for (const dir of readdirSync(MIGRATIONS_DIR).filter((d) => statSync(join(MIGRATIONS_DIR, d)).isDirectory()).sort()) {
+        const sql = readFileSync(join(MIGRATIONS_DIR, dir, 'migration.sql'), 'utf-8');
+        for (const m of sql.matchAll(/\('[^']+', '([A-Z_]+)', '[A-Z]+', '([^']*)'\)/g)) {
+          if (!out.has(m[1]!)) out.set(m[1]!, m[2]!);
+        }
+        for (const m of sql.matchAll(/UPDATE "notification_templates" SET "bodyTemplate" = '([^']*)'\s+WHERE "code" = '([A-Z_]+)'/g)) {
+          out.set(m[2]!, m[1]!);
+        }
+      }
+      return out;
+    }
+
+    it.each(CODES)('%s: prod (chỉ chạy migration) có đúng lời tin như seed', (code) => {
+      expect(bodiesAfterMigrations().get(code)).toBe(byCode.get(code)!.bodyTemplate);
+    });
+
+    it('SECOND_ORDER_VOUCHER không lặp "cho đơn" khi có đơn tối thiểu', () => {
+      const body = byCode
+        .get('SECOND_ORDER_VOUCHER')!
+        .bodyTemplate.replace('{{min_order_note}}', ' cho đơn từ 199.000đ')
+        .replace('{{value}}', '30.000');
+      expect(body.match(/cho đơn/g)).toHaveLength(1);
+    });
+  });
+
   describe('lời tin đúng sự thật', () => {
     function makeSvc(code: string) {
       const tpl = byCode.get(code)!;
