@@ -45,7 +45,9 @@ async function bootstrap() {
   };
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    cors: { origin: corsOrigin, credentials: true },
+    // Retry-After không thuộc nhóm header CORS-safelisted: không expose thì webview miniapp
+    // (khác origin) không đọc được và phải đoán thời gian chờ khi bị 429.
+    cors: { origin: corsOrigin, credentials: true, exposedHeaders: ['Retry-After'] },
   });
 
   // Graceful shutdown: dọn dẹp kết nối Prisma và queue khi container nhận SIGTERM/SIGINT.
