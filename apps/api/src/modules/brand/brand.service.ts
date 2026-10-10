@@ -17,6 +17,10 @@ const COMBINING_MARKS = new RegExp('[\u0300-\u036f]', 'g');
 const HORNED_U = new RegExp('[\u01b0\u01af]', 'g');
 const HORNED_O = new RegExp('[\u01a1\u01a0]', 'g');
 
+// DealerReward.threshold là BigInt (ngưỡng có thể vượt INT4) — JSON không serialize được bigint, còn
+// DTO chặn ngưỡng trong Number.MAX_SAFE_INTEGER nên trả về number không mất chính xác.
+const rewardView = <T extends { threshold: bigint }>(r: T) => ({ ...r, threshold: Number(r.threshold) });
+
 export function slugifyVi(input: string): string {
   return input
     .normalize('NFD')
@@ -86,7 +90,7 @@ export class BrandService {
         sold: soldExternal + soldApp,
         inStock: (variations ?? []).some((v) => v.stock > 0),
       })),
-      dealerRewards,
+      dealerRewards: dealerRewards.map(rewardView),
     };
   }
 
@@ -235,11 +239,12 @@ export class BrandService {
   }
 
   // ---- Admin: DealerReward ----
-  listDealerRewards() {
-    return this.prisma.dealerReward.findMany({ orderBy: [{ isActive: 'desc' }, { sortOrder: 'asc' }] });
+  async listDealerRewards() {
+    const rows = await this.prisma.dealerReward.findMany({ orderBy: [{ isActive: 'desc' }, { sortOrder: 'asc' }] });
+    return rows.map(rewardView);
   }
 
-  createDealerReward(dto: {
+  async createDealerReward(dto: {
     brandId?: string;
     type: 'TOUR' | 'GIFT' | 'OTHER';
     title: string;
@@ -248,7 +253,7 @@ export class BrandService {
     period?: string;
     sortOrder?: number;
   }) {
-    return this.prisma.dealerReward.create({
+    const row = await this.prisma.dealerReward.create({
       data: {
         brandId: dto.brandId ?? null,
         type: dto.type,
@@ -259,9 +264,10 @@ export class BrandService {
         sortOrder: dto.sortOrder ?? 0,
       },
     });
+    return rewardView(row);
   }
 
-  updateDealerReward(
+  async updateDealerReward(
     id: string,
     dto: {
       title?: string;
@@ -272,7 +278,7 @@ export class BrandService {
       sortOrder?: number;
     },
   ) {
-    return this.prisma.dealerReward.update({ where: { id }, data: dto });
+    return rewardView(await this.prisma.dealerReward.update({ where: { id }, data: dto }));
   }
 
   async deleteDealerReward(id: string) {

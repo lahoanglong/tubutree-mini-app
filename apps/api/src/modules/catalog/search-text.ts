@@ -4,7 +4,10 @@
  * `prisma migrate deploy` sau đó (P3009). `translate()` có sẵn trong Postgres, không cần quyền gì.
  *
  * Cùng MỘT bảng ký tự dùng cho cả hai phía:
- *  - SQL: `lower(translate(p.name, VN_FOLD_FROM, VN_FOLD_TO))` (catalog.service.ts);
+ *  - SQL: hàm `vn_search_fold(name)` (= btrim/gom khoảng trắng của `lower(translate(name, VN_FOLD_FROM,
+ *    VN_FOLD_TO))`) mà trigger ghi vào cột `products."nameSearch"` — hằng số chép NGUYÊN VĂN vào
+ *    migration 20261010053812_catalog_name_search_index; đổi bảng ở đây thì phải thêm migration
+ *    CREATE OR REPLACE hàm đó + backfill (catalog-search-index.race-spec.ts sẽ đỏ nếu lệch);
  *  - TypeScript: `foldVietnamese(q)` cho từ khoá khách gõ.
  * Bảng gồm cả chữ HOA (để không phụ thuộc `lower()` của collation DB — collation C không hạ được
  * chữ có dấu) và 8 dấu kết hợp (tên lưu dạng NFD: dấu bị xoá, giữ chữ gốc).

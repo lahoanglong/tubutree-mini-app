@@ -1,13 +1,38 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import type { Category, Prisma } from '@prisma/client';
+import { Prisma, type Category } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
-import { SQL_WHITESPACE_RE, VN_FOLD_FROM, VN_FOLD_TO, foldVietnamese, likeContainsPattern } from './search-text';
+import { foldVietnamese, likeContainsPattern } from './search-text';
 
 /** Trần số id trả về từ SQL tìm không dấu — catalog hiện vài trăm SP; chặn trường hợp từ khoá quá chung. */
 const TEXT_MATCH_LIMIT = 2000;
+
+/** Gợi ý khi gõ: từ khoá (đã gấp dấu) ngắn hơn thế khớp gần như mọi SP và trigram không lọc được. */
+export const SUGGEST_MIN_CHARS = 2;
+
+/**
+ * SQL lấy id SP khớp từ khoá (không dấu, không phân biệt hoa thường — spec 4b §2): so trên cột
+ * `"nameSearch"` mà trigger DB giữ bằng `foldVietnamese(name)` (migration
+ * 20261010053812_catalog_name_search_index) nên dùng được index trigram, thay vì gấp dấu từng dòng.
+ * Tag vẫn khớp đúng nguyên văn (chữ thường); `@>` thay `= ANY` để đi được GIN `products_tags_gin`.
+ *
+ * An toàn SQL: mọi giá trị đi qua tham số ràng buộc. `ESCAPE '!'` PHẢI là chữ trong câu lệnh
+ * (`${...}` luôn thành tham số) và bằng `LIKE_ESCAPE`. ORDER BY cho phần cắt `LIMIT` ổn định và giữ
+ * lại SP nổi bật/bán chạy khi từ khoá quá chung; điều kiện isActive/approvalStatus lặp lại
+ * `listWhere` để SP ẩn không chiếm chỗ trong phần cắt.
+ */
+export function textMatchSql(raw: string): Prisma.Sql {
+  const tag = raw.toLowerCase();
+  return Prisma.sql`
+    SELECT p.id FROM products p
+    WHERE p."isActive" = true
+      AND p."approvalStatus" = 'APPROVED'
+      AND (p."nameSearch" LIKE ${likeContainsPattern(raw)} ESCAPE '!' OR p.tags @> ARRAY[${tag}]::text[])
+    ORDER BY p."isFeatured" DESC, (p."soldExternal" + p."soldApp") DESC, p.id ASC
+    LIMIT ${TEXT_MATCH_LIMIT}`;
+}
 
 /** Khoảng giá cho filter Prisma; min > max thì đổi chỗ (client không gửi vậy, nhưng không 400). */
 function priceRange(min?: number, max?: number): { gte?: number; lte?: number } | undefined {
@@ -151,36 +176,18 @@ export class CatalogService {
   }
 
   /**
-   * Khớp từ khoá không dấu, không phân biệt hoa thường (spec 4b §2 — plan 4b Ruling 1): gấp dấu
-   * tên SP bằng `translate()` có sẵn của Postgres với CÙNG bảng ký tự mà `foldVietnamese` dùng cho
-   * từ khoá. Vẫn giữ khớp tag đúng nguyên văn (chữ thường) như trước. SQL lỗi (DB lạ) → lùi về
+   * Khớp từ khoá qua `textMatchSql`. SQL lỗi (vd DB chưa chạy migration cột nameSearch) → lùi về
    * `contains` cũ cho request đó, không tắt cờ vĩnh viễn (lỗi tạm thời không làm hỏng cả phiên).
-   *
-   * An toàn SQL: mọi giá trị đi qua tham số ràng buộc của tagged template; chuỗi translate là hằng.
-   * `ESCAPE '!'` PHẢI là chữ trong câu lệnh (`${...}` luôn thành tham số) và bằng `LIKE_ESCAPE`.
-   * ORDER BY cho phần cắt `LIMIT` ổn định và giữ lại SP nổi bật/bán chạy khi từ khoá quá chung;
-   * điều kiện isActive/approvalStatus lặp lại `listWhere` để SP ẩn không chiếm chỗ trong phần cắt.
    */
   private async textWhere(q: string | undefined): Promise<Prisma.ProductWhereInput | undefined> {
     const raw = (q ?? '').trim();
     if (!foldVietnamese(raw)) return undefined;
-    const tag = raw.toLowerCase();
     try {
-      const rows = await this.prisma.$queryRaw<{ id: string }[]>`
-        SELECT p.id FROM products p
-        WHERE p."isActive" = true
-          AND p."approvalStatus" = 'APPROVED'
-          AND (
-            regexp_replace(lower(translate(p.name, ${VN_FOLD_FROM}, ${VN_FOLD_TO})), ${SQL_WHITESPACE_RE}, ' ', 'g')
-              LIKE ${likeContainsPattern(raw)} ESCAPE '!'
-            OR ${tag} = ANY(p.tags)
-          )
-        ORDER BY p."isFeatured" DESC, (p."soldExternal" + p."soldApp") DESC, p.id ASC
-        LIMIT ${TEXT_MATCH_LIMIT}`;
+      const rows = await this.prisma.$queryRaw<{ id: string }[]>(textMatchSql(raw));
       return { id: { in: rows.map((r) => r.id) } };
     } catch (err) {
       this.logger.warn(`Tìm không dấu lỗi, dùng contains: ${err instanceof Error ? err.message : String(err)}`);
-      return { OR: [{ name: { contains: raw, mode: 'insensitive' } }, { tags: { has: tag } }] };
+      return { OR: [{ name: { contains: raw, mode: 'insensitive' } }, { tags: { has: raw.toLowerCase() } }] };
     }
   }
 
@@ -369,6 +376,7 @@ export class CatalogService {
   }
 
   async suggest(q: string) {
+    if (foldVietnamese(q).length < SUGGEST_MIN_CHARS) return [];
     const text = await this.textWhere(q);
     if (!text) return [];
     return this.prisma.product.findMany({

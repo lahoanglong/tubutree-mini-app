@@ -1,7 +1,8 @@
 import { Logger, NotFoundException } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import type { PrismaService } from '../../prisma/prisma.service';
-import { LIKE_ESCAPE, SQL_WHITESPACE_RE, VN_FOLD_FROM, VN_FOLD_TO } from './search-text';
+import type { Prisma } from '@prisma/client';
+import { LIKE_ESCAPE } from './search-text';
 
 const card = (id: string) => ({
   id,
@@ -528,21 +529,23 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     return { svc: new CatalogService(prisma), findMany };
   }
   const sqlOf = (queryRaw: jest.Mock) => {
-    const [strings, ...values] = queryRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
-    return { sql: strings.join('?'), values };
+    const [query] = queryRaw.mock.calls[0] as [Prisma.Sql];
+    return { sql: query.strings.join('?'), values: query.values };
   };
 
-  it('q → SQL gấp dấu bằng translate(); where lọc theo id tìm được (AND, không đè OR khác)', async () => {
+  it('q → SQL so cột nameSearch (đã gấp dấu, có index) với từ khoá gấp ở TS; where lọc theo id tìm được (AND, không đè OR khác)', async () => {
     const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
     const { svc, findMany } = setup(queryRaw);
     await svc.list({ page: 1, limit: 20, q: ' Nước rửa ' });
     expect(findMany.mock.calls[0][0].where.AND).toEqual([{ id: { in: ['p1', 'p2'] } }]);
     expect(findMany.mock.calls[0][0].where.OR).toBeUndefined();
     const { sql, values } = sqlOf(queryRaw);
-    expect(sql).toContain('translate(p.name');
+    expect(sql).toContain('p."nameSearch" LIKE ?');
+    expect(sql).not.toContain('translate(');
+    expect(sql).toContain('p.tags @> ARRAY[?]::text[]');
     expect(LIKE_ESCAPE).toBe('!');
     expect(sql).toContain("ESCAPE '!'");
-    expect(values).toEqual(expect.arrayContaining([VN_FOLD_FROM, VN_FOLD_TO, '%nuoc rua%', 'nước rửa']));
+    expect(values).toEqual(expect.arrayContaining(['%nuoc rua%', 'nước rửa']));
   });
 
   it('từ khoá chỉ đi vào SQL qua tham số ràng buộc, không nối chuỗi vào câu lệnh', async () => {
@@ -558,7 +561,7 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     const queryRaw = jest.fn().mockResolvedValue([]);
     const { svc } = setup(queryRaw);
     await svc.list({ page: 1, limit: 20, q: '50%' });
-    expect(queryRaw.mock.calls[0]).toContain('%50!%%');
+    expect(sqlOf(queryRaw).values).toContain('%50!%%');
   });
 
   it('SQL cắt ứng viên có thứ tự xác định (ORDER BY) + trần TEXT_MATCH_LIMIT, và chỉ xét SP đang bán đã duyệt', async () => {
@@ -572,19 +575,17 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     expect(values[values.length - 1]).toBe(2000);
   });
 
-  it('khoảng trắng không ngắt (NBSP) được gấp thành khoảng trắng thường ở phía SQL, giống foldVietnamese', async () => {
+  it('khoảng trắng không ngắt (NBSP) trong từ khoá được gấp thành khoảng trắng thường trước khi vào SQL', async () => {
     const queryRaw = jest.fn().mockResolvedValue([]);
     const { svc } = setup(queryRaw);
     await svc.list({ page: 1, limit: 20, q: 'nước rửa' });
     const { values } = sqlOf(queryRaw);
-    expect(SQL_WHITESPACE_RE).toContain('\\u00a0');
-    expect(values).toContain(SQL_WHITESPACE_RE);
     expect(values).toContain('%nuoc rua%');
   });
 
   it('SQL gấp dấu lỗi → lùi về contains như trước (mất tìm không dấu nhưng không sập trang)', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-    const queryRaw = jest.fn().mockRejectedValue(new Error('function translate does not exist'));
+    const queryRaw = jest.fn().mockRejectedValue(new Error('column p.nameSearch does not exist'));
     const { svc, findMany } = setup(queryRaw);
     await svc.list({ page: 1, limit: 20, q: 'Nước rửa' });
     expect(warn).toHaveBeenCalledTimes(1);
@@ -630,6 +631,15 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
       select: { slug: true, name: true, thumbnail: true, basePrice: true },
     });
     await expect(svc.suggest('  ')).resolves.toEqual([]);
+  });
+
+  it('suggest: từ khoá dưới 2 ký tự sau gấp dấu → [] không gọi SQL', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }]);
+    const { svc, findMany } = setup(queryRaw);
+    await expect(svc.suggest('a')).resolves.toEqual([]);
+    await expect(svc.suggest(' Ư ')).resolves.toEqual([]);
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(findMany).not.toHaveBeenCalled();
   });
 });
 
