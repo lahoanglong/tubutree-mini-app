@@ -854,6 +854,7 @@ model Order {
   items              OrderItem[]
   commissions        Commission[]
   paymentAttempts    PaymentAttempt[]
+  customerRefund     OrderCustomerRefund?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -1158,6 +1159,41 @@ model CtvMilestoneClaim {
 
   @@unique([userId, milestoneId, monthKey])
   @@map("ctv_milestone_claims")
+}
+
+// Hoàn tiền đơn CTV lên hộ (placedForCustomer): tiền là của khách cuối, KHÔNG BAO GIỜ về ví CTV
+// (C-001 / Q-01). Khách cuối có tài khoản (khớp SĐT) → cộng ví khách, dòng COMPLETED ngay để giữ vết;
+// không có → PENDING chờ admin chuyển khoản lại tay. orderId unique: mỗi đơn hoàn tối đa một lần.
+enum CustomerRefundMethod {
+  WALLET
+  MANUAL_TRANSFER
+}
+
+enum CustomerRefundStatus {
+  PENDING
+  COMPLETED
+}
+
+model OrderCustomerRefund {
+  id             String               @id @default(cuid())
+  orderId        String               @unique
+  order          Order                @relation(fields: [orderId], references: [id])
+  orderCode      String
+  amount         Int
+  phone          String? // SĐT khách cuối dạng nội địa 0xxxxxxxxx (endCustomerKey / snapshot)
+  recipientName  String?
+  customerUserId String? // tài khoản nhận tiền khi method = WALLET
+  method         CustomerRefundMethod
+  status         CustomerRefundStatus
+  reason         String // CANCELLED | RETURNED — trạng thái đơn gây ra lần hoàn
+  completedAt    DateTime?
+  completedBy    String? // adminId xác nhận đã chuyển khoản (MANUAL_TRANSFER)
+  bankRef        String?
+  adminNote      String?
+  createdAt      DateTime             @default(now())
+
+  @@index([status, createdAt])
+  @@map("order_customer_refunds")
 }
 
 enum PayoutStatus {
