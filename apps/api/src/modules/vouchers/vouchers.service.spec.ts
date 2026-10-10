@@ -72,6 +72,39 @@ describe('VouchersService.grant', () => {
     );
   });
 
+  // C-053 (A1-019): tin WELCOME_VOUCHER không nói đơn tối thiểu 199.000đ → khách mở app thấy mã không dùng được.
+  it('notify kèm min_order_note có đơn tối thiểu (định dạng vi-VN) để mẫu tin nói rõ điều kiện dùng', async () => {
+    const prisma = {
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const svc = new VouchersService(prisma, makeConfig(), notify);
+
+    await (svc as unknown as { grant(o: GrantOpts): Promise<boolean> }).grant(baseOpts);
+
+    expect((notify.notify as jest.Mock)).toHaveBeenCalledWith(
+      baseOpts.userId,
+      'WELCOME_VOUCHER',
+      expect.objectContaining({ min_order_note: ' cho đơn từ 199.000đ' }),
+    );
+  });
+
+  it.each([undefined, 0])('mã không có đơn tối thiểu (%p) → min_order_note rỗng, không in "đơn từ 0đ"', async (minOrder) => {
+    const prisma = {
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const svc = new VouchersService(prisma, makeConfig(), notify);
+
+    await (svc as unknown as { grant(o: GrantOpts): Promise<boolean> }).grant({ ...baseOpts, minOrder });
+
+    expect((notify.notify as jest.Mock)).toHaveBeenCalledWith(
+      baseOpts.userId,
+      'WELCOME_VOUCHER',
+      expect.objectContaining({ min_order_note: '' }),
+    );
+  });
+
   it('race multi-instance: create ném P2002 → coi như đã cấp (false), không notify', async () => {
     const prisma = {
       coupon: {

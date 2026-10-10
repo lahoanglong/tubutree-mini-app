@@ -89,6 +89,8 @@ export class VouchersService {
       .notify(opts.userId, opts.templateCode, {
         code,
         value: String(opts.value),
+        // Cả cụm câu (không chỉ con số) để mã không có đơn tối thiểu không in "cho đơn từ 0đ".
+        min_order_note: opts.minOrder ? ` cho đơn từ ${opts.minOrder.toLocaleString('vi-VN')}đ` : '',
         expires: formatVnDate(endAt),
       })
       .catch(() => undefined);

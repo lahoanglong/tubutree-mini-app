@@ -642,9 +642,12 @@ const PRODUCTS: SeedProduct[] = [
 ];
 
 const NOTIFICATION_TEMPLATES = [
+  // ORDER_CONFIRMED/ORDER_SHIPPING mang kênh ZNS nhưng chưa có zaloTemplateId (cần Zalo duyệt mẫu, không tự điền được):
+  // NotificationsService chỉ gửi ZNS khi có mã mẫu, nên hiện khách nhận bản INAPP.
   { id: 'nt-confirmed', code: 'ORDER_CONFIRMED', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đã được xác nhận. Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
   { id: 'nt-shipping', code: 'ORDER_SHIPPING', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đang được giao đến bạn.' },
-  { id: 'nt-delivered', code: 'ORDER_DELIVERED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã giao thành công. Điểm Xanh đã được cộng!' },
+  // {{points_note}} do OrderStatusService điền khi đơn thật sự có tích điểm (đơn trả bằng xu thì rỗng).
+  { id: 'nt-delivered', code: 'ORDER_DELIVERED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã giao thành công.{{points_note}} Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
   { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị hủy.' },
   { id: 'nt-invoice', code: 'INVOICE_ISSUED', channel: 'INAPP', bodyTemplate: 'Hóa đơn VAT cho đơn {{order_code}} đã được phát hành.' },
   { id: 'nt-packed', code: 'ORDER_PACKED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được đóng gói, chuẩn bị giao.' },
@@ -666,7 +669,7 @@ const NOTIFICATION_TEMPLATES = [
   // Thiếu mẫu này thì notify() rơi về fallback = in NGUYÊN VĂN mã code cho khách
   // ("SUBSCRIPTION_ORDER_FAILED"), và biến {{reason}} không bao giờ hiển thị.
   { id: 'nt-sub-order-failed', code: 'SUBSCRIPTION_ORDER_FAILED', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ kỳ này chưa đặt được: {{reason}}. Lịch vẫn giữ, Tubu sẽ thử lại kỳ sau 🌿' },
-  { id: 'nt-welcome', code: 'WELCOME_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chào mừng bạn đến Tubu Tree! Tặng voucher {{code}} giảm {{value}}đ, dùng trước {{expires}} 🎁' },
+  { id: 'nt-welcome', code: 'WELCOME_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chào mừng bạn đến Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng trước {{expires}} 🎁' },
   { id: 'nt-birthday', code: 'BIRTHDAY_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chúc mừng sinh nhật! 🎂 Tặng bạn voucher {{code}} giảm {{value}}đ, dùng trước {{expires}}.' },
   { id: 'nt-winback', code: 'WINBACK_VOUCHER', channel: 'INAPP', bodyTemplate: 'Tubu nhớ bạn! Quay lại với voucher {{code}} giảm {{value}}đ, dùng trước {{expires}} 💚' },
   { id: 'nt-milestone', code: 'MILESTONE_VOUCHER', channel: 'INAPP', bodyTemplate: 'Cảm ơn bạn đã tin dùng Tubu! Tặng voucher tri ân {{code}} giảm {{value}}đ, dùng trước {{expires}} 🌿' },
