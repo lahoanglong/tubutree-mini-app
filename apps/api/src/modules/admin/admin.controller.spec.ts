@@ -282,7 +282,7 @@ describe('AdminController — quyền + passthrough endpoint thu gom', () => {
     await ctrl.cancelGomdonWaybill('admin-1', 'o1');
     expect(admin.cancelGomdonWaybill).toHaveBeenCalledWith('admin-1', 'o1');
     await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, recycling: 'attention' as const }));
-    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention');
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention', undefined);
   });
 
   it('POST orders/:id/gomdon/mark-handled chuyển adminId + id + note xuống AdminService', async () => {

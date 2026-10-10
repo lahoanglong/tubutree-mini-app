@@ -10,6 +10,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
   Min,
   ValidateIf,
@@ -21,7 +22,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AdminService } from './admin.service';
 import { CatalogService } from '../catalog/catalog.service';
-import { ADMIN_ORDER_STATUSES, type RecyclingFilter } from './admin-order-filter';
+import { ADMIN_ORDER_STATUSES, type InvoiceFilter, type RecyclingFilter } from './admin-order-filter';
 
 /**
  * value <= max CHỈ khi type=PERCENT (chặn admin nhập % vô lý, vd 500%).
@@ -185,6 +186,13 @@ export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsString() @MaxLength(100) search?: string;
   /** attention = "Cần xử lý thu gom"; all = mọi đơn có chọn thu gom tái chế. */
   @IsOptional() @IsIn(['attention', 'all']) recycling?: RecyclingFilter;
+  /** pending = đơn VAT chưa xuất xong; issued = đã phát hành; all = mọi đơn có yêu cầu VAT. */
+  @IsOptional() @IsIn(['pending', 'issued', 'all']) invoice?: InvoiceFilter;
+}
+
+export class IssueInvoiceDto {
+  /** Link hoá đơn điện tử (tuỳ chọn). Chỉ https — link này hiển thị lại cho admin, không cho javascript:/http. */
+  @IsOptional() @IsUrl({ protocols: ['https'], require_protocol: true }) @MaxLength(500) invoiceUrl?: string;
 }
 
 export class DealerPriceHistoryQuery extends PaginationQuery {
@@ -271,7 +279,13 @@ export class AdminController {
 
   @Get('orders')
   orders(@Query() q: ListOrdersQuery) {
-    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling);
+    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice);
+  }
+
+  /** "Đã xuất hoá đơn VAT": ISSUED (+ link nếu có), báo khách. Luật nằm ở AdminService.issueOrderInvoice. */
+  @Post('orders/:id/issue-invoice')
+  issueInvoice(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: IssueInvoiceDto) {
+    return this.admin.issueOrderInvoice(adminId, id, { invoiceUrl: dto.invoiceUrl });
   }
 
   /**

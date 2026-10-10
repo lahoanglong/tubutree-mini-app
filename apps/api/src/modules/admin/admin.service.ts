@@ -18,6 +18,7 @@ import {
   ADMIN_SEARCH_MIN_TRGM_LENGTH,
   ADMIN_SEARCH_USER_CAP,
   buildAdminOrderWhere,
+  type InvoiceFilter,
   type RecyclingFilter,
 } from './admin-order-filter';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
@@ -444,9 +445,16 @@ export class AdminService {
    * web admin cần để hiện thu gom. `recycling='attention'` = hàng đợi "Cần xử lý thu gom"
    * (xem admin-order-filter.ts).
    */
-  async listOrders(page: number, limit: number, status?: string, search?: string, recycling?: RecyclingFilter) {
+  async listOrders(
+    page: number,
+    limit: number,
+    status?: string,
+    search?: string,
+    recycling?: RecyclingFilter,
+    invoice?: InvoiceFilter,
+  ) {
     const searchUserIds = await this.findSearchUserIds(search);
-    const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling, searchUserIds });
+    const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling, invoice, searchUserIds });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
@@ -568,6 +576,43 @@ export class AdminService {
         where: { id: order.id },
         include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
       }),
+    };
+  }
+
+  // ── Hoá đơn VAT (thao tác admin) ──
+
+  /**
+   * "Đã xuất hoá đơn": admin phát hành hoá đơn ở hệ thống hoá đơn điện tử rồi ghi nhận ở đây (kèm link nếu có).
+   * Hệ quả y hệt webhook Pancake `invoice.issued` (pancake.processor.ts onInvoiceIssued): invoiceStatus → ISSUED,
+   * giữ invoiceUrl cũ nếu không có link mới, báo khách INVOICE_ISSUED. Dành cho đơn mà Pancake không tự xuất
+   * (chưa cấu hình, webhook rớt). Guard atomic trên invoiceStatus nên hai admin bấm cùng lúc chỉ một người ghi và
+   * báo khách; đơn đã huỷ/trả không xuất hoá đơn.
+   */
+  async issueOrderInvoice(adminId: string, idOrCode: string, dto: { invoiceUrl?: string } = {}) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
+      select: { id: true, code: true, userId: true, status: true, invoiceRequest: true, invoiceStatus: true, invoiceUrl: true },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (!order.invoiceRequest) throw new BadRequestException(`Đơn ${order.code} chưa có yêu cầu xuất hóa đơn VAT.`);
+    if (order.invoiceStatus === 'ISSUED') throw new BadRequestException(`Hóa đơn của đơn ${order.code} đã được phát hành.`);
+    if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
+      throw new BadRequestException(`Đơn ${order.code} đã huỷ/trả — không xuất hóa đơn VAT.`);
+    }
+    const invoiceUrl = dto.invoiceUrl?.trim() || undefined;
+    const res = await this.prisma.order.updateMany({
+      where: { id: order.id, OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }] },
+      data: { invoiceStatus: 'ISSUED', ...(invoiceUrl ? { invoiceUrl } : {}) },
+    });
+    if (res.count === 0) throw new BadRequestException(`Hóa đơn của đơn ${order.code} vừa được phát hành bởi người khác — vui lòng tải lại.`);
+    this.logger.warn(`Admin ${adminId} ghi nhận đã xuất hóa đơn VAT đơn ${order.code}${invoiceUrl ? ` (${invoiceUrl})` : ''}.`);
+    await this.notifications
+      .notify(order.userId, 'INVOICE_ISSUED', { order_code: order.code })
+      .catch((e) => this.logger.warn(`notify INVOICE_ISSUED lỗi (${order.userId}): ${(e as Error).message}`));
+    return {
+      ok: true,
+      message: `Đã ghi nhận xuất hóa đơn VAT cho đơn ${order.code}.`,
+      order: { id: order.id, code: order.code, invoiceStatus: 'ISSUED' as const, invoiceUrl: invoiceUrl ?? order.invoiceUrl },
     };
   }
 

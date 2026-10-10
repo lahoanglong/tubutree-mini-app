@@ -50,10 +50,23 @@ export const ADMIN_ORDER_STATUSES = [
 
 export type RecyclingFilter = 'attention' | 'all';
 
+/**
+ * Đơn có yêu cầu hoá đơn VAT: pending = chưa xuất xong (REQUESTED, FAILED); issued = đã phát hành; all = cả hai.
+ * Chỉ lọc theo `invoiceStatus` (checkout đặt REQUESTED đúng khi khách gửi invoiceRequest) nên khớp partial index
+ * `orders_invoice_open_idx`.
+ */
+export type InvoiceFilter = 'pending' | 'issued' | 'all';
+const INVOICE_STATUS_WHERE: Record<InvoiceFilter, Prisma.OrderWhereInput> = {
+  pending: { invoiceStatus: { in: ['REQUESTED', 'FAILED'] } },
+  issued: { invoiceStatus: 'ISSUED' },
+  all: { invoiceStatus: { in: ['REQUESTED', 'ISSUED', 'FAILED'] } },
+};
+
 export interface AdminOrderFilter {
   status?: string;
   search?: string;
   recycling?: RecyclingFilter;
+  invoice?: InvoiceFilter;
   /**
    * Id khách khớp `search` theo SĐT/tên, tra trước bằng index trigram trên users. Có thì lọc
    * `userId IN (...)` thay cho lọc theo quan hệ `user` — Prisma dựng quan hệ thành LEFT JOIN users và
@@ -112,6 +125,7 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   }
   if (f.recycling === 'attention') and.push(recyclingAttentionWhere());
   else if (f.recycling === 'all') and.push({ hasRecyclingPickup: true });
+  if (f.invoice) and.push(INVOICE_STATUS_WHERE[f.invoice]);
   if (and.length === 0) return {};
   return and.length === 1 ? and[0]! : { AND: and };
 }
