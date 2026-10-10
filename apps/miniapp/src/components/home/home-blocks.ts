@@ -1,3 +1,4 @@
+import axios from 'axios';
 import type { QueryClient } from '@tanstack/react-query';
 import { resetHomeFeed } from '../../services/home-feed';
 
@@ -37,6 +38,11 @@ export function refreshHomeQueries(qc: QueryClient): Promise<unknown> {
   // Các khối gộp đã dùng ở lần mở đầu; không reset thì làm mới phải bắn ~10 request lẻ.
   resetHomeFeed();
   return Promise.all(HOME_QUERY_PREFIXES.map((k) => qc.invalidateQueries({ queryKey: [k] })));
+}
+
+/** API cũ chưa có endpoint (404): khối tuỳ chọn như kệ "Mua lại" ẩn đi thay vì báo lỗi mà bấm "Thử lại" cũng không khỏi. */
+export function isEndpointMissing(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 404;
 }
 
 export function dedupeAgainst<T extends { id: string }>(items: T[], seen: ReadonlySet<string>): T[] {

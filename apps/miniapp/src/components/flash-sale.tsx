@@ -13,6 +13,7 @@ import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { useCountdown } from '../hooks/use-countdown';
 import { useAuthStore } from '../store/auth';
+import { HomeBlockError } from './home/home-block-error';
 
 /**
  * Ưu đãi giờ vàng — flash sale thật từ backend. Countdown êm đến mốc kết thúc sớm nhất.
@@ -36,7 +37,12 @@ export function FlashSale() {
 
   const timeLeft = useCountdown(soonestEndAt);
 
-  if (q.isLoading || items.length === 0) return null;
+  if (q.isLoading) return null;
+  if (items.length === 0) {
+    return q.isError ? (
+      <HomeBlockError title={vi.flashSale.sectionName} error={q.error} onRetry={q.refetch} retrying={q.isFetching} />
+    ) : null;
+  }
 
   return (
     <Box mt={4}>

@@ -157,18 +157,71 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/browse?focus=search');
   });
 
-  it('khối lỗi ẩn lặng lẽ: không ErrorState, không tiêu đề trống, các khối còn lại vẫn hiện', async () => {
+  it('C-084: một khối lỗi hiện thông báo + "Thử lại" ngay tại chỗ, khối khác vẫn hiện; thử lại chỉ tải lại khối đó', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+    let bestFails = true;
     mocks.fetchProducts.mockImplementation(async (params: { sort?: string }) => {
-      if (params.sort === 'best_seller') throw new Error('boom');
+      if (params.sort === 'best_seller') {
+        if (bestFails) throw new Error('boom');
+        return PAGE([card('bs', 'Bán chạy nhất')]);
+      }
       return PAGE([card('f2', 'Chỉ nổi bật')]);
     });
     const { qc } = renderHome();
     await waitFor(() => expect(qc.getQueryState(['products', 'home-best-seller'])?.status).toBe('error'));
-    await screen.findByRole('region', { name: 'Tubu chọn cho bạn' });
-    expect(screen.queryByRole('region', { name: 'Bán chạy' })).toBeNull();
-    expect(screen.queryByText('Thử lại')).toBeNull();
-    expect(screen.queryByRole('alert')).toBeNull();
+    const featured = await screen.findByRole('region', { name: 'Tubu chọn cho bạn' });
+    expect(await within(featured).findByText('Chỉ nổi bật')).toBeInTheDocument();
+    const best = screen.getByRole('region', { name: 'Bán chạy' });
+    expect(within(best).getByText('Có chút trục trặc, thử lại nhé')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Thử lại/ })).toHaveLength(1);
+
+    const callsBefore = mocks.fetchProducts.mock.calls.length;
+    bestFails = false;
+    await userEvent.setup().click(within(best).getByRole('button', { name: 'Thử lại Bán chạy' }));
+    expect(await within(screen.getByRole('region', { name: 'Bán chạy' })).findByText('Bán chạy nhất')).toBeInTheDocument();
+    expect(mocks.fetchProducts.mock.calls.length).toBe(callsBefore + 1);
+    expect(screen.queryByRole('button', { name: /^Thử lại/ })).toBeNull();
+  });
+
+  it('C-084: "Tubu chọn cho bạn" lỗi → khối lỗi, "Thử lại" gọi lại đúng danh sách nổi bật', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+    let featuredFails = true;
+    mocks.fetchProducts.mockImplementation(async (params: { sort?: string; limit?: number }) => {
+      if (params.sort === 'best_seller') return PAGE([card('bs', 'Bán chạy nhất')]);
+      if (params.limit === 12 && featuredFails) throw new Error('boom');
+      return PAGE([card('f2', 'Chỉ nổi bật')]);
+    });
+    renderHome();
+    const retry = await screen.findByRole('button', { name: 'Thử lại Tubu chọn cho bạn' });
+    featuredFails = false;
+    await userEvent.setup().click(retry);
+    expect(await within(screen.getByRole('region', { name: 'Tubu chọn cho bạn' })).findByText('Chỉ nổi bật')).toBeInTheDocument();
+  });
+
+  it('C-084: "Dành cho bạn" lỗi → khối lỗi có "Thử lại"', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.fetchForYou.mockRejectedValueOnce(new Error('boom')).mockResolvedValue([card('f1', 'Trùng gợi ý')]);
+    renderHome();
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Thử lại Dành cho bạn' }));
+    expect(await within(screen.getByRole('region', { name: 'Dành cho bạn' })).findByText('Trùng gợi ý')).toBeInTheDocument();
+  });
+
+  it('C-084: kệ "Mua lại" lỗi (không phải 404) → khối lỗi + "Thử lại"; 404 của API cũ vẫn ẩn lặng lẽ', async () => {
+    mocks.fetchPurchasedItems.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ items: [], nextCursor: null });
+    const { qc, unmount } = renderHome();
+    await waitFor(() => expect(qc.getQueryState(['purchased-items', 10])?.status).toBe('error'));
+    const rail = await screen.findByRole('region', { name: 'Mua lại' });
+    expect(rail.closest('[data-home-block]')).toHaveAttribute('data-home-block', 'purchased');
+    await userEvent.setup().click(within(rail).getByRole('button', { name: 'Thử lại Mua lại' }));
+    await waitFor(() => expect(qc.getQueryState(['purchased-items', 10])?.status).toBe('success'));
+    expect(screen.queryByRole('button', { name: 'Thử lại Mua lại' })).toBeNull();
+    unmount();
+
+    const notFound = Object.assign(new Error('404'), { isAxiosError: true, response: { status: 404, data: {} } });
+    mocks.fetchPurchasedItems.mockReset().mockRejectedValue(notFound);
+    const second = renderHome();
+    await waitFor(() => expect(second.qc.getQueryState(['purchased-items', 10])?.status).toBe('error'));
+    expect(screen.queryByRole('button', { name: 'Thử lại Mua lại' })).toBeNull();
   });
 
   it('khung chờ mỗi khối có đúng 6 ô (bằng giới hạn thật) khi đang tải', async () => {

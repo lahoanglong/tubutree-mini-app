@@ -14,11 +14,12 @@ import { CategoryGrid } from '../components/catalog/category-grid';
 import { RecentlyViewedRail } from '../components/catalog/recently-viewed-rail';
 import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '../components/reorder/purchased-rail';
 import { HomeExtras } from '../components/home/home-extras';
+import { HomeBlockError } from '../components/home/home-block-error';
 import { HomeHeader } from '../components/home/home-header';
 import { HomeSection, type SectionQuery } from '../components/home/home-section';
 import { OrderStrip } from '../components/home/order-strip';
 import { useHomeFeed } from '../components/home/use-home-feed';
-import { dedupeAgainst, homeBlockOrder, refreshHomeQueries, type HomeBlockId } from '../components/home/home-blocks';
+import { dedupeAgainst, homeBlockOrder, isEndpointMissing, refreshHomeQueries, type HomeBlockId } from '../components/home/home-blocks';
 import { Icon } from '../components/ui/icon';
 import { Text } from '../components/ui/text';
 import { vi } from '../i18n/vi';
@@ -33,7 +34,7 @@ const FEATURED_FETCH_LIMIT = SECTION_LIMIT * 2;
  * khách cũ thấy "Mua lại" ngay dưới ô tìm; khách mới ưu tiên Flash + Bán chạy + Danh mục.
  * Lưới SP đầu tiên nằm trong 5 khối đầu (trước đây là khối thứ 11 — A2-32). Ngoại lệ chấp nhận: khách cũ
  * chưa có "Dành cho bạn" thì lưới SP đầu tiên là "Bán chạy" ở khối thứ 6.
- * Khối lỗi tải tự ẩn (không ErrorState ở vùng nhìn thấy đầu tiên); kéo để làm mới là cách thử lại.
+ * Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ (C-084), độc lập từng khối; kéo để làm mới vẫn dùng được.
  */
 export default function HomePage() {
   const navigate = useNavigate();
@@ -69,12 +70,20 @@ export default function HomePage() {
     isLoading: featured.isLoading || (authed && forYou.isPending),
     isError: featured.isError,
     error: featured.error,
+    isFetching: featured.isFetching,
+    refetch: featured.refetch,
     data: featured.data ? { data: dedupeAgainst(featured.data.data, forYouIds).slice(0, SECTION_LIMIT) } : undefined,
   };
 
   const blocks: Record<HomeBlockId, ReactNode> = {
     search: <SearchShell />,
-    purchased: <PurchasedRail source="home_rail" />,
+    // Lỗi thật → khối lỗi + Thử lại; 404 = API cũ chưa có endpoint → ẩn như trước (kệ này vốn tuỳ chọn).
+    purchased:
+      purchased.isError && !purchased.data && !isEndpointMissing(purchased.error) ? (
+        <HomeBlockError title={vi.reorder.railTitle} error={purchased.error} onRetry={purchased.refetch} retrying={purchased.isFetching} />
+      ) : (
+        <PurchasedRail source="home_rail" />
+      ),
     orderStrip: <OrderStrip />,
     flash: (
       <>

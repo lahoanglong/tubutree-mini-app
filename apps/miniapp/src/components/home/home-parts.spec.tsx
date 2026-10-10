@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type * as ZmpUi from 'zmp-ui';
@@ -54,23 +54,43 @@ describe('HomeHeader', () => {
 });
 
 describe('HomeSection', () => {
-  const q = (over: object) => ({ isLoading: false, isError: false, error: null, ...over });
+  const q = (over: object) => ({ isLoading: false, isError: false, error: null, refetch: vi.fn(), ...over });
 
   it('đã tải, rỗng → không render (không để lại tiêu đề trống)', () => {
     const { container } = wrap(<HomeSection title="Bán chạy" limit={6} query={q({ data: { data: [] } })} listSource="home" />);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('lỗi → ẩn lặng lẽ: không tiêu đề, không ErrorState, không nút Thử lại', () => {
-    const { container } = wrap(<HomeSection title="Bán chạy" limit={6} query={q({ isError: true, error: new Error('x') })} listSource="home" />);
-    expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+  it('lỗi (chưa có dữ liệu) → tiêu đề + thông báo + nút "Thử lại", không mất khối im lặng (C-084)', () => {
+    const refetch = vi.fn();
+    wrap(<HomeSection title="Bán chạy" limit={6} query={q({ isError: true, error: new Error('x'), refetch })} listSource="home" />);
+    const region = screen.getByRole('region', { name: 'Bán chạy' });
+    expect(within(region).getByRole('heading', { name: 'Bán chạy' })).toBeInTheDocument();
+    expect(within(region).getByText('Có chút trục trặc, thử lại nhé')).toBeInTheDocument();
+    fireEvent.click(within(region).getByRole('button', { name: 'Thử lại Bán chạy' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(mocks.haptic).toHaveBeenCalledWith('light');
   });
 
-  it('làm mới lỗi nhưng còn dữ liệu cũ → vẫn hiện SP cũ, không ErrorState', () => {
+  it('đang thử lại sau lỗi → nút ở trạng thái đang tải và bấm tiếp không gọi thêm', () => {
+    const refetch = vi.fn();
+    wrap(<HomeSection title="Bán chạy" limit={6} query={q({ isError: true, isFetching: true, error: new Error('x'), refetch })} listSource="home" />);
+    const btn = screen.getByRole('button', { name: 'Thử lại Bán chạy' });
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(btn);
+    expect(refetch).not.toHaveBeenCalled();
+  });
+
+  it('thông báo lỗi theo loại lỗi (mất mạng / máy chủ) giống getErrorMessage', () => {
+    const server = Object.assign(new Error('x'), { isAxiosError: true, response: { status: 503, data: {} } });
+    wrap(<HomeSection title="Bán chạy" limit={6} query={q({ isError: true, error: server })} listSource="home" />);
+    expect(screen.getByText('Máy chủ đang bận, thử lại nhé.')).toBeInTheDocument();
+  });
+
+  it('làm mới lỗi nhưng còn dữ liệu cũ → vẫn hiện SP cũ, không khối lỗi', () => {
     wrap(<HomeSection title="Bán chạy" limit={6} query={q({ isError: true, error: new Error('x'), data: { data: [P] } })} listSource="home" />);
     expect(screen.getByRole('button', { name: 'Xà phòng' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Thử lại/ })).toBeNull();
   });
 
   it('đang tải → vùng có tiêu đề + khung chờ; có dữ liệu → lưới SP', () => {
