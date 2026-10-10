@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { BrandService } from './brand.service';
 import { PromotionDto, UpdateOwnedBrandDto, UpdatePromotionDto } from './dto/brand.dto';
 
@@ -9,6 +10,7 @@ export class BrandController {
   constructor(private readonly svc: BrandService) {}
 
   @Public()
+  @PublicCache('CATALOG')
   @Get('public/:slug')
   publicView(@Param('slug') slug: string) {
     return this.svc.getPublicBySlug(slug);

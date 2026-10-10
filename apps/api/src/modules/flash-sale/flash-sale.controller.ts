@@ -1,5 +1,6 @@
 import { Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { FlashSaleService } from './flash-sale.service';
 
@@ -9,6 +10,7 @@ export class FlashSaleController {
   constructor(private readonly flashSale: FlashSaleService) {}
 
   @Public()
+  @PublicCache('LIVE')
   @Get('active')
   active() {
     return this.flashSale.listActive();

@@ -1,4 +1,5 @@
 import { api } from './api';
+import { takeMeBlock } from './home-feed';
 import type { AddressDTO } from './shop-api';
 
 /** Loyalty overview (§6.6) — hạng hiện tại, tiến độ lên hạng kế. */
@@ -328,8 +329,8 @@ export interface NotificationDTO {
   status: 'SENT' | 'FAILED' | 'READ';
   sentAt: string;
 }
-export const getNotifications = () =>
-  api.get<NotificationDTO[]>('/me/notifications').then((r) => r.data);
+export const getNotifications = async () =>
+  (await takeMeBlock('notifications')) ?? api.get<NotificationDTO[]>('/me/notifications').then((r) => r.data);
 export const markNotificationRead = (id: string) =>
   api.post<{ ok: boolean }>(`/me/notifications/${id}/read`).then((r) => r.data);
 

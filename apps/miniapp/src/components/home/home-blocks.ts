@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { resetHomeFeed } from '../../services/home-feed';
 
 export type HomeBlockId =
   | 'search' | 'purchased' | 'orderStrip' | 'flash' | 'forYou' | 'bestSellers'
@@ -33,6 +34,8 @@ export const HOME_QUERY_PREFIXES = [
 ] as const;
 
 export function refreshHomeQueries(qc: QueryClient): Promise<unknown> {
+  // Các khối gộp đã dùng ở lần mở đầu; không reset thì làm mới phải bắn ~10 request lẻ.
+  resetHomeFeed();
   return Promise.all(HOME_QUERY_PREFIXES.map((k) => qc.invalidateQueries({ queryKey: [k] })));
 }
 

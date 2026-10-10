@@ -1,4 +1,5 @@
 import { api } from './api';
+import { takeMeBlock } from './home-feed';
 
 export interface SubscriptionDTO {
   id: string;
@@ -14,8 +15,8 @@ export interface SubscriptionDTO {
   effectiveDiscountPct: number;
 }
 
-export const getSubscriptions = () =>
-  api.get<SubscriptionDTO[]>('/me/subscriptions').then((r) => r.data);
+export const getSubscriptions = async () =>
+  (await takeMeBlock('subscriptions')) ?? api.get<SubscriptionDTO[]>('/me/subscriptions').then((r) => r.data);
 
 export const createSubscription = (data: {
   variationId: string;

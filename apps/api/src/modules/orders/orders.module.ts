@@ -17,6 +17,6 @@ import { FlashSaleModule } from '../flash-sale/flash-sale.module';
   providers: [OrdersService, OrderReversalService, OrderStatusService, PurchasedItemsService, CustomerRefundsService, PendingPaymentExpiryCron],
   // Xuất cho AdminModule/MerchantModule/PancakeModule — nguồn ghi Order.status
   // dùng chung để không lặp lại khối restock/refund + guard chuyển trạng thái.
-  exports: [OrderReversalService, OrderStatusService],
+  exports: [OrderReversalService, OrderStatusService, OrdersService, PurchasedItemsService],
 })
 export class OrdersModule {}
