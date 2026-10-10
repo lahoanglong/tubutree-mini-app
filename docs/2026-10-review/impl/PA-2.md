@@ -258,3 +258,32 @@ eslint các file đã sửa                                             -> (khô
 ```
 
 Migration: không có.
+
+## Review lượt 2
+
+Commit: `915cc89`.
+
+### 1. [major] Gộp khách: dòng điểm danh và dòng sổ CHECKIN bị tách rời. ĐÃ SỬA (`915cc89`)
+
+- Đúng như reviewer nói, đã tái hiện trên Postgres thật. Bản lượt 1 chỉ đổi `refId` dòng sổ CHECKIN của khách thành `MERGED:<guestId>:<ngày>` khi target đã có cùng `refId`, còn dòng `loyalty_check_ins` ngày mới hơn lần cuối của target thì ở lại khách. Ca phổ biến: khách điểm danh hôm nay, target điểm danh lần cuối hôm qua. Sau gộp, target có dòng sổ `(CHECKIN, hôm nay)` nhưng không có dòng điểm danh hôm nay: màn điểm danh báo "chưa điểm danh", còn `dailyCheckIn` nào cũng đụng `points_transactions_checkin_day_key` ("Hôm nay bạn đã điểm danh nhận điểm rồi"), và hôm sau chuỗi bị reset. Câu "Hệ quả đã chấp nhận" ở mục 3 lượt 1 là sai cho đúng ca này.
+- Cách sửa (`mergeGuestInto`): chuyển `loyalty_check_ins` TRƯỚC (cùng quy tắc lượt 1: chỉ ngày cũ hơn lần cuối của target, không trùng ngày) với `RETURNING "dayKey"`. Sau đó mọi dòng sổ CHECKIN của khách có ngày KHÔNG nằm trong danh sách đã chuyển đều đổi khoá thành `MERGED:<guestId>:<ngày>`; vẫn giữ điều kiện cũ "target đã có cùng refId" làm lớp phòng thủ. Như vậy dòng sổ mang khoá ngày thường của target luôn có dòng điểm danh cùng ngày của target.
+- Vẫn đúng Q-11: cả hai lượt điểm đã cộng được giữ trong sổ, số dư khớp tổng sổ. Chuỗi của target không thừa hưởng chuỗi khách. Hệ quả: ở ca trên target còn được điểm danh hôm nay (thêm một lượt), cùng loại "giữ cả hai lượt" mà Q-11 đã chấp nhận.
+- Test thêm (race spec, Postgres thật, `auth-merge-guest.race-spec.ts`, gọi `LoyaltyService` thật), mỗi ca kiểm thêm bất biến "dòng sổ CHECKIN khoá ngày thường của target đều có dòng điểm danh cùng ngày":
+  - `guest checked in today, target last checked in yesterday -> target can check in today and keeps its streak`: ĐỎ trước khi sửa (dòng sổ mồ côi `2026-10-10`), XANH sau khi sửa; `dailyCheckIn` thành công, `streakDays=2`, số dư = 10 + 10 + điểm mới.
+  - `both checked in on the same day -> ...`: ngày trùng, hôm sau target điểm danh tiếp chuỗi.
+  - `guest check-in older than the target latest moves to target with its ledger row, ...`: ngày cũ hơn chuyển sang target cùng dòng sổ khoá ngày thường.
+- Giả định: test dùng ngày giờ VN thật (`Date.now()` + 7 giờ), nên có thể lệch nếu chạy đúng lúc qua nửa đêm giờ VN.
+
+### Lệnh kiểm chứng sau review lượt 2
+
+```
+cd apps/api && DATABASE_URL=postgresql://tubu:tubu@localhost:5542/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand test/integration-race/auth-merge-guest.race-spec.ts
+  -> trước khi sửa: 1 failed (ca hôm nay/hôm qua), 9 passed, 10 total
+  -> sau khi sửa:   Tests: 10 passed, 10 total
+cd apps/api && npx jest --maxWorkers=1 src/modules/auth/auth.service.spec.ts -> Tests: 22 passed, 22 total
+cd apps/api && npx jest --maxWorkers=1 src/modules/auth                     -> Tests: 51 passed, 51 total
+cd apps/api && npx tsc --noEmit -p tsconfig.json                            -> (không lỗi)
+cd apps/api && npx eslint src/modules/auth/auth.service.ts test/integration-race/auth-merge-guest.race-spec.ts -> (không lỗi)
+```
+
+Migration: không có.
