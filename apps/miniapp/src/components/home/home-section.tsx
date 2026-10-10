@@ -37,7 +37,7 @@ export function HomeSection({ title, query, listSource, limit, seeAllTo }: HomeS
   const items = query.data?.data ?? [];
   if (!query.isLoading && items.length === 0) {
     if (!query.isError) return null;
-    return <HomeBlockError title={title} error={query.error} onRetry={query.refetch} retrying={query.isFetching} />;
+    return <HomeBlockError title={title} error={query.error} onRetry={query.refetch} retrying={query.isFetching} seeAllRow={Boolean(seeAllTo)} />;
   }
   return (
     <section aria-label={title} style={{ padding: '16px 16px 0' }}>

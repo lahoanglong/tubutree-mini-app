@@ -35,9 +35,9 @@ beforeEach(() => {
 });
 
 describe('HomeHeader', () => {
-  it('chuông có nhãn + huy hiệu số chưa đọc; giỏ hàng', () => {
+  it('chuông có nhãn kèm số chưa đọc (trình đọc màn hình nghe được) + huy hiệu số chưa đọc; giỏ hàng', () => {
     wrap(<HomeHeader unreadCount={3} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Thông báo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thông báo, 3 chưa đọc' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/notifications');
     expect(mocks.haptic).toHaveBeenCalledWith('light');
     expect(screen.getByLabelText('3 thông báo chưa đọc')).toHaveTextContent('3');
@@ -47,6 +47,7 @@ describe('HomeHeader', () => {
   it('không có thông báo chưa đọc → không có huy hiệu; logo có kích thước giữ chỗ', () => {
     wrap(<HomeHeader unreadCount={0} />);
     expect(screen.queryByLabelText(/thông báo chưa đọc/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Thông báo' })).toBeInTheDocument();
     const logo = screen.getByAltText('Tubu Tree');
     expect(logo).toHaveAttribute('width');
     expect(logo).toHaveAttribute('height');
@@ -79,6 +80,19 @@ describe('HomeSection', () => {
     expect(btn).toHaveAttribute('aria-busy', 'true');
     fireEvent.click(btn);
     expect(refetch).not.toHaveBeenCalled();
+  });
+
+  it('hàng tiêu đề của khối lỗi khai báo cùng chiều cao + khoảng cách với khung chờ (tiêu đề không nhảy khi đổi trạng thái)', () => {
+    const rowStyle = (seeAllTo: string | undefined, query: object) => {
+      const { unmount } = wrap(<HomeSection title="Bán chạy" limit={6} seeAllTo={seeAllTo} query={q(query)} listSource="home" />);
+      const row = screen.getByRole('heading', { name: 'Bán chạy' }).parentElement as HTMLElement;
+      const style = { minHeight: row.style.minHeight, marginBottom: row.style.marginBottom };
+      unmount();
+      return style;
+    };
+    for (const seeAllTo of [undefined, '/browse?sort=best_seller']) {
+      expect(rowStyle(seeAllTo, { isError: true, error: new Error('x') })).toEqual(rowStyle(seeAllTo, { isLoading: true }));
+    }
   });
 
   it('thông báo lỗi theo loại lỗi (mất mạng / máy chủ) giống getErrorMessage', () => {

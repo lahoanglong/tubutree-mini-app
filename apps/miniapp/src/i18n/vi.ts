@@ -46,6 +46,7 @@ export const vi = {
     brandsRail: 'Dải thương hiệu, vuốt ngang để xem thêm',
     allBrands: 'Tất cả',
     notifications: 'Thông báo',
+    notificationsUnread: (n: number) => `Thông báo, ${n} chưa đọc`,
     unreadBadge: (n: number) => `${n} thông báo chưa đọc`,
     heroKicker: 'Sống xanh an lành',
     heroTitle: 'Thiên nhiên Việt cho cả nhà',

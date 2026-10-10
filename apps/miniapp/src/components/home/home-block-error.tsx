@@ -12,17 +12,19 @@ export interface HomeBlockErrorProps {
   onRetry: () => unknown;
   /** Đang tải lại sau lỗi: query lỗi vẫn `isLoading=false` nên phải truyền riêng `isFetching`. */
   retrying?: boolean;
+  /** Khối cùng hàng có nút "Xem tất cả" 44px (HomeSection có `seeAllTo`) → hàng tiêu đề cao 44px; không thì bằng khung chờ: không min-height, cách 8px. */
+  seeAllRow?: boolean;
 }
 
 /**
  * Khối lỗi gọn của Trang chủ (C-084): giữ tiêu đề + một dòng thông báo + "Thử lại" ngay tại chỗ để khách không tưởng
- * cửa hàng ít hàng. Mỗi khối lỗi độc lập — thử lại chỉ tải lại đúng khối này. Hàng tiêu đề cao 44px như
- * HomeSection để vị trí tiêu đề không nhảy giữa khung chờ và khối lỗi.
+ * cửa hàng ít hàng. Mỗi khối lỗi độc lập — thử lại chỉ tải lại đúng khối này. Hàng tiêu đề khai báo y hệt hàng của
+ * HomeSection ở khung chờ để tiêu đề không nhảy khi đổi trạng thái.
  */
-export function HomeBlockError({ title, error, onRetry, retrying }: HomeBlockErrorProps) {
+export function HomeBlockError({ title, error, onRetry, retrying, seeAllRow = true }: HomeBlockErrorProps) {
   return (
     <section aria-label={title} data-testid="home-block-error" style={{ padding: '16px 16px 0' }}>
-      <div style={{ display: 'flex', alignItems: 'center', minHeight: 44 }}>
+      <div style={{ display: 'flex', alignItems: 'center', minHeight: seeAllRow ? 44 : undefined, marginBottom: seeAllRow ? 0 : 8 }}>
         <Heading variant="title-sm" as="h2">
           {title}
         </Heading>
