@@ -58,9 +58,13 @@ export class CoinsService {
 
   /**
    * Cộng xu (thưởng/đổi-vào). Idempotent: partial unique index (reason WHERE refType='REFERRAL'
-   * hoặc 'COMMUNITY') → caller thua race / gọi lại ăn P2002 → bail no-op. Atomic create +
-   * increment. Nhận `tx?` để chạy TRONG transaction của caller (vd cap/ngày cần đọc-rồi-quyết
-   * cùng 1 tx Serializable với việc cấp xu, xem CommunityRewardService.rewardPost/rewardAnswer).
+   * hoặc 'COMMUNITY', ...) → caller thua race / gọi lại thì INSERT không ghi dòng nào → no-op.
+   * Nhận `tx?` để chạy TRONG transaction của caller (vd cap/ngày cần đọc-rồi-quyết cùng 1 tx
+   * Serializable với việc cấp xu, xem CommunityRewardService.rewardPost/rewardAnswer).
+   *
+   * Dùng ON CONFLICT DO NOTHING (createMany skipDuplicates) thay vì bắt P2002: một câu lệnh lỗi
+   * unique làm Postgres huỷ cả transaction đang mở, nên bắt P2002 rồi đi tiếp sẽ khiến mọi lệnh
+   * sau đó của caller trong cùng tx nổ 25P02 (C-061).
    */
   async grantCoins(
     userId: string,
@@ -71,23 +75,19 @@ export class CoinsService {
     tx?: Prisma.TransactionClient,
   ): Promise<void> {
     if (amount <= 0) return;
-    try {
-      if (tx) {
-        await tx.coinTransaction.create({ data: { userId, delta: amount, reason, refType, refId } });
-        await tx.user.update({ where: { id: userId }, data: { coinsBalance: { increment: amount } } });
-        return;
-      }
-      await this.prisma.$transaction([
-        this.prisma.coinTransaction.create({ data: { userId, delta: amount, reason, refType, refId } }),
-        this.prisma.user.update({ where: { id: userId }, data: { coinsBalance: { increment: amount } } }),
-      ]);
-    } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    const run = async (db: Prisma.TransactionClient) => {
+      const inserted = await db.coinTransaction.createMany({
+        data: [{ userId, delta: amount, reason, refType, refId }],
+        skipDuplicates: true,
+      });
+      if (inserted.count === 0) {
         this.logger.debug(`grantCoins idempotent skip reason=${reason}`);
         return;
       }
-      throw err;
-    }
+      await db.user.update({ where: { id: userId }, data: { coinsBalance: { increment: amount } } });
+    };
+    if (tx) return run(tx);
+    await this.prisma.$transaction((t) => run(t));
   }
 
   /**

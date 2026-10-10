@@ -125,11 +125,14 @@ function makeRedeemService(opts: {
   updateManyCount?: number;
   createImpl?: jest.Mock;
   perUserCount?: number | number[];
+  existingRedemption?: unknown;
 }) {
   const updateMany = jest
     .fn()
     .mockResolvedValue({ count: opts.updateManyCount ?? 1 });
-  const create = opts.createImpl ?? jest.fn().mockResolvedValue({ id: 'r1' });
+  // createMany(skipDuplicates) = INSERT ... ON CONFLICT DO NOTHING; count 0 = đơn đã có redemption.
+  const create = opts.createImpl ?? jest.fn().mockResolvedValue({ count: 1 });
+  const findRedemption = jest.fn().mockResolvedValue(opts.existingRedemption ?? null);
   // perUserLimit re-check trong redeem (in-tx) gọi couponRedemption.count. Mặc định 0 → chưa
   // dùng lần nào → pass. Cho phép truyền mảng để mô phỏng giá trị đổi giữa các lần gọi (race).
   const countValues = Array.isArray(opts.perUserCount) ? opts.perUserCount : [opts.perUserCount ?? 0];
@@ -143,7 +146,7 @@ function makeRedeemService(opts: {
       findUnique: jest.fn().mockResolvedValue(opts.coupon),
       updateMany,
     },
-    couponRedemption: { create, count },
+    couponRedemption: { createMany: create, count, findUnique: findRedemption },
     $executeRaw: executeRaw,
   };
   // redeem() không tx → tự mở $transaction(cb) — mock chạy cb với chính client này (mirror
@@ -151,7 +154,7 @@ function makeRedeemService(opts: {
   base.$transaction = jest.fn().mockImplementation((cb: (tx: unknown) => unknown) => cb(base));
   const prisma = base as unknown as PrismaService;
   const svc = new CouponsService(prisma);
-  return { svc, updateMany, create, count, executeRaw, transaction: base.$transaction as jest.Mock };
+  return { svc, updateMany, create, count, findRedemption, executeRaw, transaction: base.$transaction as jest.Mock };
 }
 
 describe('CouponsService.redeem atomic (B4)', () => {
@@ -166,35 +169,38 @@ describe('CouponsService.redeem atomic (B4)', () => {
       data: { usedCount: { increment: 1 } },
     });
     expect(create).toHaveBeenCalledWith({
-      data: { couponId: 'c1', userId: 'u1', orderId: 'o1' },
+      data: [{ couponId: 'c1', userId: 'u1', orderId: 'o1' }],
+      skipDuplicates: true,
     });
   });
 
-  it('usageLimit đã đạt (updateMany count=0) → BadRequestException, KHÔNG tạo redemption', async () => {
-    const { svc, create } = makeRedeemService({
+  it('usageLimit đã đạt (updateMany count=0) → BadRequestException (throw rollback cả redemption vừa ghi)', async () => {
+    const { svc } = makeRedeemService({
       coupon: coupon({ usageLimit: 1 }),
       updateManyCount: 0,
     });
     await expect(svc.redeem('SALE', 'u1', 'o1')).rejects.toThrow(
       'hết lượt sử dụng',
     );
-    expect(create).not.toHaveBeenCalled();
   });
 
-  it('race orderId trùng (P2002) → no-op, không throw', async () => {
-    // Mock lỗi Prisma P2002 — instance của PrismaClientKnownRequestError.
-    const { Prisma } = jest.requireActual('@prisma/client');
-    const p2002 = new Prisma.PrismaClientKnownRequestError('dup', {
-      code: 'P2002',
-      clientVersion: 'test',
-    });
-    const createImpl = jest.fn().mockRejectedValue(p2002);
-    const { svc } = makeRedeemService({
-      coupon: coupon({ usageLimit: null }),
-      createImpl,
+  it('đơn đã có redemption (retry) → no-op, KHÔNG ghi thêm, KHÔNG tăng usedCount', async () => {
+    const { svc, create, updateMany } = makeRedeemService({
+      coupon: coupon({ usageLimit: 100 }),
+      existingRedemption: { id: 'r0' },
     });
     await expect(svc.redeem('SALE', 'u1', 'o1')).resolves.toBeUndefined();
-    expect(createImpl).toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('race cùng đơn: INSERT bị ON CONFLICT bỏ qua (count=0) → no-op, KHÔNG tăng usedCount, không throw', async () => {
+    const { svc, updateMany } = makeRedeemService({
+      coupon: coupon({ usageLimit: 100 }),
+      createImpl: jest.fn().mockResolvedValue({ count: 0 }),
+    });
+    await expect(svc.redeem('SALE', 'u1', 'o1')).resolves.toBeUndefined();
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it('usageLimit null → bỏ qua atomic update, tạo redemption trực tiếp', async () => {
@@ -230,7 +236,7 @@ describe('CouponsService.redeem — perUserLimit race (advisory lock)', () => {
     });
     (create as jest.Mock).mockImplementation(() => {
       order.push('create');
-      return Promise.resolve({ id: 'r1' });
+      return Promise.resolve({ count: 1 });
     });
     await svc.redeem('SALE', 'u1', 'o1');
     // Nếu count()/create() chạy TRƯỚC khi khoá được giữ, request thứ 2 chạy song song có thể

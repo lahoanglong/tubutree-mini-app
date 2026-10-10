@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import { CoinsService } from './coins.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -6,10 +5,6 @@ import type { SystemConfigService } from '../system-config/system-config.service
 const config = {
   get: async <T>(_k: string, fb?: T): Promise<T> => fb as T, // default: thưởng 5000 xu
 } as unknown as SystemConfigService;
-
-function p2002() {
-  return new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
-}
 
 describe('CoinsService.spendCoins', () => {
   function spendPrisma(decCount = 1) {
@@ -56,27 +51,44 @@ describe('CoinsService.spendCoins', () => {
 });
 
 describe('CoinsService.grantCoins (idempotent)', () => {
-  it('hợp lệ → tạo CoinTransaction + cộng coinsBalance', async () => {
-    const create = jest.fn().mockResolvedValue({});
+  function grantPrisma(insertedCount = 1) {
+    const createMany = jest.fn().mockResolvedValue({ count: insertedCount });
     const update = jest.fn().mockResolvedValue({});
     const prisma = {
-      coinTransaction: { create },
+      coinTransaction: { createMany },
       user: { update },
-      $transaction: jest.fn().mockResolvedValue([]),
+      $transaction: jest.fn().mockImplementation(async (cb: (t: unknown) => unknown) => cb(prisma)),
     } as unknown as PrismaService;
+    return { prisma, createMany, update };
+  }
+
+  it('hợp lệ → INSERT ON CONFLICT DO NOTHING + cộng coinsBalance cùng tx', async () => {
+    const { prisma, createMany, update } = grantPrisma(1);
     await new CoinsService(prisma, config).grantCoins('u1', 5000, 'CONVERT_FROM_WALLET', 'CONVERT');
-    expect((prisma as unknown as { $transaction: jest.Mock }).$transaction).toHaveBeenCalled();
+    expect(createMany).toHaveBeenCalledWith({
+      data: [{ userId: 'u1', delta: 5000, reason: 'CONVERT_FROM_WALLET', refType: 'CONVERT', refId: undefined }],
+      skipDuplicates: true,
+    });
+    expect(update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { coinsBalance: { increment: 5000 } } });
   });
 
-  it('P2002 (trùng reason REFERRAL) → nuốt, không throw', async () => {
-    const prisma = {
-      coinTransaction: { create: jest.fn() },
-      user: { update: jest.fn() },
-      $transaction: jest.fn().mockRejectedValue(p2002()),
-    } as unknown as PrismaService;
+  it('trùng reason REFERRAL (INSERT bỏ qua, count=0) → no-op, KHÔNG cộng số dư, không throw', async () => {
+    const { prisma, update } = grantPrisma(0);
     await expect(
       new CoinsService(prisma, config).grantCoins('u1', 5000, 'REFERRAL_CASHBACK:r1', 'REFERRAL', 'r1'),
     ).resolves.toBeUndefined();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('truyền tx + trùng → không phát sinh lỗi trong tx của caller, không mở $transaction mới', async () => {
+    const { prisma } = grantPrisma();
+    const tx = {
+      coinTransaction: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      user: { update: jest.fn() },
+    };
+    await new CoinsService(prisma, config).grantCoins('u1', 200, 'COMMUNITY_POST:p1', 'COMMUNITY', 'p1', tx as never);
+    expect(tx.user.update).not.toHaveBeenCalled();
+    expect((prisma as unknown as { $transaction: jest.Mock }).$transaction).not.toHaveBeenCalled();
   });
 
   it('amount <= 0 → no-op (không mở transaction)', async () => {
@@ -88,11 +100,11 @@ describe('CoinsService.grantCoins (idempotent)', () => {
 
 describe('CoinsService.grantReferralCoins', () => {
   function refPrisma(referredById: string | null) {
-    const create = jest.fn().mockResolvedValue({});
+    const create = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
       user: { findUnique: jest.fn().mockResolvedValue({ referredById }), update: jest.fn().mockResolvedValue({}) },
-      coinTransaction: { create },
-      $transaction: jest.fn().mockResolvedValue([]),
+      coinTransaction: { createMany: create },
+      $transaction: jest.fn().mockImplementation(async (cb: (t: unknown) => unknown) => cb(prisma)),
     } as unknown as PrismaService;
     return { prisma, create };
   }
@@ -106,7 +118,7 @@ describe('CoinsService.grantReferralCoins', () => {
   it('có người giới thiệu → thưởng CẢ HAI, reason đúng', async () => {
     const { prisma, create } = refPrisma('referrer1');
     await new CoinsService(prisma, config).grantReferralCoins('referee1');
-    const byReason = Object.fromEntries(create.mock.calls.map((c) => [c[0].data.reason, c[0].data]));
+    const byReason = Object.fromEntries(create.mock.calls.map((c) => [c[0].data[0].reason, c[0].data[0]]));
     expect(byReason['REFERRAL_CASHBACK:referee1']).toMatchObject({ userId: 'referrer1', delta: 5000, refType: 'REFERRAL' });
     expect(byReason['REFERRED_CASHBACK:referee1']).toMatchObject({ userId: 'referee1', delta: 5000, refType: 'REFERRAL' });
   });
@@ -132,12 +144,12 @@ describe('CoinsService.grantReferralCoins → thưởng mốc giới thiệu', (
   }
 
   function refPrismaWithCount(successCount: number) {
-    const create = jest.fn().mockResolvedValue({});
+    const create = jest.fn().mockResolvedValue({ count: 1 });
     const count = jest.fn().mockResolvedValue(successCount);
     const prisma = {
       user: { findUnique: jest.fn().mockResolvedValue({ referredById: 'referrer1' }), update: jest.fn().mockResolvedValue({}) },
-      coinTransaction: { create, count },
-      $transaction: jest.fn().mockResolvedValue([]),
+      coinTransaction: { createMany: create, count },
+      $transaction: jest.fn().mockImplementation(async (cb: (t: unknown) => unknown) => cb(prisma)),
     } as unknown as PrismaService;
     return { prisma, create, count };
   }
@@ -145,21 +157,21 @@ describe('CoinsService.grantReferralCoins → thưởng mốc giới thiệu', (
   it('vừa chạm mốc 3 → thưởng thêm, reason nhúng referrerId + số mốc', async () => {
     const { prisma, create } = refPrismaWithCount(3);
     await new CoinsService(prisma, milestoneConfig(milestones)).grantReferralCoins('referee1');
-    const byReason = Object.fromEntries(create.mock.calls.map((c) => [c[0].data.reason, c[0].data]));
+    const byReason = Object.fromEntries(create.mock.calls.map((c) => [c[0].data[0].reason, c[0].data[0]]));
     expect(byReason['REFERRAL_MILESTONE:referrer1:3']).toMatchObject({ userId: 'referrer1', delta: 20000, refType: 'REFERRAL' });
   });
 
   it('chưa chạm mốc nào (count 2) → không thưởng thêm', async () => {
     const { prisma, create } = refPrismaWithCount(2);
     await new CoinsService(prisma, milestoneConfig(milestones)).grantReferralCoins('referee1');
-    const reasons = create.mock.calls.map((c) => c[0].data.reason);
+    const reasons = create.mock.calls.map((c) => c[0].data[0].reason);
     expect(reasons.some((r) => r.startsWith('REFERRAL_MILESTONE:'))).toBe(false);
   });
 
   it('vượt mọi mốc (count 15) → thử thưởng cả 3 mốc (idempotency ở grantCoins chặn lặp thực tế)', async () => {
     const { prisma, create } = refPrismaWithCount(15);
     await new CoinsService(prisma, milestoneConfig(milestones)).grantReferralCoins('referee1');
-    const reasons = create.mock.calls.map((c) => c[0].data.reason);
+    const reasons = create.mock.calls.map((c) => c[0].data[0].reason);
     expect(reasons).toEqual(
       expect.arrayContaining(['REFERRAL_MILESTONE:referrer1:3', 'REFERRAL_MILESTONE:referrer1:5', 'REFERRAL_MILESTONE:referrer1:10']),
     );
@@ -169,7 +181,7 @@ describe('CoinsService.grantReferralCoins → thưởng mốc giới thiệu', (
     const { prisma, create, count } = refPrismaWithCount(3);
     await new CoinsService(prisma, config).grantReferralCoins('referee1');
     expect(count).not.toHaveBeenCalled();
-    const reasons = create.mock.calls.map((c) => c[0].data.reason);
+    const reasons = create.mock.calls.map((c) => c[0].data[0].reason);
     expect(reasons.some((r) => r.startsWith('REFERRAL_MILESTONE:'))).toBe(false);
   });
 });
