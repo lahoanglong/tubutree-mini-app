@@ -5,6 +5,13 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { CashbackProviderRegistry } from './providers/cashback-provider.registry';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+
+// Sổ cái thật chạy trên Postgres ở test/integration-race/wallet-ledger*.race-spec.ts.
+jest.mock('../wallet/wallet-ledger.service', () => ({
+  applyWalletDelta: jest.fn().mockResolvedValue({ applied: true, balanceAfter: 0, entryId: 'wtx' }),
+}));
+const ledger = applyWalletDelta as jest.MockedFunction<typeof applyWalletDelta>;
 
 const registry = {
   get: jest.fn(),
@@ -281,16 +288,24 @@ describe('CashbackService.settleConfirmed', () => {
     const { prisma, updateMany, userUpdate } = settlePrisma([{ id: 'tx1', userId: 'u1', userReward: 35000 }]);
     await new CashbackService(prisma, config, notifications, registry).settleConfirmed();
     expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'tx1', status: 'CONFIRMED' });
-    expect(userUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { cashbackPending: { decrement: 35000 }, walletBalance: { increment: 35000 } } }),
-    );
+    expect(userUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { cashbackPending: { decrement: 35000 } } }));
+    expect(ledger).toHaveBeenCalledWith(prisma, {
+      userId: 'u1',
+      delta: 35000,
+      type: 'CASHBACK',
+      refType: 'CASHBACK',
+      refId: 'tx1',
+      reason: expect.any(String),
+    });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'CASHBACK_PAID', { amount: '35.000' });
   });
 
   it('multi-instance race: updateMany count=0 → KHÔNG cộng ví lần nữa, KHÔNG thông báo', async () => {
     const { prisma, userUpdate } = settlePrisma([{ id: 'tx1', userId: 'u1', userReward: 35000 }], 0);
+    ledger.mockClear();
     await new CashbackService(prisma, config, notifications, registry).settleConfirmed();
     expect(userUpdate).not.toHaveBeenCalled();
+    expect(ledger).not.toHaveBeenCalled();
     expect(notifications.notify).not.toHaveBeenCalled();
   });
 });

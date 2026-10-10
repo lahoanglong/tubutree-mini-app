@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { Env } from '../../config/env.validation';
 import { ZaloService } from './zalo.service';
 import { RbacService } from '../staff/rbac/rbac.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 
 @Injectable()
 export class AuthService {
@@ -412,12 +413,31 @@ export class AuthService {
 
       // 8) Số dư — cộng số dư đọc từ dòng khách ĐÃ KHOÁ ở trên; đồng bộ zaloId/tên/SĐT nếu target
       //    còn thiếu. Nhánh gộp theo SĐT (target là user web cũ, chưa có zaloId) cần gắn ĐÚNG
-      //    zaloId vừa xác thực.
+      //    zaloId vừa xác thực. Ví tiền đi qua sổ cái: một dòng MERGE_OUT ở khách, một dòng
+      //    MERGE_IN ở target. Ví khách lỡ âm (dữ liệu cũ) giữ nguyên ở dòng khách: chuyển khoản
+      //    âm sang target có thể bị chặn "không đủ" và làm hỏng cả lần đăng nhập.
+      if (g.walletBalance > 0) {
+        await applyWalletDelta(tx, {
+          userId: gid,
+          delta: -g.walletBalance,
+          type: 'MERGE_OUT',
+          refType: 'USER',
+          refId: tid,
+          reason: 'Gộp phiên khách vào tài khoản Zalo',
+        });
+        await applyWalletDelta(tx, {
+          userId: tid,
+          delta: g.walletBalance,
+          type: 'MERGE_IN',
+          refType: 'USER',
+          refId: gid,
+          reason: 'Nhận số dư từ phiên khách',
+        });
+      }
       const merged = await tx.user.update({
         where: { id: tid },
         data: {
           pointsBalance: { increment: g.pointsBalance },
-          walletBalance: { increment: g.walletBalance },
           coinsBalance: { increment: g.coinsBalance },
           cashbackPending: { increment: g.cashbackPending },
           ...(!target.zaloId ? { zaloId: info.zaloId } : {}),
@@ -435,7 +455,6 @@ export class AuthService {
         data: {
           zaloId: `${guest.zaloId}_merged_${Date.now()}`,
           pointsBalance: 0,
-          walletBalance: 0,
           coinsBalance: 0,
           cashbackPending: 0,
         },

@@ -244,7 +244,8 @@ model User {
   orders                 Order[]
   pointsTransactions     PointsTransaction[]
   coinTransactions       CoinTransaction[]
-  affiliateLinks         AffiliateLink[]
+  walletTransactions     WalletTransaction[]
+  affiliateLinks        AffiliateLink[]
   commissions            Commission[]
   ctvMilestoneClaims     CtvMilestoneClaim[]
   storefronts            Storefront[]
@@ -1014,6 +1015,43 @@ model CoinTransaction {
 
   @@index([userId])
   @@map("coin_transactions")
+}
+
+// Sổ cái Ví Tubu (walletBalance — VND thật, rút được). Bất biến: users.walletBalance ==
+// SUM(delta) theo userId; mọi biến động đi qua WalletLedgerService.applyDelta trong cùng
+// transaction với thay đổi số dư. Ghi từ ngày triển khai: mỗi user có số dư <> 0 lúc migrate có
+// đúng 1 dòng OPENING (Q-04, migration 20261010041004_wallet_ledger) — không dựng lại lịch sử cũ.
+enum WalletTxType {
+  OPENING // số dư đầu kỳ khi bắt đầu ghi sổ
+  ORDER_PAY // trả đơn bằng ví
+  ORDER_REFUND // hoàn tiền đơn huỷ/trả về ví
+  COMMISSION_PAYOUT // hoa hồng CTV chuyển vào ví
+  CASHBACK // cashback hết hold chuyển vào ví
+  WITHDRAW // rút về ngân hàng (gross = tiền chuyển + phí)
+  WITHDRAW_REFUND // admin từ chối lệnh rút → hoàn gross
+  XU_CONVERT // đổi ví sang TubuXu
+  MERGE_IN // nhận số dư từ tài khoản khách bị gộp
+  MERGE_OUT // chuyển số dư sang tài khoản được gộp vào
+  ADJUST // điều chỉnh tay của admin
+}
+
+model WalletTransaction {
+  id           String       @id @default(cuid())
+  userId       String
+  user         User         @relation(fields: [userId], references: [id])
+  delta        Int // VND, có dấu: + vào ví, - ra khỏi ví
+  balanceAfter Int // walletBalance ngay sau dòng này
+  type         WalletTxType
+  refType      String? // ORDER | PAYOUT | CASHBACK | USER | ...
+  // Khoá chống ghi trùng: (userId, type, refId) unique; refId NULL không bị ràng buộc (Postgres
+  // coi NULL là khác nhau) nên chỉ biến động không có tham chiếu (ADJUST tay) mới để NULL.
+  refId        String?
+  reason       String?
+  createdAt    DateTime     @default(now())
+
+  @@unique([userId, type, refId])
+  @@index([userId, createdAt])
+  @@map("wallet_transactions")
 }
 
 enum CouponType {

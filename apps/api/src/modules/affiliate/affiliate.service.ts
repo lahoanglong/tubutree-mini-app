@@ -10,6 +10,7 @@ import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, isSellableVariation, productDiscontinuedError } from '../cart/sellable';
 import { CoinsService } from '../wallet/coins.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { paginated, skipTake } from '../../common/pagination';
 import {
@@ -648,9 +649,16 @@ export class AffiliateService {
           }
           // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm.
           const credited = total;
-          await tx.user.update({ where: { id: userId }, data: { walletBalance: { increment: credited } } });
-          await tx.payout.create({
+          const payout = await tx.payout.create({
             data: { userId, amount: credited, method, status: 'PAID', paidAt: new Date(), idempotencyKey: key },
+          });
+          await applyWalletDelta(tx, {
+            userId,
+            delta: credited,
+            type: 'COMMISSION_PAYOUT',
+            refType: 'PAYOUT',
+            refId: payout.id,
+            reason: `Rút ${rows.length} khoản hoa hồng về Ví`,
           });
           return { credited };
         });
@@ -1068,9 +1076,13 @@ export class AffiliateService {
       } else {
         // Nguồn 1 (wallet.service.ts:withdraw): hoàn GROSS đã bị trừ — Payout.amount lưu NET
         // (amount = gross - fee), nên gross = amount + fee (xem wallet.service.ts:withdraw).
-        await tx.user.update({
-          where: { id: payout.userId },
-          data: { walletBalance: { increment: payout.amount + payout.fee } },
+        await applyWalletDelta(tx, {
+          userId: payout.userId,
+          delta: payout.amount + payout.fee,
+          type: 'WITHDRAW_REFUND',
+          refType: 'PAYOUT',
+          refId: payout.id,
+          reason: `Hoàn lệnh rút bị từ chối: ${why}`,
         });
       }
       this.logger.log(`Admin ${adminId} từ chối lệnh rút ${id}: ${why}`);

@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { CashbackProviderRegistry } from './providers/cashback-provider.registry';
 import type { NormalizedCashbackEvent } from './providers/cashback-provider.interface';
 
@@ -319,11 +320,18 @@ export class CashbackService {
           if (marked.count === 0) return false;
           await t.user.update({
             where: { id: tx.userId },
-            data: {
-              cashbackPending: { decrement: tx.userReward },
-              walletBalance: { increment: tx.userReward },
-            },
+            data: { cashbackPending: { decrement: tx.userReward } },
           });
+          if (tx.userReward > 0) {
+            await applyWalletDelta(t, {
+              userId: tx.userId,
+              delta: tx.userReward,
+              type: 'CASHBACK',
+              refType: 'CASHBACK',
+              refId: tx.id,
+              reason: 'Cashback hết thời gian giữ',
+            });
+          }
           return true;
         });
         if (settled) {

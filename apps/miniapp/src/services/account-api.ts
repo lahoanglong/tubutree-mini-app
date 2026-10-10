@@ -55,6 +55,22 @@ export interface WalletSummary {
   withdrawFee: number;
 }
 
+/** Một dòng sao kê Ví Tubu (sổ cái wallet_transactions). delta có dấu: + vào ví, − ra khỏi ví. */
+export interface WalletTxn {
+  id: string;
+  delta: number;
+  balanceAfter: number;
+  type: string;
+  reason: string | null;
+  orderId: string | null;
+  createdAt: string;
+}
+
+export interface WalletTxnPage {
+  data: WalletTxn[];
+  meta: { page: number; limit: number; total: number };
+}
+
 export interface CoinTxn {
   id: string;
   delta: number;
@@ -281,6 +297,8 @@ export function memberCardHint(card: Pick<MemberCardResponse, 'posCreditEnabled'
 
 // Wallet
 export const getWallet = () => api.get<WalletSummary>('/me/wallet').then((r) => r.data);
+export const getWalletTransactions = (page: number, limit = 20) =>
+  api.get<WalletTxnPage>('/me/wallet/transactions', { params: { page, limit } }).then((r) => r.data);
 export const withdraw = (amount: number, bankInfo: BankInfo, idempotencyKey: string) =>
   api
     .post<{ ok: boolean; payoutId: string; status: string; withdrawn: number; fee: number; net: number }>(

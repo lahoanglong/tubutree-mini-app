@@ -5,6 +5,19 @@ import type { JwtService } from '@nestjs/jwt';
 import type { ConfigService } from '@nestjs/config';
 import type { ZaloService } from './zalo.service';
 import type { RbacService } from '../staff/rbac/rbac.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+
+// Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
+// test/integration-race/wallet-ledger*.race-spec.ts. Ở đây thay bằng đúng tác động số dư của nó
+// (increment walletBalance trên tx) để fake Prisma vẫn đo được tiền chuyển giữa hai dòng.
+jest.mock('../wallet/wallet-ledger.service', () => ({
+  applyWalletDelta: jest.fn(
+    async (tx: { user: { update: (a: unknown) => Promise<unknown> } }, input: { userId: string; delta: number }) => {
+      await tx.user.update({ where: { id: input.userId }, data: { walletBalance: { increment: input.delta } } });
+      return { applied: true, balanceAfter: 0, entryId: 'wtx' };
+    },
+  ),
+}));
 
 // applyGrants no-op (identity) cho unit test auth — không đụng DB.
 const mkRbac = () =>
@@ -508,6 +521,15 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
       expect(guestRow.pointsBalance).toBe(0);
       expect(guestRow.walletBalance).toBe(0);
       expect(fixture.state.refreshTokens[0]!.revokedAt).toBeInstanceOf(Date);
+      // Ví tiền chuyển qua sổ cái: 1 dòng ra ở khách, 1 dòng vào ở target.
+      expect(applyWalletDelta).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ userId: 'guest1', delta: -5000, type: 'MERGE_OUT', refId: 'target1' }),
+      );
+      expect(applyWalletDelta).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ userId: 'target1', delta: 5000, type: 'MERGE_IN', refId: 'guest1' }),
+      );
     });
 
     it('gộp theo SĐT trùng (target chưa có zaloId — user web cũ) khi chưa ai giữ zaloId đó', async () => {

@@ -13,6 +13,18 @@ import type { RbacService } from '../staff/rbac/rbac.service';
 import type { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import type { GomdonClient } from '../integrations/gomdon/gomdon.client';
 
+// Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
+// test/integration-race/wallet-ledger*.race-spec.ts. Ở đây thay bằng đúng tác động số dư của nó
+// (increment walletBalance trên tx) để các mock tx sẵn có vẫn đo được tiền vào ví.
+jest.mock('../wallet/wallet-ledger.service', () => ({
+  applyWalletDelta: jest.fn(
+    async (tx: { user: { update: (a: unknown) => Promise<unknown> } }, input: { userId: string; delta: number }) => {
+      await tx.user.update({ where: { id: input.userId }, data: { walletBalance: { increment: input.delta } } });
+      return { applied: true, balanceAfter: 0, entryId: 'wtx' };
+    },
+  ),
+}));
+
 const config = {} as unknown as SystemConfigService;
 const loyalty = {
   creditOrderPoints: jest.fn().mockResolvedValue(undefined),

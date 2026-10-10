@@ -6,6 +6,20 @@ import type { PricingService } from '../pricing/pricing.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { CoinsService } from '../wallet/coins.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+
+// Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
+// test/integration-race/wallet-ledger*.race-spec.ts. Ở đây thay bằng đúng tác động số dư của nó
+// (increment walletBalance trên tx) để các mock tx sẵn có vẫn đo được tiền vào ví.
+jest.mock('../wallet/wallet-ledger.service', () => ({
+  applyWalletDelta: jest.fn(
+    async (tx: { user: { update: (a: unknown) => Promise<unknown> } }, input: { userId: string; delta: number }) => {
+      await tx.user.update({ where: { id: input.userId }, data: { walletBalance: { increment: input.delta } } });
+      return { applied: true, balanceAfter: 0, entryId: 'wtx' };
+    },
+  ),
+}));
+const ledger = applyWalletDelta as jest.MockedFunction<typeof applyWalletDelta>;
 
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 // Ship mặc định 0 cho test (override bằng mockResolvedValue trong test lên-đơn-hộ).
@@ -786,6 +800,10 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     expect(r.credited).toBe(100_000);
     expect(userUpdate.mock.calls[0][0].data.walletBalance).toEqual({ increment: 100_000 });
     expect(payoutCreate.mock.calls[0][0].data.status).toBe('PAID');
+    expect(ledger).toHaveBeenLastCalledWith(
+      prisma,
+      expect.objectContaining({ userId: 'u1', delta: 100_000, type: 'COMMISSION_PAYOUT', refType: 'PAYOUT', refId: 'payout-1' }),
+    );
     // Không còn quảng cáo hệ số nhân (đã bỏ) trong thông báo cho CTV.
     expect(r.note).not.toContain('×');
   });
@@ -1308,6 +1326,10 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).rejectPayout('admin1', 'p1', 'Sai STK');
     // gross = net (97k) + fee (3k) = đúng số đã bị trừ khỏi walletBalance lúc withdraw().
     expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { walletBalance: { increment: 100_000 } } });
+    expect(ledger).toHaveBeenLastCalledWith(
+      prisma,
+      expect.objectContaining({ userId: 'u1', delta: 100_000, type: 'WITHDRAW_REFUND', refType: 'PAYOUT', refId: 'p1' }),
+    );
     expect(commissionUpdateMany).not.toHaveBeenCalled();
   });
 
