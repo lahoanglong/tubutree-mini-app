@@ -62,3 +62,20 @@
   vendor ít giá trị với gói Zalo Mini App phát hành theo phiên bản. Vì vậy KHÔNG commit (đã gỡ cấu hình thử, working tree sạch).
 - Muốn giảm thật cần quyết định chủ dự án: bỏ axios (dùng fetch, -~12 kB gz), thay/hạn chế zmp-ui bằng DS tự viết, hoặc xin Zalo bản zmp-sdk tree-shakable.
   Mục tiêu "entry gz <= 150 kB" không đạt được nếu chỉ lazy-load; con số 201 kB gz giữ nguyên (không tăng so với trước gói).
+
+## Review lượt 1
+
+| # | Mức | Kết luận | Xử lý |
+|---|-----|----------|-------|
+| 1 | major, flashActive trong `/home` chịu 3 lớp cache (~65s) | ĐÚNG, đã sửa (commit "address review flash…") | Tách khối flash khỏi blob 20s: slot riêng TTL RAM 3s (chỉ để gom request đồng thời); header `GET /home` hạ về `LIVE` (5s/10s). Tối đa ~18s thay vì ~65s, cùng bậc endpoint lẻ. Test đỏ→xanh: "sau 6s dựng lại flashActive, categories/bestSellers vẫn dùng cache 20s", "flash trong 2s dùng cache". |
+| 2 | minor, C-088 không có code, entry 201 KB gz > 150 | ĐÚNG, ghi nhận, KHÔNG sửa code | **C-088 trạng thái: HOÃN, chờ chủ dự án quyết định** (không đánh dấu xong). Phương án cần duyệt: bỏ axios (~-12 kB gz), DS tự viết thay zmp-ui, hoặc chấp nhận manualChunks (entry 43 kB gz nhưng tổng JS lần đầu +8,6%). Chưa bisect nguồn tăng 22% so với tháng 9 (cần quyết định trước mới đáng làm). |
+| 3 | minor, `@Header` gắn cả response lỗi | ĐÚNG, đã sửa (commit "address review Cache-Control…") | `@PublicCache` đổi thành metadata + `PublicCacheInterceptor` chỉ set header khi handler thành công 2xx (lỗi guard/validation vốn chạy trước interceptor nên không bị gắn). Test thật qua HTTP (`public-cache.interceptor.spec.ts`): 200 có `public, max-age=15, s-maxage=30`; 404 không có `public`. Đã xác nhận ĐỎ với `@Header` cũ ("Received: public, max-age=15, s-maxage=30"). `public-cache.decorator.spec.ts` đọc policy từ metadata mới. |
+| 4 | minor, phiên feed không gắn user | ĐÚNG, đã sửa (commit "address review feed…") | Feed `/home/me` ghi access token lúc phản hồi về; `take()` trả null nếu token hiện tại khác → khối cá nhân không trao cho tài khoản khác, rơi về request lẻ (refresh token trong cửa sổ hiếm cũng chỉ là lùi về lẻ, an toàn). Thêm `getAccessToken()` vào `services/api.ts`. Test `home-feed.spec.ts` đỏ→xanh. |
+| 5 | minor, khối chậm giữ cả `/home/me` tới 8s | ĐÚNG, đã sửa | `HomeService.block()` cắt từng khối ở 2,5s → null (client gọi lẻ khối đó); `FEED_TIMEOUT_MS` 8s→4s. Test fake-timer "khối chậm quá hạn thì thành null". Chi phí 1 RTT tuần tự khi API cũ 404 giữ nguyên (đổi lấy tương thích, chỉ xảy ra lúc API cũ). |
+| 6 | minor, Playwright 4b chưa mock `/home` | KHÔNG sửa trong lượt này | Quy định gói cấm chạy Playwright (RAM 15,5GB); viết spec e2e không chạy được là rủi ro đưa spec hỏng. Việc còn lại: thêm spec `buy-flow-4b-home-merged` mock `GET /home`+`/home/me` có dữ liệu, assert `api.callsTo('/home')===1` và route lẻ 0; chạy suite `buy-flow-4b-*` một lần trước merge. Test vitest `home-requests.spec.tsx` chỉ đếm khối Home (2 request); con số "≤5 gồm khung app" là ước lượng từ các request khung (`/me`, `/cart`, `/me/wishlist/ids`, `/auth/*`). |
+
+### Kiểm chứng lượt này
+- `npx jest src/common/decorators src/modules/catalog --maxWorkers=1` (apps/api): 7 suite / 110 test xanh.
+- `npx tsc --noEmit -p tsconfig.json` (apps/api) và `npx tsc --noEmit` (apps/miniapp) sạch; ESLint các file đã sửa sạch.
+- `npx vitest run src/services/home-feed.spec.ts src/pages/home-requests.spec.tsx` (apps/miniapp): 12 test xanh.
+- Migration: không có.
