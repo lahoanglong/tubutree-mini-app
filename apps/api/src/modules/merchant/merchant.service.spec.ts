@@ -525,6 +525,73 @@ describe('MerchantService', () => {
     });
   });
 
+  // C-013 (A5N-02): findMany dùng include nên trả mọi cột scalar của Order cho CTV — lộ
+  // invoiceRequest (MST/email), note nội bộ, userId, referrerUserId, endCustomerKey (SĐT người
+  // nhận lên-hộ). Phải chọn field tường minh (whitelist), không vá từng trường.
+  describe('listMerchantOrders — C-013 chỉ trả field tường minh', () => {
+    const store = { id: 's1', ownerUserId: 'u1', slug: 'shop1', subdomain: 'shop1', collections: [] };
+    const FORBIDDEN = [
+      'invoiceRequest',
+      'invoiceUrl',
+      'invoiceStatus',
+      'note',
+      'userId',
+      'referrerUserId',
+      'endCustomerKey',
+      'idempotencyKey',
+      'pancakeOrderId',
+      'paymentTxnId',
+      'commission',
+      'recyclingNote',
+      'gomdonOrderId',
+    ];
+
+    function setup(role: string) {
+      const findMany = jest.fn().mockResolvedValue([]);
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(store) },
+        product: { findMany: jest.fn().mockResolvedValue([]) },
+        order: { count: jest.fn().mockResolvedValue(0), findMany },
+      });
+      return { svc: new MerchantService(prisma, orderStatus), findMany };
+    }
+
+    it.each(['AFFILIATE', 'DEALER', 'ADMIN'])('%s: findMany dùng select tường minh, không include', async (role) => {
+      const { svc, findMany } = setup(role);
+      await svc.listMerchantOrders('u1');
+      const args = findMany.mock.calls[0]![0] as Record<string, unknown>;
+      expect(args).toHaveProperty('select');
+      expect(args).not.toHaveProperty('include');
+    });
+
+    it('select không chứa field nhạy cảm (đơn, user lồng, item)', async () => {
+      const { svc, findMany } = setup('AFFILIATE');
+      await svc.listMerchantOrders('u1');
+      const select = (findMany.mock.calls[0]![0] as { select: Record<string, unknown> }).select;
+      for (const k of FORBIDDEN) expect(select).not.toHaveProperty(k);
+      const user = (select.user as { select: Record<string, unknown> }).select;
+      expect(user).not.toHaveProperty('id');
+      const item = (select.items as { select: Record<string, unknown> }).select;
+      expect(item).not.toHaveProperty('variationId');
+      expect(item).not.toHaveProperty('flashSaleItemId');
+    });
+
+    it('select vẫn đủ field mà bảng đơn của FE CTV đang dùng', async () => {
+      const { svc, findMany } = setup('AFFILIATE');
+      await svc.listMerchantOrders('u1');
+      const select = (findMany.mock.calls[0]![0] as { select: Record<string, unknown> }).select;
+      for (const k of ['id', 'code', 'status', 'total', 'createdAt', 'shippingAddress', 'user', 'items']) {
+        expect(select).toHaveProperty(k);
+      }
+      expect((select.user as { select: object }).select).toEqual({ fullName: true, phone: true });
+      const item = (select.items as { select: Record<string, unknown> }).select;
+      for (const k of ['id', 'productName', 'variationName', 'unitPrice', 'quantity', 'backorderedQty']) {
+        expect(item).toHaveProperty(k);
+      }
+    });
+  });
+
   describe('publishStore', () => {
     it('bật tắt xuất bản gian hàng đối tác thành công', async () => {
       const store = { id: 's1', ownerUserId: 'u1', collections: [] };

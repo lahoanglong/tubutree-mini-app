@@ -81,6 +81,41 @@ function maskShippingAddress(
   };
 }
 
+// Whitelist field đơn trả cho cổng /merchant (CTV/đại lý/admin). Dùng select thay vì include để cột
+// mới thêm vào Order không tự rò ra: invoiceRequest (MST/email), note nội bộ, userId, referrerUserId,
+// endCustomerKey (SĐT người nhận đơn lên-hộ của CTV khác) KHÔNG nằm ở đây có chủ đích.
+const MERCHANT_ORDER_SELECT = {
+  id: true,
+  code: true,
+  status: true,
+  subtotal: true,
+  discount: true,
+  shippingFee: true,
+  total: true,
+  paymentMethod: true,
+  paymentStatus: true,
+  shippingAddress: true,
+  shippingPartner: true,
+  shippingCode: true,
+  shippingStatus: true,
+  trackingLink: true,
+  createdAt: true,
+  updatedAt: true,
+  items: {
+    select: {
+      id: true,
+      productName: true,
+      productSlug: true,
+      variationName: true,
+      unitPrice: true,
+      quantity: true,
+      total: true,
+      backorderedQty: true,
+    },
+  },
+  user: { select: { fullName: true, phone: true } },
+} satisfies Prisma.OrderSelect;
+
 export interface UpdateStoreDto {
   title?: string;
   headerNote?: string;
@@ -490,12 +525,7 @@ export class MerchantService {
       this.prisma.order.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        include: {
-          items: true,
-          user: {
-            select: { id: true, fullName: true, phone: true },
-          },
-        },
+        select: MERCHANT_ORDER_SELECT,
         ...skipTake(page, limit),
       }),
     ]);
