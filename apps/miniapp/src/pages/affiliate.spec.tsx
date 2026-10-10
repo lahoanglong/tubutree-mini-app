@@ -84,3 +84,70 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
   });
 });
+
+describe('Đăng ký CTV — đồng ý điều khoản hoa hồng & thuế (C-117)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: false, referralCode: 'TUBU88', walletBalance: 0 });
+    mocks.registerAffiliate.mockResolvedValue({ ok: true, referralCode: 'TUBU88' });
+  });
+
+  it('hiện điều khoản ngắn về hoa hồng và thuế trước nút đăng ký', async () => {
+    renderPage();
+    expect(await screen.findByText('Điều khoản hoa hồng & thuế')).toBeInTheDocument();
+    expect(screen.getByText(/hết thời gian đổi\/trả/)).toBeInTheDocument();
+    expect(screen.getByText(/tự kê khai và nộp thuế/)).toBeInTheDocument();
+  });
+
+  it('chưa tick đồng ý: nút đăng ký bị khoá, có lời nhắc, không gọi API', async () => {
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
+    expect(btn).toBeDisabled();
+    expect(screen.getByText('Tick đồng ý điều khoản để đăng ký')).toBeInTheDocument();
+    fireEvent.click(btn);
+    expect(mocks.registerAffiliate).not.toHaveBeenCalled();
+  });
+
+  it('tick đồng ý rồi đăng ký: gửi kèm phiên bản điều khoản, bỏ lời nhắc', async () => {
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
+    fireEvent.click(screen.getByRole('checkbox', { name: /đồng ý với điều khoản hoa hồng/ }));
+    expect(btn).toBeEnabled();
+    expect(screen.queryByText('Tick đồng ý điều khoản để đăng ký')).toBeNull();
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.registerAffiliate).toHaveBeenCalledTimes(1));
+    expect(mocks.registerAffiliate).toHaveBeenCalledWith('2026-10');
+  });
+
+  it('bỏ tick lại thì khoá nút trở lại', async () => {
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
+    const box = screen.getByRole('checkbox', { name: /đồng ý với điều khoản hoa hồng/ });
+    fireEvent.click(box);
+    fireEvent.click(box);
+    expect(btn).toBeDisabled();
+  });
+});
+
+describe('Dashboard CTV — lối tắt Lên đơn hộ ở đầu trang (C-064)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+  });
+
+  it('nút Lên đơn hộ khách nằm trước nút Rút hoa hồng và trước lịch sử hoa hồng, đủ cao 44px', async () => {
+    renderPage();
+    const entry = await screen.findByRole('button', { name: /Lên đơn hộ khách/ });
+    const withdraw = screen.getByRole('button', { name: 'Rút hoa hồng' });
+    const history = screen.getByText('Lịch sử hoa hồng');
+    expect(entry.compareDocumentPosition(withdraw) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(entry.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(entry.style.minHeight).toBe('44px');
+  });
+
+  it('chạm lối tắt mở form lên đơn hộ', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Lên đơn hộ khách/ }));
+    expect(await screen.findByTestId('ctv-order-sheet')).toBeInTheDocument();
+  });
+});
