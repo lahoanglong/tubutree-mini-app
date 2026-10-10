@@ -1,5 +1,6 @@
 import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
 import { Public } from '../../../common/decorators/public.decorator';
+import { PublicCache } from '../../../common/decorators/public-cache.decorator';
 import { GeoService } from './geo.service';
 
 /**
@@ -11,12 +12,14 @@ export class GeoController {
   constructor(private readonly geo: GeoService) {}
 
   @Public()
+  @PublicCache('STATIC')
   @Get('provinces')
   async provinces() {
     return this.geo.provinces();
   }
 
   @Public()
+  @PublicCache('STATIC')
   @Get('communes')
   async communes(@Query('provinceCode') provinceCode?: string) {
     if (!provinceCode) throw new BadRequestException('provinceCode là bắt buộc.');

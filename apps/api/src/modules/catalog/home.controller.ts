@@ -1,6 +1,7 @@
 import { Controller, Get, Header, Query } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { HomeMeQuery } from './dto/home-me-query.dto';
 import { HomeService } from './home.service';
 
@@ -10,6 +11,7 @@ export class HomeController {
 
   /** Khối công khai của Trang chủ, gộp một request. Không đọc người dùng → an toàn cache chung. */
   @Public()
+  @PublicCache('CATALOG')
   @Get()
   publicBlocks() {
     return this.home.getPublic();
