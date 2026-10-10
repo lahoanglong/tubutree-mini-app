@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SEARCH_MAX_LENGTH, homeHref, normalizeSearchQuery } from './catalog-filter';
+import { SEARCH_MAX_LENGTH, firstParam, homeHref, normalizeSearchQuery } from './catalog-filter';
 
 describe('catalog-filter — tìm kiếm và lọc thương hiệu ở trang chủ (C-025)', () => {
   it('normalizeSearchQuery cắt khoảng trắng, gộp khoảng trắng liền nhau, giới hạn 100 ký tự như API', () => {
@@ -16,5 +16,15 @@ describe('catalog-filter — tìm kiếm và lọc thương hiệu ở trang ch�
     expect(homeHref({ q: 'dầu gội' })).toBe(`/?${new URLSearchParams({ q: 'dầu gội' }).toString()}#san-pham`);
     expect(homeHref({ brand: 'A&B', q: 'x y' })).toBe('/?brand=A%26B&q=x+y#san-pham');
     expect(homeHref({ brand: '', q: '  ' })).toBe('/');
+  });
+});
+
+describe('catalog-filter — tham số URL lặp (?q=a&q=b)', () => {
+  it('searchParams có thể là mảng khi khách/bot lặp tham số: lấy giá trị đầu, không ném lỗi', () => {
+    expect(normalizeSearchQuery(['  dầu gội ', 'xà phòng'])).toBe('dầu gội');
+    expect(normalizeSearchQuery([])).toBe('');
+    expect(firstParam(['a', 'b'])).toBe('a');
+    expect(firstParam('a')).toBe('a');
+    expect(firstParam(undefined)).toBeUndefined();
   });
 });
