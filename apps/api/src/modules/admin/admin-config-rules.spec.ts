@@ -77,6 +77,44 @@ describe('validateAdminConfigValue', () => {
     bad('shipping.gomdon.config', 'x');
   });
 
+  it('voucher.* dạng số phải là số nguyên (đồng/ngày); khoảng do SystemConfigService kiểm', () => {
+    for (const k of ['voucher.welcome_amount', 'voucher.welcome_min_order', 'voucher.birthday_amount', 'voucher.winback_amount', 'voucher.winback_days']) {
+      ok(k, 30000);
+      bad(k, 30000.5);
+      bad(k, '30000');
+    }
+  });
+
+  it('voucher.milestones: mảng mốc {spend>0, reward>0} số nguyên, không trùng spend, ≤ 10 mốc', () => {
+    ok('voucher.milestones', [{ spend: 1_000_000, reward: 30_000 }, { spend: 3_000_000, reward: 100_000 }]);
+    ok('voucher.milestones', []);
+    bad('voucher.milestones', { spend: 1, reward: 1 });
+    bad('voucher.milestones', [{ spend: 0, reward: 30_000 }]);
+    bad('voucher.milestones', [{ spend: 1_000_000, reward: 0 }]);
+    bad('voucher.milestones', [{ spend: 1_000_000, reward: -5 }]);
+    bad('voucher.milestones', [{ spend: 1_000_000.5, reward: 30_000 }]);
+    bad('voucher.milestones', [{ spend: '1000000', reward: 30_000 }]);
+    bad('voucher.milestones', [{ spend: 1_000_000 }]);
+    bad('voucher.milestones', [{ spend: 1_000_000, reward: 1 }, { spend: 1_000_000, reward: 2 }]);
+    bad('voucher.milestones', Array.from({ length: 11 }, (_, i) => ({ spend: (i + 1) * 1000, reward: 1000 })));
+    // Thưởng vượt mốc chi tiêu = lỗ mỗi lần cấp → nhiều khả năng nhầm cột.
+    bad('voucher.milestones', [{ spend: 30_000, reward: 1_000_000 }]);
+  });
+
+  // toShippingEta âm thầm ẩn dòng giao dự kiến khi max < min nên admin thấy "đã lưu" mà app không hiện gì.
+  it('ETA giao hàng: max không nhỏ hơn min hiện có; khoá đối ứng chưa đặt (null) thì bỏ qua', () => {
+    const v = (k: string, n: unknown, partner: unknown) => () => validateAdminConfigValue(k, n, partner);
+    expect(v('shipping.eta_max_days', 4, 2)).not.toThrow();
+    expect(v('shipping.eta_max_days', 2, 2)).not.toThrow();
+    expect(v('shipping.eta_max_days', 1, 2)).toThrow(BadRequestException);
+    expect(v('shipping.eta_max_days', 1, null)).not.toThrow();
+    expect(v('shipping.eta_max_days', 1, undefined)).not.toThrow();
+    expect(v('shipping.eta_min_days', 2, 4)).not.toThrow();
+    expect(v('shipping.eta_min_days', 5, 4)).toThrow(BadRequestException);
+    expect(v('shipping.eta_min_days', 5, 4)).toThrow(/shipping\.eta_max_days/);
+    expect(v('shipping.eta_min_days', 3.5, null)).toThrow(BadRequestException);
+  });
+
   it('khoá khác: không can thiệp (SystemConfigService tự giữ kiểu/khoảng)', () => {
     ok('shipping.free_threshold', 200000);
     ok('misc.anything', { a: 1 });

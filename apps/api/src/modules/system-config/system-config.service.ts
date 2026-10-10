@@ -75,6 +75,14 @@ export class SystemConfigService {
     // bị từ chối lúc ghi thay vì âm thầm ẩn dòng ETA (toShippingEta bỏ giá trị ngoài 0–60).
     'shipping.eta_min_days': { min: 0, max: 60, note: 'số ngày' },
     'shipping.eta_max_days': { min: 0, max: 60, note: 'số ngày' },
+    // Cron VouchersService cấp mã hàng loạt theo các khoá này: gõ nhầm đơn vị (30000 → 3000000) hay số âm sẽ cấp mã
+    // sai giá trị cho cả tệp khách. Mức 0đ bị loại vì grant() vẫn tạo mã 0đ và gửi thông báo.
+    'voucher.welcome_amount': { min: 1000, max: 1_000_000, note: 'đồng' },
+    'voucher.birthday_amount': { min: 1000, max: 1_000_000, note: 'đồng' },
+    'voucher.winback_amount': { min: 1000, max: 1_000_000, note: 'đồng' },
+    'voucher.welcome_min_order': { min: 0, max: 50_000_000, note: 'đồng (0 = không yêu cầu đơn tối thiểu)' },
+    // 0 ngày = coi mọi khách từng mua là "đã bỏ đi" và cấp mã cho tất cả.
+    'voucher.winback_days': { min: 1, max: 365, note: 'số ngày' },
   };
 
   private assertInRange(key: string, value: unknown): void {

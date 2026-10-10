@@ -237,4 +237,21 @@ describe('SystemConfigService.set — biên cho khoá hạn ngày (đúng tên k
     await ok.svc.set('dealer.reward_claim_grace_days', 30, 'admin1');
     expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
   });
+
+  // Cron cấp mã giảm giá đọc thẳng các khoá voucher.* — gõ nhầm đơn vị/số âm sẽ cấp mã hàng loạt sai giá trị.
+  it.each([
+    ['voucher.welcome_amount', 30_000, [0, -1, 999, 1_000_001]],
+    ['voucher.birthday_amount', 50_000, [0, -5000, 1_000_001]],
+    ['voucher.winback_amount', 50_000, [0, -5000, 1_000_001]],
+    ['voucher.welcome_min_order', 199_000, [-1, 50_000_001]],
+    ['voucher.winback_days', 60, [0, -1, 366]],
+  ] as const)('%s: nhận giá trị hợp lý, từ chối %j ngoài biên', async (key, fine, badValues) => {
+    const ok = mk();
+    await ok.svc.set(key, fine, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    for (const v of badValues) {
+      await expect(mk().svc.set(key, v, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    }
+    await expect(mk().svc.set(key, '30000' as unknown as number, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+  });
 });

@@ -64,7 +64,66 @@ function assertGomdonConfig(key: string, v: unknown) {
   }
 }
 
+const MILESTONES_MAX_COUNT = 10;
+const MILESTONE_SPEND_MAX = 1_000_000_000;
+const MILESTONE_REWARD_MAX = 10_000_000;
+
+/** Khoảng của từng khoá voucher.* do SystemConfigService.RANGES giữ; ở đây chỉ chặn số lẻ (đồng/ngày là số nguyên). */
+function assertInteger(key: string, v: unknown) {
+  if (typeof v !== 'number' || !Number.isInteger(v)) throw fail(key, 'phải là số nguyên.');
+}
+
+/**
+ * Cron milestoneVouchers chọn mốc CAO NHẤT đạt được: spend trùng nhau làm mốc nào thắng phụ thuộc thứ tự sort,
+ * reward 0 vẫn tạo mã 0đ + thông báo, mảng sai cấu trúc thì cron ném lỗi và bị nuốt (cả đợt không cấp mã nào).
+ */
+function assertMilestones(key: string, v: unknown) {
+  if (!Array.isArray(v)) throw fail(key, 'phải là mảng các mốc {"spend": đồng chi tiêu, "reward": đồng thưởng}.');
+  if (v.length > MILESTONES_MAX_COUNT) throw fail(key, `tối đa ${MILESTONES_MAX_COUNT} mốc.`);
+  const seen = new Set<number>();
+  v.forEach((m, i) => {
+    const at = `${key}[${i}]`;
+    if (!m || typeof m !== 'object' || Array.isArray(m)) throw fail(at, 'phải là object {"spend", "reward"}.');
+    const { spend, reward } = m as { spend?: unknown; reward?: unknown };
+    assertIntInRange(`${at}.spend`, spend, 1, MILESTONE_SPEND_MAX, 'đ');
+    assertIntInRange(`${at}.reward`, reward, 1, MILESTONE_REWARD_MAX, 'đ');
+    if ((reward as number) > (spend as number)) throw fail(at, 'thưởng không được lớn hơn mốc chi tiêu.');
+    if (seen.has(spend as number)) throw fail(`${at}.spend`, 'trùng với một mốc khác.');
+    seen.add(spend as number);
+  });
+}
+
+/**
+ * ETA giao hàng: toShippingEta ẩn dòng "Giao dự kiến" khi max < min, nên admin thấy "đã lưu" mà app không hiện gì.
+ * Khoá đối ứng chưa đặt (null) thì chưa có gì để so.
+ */
+const ETA_MIN_KEY = 'shipping.eta_min_days';
+const ETA_MAX_KEY = 'shipping.eta_max_days';
+const CROSS_CHECK_PARTNER: Record<string, string> = { [ETA_MIN_KEY]: ETA_MAX_KEY, [ETA_MAX_KEY]: ETA_MIN_KEY };
+
+/** Khoá mà luật ghi cần đọc thêm giá trị hiện có của một khoá khác (xem validateAdminConfigValue). */
+export function configPartnerKey(key: string): string | undefined {
+  return CROSS_CHECK_PARTNER[key];
+}
+
+function assertEtaAgainstPartner(key: string, v: unknown, partner: unknown) {
+  assertInteger(key, v);
+  if (typeof partner !== 'number') return;
+  if (key === ETA_MAX_KEY && (v as number) < partner) {
+    throw fail(key, `không được nhỏ hơn "${ETA_MIN_KEY}" hiện tại (${partner}). Hạ "${ETA_MIN_KEY}" trước nếu muốn giảm số ngày tối đa.`);
+  }
+  if (key === ETA_MIN_KEY && (v as number) > partner) {
+    throw fail(key, `không được lớn hơn "${ETA_MAX_KEY}" hiện tại (${partner}). Tăng "${ETA_MAX_KEY}" trước nếu muốn tăng số ngày tối thiểu.`);
+  }
+}
+
 const RULES: Record<string, (key: string, v: unknown) => void> = {
+  'voucher.welcome_amount': assertInteger,
+  'voucher.welcome_min_order': assertInteger,
+  'voucher.birthday_amount': assertInteger,
+  'voucher.winback_amount': assertInteger,
+  'voucher.winback_days': assertInteger,
+  'voucher.milestones': assertMilestones,
   'shipping.gomdon.recycling_enabled': assertBoolean,
   'shipping.gomdon.config': assertGomdonConfig,
   'loyalty.pos_credit_enabled': assertBoolean,
@@ -75,11 +134,15 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   [PENDING_PAYMENT_TTL_KEY]: (k, v) => assertIntInRange(k, v, MIN_TTL_HOURS, MAX_TTL_HOURS, 'giờ'),
 };
 
-/** Ném BadRequest nếu `value` sai luật của khoá; khoá không có luật riêng → bỏ qua. */
-export function validateAdminConfigValue(key: string, value: unknown): void {
+/**
+ * Ném BadRequest nếu `value` sai luật của khoá; khoá không có luật riêng → bỏ qua. `partnerValue` là giá trị hiện lưu
+ * của khoá đối ứng (configPartnerKey) cho luật so chéo; không truyền hoặc null/undefined = chưa có gì để so.
+ */
+export function validateAdminConfigValue(key: string, value: unknown, partnerValue?: unknown): void {
   const deadReason = deadConfigKeyReason(key);
   if (deadReason) {
     throw fail(key, `khoá này không còn được hệ thống đọc nên sửa sẽ không có tác dụng. ${deadReason}`);
   }
-  RULES[key]?.(key, value);
+  if (CROSS_CHECK_PARTNER[key]) assertEtaAgainstPartner(key, value, partnerValue);
+  else RULES[key]?.(key, value);
 }

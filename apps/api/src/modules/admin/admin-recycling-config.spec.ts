@@ -326,6 +326,18 @@ describe('AdminService.getConfig / setConfig — che bí mật khi đọc, khôn
     expect(res.value).toEqual({ password: REDACTED, defaultWeightFallback: 800 });
   });
 
+  it('PUT ETA max nhỏ hơn min đang lưu trong DB → 400 nêu khoá min, KHÔNG ghi; max hợp lệ thì ghi', async () => {
+    const set = jest.fn().mockResolvedValue(undefined);
+    const findUnique = jest.fn(async ({ where }: { where: { key: string } }) =>
+      where.key === 'shipping.eta_min_days' ? { value: 3 } : { value: null },
+    );
+    const prisma = { systemConfig: { findUnique } };
+    await expect(mkAdmin(prisma, { config: { set } }).setConfig('admin-1', 'shipping.eta_max_days', 2)).rejects.toThrow(/shipping\.eta_min_days/);
+    expect(set).not.toHaveBeenCalled();
+    await mkAdmin(prisma, { config: { set } }).setConfig('admin-1', 'shipping.eta_max_days', 5);
+    expect(set).toHaveBeenCalledWith('shipping.eta_max_days', 5, 'admin-1');
+  });
+
   it('PUT sai luật khoá có form riêng (checkin_points 6 số) → 400, KHÔNG ghi', async () => {
     const set = jest.fn();
     const prisma = { systemConfig: { findUnique: jest.fn().mockResolvedValue({ value: [1, 1, 1, 1, 1, 1, 2] }) } };

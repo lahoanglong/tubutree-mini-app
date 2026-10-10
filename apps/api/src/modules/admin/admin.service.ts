@@ -24,7 +24,7 @@ import {
 } from './admin-order-filter';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
-import { validateAdminConfigValue } from './admin-config-rules';
+import { configPartnerKey, validateAdminConfigValue } from './admin-config-rules';
 
 /**
  * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
@@ -867,7 +867,9 @@ export class AdminService {
   async setConfig(adminId: string, key: string, value: object | string | number | boolean) {
     const existing = await this.prisma.systemConfig.findUnique({ where: { key }, select: { value: true } });
     const restored = restoreRedactedSecrets(key, value, existing?.value) as object | string | number | boolean;
-    validateAdminConfigValue(key, restored);
+    const partnerKey = configPartnerKey(key);
+    const partner = partnerKey ? await this.prisma.systemConfig.findUnique({ where: { key: partnerKey }, select: { value: true } }) : null;
+    validateAdminConfigValue(key, restored, partner?.value);
     await this.config.set(key, restored, adminId);
     this.logger.warn(`Admin ${adminId} cập nhật cấu hình ${key}.`);
     return { ok: true, key, value: redactValueForKey(key, restored) };
