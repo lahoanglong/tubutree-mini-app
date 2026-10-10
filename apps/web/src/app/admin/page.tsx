@@ -1784,7 +1784,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
           {sale.items.length === 0 && <p className="text-xs text-neutral-400">Chưa có sản phẩm nào trong đợt này.</p>}
         </div>
 
-        <div className="mt-2 flex flex-wrap items-end gap-2">
+        <div className="mt-2 flex flex-wrap items-start gap-2">
           <ProductPicker
             mode="variation"
             label="Chọn biến thể sản phẩm cho đợt Flash Sale"
