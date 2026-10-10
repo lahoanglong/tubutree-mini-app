@@ -193,6 +193,68 @@ Không có.
 
 ### Việc còn lại
 
-- Throttler 6.5 đặt `Retry-After` = thời gian còn bị chặn, và `blockDuration` mặc định bằng `ttl` (60 s). Vì vậy lần 429 đầu thường báo `Retry-After: 60`, và miniapp sẽ báo lỗi ngay chứ không gửi lại. Việc gửi lại chỉ xảy ra khi khoảng chặn còn ≤ 5 s. Muốn gửi lại có ích hơn thì đặt `blockDuration` ngắn (vd 5–10 s) trong `throttle.config.ts`. Đây là quyết định chính sách, chưa làm.
+- Throttler 6.5 đặt `Retry-After` = thời gian còn bị chặn, và `blockDuration` mặc định bằng `ttl` (60 s). Vì vậy lần 429 đầu thường báo `Retry-After: 60`, và miniapp sẽ báo lỗi ngay chứ không gửi lại. Việc gửi lại chỉ xảy ra khi khoảng chặn còn ≤ 5 s. Không rút ngắn `blockDuration`; xem lý do ở mục Review lượt 1, finding 4.
 - Chưa chạy `next build` + `scripts/loadtest/web-crawl-probe.cjs` (job nặng, máy 15,5 GB). Mới kiểm chứng bằng unit test của `lib/api.ts`.
 - Comment ở `apps/api/src/main.ts:57` vẫn nhắc "60req/min" (đã ghi ở C-005).
+
+## Review lượt 1
+
+Commit: `9e36e89`, `b0053f9`, `c152de0`, `601c0c1`.
+
+### 1. [major] `api-throttle.spec.ts` chạy lúc đỏ lúc xanh. ĐÃ SỬA (`9e36e89`)
+
+- Đúng như reviewer nói. Trước khi sửa, chạy 5 lần thì cả 5 lần đều đỏ ở test đầu, lỗi `điều kiện không xảy ra`. Nguyên nhân: lần `await import('../store/auth')` đầu tiên (nạp lạnh) cần nhiều hơn 200 vòng `setImmediate`.
+- Cách sửa: `beforeAll` nạp sẵn module, và `until()` chờ theo hạn 3 s đo bằng `performance.now()` (không bị đồng hồ giả làm giả) thay cho số vòng cố định.
+- Kiểm chứng: `npx vitest run src/services/api-throttle.spec.ts` chạy 10 lần liên tiếp: `pass=10/10`, `Tests 7 passed (7)`.
+
+### 2. [major] Gộp khách bỏ sót `subscriptions` và `payouts`. ĐÃ SỬA (`b0053f9`)
+
+- Đúng như reviewer nói. Địa chỉ đã chuyển sang target, nhưng gói định kỳ vẫn ở lại khách. `subscriptions.service.ts:228` (`addr.userId !== sub.userId`) vì thế tạm dừng gói và gửi thông báo cho dòng khách không ai đăng nhập được nữa. Với lệnh rút, `affiliate.service.ts` hoàn tiền về `payout.userId`, tức là về dòng khách đã bị đưa số dư về 0.
+- Cách sửa: thêm `subscription.updateMany` và `payout.updateMany` (hai bảng này không có unique theo userId). Chuyển thêm `wishlists`, `flash_sale_reminders`, `brand_follows` và `reorder_reminders` bằng `NOT EXISTS` trên khoá unique; dòng trùng thì giữ của target. Đã sửa docblock: bỏ câu "không mất dữ liệu", ghi rõ những bảng còn để lại ở khách.
+- Test (race spec, Postgres thật): `merge: subscriptions, payouts, wishlist, reminders and brand follows move to target`. Test kiểm `sub.userId === address.userId === target` (điều kiện để cron không tạm dừng gói) và `payout.userId === target` (nơi nhận tiền hoàn khi bị từ chối). Không gọi thẳng `SubscriptionsService`/`AffiliateService` vì hai service này cần nhiều phụ thuộc; điều kiện ở dữ liệu là đúng điều kiện mà hai service đó kiểm. Trước khi sửa test ĐỎ (`Expected: <target> / Received: <guest>`), sau khi sửa XANH.
+- Fake Prisma trong `auth.service.spec.ts` được thêm 2 delegate `subscription` và `payout`.
+
+### 3. [minor] Điểm danh: target thừa hưởng chuỗi của khách. ĐÃ SỬA (`b0053f9`), lệch chữ Q-11
+
+- Đúng như reviewer nói. Chuỗi điểm danh lấy từ dòng có `dayKey` lớn nhất (`loyalty.service.ts` `lastCheckIn`). Code cũ chuyển mọi ngày không trùng, nên một dòng khách mới hơn sẽ trở thành "lần gần nhất" của target.
+- Cách làm mới: chỉ chuyển những ngày của khách CŨ HƠN lần điểm danh gần nhất của target (`dayKey < max(target.dayKey)`). Nếu target chưa từng điểm danh thì chuyển hết, vì khi đó lịch sử của khách là lịch sử duy nhất. Ngày trùng và ngày mới hơn ở lại dòng khách.
+- Lệch so với chữ Q-11: `MERGED:<guestId>:<dayKey>` chỉ áp cho khoá sổ điểm (`points_transactions.refId`, và `coin_transactions.reason` cho nhiệm vụ). Dòng `loyalty_check_ins` của khách không đổi khoá, vì `"MERGED:..." > "2026-..."` khi so chuỗi, nên dòng đó sẽ thành "ngày gần nhất" và làm hỏng chuỗi. Cả hai lượt điểm vẫn được giữ trong sổ, đúng tinh thần Q-11.
+- Hệ quả đã chấp nhận: nếu khách đã điểm danh hôm nay còn target thì chưa, target vẫn điểm danh được hôm nay. Đó là một lượt điểm cho ngày trùng, cùng loại với trường hợp Q-11 đã chấp nhận ("giữ cả hai lượt"), và không làm sai chuỗi.
+- Test: `merge: guest check-ins newer than the target latest stay on the guest, so the target streak is not inherited`. Test này ĐỎ với code cũ, XANH sau khi sửa. Test cũ (trùng ngày 10-09, khác ngày 10-08) vẫn xanh.
+
+### 4. [minor] Retry-After thật là 60 s nên GET không bao giờ được gửi lại. KHÔNG đổi server; đã thêm test và ghi lại (`c152de0`, `601c0c1`)
+
+- Đúng như reviewer nói: lần đo thật ở C-033 cho `retry-after= 60`.
+- Không rút ngắn `blockDuration`. Trong `@nestjs/throttler` 6.5, `ThrottlerStorageService.increment` gọi `resetBlockdRequest` khi hết khoá, và hàm này đưa `totalHits` về 0. Với khoá 5 s, một client gửi nhanh sẽ được khoảng 300 request mỗi ~5 s (khoảng 3.600/phút), tức là làm yếu hẳn giới hạn Q-22.
+- Thay vào đó: thêm test miniapp `Retry-After 60 như server thật gửi` (không gửi lại, báo thân thiện ngay); sửa comment trong `services/api.ts` cho đúng thực tế; thêm comment "vì sao" ở `throttle.config.ts`. GET vẫn được gửi lại khi 429 đến từ proxy phía trước không có `Retry-After`, hoặc có `Retry-After` ngắn.
+
+### 5. [minor] Web: `getProducts`/`getBrands`/`getStorefrontList` trả `[]`, và ISR cache kết quả rỗng. KHÔNG SỬA
+
+Lý do, có bằng chứng:
+
+- Next 14.2.35, `next/dist/server/lib/patch-fetch.js:458`: data cache chỉ lưu khi `res.status === 200`, nên phản hồi 429/5xx không bị cache.
+- Trang chủ `app/page.tsx` đọc `searchParams`, nên là route động: HTML không được ISR lưu. Trang rỗng chỉ hiện cho chính request gặp lỗi.
+- Chỗ duy nhất có thể lưu kết quả thiếu là `app/sitemap.ts` (tĩnh, revalidate 3600). Nhưng file đó tự `try/catch` và cố ý trả sitemap tối thiểu ("thà thiếu trang còn hơn trả 500 cho crawler"), nên dù `lib/api.ts` có ném lỗi thì kết quả vẫn y hệt. Muốn Next giữ sitemap cũ thì phải bỏ `catch` trong `app/sitemap.ts`. File này nằm ngoài nhóm file của gói, và nếu bỏ `catch` thì `next build` không có API sẽ hỏng. Đề xuất cho gói web sau: trong sitemap, chỉ ném lỗi khi đang revalidate ở runtime.
+- Nếu đổi `getProducts`/`getBrands` thành ném lỗi, trang chủ sẽ thành trang lỗi toàn phần (`Promise.all`) chỉ vì `/brands` hỏng. Như vậy trải nghiệm kém hơn hiện tại.
+
+### 6. [minor] 300/phút tính theo user × route, không phải giới hạn chung; `/auth/guest` cho 30 khách mới/phút/IP. KHÔNG SỬA, cần chủ dự án xác nhận
+
+- Đúng về mặt mô tả. Khoá đếm của throttler gồm class + handler + tracker, như đã ghi ở mục C-005 và trong comment `throttle.config.ts`.
+- Lý do giữ nguyên: khách vô danh chung IP (CGNAT, web chưa đăng nhập) mà chia một bộ đếm chung 300/phút thì mỗi lần mở app tốn khoảng 15 endpoint, nên chỉ khoảng 20 người/phút là bị chặn. Đó chính là lỗi mà Q-22 muốn tránh. Đổi sang giới hạn chung toàn API là quyết định chính sách.
+- `/auth/guest`: tạo khách không cộng tiền hay điểm ngay (thưởng giới thiệu chỉ trả khi cashback CONFIRMED). Hạ trần IP sẽ chặn người dùng CGNAT bị rơi về chế độ khách khi đăng nhập Zalo lỗi. Muốn giới hạn riêng số lượt TẠO khách mới thì cần đếm trong `loginAsGuest`, không đếm ở decorator; để chủ dự án quyết.
+
+### Lệnh kiểm chứng sau review
+
+```
+cd apps/api && DATABASE_URL=postgresql://tubu:tubu@localhost:5542/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand auth-merge-guest
+  -> trước khi sửa: Tests: 2 failed, 5 passed, 7 total
+  -> sau khi sửa:   [race] fulfilled=2 rejected=0 errors=[]  [upgrade-race] fulfilled=2 rejected=0 errors=[]  Tests: 7 passed, 7 total
+cd apps/api && npx jest --maxWorkers=1 src/modules/auth            -> Tests: 51 passed, 51 total
+cd apps/api && npx jest --maxWorkers=1 src/common/throttle         -> Tests: 13 passed, 13 total
+cd apps/api && npx tsc --noEmit -p tsconfig.json                   -> (không lỗi)
+cd apps/miniapp && npx vitest run src/services/api-throttle.spec.ts (10 lần) -> pass=10/10, Tests 7 passed (7)
+cd apps/miniapp && npx tsc --noEmit                                -> (không lỗi)
+eslint các file đã sửa                                             -> (không lỗi)
+```
+
+Migration: không có.
