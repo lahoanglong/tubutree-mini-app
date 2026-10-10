@@ -3,6 +3,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CatalogService } from './catalog.service';
 import { ProductQuery } from './dto/product-query.dto';
+import { SuggestQuery } from './dto/suggest-query.dto';
 
 // Không còn @Public() ở class — mỗi route public tự khai báo, để route
 // /products/for-you (cá nhân hoá) bắt buộc JWT theo JwtAuthGuard mặc định.
@@ -55,7 +56,7 @@ export class CatalogController {
 
   @Public()
   @Get('search/suggest')
-  suggest(@Query('q') q: string) {
-    return this.catalog.suggest(q ?? '');
+  suggest(@Query() query: SuggestQuery) {
+    return this.catalog.suggest(query.q ?? '');
   }
 }

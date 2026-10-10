@@ -355,6 +355,9 @@ model Product {
   affiliateBlocked Boolean               @default(false)
   slug             String                @unique
   name             String
+  // Tên đã gấp dấu (= foldVietnamese(name)) cho tìm không dấu có index — trigger DB
+  // products_name_search_sync tự ghi khi INSERT/UPDATE name; code KHÔNG tự ghi cột này.
+  nameSearch       String                @default("")
   description      String                @db.Text
   shortDesc        String?
   images           String[]
@@ -399,6 +402,8 @@ model Product {
   @@index([categoryIds], type: Gin, map: "products_categoryIds_gin")
   @@index([forSegment], type: Gin, map: "products_forSegment_gin")
   @@index([tags], type: Gin, map: "products_tags_gin")
+  // Tìm không dấu (catalog textMatchSql: "nameSearch" LIKE '%x%') — trigram GIN, cần pg_trgm.
+  @@index([nameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_nameSearch_trgm_idx")
   @@map("products")
 }
 

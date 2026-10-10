@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { PaginationQuery } from '../../../common/pagination';
+import { SEARCH_Q_MAX_LENGTH } from './suggest-query.dto';
 
 /** Query string luôn là chuỗi: 'true'/'1' → true, 'false'/'0' → false; giá trị khác để IsBoolean từ chối. */
 function toBool({ value }: { value: unknown }): unknown {
@@ -13,7 +14,7 @@ export class ProductQuery extends PaginationQuery {
   @IsOptional() @IsString() brand?: string;
   @IsOptional() @IsString() category?: string;
   @IsOptional() @IsString() segment?: string; // forSegment (vd mom_baby)
-  @IsOptional() @IsString() q?: string;
+  @IsOptional() @IsString() @MaxLength(SEARCH_Q_MAX_LENGTH) q?: string;
 
   @IsOptional()
   @IsIn(['price_asc', 'price_desc', 'newest', 'best_seller', 'rating'])
