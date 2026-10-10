@@ -227,3 +227,17 @@ Không có.
 ### Việc còn lại (sau review lượt 1)
 - Gói pages: `<h1>` cho các trang chưa dùng `PageHeader`; `aria-label` cho cặp `TimeInput`; đổi `() => void asyncFn()` thành trả Promise; thêm `rowKeyboardProps()` cho hàng `role=radio` ở `address-section.tsx`; chuyển các rail `scroll-x` sang `ScrollRow`.
 - Điều phối viên khi có máy trống: Playwright cho thẻ sản phẩm (buy-flow-4a/4b, design-system-pilot) + axe `color-contrast`/`nested-interactive`/`scrollable-region-focusable`/`label`; kiểm tay ô nhập trên iOS Zalo.
+
+## Review lượt 2
+
+Review độc lập (xác nhận bằng axe-core) tìm thêm 1 lỗi MAJOR và vài minor.
+
+### 1. Checkbox/Radio/Switch có nhãn qua `Field` bị coi là trang trí (MAJOR) - ĐÃ SỬA
+
+- Lỗi: `hasName()` trong `components/ui/form.tsx` chỉ nhìn `label`/`children`/`aria-label`/`aria-labelledby`, bỏ qua `id`. `Field` cấp `id` + `<label htmlFor>` cho control con, nên `<Field label="Đồng ý"><Checkbox/></Field>` có nhãn thật nhưng vẫn bị `aria-hidden` + `tabIndex=-1` (mất khỏi trình đọc màn hình và Tab). `TimeInput` đã coi có `id` là có tên, nên hai component trong cùng `Field` không nhất quán.
+- Sửa: `hasName()` coi `id !== undefined` là có tên (giống `TimeInput`). Control không bọc `Field`, không nhãn, không `id` vẫn là trang trí như trước (checkout.tsx không đổi); không caller nào truyền `id` trần cho Checkbox/Radio/Switch (đã `grep`).
+- Test: `form.spec.tsx` +4 ca (Checkbox/Radio/Switch trong `Field`: `getByLabelText` tồn tại, `tabIndex` khác -1, không có tổ tiên `aria-hidden`; thêm ca `Field` có lỗi giữ tên và mô tả lỗi). Đỏ 4/4 trước khi sửa, xanh sau; `npx vitest run src/components/ui` -> 31 file, 211 test pass; eslint và `tsc --noEmit` sạch.
+
+### Minor còn lại - KHÔNG SỬA
+
+Giữ nguyên danh sách bàn giao ở "Việc còn lại (sau review lượt 1)" (gói pages, điều phối viên: Playwright/axe, kiểm tay iOS Zalo).
