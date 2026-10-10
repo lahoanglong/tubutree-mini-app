@@ -87,12 +87,14 @@ interface NameProps {
   children?: ReactNode;
   'aria-label'?: string;
   'aria-labelledby'?: string;
+  id?: string;
 }
 
-/** Control có tên truy cập khi có nhãn hiển thị (`label` / `children`) hoặc aria-label/aria-labelledby. */
+/** Control có tên truy cập khi có nhãn hiển thị (`label` / `children`), aria-label/aria-labelledby, hoặc `id`:
+ * `Field` cấp `id` để gắn `<label htmlFor>` (giống `TimeInput`), nên có `id` nghĩa là nhãn ngoài đã trỏ vào. */
 function hasName(p: NameProps): boolean {
   const visible = (v: ReactNode) => v !== undefined && v !== null && v !== false && v !== '';
-  return visible(p.label) || visible(p.children) || !!p['aria-label'] || !!p['aria-labelledby'];
+  return visible(p.label) || visible(p.children) || !!p['aria-label'] || !!p['aria-labelledby'] || p.id !== undefined;
 }
 
 // Control không có tên không dùng được bằng trình đọc màn hình (axe `label`, A4-005 — 6 ô ở checkout).

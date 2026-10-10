@@ -176,3 +176,28 @@ describe('control không có tên (C-077)', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Checkbox/Radio/Switch có nhãn qua Field không bị coi là trang trí (C-077)', () => {
+  it.each([
+    ['Checkbox', <Checkbox checked onChange={() => {}} />, 'checkbox-hit-area'],
+    ['Radio', <Radio checked onChange={() => {}} />, 'radio-hit-area'],
+    ['Switch', <Switch checked onChange={() => {}} />, 'switch-hit-area'],
+  ])('%s trong Field: đọc được tên, nằm trong thứ tự Tab, không có tổ tiên aria-hidden', (_n, ui, testId) => {
+    render(<Field label="Đồng ý">{ui}</Field>);
+    const input = screen.getByLabelText('Đồng ý') as HTMLInputElement;
+    expect(input.tabIndex).not.toBe(-1);
+    expect(input.closest('[aria-hidden="true"]')).toBeNull();
+    expect(screen.getByTestId(testId)).not.toHaveAttribute('aria-hidden');
+  });
+
+  it('Field có lỗi: control vẫn có tên và mô tả lỗi, không bị ẩn', () => {
+    render(
+      <Field label="Đồng ý" error="Phải đồng ý">
+        <Checkbox checked={false} onChange={() => {}} />
+      </Field>,
+    );
+    const input = screen.getByLabelText('Đồng ý');
+    expect(input.closest('[aria-hidden="true"]')).toBeNull();
+    expect(input).toHaveAccessibleDescription('Phải đồng ý');
+  });
+});
