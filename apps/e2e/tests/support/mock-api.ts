@@ -310,6 +310,9 @@ export const test = base.extend<{ api: MockApi }>({
   api: [
     async ({ page }, use, testInfo) => {
       const api = new MockApi();
+      // Trang chủ thử GET /home + /home/me trước; 404 (như API cũ) làm nó lùi về từng request lẻ — đúng
+      // luồng mà các spec Home/Browse hiện có đã mock. Spec muốn kiểm đường gộp thì api.get('/home', ...).
+      api.allowUnmocked('GET /home', 'GET /home/me');
       // Đăng ký TRƯỚC → ưu tiên THẤP NHẤT (Playwright chạy route đăng ký sau trước).
       await page.route(
         (url) => !LOCAL_HOSTS.has(url.hostname),
