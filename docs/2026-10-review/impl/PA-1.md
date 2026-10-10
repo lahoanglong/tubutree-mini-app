@@ -136,3 +136,67 @@ Migration: không.
 ### Việc còn lại
 
 - Khi làm thiết kế "userId = khách cuối" (yêu cầu 5), bước chặn này phải chạy trước bước khớp tài khoản theo SĐT (đã ghi ở mục 5 của thiết kế).
+
+## C-002 — Hoa hồng CTV tạo trong cùng transaction với đơn, chống trùng — XONG
+
+### Đã sửa
+
+- `affiliate.service.ts` `createCommissionForOrder(orderId, db = this.prisma)`: nhận client của transaction caller; ghi bằng `commission.createMany({ skipDuplicates: true })` (`INSERT ... ON CONFLICT DO NOTHING`) nên gọi lại / gọi song song không tạo dòng thứ 2 và không làm abort transaction của caller (tránh bẫy "bắt P2002 trong tx", A2-006).
+- `checkout.service.ts` `placeOrder` (chỉ khối tạo hoa hồng): gọi `createCommissionForOrder(created.id, tx)` trong tx đơn; bỏ `.catch(log)` sau commit. Lỗi tạo hoa hồng làm đơn (kho, ví, điểm, coupon) rollback và lỗi nổi lên client, không còn đơn tồn tại mà CTV mất hoa hồng.
+- `affiliate.service.ts` `placeOrderForCustomer` (đơn hộ): như trên, trong tx đơn, bỏ `.catch(log)`.
+- Schema `Commission`: `@@unique([orderId, affiliateUserId])`.
+
+### Migration
+
+`apps/api/prisma/migrations/20261010010000_commission_order_affiliate_unique` — additive: khối `DO $$` đếm cặp `(orderId, affiliateUserId)` trùng; có trùng thì `RAISE EXCEPTION` (không tự xoá vì dòng trùng có thể đã APPROVED/PAID); không trùng thì `CREATE UNIQUE INDEX "commissions_orderId_affiliateUserId_key"`. Đầu file ghi truy vấn liệt kê dòng trùng và cách chạy lại (`prisma migrate resolve --rolled-back ...` rồi `migrate deploy`).
+
+Đã thử trên Postgres riêng `tubu_it_pa1:5541` khi DB đang có trùng (do race spec đỏ tạo):
+```
+npx prisma migrate deploy
+  Database error code: P0001
+  ERROR: commissions có 2 cặp (orderId, affiliateUserId) trùng; đối soát và xoá dòng thừa (xem đầu migration.sql) rồi chạy lại migrate deploy
+npx prisma migrate resolve --rolled-back 20261010010000_commission_order_affiliate_unique   # sau khi xoá 10 dòng trùng của test
+npx prisma migrate deploy
+  All migrations have been successfully applied.
+\d commissions  ->  "commissions_orderId_affiliateUserId_key" UNIQUE, btree ("orderId", "affiliateUserId")
+npx prisma migrate diff --from-url <IT> --to-schema-datamodel prisma/schema.prisma --script | grep -i commission  -> (rỗng, không lệch)
+```
+Trước khi deploy PROD nên chạy truy vấn kiểm trùng (đầu migration.sql). Code cũ chỉ tạo hoa hồng 1 lần/đơn nên kỳ vọng 0 dòng.
+
+### Test (đỏ → xanh)
+
+Race spec mới `apps/api/test/integration-race/commission-create.race-spec.ts` (Postgres thật), commit đỏ riêng `2ab0036`:
+1. 10 lần `createCommissionForOrder` song song cùng đơn → đúng 1 dòng, không lần nào lỗi.
+2. DB từ chối dòng hoa hồng thứ 2 cùng (đơn, người hưởng) → P2002.
+3. Đơn hộ: hoa hồng có ngay khi `placeOrderForCustomer` trả về.
+4. Đơn hộ: tạo hoa hồng lỗi → `placeOrderForCustomer` ném lỗi, không có đơn, tồn kho giữ nguyên.
+
+Unit `checkout.service.spec.ts` thêm 3 ca (gọi với `tx` trước dọn giỏ/đẩy Pancake; lỗi hoa hồng → placeOrder lỗi, không đẩy Pancake/báo khách; không người giới thiệu → không gọi). `affiliate.service.spec.ts` đổi mock `commission.create` → `createMany`, tx giả của ca "order_placed bằng tx" có thêm `order.findUniqueOrThrow`/`variation.findMany`.
+
+```
+cd apps/api
+DATABASE_URL=postgresql://tubu:tubu@localhost:5541/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand commission-create   # trước khi sửa
+  [commission x10] -> Received length: 10 (kỳ vọng 1); dòng thứ 2 được insert; đơn hộ vẫn tạo khi hoa hồng lỗi
+  Tests: 3 failed, 1 passed, 4 total
+# checkout.service.ts bản cũ + spec mới, -t C-002:
+  Tests: 2 failed, 54 skipped, 1 passed, 57 total
+# sau khi sửa:
+DATABASE_URL=... npx jest -c test/integration-race/jest.config.js --runInBand commission-create ctv-assisted-refund affiliate.race
+  [commission x10] fulfilled=10 rejected=0 rows=1 errors=[]
+  Test Suites: 3 passed, 3 total   Tests: 15 passed, 15 total
+npx jest --maxWorkers=1 src/modules/affiliate src/modules/checkout
+  Test Suites: 5 passed, 5 total   Tests: 185 passed, 185 total
+npx tsc --noEmit -p tsconfig.json   -> không lỗi
+npx eslint <5 file đã sửa>          -> 0 lỗi, 0 cảnh báo
+```
+
+### Giả định
+
+- Lỗi tạo hoa hồng giờ làm hỏng cả lần đặt đơn (khách thấy lỗi, thử lại). Chọn vì an toàn tiền: thà đơn không thành còn hơn đơn thành mà hoa hồng mất không dấu vết. Lỗi kiểu này chỉ là lỗi DB, khi đó các bước khác của tx đơn cũng hỏng như nhau.
+- Đọc `affiliateRate` trong tx (không đọc trước tx như đề xuất A2-005): thêm 2 câu SELECT ngắn trong tx, đổi lại tỉ lệ dùng đúng thời điểm đơn commit.
+- Migration chặn khi có trùng thay vì tự dọn: dọn tự động có thể xoá dòng đã chi tiền.
+
+### Việc còn lại
+
+- Đơn cũ (trước bản này) có `referrerUserId` mà thiếu hoa hồng do lỗi bị nuốt: chưa có cron bù. Đối soát bằng truy vấn ở A2-005 (`02-*.md`), lưu ý đơn có rate 0 / tự giới thiệu organic hợp lệ không có hoa hồng; bù từng đơn có thể gọi `createCommissionForOrder(orderId)` (giờ idempotent). Đơn mới không cần cron vì hoa hồng commit cùng đơn.
+- Mock `commission: { create }` ở ca "order_placed bằng tx" trong `affiliate.service.spec.ts` không còn được dùng (vô hại).
