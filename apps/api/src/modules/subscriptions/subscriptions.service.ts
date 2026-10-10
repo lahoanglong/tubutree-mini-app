@@ -32,6 +32,15 @@ export type SubscriptionPaymentMethod = (typeof SUBSCRIPTION_PAYMENT_METHODS)[nu
 /** Khách chỉ được hẹn ngày bắt đầu trong khoảng này (tính theo ngày giờ Việt Nam). */
 export const MAX_START_DAYS_AHEAD = 60;
 
+/** Cùng trần số lượng một dòng giỏ hàng (cart.dto). */
+export const MAX_SUBSCRIPTION_QUANTITY = 999;
+
+/**
+ * Hạn mức đơn COD — bằng hằng số ở checkout.service (đơn kỳ không đi qua checkout nên phải tự chặn, không thì gói
+ * số lượng lớn lách được hạn mức COD).
+ */
+export const SUBSCRIPTION_COD_MAX = 5_000_000;
+
 interface CreateSubInput {
   variationId: string;
   quantity: number;
@@ -58,6 +67,10 @@ class SubscriptionOutOfStockError extends Error {}
 class SubscriptionAddressError extends Error {}
 /** Ví Tubu không đủ trả đơn kỳ: không sinh đơn nợ, gói tạm dừng. */
 class SubscriptionWalletShortError extends Error {}
+/** Đơn kỳ trả COD vượt hạn mức COD: không sinh đơn, gói tạm dừng. */
+class SubscriptionCodLimitError extends Error {}
+
+const COD_LIMIT_TEXT = `${SUBSCRIPTION_COD_MAX.toLocaleString('vi-VN')}đ`;
 
 const WALLET_SHORT_MESSAGE = 'Số dư Ví Tubu không đủ để thanh toán đơn định kỳ.';
 
@@ -135,6 +148,7 @@ export class SubscriptionsService {
       throw new BadRequestException('Chu kỳ chỉ nhận 4/6/8/10 tuần.');
     }
     const paymentMethod = this.parsePaymentMethod(dto.paymentMethod);
+    this.assertQuantity(dto.quantity);
     const firstRunAt = this.parseStartDate(dto.startDate);
     const variation = await this.prisma.variation.findUnique({
       where: { id: dto.variationId },
@@ -199,6 +213,11 @@ export class SubscriptionsService {
         throw new BadRequestException('Số dư Ví Tubu không đủ để thanh toán đơn đầu tiên, hãy nạp thêm hoặc chọn cách trả khác.');
       }
       if (err instanceof SubscriptionAddressError) throw new BadRequestException('Địa chỉ không hợp lệ.');
+      if (err instanceof SubscriptionCodLimitError) {
+        throw new BadRequestException(
+          `Đơn vượt hạn mức thanh toán khi nhận hàng (${COD_LIMIT_TEXT}), vui lòng giảm số lượng hoặc chọn Ví Tubu/chuyển khoản.`,
+        );
+      }
       throw err;
     }
   }
@@ -264,9 +283,7 @@ export class SubscriptionsService {
    */
   async update(userId: string, id: string, dto: UpdateSubInput) {
     const paymentMethod = dto.paymentMethod === undefined ? undefined : this.parsePaymentMethod(dto.paymentMethod);
-    if (dto.quantity !== undefined && (!Number.isInteger(dto.quantity) || dto.quantity < 1)) {
-      throw new BadRequestException('Số lượng không hợp lệ.');
-    }
+    if (dto.quantity !== undefined) this.assertQuantity(dto.quantity);
     let productName = 'Sản phẩm';
     let variationId: string | null = null;
     try {
@@ -500,6 +517,14 @@ export class SubscriptionsService {
         await this.pauseSubscription(sub, 'Số dư Ví Tubu không đủ để thanh toán đơn kỳ này', 'insufficient_wallet');
         return false;
       }
+      if (err instanceof SubscriptionCodLimitError) {
+        await this.pauseSubscription(
+          sub,
+          `Giá trị đơn kỳ vượt hạn mức thanh toán khi nhận hàng (${COD_LIMIT_TEXT}), hãy giảm số lượng hoặc đổi sang Ví Tubu/chuyển khoản`,
+          'cod_limit',
+        );
+        return false;
+      }
       if (err instanceof SubscriptionOutOfStockError) {
         // Khác nhánh isActive/địa chỉ ở trên (pause hẳn): hết hàng báo cho khách biết kỳ này
         // không có đơn, KHÔNG pause lịch — cron sẽ tự thử lại ở chu kỳ kế (nextRunAt đã advance).
@@ -566,6 +591,7 @@ export class SubscriptionsService {
     const total = goods + shippingFee;
     const method = sub.paymentMethod;
     const paid = method === 'WALLET';
+    if (method === 'COD' && total > SUBSCRIPTION_COD_MAX) throw new SubscriptionCodLimitError('cod limit');
 
     // Trừ stock ATOMIC (mirror checkout.placeOrder/affiliate.processGroupOrder) TRONG cùng
     // transaction với tạo đơn — không đủ stock → throw, rollback; nextRunAt đã advance ở claim
@@ -704,6 +730,12 @@ export class SubscriptionsService {
       SELECT "id", "userId", "variationId", "quantity", "addressId", "status", "paymentMethod"::text AS "paymentMethod"
       FROM "subscriptions" WHERE "id" = ${id} FOR UPDATE`;
     return rows[0] ?? null;
+  }
+
+  private assertQuantity(quantity: number): void {
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_SUBSCRIPTION_QUANTITY) {
+      throw new BadRequestException(`Số lượng không hợp lệ (1–${MAX_SUBSCRIPTION_QUANTITY}).`);
+    }
   }
 
   private parsePaymentMethod(method: string | undefined): SubscriptionPaymentMethod {

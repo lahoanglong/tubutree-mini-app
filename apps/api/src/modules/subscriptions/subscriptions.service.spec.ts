@@ -153,6 +153,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       paymentMethod?: 'COD' | 'WALLET' | 'BANK_TRANSFER';
       lockedStatus?: string;
       applyDelta?: jest.Mock;
+      quantity?: number;
     } = {},
   ) {
     const due = [{ id: 's1', userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4, nextRunAt: new Date(Date.now() - 60_000) }];
@@ -167,6 +168,8 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         updateMany,
         update: subUpdate,
         count: jest.fn().mockResolvedValue(opts.activeCount ?? 1),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data })),
       },
       variation: {
         findUnique: jest.fn().mockResolvedValue(
@@ -184,7 +187,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
           id: 's1',
           userId: 'u1',
           variationId: 'v1',
-          quantity: 1,
+          quantity: opts.quantity ?? 1,
           addressId: 'a1',
           status: opts.lockedStatus ?? 'ACTIVE',
           paymentMethod: opts.paymentMethod ?? 'COD',
@@ -420,6 +423,39 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       );
     });
 
+    // Checkout chặn COD > 5.000.000đ; đơn kỳ không qua checkout nên phải tự chặn, không thì tạo gói số lượng lớn
+    // là lách được hạn mức COD (đơn đầu giao ngay giữ kho + đẩy Pancake).
+    it('COD vượt hạn mức 5.000.000đ → không giữ kho, không đơn, tạm dừng gói + báo lý do (review)', async () => {
+      const { svc, orderCreate, stockExecuteRaw, updateMany, notify, analytics } = makeProcess(1, { quantity: 60 });
+      await svc.processDue();
+      expect(stockExecuteRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect(updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 's1', status: 'ACTIVE' }, data: expect.objectContaining({ status: 'PAUSED' }) }),
+      );
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', { reason: expect.stringContaining('5.000.000đ') });
+      expect(analytics.recordBestEffort).toHaveBeenCalledWith(
+        expect.objectContaining({ props: expect.objectContaining({ action: 'order_failed', reason: 'cod_limit' }) }),
+      );
+    });
+
+    it('COD vượt hạn mức ở đơn đầu giao ngay → 400, không tạo gói lẫn đơn (review)', async () => {
+      const { svc, orderCreate, stockExecuteRaw } = makeProcess(1, { quantity: 60 });
+      await expect(
+        svc.create('u1', { variationId: 'v1', quantity: 60, intervalWeeks: 4, addressId: 'a1' }),
+      ).rejects.toThrow('hạn mức');
+      expect(stockExecuteRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('Ví Tubu / chuyển khoản không bị hạn mức COD', async () => {
+      for (const paymentMethod of ['WALLET', 'BANK_TRANSFER'] as const) {
+        const { svc, orderCreate } = makeProcess(1, { quantity: 60, paymentMethod });
+        await svc.processDue();
+        expect(orderCreate).toHaveBeenCalledTimes(1);
+      }
+    });
+
     it('khách tạm dừng gói giữa lúc claim và lúc khoá dòng → không sinh đơn', async () => {
       const { svc, orderCreate, stockExecuteRaw } = makeProcess(1, { lockedStatus: 'PAUSED' });
       await svc.processDue();
@@ -447,6 +483,30 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     });
   });
 
+});
+
+describe('SubscriptionsService — trần số lượng 999 như giỏ hàng (review)', () => {
+  it('create số lượng 1000 → 400, không ghi gì', async () => {
+    const { svc, create } = makeService();
+    await expect(svc.create('u1', dto({ quantity: 1000 }))).rejects.toThrow('Số lượng');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('update số lượng 1000 → 400 trước khi mở transaction', async () => {
+    const $transaction = jest.fn();
+    const svc = new SubscriptionsService(
+      { $transaction } as unknown as PrismaService,
+      config,
+      pricing,
+      loyalty,
+      notifications,
+      pancakeStub(),
+      makeAnalytics(),
+      walletLedger(),
+    );
+    await expect(svc.update('u1', 's1', { quantity: 1000 })).rejects.toThrow('Số lượng');
+    expect($transaction).not.toHaveBeenCalled();
+  });
 });
 
 describe('SubscriptionsService.effectiveDiscountPct', () => {
