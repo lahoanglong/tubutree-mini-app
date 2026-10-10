@@ -70,3 +70,68 @@ npx eslint <các file đã sửa>         → exit 0
   `pancake.processor.spec.ts` / `zalopay.service.spec.ts` theo shape `where` mới).
 - Yêu cầu 3 (web admin: nút trạng thái hợp lệ + nút "Đã nhận tiền"), 4 (cron huỷ PENDING_PAYMENT),
   5 (C-008 phần admin), 6 (C-050) — các lượt sau.
+
+## Lượt 2 — C-024 yêu cầu 4: cron tự huỷ PENDING_PAYMENT quá hạn (+ race spec cron vs tiền về)
+
+### C-024 — yêu cầu 4 XONG (yêu cầu 3 web, 5 C-008, 6 C-050 ở lượt sau)
+
+**Guard "chỉ huỷ khi vẫn chưa trả"** (commit `98969e9`)
+- `OrderStatusService.setStatus` thêm `opts.onlyIfUnpaid`: ảnh chụp đã không còn UNPAID → trả đơn nguyên trạng, không mở
+  tx; ngược lại câu lật có thêm `paymentStatus: 'UNPAID'` trong `where`. Tiền về (markPaid / callback ZaloPay / Pancake)
+  chen giữa lúc cron đọc và lúc cron lật → lần huỷ trượt, đơn giữ PAID. Không truyền cờ → hành vi cũ không đổi.
+
+**Cron** (commit `3b33b7b`) — `orders/pending-payment-expiry.cron.ts` `PendingPaymentExpiryCron`, đăng ký ở `orders.module.ts`
+- `@Cron('0 */10 * * * *', { name: 'orders.pending-payment-expiry', timeZone: 'Asia/Ho_Chi_Minh' })`, thân bọc try/catch.
+- Quét `type=RETAIL` (khách lẻ + CTV lên đơn hộ), `status=PENDING_PAYMENT`, `paymentStatus=UNPAID`, `paymentMethod ∈
+  PREPAID_METHODS` (mới export từ `order-transition.ts`, suy từ bảng `PREPAID_METHOD` — mọi phương thức trừ COD),
+  `createdAt < now − TTL`; lô 200 đơn cũ nhất mỗi lượt (index `[status, createdAt]` có sẵn).
+- Huỷ qua đường huỷ chuẩn `setStatus(id, 'CANCELLED', { actorType: 'SYSTEM', note: 'Tự huỷ: quá N giờ chưa thanh toán',
+  onlyIfUnpaid: true })`: hoàn kho + quota flash + coupon (OrderReversalService), đảo điểm/hoa hồng, dòng
+  `order_status_history` actor SYSTEM, báo khách `ORDER_CANCELLED`, huỷ vận đơn Gomdon nếu có. Một đơn lỗi không chặn đơn khác.
+- Chống chạy chồng 2 lớp: cờ `running` trong instance + `pg_try_advisory_xact_lock(hashtext('cron:orders.pending_payment_expiry'))`
+  trong một transaction giữ suốt lượt (nhiều instance API → chỉ một instance quét; bên kia trả `{skipped:'LOCKED'}`).
+- Config `orders.pending_payment_ttl_hours` (mặc định 24) thêm vào `prisma/seed.ts` dạng upsert `createOnly` (không ghi
+  đè giá trị admin). Cron kẹp giá trị vào [1, 720] giờ; không phải số → 24.
+
+**Test thêm (đỏ → xanh)**
+- `order-status.service.spec.ts` +3 (`onlyIfUnpaid`): trước khi sửa `Tests: 2 failed, 1 passed` (lọc -t), sau sửa 40/40.
+- `pending-payment-expiry.cron.spec.ts` mới, 13 test (timeZone qua metadata `SCHEDULE_CRON_OPTIONS`, bộ lọc where, gọi
+  setStatus đúng tham số, đơn được trả chen giữa không tính là huỷ, lỗi 1 đơn, kẹp TTL 0/−5/'abc'/null/100000, khoá advisory
+  bị giữ, chạy chồng trong instance, handleCron nuốt lỗi): trước khi có file nguồn → suite FAIL (không import được).
+- Race spec mới `test/integration-race/pending-payment-expiry.race-spec.ts` (Postgres thật, có order item + variation để đo kho):
+  (a) cron đọc đơn, `markPaid` commit chen giữa → đơn CONFIRMED+PAID, kho giữ nguyên, không dòng CANCELLED, chỉ 1 thông báo
+  ORDER_CONFIRMED; (b) tiền về chỉ lật paymentStatus (status vẫn PENDING_PAYMENT) chen giữa → không huỷ, không hoàn ví;
+  (c) 8 đơn, cron + markPaid đồng thời → mỗi đơn hoặc PAID nguyên kho hoặc CANCELLED/UNPAID hoàn kho đúng 1 lần, markPaid
+  thua trả `CLOSED`; (d) 2 instance cron cùng lúc → 1 `LOCKED`, mỗi đơn huỷ + báo khách đúng 1 lần; (e) đơn mới, đơn
+  DEALER, COD, đã PAID không bị đụng.
+  Kiểm đột biến: bỏ `paymentStatus:'UNPAID'` khỏi where của setStatus → (b) ĐỎ (`1 failed, 4 passed`); bỏ kiểm khoá
+  advisory → (d) ĐỎ (`1 failed, 4 passed`); khôi phục → xanh.
+
+**Lệnh kiểm chứng + output thật**
+```
+cd apps/api
+npx jest --maxWorkers=1 src/modules/orders src/modules/admin src/modules/merchant src/modules/integrations/pancake src/modules/integrations/payment
+  Test Suites: 26 passed, 26 total
+  Tests:       499 passed, 499 total
+DATABASE_URL=postgresql://tubu:tubu@localhost:5543/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand \
+  test/integration-race/pending-payment-expiry.race-spec.ts test/integration-race/admin-confirm-payment.race-spec.ts test/integration-race/order-cancel.race-spec.ts
+  PASS pending-payment-expiry / admin-confirm-payment / order-cancel — Tests: 11 passed, 11 total
+DATABASE_URL=<IT 5543> npx tsx prisma/seed.ts → "✅ Seed done."; system_configs: orders.pending_payment_ttl_hours|24|orders
+npx tsc --noEmit -p tsconfig.json → exit 0 ; npx eslint <file đã sửa> → exit 0
+```
+
+**Migration:** không có (dùng index `orders(status, createdAt)` sẵn có; config là dữ liệu seed).
+
+**Giả định**
+- "Đơn trả trước của khách lẻ/CTV" = `type=RETAIL` + phương thức khác COD. Đơn DEALER không quét chút nào (kể cả đại lý trả
+  trước chuyển khoản): đơn đại lý có backorder/công nợ và đã có luồng xác nhận riêng ở `/admin/dealer-orders`; an toàn hơn là
+  không tự huỷ đơn đại lý.
+- TTL tính từ `createdAt`; sàn 1 giờ để cấu hình nhầm (0) không huỷ đơn khách đang chuyển khoản. Trần 720 giờ. Không thêm
+  khoá vào `SystemConfigService.RANGES` vì file đó ngoài nhóm file của gói — cron tự kẹp.
+- Tiền về SAU khi cron đã huỷ: markPaid trả `CLOSED`, callback ZaloPay/Pancake log "CẦN HOÀN TIỀN THỦ CÔNG" (hành vi sẵn có) —
+  không hồi sinh đơn đã nhả kho.
+- Khoá advisory giữ 1 kết nối pool suốt lượt (timeout tx 15 phút, lô 200 đơn); mỗi lần huỷ dùng tx riêng trên kết nối khác.
+
+**Việc còn lại**
+- Yêu cầu 3 (web admin), 5 (C-008 phần admin), 6 (C-050) — các lượt sau.
+- Sau deploy: chạy seed (hoặc thêm tay khoá `orders.pending_payment_ttl_hours`), nếu không cron dùng mặc định 24 giờ.
