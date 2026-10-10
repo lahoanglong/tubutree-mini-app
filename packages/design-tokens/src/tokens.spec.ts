@@ -7,22 +7,24 @@ const css = readFileSync(new URL('./tokens.css', import.meta.url), 'utf-8');
 /** Resolve `--name` through var() chains declared in the :root block of tokens.css to a hex. */
 function resolveToken(name: string): string {
   const decl = css.match(new RegExp(`${name}:\\s*([^;]+);`));
-  if (!decl) throw new Error(`token ${name} not found in tokens.css`);
-  const value = decl[1].trim();
+  const value = decl?.[1]?.trim();
+  if (!value) throw new Error(`token ${name} not found in tokens.css`);
   const ref = value.match(/^var\((--[\w-]+)/);
-  return ref ? resolveToken(ref[1]) : value;
+  return ref?.[1] ? resolveToken(ref[1]) : value;
+}
+
+function channel(hex: string, at: number): number {
+  const c = parseInt(hex.slice(at, at + 2), 16) / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 }
 
 function luminance(hex: string): number {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) =>
-    c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
-  );
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return 0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5);
 }
 
 function contrast(fg: string, bg: string): number {
-  const [hi, lo] = [luminance(fg), luminance(bg)].sort((a, b) => b - a);
-  return (hi + 0.05) / (lo + 0.05);
+  const [lf, lb] = [luminance(fg), luminance(bg)];
+  return (Math.max(lf, lb) + 0.05) / (Math.min(lf, lb) + 0.05);
 }
 
 describe('design-tokens/tokens.css', () => {

@@ -7,7 +7,7 @@ const css = readFileSync(new URL('./fonts.css', import.meta.url), 'utf-8');
 /** Weights declared for a family in fonts.css (one @font-face per weight, each with its own file). */
 function declaredWeights(family: string): number[] {
   return [...css.matchAll(/@font-face\s*\{([^}]*)\}/g)]
-    .map((m) => m[1])
+    .map((m) => m[1] ?? '')
     .filter((face) => new RegExp(`font-family:\\s*['"]${family}['"]`).test(face))
     .map((face) => Number(face.match(/font-weight:\s*(\d+)/)?.[1]));
 }

@@ -44,29 +44,35 @@ describe('web tailwind.config', () => {
   // C-023 (A4-006): the legacy orange (#E08C1C) was the CTA fill with white text at 2.65:1 and the
   // text colour on #FAFAF8 at 2.53:1. The CTA shades must clear WCAG 1.4.3 (4.5:1) in both roles.
   describe('legacy orange CTA reaches WCAG AA (4.5:1)', () => {
-    const luminance = (hex: string) => {
-      const [r, g, b] = [1, 3, 5]
-        .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-        .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const channel = (hex: string, at: number) => {
+      const c = parseInt(hex.slice(at, at + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
     };
+    const luminance = (hex: string) => 0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5);
     const contrast = (a: string, b: string) => {
-      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-      return (hi + 0.05) / (lo + 0.05);
+      const [la, lb] = [luminance(a), luminance(b)];
+      return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
     };
-    const p = colors.primary as Shades;
-    const n = colors.neutral as Shades;
+    const shade = (family: Shades, key: number) => {
+      const hex = family[key];
+      if (!hex) throw new Error(`missing shade ${key}`);
+      return hex;
+    };
+    const primary = colors.primary as Shades;
+    const neutral = colors.neutral as Shades;
+    const p = (key: number) => shade(primary, key);
+    const n = (key: number) => shade(neutral, key);
 
     it('white label on the primary-600 button fill', () => {
-      expect(contrast('#FFFFFF', p[600])).toBeGreaterThanOrEqual(4.5);
+      expect(contrast('#FFFFFF', p(600))).toBeGreaterThanOrEqual(4.5);
     });
     it('primary-600 as text on white, the page background and the primary-50 tint', () => {
-      for (const bg of ['#FFFFFF', n[50], p[50]]) expect(contrast(p[600], bg)).toBeGreaterThanOrEqual(4.5);
+      for (const bg of ['#FFFFFF', n(50), p(50)]) expect(contrast(p(600), bg)).toBeGreaterThanOrEqual(4.5);
     });
     it('primary-700 (hover fill / tinted-badge text) is darker than 600 and also passes', () => {
-      expect(luminance(p[700])).toBeLessThan(luminance(p[600]));
-      expect(contrast('#FFFFFF', p[700])).toBeGreaterThanOrEqual(4.5);
-      for (const bg of [p[50], p[100]]) expect(contrast(p[700], bg)).toBeGreaterThanOrEqual(4.5);
+      expect(luminance(p(700))).toBeLessThan(luminance(p(600)));
+      expect(contrast('#FFFFFF', p(700))).toBeGreaterThanOrEqual(4.5);
+      for (const bg of [p(50), p(100)]) expect(contrast(p(700), bg)).toBeGreaterThanOrEqual(4.5);
     });
   });
 });
