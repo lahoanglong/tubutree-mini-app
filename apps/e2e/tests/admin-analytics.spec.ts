@@ -48,6 +48,8 @@ test.describe('Admin — tab Retention & North-star', () => {
         ordersPerBuyerMtd: 4.1,
         dauProxyRefreshToken: 30,
         dauEventBased: null,
+        ns1CohortSize: null,
+        ns1RepeatCount: null,
       },
     ];
     api.get('/admin/analytics/retention-daily', rows);
