@@ -106,6 +106,18 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(labels).toEqual(expect.arrayContaining(['Sao chép: 9984606774', 'Sao chép: TB-9']));
   });
 
+  // Order.discount gộp mã + combo + giảm hạng + Điểm Xanh nên số tiền không được gắn riêng cho mã.
+  it('dòng Giảm giá là tổng trung tính, mã và Điểm Xanh nằm ở dòng ghi chú riêng', async () => {
+    mocks.order = { ...structuredClone(ORDER), discount: 80000, pointsUsed: 500 };
+    const { container } = await mount();
+    const rows = Array.from(container.querySelectorAll('div.flex.justify-between'));
+    const row = rows.find((r) => (r.textContent ?? '').includes('-80.000đ'));
+    expect(row?.firstElementChild?.textContent).toBe('Giảm giá');
+    expect(container.textContent).not.toContain('Giảm giá (');
+    expect(container.textContent).toContain('Mã giảm giá đã áp dụng: WELCOME30');
+    expect(container.textContent).toContain('Đã dùng 500 Điểm Xanh (đã tính trong giảm giá)');
+  });
+
   it('đủ truy cập: một h1, không nhảy cấp, mọi điều khiển có tên và vùng chạm 44px', async () => {
     const { container } = await mount();
     expect(headingProblems(container)).toEqual([]);
