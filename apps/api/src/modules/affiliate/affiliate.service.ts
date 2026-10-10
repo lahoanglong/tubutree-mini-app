@@ -48,13 +48,29 @@ export class AffiliateService {
     private readonly analytics: AnalyticsEventsService,
   ) {}
 
-  async register(userId: string) {
+  async register(userId: string, termsVersion?: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.role === 'DEALER' || user.role === 'ADMIN' || user.role === 'STAFF') {
       throw new BadRequestException('Tài khoản này không thể đăng ký CTV.');
     }
-    if (user.role !== 'AFFILIATE') {
-      await this.prisma.user.update({ where: { id: userId }, data: { role: 'AFFILIATE' } });
+    const data: Prisma.UserUpdateInput = {};
+    if (user.role !== 'AFFILIATE') data.role = 'AFFILIATE';
+    // Bằng chứng người dùng đã đồng ý điều khoản hoa hồng/thuế: ghi vào User.metadata (đã dùng cho
+    // segments/dealerTierId, không cần migration). Chỉ ghi khi phiên bản đổi để giữ thời điểm đồng
+    // ý đầu tiên của từng phiên bản; merge để không mất khoá metadata khác.
+    const version = termsVersion?.trim();
+    if (version) {
+      const meta = (user.metadata as Record<string, unknown> | null) ?? {};
+      const prev = meta.affiliateTerms as { version?: string } | undefined;
+      if (prev?.version !== version) {
+        data.metadata = {
+          ...meta,
+          affiliateTerms: { version, acceptedAt: new Date().toISOString() },
+        } as Prisma.InputJsonValue;
+      }
+    }
+    if (Object.keys(data).length > 0) {
+      await this.prisma.user.update({ where: { id: userId }, data });
     }
     return { ok: true, referralCode: user.referralCode };
   }
