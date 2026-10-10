@@ -45,20 +45,38 @@ describe('WalletLedgerService.applyDelta (real Postgres)', () => {
     return { balance: user.walletBalance, rows, sum: rows.reduce((s, r) => s + r.delta, 0) };
   }
 
-  /** Mỗi dòng: balanceAfter - delta phải là balanceAfter của đúng một dòng khác (hoặc 0 cho dòng đầu). */
+  /**
+   * Chuỗi balanceAfter liền mạch: xếp được MỌI dòng thành một dãy 0 → … → finalBalance, mỗi dòng nối
+   * từ balanceAfter của dòng trước. createdAt là giờ bắt đầu tx (không phải thứ tự commit) nên không
+   * dùng để xếp; coi mỗi dòng là cạnh (balanceAfter - delta) → balanceAfter và kiểm điều kiện đường
+   * Euler: bậc vào/ra cân bằng trừ điểm đầu 0 và điểm cuối, mọi cạnh liên thông với 0.
+   */
   function expectContiguousChain(rows: { delta: number; balanceAfter: number }[], finalBalance: number) {
-    let cur = 0;
-    let walked = 0;
-    const remaining = [...rows];
-    while (remaining.length > 0) {
-      const idx = remaining.findIndex((r) => r.balanceAfter - r.delta === cur);
-      expect(idx).toBeGreaterThanOrEqual(0);
-      cur = remaining[idx]!.balanceAfter;
-      remaining.splice(idx, 1);
-      walked += 1;
+    const net = new Map<number, number>();
+    const adj = new Map<number, number[]>();
+    const link = (a: number, b: number) => adj.set(a, [...(adj.get(a) ?? []), b]);
+    for (const r of rows) {
+      const from = r.balanceAfter - r.delta;
+      net.set(from, (net.get(from) ?? 0) + 1);
+      net.set(r.balanceAfter, (net.get(r.balanceAfter) ?? 0) - 1);
+      link(from, r.balanceAfter);
+      link(r.balanceAfter, from);
     }
-    expect(walked).toBe(rows.length);
-    expect(cur).toBe(finalBalance);
+    for (const [node, d] of net) {
+      const expected = 0 === finalBalance ? 0 : node === 0 ? 1 : node === finalBalance ? -1 : 0;
+      expect({ node, d }).toEqual({ node, d: expected });
+    }
+    const seen = new Set<number>([0]);
+    const stack = [0];
+    while (stack.length > 0) {
+      for (const n of adj.get(stack.pop()!) ?? []) {
+        if (!seen.has(n)) {
+          seen.add(n);
+          stack.push(n);
+        }
+      }
+    }
+    expect([...adj.keys()].filter((n) => !seen.has(n))).toEqual([]);
   }
 
   it('20 lệnh trừ song song vượt số dư → đúng 10 thành công, số dư về 0, không âm, sổ khớp', async () => {
