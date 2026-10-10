@@ -4,9 +4,15 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <title>Tubu Tree</title>
+    <style>
+      /* Pinch-zoom stays on (WCAG 1.4.4); this only drops the double-tap-to-zoom delay on rapid taps. */
+      html {
+        touch-action: manipulation;
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>
