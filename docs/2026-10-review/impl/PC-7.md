@@ -216,3 +216,45 @@ Không chạy Playwright/`next build`/chụp màn hình (quy định máy 15,5GB
 | C-123 heading web khách | XONG (trừ `merchant-denied` thuộc cổng) |
 | C-077 phần web khách (tên truy cập, nhãn ô nhập) | XONG (spec truy cập 14 + 9 + 8 test) |
 | Q-20 SITE_URL/canonical/sitemap, `NEXT_PUBLIC_SITE_URL` trong docker-compose.vietnix.yml | XONG |
+
+## Review lượt 1
+
+Reviewer độc lập đưa 7 phát hiện (2 major, 5 minor). Đã đối chiếu từng cái với mã, cả 7 đều đúng; 6 sửa trong web, 1 sửa phía miniapp.
+
+| # | Mức | Phát hiện | Kết quả | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | major | `SITE_URL` dùng `??` nên `NEXT_PUBLIC_SITE_URL=''` (Dockerfile khai `ARG`+`ENV`, build không truyền arg ra chuỗi rỗng) làm `new URL('')` trong `layout.tsx` ném lỗi | ĐÃ SỬA: `?.trim() \|\| 'https://app.tubutree.com'` | 20245e3 |
+| 2 | major | Nút Đặt hàng chỉ khoá lúc đang fetch; refetch báo giá lỗi vẫn giữ `data` cũ (React Query v5) nên nút bật với tổng tiền đã cũ | ĐÃ SỬA: `quote = quoteQ.isError ? undefined : quoteQ.data` (màn hình hiện "…", nút khoá cho tới khi "Thử lại" thành công) | c17a12c |
+| 3 | minor | `/brand` trong `PORTAL_PATHS` làm `/brand/[slug]` (trang công khai) mất chân trang hotline/email | ĐÃ SỬA: bỏ `/brand`; sửa chú thích sai | 20245e3 |
+| 4 | minor | `CouponBox` không biết đơn đang đặt, vẫn đổi/bỏ mã được lúc `placeOrder` bay | ĐÃ SỬA: prop `disabled`, trang truyền `place.isPending` | c17a12c |
+| 5 | minor | Dòng "Giảm giá (MÃ)" ở chi tiết đơn gán cả `Order.discount` (mã + combo + hạng + Điểm Xanh) cho mã | ĐÃ SỬA: nhãn trung tính "Giảm giá", mã ghi dòng riêng "Mã giảm giá đã áp dụng: …" | 21048e0 |
+| 6 | minor | Ô tìm kiếm: ở host gian hàng CTV `/` bị rewrite sang `/s/{sub}` nên `?q=` mất; ô nhập không theo `?q=` | ĐÃ SỬA: ẩn ô trên host gian hàng (`tenantSubdomainOf`, khớp `middleware.ts`), giá trị ô đồng bộ theo `useSearchParams` | 8732c42 |
+| 7 | minor | Fallback `app.tubutree.com` ở miniapp tự ghi 4 chỗ, chỉ 1 chỗ có test; biến trống chưa có test | ĐÃ SỬA: `utils/web-base-url.ts` (`WEB_BASE_URL`), 3 file dùng chung, spec khoá giá trị mặc định + quét nguồn không còn tự ghi tên miền | 52fbae3 |
+
+### Cách đã kiểm lại từng phát hiện (đỏ trước, xanh sau)
+- #1: `site.spec.ts` thêm 2 ca `''` và `'   '` (đỏ: SITE_URL trả `''`), xanh sau khi đổi sang `||`.
+- #2: `coupon.spec.tsx` ca "báo giá tính lại sau khi đổi mã bị lỗi" đỏ với `expected … not to contain '240.000đ'` (nhận `Tổng cộng240.000đKhông tính được phí ship/tổng tiền. Thử lạiĐặt hàng`), xanh sau khi sửa; ca còn kiểm "Thử lại" mở khoá nút và hiện 330.000đ.
+- #3: `site.spec.ts`/`hide-on-portals.spec.tsx` đổi kỳ vọng: `/brand/abc` hiện chân trang (đỏ → xanh).
+- #4: 2 ca mới trong `coupon.spec.tsx` (nút bỏ mã, chip trong ví và "Áp dụng" khoá khi `placeOrder` chưa trả); gỡ `|| disabled` thì cả 2 đỏ, khôi phục thì xanh.
+- #5: ca mới ở `page.spec.tsx` của chi tiết đơn đỏ (`expected 'Giảm giá (WELCOME30)' to be 'Giảm giá'`), xanh sau khi sửa.
+- #6: `site-search.spec.tsx` +2 ca (vào `/?q=` hiện từ khoá; URL đổi `q` thì ô đổi theo, đang gõ dở không bị ghi đè), `site-search.tenant.spec.tsx` (jsdom url `https://ctv-an.tubutree.com/`: không có form), `site.spec.ts` bảng ca `tenantSubdomainOf`; tất cả đỏ trước khi sửa.
+- #7: `web-base-url.spec.ts` đỏ do chưa có module; xanh sau refactor.
+
+### Kiểm chứng (lượt review)
+```
+cd apps/web && npx vitest run            -> Test Files 43 passed (43), Tests 528 passed (528)
+cd apps/web && npx tsc --noEmit          -> exit 0
+cd apps/web && npx eslint <file đã sửa>  -> 0 lỗi
+cd apps/web && npx next build           -> Compiled successfully, Generating static pages (14/14) (Suspense của ô tìm kiếm không làm hỏng trang tĩnh)
+cd apps/miniapp && npx vitest run src/utils/web-base-url.spec.ts src/components -> Test Files 66 passed (66), Tests 485 passed (485)
+cd apps/miniapp && npx tsc --noEmit      -> exit 0
+```
+`affiliate.tsx` còn 4 lỗi `tubu-ds/no-raw-color` ở dòng 126/133/331/957 (rgba trắng) có từ trước, không nằm trong phần đã sửa; để gói miniapp.
+
+### Chỉnh lại tuyên bố ở mục 3/3
+Câu "khách luôn thấy đúng con số trước khi đặt" ở Giả định mục 3/3 chưa đúng trước lượt này: refetch lỗi vẫn giữ báo giá cũ (#2). Nay nút khoá và số tiền hiện "…" khi báo giá không tính được; server vẫn tính lại giá lúc đặt.
+
+### Giả định (lượt review)
+- Ẩn ô tìm kiếm ở host gian hàng (thay vì trỏ về domain gốc) để khách không bị đưa khỏi gian hàng CTV làm mất ngữ cảnh giới thiệu (sessionStorage không chia sẻ giữa origin). Server vẫn render ô này trước khi hydrate (host chỉ biết ở client; dùng `headers()` ở layout sẽ làm mọi trang thành dynamic).
+- `tenantSubdomainOf` lặp quy tắc của `middleware.ts` (file ngoài nhóm của gói nên không sửa); nếu middleware đổi danh sách subdomain hệ thống thì phải đổi cả hai.
+- `docker-compose.prod.yml` vẫn không truyền `NEXT_PUBLIC_SITE_URL`; không còn sập nhờ `||` (build ra `https://app.tubutree.com`), nhưng build theo file đó trên môi trường khác tên miền cần thêm arg.
