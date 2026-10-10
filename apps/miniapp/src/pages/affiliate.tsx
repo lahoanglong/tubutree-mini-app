@@ -302,7 +302,7 @@ function Dashboard() {
   const shareWithFallback = useShareWithFallback();
   const shareReferral = () => {
     haptic('light');
-    const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
+    const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://app.tubutree.com';
     const description = `Mua sắm sản phẩm thiên nhiên cùng mình, dùng mã ${referral} nhé!`;
     void shareWithFallback(
       { title: 'Tubu Tree — Sống xanh An Lành', description, path: `/?ref=${referral}` },
@@ -629,7 +629,7 @@ function Dashboard() {
                   bold
                   style={{ color: 'var(--primary-700)' }}
                   onClick={() => {
-                    const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
+                    const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://app.tubutree.com';
                     void copyText(`${base}/?ref=${referral}&l=${l.shortCode}`).then((ok) =>
                       openSnackbar(
                         ok

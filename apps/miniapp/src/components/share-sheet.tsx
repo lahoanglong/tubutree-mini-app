@@ -62,7 +62,7 @@ export function ShareSheet({
 }) {
   const { openSnackbar } = useSnackbar();
   const shareWithFallback = useShareWithFallback();
-  const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
+  const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://app.tubutree.com';
   const path = `/${pathPrefix}/${slug}`;
   // Mã giới thiệu PHẢI đi kèm ở CẢ 2 lối chia sẻ. Trước đây chỉ `url` (nút Sao chép link) có
   // `?ref=`, còn nút "Chia sẻ qua Zalo" gửi `path` trần → khách mở từ Zalo mua hàng thì CTV

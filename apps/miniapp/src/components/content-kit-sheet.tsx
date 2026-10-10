@@ -16,7 +16,7 @@ import { copyText } from '../utils/clipboard';
  */
 function absoluteLink(link: string): string {
   if (!link.startsWith('/')) return link;
-  const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
+  const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://app.tubutree.com';
   return `${base}${link}`;
 }
 

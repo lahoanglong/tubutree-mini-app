@@ -28,7 +28,7 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     mocks.copyText.mockResolvedValue(true);
     mocks.fetchContentKit.mockResolvedValue({
       productName: 'Trà xanh', images: [], usps: ['Lá trà sạch'], faqs: [], videoUrls: [],
-      captions: ['Trà xanh ngon lắm https://shop.tubutree.com/product/tra-xanh?ref=ABC123'],
+      captions: ['Trà xanh ngon lắm https://app.tubutree.com/product/tra-xanh?ref=ABC123'],
       shareLink: '/product/tra-xanh?ref=ABC123',
     });
   });
@@ -67,7 +67,7 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ Zalo/ }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
     expect(mocks.copyText).toHaveBeenCalledWith(
-      'Trà xanh ngon lắm, mua đi https://shop.tubutree.com/product/tra-xanh?ref=ABC123',
+      'Trà xanh ngon lắm, mua đi https://app.tubutree.com/product/tra-xanh?ref=ABC123',
     );
   });
 
@@ -80,7 +80,7 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     renderKit();
     fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ Zalo/ }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
-    expect(mocks.copyText).toHaveBeenCalledWith('https://shop.tubutree.com/product/tra-xanh?ref=ABC123');
+    expect(mocks.copyText).toHaveBeenCalledWith('https://app.tubutree.com/product/tra-xanh?ref=ABC123');
   });
 
   it('nút Sao chép liên kết cũng chép liên kết tuyệt đối khi API trả đường dẫn tương đối', async () => {
@@ -91,6 +91,6 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     renderKit();
     fireEvent.click(await screen.findByRole('button', { name: /Sao chép/ }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
-    expect(mocks.copyText).toHaveBeenCalledWith('https://shop.tubutree.com/product/tra-xanh?ref=ABC123');
+    expect(mocks.copyText).toHaveBeenCalledWith('https://app.tubutree.com/product/tra-xanh?ref=ABC123');
   });
 });
