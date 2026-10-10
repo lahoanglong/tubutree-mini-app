@@ -218,17 +218,17 @@ export class CashbackService {
     event: NormalizedCashbackEvent,
     status: NormalizedCashbackEvent['status'],
     userReward: number,
-  ): Promise<{ becameConfirmed: boolean; confirmedUserId: string | null }> {
+  ): Promise<void> {
     // Đã settle về Ví (PAID) → BỎ QUA postback đến sau: không ghi đè status, không đụng số dư
     // (không claw-back được tiền đã về Ví).
-    if (existing.status === 'PAID') return { becameConfirmed: false, confirmedUserId: null };
+    if (existing.status === 'PAID') return;
 
     // Chuyển trạng thái ATOMIC bằng optimistic CAS theo status đã đọc + điều chỉnh pending trong
     // CÙNG tx → chống 2 sự kiện 'approved' song song cùng cộng pending 2 lần. Racer thua thấy
     // count=0 → bỏ qua.
     const wasConfirmed = existing.status === 'CONFIRMED';
     const nowConfirmed = status === 'CONFIRMED';
-    const applied = await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       const moved = await tx.cashbackTransaction.updateMany({
         where: { id: existing.id, status: existing.status },
         data: {
@@ -244,7 +244,7 @@ export class CashbackService {
             : { orderAmount: event.orderAmount, commission: event.commission, userReward }),
         },
       });
-      if (moved.count === 0) return false;
+      if (moved.count === 0) return;
       if (nowConfirmed && !wasConfirmed) {
         await tx.user.update({
           where: { id: existing.userId },
@@ -256,12 +256,7 @@ export class CashbackService {
           data: { cashbackPending: { decrement: existing.userReward } },
         });
       }
-      return true;
     });
-    if (applied && nowConfirmed && !wasConfirmed) {
-      return { becameConfirmed: true, confirmedUserId: existing.userId };
-    }
-    return { becameConfirmed: false, confirmedUserId: null };
   }
 
   /** Tạo mới 1 giao dịch cashback từ sự kiện đầu tiên nhận được cho (provider, merchantOrderId). */
@@ -271,7 +266,7 @@ export class CashbackService {
     event: NormalizedCashbackEvent,
     status: NormalizedCashbackEvent['status'],
     userReward: number,
-  ): Promise<{ becameConfirmed: boolean; confirmedUserId: string | null }> {
+  ): Promise<void> {
     const ops: Prisma.PrismaPromise<unknown>[] = [
       this.prisma.cashbackTransaction.create({
         data: {
@@ -288,8 +283,6 @@ export class CashbackService {
         },
       }),
     ];
-    let becameConfirmed = false;
-    let confirmedUserId: string | null = null;
     if (status === 'CONFIRMED') {
       ops.push(
         this.prisma.user.update({
@@ -297,11 +290,8 @@ export class CashbackService {
           data: { cashbackPending: { increment: userReward } },
         }),
       );
-      becameConfirmed = true;
-      confirmedUserId = click.userId;
     }
     await this.prisma.$transaction(ops);
-    return { becameConfirmed, confirmedUserId };
   }
 
   /** Cron mỗi giờ: cashback CONFIRMED quá hold_days → chuyển pending→Ví (PAID). */
