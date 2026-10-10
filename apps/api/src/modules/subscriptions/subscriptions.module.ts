@@ -8,5 +8,6 @@ import { PancakeModule } from '../integrations/pancake/pancake.module';
   imports: [PancakeModule],
   controllers: [SubscriptionsController],
   providers: [SubscriptionsService],
+  exports: [SubscriptionsService],
 })
 export class SubscriptionsModule {}
