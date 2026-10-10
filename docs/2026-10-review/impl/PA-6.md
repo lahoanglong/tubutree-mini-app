@@ -80,3 +80,53 @@ Không có.
 - `analytics/order-error-classifier.ts` xếp lỗi PRODUCT_DISCONTINUED vào `VALIDATION`. Có thể thêm mã riêng; module analytics nằm ngoài nhóm file.
 - Mẫu thông báo seed `SUBSCRIPTION_PAUSED` ghi "(sản phẩm hết hàng hoặc địa chỉ không hợp lệ)". Nên thêm "ngừng bán" vào câu chữ.
 - Trang checkout (miniapp/web) chưa hiện `unavailableItems`. Lỗi 400 có message tiếng Việt hiển thị qua `getErrorMessage`.
+
+## C-014 (A2-003; Q-12): xoá địa chỉ làm mất gói định kỳ. XONG
+
+Commit `f415528`.
+
+### Đã làm
+- `users.service.ts` `deleteAddress`: trong một transaction, khoá dòng địa chỉ (`SELECT … FOR UPDATE`), tìm gói `ACTIVE`/`PAUSED` dùng địa chỉ này. Có gói thì trả 400, mã `ADDRESS_IN_USE_BY_SUBSCRIPTION`, câu "Địa chỉ đang dùng cho gói giao định kỳ "<tên SP>", hãy đổi địa chỉ của gói trước." Không có thì xoá các gói `CANCELLED` của địa chỉ (giống hành vi cũ) rồi xoá địa chỉ. Lỗi FK P2003 (lưới an toàn) cũng ra cùng lỗi 400.
+- Đổi FK `subscriptions.addressId` từ CASCADE sang RESTRICT (schema + migration).
+- `subscriptions.service.ts` `create`: địa chỉ bị xoá giữa lúc kiểm và lúc ghi gói thì FK báo P2003 trên `addressId`, nay đổi thành 400 "Địa chỉ không hợp lệ." thay vì lỗi FK thô.
+- Miniapp `pages/addresses.tsx` đã hiện `getErrorMessage(e)` khi xoá lỗi, nên không cần sửa FE.
+
+### Test thêm (đỏ → xanh)
+`apps/api/test/integration-race/address-subscription.race-spec.ts` (Postgres thật, 7 test). Trước khi sửa: 4 đỏ (FK còn `c`; gói ACTIVE và PAUSED bị xoá theo địa chỉ; race báo tạo gói thành công nhưng gói biến mất). Sau khi sửa: 7 xanh.
+- FK `subscriptions_addressId_fkey` có `confdeltype = 'r'`.
+- Gói ACTIVE / PAUSED: xoá bị chặn, mã và câu lỗi đúng, gói và địa chỉ còn nguyên.
+- Chỉ còn gói CANCELLED: xoá được. Địa chỉ không có gói: xoá bình thường.
+- Race 20 vòng: cả hai bên qua bước đọc địa chỉ rồi mới ghi (`barrierOnFirstCalls`). Đúng một bên thắng, bên thua nhận `BadRequestException`. Không có gói nào "tạo thành công" mà biến mất, không có gói mồ côi. Cả hai kết cục đều xảy ra qua các lần chạy.
+- 5 vòng tất định: gói đã INSERT nhưng chưa commit khi bắt đầu xoá. Xoá chờ khoá, sau đó bị chặn, gói còn nguyên.
+
+### Lệnh kiểm chứng (output thật)
+```
+# apps/api
+DATABASE_URL=postgresql://tubu:tubu@localhost:5546/tubutree_it?schema=public npx prisma migrate deploy
+  All migrations have been successfully applied.
+npx prisma migrate diff --from-url $DATABASE_URL --to-schema-datamodel prisma/schema.prisma --script
+  -- This is an empty migration.
+docker exec tubu_it_pa6 psql -U tubu -d tubutree_it -At -c "select confdeltype from pg_constraint where conname='subscriptions_addressId_fkey'"
+  r
+DATABASE_URL=... npx jest -c test/integration-race/jest.config.js --runInBand address-subscription   (chạy 2 lần)
+  Tests:       7 passed, 7 total
+DATABASE_URL=... npx jest -c test/integration-race/jest.config.js --runInBand sellable-product
+  Tests:       27 passed, 27 total
+npx jest --maxWorkers=1 src/modules/users src/modules/subscriptions
+  Test Suites: 2 passed, 2 total
+  Tests:       58 passed, 58 total
+npx tsc --noEmit -p tsconfig.json   -> (không lỗi)
+npx eslint users.service.ts subscriptions.service.ts address-subscription.race-spec.ts -> (không lỗi)
+```
+Thử tay trong transaction rồi ROLLBACK: xoá một user có địa chỉ và gói vẫn chạy được (CASCADE từ users xuống cả addresses lẫn subscriptions, RESTRICT không cản).
+
+### Migration
+`20261010020000_subscription_address_fk_restrict`: kiểm gói mồ côi trước (có thì `RAISE EXCEPTION`, không xoá gì), rồi DROP và ADD lại FK với `ON DELETE RESTRICT ON UPDATE CASCADE`. Không đụng dòng dữ liệu nào.
+
+### Giả định
+- Gói `CANCELLED` không chặn xoá địa chỉ, và bị xoá cùng địa chỉ như trước. Lý do: gói huỷ không sinh đơn, `list` cũng không hiện nó; nếu giữ thì khách không bao giờ xoá được địa chỉ cũ.
+- Câu lỗi nêu tên SP (không kèm tên phân loại) cho khớp các câu lỗi khác của gói định kỳ.
+
+### Việc còn lại
+- Hiện chưa có API đổi địa chỉ của gói, nên "hãy đổi địa chỉ của gói trước" chỉ làm được bằng cách huỷ gói. Phần sửa gói thuộc gói việc khác (Q-13).
+- `subscriptions.variationId` vẫn là CASCADE (A2-003 có nhắc). Ngoài phạm vi Q-12, để lại.
