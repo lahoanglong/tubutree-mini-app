@@ -84,3 +84,57 @@ Prisma chạy mỗi migration trong một transaction nên không dùng được
 - Dashboard: `SUM(total)` toàn bảng (35–40 ms) và `COUNT(*)` không lọc (24–33 ms) tăng tuyến tính theo số đơn. Nên cache ngắn (30–60 s) hoặc dùng bảng tổng hợp, chưa làm vì thay đổi độ tươi của số liệu.
 - `GET /admin/orders` vẫn trả `items` của 20 đơn (~34 KB). Nếu chuyển sang `select` hẹp thì phải sửa cùng web admin.
 - **KHÔNG BAO GIỜ dùng `prisma db push` cho DB thật:** nó bỏ qua lịch sử migration và xoá các index/constraint không khai báo được trong schema (partial unique index, C-109). Mọi thay đổi schema phải đi bằng `prisma migrate deploy`.
+
+## C-038 — Tìm không dấu có index, suggest giới hạn độ dài — XONG
+
+### Đã làm
+- Migration `20261010053812_catalog_name_search_index` (additive):
+  - Cột `products."nameSearch" TEXT NOT NULL DEFAULT ''` (khai báo trong `schema.prisma`, không drift: `prisma migrate diff --from-migrations --to-schema-datamodel` ra "No difference detected.").
+  - Hàm `vn_search_fold(text)` (SQL, IMMUTABLE): `btrim(regexp_replace(lower(translate(t, FROM, TO)), WS_RE, ' ', 'g'))`, chép nguyên văn hằng `VN_FOLD_FROM/VN_FOLD_TO/SQL_WHITESPACE_RE` của `search-text.ts` (8 dấu kết hợp NFD viết bằng escape trong chuỗi `E''`).
+  - Backfill `UPDATE products SET "nameSearch" = vn_search_fold(name)`.
+  - Trigger `products_name_search_sync` BEFORE INSERT OR UPDATE OF name, "nameSearch": cột luôn là hàm của `name`, kể cả khi sync Pancake / SQL tay ghi thẳng. Prisma không diff trigger/hàm nên `migrate dev` không sinh DROP.
+  - `CREATE INDEX "products_nameSearch_trgm_idx" USING GIN ("nameSearch" gin_trgm_ops)` (cần pg_trgm, đã tạo ở migration C-027).
+- `catalog.service.ts`: câu SQL tách thành `textMatchSql(raw)` (export để race test EXPLAIN đúng câu thật). So `p."nameSearch" LIKE '%<từ khoá gấp ở TS>%' ESCAPE '!'` thay vì gấp dấu từng dòng; tag đổi `= ANY(p.tags)` sang `p.tags @> ARRAY[tag]` (cùng nghĩa) để BitmapOr với `products_tags_gin`. Vẫn lùi về `contains` khi SQL lỗi (vd DB chưa migrate).
+- `GET /search/suggest`: DTO `SuggestQuery` (`@IsString @MaxLength(100)`, q lặp thành mảng cũng bị 400); service trả `[]` không chạm DB khi từ khoá sau gấp dấu < 2 ký tự (khớp `SUGGEST_MIN_CHARS = 2` của ô tìm miniapp). `GET /products?q=` cũng `@MaxLength(100)`.
+
+### Test (đỏ → xanh)
+- `test/integration-race/catalog-search-index.race-spec.ts` (Postgres thật, 6 test): hàm DB gấp giống hệt `foldVietnamese` (cả bảng ký tự, NFD, mọi khoảng trắng JS); trigger khi tạo / đổi tên qua Prisma / SQL tay ghi đè `nameSearch`; backfill không lệch; plan của `textMatchSql` là BitmapOr `products_nameSearch_trgm_idx` + `products_tags_gin` (DB test chỉ ~100 SP nên tắt seqscan và tạm DROP 2 index trạng thái trong transaction rồi ROLLBACK, test kiểm lại 2 index vẫn còn); tìm qua service không lùi về contains; suggest < 2 ký tự không gọi DB. Trước khi sửa: 5 đỏ / 1 xanh.
+- `src/modules/catalog/dto/suggest-query.dto.spec.ts` (3 test): trước khi sửa đỏ (chưa có DTO).
+- `catalog.service.spec.ts`: cập nhật theo câu SQL mới (`Prisma.Sql`), thêm test suggest < 2 ký tự.
+- `buy-flow-4b.race-spec.ts` (tiếng Việt / HOA / NFD / NBSP / escape `% _ ! \`, tag, suggest, bộ lọc) chạy lại trên đường mới: xanh, không test nào phải sửa.
+
+```
+$ npx jest --maxWorkers=1 src/modules/catalog
+Test Suites: 5 passed, 5 total
+Tests:       86 passed, 86 total
+$ DATABASE_URL=postgresql://tubu:tubu@localhost:5551/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand catalog-search-index buy-flow-4b
+PASS test/integration-race/catalog-search-index.race-spec.ts
+PASS test/integration-race/buy-flow-4b.race-spec.ts
+Tests:       19 passed, 19 total
+$ npx tsc --noEmit -p tsconfig.json   -> exit 0
+$ npx eslint <7 file catalog + race spec>   -> sạch
+```
+
+### EXPLAIN (ANALYZE) trước/sau — 3044 SP
+"Trước": câu cũ trên `tubutree_perf` (chỉ đọc). "Sau": câu mới trên bản sao `tubutree_pb1_copy` đã `migrate deploy` + ANALYZE. Mỗi câu 3 lần.
+
+| Từ khoá | Trước (Seq Scan + translate/regexp_replace mỗi dòng) | Sau (BitmapOr trigram + tags GIN) |
+|---|---|---|
+| `hat giong rau` (300 khớp) | 82,2 / 62,9 / 63,6 ms | 4,3 / 2,9 / 2,5 ms |
+| `binh tuoi nuoc 2247` (1 khớp) | 61,3 / 63,0 / 65,9 ms | 0,94 / 0,99 / 1,17 ms |
+| `zzz khong co` (0 khớp) | 67,6 / 67,6 / 85,2 ms | 0,59 / 0,57 / 0,61 ms |
+
+### Migration — áp thử
+- DB trống: `prisma migrate diff --from-migrations` dựng lại toàn bộ 109 migration trên shadow DB trống (`pb1_shadow` trong `tubu_it_pb1`) thành công, sau đó DROP.
+- `tubutree_it` (pb1): `migrate deploy` OK; race test xác nhận backfill khớp.
+- Bản sao dữ liệu: `pg_dump tubutree_perf | psql tubutree_pb1_copy` (75 s), `migrate deploy` áp 6 migration còn thiếu tổng 12 s; riêng migration này **342 ms** (backfill 3044 dòng + index 296 kB); `nameSearch` lệch `vn_search_fold(name)` = 0 dòng. Đã `DROP DATABASE tubutree_pb1_copy`. Không ghi gì vào `tubutree_perf`.
+- Khoá bảng: UPDATE backfill + CREATE INDEX giữ khoá ghi trên `products` trong lúc migration chạy (~0,3 s với 3k SP). Bảng nhỏ, chấp nhận được.
+
+### Giả định
+- Suggest < 2 ký tự (sau gấp dấu) trả `[]` thay vì 400, để ô gợi ý không báo lỗi. Ô chọn SP của cộng đồng / CTV lên-đơn-hộ (miniapp gọi từ 1 ký tự) giờ ra rỗng ở ký tự đầu, có kết quả từ ký tự thứ 2.
+- Max 100 ký tự cho cả `/products?q=`: vượt thì 400 (tên SP thực tế ngắn hơn nhiều).
+- Từ khoá 1–2 ký tự ở `/products?q=` không dùng được trigram, nên Postgres có thể quét bảng `products`. Vẫn đúng kết quả, và bảng chỉ vài nghìn dòng.
+
+### Việc còn lại
+- Ai đổi bảng ký tự trong `search-text.ts` phải thêm migration `CREATE OR REPLACE FUNCTION vn_search_fold` và backfill lại. Nếu quên, `catalog-search-index.race-spec.ts` sẽ đỏ.
+- Miniapp `product-picker.tsx` / `ctv-order-sheet.tsx` vẫn gọi suggest từ 1 ký tự (ngoài nhóm file PB-1). Có thể nâng lên 2 cho đồng bộ.
