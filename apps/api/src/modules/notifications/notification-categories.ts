@@ -3,18 +3,19 @@
  * PROMO = tin tiếp thị (khách tắt "Khuyến mãi & mã giảm giá" thì không nhận, cả trong app lẫn ZNS);
  * GARDEN = nhắc nhở Vườn Xanh; còn lại là tin giao dịch/tài khoản, luôn gửi.
  * Mã mới chưa liệt kê rơi vào TRANSACTIONAL, nên tin tiếp thị mới PHẢI được thêm vào đây.
+ * Cố ý KHÔNG xếp PROMO: FLASH_STARTING (khách tự bấm "Nhắc tôi", cron đã đánh dấu notifiedAt trước khi
+ * gửi nên chặn ở đây là mất nhắc vĩnh viễn) và MILESTONE_VOUCHER (thưởng khách tự kiếm qua giới thiệu,
+ * mã vẫn được phát nên khách phải được báo).
  */
 export type NotificationCategory = 'PROMO' | 'GARDEN' | 'TRANSACTIONAL';
 
 const PROMO_CODES = new Set([
   'CART_ABANDONED',
   'PRICE_DROP_ALERT',
-  'FLASH_STARTING',
   'VOUCHER_EXPIRING',
   'WELCOME_VOUCHER',
   'BIRTHDAY_VOUCHER',
   'WINBACK_VOUCHER',
-  'MILESTONE_VOUCHER',
   'REORDER_REMINDER',
   'STOREFRONT_TRENDING_PRODUCTS',
 ]);

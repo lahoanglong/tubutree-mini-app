@@ -34,12 +34,10 @@ describe('Phân loại tin (C-022)', () => {
   it.each([
     'CART_ABANDONED',
     'PRICE_DROP_ALERT',
-    'FLASH_STARTING',
     'VOUCHER_EXPIRING',
     'WELCOME_VOUCHER',
     'BIRTHDAY_VOUCHER',
     'WINBACK_VOUCHER',
-    'MILESTONE_VOUCHER',
     'REORDER_REMINDER',
     'STOREFRONT_TRENDING_PRODUCTS',
   ])('%s là tin khuyến mãi', (code) => {
@@ -59,6 +57,10 @@ describe('Phân loại tin (C-022)', () => {
     'GAME_WATER_GIFT',
     'COMMUNITY_BEST_ANSWER',
     'ACCOUNT_DELETION_REQUESTED',
+    // Khách tự bấm "Nhắc tôi" → đây là tin khách yêu cầu, không phải tiếp thị.
+    'FLASH_STARTING',
+    // Phần thưởng khách tự kiếm qua giới thiệu: mã vẫn phát, khách phải được biết mình có.
+    'MILESTONE_VOUCHER',
   ])('%s là tin giao dịch, luôn gửi', (code) => {
     expect(notificationCategory(code)).toBe('TRANSACTIONAL');
   });
@@ -93,9 +95,15 @@ describe('NotificationsService.notify tôn trọng tuỳ chọn của khách (C-
     expect(sendTemplate).toHaveBeenCalledTimes(1);
   });
 
+  it('đã tắt khuyến mãi nhưng tự bấm "Nhắc tôi" giờ vàng → vẫn nhận nhắc', async () => {
+    const { svc, create } = setup(optedOut);
+    await svc.notify('u1', 'FLASH_STARTING', { product: 'A' });
+    expect(create).toHaveBeenCalled();
+  });
+
   it('không tìm thấy user → không gửi tin khuyến mãi', async () => {
     const { svc, create } = setup(null);
-    await svc.notify('u1', 'FLASH_STARTING', {});
+    await svc.notify('u1', 'CART_ABANDONED', {});
     expect(create).not.toHaveBeenCalled();
   });
 });
