@@ -30,7 +30,7 @@ vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: unknown) => unknown) => sel({ user: mocks.user.current }),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 

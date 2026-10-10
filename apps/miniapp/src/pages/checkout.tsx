@@ -12,6 +12,7 @@ import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
+import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd, recyclingCheckoutFields, recyclingMaxKg } from '../utils/format';
@@ -56,6 +57,8 @@ export default function CheckoutPage() {
   const publicConfig = usePublicConfig();
   const recyclingEnabled = publicConfig.isLoaded && publicConfig.recyclingEnabled === true;
   const [voucherSheetOpen, setVoucherSheetOpen] = useState(false);
+  // Mã giới thiệu CTV khách tự nhập ở màn này (đã được server xác nhận) — khác mã đến từ link (sfCtx).
+  const [referralApplied, setReferralApplied] = useState<string | null>(null);
   const [summarySheetOpen, setSummarySheetOpen] = useState(false);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
   const [priceChanged, setPriceChanged] = useState(false);
@@ -175,7 +178,7 @@ export default function CheckoutPage() {
                 email: invoice.email.trim(),
               }
             : undefined,
-          referralCode: sfCtx.referralCode ?? undefined,
+          referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
           storefrontSlug: ctvSlug,
           itemIds,
         },
@@ -421,6 +424,12 @@ export default function CheckoutPage() {
           </Box>
         </Box>
       </Box>
+
+      <ReferralCodeBox
+        linkedCode={sfCtx.referralCode ?? sfCtx.slug}
+        appliedCode={referralApplied}
+        onApplied={setReferralApplied}
+      />
 
       {/* ── Thanh toán ── */}
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
