@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
 import {
@@ -24,6 +24,7 @@ import { orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
+import { CouponBox, COUPON_MUTATION_KEY } from '@/components/coupon-box';
 import { BankTransferPanel } from './bank-transfer-panel';
 
 const VN_PHONE = /^(0|\+84)\d{9}$/;
@@ -76,6 +77,9 @@ export default function CheckoutPage() {
   const [hasRecyclingPickup, setHasRecyclingPickup] = useState(false);
   const [recyclingNote, setRecyclingNote] = useState('');
 
+  // Mã giảm giá đổi trên giỏ nên báo giá đang hiện đã cũ cho tới khi tính lại xong: khoá nút đặt hàng
+  // trong lúc đó để khách không bấm đặt khi con số trên màn hình chưa phải con số sẽ bị tính.
+  const couponChanging = useIsMutating({ mutationKey: COUPON_MUTATION_KEY }) > 0;
   const quoteQ = useQuery({
     queryKey: ['quote', addressId, ctvSlug, usePoints],
     queryFn: () =>
@@ -87,6 +91,8 @@ export default function CheckoutPage() {
     // loyalty.max_redeem_pct nên gửi toàn bộ số dùng được là an toàn.
     if (quoteQ.data && !usePoints) setPointsOffer(checkoutPointsOffer(quoteQ.data));
   }, [quoteQ.data, usePoints]);
+
+  const quoteStale = couponChanging || quoteQ.isFetching;
 
   const place = useMutation({
     mutationFn: () =>
@@ -246,11 +252,14 @@ export default function CheckoutPage() {
             ))}
           </div>
           <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? cart?.subtotal ?? 0)} />
-          {(quote?.discount ?? 0) > 0 && <Row label="Giảm giá" value={`-${formatVnd(quote!.discount)}`} green />}
+          {(quote?.discount ?? 0) > 0 && (
+            <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />
+          )}
           {(quote?.pointsDiscount ?? 0) > 0 && (
             <Row label={`Điểm Xanh (${quote!.pointsUsed})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
           )}
           <Row label="Phí vận chuyển" value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : '…'} />
+          {cart && <CouponBox currentCode={cart.couponCode} subtotal={cart.subtotal} />}
           {usablePoints > 0 && (
             <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 rounded-control border border-forest-200 bg-forest-50 p-3 text-sm">
               <input
@@ -294,7 +303,7 @@ export default function CheckoutPage() {
           <button
             type="button"
             onClick={() => place.mutate()}
-            disabled={!addressId || !quote || place.isPending}
+            disabled={!addressId || !quote || quoteStale || place.isPending}
             className={`${ui.btnPrimary} mt-4 w-full`}
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}

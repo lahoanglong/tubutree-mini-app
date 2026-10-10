@@ -169,7 +169,7 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
     const names = Array.from(container.querySelectorAll('button')).map((b) => b.getAttribute('aria-label') ?? b.textContent);
     expect(names).toContain('Giảm số lượng Dầu gội bồ kết');
     expect(names).toContain('Tăng số lượng Dầu gội bồ kết');
-    const coupon = container.querySelector('#cart-coupon');
+    const coupon = container.querySelector('#coupon-code');
     expect(coupon).not.toBeNull();
     expect(accessibleName(coupon!)).toBe('Mã giảm giá');
   });
@@ -291,7 +291,7 @@ describe('trang khách — hành vi giữ nguyên sau khi đổi giao diện', (
   it('giỏ hàng: nhập mã giảm giá vẫn bật nút Áp dụng', async () => {
     const { container } = mount(<CartPage />);
     await flush();
-    const input = container.querySelector<HTMLInputElement>('#cart-coupon');
+    const input = container.querySelector<HTMLInputElement>('#coupon-code');
     const apply = () => Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Áp dụng') as HTMLButtonElement;
     expect(apply().disabled).toBe(true);
     typeInto(input, 'welcome30');
