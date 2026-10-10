@@ -679,6 +679,9 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-welcome', code: 'WELCOME_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chào mừng bạn đến Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng trước {{expires}} 🎁' },
   { id: 'nt-birthday', code: 'BIRTHDAY_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chúc mừng sinh nhật! 🎂 Tặng bạn voucher {{code}} giảm {{value}}đ, dùng trước {{expires}}.' },
   { id: 'nt-winback', code: 'WINBACK_VOUCHER', channel: 'INAPP', bodyTemplate: 'Tubu nhớ bạn! Quay lại với voucher {{code}} giảm {{value}}đ, dùng trước {{expires}} 💚' },
+  // C-017: cùng mã/nội dung với migration 20261010190500_order_review_invite_second_order.
+  { id: 'nt-second-order', code: 'SECOND_ORDER_VOUCHER', channel: 'INAPP', bodyTemplate: 'Cảm ơn bạn đã tin dùng Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}} cho đơn tiếp theo, dùng trước {{expires}} 🌿', createOnly: true },
+  { id: 'nt-review-request', code: 'REVIEW_REQUEST', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã đến tay bạn. Bạn thấy {{product}} thế nào? Viết đánh giá để giúp người mua sau, lần đầu đánh giá mỗi sản phẩm được cộng Điểm Xanh 🌿', createOnly: true },
   { id: 'nt-milestone', code: 'MILESTONE_VOUCHER', channel: 'INAPP', bodyTemplate: 'Cảm ơn bạn đã tin dùng Tubu! Tặng voucher tri ân {{code}} giảm {{value}}đ, dùng trước {{expires}} 🌿' },
   { id: 'nt-game-checkin', code: 'GAME_CHECKIN_REMINDER', channel: 'INAPP', bodyTemplate: '🔥 Chuỗi {{streak}} ngày của bạn sắp lỡ! Điểm danh Vườn Xanh hôm nay để giữ lửa nhé 🌿' },
   { id: 'nt-game-thirsty', code: 'GAME_TREE_THIRSTY', channel: 'INAPP', bodyTemplate: '🥀 Cây của bạn đang khát! Tưới nước hôm nay để cây không héo và mất tiến trình nhé 💧' },
