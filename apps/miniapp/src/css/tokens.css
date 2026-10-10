@@ -237,6 +237,20 @@ body.with-back-btn .page.page-bleed {
   transform: translateY(-50%);
 }
 
+/* ── Vùng chạm 44x44 cho nút vuông nhìn nhỏ hơn (QuantitySelector sm 36px): giãn cả hai chiều, không đổi hình ── */
+.tubu-hit-44-square {
+  position: relative;
+}
+.tubu-hit-44-square::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
 /* ── Gợi ý cuộn ngang (ScrollRow / SegmentedTabs scroll): mờ mép phía còn nội dung bằng mask nên không
    cần biết màu nền. Thuộc tính data-fade-* do use-scroll-hints.ts bật theo vị trí cuộn. ── */
 .tubu-scroll-fade[data-fade-end] {
