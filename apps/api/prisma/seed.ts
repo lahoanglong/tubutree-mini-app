@@ -33,7 +33,9 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'affiliate.monthly_tier_thresholds', value: [3000000, 10000000, 30000000, 80000000], category: 'affiliate', description: 'Ngưỡng VND để lên bậc' },
   { key: 'affiliate.monthly_tier_bonuses', value: [0, 0.01, 0.025, 0.04, 0.06], category: 'affiliate', description: 'Bonus rate tương ứng' },
   { key: 'affiliate.hold_days', value: 20, category: 'affiliate', description: 'Hold ngày sau DELIVERED trước khi APPROVED' },
-  { key: 'affiliate.last_click_window_days', value: 30, category: 'affiliate', description: 'Cookie/tracking window' },
+  { key: 'affiliate.last_click_window_days', value: 30, category: 'affiliate', description: 'Không còn dùng: cửa sổ ghi nhận giới thiệu là affiliate.attribution_days' },
+  // Q-31: cửa sổ ghi nhận "chạm" giới thiệu CTV (AffiliateService.recordTouch). createOnly: admin chỉnh rồi thì seed không reset.
+  { key: 'affiliate.attribution_days', value: 7, category: 'affiliate', description: 'Số ngày giữ ghi nhận giới thiệu (chạm link CTV/nhãn) cho đơn đặt sau đó', createOnly: true },
   { key: 'affiliate.min_withdraw_bank', value: 50000, category: 'affiliate', description: 'Min rút STK' },
   { key: 'affiliate.tubu_wallet_multiplier', value: 1.5, category: 'affiliate', description: 'Hệ số chuyển sang Ví Tubu' },
   { key: 'affiliate.kyc_required_above', value: 2000000, category: 'affiliate', description: 'KYC khi rút > X/tháng' },
@@ -51,8 +53,10 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'wallet.xu_convert_multiplier', value: 1.2, category: 'wallet', description: 'Đổi Ví → TubuXu nhận thêm 20%' },
   { key: 'wallet.withdraw_min', value: 100000, category: 'wallet', description: 'Rút Ví về ngân hàng tối thiểu' },
   { key: 'wallet.withdraw_fee', value: 3000, category: 'wallet', description: 'Phí chuyển khoản ngân hàng/lần' },
-  { key: 'coins.referrer_reward', value: 5000, category: 'coins', description: 'Xu thưởng người giới thiệu (mỗi bạn có cashback đầu)' },
-  { key: 'coins.referee_reward', value: 5000, category: 'coins', description: 'Xu thưởng người được mời' },
+  { key: 'coins.referrer_reward', value: 5000, category: 'coins', description: 'Xu thưởng người giới thiệu khi bạn được mời có đơn thứ 2 giao thành công trong referral.window_days ngày (thu hồi nếu trả hàng; CTV không nhận)' },
+  { key: 'coins.referee_reward', value: 5000, category: 'coins', description: 'Không còn dùng: người được mời chỉ nhận voucher chào mừng (Q-05)' },
+  { key: 'referral.window_days', value: 30, category: 'referral', description: 'Đơn thứ 2 phải đặt trong số ngày này kể từ đơn đầu thì người mời mới được thưởng xu', createOnly: true },
+  { key: 'referral.min_order_amount', value: 200000, category: 'referral', description: 'Chỉ đơn có tổng tiền từ mức này mới được tính là đơn đầu/đơn thứ 2 của chương trình giới thiệu', createOnly: true },
   {
     key: 'coins.referral_milestones',
     value: [

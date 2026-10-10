@@ -186,6 +186,17 @@ describe('OrderStatusService', () => {
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' });
   });
 
+  it('DELIVERED: xét thưởng giới thiệu lỗi (khoá/deadlock) → đơn vẫn giao xong, vẫn notify', async () => {
+    const order = makeOrder({ status: 'SHIPPING' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'DELIVERED' });
+    mockTx();
+    affiliate.grantReferralReward.mockRejectedValue(new Error('deadlock detected'));
+
+    await expect(service.setStatus('o1', 'DELIVERED' as never)).resolves.toMatchObject({ status: 'DELIVERED' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' });
+  });
+
   it('CANCELLED: gọi reversal trong tx + đảo điểm/hoa hồng, KHÔNG credit', async () => {
     const order = makeOrder({ status: 'CONFIRMED' });
     prisma.order.findFirst.mockResolvedValue(order);

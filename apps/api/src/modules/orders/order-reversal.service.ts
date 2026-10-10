@@ -5,6 +5,7 @@ import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { DealerService } from '../dealer/dealer.service';
 import { releaseVariationStock } from '../catalog/variation-stock';
+import { revokeReferralRewardForOrder } from '../wallet/referral-reward';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
@@ -189,6 +190,18 @@ export class OrderReversalService {
       } else {
         this.logger.error(
           `DealerService chưa wiring — KHÔNG thu hồi được thưởng quý cho đơn đại lý ${order.code} bị huỷ/trả. Cần đối soát tay.`,
+        );
+      }
+    }
+
+    // Thưởng giới thiệu chỉ cấp từ đơn đã giao (đơn lẻ, không phải lên hộ), nên chỉ đơn trả hàng
+    // (ảnh chụp trước lần lật = DELIVERED) mới có thể là đơn đã dùng để thưởng. Thu hồi trong cùng tx
+    // để lần trả hàng và việc trừ xu người mời commit/rollback cùng nhau.
+    if (order.status === 'DELIVERED' && order.type === 'RETAIL' && !order.placedForCustomer) {
+      const revoked = await revokeReferralRewardForOrder(tx, order);
+      if (revoked?.shortfall) {
+        this.logger.warn(
+          `Thu hồi thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} xu, thiếu ${revoked.shortfall} xu (đã ghi REFERRAL_DEBT).`,
         );
       }
     }

@@ -72,7 +72,7 @@ export class AffiliateService {
 
   /**
    * Ghi "chạm" giới thiệu (attribution last-touch persistent §quyết-định). Khi khách (đã đăng nhập)
-   * mở link CTV/nhãn → lưu referrerUserId + slug, hạn = now + config(attribution_days, mặc định 3).
+   * mở link CTV/nhãn → lưu referrerUserId + slug, hạn = now + config(attribution_days, mặc định 7 — Q-31).
    * Mỗi lần mở làm mới hạn. Bỏ qua nếu thiếu code / code không tồn tại / trỏ chính mình.
    */
   async recordTouch(
@@ -93,7 +93,7 @@ export class AffiliateService {
       select: { id: true },
     });
     if (!ref || ref.id === userId) return { ok: false };
-    const days = await this.config.get<number>('affiliate.attribution_days', 3);
+    const days = await this.config.get<number>('affiliate.attribution_days', 7);
     const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     const data = {
       referrerUserId: ref.id,
@@ -525,60 +525,18 @@ export class AffiliateService {
   }
 
   /**
-   * Refer-reward MỘT LẦN (tách khỏi hoa hồng %): đơn DELIVERED có người giới thiệu →
-   * thưởng voucher cho cả người mời và người được mời. Idempotent qua coupon.code @unique:
-   * mỗi cặp (mời, được-mời) thưởng 1 lần; mỗi người-được-mời nhận welcome-giới-thiệu 1 lần.
+   * Đơn DELIVERED → xét thưởng giới thiệu cho người mời của chủ đơn (Q-05: một chương trình duy
+   * nhất, thưởng xu khi người được mời có đơn thứ 2 trong cửa sổ). Không còn voucher REFER/REFERRED
+   * 50k+50k: voucher đó cộng thêm cho CTV ngoài hoa hồng và không bị thu hồi khi đơn bị trả. Voucher
+   * đã cấp trước đây giữ nguyên.
    */
   async grantReferralReward(orderId: string): Promise<void> {
-    const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
-    const referrerId = order.referrerUserId;
-    if (!referrerId || referrerId === order.userId) return;
-
-    // §6.14.5: chỉ kích hoạt khi đơn (đầu) của người được mời ≥ ngưỡng (mặc định 200k).
-    const minOrder = await this.config.get<number>('referral.min_order_amount', 200000);
-    if (order.total < minOrder) return;
-
-    const refereeId = order.userId;
-    // §6.14.5: CẢ hai nhận voucher 50k. Voucher áp cho đơn ≥ minOrder.
-    const referrerAmount = await this.config.get<number>('referral.referrer_reward_amount', 50000);
-    const refereeAmount = await this.config.get<number>('referral.referee_reward_amount', 50000);
-    await this.grantReferralVoucher(referrerId, `REFER-${referrerId}-${refereeId}`, referrerAmount, minOrder);
-    await this.grantReferralVoucher(refereeId, `REFERRED-${refereeId}`, refereeAmount, minOrder);
-  }
-
-  /** Cấp voucher cá nhân AMOUNT (USER_GROUP). Idempotent: code deterministic + catch P2002. */
-  private async grantReferralVoucher(
-    userId: string,
-    rawCode: string,
-    amount: number,
-    minOrder: number,
-  ): Promise<void> {
-    if (amount <= 0) return;
-    const code = rawCode.toUpperCase();
-    const existing = await this.prisma.coupon.findUnique({ where: { code } });
-    if (existing) return;
-    const now = new Date();
-    const endAt = new Date(now.getTime() + 30 * 864e5);
-    try {
-      await this.prisma.coupon.create({
-        data: {
-          code,
-          type: 'AMOUNT',
-          value: amount,
-          minOrder,
-          startAt: now,
-          endAt,
-          usageLimit: 1,
-          perUserLimit: 1,
-          scope: 'USER_GROUP',
-          scopeMeta: { userId },
-        },
-      });
-    } catch (err) {
-      // Race: instance khác vừa cấp cùng code → coi như đã thưởng.
-      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') return;
-      throw err;
-    }
+    const order = await this.prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
+      select: { userId: true, type: true, placedForCustomer: true },
+    });
+    if (order.type !== 'RETAIL' || order.placedForCustomer) return;
+    await this.coins.grantReferralOrderReward(order.userId);
   }
 
   /** Đơn hoàn/hủy trong cửa sổ → reject commission. */

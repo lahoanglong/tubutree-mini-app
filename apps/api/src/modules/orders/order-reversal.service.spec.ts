@@ -14,7 +14,7 @@ type MockTx = {
   row: { paymentStatus: string };
   order: { updateMany: jest.Mock };
   user: { update: jest.Mock };
-  coinTransaction: { create: jest.Mock };
+  coinTransaction: { create: jest.Mock; findMany: jest.Mock };
   /** Hoàn kho đi bằng SQL thô (catalog/variation-stock.ts) để sửa 3 cột nguyên tử. */
   $executeRaw: jest.Mock;
   dealerCreditLedger: { findFirst: jest.Mock; create: jest.Mock };
@@ -42,7 +42,8 @@ function makeTx(order: unknown, dbPaymentStatus?: string): MockTx {
       ),
     },
     user: { update: jest.fn().mockResolvedValue({}) },
-    coinTransaction: { create: jest.fn().mockResolvedValue({}) },
+    // Không có thưởng giới thiệu nào gắn với đơn → nhánh thu hồi không làm gì.
+    coinTransaction: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     orderItem: { update: jest.fn().mockResolvedValue({}) },

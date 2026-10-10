@@ -526,7 +526,7 @@ model ReferralTouch {
   referrerUserId String // CTV được công (đã resolve từ referralCode lúc ghi)
   storefrontSlug String? // chỉ set khi đến từ gian hàng CTV (kind=ctv); brand → null
   kind           String   @default("ctv") // ctv | brand
-  expiresAt      DateTime // now + config(affiliate.attribution_days, mặc định 3 ngày)
+  expiresAt      DateTime // now + config(affiliate.attribution_days, mặc định 7 ngày)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
