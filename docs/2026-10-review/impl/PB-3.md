@@ -79,3 +79,68 @@ $ npx eslint <các file đã sửa>        → không lỗi
   auth mergeGuestInto (MERGE_OUT/MERGE_IN).
 - API sao kê `GET /me/wallet/transactions` + màn miniapp; script reconcile ví; race spec cho các
   luồng nghiệp vụ.
+
+## Lượt 2/3 — Yêu cầu 2: mọi chỗ ghi số dư ví đi qua `applyWalletDelta` trong cùng transaction
+
+Trạng thái: **XONG**. Không còn chỗ nào ngoài `wallet-ledger.service.ts` ghi `users.walletBalance`.
+
+### Bảng các chỗ thay đổi số dư ví (grep `walletBalance` + `increment/decrement/update` trong `apps/api/src`)
+| # | File:dòng | Luồng | delta | type | refType / refId | Commit |
+|---|---|---|---|---|---|---|
+| 1 | `wallet/wallet.service.ts:93` | Đổi Ví → xu | −amountVnd | XU_CONVERT | CONVERT / Idempotency-Key | fe6ff3e |
+| 2 | `wallet/wallet.service.ts:190` | Rút ví về ngân hàng (gross = amount + phí) | −amount | WITHDRAW | PAYOUT / payout.id | fe6ff3e |
+| 3 | `affiliate/affiliate.service.ts:655` | CTV rút hoa hồng về Ví (WALLET_BALANCE) | +credited | COMMISSION_PAYOUT | PAYOUT / payout.id | 7999a23 |
+| 4 | `affiliate/affiliate.service.ts:1079` | Admin từ chối lệnh rút ví → hoàn gross | +(amount+fee) | WITHDRAW_REFUND | PAYOUT / payout.id | 7999a23 |
+| 5 | `cashback/cashback.service.ts:326` | Cron settle cashback | +userReward | CASHBACK | CASHBACK / cashbackTx.id | 9fa2f31 |
+| 6 | `checkout/checkout.service.ts:325` | Trả đơn bằng Ví | −total | ORDER_PAY | ORDER / order.id | c79c58e |
+| 7 | `orders/order-reversal.service.ts:211` (`refundToWallet`, gọi từ `reverseFinancials` và `refundEndCustomer`) | Huỷ/trả đơn hoàn về ví người đặt hoặc ví khách cuối (đơn CTV lên hộ, PA-1) | +total | ORDER_REFUND | ORDER / order.id | c79c58e |
+| 8 | `auth/auth.service.ts:420/428` (`mergeGuestInto`) | Gộp phiên khách: chuyển ví | −bal (khách) / +bal (đích) | MERGE_OUT / MERGE_IN | USER / id bên kia | dd19325 |
+
+Đã kiểm, KHÔNG có ghi ví: `dealer` (công nợ đại lý là sổ riêng), `admin` (chỉ đọc `walletBalance`
+ở danh sách user, không có màn điều chỉnh ví), `users` (chỉ đọc), `coins`/referral-reward (xu, ngoài
+phạm vi). Kiểm `checkout.service.ts:185` chỉ là kiểm tra sớm cho thông báo lỗi; chặn thật là điều
+kiện trong `applyWalletDelta`.
+
+### Sửa thêm trong lượt: mức khoá dòng user
+`applyWalletDelta` khoá `SELECT ... FOR UPDATE` gây **deadlock 40P01** ở `dealer-bonus.race-spec`
+(hoàn 2 đơn cùng đại lý song song): tx khác giữ KEY SHARE trên dòng `users` do INSERT có FK tới
+user (đơn, sổ thưởng đại lý), `FOR UPDATE` xung đột với KEY SHARE. Đổi sang `FOR NO KEY UPDATE`
+(đúng mức khoá của một `UPDATE walletBalance` thường) — vẫn tuần tự hoá các lần ghi sổ cùng user.
+Commit `909e58c`. Đỏ → xanh: tạm đổi lại `FOR UPDATE` → `dealer-bonus` FAIL
+(`Code: 40P01 ... deadlock detected`), trả lại → PASS.
+
+### Test thêm (đỏ → xanh)
+- `test/integration-race/wallet-ledger-flows.race-spec.ts` (Postgres thật, 8 case qua service
+  nghiệp vụ thật): rút + đổi xu song song vượt số dư; đổi xu cùng key ×5; admin từ chối lệnh rút ×2;
+  CTV rút hoa hồng về ví ×4; cron cashback chồng ×2; 2 đơn trả ví chỉ đủ tiền 1 + huỷ ×2; hoàn đơn
+  CTV lên hộ về ví khách cuối; gộp phiên khách có ví. Mỗi case kiểm số dư == tổng sổ, không âm, mỗi
+  khoá đúng 1 dòng. Đỏ trước khi chuyển từng luồng (không có dòng sổ), xanh sau commit tương ứng.
+- Unit spec của wallet/affiliate/cashback/checkout/order-reversal/auth cập nhật mock
+  (`$queryRaw`, `walletTransaction`).
+
+### Lệnh kiểm chứng (output thật, lượt 2)
+```
+$ DATABASE_URL=postgresql://tubu:tubu@localhost:5553/tubutree_it?schema=public npx jest \
+  -c test/integration-race/jest.config.js --runInBand "wallet-ledger|dealer-bonus|order-cancel|cod-return-refund|ctv-assisted-refund|auth-merge-guest|affiliate.race|admin-confirm-payment|pending-payment-expiry|referral-order2"
+PASS test/integration-race/wallet-ledger-flows.race-spec.ts
+PASS test/integration-race/wallet-ledger.race-spec.ts
+PASS test/integration-race/dealer-bonus.race-spec.ts
+... (11 suite)
+Test Suites: 11 passed, 11 total
+Tests:       75 passed, 75 total
+
+$ npx jest --maxWorkers=1 src/modules/wallet src/modules/affiliate src/modules/cashback \
+    src/modules/checkout src/modules/orders/order-reversal src/modules/auth/auth.service
+Test Suites: 14 passed, 14 total
+Tests:       343 passed, 343 total
+
+$ npx tsc --noEmit -p tsconfig.json   → exit 0
+$ npx eslint src/modules/wallet/wallet-ledger.service.ts → exit 0
+```
+
+### Giả định (lượt 2)
+- Gộp phiên khách chỉ chuyển ví khi số dư khách > 0; ví khách âm (dữ liệu cũ) giữ nguyên ở khách.
+- Rút ví ghi WITHDRAW theo gross (amount + phí) vì đó là số thật bị trừ; hoàn khi từ chối trả đúng gross.
+
+### Việc còn lại (lượt 3)
+- API sao kê `GET /me/wallet/transactions` + màn miniapp; script reconcile ví (sum sổ vs số dư).
