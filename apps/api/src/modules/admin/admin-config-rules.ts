@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { MAX_TTL_HOURS, MIN_TTL_HOURS, PENDING_PAYMENT_TTL_KEY } from '../orders/pending-payment-expiry.cron';
 
 /**
  * Luật ghi cho những khoá có FORM riêng trong web admin (Gomdon, tích điểm). SystemConfigService.set
@@ -70,6 +71,7 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   'loyalty.pos_max_order_total': (k, v) => assertIntInRange(k, v, POS_ORDER_TOTAL_MIN, POS_ORDER_TOTAL_MAX, 'đ'),
   'loyalty.pos_staff_daily_points_cap': (k, v) => assertIntInRange(k, v, 1, POS_POINTS_CAP_MAX, 'điểm'),
   'loyalty.pos_member_daily_points_cap': (k, v) => assertIntInRange(k, v, 1, POS_POINTS_CAP_MAX, 'điểm'),
+  [PENDING_PAYMENT_TTL_KEY]: (k, v) => assertIntInRange(k, v, MIN_TTL_HOURS, MAX_TTL_HOURS, 'giờ'),
 };
 
 /** Ném BadRequest nếu `value` sai luật của khoá; khoá không có luật riêng → bỏ qua. */

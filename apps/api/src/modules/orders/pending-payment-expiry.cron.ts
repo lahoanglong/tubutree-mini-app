@@ -8,8 +8,8 @@ import { PREPAID_METHODS } from './order-transition';
 export const PENDING_PAYMENT_TTL_KEY = 'orders.pending_payment_ttl_hours';
 export const DEFAULT_PENDING_PAYMENT_TTL_HOURS = 24;
 // Sàn 1 giờ: lỡ tay đặt 0 thì đơn khách vừa đặt (đang mở app ngân hàng chuyển khoản) bị huỷ ngay lượt sau.
-const MIN_TTL_HOURS = 1;
-const MAX_TTL_HOURS = 24 * 30;
+export const MIN_TTL_HOURS = 1;
+export const MAX_TTL_HOURS = 24 * 30;
 const BATCH_SIZE = 200;
 const LOCK_KEY = 'cron:orders.pending_payment_expiry';
 

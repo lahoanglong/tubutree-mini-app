@@ -39,6 +39,18 @@ describe('validateAdminConfigValue', () => {
     ok('loyalty.pos_member_daily_points_cap', 1000);
   });
 
+  // Cron huỷ đơn quá hạn thanh toán kẹp giá trị ngoài biên về 1/720 hoặc 24 — chặn lúc ghi để admin không thấy
+  // "đã lưu" một con số mà cron không chạy theo.
+  it('orders.pending_payment_ttl_hours: số nguyên 1..720 giờ', () => {
+    ok('orders.pending_payment_ttl_hours', 24);
+    ok('orders.pending_payment_ttl_hours', 1);
+    ok('orders.pending_payment_ttl_hours', 720);
+    bad('orders.pending_payment_ttl_hours', 0);
+    bad('orders.pending_payment_ttl_hours', 721);
+    bad('orders.pending_payment_ttl_hours', 1.5);
+    bad('orders.pending_payment_ttl_hours', '24');
+  });
+
   it('shipping.gomdon.config: kho + cân nặng mặc định hợp lệ', () => {
     ok('shipping.gomdon.config', {
       defaultWarehouse: { name: 'Kho', phone: '0900000000', address: '1 A', ward: 'P1', district: '', province: 'HCM' },
