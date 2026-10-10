@@ -28,7 +28,6 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }:
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: size === 'md' ? 20 : 17,
     userSelect: 'none',
     padding: 0,
     margin: 0,

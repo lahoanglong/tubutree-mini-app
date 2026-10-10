@@ -81,4 +81,17 @@ describe('QuantitySelector', () => {
       expect(btn.style.height).toBe('44px');
     }
   });
+  it('đổi cỡ khi đang hiển thị không làm React cảnh báo xung đột style font/fontSize', () => {
+    const errors: unknown[][] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args) => {
+      errors.push(args);
+    });
+    try {
+      const { rerender } = render(<QuantitySelector value={2} max={5} size="sm" onChange={() => {}} />);
+      rerender(<QuantitySelector value={2} max={5} size="md" onChange={() => {}} />);
+      expect(errors.filter((a) => String(a[0]).includes('conflicting property'))).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
