@@ -23,12 +23,12 @@ function makeAnalytics() {
   } as unknown as AnalyticsEventsService;
 }
 
-function makeService(opts: { variation?: unknown; address?: unknown; create?: jest.Mock } = {}) {
+function makeService(opts: { variation?: unknown; address?: unknown; create?: jest.Mock; open?: unknown } = {}) {
   const create = opts.create ?? jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data }));
   const prisma = {
     variation: { findUnique: jest.fn().mockResolvedValue('variation' in opts ? opts.variation : { id: 'v1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }) },
     address: { findUnique: jest.fn().mockResolvedValue(opts.address ?? { id: 'a1', userId: 'u1' }) },
-    subscription: { create },
+    subscription: { create, findFirst: jest.fn().mockResolvedValue(opts.open ?? null) },
     // create() giờ chạy trong $transaction (subscription.create + event atomic) — mock chạy
     // callback với chính prisma mock (đủ subscription.create cho test).
     $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
@@ -109,6 +109,22 @@ describe('SubscriptionsService.create', () => {
         }),
       }),
     );
+  });
+
+  it('gửi lại y hệt khi đã có gói ACTIVE cùng SP + địa chỉ → trả gói cũ, không tạo (C-057)', async () => {
+    const open = { id: 's0', status: 'ACTIVE', quantity: 2, intervalWeeks: 6 };
+    const { svc, create } = makeService({ open });
+    await expect(svc.create('u1', dto({ intervalWeeks: 6 }))).resolves.toBe(open);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('đã có gói cùng SP + địa chỉ nhưng khác chu kỳ → 409 SUBSCRIPTION_DUPLICATE (C-057)', async () => {
+    const { svc, create } = makeService({ open: { id: 's0', status: 'ACTIVE', quantity: 2, intervalWeeks: 4 } });
+    await expect(svc.create('u1', dto({ intervalWeeks: 6 }))).rejects.toMatchObject({
+      status: 409,
+      response: { code: 'SUBSCRIPTION_DUPLICATE', subscriptionId: 's0' },
+    });
+    expect(create).not.toHaveBeenCalled();
   });
 });
 

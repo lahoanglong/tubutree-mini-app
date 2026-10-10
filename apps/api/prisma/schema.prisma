@@ -2205,6 +2205,8 @@ model Subscription {
 
   @@index([status, nextRunAt])
   @@index([userId])
+  // Partial unique (userId, variationId, addressId) WHERE status IN ('ACTIVE','PAUSED') chỉ có trong
+  // migration 20261010030000_subscription_open_unique (C-057): Prisma không biểu diễn được, đừng `db push`.
   @@map("subscriptions")
 }
 
