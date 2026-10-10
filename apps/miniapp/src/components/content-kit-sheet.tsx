@@ -3,7 +3,7 @@ import { Share2, Copy } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchContentKit } from '../services/affiliate-api';
 import { getErrorMessage } from '../services/api';
-import { shareLink } from '../services/zmp-bridge';
+import { useShareWithFallback } from './share-sheet';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { Skeleton } from './ui/skeleton';
@@ -24,6 +24,7 @@ export function ContentKitSheet({
   productSlug: string;
 }) {
   const { openSnackbar } = useSnackbar();
+  const shareWithFallback = useShareWithFallback();
   const q = useQuery({
     queryKey: ['content-kit', productSlug],
     queryFn: () => fetchContentKit(productSlug),
@@ -82,12 +83,15 @@ export function ContentKitSheet({
               style={{ background: 'var(--primary-600)', marginBottom: 8 }}
               onClick={() => {
                 haptic('light');
-                void shareLink({
-                  title: data.productName,
-                  description: data.captions[0] ?? data.productName,
-                  thumbnail: data.images[0],
-                  path: data.shareLink,
-                }).catch(() => {});
+                void shareWithFallback(
+                  {
+                    title: data.productName,
+                    description: data.captions[0] ?? data.productName,
+                    thumbnail: data.images[0],
+                    path: data.shareLink,
+                  },
+                  data.captions[0] ?? data.shareLink,
+                );
               }}
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
