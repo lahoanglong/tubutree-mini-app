@@ -85,7 +85,7 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
             wardCode: initial.wardCode && initial.wardCode !== '00' ? initial.wardCode : '',
           }
         : EMPTY_GEO
-      : (recallLastGeo() ?? pickLastGeo(queryClient.getQueryData<AddressDTO[]>(['addresses'])) ?? EMPTY_GEO),
+      : (recallLastGeo(undefined, user?.id) ?? pickLastGeo(queryClient.getQueryData<AddressDTO[]>(['addresses'])) ?? EMPTY_GEO),
   );
   const [errors, setErrors] = useState<Partial<Record<FormFields, string>>>({});
   const [touched, setTouched] = useState<Partial<Record<FormFields, boolean>>>({});
@@ -115,8 +115,8 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
   useEffect(() => {
     if (initial || !askZaloProfile) return;
     if (form.recipient.trim() && form.phone.trim()) return;
-    if (hasAskedZaloPrefill()) return;
-    markZaloPrefillAsked();
+    if (hasAskedZaloPrefill(undefined, user?.id)) return;
+    markZaloPrefillAsked(undefined, user?.id);
     void fillFromZalo(false);
   }, []);
 
@@ -137,7 +137,7 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
     },
     onSuccess: (a) => {
       haptic('medium');
-      rememberLastGeo(geo);
+      rememberLastGeo(geo, undefined, user?.id);
       openSnackbar({ text: initial ? 'Đã cập nhật địa chỉ.' : 'Đã thêm địa chỉ.', type: 'success' });
       onSaved(a);
     },

@@ -111,3 +111,31 @@ describe('cờ đã xin thông tin Zalo (chỉ xin 1 lần ở đơn đầu)', (
     expect(hasAskedZaloPrefill(boom)).toBe(true);
   });
 });
+
+describe('khoá theo tài khoản (máy dùng chung / đổi tài khoản)', () => {
+  it('tỉnh/phường người trước lưu không điền sẵn cho tài khoản khác', () => {
+    const s = memoryStorage();
+    rememberLastGeo(HCM, s, 'u1');
+    expect(recallLastGeo(s, 'u1')).toEqual(HCM);
+    expect(recallLastGeo(s, 'u2')).toBeNull();
+    expect(recallLastGeo(s)).toBeNull();
+  });
+
+  it('tài khoản khác vẫn được xin quyền Zalo dù người trước đã xin', () => {
+    const s = memoryStorage();
+    markZaloPrefillAsked(s, 'u1');
+    expect(hasAskedZaloPrefill(s, 'u1')).toBe(true);
+    expect(hasAskedZaloPrefill(s, 'u2')).toBe(false);
+  });
+
+  it('storage hỏng: cờ trong bộ nhớ cũng tách theo tài khoản', () => {
+    const boom: StorageLike = {
+      getItem: () => { throw new Error('denied'); },
+      setItem: () => { throw new Error('quota'); },
+      removeItem: () => undefined,
+    };
+    markZaloPrefillAsked(boom, 'u9');
+    expect(hasAskedZaloPrefill(boom, 'u9')).toBe(true);
+    expect(hasAskedZaloPrefill(boom, 'u10')).toBe(false);
+  });
+});

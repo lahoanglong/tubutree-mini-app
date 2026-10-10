@@ -8,7 +8,7 @@ import * as accountApi from '../services/account-api';
 import { LAST_GEO_KEY, ZALO_PREFILL_ASKED_KEY } from '../utils/address-memory';
 
 const mocks = vi.hoisted(() => ({
-  user: { current: null as { fullName?: string | null; phone?: string | null } | null },
+  user: { current: null as { id?: string; fullName?: string | null; phone?: string | null } | null },
   requestZaloProfile: vi.fn(),
   openSnackbar: vi.fn(),
 }));
@@ -138,6 +138,23 @@ describe('AddressForm', () => {
       expect(screen.queryByText('Điền nhanh từ Zalo')).not.toBeInTheDocument();
     });
 
+    it('máy dùng chung: người trước đã xin rồi thì tài khoản khác (id khác) vẫn được xin quyền', async () => {
+      localStorage.setItem(`${ZALO_PREFILL_ASKED_KEY}:u1`, '1');
+      mocks.user.current = { id: 'u2', fullName: null, phone: null };
+      mocks.requestZaloProfile.mockResolvedValue({ name: 'Người Sau', phone: '0907654321' });
+      renderForm(<AddressForm initial={null} askZaloProfile onCancel={() => {}} onSaved={() => {}} />);
+      await waitFor(() => expect(inputNear('Người nhận')).toHaveValue('Người Sau'));
+      expect(mocks.requestZaloProfile).toHaveBeenCalledTimes(1);
+      expect(localStorage.getItem(`${ZALO_PREFILL_ASKED_KEY}:u2`)).toBe('1');
+    });
+
+    it('cùng tài khoản đã xin rồi → không xin lại', () => {
+      localStorage.setItem(`${ZALO_PREFILL_ASKED_KEY}:u1`, '1');
+      mocks.user.current = { id: 'u1', fullName: null, phone: null };
+      renderForm(<AddressForm initial={null} askZaloProfile onCancel={() => {}} onSaved={() => {}} />);
+      expect(mocks.requestZaloProfile).not.toHaveBeenCalled();
+    });
+
     it('đã xin ở lần trước (cờ trên máy) → mở form KHÔNG xin lại', () => {
       localStorage.setItem(ZALO_PREFILL_ASKED_KEY, '1');
       renderForm(<AddressForm initial={null} askZaloProfile onCancel={() => {}} onSaved={() => {}} />);
@@ -213,6 +230,31 @@ describe('AddressForm', () => {
         expect.objectContaining({ province: HCM.province, provinceCode: HCM.provinceCode, ward: HCM.ward, wardCode: HCM.wardCode }),
       );
       expect(onSaved).toHaveBeenCalled();
+    });
+
+    it('tỉnh/phường nhớ của tài khoản khác trên cùng máy không được điền sẵn', async () => {
+      localStorage.setItem(`${LAST_GEO_KEY}:u1`, JSON.stringify(HCM));
+      mocks.user.current = { id: 'u2', fullName: 'Long', phone: '0900000000' };
+      (shopApi.createAddress as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'new' });
+      renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+      typeStreet();
+      fireEvent.click(screen.getByText('Lưu'));
+      await waitFor(() => expect(screen.getAllByText(/Bạn điền giúp Tubu mục này nhé/).length).toBeGreaterThan(0));
+      expect(shopApi.createAddress).not.toHaveBeenCalled();
+    });
+
+    it('lưu thành công ghi nhớ tỉnh/phường dưới khoá của tài khoản hiện tại', async () => {
+      mocks.user.current = { id: 'u7', fullName: 'Long', phone: '0900000000' };
+      const qc = new QueryClient();
+      qc.setQueryData(['addresses'], [
+        { id: 'x', recipient: 'A', phone: '0900000000', street: '9 Y', district: '', districtCode: '', isDefault: true, ...HCM },
+      ]);
+      (shopApi.createAddress as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'new' });
+      renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />, qc);
+      typeStreet();
+      fireEvent.click(screen.getByText('Lưu'));
+      await waitFor(() => expect(localStorage.getItem(`${LAST_GEO_KEY}:u7`)).not.toBeNull());
+      expect(localStorage.getItem(LAST_GEO_KEY)).toBeNull();
     });
 
     it('máy chưa nhớ gì nhưng sổ địa chỉ đã tải có địa chỉ mặc định → lấy tỉnh/phường từ đó', async () => {
