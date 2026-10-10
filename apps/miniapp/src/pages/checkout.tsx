@@ -15,10 +15,17 @@ import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
-import { formatVnd, recyclingCheckoutFields, recyclingMaxKg } from '../utils/format';
+import { formatVnd, formatXu, recyclingCheckoutFields, recyclingMaxKg } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { newIdempotencyKey } from '../utils/idempotency';
-import { checkoutPoints, isInvoiceValid, shouldFallbackToCod } from '../utils/checkout-rules';
+import {
+  checkoutPoints,
+  isInvoiceValid,
+  paymentUnavailableReason,
+  pointsEarnLabel,
+  pointsUseLabel,
+  shouldFallbackToCod,
+} from '../utils/checkout-rules';
 import {
   clearCheckoutSelection,
   recallCheckoutSelection,
@@ -282,22 +289,17 @@ export default function CheckoutPage() {
   const canPlace = !!addressId && quote.isSuccess && !!invoiceValid;
 
   const coinsBalance = coinsBalanceLive;
+  // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
+  const walletReason = quote.isSuccess ? paymentUnavailableReason('WALLET', walletBalance, total) : null;
+  const xuReason = quote.isSuccess ? paymentUnavailableReason('XU', coinsBalance, total) : null;
   const paymentMethods = [
-    { value: 'COD', label: vi.checkout.paymentCod, disabled: false },
+    { value: 'COD', label: vi.checkout.paymentCod, hint: null },
     // ZALOPAY tạm ẨN: chưa nối cổng thanh toán thật → nếu hiện, bấm đặt sẽ ra "thành công"
     // mà KHÔNG thu tiền (như COD) → đơn treo/sai đối soát. Mở lại khi tích hợp Payment API Zalo.
-    { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank, disabled: false },
-    {
-      value: 'WALLET',
-      label: vi.checkout.paymentWallet(formatVnd(walletBalance)),
-      disabled: quote.isSuccess && walletBalance < total,
-    },
-    {
-      value: 'XU',
-      label: vi.checkout.paymentXu(`${coinsBalance.toLocaleString('vi-VN')} xu`),
-      disabled: quote.isSuccess && coinsBalance < total,
-    },
-  ];
+    { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank, hint: null },
+    { value: 'WALLET', label: vi.checkout.paymentWallet(formatVnd(walletBalance)), hint: walletReason },
+    { value: 'XU', label: vi.checkout.paymentXu(formatXu(coinsBalance)), hint: xuReason },
+  ].map((m) => ({ ...m, disabled: m.hint !== null }));
 
   const shownItems = itemIds
     ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
@@ -442,6 +444,7 @@ export default function CheckoutPage() {
             role="radio"
             aria-checked={payment === m.value}
             aria-disabled={m.disabled}
+            aria-describedby={m.hint ? `pay-hint-${m.value}` : undefined}
             className={m.disabled ? undefined : 'tubu-press'}
             onClick={() => {
               if (m.disabled) return;
@@ -450,7 +453,7 @@ export default function CheckoutPage() {
             }}
             flex
             alignItems="center"
-            style={{ gap: 10, padding: '12px 0', minHeight: 44, opacity: m.disabled ? 0.45 : 1, boxSizing: 'border-box' }}
+            style={{ gap: 10, padding: '12px 0', minHeight: 44, boxSizing: 'border-box' }}
           >
             {/* Radio (Task 19) là thị giác thuần tuý ở đây — logic chọn phương thức thanh toán
                 VẪN nằm nguyên trong onClick của Box cha ở trên (không đổi). onChange rỗng chỉ để
@@ -458,8 +461,20 @@ export default function CheckoutPage() {
                 ĐÈ lên đúng vùng chấm tròn (zaui checkbox/radio input position:absolute che kín ô
                 24x24) nên 1 chạm tại đó chỉ phát sinh đúng 1 sự kiện click nổi bọt lên Box cha —
                 không có nguy cơ gọi setPayment 2 lần. */}
-            <Radio checked={payment === m.value} disabled={m.disabled} onChange={() => {}} />
-            <Text size="small">{m.label}</Text>
+            <Box style={{ opacity: m.disabled ? 0.45 : 1 }}>
+              <Radio checked={payment === m.value} disabled={m.disabled} onChange={() => {}} />
+            </Box>
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Text size="small" style={{ opacity: m.disabled ? 0.45 : 1 }}>
+                {m.label}
+              </Text>
+              {/* Lý do KHÔNG mờ theo dòng: chữ giải thích mà mờ thì khách vẫn không đọc được. */}
+              {m.hint && (
+                <Text id={`pay-hint-${m.value}`} size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                  {m.hint}
+                </Text>
+              )}
+            </Box>
           </Box>
         ))}
       </Box>
@@ -488,7 +503,7 @@ export default function CheckoutPage() {
               </Text>
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                 {points.usable > 0 && usePoints && quote.data
-                  ? vi.checkout.pointsUse(quote.data.pointsUsed, formatVnd(quote.data.pointsDiscount))
+                  ? pointsUseLabel(quote.data.pointsUsed, formatVnd(quote.data.pointsDiscount))
                   : (points.label ?? vi.checkout.pointsNone)}
               </Text>
               {points.lockNote && (
@@ -707,7 +722,7 @@ export default function CheckoutPage() {
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
                 <Sprout size={13} color="var(--color-text-success)" aria-hidden />
                 <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
-                  {vi.checkout.pointsEarn(quote.data.pointsEarned)}
+                  {pointsEarnLabel(quote.data.pointsEarned)}
                 </Text>
               </Box>
             )}
@@ -840,7 +855,7 @@ export default function CheckoutPage() {
             <Box flex alignItems="center" justifyContent="flex-end" style={{ gap: 4, marginTop: 6 }}>
               <Sprout size={13} color="var(--color-text-success)" aria-hidden />
               <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
-                Tích lũy +{quote.data!.pointsEarned} điểm Xanh khi giao thành công
+                Tích lũy {pointsEarnLabel(quote.data!.pointsEarned)}
               </Text>
             </Box>
           )}

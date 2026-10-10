@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   recordReferralTouch: vi.fn(),
   ensurePhone: vi.fn(),
   requestZaloProfile: vi.fn(),
+  getWallet: vi.fn(),
+  getLoyalty: vi.fn(),
   user: { id: 'u1', fullName: 'Long', phone: '0900000000' as string | null, walletBalance: 0, coinsBalance: 0, pointsBalance: 0 },
   sfCtx: { slug: null as string | null, referralCode: null as string | null, kind: 'ctv' as const },
 }));
@@ -32,8 +34,8 @@ vi.mock('../services/shop-api', () => ({
   createAddress: vi.fn(),
 }));
 vi.mock('../services/account-api', () => ({
-  getWallet: vi.fn().mockResolvedValue({ walletBalance: 0, coinsBalance: 0 }),
-  getLoyalty: vi.fn().mockResolvedValue({ pointsBalance: 0 }),
+  getWallet: mocks.getWallet,
+  getLoyalty: mocks.getLoyalty,
   updateAddress: vi.fn(),
 }));
 vi.mock('../services/affiliate-api', () => ({ recordReferralTouch: mocks.recordReferralTouch }));
@@ -110,6 +112,8 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     mocks.checkoutQuote.mockResolvedValue(QUOTE);
     mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
     mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0, coinsBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
   });
 
   it('có ô nhập mã giới thiệu; nhập mã hợp lệ rồi đặt hàng → placeOrder gửi kèm referralCode (đã chuẩn hoá HOA)', async () => {
@@ -164,6 +168,8 @@ describe('CheckoutPage — đơn đầu: xin tên + SĐT Zalo để điền sẵ
     mocks.user.phone = null;
     mocks.getCart.mockResolvedValue(CART);
     mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0, coinsBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
   });
 
   it('chưa có địa chỉ → mở form thêm địa chỉ thì xin quyền Zalo 1 lần và điền sẵn tên + SĐT', async () => {
@@ -182,5 +188,92 @@ describe('CheckoutPage — đơn đầu: xin tên + SĐT Zalo để điền sẵ
     fireEvent.click(await screen.findByText('Thêm địa chỉ mới'));
     await screen.findByText('Lưu');
     expect(mocks.requestZaloProfile).not.toHaveBeenCalled();
+  });
+});
+
+describe('CheckoutPage — Ví/TubuXu bị mờ phải nói lý do, số điểm có dấu nghìn (C-080)', () => {
+  const BIG_QUOTE = { ...QUOTE, subtotal: 778_000, total: 798_000 };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(BIG_QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 130_000, coinsBalance: 149_000 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  afterEach(() => {
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0, coinsBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('số dư Ví Tubu và xu không đủ tổng đơn → hai dòng bị khoá, mỗi dòng có lý do + số tiền còn thiếu', async () => {
+    renderPage();
+    expect(await screen.findByText('Số dư chưa đủ — cần thêm 668.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Số dư chưa đủ — cần thêm 649.000 xu')).toBeInTheDocument();
+    const wallet = screen.getByRole('radio', { name: /Ví Tubu/ });
+    const xu = screen.getByRole('radio', { name: /TubuXu/ });
+    expect(wallet).toHaveAttribute('aria-disabled', 'true');
+    expect(xu).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('số tiền trong nhãn có dấu nghìn: "TubuXu (149.000 xu)", "Ví Tubu (130.000đ)"', async () => {
+    renderPage();
+    expect(await screen.findByText('TubuXu (149.000 xu)')).toBeInTheDocument();
+    expect(screen.getByText('Ví Tubu (130.000đ)')).toBeInTheDocument();
+  });
+
+  it('lý do KHÔNG bị làm mờ theo dòng (chữ phải đọc được): không có tổ tiên nào của lý do có opacity < 1', async () => {
+    renderPage();
+    const hint = await screen.findByText('Số dư chưa đủ — cần thêm 668.000đ');
+    for (let el: HTMLElement | null = hint; el && el !== document.body; el = el.parentElement) {
+      const o = el.style.opacity;
+      expect(o === '' || Number(o) === 1).toBe(true);
+    }
+  });
+
+  it('Ví đủ tiền, xu không đủ → chỉ dòng xu có lý do; Ví chọn được', async () => {
+    mocks.getWallet.mockResolvedValue({ walletBalance: 900_000, coinsBalance: 149_000 });
+    renderPage();
+    expect(await screen.findByText('Số dư chưa đủ — cần thêm 649.000 xu')).toBeInTheDocument();
+    expect(screen.queryByText(/cần thêm \d[\d.]*đ/)).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Ví Tubu/ })).toHaveAttribute('aria-disabled', 'false');
+  });
+
+  it('chưa có báo giá (chưa có địa chỉ) → chưa khoá, chưa có lý do', async () => {
+    mocks.getAddresses.mockResolvedValue([]);
+    renderPage();
+    await screen.findByText('Thêm địa chỉ mới');
+    expect(screen.queryByText(/Số dư chưa đủ/)).not.toBeInTheDocument();
+  });
+
+  it('Điểm Xanh: "Dùng được 48/65.000 điểm" thay vì "48/65000"', async () => {
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 65_000, lockedPoints: 64_952, redeemablePoints: 48 });
+    renderPage();
+    expect(await screen.findByText('Dùng được 48/65.000 điểm')).toBeInTheDocument();
+    expect(screen.getByText(/^64\.952 điểm từ đơn còn trong hạn/)).toBeInTheDocument();
+  });
+
+  it('bật dùng điểm: "Dùng 1.250 điểm — giảm 12.500đ"', async () => {
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 1250, lockedPoints: 0, redeemablePoints: 1250 });
+    mocks.checkoutQuote.mockImplementation(async (_a: string, pts: number) => ({
+      ...BIG_QUOTE, pointsUsed: pts, pointsDiscount: pts * 10, total: 798_000 - pts * 10,
+    }));
+    renderPage();
+    fireEvent.click(await screen.findByText('Bạn đang có 1.250 điểm'));
+    expect(await screen.findByText('Dùng 1.250 điểm — giảm 12.500đ')).toBeInTheDocument();
+  });
+
+  it('điểm sẽ tích ≥ 1.000 có dấu nghìn ở thanh tóm tắt', async () => {
+    mocks.checkoutQuote.mockResolvedValue({ ...BIG_QUOTE, pointsEarned: 1250 });
+    renderPage();
+    expect(await screen.findByText('+1.250 điểm Xanh khi giao thành công')).toBeInTheDocument();
   });
 });
