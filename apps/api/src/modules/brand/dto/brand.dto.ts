@@ -52,7 +52,7 @@ export class PromotionDto {
   @IsString() title!: string;
   @IsOptional() @IsString() subtitle?: string;
   @IsOptional() @IsString() themeColor?: string;
-  @IsOptional() @IsString() couponCode?: string;
+  @IsOptional() @IsString() @MaxLength(64) couponCode?: string;
   // @IsDateString: endpoint self-service /brand/owner/* dùng chung DTO này với client ít
   // tin cậy hơn admin → chặn chuỗi không phải ngày (new Date('x')→Invalid Date→Prisma 500).
   @IsDateString() startAt!: string;
@@ -64,7 +64,7 @@ export class UpdatePromotionDto {
   @IsOptional() @IsString() title?: string;
   @IsOptional() @IsString() subtitle?: string;
   @IsOptional() @IsString() themeColor?: string;
-  @IsOptional() @IsString() couponCode?: string;
+  @IsOptional() @IsString() @MaxLength(64) couponCode?: string;
   @IsOptional() @IsDateString() startAt?: string;
   @IsOptional() @IsDateString() endAt?: string;
   @IsOptional() @IsBoolean() isActive?: boolean;
