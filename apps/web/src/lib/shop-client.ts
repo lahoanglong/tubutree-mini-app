@@ -22,6 +22,8 @@ export interface CartSummary {
   freeship: boolean;
   freeshipThreshold: number;
   itemCount: number;
+  /** Dòng có SP đã ngừng bán/chưa duyệt — server không tính tiền, không đặt được. */
+  unavailableItems?: { id: string; productName: string; variationName: string; quantity: number }[];
 }
 export interface AddressDTO {
   id: string;
