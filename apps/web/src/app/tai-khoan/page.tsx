@@ -4,25 +4,9 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { fetchOrders, formatVnd } from '@/lib/shop-client';
+import { canPayAgain, orderDetailHref, orderStatusLabel, orderStatusTone } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { RecyclingStatus } from '@/components/recycling-status';
-
-const STATUS_LABEL: Record<string, string> = {
-  PENDING_PAYMENT: 'Chờ thanh toán',
-  CONFIRMED: 'Đã xác nhận',
-  PACKED: 'Đang đóng gói',
-  SHIPPING: 'Đang giao',
-  DELIVERED: 'Đã giao',
-  RETURNED: 'Đã hoàn',
-  CANCELLED: 'Đã hủy',
-};
-
-// Chờ thanh toán là việc khách còn phải làm nên dùng màu cảnh báo; đơn đã hủy/hoàn là trạng thái kết thúc.
-function statusTone(status: string): string {
-  if (status === 'PENDING_PAYMENT') return 'bg-warning-bg text-warning-fg';
-  if (status === 'CANCELLED' || status === 'RETURNED') return 'bg-stone-100 text-stone-700';
-  return 'bg-forest-50 text-forest-800';
-}
 
 export default function AccountPage() {
   const { user, status, logout } = useAuth();
@@ -88,8 +72,8 @@ export default function AccountPage() {
               <li key={o.code} className={`p-4 ${ui.card}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-stone-900">#{o.code}</span>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusTone(o.status)}`}>
-                    {STATUS_LABEL[o.status] ?? o.status}
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${orderStatusTone(o.status)}`}>
+                    {orderStatusLabel(o.status)}
                   </span>
                 </div>
                 <div className="mt-1 text-xs text-stone-600">
@@ -97,6 +81,20 @@ export default function AccountPage() {
                 </div>
                 <div className="mt-1 font-semibold text-stone-900">{formatVnd(o.total)}</div>
                 <RecyclingStatus order={o} />
+                {/* Đơn chuyển khoản còn chờ tiền: lối riêng "Thanh toán" vì đó là việc khách còn phải làm. */}
+                {canPayAgain(o) ? (
+                  <Link href={orderDetailHref(o.code)} aria-label={`Thanh toán đơn ${o.code}`} className={`${ui.btnPrimary} mt-2`}>
+                    Thanh toán
+                  </Link>
+                ) : (
+                  <Link
+                    href={orderDetailHref(o.code)}
+                    aria-label={`Xem chi tiết đơn ${o.code}`}
+                    className={`${ui.btnText} -ml-2 mt-1 text-forest-700`}
+                  >
+                    Xem chi tiết
+                  </Link>
+                )}
               </li>
             ))}
           </ul>

@@ -257,6 +257,36 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
   });
 });
 
+describe('trang khách — chi tiết đơn (C-025)', () => {
+  it('/tai-khoan: mỗi đơn dẫn tới trang chi tiết; đơn chuyển khoản chờ thanh toán có lối "Thanh toán" riêng', async () => {
+    shop.orders = [
+      { code: 'TB-1', status: 'PENDING_PAYMENT', subtotal: 1, discount: 0, shippingFee: 0, total: 150000, paymentMethod: 'COD', createdAt: '2026-10-01T00:00:00Z', items: [] },
+      { code: 'TB-2', status: 'PENDING_PAYMENT', subtotal: 1, discount: 0, shippingFee: 0, total: 99000, paymentMethod: 'BANK_TRANSFER', createdAt: '2026-10-02T00:00:00Z', items: [] },
+      { code: 'TB-3', status: 'DELIVERED', subtotal: 1, discount: 0, shippingFee: 0, total: 80000, paymentMethod: 'BANK_TRANSFER', createdAt: '2026-10-03T00:00:00Z', items: [] },
+    ];
+    const { container } = mount(<AccountPage />);
+    await flush();
+    expectAccessible(container);
+    const link = (code: string) => container.querySelector<HTMLAnchorElement>(`a[href="/tai-khoan/don-hang/${code}"]`);
+    expect(accessibleName(link('TB-1')!)).toBe('Xem chi tiết đơn TB-1');
+    expect(link('TB-1')!.textContent).toBe('Xem chi tiết');
+    expect(accessibleName(link('TB-2')!)).toBe('Thanh toán đơn TB-2');
+    expect(link('TB-2')!.textContent).toBe('Thanh toán');
+    expect(link('TB-3')!.textContent).toBe('Xem chi tiết');
+  });
+
+  it('/thanh-toan sau khi đặt đơn: nút chính dẫn tới chi tiết đơn vừa đặt', async () => {
+    const { container } = mount(<CheckoutPage />);
+    await flush();
+    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Đặt hàng') ?? null);
+    await flush(8);
+    expect(container.textContent).toContain('Đặt hàng thành công!');
+    const detail = container.querySelector<HTMLAnchorElement>('a[href="/tai-khoan/don-hang/TB-9"]');
+    expect(detail).not.toBeNull();
+    expect(detail!.textContent).toBe('Xem chi tiết đơn');
+  });
+});
+
 describe('trang khách — hành vi giữ nguyên sau khi đổi giao diện', () => {
   it('giỏ hàng: nhập mã giảm giá vẫn bật nút Áp dụng', async () => {
     const { container } = mount(<CartPage />);

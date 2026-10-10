@@ -20,6 +20,7 @@ import {
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { recyclingCheckoutFields } from '@/lib/recycling';
 import { checkoutPointsOffer } from '@/lib/checkout-points';
+import { orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
@@ -147,17 +148,19 @@ export default function CheckoutPage() {
             </div>
           )}
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link href="/tai-khoan" className={ui.btnPrimary}>
-              Xem đơn của tôi
+            <Link href={orderDetailHref(placed.code)} className={ui.btnPrimary}>
+              Xem chi tiết đơn
+            </Link>
+            <Link href="/tai-khoan" className={ui.btnSecondary}>
+              Đơn của tôi
             </Link>
             <Link href="/" className={ui.btnSecondary}>
               Tiếp tục mua sắm
             </Link>
           </div>
         </div>
-        {/* A2-02 = A6-01: đơn CHUYỂN KHOẢN phải hiện QR/STK/nội dung CK NGAY TẠI ĐÂY — chưa có
-            trang chi tiết đơn trên web (`/tai-khoan` chỉ là danh sách), nên đây là nơi DUY NHẤT
-            khách có thể thấy lại thông tin thanh toán nếu không lưu/chụp màn hình. */}
+        {/* A2-02 = A6-01: đơn CHUYỂN KHOẢN hiện QR/STK/nội dung CK ngay sau khi đặt để khách trả liền;
+            nếu đóng tab, trang chi tiết đơn (`/tai-khoan/don-hang/[code]`) dựng lại đúng khung này. */}
         <div className="mx-auto max-w-md">
           <BankTransferPanel order={placed} />
         </div>
