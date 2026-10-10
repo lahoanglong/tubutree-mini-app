@@ -43,8 +43,11 @@ export async function applyWalletDelta(
   // việc tra trùng + đọc số dư + ghi dòng mới được tuần tự hoá theo user. Không khoá thì 2 tx
   // cùng refId đều thấy "chưa có", tx thua chỉ nổ P2002 ở INSERT — lỗi đó huỷ cả tx của caller
   // (Postgres abort transaction, xem C-061) thay vì được bỏ qua êm.
+  // NO KEY UPDATE = đúng mức khoá mà một UPDATE "walletBalance" vốn lấy: vẫn tuần tự hoá các lần
+  // ghi sổ cùng user, nhưng không đụng khoá KEY SHARE do INSERT có FK tới users (đơn, sổ thưởng đại
+  // lý…) của tx khác giữ — FOR UPDATE đụng khoá đó và gây deadlock khi hoàn 2 đơn cùng đại lý.
   const locked = await tx.$queryRaw<{ walletBalance: number }[]>`
-    SELECT "walletBalance" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+    SELECT "walletBalance" FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
   const row = locked[0];
   if (!row) throw new NotFoundException('Không tìm thấy tài khoản.');
   const current = row.walletBalance;
