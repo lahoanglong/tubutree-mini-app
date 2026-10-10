@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ProductCard } from '../../services/shop-api';
@@ -32,7 +33,7 @@ describe('CatalogGrid', () => {
   it('2 thẻ; thẻ sale có badge -20%; thẻ hết hàng KHÔNG có badge % (lớp phủ trong suốt)', async () => {
     renderGrid();
     const grid = screen.getByTestId('catalog-grid');
-    expect(grid.querySelectorAll('[role="button"][aria-label]')).toHaveLength(2);
+    expect(grid.querySelectorAll('button.tubu-tile-link')).toHaveLength(2);
     expect(await screen.findByText('-20%')).toBeInTheDocument();
     expect(screen.getAllByText(/-\d+%/)).toHaveLength(1);
   });
@@ -54,13 +55,15 @@ describe('CatalogGrid', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/product/het', { state: { listSource: 'search' } });
   });
 
-  it('bàn phím: Tab tới được thẻ, Enter và Space đều mở sản phẩm', () => {
+  it('bàn phím: Tab tới được nút tên của thẻ, Enter và Space đều mở sản phẩm', async () => {
+    const user = userEvent.setup();
     renderGrid();
     const tile = screen.getByRole('button', { name: 'Nước rửa chén' });
     expect(tile.tabIndex).toBe(0);
-    fireEvent.keyDown(tile, { key: 'Enter' });
+    tile.focus();
+    await user.keyboard('{Enter}');
     expect(mocks.navigate).toHaveBeenCalledTimes(1);
-    fireEvent.keyDown(tile, { key: ' ' });
+    await user.keyboard(' ');
     expect(mocks.navigate).toHaveBeenCalledTimes(2);
     expect(mocks.navigate).toHaveBeenLastCalledWith('/product/nrc', { state: { listSource: 'search' } });
   });

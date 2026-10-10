@@ -237,6 +237,27 @@ body.with-back-btn .page.page-bleed {
   transform: translateY(-50%);
 }
 
+/* ── Thẻ sản phẩm (ProductTile): nút tên là phần tử bấm được duy nhất; ::after phủ kín vỏ thẻ
+   (position:relative) để chạm đâu trên thẻ cũng mở chi tiết, còn tim / Mua lại là anh em nổi lên
+   bằng z-index (không lồng phần tử tương tác — axe nested-interactive). Vòng focus vẽ trên lớp phủ
+   để bao cả thẻ thay vì chỉ dòng tên. ── */
+.tubu-tile-link::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: var(--radius-card);
+}
+.tubu-tile-link:focus-visible {
+  outline: none;
+}
+.tubu-tile-link:focus-visible::after {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
 /* ── Ô tìm kiếm (SearchField): ẩn nút "x" gốc của WebKit/Blink (trùng nút xoá của DS) + vòng focus
    của khung (WCAG 2.4.7; ô nhập tự bỏ outline nên khung phải báo thay). Border nằm trong style
    nội tuyến nên vòng focus dùng box-shadow. ── */

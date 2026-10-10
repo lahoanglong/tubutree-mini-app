@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi } from 'vitest';
 import type { ReactElement } from 'react';
@@ -41,7 +44,7 @@ describe('ProductTile', () => {
   it('onPress fires when the tile itself (not a nested button) is clicked', () => {
     const onPress = vi.fn();
     renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={onPress} />);
-    screen.getByText('Serum Bã Trầu').closest('[role="button"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Serum Bã Trầu' }));
     expect(onPress).toHaveBeenCalledTimes(1);
   });
   it('clicking "Mua lại" does NOT also fire the tile\'s onPress (click isolation, no accidental navigation)', () => {
@@ -63,37 +66,84 @@ describe('ProductTile', () => {
     expect(btn.className).toContain('zaui-btn-full-width');
     expect(btn).toHaveStyle({ minWidth: '0px' });
   });
-  it('bàn phím: thẻ nằm trong thứ tự Tab, Enter / Space gọi onPress; phím trên nút lồng bên trong KHÔNG kích hoạt thẻ', () => {
+  it('bàn phím: nút tên nằm trong thứ tự Tab, Enter / Space gọi onPress; phím trên tim yêu thích KHÔNG kích hoạt thẻ', async () => {
+    const user = userEvent.setup();
     const onPress = vi.fn();
     renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={onPress} />);
-    const tile = screen.getByRole('button', { name: 'Serum Bã Trầu' });
-    expect(tile.tabIndex).toBe(0);
-    fireEvent.keyDown(tile, { key: 'Enter' });
-    fireEvent.keyDown(tile, { key: ' ' });
+    const link = screen.getByRole('button', { name: 'Serum Bã Trầu' });
+    expect(link.tagName).toBe('BUTTON');
+    expect(link.tabIndex).toBe(0);
+    link.focus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
     expect(onPress).toHaveBeenCalledTimes(2);
-    fireEvent.keyDown(tile, { key: 'a' });
-    expect(onPress).toHaveBeenCalledTimes(2);
-    fireEvent.keyDown(screen.getByRole('button', { name: /yêu thích/i }), { key: 'Enter' });
+    screen.getByRole('button', { name: /yêu thích/i }).focus();
+    await user.keyboard('{Enter}');
     expect(onPress).toHaveBeenCalledTimes(2);
   });
   it('tên truy cập = tên sản phẩm; giá đang hiển thị nằm trong mô tả truy cập', () => {
     renderTile(<ProductTile product={{ ...PRODUCT, salePrice: 45000 }} priceOverride={{ price: 39000 }} variant="grid" onPress={() => {}} />);
     expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(/39.000/);
   });
-  it('Space bị chặn cuộn trang (preventDefault); phím giữ lặp (repeat) không bấm thẻ nhiều lần', () => {
-    const onPress = vi.fn();
-    renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={onPress} />);
-    const tile = screen.getByRole('button', { name: 'Serum Bã Trầu' });
-    expect(fireEvent.keyDown(tile, { key: ' ' })).toBe(false); // false = defaultPrevented
-    expect(fireEvent.keyDown(tile, { key: 'Enter' })).toBe(false);
-    expect(onPress).toHaveBeenCalledTimes(2);
-    fireEvent.keyDown(tile, { key: 'Enter', repeat: true });
-    expect(onPress).toHaveBeenCalledTimes(2);
-  });
   it('bọc giá cho aria-describedby phải là display:flex: span thường tạo line box 24px làm thẻ cao hơn 4px so với skeleton 133px (pin chiều cao thật: e2e Task 26)', () => {
     renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={() => {}} />);
     const tile = screen.getByRole('button', { name: 'Serum Bã Trầu' });
     const wrapper = document.getElementById(tile.getAttribute('aria-describedby')!)!;
     expect(wrapper).toHaveStyle({ display: 'flex' });
+  });
+
+  describe('không lồng phần tử tương tác (C-072, axe nested-interactive)', () => {
+    const INTERACTIVE = 'button, a[href], input, select, textarea, [role="button"], [role="link"], [tabindex]:not([tabindex="-1"])';
+
+    function expectNoNestedInteractive(container: HTMLElement) {
+      const nested = Array.from(container.querySelectorAll(INTERACTIVE)).filter((el) => el.querySelector(INTERACTIVE));
+      expect(nested.map((el) => el.outerHTML.slice(0, 80))).toEqual([]);
+    }
+
+    it('thẻ lưới có tim: không phần tử bấm được nào chứa phần tử bấm được khác', () => {
+      const { container } = renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={() => {}} />);
+      expect(screen.getByRole('button', { name: /yêu thích/i })).toBeInTheDocument();
+      expectNoNestedInteractive(container);
+    });
+
+    it('thẻ kệ "Mua lại": nút Mua lại cũng không nằm trong phần tử bấm được', () => {
+      const { container } = renderTile(
+        <ProductTile product={PRODUCT} variant="rail" action="rebuy" showWishlist={false} onPress={() => {}} onAction={() => {}} />,
+      );
+      expect(screen.getByRole('button', { name: 'Mua lại' })).toBeInTheDocument();
+      expectNoNestedInteractive(container);
+    });
+
+    it('nút tên không có định vị riêng (để ::after phủ đúng cả thẻ) còn vỏ thẻ là position:relative', () => {
+      const { container } = renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={() => {}} />);
+      const link = screen.getByRole('button', { name: 'Serum Bã Trầu' });
+      expect(link.className).toContain('tubu-tile-link');
+      expect(link.style.position).toBe('');
+      expect((container.firstElementChild as HTMLElement).style.position).toBe('relative');
+    });
+
+    it('tim và Mua lại nổi trên lớp phủ bằng z-index; ảnh chỉ để trang trí (tên đã có ở nút tên)', () => {
+      const { container } = renderTile(
+        <ProductTile product={{ ...PRODUCT, thumbnail: 'https://x/a.jpg' }} variant="grid" action="rebuy" onAction={() => {}} onPress={() => {}} />,
+      );
+      for (const name of [/yêu thích/i, 'Mua lại']) {
+        let el: HTMLElement | null = screen.getByRole('button', { name });
+        let lifted = false;
+        while (el && el !== container) {
+          if (el.style.zIndex === '1') lifted = true;
+          el = el.parentElement;
+        }
+        expect(lifted).toBe(true);
+      }
+      expect(container.querySelector('img')).toHaveAttribute('alt', '');
+    });
+
+    it('tokens.css có lớp phủ .tubu-tile-link::after kín thẻ và vòng focus vẽ trên lớp phủ', () => {
+      const css = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');
+      const after = /\.tubu-tile-link::after\s*\{([^}]*)\}/.exec(css);
+      expect(after).not.toBeNull();
+      for (const decl of ['position: absolute', 'top: 0', 'right: 0', 'bottom: 0', 'left: 0']) expect(after![1]).toContain(decl);
+      expect(css).toMatch(/\.tubu-tile-link:focus-visible::after\s*\{[^}]*outline:/);
+    });
   });
 });

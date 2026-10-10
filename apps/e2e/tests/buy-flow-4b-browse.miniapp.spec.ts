@@ -19,7 +19,7 @@ async function waitBrowseSettled(page: Page, api: MockApi): Promise<void> {
 
 /** Phần tử cuộn thật của trang Danh mục (`.zaui-page` chứa lưới). */
 const scrollerOf = (page: Page): Locator => page.locator('.zaui-page', { has: page.getByTestId('catalog-grid') }).first();
-const tilesOf = (page: Page): Locator => page.getByTestId('catalog-grid').locator('[role="button"][aria-label]');
+const tilesOf = (page: Page): Locator => page.getByTestId('catalog-grid').locator('button.tubu-tile-link');
 const scrollTopOf = (loc: Locator): Promise<number> => loc.evaluate((el) => el.scrollTop);
 
 /**
