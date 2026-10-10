@@ -23,4 +23,16 @@ describe('index.html viewport', () => {
   it('still suppresses the double-tap zoom delay so rapid taps (watering, quantity steppers) do not zoom', () => {
     expect(html).toMatch(/touch-action:\s*manipulation/);
   });
+
+  // iOS WKWebView phóng to trang khi focus ô nhập có chữ < 16px và giữ nguyên mức phóng sau khi blur;
+  // bỏ maximum-scale (ở trên) làm hiện tượng này lộ ra, nên phải bù bằng cỡ chữ 16px cho ô nhập trên iOS.
+  it('ô nhập trên iOS có cỡ chữ >= 16px để focus không tự phóng to (inline style nên cần !important)', () => {
+    const block = /@supports\s*\(\s*-webkit-touch-callout:\s*none\s*\)\s*\{([\s\S]*?\})\s*\}/.exec(html);
+    expect(block).not.toBeNull();
+    const rule = /([^{}]*)\{([^}]*)\}/.exec(block![1]);
+    expect(rule![1]).toMatch(/input/);
+    expect(rule![1]).toMatch(/textarea/);
+    expect(rule![1]).toMatch(/select/);
+    expect(rule![2]).toMatch(/font-size:\s*16px\s*!important/);
+  });
 });

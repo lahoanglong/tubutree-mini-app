@@ -12,6 +12,15 @@
       html {
         touch-action: manipulation;
       }
+      /* iOS WKWebView zooms the page when a field under 16px takes focus and keeps the zoom after blur.
+         !important because components set the font size inline (search-field.tsx). */
+      @supports (-webkit-touch-callout: none) {
+        input,
+        textarea,
+        select {
+          font-size: 16px !important;
+        }
+      }
     </style>
   </head>
   <body>
