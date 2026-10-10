@@ -22,7 +22,7 @@ describe('pointsReasonLabel', () => {
     ['DAILY_CHECKIN:DAY_3', 'Điểm danh hằng ngày'],
     ['DAILY_CHECKIN', 'Điểm danh hằng ngày'],
     ['POS_OFFLINE_ORDER:HD-001', 'Tích điểm mua tại cửa hàng'],
-    ['LOYALTY_REDEEM_VOUCHER:reward-discount-50k', 'Đổi điểm lấy voucher'],
+    ['LOYALTY_REDEEM_VOUCHER:reward-discount-50k', 'Đổi điểm lấy mã giảm giá'],
     ['ORDER_DELIVERED:TB123', 'Tích điểm từ đơn hàng'],
     ['ORDER_REDEEM:TB123', 'Dùng điểm khi thanh toán'],
     ['ORDER_REVERSED:TB123', 'Hoàn ngược điểm (hủy/trả)'],

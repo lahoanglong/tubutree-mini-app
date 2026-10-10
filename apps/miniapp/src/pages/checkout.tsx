@@ -413,7 +413,7 @@ export default function CheckoutPage() {
                 </Box>
               ) : (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                  Chọn hoặc nhập mã ưu đãi
+                  Chọn hoặc nhập mã giảm giá
                 </Text>
               )}
             </Box>
@@ -831,7 +831,7 @@ export default function CheckoutPage() {
           <KeyValueRow label="Tạm tính tiền hàng" value={formatVnd(quote.data?.subtotal ?? previewSubtotal)} />
 
           {(quote.data?.discount ?? previewDiscount) > 0 && (
-            <KeyValueRow label="Giảm giá voucher" value={`-${formatVnd(quote.data?.discount ?? previewDiscount)}`} tone="success" />
+            <KeyValueRow label="Mã giảm giá" value={`-${formatVnd(quote.data?.discount ?? previewDiscount)}`} tone="success" />
           )}
 
           {quote.data && quote.data.comboDiscount > 0 && (

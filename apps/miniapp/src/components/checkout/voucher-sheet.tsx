@@ -90,7 +90,7 @@ export function VoucherSheet({
               Chọn mã giảm giá
             </Text>
             <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
-              Mỗi đơn hàng chỉ áp dụng 1 mã ưu đãi
+              Mỗi đơn hàng chỉ áp dụng 1 mã giảm giá
             </Text>
           </Box>
           <button
@@ -137,7 +137,7 @@ export function VoucherSheet({
           }}
         >
           <Text size="xSmall" bold style={{ color: 'var(--neutral-600)', marginBottom: 8, display: 'block' }}>
-            Nhập mã ưu đãi khác
+            Nhập mã giảm giá khác
           </Text>
           <Box flex style={{ gap: 8 }}>
             <Box style={{ flex: 1 }}>
@@ -172,7 +172,7 @@ export function VoucherSheet({
         {/* Section 2: Mã giảm giá có sẵn (Phía dưới) */}
         <Box>
           <Text size="xSmall" bold style={{ color: 'var(--neutral-600)', marginBottom: 10, display: 'block' }}>
-            Mã ưu đãi của bạn
+            Mã giảm giá của bạn
           </Text>
 
           {couponsQ.isLoading ? (
@@ -299,7 +299,7 @@ export function VoucherSheet({
                 Bạn chưa có mã giảm giá trong ví
               </Text>
               <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-                Nhập mã ưu đãi thủ công ở phía trên để áp dụng.
+                Nhập mã giảm giá thủ công ở phía trên để áp dụng.
               </Text>
             </Box>
           )}

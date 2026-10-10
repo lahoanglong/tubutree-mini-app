@@ -129,7 +129,7 @@ export const vi = {
     discount: 'Giảm giá',
     checkout: (n: number) => `Thanh toán (${n})`,
     removed: 'Đã bỏ khỏi giỏ',
-    couponPlaceholder: 'Nhập mã ưu đãi',
+    couponPlaceholder: 'Nhập mã giảm giá',
     couponApply: 'Áp dụng',
     couponApplied: (code: string) => `Đã áp mã ${code}`,
     couponRemove: 'Bỏ mã',

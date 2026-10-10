@@ -3,7 +3,7 @@ import { formatVnd, formatXu } from '../../utils/format';
 /**
  * Chữ hiển thị cho bậc/mốc thưởng CTV (affiliate.tsx). Tách thuần để test được và để mọi chỗ
  * nói CÙNG một điều với backend (apps/api/src/modules/affiliate/ctv-milestones.ts):
- * - Thưởng mốc là Tubu Xu (coinsBalance) — KHÔNG phải "điểm" (Điểm Xanh) hay tiền rút được.
+ * - Thưởng mốc là TubuXu (coinsBalance) — KHÔNG phải "điểm" (Điểm Xanh) hay tiền rút được.
  * - Bậc CTV không kèm "+X% bonus hoa hồng" — backend không trả khoản đó.
  * - Doanh số tính mốc là doanh số ĐÃ CHỐT (đơn đã giao + hết thời gian giữ đổi/trả).
  */
@@ -19,7 +19,7 @@ export function milestoneStatusText(
   m: { achieved: boolean; claimed: boolean; threshold: number },
   confirmedRevenue: number,
 ): string {
-  if (m.claimed) return 'Đã cộng vào ví Tubu Xu';
+  if (m.claimed) return 'Đã cộng vào TubuXu';
   if (m.achieved) return 'Đã đạt chỉ tiêu 🎉';
   return `Còn thiếu ${formatVnd(Math.max(0, m.threshold - confirmedRevenue))} doanh số đã chốt`;
 }

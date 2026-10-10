@@ -8,15 +8,15 @@ import {
   tierRewardLabel,
 } from './milestone-copy';
 
-describe('milestone-copy — thưởng mốc CTV là Tubu Xu, không phải điểm', () => {
+describe('milestone-copy — thưởng mốc CTV là TubuXu, không phải điểm', () => {
   it('formatXu hiển thị đơn vị "xu" (không phải "điểm" của Điểm Xanh)', () => {
     expect(formatXu(2_000_000)).toMatch(/^2[.,]000[.,]000 xu$/);
     expect(formatXu(50_000)).not.toContain('điểm');
   });
 
-  it('trạng thái mốc: đã nhận → ví Tubu Xu; đạt → mời nhận; chưa đạt → còn thiếu doanh số ĐÃ CHỐT', () => {
+  it('trạng thái mốc: đã nhận → cộng vào TubuXu; đạt → mời nhận; chưa đạt → còn thiếu doanh số ĐÃ CHỐT', () => {
     expect(milestoneStatusText({ achieved: true, claimed: true, threshold: 3_000_000 }, 5_000_000)).toBe(
-      'Đã cộng vào ví Tubu Xu',
+      'Đã cộng vào TubuXu',
     );
     expect(milestoneStatusText({ achieved: true, claimed: false, threshold: 3_000_000 }, 5_000_000)).toContain(
       'Đã đạt',

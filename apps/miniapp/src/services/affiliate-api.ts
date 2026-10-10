@@ -59,7 +59,7 @@ export interface CtvMilestonesResponse {
 export interface CtvTiersResponse {
   revenue: number;
   tier: AffiliateTier;
-  /** milestoneRewardXu: thưởng mốc Tubu Xu cùng ngưỡng bậc (null với bậc khởi đầu). */
+  /** milestoneRewardXu: thưởng mốc TubuXu cùng ngưỡng bậc (null với bậc khởi đầu). */
   allTiers: { name: string; emoji: string; min: number; milestoneRewardXu: number | null }[];
 }
 
@@ -88,7 +88,7 @@ export interface Commission {
 export const getAffiliateMe = () => api.get<AffiliateMe>('/affiliate/me').then((r) => r.data);
 export const getCtvTiers = () => api.get<CtvTiersResponse>('/affiliate/tiers').then((r) => r.data);
 export const getCtvMilestones = () => api.get<CtvMilestonesResponse>('/affiliate/milestones').then((r) => r.data);
-/** Nhận thưởng mốc → cộng Tubu Xu. `month` ('YYYY-MM') bỏ trống = tháng này; chỉ nhận tháng này/tháng trước. */
+/** Nhận thưởng mốc → cộng TubuXu. `month` ('YYYY-MM') bỏ trống = tháng này; chỉ nhận tháng này/tháng trước. */
 export const claimCtvMilestone = (milestoneId: string, month?: string) =>
   api
     .post<{ success: boolean; message: string; rewardXu: number; monthKey: string }>(

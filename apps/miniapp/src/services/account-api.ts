@@ -220,7 +220,7 @@ export const getMemberCard = () => api.get<MemberCardResponse>('/me/loyalty/memb
 export function pointsReasonLabel(reason: string): string {
   if (reason.startsWith('DAILY_CHECKIN')) return 'Điểm danh hằng ngày';
   if (reason.startsWith('POS_OFFLINE_ORDER')) return 'Tích điểm mua tại cửa hàng';
-  if (reason.startsWith('LOYALTY_REDEEM_VOUCHER')) return 'Đổi điểm lấy voucher';
+  if (reason.startsWith('LOYALTY_REDEEM_VOUCHER')) return 'Đổi điểm lấy mã giảm giá';
   if (reason.startsWith('ORDER_DELIVERED')) return 'Tích điểm từ đơn hàng';
   if (reason.startsWith('ORDER_REDEEM')) return 'Dùng điểm khi thanh toán';
   if (reason.startsWith('ORDER_REVERSED')) return 'Hoàn ngược điểm (hủy/trả)';

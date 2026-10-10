@@ -53,7 +53,7 @@ describe('formatPoints — điểm Xanh hiển thị thống nhất', () => {
 });
 
 // Trước đây formatXu bị định nghĩa lặp ở milestone-copy.ts và wallet.tsx — gộp về đây (A4-10).
-describe('formatXu — Tubu Xu hiển thị thống nhất', () => {
+describe('formatXu — TubuXu hiển thị thống nhất', () => {
   it('luôn có dấu phân cách nghìn + đơn vị "xu"', () => {
     expect(formatXu(50_000)).toBe('50.000 xu');
   });

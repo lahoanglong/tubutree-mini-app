@@ -518,7 +518,7 @@ function CouponBlock({ summary, selectedSubtotal }: { summary: CartSummary; sele
               </Box>
             ) : (
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                Chọn hoặc nhập mã ưu đãi
+                Chọn hoặc nhập mã giảm giá
               </Text>
             )}
           </Box>

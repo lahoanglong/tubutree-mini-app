@@ -1146,7 +1146,7 @@ export default function GamePage() {
                 }}
                 style={{ marginTop: 12 }}
               >
-                Dùng voucher mua sắm ngay
+                Dùng mã giảm giá ngay
               </Button>
             )}
             <Button
