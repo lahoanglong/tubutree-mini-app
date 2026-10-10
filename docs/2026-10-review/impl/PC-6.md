@@ -69,7 +69,7 @@ npx eslint src/modules/subscriptions test/integration-race/{subscription-*,addre
 
 ### Còn lại (lượt khác)
 - ~~C-015 phần miniapp~~: xong, xem mục dưới.
-- C-017.
+- ~~C-017~~: xong, xem mục cuối.
 
 ## C-015 — phần miniapp: XONG
 
@@ -128,3 +128,102 @@ npx eslint <các file đã sửa/thêm>                 -> 0 lỗi (1 cảnh bá
 - Chưa kiểm trực quan trên Zalo thật/Playwright (máy giới hạn RAM). Cần UAT tay: ô `type=date` trên WebView Zalo iOS/Android.
 - Deploy: `prisma migrate deploy` (1 migration) + seed lại mẫu thông báo `SUBSCRIPTION_PAUSED`/
   `SUBSCRIPTION_ORDER_AWAITING_PAYMENT`.
+
+## C-017 — đơn thứ 2 trong 30 ngày + mời đánh giá sau giao: XONG (phía API)
+
+Commit: `05567ea` (cột + mẫu tin), `fb80929` (cron + test).
+
+Đã làm:
+- **Mã giảm giá đơn thứ 2** `VouchersService.secondOrderVouchers()`, cron `0 10 * * *` với `timeZone: CRON_TZ`. Cron cấp
+  cho khách thỏa đủ các điều kiện sau:
+  - là khách thật (cùng `REAL_USER_SQL` của C-059: có SĐT hoặc zaloId không phải `guest_`), role `CUSTOMER`;
+  - có đúng MỘT đơn không huỷ, đơn đó `DELIVERED` đã `voucher.second_order_delay_days` ngày (mặc định 3);
+  - đơn còn ít nhất `voucher.second_order_min_remaining_days` ngày (mặc định 3) trong cửa sổ NS-1 30 ngày tính từ lúc tạo
+    đơn đầu.
+
+  Không xét đơn lên hộ (`placedForCustomer`), đơn đại lý (`type DEALER`), đơn sinh từ gói định kỳ và khách còn gói
+  ACTIVE/PAUSED. Mã `SECOND-ORDER-<userId>` mỗi khách chỉ một lần trong đời. Mã có `usageLimit` 1, giảm
+  `voucher.second_order_amount` (30.000đ) cho đơn từ `voucher.second_order_min_order` (199.000đ), hết hạn đúng lúc đóng
+  cửa sổ 30 ngày (`grant()` có thêm tham số `endAt`).
+- **Tôn trọng notifyPromo:** `SECOND_ORDER_VOUCHER` được thêm vào nhóm PROMO (`notification-categories.ts`). Khách đã tắt
+  "Khuyến mãi & mã giảm giá" không nhận tin, cả trong app lẫn ZNS. Mã vẫn nằm trong kho voucher, giống voucher chào mừng.
+- **Tin mời đánh giá** `ReviewInviteService.sendReviewInvites()` (mới, `lifecycle/review-invite.service.ts`), cron
+  `0 10,19 * * *` với `timeZone: CRON_TZ`. Cron chọn đơn RETAIL không lên hộ, đã giao từ `review.invite_delay_hours`
+  (48h) đến `review.invite_max_age_days` (7 ngày) và chưa có `reviewInvitedAt`. Cách gửi:
+  - Cron claim đơn bằng `updateMany … reviewInvitedAt IS NULL` rồi mới gửi `REVIEW_REQUEST`. Đây là tin giao dịch, không
+    bị công tắc khuyến mãi chặn. Payload gồm `order_code`, `product`, `product_slug`.
+  - Q-30: tin chỉ nêu SP khách CHƯA đánh giá (`reviews` unique userId+productId). Đơn đã đánh giá hết thì được đánh dấu
+    và không gửi.
+  - Gửi lỗi thì cron trả `reviewInvitedAt` về null để lượt sau gửi lại.
+  - Trần 7 ngày tránh việc lần chạy đầu sau deploy gửi tin cho toàn bộ đơn cũ, vì cột mới đều NULL.
+- **Cả hai cron chạy theo lô có giới hạn và có khoá chống chạy chồng.** Keyset theo `userId`/`orderId`. Đơn thứ 2 xử lý
+  tối đa 200×25 khách mỗi lượt, mời đánh giá tối đa 200×10 đơn mỗi lượt. Có cờ `running` trong process và
+  `pg_try_advisory_xact_lock` giữa các instance, theo đúng mẫu `coupon-cleanup.cron`. Lớp chặn cuối là code coupon
+  `@unique` và claim theo cột. Toàn thân cron bọc try/catch, lỗi từng khách/đơn không làm hỏng cả lô.
+- Mẫu tin `SECOND_ORDER_VOUCHER` và `REVIEW_REQUEST` có trong cả `prisma/seed.ts` (createOnly) lẫn migration, vì prod không
+  chạy seed. Câu chữ dùng "Mã giảm giá" và "Điểm Xanh" (Q-26).
+- Miniapp: không cần sửa. `notificationAction` hiện sẵn nút "Xem chi tiết đơn hàng" cho tin có `order_code`. Trang
+  chi tiết đơn đã có lối sang trang SP để đánh giá (P1-2). Tin `*_VOUCHER` đi tới kho voucher.
+
+Migration: `20261010190500_order_review_invite_second_order`.
+- `ALTER TABLE orders ADD COLUMN "reviewInvitedAt" TIMESTAMP(3)` (nullable, không backfill).
+- `INSERT` 2 mẫu tin `ON CONFLICT DO NOTHING`.
+- Đã áp bằng `prisma migrate deploy` lên `tubu_it_pc6:5576`.
+- Đặt tên `19:05` để đứng sau `20261010180000` của C-015.
+
+### Test (đỏ → xanh)
+- Race spec mới `apps/api/test/integration-race/second-order-review-invite.race-spec.ts` (Postgres thật), 5 ca:
+  - (a) 2 instance song song cộng chạy lại thì ra đúng 1 mã và 1 tin; hạn mã = đơn đầu + 30 ngày; instance thứ hai nhận `LOCKED`.
+  - (b) 7 ca không cấp: guest, đã có đơn 2 (PENDING_PAYMENT), giao chưa đủ ngày, sắp hết cửa sổ, lên hộ, đại lý,
+    đơn định kỳ. Có đơn huỷ trước đó vẫn được cấp.
+  - (c) số khách vượt một lô (lô 2, 5 khách) thì không sót ai.
+  - (d) mời đánh giá chỉ nêu SP chưa đánh giá; 2 instance song song cộng chạy lại chỉ gửi 1 tin; đơn đã đánh giá hết
+    được đánh dấu và không gửi.
+  - (e) đơn chưa tới giờ, quá 7 ngày, đơn đại lý, đơn lên hộ: không gửi và không đánh dấu. Gửi lỗi thì cờ trở về null,
+    lượt sau gửi đúng 1 tin.
+- Unit test: `vouchers.service.spec.ts` có ca `grant` với `endAt`. `notification-prefs.spec.ts` kiểm
+  SECOND_ORDER_VOUCHER = PROMO và REVIEW_REQUEST = giao dịch. `notification-templates-seed.spec.ts` bắt buộc có mẫu
+  SECOND_ORDER_VOUCHER.
+- Đỏ: chạy race spec trước khi code thì `Cannot find module '../../src/modules/lifecycle/review-invite.service'`
+  (`Test Suites: 1 failed`). Lúc đó tính năng chưa tồn tại, chưa có `secondOrderVouchers`/`ReviewInviteService`.
+
+Lệnh kiểm chứng:
+```
+cd apps/api && DATABASE_URL=postgresql://tubu:tubu@localhost:5576/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand second-order-review-invite vouchers-real-user
+  [a] results=[{"granted":1,"scanned":1},{"skipped":"LOCKED"}] coupons=1 notify=1
+  [b] guest,hasSecond,tooFresh,windowEnding,proxy,dealer,subscriber,withCancelled=[0,0,0,0,0,0,0,1]
+  [e] afterFail={"reviewInvitedAt":null} calls=[{"order_code":"IT…","product":"Nước rửa chén IT",…}]
+  Tests:       10 passed, 10 total
+npx jest --maxWorkers=1 src/modules/notifications/notification-prefs.spec.ts src/modules/notifications/notification-templates-seed.spec.ts src/common/cron-timezone.spec.ts src/modules/vouchers src/modules/lifecycle
+  Tests:       118 passed, 118 total   (sau đó vouchers riêng: 22 passed)
+npx tsc --noEmit -p tsconfig.json        -> exit 0
+npx eslint <8 file đã sửa/thêm>           -> 0 lỗi
+```
+
+### Sửa ngoài nhóm file (tối thiểu)
+- `apps/api/src/modules/notifications/notification-categories.ts`: thêm 1 dòng `SECOND_ORDER_VOUCHER` vào PROMO_CODES. File này
+  ghi rõ mã mới chưa liệt kê sẽ rơi vào TRANSACTIONAL, nên thiếu dòng này thì tin khuyến mãi vẫn gửi cho khách đã tắt. Ngoài ra
+  có 2 spec cùng thư mục, mỗi spec thêm 1 mã vào danh sách kiểm.
+
+### Giả định (C-017)
+- Mức ưu đãi đơn 2 lấy theo voucher chào mừng: 30.000đ cho đơn từ 199.000đ. Mức này đọc từ SystemConfig nên admin chỉnh
+  được mà không cần deploy. Chọn mức khiêm tốn vì đây là chi phí trên mỗi khách.
+- "Một đơn" nghĩa là chỉ có một đơn không huỷ. Đã có đơn khác ở bất kỳ trạng thái nào (kể cả chờ thanh toán hay trả hàng) thì
+  không cấp, vì khách đã quay lại hoặc không phải khách mới.
+- Khách còn gói định kỳ, hoặc đơn đầu sinh từ gói, thì không cấp, vì đơn kế tiếp tự đến. Giảm giá lúc này không kéo thêm
+  đơn mà chỉ thành chi phí.
+- Tin mời đánh giá gửi cả cho khách guest có đơn (đây là tin giao dịch về đơn của chính họ, và API đánh giá cho phép).
+  Không gửi cho đơn lên hộ vì userId là CTV, không phải người dùng SP.
+- Tin mời đánh giá không chặn theo giờ yên lặng riêng mà chỉ chạy lúc 10h và 19h giờ VN.
+
+### Việc còn lại (C-017)
+- Deploy: `prisma migrate deploy` (thêm migration `20261010190500_order_review_invite_second_order`).
+- Có thể làm sau (ngoài gói): nhiệm vụ game "đơn thứ 2" (finding gốc nhắc bảng `missions`), icon/nhãn riêng cho
+  `REVIEW_REQUEST` ở `pages/notifications.tsx` (file của gói khác), nút "Đánh giá ngay" dẫn thẳng `product_slug`.
+- `apps/api/prisma/migrations/migration_lock.toml` trong worktree đang khác HEAD chỉ ở kiểu xuống dòng (do `migrate dev`). Không
+  commit, nội dung không đổi.
+
+## Tổng kết gói PC-6
+- C-015: XONG (API + miniapp). C-017: XONG (API; miniapp dùng lại CTA có sẵn).
+- Migration của gói: `20261010180000_subscription_payment_method`, `20261010190500_order_review_invite_second_order`
+  (cả hai additive).
