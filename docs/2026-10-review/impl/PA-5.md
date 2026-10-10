@@ -60,3 +60,62 @@ Không có (chỉ thêm khoá SystemConfig qua seed).
 - Miniapp cần build và deploy Zalo thì nút mua nước mới biến mất; bản cũ bấm nút sẽ nhận lỗi 410 có thông báo.
 - `getProfile` vẫn trả `xuPerSeed` (vô hại); có thể bỏ khi gộp Điểm Xanh/TubuXu ở PD-3.
 - Mục 3 (C-061) do lượt sau làm.
+
+---
+
+## C-061 (A2-006): bẫy catch P2002 trong interactive transaction: XONG
+
+### Lỗi
+
+`CoinsService.grantCoins(tx)` và `CouponsService.redeemInTx` bắt P2002 rồi trả về bình thường. Trong Postgres, câu INSERT lỗi unique làm hỏng cả transaction đang mở, nên mọi lệnh tiếp theo của caller trong cùng tx (checkout, thưởng cộng đồng, mốc CTV) nổ `25P02 current transaction is aborted` (thành lỗi 500). Riêng `redeem` còn tăng `usedCount` TRƯỚC khi ghi redemption, nên retry cùng đơn (nếu tx không hỏng) sẽ đếm lượt 2 lần. Retry cùng đơn khi perUserLimit=1 thì bị báo nhầm "hết lượt".
+
+### Sửa
+
+- `grantCoins`: `coinTransaction.createMany({ skipDuplicates: true })` (INSERT ... ON CONFLICT DO NOTHING). Nếu `count = 0` thì no-op và không cộng `coinsBalance`. Nhánh không truyền tx đổi từ batch `$transaction([...])` sang interactive tx để đọc được `count`. Hàm vẫn trả `void` như cũ.
+- `redeemInTx`: thứ tự mới là advisory lock (khi có perUserLimit), rồi tìm redemption `(couponId, orderId)` (có thì no-op), rồi kiểm perUserLimit, rồi `createMany skipDuplicates` (count 0 thì no-op), cuối cùng mới tăng `usedCount` có guard. Nếu hết lượt toàn cục thì throw và tx rollback luôn dòng redemption vừa ghi.
+
+### Test (đỏ → xanh)
+
+Race spec mới `apps/api/test/integration-race/p2002-in-tx.race-spec.ts` chạy trên Postgres thật, gồm 10 case:
+- grant trùng trong tx của caller rồi ghi tiếp; 10 grant trùng song song trong tx Serializable của caller; 10 grant trùng song song không tx; reason ngoài index vẫn cộng mỗi lần.
+- redeem trùng trong tx của caller rồi ghi tiếp; retry cùng đơn khi perUserLimit=1; 10 redeem trùng song song trong tx; 10 redeem trùng song song không tx (perUserLimit=1); perUserLimit vẫn chặn đơn khác; usageLimit vẫn chặn.
+
+Trước khi sửa: `Tests: 6 failed, 4 passed`. Lỗi thật:
+```
+[grant-tx]  fulfilled=1 errors=[... PostgresError { code: "25P02", message: "current transaction is aborted, commands ignored until end of transaction block" ...]
+[redeem-tx] fulfilled=1 errors=[... "25P02" ...]
+[redeem]    fulfilled=1 errors=["BadRequestException: Bạn đã dùng hết lượt cho mã này."]
+```
+Sau khi sửa:
+```
+cd apps/api && DATABASE_URL=postgresql://tubu:tubu@localhost:5545/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand p2002-in-tx affiliate buy-flow-4a cod-return-refund dealer-bonus loyalty order-cancel
+  [grant-tx] fulfilled=10 errors=[]
+  [grant] fulfilled=10 errors=[]
+  [redeem-tx] fulfilled=10 errors=[]
+  [redeem] fulfilled=10 errors=[]
+  Test Suites: 7 passed, 7 total
+  Tests:       30 passed, 30 total
+cd apps/api && npx jest --maxWorkers=1 src/modules/wallet src/modules/coupons src/modules/feed src/modules/affiliate src/modules/checkout src/modules/loyalty src/modules/game src/modules/storefront
+  Test Suites: 33 passed, 33 total
+  Tests:       849 passed, 849 total
+cd apps/api && npx tsc --noEmit -p tsconfig.json   -> exit 0
+cd apps/api && npx eslint <6 file đã sửa>           -> 0 lỗi
+grep -rn -B3 P2002 coins.service.ts coupons.service.ts | grep 'tx\.'  -> không còn dòng nào (lệnh kiểm của catalog)
+```
+Unit test cập nhật theo hành vi mới: `coins.service.spec.ts` (mock `createMany`, thêm case trùng không cộng số dư và case trùng trong tx), `coupons.service.spec.ts` (mock `createMany`/`findUnique`, thay case "P2002 nuốt" bằng 2 case "đã có redemption" và "ON CONFLICT count=0", cả hai đều không tăng usedCount).
+
+Đã sửa thêm file ngoài nhóm: `apps/api/src/modules/affiliate/affiliate-tier.spec.ts`. Lý do: mock tx giả của test đó gọi `coinTransaction.create` qua CoinsService thật, nên phải đổi sang `createMany`. Chỉ đổi mock, không đổi assert.
+
+### Migration
+
+Không có. Các unique index sẵn có (`coin_transactions_*_unique/_key`, `coupon_redemptions(couponId, orderId)`) vẫn là thứ chặn trùng.
+
+### Giả định
+
+- ON CONFLICT DO NOTHING không có target nên bỏ qua MỌI vi phạm unique trên `coin_transactions`, giống hành vi bắt mọi P2002 trước đây.
+- Trong tx Serializable của caller, kẻ thua vẫn có thể nhận 40001/P2034. Đây là hành vi đúng, và `CommunityRewardService` đã nuốt mã này.
+- Hàm vẫn trả `void`. Caller nào cần biết đã cộng hay chưa (vd affiliate milestone) đã tự ghi claim unique trước khi gọi.
+
+### Việc còn lại
+
+- Còn các chỗ catch P2002 khác ngoài nhóm file của gói: `game.service.ts:523` (đã rethrow nên tx rollback, không phải mẫu catch-continue), `game-quiz.service.ts:87`, `wallet.service.ts:188`. Ba chỗ này chưa rà theo tiêu chí C-061; nên kiểm thêm ở gói khác.
