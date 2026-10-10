@@ -266,6 +266,15 @@ export class AffiliateService {
     if (ctv.role !== 'AFFILIATE' && ctv.role !== 'ADMIN') {
       throw new BadRequestException('Chỉ CTV mới có thể lên đơn hộ khách.');
     }
+    // Đơn hộ được phép tự-giới-thiệu (referrer == userId) vì người nhận là khách khác; nếu người
+    // nhận chính là CTV thì đó là mua cho mình mà vẫn ăn hoa hồng, và tiền hoàn (theo SĐT người
+    // nhận) cũng chảy về CTV.
+    const ctvPhone = ctv.phone ? this.normalizeToLocalPhone(ctv.phone) : null;
+    if (ctvPhone && ctvPhone === this.normalizeToLocalPhone(dto.customer.phone)) {
+      throw new BadRequestException(
+        'Không thể lên đơn hộ với SĐT của chính bạn. Hãy đặt hàng như khách thường cho đơn của mình.',
+      );
+    }
 
     const variationIds = [...new Set(dto.items.map((i) => i.variationId))];
     const variations = await this.prisma.variation.findMany({

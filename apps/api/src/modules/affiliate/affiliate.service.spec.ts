@@ -197,6 +197,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       stockCount?: number;
       executeRaw?: jest.Mock;
       role?: string;
+      ctvPhone?: string | null;
       storefront?: { slug: string } | null;
       shippingFee?: number;
     } = {},
@@ -208,7 +209,11 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const executeRaw = opts.executeRaw ?? jest.fn().mockResolvedValue(opts.stockCount ?? 1);
     const commissionCreate = jest.fn().mockResolvedValue({});
     const prisma = {
-      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv', role: opts.role ?? 'AFFILIATE' }) },
+      user: {
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue({ id: 'ctv', role: opts.role ?? 'AFFILIATE', phone: opts.ctvPhone === undefined ? '0911111111' : opts.ctvPhone }),
+      },
       variation: { findMany: jest.fn().mockResolvedValue(variations) },
       $executeRaw: executeRaw,
       storefront: { findFirst: jest.fn().mockResolvedValue(opts.storefront === undefined ? { slug: 'ctv-shop' } : opts.storefront) },
@@ -329,6 +334,28 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const { svc, orderCreate } = build({ role: 'CUSTOMER' });
     await expect(svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toThrow();
     expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  // C-028: SĐT người nhận trùng SĐT tài khoản CTV = CTV tự mua cho mình qua đường "đơn hộ" để
+  // ăn hoa hồng (và khi huỷ, đích hoàn theo SĐT cũng trỏ về chính CTV).
+  it.each([
+    ['cùng dạng 0xxxxxxxxx', '0901234567', '0901234567'],
+    ['CTV gõ +84 cho SĐT tài khoản lưu 0x', '0901234567', '+84 90 123 4567'],
+    ['tài khoản lưu dạng 84x, CTV gõ 0x', '84901234567', '090.123.4567'],
+  ])('SĐT người nhận trùng SĐT tài khoản CTV (%s) → BadRequest, KHÔNG giữ kho / tạo đơn / hoa hồng', async (_case, ctvPhone, customerPhone) => {
+    const { svc, orderCreate, executeRaw, commissionCreate } = build({ ctvPhone });
+    await expect(
+      svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, phone: customerPhone } }) as never),
+    ).rejects.toThrow('SĐT của chính bạn');
+    expect(executeRaw).not.toHaveBeenCalled();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(commissionCreate).not.toHaveBeenCalled();
+  });
+
+  it('CTV chưa có SĐT trên tài khoản → vẫn lên đơn hộ bình thường', async () => {
+    const { svc, orderCreate } = build({ ctvPhone: null });
+    await svc.placeOrderForCustomer('ctv', DTO() as never);
+    expect(orderCreate).toHaveBeenCalledTimes(1);
   });
 
   it('xếp hàng đẩy đơn sang Pancake sau khi tạo (đơn hộ phải vào pipeline giao vận như đơn thường)', async () => {
