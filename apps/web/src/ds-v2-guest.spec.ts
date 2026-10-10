@@ -13,6 +13,7 @@ const MIGRATED = [
   'app/globals.css',
   'components/site-header.tsx',
   'components/site-footer.tsx',
+  'components/site-search.tsx',
   'components/product-card.tsx',
   'components/add-to-cart.tsx',
   'components/copy-button.tsx',

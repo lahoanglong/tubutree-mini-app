@@ -1,18 +1,26 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ShieldCheck, Truck, RotateCcw, Sparkles, ChevronRight } from 'lucide-react';
 import { getProducts, getBrands } from '@/lib/api';
+import { firstParam, homeHref, normalizeSearchQuery } from '@/lib/catalog-filter';
 import ProductCard from '@/components/product-card';
 
 export const revalidate = 300;
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ brand?: string }>;
-}) {
-  const { brand } = await searchParams;
+type HomeSearchParams = Promise<{ brand?: string | string[]; q?: string | string[] }>;
+
+// Mỗi từ khoá là một URL riêng: không để công cụ tìm kiếm lập chỉ mục vô số trang kết quả.
+export async function generateMetadata({ searchParams }: { searchParams: HomeSearchParams }): Promise<Metadata> {
+  const { q } = await searchParams;
+  return normalizeSearchQuery(q) ? { robots: { index: false, follow: true } } : {};
+}
+
+export default async function HomePage({ searchParams }: { searchParams: HomeSearchParams }) {
+  const sp = await searchParams;
+  const brand = firstParam(sp.brand);
+  const q = normalizeSearchQuery(sp.q);
   const [products, brands] = await Promise.all([
-    getProducts(brand ? { brand } : {}),
+    getProducts({ ...(brand ? { brand } : {}), ...(q ? { q } : {}) }),
     getBrands(),
   ]);
 
@@ -94,15 +102,28 @@ export default async function HomePage({
       </section>
 
       {/* ── Lọc theo thương hiệu ── */}
-      <section id="san-pham" className="mb-6 scroll-mt-20">
+      <section id="san-pham" className="mb-6 scroll-mt-32 sm:scroll-mt-20">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-xl font-semibold text-stone-900 sm:text-2xl">Danh Mục Thương Hiệu</h2>
-          <span className="text-xs text-stone-600">{products.length} sản phẩm đang bán</span>
+          <span className="text-xs text-stone-600">
+            {products.length} sản phẩm {q ? 'phù hợp' : 'đang bán'}
+          </span>
         </div>
+
+        {q && (
+          <p role="status" className="mb-3 flex flex-wrap items-center gap-x-3 text-sm text-stone-700">
+            <span>
+              Kết quả tìm kiếm cho “<strong className="break-all font-semibold text-stone-900">{q}</strong>”
+            </span>
+            <Link href={homeHref({ brand })} className="inline-flex min-h-11 items-center font-semibold text-forest-700 underline">
+              Xóa tìm kiếm
+            </Link>
+          </p>
+        )}
 
         <div className="flex items-center gap-2 overflow-x-auto pb-2">
           <Link
-            href="/"
+            href={homeHref({ q })}
             aria-current={!brand ? 'true' : undefined}
             className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-sm font-semibold transition-all ${
               !brand
@@ -117,7 +138,7 @@ export default async function HomePage({
             return (
               <Link
                 key={b.brand}
-                href={`/?brand=${encodeURIComponent(b.brand)}#san-pham`}
+                href={homeHref({ brand: b.brand, q })}
                 aria-current={isActive ? 'true' : undefined}
                 className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-sm font-medium transition-all ${
                   isActive
@@ -144,7 +165,13 @@ export default async function HomePage({
             </div>
             <h3 className="mt-3 font-display text-lg font-semibold text-stone-900">Chưa có sản phẩm phù hợp</h3>
             <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">
-              Hiện chưa có sản phẩm nào thuộc bộ lọc này hoặc hệ thống đang được cập nhật thêm nguồn hàng mới.
+              {q ? (
+                <>
+                  Không tìm thấy sản phẩm nào cho “<span className="break-all">{q}</span>”. Hãy thử từ khoá ngắn hơn hoặc xem toàn bộ sản phẩm.
+                </>
+              ) : (
+                'Hiện chưa có sản phẩm nào thuộc bộ lọc này hoặc hệ thống đang được cập nhật thêm nguồn hàng mới.'
+              )}
             </p>
             <Link
               href="/"

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ShoppingBag, User } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { getCart } from '@/lib/shop-client';
+import SiteSearch from '@/components/site-search';
 
 export default function SiteHeader() {
   const { user, status } = useAuth();
@@ -13,7 +14,7 @@ export default function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-0/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2">
         {/* Logo & Brand */}
         <Link href="/" className="group flex min-h-11 items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-control bg-forest-600 shadow-card transition-transform duration-200 group-hover:scale-105">
@@ -43,6 +44,11 @@ export default function SiteHeader() {
             </span>
           </div>
         </Link>
+
+        {/* Tìm kiếm: hàng riêng ở điện thoại để ô nhập đủ rộng, nằm giữa logo và giỏ hàng từ màn sm. */}
+        <div className="order-last flex w-full sm:order-none sm:w-auto sm:max-w-md sm:flex-1">
+          <SiteSearch />
+        </div>
 
         {/* Giỏ hàng & tài khoản */}
         <nav aria-label="Điều hướng chính" className="flex items-center gap-2 text-sm sm:gap-3">

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({ auth: { user: null as { fullName: string } | n
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: mocks.cart }) }));
 vi.mock('@/lib/shop-client', () => ({ getCart: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import SiteHeader from './site-header';
 
@@ -35,6 +36,13 @@ describe('SiteHeader', () => {
     expect(out).toMatch(/<a [^>]*class="[^"]*\bh-11 w-11\b[^"]*"[^>]*href="\/gio-hang"/);
     mocks.cart = { itemCount: 0 };
     expect(render()).toContain('aria-label="Giỏ hàng"');
+  });
+
+  it('có ô tìm kiếm sản phẩm ở header — C-025', () => {
+    const out = render();
+    expect(out).toContain('role="search"');
+    expect(out).toContain('name="q"');
+    expect(out).toContain('aria-label="Tìm kiếm"');
   });
 
   it('nhãn thương hiệu dùng Fraunces (font-display)', () => {
