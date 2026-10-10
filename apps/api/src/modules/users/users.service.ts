@@ -168,9 +168,9 @@ export class UsersService {
 
   /**
    * A1-03 (audit 2026-09): nút "Gửi yêu cầu xoá tài khoản" trước đây chỉ hiện snackbar giả, không
-   * gọi API nào. Đây KHÔNG phải xoá thật (cascade/ẩn danh hoá dữ liệu là quyết định nghiệp vụ lớn
-   * hơn phạm vi vá lỗi này) — chỉ ghi nhận YÊU CẦU thật + báo admin qua NotificationsService để CSKH
-   * xử lý thủ công, mirror notifyAdminsOfCreditReport (dealer.service.ts). Idempotent-ish: đã có
+   * gọi API nào. Ở đây chỉ ghi nhận YÊU CẦU + báo admin qua NotificationsService (mirror
+   * notifyAdminsOfCreditReport, dealer.service.ts); việc ẩn danh thật do admin bấm "Xử lý" ở web admin
+   * (AccountDeletionService.process, C-016) sau khi CSKH liên hệ khách. Idempotent-ish: đã có
    * yêu cầu PENDING thì trả lại chính yêu cầu đó, không tạo dòng mới (khách bấm nhiều lần không
    * tạo hàng đợi vô hạn cho CSKH).
    */

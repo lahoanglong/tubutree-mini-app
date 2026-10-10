@@ -126,3 +126,17 @@ describe('SystemConfigController.publicConfig', () => {
     });
   });
 });
+
+describe('SystemConfigController.publicConfig — liên hệ CSKH (C-019, Q-17)', () => {
+  it('chưa cấu hình → hotline/email thật của Tubu Tree, chưa có Zalo OA', async () => {
+    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    expect(out.support).toEqual({ hotline: '0899 149 229', email: 'tubutree@gmail.com', zaloOaName: null });
+  });
+
+  it('admin sửa → trả giá trị mới; để trống hoặc sai kiểu → null để miniapp ẩn dòng', async () => {
+    const out = await new SystemConfigController(
+      makeConfig({ 'support.hotline': ' 0900 000 000 ', 'support.email': '', 'support.zalo_oa_name': 42 }),
+    ).publicConfig();
+    expect(out.support).toEqual({ hotline: '0900 000 000', email: null, zaloOaName: null });
+  });
+});

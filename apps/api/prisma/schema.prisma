@@ -233,6 +233,9 @@ model User {
   coinsBalance      Int             @default(0) // TubuXu — tiền tệ tiêu trong app (không rút được)
   cashbackPending   Int             @default(0)
   isBlocked         Boolean         @default(false)
+  // Đồng ý nhận tin khuyến mãi / nhắc Vườn Xanh: NotificationsService.notify bỏ qua tin thuộc nhóm đã tắt.
+  notifyPromo       Boolean         @default(true)
+  notifyGarden      Boolean         @default(true)
   pancakeCustomerId String?         @unique
   metadata          Json?
   createdAt         DateTime        @default(now())

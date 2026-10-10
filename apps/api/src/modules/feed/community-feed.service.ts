@@ -584,7 +584,7 @@ export class CommunityFeedService {
       this.logger.warn(`bumpReputation(approve) failed for ${post.userId}: ${(err as Error).message}`);
     }
     try {
-      await this.notifications?.notify(post.userId, 'COMMUNITY_POST_APPROVED', {});
+      await this.notifications?.notify(post.userId, 'COMMUNITY_POST_APPROVED', { post_id: post.id });
     } catch (err) {
       this.logger.warn(`notify(approve) failed ${post.id}: ${(err as Error).message}`);
     }
@@ -702,6 +702,7 @@ export class CommunityFeedService {
           await this.notifications?.notify(post.userId, template, {
             author: answerer?.fullName ?? 'Thành viên',
             title: post.title ?? 'câu hỏi của bạn',
+            post_id: post.id,
           });
         } catch (err) {
           this.logger.warn(`notify(answer) failed for comment ${comment.id}: ${(err as Error).message}`);
@@ -807,7 +808,7 @@ export class CommunityFeedService {
         this.logger.warn(`bumpReputation(best-answer) failed for ${comment.userId}: ${(err as Error).message}`);
       }
       try {
-        await this.notifications?.notify(comment.userId, 'COMMUNITY_BEST_ANSWER', {});
+        await this.notifications?.notify(comment.userId, 'COMMUNITY_BEST_ANSWER', { post_id: postId });
       } catch (err) {
         this.logger.warn(`notify(best-answer) failed for comment ${commentId}: ${(err as Error).message}`);
       }

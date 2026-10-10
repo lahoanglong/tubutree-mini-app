@@ -206,14 +206,16 @@ export class LifecycleService {
       take: LifecycleService.PRICE_DROP_MAX_RECIPIENTS,
       select: { userId: true },
     });
+    if (items.length === 0) return;
+    const product = await this.prisma.product
+      .findUnique({ where: { id: productId }, select: { slug: true } })
+      .catch(() => null);
+    const data: Record<string, string> = { product: productName };
+    if (product?.slug) data.product_slug = product.slug;
     for (const w of items) {
-      await this.notifications
-        .notify(w.userId, 'PRICE_DROP_ALERT', { product: productName })
-        .catch(() => undefined);
+      await this.notifications.notify(w.userId, 'PRICE_DROP_ALERT', data).catch(() => undefined);
     }
-    if (items.length) {
-      const capped = items.length === LifecycleService.PRICE_DROP_MAX_RECIPIENTS ? ' (đã chạm trần)' : '';
-      this.logger.log(`Price-drop alert: ${productName} → ${items.length} user${capped}.`);
-    }
+    const capped = items.length === LifecycleService.PRICE_DROP_MAX_RECIPIENTS ? ' (đã chạm trần)' : '';
+    this.logger.log(`Price-drop alert: ${productName} → ${items.length} user${capped}.`);
   }
 }

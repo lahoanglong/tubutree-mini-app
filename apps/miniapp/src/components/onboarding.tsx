@@ -1,10 +1,12 @@
-import { useState } from 'react';
-import { Box, Text, Button, useSnackbar } from 'zmp-ui';
+import { useEffect, useState } from 'react';
+import { Box, Text, Button, useLocation, useSnackbar } from 'zmp-ui';
+import { getStorage, setStorage } from 'zmp-sdk/apis';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getMe, completeOnboarding } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
+import { hasPartnerLinkParams, ONBOARDING_SNOOZE_KEY, ONBOARDING_SNOOZE_MS, shouldShowOnboarding } from './onboarding-rules';
 
 interface Q {
   id: string;
@@ -61,16 +63,57 @@ const QUESTIONS: Q[] = [
   },
 ];
 
-export function OnboardingGate() {
-  const { status } = useAuthStore();
-  const [dismissed, setDismissed] = useState(false);
-  const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: status === 'authenticated' });
+// Đọc một lần lúc mở app: khách vào bằng link CTV/gian hàng thì cả phiên không bị quiz chặn.
+const OPENED_FROM_PARTNER_LINK =
+  typeof window !== 'undefined' && hasPartnerLinkParams(window.location.search, window.location.hash);
 
-  if (status !== 'authenticated' || !meQ.data || meQ.data.onboarded || dismissed) return null;
-  return <Onboarding onDone={() => setDismissed(true)} />;
+async function readSnoozedUntil(): Promise<number | null> {
+  try {
+    const res = await getStorage({ keys: [ONBOARDING_SNOOZE_KEY] });
+    const raw = Number((res as Record<string, unknown>)[ONBOARDING_SNOOZE_KEY]);
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  } catch {
+    return null;
+  }
 }
 
-function Onboarding({ onDone }: { onDone: () => void }) {
+export function OnboardingGate() {
+  const { status } = useAuthStore();
+  const location = useLocation();
+  const [dismissed, setDismissed] = useState(false);
+  // undefined = chưa đọc xong bộ nhớ máy; chưa đọc xong thì không hiện để tránh nháy quiz.
+  const [snoozedUntil, setSnoozedUntil] = useState<number | null | undefined>(undefined);
+  const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: status === 'authenticated' });
+
+  useEffect(() => {
+    let alive = true;
+    void readSnoozedUntil().then((v) => {
+      if (alive) setSnoozedUntil(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (status !== 'authenticated' || !meQ.data || dismissed || snoozedUntil === undefined) return null;
+  const show = shouldShowOnboarding({
+    onboarded: meQ.data.onboarded,
+    pathname: location.pathname,
+    search: location.search,
+    openedFromPartnerLink: OPENED_FROM_PARTNER_LINK,
+    snoozedUntil,
+    now: Date.now(),
+  });
+  if (!show) return null;
+
+  const snooze = () => {
+    setDismissed(true);
+    void setStorage({ data: { [ONBOARDING_SNOOZE_KEY]: String(Date.now() + ONBOARDING_SNOOZE_MS) } }).catch(() => undefined);
+  };
+  return <Onboarding onSnooze={snooze} onDone={() => setDismissed(true)} />;
+}
+
+function Onboarding({ onSnooze, onDone }: { onSnooze: () => void; onDone: () => void }) {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const [step, setStep] = useState(0); // 0 = welcome, 1..N = questions, N+1 = done
@@ -120,15 +163,13 @@ function Onboarding({ onDone }: { onDone: () => void }) {
           <Text bold style={{ color: 'var(--neutral-0)', fontSize: 24 }}>
             Chào mừng đến Tubu Tree!
           </Text>
-          <Text style={{ color: 'rgba(255,255,255,0.9)' }}>
-            Trả lời vài câu hỏi nhanh để chúng mình gợi ý sản phẩm hợp với bạn — và nhận quà chào mừng.
+          <Text style={{ color: 'var(--neutral-0)', opacity: 0.9 }}>
+            Cho Tubu Tree biết bạn quan tâm điều gì nhé, chỉ mất chưa tới một phút.
           </Text>
           <Button onClick={() => setStep(1)} style={{ marginTop: 16, background: 'var(--neutral-0)', color: 'var(--leaf-700)', minWidth: 200 }}>
             Bắt đầu
           </Button>
-          <Text size="xSmall" onClick={onDone} style={{ color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>
-            Để sau
-          </Text>
+          <TextButton onClick={onSnooze}>Để sau</TextButton>
         </Box>
       )}
 
@@ -155,7 +196,7 @@ function Onboarding({ onDone }: { onDone: () => void }) {
             <Text bold style={{ color: 'var(--neutral-0)', fontSize: 22, marginBottom: 4 }}>
               {q.title}
             </Text>
-            <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.8)', marginBottom: 20 }}>
+            <Text size="xSmall" style={{ color: 'var(--neutral-0)', opacity: 0.8, marginBottom: 20 }}>
               {q.multi ? 'Chọn nhiều đáp án' : 'Chọn 1 đáp án'}
             </Text>
 
@@ -200,15 +241,7 @@ function Onboarding({ onDone }: { onDone: () => void }) {
               >
                 {step < total ? 'Tiếp tục' : 'Hoàn tất'}
               </Button>
-              {step > 1 && (
-                <Text
-                  size="xSmall"
-                  onClick={() => setStep(step - 1)}
-                  style={{ color: 'rgba(255,255,255,0.8)', textAlign: 'center', display: 'block', marginTop: 12 }}
-                >
-                  Quay lại
-                </Text>
-              )}
+              {step > 1 && <TextButton onClick={() => setStep(step - 1)} block>Quay lại</TextButton>}
             </Box>
           </Box>
         );
@@ -216,13 +249,12 @@ function Onboarding({ onDone }: { onDone: () => void }) {
 
       {step === finishStep && (
         <Box flex flexDirection="column" alignItems="center" justifyContent="center" style={{ flex: 1, textAlign: 'center', gap: 12 }}>
-          <Text style={{ fontSize: 72 }}>🎁</Text>
+          <Text style={{ fontSize: 72 }}>🌿</Text>
           <Text bold style={{ color: 'var(--neutral-0)', fontSize: 24 }}>
             Tuyệt vời!
           </Text>
-          <Text style={{ color: 'rgba(255,255,255,0.9)' }}>
-            Chúng mình đã ghi nhận sở thích của bạn và sẽ gợi ý sản phẩm phù hợp hơn. Chúc bạn mua sắm
-            sống xanh thật vui! 🌿
+          <Text style={{ color: 'var(--neutral-0)', opacity: 0.9 }}>
+            Cảm ơn bạn đã chia sẻ. Chúc bạn mua sắm sống xanh thật vui!
           </Text>
           <Button onClick={onDone} style={{ marginTop: 16, background: 'var(--neutral-0)', color: 'var(--leaf-700)', minWidth: 200 }}>
             Khám phá ngay
@@ -230,5 +262,29 @@ function Onboarding({ onDone }: { onDone: () => void }) {
         </Box>
       )}
     </Box>
+  );
+}
+
+function TextButton({ children, onClick, block }: { children: string; onClick: () => void; block?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        minHeight: 44,
+        padding: '0 16px',
+        marginTop: block ? 8 : 4,
+        width: block ? '100%' : undefined,
+        background: 'none',
+        border: 'none',
+        font: 'inherit',
+        fontSize: 'var(--type-caption-size)',
+        color: 'var(--neutral-0)',
+        opacity: 0.8,
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </button>
   );
 }
