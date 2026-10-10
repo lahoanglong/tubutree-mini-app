@@ -22,7 +22,8 @@ const variation = (id: string, retail: number) => ({
   name: '500ml',
   retailPrice: retail,
   stock: 10,
-  product: { name: `SP ${id}`, brand: 'Pơ Lang' },
+  isActive: true,
+  product: { name: `SP ${id}`, brand: 'Pơ Lang', isActive: true, approvalStatus: 'APPROVED' },
 });
 
 describe('DealerService.pricelist', () => {
@@ -256,7 +257,7 @@ describe('DealerService.placeOrder idempotency (chống double-submit đơn CRED
     const base: Record<string, unknown> = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
-      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', retailPrice: 100000, dealerPrices: null, name: '500ml', product: { name: 'SP' } }]) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', isActive: true, retailPrice: 100000, dealerPrices: null, name: '500ml', product: { name: 'SP', isActive: true, approvalStatus: 'APPROVED' } }]) },
       order: {
         create: orderCreate,
         findUnique: jest.fn().mockResolvedValue(null),
@@ -282,6 +283,28 @@ describe('DealerService.placeOrder idempotency (chống double-submit đơn CRED
     );
     expect((r as { id: string }).id).toBe('o-existing');
     expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('SP ngừng bán / chưa duyệt → PRODUCT_DISCONTINUED, không giữ kho, không tạo đơn (C-007)', async () => {
+    for (const [isActive, product] of [
+      [false, { name: 'SP', isActive: true, approvalStatus: 'APPROVED' }],
+      [true, { name: 'SP', isActive: false, approvalStatus: 'APPROVED' }],
+      [true, { name: 'SP', isActive: true, approvalStatus: 'REJECTED' }],
+      [true, { name: 'SP', isActive: true, approvalStatus: 'PENDING_REVIEW' }],
+    ] as const) {
+      const { prisma, orderCreate, queryRaw } = prismaForOrder();
+      (prisma.variation.findMany as jest.Mock).mockResolvedValue([
+        { id: 'v1', isActive, retailPrice: 100000, dealerPrices: null, name: '500ml', product },
+      ]);
+      await expect(
+        new DealerService(prisma, makeConfig()).placeOrder(
+          'd1',
+          { items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'PREPAID' } as never,
+        ),
+      ).rejects.toMatchObject({ response: { code: 'PRODUCT_DISCONTINUED' } });
+      expect(queryRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    }
   });
 
   it('key mới → tạo đơn bình thường + ghi idempotencyKey', async () => {
@@ -399,7 +422,7 @@ describe('DealerService.placeOrder — tồn kho', () => {
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
       variation: {
         findMany: jest.fn().mockResolvedValue([
-          { id: 'v1', retailPrice: 100000, dealerPrices: null, name: '500ml', product: { name: 'SP' } },
+          { id: 'v1', isActive: true, retailPrice: 100000, dealerPrices: null, name: '500ml', product: { name: 'SP', isActive: true, approvalStatus: 'APPROVED' } },
         ]),
       },
       order: {
@@ -483,7 +506,7 @@ describe('DealerService.placeOrder — hạn mức công nợ (C-008)', () => {
       dealerTier: { findUnique: jest.fn().mockResolvedValue(tier) },
       variation: {
         findMany: jest.fn().mockResolvedValue([
-          { id: 'v1', retailPrice: 20_000, dealerPrices: null, name: '500ml', product: { name: 'SP', slug: 'sp' } },
+          { id: 'v1', isActive: true, retailPrice: 20_000, dealerPrices: null, name: '500ml', product: { name: 'SP', slug: 'sp', isActive: true, approvalStatus: 'APPROVED' } },
         ]),
       },
       order: {

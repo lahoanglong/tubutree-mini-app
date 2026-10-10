@@ -73,12 +73,18 @@ function build(
     $queryRaw: jest.fn().mockResolvedValue([{ id: 'u1' }]),
     address: { findUnique: jest.fn().mockResolvedValue(ADDRESS) },
     pointsTransaction: { create: jest.fn() },
+    // Kiểm lại SP còn bán trong tx (cart/sellable.ts) — mặc định mọi variation đều còn bán.
+    variation: {
+      findMany: jest.fn().mockImplementation(({ where }: { where: { id: { in: string[] } } }) =>
+        Promise.resolve(where.id.in.map((id) => ({ id }))),
+      ),
+    },
   } as unknown as PrismaService;
   (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
     .fn()
     .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
 
-  const cart = { getCart: jest.fn().mockResolvedValue(opts.cartData ?? CART), clear: jest.fn(), removeItems: jest.fn() } as unknown as CartService;
+  const cart = { getCart: jest.fn().mockResolvedValue({ unavailableItems: [], ...((opts.cartData ?? CART) as object) }), clear: jest.fn(), removeItems: jest.fn() } as unknown as CartService;
   const coupons = {
     redeem: jest.fn(),
     validateAndCompute:
@@ -987,5 +993,34 @@ describe('CheckoutService — quyền lợi hạng thành viên tự động (P0
     expect(data.total).toBeGreaterThan(0);
     expect(data.discount).toBeLessThan(data.subtotal);
     expect(data.discount + data.total).toBe(data.subtotal);
+  });
+});
+
+describe('CheckoutService — SP ngừng bán (C-007, Q-14)', () => {
+  const GONE = { id: 'ci-gone', variationId: 'v-gone', productId: 'p-gone', productName: 'SP đã gỡ', variationName: 'V', quantity: 1 };
+
+  it('mua ngay đúng dòng đã ngừng bán → 400 code PRODUCT_DISCONTINUED, không tạo đơn', async () => {
+    const { svc, orderCreate } = build({ cartData: { ...CART, unavailableItems: [GONE] } });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', itemIds: ['ci-gone'] } as never),
+    ).rejects.toMatchObject({ response: { code: 'PRODUCT_DISCONTINUED' } });
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('giỏ chỉ còn dòng ngừng bán → báo ngừng bán (không phải "chưa chọn sản phẩm")', async () => {
+    const { svc } = build({ cartData: { ...CART, items: [], subtotal: 0, unavailableItems: [GONE] } });
+    await expect(svc.quote('u1', { addressId: 'addr1' } as never)).rejects.toMatchObject({
+      response: { code: 'PRODUCT_DISCONTINUED', message: expect.stringContaining('SP đã gỡ') },
+    });
+  });
+
+  it('SP bị gỡ sau khi tính giá: kiểm lại trong tx thấy thiếu → rollback trước khi giữ kho/tạo đơn', async () => {
+    const { svc, prisma, orderCreate, executeRaw } = build();
+    (prisma.variation.findMany as jest.Mock).mockResolvedValueOnce([]);
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
+    ).rejects.toMatchObject({ response: { code: 'PRODUCT_DISCONTINUED' } });
+    expect(executeRaw).not.toHaveBeenCalled();
+    expect(orderCreate).not.toHaveBeenCalled();
   });
 });

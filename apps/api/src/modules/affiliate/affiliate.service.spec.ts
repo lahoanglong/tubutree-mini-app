@@ -193,7 +193,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
 
   function build(
     opts: {
-      variations?: Array<{ id: string; isActive?: boolean; salePrice?: number | null; retailPrice?: number; name?: string; product?: { name: string } }>;
+      variations?: Array<{ id: string; isActive?: boolean; salePrice?: number | null; retailPrice?: number; name?: string; product?: { name: string; isActive?: boolean; approvalStatus?: string } }>;
       stockCount?: number;
       executeRaw?: jest.Mock;
       role?: string;
@@ -203,7 +203,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     } = {},
   ) {
     const variations =
-      opts.variations ?? [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'Mặc định', product: { name: 'Trà thảo mộc' } }];
+      opts.variations ?? [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'Mặc định', product: { name: 'Trà thảo mộc', isActive: true, approvalStatus: 'APPROVED' } }];
     const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
     // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
     const executeRaw = opts.executeRaw ?? jest.fn().mockResolvedValue(opts.stockCount ?? 1);
@@ -282,7 +282,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
 
   it('dùng salePrice khi có (ưu tiên salePrice ?? retailPrice)', async () => {
     const { svc, orderCreate } = build({
-      variations: [{ id: 'v1', isActive: true, salePrice: 80000, retailPrice: 100000, name: 'X', product: { name: 'P' } }],
+      variations: [{ id: 'v1', isActive: true, salePrice: 80000, retailPrice: 100000, name: 'X', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }],
     });
     await svc.placeOrderForCustomer('ctv', DTO() as never);
     const data = orderCreate.mock.calls[0][0].data;
@@ -311,8 +311,11 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       .mockResolvedValueOnce({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 200000, items: [{ variationId: 'v1', total: 200000 }] })
       .mockResolvedValueOnce({ id: 'o1', code: 'TUBU1', total: 200000, items: [] });
     (prisma.variation.findMany as jest.Mock).mockResolvedValueOnce([
-      { id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'X', product: { name: 'P' } },
-    ]).mockResolvedValueOnce([{ id: 'v1', affiliateRate: 10 }]);
+      { id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'X', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } },
+    ])
+      // kiểm lại SP còn bán trong tx (cart/sellable.ts)
+      .mockResolvedValueOnce([{ id: 'v1' }])
+      .mockResolvedValueOnce([{ id: 'v1', affiliateRate: 10 }]);
     await svc.placeOrderForCustomer('ctv', DTO() as never);
     expect(commissionCreate).toHaveBeenCalledTimes(1);
     expect(commissionCreate.mock.calls[0][0].data.affiliateUserId).toBe('ctv');
@@ -325,9 +328,25 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
 
   it('variation ngừng bán (isActive=false) → BadRequest', async () => {
     const { svc } = build({
-      variations: [{ id: 'v1', isActive: false, salePrice: null, retailPrice: 100000, name: 'X', product: { name: 'P' } }],
+      variations: [{ id: 'v1', isActive: false, salePrice: null, retailPrice: 100000, name: 'X', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }],
     });
     await expect(svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toThrow();
+  });
+
+  it('SP cha ngừng bán / chưa duyệt (variation vẫn active) → PRODUCT_DISCONTINUED, không tạo đơn (C-007)', async () => {
+    for (const product of [
+      { name: 'P', isActive: false, approvalStatus: 'APPROVED' },
+      { name: 'P', isActive: true, approvalStatus: 'PENDING_REVIEW' },
+      { name: 'P', isActive: true, approvalStatus: 'REJECTED' },
+    ]) {
+      const { svc, orderCreate } = build({
+        variations: [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'X', product }],
+      });
+      await expect(svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toMatchObject({
+        response: { code: 'PRODUCT_DISCONTINUED' },
+      });
+      expect(orderCreate).not.toHaveBeenCalled();
+    }
   });
 
   it('người dùng không phải CTV/ADMIN → BadRequest (chống tự-giao-dịch)', async () => {
@@ -463,7 +482,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
         create: txOrderCreate,
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 100000, items: [] }),
       },
-      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1' }]) },
       $executeRaw: txExecuteRaw,
     };
     const prisma = {
@@ -471,7 +490,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       variation: {
         findMany: jest
           .fn()
-          .mockResolvedValue([{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'Mặc định', product: { name: 'Trà thảo mộc' } }]),
+          .mockResolvedValue([{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'Mặc định', product: { name: 'Trà thảo mộc', isActive: true, approvalStatus: 'APPROVED' } }]),
       },
       storefront: { findFirst: jest.fn().mockResolvedValue({ slug: 'ctv-shop' }) },
       order: {
