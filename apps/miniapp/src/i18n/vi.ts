@@ -444,6 +444,22 @@ export const vi = {
     viewOrder: 'Xem đơn',
     removeItem: 'Xoá sản phẩm',
     outOfStock: 'Tạm hết hàng',
+    recentHeading: 'Khách gần đây',
+    newCustomer: 'Khách mới',
+  },
+
+  // Đổi nội dung điều khoản thì PHẢI tăng `version` để máy chủ ghi nhận lần đồng ý mới.
+  ctvTerms: {
+    version: '2026-10',
+    heading: 'Điều khoản hoa hồng & thuế',
+    items: [
+      'Hoa hồng tính theo tỷ lệ của từng sản phẩm, hiển thị trong ứng dụng.',
+      'Hoa hồng chỉ được chốt khi đơn đã giao và hết thời gian đổi/trả. Đơn bị huỷ, hoàn hoặc trả hàng thì hoa hồng của đơn đó bị thu hồi.',
+      'Không tự mua, lên đơn ảo hoặc dùng số điện thoại của chính mình để hưởng hoa hồng. Tubu Tree có quyền từ chối hoặc thu hồi hoa hồng khi phát hiện gian lận.',
+      'Hoa hồng là thu nhập của bạn: bạn tự kê khai và nộp thuế theo quy định. Khi pháp luật yêu cầu, Tubu Tree có thể khấu trừ thuế trước khi chi trả.',
+    ],
+    agree: 'Tôi đã đọc và đồng ý với điều khoản hoa hồng & thuế của CTV Tubu Tree',
+    mustAgree: 'Tick đồng ý điều khoản để đăng ký',
   },
 
   dealerOrder: {
