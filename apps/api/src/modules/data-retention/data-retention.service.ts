@@ -17,7 +17,7 @@ export const RETENTION_POLICY: Record<RetentionTargetKey, { configKey: string; d
   analytics_events: { configKey: 'retention.analytics_events_days', defaultDays: 395, minDays: 90 },
   notification_logs: { configKey: 'retention.notification_logs_days', defaultDays: 180, minDays: 30 },
   webhook_events: { configKey: 'retention.webhook_events_days', defaultDays: 90, minDays: 14 },
-  refresh_tokens: { configKey: 'retention.refresh_tokens_days', defaultDays: 30, minDays: 7 },
+  refresh_tokens: { configKey: 'retention.refresh_sessions_days', defaultDays: 30, minDays: 7 },
 };
 
 export function resolveRetentionDays(target: RetentionTargetKey, raw: unknown): number {

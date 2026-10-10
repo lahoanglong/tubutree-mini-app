@@ -4,6 +4,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
+import { CRON_TZ } from '../../../common/cron-tz';
 import { addGomdonJob } from '../gomdon/gomdon-queue';
 import {
   PANCAKE_CLAIM_STALE_MINUTES,
@@ -40,7 +41,7 @@ export class PancakeEventsReconcileService {
   ) {}
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
-  @Cron('45 */10 * * * *', { name: 'pancake.events-reconcile' })
+  @Cron('45 */10 * * * *', { name: 'pancake.events-reconcile', timeZone: CRON_TZ })
   async reconcile(): Promise<void> {
     try {
       await this.redriveEvents();

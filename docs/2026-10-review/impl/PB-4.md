@@ -7,7 +7,7 @@ Module mới `apps/api/src/modules/data-retention/` (`DataRetentionService`, đ�
 - `@Cron('0 30 4 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })`: sau cron retention 03:00 (cron này đọc `refresh_tokens` của hôm qua để tính DAU), trước giờ cao điểm.
 - Khoá chống chạy chồng: cờ `running` trong instance + `pg_try_advisory_xact_lock(hashtext('cron:data-retention.cleanup'))` giữ bằng một transaction suốt lượt (cùng mẫu `PendingPaymentExpiryCron`); các lô DELETE chạy trên kết nối khác.
 - Mỗi bảng: `DELETE ... WHERE id IN (SELECT id ... WHERE <quá hạn> LIMIT 5000)`, nghỉ 200 ms giữa các lô, dừng sớm sau 90 phút (phần còn lại để đêm sau). Một bảng lỗi không chặn bảng khác; `handleCron` không ném lỗi.
-- TTL qua SystemConfig (seed `createOnly`, category `retention`): `retention.analytics_events_days` 395, `retention.notification_logs_days` 180, `retention.webhook_events_days` 90, `retention.refresh_tokens_days` 30. Có sàn (90/30/14/7 ngày) để gõ nhầm 0 không xoá sạch bảng; giá trị không phải số → mặc định.
+- TTL qua SystemConfig (seed `createOnly`, category `retention`): `retention.analytics_events_days` 395, `retention.notification_logs_days` 180, `retention.webhook_events_days` 90, `retention.refresh_sessions_days` 30. Có sàn (90/30/14/7 ngày) để gõ nhầm 0 không xoá sạch bảng; giá trị không phải số → mặc định.
 - Bảng dọn: `analytics_events`, `notification_logs`, `pancake_webhook_events`, `gomdon_webhook_events`, `oa_inbound_messages`, `refresh_tokens` (thu hồi hoặc hết hạn quá 30 ngày).
 
 ### Test (xem báo cáo lượt cuối)

@@ -242,7 +242,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'retention.analytics_events_days', value: 395, category: 'retention', description: 'Giữ analytics_events thô bao nhiêu ngày (13 tháng; sàn 90)', createOnly: true },
   { key: 'retention.notification_logs_days', value: 180, category: 'retention', description: 'Giữ notification_logs bao nhiêu ngày (sàn 30)', createOnly: true },
   { key: 'retention.webhook_events_days', value: 90, category: 'retention', description: 'Giữ log webhook Pancake/Gomdon/tin nhắn OA bao nhiêu ngày (sàn 14)', createOnly: true },
-  { key: 'retention.refresh_tokens_days', value: 30, category: 'retention', description: 'Xoá refresh token đã thu hồi/hết hạn quá bao nhiêu ngày (sàn 7)', createOnly: true },
+  { key: 'retention.refresh_sessions_days', value: 30, category: 'retention', description: 'Xoá refresh token đã thu hồi/hết hạn quá bao nhiêu ngày (sàn 7)', createOnly: true },
 ];
 
 const TIERS = [
