@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
-import { headingProblems, unnamedControls } from '@/test-utils/a11y';
+import { accessibleName, headingProblems, unnamedControls } from '@/test-utils/a11y';
 
 // C-123 + C-077 (web khách): mỗi trang khách có đúng một h1, heading không nhảy cấp, và mọi nút/ô nhập/
 // select có tên truy cập. Đây là bản kiểm thay cho axe `heading-order`/`page-has-heading-one`/`button-name`/
@@ -159,7 +159,9 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
     const names = Array.from(container.querySelectorAll('button')).map((b) => b.getAttribute('aria-label') ?? b.textContent);
     expect(names).toContain('Giảm số lượng Dầu gội bồ kết');
     expect(names).toContain('Tăng số lượng Dầu gội bồ kết');
-    expect(container.querySelector('input[aria-label="Mã giảm giá"]')).not.toBeNull();
+    const coupon = container.querySelector('#cart-coupon');
+    expect(coupon).not.toBeNull();
+    expect(accessibleName(coupon!)).toBe('Mã giảm giá');
   });
 
   it('/gio-hang đã áp mã: nút bỏ mã có tên', async () => {
@@ -236,7 +238,7 @@ describe('trang khách — hành vi giữ nguyên sau khi đổi giao diện', (
   it('giỏ hàng: nhập mã giảm giá vẫn bật nút Áp dụng', async () => {
     const { container } = mount(<CartPage />);
     await flush();
-    const input = container.querySelector<HTMLInputElement>('input[aria-label="Mã giảm giá"]');
+    const input = container.querySelector<HTMLInputElement>('#cart-coupon');
     const apply = () => Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Áp dụng') as HTMLButtonElement;
     expect(apply().disabled).toBe(true);
     typeInto(input, 'welcome30');
