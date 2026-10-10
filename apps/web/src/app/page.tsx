@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ShieldCheck, Truck, RotateCcw, Sparkles, Store, ChevronRight } from 'lucide-react';
+import { ShieldCheck, Truck, RotateCcw, Sparkles, ChevronRight } from 'lucide-react';
 import { getProducts, getBrands } from '@/lib/api';
 import ProductCard from '@/components/product-card';
 
@@ -18,100 +18,96 @@ export default async function HomePage({
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
-      {/* ── Biophilic Hero Section ── */}
-      <section className="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-leaf-900 via-leaf-800 to-primary-900 px-6 py-10 sm:px-10 sm:py-14 text-white shadow-lg">
-        {/* Subtle background decorative shapes */}
-        <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-leaf-500/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-20 -left-12 h-64 w-64 rounded-full bg-primary-500/20 blur-3xl" />
+      {/* ── Hero ── */}
+      <section className="relative mb-8 overflow-hidden rounded-sheet bg-forest-800 px-6 py-10 text-stone-0 shadow-raised sm:px-10 sm:py-14">
+        {/* Hai mảng sáng mờ làm điểm nhấn nền, không mang thông tin */}
+        <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-forest-500/25 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-20 -left-12 h-64 w-64 rounded-full bg-sage-600/25 blur-3xl" />
 
         <div className="relative z-10 max-w-2xl">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-leaf-400/30 bg-leaf-500/20 px-3.5 py-1 text-xs font-semibold tracking-wide text-leaf-200 backdrop-blur-md">
-            <Sparkles className="h-3.5 w-3.5 text-primary-300" />
+          <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-forest-300/30 bg-forest-500/20 px-3.5 py-1 text-xs font-semibold tracking-wide text-forest-100 backdrop-blur-md">
+            <Sparkles className="h-3.5 w-3.5 text-forest-200" aria-hidden="true" />
             <span>SỐNG XANH AN LÀNH · 100% NGUYÊN BẢN VIỆT NAM</span>
-          </div>
+          </p>
 
-          <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl leading-tight">
+          <h1 className="font-display text-3xl font-semibold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
             Mỹ Phẩm & Tiêu Dùng <br className="hidden sm:inline" />
-            <span className="bg-gradient-to-r from-primary-300 via-leaf-200 to-white bg-clip-text text-transparent">
-              Sinh Học Thuần Khiết
-            </span>
+            <span className="text-forest-200">Sinh Học Thuần Khiết</span>
           </h1>
 
-          <p className="mt-4 text-sm sm:text-base leading-relaxed text-leaf-100/90 max-w-xl">
-            Tuyển chọn những sản phẩm sống xanh lành tính nhất từ các nhà xưởng nông nghiệp bền vững. 
+          <p className="mt-4 max-w-xl text-sm leading-relaxed text-forest-100 sm:text-base">
+            Tuyển chọn những sản phẩm sống xanh lành tính nhất từ các nhà xưởng nông nghiệp bền vững.
             An toàn cho cả gia đình, giảm phát thải và chung tay bảo vệ môi trường.
           </p>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <a
               href="#san-pham"
-              className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-primary-700 active:scale-95"
+              className="inline-flex min-h-11 items-center gap-2 rounded-control bg-stone-0 px-5 text-sm font-semibold text-forest-700 shadow-card transition hover:bg-forest-50 active:scale-95"
             >
               <span>Mua sắm ngay</span>
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </a>
-
-            <Link
-              href="/merchant"
-              className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/20 active:scale-95"
-            >
-              <Store className="h-4 w-4 text-leaf-300" />
-              <span>Mở gian hàng Đối tác</span>
-            </Link>
           </div>
         </div>
       </section>
 
-      {/* ── Trust Pillars Bar ── */}
-      <section className="mb-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="flex items-center gap-3.5 rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-leaf-50 text-leaf-700">
-            <ShieldCheck className="h-5 w-5" />
+      {/* ── Cam kết ── */}
+      <section aria-labelledby="cam-ket" className="mb-10">
+        <h2 id="cam-ket" className="sr-only">
+          Cam kết của Tubu Tree
+        </h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="flex items-center gap-3.5 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-forest-50 text-forest-700">
+              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-stone-900">100% Thuần Chay & Lành Tính</h3>
+              <p className="text-xs text-stone-600">Đạt chuẩn kiểm định, an toàn cho làn da</p>
+            </div>
           </div>
-          <div>
-            <h4 className="text-xs font-bold text-neutral-900">100% Thuần Chay & Lành Tính</h4>
-            <p className="text-[11px] text-neutral-500">Đạt chuẩn kiểm định, an toàn cho làn da</p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-3.5 rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-700">
-            <Truck className="h-5 w-5" />
+          <div className="flex items-center gap-3.5 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-sage-50 text-sage-700">
+              <Truck className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-stone-900">Giao Hàng Nhanh Toàn Quốc</h3>
+              <p className="text-xs text-stone-600">Đóng gói vật liệu phân hủy sinh học</p>
+            </div>
           </div>
-          <div>
-            <h4 className="text-xs font-bold text-neutral-900">Giao Hàng Nhanh Toàn Quốc</h4>
-            <p className="text-[11px] text-neutral-500">Đóng gói vật liệu phân hủy sinh học</p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-3.5 rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-leaf-50 text-leaf-700">
-            <RotateCcw className="h-5 w-5" />
-          </div>
-          <div>
-            {/* Chính sách thật (miniapp /about, và chính tab Đổi/Trả của admin): chỉ đổi/trả khi
-                sản phẩm LỖI NHÀ SẢN XUẤT, trong 7 ngày. Hứa "hoàn tiền nếu không hài lòng" là
-                rộng hơn hẳn — khách đổi ý sẽ bị từ chối và có cơ sở khiếu nại. */}
-            <h4 className="text-xs font-bold text-neutral-900">Đổi Trả 7 Ngày</h4>
-            <p className="text-[11px] text-neutral-500">Hàng lỗi nhà sản xuất — đổi mới hoặc hoàn tiền</p>
+          <div className="flex items-center gap-3.5 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-forest-50 text-forest-700">
+              <RotateCcw className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              {/* Chính sách thật (miniapp /about, và chính tab Đổi/Trả của admin): chỉ đổi/trả khi
+                  sản phẩm LỖI NHÀ SẢN XUẤT, trong 7 ngày. Hứa "hoàn tiền nếu không hài lòng" là
+                  rộng hơn hẳn — khách đổi ý sẽ bị từ chối và có cơ sở khiếu nại. */}
+              <h3 className="text-sm font-semibold text-stone-900">Đổi Trả 7 Ngày</h3>
+              <p className="text-xs text-stone-600">Hàng lỗi nhà sản xuất — đổi mới hoặc hoàn tiền</p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── Brand Filter Section ── */}
-      <section id="san-pham" className="mb-6">
+      {/* ── Lọc theo thương hiệu ── */}
+      <section id="san-pham" className="mb-6 scroll-mt-20">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-neutral-900 sm:text-xl">Danh Mục Thương Hiệu</h2>
-          <span className="text-xs text-neutral-500">{products.length} sản phẩm đang bán</span>
+          <h2 className="font-display text-xl font-semibold text-stone-900 sm:text-2xl">Danh Mục Thương Hiệu</h2>
+          <span className="text-xs text-stone-600">{products.length} sản phẩm đang bán</span>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2">
           <Link
             href="/"
-            className={`whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
+            aria-current={!brand ? 'true' : undefined}
+            className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-sm font-semibold transition-all ${
               !brand
-                ? 'bg-primary-600 text-white shadow-sm ring-2 ring-primary-600/30'
-                : 'border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50'
+                ? 'bg-forest-600 text-stone-0 shadow-card ring-2 ring-forest-600/30'
+                : 'border border-stone-300 bg-stone-0 text-stone-700 hover:border-stone-450 hover:bg-stone-50'
             }`}
           >
             Tất cả sản phẩm
@@ -122,44 +118,49 @@ export default async function HomePage({
               <Link
                 key={b.brand}
                 href={`/?brand=${encodeURIComponent(b.brand)}#san-pham`}
-                className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
+                aria-current={isActive ? 'true' : undefined}
+                className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-sm font-medium transition-all ${
                   isActive
-                    ? 'bg-primary-600 text-white shadow-sm ring-2 ring-primary-600/30 font-semibold'
-                    : 'border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50'
+                    ? 'bg-forest-600 font-semibold text-stone-0 shadow-card ring-2 ring-forest-600/30'
+                    : 'border border-stone-300 bg-stone-0 text-stone-700 hover:border-stone-450 hover:bg-stone-50'
                 }`}
               >
-                {b.brand} <span className="text-[10px] opacity-75">({b.count})</span>
+                {b.brand} <span className="ml-1 text-xs opacity-80">({b.count})</span>
               </Link>
             );
           })}
         </div>
       </section>
 
-      {/* ── Products Showcase Grid ── */}
-      {products.length === 0 ? (
-        <div className="rounded-2xl border border-neutral-200 bg-white p-12 text-center shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-leaf-50 text-leaf-600">
-            <Sparkles className="h-6 w-6" />
+      {/* ── Lưới sản phẩm ── */}
+      <section aria-labelledby="danh-sach-san-pham">
+        <h2 id="danh-sach-san-pham" className="sr-only">
+          Danh sách sản phẩm
+        </h2>
+        {products.length === 0 ? (
+          <div className="rounded-card border border-stone-200 bg-stone-0 p-12 text-center shadow-card">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-forest-50 text-forest-600">
+              <Sparkles className="h-6 w-6" aria-hidden="true" />
+            </div>
+            <h3 className="mt-3 font-display text-lg font-semibold text-stone-900">Chưa có sản phẩm phù hợp</h3>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">
+              Hiện chưa có sản phẩm nào thuộc bộ lọc này hoặc hệ thống đang được cập nhật thêm nguồn hàng mới.
+            </p>
+            <Link
+              href="/"
+              className="mt-4 inline-flex min-h-11 items-center rounded-control bg-forest-600 px-5 text-sm font-semibold text-stone-0 shadow-card transition hover:bg-forest-700"
+            >
+              Xem toàn bộ sản phẩm
+            </Link>
           </div>
-          <h3 className="mt-3 text-base font-bold text-neutral-800">Chưa có sản phẩm phù hợp</h3>
-          <p className="mt-1 text-xs text-neutral-500 max-w-sm mx-auto">
-            Hiện chưa có sản phẩm nào thuộc bộ lọc này hoặc hệ thống đang được cập nhật thêm nguồn hàng mới.
-          </p>
-          <Link
-            href="/"
-            className="mt-4 inline-block rounded-xl bg-primary-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-primary-700"
-          >
-            Xem toàn bộ sản phẩm
-          </Link>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 sm:gap-5">
-          {products.map((p) => (
-            <ProductCard key={p.id} product={p} />
-          ))}
-        </div>
-      )}
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 md:grid-cols-4">
+            {products.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   );
 }
-
