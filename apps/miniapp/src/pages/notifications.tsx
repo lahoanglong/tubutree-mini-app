@@ -69,6 +69,9 @@ function internalRoute(v: unknown): string | null {
   return typeof v === 'string' && v.startsWith('/') && !v.startsWith('//') ? v : null;
 }
 
+/** Tin chỉ gửi cho admin; việc xử lý nằm ở trang quản trị web, mini app không có màn tương ứng. */
+const ADMIN_ONLY_CODES = new Set(['DEALER_CREDIT_PAYMENT_REPORTED', 'DEALER_REWARD_CLAIM_NEW']);
+
 /**
  * Nút đi tiếp trong chi tiết thông báo, quyết định theo LOẠI tin (templateCode) và dữ liệu có cấu trúc
  * trong payload. Bản cũ dò từ khoá trong nội dung tin nên tin nói về sản phẩm bị dẫn nhầm sang Vườn Xanh,
@@ -76,7 +79,7 @@ function internalRoute(v: unknown): string | null {
  */
 export function notificationAction(templateCode: string, data: Record<string, string> | undefined): NotificationAction | null {
   const d = data ?? {};
-  if (templateCode.startsWith('OPS_')) return null;
+  if (templateCode.startsWith('OPS_') || ADMIN_ONLY_CODES.has(templateCode)) return null;
   const orderCode = d.order_code ?? d.orderCode;
   const productSlug = d.product_slug ?? d.productSlug;
   const route = internalRoute(d.route);

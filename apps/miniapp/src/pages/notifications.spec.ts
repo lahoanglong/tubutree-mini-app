@@ -133,4 +133,10 @@ describe('notificationAction — nút theo loại tin, không dò nội dung (C-
     expect(to('SOMETHING_NEW', { route: 'https://evil.com' })).toBeNull();
     expect(to('OPS_GOMDON_ALERT', { order_code: 'T1', route: '/admin' })).toBeNull();
   });
+
+  it('tin chỉ gửi cho admin (đại lý báo chuyển khoản, yêu cầu nhận thưởng mới) không dẫn sang trang Đại lý của khách', () => {
+    expect(to('DEALER_CREDIT_PAYMENT_REPORTED', { dealer: 'A', amount: '1.000' })).toBeNull();
+    expect(to('DEALER_REWARD_CLAIM_NEW', { dealer: 'A' })).toBeNull();
+    expect(to('DEALER_REWARD_CLAIM_APPROVED', {})).toBe('/dealer');
+  });
 });
