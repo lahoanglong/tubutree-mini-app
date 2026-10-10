@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { applyWalletDelta } from './wallet-ledger.service';
 
 /**
  * Ví Tubu (walletBalance, VND thật) — nhận hoa hồng CTV + cashback Shopee.
@@ -43,7 +44,7 @@ export class WalletService {
   }
 
   /**
-   * Đổi Ví → TubuXu (×multiplier). Atomic: trừ ví (gte guard chống overdraft) +
+   * Đổi Ví → TubuXu (×multiplier). Atomic: trừ ví qua sổ cái (khoá dòng user, chống overdraft) +
    * cộng xu + ghi CoinTransaction trong 1 transaction (bất biến coinsBalance == Σdelta).
    */
   /**
@@ -88,12 +89,19 @@ export class WalletService {
     }
 
     try {
-      await this.prisma.$transaction(async (tx) => {
-        const dec = await tx.user.updateMany({
-          where: { id: userId, walletBalance: { gte: amountVnd } },
-          data: { walletBalance: { decrement: amountVnd } },
+      const replay = await this.prisma.$transaction(async (tx) => {
+        const debit = await applyWalletDelta(tx, {
+          userId,
+          delta: -amountVnd,
+          type: 'XU_CONVERT',
+          refType: 'CONVERT',
+          refId: key,
+          reason: 'Đổi Ví sang TubuXu',
+          insufficientMessage: 'Số dư Ví không đủ.',
         });
-        if (dec.count === 0) throw new BadRequestException('Số dư Ví không đủ.');
+        // Cùng key đã ghi sổ ở request song song thắng trước (khoá dòng user của applyWalletDelta
+        // xếp hàng hai request): không cộng xu lần hai.
+        if (!debit.applied) return true;
         await tx.user.update({ where: { id: userId }, data: { coinsBalance: { increment: received } } });
         await tx.coinTransaction.create({
           data: {
@@ -104,7 +112,9 @@ export class WalletService {
             ...(key ? { refId: key } : {}),
           },
         });
+        return false;
       });
+      if (replay) return { spent: amountVnd, received, multiplier };
     } catch (err) {
       // Thua race 2 request cùng key: unique index chặn bản ghi thứ 2 → coi như replay, KHÔNG
       // báo lỗi cho user (giao dịch của bên thắng đã thành công đúng 1 lần).
@@ -171,16 +181,21 @@ export class WalletService {
     let payout: Awaited<ReturnType<typeof this.prisma.payout.create>>;
     try {
       payout = await this.prisma.$transaction(async (tx) => {
-        // Trừ tiền ATOMIC: chỉ trừ nếu số dư còn đủ (where gte) — chống TOCTOU/overdraft
-        // khi 2 lệnh rút chạy đồng thời (check ở trên có thể đã cũ).
-        const dec = await tx.user.updateMany({
-          where: { id: userId, walletBalance: { gte: amount } },
-          data: { walletBalance: { decrement: amount } },
-        });
-        if (dec.count === 0) throw new BadRequestException('Số dư ví không đủ.');
-        return tx.payout.create({
+        const created = await tx.payout.create({
           data: { userId, amount: net, fee, method: 'BANK', bankInfo, status: 'REQUESTED', idempotencyKey: key },
         });
+        // Trừ GROSS dưới khoá dòng user (check ở trên có thể đã cũ khi 2 lệnh rút chạy đồng
+        // thời); không đủ → throw, rollback luôn Payout vừa tạo. refId = payout để lệnh hoàn khi
+        // admin từ chối (WITHDRAW_REFUND) đối chiếu được.
+        await applyWalletDelta(tx, {
+          userId,
+          delta: -amount,
+          type: 'WITHDRAW',
+          refType: 'PAYOUT',
+          refId: created.id,
+          reason: `Rút về ngân hàng (phí ${fee}đ)`,
+        });
+        return created;
       });
     } catch (err) {
       // Race 2 request cùng Idempotency-Key: kẻ thua ăn P2002 trên unique key → trả lại Payout
