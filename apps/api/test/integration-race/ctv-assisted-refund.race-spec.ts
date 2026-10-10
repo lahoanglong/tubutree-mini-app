@@ -15,6 +15,7 @@ import { OrderReversalService } from '../../src/modules/orders/order-reversal.se
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { OrdersService } from '../../src/modules/orders/orders.service';
 import { CartService } from '../../src/modules/cart/cart.service';
+import { CustomerRefundsService } from '../../src/modules/orders/customer-refunds.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
 import { GomdonOrderService } from '../../src/modules/integrations/gomdon/gomdon-order.service';
@@ -49,6 +50,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
         OrderStatusService,
         OrdersService,
         AdminService,
+        CustomerRefundsService,
         { provide: PricingService, useValue: { calcShippingFee: jest.fn().mockResolvedValue(0) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         { provide: CartService, useValue: {} },
@@ -295,6 +297,29 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     expect(await walletOf(ctv.id)).toBe(0);
     expect(await walletOf(customer.id)).toBe(270_000);
     expect(await prisma.orderCustomerRefund.count({ where: { orderId: order.id } })).toBe(1);
+  });
+
+  it('admin xác nhận đã chuyển khoản hoàn thủ công: 2 lần bấm đồng thời → 1 thắng, dòng COMPLETED có bankRef', async () => {
+    const refunds = moduleRef.get(CustomerRefundsService);
+    const adminUser = await createUser(prisma, { role: 'ADMIN' });
+    const { order } = await assistedOrder({ status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
+    await orderStatus.setStatus(order.id, 'CANCELLED', { actorType: 'ADMIN' });
+    const pending = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { orderId: order.id } });
+
+    const listed = await refunds.list('PENDING', 1, 100);
+    expect(listed.data.map((r) => r.id)).toContain(pending.id);
+
+    const results = await Promise.allSettled([
+      refunds.markPaid(adminUser.id, pending.id, { bankRef: 'FT001' }),
+      refunds.markPaid(adminUser.id, pending.id, { bankRef: 'FT002' }),
+    ]);
+    const s = summarize(results);
+    expect(s.fulfilled.length).toBe(1);
+    expect(s.rejected.length).toBe(1);
+    const done = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: pending.id } });
+    expect(done.status).toBe('COMPLETED');
+    expect(done.completedBy).toBe(adminUser.id);
+    expect(['FT001', 'FT002']).toContain(done.bankRef);
   });
 
   it('đơn thường (không phải đơn hộ) vẫn hoàn vào ví người đặt như cũ, không tạo dòng hoàn khách cuối', async () => {
