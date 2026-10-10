@@ -168,3 +168,48 @@ describe('PancakePushReconcileService.reconcile', () => {
     expect(enqueuePush).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('PancakePushReconcileService.reconcile — đơn đại lý còn backorder (C-011)', () => {
+  const old = new Date(Date.now() - 20 * 60_000);
+  const base = { createdAt: old, hasRecyclingPickup: false, gomdonOrderId: null, gomdonPartnerCode: null, gomdonStatus: null };
+
+  it('đơn DEALER có item backorderedQty=3, tạo 20 phút trước → KHÔNG enqueuePush', async () => {
+    const findMany = jest.fn().mockResolvedValue([
+      { ...base, id: 'd1', code: 'DLR1', type: 'DEALER', items: [{ backorderedQty: 0 }, { backorderedQty: 3 }] },
+    ]);
+    const { svc, enqueuePush } = mk({ order: { findMany } });
+    await svc.reconcile();
+    expect(enqueuePush).not.toHaveBeenCalled();
+  });
+
+  it('đơn DEALER đã đủ hàng (backorderedQty=0 hết) → vẫn re-enqueue', async () => {
+    const findMany = jest.fn().mockResolvedValue([
+      { ...base, id: 'd2', code: 'DLR2', type: 'DEALER', items: [{ backorderedQty: 0 }] },
+    ]);
+    const { svc, enqueuePush } = mk({ order: { findMany } });
+    await svc.reconcile();
+    expect(enqueuePush).toHaveBeenCalledWith('d2');
+  });
+
+  it('đơn khách lẻ giữ hành vi cũ: vẫn re-enqueue dù item có backorderedQty > 0', async () => {
+    const findMany = jest.fn().mockResolvedValue([
+      { ...base, id: 'r1', code: 'TUBU1', type: 'RETAIL', items: [{ backorderedQty: 2 }] },
+    ]);
+    const { svc, enqueuePush } = mk({ order: { findMany } });
+    await svc.reconcile();
+    expect(enqueuePush).toHaveBeenCalledWith('r1');
+  });
+
+  it('truy vấn loại đơn DEALER còn backorder ngay ở where (không chiếm lô BATCH_SIZE)', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const { svc } = mk({ order: { findMany } });
+    await svc.reconcile();
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          NOT: { type: 'DEALER', items: { some: { backorderedQty: { gt: 0 } } } },
+        }),
+      }),
+    );
+  });
+});
