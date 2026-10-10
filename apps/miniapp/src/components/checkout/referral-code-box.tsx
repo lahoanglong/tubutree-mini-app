@@ -179,6 +179,7 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
         Mã giới thiệu
       </Text>
       <Input
+        aria-label="Mã giới thiệu"
         placeholder="Nhập mã giới thiệu"
         value={draft}
         maxLength={64}

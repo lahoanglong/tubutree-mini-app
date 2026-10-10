@@ -52,6 +52,12 @@ describe('ReferralCodeBox — ô nhập mã giới thiệu CTV ở checkout (C-0
     expect(onApplied).not.toHaveBeenCalled();
   });
 
+  it('ô nhập có nhãn truy cập riêng cho trình đọc màn hình (không chỉ placeholder)', () => {
+    setup();
+    fireEvent.click(screen.getByText('Nhập mã'));
+    expect(input()).toHaveAttribute('aria-label', 'Mã giới thiệu');
+  });
+
   it('ô trống → nhắc nhập, không gọi server', () => {
     const { onApplied } = setup();
     fireEvent.click(screen.getByText('Nhập mã'));
