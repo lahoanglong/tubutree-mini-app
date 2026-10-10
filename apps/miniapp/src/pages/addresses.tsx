@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Sheet, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Sheet, useSnackbar } from 'zmp-ui';
+import { Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAddresses, type AddressDTO } from '../services/shop-api';
 import { updateAddress, deleteAddress } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
+import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { useAuthStore } from '../store/auth';
@@ -93,7 +95,7 @@ export default function AddressesPage() {
                 {addressLine(a)}
               </Text>
 
-              <Box flex style={{ gap: 16, marginTop: 10 }}>
+              <Box flex style={{ gap: 8, marginTop: 4, marginLeft: -8 }}>
                 {!a.isDefault && (
                   <ActionLink
                     label="Đặt mặc định"
@@ -115,13 +117,14 @@ export default function AddressesPage() {
           <Button
             fullWidth
             variant="secondary"
+            icon={Plus}
             style={{ marginTop: 6 }}
-            onClick={() => {
+            onPress={() => {
               haptic('light');
               setEditing('new');
             }}
           >
-            + Thêm địa chỉ mới
+            Thêm địa chỉ mới
           </Button>
         </Box>
       )}
@@ -155,15 +158,14 @@ export default function AddressesPage() {
               {addressLine(confirmDel)}
             </Text>
             <Box flex style={{ gap: 10, marginTop: 16 }}>
-              <Button variant="secondary" fullWidth onClick={() => setConfirmDel(null)}>
+              <Button variant="secondary" fullWidth onPress={() => setConfirmDel(null)}>
                 Hủy
               </Button>
               <Button
                 fullWidth
+                variant="danger"
                 loading={deleteMut.isPending}
-                disabled={deleteMut.isPending}
-                onClick={() => deleteMut.mutate(confirmDel.id)}
-                style={{ background: 'var(--danger)' }}
+                onPress={() => deleteMut.mutate(confirmDel.id)}
               >
                 Xóa
               </Button>
@@ -175,6 +177,7 @@ export default function AddressesPage() {
   );
 }
 
+/** Nút chữ trong thẻ địa chỉ: thẻ <button> thật để có vai trò + bàn phím, cao 44px cho vùng chạm. */
 function ActionLink({
   label,
   onClick,
@@ -187,16 +190,25 @@ function ActionLink({
   disabled?: boolean;
 }) {
   return (
-    <Text
-      size="small"
-      bold
-      onClick={disabled ? undefined : onClick}
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="tubu-press"
       style={{
+        minHeight: 44,
+        padding: '0 8px',
+        background: 'none',
+        border: 'none',
+        font: 'inherit',
+        fontSize: 'var(--type-body-sm-size)',
+        fontWeight: 600,
         color: danger ? 'var(--danger)' : 'var(--primary-700)',
         opacity: disabled ? 0.5 : 1,
+        cursor: disabled ? 'default' : 'pointer',
       }}
     >
       {label}
-    </Text>
+    </button>
   );
 }
