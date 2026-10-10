@@ -208,7 +208,7 @@ export const vi = {
   orders: {
     title: 'Đơn hàng của tôi',
     emptyHeading: 'Bạn chưa có đơn nào',
-    emptyBody: 'Mua đơn đầu — nhận 30k voucher',
+    emptyBody: 'Đơn đầu từ 199.000đ dùng được mã giảm giá chào mừng 30.000đ',
     emptyCta: 'Bắt đầu mua',
     tabAll: 'Tất cả',
     tabTitle: 'Đơn hàng',
