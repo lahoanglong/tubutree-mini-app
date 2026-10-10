@@ -77,6 +77,10 @@ export interface AdminOrder {
     fullName: string | null;
   } | null;
   items?: AdminOrderItem[];
+  /** Trạng thái API sẽ nhận ngay lúc này (AdminService.listOrders, cùng luật OrderStatusService.setStatus). */
+  allowedTransitions?: string[];
+  /** true = đơn lẻ chuyển khoản còn UNPAID, chưa huỷ/trả → nút "Đã nhận tiền". */
+  canConfirmPayment?: boolean;
 }
 export interface DashboardStats {
   totalRevenue: number;
@@ -233,11 +237,14 @@ export const importSoldExternal = (csv: string) =>
 export const listUsers = (page = 1) =>
   apiFetch<Page<AdminUser>>(`/admin/users?page=${page}&limit=20`);
 export type UserRole = 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
-export const setUserRole = (phone: string, role: UserRole) =>
-  apiFetch<{ ok: boolean; id: string; phone: string | null; fullName: string | null; role: string; previousRole: string }>(
+/** tierId bắt buộc khi role = DEALER (BE từ chối nếu thiếu/không tồn tại — C-008); role khác không gửi. */
+export const setUserRole = (phone: string, role: UserRole, tierId?: string) => {
+  const tier = role === 'DEALER' ? tierId?.trim() : undefined;
+  return apiFetch<{ ok: boolean; id: string; phone: string | null; fullName: string | null; role: string; previousRole: string }>(
     '/admin/users/role',
-    { method: 'POST', body: { phone, role } },
+    { method: 'POST', body: { phone, role, ...(tier ? { tierId: tier } : {}) } },
   );
+};
 export const getDashboardStats = () =>
   apiFetch<DashboardStats>('/admin/dashboard/stats');
 /** attention = hàng đợi "Cần xử lý thu gom"; all = mọi đơn có chọn thu gom tái chế. */
@@ -297,6 +304,19 @@ export const confirmDealerOrderPayment = (orderId: string, input: { bankRef?: st
   const bankRef = input.bankRef?.trim().slice(0, DEALER_BANK_REF_MAX);
   const note = input.note?.trim().slice(0, DEALER_PAYMENT_NOTE_MAX);
   return apiFetch<ConfirmDealerPaymentResult>(`/admin/dealer-orders/${encodeURIComponent(orderId)}/confirm-payment`, {
+    method: 'POST',
+    body: { ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}) },
+  });
+};
+
+/**
+ * POST /admin/orders/:id/confirm-payment — "Đã nhận tiền" cho đơn lẻ chuyển khoản (C-024): UNPAID → PAID
+ * (PENDING_PAYMENT → CONFIRMED), idempotent; luật nằm ở AdminService.confirmOrderPayment, lỗi 400 hiện nguyên văn.
+ */
+export const confirmOrderPayment = (orderId: string, input: { bankRef?: string; note?: string } = {}) => {
+  const bankRef = input.bankRef?.trim().slice(0, DEALER_BANK_REF_MAX);
+  const note = input.note?.trim().slice(0, DEALER_PAYMENT_NOTE_MAX);
+  return apiFetch<ConfirmDealerPaymentResult>(`/admin/orders/${encodeURIComponent(orderId)}/confirm-payment`, {
     method: 'POST',
     body: { ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}) },
   });
