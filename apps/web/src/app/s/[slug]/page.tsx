@@ -56,7 +56,9 @@ export default async function StorefrontPage({
   const sf = await getStorefront(slug);
   if (!sf) notFound();
 
-  const themeColor = sf.themeColor || '#16a34a';
+  // Màu chủ đề do chủ gian hàng chọn (dữ liệu, không phải token) — CHỈ dùng làm điểm nhấn không mang chữ
+  // (ảnh bìa, avatar, thanh tiêu đề bộ sưu tập). Mọi chữ dùng token để luôn đủ tương phản bất kể màu họ chọn.
+  const themeColor = sf.themeColor || 'var(--color-action-primary-bg)';
   const warehouseParts = [
     sf.warehouseAddress,
     sf.warehouseWard,
@@ -71,7 +73,7 @@ export default async function StorefrontPage({
       <StorefrontTracker slug={slug} type={sf.type ?? undefined} />
 
       {/* ── Storefront Banner Cover ── */}
-      <div className="relative mb-6 overflow-hidden rounded-3xl shadow-sm">
+      <div className="relative mb-6 overflow-hidden rounded-sheet shadow-card">
         {sf.coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -83,16 +85,16 @@ export default async function StorefrontPage({
           <div
             className="h-36 w-full sm:h-48"
             style={{
-              background: `linear-gradient(135deg, ${themeColor} 0%, #1e293b 100%)`,
+              background: `linear-gradient(135deg, ${themeColor} 0%, var(--color-bg-inverse) 100%)`,
             }}
           />
         )}
         {/* Soft gradient overlay at bottom of cover */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-stone-900/40 via-transparent to-transparent" />
       </div>
 
       {/* ── Brand Identity & Header Card ── */}
-      <div className="relative mb-6 -mt-16 sm:-mt-20 rounded-2xl border border-neutral-200/80 bg-white p-5 sm:p-7 shadow-sm">
+      <div className="relative -mt-16 mb-6 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card sm:-mt-20 sm:p-7">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-4">
             {/* Brand Avatar */}
@@ -102,47 +104,43 @@ export default async function StorefrontPage({
                 <img
                   src={sf.avatarUrl}
                   alt={sf.title}
-                  className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl border-4 border-white object-cover shadow-md"
-                  style={{ borderColor: '#ffffff' }}
+                  className="h-16 w-16 rounded-card border-4 border-stone-0 object-cover shadow-raised sm:h-20 sm:w-20"
                 />
               ) : (
                 <div
-                  className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-2xl border-4 border-white text-2xl sm:text-3xl font-bold text-white shadow-md"
+                  className="flex h-16 w-16 items-center justify-center rounded-card border-4 border-stone-0 font-display text-2xl font-semibold text-stone-0 shadow-raised sm:h-20 sm:w-20 sm:text-3xl"
                   style={{ backgroundColor: themeColor }}
                 >
                   {sf.title.slice(0, 1).toUpperCase()}
                 </div>
               )}
               {/* Verified check badge */}
-              <div className="absolute -bottom-1.5 -right-1.5 rounded-full bg-white p-0.5 shadow-sm">
-                <CheckCircle2 className="h-5 w-5 fill-leaf-600 text-white" />
+              <div className="absolute -bottom-1.5 -right-1.5 rounded-full bg-stone-0 p-0.5 shadow-card">
+                <CheckCircle2 className="h-5 w-5 fill-forest-600 text-stone-0" aria-hidden="true" />
               </div>
             </div>
 
             {/* Brand Title & Meta */}
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-extrabold text-neutral-900 tracking-tight">
+                <h1 className="font-display text-xl font-semibold tracking-tight text-stone-900 sm:text-2xl">
                   {sf.title}
                 </h1>
-                <span
-                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold text-white shadow-sm"
-                  style={{ backgroundColor: themeColor }}
-                >
-                  <Sparkles className="h-3 w-3" />
+                <span className="inline-flex items-center gap-1 rounded-full bg-forest-700 px-2.5 py-0.5 text-xs font-semibold text-stone-0 shadow-card">
+                  <Sparkles className="h-3 w-3" aria-hidden="true" />
                   {sf.type === 'MERCHANT' ? 'Đối tác chính hãng' : 'CTV tuyển chọn'}
                 </span>
                 {sf.ownerTier && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 shadow-sm ring-1 ring-inset ring-amber-200">
-                    <span aria-hidden>{sf.ownerTier.emoji}</span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-warning-bg px-2.5 py-0.5 text-xs font-semibold text-warning-fg ring-1 ring-inset ring-warning-fg">
+                    <span aria-hidden="true">{sf.ownerTier.emoji}</span>
                     {sf.ownerTier.name}
                   </span>
                 )}
               </div>
 
               {sf.subdomain && (
-                <p className="flex items-center gap-1 text-xs font-medium text-neutral-500">
-                  <Globe className="h-3.5 w-3.5 text-neutral-400" />
+                <p className="flex items-center gap-1 text-xs font-medium text-stone-600">
+                  <Globe className="h-3.5 w-3.5 text-stone-500" aria-hidden="true" />
                   <span>https://{sf.subdomain}.tubutree.com</span>
                 </p>
               )}
@@ -152,31 +150,31 @@ export default async function StorefrontPage({
 
         {/* Bio / Slogan */}
         {sf.headerNote && (
-          <p className="mt-4 border-t border-neutral-100 pt-3.5 text-sm leading-relaxed text-neutral-700">
+          <p className="mt-4 border-t border-stone-200 pt-3.5 text-sm leading-relaxed text-stone-700">
             {sf.headerNote}
           </p>
         )}
 
         {/* Warehouse & Dispatch Origin */}
         {(fullWarehouseAddress || sf.warehousePhone) && (
-          <div className="mt-4 flex flex-wrap gap-4 rounded-xl bg-neutral-50/80 border border-neutral-200/60 p-3.5 text-xs text-neutral-600">
+          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 rounded-card border border-stone-200 bg-stone-50 p-3.5 text-xs text-stone-700">
             {fullWarehouseAddress && (
               <div className="flex items-center gap-1.5">
-                <MapPin className="h-4 w-4 shrink-0 text-leaf-700" />
+                <MapPin className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
                 <span>
-                  <strong className="font-semibold text-neutral-900">Kho xuất hàng:</strong>{' '}
+                  <strong className="font-semibold text-stone-900">Kho xuất hàng:</strong>{' '}
                   {fullWarehouseAddress}
                 </span>
               </div>
             )}
             {sf.warehousePhone && (
               <div className="flex items-center gap-1.5">
-                <Phone className="h-4 w-4 shrink-0 text-leaf-700" />
+                <Phone className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
                 <span>
-                  <strong className="font-semibold text-neutral-900">Hotline:</strong>{' '}
+                  <strong className="font-semibold text-stone-900">Hotline:</strong>{' '}
                   <a
                     href={`tel:${sf.warehousePhone}`}
-                    className="font-semibold text-neutral-900 underline hover:text-primary-700"
+                    className="inline-flex min-h-11 items-center font-semibold text-stone-900 underline hover:text-forest-700"
                   >
                     {sf.warehousePhone}
                   </a>
@@ -196,22 +194,27 @@ export default async function StorefrontPage({
       </div>
 
       {/* ── Trust Ribbon ── */}
-      <section className="mb-8 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-        <div className="flex items-center gap-2 rounded-xl border border-neutral-200/70 bg-white p-3 shadow-sm">
-          <ShieldCheck className="h-4 w-4 shrink-0 text-leaf-700" />
-          <span className="text-xs font-semibold text-neutral-800">100% Chính hãng</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-xl border border-neutral-200/70 bg-white p-3 shadow-sm">
-          <Truck className="h-4 w-4 shrink-0 text-primary-600" />
-          <span className="text-xs font-semibold text-neutral-800">Xuất kho tận gốc</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-xl border border-neutral-200/70 bg-white p-3 shadow-sm">
-          <CreditCard className="h-4 w-4 shrink-0 text-emerald-600" />
-          <span className="text-xs font-semibold text-neutral-800">VietQR Napas247</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-xl border border-neutral-200/70 bg-white p-3 shadow-sm">
-          <RotateCcw className="h-4 w-4 shrink-0 text-leaf-700" />
-          <span className="text-xs font-semibold text-neutral-800">Đổi trả 7 ngày (hàng lỗi NSX)</span>
+      <section aria-labelledby="cam-ket-gian-hang" className="mb-8">
+        <h2 id="cam-ket-gian-hang" className="sr-only">
+          Cam kết của gian hàng
+        </h2>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+          <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
+            <span className="text-xs font-semibold text-stone-800">100% Chính hãng</span>
+          </div>
+          <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
+            <Truck className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
+            <span className="text-xs font-semibold text-stone-800">Xuất kho tận gốc</span>
+          </div>
+          <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
+            <CreditCard className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
+            <span className="text-xs font-semibold text-stone-800">VietQR Napas247</span>
+          </div>
+          <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
+            <RotateCcw className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
+            <span className="text-xs font-semibold text-stone-800">Đổi trả 7 ngày (hàng lỗi NSX)</span>
+          </div>
         </div>
       </section>
 
@@ -220,14 +223,15 @@ export default async function StorefrontPage({
         <section key={c.id} className="mt-8">
           <div className="mb-4 flex items-center gap-2.5">
             <span
+              aria-hidden="true"
               className="h-5 w-1.5 rounded-full"
               style={{ backgroundColor: themeColor }}
             />
-            <h2 className="text-lg sm:text-xl font-bold text-neutral-900">{c.title}</h2>
-            <span className="text-xs text-neutral-400">({c.items?.length ?? 0} sản phẩm)</span>
+            <h2 className="font-display text-lg font-semibold text-stone-900 sm:text-xl">{c.title}</h2>
+            <span className="text-xs text-stone-600">({c.items?.length ?? 0} sản phẩm)</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 sm:gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4">
             {c.items.map((it) => {
               const price = it.product.salePrice ?? it.product.basePrice;
               const hasSale = it.product.salePrice != null && it.product.salePrice < it.product.basePrice;
@@ -239,9 +243,9 @@ export default async function StorefrontPage({
                 <Link
                   key={it.id}
                   href={`/san-pham/${it.product.slug}`}
-                  className="group flex flex-col overflow-hidden rounded-2xl border border-neutral-200/80 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md"
+                  className="group flex flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-forest-600/40 hover:shadow-raised"
                 >
-                  <div className="relative aspect-square w-full overflow-hidden bg-neutral-100/60">
+                  <div className="relative aspect-square w-full overflow-hidden bg-stone-100">
                     {it.product.thumbnail ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -251,40 +255,38 @@ export default async function StorefrontPage({
                         loading="lazy"
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-leaf-50/70 text-leaf-600">
+                      <div className="flex h-full w-full items-center justify-center bg-forest-50 text-forest-600">
                         <svg width="40" height="40" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-                          <path d="M14 36c-1.5-14 8-26 24-27 1 16-7 27-20 28-2 .2-3.4-.4-4-1z" fill="#95D222" />
-                          <path d="M24 37c-1-8 4-15 14-16" stroke="#509018" strokeWidth="2" strokeLinecap="round" />
+                          <path d="M14 36c-1.5-14 8-26 24-27 1 16-7 27-20 28-2 .2-3.4-.4-4-1z" fill="currentColor" fillOpacity="0.3" />
+                          <path d="M24 37c-1-8 4-15 14-16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                         </svg>
                       </div>
                     )}
 
                     {hasSale && discountPct > 0 && (
-                      <div className="absolute left-2 top-2 rounded-full bg-primary-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                      <div className="absolute left-2 top-2 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-0 shadow-card">
                         -{discountPct}%
                       </div>
                     )}
                   </div>
 
                   <div className="flex flex-1 flex-col p-3.5">
-                    <p className="text-[10px] font-semibold text-leaf-800">{it.product.brand}</p>
-                    <p className="line-clamp-2 min-h-[2.5rem] text-xs sm:text-sm font-medium text-neutral-900 group-hover:text-primary-700">
+                    <p className="text-xs font-semibold text-forest-800">{it.product.brand}</p>
+                    <h3 className="line-clamp-2 min-h-[2.5rem] text-xs font-medium text-stone-900 group-hover:text-forest-700 sm:text-sm">
                       {it.product.name}
-                    </p>
+                    </h3>
 
                     <div className="mt-2 flex items-baseline gap-1.5">
-                      <p className="font-bold text-sm sm:text-base" style={{ color: themeColor }}>
-                        {formatVnd(price)}
-                      </p>
+                      <p className="text-sm font-bold text-stone-900 sm:text-base">{formatVnd(price)}</p>
                       {hasSale && (
-                        <p className="text-[11px] text-neutral-400 line-through">
+                        <p className="text-xs text-stone-500 line-through">
                           {formatVnd(it.product.basePrice)}
                         </p>
                       )}
                     </div>
 
                     {formatSold(it.product.sold) && (
-                      <p className="mt-1 text-[11px] text-neutral-400">{formatSold(it.product.sold)}</p>
+                      <p className="mt-1 text-xs text-stone-600">{formatSold(it.product.sold)}</p>
                     )}
                   </div>
                 </Link>
@@ -296,4 +298,3 @@ export default async function StorefrontPage({
     </main>
   );
 }
-
