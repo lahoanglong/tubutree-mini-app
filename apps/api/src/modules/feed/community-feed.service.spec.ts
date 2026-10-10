@@ -9,14 +9,17 @@ function makePrisma(over: Record<string, unknown> = {}) {
       findUnique: jest.fn().mockResolvedValue({ id: 'post1', userId: 'author', kind: 'SHOWCASE' }),
       create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'new', ...data })),
       update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     feedReaction: {
       findUnique: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockResolvedValue({}),
       delete: jest.fn().mockResolvedValue({}),
       deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+      groupBy: jest.fn().mockResolvedValue([]),
     },
     feedComment: {
+      groupBy: jest.fn().mockResolvedValue([]),
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue({ id: 'c1', postId: 'p1', userId: 'answerer' }),
       create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'c1', ...data })),
@@ -110,7 +113,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   category: { slug: 'khoe-vuon', name: 'Khoe vườn', icon: '🌿' },
   productTags: [{ product: { slug: 'cay-a', name: 'Cây A', thumbnail: 't', salePrice: null, basePrice: 100 } }],
   tags: [],
-  _count: { reactions: 3, comments: 2 }, reactions: [{ id: 'r1' }],
+  reactions: [{ id: 'r1' }],
   ...over,
 });
 
@@ -118,6 +121,8 @@ describe('CommunityFeedService.getFeed (cộng đồng)', () => {
   it('hiện tên thật + avatar + badge + chip SP + đã-thả-tim', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row()]);
+    (prisma.feedReaction.groupBy as jest.Mock).mockResolvedValue([{ postId: 'p1', _count: { _all: 3 } }]);
+    (prisma.feedComment.groupBy as jest.Mock).mockResolvedValue([{ postId: 'p1', _count: { _all: 2 } }]);
     const r = await makeSvc(prisma).getFeed('u1', { category: 'khoe-vuon' });
     expect(r.posts[0]).toMatchObject({
       id: 'p1', author: 'Lã Hoàng Long', avatar: 'https://a/1.png', badge: null,
@@ -128,6 +133,31 @@ describe('CommunityFeedService.getFeed (cộng đồng)', () => {
     // Lọc theo danh mục + chỉ PUBLISHED được truyền vào where
     const where = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0].where;
     expect(where).toMatchObject({ status: 'PUBLISHED', category: { slug: 'khoe-vuon' } });
+  });
+
+  it('đếm tim/bình luận chỉ cho id của trang (không _count join cả bảng), bình luận bỏ isRemoved', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ id: 'a' }), row({ id: 'b' }), row({ id: 'c' })]);
+    (prisma.feedReaction.groupBy as jest.Mock).mockResolvedValue([{ postId: 'b', _count: { _all: 4 } }]);
+    (prisma.feedComment.groupBy as jest.Mock).mockResolvedValue([{ postId: 'a', _count: { _all: 1 } }]);
+    const r = await makeSvc(prisma).getFeed('u1', { take: 2 });
+    const findArgs = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
+    expect(JSON.stringify(findArgs.include)).not.toContain('_count');
+    // c là bài thừa (take+1) nên không được đếm
+    expect(prisma.feedReaction.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({ by: ['postId'], where: { postId: { in: ['a', 'b'] } } }),
+    );
+    expect(prisma.feedComment.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { postId: { in: ['a', 'b'] }, isRemoved: false } }),
+    );
+    expect(r.posts.map((p: any) => [p.id, p.likeCount, p.commentCount])).toEqual([['a', 0, 1], ['b', 4, 0]]);
+  });
+
+  it('trang rỗng → không gọi groupBy', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).getFeed('u1');
+    expect(prisma.feedReaction.groupBy).not.toHaveBeenCalled();
+    expect(prisma.feedComment.groupBy).not.toHaveBeenCalled();
   });
 
   it('tác giả STAFF → badge EXPERT; tên null → "Bạn Tubu"', async () => {
@@ -161,7 +191,7 @@ describe('CommunityFeedService.getFeed (cộng đồng)', () => {
     const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
     expect(args.orderBy).toEqual([
       { isPinned: 'desc' },
-      { reactions: { _count: 'desc' } },
+      { likeCount: 'desc' },
       { createdAt: 'desc' },
       { id: 'desc' },
     ]);
@@ -254,7 +284,7 @@ describe('CommunityFeedService.getPost', () => {
     const prisma = makePrisma();
     (prisma.feedPost.update as jest.Mock) = jest.fn().mockResolvedValue({});
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({
-      ...row(), reactions: [], _count: { reactions: 0, comments: 0 },
+      ...row(), reactions: [],
     });
     const svc = makeSvc(prisma);
     const r = await svc.getPost('u1', 'p1');
@@ -267,7 +297,7 @@ describe('CommunityFeedService.getPost', () => {
   it('userId trùng chủ bài → isOwner true', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({
-      ...row(), userId: 'author', reactions: [], _count: { reactions: 0, comments: 0 },
+      ...row(), userId: 'author', reactions: [],
     });
     const r = await makeSvc(prisma).getPost('author', 'p1');
     expect(r).toMatchObject({ isOwner: true });
@@ -290,14 +320,14 @@ describe('CommunityFeedService.getPost', () => {
 
   it('bài PENDING của người khác → NotFound + KHÔNG tăng viewCount', async () => {
     const prisma = makePrisma();
-    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row(), status: 'PENDING', userId: 'author', reactions: [], _count: { reactions: 0, comments: 0 } });
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row(), status: 'PENDING', userId: 'author', reactions: [] });
     await expect(makeSvc(prisma).getPost('intruder', 'p1')).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.feedPost.update).not.toHaveBeenCalled();
   });
 
   it('chủ bài xem bài PENDING của mình → OK', async () => {
     const prisma = makePrisma();
-    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row(), status: 'PENDING', userId: 'owner', reactions: [], _count: { reactions: 0, comments: 0 } });
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row(), status: 'PENDING', userId: 'owner', reactions: [] });
     const r = await makeSvc(prisma).getPost('owner', 'p1');
     expect(r.id).toBe('p1');
   });
@@ -340,6 +370,7 @@ describe('CommunityFeedService.toggleReaction', () => {
     expect(r.liked).toBe(true);
     expect(prisma.feedReaction.create).toHaveBeenCalled();
     expect(prisma.feedReaction.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { likeCount: { increment: 1 } } });
   });
 
   it('đã thả tim → bỏ tim, liked false', async () => {
@@ -350,6 +381,19 @@ describe('CommunityFeedService.toggleReaction', () => {
     expect(r.liked).toBe(false);
     expect(prisma.feedReaction.deleteMany).toHaveBeenCalled();
     expect(prisma.feedReaction.create).not.toHaveBeenCalled();
+    expect(prisma.feedPost.updateMany).toHaveBeenCalledWith({
+      where: { id: 'p1', likeCount: { gt: 0 } },
+      data: { likeCount: { decrement: 1 } },
+    });
+  });
+
+  it('bỏ tim nhưng deleteMany xoá 0 dòng (thiết bị kia đã bỏ) → không trừ likeCount lần hai', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', status: 'PUBLISHED' });
+    (prisma.feedReaction.findUnique as jest.Mock).mockResolvedValue({ id: 'r1' });
+    (prisma.feedReaction.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+    await makeSvc(prisma).toggleReaction('u1', 'p1');
+    expect(prisma.feedPost.updateMany).not.toHaveBeenCalled();
   });
 
   it('bài CHƯA DUYỆT → NotFound, không đẩy lượt tim cho bài sắp được duyệt', async () => {

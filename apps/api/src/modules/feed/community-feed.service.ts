@@ -146,11 +146,12 @@ const FEED_INCLUDE = {
   category: { select: { slug: true, name: true, icon: true } },
   productTags: { include: { product: { select: { slug: true, name: true, thumbnail: true, salePrice: true, basePrice: true } } } },
   tags: { include: { tag: { select: { slug: true, name: true } } } },
-  // comments đếm CÓ LỌC isRemoved: thẻ bài và màn chi tiết cùng hiện con số này, trong khi
-      // danh sách bình luận lại lọc bỏ bài đã gỡ — người đọc thấy "💬 5" cạnh "Trả lời (3)" và
-      // tưởng bị giấu nội dung.
-      _count: { select: { reactions: true, comments: { where: { isRemoved: false } } } },
 } as const;
+
+interface FeedCounts {
+  likes: Map<string, number>;
+  comments: Map<string, number>;
+}
 
 /** Hình dạng FeedPost sau khi include FEED_INCLUDE + reactions (dùng chung getFeed/getPost/eventPosts). */
 type FeedPostRow = Prisma.FeedPostGetPayload<{
@@ -341,16 +342,16 @@ export class CommunityFeedService {
       where.bestCommentId = null;
     }
     if (opts.tag) where.tags = { some: { tag: { slug: opts.tag } } };
-    // HẠN CHẾ ĐÃ BIẾT của sort 'popular': khoá sắp xếp là số tim — một con số THAY ĐỔI ĐƯỢC. Ai
-    // đó thả tim cho một bài ở trang 2 trong lúc người dùng đang xem trang 1 thì bài đó có thể
-    // nhảy lên và hiện lần thứ hai (hoặc một bài khác bị bỏ qua). Sửa triệt để cần cột likeCount
-    // vật chất hoá + keyset theo (likeCount, createdAt, id), tức phải bảo trì bộ đếm ở mọi lượt
-    // thả/bỏ tim — chưa làm vì rủi ro lệch bộ đếm lớn hơn phiền toái hiện tại.
+    // 'popular' sắp theo cột likeCount (bảo trì trong toggleReaction) nên không phải đếm cả bảng
+    // feed_reactions. HẠN CHẾ ĐÃ BIẾT: khoá sắp xếp là số tim — một con số THAY ĐỔI ĐƯỢC. Ai đó
+    // thả tim cho một bài ở trang 2 trong lúc người dùng đang xem trang 1 thì bài đó có thể nhảy
+    // lên và hiện lần thứ hai (hoặc một bài khác bị bỏ qua); keyset theo (likeCount, createdAt,
+    // id) mới triệt để, chưa làm. Cột chỉ để xếp hạng: số hiển thị vẫn đếm thật theo trang.
     const orderBy =
       opts.sort === 'popular'
         ? [
             { isPinned: 'desc' as const },
-            { reactions: { _count: 'desc' as const } },
+            { likeCount: 'desc' as const },
             { createdAt: 'desc' as const },
             { id: 'desc' as const },
           ]
@@ -364,8 +365,9 @@ export class CommunityFeedService {
     });
     const hasMore = posts.length > take;
     const page = hasMore ? posts.slice(0, take) : posts;
+    const counts = await this.countsForPage(page.map((p) => p.id));
     return {
-      posts: page.map((p) => this.toItem(p, userId)),
+      posts: page.map((p) => this.toItem(p, userId, counts)),
       nextCursor: hasMore ? page[page.length - 1]!.id : null,
     };
   }
@@ -382,7 +384,34 @@ export class CommunityFeedService {
     // UPDATE khoá đúng một dòng (ghi tuần tự trên bài viral), trong khi toItem() và FeedItem
     // KHÔNG hề trả `viewCount` ra — không màn nào hiển thị con số đó. Cột vẫn còn trong schema
     // cho báo cáo sau này; khi cần hãy đếm theo phiên/ngày hoặc gom batch thay vì ghi mỗi request.
-    return this.toItem(p, userId);
+    return this.toItem(p, userId, await this.countsForPage([p.id]));
+  }
+
+  /**
+   * Đếm tim/bình luận CHỈ cho các bài của trang hiện tại (theo index postId). Cách cũ dùng
+   * `_count` của include khiến Prisma LEFT JOIN hai subquery GROUP BY quét cả bảng reactions và
+   * comments mỗi lần tải feed (C-042). Bình luận đếm CÓ LỌC isRemoved: thẻ bài và màn chi tiết
+   * cùng hiện con số này, trong khi danh sách bình luận lại lọc bỏ bài đã gỡ — người đọc thấy
+   * "💬 5" cạnh "Trả lời (3)" và tưởng bị giấu nội dung.
+   */
+  private async countsForPage(postIds: string[]): Promise<FeedCounts> {
+    if (postIds.length === 0) return { likes: new Map(), comments: new Map() };
+    const [likes, comments] = await Promise.all([
+      this.prisma.feedReaction.groupBy({
+        by: ['postId'],
+        where: { postId: { in: postIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.feedComment.groupBy({
+        by: ['postId'],
+        where: { postId: { in: postIds }, isRemoved: false },
+        _count: { _all: true },
+      }),
+    ]);
+    return {
+      likes: new Map(likes.map((g) => [g.postId, g._count._all])),
+      comments: new Map(comments.map((g) => [g.postId, g._count._all])),
+    };
   }
 
   /** Danh mục cộng đồng đang hiển thị, sắp theo order — dùng cho tabs FE. */
@@ -394,7 +423,7 @@ export class CommunityFeedService {
     });
   }
 
-  private toItem(p: FeedPostRow, userId: string) {
+  private toItem(p: FeedPostRow, userId: string, counts: FeedCounts) {
     return {
       id: p.id,
       kind: p.kind,
@@ -414,8 +443,8 @@ export class CommunityFeedService {
         salePrice: t.product.salePrice, basePrice: t.product.basePrice,
       })),
       tags: (p.tags ?? []).map((t) => ({ slug: t.tag.slug, name: t.tag.name })),
-      likeCount: p._count.reactions,
-      commentCount: p._count.comments,
+      likeCount: counts.likes.get(p.id) ?? 0,
+      commentCount: counts.comments.get(p.id) ?? 0,
       liked: p.reactions.length > 0,
       bestCommentId: p.bestCommentId ?? null,
       isOwner: p.userId === userId,
@@ -610,11 +639,23 @@ export class CommunityFeedService {
     if (existing) {
       // deleteMany thay vì delete: hai thiết bị bấm cùng lúc thì kẻ thua gặp "record not found"
       // → 500 cho một thao tác thực ra đã thành công.
-      await this.prisma.feedReaction.deleteMany({ where: { postId, userId } });
+      await this.prisma.$transaction(async (tx) => {
+        const { count } = await tx.feedReaction.deleteMany({ where: { postId, userId } });
+        if (count > 0) {
+          await tx.feedPost.updateMany({
+            where: { id: postId, likeCount: { gt: 0 } },
+            data: { likeCount: { decrement: count } },
+          });
+        }
+      });
       return { liked: false };
     }
     try {
-      await this.prisma.feedReaction.create({ data: { postId, userId } });
+      // Cùng transaction để likeCount không lệch khi tạo tim thất bại (P2002 → rollback cả hai).
+      await this.prisma.$transaction([
+        this.prisma.feedReaction.create({ data: { postId, userId } }),
+        this.prisma.feedPost.update({ where: { id: postId }, data: { likeCount: { increment: 1 } } }),
+      ]);
       // Task 9: chỉ phát khi THẬT SỰ tạo được reaction ở request này — nhánh P2002 bên dưới nghĩa
       // là thiết bị khác đã tạo trước, không phải hành động của request này.
       await this.analytics.recordBestEffort({
@@ -1044,8 +1085,9 @@ export class CommunityFeedService {
     });
     const hasMore = rows.length > limit;
     const posts = hasMore ? rows.slice(0, limit) : rows;
+    const counts = await this.countsForPage(posts.map((p) => p.id));
     return {
-      posts: posts.map((p) => this.toItem(p, viewerId)),
+      posts: posts.map((p) => this.toItem(p, viewerId, counts)),
       nextCursor: hasMore ? posts[posts.length - 1]!.id : null,
     };
   }
