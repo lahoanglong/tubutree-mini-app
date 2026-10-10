@@ -1,7 +1,7 @@
 # PB-5 - Cron múi giờ + feed + danh sách chưa giới hạn
 
 ## C-026 - XONG (mục 1/2 của gói)
-- 28 `@Cron` (27 thiếu + 1 sót) đều có `{ timeZone: CRON_TZ }`; hằng `CRON_TZ = 'Asia/Ho_Chi_Minh'` ở `apps/api/src/common/cron-tz.ts`. Hai cron đã có literal (`analytics-aggregation`, `pending-payment-expiry`) đổi sang hằng. Thưởng quý đại lý (`0 0 4 10 1,4,7,10 *`) nay chạy 04:00 ngày 10 giờ VN.
+- 29 `@Cron` (27 thiếu timeZone, 2 đã có literal) đều có `{ timeZone: CRON_TZ }`; hằng `CRON_TZ = 'Asia/Ho_Chi_Minh'` ở `apps/api/src/common/cron-tz.ts`. Hai cron đã có literal (`analytics-aggregation`, `pending-payment-expiry`) đổi sang hằng. Thưởng quý đại lý (`0 0 4 10 1,4,7,10 *`) nay chạy 04:00 ngày 10 giờ VN.
 - `TZ=Asia/Ho_Chi_Minh` cho service `api` trong `docker-compose.prod.yml` và `docker-compose.vietnix.yml` (dev compose không có api); `apps/api/Dockerfile` runner thêm `tzdata` và `ENV TZ` (alpine cần tzdata thì TZ mới có hiệu lực).
 - Test tĩnh `src/common/cron-timezone.spec.ts`: quét mọi `.ts` (trừ spec) dưới `src/`, bắt từng decorator `@Cron(...)` (cân ngoặc) và đòi có `timeZone:`; chỉ tính dòng bắt đầu bằng `@Cron(` nên comment không gây nhiễu. Đỏ: gỡ timeZone khỏi `loyalty.cron.ts` thì fail đúng file đó (24 pass, 1 fail); xanh sau khi trả lại (25/25). Cron mới của PB-2/PB-4 đã có timeZone riêng nên xanh sau merge (literal hay `CRON_TZ` đều qua).
 - Helper lịch VN `src/common/vn-time.ts` (`startOfVnDay`, `startOfVnMonth`, `vnDateParts`, `vnMonthKey`, `formatVnDate`), tính bằng số học UTC. Jest chạy `TZ=UTC` qua `globalSetup` (`test/jest-global-utc.js`, khai trong `jest.config.js`) vì jest sao chép `process.env` cho từng test file, gán TZ trong spec không tác động; chạy UTC để lỗi lộ ra cả trên máy dev múi giờ VN.
