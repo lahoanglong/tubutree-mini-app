@@ -8,6 +8,11 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { seedGameQuiz } from './seed-game-quiz';
 import { configSeedUpsertArgs, type ConfigSeed } from '../src/modules/system-config/config-seed';
+import {
+  COMMUNITY_CATEGORIES,
+  communityCategoryUpsertArgs,
+  retireCommunityCategoriesArgs,
+} from '../src/modules/feed/community-categories-seed';
 
 const prisma = new PrismaClient();
 
@@ -902,20 +907,14 @@ async function main() {
     },
   });
 
-  // Cộng đồng Vườn Tubu Pha 1a — 6 danh mục Q&A cố định.
+  // Cộng đồng Vườn Tubu — danh mục Q&A theo ngành hàng thật (C-073). Danh mục cây cảnh của bản đầu chỉ bị ẩn,
+  // không xoá: bài đã đăng giữ nguyên chỗ (xem community-categories-seed.ts).
   console.log('🌱 Seeding Community Categories...');
-  const COMMUNITY_CATEGORIES = [
-    { slug: 'cham-soc', name: 'Chăm sóc cây', icon: '🌱', order: 1 },
-    { slug: 'sau-benh', name: 'Sâu bệnh', icon: '🐛', order: 2 },
-    { slug: 'phoi-canh', name: 'Phối cảnh / décor', icon: '🪴', order: 3 },
-    { slug: 'khoe-vuon', name: 'Khoe vườn', icon: '🌿', order: 4 },
-    { slug: 'hoi-mua-gi', name: 'Hỏi mua gì', icon: '🛒', order: 5 },
-    { slug: 'meo-hay', name: 'Mẹo hay', icon: '💡', order: 6 },
-  ];
   for (const c of COMMUNITY_CATEGORIES) {
-    await prisma.communityCategory.upsert({ where: { slug: c.slug }, update: { name: c.name, icon: c.icon, order: c.order }, create: c });
+    await prisma.communityCategory.upsert(communityCategoryUpsertArgs(c));
   }
-  console.log(`Seeded ${COMMUNITY_CATEGORIES.length} community categories`);
+  const retired = await prisma.communityCategory.updateMany(retireCommunityCategoriesArgs());
+  console.log(`Seeded ${COMMUNITY_CATEGORIES.length} community categories (${retired.count} danh mục cũ đã ẩn)`);
 
   console.log('✅ Seed done.');
 }
