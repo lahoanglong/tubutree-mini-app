@@ -29,10 +29,11 @@ describe('index.html viewport', () => {
   it('ô nhập trên iOS có cỡ chữ >= 16px để focus không tự phóng to (inline style nên cần !important)', () => {
     const block = /@supports\s*\(\s*-webkit-touch-callout:\s*none\s*\)\s*\{([\s\S]*?\})\s*\}/.exec(html);
     expect(block).not.toBeNull();
-    const rule = /([^{}]*)\{([^}]*)\}/.exec(block![1]);
-    expect(rule![1]).toMatch(/input/);
-    expect(rule![1]).toMatch(/textarea/);
-    expect(rule![1]).toMatch(/select/);
-    expect(rule![2]).toMatch(/font-size:\s*16px\s*!important/);
+    const rule = /([^{}]*)\{([^}]*)\}/.exec(block?.[1] ?? '');
+    const [, selectors = '', declarations = ''] = rule ?? [];
+    expect(selectors).toMatch(/input/);
+    expect(selectors).toMatch(/textarea/);
+    expect(selectors).toMatch(/select/);
+    expect(declarations).toMatch(/font-size:\s*16px\s*!important/);
   });
 });
