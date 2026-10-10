@@ -760,6 +760,26 @@ function makeStatusPrisma(order: Record<string, unknown>, finalOrder: Record<str
 }
 
 describe('AdminService.updateOrderStatus', () => {
+  // C-024: admin từng đẩy được đơn chuyển khoản chưa ai trả lên DELIVERED → cộng điểm + chốt hoa hồng.
+  it.each(['SHIPPING', 'DELIVERED'] as const)(
+    'đơn BANK_TRANSFER chưa PAID → %s bị từ chối 400, không cộng điểm/hoa hồng',
+    async (to) => {
+      const order = {
+        id: 'o9', code: 'TB-109', userId: 'u9', status: 'CONFIRMED', total: 250000, note: null, items: [],
+        paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID',
+      };
+      const { prisma, txUpdateMany } = makeStatusPrisma(order, order);
+      (prisma as unknown as { dealerCreditLedger: unknown }).dealerCreditLedger = { findFirst: jest.fn().mockResolvedValue(null) };
+
+      const err = await mkAdmin(prisma).updateOrderStatus('admin-1', 'o9', to).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toContain('Đã nhận tiền');
+      expect(txUpdateMany).not.toHaveBeenCalled();
+      expect(loyalty.creditOrderPoints).not.toHaveBeenCalledWith('o9');
+      expect(affiliate.lockCommissionsForOrder).not.toHaveBeenCalledWith('o9');
+    },
+  );
+
   it('chuyển DELIVERED → credit điểm và lock hoa hồng', async () => {
     const order = { id: 'o1', code: 'TB-100', userId: 'u1', status: 'SHIPPING', total: 200000, note: null, items: [] };
     const { prisma } = makeStatusPrisma(order, { ...order, status: 'DELIVERED' });

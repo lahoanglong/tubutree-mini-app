@@ -1,4 +1,4 @@
-import type { OrderStatus } from '@tubutree/shared-types';
+import type { OrderStatus, PaymentMethod } from '@tubutree/shared-types';
 
 /**
  * Bảng chuyển trạng thái đơn hàng — NGUỒN CHÂN LÝ DUY NHẤT.
@@ -53,8 +53,9 @@ export class InvalidOrderTransitionError extends Error {
   constructor(
     public readonly from: OrderStatus,
     public readonly to: OrderStatus,
+    message?: string,
   ) {
-    super(`Không thể chuyển đơn từ ${from} sang ${to}.`);
+    super(message ?? `Không thể chuyển đơn từ ${from} sang ${to}.`);
     this.name = 'InvalidOrderTransitionError';
   }
 }
@@ -62,4 +63,58 @@ export class InvalidOrderTransitionError extends Error {
 /** Ném InvalidOrderTransitionError nếu chuyển trạng thái không hợp lệ. */
 export function assertTransition(from: OrderStatus, to: OrderStatus): void {
   if (!canTransition(from, to)) throw new InvalidOrderTransitionError(from, to);
+}
+
+/**
+ * Trạng thái mà đơn TRẢ TRƯỚC chỉ được vào khi đã PAID: hàng rời kho (SHIPPING) và giao xong
+ * (DELIVERED — mốc cộng điểm Xanh, chốt hoa hồng CTV, thưởng giới thiệu). Trước đây đơn chuyển
+ * khoản chưa ai trả vẫn đẩy được lên DELIVERED và nhận đủ các khoản đó (C-024).
+ */
+const PAYMENT_GATED_STATUSES: readonly OrderStatus[] = ['SHIPPING', 'DELIVERED'];
+
+export function requiresPaymentBefore(to: OrderStatus): boolean {
+  return PAYMENT_GATED_STATUSES.includes(to);
+}
+
+/**
+ * Record đầy đủ theo enum: thêm phương thức thanh toán mới thì tsc buộc phải xếp loại ở đây, không
+ * lặng lẽ lọt khỏi luật "trả trước phải PAID mới được giao".
+ */
+const PREPAID_METHOD: Record<PaymentMethod, boolean> = {
+  COD: false,
+  ZALOPAY: true,
+  VNPAY: true,
+  BANK_TRANSFER: true,
+  WALLET: true,
+  XU: true,
+};
+
+export function isPrepaidMethod(paymentMethod: string): boolean {
+  return PREPAID_METHOD[paymentMethod as PaymentMethod] === true;
+}
+
+/** Lý do riêng để admin thấy cần bấm "Đã nhận tiền"; vẫn là lỗi chuyển trạng thái nên webhook bỏ qua êm. */
+export class UnpaidPrepaidTransitionError extends InvalidOrderTransitionError {
+  constructor(code: string, paymentMethod: string, from: OrderStatus, to: OrderStatus) {
+    super(
+      from,
+      to,
+      `Đơn ${code} trả trước (${paymentMethod}) chưa được ghi nhận thanh toán — xác nhận "Đã nhận tiền" trước khi chuyển sang ${to}.`,
+    );
+    this.name = 'UnpaidPrepaidTransitionError';
+  }
+}
+
+/**
+ * `onCredit`: đơn đại lý ghi công nợ — BANK_TRANSFER + UNPAID suốt đời (trả qua sổ công nợ, không bao
+ * giờ lật PAID) nên được giao như thường.
+ */
+export function assertPaidBeforeFulfilment(
+  order: { code: string; paymentMethod: string; paymentStatus: string; onCredit?: boolean },
+  from: OrderStatus,
+  to: OrderStatus,
+): void {
+  if (!requiresPaymentBefore(to) || !isPrepaidMethod(order.paymentMethod)) return;
+  if (order.paymentStatus === 'PAID' || order.onCredit) return;
+  throw new UnpaidPrepaidTransitionError(order.code, order.paymentMethod, from, to);
 }

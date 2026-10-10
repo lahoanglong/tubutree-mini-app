@@ -9,7 +9,14 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OrderReversalService } from './order-reversal.service';
-import { assertTransition, canTransition, InvalidOrderTransitionError } from './order-transition';
+import {
+  assertPaidBeforeFulfilment,
+  assertTransition,
+  canTransition,
+  InvalidOrderTransitionError,
+  isPrepaidMethod,
+  requiresPaymentBefore,
+} from './order-transition';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 /**
@@ -71,12 +78,26 @@ export class OrderStatusService {
 
     if (order.status === targetStatus) return order; // no-op idempotent (webhook lặp lại)
     assertTransition(order.status as OrderStatus, targetStatus);
+    const paymentGated =
+      requiresPaymentBefore(targetStatus) && isPrepaidMethod(order.paymentMethod) && order.paymentStatus !== 'PAID';
+    if (paymentGated) {
+      assertPaidBeforeFulfilment(
+        { ...order, onCredit: await this.isOnDealerCredit(order.id) },
+        order.status as OrderStatus,
+        targetStatus,
+      );
+    }
 
     // Atomic flip guard theo status hiện tại — 2 caller song song (vd admin + webhook)
     // chỉ 1 bên thắng (count===1), bên thua bail êm để không chạy side-effect 2 lần.
     const won = await this.prisma.$transaction(async (tx) => {
       const flip = await tx.order.updateMany({
-        where: { id: order.id, status: order.status },
+        // Đã PAID lúc đọc mà bị hoàn/huỷ thanh toán chen giữa thì không được giao tiếp trên ảnh chụp cũ.
+        where: {
+          id: order.id,
+          status: order.status,
+          ...(requiresPaymentBefore(targetStatus) && order.paymentStatus === 'PAID' ? { paymentStatus: 'PAID' as const } : {}),
+        },
         data: {
           status: targetStatus,
           // Mốc giao thật — hạn đổi/trả tính từ đây (không dùng updatedAt: ghi gì sau đó cũng đổi nó).
@@ -156,6 +177,15 @@ export class OrderStatusService {
       .catch(() => undefined);
 
     return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
+  }
+
+  /** Đơn đại lý ghi công nợ — cùng điều kiện DealerService.confirmDealerOrderPayment dùng để nhận diện. */
+  private async isOnDealerCredit(orderId: string): Promise<boolean> {
+    const debit = await this.prisma.dealerCreditLedger.findFirst({
+      where: { refType: 'ORDER', refId: orderId },
+      select: { id: true },
+    });
+    return debit !== null;
   }
 
   /**

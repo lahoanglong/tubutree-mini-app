@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { OrderStatusService, InvalidOrderTransitionError } from './order-status.service';
+import { UnpaidPrepaidTransitionError } from './order-transition';
 import { OrderReversalService } from './order-reversal.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
@@ -336,5 +337,102 @@ describe('OrderStatusService — ghi deliveredAt khi lật DELIVERED (mốc hạ
     prisma.order.findFirst.mockResolvedValue(makeOrder({ status: 'CONFIRMED' }));
     await svc.setStatus('o1', 'PACKED' as never);
     expect(tx.order.updateMany.mock.calls[1][0].data.deliveredAt).toBeUndefined();
+  });
+});
+
+/**
+ * C-024: admin/merchant/webhook từng đẩy được đơn chuyển khoản CHƯA trả tiền lên DELIVERED → cộng điểm
+ * + chốt hoa hồng cho một đơn không ai trả. Trả trước (mọi phương thức trừ COD) phải PAID mới được
+ * SHIPPING/DELIVERED; đơn đại lý ghi công nợ (có dòng DealerCreditLedger refType=ORDER) được miễn.
+ */
+describe('OrderStatusService — chặn giao đơn trả trước chưa thanh toán (C-024)', () => {
+  function make(order: Record<string, unknown>, opts: { creditDebit?: boolean; flipCount?: number } = {}) {
+    const tx = {
+      order: { updateMany: jest.fn().mockResolvedValue({ count: opts.flipCount ?? 1 }) },
+      orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      order: { findFirst: jest.fn().mockResolvedValue(order), findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(opts.creditDebit ? { id: 'l1' } : null) },
+      $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
+    };
+    const loyalty = { creditOrderPoints: jest.fn().mockResolvedValue(undefined), reverseOrderPoints: jest.fn() };
+    const affiliate = {
+      lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+      grantReferralReward: jest.fn().mockResolvedValue(undefined),
+      reverseCommissionsForOrder: jest.fn(),
+    };
+    const svc = new OrderStatusService(
+      prisma as unknown as PrismaService,
+      loyalty as unknown as LoyaltyService,
+      affiliate as unknown as AffiliateService,
+      { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+      { reverseFinancials: jest.fn() } as unknown as OrderReversalService,
+    );
+    return { svc, prisma, tx, loyalty, affiliate };
+  }
+
+  it.each(['SHIPPING', 'DELIVERED'])('BANK_TRANSFER UNPAID → %s bị chặn, không mở tx, không cộng điểm/hoa hồng', async (to) => {
+    const { svc, prisma, loyalty, affiliate } = make(
+      makeOrder({ status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }),
+    );
+    await expect(svc.setStatus('o1', to as never, { actorType: 'ADMIN' })).rejects.toThrow(UnpaidPrepaidTransitionError);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(loyalty.creditOrderPoints).not.toHaveBeenCalled();
+    expect(affiliate.lockCommissionsForOrder).not.toHaveBeenCalled();
+  });
+
+  it('PENDING_PAYMENT → DELIVERED (nhảy cóc) cho đơn chuyển khoản chưa trả → chặn', async () => {
+    const { svc } = make(makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }));
+    await expect(svc.setStatus('o1', 'DELIVERED' as never)).rejects.toThrow(InvalidOrderTransitionError);
+  });
+
+  it('ZALOPAY UNPAID → DELIVERED bị chặn', async () => {
+    const { svc } = make(makeOrder({ status: 'CONFIRMED', paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID' }));
+    await expect(svc.setStatus('o1', 'DELIVERED' as never)).rejects.toThrow(UnpaidPrepaidTransitionError);
+  });
+
+  it('BANK_TRANSFER đã PAID → DELIVERED đi được, lật có guard paymentStatus=PAID', async () => {
+    const { svc, tx, loyalty } = make(makeOrder({ status: 'SHIPPING', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' }));
+    await svc.setStatus('o1', 'DELIVERED' as never);
+    expect(tx.order.updateMany.mock.calls[0][0].where).toMatchObject({ id: 'o1', status: 'SHIPPING', paymentStatus: 'PAID' });
+    expect(loyalty.creditOrderPoints).toHaveBeenCalledWith('o1');
+  });
+
+  it('COD UNPAID → DELIVERED đi được (thu tiền khi giao), không tra sổ công nợ', async () => {
+    const { svc, prisma, loyalty } = make(makeOrder({ status: 'SHIPPING', paymentMethod: 'COD', paymentStatus: 'UNPAID' }));
+    await svc.setStatus('o1', 'DELIVERED' as never);
+    expect(loyalty.creditOrderPoints).toHaveBeenCalled();
+    expect(prisma.dealerCreditLedger.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('đơn đại lý ghi công nợ (BANK_TRANSFER UNPAID + dòng nợ ORDER) → SHIPPING đi được', async () => {
+    const { svc, prisma, tx } = make(
+      makeOrder({ type: 'DEALER', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }),
+      { creditDebit: true },
+    );
+    await svc.setStatus('o1', 'SHIPPING' as never);
+    expect(prisma.dealerCreditLedger.findFirst).toHaveBeenCalledWith({
+      where: { refType: 'ORDER', refId: 'o1' },
+      select: { id: true },
+    });
+    expect(tx.order.updateMany).toHaveBeenCalled();
+  });
+
+  it('đơn đại lý TRẢ TRƯỚC (không có dòng nợ) chưa PAID → DELIVERED bị chặn', async () => {
+    const { svc } = make(makeOrder({ type: 'DEALER', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }));
+    await expect(svc.setStatus('o1', 'DELIVERED' as never)).rejects.toThrow(UnpaidPrepaidTransitionError);
+  });
+
+  it('BANK_TRANSFER UNPAID → PACKED / CANCELLED vẫn đi được', async () => {
+    const a = make(makeOrder({ status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }));
+    await expect(a.svc.setStatus('o1', 'PACKED' as never)).resolves.toBeDefined();
+    const b = make(makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }));
+    await expect(b.svc.setStatus('o1', 'CANCELLED' as never)).resolves.toBeDefined();
+  });
+
+  it('chuyển lùi vẫn bị chặn như cũ (DELIVERED → CONFIRMED)', async () => {
+    const { svc } = make(makeOrder({ status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' }));
+    await expect(svc.setStatus('o1', 'CONFIRMED' as never)).rejects.toThrow(InvalidOrderTransitionError);
   });
 });
