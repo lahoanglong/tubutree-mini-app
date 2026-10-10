@@ -55,7 +55,7 @@ describe('WalletService.withdraw (Ví → ngân hàng, min 100k, phí 3k)', () =
     const { prisma, debit, payoutCreate } = makePrisma(200_000);
     const r = await new WalletService(prisma, config).withdraw('u1', 100_000, { bank: 'VCB' });
     expect(r).toMatchObject({ status: 'REQUESTED', fee: 3000, net: 97_000, withdrawn: 100_000 });
-    expect(debit.mock.calls[0][1]).toMatchObject({
+    expect(debit.mock.calls[0]![1]).toMatchObject({
       userId: 'u1',
       delta: -100_000,
       type: 'WITHDRAW',
@@ -127,7 +127,7 @@ describe('WalletService.convertToXu (Ví → TubuXu ×1.2)', () => {
     const { prisma, debit, userUpdate, coinCreate } = makePrisma(200_000);
     const r = await new WalletService(prisma, config).convertToXu('u1', 100_000);
     expect(r).toEqual({ spent: 100_000, received: 120_000, multiplier: 1.2 });
-    expect(debit.mock.calls[0][1]).toMatchObject({ userId: 'u1', delta: -100_000, type: 'XU_CONVERT', refId: undefined });
+    expect(debit.mock.calls[0]![1]).toMatchObject({ userId: 'u1', delta: -100_000, type: 'XU_CONVERT', refId: undefined });
     expect(userUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: { coinsBalance: { increment: 120_000 } } }),
     );
@@ -164,7 +164,7 @@ describe('WalletService.convertToXu (Ví → TubuXu ×1.2)', () => {
     const { prisma, coinCreate } = makePrisma(200_000);
     await new WalletService(prisma, config).convertToXu('u1', 100_000, 'key-1');
     expect(coinCreate.mock.calls[0][0].data).toMatchObject({ refType: 'CONVERT', refId: 'key-1' });
-    expect(ledger.mock.calls[0][1]).toMatchObject({ type: 'XU_CONVERT', refType: 'CONVERT', refId: 'key-1' });
+    expect(ledger.mock.calls[0]![1]).toMatchObject({ type: 'XU_CONVERT', refType: 'CONVERT', refId: 'key-1' });
   });
 
   it('sổ ví đã có dòng cùng key (request song song thắng trước) → không cộng xu lần hai, trả kết quả cũ', async () => {
