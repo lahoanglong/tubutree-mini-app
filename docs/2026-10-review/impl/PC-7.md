@@ -63,6 +63,80 @@ cd apps/miniapp && npx vitest run src/components/content-kit-sheet.spec.tsx
 - Footer ẩn ở `/admin`, `/merchant`, `/brand` vì hotline dành cho khách mua hàng; các cổng đó có giao diện riêng (PC-11/PD-1).
 - `shop.tubutree.com` còn xuất hiện ở `site.ts` (chú thích) và `site.spec.ts` (kiểm không còn là mặc định), cố ý.
 
-### Chưa làm (các mục sau của PC-7)
-- Mục 2/3, 3/3: chuyển san-pham, gio-hang, thanh-toan, tai-khoan, s/[slug], dang-nhap sang DS v2 (thêm vào `MIGRATED`), C-025 phần còn lại (trang chi tiết đơn + QR,
-  ô mã giảm giá ở thanh toán, ô tìm kiếm ở header), C-116/C-123/C-077 trên các trang đó. Xoá khối legacy v1 khỏi `tailwind.config.ts` khi PC-11/PD-1 xong.
+### Chưa làm sau mục 1/3
+- Chuyển san-pham, gio-hang, thanh-toan, tai-khoan, s/[slug], dang-nhap sang DS v2: đã làm ở mục 2/3 bên dưới.
+- C-025 phần còn lại (trang chi tiết đơn + QR, danh sách mã giảm giá ở thanh toán, ô tìm kiếm ở header): mục 3/3. Xoá khối legacy v1 khỏi `tailwind.config.ts` khi PC-11/PD-1 xong.
+
+## Mục 2/3 — C-097 (các trang khách còn lại) + C-116 + C-123 + C-077 phần web khách
+
+| Mục | Trạng thái | Commit |
+| --- | --- | --- |
+| C-097 `/san-pham/[slug]` và component dùng chung (`add-to-cart`, `copy-button`, `geo-picker`, `recycling-*`), màu trạng thái `danger/warning/success/info`, `lib/guest-ui.ts` | XONG | 1e7d97c |
+| C-097 `/gio-hang` (kèm C-077: nút −/+/Xóa gắn tên sản phẩm, ô "Mã giảm giá" có nhãn) | XONG | 9420992 |
+| C-097 `/thanh-toan` + khung chuyển khoản (kèm C-077: ô địa chỉ, select tỉnh/phường, radio; vùng cuộn focus được) | XONG | e1a8bbf |
+| C-097 `/tai-khoan`, `/dang-nhap`, `/dang-nhap/callback`, `error`, `global-error`, `not-found`, `loading` (kèm C-123: thêm h1 cho tài khoản + callback) | XONG | e9331fa |
+| C-097 `/s/[slug]` (kèm C-116: chữ 10-11px; hex cứng) | XONG | 9a590a8 |
+| C-077/C-097 kiểm vùng chạm 44px, cho phép xuống dòng ở hàng điều khiển giỏ | XONG | aee558b |
+| Bánh cóc + spec truy cập (đỏ trước) | XONG | 7dafbe5 |
+
+C-123 phần web khách: đủ. Trang thiếu h1 trong báo cáo gốc là `tai-khoan`, `dang-nhap/callback` (đã thêm) và `merchant-denied` (thuộc `/merchant`, KHÔNG sửa, để PC-11/PD-1).
+
+### Số đo trước/sau (cùng regex của bánh cóc, 17 file khách đã chuyển trong mục này)
+| | Trước (ee97986 + mục 1) | Sau |
+| --- | --- | --- |
+| Lớp palette v1/stock (primary/leaf/clay/sun/neutral/green/red/amber…) | 289 | 0 |
+| `white`/`black` thô của Tailwind | 45 | 0 |
+| Chữ < 12px (`text-[10px]`, `text-[11px]`) | 6 | 0 |
+| Hex cứng (`s/[slug]`: `#16a34a`, `#1e293b`, `#ffffff`, `#95D222`, `#509018`) | 5 | 0 |
+
+Quét chính thức của báo cáo gốc (`node scripts/uiux/static-scan.mjs`, thư mục `scripts/uiux/results` tạo tạm, đã gitignore): web khách 51 file cho hex 0, legacyPalette 0, neutral 0, greenRed 0, v2Cls 295, 13 file dùng Fraunces.
+Nhóm cổng (admin/merchant/brand, 34 file) giữ nguyên hex 8, legacyPalette 45, neutral 774, greenRed 431, v2 0 — đúng phạm vi PC-11/PD-1.
+
+### Thay đổi chính
+- `tailwind.config.ts`: thêm màu ngữ nghĩa `danger/warning/success/info-{fg,bg}` trỏ vào `var(--color-status-*)` của tokens.css (preset không có tên cho nhóm này, còn `red/amber/green` thô nằm ngoài DS v2).
+  Là biến CSS nên không dùng hậu tố độ trong suốt (`/40`); khối legacy v1 giữ nguyên cho cổng chưa chuyển.
+- `lib/guest-ui.ts` (mới): hằng lớp dùng chung `ui.card/field/fieldError/btnPrimary/btnSecondary/btnText/backLink/pageTitle/sectionTitle/error`. `field` và `fieldError` là hai chuỗi riêng (không chồng hai lớp `border-*`, vì thứ tự CSS không đảm bảo).
+  Viền ô nhập `stone-450` (đủ 3:1, WCAG 1.4.11); vùng chạm `min-h-11`.
+- Thay thế: primary/leaf thành `forest`, neutral thành `stone`, clay của giá thành `stone-900` (như thẻ sản phẩm ở mục 1), clay của mã giảm giá thành `promo-*`, red/amber/green thành `danger/warning/success`,
+  `rounded-md/lg/2xl` thành `rounded-control/card/sheet`, `shadow-sm` thành `shadow-card`. Tiêu đề trang dùng `font-display` (Fraunces).
+- C-077: `aria-label` cho nút −/+/Xóa/Xoá/Bỏ mã (kèm tên sản phẩm hoặc mã), `aria-pressed` cho nút phân loại, `aria-label` "Tỉnh/thành"/"Phường/xã" cho select, nhãn hiển thị cho 3 ô địa chỉ (kèm `autoComplete`/`inputMode`),
+  nhãn "Mã giảm giá" cho ô nhập mã, nút Sao chép có tên kèm giá trị ("Sao chép: 9984606774"), icon trang trí `aria-hidden`, vùng cuộn danh sách món ở thanh toán có `tabIndex=0` + `role="region"`.
+- C-116: mọi chữ ≥ 12px trên các trang này.
+- Thuật ngữ Q-26 trong chữ vừa chạm tới: "Nhập mã ưu đãi" thành "Nhập mã giảm giá", "Không áp được mã" thành "Không áp dụng được mã giảm giá", "Không bỏ được mã" thành "Không bỏ được mã giảm giá". "Điểm Xanh"/"Ví Tubu" giữ nguyên.
+- `/tai-khoan`: h1 "Tài khoản" ở cả ba trạng thái (đang tải: `sr-only`); danh sách đơn thành `ul/li`; nhãn trạng thái đơn có tông màu (chờ thanh toán = cảnh báo, hủy/hoàn = trung tính, còn lại = xanh).
+- `/dang-nhap/callback`: h1 "Đăng nhập chưa thành công" (lỗi) / "Đang đăng nhập…" (chờ).
+- `/s/[slug]`: màu chủ đề của chủ gian hàng chỉ còn là điểm nhấn không mang chữ (ảnh bìa, nền avatar, thanh bộ sưu tập); huy hiệu loại gian hàng dùng `forest-700`, giá dùng `stone-900`; thêm h2 `sr-only` cho dải cam kết; tên sản phẩm là h3; svg lá dùng `currentColor`.
+
+### Test (đỏ→xanh)
+- Commit 7dafbe5 là commit ĐỎ có chủ đích: mở rộng `MIGRATED` của `ds-v2-guest.spec.ts` (6 → 24 file, thêm luật không `white/black` thô và kiểm màu trạng thái) và thêm `guest-pages.a11y.spec.tsx` + `test-utils/a11y.ts`.
+  Chạy thấy đỏ: bánh cóc 34 test; spec truy cập 5/11 test (giỏ hàng: ô mã không nhãn; thanh toán: 5 điều khiển không tên; tài khoản và callback: 0 h1; không có `#cart-coupon`).
+- Các commit 1e7d97c đến 9a590a8 làm xanh dần; kết quả cuối ở mục "Kiểm chứng".
+- `guest-pages.a11y.spec.tsx` (12 test, jsdom, mock auth/shop-client/api): `/san-pham/[slug]`, `/gio-hang` (có hàng, đã áp mã, trống, chưa đăng nhập), `/thanh-toan` (form địa chỉ mở; sau khi đặt đơn chuyển khoản), `/tai-khoan` (3 trạng thái),
+  `/dang-nhap`, `/dang-nhap/callback` (lỗi + chờ), `/s/[slug]`, 404, lỗi chung. Mỗi trang: đúng 1 h1, không nhảy cấp heading, mọi nút/ô nhập/select/liên kết có tên truy cập (placeholder KHÔNG tính là tên, chặt hơn axe),
+  nút/ô nhập có lớp vùng chạm 44px. Kèm kiểm hành vi: nút "Áp dụng" mã giảm giá vẫn chỉ bật khi có chữ, địa chỉ không còn dấu phẩy thừa khi quận/huyện rỗng (hệ 2 cấp), nút Sao chép có tên đúng.
+
+### Kiểm chứng
+```
+cd apps/web && npx vitest run tailwind.config.spec.ts src/ds-v2-guest.spec.ts src/app/guest-pages.a11y.spec.tsx \
+  src/app/thanh-toan/bank-transfer-panel.spec.tsx src/components/hide-on-portals.spec.tsx src/components/site-footer.spec.tsx \
+  src/components/site-header.spec.tsx src/lib/public-support.spec.ts src/lib/site.spec.ts src/lib/recycling.spec.ts \
+  src/lib/checkout-points.spec.ts src/lib/storefront-context.spec.ts
+ Test Files  12 passed (12)
+      Tests  213 passed (213)
+cd apps/web && npx tsc --noEmit        -> exit 0
+cd apps/web && npx eslint <các file đã sửa/thêm> -> 0 lỗi, 0 cảnh báo
+node scripts/uiux/static-scan.mjs      -> web khách: hex 0, legacyPalette 0, neutral 0, greenRed 0, v2Cls 295
+tailwindcss CLI (config web)           -> sinh đủ border-stone-450, text-danger-fg, bg-promo-bg, rounded-card, min-h-11, disabled:bg-stone-200, placeholder:text-stone-500
+```
+Không chạy Playwright/chụp màn hình (quy định máy 15,5GB); bố cục chỉ kiểm bằng spec và đọc mã.
+
+### Giả định
+- Màu trạng thái đi qua `danger/warning/success` (biến CSS token) thay vì thêm `red/amber/green` thô; thông báo lỗi của "Thêm vào giỏ" trước đây hiện màu xanh cả khi lỗi, nay lỗi dùng `danger`.
+- Giá luôn `stone-900` (giỏ, thanh toán, chi tiết sản phẩm, gian hàng), nhất quán với mục 1; clay chỉ cho mã giảm giá/khuyến mãi.
+- `error/global-error/not-found/loading` nằm ngoài danh sách file của gói nhưng là trang web khách, chỉ đổi tên lớp, không đổi logic. `global-error` do Next dựng thay layout gốc nên có thể không nạp `globals.css`; không kiểm chứng trực quan.
+- Avatar chữ cái đầu của gian hàng vẫn đặt chữ trắng lên màu chủ đề do chủ gian hàng chọn (dữ liệu tuỳ ý); chưa tính tương phản động. Huy hiệu và chữ giá đã chuyển sang token cố định.
+- Nút "Thử lại" dạng chữ cao 44px nên hơi lớn trong đoạn văn; ưu tiên vùng chạm theo yêu cầu gói.
+
+### Chưa làm (mục 3/3)
+- C-025 phần còn lại: trang chi tiết đơn + QR trả lại đơn, danh sách mã giảm giá ở thanh toán, ô tìm kiếm ở header.
+- `merchant-denied` thiếu h1 và khối `legacyV1Colors` của `tailwind.config.ts`: chờ PC-11/PD-1 (cổng admin/merchant/brand).
