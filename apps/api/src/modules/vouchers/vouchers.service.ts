@@ -1,8 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+
+/**
+ * "User thật" (Q-05): có zaloId Zalo thật hoặc SĐT. Khách đăng nhập theo deviceId mang zaloId
+ * `guest_<deviceId>` (cả dòng guest đã gộp `guest_..._merged_...`) — tạo vô hạn chỉ bằng deviceId
+ * mới nên không được nhận voucher chào mừng/sinh nhật/winback. SĐT chỉ được ghi từ phoneToken Zalo
+ * (auth.service) nên có SĐT = đã xác thực, kể cả khi dòng vẫn mang zaloId guest.
+ */
+const REAL_USER_WHERE: Prisma.UserWhereInput = {
+  OR: [
+    { phone: { not: null } },
+    { AND: [{ zaloId: { not: null } }, { NOT: { zaloId: { startsWith: 'guest_' } } }] },
+  ],
+};
+/** Bản SQL của REAL_USER_WHERE, bảng users phải có alias `u`. `left()` thay LIKE vì `_` là ký tự đại diện. */
+const REAL_USER_SQL = Prisma.sql`(u.phone IS NOT NULL OR (u."zaloId" IS NOT NULL AND left(u."zaloId", 6) <> 'guest_'))`;
 
 /**
  * Voucher tự động (Build Spec §6.6): welcome / birthday / win-back / milestone.
@@ -15,6 +31,8 @@ export class VouchersService {
   private static readonly WELCOME_PAGE = 200;
   /** Trần an toàn: 200 × 25 = 5.000 user/giờ, đủ cho mọi chiến dịch thực tế. */
   private static readonly WELCOME_MAX_PAGES = 25;
+  /** Kích thước lô keyset cho birthday/winback (quét đến hết, không có trần số trang). */
+  private static readonly BATCH_PAGE = 500;
 
   private readonly logger = new Logger(VouchersService.name);
 
@@ -103,7 +121,7 @@ export class VouchersService {
         const users = await this.prisma.user.findMany({
           // "chưa có đơn" (đúng như doc-comment) — trước đây thiếu filter `orders: { none: {} }`
           // nên user đã đặt đơn trong 24h đầu vẫn bị cấp voucher chào mừng, sai business rule.
-          where: { createdAt: { gte: since }, role: 'CUSTOMER', orders: { none: {} } },
+          where: { createdAt: { gte: since }, role: 'CUSTOMER', orders: { none: {} }, ...REAL_USER_WHERE },
           orderBy: { id: 'asc' }, // khoá cursor ổn định (createdAt có thể trùng nhau hàng loạt)
           take: VouchersService.WELCOME_PAGE,
           ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -135,15 +153,6 @@ export class VouchersService {
       const today = new Date();
       const mm = today.getMonth() + 1;
       const dd = today.getDate();
-      // Lọc theo tháng/ngày của dob (Postgres EXTRACT qua raw). Lấy kèm tierId để cấp ĐÚNG mức
-      // hạng đã hứa (P0 A3-05: trước đây mọi hạng cùng nhận 1 mức, dù seed hứa Lộc Biếc 50k/
-      // Đại Thụ 150k/Cổ Thụ 300k — xem prisma/seed.ts TIERS[].perks).
-      const users = await this.prisma.$queryRaw<{ id: string; tierId: string | null }[]>`
-        SELECT id, "tierId" FROM users
-        WHERE dob IS NOT NULL
-          AND EXTRACT(MONTH FROM dob) = ${mm}
-          AND EXTRACT(DAY FROM dob) = ${dd}
-        LIMIT 500`;
       const defaultValue = await this.config.get<number>('voucher.birthday_amount', 50000);
       // Mức riêng theo hạng (birthdayVoucherAmount null = hạng chưa có/không hứa mức riêng →
       // dùng mặc định chung, không phải 0 — không tự ý cắt quyền lợi hạng cơ bản đang có).
@@ -151,9 +160,27 @@ export class VouchersService {
       const amountByTier = new Map(tiers.map((t) => [t.id, t.birthdayVoucherAmount]));
       const reason = `BIRTHDAY-${today.getFullYear()}-${mm}`;
       let granted = 0;
-      for (const u of users) {
-        const value = (u.tierId ? amountByTier.get(u.tierId) : null) ?? defaultValue;
-        if (await this.grant({ userId: u.id, reason, type: 'AMOUNT', value, validDays: 30, templateCode: 'BIRTHDAY_VOUCHER' })) granted++;
+      // Keyset theo id: trước đây một lần `LIMIT 500` không ORDER BY — ngày có > 500 người cùng
+      // sinh nhật thì phần dư không bao giờ được cấp (Postgres trả tập tuỳ ý, mỗi lần chạy như
+      // nhau). Chạy lại/2 instance song song vẫn an toàn nhờ code coupon tất định trong grant().
+      let cursor = '';
+      for (;;) {
+        // Lấy kèm tierId để cấp ĐÚNG mức hạng đã hứa (P0 A3-05 — xem prisma/seed.ts TIERS[].perks).
+        const users = await this.prisma.$queryRaw<{ id: string; tierId: string | null }[]>`
+          SELECT u.id, u."tierId" FROM users u
+          WHERE u.dob IS NOT NULL
+            AND EXTRACT(MONTH FROM u.dob) = ${mm}
+            AND EXTRACT(DAY FROM u.dob) = ${dd}
+            AND ${REAL_USER_SQL}
+            AND u.id > ${cursor}
+          ORDER BY u.id
+          LIMIT ${VouchersService.BATCH_PAGE}`;
+        for (const u of users) {
+          const value = (u.tierId ? amountByTier.get(u.tierId) : null) ?? defaultValue;
+          if (await this.grant({ userId: u.id, reason, type: 'AMOUNT', value, validDays: 30, templateCode: 'BIRTHDAY_VOUCHER' })) granted++;
+        }
+        if (users.length < VouchersService.BATCH_PAGE) break;
+        cursor = users[users.length - 1]!.id;
       }
       if (granted) this.logger.log(`Birthday vouchers granted: ${granted}`);
     } catch (err) {
@@ -172,17 +199,26 @@ export class VouchersService {
     try {
       const days = await this.config.get<number>('voucher.winback_days', 60);
       const cutoff = new Date(Date.now() - days * 864e5);
-      const rows = await this.prisma.$queryRaw<{ userId: string }[]>`
-        SELECT "userId", MAX("createdAt") AS last
-        FROM orders
-        GROUP BY "userId"
-        HAVING MAX("createdAt") < ${cutoff}
-        LIMIT 500`;
       const value = await this.config.get<number>('voucher.winback_amount', 50000);
       const reason = `WINBACK-${new Date().toISOString().slice(0, 7)}`;
       let granted = 0;
-      for (const r of rows) {
-        if (await this.grant({ userId: r.userId, reason, type: 'AMOUNT', value, validDays: 21, templateCode: 'WINBACK_VOUCHER' })) granted++;
+      // Keyset theo userId, cùng lý do với birthdayVouchers (LIMIT 500 không ORDER BY bỏ sót).
+      let cursor = '';
+      for (;;) {
+        const rows = await this.prisma.$queryRaw<{ userId: string }[]>`
+          SELECT o."userId"
+          FROM orders o
+          JOIN users u ON u.id = o."userId"
+          WHERE ${REAL_USER_SQL} AND o."userId" > ${cursor}
+          GROUP BY o."userId"
+          HAVING MAX(o."createdAt") < ${cutoff}
+          ORDER BY o."userId"
+          LIMIT ${VouchersService.BATCH_PAGE}`;
+        for (const r of rows) {
+          if (await this.grant({ userId: r.userId, reason, type: 'AMOUNT', value, validDays: 21, templateCode: 'WINBACK_VOUCHER' })) granted++;
+        }
+        if (rows.length < VouchersService.BATCH_PAGE) break;
+        cursor = rows[rows.length - 1]!.userId;
       }
       if (granted) this.logger.log(`Win-back vouchers granted: ${granted}`);
     } catch (err) {
