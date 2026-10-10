@@ -68,6 +68,15 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getPublicConfig: async () => ({ recyclingEnabled: true }),
   fetchOrders: async () => shop.orders,
   addToCart: vi.fn(),
+  placeOrder: async () => ({
+    code: 'TB-9', status: 'PENDING_PAYMENT', subtotal: 300000, discount: 0, shippingFee: 30000, total: 330000,
+    paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', createdAt: '2026-10-01T00:00:00Z', items: [],
+  }),
+  getBankQr: async () => ({
+    orderCode: 'TB-9', amount: 330000, paymentStatus: 'UNPAID',
+    bank: { bin: '970407', name: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' },
+    memo: 'TB-9', qrString: 'x', qrImageUrl: 'https://img.vietqr.io/x.png',
+  }),
 }));
 vi.mock('@/lib/geo-client', () => ({
   getProvinces: async () => [{ code: '84_VN01', name: 'Hà Nội' }],
@@ -191,6 +200,19 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
     expectAccessible(container);
     expect(container.querySelector('select[aria-label="Tỉnh/thành"]')).not.toBeNull();
     expect(container.querySelector('select[aria-label="Phường/xã"]')).not.toBeNull();
+  });
+
+  it('/thanh-toan sau khi đặt đơn chuyển khoản: h1 → h2, nút Sao chép có tên, địa chỉ không còn dấu phẩy thừa', async () => {
+    const { container } = mount(<CheckoutPage />);
+    await flush();
+    expect(container.textContent).toContain('1 Xuân Thuỷ, Cầu Giấy, Hà Nội');
+    click(Array.from(container.querySelectorAll('input[type="radio"]')).find((r) => (r as HTMLInputElement).name === 'pay') ?? null);
+    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Đặt hàng') ?? null);
+    await flush(8);
+    expect(container.textContent).toContain('Đặt hàng thành công!');
+    expectAccessible(container);
+    const copyLabels = Array.from(container.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
+    expect(copyLabels).toEqual(expect.arrayContaining(['Sao chép: 9984606774', 'Sao chép: TB-9']));
   });
 
   it('/tai-khoan: có h1 khi đã đăng nhập, khi chưa đăng nhập và khi đang tải', async () => {
