@@ -1,14 +1,26 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { IsIn, IsInt, IsString, Min } from 'class-validator';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { IsIn, IsInt, IsOptional, IsString, Matches, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { clampTake } from '../../common/pagination';
-import { SubscriptionsService } from './subscriptions.service';
+import {
+  SUBSCRIPTION_PAYMENT_METHODS,
+  SubscriptionsService,
+  type SubscriptionPaymentMethod,
+} from './subscriptions.service';
 
 class CreateSubDto {
   @IsString() variationId!: string;
   @IsInt() @Min(1) quantity!: number;
   @IsIn([4, 6, 8, 10]) intervalWeeks!: number;
   @IsString() addressId!: string;
+  /** YYYY-MM-DD giờ Việt Nam; bỏ trống = giao đơn đầu ngay. */
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) startDate?: string;
+  @IsOptional() @IsIn(SUBSCRIPTION_PAYMENT_METHODS) paymentMethod?: SubscriptionPaymentMethod;
+}
+class UpdateSubDto {
+  @IsOptional() @IsInt() @Min(1) quantity?: number;
+  @IsOptional() @IsString() addressId?: string;
+  @IsOptional() @IsIn(SUBSCRIPTION_PAYMENT_METHODS) paymentMethod?: SubscriptionPaymentMethod;
 }
 class StatusDto {
   @IsIn(['ACTIVE', 'PAUSED', 'CANCELLED']) status!: 'ACTIVE' | 'PAUSED' | 'CANCELLED';
@@ -26,6 +38,11 @@ export class SubscriptionsController {
   @Post()
   create(@CurrentUser('sub') userId: string, @Body() dto: CreateSubDto) {
     return this.subs.create(userId, dto);
+  }
+
+  @Patch(':id')
+  update(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() dto: UpdateSubDto) {
+    return this.subs.update(userId, id, dto);
   }
 
   @Post(':id/status')

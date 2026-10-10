@@ -9,6 +9,7 @@ import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
+import { WalletLedgerService } from '../../src/modules/wallet/wallet-ledger.service';
 import { SubscriptionsService } from '../../src/modules/subscriptions/subscriptions.service';
 import { UsersService, ADDRESS_IN_USE_BY_SUBSCRIPTION } from '../../src/modules/users/users.service';
 import { barrierOnFirstCalls, createUser, randCode, summarize, warmPool } from './helpers';
@@ -18,6 +19,9 @@ import { barrierOnFirstCalls, createUser, randCode, summarize, warmPool } from '
  * đây xoá cứng luôn gói (FK ON DELETE CASCADE). Nay phải chặn bằng lỗi tiếng Việt, và FK là RESTRICT để
  * cả khi xoá địa chỉ chạy song song với tạo gói cũng không có gói nào bị mất hay mồ côi.
  */
+/** Gói hẹn ngày bắt đầu sau hôm nay: không sinh đơn đầu ngay (C-015), giữ đúng phạm vi các ca dưới đây. */
+const LATER = new Date(Date.now() + 7 * 3600e3 + 3 * 864e5).toISOString().slice(0, 10);
+
 describe('Xoá địa chỉ đang dùng cho gói định kỳ (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
@@ -32,6 +36,7 @@ describe('Xoá địa chỉ đang dùng cho gói định kỳ (real Postgres)', 
         AnalyticsEventsService,
         UsersService,
         SubscriptionsService,
+        WalletLedgerService,
         { provide: PricingService, useValue: {} },
         { provide: LoyaltyService, useValue: {} },
         { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
@@ -114,7 +119,7 @@ describe('Xoá địa chỉ đang dùng cho gói định kỳ (real Postgres)', 
     const u = await createUser(prisma);
     const v = await variation();
     const addr = await address(u.id);
-    const sub = await subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id });
+    const sub = await subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id, startDate: LATER });
     if (status === 'PAUSED') await subs.setStatus(u.id, sub.id, 'PAUSED');
 
     const err = await users.deleteAddress(u.id, addr.id).catch((e: unknown) => e);
@@ -130,7 +135,7 @@ describe('Xoá địa chỉ đang dùng cho gói định kỳ (real Postgres)', 
     const u = await createUser(prisma);
     const v = await variation();
     const addr = await address(u.id);
-    const sub = await subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id });
+    const sub = await subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id, startDate: LATER });
     await subs.setStatus(u.id, sub.id, 'CANCELLED');
 
     await expect(users.deleteAddress(u.id, addr.id)).resolves.toEqual({ ok: true });
@@ -155,7 +160,7 @@ describe('Xoá địa chỉ đang dùng cho gói định kỳ (real Postgres)', 
       // nào kịp ghi — ép đúng kẽ hở giữa kiểm và ghi thay vì trông vào may rủi lịch chạy.
       const barrier = barrierOnFirstCalls(prisma.address, 'findUnique', 2);
       const [created, deleted] = await Promise.allSettled([
-        subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id }),
+        subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id, startDate: LATER }),
         users.deleteAddress(u.id, addr.id),
       ]);
       barrier.mockRestore();
@@ -201,7 +206,7 @@ describe('Xoá địa chỉ đang dùng cho gói định kỳ (real Postgres)', 
         await new Promise((r) => setTimeout(r, 300));
         return original(...args);
       });
-      const creating = subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id });
+      const creating = subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id, startDate: LATER });
       await insertedSignal;
       const deleting = users.deleteAddress(u.id, addr.id).catch((e: unknown) => e);
       const [sub, delErr] = await Promise.all([creating, deleting]);
