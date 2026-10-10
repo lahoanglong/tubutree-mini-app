@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Type } from 'class-transformer';
 import {
   Allow,
   IsArray,
@@ -11,6 +12,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Max,
   MaxLength,
   Min,
   ValidateIf,
@@ -190,6 +192,29 @@ export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsIn(['pending', 'issued', 'all']) invoice?: InvoiceFilter;
 }
 
+export class ListUsersQuery extends PaginationQuery {
+  /** SĐT (chứa), tên (chứa, không phân biệt hoa thường) hoặc id đúng — cho ô chọn khách. */
+  @IsOptional() @IsString() @MaxLength(100) search?: string;
+}
+
+export class ProductSearchQuery {
+  @IsOptional() @IsString() @MaxLength(100) q?: string;
+}
+
+export class VariationLookupQuery {
+  /** Các Variation ID phân tách bằng dấu phẩy (tối đa 100 id được tra). */
+  @IsString() @MaxLength(3000) ids!: string;
+}
+
+export class ListReviewsQuery extends PaginationQuery {
+  @IsOptional() @IsIn(['visible', 'hidden']) visibility?: 'visible' | 'hidden';
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5) rating?: number;
+}
+
+export class ListSubscriptionsQuery extends PaginationQuery {
+  @IsOptional() @IsIn(['ACTIVE', 'PAUSED', 'CANCELLED']) status?: 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+}
+
 export class IssueInvoiceDto {
   /** Link hoá đơn điện tử (tuỳ chọn). Chỉ https — link này hiển thị lại cho admin, không cho javascript:/http. */
   @IsOptional() @IsUrl({ protocols: ['https'], require_protocol: true }) @MaxLength(500) invoiceUrl?: string;
@@ -267,8 +292,37 @@ export class AdminController {
   }
 
   @Get('users')
-  users(@Query() q: PaginationQuery) {
-    return this.admin.listUsers(q.page, q.limit);
+  users(@Query() q: ListUsersQuery) {
+    return this.admin.listUsers(q.page, q.limit, q.search);
+  }
+
+  /** Ô chọn sản phẩm/biến thể (Flash Sale, Content Kit) thay cho nhập Variation/Product ID. */
+  @Get('products/search')
+  searchProducts(@Query() q: ProductSearchQuery) {
+    return this.admin.searchProducts(q.q ?? '');
+  }
+
+  /** Nhãn cho các Variation ID đã lưu (danh sách mặt hàng của đợt Flash Sale). */
+  @Get('variations/lookup')
+  lookupVariations(@Query() q: VariationLookupQuery) {
+    return this.admin.lookupVariations(q.ids);
+  }
+
+  @Get('dealer-tiers')
+  dealerTiers() {
+    return this.admin.listDealerTiers();
+  }
+
+  /** Đánh giá cho admin duyệt (kể cả đã ẩn); ẩn/hiện qua POST /reviews/:id/visibility. */
+  @Get('reviews')
+  reviews(@Query() q: ListReviewsQuery) {
+    return this.admin.listReviews(q.page, q.limit, q.visibility, q.rating);
+  }
+
+  /** Gói mua định kỳ (chỉ xem). */
+  @Get('subscriptions')
+  subscriptions(@Query() q: ListSubscriptionsQuery) {
+    return this.admin.listSubscriptions(q.page, q.limit, q.status);
   }
 
   // Cấp/đổi role theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi).

@@ -7,6 +7,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
+import { foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { allowedNextStatuses } from '../orders/order-transition';
@@ -285,9 +286,14 @@ export class AdminService {
   }
 
   // ── Users & orders ──
-  async listUsers(page: number, limit: number) {
+  async listUsers(page: number, limit: number, search?: string) {
+    const s = search?.trim();
+    const where: Prisma.UserWhereInput | undefined = s
+      ? { OR: [{ phone: { contains: s } }, { fullName: { contains: s, mode: 'insensitive' } }, { id: s }] }
+      : undefined;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
+        where,
         orderBy: { createdAt: 'desc' },
         ...skipTake(page, limit),
         select: {
@@ -295,7 +301,139 @@ export class AdminService {
           pointsBalance: true, walletBalance: true, tierId: true, createdAt: true,
         },
       }),
-      this.prisma.user.count(),
+      this.prisma.user.count({ where }),
+    ]);
+    return paginated(items, page, limit, total);
+  }
+
+  // ── Tra cứu cho ô chọn (thay nhập ID thô) + màn duyệt đánh giá / gói định kỳ (C-092) ──
+
+  /**
+   * Tìm sản phẩm kèm biến thể cho ô chọn của admin (Flash Sale cần Variation ID, Content Kit cần Product ID).
+   * Khớp tên không dấu (cột nameSearch có index trigram), slug hoặc SKU; KHÔNG lọc isActive để admin thấy cả
+   * hàng đang ẩn — cờ isActive đi kèm để ô chọn cảnh báo. Tối đa 20 sản phẩm.
+   */
+  async searchProducts(raw: string) {
+    const q = raw.trim();
+    if (q.length < 2) return [];
+    const folded = foldVietnamese(q);
+    const products = await this.prisma.product.findMany({
+      where: {
+        OR: [
+          { nameSearch: { contains: folded } },
+          { slug: { contains: folded.replace(/ /g, '-') } },
+          { variations: { some: { sku: { contains: q, mode: 'insensitive' } } } },
+        ],
+      },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+      take: 20,
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        brand: true,
+        thumbnail: true,
+        isActive: true,
+        variations: {
+          orderBy: { retailPrice: 'asc' },
+          select: { id: true, name: true, sku: true, retailPrice: true, salePrice: true, stock: true, isActive: true },
+        },
+      },
+    });
+    return products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      brand: p.brand,
+      thumbnail: p.thumbnail,
+      isActive: p.isActive,
+      variations: p.variations.map((v) => ({
+        id: v.id,
+        name: v.name,
+        sku: v.sku,
+        price: v.salePrice ?? v.retailPrice,
+        stock: v.stock,
+        isActive: v.isActive,
+      })),
+    }));
+  }
+
+  /** Nhãn "Sản phẩm · Biến thể (SKU)" cho các Variation ID đã lưu (vd danh sách mặt hàng của đợt Flash Sale). */
+  async lookupVariations(idsCsv: string) {
+    const ids = [...new Set(idsCsv.split(',').map((x) => x.trim()).filter(Boolean))].slice(0, 100);
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.variation.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, sku: true, productId: true, product: { select: { name: true } } },
+    });
+    return rows.map((v) => ({ id: v.id, name: v.name, sku: v.sku, productId: v.productId, productName: v.product.name }));
+  }
+
+  /** Bậc đại lý để chọn khi duyệt/cấp vai trò DEALER (thay nhập Tier ID). */
+  async listDealerTiers() {
+    const tiers = await this.prisma.dealerTier.findMany({ orderBy: { minOrderVolume: 'asc' } });
+    return tiers.map((t) => ({
+      id: t.id,
+      name: t.name,
+      minOrderVolume: t.minOrderVolume,
+      creditLimit: t.creditLimit,
+      paymentTerms: t.paymentTerms,
+    }));
+  }
+
+  /**
+   * Danh sách đánh giá cho admin duyệt (kể cả đã ẩn). Ẩn/hiện dùng POST /reviews/:id/visibility sẵn có — nó tính
+   * lại điểm sao của sản phẩm, nên không viết lại ở đây.
+   */
+  async listReviews(page: number, limit: number, visibility?: 'visible' | 'hidden', rating?: number) {
+    const where: Prisma.ReviewWhereInput = {
+      ...(visibility ? { isVisible: visibility === 'visible' } : {}),
+      ...(rating ? { rating } : {}),
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.review.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        ...skipTake(page, limit),
+        select: {
+          id: true,
+          rating: true,
+          comment: true,
+          images: true,
+          videoUrl: true,
+          isVisible: true,
+          isVerified: true,
+          createdAt: true,
+          user: { select: { id: true, fullName: true, phone: true } },
+          product: { select: { id: true, name: true, slug: true } },
+        },
+      }),
+      this.prisma.review.count({ where }),
+    ]);
+    return paginated(items, page, limit, total);
+  }
+
+  /** Gói mua định kỳ để CSKH tra (chỉ xem; khách tự tạm dừng/huỷ trong app). Không trả addressId. */
+  async listSubscriptions(page: number, limit: number, status?: 'ACTIVE' | 'PAUSED' | 'CANCELLED') {
+    const where: Prisma.SubscriptionWhereInput = status ? { status } : {};
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.subscription.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        ...skipTake(page, limit),
+        select: {
+          id: true,
+          status: true,
+          quantity: true,
+          intervalWeeks: true,
+          nextRunAt: true,
+          lastOrderId: true,
+          createdAt: true,
+          user: { select: { id: true, fullName: true, phone: true } },
+          variation: { select: { id: true, name: true, sku: true, product: { select: { id: true, name: true } } } },
+        },
+      }),
+      this.prisma.subscription.count({ where }),
     ]);
     return paginated(items, page, limit, total);
   }
