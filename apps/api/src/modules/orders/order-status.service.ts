@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import type { Order } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
-import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';
+import { enqueueGomdonCancel, enqueueGomdonPush } from '../integrations/gomdon/gomdon-queue';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
@@ -18,6 +19,15 @@ import {
   requiresPaymentBefore,
 } from './order-transition';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+
+type StatusActor = 'ADMIN' | 'CUSTOMER' | 'MERCHANT' | 'PANCAKE' | 'SYSTEM';
+
+/**
+ * PAID: lần gọi này lật thanh toán. ALREADY_PAID: đã PAID từ trước (bấm lặp / người khác thắng race).
+ * CLOSED: đơn đã huỷ/trả — tiền về muộn phải hoàn thủ công, không "hồi sinh" đơn. NOT_PAYABLE: đã
+ * REFUNDED/FAILED.
+ */
+export type MarkPaidOutcome = 'PAID' | 'ALREADY_PAID' | 'CLOSED' | 'NOT_PAYABLE';
 
 /**
  * Nguồn ghi Order.status DUY NHẤT cho mọi nơi KHÔNG PHẢI là luồng khách tự hủy
@@ -66,7 +76,7 @@ export class OrderStatusService {
       note?: string;
       notifyEvent?: string;
       /** Ai đổi — để lại vết trong order_status_history (mặc định SYSTEM). */
-      actorType?: 'ADMIN' | 'CUSTOMER' | 'MERCHANT' | 'PANCAKE' | 'SYSTEM';
+      actorType?: StatusActor;
       actorId?: string;
     } = {},
   ) {
@@ -177,6 +187,79 @@ export class OrderStatusService {
       .catch(() => undefined);
 
     return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
+  }
+
+  /**
+   * Ghi nhận ĐÃ NHẬN TIỀN cho đơn trả trước: UNPAID → PAID (+ paidAt), PENDING_PAYMENT → CONFIRMED; ghi
+   * lịch sử (ai/lúc nào) + event `order_paid` trong cùng transaction; sau commit đặt bưu tá thu gom
+   * (đơn thu gom chờ tiền mới đặt) và báo khách. Không cộng điểm/hoa hồng — đó là việc của DELIVERED.
+   *
+   * Guard atomic theo (paymentStatus=UNPAID, status vừa đọc): hai admin bấm cùng lúc, hay admin và
+   * webhook, chỉ một bên lật và chạy hệ quả. Bên thua đọc lại để trả đúng kết quả (đã PAID / đơn vừa
+   * bị huỷ) thay vì báo lỗi; trạng thái vừa đổi do bên khác (vd PENDING_PAYMENT → CONFIRMED mà chưa
+   * trả) thì thử lại với ảnh chụp mới.
+   */
+  async markPaid(
+    orderIdOrCode: string,
+    opts: { actorType: StatusActor; actorId?: string; note?: string },
+  ): Promise<{ outcome: MarkPaidOutcome; order: Order }> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const order = await this.prisma.order.findFirst({ where: { OR: [{ id: orderIdOrCode }, { code: orderIdOrCode }] } });
+      if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+      if (order.paymentStatus === 'PAID') return { outcome: 'ALREADY_PAID', order };
+      if (order.status === 'CANCELLED' || order.status === 'RETURNED') return { outcome: 'CLOSED', order };
+      if (order.paymentStatus !== 'UNPAID') return { outcome: 'NOT_PAYABLE', order };
+
+      const toStatus = order.status === 'PENDING_PAYMENT' ? 'CONFIRMED' : order.status;
+      const won = await this.prisma.$transaction(async (tx) => {
+        // paidAt (cột) và occurredAt (event) dùng chung một mốc.
+        const paidAt = new Date();
+        const flip = await tx.order.updateMany({
+          where: { id: order.id, paymentStatus: 'UNPAID', status: order.status },
+          data: { paymentStatus: 'PAID', paidAt, ...(toStatus !== order.status ? { status: toStatus } : {}) },
+        });
+        if (flip.count === 0) return false;
+        await tx.orderStatusHistory.create({
+          data: {
+            orderId: order.id,
+            fromStatus: order.status,
+            toStatus,
+            actorType: opts.actorType,
+            actorId: opts.actorId ?? null,
+            note: ['Đã nhận tiền (UNPAID → PAID)', opts.note].filter(Boolean).join(' · '),
+          },
+        });
+        if (this.analytics) {
+          await this.analytics.record(tx, {
+            eventName: 'order_paid',
+            userId: order.userId,
+            platform: order.platform === 'web' ? 'web' : 'miniapp',
+            occurredAt: paidAt,
+            props: { orderId: order.id, method: order.paymentMethod, amount: order.total },
+          });
+        }
+        return true;
+      });
+      if (!won) continue;
+
+      if (order.hasRecyclingPickup && this.gomdonQueue) {
+        // Lỗi enqueue không được làm hỏng việc đã lật PAID — GomdonReconcileService quét
+        // AWAITING_PAYMENT + PAID và enqueue lại.
+        await enqueueGomdonPush(this.gomdonQueue, order.id).catch((err) =>
+          this.logger.error(
+            `Enqueue vận đơn Gomdon sau thanh toán lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`,
+          ),
+        );
+      }
+      await this.notifications
+        .notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code })
+        .catch(() => undefined);
+      return {
+        outcome: 'PAID',
+        order: await this.prisma.order.findUniqueOrThrow({ where: { id: order.id } }),
+      };
+    }
+    throw new ConflictException('Đơn đang thay đổi trạng thái liên tục — vui lòng tải lại rồi thử lại.');
   }
 
   /** Đơn đại lý ghi công nợ — cùng điều kiện DealerService.confirmDealerOrderPayment dùng để nhận diện. */

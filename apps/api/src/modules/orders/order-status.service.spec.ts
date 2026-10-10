@@ -436,3 +436,156 @@ describe('OrderStatusService — chặn giao đơn trả trước chưa thanh to
     await expect(svc.setStatus('o1', 'CONFIRMED' as never)).rejects.toThrow(InvalidOrderTransitionError);
   });
 });
+
+/**
+ * C-024: hệ quả của "đã nhận tiền" (UNPAID → PAID, PENDING_PAYMENT → CONFIRMED, paidAt, order_paid,
+ * đặt bưu tá thu gom, báo khách) gom về MỘT hàm để nút admin và webhook đối soát không lệch nhau.
+ */
+describe('OrderStatusService.markPaid', () => {
+  function make(reads: Record<string, unknown>[], flipCounts: number[] = [1]) {
+    const flips = [...flipCounts];
+    const tx = {
+      order: { updateMany: jest.fn(async () => ({ count: flips.length ? flips.shift()! : 1 })) },
+      orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const findFirst = jest.fn();
+    for (const r of reads) findFirst.mockResolvedValueOnce(r);
+    findFirst.mockResolvedValue(reads[reads.length - 1]);
+    const prisma = {
+      order: { findFirst, findUniqueOrThrow: jest.fn(async () => reads[reads.length - 1]) },
+      $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
+    };
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const queue = { getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) };
+    const analytics = { record: jest.fn().mockResolvedValue(undefined) };
+    const loyalty = { creditOrderPoints: jest.fn(), reverseOrderPoints: jest.fn() };
+    const svc = new OrderStatusService(
+      prisma as unknown as PrismaService,
+      loyalty as unknown as LoyaltyService,
+      {
+        lockCommissionsForOrder: jest.fn(),
+        grantReferralReward: jest.fn(),
+        reverseCommissionsForOrder: jest.fn(),
+      } as unknown as AffiliateService,
+      notifications as unknown as NotificationsService,
+      { reverseFinancials: jest.fn() } as unknown as OrderReversalService,
+      queue as never,
+      analytics as unknown as AnalyticsEventsService,
+    );
+    return { svc, prisma, tx, notifications, queue, analytics, loyalty };
+  }
+  const pending = (over: Record<string, unknown> = {}) =>
+    makeOrder({
+      status: 'PENDING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      platform: 'miniapp',
+      ...over,
+    });
+  type FlipCall = [{ where: unknown; data: Record<string, unknown> }];
+
+  it('PENDING_PAYMENT+UNPAID → lật PAID + CONFIRMED có guard, ghi lịch sử (ai bấm) + order_paid trong CÙNG tx, báo khách', async () => {
+    const { svc, tx, analytics, notifications } = make([pending()]);
+
+    const res = await svc.markPaid('TUBU1', { actorType: 'ADMIN', actorId: 'admin-1', note: 'Mã GD FT123' });
+
+    expect(res.outcome).toBe('PAID');
+    const call = tx.order.updateMany.mock.calls[0] as unknown as FlipCall;
+    expect(call[0].where).toEqual({ id: 'o1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' });
+    expect(call[0].data).toMatchObject({ paymentStatus: 'PAID', status: 'CONFIRMED' });
+    expect(call[0].data.paidAt).toBeInstanceOf(Date);
+    expect(tx.orderStatusHistory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: 'o1',
+        fromStatus: 'PENDING_PAYMENT',
+        toStatus: 'CONFIRMED',
+        actorType: 'ADMIN',
+        actorId: 'admin-1',
+        note: expect.stringContaining('Mã GD FT123'),
+      }),
+    });
+    expect(analytics.record).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        eventName: 'order_paid',
+        occurredAt: call[0].data.paidAt,
+        props: expect.objectContaining({ orderId: 'o1', method: 'BANK_TRANSFER', amount: 100000 }),
+      }),
+    );
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
+  });
+
+  it('đơn đã xác nhận trước khi tiền về → chỉ lật PAID, giữ trạng thái', async () => {
+    const { svc, tx } = make([pending({ status: 'PACKED' })]);
+    const res = await svc.markPaid('o1', { actorType: 'ADMIN', actorId: 'a' });
+    expect(res.outcome).toBe('PAID');
+    const call = tx.order.updateMany.mock.calls[0] as unknown as FlipCall;
+    expect(call[0].where).toEqual({ id: 'o1', paymentStatus: 'UNPAID', status: 'PACKED' });
+    expect(call[0].data.status).toBeUndefined();
+    expect(tx.orderStatusHistory.create.mock.calls[0][0].data).toMatchObject({ fromStatus: 'PACKED', toStatus: 'PACKED' });
+  });
+
+  it('đã PAID → ALREADY_PAID, không mở tx, không báo lại (idempotent)', async () => {
+    const { svc, prisma, notifications } = make([pending({ status: 'CONFIRMED', paymentStatus: 'PAID' })]);
+    const res = await svc.markPaid('o1', { actorType: 'ADMIN' });
+    expect(res.outcome).toBe('ALREADY_PAID');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it.each(['CANCELLED', 'RETURNED'])('đơn %s → CLOSED, không hồi sinh thành PAID', async (status) => {
+    const { svc, prisma } = make([pending({ status })]);
+    const res = await svc.markPaid('o1', { actorType: 'ADMIN' });
+    expect(res.outcome).toBe('CLOSED');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('paymentStatus REFUNDED → NOT_PAYABLE', async () => {
+    const { svc, prisma } = make([pending({ status: 'CONFIRMED', paymentStatus: 'REFUNDED' })]);
+    expect((await svc.markPaid('o1', { actorType: 'ADMIN' })).outcome).toBe('NOT_PAYABLE');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('thua race (người khác vừa lật PAID) → đọc lại thấy PAID → ALREADY_PAID, không ghi vết/không báo lần 2', async () => {
+    const { svc, tx, notifications, analytics } = make(
+      [pending(), pending({ status: 'CONFIRMED', paymentStatus: 'PAID' })],
+      [0],
+    );
+    const res = await svc.markPaid('o1', { actorType: 'ADMIN' });
+    expect(res.outcome).toBe('ALREADY_PAID');
+    expect(tx.orderStatusHistory.create).not.toHaveBeenCalled();
+    expect(analytics.record).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('thua race vì khách vừa huỷ → đọc lại thấy CANCELLED → CLOSED', async () => {
+    const { svc } = make([pending(), pending({ status: 'CANCELLED' })], [0]);
+    expect((await svc.markPaid('o1', { actorType: 'ADMIN' })).outcome).toBe('CLOSED');
+  });
+
+  it('đơn thu gom tái chế → đặt vận đơn Gomdon sau khi PAID; lỗi enqueue không làm hỏng kết quả', async () => {
+    const a = make([pending({ hasRecyclingPickup: true })]);
+    await a.svc.markPaid('o1', { actorType: 'ADMIN' });
+    expect(a.queue.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, { jobId: 'o1' });
+
+    const b = make([pending({ hasRecyclingPickup: true })]);
+    b.queue.add.mockRejectedValue(new Error('redis'));
+    await expect(b.svc.markPaid('o1', { actorType: 'ADMIN' })).resolves.toMatchObject({ outcome: 'PAID' });
+
+    const c = make([pending({ hasRecyclingPickup: false })]);
+    await c.svc.markPaid('o1', { actorType: 'ADMIN' });
+    expect(c.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('không cộng điểm/hoa hồng khi PAID (chỉ DELIVERED mới cộng)', async () => {
+    const { svc, loyalty } = make([pending()]);
+    await svc.markPaid('o1', { actorType: 'ADMIN' });
+    expect(loyalty.creditOrderPoints).not.toHaveBeenCalled();
+  });
+
+  it('không tìm thấy đơn → NotFoundException', async () => {
+    const { svc, prisma } = make([pending()]);
+    prisma.order.findFirst.mockReset().mockResolvedValue(null);
+    await expect(svc.markPaid('nope', { actorType: 'ADMIN' })).rejects.toThrow(NotFoundException);
+  });
+});

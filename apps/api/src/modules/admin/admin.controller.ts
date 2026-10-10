@@ -153,6 +153,12 @@ class UpdateOrderStatusDto {
   note?: string;
 }
 
+export class ConfirmOrderPaymentDto {
+  /** Mã giao dịch ngân hàng (vd FT26270…) — lưu vào lịch sử đơn để đối soát. */
+  @IsOptional() @IsString() @MaxLength(100) bankRef?: string;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
 /**
  * Query có lọc — PHẢI khai báo trong DTO. ValidationPipe toàn cục bật forbidNonWhitelisted, nên
  * `@Query() q: PaginationQuery` kèm `@Query('status')` riêng làm MỌI request có `?status=`/`?search=`
@@ -301,6 +307,16 @@ export class AdminController {
   @Get('orders/:id/status-history')
   orderStatusHistory(@Param('id') id: string) {
     return this.admin.orderStatusHistory(id);
+  }
+
+  /** "Đã nhận tiền" cho đơn chuyển khoản lẻ: UNPAID → PAID (PENDING_PAYMENT → CONFIRMED), idempotent. */
+  @Post('orders/:id/confirm-payment')
+  confirmOrderPayment(
+    @CurrentUser('sub') adminId: string,
+    @Param('id') id: string,
+    @Body() dto: ConfirmOrderPaymentDto,
+  ) {
+    return this.admin.confirmOrderPayment(adminId, id, dto);
   }
 
   @Put('orders/:id/status')

@@ -1023,3 +1023,92 @@ describe('AdminService.listReturnRequests / listDealerApplications — thứ t�
     expect(d.findMany.mock.calls[0][0].orderBy).toEqual({ createdAt: 'desc' });
   });
 });
+
+/**
+ * C-024 / Q-06: đơn chuyển khoản lẻ (khách hoặc CTV lên đơn hộ) trước đây không có cách nào ghi nhận
+ * "đã nhận tiền" ngoài webhook Pancake — webhook không tới là đơn kẹt PENDING_PAYMENT mãi.
+ */
+describe('AdminService.confirmOrderPayment', () => {
+  function make(order: Record<string, unknown> | null, outcome = 'PAID') {
+    const prisma = makePrisma({
+      order: {
+        findFirst: jest.fn().mockResolvedValue(order),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...order, paymentStatus: 'PAID', status: 'CONFIRMED' }),
+      },
+    });
+    const orderStatus = {
+      markPaid: jest.fn().mockResolvedValue({ outcome, order: { ...order, paymentStatus: 'PAID' } }),
+    } as unknown as OrderStatusService;
+    const svc = new AdminService(
+      prisma,
+      config,
+      loyalty,
+      affiliate,
+      notifications,
+      new OrderReversalService(flash, coupons),
+      orderStatus,
+      rbac,
+      defaultGomdonOrder,
+      defaultGomdonClient,
+    );
+    return { svc, orderStatus: orderStatus as unknown as { markPaid: jest.Mock } };
+  }
+  const bankOrder = (over: Record<string, unknown> = {}) => ({
+    id: 'o1',
+    code: 'TB-1',
+    type: 'RETAIL',
+    status: 'PENDING_PAYMENT',
+    paymentMethod: 'BANK_TRANSFER',
+    paymentStatus: 'UNPAID',
+    total: 350000,
+    ...over,
+  });
+
+  it('đơn lẻ chuyển khoản → gọi hàm PAID dùng chung với actor ADMIN + mã GD vào ghi chú lịch sử', async () => {
+    const { svc, orderStatus } = make(bankOrder());
+    const res = await svc.confirmOrderPayment('admin-1', 'TB-1', { bankRef: ' FT999 ', note: 'khớp sao kê' });
+    expect(orderStatus.markPaid).toHaveBeenCalledWith('o1', {
+      actorType: 'ADMIN',
+      actorId: 'admin-1',
+      note: 'Admin xác nhận · Mã GD FT999 · khớp sao kê',
+    });
+    expect(res).toMatchObject({ ok: true, alreadyPaid: false });
+    expect(res.order).toMatchObject({ id: 'o1', paymentStatus: 'PAID' });
+  });
+
+  it('bấm lại / admin khác đã bấm → 200 alreadyPaid, không lỗi', async () => {
+    const { svc } = make(bankOrder({ paymentStatus: 'PAID', status: 'CONFIRMED' }), 'ALREADY_PAID');
+    await expect(svc.confirmOrderPayment('admin-2', 'o1')).resolves.toMatchObject({ ok: true, alreadyPaid: true });
+  });
+
+  it('đơn đã huỷ/trả → 400 nhắc hoàn tiền thủ công', async () => {
+    const { svc } = make(bankOrder({ status: 'CANCELLED' }), 'CLOSED');
+    const err = await svc.confirmOrderPayment('admin-1', 'o1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toContain('hoàn tiền thủ công');
+  });
+
+  it('đơn đã hoàn tiền (REFUNDED) → 400', async () => {
+    const { svc } = make(bankOrder({ paymentStatus: 'REFUNDED', status: 'CONFIRMED' }), 'NOT_PAYABLE');
+    await expect(svc.confirmOrderPayment('admin-1', 'o1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it.each(['COD', 'WALLET', 'ZALOPAY'])('đơn %s → 400, không gọi hàm PAID', async (paymentMethod) => {
+    const { svc, orderStatus } = make(bankOrder({ paymentMethod }));
+    await expect(svc.confirmOrderPayment('admin-1', 'o1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(orderStatus.markPaid).not.toHaveBeenCalled();
+  });
+
+  it('đơn đại lý → 400 chỉ đường sang xác nhận đơn đại lý (luật ghi công nợ ở đó)', async () => {
+    const { svc, orderStatus } = make(bankOrder({ type: 'DEALER' }));
+    const err = await svc.confirmOrderPayment('admin-1', 'o1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toContain('đại lý');
+    expect(orderStatus.markPaid).not.toHaveBeenCalled();
+  });
+
+  it('không có đơn → 404', async () => {
+    const { svc } = make(null);
+    await expect(svc.confirmOrderPayment('admin-1', 'x')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});

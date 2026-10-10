@@ -450,6 +450,61 @@ export class AdminService {
     });
   }
 
+  /**
+   * Nút "Đã nhận tiền" cho đơn chuyển khoản lẻ (khách tự đặt hoặc CTV lên đơn hộ). Hệ quả PAID đi qua
+   * OrderStatusService.markPaid — cùng guard atomic và cùng hệ quả với đối soát thanh toán — nên bấm lặp
+   * hay hai admin bấm cùng lúc chỉ lật một lần; ai bấm, lúc nào, mã giao dịch nằm ở order_status_history.
+   * Đơn đại lý đi đường riêng (DealerService.confirmDealerOrderPayment) vì phải loại đơn ghi công nợ.
+   */
+  async confirmOrderPayment(adminId: string, idOrCode: string, dto: { bankRef?: string; note?: string } = {}) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
+      select: { id: true, code: true, type: true, paymentMethod: true, total: true },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (order.type === 'DEALER') {
+      throw new BadRequestException(
+        `Đơn ${order.code} là đơn đại lý — xác nhận thanh toán ở mục đơn đại lý (có kiểm tra đơn ghi công nợ).`,
+      );
+    }
+    if (order.paymentMethod !== 'BANK_TRANSFER') {
+      throw new BadRequestException(`Đơn ${order.code} thanh toán ${order.paymentMethod}, không phải chuyển khoản.`);
+    }
+
+    const bankRef = dto.bankRef?.trim();
+    const adminNote = dto.note?.trim();
+    const { outcome } = await this.orderStatus.markPaid(order.id, {
+      actorType: 'ADMIN',
+      actorId: adminId,
+      note: ['Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
+    });
+    if (outcome === 'CLOSED') {
+      throw new BadRequestException(
+        `Đơn ${order.code} đã huỷ/trả — nếu đã nhận tiền, cần hoàn tiền thủ công cho khách, không xác nhận thanh toán.`,
+      );
+    }
+    if (outcome === 'NOT_PAYABLE') {
+      throw new BadRequestException(`Đơn ${order.code} đã hoàn tiền hoặc thanh toán lỗi — không thể xác nhận.`);
+    }
+    if (outcome === 'PAID') {
+      this.logger.warn(
+        `Admin ${adminId} xác nhận đã nhận chuyển khoản đơn ${order.code} (${order.total}đ)` + (bankRef ? `, mã GD ${bankRef}` : ''),
+      );
+    }
+    const alreadyPaid = outcome === 'ALREADY_PAID';
+    return {
+      ok: true,
+      alreadyPaid,
+      message: alreadyPaid
+        ? `Đơn ${order.code} đã được ghi nhận thanh toán trước đó.`
+        : `Đã xác nhận nhận tiền đơn ${order.code}.`,
+      order: await this.prisma.order.findUniqueOrThrow({
+        where: { id: order.id },
+        include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
+      }),
+    };
+  }
+
   // ── Vận đơn thu gom Gomdon (thao tác admin) ──
   //
   // KHÔNG tự viết lại logic: GomdonOrderService.retryPush/cancelWaybill đã có claim nguyên tử + luật
