@@ -4,18 +4,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), getSubscriptions: vi.fn(), setSubscriptionStatus: vi.fn(), skipSubscriptionCycle: vi.fn(),
+  updateSubscription: vi.fn(), getAddresses: vi.fn(), getWallet: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useNavigate: () => mocks.navigate,
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
-vi.mock('../services/subscriptions-api', () => ({
+vi.mock('../services/subscriptions-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   getSubscriptions: mocks.getSubscriptions,
   setSubscriptionStatus: mocks.setSubscriptionStatus,
   skipSubscriptionCycle: mocks.skipSubscriptionCycle,
+  updateSubscription: mocks.updateSubscription,
 }));
-vi.mock('../services/shop-api', () => ({ getPublicConfig: vi.fn().mockResolvedValue({ subscribeDiscountPct: 0.12 }) }));
+vi.mock('../services/shop-api', () => ({
+  getPublicConfig: vi.fn().mockResolvedValue({ subscribeDiscountPct: 0.12 }),
+  getAddresses: mocks.getAddresses,
+}));
+vi.mock('../services/account-api', () => ({ getWallet: mocks.getWallet }));
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -23,6 +30,7 @@ import { SubscriptionsPanel } from './subscriptions-panel';
 
 const SUB = {
   id: 's1', quantity: 2, intervalWeeks: 4, status: 'ACTIVE' as const, nextRunAt: '2026-10-15T00:00:00.000Z',
+  addressId: 'a1', paymentMethod: 'COD' as const, lastOrderId: null,
   productName: 'Nước xả vải Tubu', variationName: 'Hương sả', thumbnail: null, slug: 'nxv', unitPrice: 80000, effectiveDiscountPct: 0.14,
 };
 
@@ -31,8 +39,17 @@ function renderPanel() {
   return render(<QueryClientProvider client={qc}><SubscriptionsPanel /></QueryClientProvider>);
 }
 
+const ADDR = (id: string, street: string) => ({
+  id, recipient: 'Lan', phone: '0900000000', province: 'HCM', district: 'Q.1', ward: 'P.1', street,
+  provinceCode: '79', districtCode: '760', wardCode: '1', isDefault: id === 'a1',
+});
+
 describe('SubscriptionsPanel', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', '1 Lê Lợi'), ADDR('a2', '9 Hai Bà Trưng')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+  });
 
   it('liệt kê lịch: tên, chu kỳ + tiền, trạng thái, % giảm đang áp', async () => {
     mocks.getSubscriptions.mockResolvedValue([SUB]);
@@ -41,6 +58,55 @@ describe('SubscriptionsPanel', () => {
     expect(screen.getByText('Mỗi 4 tuần · 160.000đ')).toBeInTheDocument();
     expect(screen.getByText('Đang chạy')).toBeInTheDocument();
     expect(screen.getByText('Đang giảm 14% cho đơn định kỳ')).toBeInTheDocument();
+  });
+
+  it('thẻ hiện cách trả + địa chỉ giao (phân biệt các gói cùng SP khác địa chỉ)', async () => {
+    mocks.getSubscriptions.mockResolvedValue([SUB, { ...SUB, id: 's2', addressId: 'a2', paymentMethod: 'WALLET' }]);
+    renderPanel();
+    expect(await screen.findByText('Giao tới: 1 Lê Lợi, P.1, Q.1')).toBeInTheDocument();
+    expect(screen.getByText('Giao tới: 9 Hai Bà Trưng, P.1, Q.1')).toBeInTheDocument();
+    expect(screen.getByText('Thanh toán: COD')).toBeInTheDocument();
+    expect(screen.getByText('Thanh toán: Ví Tubu')).toBeInTheDocument();
+  });
+
+  it('"Sửa" mở sheet; đổi số lượng + địa chỉ + cách trả → PATCH chỉ các trường đã đổi', async () => {
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+    mocks.updateSubscription.mockResolvedValue({ ...SUB, quantity: 3, addressId: 'a2', paymentMethod: 'BANK_TRANSFER' });
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa' }));
+    expect(await screen.findByText('Sửa gói định kỳ')).toBeInTheDocument();
+    const save = screen.getByRole('button', { name: 'Lưu thay đổi' });
+    expect(save).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    fireEvent.click(await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { quantity: 3, addressId: 'a2', paymentMethod: 'BANK_TRANSFER' }),
+    );
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã cập nhật gói định kỳ', type: 'success' }));
+  });
+
+  it('chỉ đổi số lượng → PATCH chỉ có quantity (không gửi lại địa chỉ, không vướng kiểm trùng)', async () => {
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+    mocks.updateSubscription.mockResolvedValue({ ...SUB, quantity: 1 });
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa' }));
+    await screen.findByRole('radio', { name: /1 Lê Lợi/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Giảm số lượng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { quantity: 1 }));
+  });
+
+  it('gói tạm dừng cũng sửa được; API từ chối (trùng gói 409) → báo lỗi, sheet vẫn mở', async () => {
+    mocks.getSubscriptions.mockResolvedValue([{ ...SUB, status: 'PAUSED' as const }]);
+    mocks.updateSubscription.mockRejectedValue(new Error('Bạn đã có gói định kỳ cho sản phẩm này tại địa chỉ đó.'));
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa' }));
+    fireEvent.click(await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(screen.getByText('Sửa gói định kỳ')).toBeInTheDocument();
   });
 
   it('"Tạm dừng" gọi đổi trạng thái PAUSED', async () => {
