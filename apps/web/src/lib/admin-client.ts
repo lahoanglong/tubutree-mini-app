@@ -37,6 +37,23 @@ export interface AdminOrderItem {
   /** Số lượng đang đặt trước (đơn đại lý vượt tồn) — 0 với đơn khác. */
   backorderedQty?: number;
 }
+/** Ảnh chụp địa chỉ giao lúc đặt (Order.shippingAddress). Mọi trường có thể thiếu với đơn cũ / đơn tạo tay. */
+export interface AdminShippingAddress {
+  recipient?: string;
+  phone?: string;
+  street?: string;
+  ward?: string;
+  district?: string;
+  province?: string;
+}
+/** Yêu cầu xuất hoá đơn VAT khách gửi lúc thanh toán (Order.invoiceRequest). */
+export interface AdminInvoiceRequest {
+  taxCode?: string;
+  companyName?: string;
+  address?: string;
+  email?: string;
+}
+export type AdminInvoiceStatus = 'NOT_REQUESTED' | 'REQUESTED' | 'ISSUED' | 'FAILED';
 export interface AdminOrder {
   id: string;
   code: string;
@@ -56,6 +73,10 @@ export interface AdminOrder {
   note?: string | null;
   createdAt: string;
   updatedAt?: string;
+  shippingAddress?: AdminShippingAddress | null;
+  invoiceRequest?: AdminInvoiceRequest | null;
+  invoiceStatus?: AdminInvoiceStatus | null;
+  invoiceUrl?: string | null;
   shippingPartner?: string | null;
   shippingCode?: string | null;
   shippingStatus?: string | null;
@@ -251,11 +272,55 @@ export const getDashboardStats = () =>
   apiFetch<DashboardStats>('/admin/dashboard/stats');
 /** attention = hàng đợi "Cần xử lý thu gom"; all = mọi đơn có chọn thu gom tái chế. */
 export type RecyclingFilter = 'attention' | 'all';
-export const listOrders = (page = 1, status?: string, search?: string, recycling?: RecyclingFilter, limit = 20) =>
+/** pending = đơn VAT chưa xuất xong (REQUESTED/FAILED); issued = đã phát hành; all = mọi đơn có yêu cầu VAT. */
+export type InvoiceFilter = 'pending' | 'issued' | 'all';
+export const listOrders = (
+  page = 1,
+  status?: string,
+  search?: string,
+  recycling?: RecyclingFilter,
+  limit = 20,
+  invoice?: InvoiceFilter,
+) =>
   apiFetch<Page<AdminOrder>>(
     `/admin/orders?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}${
       recycling ? `&recycling=${recycling}` : ''
-    }`,
+    }${invoice ? `&invoice=${invoice}` : ''}`,
+  );
+/** Số đơn VAT chưa xuất xong (đọc meta.total, không tải danh sách). */
+export const countInvoicePending = () =>
+  listOrders(1, undefined, undefined, undefined, 1, 'pending').then((r) => r.meta.total);
+
+// ── Hoá đơn VAT: ghi nhận đã xuất ──
+/** Trùng @MaxLength(500) của IssueInvoiceDto. */
+export const INVOICE_URL_MAX = 500;
+export interface IssueInvoiceResult {
+  ok: boolean;
+  message: string;
+  order: { id: string; code: string; invoiceStatus: AdminInvoiceStatus; invoiceUrl: string | null };
+}
+/** POST /admin/orders/:id/issue-invoice — link tuỳ chọn (chỉ gửi khi có), BE chỉ nhận https. Lỗi 400 hiện NGUYÊN VĂN. */
+export const issueOrderInvoice = (orderId: string, invoiceUrl?: string) =>
+  apiFetch<IssueInvoiceResult>(`/admin/orders/${encodeURIComponent(orderId)}/issue-invoice`, {
+    method: 'POST',
+    body: invoiceUrl?.trim() ? { invoiceUrl: invoiceUrl.trim() } : {},
+  });
+
+// ── Lịch sử đổi trạng thái đơn ──
+export interface AdminOrderStatusHistoryRow {
+  id: string;
+  fromStatus: string;
+  toStatus: string;
+  /** ADMIN | CUSTOMER | MERCHANT | PANCAKE | SYSTEM */
+  actorType: string;
+  actorId: string | null;
+  note: string | null;
+  createdAt: string;
+  actor: { id: string; fullName: string | null; phone: string | null } | null;
+}
+export const getOrderStatusHistory = (orderId: string) =>
+  apiFetch<{ orderCode: string; history: AdminOrderStatusHistoryRow[] }>(
+    `/admin/orders/${encodeURIComponent(orderId)}/status-history`,
   );
 /** Số đơn trong hàng đợi "Cần xử lý thu gom" (đọc meta.total, không tải danh sách). */
 export const countRecyclingAttention = () =>

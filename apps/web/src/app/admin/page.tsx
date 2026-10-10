@@ -72,6 +72,7 @@ import {
   listDealerRewardClaims,
   listPayouts,
   type RecyclingFilter,
+  type InvoiceFilter,
 } from '@/lib/admin-client';
 import { RecyclingBadge, RecyclingPanel } from '@/components/admin/recycling-panel';
 import { DealerPaymentPanel } from '@/components/admin/dealer-payment-panel';
@@ -86,6 +87,8 @@ import { MerchantProductsTab } from '@/components/admin/merchant-products-tab';
 import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
 import { PosCreditsTab } from '@/components/admin/pos-credits-tab';
 import { useConfirm } from '@/components/admin/confirm-dialog';
+import { InvoiceFilterChips } from '@/components/admin/invoice-filter-chips';
+import { OrderInvoicePanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
 import { AnalyticsTab } from './analytics-tab';
 import {
   exportOrdersToCsv,
@@ -567,10 +570,11 @@ function OrdersTab({
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [invoice, setInvoice] = useState<InvoiceFilter | ''>('');
 
   const q = useQuery({
-    queryKey: ['admin-orders', page, status, search, recycling],
-    queryFn: () => listOrders(page, status || undefined, search || undefined, recycling || undefined),
+    queryKey: ['admin-orders', page, status, search, recycling, invoice],
+    queryFn: () => listOrders(page, status || undefined, search || undefined, recycling || undefined, 20, invoice || undefined),
   });
   const attentionQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
 
@@ -687,6 +691,16 @@ function OrdersTab({
         )}
       </div>
 
+      {/* Bộ lọc đơn yêu cầu hoá đơn VAT */}
+      <InvoiceFilterChips
+        value={invoice}
+        onChange={(v) => {
+          setPage(1);
+          setExpandedId(null);
+          setInvoice(v);
+        }}
+      />
+
       {/* Orders Table */}
       {q.isError && (
         <p className="text-sm text-red-600">
@@ -798,6 +812,8 @@ function OrdersTab({
                                 )}
                               </div>
 
+                              <OrderShippingAddress order={o} />
+
                               {o.note && (
                                 <div className="text-xs text-neutral-600">
                                   <span className="font-semibold">Ghi chú từ khách:</span> {o.note}
@@ -811,6 +827,8 @@ function OrdersTab({
                                 </div>
                               )}
 
+                              <OrderInvoicePanel order={o} />
+
                               <RecyclingPanel order={o} />
 
                               {/* Đơn đại lý trả trước chờ chuyển khoản: admin xác nhận đã nhận tiền (tự ẩn khi không đủ điều kiện). */}
@@ -821,6 +839,8 @@ function OrdersTab({
 
                               {/* Nút trạng thái + "Đã nhận tiền" theo allowedTransitions/canConfirmPayment của API (C-024). */}
                               <OrderStatusActions order={o} />
+
+                              <OrderStatusHistory order={o} />
                             </div>
                           </td>
                         </tr>
