@@ -317,15 +317,32 @@ export class AuthService {
       await tx.subscription.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.payout.updateMany({ where: { userId: gid }, data: { userId: tid } });
 
-      // 4) Sổ điểm/xu. Partial unique theo userId: điểm danh (userId, refId=ngày) WHERE
-      //    refType='CHECKIN' và nhiệm vụ (userId, reason) WHERE refType='QUEST'. Dòng khách trùng
-      //    với target được đổi khoá thành MERGED:<guestId>:<khoá cũ> — giữ cả hai lượt đã cộng
-      //    (Q-11), số dư bước 6 vẫn khớp tổng sổ.
+      // 4) Điểm danh. Chuỗi tính từ dòng loyalty_check_ins có dayKey lớn nhất, nên chỉ chuyển
+      //    ngày CŨ HƠN lần điểm danh gần nhất của target (target chưa từng điểm danh thì chuyển
+      //    hết) — target không thừa hưởng chuỗi của khách. Ngày trùng/mới hơn ở lại khách (dayKey
+      //    phải giữ định dạng ngày, không gắn tiền tố MERGED được).
+      const movedCheckInDays = (
+        await tx.$queryRaw<{ dayKey: string }[]>`
+          UPDATE "loyalty_check_ins" g SET "userId" = ${tid}
+           WHERE g."userId" = ${gid}
+             AND NOT EXISTS (SELECT 1 FROM "loyalty_check_ins" t WHERE t."userId" = ${tid} AND t."dayKey" = g."dayKey")
+             AND g."dayKey" < COALESCE((SELECT max(t."dayKey") FROM "loyalty_check_ins" t WHERE t."userId" = ${tid}), '9999-12-31')
+          RETURNING g."dayKey"`
+      ).map((r) => r.dayKey);
+
+      // 5) Sổ điểm/xu. Partial unique theo userId: điểm danh (userId, refId=ngày) WHERE
+      //    refType='CHECKIN' và nhiệm vụ (userId, reason) WHERE refType='QUEST'. Dòng sổ CHECKIN
+      //    chỉ giữ khoá ngày khi dòng điểm danh cùng ngày đã sang target ở bước 4; ngày ở lại khách
+      //    thì dòng sổ đổi khoá thành MERGED:<guestId>:<ngày>. Nếu không, target có dòng sổ ngày D
+      //    mà không có dòng điểm danh ngày D: màn điểm danh báo "chưa điểm danh" nhưng mọi lần bấm
+      //    đều đụng unique sổ. Dòng QUEST trùng với target cũng đổi khoá như vậy. Giữ cả hai lượt
+      //    đã cộng (Q-11), số dư bước 8 vẫn khớp tổng sổ.
       await tx.$executeRaw`
         UPDATE "points_transactions" g SET "refId" = ${mergedPrefix}::text || g."refId"
          WHERE g."userId" = ${gid} AND g."refType" = 'CHECKIN' AND g."refId" IS NOT NULL
-           AND EXISTS (SELECT 1 FROM "points_transactions" t
-                        WHERE t."userId" = ${tid} AND t."refType" = 'CHECKIN' AND t."refId" = g."refId")`;
+           AND (g."refId" <> ALL(${movedCheckInDays}::text[])
+                OR EXISTS (SELECT 1 FROM "points_transactions" t
+                            WHERE t."userId" = ${tid} AND t."refType" = 'CHECKIN' AND t."refId" = g."refId"))`;
       await tx.$executeRaw`
         UPDATE "coin_transactions" g SET "reason" = ${mergedPrefix}::text || g."reason"
          WHERE g."userId" = ${gid} AND g."refType" = 'QUEST'
@@ -334,17 +351,8 @@ export class AuthService {
       await tx.pointsTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.coinTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
 
-      // 5) Bảng giới hạn lượt theo user. Điểm danh: chuỗi tính từ dòng có dayKey lớn nhất, nên chỉ
-      //    chuyển ngày CŨ HƠN lần điểm danh gần nhất của target (target chưa từng điểm danh thì chuyển
-      //    hết) — target không thừa hưởng chuỗi của khách; ngày trùng/mới hơn ở lại khách (dayKey phải
-      //    giữ định dạng ngày, không gắn tiền tố MERGED được). Điểm của các lượt đó đã nằm trong sổ ở
-      //    bước 4. Flash sale: cộng dồn số đã mua để perUserLimit tính cả hai bên.
-      //    Đánh giá: mỗi user một đánh giá/SP, trùng thì giữ của target.
-      await tx.$executeRaw`
-        UPDATE "loyalty_check_ins" g SET "userId" = ${tid}
-         WHERE g."userId" = ${gid}
-           AND NOT EXISTS (SELECT 1 FROM "loyalty_check_ins" t WHERE t."userId" = ${tid} AND t."dayKey" = g."dayKey")
-           AND g."dayKey" < COALESCE((SELECT max(t."dayKey") FROM "loyalty_check_ins" t WHERE t."userId" = ${tid}), '9999-12-31')`;
+      // 6) Bảng giới hạn lượt theo user. Flash sale: cộng dồn số đã mua để perUserLimit tính cả
+      //    hai bên. Đánh giá: mỗi user một đánh giá/SP, trùng thì giữ của target.
       await tx.$executeRaw`
         UPDATE "flash_sale_purchases" t SET "quantity" = t."quantity" + g."quantity", "updatedAt" = now()
           FROM "flash_sale_purchases" g
@@ -375,7 +383,7 @@ export class AuthService {
            AND NOT EXISTS (SELECT 1 FROM "reorder_reminders" t
                             WHERE t."userId" = ${tid} AND t."variationId" = g."variationId")`;
 
-      // 6) Game: chỉ chuyển nguyên cụm khi target chưa có GameProfile (chưa từng chơi). Cả hai
+      // 7) Game: chỉ chuyển nguyên cụm khi target chưa có GameProfile (chưa từng chơi). Cả hai
       //    cùng chơi thì giữ game của target, cụm của khách ở lại — ghép hai khu vườn (ô đất,
       //    cấp cây, chuỗi tưới) cần quyết định riêng.
       const targetPlays = (await tx.gameProfile.count({ where: { userId: tid } })) > 0;
@@ -402,7 +410,7 @@ export class AuthService {
              AND NOT EXISTS (SELECT 1 FROM "user_season_passes" t WHERE t."userId" = ${tid} AND t."seasonId" = g."seasonId")`;
       }
 
-      // 7) Số dư — cộng số dư đọc từ dòng khách ĐÃ KHOÁ ở trên; đồng bộ zaloId/tên/SĐT nếu target
+      // 8) Số dư — cộng số dư đọc từ dòng khách ĐÃ KHOÁ ở trên; đồng bộ zaloId/tên/SĐT nếu target
       //    còn thiếu. Nhánh gộp theo SĐT (target là user web cũ, chưa có zaloId) cần gắn ĐÚNG
       //    zaloId vừa xác thực.
       const merged = await tx.user.update({
@@ -418,7 +426,7 @@ export class AuthService {
         },
       });
 
-      // 8) Khoá phiên khách: thu hồi refresh token còn sống, đổi zaloId để giải phóng
+      // 9) Khoá phiên khách: thu hồi refresh token còn sống, đổi zaloId để giải phóng
       //    "guest_<deviceId>" (thiết bị cần fallback khách lần sau sẽ tạo dòng MỚI) và đưa số dư
       //    về 0. zaloId mới cũng là dấu hiệu "đã gộp" cho request song song ở trên.
       await tx.refreshToken.updateMany({ where: { userId: gid, revokedAt: null }, data: { revokedAt: new Date() } });

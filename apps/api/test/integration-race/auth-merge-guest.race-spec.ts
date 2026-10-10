@@ -7,6 +7,8 @@ import { AuthService } from '../../src/modules/auth/auth.service';
 import type { ZaloService } from '../../src/modules/auth/zalo.service';
 import type { RbacService } from '../../src/modules/staff/rbac/rbac.service';
 import type { Env } from '../../src/config/env.validation';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
+import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { barrierOnFirstCalls, createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
 type Balances = Partial<Record<'pointsBalance' | 'walletBalance' | 'coinsBalance' | 'cashbackPending', number>>;
@@ -20,15 +22,20 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let auth: AuthService;
+  let loyalty: LoyaltyService;
   let zaloIdForNextCall = '';
 
   const DAY = '2026-10-09';
   const OTHER_DAY = '2026-10-08';
 
   beforeAll(async () => {
-    moduleRef = await Test.createTestingModule({ imports: [PrismaModule] }).compile();
+    moduleRef = await Test.createTestingModule({
+      imports: [PrismaModule],
+      providers: [SystemConfigService, LoyaltyService],
+    }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
+    loyalty = moduleRef.get(LoyaltyService);
     await warmPool(prisma);
 
     const cfg: Record<string, unknown> = {
@@ -321,6 +328,80 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     await auth.ensurePhoneForCurrentUser(other.guest.id, 'code', 'access');
     expect(await prisma.loyaltyCheckIn.count({ where: { userId: other.target.id } })).toBe(1);
     expect(await prisma.loyaltyCheckIn.count({ where: { userId: other.guest.id } })).toBe(0);
+  });
+
+  /** Ngày giờ VN lệch `offset` ngày so với hôm nay — cùng quy tắc với LoyaltyService.getVnDayKey. */
+  const vnDay = (offset: number) =>
+    new Date(Date.now() + 7 * 3_600_000 + offset * 86_400_000).toISOString().slice(0, 10);
+
+  /** Mỗi dòng sổ CHECKIN mang khoá ngày thường của user phải có dòng điểm danh cùng ngày của user đó. */
+  async function expectLedgerMatchesCheckIns(userId: string) {
+    const ledger = await prisma.pointsTransaction.findMany({ where: { userId, refType: 'CHECKIN' } });
+    const days = new Set((await prisma.loyaltyCheckIn.findMany({ where: { userId } })).map((c) => c.dayKey));
+    const orphans = ledger.filter((p) => p.refId && !p.refId.startsWith('MERGED:') && !days.has(p.refId));
+    expect(orphans.map((p) => p.refId)).toEqual([]);
+  }
+
+  it('merge: guest checked in today, target last checked in yesterday -> target can check in today and keeps its streak', async () => {
+    const { guest, target } = await guestAndTarget({ pointsBalance: 10 }, { pointsBalance: 10 });
+    const today = vnDay(0);
+    const yesterday = vnDay(-1);
+    await checkIn(guest.id, today, 10);
+    await checkIn(target.id, yesterday, 10);
+
+    zaloIdForNextCall = target.zaloId!;
+    await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
+    await expectLedgerMatchesCheckIns(target.id);
+
+    const before = await loyalty.getDailyCheckInStatus(target.id);
+    expect([before.checkedInToday, before.streakDays]).toEqual([false, 1]);
+    const res = await loyalty.dailyCheckIn(target.id);
+    expect(res.streakDays).toBe(2);
+
+    const t = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(t.pointsBalance).toBe(20 + res.pointsEarned);
+    const refIds = (await prisma.pointsTransaction.findMany({ where: { userId: target.id, refType: 'CHECKIN' } }))
+      .map((p) => p.refId)
+      .sort();
+    expect(refIds).toEqual([today, yesterday, `MERGED:${guest.id}:${today}`].sort());
+    expect((await loyalty.getDailyCheckInStatus(target.id)).checkedInToday).toBe(true);
+  });
+
+  it('merge: both checked in on the same day -> target keeps its own row, both points kept, next day check-in continues the target streak', async () => {
+    const { guest, target } = await guestAndTarget({ pointsBalance: 10 }, { pointsBalance: 10 });
+    const yesterday = vnDay(-1);
+    await checkIn(guest.id, yesterday, 10);
+    await checkIn(target.id, yesterday, 10);
+
+    zaloIdForNextCall = target.zaloId!;
+    await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
+    await expectLedgerMatchesCheckIns(target.id);
+
+    const res = await loyalty.dailyCheckIn(target.id);
+    expect(res.streakDays).toBe(2);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).pointsBalance).toBe(20 + res.pointsEarned);
+  });
+
+  it('merge: guest check-in older than the target latest moves to target with its ledger row, target streak unaffected', async () => {
+    const { guest, target } = await guestAndTarget({ pointsBalance: 10 }, { pointsBalance: 10 });
+    const older = vnDay(-3);
+    const yesterday = vnDay(-1);
+    await checkIn(guest.id, older, 10);
+    await checkIn(target.id, yesterday, 10);
+
+    zaloIdForNextCall = target.zaloId!;
+    await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
+    await expectLedgerMatchesCheckIns(target.id);
+
+    const days = await prisma.loyaltyCheckIn.findMany({ where: { userId: target.id }, orderBy: { dayKey: 'asc' } });
+    expect(days.map((c) => c.dayKey)).toEqual([older, yesterday]);
+    const refIds = (await prisma.pointsTransaction.findMany({ where: { userId: target.id, refType: 'CHECKIN' } }))
+      .map((p) => p.refId)
+      .sort();
+    expect(refIds).toEqual([older, yesterday].sort());
+
+    const res = await loyalty.dailyCheckIn(target.id);
+    expect(res.streakDays).toBe(2);
   });
 
   it('merge: game data moves only when the target never played', async () => {
