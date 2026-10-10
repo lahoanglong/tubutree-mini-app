@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
@@ -19,7 +19,6 @@ import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { fetchPurchasedItems } from '../services/shop-api';
 import { trackReorderReminderCta } from '../services/buy-flow-events';
-// zmp-ui Button vẫn dùng cho các CTA loại khác (nợ migrate); CTA nhắc mua lại dùng DS v2 (spec 4a.4).
 import { Button as DsButton } from '../components/ui/button';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
@@ -59,6 +58,58 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
 export function notificationOrderLink(templateCode: string, orderCode: unknown): boolean {
   if (templateCode.startsWith('OPS_')) return false;
   return templateCode.startsWith('ORDER') || !!orderCode;
+}
+
+export type NotificationAction = { kind: 'reorder'; label: string } | { kind: 'link'; label: string; to: string };
+
+const enc = (v: string) => encodeURIComponent(v);
+
+/** Đường dẫn nội bộ an toàn: bắt đầu bằng "/" một lần (chặn "//host" và URL ngoài). */
+function internalRoute(v: unknown): string | null {
+  return typeof v === 'string' && v.startsWith('/') && !v.startsWith('//') ? v : null;
+}
+
+/**
+ * Nút đi tiếp trong chi tiết thông báo, quyết định theo LOẠI tin (templateCode) và dữ liệu có cấu trúc
+ * trong payload. Bản cũ dò từ khoá trong nội dung tin nên tin nói về sản phẩm bị dẫn nhầm sang Vườn Xanh,
+ * còn tin giảm giá/cộng đồng không có nút.
+ */
+export function notificationAction(templateCode: string, data: Record<string, string> | undefined): NotificationAction | null {
+  const d = data ?? {};
+  if (templateCode.startsWith('OPS_')) return null;
+  const orderCode = d.order_code ?? d.orderCode;
+  const productSlug = d.product_slug ?? d.productSlug;
+  const route = internalRoute(d.route);
+
+  if (templateCode.startsWith('REORDER_REMINDER')) return { kind: 'reorder', label: vi.reorder.reminderCta };
+  if (notificationOrderLink(templateCode, orderCode)) {
+    return { kind: 'link', label: 'Xem chi tiết đơn hàng', to: orderCode ? `/order/${enc(orderCode)}` : '/orders' };
+  }
+  if (route) return { kind: 'link', label: 'Xem chi tiết', to: route };
+  if (templateCode.startsWith('FLASH')) {
+    // Không có slug thì về Trang chủ, nơi dải "Ưu đãi giờ vàng" đang hiển thị.
+    return { kind: 'link', label: 'Xem ưu đãi giờ vàng', to: productSlug ? `/product/${enc(productSlug)}` : '/' };
+  }
+  if (templateCode === 'PRICE_DROP_ALERT') {
+    return { kind: 'link', label: 'Xem sản phẩm', to: productSlug ? `/product/${enc(productSlug)}` : '/wishlist' };
+  }
+  if (templateCode.startsWith('COMMUNITY_')) {
+    const postId = d.post_id ?? d.postId;
+    return { kind: 'link', label: 'Xem trong Cộng đồng', to: postId ? `/feed/${enc(postId)}` : '/feed' };
+  }
+  if (templateCode.startsWith('GAME_')) return { kind: 'link', label: 'Đến Vườn Xanh', to: '/game' };
+  if (templateCode === 'CART_ABANDONED') return { kind: 'link', label: 'Xem giỏ hàng', to: '/cart' };
+  if (templateCode.endsWith('_VOUCHER') || templateCode.startsWith('VOUCHER')) {
+    return { kind: 'link', label: 'Xem mã giảm giá', to: '/loyalty' };
+  }
+  if (templateCode.startsWith('POINTS')) return { kind: 'link', label: 'Xem Điểm Xanh', to: '/loyalty' };
+  if (templateCode.startsWith('CASHBACK')) return { kind: 'link', label: 'Xem Ví Tubu', to: '/wallet' };
+  if (templateCode.startsWith('SUBSCRIPTION')) return { kind: 'link', label: 'Xem gói định kỳ', to: '/subscriptions' };
+  if (templateCode.startsWith('STOREFRONT')) return { kind: 'link', label: 'Thêm vào gian hàng', to: '/storefront' };
+  if (templateCode.startsWith('DEALER')) return { kind: 'link', label: 'Mở trang Đại lý', to: '/dealer' };
+  if (templateCode.startsWith('GROUP_BUY')) return { kind: 'link', label: 'Xem mua chung', to: '/group-buy' };
+  if (templateCode.startsWith('REFILL')) return { kind: 'link', label: 'Xem đổi vỏ chai', to: '/refill' };
+  return null;
 }
 
 function relativeTime(iso: string): string {
@@ -286,23 +337,7 @@ export default function NotificationsPage() {
             {(() => {
               const m = notificationMeta(selectedNotif.templateCode);
               const bodyText = selectedNotif.payload.body || '';
-              const orderCode = selectedNotif.payload.data?.order_code ?? selectedNotif.payload.data?.orderCode;
-              const isOrder = notificationOrderLink(selectedNotif.templateCode, orderCode);
-              const isGame = selectedNotif.templateCode.includes('GAME') || /cây|vườn|tưới|khát|chuỗi/i.test(bodyText);
-              const isCart = selectedNotif.templateCode.includes('CART') || /giỏ/i.test(bodyText);
-              const isLoyalty = selectedNotif.templateCode.includes('VOUCHER') || selectedNotif.templateCode.includes('POINTS');
-              // Thông báo giờ vàng trước đây KHÔNG có nút đi tiếp: khách đặt nhắc, đúng giờ mở
-              // thông báo, đọc xong rồi phải tự back và tự tìm lại sản phẩm — đúng lúc chuyển
-              // đổi cao nhất lại bắt đi vòng (P1-6 audit mạch lạc).
-              const isFlash = selectedNotif.templateCode.startsWith('FLASH');
-              const flashSlug = selectedNotif.payload.data?.product_slug ?? selectedNotif.payload.data?.productSlug;
-              // REORDER_REMINDER (A1-01=A2-06=A3-02): trước đây payload chỉ có "product" (tên) nên
-              // không nhánh CTA nào ở đây khớp được — khách đọc xong nhắc mua lại rồi phải tự đi
-              // tìm lại sản phẩm, đúng lúc ý định mua cao nhất lại bắt đi vòng. Nay BE
-              // (lifecycle.service.ts) gửi kèm product_slug khi có, mirror đúng field FLASH đã
-              // dùng ở trên.
-              const isReorder = selectedNotif.templateCode.startsWith('REORDER_REMINDER');
-              const isStorefront = selectedNotif.templateCode.startsWith('STOREFRONT');
+              const action = notificationAction(selectedNotif.templateCode, selectedNotif.payload.data);
 
               return (
                 <Box
@@ -336,35 +371,7 @@ export default function NotificationsPage() {
                     {bodyText}
                   </Text>
 
-                  {isOrder && (
-                    <Button
-                      fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        navigate(orderCode ? `/order/${encodeURIComponent(orderCode)}` : '/orders');
-                      }}
-                    >
-                      Xem chi tiết đơn hàng
-                    </Button>
-                  )}
-                  {isFlash && !isOrder && (
-                    <Button
-                      fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        // Có slug trong payload thì tới thẳng sản phẩm; không thì về trang chủ,
-                        // nơi dải "Ưu đãi giờ vàng" đang hiển thị.
-                        navigate(flashSlug ? `/product/${encodeURIComponent(String(flashSlug))}` : '/');
-                      }}
-                    >
-                      Xem ưu đãi giờ vàng ⚡
-                    </Button>
-                  )}
-                  {isReorder && !isOrder && !isFlash && (
+                  {action?.kind === 'reorder' && (
                     <DsButton
                       fullWidth
                       size="lg"
@@ -372,60 +379,22 @@ export default function NotificationsPage() {
                       onPress={() => void openReorderReminder(selectedNotif)}
                       style={{ marginTop: 8 }}
                     >
-                      {vi.reorder.reminderCta}
+                      {action.label}
                     </DsButton>
                   )}
-                  {isGame && !isOrder && !isFlash && !isReorder && (
-                    <Button
+                  {action?.kind === 'link' && (
+                    <DsButton
                       fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
+                      size="lg"
+                      onPress={() => {
                         haptic('light');
                         setSelectedNotif(null);
-                        navigate('/game');
+                        navigate(action.to);
                       }}
+                      style={{ marginTop: 8 }}
                     >
-                      Đến Vườn Xanh 🌿
-                    </Button>
-                  )}
-                  {isCart && !isOrder && !isGame && !isReorder && (
-                    <Button
-                      fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        navigate('/cart');
-                      }}
-                    >
-                      Xem giỏ hàng 🛒
-                    </Button>
-                  )}
-                  {isLoyalty && !isOrder && !isGame && !isCart && !isReorder && (
-                    <Button
-                      fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        navigate('/loyalty');
-                      }}
-                    >
-                      Xem ưu đãi 🎁
-                    </Button>
-                  )}
-                  {isStorefront && !isOrder && !isGame && !isCart && !isLoyalty && !isReorder && (
-                    <Button
-                      fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        navigate('/storefront');
-                      }}
-                    >
-                      Thêm vào gian hàng 🛍️
-                    </Button>
+                      {action.label}
+                    </DsButton>
                   )}
                 </Box>
               );

@@ -9,7 +9,7 @@ vi.mock('zmp-ui', () => ({
 }));
 vi.mock('zmp-sdk/apis', () => ({ vibrate: () => undefined, setStorage: async () => ({}), getStorage: async () => ({}), removeStorage: async () => ({}) }));
 
-import { notificationMeta, notificationOrderLink } from './notifications';
+import { notificationAction, notificationMeta, notificationOrderLink } from './notifications';
 import { reminderFallbackPath } from '../components/reorder/reorder-reminder';
 
 /**
@@ -83,5 +83,54 @@ describe('notificationOrderLink', () => {
   // người xem (404 với admin), nên nút "Xem chi tiết đơn hàng" dẫn tới màn lỗi.
   it('OPS_* có order_code của khách khác → KHÔNG hiện nút xem đơn', () => {
     expect(notificationOrderLink('OPS_GOMDON_ALERT', 'TUBU1')).toBe(false);
+  });
+});
+
+describe('notificationAction — nút theo loại tin, không dò nội dung (C-085)', () => {
+  const to = (code: string, data?: Record<string, string>) => {
+    const a = notificationAction(code, data);
+    return a?.kind === 'link' ? a.to : a?.kind ?? null;
+  };
+
+  it('tin giảm giá → mở đúng sản phẩm; thiếu slug thì về Yêu thích', () => {
+    expect(to('PRICE_DROP_ALERT', { product: 'Cây lau nhà', product_slug: 'cay-lau-nha' })).toBe('/product/cay-lau-nha');
+    expect(to('PRICE_DROP_ALERT', { product: 'X' })).toBe('/wishlist');
+  });
+
+  it('tin cộng đồng → Cộng đồng (có post_id thì mở thẳng bài)', () => {
+    expect(to('COMMUNITY_NEW_ANSWER', { author: 'Lan', title: 'Cây khô lá?' })).toBe('/feed');
+    expect(to('COMMUNITY_BEST_ANSWER', { post_id: 'p1' })).toBe('/feed/p1');
+  });
+
+  it('chữ "cây"/"giỏ" trong dữ liệu không đổi hướng nút: chỉ templateCode quyết định', () => {
+    expect(to('ORDER_SHIPPING', { order_code: 'TUBU1', product: 'Chậu cây, giỏ tre' })).toBe('/order/TUBU1');
+    expect(to('WINBACK_VOUCHER', { product: 'vườn cây' })).toBe('/loyalty');
+  });
+
+  it.each([
+    ['GAME_TREE_THIRSTY', '/game'],
+    ['CART_ABANDONED', '/cart'],
+    ['VOUCHER_EXPIRING', '/loyalty'],
+    ['BIRTHDAY_VOUCHER', '/loyalty'],
+    ['POINTS_EXPIRING', '/loyalty'],
+    ['CASHBACK_PAID', '/wallet'],
+    ['SUBSCRIPTION_PAUSED', '/subscriptions'],
+    ['STOREFRONT_TRENDING_PRODUCTS', '/storefront'],
+    ['DEALER_BONUS_PAID', '/dealer'],
+    ['FLASH_STARTING', '/'],
+  ])('%s → %s', (code, path) => {
+    expect(to(code)).toBe(path);
+  });
+
+  it('FLASH có slug → sản phẩm; REORDER_REMINDER → luồng mua lại', () => {
+    expect(to('FLASH_STARTING', { product_slug: 'a b' })).toBe('/product/a%20b');
+    expect(notificationAction('REORDER_REMINDER', { product: 'X' })?.kind).toBe('reorder');
+  });
+
+  it('data.route nội bộ được dùng; URL ngoài/"//" bị bỏ qua; OPS_* không có nút', () => {
+    expect(to('SOMETHING_NEW', { route: '/academy' })).toBe('/academy');
+    expect(to('SOMETHING_NEW', { route: '//evil.com' })).toBeNull();
+    expect(to('SOMETHING_NEW', { route: 'https://evil.com' })).toBeNull();
+    expect(to('OPS_GOMDON_ALERT', { order_code: 'T1', route: '/admin' })).toBeNull();
   });
 });
