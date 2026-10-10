@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   routes: {} as Record<string, () => Promise<{ data: unknown }> | { data: unknown } | Error>,
   status: 'authenticated',
 }));
-vi.mock('../services/api', () => ({ api: { get: mocks.get, post: vi.fn() } }));
+vi.mock('../services/api', () => ({ api: { get: mocks.get, post: vi.fn() }, getAccessToken: () => 'tok' }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,

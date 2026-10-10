@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, getAccessToken } from './api';
 import type { CategoryDTO, FlashSaleActiveItem, OrderView, PageResponse, ProductCard, PurchasedItemsPage, UpcomingFlashItem } from './shop-api';
 import type { NotificationDTO } from './account-api';
 import type { SubscriptionDTO } from './subscriptions-api';
@@ -40,11 +40,15 @@ const SECTION_LIMIT = 6;
 const FEATURED_LIMIT = SECTION_LIMIT * 2;
 // Khớp PURCHASED_RAIL_LIMIT của kệ Mua lại; lệch thì wrapper tự lùi về request lẻ.
 export const HOME_PURCHASED_LIMIT = 10;
-const FEED_TIMEOUT_MS = 8_000;
+// Server đã tự cắt từng khối ở ~2,5s nên request gộp không cần chờ lâu mới lùi về request lẻ.
+const FEED_TIMEOUT_MS = 4_000;
 
 interface Feed<T> {
   promise: Promise<T | null>;
   taken: Set<string>;
+  /** Access token lúc phản hồi về; chỉ khối cá nhân dùng để chặn trao nhầm cho tài khoản khác. */
+  token?: string | null;
+  personal: boolean;
 }
 interface Session {
   pub: Feed<HomePublicDTO> | null;
@@ -53,12 +57,16 @@ interface Session {
 
 let session: Session | null = null;
 
-function startFeed<T>(url: string, params?: Record<string, number>): Feed<T> {
-  const promise = api
+function startFeed<T>(url: string, personal: boolean, params?: Record<string, number>): Feed<T> {
+  const feed: Feed<T> = { promise: Promise.resolve(null), taken: new Set(), personal };
+  feed.promise = api
     .get<T>(url, { params, timeout: FEED_TIMEOUT_MS })
-    .then((r) => (r.data && typeof r.data === 'object' ? r.data : null))
+    .then((r) => {
+      if (personal) feed.token = getAccessToken();
+      return r.data && typeof r.data === 'object' ? r.data : null;
+    })
     .catch(() => null);
-  return { promise, taken: new Set() };
+  return feed;
 }
 
 /** Gọi khi Trang chủ mount (trước khi các query con chạy). Idempotent. */
@@ -78,6 +86,8 @@ export function resetHomeFeed(): void {
 async function take<T extends object, K extends keyof T>(feed: Feed<T> | null, key: K): Promise<NonNullable<T[K]> | null> {
   if (!feed) return null;
   const data = await feed.promise;
+  // Đăng xuất/đăng nhập tài khoản khác khi Trang chủ còn mở: không trao dữ liệu cá nhân của người trước.
+  if (feed.personal && feed.token !== getAccessToken()) return null;
   const value = data?.[key];
   if (value == null || feed.taken.has(String(key))) return null;
   feed.taken.add(String(key));
@@ -86,12 +96,12 @@ async function take<T extends object, K extends keyof T>(feed: Feed<T> | null, k
 
 function publicFeed(): Feed<HomePublicDTO> | null {
   if (!session) return null;
-  return (session.pub ??= startFeed<HomePublicDTO>('/home'));
+  return (session.pub ??= startFeed<HomePublicDTO>('/home', false));
 }
 
 function meFeed(): Feed<HomeMeDTO> | null {
   if (!session) return null;
-  return (session.me ??= startFeed<HomeMeDTO>('/home/me', { purchasedLimit: HOME_PURCHASED_LIMIT }));
+  return (session.me ??= startFeed<HomeMeDTO>('/home/me', true, { purchasedLimit: HOME_PURCHASED_LIMIT }));
 }
 
 export const takePublicBlock = <K extends keyof HomePublicDTO>(key: K) => take(publicFeed(), key);

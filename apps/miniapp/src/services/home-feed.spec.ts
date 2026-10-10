@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('./api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
+vi.mock('./api', () => ({ api: { get: vi.fn(), post: vi.fn() }, getAccessToken: vi.fn(() => 'tok-a') }));
 
-import { api } from './api';
+import { api, getAccessToken } from './api';
 import { armHomeFeed, disarmHomeFeed, homeProductSlot, resetHomeFeed, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
 
 const get = api.get as unknown as ReturnType<typeof vi.fn>;
@@ -54,6 +54,17 @@ describe('home-feed', () => {
     expect(await takePurchasedItems({ limit: 10 })).toEqual({ items: [], nextCursor: null });
     expect(get).toHaveBeenCalledWith('/home/me', expect.objectContaining({ params: { purchasedLimit: 10 } }));
     expect(await takeMeBlock('activeOrderCount')).toEqual({ count: 2 });
+  });
+
+  it('đổi tài khoản khi Trang chủ còn mở: khối cá nhân của user cũ không trao cho user mới', async () => {
+    const token = getAccessToken as unknown as ReturnType<typeof vi.fn>;
+    token.mockReturnValue('tok-a');
+    get.mockResolvedValue({ data: { notifications: [{ id: 'n1' }], subscriptions: [] } });
+    armHomeFeed();
+    expect(await takeMeBlock('subscriptions')).toEqual([]);
+    token.mockReturnValue('tok-b');
+    expect(await takeMeBlock('notifications')).toBeNull();
+    token.mockReturnValue('tok-a');
   });
 
   it('homeProductSlot chỉ nhận đúng 3 bộ tham số của Home', () => {

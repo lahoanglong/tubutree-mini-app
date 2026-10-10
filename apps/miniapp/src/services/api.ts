@@ -64,6 +64,10 @@ export function setAccessToken(token: string | null): void {
   accessToken = token;
 }
 
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
 /** Auth store gọi khi bắt đầu khôi phục/đăng nhập phiên; truyền null khi đã xong. */
 export function setAuthReady(promise: Promise<unknown> | null): void {
   authReady = promise;
