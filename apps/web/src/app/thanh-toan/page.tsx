@@ -175,7 +175,9 @@ export default function CheckoutPage() {
   }
 
   const cart = cartQ.data;
-  const quote = quoteQ.data;
+  // Refetch lỗi vẫn giữ `data` của lần trước (React Query v5): không coi đó là báo giá hiện hành, nếu không
+  // khách thấy số cũ trong khi server đã tính theo mã mới và nút Đặt hàng vẫn bật.
+  const quote = quoteQ.isError ? undefined : quoteQ.data;
 
   return (
     <Shell>
@@ -259,7 +261,7 @@ export default function CheckoutPage() {
             <Row label={`Điểm Xanh (${quote!.pointsUsed})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
           )}
           <Row label="Phí vận chuyển" value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : '…'} />
-          {cart && <CouponBox currentCode={cart.couponCode} subtotal={cart.subtotal} />}
+          {cart && <CouponBox currentCode={cart.couponCode} subtotal={cart.subtotal} disabled={place.isPending} />}
           {usablePoints > 0 && (
             <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 rounded-control border border-forest-200 bg-forest-50 p-3 text-sm">
               <input

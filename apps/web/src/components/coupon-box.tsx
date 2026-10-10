@@ -17,7 +17,16 @@ export const COUPON_MUTATION_KEY = ['cart-coupon'] as const;
  * nại, CSKH phải huỷ đơn tạo lại. Mã nằm trên giỏ, nên đổi mã xong phải tải lại báo giá thanh toán
  * (`['quote', …]`), nếu không tổng tiền trên màn hình còn là con số cũ.
  */
-export function CouponBox({ currentCode, subtotal }: { currentCode: string | null; subtotal: number }) {
+export function CouponBox({
+  currentCode,
+  subtotal,
+  disabled = false,
+}: {
+  currentCode: string | null;
+  subtotal: number;
+  /** Trang chứa đang đặt hàng: đổi mã lúc này làm đơn lấy mã khác với con số khách đã thấy. */
+  disabled?: boolean;
+}) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -43,7 +52,7 @@ export function CouponBox({ currentCode, subtotal }: { currentCode: string | nul
     onSuccess: afterChange,
     onError: (e) => setErr(e instanceof Error ? e.message : 'Không bỏ được mã giảm giá'),
   });
-  const busy = apply.isPending || drop.isPending;
+  const busy = apply.isPending || drop.isPending || disabled;
 
   return (
     <div className="mt-3 border-t border-stone-200 pt-3">

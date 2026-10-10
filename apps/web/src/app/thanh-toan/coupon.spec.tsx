@@ -13,6 +13,9 @@ const state = vi.hoisted(() => ({
   removed: 0,
   quoteCalls: 0,
   applyError: null as Error | null,
+  quoteError: null as Error | null,
+  /** Giữ placeOrder đang bay để quan sát trạng thái "đang đặt hàng". */
+  placeGate: null as Promise<void> | null,
   coupons: [] as unknown[],
   /** Giữ phản hồi của applyCoupon/checkoutQuote cho tới khi test cho chạy, để quan sát trạng thái "đang tính". */
   gate: null as Promise<void> | null,
@@ -54,6 +57,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ],
   checkoutQuote: async () => {
     state.quoteCalls += 1;
+    if (state.quoteError) throw state.quoteError;
     if (state.couponCode) await state.gate;
     return {
       subtotal: SUBTOTAL, discount: discountOf(), pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000,
@@ -61,6 +65,10 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     };
   },
   getPublicConfig: async () => ({ recyclingEnabled: false }),
+  placeOrder: async () => {
+    await state.placeGate;
+    return { code: 'TT0001', total: SUBTOTAL - discountOf() + 30000 };
+  },
 }));
 
 import CheckoutPage from './page';
@@ -83,6 +91,8 @@ beforeEach(() => {
   state.removed = 0;
   state.quoteCalls = 0;
   state.applyError = null;
+  state.quoteError = null;
+  state.placeGate = null;
   state.coupons = [COUPON];
   state.gate = null;
 });
@@ -173,6 +183,59 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     await flush(10);
     expect(btn(container, 'Đặt hàng')!.disabled).toBe(false);
     expect(container.textContent).toContain('240.000đ');
+  });
+
+  // React Query giữ `data` cũ khi refetch lỗi: nếu chỉ khoá nút lúc đang fetch thì sau khi bỏ mã mà báo giá
+  // mới không về, màn hình còn 240.000đ (có mã) trong khi server đã bỏ mã và thu 330.000đ.
+  it('báo giá tính lại sau khi đổi mã bị lỗi: không hiện số tiền cũ và khoá nút đặt hàng', async () => {
+    state.couponCode = 'WELCOME30';
+    const { container } = await mount();
+    expect(container.textContent).toContain('240.000đ');
+    state.quoteError = new Error('mất mạng');
+    click(container.querySelector<HTMLButtonElement>('button[aria-label="Bỏ mã giảm giá WELCOME30"]'));
+    await flush(10);
+    expect(state.removed).toBe(1);
+    expect(container.textContent).toContain('Không tính được phí ship/tổng tiền');
+    expect(container.textContent).not.toContain('240.000đ');
+    expect(btn(container, 'Đặt hàng')!.disabled).toBe(true);
+    // Thử lại thành công thì mở khoá và hiện đúng số tiền server sẽ thu.
+    state.quoteError = null;
+    click(btn(container, 'Thử lại')!);
+    await flush(10);
+    expect(container.textContent).toContain('330.000đ');
+    expect(btn(container, 'Đặt hàng')!.disabled).toBe(false);
+  });
+
+  // Server đọc mã từ giỏ lúc tạo đơn: đổi/bỏ mã khi đơn đang bay làm đơn lấy mã khác con số khách đã thấy.
+  it('đang đặt hàng thì không đổi/bỏ được Mã giảm giá', async () => {
+    state.couponCode = 'WELCOME30';
+    const { container } = await mount();
+    let release!: () => void;
+    state.placeGate = new Promise<void>((r) => {
+      release = r;
+    });
+    click(btn(container, 'Đặt hàng')!);
+    await flush(3);
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Bỏ mã giảm giá WELCOME30"]')!.disabled).toBe(true);
+    release();
+    await flush(6);
+    expect(container.textContent).toContain('Đặt hàng thành công');
+  });
+
+  it('đang đặt hàng thì chip mã trong ví và nút Áp dụng bị khoá', async () => {
+    const { container } = await mount();
+    typeInto(input(container), 'WELCOME30');
+    expect(btn(container, 'Áp dụng')!.disabled).toBe(false);
+    let release!: () => void;
+    state.placeGate = new Promise<void>((r) => {
+      release = r;
+    });
+    click(btn(container, 'Đặt hàng')!);
+    await flush(3);
+    expect(btn(container, 'Áp dụng')!.disabled).toBe(true);
+    expect(btn(container, 'WELCOME30')!.disabled).toBe(true);
+    release();
+    await flush(4);
   });
 
   it('truy cập: một h1, mọi điều khiển có tên, vùng chạm 44px', async () => {
