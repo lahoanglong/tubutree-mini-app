@@ -169,9 +169,10 @@ describe('LifecycleService.sendReorderReminders — FIX 2 (A2-07=A3-03=A6-31): c
 });
 
 describe('LifecycleService.notifyWishlistPriceDrop (§6.14.10)', () => {
-  function setupWishlist(users: string[]) {
+  function setupWishlist(users: string[], slug: string | null = 'tinh-dau-tram') {
     const findMany = jest.fn().mockResolvedValue(users.map((userId) => ({ userId })));
-    const prisma = { wishlist: { findMany } } as unknown as PrismaService;
+    const product = { findUnique: jest.fn().mockResolvedValue(slug === null ? null : { slug }) };
+    const prisma = { wishlist: { findMany }, product } as unknown as PrismaService;
     const notify = jest.fn().mockResolvedValue(undefined);
     const notifications = { notify } as unknown as NotificationsService;
     return { svc: new LifecycleService(prisma, config, notifications), notify };
@@ -181,8 +182,15 @@ describe('LifecycleService.notifyWishlistPriceDrop (§6.14.10)', () => {
     const { svc, notify } = setupWishlist(['u1', 'u2']);
     await svc.notifyWishlistPriceDrop('p1', 'Tinh dầu tràm');
     expect(notify).toHaveBeenCalledTimes(2);
+    // C-085: kèm product_slug để nút trong thông báo mở đúng sản phẩm.
+    expect(notify).toHaveBeenCalledWith('u1', 'PRICE_DROP_ALERT', { product: 'Tinh dầu tràm', product_slug: 'tinh-dau-tram' });
+    expect(notify).toHaveBeenCalledWith('u2', 'PRICE_DROP_ALERT', { product: 'Tinh dầu tràm', product_slug: 'tinh-dau-tram' });
+  });
+
+  it('không tìm thấy slug → vẫn báo, chỉ thiếu product_slug', async () => {
+    const { svc, notify } = setupWishlist(['u1'], null);
+    await svc.notifyWishlistPriceDrop('p1', 'Tinh dầu tràm');
     expect(notify).toHaveBeenCalledWith('u1', 'PRICE_DROP_ALERT', { product: 'Tinh dầu tràm' });
-    expect(notify).toHaveBeenCalledWith('u2', 'PRICE_DROP_ALERT', { product: 'Tinh dầu tràm' });
   });
 
   it('không ai wishlist → không báo', async () => {
