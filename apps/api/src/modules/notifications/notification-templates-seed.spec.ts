@@ -64,6 +64,7 @@ const REQUIRED_CODES = [
   'BIRTHDAY_VOUCHER',
   'WINBACK_VOUCHER',
   'MILESTONE_VOUCHER',
+  'SECOND_ORDER_VOUCHER',
 ];
 
 describe('seed mẫu thông báo', () => {

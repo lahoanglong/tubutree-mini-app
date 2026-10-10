@@ -72,6 +72,26 @@ describe('VouchersService.grant', () => {
     );
   });
 
+  it('endAt cố định (mã đơn thứ 2 hết hạn cùng cửa sổ 30 ngày) thay cho now + validDays', async () => {
+    const prisma = {
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const svc = new VouchersService(prisma, makeConfig(), notify);
+    const endAt = new Date('2026-11-09T03:00:00.000Z');
+
+    await (svc as unknown as { grant(o: GrantOpts & { endAt?: Date }): Promise<boolean> }).grant({
+      ...baseOpts,
+      reason: 'SECOND-ORDER',
+      templateCode: 'SECOND_ORDER_VOUCHER',
+      endAt,
+    });
+
+    const data = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data;
+    expect(data.code).toBe(`SECOND-ORDER-${baseOpts.userId}`.toUpperCase());
+    expect(data.endAt).toEqual(endAt);
+  });
+
   // C-053 (A1-019): tin WELCOME_VOUCHER không nói đơn tối thiểu 199.000đ → khách mở app thấy mã không dùng được.
   it('notify kèm min_order_note có đơn tối thiểu (định dạng vi-VN) để mẫu tin nói rõ điều kiện dùng', async () => {
     const prisma = {

@@ -38,6 +38,7 @@ describe('Phân loại tin (C-022)', () => {
     'WELCOME_VOUCHER',
     'BIRTHDAY_VOUCHER',
     'WINBACK_VOUCHER',
+    'SECOND_ORDER_VOUCHER',
     'REORDER_REMINDER',
     'STOREFRONT_TRENDING_PRODUCTS',
   ])('%s là tin khuyến mãi', (code) => {
@@ -61,6 +62,8 @@ describe('Phân loại tin (C-022)', () => {
     'FLASH_STARTING',
     // Phần thưởng khách tự kiếm qua giới thiệu: mã vẫn phát, khách phải được biết mình có.
     'MILESTONE_VOUCHER',
+    // Mời đánh giá đơn khách đã nhận (C-017).
+    'REVIEW_REQUEST',
   ])('%s là tin giao dịch, luôn gửi', (code) => {
     expect(notificationCategory(code)).toBe('TRANSACTIONAL');
   });
