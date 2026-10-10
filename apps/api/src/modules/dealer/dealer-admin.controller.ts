@@ -22,7 +22,7 @@ export class RejectRewardClaimDto {
 
 /**
  * Admin xử lý yêu cầu nhận thưởng mốc đại lý (tour/quà): PENDING → APPROVED | REJECTED;
- * APPROVED → PAID (đã trao thưởng offline). Mọi chuyển trạng thái đều atomic trong DealerService.
+ * APPROVED → PAID (đã trao thưởng offline); REJECTED → PENDING (mở lại khi từ chối nhầm). Mọi chuyển trạng thái đều atomic trong DealerService.
  */
 @Roles('ADMIN')
 @Controller('admin/dealer-reward-claims')
@@ -47,6 +47,12 @@ export class DealerAdminController {
   @Post(':id/mark-paid')
   markPaid(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ReviewRewardClaimDto) {
     return this.dealer.markRewardClaimPaid(adminId, id, dto.note);
+  }
+
+  /** Mở lại yêu cầu bị từ chối nhầm: REJECTED → PENDING (Q-09). */
+  @Post(':id/reopen')
+  reopen(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ReviewRewardClaimDto) {
+    return this.dealer.reopenRewardClaim(adminId, id, dto.note);
   }
 }
 

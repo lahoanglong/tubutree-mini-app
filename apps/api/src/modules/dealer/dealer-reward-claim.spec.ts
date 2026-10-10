@@ -74,6 +74,9 @@ type FakeClaim = {
   note: string | null;
   status: string;
   rejectionReason: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: Date | null;
+  adminNote?: string | null;
   createdAt: Date;
 };
 
@@ -596,6 +599,78 @@ describe('Admin xử lý yêu cầu nhận thưởng (PENDING → APPROVED/REJEC
     await expect(svc.markRewardClaimPaid('admin1', 'c2')).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  // Q-09: từ chối là trạng thái cuối với đại lý (unique [userId, periodKey, rewardId] chặn gửi lại), nên admin
+  // từ chối nhầm phải có đường quay lại thay vì sửa DB.
+  it('mở lại: chỉ REJECTED → PENDING bằng updateMany có guard status; xoá lý do từ chối nhưng giữ dấu vết trong adminNote', async () => {
+    const claims = fakeClaims([
+      {
+        id: 'c1',
+        status: 'REJECTED',
+        rejectionReason: 'Đơn Q3 đã trả hàng',
+        reviewedBy: 'admin9',
+        reviewedAt: new Date('2026-09-01T03:00:00Z'),
+        adminNote: 'kiểm tra lần 1',
+      },
+    ]);
+    const { prisma } = buildPrisma({ claims });
+    const out = await new DealerService(prisma, makeConfig()).reopenRewardClaim('admin1', 'c1', 'Từ chối nhầm, đơn không trả');
+    expect(claims.updateMany.mock.calls[0]![0].where).toEqual({ id: 'c1', status: 'REJECTED' });
+    expect(out.status).toBe('PENDING');
+    expect(claims.rows[0]).toMatchObject({ status: 'PENDING', rejectionReason: null, reviewedBy: null, reviewedAt: null });
+    const note = String(claims.rows[0]!.adminNote);
+    expect(note).toContain('kiểm tra lần 1');
+    expect(note).toContain('Đơn Q3 đã trả hàng');
+    expect(note).toContain('admin1');
+    expect(note).toContain('Từ chối nhầm, đơn không trả');
+  });
+
+  it('mở lại không cần ghi chú; adminNote cũ rỗng thì không có dấu phân cách thừa', async () => {
+    const claims = fakeClaims([{ id: 'c1', status: 'REJECTED', rejectionReason: 'Sai doanh số' }]);
+    const { prisma } = buildPrisma({ claims });
+    await new DealerService(prisma, makeConfig()).reopenRewardClaim('admin1', 'c1');
+    expect(String(claims.rows[0]!.adminNote).startsWith('Mở lại')).toBe(true);
+    expect(claims.rows[0]!.status).toBe('PENDING');
+  });
+
+  it('mở lại claim không phải REJECTED (PENDING/APPROVED/PAID) → BadRequest, không ghi gì', async () => {
+    const claims = fakeClaims([
+      { id: 'c1', status: 'PENDING', periodKey: 'Q1/2026' },
+      { id: 'c2', status: 'APPROVED', periodKey: 'Q2/2026' },
+      { id: 'c3', status: 'PAID', periodKey: 'Q3/2026' },
+    ]);
+    const { prisma } = buildPrisma({ claims });
+    const svc = new DealerService(prisma, makeConfig());
+    for (const id of ['c1', 'c2', 'c3']) {
+      await expect(svc.reopenRewardClaim('admin1', id)).rejects.toBeInstanceOf(BadRequestException);
+    }
+    expect(claims.rows.map((r) => r.status)).toEqual(['PENDING', 'APPROVED', 'PAID']);
+  });
+
+  it('mở lại claim không tồn tại → NotFound', async () => {
+    const { prisma } = buildPrisma({ claims: fakeClaims() });
+    await expect(new DealerService(prisma, makeConfig()).reopenRewardClaim('admin1', 'nope')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('race 2 admin cùng mở lại: updateMany count=0 → BadRequest', async () => {
+    const claims = fakeClaims([{ id: 'c1', status: 'REJECTED', rejectionReason: 'x' }]);
+    claims.updateMany.mockResolvedValueOnce({ count: 0 });
+    const { prisma } = buildPrisma({ claims });
+    await expect(new DealerService(prisma, makeConfig()).reopenRewardClaim('admin1', 'c1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('claim đã mở lại duyệt được như PENDING bình thường (doanh số vẫn được kiểm lúc duyệt)', async () => {
+    const claims = fakeClaims([{ id: 'c1', status: 'REJECTED', rejectionReason: 'x' }]);
+    const { prisma } = buildPrisma({ orders: [settled('o1', 60_000_000)], claims });
+    const svc = new DealerService(prisma, makeConfig());
+    await svc.reopenRewardClaim('admin1', 'c1');
+    const out = await svc.approveRewardClaim('admin2', 'c1');
+    expect(out.status).toBe('APPROVED');
+  });
+
   it('danh sách: lọc theo status + kèm thông tin đại lý, phân trang', async () => {
     const claims = fakeClaims([
       { id: 'c1', status: 'PENDING' },
@@ -625,6 +700,7 @@ describe('DTO + phân quyền route', () => {
     expect(route('approve')).toEqual([RequestMethod.POST, ':id/approve']);
     expect(route('reject')).toEqual([RequestMethod.POST, ':id/reject']);
     expect(route('markPaid')).toEqual([RequestMethod.POST, ':id/mark-paid']);
+    expect(route('reopen')).toEqual([RequestMethod.POST, ':id/reopen']);
   });
 
   it('controller chuyển đúng tham số xuống service (đại lý + admin)', async () => {
@@ -634,6 +710,7 @@ describe('DTO + phân quyền route', () => {
       approveRewardClaim: jest.fn().mockResolvedValue({}),
       rejectRewardClaim: jest.fn().mockResolvedValue({}),
       markRewardClaimPaid: jest.fn().mockResolvedValue({}),
+      reopenRewardClaim: jest.fn().mockResolvedValue({}),
     };
     const dealerCtl = new DealerController(svc as never);
     await dealerCtl.claimReward('d1', 'r1', { periodKey: 'Q3/2026', note: 'x' });
@@ -651,6 +728,8 @@ describe('DTO + phân quyền route', () => {
     expect(svc.rejectRewardClaim).toHaveBeenCalledWith('admin1', 'c1', 'Sai doanh số');
     await adminCtl.markPaid('admin1', 'c1', {});
     expect(svc.markRewardClaimPaid).toHaveBeenCalledWith('admin1', 'c1', undefined);
+    await adminCtl.reopen('admin1', 'c1', { note: 'từ chối nhầm' });
+    expect(svc.reopenRewardClaim).toHaveBeenCalledWith('admin1', 'c1', 'từ chối nhầm');
   });
 
   it('ClaimRewardDto: periodKey đúng định dạng quý/năm, note giới hạn độ dài', async () => {
