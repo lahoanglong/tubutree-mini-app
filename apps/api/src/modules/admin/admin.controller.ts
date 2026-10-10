@@ -204,10 +204,12 @@ export class GomdonMarkHandledDto {
   @IsOptional() @IsString() @MaxLength(500) note?: string;
 }
 
-class SetUserRoleDto {
+export class SetUserRoleDto {
   @IsString() phone!: string;
   @IsIn(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'])
   role!: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
+  /** Bắt buộc khi role = DEALER (kiểm ở AdminService.setUserRole — C-008). */
+  @IsOptional() @IsString() @MaxLength(100) tierId?: string;
 }
 
 /** Parse CSV "sku,giá" (phân tách , ; hoặc tab); bỏ dòng header/giá không hợp lệ. */
@@ -264,7 +266,7 @@ export class AdminController {
   // Cấp/đổi role theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi).
   @Post('users/role')
   setUserRole(@CurrentUser('sub') adminId: string, @Body() dto: SetUserRoleDto) {
-    return this.admin.setUserRole(adminId, dto.phone, dto.role);
+    return this.admin.setUserRole(adminId, dto.phone, dto.role, dto.tierId);
   }
 
   @Get('orders')

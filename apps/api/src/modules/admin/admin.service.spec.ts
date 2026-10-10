@@ -663,6 +663,66 @@ describe('AdminService.setUserRole', () => {
     const out = await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
     expect(out.role).toBe('CUSTOMER');
   });
+
+  // C-008 (A5N-03, Q-07): cấp DEALER thẳng qua đây trước đây không gán bậc → dealerContext trả tier null
+  // và luồng CREDIT bỏ qua hạn mức công nợ. Gán DEALER bắt buộc kèm bậc tồn tại, ghi metadata.dealerTierId.
+  describe('gán DEALER bắt buộc chọn bậc (C-008)', () => {
+    const customer = { id: 'u1', phone: '0899625240', role: 'CUSTOMER', metadata: { onboardedAt: '2026-09-01', segments: ['home'] } };
+
+    it('thiếu tierId → 400, không đổi role', async () => {
+      const update = jest.fn();
+      const prisma = makePrisma({ user: { findUnique: jest.fn().mockResolvedValue(customer), update } });
+      await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'DEALER')).rejects.toThrow(/bậc đại lý/);
+      await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'DEALER', '   ')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('tierId không tồn tại → 400, không đổi role', async () => {
+      const update = jest.fn();
+      const prisma = makePrisma({
+        user: { findUnique: jest.fn().mockResolvedValue(customer), update },
+        dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
+      });
+      await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'DEALER', 'ghost')).rejects.toThrow(
+        /không tồn tại/,
+      );
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('tierId hợp lệ → role DEALER + metadata.dealerTierId, giữ nguyên metadata cũ', async () => {
+      const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'DEALER', fullName: 'X' });
+      const tierFind = jest.fn().mockResolvedValue({ id: 'dealer_l3' });
+      const prisma = makePrisma({
+        user: { findUnique: jest.fn().mockResolvedValue(customer), update },
+        dealerTier: { findUnique: tierFind },
+      });
+      const out = await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'DEALER', ' dealer_l3 ');
+      expect(tierFind).toHaveBeenCalledWith({ where: { id: 'dealer_l3' } });
+      expect(update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: {
+          role: 'DEALER',
+          metadata: { onboardedAt: '2026-09-01', segments: ['home'], dealerTierId: 'dealer_l3' },
+        },
+        select: { id: true, phone: true, fullName: true, role: true },
+      });
+      expect(out).toMatchObject({ ok: true, role: 'DEALER', previousRole: 'CUSTOMER', dealerTierId: 'dealer_l3' });
+    });
+
+    it('role khác DEALER: tierId bị bỏ qua, metadata không đụng', async () => {
+      const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'AFFILIATE', fullName: 'X' });
+      const tierFind = jest.fn();
+      const prisma = makePrisma({
+        user: { findUnique: jest.fn().mockResolvedValue(customer), update },
+        dealerTier: { findUnique: tierFind },
+      });
+      await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'AFFILIATE', 'dealer_l3');
+      expect(tierFind).not.toHaveBeenCalled();
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'AFFILIATE' } }));
+    });
+  });
 });
 
 // Việc 9 (audit round 2): createCoupon() trước đây KHÔNG ghi scopeMeta → coupon scope TIER/

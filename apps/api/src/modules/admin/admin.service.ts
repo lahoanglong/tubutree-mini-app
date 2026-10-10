@@ -288,6 +288,7 @@ export class AdminService {
     adminId: string,
     phone: string,
     role: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN',
+    tierId?: string,
   ) {
     const normalized = phone.trim();
     const user = await this.prisma.user.findUnique({ where: { phone: normalized } });
@@ -305,9 +306,26 @@ export class AdminService {
         throw new BadRequestException('Đây là quản trị viên cuối cùng — cấp quyền cho người khác trước khi hạ.');
       }
     }
+    // DEALER không bậc → dealerContext trả tier null và đơn CREDIT bỏ qua hạn mức công nợ (C-008); cùng
+    // luật với duyệt hồ sơ đại lý: bắt buộc chọn bậc tồn tại, merge vào metadata sẵn có (giữ segments/onboardedAt).
+    let data: Prisma.UserUpdateInput = { role };
+    let dealerTierId: string | undefined;
+    if (role === 'DEALER') {
+      dealerTierId = tierId?.trim();
+      if (!dealerTierId) throw new BadRequestException('Cần chọn bậc đại lý khi cấp vai trò DEALER.');
+      const tier = await this.prisma.dealerTier.findUnique({ where: { id: dealerTierId } });
+      if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
+      data = {
+        role,
+        metadata: {
+          ...((user.metadata as Record<string, unknown> | null) ?? {}),
+          dealerTierId,
+        } as Prisma.InputJsonObject,
+      };
+    }
     const updated = await this.prisma.user.update({
       where: { id: user.id },
-      data: { role },
+      data,
       select: { id: true, phone: true, fullName: true, role: true },
     });
     // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán — trước đây KHÔNG làm
@@ -323,8 +341,11 @@ export class AdminService {
     if (revoked > 0) {
       this.logger.warn(`Admin ${adminId} đổi role user ${user.id} (${normalized}) → thu hồi ${revoked} grant xếp hạng cao hơn ${role}.`);
     }
-    this.logger.warn(`Admin ${adminId} đổi role user ${user.id} (${normalized}): ${previousRole} → ${role}`);
-    return { ok: true, ...updated, previousRole };
+    this.logger.warn(
+      `Admin ${adminId} đổi role user ${user.id} (${normalized}): ${previousRole} → ${role}` +
+        (dealerTierId ? ` (bậc ${dealerTierId})` : ''),
+    );
+    return { ok: true, ...updated, previousRole, ...(dealerTierId ? { dealerTierId } : {}) };
   }
 
   async getDashboardStats() {
