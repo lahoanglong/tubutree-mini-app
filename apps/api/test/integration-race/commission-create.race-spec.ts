@@ -101,7 +101,6 @@ describe('Tạo hoa hồng CTV (real Postgres)', () => {
     );
     const s = summarize(results);
     const rows = await prisma.commission.findMany({ where: { orderId: order.id } });
-    // eslint-disable-next-line no-console
     console.log('[commission x10] fulfilled=%d rejected=%d rows=%d errors=%j', s.fulfilled.length, s.rejected.length, rows.length, [...new Set(s.errors)]);
 
     expect(s.rejected).toHaveLength(0);

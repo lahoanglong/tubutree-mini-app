@@ -38,6 +38,7 @@ function build(
     combo?: { computeForStorefront: jest.Mock }; // override ComboService
     validateAndCompute?: jest.Mock; // override coupons.validateAndCompute
     getActiveTouch?: jest.Mock; // override affiliate.getActiveTouch (attribution 3 ngày)
+    createCommissionForOrder?: jest.Mock; // override affiliate.createCommissionForOrder
     cartData?: unknown; // override giỏ (test checkout tập con)
     flashSale?: { consumeQuota: jest.Mock; resolveEffective: jest.Mock }; // override FlashSaleService
     gomdon?: unknown;
@@ -111,7 +112,7 @@ function build(
     isRecyclingEnabled: jest.fn().mockResolvedValue(true),
   }) as unknown as GomdonOrderService;
   const affiliate = {
-    createCommissionForOrder: jest.fn().mockResolvedValue(undefined),
+    createCommissionForOrder: opts.createCommissionForOrder ?? jest.fn().mockResolvedValue(undefined),
     getActiveTouch: opts.getActiveTouch ?? jest.fn().mockResolvedValue(null),
   } as unknown as AffiliateService;
   const coins = { spendCoins: jest.fn().mockResolvedValue(undefined) } as unknown as CoinsService;
@@ -133,7 +134,7 @@ function build(
   } as unknown as AnalyticsEventsService;
 
   const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, coins, config, combo, flashSale, analytics);
-  return { svc, prisma, updateMany, orderCreate, executeRaw, total, coins, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics };
+  return { svc, prisma, updateMany, orderCreate, executeRaw, total, coins, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics, affiliate, notifications };
 }
 
 describe('CheckoutService.placeOrder — money safety', () => {
@@ -318,6 +319,37 @@ describe('CheckoutService.placeOrder — storefrontSlug attribution (Lớp 2)', 
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', referralCode: 'abcd1234' } as never);
     expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { referralCode: 'ABCD1234' } });
     expect(orderCreate.mock.calls[0][0].data.referrerUserId).toBe('ctv9');
+  });
+});
+
+// C-002: hoa hồng từng được tạo SAU commit với `.catch(log)` — lỗi DB/process chết giữa chừng làm
+// CTV mất hoa hồng vĩnh viễn mà không ai biết.
+describe('CheckoutService.placeOrder — hoa hồng CTV tạo trong tx của đơn (C-002)', () => {
+  const touch = () => jest.fn().mockResolvedValue({ referrerUserId: 'ctv9', storefrontSlug: null, kind: 'ctv' });
+
+  it('có người giới thiệu → createCommissionForOrder(orderId, tx) chạy trong tx, trước các bước sau commit', async () => {
+    const { svc, prisma, affiliate, cart, pancake } = build({ stockCount: 1, getActiveTouch: touch() });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const create = affiliate.createCommissionForOrder as jest.Mock;
+    expect(create).toHaveBeenCalledTimes(1);
+    // $transaction mock truyền chính `prisma` làm tx.
+    expect(create).toHaveBeenCalledWith('o1', prisma);
+    expect(create.mock.invocationCallOrder[0]!).toBeLessThan((cart.clear as jest.Mock).mock.invocationCallOrder[0]!);
+    expect(create.mock.invocationCallOrder[0]!).toBeLessThan((pancake.enqueuePush as jest.Mock).mock.invocationCallOrder[0]!);
+  });
+
+  it('tạo hoa hồng lỗi → placeOrder lỗi (đơn rollback), không nuốt lỗi, không đẩy Pancake/báo khách', async () => {
+    const createCommissionForOrder = jest.fn().mockRejectedValue(new Error('db blip'));
+    const { svc, pancake, notifications } = build({ stockCount: 1, getActiveTouch: touch(), createCommissionForOrder });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('db blip');
+    expect(pancake.enqueuePush).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('không có người giới thiệu → không gọi tạo hoa hồng', async () => {
+    const { svc, affiliate } = build({ stockCount: 1 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(affiliate.createCommissionForOrder).not.toHaveBeenCalled();
   });
 });
 

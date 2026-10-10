@@ -27,7 +27,7 @@ function prismaWith(order: unknown, variations: unknown[], createSpy = jest.fn()
   return {
     order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
     variation: { findMany: jest.fn().mockResolvedValue(variations) },
-    commission: { create: createSpy },
+    commission: { createMany: createSpy },
   } as unknown as PrismaService;
 }
 
@@ -225,7 +225,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
           // 1) createCommissionForOrder đọc order + items; 2) trả đơn cuối cùng
           .mockResolvedValue({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 100000, items: [], code: 'TUBU1' }),
       },
-      commission: { create: commissionCreate },
+      commission: { createMany: commissionCreate },
     } as unknown as PrismaService;
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
       .fn()
@@ -304,7 +304,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
-  it('tạo hoa hồng cho CTV sau khi đặt đơn (createCommissionForOrder)', async () => {
+  it('tạo hoa hồng cho CTV trong cùng tx với đơn (createCommissionForOrder)', async () => {
     const { svc, commissionCreate, prisma } = build();
     // order fetch trong createCommissionForOrder: đơn CTV placedForCustomer + 1 item có rate.
     (prisma.order.findUniqueOrThrow as jest.Mock)
@@ -458,7 +458,14 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
   it('order_placed được ghi bằng ĐÚNG object `tx` của $transaction, không phải this.prisma ở ngoài (chứng minh atomic thật — mirror dealer-order-payment.spec.ts)', async () => {
     const txOrderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
     const txExecuteRaw = jest.fn().mockResolvedValue(1);
-    const txMarker = { order: { create: txOrderCreate }, $executeRaw: txExecuteRaw };
+    const txMarker = {
+      order: {
+        create: txOrderCreate,
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 100000, items: [] }),
+      },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      $executeRaw: txExecuteRaw,
+    };
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv', role: 'AFFILIATE' }) },
       variation: {

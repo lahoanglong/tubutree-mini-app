@@ -371,6 +371,7 @@ export class CheckoutService {
             props: { orderId: created.id, method: dto.paymentMethod, amount: computed.total, secsFromPlaced: 0 },
           });
         }
+        if (referrerUserId) await this.affiliate.createCommissionForOrder(created.id, tx);
         return created;
       });
     } catch (err) {
@@ -386,7 +387,7 @@ export class CheckoutService {
     // Dọn giỏ + đẩy Pancake (ngoài transaction chính). Coupon redeem đã chạy trong tx ở trên.
     // Checkout TẬP CON: chỉ xoá món ĐÃ mua, giữ phần còn lại (không clear coupon toàn giỏ).
     // Đơn + thanh toán đã commit ở tx trên — lỗi dọn giỏ (DB blip) không được làm hỏng response
-    // (nhất quán với Pancake/affiliate/notification bên dưới).
+    // (nhất quán với Pancake/notification bên dưới).
     try {
       if (Array.isArray(dto.itemIds) && dto.itemIds.length > 0) {
         await this.cart.removeItems(userId, cart.items.map((l) => l.id));
@@ -421,12 +422,7 @@ export class CheckoutService {
         this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
       }
     }
-    if (referrerUserId) {
-      await this.affiliate.createCommissionForOrder(order.id).catch((err) =>
-        this.logger.error(`Tạo commission lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`),
-      );
-    }
-    // Thông báo là side-effect — lỗi gửi không được làm hỏng đơn đã đặt (nhất quán với Pancake/affiliate).
+    // Thông báo là side-effect — lỗi gửi không được làm hỏng đơn đã đặt (nhất quán với Pancake).
     try {
       await this.notifications.notify(userId, 'ORDER_CONFIRMED', { order_code: code });
     } catch (err) {
