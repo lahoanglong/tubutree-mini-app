@@ -214,6 +214,8 @@ function makeGuestMergeFixture(opts: {
     'cashbackTransaction',
     'returnRequest',
     'couponRedemption',
+    'subscription',
+    'payout',
     'flashSalePurchase',
     'gameProfile',
     'plantedTree',

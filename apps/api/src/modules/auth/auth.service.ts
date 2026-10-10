@@ -239,8 +239,9 @@ export class AuthService {
 
   /**
    * Gộp guest → target (target đã tồn tại từ trước, khác dòng với guest): giỏ hàng, sổ địa chỉ,
-   * đơn + yêu cầu đổi trả, số dư điểm/ví/xu/cashback + sổ giao dịch, lượt dùng coupon, suất flash
-   * sale, điểm danh, đánh giá và (khi target chưa chơi) dữ liệu game.
+   * đơn + yêu cầu đổi trả, gói định kỳ, lệnh rút, số dư điểm/ví/xu/cashback + sổ giao dịch, lượt
+   * dùng coupon, suất flash sale, điểm danh, đánh giá, yêu thích/nhắc/theo dõi thương hiệu và (khi
+   * target chưa chơi) dữ liệu game.
    *
    * Không được "thử rồi bắt P2002" trong interactive transaction: sau lỗi đầu tiên Postgres huỷ
    * cả transaction (25P02), COMMIT thành ROLLBACK và mọi lần gộp sau lặp lại y hệt → phiên khách
@@ -251,8 +252,9 @@ export class AuthService {
    * TRONG transaction; request đến sau thấy zaloId khách đã đổi thì không cộng lần nữa.
    *
    * Còn để lại ở dòng khách (quan hệ 1-1 hoặc ít giá trị, chưa có quyết định "bên nào thắng"):
-   * staffProfile/communityProfile/subscriptions/affiliate/dealer/feed/wishlist/... và dòng trùng
-   * khoá với target ở các bảng trên. Dòng khách không bị xoá nên không mất dữ liệu.
+   * staffProfile/communityProfile/affiliate/commission/dealer/feed/... và dòng trùng khoá với
+   * target ở các bảng trên. Các bảng này không giữ tiền hay luồng đang chạy của khách; dòng khách
+   * không bị xoá nên vẫn tra lại được nếu cần gộp tay.
    */
   private async mergeGuestInto(
     guest: User,
@@ -310,6 +312,10 @@ export class AuthService {
       await tx.cashbackClick.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.cashbackTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.couponRedemption.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      // Gói định kỳ phải theo địa chỉ đã chuyển ở bước 2 (subscriptions.service tạm dừng gói khi
+      // address.userId !== sub.userId); lệnh rút bị từ chối hoàn tiền về payout.userId.
+      await tx.subscription.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      await tx.payout.updateMany({ where: { userId: gid }, data: { userId: tid } });
 
       // 4) Sổ điểm/xu. Partial unique theo userId: điểm danh (userId, refId=ngày) WHERE
       //    refType='CHECKIN' và nhiệm vụ (userId, reason) WHERE refType='QUEST'. Dòng khách trùng
@@ -328,14 +334,17 @@ export class AuthService {
       await tx.pointsTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.coinTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
 
-      // 5) Bảng giới hạn lượt theo user. Điểm danh: ngày trùng để lại ở khách (dayKey phải giữ
-      //    định dạng ngày vì chuỗi điểm danh sắp xếp theo nó), ngày khác chuyển để target không
-      //    điểm danh lại ngày đó. Flash sale: cộng dồn số đã mua để perUserLimit tính cả hai bên.
+      // 5) Bảng giới hạn lượt theo user. Điểm danh: chuỗi tính từ dòng có dayKey lớn nhất, nên chỉ
+      //    chuyển ngày CŨ HƠN lần điểm danh gần nhất của target (target chưa từng điểm danh thì chuyển
+      //    hết) — target không thừa hưởng chuỗi của khách; ngày trùng/mới hơn ở lại khách (dayKey phải
+      //    giữ định dạng ngày, không gắn tiền tố MERGED được). Điểm của các lượt đó đã nằm trong sổ ở
+      //    bước 4. Flash sale: cộng dồn số đã mua để perUserLimit tính cả hai bên.
       //    Đánh giá: mỗi user một đánh giá/SP, trùng thì giữ của target.
       await tx.$executeRaw`
         UPDATE "loyalty_check_ins" g SET "userId" = ${tid}
          WHERE g."userId" = ${gid}
-           AND NOT EXISTS (SELECT 1 FROM "loyalty_check_ins" t WHERE t."userId" = ${tid} AND t."dayKey" = g."dayKey")`;
+           AND NOT EXISTS (SELECT 1 FROM "loyalty_check_ins" t WHERE t."userId" = ${tid} AND t."dayKey" = g."dayKey")
+           AND g."dayKey" < COALESCE((SELECT max(t."dayKey") FROM "loyalty_check_ins" t WHERE t."userId" = ${tid}), '9999-12-31')`;
       await tx.$executeRaw`
         UPDATE "flash_sale_purchases" t SET "quantity" = t."quantity" + g."quantity", "updatedAt" = now()
           FROM "flash_sale_purchases" g
@@ -349,6 +358,22 @@ export class AuthService {
         UPDATE "reviews" g SET "userId" = ${tid}
          WHERE g."userId" = ${gid}
            AND NOT EXISTS (SELECT 1 FROM "reviews" t WHERE t."userId" = ${tid} AND t."productId" = g."productId")`;
+
+      // Danh sách theo dõi/nhắc: unique (userId, khoá), trùng thì giữ dòng của target.
+      await tx.$executeRaw`
+        UPDATE "wishlists" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+           AND NOT EXISTS (SELECT 1 FROM "wishlists" t WHERE t."userId" = ${tid} AND t."productId" = g."productId")`;
+      await tx.$executeRaw`
+        UPDATE "flash_sale_reminders" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+           AND NOT EXISTS (SELECT 1 FROM "flash_sale_reminders" t
+                            WHERE t."userId" = ${tid} AND t."flashSaleItemId" = g."flashSaleItemId")`;
+      await tx.$executeRaw`
+        UPDATE "brand_follows" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+           AND NOT EXISTS (SELECT 1 FROM "brand_follows" t WHERE t."userId" = ${tid} AND t."brandId" = g."brandId")`;
+      await tx.$executeRaw`
+        UPDATE "reorder_reminders" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+           AND NOT EXISTS (SELECT 1 FROM "reorder_reminders" t
+                            WHERE t."userId" = ${tid} AND t."variationId" = g."variationId")`;
 
       // 6) Game: chỉ chuyển nguyên cụm khi target chưa có GameProfile (chưa từng chơi). Cả hai
       //    cùng chơi thì giữ game của target, cụm của khách ở lại — ghép hai khu vườn (ô đất,

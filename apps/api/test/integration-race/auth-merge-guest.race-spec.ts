@@ -213,6 +213,116 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     expect(await prisma.cart.findUnique({ where: { id: guestCart.id } })).toBeNull();
   });
 
+  it('merge: subscriptions, payouts, wishlist, reminders and brand follows move to target', async () => {
+    const { guest, target } = await guestAndTarget({}, {});
+    const tag = randCode(6);
+    const a = await makeVariation(`${tag}A`);
+    const b = await makeVariation(`${tag}B`);
+
+    const addr = await prisma.address.create({
+      data: {
+        userId: guest.id,
+        recipient: 'Khách',
+        phone: '0900000000',
+        province: 'HCM',
+        district: 'Q1',
+        ward: 'P1',
+        street: '1 Lê Lợi',
+        provinceCode: '79',
+        districtCode: '760',
+        wardCode: '26734',
+      },
+    });
+    const sub = await prisma.subscription.create({
+      data: {
+        userId: guest.id,
+        variationId: a.variation.id,
+        intervalWeeks: 4,
+        addressId: addr.id,
+        nextRunAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    // Lệnh rút đang chờ duyệt: admin từ chối sẽ hoàn tiền về payout.userId (affiliate.service).
+    const payout = await prisma.payout.create({
+      data: { userId: guest.id, amount: 47_000, fee: 3_000, method: 'BANK', status: 'REQUESTED' },
+    });
+
+    await prisma.wishlist.create({ data: { userId: guest.id, productId: a.product.id } });
+    await prisma.wishlist.create({ data: { userId: guest.id, productId: b.product.id } });
+    await prisma.wishlist.create({ data: { userId: target.id, productId: a.product.id } });
+
+    const sale = await prisma.flashSale.create({
+      data: { title: 'IT', startAt: new Date(Date.now() + 3_600_000), endAt: new Date(Date.now() + 7_200_000), createdBy: 'it' },
+    });
+    const fsA = await prisma.flashSaleItem.create({
+      data: { flashSaleId: sale.id, variationId: a.variation.id, flashPrice: 1_000, quota: 10, perUserLimit: 1 },
+    });
+    const fsB = await prisma.flashSaleItem.create({
+      data: { flashSaleId: sale.id, variationId: b.variation.id, flashPrice: 1_000, quota: 10, perUserLimit: 1 },
+    });
+    await prisma.flashSaleReminder.create({ data: { userId: guest.id, flashSaleItemId: fsA.id } });
+    await prisma.flashSaleReminder.create({ data: { userId: guest.id, flashSaleItemId: fsB.id } });
+    await prisma.flashSaleReminder.create({ data: { userId: target.id, flashSaleItemId: fsA.id } });
+
+    const brand = await prisma.brand.create({ data: { slug: `itm-b-${tag.toLowerCase()}`, name: `IT Brand ${tag}` } });
+    await prisma.brandFollow.create({ data: { userId: guest.id, brandId: brand.id } });
+    await prisma.reorderReminder.create({
+      data: { userId: guest.id, variationId: b.variation.id, productName: 'SP B', lastOrderAt: new Date() },
+    });
+
+    zaloIdForNextCall = target.zaloId!;
+    await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
+
+    // Gói định kỳ phải đi cùng địa chỉ của nó: subscriptions.service tạm dừng gói khi
+    // address.userId !== sub.userId.
+    const s = await prisma.subscription.findUniqueOrThrow({ where: { id: sub.id } });
+    const ad = await prisma.address.findUniqueOrThrow({ where: { id: addr.id } });
+    expect(s.userId).toBe(target.id);
+    expect(ad.userId).toBe(s.userId);
+    expect((await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).userId).toBe(target.id);
+
+    const wl = await prisma.wishlist.findMany({ where: { userId: target.id } });
+    expect(wl.map((w) => w.productId).sort()).toEqual([a.product.id, b.product.id].sort());
+    const rem = await prisma.flashSaleReminder.findMany({ where: { userId: target.id } });
+    expect(rem.map((r) => r.flashSaleItemId).sort()).toEqual([fsA.id, fsB.id].sort());
+    expect(await prisma.brandFollow.count({ where: { userId: target.id, brandId: brand.id } })).toBe(1);
+    expect(await prisma.reorderReminder.count({ where: { userId: target.id, variationId: b.variation.id } })).toBe(1);
+  });
+
+  it('merge: guest check-ins newer than the target latest stay on the guest, so the target streak is not inherited', async () => {
+    const { guest, target } = await guestAndTarget({}, {});
+    await prisma.loyaltyCheckIn.create({
+      data: { userId: target.id, dayKey: '2026-10-07', cycleDay: 2, streakDays: 2, points: 10 },
+    });
+    await prisma.loyaltyCheckIn.create({
+      data: { userId: guest.id, dayKey: '2026-10-05', cycleDay: 1, streakDays: 1, points: 10 },
+    });
+    await prisma.loyaltyCheckIn.create({
+      data: { userId: guest.id, dayKey: '2026-10-09', cycleDay: 5, streakDays: 5, points: 25 },
+    });
+
+    zaloIdForNextCall = target.zaloId!;
+    await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
+
+    const latest = await prisma.loyaltyCheckIn.findFirstOrThrow({ where: { userId: target.id }, orderBy: { dayKey: 'desc' } });
+    expect([latest.dayKey, latest.streakDays]).toEqual(['2026-10-07', 2]);
+    const tDays = await prisma.loyaltyCheckIn.findMany({ where: { userId: target.id }, orderBy: { dayKey: 'asc' } });
+    expect(tDays.map((c) => c.dayKey)).toEqual(['2026-10-05', '2026-10-07']);
+    expect((await prisma.loyaltyCheckIn.findMany({ where: { userId: guest.id } })).map((c) => c.dayKey)).toEqual([
+      '2026-10-09',
+    ]);
+
+    // Target chưa từng điểm danh: lịch sử của khách là lịch sử duy nhất → chuyển hết.
+    const other = await guestAndTarget({}, {});
+    await prisma.loyaltyCheckIn.create({
+      data: { userId: other.guest.id, dayKey: '2026-10-09', cycleDay: 3, streakDays: 3, points: 15 },
+    });
+    zaloIdForNextCall = other.target.zaloId!;
+    await auth.ensurePhoneForCurrentUser(other.guest.id, 'code', 'access');
+    expect(await prisma.loyaltyCheckIn.count({ where: { userId: other.target.id } })).toBe(1);
+    expect(await prisma.loyaltyCheckIn.count({ where: { userId: other.guest.id } })).toBe(0);
+  });
+
   it('merge: game data moves only when the target never played', async () => {
     const { guest, target } = await guestAndTarget({}, {});
     await prisma.gameProfile.create({ data: { userId: guest.id, totalSeeds: 40 } });
