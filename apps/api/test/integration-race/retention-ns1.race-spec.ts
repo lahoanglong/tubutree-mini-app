@@ -130,4 +130,23 @@ describe('NS-1 retention (real Postgres)', () => {
     const empty = await prisma.retentionDailySnapshot.findUniqueOrThrow({ where: { date: new Date('2031-09-20') } });
     expect([empty.ns1CohortSize, empty.ns1RepeatCount]).toEqual([0, 0]);
   });
+
+  it('một khách vừa tự mua vừa được CTV lên hộ cùng SĐT trong ngày cohort chỉ đếm MỘT lần (cohort và lặp)', async () => {
+    const day1 = new Date('2031-05-10T03:00:00Z');
+    const phoneX = `${31}${phoneBase}`;
+    const x = await createUser(prisma, { phone: phoneX });
+    const ctv = await createUser(prisma, { phone: `${32}${phoneBase}` });
+    // X: một đơn tự mua + hai đơn CTV lên hộ cho chính SĐT của X (endCustomerKey = SĐT nội địa) → lặp.
+    await order(x.id, day1);
+    await order(ctv.id, plus(HOUR, day1), { placedForCustomer: true, endCustomerKey: phoneX });
+    await order(ctv.id, plus(2 * HOUR, day1), { placedForCustomer: true, endCustomerKey: phoneX });
+    // Y: một đơn duy nhất → không lặp.
+    const y = await createUser(prisma, { phone: `${33}${phoneBase}` });
+    await order(y.id, day1);
+
+    await svc.computeRetentionSnapshot('2031-06-09');
+    const row = await prisma.retentionDailySnapshot.findUniqueOrThrow({ where: { date: new Date('2031-06-09') } });
+    console.log('[ns1] cohort=%d repeat=%d', row.ns1CohortSize, row.ns1RepeatCount);
+    expect([row.ns1CohortSize, row.ns1RepeatCount]).toEqual([2, 1]);
+  });
 });

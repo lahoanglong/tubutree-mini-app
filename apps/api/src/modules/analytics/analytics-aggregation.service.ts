@@ -62,6 +62,26 @@ const MONTH_START_SQL = `date_trunc('month', $1::date)::timestamp - interval '7 
 /** Cửa sổ quét đơn của cohort ngày VN $1: từ 00:00 VN tới +31 ngày (phủ đơn cuối ngày cohort cộng đủ 30 ngày). */
 const COHORT_WINDOW_SQL = `o."createdAt" >= ${DAY_START_SQL} AND o."createdAt" < (${DAY_START_SQL}) + interval '${NS1_WINDOW_DAYS + 1} days'`;
 
+/**
+ * `customersOfDay` nhóm theo (khoá, loại) nên cùng một SĐT vừa tự mua (PHONE) vừa được CTV lên hộ (PROXY, khoá là
+ * SĐT nội địa) cho ra hai dòng cùng khoá. Gộp về một dòng mỗi khách, lấy đơn đầu sớm nhất, để cohort và đơn lặp
+ * không đếm đôi.
+ */
+function mergeByCustomerKey(rows: DayCustomer[]): DayCustomer[] {
+  const merged = new Map<string, DayCustomer>();
+  for (const r of rows) {
+    const cur = merged.get(r.customer_key);
+    if (!cur) {
+      merged.set(r.customer_key, { ...r });
+      continue;
+    }
+    cur.orders += r.orders;
+    if (new Date(r.first_at).getTime() < new Date(cur.first_at).getTime()) cur.first_at = r.first_at;
+    if (r.kind === 'USER') cur.kind = 'USER';
+  }
+  return [...merged.values()];
+}
+
 function shiftDayKey(dateKey: string, days: number): string {
   return new Date(Date.parse(`${dateKey}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }
@@ -244,7 +264,7 @@ export class AnalyticsAggregationService {
    */
   private async computeNs1(dateKey: string): Promise<{ cohortSize: number; repeatCount: number }> {
     const cohortKey = shiftDayKey(dateKey, -NS1_WINDOW_DAYS);
-    const cohort = await this.customersOfDay(cohortKey);
+    const cohort = mergeByCustomerKey(await this.customersOfDay(cohortKey));
     if (cohort.length === 0) return { cohortSize: 0, repeatCount: 0 };
 
     const phoneUsers = await this.userIdsByPhoneKey(cohort.map((r) => r.customer_key));
