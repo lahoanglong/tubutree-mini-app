@@ -12,7 +12,9 @@ import type { OrderStatusService } from './order-status.service';
 const NOW = new Date('2026-10-10T05:00:00.000Z');
 const HOUR = 3_600_000;
 
-function make(opts: { ttl?: unknown; locked?: boolean; orders?: { id: string; code: string }[] } = {}) {
+type StaleRow = { id: string; code: string; paymentMethod?: string; _count?: { paymentAttempts: number } };
+
+function make(opts: { ttl?: unknown; locked?: boolean; orders?: StaleRow[] } = {}) {
   const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: opts.locked ?? true }]) };
   const prisma = {
     order: { findMany: jest.fn().mockResolvedValue(opts.orders ?? []) },
@@ -51,6 +53,27 @@ describe('PendingPaymentExpiryCron (C-024)', () => {
     });
     expect(where.paymentMethod.in).toEqual(expect.arrayContaining(['BANK_TRANSFER', 'ZALOPAY', 'VNPAY']));
     expect(where.paymentMethod.in).not.toContain('COD');
+  });
+
+  // Không có API tra trạng thái ZaloPay: callback mất mà khách đã trả thì đơn vẫn bị huỷ — để lại dấu trong
+  // ghi chú/lịch sử đơn + log cảnh báo để vận hành đối chiếu cổng thanh toán và hoàn tiền tay nếu cần.
+  it('đơn qua cổng thanh toán (ZALOPAY/VNPAY) đã mở lệnh → ghi chú huỷ nhắc đối chiếu cổng + log cảnh báo', async () => {
+    const { cron, orderStatus } = make({
+      orders: [
+        { id: 'z1', code: 'Z1', paymentMethod: 'ZALOPAY', _count: { paymentAttempts: 1 } },
+        { id: 'z2', code: 'Z2', paymentMethod: 'ZALOPAY', _count: { paymentAttempts: 0 } },
+        { id: 'b1', code: 'B1', paymentMethod: 'BANK_TRANSFER', _count: { paymentAttempts: 0 } },
+      ],
+    });
+    const warn = jest.spyOn((cron as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation();
+    await cron.expireStale(NOW);
+    const noteOf = (id: string) =>
+      (orderStatus.setStatus.mock.calls.find((c) => c[0] === id) as unknown as [string, string, { note: string }])[2].note;
+    expect(noteOf('z1')).toContain('đối chiếu ZALOPAY');
+    expect(noteOf('z2')).not.toContain('đối chiếu');
+    expect(noteOf('b1')).not.toContain('đối chiếu');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Z1'));
   });
 
   it('huỷ từng đơn qua đường huỷ chuẩn setStatus(CANCELLED) với guard onlyIfUnpaid, actor SYSTEM', async () => {

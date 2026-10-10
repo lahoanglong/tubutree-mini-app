@@ -78,7 +78,7 @@ export class PendingPaymentExpiryCron {
         paymentMethod: { in: [...PREPAID_METHODS] },
         createdAt: { lt: cutoff },
       },
-      select: { id: true, code: true },
+      select: { id: true, code: true, paymentMethod: true, _count: { select: { paymentAttempts: true } } },
       orderBy: { createdAt: 'asc' },
       take: BATCH_SIZE,
     });
@@ -86,14 +86,25 @@ export class PendingPaymentExpiryCron {
     let cancelled = 0;
     let failed = 0;
     for (const o of stale) {
+      // Chưa có API tra trạng thái cổng: khách đã mở lệnh thanh toán mà callback thất lạc thì có thể đã bị trừ tiền.
+      const gatewayAttempted = o.paymentMethod !== 'BANK_TRANSFER' && (o._count?.paymentAttempts ?? 0) > 0;
       try {
         const res = await this.orderStatus.setStatus(o.id, 'CANCELLED', {
           actorType: 'SYSTEM',
-          note: `Tự huỷ: quá ${ttlHours} giờ chưa thanh toán`,
+          note: `Tự huỷ: quá ${ttlHours} giờ chưa thanh toán${
+            gatewayAttempted ? ` — đã mở lệnh ${o.paymentMethod}: đối chiếu ${o.paymentMethod}, đã trừ tiền thì hoàn thủ công` : ''
+          }`,
           onlyIfUnpaid: true,
           expectedStatus: 'PENDING_PAYMENT',
         });
-        if (res.status === 'CANCELLED') cancelled += 1;
+        if (res.status === 'CANCELLED') {
+          cancelled += 1;
+          if (gatewayAttempted) {
+            this.logger.warn(
+              `Đã tự huỷ đơn ${o.code} (${o.paymentMethod}) có lệnh thanh toán nhưng không nhận callback — cần đối chiếu cổng, hoàn tiền thủ công nếu khách đã bị trừ.`,
+            );
+          }
+        }
       } catch (err) {
         failed += 1;
         this.logger.error(`Không tự huỷ được đơn ${o.code} quá hạn thanh toán: ${err instanceof Error ? err.message : err}`);
