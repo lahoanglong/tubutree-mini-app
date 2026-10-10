@@ -929,3 +929,90 @@ export interface RetentionDailyRow {
 }
 export const getRetentionDaily = (days = 30) =>
   apiFetch<RetentionDailyRow[]>(`/admin/analytics/retention-daily?days=${days}`);
+
+// ── Ô chọn (khách / sản phẩm / bậc đại lý), duyệt đánh giá, gói định kỳ (C-092) ──
+export interface AdminVariationHit {
+  id: string;
+  name: string;
+  sku: string;
+  /** Giá đang bán (giá khuyến mãi nếu có, không thì giá lẻ). */
+  price: number;
+  stock: number;
+  isActive: boolean;
+}
+export interface AdminProductHit {
+  id: string;
+  name: string;
+  slug: string;
+  brand: string | null;
+  thumbnail: string | null;
+  isActive: boolean;
+  variations: AdminVariationHit[];
+}
+export interface AdminVariationLabel {
+  id: string;
+  name: string;
+  sku: string;
+  productId: string;
+  productName: string;
+}
+/** Ô chọn chỉ tìm khi đủ ký tự này — khớp ngưỡng của BE (ngắn hơn trả mảng rỗng). */
+export const PICKER_MIN_CHARS = 2;
+export const searchAdminProducts = (q: string) =>
+  apiFetch<AdminProductHit[]>(`/admin/products/search?q=${encodeURIComponent(q.trim())}`);
+export const lookupVariations = (ids: string[]) =>
+  ids.length === 0
+    ? Promise.resolve<AdminVariationLabel[]>([])
+    : apiFetch<AdminVariationLabel[]>(`/admin/variations/lookup?ids=${encodeURIComponent(ids.join(','))}`);
+export const searchAdminUsers = (search: string, limit = 8) =>
+  apiFetch<Page<AdminUser>>(`/admin/users?page=1&limit=${limit}&search=${encodeURIComponent(search.trim())}`);
+
+export interface AdminDealerTier {
+  id: string;
+  name: string;
+  minOrderVolume: number;
+  creditLimit: number;
+  paymentTerms: string | null;
+}
+export const listDealerTiers = () => apiFetch<AdminDealerTier[]>('/admin/dealer-tiers');
+
+export type ReviewVisibilityFilter = 'visible' | 'hidden';
+export interface AdminReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  images: string[];
+  videoUrl: string | null;
+  isVisible: boolean;
+  isVerified: boolean;
+  createdAt: string;
+  user: { id: string; fullName: string | null; phone: string | null };
+  product: { id: string; name: string; slug: string };
+}
+export const listAdminReviews = (page = 1, visibility?: ReviewVisibilityFilter, rating?: number, limit = 20) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (visibility) params.set('visibility', visibility);
+  if (rating) params.set('rating', String(rating));
+  return apiFetch<Page<AdminReview>>(`/admin/reviews?${params.toString()}`);
+};
+/** Route của module reviews (không nằm dưới /admin): BE tự tính lại điểm sao của sản phẩm sau khi ẩn/hiện. */
+export const setReviewVisibility = (id: string, isVisible: boolean) =>
+  apiFetch<{ ok: boolean; isVisible: boolean }>(`/reviews/${id}/visibility`, { method: 'POST', body: { isVisible } });
+
+export type SubscriptionStatus = 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+export interface AdminSubscription {
+  id: string;
+  status: SubscriptionStatus;
+  quantity: number;
+  intervalWeeks: number;
+  nextRunAt: string;
+  lastOrderId: string | null;
+  createdAt: string;
+  user: { id: string; fullName: string | null; phone: string | null };
+  variation: { id: string; name: string; sku: string; product: { id: string; name: string } };
+}
+export const listAdminSubscriptions = (page = 1, status?: SubscriptionStatus, limit = 20) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (status) params.set('status', status);
+  return apiFetch<Page<AdminSubscription>>(`/admin/subscriptions?${params.toString()}`);
+};
