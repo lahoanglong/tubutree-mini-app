@@ -99,7 +99,8 @@ export class VouchersService {
     await this.notifications
       .notify(opts.userId, opts.templateCode, {
         code,
-        value: String(opts.value),
+        // Chỉ mã giảm tiền mới đọc như số tiền; giá trị % để nguyên.
+        value: opts.type === 'AMOUNT' ? opts.value.toLocaleString('vi-VN') : String(opts.value),
         // Cả cụm câu (không chỉ con số) để mã không có đơn tối thiểu không in "cho đơn từ 0đ".
         min_order_note: opts.minOrder ? ` cho đơn từ ${opts.minOrder.toLocaleString('vi-VN')}đ` : '',
         expires: formatVnDate(endAt),

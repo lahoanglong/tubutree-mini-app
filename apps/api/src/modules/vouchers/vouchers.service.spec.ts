@@ -68,7 +68,8 @@ describe('VouchersService.grant', () => {
     expect((notify.notify as jest.Mock)).toHaveBeenCalledWith(
       baseOpts.userId,
       'WELCOME_VOUCHER',
-      expect.objectContaining({ value: '30000' }),
+      // Mã giảm tiền: số tiền định dạng vi-VN như min_order_note ("giảm 30.000đ", không "giảm 30000đ").
+      expect.objectContaining({ value: '30.000' }),
     );
   });
 
