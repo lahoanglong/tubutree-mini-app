@@ -145,6 +145,7 @@ export const vi = {
     createCta: 'Bắt đầu đặt định kỳ',
     createdNow: (code: string) => `Đã tạo lịch định kỳ và đơn đầu ${code} 🌿`,
     createdScheduled: (date: string) => `Đã tạo lịch định kỳ, đơn đầu giao từ ${date} 🌿`,
+    createdExisting: 'Bạn đã có lịch định kỳ này rồi, xem ở tab Định kỳ trong Đơn hàng 🌿',
     createdAwaitTransfer: (code: string) => `Đã tạo đơn đầu ${code}, bạn chuyển khoản để Tubu giao nhé`,
     edit: 'Sửa',
     editTitle: 'Sửa gói định kỳ',

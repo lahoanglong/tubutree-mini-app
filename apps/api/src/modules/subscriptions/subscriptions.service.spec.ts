@@ -123,9 +123,19 @@ describe('SubscriptionsService.create', () => {
   });
 
   it('gửi lại y hệt khi đã có gói ACTIVE cùng SP + địa chỉ → trả gói cũ, không tạo (C-057)', async () => {
-    const open = { id: 's0', status: 'ACTIVE', quantity: 2, intervalWeeks: 6 };
+    const open = { id: 's0', status: 'ACTIVE', quantity: 2, intervalWeeks: 6, paymentMethod: 'COD' };
     const { svc, create } = makeService({ open });
     await expect(svc.create('u1', dto({ intervalWeeks: 6 }))).resolves.toBe(open);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('đã có gói ACTIVE y hệt nhưng khác cách trả → 409, không âm thầm bỏ cách trả khách chọn (review)', async () => {
+    const open = { id: 's0', status: 'ACTIVE', quantity: 2, intervalWeeks: 6, paymentMethod: 'COD' };
+    const { svc, create } = makeService({ open });
+    await expect(svc.create('u1', dto({ intervalWeeks: 6, paymentMethod: 'WALLET' }))).rejects.toMatchObject({
+      status: 409,
+      response: { code: 'SUBSCRIPTION_DUPLICATE', subscriptionId: 's0' },
+    });
     expect(create).not.toHaveBeenCalled();
   });
 

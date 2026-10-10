@@ -86,10 +86,13 @@ export function SubscribeSheet({
         navigate(`/bank-payment/${first.code}`);
         return;
       }
-      openSnackbar({
-        text: first ? t.createdNow(first.code) : t.createdScheduled(formatVnDate(startDate)),
-        type: 'success',
-      });
+      // Giao ngay mà không có đơn đầu = API trả lại gói y hệt đã có (bấm đúp/thử lại).
+      const text = first
+        ? t.createdNow(first.code)
+        : startMode === 'now'
+          ? t.createdExisting
+          : t.createdScheduled(formatVnDate(startDate));
+      openSnackbar({ text, type: 'success' });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });

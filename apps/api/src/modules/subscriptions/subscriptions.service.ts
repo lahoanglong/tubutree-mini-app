@@ -161,7 +161,7 @@ export class SubscriptionsService {
 
     const quantity = Math.max(1, dto.quantity);
     const key = { userId, variationId: dto.variationId, addressId: dto.addressId };
-    const asRequested = { quantity, intervalWeeks: dto.intervalWeeks };
+    const asRequested = { quantity, intervalWeeks: dto.intervalWeeks, paymentMethod };
     // Giao ngay: gói + đơn đầu cùng một transaction — đơn đầu không đặt được (hết hàng, ví thiếu)
     // thì không để lại gói nào, khách thấy lỗi và chọn lại thay vì có gói "chạy" mà không có hàng.
     const startNow = firstRunAt === null;
@@ -224,15 +224,20 @@ export class SubscriptionsService {
 
   /**
    * Đã có gói còn chạy cho cùng SP + địa chỉ (Q-13). Bấm đúp/retry gửi lại y hệt → trả lại gói đó
-   * (idempotent, FE không phải xử lý gì). Khác số lượng/chu kỳ hoặc gói đang tạm dừng → 409 để khách
-   * sửa/bật lại gói cũ thay vì âm thầm có 2 lịch giao cùng chỗ.
+   * (idempotent, không kèm firstOrder). Khác số lượng/chu kỳ/cách trả hoặc gói đang tạm dừng → 409 để
+   * khách sửa/bật lại gói cũ thay vì âm thầm có 2 lịch giao cùng chỗ hoặc mất cách trả vừa chọn.
    */
   private resolveDuplicate(
-    open: { id: string; status: string; quantity: number; intervalWeeks: number },
-    req: { quantity: number; intervalWeeks: number },
+    open: { id: string; status: string; quantity: number; intervalWeeks: number; paymentMethod?: string | null },
+    req: { quantity: number; intervalWeeks: number; paymentMethod: SubscriptionPaymentMethod },
     productName: string,
   ) {
-    if (open.status === 'ACTIVE' && open.quantity === req.quantity && open.intervalWeeks === req.intervalWeeks) {
+    if (
+      open.status === 'ACTIVE' &&
+      open.quantity === req.quantity &&
+      open.intervalWeeks === req.intervalWeeks &&
+      (open.paymentMethod ?? 'COD') === req.paymentMethod
+    ) {
       return open;
     }
     throw subscriptionDuplicateError(open, productName);

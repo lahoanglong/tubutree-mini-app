@@ -69,6 +69,17 @@ describe('SubscribeSheet (C-015: ngày bắt đầu + cách trả + địa chỉ
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('TB-1'), type: 'success' }));
   });
 
+  it('giao ngay nhưng API trả gói y hệt đã có (bấm đúp/thử lại, không kèm đơn đầu) → báo đã có gói, không in ngày rỗng', async () => {
+    mocks.createSubscription.mockResolvedValue({ ...SUB, firstOrder: null });
+    const { onClose } = renderSheet();
+    await waitFor(() => expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu đặt định kỳ' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const text = mocks.openSnackbar.mock.calls[0]![0].text as string;
+    expect(text).toContain('đã có');
+    expect(text).not.toMatch(/undefined|đơn đầu giao từ/);
+  });
+
   it('chọn ngày bắt đầu + Ví Tubu + địa chỉ khác + chu kỳ 6 tuần → gửi đúng startDate/paymentMethod/addressId', async () => {
     mocks.createSubscription.mockResolvedValue({ ...SUB, firstOrder: null });
     renderSheet();
