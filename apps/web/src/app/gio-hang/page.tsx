@@ -138,7 +138,7 @@ export default function CartPage() {
                     <div className="text-sm font-medium text-stone-900">{it.productName}</div>
                     <div className="text-xs text-stone-600">{it.variationName}</div>
                     <div className="mt-1 font-semibold text-stone-900">{formatVnd(it.unitPrice)}</div>
-                    <div className="mt-1 flex items-center gap-2">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2">
                       <div className="flex items-center rounded-control border border-stone-450 text-sm">
                         <button
                           type="button"

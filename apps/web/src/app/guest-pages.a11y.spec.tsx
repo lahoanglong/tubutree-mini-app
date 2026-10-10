@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
-import { accessibleName, headingProblems, unnamedControls } from '@/test-utils/a11y';
+import { accessibleName, headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
 // C-123 + C-077 (web khách): mỗi trang khách có đúng một h1, heading không nhảy cấp, và mọi nút/ô nhập/
 // select có tên truy cập. Đây là bản kiểm thay cho axe `heading-order`/`page-has-heading-one`/`button-name`/
@@ -147,6 +147,7 @@ afterEach(() => {
 const expectAccessible = (container: HTMLElement) => {
   expect(headingProblems(container)).toEqual([]);
   expect(unnamedControls(container)).toEqual([]);
+  expect(smallTouchTargets(container)).toEqual([]);
 };
 
 describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
