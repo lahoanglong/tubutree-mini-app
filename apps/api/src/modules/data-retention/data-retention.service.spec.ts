@@ -11,7 +11,7 @@ function make(opts: { locked?: boolean; config?: Record<string, unknown>; batchC
   const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: opts.locked ?? true }]) };
   const queue = [...(opts.batchCounts ?? [])];
   const prisma = {
-    $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
+    $transaction: jest.fn<Promise<unknown>, [(t: unknown) => Promise<unknown>]>(async (fn) => fn(tx)),
     $executeRaw: jest.fn(async () => queue.shift() ?? 0),
   };
   const systemConfig = {
@@ -97,7 +97,7 @@ describe('DataRetentionService (C-046)', () => {
       truncated: false,
     });
     expect(prisma.$executeRaw).toHaveBeenCalledTimes(6);
-    const cutoffs = [0, 1, 2, 3, 4, 5].map((i) => datesIn(call(prisma, i).values)[0].getTime());
+    const cutoffs = [0, 1, 2, 3, 4, 5].map((i) => datesIn(call(prisma, i).values)[0]!.getTime());
     expect(cutoffs).toEqual([
       NOW.getTime() - 395 * DAY,
       NOW.getTime() - 60 * DAY,
