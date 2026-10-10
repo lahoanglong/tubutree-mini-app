@@ -88,3 +88,63 @@
 - Lời "voucher" ở các mẫu khác để PC-9/PD-2.
 - Dòng config chết vẫn nằm trong DB prod (có nhãn deprecated); xoá vật lý để PD-2.
 - Nút mở lại claim Q-09 và C-092/C-094/C-122 do các lượt khác trong gói PC-8 làm.
+
+## Review lượt 1
+
+Reviewer độc lập báo 1 major + 5 minor. Cả 6 đã xác minh lại bằng mã/DB thật trước khi sửa; không finding nào sai.
+
+| # | Mức | Finding | Kết luận | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | major | Hàng đợi "VAT chờ xuất" (pending/all) giữ mãi đơn HUỶ/TRẢ | ĐÃ SỬA | c13a789 |
+| 2 | minor | NS-1 đếm theo dòng (khoá, loại) nên khách PROXY+PHONE cùng SĐT bị đếm đôi | ĐÃ SỬA | aeaace8 |
+| 3 | minor | `voucher.*`/ETA admin sửa được nhưng không có biên/so chéo | ĐÃ SỬA | 7d06bbb |
+| 4 | minor | `invoiceUrl` render `<a href>` thẳng, có thể `javascript:`/`http:` từ webhook Pancake | ĐÃ SỬA | 4f30932 |
+| 5 | minor | C-122 còn `window.prompt` ở tab Hoàn tiền sàn ngoài, Duyệt hoàn tiền không hỏi lại | ĐÃ SỬA phần admin; `merchant/page.tsx:937` KHÔNG sửa | c2e33e1, c7e71a0 |
+| 6 | minor | POINTS_EXPIRING viết "điểm Xanh" (trái Q-26) | ĐÃ SỬA ("voucher" ở mẫu khác vẫn để PC-9/PD-2) | b945b9b |
+
+### 1. VAT chờ xuất loại đơn HUỶ/TRẢ (C-094, major)
+- Xác minh: `grep invoiceStatus` toàn `apps/api/src` chỉ thấy checkout đặt `REQUESTED`, admin/Pancake đặt `ISSUED`, `orders.service` đặt `REQUESTED`; không đường huỷ/trả nào đổi `invoiceStatus`. Số đếm của chip lấy `meta.total` của chính `GET /admin/orders?invoice=pending`, nên sửa bộ lọc là sửa cả danh sách lẫn số đếm.
+- Đỏ trước: race spec mới (`admin-invoice.race-spec.ts`) tạo 5 đơn (CONFIRMED/REQUESTED, CANCELLED/REQUESTED, RETURNED/REQUESTED, CANCELLED/FAILED, CANCELLED/ISSUED) -> `pending` trả 4 đơn (`total=4`), kỳ vọng 1.
+- Sửa (`admin-order-filter.ts`): pending = `invoiceStatus IN (REQUESTED, FAILED) AND status NOT IN (CANCELLED, RETURNED)`; issued giữ nguyên; all = `OR[pending, issued]`. Hoá đơn ĐÃ phát hành của đơn huỷ/trả vẫn tra được ở issued/all (kế toán còn phải điều chỉnh/huỷ hoá đơn): đây là giả định, phương án an toàn hơn là không giấu nó.
+- Xanh: `Test Suites: 2 passed` / `Tests: 7 passed` (admin-invoice + admin-order-search race), log `[invoice] pending=["IT1791630400995ZJUDW"] total=1`. Unit `admin-invoice.spec.ts` 15 xanh (cập nhật 3 kỳ vọng hình dạng where).
+- Index: `EXPLAIN` truy vấn `all` mới với `enable_seqscan=off` -> `BitmapOr` của hai `Bitmap Index Scan on orders_invoice_open_idx`, partial index vẫn dùng được, không cần migration.
+
+### 2. NS-1 đếm theo khách (C-032)
+- Xác minh: `customersOfDay` `GROUP BY 1, 2` (khoá, loại) nên SĐT vừa tự mua (PHONE) vừa được CTV lên hộ (PROXY, khoá = SĐT) cho 2 dòng cùng khoá; cả `cohort` lẫn `countRepeatWithinWindow` lặp theo dòng.
+- Đỏ trước: case mới trong `retention-ns1.race-spec.ts` (khách X: 1 đơn tự mua + 2 đơn CTV lên hộ cùng SĐT; khách Y: 1 đơn; cùng ngày cohort 2031-05-10) -> `[ns1] cohort=3 repeat=2`, đúng phải 2/1.
+- Sửa (`analytics-aggregation.service.ts`): `mergeByCustomerKey` gộp về một dòng mỗi khoá khách (cộng `orders`, lấy `first_at` sớm nhất) ngay đầu `computeNs1`. `computeRetentionSnapshot` giữ nguyên vì đã dedupe bằng Set từ trước.
+- Xanh: `retention-ns1` + `retention-snapshot` race `Tests: 8 passed`, `[ns1] cohort=2 repeat=1`; unit `src/modules/analytics` 53 xanh.
+
+### 3. Biên cho `voucher.*` + so chéo ETA (C-054)
+- Xác minh: `RANGES` chỉ có ETA 0..60; `voucher.*` hoàn toàn không có biên; cron `winbackVouchers` dùng `days` thẳng vào `cutoff`, `grant()` vẫn tạo mã 0đ + gửi thông báo.
+- Sửa:
+  - `SystemConfigService.RANGES`: `voucher.welcome_amount|birthday_amount|winback_amount` 1.000..1.000.000đ (loại 0đ vì vẫn tạo mã 0đ), `welcome_min_order` 0..50.000.000, `winback_days` 1..365.
+  - `admin-config-rules.ts`: các khoá số `voucher.*` phải là số nguyên; `voucher.milestones` phải là mảng tối đa 10 mốc `{spend, reward}` số nguyên >= 1, `reward <= spend`, không trùng `spend`; ETA so chéo `eta_max >= eta_min` qua tham số `partnerValue` (lỗi nêu khoá còn lại và nói nên chỉnh khoá nào trước).
+  - `admin.service.setConfig` đọc giá trị hiện lưu của khoá đối ứng (`configPartnerKey`) rồi truyền vào luật; khoá đối ứng JSON null (chưa đặt) thì bỏ qua.
+- Đỏ trước: spec thêm ở `system-config.service.spec.ts`, `admin-config-rules.spec.ts`, `admin-recycling-config.spec.ts` -> `Tests: 9 failed, 51 passed` trước khi viết mã; sau sửa `Test Suites: 6 passed` / `Tests: 85 passed`.
+- Giả định: trần 1.000.000đ cho mã tự cấp và 10 mốc là mức an toàn do tôi chọn (không có số liệu từ chủ dự án); muốn mức cao hơn thì sửa `RANGES` hoặc hằng `MILESTONE_*` trong `admin-config-rules.ts`. Giá trị đã nằm sẵn trong DB không bị kiểm lại (biên chỉ áp lúc ghi).
+- Hệ quả vận hành: đổi cả khoảng ETA (vd 2-3 thành 5-7) phải đặt `eta_max` trước rồi mới `eta_min`; thông báo lỗi nói rõ.
+
+### 4. Link hoá đơn chỉ https (C-094)
+- Xác minh: `pancake.processor.ts` ghi `String(data.invoice_url)` không kiểm giao thức; `order-detail-extras.tsx` render `<a href={order.invoiceUrl}>` thẳng.
+- Đỏ trước: 3 case (`javascript:`, `http:`, `data:`) trong `order-detail-extras.spec.tsx` -> `3 failed | 11 passed` (có `<a href="http://hd.example.vn/1">`).
+- Sửa: dùng `safeHttpsLink` (đã có ở `lib/admin-pickers.ts`); không hợp lệ thì hiện chữ thường, không có thẻ `<a>`. Xanh: `14 passed`.
+
+### 5. Hộp thoại gốc còn sót (C-122)
+- Xác minh: `page.tsx` có đúng một `window.prompt` (tab Hoàn tiền sàn ngoài) và nút "Duyệt hoàn tiền" chạy mutation ngay; `grep window.confirm|window.prompt` toàn `apps/web/src` còn thêm `merchant/page.tsx:937`.
+- Sửa: `useConfirm` thêm `ask(options)` (hộp thoại DS có ô nhập lý do, `input: {label, placeholder, maxLength, required}`; trả chuỗi đã trim hoặc `null` khi huỷ; `confirm()` không đổi hành vi). Tab hoàn tiền tách ra `components/admin/cashback-tab.tsx` (page.tsx chỉ xoá khối cũ + 1 import): "Duyệt hoàn tiền" hỏi xác nhận nêu mã giao dịch và số khách nhận, "Từ chối" dùng `ask` với lý do tuỳ chọn; nút cao tối thiểu 44px.
+- Đỏ trước: `confirm-dialog.spec.tsx` +5 (4 đỏ trên bản cũ của `confirm-dialog.tsx`, đã chạy thật bằng cách đặt lại bản HEAD rồi khôi phục), `cashback-tab.spec.tsx` mới 4 (đỏ vì lỗi import khi chưa có component). Xanh: `src/components/admin` + `src/app/admin` -> `Test Files 16 passed` / `Tests 140 passed`; `tsc --noEmit` và `eslint` file đã sửa exit 0.
+- KHÔNG sửa `apps/web/src/app/merchant/page.tsx:937` (`window.confirm` gỡ sản phẩm khỏi gian hàng): ngoài nhóm file của PC-8 và không thuộc admin; để gói sở hữu trang merchant.
+
+### 6. Lời POINTS_EXPIRING (C-053)
+- Xác minh: seed + migration `20261010150000` (do commit a0e96fa của chính gói này, chưa push/deploy nên sửa được tại chỗ) đều có "điểm Xanh".
+- Sửa: "Điểm Xanh" ở `seed.ts` và migration. Thêm vào `notification-templates-seed.spec.ts` hai case: tám mẫu migration chèn phải trùng từng chữ (id/channel/bodyTemplate) với seed, và POINTS_EXPIRING phải có "Điểm Xanh" không có "điểm Xanh" (đỏ trước: `Expected substring: "Điểm Xanh"`). Xanh `Tests: 8 passed`. Chạy lại file SQL lên DB riêng (`ON_ERROR_STOP=1`): mọi INSERT `0 0`, UPDATE `0`, không lỗi.
+- Lưu ý: DB riêng `tubu_it_pc8` đã áp bản migration cũ nên dòng POINTS_EXPIRING ở đó vẫn là chữ thường (migration không ghi đè mẫu đã có); DB dựng mới và prod (chưa áp) nhận bản mới.
+- Chưa làm: "voucher" ở BIRTHDAY/WINBACK/MILESTONE/VOUCHER_EXPIRING đã nằm trên prod từ trước, đổi bằng migration UPDATE có điều kiện, để PC-9/PD-2 (đúng phạm vi đã ghi ở mục 1/2).
+
+### Kiểm chứng tổng sau review (kết quả thật)
+- `cd apps/api && npx jest --maxWorkers=1 src/modules/analytics src/modules/system-config src/modules/admin src/modules/notifications src/modules/vouchers src/modules/dealer` -> `Test Suites: 26 passed, 26 total` / `Tests: 478 passed, 478 total`.
+- Race trên Postgres thật `tubu_it_pc8` (`--runInBand admin-invoice admin-lookups admin-order-search retention-ns1 retention-snapshot system-config-unset-key dealer-claim-reopen`) -> `Test Suites: 7 passed, 7 total` / `Tests: 24 passed, 24 total`. Một lần chạy gộp đầu tiên `admin-lookups.race-spec.ts` báo 5 test fail ngay sau lượt unit nặng; không tái hiện ở 5 lần chạy lại (3 lần riêng, 2 lần gộp, kể cả gộp sau khi chạy lại unit). Spec này không bị lượt sửa nào chạm tới nên coi là nhiễu nhất thời do tải máy; chưa có log lỗi để chẩn đoán sâu hơn.
+- `cd apps/api && npx tsc --noEmit -p tsconfig.json` exit 0; ESLint các file api đã sửa exit 0.
+- `cd apps/web && npx tsc --noEmit` exit 0; `npx eslint` các file web đã sửa exit 0.
+- Migration mới: không (sửa tại chỗ `20261010150000`, chưa deploy).
