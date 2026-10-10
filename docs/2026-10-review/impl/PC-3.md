@@ -28,7 +28,7 @@ Test (đỏ → xanh):
 Hiện trạng: caption CTV dặn "Nhập mã X khi mua" nhưng checkout chỉ gửi `referralCode` lấy từ link (`sfCtx`). Backend đã nhận `referralCode` trong `PlaceOrderDto` và `CheckoutService.resolveReferrer` (chuẩn hoá HOA, loại mã của chính người mua) nên không đổi API.
 
 Đã làm:
-- `components/checkout/referral-code-box.tsx` (mới, dùng DS v2: `ui/button`, `ui/text`, token màu, vùng chạm ≥44px): mặc định 1 dòng thu gọn "Mã giới thiệu — Nhập mã"; mở ra thì Input + "Áp dụng"/"Huỷ". Mã chuẩn hoá (bỏ khoảng trắng, HOA) rồi xác nhận qua `POST /affiliate/touch` (`recordReferralTouch`, cơ chế attribution sẵn có: server tra mã, `ok:false` nếu không thấy hoặc là mã của chính mình). Hợp lệ → hiện mã + "Đổi"; sai → "Không tìm thấy mã này, hoặc đây là mã của chính bạn..."; lỗi mạng → `getErrorMessage`. Khi phiên đã có mã từ link/gian hàng (`sfCtx.referralCode ?? sfCtx.slug`) → hiện cố định, KHÔNG cho nhập đè.
+- `components/checkout/referral-code-box.tsx` (mới, dùng DS v2: `ui/button`, `ui/text`, token màu, vùng chạm ≥44px): mặc định 1 dòng thu gọn "Mã giới thiệu — Nhập mã"; mở ra thì Input + "Áp dụng"/"Huỷ". Mã chuẩn hoá (bỏ khoảng trắng, HOA) rồi xác nhận qua `POST /affiliate/touch` (`recordReferralTouch`, cơ chế attribution sẵn có: server tra mã, `ok:false` nếu không thấy hoặc là mã của chính mình). Hợp lệ → hiện mã + "Đổi"; sai → "Không tìm thấy mã này, hoặc đây là mã của chính bạn..."; lỗi mạng → `getErrorMessage`. Khi phiên đã có mã CTV từ link/gian hàng (`sfCtx.referralCode`, đã sửa ở Review lượt 1: không còn dùng `slug` làm mã) → hiện cố định, KHÔNG cho nhập đè.
 - `pages/checkout.tsx`: state `referralApplied`, chèn `<ReferralCodeBox>` giữa "Mã giảm giá" và "Thanh toán", `referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode)` (mã vừa nhập thắng mã link; không có gì → `undefined` như cũ).
 
 Test (đỏ → xanh):
@@ -132,3 +132,47 @@ Không có (FE thuần).
 - Sửa tĩnh e2e (`buy-flow-4a`) chưa chạy; ca đếm `reorder_clicked` dựa vào `page.goBack()` từ `/cart` về Home, nếu lịch sử khác dự kiến cần chỉnh khi chạy thật.
 - `order-detail.tsx` còn `o.pointsUsed.toLocaleString('vi-VN')` và `vi.checkout.pointsEarn(o.pointsEarned)` không dấu nghìn: thuộc C-083 (PC-9), không đụng.
 - PC-1 sửa `QuantitySelector`/Chip ở `components/ui`: giỏ đã chuyển `md` nên không phụ thuộc thay đổi đó.
+
+## Review lượt 1 (reviewer độc lập, 5 finding)
+
+Nhánh `hz5/PC-3`. Mỗi finding được xác minh lại bằng mã nguồn trước khi sửa.
+
+### 1. [major] C-020 — `linkedCode={sfCtx.referralCode ?? sfCtx.slug}` coi slug trang nhãn/gian hàng là mã giới thiệu — ĐÚNG, ĐÃ SỬA
+
+Xác minh: `brand-view.tsx` chỉ `setSfContext({ slug, kind: 'brand' })` (referralCode giữ null); `storefront-view.tsx` đặt `referralCode = sf.slug` chỉ khi `sf.type === 'CTV'`, còn gian hàng `BRAND`/`MERCHANT` vẫn lưu `slug` với `kind: 'ctv'` và `referralCode: null`. Đơn chỉ gửi `effectiveReferralCode(applied, sfCtx.referralCode)` nên chip "TUBU-CO / Bạn đang mua qua link giới thiệu" là mã không tồn tại, lại ẩn mất ô nhập (đúng mô tả của reviewer).
+
+Sửa (commit 56257ac): `linkedCode={sfCtx.referralCode}`. Chọn khắt khe hơn gợi ý của reviewer (`referralCode ?? (kind === 'ctv' ? slug : null)`) vì gian hàng BRAND/MERCHANT cũng có `kind: 'ctv'` và `slug` không phải mã; store không có cờ phân biệt, mà `referralCode` được đặt đúng và chỉ đúng cho CTV thật, và là đúng thứ checkout gửi lên server nên chip luôn khớp với đơn. Hệ quả: link `?s=<slug>` thuần (không `?ref=`; hiện không còn nơi nào sinh link kiểu này) hiện ô "Nhập mã" thay vì chip; attribution vẫn chạy qua `/affiliate/touch` của `app.tsx` và fallback `getActiveTouch` phía server như cũ.
+
+Test (đỏ → xanh), `pages/checkout.spec.tsx`: đổi kiểu mock `sfCtx.kind` thành `'ctv' | 'brand'`, thêm 2 ca: (a) `{slug:'tubu-co', referralCode:null, kind:'brand'}` → ô "Nhập mã" vẫn hiện, không có chip "TUBU-CO"/"mua qua link giới thiệu", nhập mã hợp lệ thì `placeOrder` gửi `referralCode: 'AB12CD34'`; (b) `{slug:'cua-hang-x', referralCode:null, kind:'ctv'}` → không chip, không gửi `referralCode`. Trước khi sửa 2/2 đỏ (không tìm thấy "Nhập mã"), sau sửa 18/18 xanh.
+
+### 2. [minor] Cờ "đã xin Zalo" và tỉnh/phường nhớ lưu theo thiết bị — ĐÚNG, ĐÃ SỬA PHẦN THEO TÀI KHOẢN; PHẦN "CỜ BỊ ĐỐT TRƯỚC KẾT QUẢ" KHÔNG SỬA
+
+Sửa (commit 3387510): `address-memory.ts` thêm tham số `userId` (khoá `tubu_last_geo:<userId>`, `tubu_zalo_prefill_asked:<userId>`, cờ dự phòng trong bộ nhớ cũng tách theo khoá); `address-form.tsx` truyền `user?.id`. Máy dùng chung / đổi tài khoản: tài khoản sau được xin quyền Zalo và không bị điền sẵn tỉnh/phường của người trước. Không có `userId` (test cũ, gọi trần) rơi về khoá cũ nên tương thích. Test: `address-memory.spec.ts` +3 (tách theo tài khoản, cờ, cờ dự phòng), `address-form.spec.tsx` +4 (tài khoản khác vẫn được xin, cùng tài khoản không xin lại, không điền sẵn geo của tài khoản khác, ghi nhớ đúng khoá); trước khi nối vào form 3 ca đỏ, sau sửa xanh.
+
+Không sửa "cờ bị đốt trước khi biết kết quả": `getZaloUserInfo` ném lỗi cả khi khách từ chối lẫn khi SDK lỗi, không phân biệt được hai trường hợp từ phía FE; chủ ý đánh dấu trước để chống xin lại khi StrictMode/mở form lặp (Giả định 2 lượt 1). Khách vẫn còn nút "Điền nhanh từ Zalo" để thử lại. Cần quyết định sản phẩm nếu muốn xin lại tự động.
+
+### 3. [minor] `vi.checkout.pointsUse` thành chuỗi chết, `pointsEarn` định nghĩa lệch — KHÔNG SỬA (ghi nhận)
+
+Đúng như reviewer và như đã ghi ở Giả định 2 lượt 2. `i18n/vi.ts` thuộc PC-9 (đang sửa song song) và `order-detail.tsx:319` (`pointsEarn`) thuộc C-083/PC-9; sửa ở đây gây xung đột merge mà không đổi hành vi. Việc cho PC-9: gộp `pointsUseLabel`/`pointsEarnLabel` (đang ở `utils/checkout-rules.ts`) vào i18n và xoá `pointsUse`.
+
+### 4. [minor] Test C-021 chỉ assert class/inline style, chưa đo UI thật — GHI NHẬN, CHƯA VERIFY UI THẬT
+
+Đúng: jsdom không đo được vùng chạm thật nên không kiểm được `::after` có phủ đủ 44px hay đè phần tử bên cạnh; 2 ca e2e `buy-flow-4a` sửa tĩnh chưa chạy. Quy định máy 15,5GB cấm Playwright trong gói này nên không chạy. Trạng thái: chưa verify UI thật. Đợt verify cần chạy `node scripts/uiux/capture.mjs miniapp --only '^(cart|checkout|order-detail)$'` và 2 ca e2e `buy-flow-4a` (đặc biệt `page.goBack()` từ `/cart` về Home).
+
+### 5. [minor] Chip "mua qua link giới thiệu" khi mã link sai/của chính mình; ô nhập thiếu nhãn truy cập; chuỗi ngoài i18n — MỘT PHẦN
+
+- Đã sửa (commit cf0af43): `Input` mã giới thiệu có `aria-label="Mã giới thiệu"` (test mới đỏ → xanh, `referral-code-box.spec.tsx` 9/9).
+- Không sửa: chip khi mã link sai/của chính người mua. Sau fix #1 chip chỉ hiện với `referralCode` thật của CTV (storefront CTV hoặc `?ref=`), nên mã "sai" gần như chỉ còn là CTV tự mở link của mình, vô hại (server bỏ qua, đơn không lệch tiền). Cho nút "Đổi" cả với mã link mâu thuẫn Giả định 5 lượt 1 (mã nhập đè lệch người nhận hoa hồng với `storefrontSlug` của gian hàng) nên giữ nguyên.
+- Không sửa: chuỗi UI trong component ngoài i18n, có chủ đích tránh đụng PC-9 (Giả định 6 lượt 1); chuyển ở lượt dọn câu chữ.
+
+### Lệnh kiểm chứng (Review lượt 1)
+
+```
+$ npx vitest run src/utils/address-memory.spec.ts src/components/address-form.spec.tsx src/components/checkout     src/pages/checkout.spec.tsx src/pages/cart.spec.tsx
+ Test Files  8 passed (8)
+      Tests  86 passed (86)
+$ npx tsc --noEmit                                  -> exit 0, không output
+$ npx eslint <8 file .ts/.tsx đã sửa (4 nguồn + 4 spec)>   -> exit 0, 0 error, 0 warning
+```
+
+Migration: không có (FE thuần).
