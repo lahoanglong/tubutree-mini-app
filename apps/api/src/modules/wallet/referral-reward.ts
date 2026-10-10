@@ -8,6 +8,8 @@ import type { Prisma } from '@prisma/client';
  * Dòng thưởng: refType REFERRAL, reason REFERRAL_ORDER2:<refereeId> (partial unique index
  * coin_transactions_referral_unique theo reason ⇒ mỗi người được mời thưởng đúng 1 lần, và vì mỗi
  * người được mời chỉ có 1 người mời nên cũng là 1 lần cho mỗi cặp), refId "<đơn đầu>:<đơn thứ 2>".
+ * Gộp phiên khách đổi chủ đơn nhưng không đổi reason, nên thu hồi và chặn dùng lại đơn đều tra
+ * theo id đơn trong refId.
  */
 export const REFERRAL_ORDER2_PREFIX = 'REFERRAL_ORDER2:';
 export const REFERRAL_ORDER2_REVOKE_PREFIX = 'REFERRAL_ORDER2_REVOKE:';
@@ -174,21 +176,59 @@ export async function revokeReferralRewardForOrder(
   order: { id: string; userId: string },
 ): Promise<{ revoked: number; shortfall: number } | null> {
   await lockReferee(tx, order.userId);
-  const grant = await tx.coinTransaction.findFirst({
-    where: { refType: 'REFERRAL', reason: `${REFERRAL_ORDER2_PREFIX}${order.userId}` },
-    select: { userId: true, delta: true, refId: true },
-  });
-  if (!grant || grant.delta <= 0 || !grant.refId?.split(':').includes(order.id)) return null;
+  // Tra theo id đơn, không theo chủ đơn hiện tại: gộp phiên khách chuyển đơn sang tài khoản đích
+  // nhưng dòng thưởng vẫn mang id khách (REFERRAL_ORDER2:<guestId>). Không cần khoá thêm dòng
+  // khách: mọi lần xét thưởng cho khách đọc đơn theo userId = khách và khoá khách, còn lần gộp cũng
+  // khoá khách trước khi chuyển đơn, nên khi đơn đã thuộc người khác thì dòng thưởng của khách
+  // (nếu có) đã commit và thấy được ở đây.
+  const grants = (
+    await tx.coinTransaction.findMany({
+      where: {
+        refType: 'REFERRAL',
+        reason: { startsWith: REFERRAL_ORDER2_PREFIX },
+        OR: [{ refId: { startsWith: `${order.id}:` } }, { refId: { endsWith: `:${order.id}` } }],
+      },
+      select: { userId: true, delta: true, refId: true, reason: true },
+    })
+  ).filter((g) => g.delta > 0 && g.refId?.split(':').includes(order.id));
 
-  const main = await debitReferralReward(
-    tx,
-    grant.userId,
-    grant.delta,
-    `${REFERRAL_ORDER2_REVOKE_PREFIX}${order.userId}`,
-    order.id,
-    `REFERRAL_ORDER2_DEBT:${order.userId}`,
-  );
-  if (!main) return null;
-  const milestones = await revokeLostMilestones(tx, grant.userId, order.id);
-  return { revoked: main.revoked + milestones.revoked, shortfall: main.shortfall + milestones.shortfall };
+  const total = { revoked: 0, shortfall: 0 };
+  let anyRevoked = false;
+  for (const grant of grants) {
+    const refereeId = grant.reason.slice(REFERRAL_ORDER2_PREFIX.length);
+    const main = await debitReferralReward(
+      tx,
+      grant.userId,
+      grant.delta,
+      `${REFERRAL_ORDER2_REVOKE_PREFIX}${refereeId}`,
+      order.id,
+      `REFERRAL_ORDER2_DEBT:${refereeId}`,
+    );
+    if (!main) continue;
+    const milestones = await revokeLostMilestones(tx, grant.userId, order.id);
+    anyRevoked = true;
+    total.revoked += main.revoked + milestones.revoked;
+    total.shortfall += main.shortfall + milestones.shortfall;
+  }
+  return anyRevoked ? total : null;
+}
+
+/**
+ * Các đơn hiện thuộc `refereeId` đã nằm trong một lần thưởng REFERRAL_ORDER2 (kể cả đã thu hồi), kèm
+ * người mời đã nhận lần thưởng đó. Sau gộp phiên khách, đơn của khách đã dùng để thưởng sang tài
+ * khoản đích nhưng dòng thưởng vẫn mang id khách — chặn theo reason REFERRAL_ORDER2:<refereeId>
+ * không thấy chúng.
+ */
+export async function findReferralRewardedOrders(
+  tx: Db,
+  refereeId: string,
+): Promise<{ orderId: string; referrerId: string }[]> {
+  return tx.$queryRaw<{ orderId: string; referrerId: string }[]>`
+    SELECT o."id" AS "orderId", ct."userId" AS "referrerId"
+      FROM "coin_transactions" ct
+      JOIN "orders" o
+        ON o."id" IN (split_part(ct."refId", ':', 1), split_part(ct."refId", ':', 2))
+     WHERE ct."refType" = 'REFERRAL'
+       AND starts_with(ct."reason", ${REFERRAL_ORDER2_PREFIX})
+       AND o."userId" = ${refereeId}`;
 }

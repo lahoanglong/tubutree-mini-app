@@ -1,4 +1,10 @@
+import { JwtService } from '@nestjs/jwt';
+import type { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { AuthService } from '../../src/modules/auth/auth.service';
+import type { ZaloService } from '../../src/modules/auth/zalo.service';
+import type { RbacService } from '../../src/modules/staff/rbac/rbac.service';
+import type { Env } from '../../src/config/env.validation';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
@@ -13,7 +19,7 @@ import { OrderReversalService } from '../../src/modules/orders/order-reversal.se
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
-import { createOrder, createUser, setConfig, summarize, warmPool } from './helpers';
+import { createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
 
 const REWARD = 5000;
 const DAY = 864e5;
@@ -331,6 +337,155 @@ describe('Thưởng giới thiệu theo đơn thứ 2 (real Postgres)', () => {
     }
     throw new Error(`không thấy ${n} phiên chờ khoá`);
   }
+});
+
+/**
+ * Gộp phiên khách (mergeGuestInto) chuyển đơn của khách sang tài khoản đích nhưng dòng thưởng
+ * REFERRAL_ORDER2:<guestId> vẫn mang id khách. Thu hồi và chặn thưởng trùng phải theo ĐƠN, không
+ * theo chủ đơn hiện tại.
+ */
+describe('Thưởng giới thiệu sau khi gộp phiên khách (real Postgres)', () => {
+  let moduleRef: TestingModule;
+  let prisma: PrismaService;
+  let orderStatus: OrderStatusService;
+  let auth: AuthService;
+  let zaloIdForNextCall = '';
+
+  beforeAll(async () => {
+    moduleRef = await Test.createTestingModule({
+      imports: [PrismaModule],
+      providers: [
+        SystemConfigService,
+        LoyaltyService,
+        CoinsService,
+        AnalyticsEventsService,
+        AffiliateService,
+        OrderReversalService,
+        OrderStatusService,
+        { provide: PricingService, useValue: { calcShippingFee: jest.fn().mockResolvedValue(0) } },
+        { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
+        { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+      ],
+    }).compile();
+    await moduleRef.init();
+    prisma = moduleRef.get(PrismaService);
+    await warmPool(prisma);
+    orderStatus = moduleRef.get(OrderStatusService);
+    await setConfig(prisma, 'coins.referrer_reward', REWARD);
+    await setConfig(prisma, 'referral.window_days', 30);
+    await setConfig(prisma, 'coins.referral_milestones', []);
+    await setConfig(prisma, 'referral.min_order_amount', MIN_ORDER);
+
+    const cfg: Record<string, unknown> = { JWT_ACCESS_SECRET: 'it-secret-ref', JWT_ACCESS_TTL: '15m', JWT_REFRESH_TTL_DAYS: 30 };
+    const config = { get: (k: string) => cfg[k] } as unknown as ConfigService<Env, true>;
+    const zalo = {
+      getUserInfo: async () => ({ zaloId: zaloIdForNextCall, name: 'Zalo IT' }),
+      resolvePhoneNumber: async () => null,
+    } as unknown as ZaloService;
+    const rbac = { applyGrants: async <T>(u: T) => u } as unknown as RbacService;
+    auth = new AuthService(prisma, new JwtService(), config, zalo, rbac);
+  });
+
+  afterAll(async () => {
+    await moduleRef?.close();
+  });
+
+  async function coinsOf(userId: string) {
+    const u = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { coinsBalance: true } });
+    const sum = await prisma.coinTransaction.aggregate({ where: { userId }, _sum: { delta: true } });
+    return { balance: u.coinsBalance, ledger: sum._sum.delta ?? 0 };
+  }
+
+  async function deliver(userId: string, daysAgo: number) {
+    const o = await createOrder(prisma, {
+      userId, status: 'SHIPPING', total: 250_000, subtotal: 250_000, createdAt: new Date(Date.now() - daysAgo * DAY),
+    });
+    await orderStatus.setStatus(o.id, 'DELIVERED');
+    return o;
+  }
+
+  async function reasonsOf(userId: string) {
+    const rows = await prisma.coinTransaction.findMany({ where: { userId }, select: { reason: true } });
+    return rows.map((r) => r.reason).sort();
+  }
+
+  /** Khách G (người mời R) có O1, O2 đã giao → R đã nhận thưởng; rồi G gộp vào T. */
+  async function rewardedGuestMergedInto(targetReferrerId: string | null) {
+    const referrer = await createUser(prisma, { coinsBalance: 0 });
+    const guest = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}`, referredById: referrer.id });
+    const target = await createUser(prisma, {
+      zaloId: `zalo_${randCode(10)}`,
+      referredById: targetReferrerId === 'SAME' ? referrer.id : targetReferrerId,
+    });
+    const o1 = await deliver(guest.id, 9);
+    const o2 = await deliver(guest.id, 4);
+    expect(await coinsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
+
+    zaloIdForNextCall = target.zaloId!;
+    await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
+    expect(await prisma.order.count({ where: { id: { in: [o1.id, o2.id] }, userId: target.id } })).toBe(2);
+    return { referrer, guest, target, o1, o2 };
+  }
+
+  it('(g1) T cùng người mời R: đơn mới của T giao xong không thưởng lại cặp O1:O2; trả O1+O2 thu hồi đủ', async () => {
+    const { referrer, guest, target, o1, o2 } = await rewardedGuestMergedInto('SAME');
+    await deliver(target.id, 1);
+    expect(await coinsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
+    expect(await reasonsOf(referrer.id)).toEqual([`REFERRAL_ORDER2:${guest.id}`]);
+
+    await orderStatus.setStatus(o1.id, 'RETURNED');
+    await orderStatus.setStatus(o2.id, 'RETURNED');
+    expect(await coinsOf(referrer.id)).toEqual({ balance: 0, ledger: 0 });
+    expect(await reasonsOf(referrer.id)).toEqual([`REFERRAL_ORDER2:${guest.id}`, `REFERRAL_ORDER2_REVOKE:${guest.id}`]);
+  });
+
+  it('(g2) T không có người mời: trả O1 sau gộp vẫn thu hồi thưởng của G; trả O2 không trừ thêm', async () => {
+    const { referrer, guest, o1, o2 } = await rewardedGuestMergedInto(null);
+    await orderStatus.setStatus(o1.id, 'RETURNED');
+    expect(await coinsOf(referrer.id)).toEqual({ balance: 0, ledger: 0 });
+    await orderStatus.setStatus(o2.id, 'RETURNED');
+    expect(await coinsOf(referrer.id)).toEqual({ balance: 0, ledger: 0 });
+    expect(await reasonsOf(referrer.id)).toEqual([`REFERRAL_ORDER2:${guest.id}`, `REFERRAL_ORDER2_REVOKE:${guest.id}`]);
+  });
+
+  it('(g3) T có người mời khác R2: R2 chỉ được thưởng từ 2 đơn chưa dùng của T, không từ O1:O2', async () => {
+    const r2 = await createUser(prisma, { coinsBalance: 0 });
+    const { referrer, target, o1 } = await rewardedGuestMergedInto(r2.id);
+    await deliver(target.id, 2);
+    expect(await coinsOf(r2.id)).toEqual({ balance: 0, ledger: 0 });
+    const o4 = await deliver(target.id, 1);
+    expect(await coinsOf(r2.id)).toEqual({ balance: REWARD, ledger: REWARD });
+    const grant = await prisma.coinTransaction.findFirstOrThrow({
+      where: { reason: `REFERRAL_ORDER2:${target.id}` },
+      select: { refId: true },
+    });
+    expect(grant.refId?.split(':')).toContain(o4.id);
+    expect(grant.refId?.split(':')).not.toContain(o1.id);
+
+    // Trả O1 chỉ đụng thưởng của G (người mời R), không đụng thưởng của T.
+    await orderStatus.setStatus(o1.id, 'RETURNED');
+    expect(await coinsOf(referrer.id)).toEqual({ balance: 0, ledger: 0 });
+    expect(await coinsOf(r2.id)).toEqual({ balance: REWARD, ledger: REWARD });
+  });
+
+  it('(g4) không gộp: 2 người được mời cùng R, trả đơn của A chỉ thu hồi lượt của A', async () => {
+    const referrer = await createUser(prisma, { coinsBalance: 0 });
+    const a = await createUser(prisma, { referredById: referrer.id });
+    const b = await createUser(prisma, { referredById: referrer.id });
+    const a1 = await deliver(a.id, 9);
+    await deliver(a.id, 4);
+    await deliver(b.id, 9);
+    await deliver(b.id, 4);
+    expect(await coinsOf(referrer.id)).toEqual({ balance: 2 * REWARD, ledger: 2 * REWARD });
+
+    await orderStatus.setStatus(a1.id, 'RETURNED');
+    expect(await coinsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
+    expect(await reasonsOf(referrer.id)).toEqual(
+      [`REFERRAL_ORDER2:${a.id}`, `REFERRAL_ORDER2:${b.id}`, `REFERRAL_ORDER2_REVOKE:${a.id}`].sort(),
+    );
+  });
 });
 
 /**

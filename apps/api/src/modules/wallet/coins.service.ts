@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import {
   countReferralSuccesses,
+  findReferralRewardedOrders,
   LEGACY_REFERRAL_CASHBACK_PREFIX,
   lockReferee,
   lockReferrer,
@@ -154,8 +155,13 @@ export class CoinsService {
         select: { id: true },
       });
       if (already) return false;
+      // Đơn nhận về từ một phiên khách đã gộp có thể đã dùng để thưởng dưới id khách. Cùng người mời
+      // ⇒ đó là cùng một người được mời đã được thưởng; khác người mời thì chỉ bỏ các đơn đó ra.
+      const rewardedOrders = await findReferralRewardedOrders(tx, refereeId);
+      if (rewardedOrders.some((r) => r.referrerId === referrerId)) return false;
       const [first, second] = await tx.order.findMany({
         where: {
+          id: { notIn: rewardedOrders.map((r) => r.orderId) },
           userId: refereeId,
           status: 'DELIVERED',
           type: 'RETAIL',
