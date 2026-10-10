@@ -197,7 +197,14 @@ export class OrderStatusService {
     if (targetStatus === 'DELIVERED') {
       await this.loyalty.creditOrderPoints(order.id);
       await this.affiliate.lockCommissionsForOrder(order.id);
-      await this.affiliate.grantReferralReward(order.id);
+      // Đơn đã giao (commit ở trên) nên lỗi khoá/deadlock khi xét thưởng không được làm hỏng
+      // setStatus: retry Pancake sẽ thấy no-op và bỏ qua notify. Thưởng tự xét lại từ DB ở lần giao
+      // đơn kế tiếp của người được mời.
+      await this.affiliate.grantReferralReward(order.id).catch((e: unknown) => {
+        this.logger.error(
+          `Xét thưởng giới thiệu cho đơn ${order.code} lỗi: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
     } else if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
       await this.loyalty.reverseOrderPoints(order.id);
       await this.affiliate.reverseCommissionsForOrder(order.id);
