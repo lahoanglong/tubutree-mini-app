@@ -21,6 +21,7 @@ import {
   type RecyclingFilter,
 } from './admin-order-filter';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
+import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { validateAdminConfigValue } from './admin-config-rules';
 
 /**
@@ -670,7 +671,9 @@ export class AdminService {
    */
   async getConfig(category?: string) {
     if (category) return redactConfigRows(await this.config.getByCategory(category));
-    return redactConfigRows(await this.prisma.systemConfig.findMany({ orderBy: { category: 'asc' } }));
+    const rows = redactConfigRows(await this.prisma.systemConfig.findMany({ orderBy: { category: 'asc' } }));
+    // Khoá không còn code nào đọc (dead-config-keys.ts): UI hiện nhãn "Không dùng" thay vì để admin sửa vô ích.
+    return rows.map((r) => ({ ...r, deprecated: isDeadConfigKey(r.key) }));
   }
 
   /**

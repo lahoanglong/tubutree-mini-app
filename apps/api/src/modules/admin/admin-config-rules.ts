@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { MAX_TTL_HOURS, MIN_TTL_HOURS, PENDING_PAYMENT_TTL_KEY } from '../orders/pending-payment-expiry.cron';
+import { deadConfigKeyReason } from '../system-config/dead-config-keys';
 
 /**
  * Luật ghi cho những khoá có FORM riêng trong web admin (Gomdon, tích điểm). SystemConfigService.set
@@ -76,5 +77,9 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
 
 /** Ném BadRequest nếu `value` sai luật của khoá; khoá không có luật riêng → bỏ qua. */
 export function validateAdminConfigValue(key: string, value: unknown): void {
+  const deadReason = deadConfigKeyReason(key);
+  if (deadReason) {
+    throw fail(key, `khoá này không còn được hệ thống đọc nên sửa sẽ không có tác dụng. ${deadReason}`);
+  }
   RULES[key]?.(key, value);
 }

@@ -289,6 +289,22 @@ describe('AdminService.getConfig / setConfig — che bí mật khi đọc, khôn
     expect(rows[2]!.value).toBe(200000);
   });
 
+  it('GET không category: gắn deprecated cho khoá chết để tab Cấu hình hiện nhãn "Không dùng" (C-054)', async () => {
+    const prisma = {
+      systemConfig: {
+        findMany: jest.fn().mockResolvedValue([
+          { key: 'payment.cod_max_amount', value: 5000000, category: 'payment', description: null },
+          { key: 'voucher.welcome_amount', value: 30000, category: 'voucher', description: null },
+        ]),
+      },
+    };
+    const rows = (await mkAdmin(prisma).getConfig()) as { key: string; deprecated?: boolean }[];
+    expect(rows.map((r) => [r.key, r.deprecated])).toEqual([
+      ['payment.cod_max_amount', true],
+      ['voucher.welcome_amount', false],
+    ]);
+  });
+
   it('GET theo category cũng che', async () => {
     const out = await mkAdmin(
       {},

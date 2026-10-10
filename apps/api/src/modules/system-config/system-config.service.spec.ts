@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { SystemConfigService } from './system-config.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
@@ -169,6 +170,33 @@ describe('SystemConfigService.set — biên đơn vị cho khoá nhạy cảm', 
     const { svc, tx } = mk();
     await svc.set('shipping.free_threshold', 500000, 'admin1');
     expect(tx.systemConfig.upsert).toHaveBeenCalled();
+  });
+});
+
+describe('SystemConfigService.set — khoá seed null = "chưa đặt" (ETA giao hàng, C-054)', () => {
+  function mk(existing: { value: unknown } | null) {
+    const tx = {
+      systemConfig: { findUnique: jest.fn().mockResolvedValue(existing), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+
+  it('dòng đang null → đặt được số (null không bị coi là kiểu "object" chặn đổi kiểu), history ghi oldValue là JSON null', async () => {
+    const { svc, tx } = mk({ value: null });
+    await svc.set('shipping.eta_min_days', 2, 'admin1');
+    expect(tx.systemConfig.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: { value: 2, updatedBy: 'admin1' } }));
+    expect(tx.systemConfigHistory.create).toHaveBeenCalledWith({
+      data: { key: 'shipping.eta_min_days', oldValue: Prisma.JsonNull, newValue: 2, changedBy: 'admin1' },
+    });
+  });
+
+  it('dòng đã có số → vẫn chặn đổi sang chuỗi (luật đổi kiểu không đổi)', async () => {
+    const { svc } = mk({ value: 2 });
+    await expect(svc.set('shipping.eta_min_days', 'hai' as unknown as number, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
@@ -63,8 +64,6 @@ export class SystemConfigService {
     'cashback.merchant_user_share': { min: 0, max: 1, note: 'phân số (0.7 = 70%)' },
     'cashback.merchant_tubu_share': { min: 0, max: 1, note: 'phân số (0.3 = 30%)' },
     'groupbuy.discount_pct': { min: 0, max: 100, note: 'phần trăm nguyên (15 = 15%)' },
-    'affiliate.tubu_wallet_multiplier': { min: 1, max: 10, note: 'hệ số nhân (1.5 = ×1,5)' },
-    'cashback.tubu_wallet_multiplier': { min: 1, max: 10, note: 'hệ số nhân (1.5 = ×1,5)' },
     'wallet.xu_convert_multiplier': { min: 0.1, max: 10, note: 'hệ số nhân (1.2 = ×1,2)' },
     'cashback.hold_days': { min: 0, max: 365, note: 'số ngày' },
     'affiliate.hold_days': { min: 0, max: 365, note: 'số ngày' },
@@ -104,9 +103,12 @@ export class SystemConfigService {
       // v1→v3), làm mất bản ghi v1→v2 thật sự đã xảy ra trong audit trail.
       const existing = await tx.systemConfig.findUnique({ where: { key } });
       if (existing) {
+        // JSON null = khoá có dòng nhưng chưa đặt giá trị (seed ETA giao hàng): chưa có kiểu để giữ, và `typeof null`
+        // là 'object' nên nếu không bỏ qua thì admin không bao giờ đặt được số đầu tiên.
+        const wasUnset = existing.value === null;
         const oldType = Array.isArray(existing.value) ? 'array' : typeof existing.value;
         const newType = Array.isArray(value) ? 'array' : typeof value;
-        if (oldType !== newType) {
+        if (!wasUnset && oldType !== newType) {
           throw new BadRequestException(
             `Kiểu dữ liệu mới ("${newType}") khác kiểu hiện tại ("${oldType}") của "${key}". ` +
               'Đổi kiểu có thể làm crash nơi khác đang dùng get<T>() với kiểu cũ. Nếu chắc chắn muốn đổi, xoá config này trước rồi tạo lại.',
@@ -115,7 +117,7 @@ export class SystemConfigService {
         await tx.systemConfigHistory.create({
           data: {
             key,
-            oldValue: existing.value as object,
+            oldValue: wasUnset ? Prisma.JsonNull : (existing.value as object),
             newValue: value as object,
             changedBy,
           },

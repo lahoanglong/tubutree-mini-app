@@ -16,26 +16,33 @@ describe('SystemConfigController.publicConfig', () => {
     expect((config as unknown as { get: jest.Mock }).get).toHaveBeenCalledWith('shipping.free_threshold', 200000);
   });
 
-  // FE đang hardcode các con số này ở nhiều màn (tiết kiệm 12% đặt định kỳ, hoa hồng → Ví ×1.5,
-  // rút tối thiểu 50k). Admin đổi config là FE hiển thị SAI SỐ TIỀN mà không ai biết
-  // (P2-5/P2-15 audit mạch lạc) → đưa hết vào endpoint public để FE đọc.
-  it('trả kèm tham số FE đang hardcode: % đặt định kỳ, hệ số Ví CTV, mốc rút tối thiểu', async () => {
+  // FE đang hardcode các con số này ở nhiều màn (tiết kiệm 12% đặt định kỳ, rút tối thiểu 50k).
+  // Admin đổi config là FE hiển thị SAI SỐ TIỀN mà không ai biết (P2-5/P2-15 audit mạch lạc) →
+  // đưa hết vào endpoint public để FE đọc.
+  it('trả kèm tham số FE đang hardcode: % đặt định kỳ, mốc rút tối thiểu', async () => {
     const config = makeConfig({
       'subscribe.discount_pct': 0.15,
-      'affiliate.tubu_wallet_multiplier': 1.8,
       'affiliate.min_withdraw_bank': 80000,
     });
     const out = await new SystemConfigController(config).publicConfig();
     expect(out.subscribeDiscountPct).toBe(0.15);
-    expect(out.affiliateWalletMultiplier).toBe(1.8);
     expect(out.affiliateMinWithdrawBank).toBe(80000);
   });
 
-  it('chưa cấu hình → trả đúng mặc định hiện hành (12%, ×1.5, 50k)', async () => {
+  it('chưa cấu hình → trả đúng mặc định hiện hành (12%, 50k)', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
     expect(out.subscribeDiscountPct).toBe(0.12);
-    expect(out.affiliateWalletMultiplier).toBe(1.5);
     expect(out.affiliateMinWithdrawBank).toBe(50000);
+  });
+
+  // C-054 (A1-043): luật Ví ×1,5 đã bỏ (rút hoa hồng về Ví Tubu là 1:1, affiliate.service P0 A5-07). Config công
+  // khai không được đọc khoá cũ nữa — dòng DB còn seed 1,5 mà FE cũ hiển thị "×1,5" là hứa sai số tiền.
+  it('affiliateWalletMultiplier luôn là 1 (Ví 1:1), không đọc khoá affiliate.tubu_wallet_multiplier còn sót trong DB', async () => {
+    const config = makeConfig({ 'affiliate.tubu_wallet_multiplier': 1.8 });
+    const out = await new SystemConfigController(config).publicConfig();
+    expect(out.affiliateWalletMultiplier).toBe(1);
+    const get = (config as unknown as { get: jest.Mock }).get;
+    expect(get.mock.calls.map((c) => c[0])).not.toContain('affiliate.tubu_wallet_multiplier');
   });
 
   it('dùng default 200000 khi config chưa set', async () => {

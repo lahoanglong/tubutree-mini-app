@@ -10,6 +10,19 @@ const bad = (key: string, value: unknown) => expect(() => validateAdminConfigVal
  * positiveConfig) — admin bấm Lưu thấy "đã lưu" mà hệ thống vẫn chạy số cũ. Chặn ngay lúc ghi, báo rõ.
  */
 describe('validateAdminConfigValue', () => {
+  // C-054 (A1-032): admin tưởng đã tắt COD / đặt trần COD mà không code nào đọc khoá → chặn ghi và nói rõ.
+  it.each(['payment.cod_max_amount', 'payment.enabled_methods', 'loyalty.welcome_voucher_amount', 'rbac.admin_phones'])(
+    'khoá chết %s: từ chối ghi, thông báo nêu rõ không có tác dụng',
+    (key) => {
+      expect(() => validateAdminConfigValue(key, 1)).toThrow(BadRequestException);
+      expect(() => validateAdminConfigValue(key, 1)).toThrow(/không còn được hệ thống đọc/);
+    },
+  );
+
+  it('khoá thay thế đang sống vẫn ghi được (voucher.welcome_amount)', () => {
+    ok('voucher.welcome_amount', 50000);
+  });
+
   it('loyalty.checkin_points: đúng 7 số nguyên 0..100', () => {
     ok('loyalty.checkin_points', [1, 1, 1, 1, 1, 1, 2]);
     ok('loyalty.checkin_points', [0, 0, 0, 0, 0, 0, 100]);
