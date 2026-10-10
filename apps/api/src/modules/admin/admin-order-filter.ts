@@ -54,7 +54,18 @@ export interface AdminOrderFilter {
   status?: string;
   search?: string;
   recycling?: RecyclingFilter;
+  /**
+   * Id khách khớp `search` theo SĐT/tên, tra trước bằng index trigram trên users. Có thì lọc
+   * `userId IN (...)` thay cho lọc theo quan hệ `user` — Prisma dựng quan hệ thành LEFT JOIN users và
+   * OR xuyên hai bảng không dùng được index nào, Postgres phải quét toàn bảng orders.
+   */
+  searchUserIds?: string[];
 }
+
+/** Trigram cần ≥ 3 ký tự mới dùng được index; ngắn hơn thì tra trước chỉ tốn thêm một lượt quét users. */
+export const ADMIN_SEARCH_MIN_TRGM_LENGTH = 3;
+/** Khớp nhiều khách hơn mức này (tìm quá chung) thì giữ lọc theo quan hệ để không cắt bớt kết quả. */
+export const ADMIN_SEARCH_USER_CAP = 1000;
 
 export function recyclingAttentionWhere(): Prisma.OrderWhereInput {
   return {
@@ -86,12 +97,16 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   if (f.status) and.push({ status: f.status as never });
   const s = f.search?.trim();
   if (s) {
+    const byUser: Prisma.OrderWhereInput[] = f.searchUserIds
+      ? f.searchUserIds.length > 0
+        ? [{ userId: { in: f.searchUserIds } }]
+        : []
+      : [{ user: { phone: { contains: s } } }, { user: { fullName: { contains: s, mode: 'insensitive' } } }];
     and.push({
       OR: [
         { code: { contains: s, mode: 'insensitive' } },
         { gomdonPartnerCode: { contains: s, mode: 'insensitive' } },
-        { user: { phone: { contains: s } } },
-        { user: { fullName: { contains: s, mode: 'insensitive' } } },
+        ...byUser,
       ],
     });
   }

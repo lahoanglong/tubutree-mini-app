@@ -14,7 +14,12 @@ import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
 import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
-import { buildAdminOrderWhere, type RecyclingFilter } from './admin-order-filter';
+import {
+  ADMIN_SEARCH_MIN_TRGM_LENGTH,
+  ADMIN_SEARCH_USER_CAP,
+  buildAdminOrderWhere,
+  type RecyclingFilter,
+} from './admin-order-filter';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { validateAdminConfigValue } from './admin-config-rules';
 
@@ -426,8 +431,20 @@ export class AdminService {
    * web admin cần để hiện thu gom. `recycling='attention'` = hàng đợi "Cần xử lý thu gom"
    * (xem admin-order-filter.ts).
    */
+  private async findSearchUserIds(search?: string): Promise<string[] | undefined> {
+    const s = search?.trim();
+    if (!s || s.length < ADMIN_SEARCH_MIN_TRGM_LENGTH) return undefined;
+    const rows = await this.prisma.user.findMany({
+      where: { OR: [{ phone: { contains: s } }, { fullName: { contains: s, mode: 'insensitive' } }] },
+      select: { id: true },
+      take: ADMIN_SEARCH_USER_CAP + 1,
+    });
+    return rows.length > ADMIN_SEARCH_USER_CAP ? undefined : rows.map((r) => r.id);
+  }
+
   async listOrders(page: number, limit: number, status?: string, search?: string, recycling?: RecyclingFilter) {
-    const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling });
+    const searchUserIds = await this.findSearchUserIds(search);
+    const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling, searchUserIds });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,

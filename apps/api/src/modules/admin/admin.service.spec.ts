@@ -896,10 +896,90 @@ describe('AdminService.listOrders with search', () => {
         where: expect.objectContaining({
           OR: expect.arrayContaining([
             expect.objectContaining({ code: { contains: '0901234567', mode: 'insensitive' } }),
-            expect.objectContaining({ user: { phone: { contains: '0901234567' } } }),
           ]),
         }),
       }),
+    );
+  });
+
+  // C-027: lọc theo quan hệ `user` sinh LEFT JOIN users + OR xuyên hai bảng → Postgres phải quét cả bảng
+  // orders. Tra trước id khách khớp SĐT/tên (index trigram trên users) rồi lọc orders.userId IN (...)
+  // để mọi nhánh OR đều đi được index.
+  it('tìm ≥ 3 ký tự: tra trước khách khớp SĐT/tên rồi lọc userId IN, không lọc theo quan hệ user', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const userFindMany = jest.fn().mockResolvedValue([{ id: 'u1' }, { id: 'u2' }]);
+    const prisma = makePrisma({
+      order: { findMany, count },
+      user: { findMany: userFindMany },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+
+    await mkAdmin(prisma).listOrders(1, 20, undefined, ' 0901 ');
+    expect(userFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          OR: [{ phone: { contains: '0901' } }, { fullName: { contains: '0901', mode: 'insensitive' } }],
+        },
+        select: { id: true },
+      }),
+    );
+    const where = findMany.mock.calls[0][0].where;
+    expect(where).toEqual({
+      OR: [
+        { code: { contains: '0901', mode: 'insensitive' } },
+        { gomdonPartnerCode: { contains: '0901', mode: 'insensitive' } },
+        { userId: { in: ['u1', 'u2'] } },
+      ],
+    });
+    expect(count.mock.calls[0][0].where).toEqual(where);
+  });
+
+  it('không khách nào khớp → chỉ còn nhánh mã đơn / mã Gomdon', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({
+      order: { findMany, count: jest.fn().mockResolvedValue(0) },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    await mkAdmin(prisma).listOrders(1, 20, undefined, 'TB-123');
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      OR: [
+        { code: { contains: 'TB-123', mode: 'insensitive' } },
+        { gomdonPartnerCode: { contains: 'TB-123', mode: 'insensitive' } },
+      ],
+    });
+  });
+
+  it('quá nhiều khách khớp (tìm quá chung) → giữ lọc theo quan hệ user để không cắt bớt kết quả', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const many = Array.from({ length: 1001 }, (_, i) => ({ id: `u${i}` }));
+    const prisma = makePrisma({
+      order: { findMany, count: jest.fn().mockResolvedValue(0) },
+      user: { findMany: jest.fn().mockResolvedValue(many) },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    await mkAdmin(prisma).listOrders(1, 20, undefined, 'Nguyễn');
+    expect(findMany.mock.calls[0][0].where.OR).toEqual(
+      expect.arrayContaining([
+        { user: { phone: { contains: 'Nguyễn' } } },
+        { user: { fullName: { contains: 'Nguyễn', mode: 'insensitive' } } },
+      ]),
+    );
+  });
+
+  it('chuỗi tìm < 3 ký tự (trigram không dùng được) → không tra trước, giữ lọc theo quan hệ user', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const userFindMany = jest.fn();
+    const prisma = makePrisma({
+      order: { findMany, count: jest.fn().mockResolvedValue(0) },
+      user: { findMany: userFindMany },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    await mkAdmin(prisma).listOrders(1, 20, undefined, '09');
+    expect(userFindMany).not.toHaveBeenCalled();
+    expect(findMany.mock.calls[0][0].where.OR).toEqual(
+      expect.arrayContaining([{ user: { phone: { contains: '09' } } }]),
     );
   });
 });

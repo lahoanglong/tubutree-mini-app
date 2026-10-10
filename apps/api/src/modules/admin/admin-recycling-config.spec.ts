@@ -39,6 +39,7 @@ function listOrdersPrisma() {
   const count = jest.fn().mockResolvedValue(0);
   const prisma = {
     order: { findMany, count },
+    user: { findMany: jest.fn().mockResolvedValue([]) },
     $transaction: jest.fn().mockImplementation((arr: Promise<unknown>[]) => Promise.all(arr)),
   };
   return { prisma, findMany, count };
