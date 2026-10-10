@@ -284,7 +284,7 @@ export default function OrderDetailPage() {
               <Text
                 size="xSmall"
                 bold
-                className="tubu-press"
+                className="tubu-press tubu-hit-44"
                 style={{ color: 'var(--color-text-brand)', marginTop: 2, display: 'inline-block' }}
                 onClick={() => {
                   haptic('light');
