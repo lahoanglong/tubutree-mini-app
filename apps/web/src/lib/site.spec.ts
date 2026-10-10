@@ -24,6 +24,15 @@ describe('SITE_URL', () => {
     expect(SITE_URL).toBe('https://app.tubutree.com');
   });
 
+  // Dockerfile khai ARG rồi ENV nên build không truyền arg vẫn nhúng chuỗi rỗng vào bundle;
+  // `new URL('')` trong layout.tsx sẽ ném lỗi nếu SITE_URL rỗng.
+  it.each(['', '   '])('chuỗi rỗng %j cũng rơi về https://app.tubutree.com', async (raw) => {
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', raw);
+    const { SITE_URL } = await loadSite();
+    expect(SITE_URL).toBe('https://app.tubutree.com');
+    expect(() => new URL(SITE_URL)).not.toThrow();
+  });
+
   it('lấy từ NEXT_PUBLIC_SITE_URL và bỏ dấu / ở cuối', async () => {
     vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://staging.tubutree.com//');
     const { SITE_URL } = await loadSite();
@@ -58,12 +67,12 @@ describe('NEXT_PUBLIC_SITE_URL lúc build', () => {
 });
 
 describe('isPortalPath', () => {
-  it('nhận /admin, /merchant, /brand và cây con; không nhận trang khách', async () => {
+  it('nhận /admin, /merchant và cây con; không nhận trang khách (kể cả /brand/[slug] công khai)', async () => {
     const { isPortalPath } = await loadSite();
-    for (const p of ['/admin', '/admin/orders', '/merchant', '/merchant/x', '/brand', '/brand/abc']) {
+    for (const p of ['/admin', '/admin/orders', '/merchant', '/merchant/x']) {
       expect(isPortalPath(p), p).toBe(true);
     }
-    for (const p of ['/', '/san-pham/abc', '/brands-new', '/administrator', '/s/abc', '/tai-khoan', null, undefined]) {
+    for (const p of ['/', '/san-pham/abc', '/brand/abc', '/administrator', '/s/abc', '/tai-khoan', null, undefined]) {
       expect(isPortalPath(p), String(p)).toBe(false);
     }
   });
