@@ -16,8 +16,13 @@
 - `admin.spec.ts` "Hàng chờ quá 1 trang": mock phục vụ theo asc, assert `order=asc` ở cả hai lần gọi, "mới hơn chưa tải", hồ sơ chờ lâu nhất đứng đầu và hồ sơ mới tải thêm đứng cuối.
 - Playwright `--project="Web Admin" --workers=2 --retries=0`: sau sửa 4 pass / 0 fail (trước: 1 fail theo catalog, spec dealer pagination).
 
+## C-062 - XONG (loyalty) / KHÔNG TÁI HIỆN (pilot:236)
+- Nguyên nhân loyalty: tracker analytics (`services/analytics.ts`) xả lô `POST /events` khi ẩn app hoặc mỗi 10s; `mockLoyalty` không mock route này nên fixture `mock-api.ts` (guard unmocked) fail test nào chạy đủ lâu. Trôi mock, không phải lỗi sản phẩm.
+- Sửa: `mockLoyalty` thêm `api.post('/events', { accepted: 1 })`. Test hồi quy mới "Xả hàng đợi analytics (POST /events) ... không vỡ mock" (ép xả bằng `flushEvents`): ĐỎ trước sửa (unmocked `POST /events`), XANH sau sửa.
+- pilot:236 (storefront CTV 504): trên Vite mới khởi động pass; 504 "Outdated Optimize Dep" là cache dep của dev server chạy lâu của chủ máy (môi trường), không có gì để sửa trong repo.
+- Playwright `E2E_SCOPE=miniapp --project="Zalo Mini App" --workers=2 --retries=0`: trước 115 pass / 0 fail (5 test loyalty chỉ fail khi có lần xả /events, không tái hiện ngẫu nhiên: repeat-each=4 vẫn 20/20); sau 116 pass / 0 fail (115 + 1 test hồi quy). Không còn cổng 3001/3112/3113 LISTEN.
+
 ## Môi trường E2E
 Postgres `tubu_it_pa8` cổng 5548 DB `tubutree_it` (đã migrate; `prisma/seed.ts` chạy), `REDIS_URL=redis://localhost:6381/7`. Không đụng tubu_pg:5434. Playwright tự spawn server và dọn khi kết thúc; sau lượt chạy không còn cổng 3001/3112/3113 LISTEN.
 
 ## Giả định / việc còn lại
-- C-062 (miniapp E2E) do lượt khác làm.
