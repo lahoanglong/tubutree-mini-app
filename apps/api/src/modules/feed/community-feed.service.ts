@@ -6,6 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { authorBadge } from './author-badge';
+import { startOfVnDay } from '../../common/vn-time';
 
 const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];
 const LEVEL_NAMES: Record<number, string> = {
@@ -196,8 +197,7 @@ export class CommunityFeedService {
     try {
       const thresholds = await this.config.get<number[]>('community.rep_thresholds', DEFAULT_REP_THRESHOLDS);
       const dailyCap = await this.config.get<number>('community.daily_rep_cap', 30);
-      const since = new Date();
-      since.setHours(0, 0, 0, 0);
+      const since = startOfVnDay();
       await this.prisma.$transaction(
         async (tx) => {
           const earnedToday = await tx.reputationEvent.aggregate({

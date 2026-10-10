@@ -2062,3 +2062,19 @@ describe('CommunityFeedService.getComments — phân trang', () => {
     expect((prisma.feedComment.findMany as jest.Mock).mock.calls[0][0].take).toBe(101);
   });
 });
+
+// C-026: trần điểm reputation/ngày đếm từ 00:00 giờ VN dù host chạy UTC.
+describe('CommunityFeedService.bumpReputation — đầu ngày theo giờ VN (C-026)', () => {
+  it('01:30 ngày 10/3 giờ VN → aggregate từ 2026-03-09T17:00Z', async () => {
+    const prisma = makePrisma();
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 5 });
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-09T18:30:00Z'));
+    try {
+      await makeSvc(prisma).bumpReputation('u1', 5, 'POST', 'p1');
+    } finally {
+      jest.useRealTimers();
+    }
+    const where = (prisma.reputationEvent.aggregate as jest.Mock).mock.calls[0][0].where;
+    expect(where.createdAt.gte.toISOString()).toBe('2026-03-09T17:00:00.000Z');
+  });
+});

@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
+import { formatVnDate } from '../../common/vn-time';
 
 /**
  * Remarketing reminders: nhắc user quay lại app.
@@ -140,7 +141,7 @@ export class RemarketingService {
         try {
           await this.notifications.notify(meta.userId, 'VOUCHER_EXPIRING', {
             code: c.code,
-            expires: c.endAt.toLocaleDateString('vi-VN'),
+            expires: formatVnDate(c.endAt),
           });
           sent++;
         } catch (err) {

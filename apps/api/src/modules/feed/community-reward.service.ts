@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CoinsService } from '../wallet/coins.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { startOfVnDay } from '../../common/vn-time';
 
 /**
  * Thưởng TubuXu cho hoạt động cộng đồng. Idempotent qua reason + partial unique index
@@ -28,8 +29,7 @@ export class CommunityRewardService {
     amount: number,
     cap: number,
   ): Promise<void> {
-    const since = new Date();
-    since.setHours(0, 0, 0, 0);
+    const since = startOfVnDay();
     try {
       await this.prisma.$transaction(
         async (tx) => {

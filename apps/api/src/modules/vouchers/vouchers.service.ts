@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
+import { formatVnDate, vnDateParts, vnMonthKey } from '../../common/vn-time';
 
 /**
  * "User thật" (Q-05): có zaloId Zalo thật hoặc SĐT. Khách đăng nhập theo deviceId mang zaloId
@@ -88,7 +89,7 @@ export class VouchersService {
       .notify(opts.userId, opts.templateCode, {
         code,
         value: String(opts.value),
-        expires: endAt.toLocaleDateString('vi-VN'),
+        expires: formatVnDate(endAt),
       })
       .catch(() => undefined);
     return true;
@@ -151,15 +152,13 @@ export class VouchersService {
   @Cron('0 1 * * *', { timeZone: CRON_TZ })
   async birthdayVouchers(): Promise<void> {
     try {
-      const today = new Date();
-      const mm = today.getMonth() + 1;
-      const dd = today.getDate();
+      const { year, month: mm, day: dd } = vnDateParts();
       const defaultValue = await this.config.get<number>('voucher.birthday_amount', 50000);
       // Mức riêng theo hạng (birthdayVoucherAmount null = hạng chưa có/không hứa mức riêng →
       // dùng mặc định chung, không phải 0 — không tự ý cắt quyền lợi hạng cơ bản đang có).
       const tiers = await this.prisma.membershipTier.findMany({ select: { id: true, birthdayVoucherAmount: true } });
       const amountByTier = new Map(tiers.map((t) => [t.id, t.birthdayVoucherAmount]));
-      const reason = `BIRTHDAY-${today.getFullYear()}-${mm}`;
+      const reason = `BIRTHDAY-${year}-${mm}`;
       let granted = 0;
       // Keyset theo id: trước đây một lần `LIMIT 500` không ORDER BY — ngày có > 500 người cùng
       // sinh nhật thì phần dư không bao giờ được cấp (Postgres trả tập tuỳ ý, mỗi lần chạy như
@@ -201,7 +200,7 @@ export class VouchersService {
       const days = await this.config.get<number>('voucher.winback_days', 60);
       const cutoff = new Date(Date.now() - days * 864e5);
       const value = await this.config.get<number>('voucher.winback_amount', 50000);
-      const reason = `WINBACK-${new Date().toISOString().slice(0, 7)}`;
+      const reason = `WINBACK-${vnMonthKey()}`;
       let granted = 0;
       // Keyset theo userId, cùng lý do với birthdayVouchers (LIMIT 500 không ORDER BY bỏ sót).
       let cursor = '';

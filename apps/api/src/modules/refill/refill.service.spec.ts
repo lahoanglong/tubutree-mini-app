@@ -95,3 +95,19 @@ describe('RefillService.approveReturn', () => {
     expect(up.update.totalSeeds).toEqual({ increment: 150 });
   });
 });
+
+// C-026: mốc "đầu tháng" của hạn mức đổi chai phải là 00:00 ngày 1 giờ VN dù host chạy UTC.
+describe('RefillService.getSummary — đầu tháng theo giờ VN (C-026)', () => {
+  it('03:00 ngày 1/10 giờ VN → đếm từ 2026-09-30T17:00Z, không phải 2026-10-01T00:00Z hay đầu tháng 9', async () => {
+    const prisma = makePrisma();
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-30T20:00:00Z'));
+    try {
+      await new RefillService(prisma, makeConfig(), makeNotifications()).getSummary('u1');
+    } finally {
+      jest.useRealTimers();
+    }
+    const calls = (prisma.bottleReturn.aggregate as jest.Mock).mock.calls;
+    const gtes = calls.map((c) => (c[0].where.createdAt?.gte as Date | undefined)?.toISOString());
+    expect(gtes).toContain('2026-09-30T17:00:00.000Z');
+  });
+});

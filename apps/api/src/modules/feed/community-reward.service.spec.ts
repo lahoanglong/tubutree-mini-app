@@ -151,3 +151,19 @@ describe('CommunityRewardService.rewardBestAnswer', () => {
     expect(d.prisma.$transaction).toHaveBeenCalled();
   });
 });
+
+// C-026: trần thưởng "trong ngày" phải đếm từ 00:00 giờ VN dù host chạy UTC.
+describe('CommunityRewardService — đầu ngày theo giờ VN (C-026)', () => {
+  it('01:30 ngày 10/3 giờ VN → đếm từ 2026-03-09T17:00Z', async () => {
+    const d = deps();
+    d.config.get.mockImplementation(async (k: string, f: number) => (k === 'community.post_reward' ? 200 : f));
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-09T18:30:00Z'));
+    try {
+      await make(d).rewardPost('u1', 'p1');
+    } finally {
+      jest.useRealTimers();
+    }
+    const where = d.prisma.coinTransaction.count.mock.calls[0][0].where;
+    expect(where.createdAt.gte.toISOString()).toBe('2026-03-09T17:00:00.000Z');
+  });
+});

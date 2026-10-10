@@ -261,3 +261,57 @@ describe('VouchersService.welcomeVouchers — quét hết cửa sổ 24h', () =>
     expect(findMany).toHaveBeenCalledTimes(1);
   });
 });
+
+// C-026: cron 01:00 giờ VN = 18:00 UTC của ngày TRƯỚC. Tính "hôm nay" bằng Date local khi host chạy
+// UTC thì tặng voucher sinh nhật lệch một ngày (và khoá chu kỳ sai tháng ở ranh giới tháng).
+describe('VouchersService — lịch giờ VN, độc lập TZ host (C-026)', () => {
+  function setup() {
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+      membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    return { svc: new VouchersService(prisma, makeConfig(), notify), prisma };
+  }
+
+  it('birthdayVouchers lúc 01:00 ngày 10/3 giờ VN → lọc đúng tháng 3 ngày 10, không phải ngày 9', async () => {
+    const { svc, prisma } = setup();
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-09T18:00:00Z'));
+    try {
+      await svc.birthdayVouchers();
+    } finally {
+      jest.useRealTimers();
+    }
+    const args = ((prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw).mock.calls[0].slice(1);
+    expect(args).toContain(3);
+    expect(args).toContain(10);
+    expect(args).not.toContain(9);
+  });
+
+  it('birthdayVouchers lúc 01:00 ngày 1/1 giờ VN (UTC còn 31/12 năm trước) → khoá chu kỳ theo năm/tháng VN', async () => {
+    const { svc, prisma } = setup();
+    (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw.mockResolvedValueOnce([{ id: 'u1', tierId: null }]);
+    jest.useFakeTimers().setSystemTime(new Date('2025-12-31T18:00:00Z'));
+    try {
+      await svc.birthdayVouchers();
+    } finally {
+      jest.useRealTimers();
+    }
+    const data = ((prisma as unknown as { coupon: { create: jest.Mock } }).coupon.create).mock.calls[0][0].data;
+    expect(data.scopeMeta.reason).toBe('BIRTHDAY-2026-1');
+  });
+
+  it('winbackVouchers lúc 02:00 ngày 1/10 giờ VN → khoá theo tháng VN (2026-10), không phải 2026-09', async () => {
+    const { svc, prisma } = setup();
+    (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw.mockResolvedValueOnce([{ userId: 'u1' }]);
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-30T19:00:00Z'));
+    try {
+      await svc.winbackVouchers();
+    } finally {
+      jest.useRealTimers();
+    }
+    const data = ((prisma as unknown as { coupon: { create: jest.Mock } }).coupon.create).mock.calls[0][0].data;
+    expect(data.scopeMeta.reason).toBe('WINBACK-2026-10');
+  });
+});

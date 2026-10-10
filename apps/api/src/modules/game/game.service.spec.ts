@@ -800,3 +800,21 @@ describe('GameService.pickWeighted (phân phối theo trọng số)', () => {
     expect(pick(PRIZES, 0.99).id).toBe('b'); // r=99 → 99-70=29>0 → 29-30≤0 → b
   });
 });
+
+// C-026: trần coupon thu hoạch "trong ngày" đếm từ 00:00 giờ VN dù host chạy UTC.
+describe('GameService.waterTree — đầu ngày theo giờ VN (C-026)', () => {
+  it('01:30 ngày 10/3 giờ VN → đếm coupon từ 2026-03-09T17:00Z', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, ecoImpact: { progress: 0, target: 30, treeType: 't', treesPlanted: 0 } }),
+    );
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-09T18:30:00Z'));
+    try {
+      await new GameService(prisma, makeConfig(), analytics).waterTree('u1', 30);
+    } finally {
+      jest.useRealTimers();
+    }
+    const where = (prisma.coupon.count as jest.Mock).mock.calls[0][0].where;
+    expect(where.startAt.gte.toISOString()).toBe('2026-03-09T17:00:00.000Z');
+  });
+});
