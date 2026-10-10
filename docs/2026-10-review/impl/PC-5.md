@@ -143,3 +143,56 @@ Không có (không đổi schema). Khi deploy PROD cần chạy seed để có 3
 - Lệnh rút bị từ chối (`rejectPayout`) chưa báo CTV kèm lý do (ngoài phạm vi C-029, nên làm cùng đợt).
 - Lỗi rgba trắng ở `affiliate.tsx`/`dealer.tsx` cần token "chữ trắng mờ trên nền tối" từ DS (PC-1); `dealer.tsx` còn Button zmp-ui.
 - Việc cần người: duyệt nội dung điều khoản (`vi.ctvTerms`), chạy seed khi deploy, deploy API trước miniapp.
+
+## Review lượt 1
+
+Reviewer độc lập đưa 5 phát hiện (1 major, 4 minor). Đã xác minh từng điểm trong mã trước khi sửa; cả 5 đều đúng.
+
+### 1. major — pricelist đại lý không lọc SP ngừng bán/chưa duyệt (C-081): ĐÃ SỬA
+
+- Xác minh: `DealerService.pricelist` chỉ lọc `variation.isActive`; `placeOrder` thì ném `PRODUCT_DISCONTINUED` qua `isSellableVariation` (cần thêm `product.isActive` và `approvalStatus = APPROVED`). Từ khi C-081 bỏ trần `max = tồn`, dòng tồn 0 của SP `isActive=false`/`PENDING_REVIEW` (variation vẫn active) hiện trong bảng giá với nhãn "Hết hàng — được đặt trước", đại lý cộng được rồi cả đơn bị từ chối. Trước C-081, `max = 0` chặn tình cờ các dòng này.
+- Sửa: `dealer.service.ts` `pricelist` dùng `SELLABLE_VARIATION_WHERE` (cùng điều kiện với `placeOrder`/giỏ/CTV). Ghi chú ngoài nhóm file: `apps/api/src/modules/dealer/**` không thuộc nhóm file của gói; sửa 1 điều kiện `where` + 1 import, vì lỗi do C-081 gây ra và reviewer chỉ đích danh dòng này.
+- Test: `dealer.service.spec.ts` ca "chỉ trả variation còn bán được" (đỏ: `where` chỉ có `{ isActive: true }`; xanh sau sửa). Mock Prisma kiểm đúng điều kiện `where`; điều kiện đó đã được test riêng bằng `cart/sellable` nên không dựng race spec.
+- Commit: "fix(dealer): address review - bang gia dai ly chi tra SP con ban duoc (C-081)".
+
+### 2. minor — thông điệp "phần thiếu giao khi hàng về" sai nghĩa (C-081): ĐÃ SỬA
+
+- Xác minh: `DealerBackorderService` chỉ `enqueuePush` Pancake khi đơn lấp đủ 100% (`dealer-backorder.service.ts`); `placeOrder` bỏ qua đẩy Pancake khi `hasBackorder`. Nghĩa là cả đơn chờ hàng, kể cả dòng đủ hàng; đơn PREPAID vẫn phải trả đủ tiền.
+- Sửa `i18n/vi.ts`: `preorderNote` = "N mặt hàng đặt vượt tồn: cả đơn sẽ giao khi đủ hàng, giữ giá hôm nay. Đơn trả trước vẫn thanh toán đủ ngay."; `createdWithPreorder` = "Đã tạo đơn đại lý — đơn sẽ giao khi đủ hàng, giữ giá hôm nay." Nhãn từng dòng "Đặt trước N, giao khi hàng về" giữ nguyên vì nó nói đúng về số lượng đặt trước của dòng đó.
+- Test: `pages/dealer.spec.tsx` cập nhật 2 ca (đỏ với chữ cũ, xanh sau sửa).
+
+### 3. minor — fallback bộ nội dung chép caption có thể thiếu liên kết giới thiệu (C-067): ĐÃ SỬA
+
+- Xác minh: `ContentKitService.getForCtv` ghép `shareLink = ${app.miniapp_base_url}/product/..?ref=..`, `baseUrl` mặc định rỗng nên link tương đối; caption chỉ có link khi admin soạn `{link}`.
+- Sửa `components/content-kit-sheet.tsx`: `absoluteLink()` ghép `VITE_WEB_BASE_URL` (mặc định `https://shop.tubutree.com`, cùng nguồn với `share-sheet.tsx`/`affiliate.tsx`) khi link bắt đầu bằng `/`; `shareFallbackText()` chép caption nguyên văn nếu đã có `ref=`, nếu không nối thêm link vào cuối, không có caption thì chép riêng link. Nút "Sao chép link" cũng chép link tuyệt đối. Đường `path` truyền cho `shareLink` (deep link trong Zalo) giữ nguyên.
+- Test: `content-kit-sheet.spec.tsx` thêm 3 ca (caption thiếu ref, không có caption, nút sao chép); cả 3 đỏ với mã cũ (đã chạy lại bằng mã cũ), xanh sau sửa.
+
+### 4. minor — người dùng huỷ hộp thoại bị coi là lỗi (C-067): ĐÃ SỬA PHÒNG THỦ, KHÔNG KIỂM ĐƯỢC TRÊN ZALO THẬT
+
+- Xác minh từ SDK (`zmp-sdk` trong `node_modules`): kiểu trả về của `openShareSheet` ghi `status: 0` = "User nhấn hủy" (resolve, không reject); bảng lỗi native của `OPEN_SHARESHEET` chỉ ánh xạ `-101` → CLIENT_NOT_SUPPORT, không có mã huỷ riêng. Nên nhiều khả năng huỷ không vào nhánh `catch`, mối lo của reviewer ít xảy ra. Vẫn rẻ để phòng thủ.
+- Sửa `components/share-sheet.tsx`: nếu lỗi mang `code === -2003` (`RESPONSE_CODE.USER_CANCEL` của SDK) thì bỏ qua, không ghi đè clipboard, không snackbar. Mọi lỗi khác vẫn fallback như cũ. Sửa lại comment hook cho đúng.
+- Test: `share-sheet.spec.tsx` ca huỷ (-2003) đỏ trước, xanh sau.
+- Việc còn lại: kiểm hành vi huỷ trên Zalo thật (version test) khi UAT; nếu SDK dùng mã khác thì thêm mã đó.
+
+### 5. minor — nút Button DS vẫn truyền `disabled={... || isPending}` kèm `loading` (C-064, C-117): ĐÃ SỬA
+
+- Xác minh: zmp-ui `Button` chỉ gắn class `zaui-btn-loading` (spinner) khi `loading && !disabled`; `components/ui/button.tsx` đã tự chặn bấm lại khi `loading`. Nên `disabled` kèm `isPending` làm mất spinner và dư thừa.
+- Sửa: `ctv-order-sheet.tsx` `disabled={showErrors && !valid}`; `affiliate.tsx` nút đăng ký `disabled={!agreed}`. Không đụng `dealer.tsx` (vẫn dùng Button zmp-ui trực tiếp, chưa tự chặn bấm lại, nên `disabled` ở đó còn là lớp chống bấm đúp; chuyển sang DS thuộc phần việc DS v2 đã ghi ở "Việc còn lại").
+- Test: 2 ca mới (`affiliate.spec.tsx`, `ctv-order-sheet.spec.tsx`): khi mutation treo, nút có class `zaui-btn-loading`, không `disabled`, bấm lần 2 không gọi API lần 2. Đỏ với mã cũ, xanh sau sửa.
+
+### Lệnh kiểm chứng (lượt review)
+
+```
+cd apps/api && npx jest --maxWorkers=1 src/modules/dealer
+  Test Suites: 7 passed, 7 total / Tests: 140 passed, 140 total
+cd apps/miniapp && npx vitest run src/components/ui/button-guard.spec.ts src/pages/dealer.spec.tsx \
+  src/pages/affiliate.spec.tsx src/pages/brand-owner src/pages/brand-view src/components/affiliate \
+  src/components/share-sheet.spec.tsx src/components/content-kit-sheet.spec.tsx src/ds-legacy-vars-4a.spec.ts src/ds-legacy-vars-4b.spec.ts
+  Test Files 11 passed (11) / Tests 139 passed (139)
+npx tsc --noEmit (apps/api, apps/miniapp): 0 lỗi
+npx eslint các file đã sửa: 0 lỗi mới (còn lỗi no-raw-color/zmp-ui import có từ trước ở dealer.tsx, affiliate.tsx)
+```
+
+### Migration
+
+Không có.
