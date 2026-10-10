@@ -1,3 +1,5 @@
+import { formatPoints, formatVnd, formatXu } from './format';
+
 export interface InvoiceInfo {
   taxCode: string;
   companyName: string;
@@ -34,6 +36,29 @@ export function shouldFallbackToCod(
 }
 
 /**
+ * Lý do Ví Tubu/TubuXu bị mờ ở màn thanh toán (null = dùng được). Cùng điều kiện với `shouldFallbackToCod`
+ * (số dư < tổng đơn) để dòng bị mờ luôn có lời giải thích và dòng được chọn không bị tự đổi về COD.
+ * XU so thẳng với tổng đơn vì BE kiểm `coinsBalance < total` (1 xu = 1đ).
+ */
+export function paymentUnavailableReason(method: 'WALLET' | 'XU', balance: number, total: number): string | null {
+  if (balance >= total) return null;
+  const missing = total - balance;
+  return `Số dư chưa đủ — cần thêm ${method === 'WALLET' ? formatVnd(missing) : formatXu(missing)}`;
+}
+
+const groupThousands = (n: number) => n.toLocaleString('vi-VN');
+
+/** "Dùng 1.250 điểm — giảm 12.500đ" (số điểm có dấu nghìn như mọi màn khác). */
+export function pointsUseLabel(points: number, discount: string): string {
+  return `Dùng ${formatPoints(points)} — giảm ${discount}`;
+}
+
+/** "+1.250 điểm Xanh khi giao thành công". */
+export function pointsEarnLabel(points: number): string {
+  return `+${groupThousands(points)} điểm Xanh khi giao thành công`;
+}
+
+/**
  * Điểm Xanh màn thanh toán được đề nghị dùng: số DÙNG ĐƯỢC (`redeemablePoints` của loyalty overview = số
  * dư − điểm đơn còn trong hạn đổi/trả hoặc đang chờ xử lý đổi/trả), KHÔNG phải số dư. Backend (báo giá +
  * đặt đơn) kẹp đúng theo luật này — hiện số dư sẽ hứa "Dùng 500 điểm" mà đơn chỉ trừ được 200.
@@ -49,9 +74,9 @@ export function checkoutPoints(
   const balance = Math.max(0, ov?.pointsBalance ?? fallbackBalance);
   const usable = Math.min(balance, Math.max(0, ov?.redeemablePoints ?? balance - (ov?.lockedPoints ?? 0)));
   const held = balance - usable;
-  const heldText = `${held} điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được`;
+  const heldText = `${formatPoints(held)} từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được`;
   if (balance === 0) return { balance, usable, label: null, lockNote: null };
   if (usable === 0) return { balance, usable, label: heldText, lockNote: null };
-  if (held === 0) return { balance, usable, label: `Bạn đang có ${usable} điểm`, lockNote: null };
-  return { balance, usable, label: `Dùng được ${usable}/${balance} điểm`, lockNote: heldText };
+  if (held === 0) return { balance, usable, label: `Bạn đang có ${formatPoints(usable)}`, lockNote: null };
+  return { balance, usable, label: `Dùng được ${groupThousands(usable)}/${formatPoints(balance)}`, lockNote: heldText };
 }

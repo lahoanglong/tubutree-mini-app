@@ -37,6 +37,7 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
         <Box style={{ marginTop: 8 }}>
           <AddressForm
             initial={null}
+            askZaloProfile={addresses.length === 0}
             onCancel={() => setAdding(false)}
             onSaved={(a) => {
               void queryClient.invalidateQueries({ queryKey: ['addresses'] });

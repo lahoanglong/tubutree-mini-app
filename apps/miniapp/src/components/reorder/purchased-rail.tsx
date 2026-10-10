@@ -40,7 +40,8 @@ export interface PurchasedRailProps {
 
 /**
  * Kệ "Mua lại" (spec 4a.2/4a.3): SP khách đã nhận hàng, mới mua trước. Khách mới / chưa đăng nhập
- * / API cũ (404) → không render gì (không ErrorState trên đầu trang). Mua lại = 2 chạm.
+ * / API cũ (404) → không render gì (không ErrorState trên đầu trang). Mua lại = 2 chạm rồi tự sang
+ * giỏ (như thẻ đơn/chi tiết đơn): ở lại Home thì khách phải tự tìm giỏ và hay tưởng đã đặt xong.
  *
  * `target` là state (chỉ đổi khi chạm nút) nên danh tính ổn định — ReorderSheet khởi tạo lại lựa
  * chọn theo danh tính `target`, không được dựng target inline trong JSX.
@@ -90,7 +91,7 @@ export function PurchasedRail({ source }: PurchasedRailProps) {
           </div>
         ))}
       </div>
-      <ReorderSheet target={target} source={source} onClose={() => setTarget(null)} />
+      <ReorderSheet target={target} source={source} navigateToCart onClose={() => setTarget(null)} />
     </section>
   );
 }

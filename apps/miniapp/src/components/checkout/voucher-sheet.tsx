@@ -99,17 +99,30 @@ export function VoucherSheet({
             className="tubu-press"
             onClick={onClose}
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
+              width: 44,
+              height: 44,
               border: 'none',
-              background: 'var(--neutral-100)',
+              background: 'transparent',
               display: 'grid',
               placeItems: 'center',
               cursor: 'pointer',
+              padding: 0,
             }}
           >
-            <X size={18} color="var(--neutral-600)" />
+            {/* Nút vuông 44px (vùng chạm); chỉ vòng tròn 32px bên trong là phần nhìn thấy. */}
+            <span
+              aria-hidden
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: 'var(--neutral-100)',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              <X size={18} color="var(--neutral-600)" />
+            </span>
           </button>
         </Box>
 
@@ -171,7 +184,7 @@ export function VoucherSheet({
               <Text size="small" style={{ color: 'var(--danger)', marginBottom: 8, display: 'block' }}>
                 ⚠ Không thể tải danh sách mã giảm giá: {getErrorMessage(couponsQ.error)}
               </Text>
-              <Button size="small" variant="secondary" onClick={() => void couponsQ.refetch()}>
+              <Button size="small" variant="secondary" onClick={() => void couponsQ.refetch()} style={{ minHeight: 44 }}>
                 Thử lại
               </Button>
             </Box>
@@ -254,7 +267,7 @@ export function VoucherSheet({
                           disabled={isAnyMutating}
                           loading={removeMut.isPending}
                           onClick={() => removeMut.mutate()}
-                          style={{ minHeight: 36, fontSize: 12, borderColor: 'var(--neutral-300)' }}
+                          style={{ minHeight: 44, fontSize: 12, borderColor: 'var(--neutral-300)' }}
                         >
                           Bỏ dùng
                         </Button>
@@ -266,7 +279,7 @@ export function VoucherSheet({
                           onClick={() => applyMut.mutate(coupon.code)}
                           style={{
                             background: notEligible || isAnyMutating ? undefined : 'var(--primary-600)',
-                            minHeight: 36,
+                            minHeight: 44,
                             fontSize: 12,
                             fontWeight: 600,
                           }}

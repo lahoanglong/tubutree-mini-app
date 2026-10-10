@@ -19,7 +19,7 @@ async function waitRailSettled(page: Page, api: MockApi): Promise<void> {
 }
 
 test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
-  test('Home: kệ "Mua lại" là khối đầu tiên dưới ô tìm; mua lại 1 SP đúng 2 chạm, ở lại trang chủ', async ({ page, api }) => {
+  test('Home: kệ "Mua lại" là khối đầu tiên dưới ô tìm; mua lại 1 SP đúng 2 chạm rồi tự sang giỏ', async ({ page, api }) => {
     mockBuyFlowSession(api);
     await page.goto('/');
 
@@ -38,9 +38,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await page.getByRole('button', { name: 'Thêm vào giỏ (1)' }).click(); // chạm 2
     const call = await added;
     expect(call.body).toEqual({ variationId: 'var-1', quantity: 1, addSource: 'repurchase' });
-    await expect(page.getByText('Đã thêm 1 món vào giỏ')).toBeVisible();
-    await expect(page.getByText('Xem giỏ')).toBeVisible();
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/cart$/, { timeout: 10_000 });
   });
 
   test('Skeleton kệ Mua lại cao xấp xỉ kệ thật (≤ 16px) → dữ liệu về không đẩy nội dung bên dưới', async ({ page, api }) => {
@@ -276,8 +274,11 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     const added = api.waitForCall('POST', '/cart/items');
     await addBtn.click();
     await added;
-    await expect(page.getByText('Đã thêm 1 món vào giỏ')).toBeVisible();
+    await expect(page).toHaveURL(/\/cart$/, { timeout: 10_000 });
     await expect(addBtn).toBeHidden();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(rail).toBeVisible({ timeout: 15_000 });
 
     // Chạm 2: mở lại sheet (target mới) rồi để nguyên — sheet mở lại phải tính thêm ĐÚNG 1 lần.
     await rail.getByRole('button', { name: 'Mua lại', exact: true }).first().click();
