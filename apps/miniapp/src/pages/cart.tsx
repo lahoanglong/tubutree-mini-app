@@ -249,7 +249,8 @@ export default function CartPage() {
             size="small"
             bold
             onClick={handleUndo}
-            style={{ color: 'var(--forest-200)', padding: '8px 6px' }}
+            className="tubu-hit-44"
+            style={{ color: 'var(--forest-200)', padding: '8px 6px', display: 'inline-block' }}
           >
             {vi.common.undo}
           </Text>
@@ -392,7 +393,8 @@ function CartLineRow({
       </Box>
 
       <Box style={{ flex: 1, minWidth: 0 }}>
-        <Text size="small" bold onClick={onOpen} style={{ cursor: 'pointer' }}>
+        {/* Tên 1-2 dòng chỉ cao 18-36px: tubu-hit-44 nới vùng chạm lên 44px mà không đổi bố cục dòng. */}
+        <Text size="small" bold onClick={onOpen} className="tubu-hit-44" style={{ cursor: 'pointer', display: 'block' }}>
           {line.productName}
         </Text>
         {line.variationName && (

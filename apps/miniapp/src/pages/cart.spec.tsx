@@ -105,3 +105,27 @@ describe('CartPage — SP đã ngừng bán (C-007)', () => {
     expect(screen.queryByText(/đã ngừng bán/)).toBeNull();
   });
 });
+
+describe('CartPage — vùng chạm >= 44px (C-021)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCart.mockResolvedValue(summary({}));
+  });
+
+  it('tên sản phẩm bấm được mở trang sản phẩm và có vùng chạm 44px (tubu-hit-44, hiện block cho trọn bề ngang)', async () => {
+    renderPage();
+    const name = await screen.findByText('Xà bông thảo mộc');
+    expect(name.className).toContain('tubu-hit-44');
+    expect(name.style.display).toBe('block');
+    fireEvent.click(name);
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/xb');
+  });
+
+  it('nút "Hoàn tác" sau khi xoá có vùng chạm 44px', async () => {
+    mocks.removeCartItem.mockResolvedValue(summary({ items: [], subtotal: 0, itemCount: 0 }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá Xà bông thảo mộc' }));
+    const undo = await screen.findByRole('button', { name: 'Hoàn tác' });
+    expect(undo.className).toContain('tubu-hit-44');
+  });
+});
