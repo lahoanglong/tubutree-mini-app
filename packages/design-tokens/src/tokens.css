@@ -96,7 +96,10 @@
   --color-text-primary: var(--stone-900);
   --color-text-secondary: var(--stone-600);
   --color-text-tertiary: var(--stone-500);
-  --color-text-disabled: var(--stone-400);
+  /* Used for muted INFORMATIVE text (rating count, "★ Mới") on canvas/surface/tints, so it must clear
+     4.5:1 (WCAG 1.4.3) — stone-500 is 4.59:1 on forest-50, the darkest surface. A truly inert control
+     is exempt and keeps the lighter --color-action-primary-fg-disabled. */
+  --color-text-disabled: var(--stone-500);
   --color-text-inverse: var(--stone-0);
   --color-text-brand: var(--forest-600);
   --color-text-link: var(--forest-600);
