@@ -1,7 +1,7 @@
-import type { Page } from '@playwright/test';
-import { test, expect, type MockApi } from './support/mock-api';
+import type { Locator, Page } from '@playwright/test';
+import { test, expect, makeOrder, type MockApi, type MockContext } from './support/mock-api';
 import { PURCHASED_PAGE } from './support/buy-flow-mocks';
-import { BINH_SUA, SHIPPING_CODE, SUBSCRIPTION_DAY_MONTH, XA_PHONG, mockDiscovery, toCard } from './support/discovery-mocks';
+import { BINH_SUA, SHIPPING_CODE, SUBSCRIPTION_DAY_MONTH, XA_PHONG, catalogHandler, mockDiscovery, toCard } from './support/discovery-mocks';
 import { eventsNamed, flushEvents } from './support/events';
 
 /**
@@ -183,5 +183,130 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     await flushEvents(page);
     await expect.poll(() => api.callsTo('POST', '/events').length, { timeout: 15_000 }).toBeGreaterThan(0);
     expect(eventsNamed(api, 'search_result_clicked')).toEqual([]);
+  });
+});
+
+test.describe('Buy-flow 4b — bố cục 320/375/390, vùng chạm, khung chờ', () => {
+  const noHorizontalScroll = (page: Page) =>
+    page.evaluate(() => {
+      const scroller = document.querySelector('.zaui-page') as HTMLElement | null;
+      return document.documentElement.scrollWidth <= window.innerWidth && (scroller ? scroller.scrollWidth <= scroller.clientWidth : true);
+    });
+  /** Phần tử đứng yên qua 2 khung hình (sheet trượt xong) — không dùng waitForTimeout. */
+  const settled = (locator: Locator) =>
+    locator.evaluate(
+      (el) =>
+        new Promise<boolean>((resolve) => {
+          const y0 = el.getBoundingClientRect().y;
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve(Math.abs(el.getBoundingClientRect().y - y0) < 0.5)));
+        }),
+    );
+  /** Thẻ SP thật: vỏ `.tubu-press` bao nút tên (`button.tubu-tile-link`) — cùng phần tử mà khung chờ `catalog-tile-skeleton` thay thế. */
+  const tileRoot = (scope: Locator) => scope.locator('button.tubu-tile-link').first().locator('xpath=ancestor::div[contains(@class,"tubu-press")][1]');
+  const gateOf = () => {
+    let open: () => void = () => {};
+    const promise = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    return { promise, open };
+  };
+
+  for (const width of [320, 375, 390]) {
+    test(`${width}px: Trang chủ (khách cũ), Danh mục, Bộ lọc — không tràn ngang, nút nằm trọn, chip có vùng chạm 44px`, async ({ page, api }) => {
+      await page.setViewportSize({ width, height: 740 });
+      mockDiscovery(api, { returning: true, shipping: true, subscription: true, forYou: [toCard(BINH_SUA)] });
+      await page.goto('/');
+      await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
+      await waitHomeSettled(page, api);
+      expect(await noHorizontalScroll(page)).toBe(true);
+      await page.screenshot({ path: test.info().outputPath(`home-4b-${width}.png`), fullPage: true });
+
+      await page.goto('/browse');
+      await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm', { timeout: 15_000 });
+      expect(await noHorizontalScroll(page)).toBe(true);
+      for (const name of ['Gợi ý', 'Bán chạy']) {
+        const chip = page.getByRole('group', { name: 'Sắp xếp' }).getByRole('button', { name, exact: true });
+        const hit = await chip.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const x = r.left + r.width / 2;
+          const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
+          return { above: at(r.top - 3), below: at(r.bottom + 3) };
+        });
+        expect(hit, `"${name}": vùng chạm phải phủ ≥ 44px theo chiều dọc`).toEqual({ above: true, below: true });
+      }
+      await page.screenshot({ path: test.info().outputPath(`browse-4b-${width}.png`) });
+
+      await page.getByRole('button', { name: 'Bộ lọc' }).click();
+      const apply = page.getByRole('button', { name: /^Xem [\d.]+ sản phẩm$/ });
+      await expect(apply).toBeVisible({ timeout: 15_000 });
+      await expect.poll(() => settled(apply), { timeout: 5_000 }).toBe(true);
+      const b = (await apply.boundingBox())!;
+      expect(b.x).toBeGreaterThanOrEqual(0);
+      expect(b.x + b.width, 'nút áp dụng tràn phải').toBeLessThanOrEqual(width);
+      expect(b.y + b.height, 'nút áp dụng ra ngoài màn hình').toBeLessThanOrEqual(740);
+      expect(b.height).toBeGreaterThanOrEqual(44);
+      const reset = page.getByRole('button', { name: 'Xoá bộ lọc' });
+      const label = reset.locator('.zaui-btn-container > span:not(.zaui-btn-icon)');
+      expect(await label.evaluate((el) => el.scrollWidth <= el.clientWidth), '"Xoá bộ lọc" bị rút gọn').toBe(true);
+      await page.screenshot({ path: test.info().outputPath(`filter-sheet-4b-${width}.png`) });
+    });
+  }
+
+  test('375px: khung chờ "Bán chạy" (Trang chủ) và lưới kết quả (Danh mục) cao xấp xỉ thẻ thật (≤ 16px)', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    mockDiscovery(api);
+    const real = catalogHandler();
+    const gate = gateOf();
+    api.get('/products', async (ctx: MockContext) => {
+      if (ctx.call.query.get('sort') === 'best_seller') await gate.promise;
+      return real(ctx);
+    });
+    await page.goto('/');
+    const best = page.getByRole('region', { name: 'Bán chạy' });
+    const skel = best.getByTestId('catalog-tile-skeleton').first();
+    await expect(skel).toBeVisible({ timeout: 15_000 });
+    const skelH = (await skel.boundingBox())!.height;
+    gate.open();
+    const tile = tileRoot(best);
+    await expect(tile).toBeVisible({ timeout: 15_000 });
+    await expect(best.getByTestId('catalog-tile-skeleton')).toHaveCount(0);
+    const tileH = (await tile.boundingBox())!.height;
+    expect(Math.abs(skelH - tileH), `Trang chủ: khung chờ ${skelH}px vs thẻ ${tileH}px`).toBeLessThanOrEqual(16);
+
+    const gate2 = gateOf();
+    api.get('/products', async (ctx: MockContext) => {
+      if (ctx.call.query.get('limit') === '30') await gate2.promise;
+      return real(ctx);
+    });
+    await page.goto('/browse?sort=newest');
+    const skel2 = page.getByTestId('catalog-tile-skeleton').first();
+    await expect(skel2).toBeVisible({ timeout: 15_000 });
+    const skel2H = (await skel2.boundingBox())!.height;
+    gate2.open();
+    const tile2 = tileRoot(page.getByTestId('catalog-grid'));
+    await expect(tile2).toBeVisible({ timeout: 15_000 });
+    const tile2H = (await tile2.boundingBox())!.height;
+    expect(Math.abs(skel2H - tile2H), `Danh mục: khung chờ ${skel2H}px vs thẻ ${tile2H}px`).toBeLessThanOrEqual(16);
+  });
+
+  test('375px: khung chờ dải "Đơn của bạn" cao xấp xỉ dải thật có một dòng đang giao (≤ 8px)', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    mockDiscovery(api, { returning: true, shipping: true });
+    const gate = gateOf();
+    api.get('/orders', async ({ call }: MockContext) => {
+      if (call.query.get('status') !== 'SHIPPING') return { data: [], meta: { page: 1, limit: 1, total: 0 } };
+      await gate.promise;
+      return { data: [makeOrder({ code: SHIPPING_CODE, status: 'SHIPPING', paymentStatus: 'PAID' })], meta: { page: 1, limit: 1, total: 1 } };
+    });
+    await page.goto('/');
+    const skel = page.getByTestId('order-strip-loading');
+    await expect(skel).toBeVisible({ timeout: 15_000 });
+    const skelH = (await skel.boundingBox())!.height;
+    gate.open();
+    const strip = page.getByRole('region', { name: 'Đơn của bạn' });
+    await expect(strip).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('order-strip-loading')).toHaveCount(0);
+    const stripH = (await strip.boundingBox())!.height;
+    expect(Math.abs(skelH - stripH), `Dải đơn: khung chờ ${skelH}px vs dải thật ${stripH}px`).toBeLessThanOrEqual(8);
   });
 });
