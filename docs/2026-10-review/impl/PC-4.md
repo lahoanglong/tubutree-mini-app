@@ -117,3 +117,46 @@ ESLint file đã sửa: 0 lỗi mới. settings/addresses/about/notifications/on
 - Lựa chọn tắt cũ lưu trên máy chỉ được chuyển lên server khi khách mở trang Cài đặt; muốn chuyển ngay lúc mở app thì gọi `legacyOptOuts` trong `components/app.tsx` (ngoài nhóm file).
 - `services/account-api.ts`/`shop-api.ts` chưa khai báo kiểu `support`/prefs (để tránh đụng gói khác, kiểu khai báo cục bộ ở `pages/about-data.ts`, `pages/settings-notify-prefs.ts`).
 - Template tin tiếp thị mới phải được thêm vào `notification-categories.ts`; nếu không sẽ bị coi là tin giao dịch và gửi cả khi khách đã tắt.
+
+## Review lượt 1
+
+| # | Mức | Finding | Kết quả |
+|---|-----|---------|---------|
+| 1 | major | FLASH_STARTING xếp PROMO → khách tắt khuyến mãi bấm "Nhắc tôi" mất nhắc vĩnh viễn (cron đặt `notifiedAt` trước khi `notify`) | **Đúng, đã sửa** (`a2a0a79`): FLASH_STARTING sang TRANSACTIONAL. Đã xác minh `flash-sale.service.ts:notifyStartedFlashSales` claim `notifiedAt` rồi mới gọi `notify`, `notify` return sớm không ném lỗi nên không có đường thử lại. Test đỏ→xanh: `notification-prefs.spec.ts` "đã tắt khuyến mãi nhưng tự bấm Nhắc tôi giờ vàng → vẫn nhận nhắc". |
+| 2 | major | Lựa chọn tắt cũ trên máy chỉ đẩy lên server khi khách mở Cài đặt | **Đúng, đã sửa** (`5afa5df`): `pages/settings-legacy-sync.ts` (`syncLegacyNotifyPrefs` + hook `useLegacyNotifyPrefsSync`), `components/app.tsx` gọi hook khi `status === 'authenticated'` (2 dòng: import + gọi; file ngoài nhóm, chèn tối thiểu vì đây là nơi duy nhất chạy lúc mở app). Khoá cũ trên máy chỉ xoá SAU khi server nhận, lỗi mạng thì lần mở sau thử lại; máy không có khoá cũ thì không gọi mạng. Logic ở Cài đặt giữ làm dự phòng. Test mới `settings-legacy-sync.spec.tsx` (4 ca, gồm hook chỉ chạy khi đã đăng nhập) — đỏ (module chưa có) → xanh. |
+| 3 | minor | Ẩn danh giữ `referralCode` → link/mã cũ của CTV vẫn ghi công | **Đã sửa** (`89237c2`): đổi `referralCode` sang `DEL<16 hex>` ngẫu nhiên (mọi tra cứu theo mã cũ ở checkout/auth/affiliate trượt — slug gian hàng = mã cũ viết thường cũng trượt vì tra theo `referralCode.toUpperCase()`), và cho hết hạn ngay các `ReferralTouch` còn hiệu lực trỏ về tài khoản đó. Race spec thêm ca kiểm cả hai. |
+| 4 | minor | Ẩn danh sót `invoiceRequest`, gian hàng `title/headerNote/avatarUrl/coverUrl` | **Đã sửa** (`89237c2`): bỏ `email` khỏi `invoiceRequest`; gian hàng đặt `title` = "Người dùng đã xoá", xoá `headerNote/avatarUrl/coverUrl`. **Cố ý giữ** (ghi trong docblock service): MST/tên công ty/địa chỉ hoá đơn (hoá đơn VAT phải lưu theo luật kế toán), `Payout.bankInfo` và `OrderCustomerRefund` (chứng từ chi tiền phải đối soát). |
+| 5 | minor | JwtStrategy không kiểm `isBlocked` → access token cũ còn dùng tới hết hạn | **Không sửa, chấp nhận rủi ro + ghi tài liệu**: `JWT_ACCESS_TTL` mặc định `15m` (`env.validation.ts`, `.env`). Kiểm `isBlocked` trong JwtStrategy là thêm 1 truy vấn DB cho MỌI request toàn hệ thống, thuộc module auth (ngoài nhóm file, gói khác có thể đang sửa) — cần quyết định riêng. Refresh token đã thu hồi, `issueTokens` chặn `isBlocked`. Ghi chú trong docblock `AccountDeletionService`. |
+| 6 | minor | WELCOME/BIRTHDAY/MILESTONE_VOUCHER xếp PROMO | **Sửa một phần** (`a2a0a79`): MILESTONE_VOUCHER sang TRANSACTIONAL (thưởng khách tự kiếm qua giới thiệu, mã vẫn phát nên khách phải được báo). WELCOME/BIRTHDAY/WINBACK giữ PROMO (mã tặng mang tính tiếp thị, khách vẫn thấy trong mục Mã giảm giá). Cần chủ dự án xác nhận — xem Giả định. |
+| 7 | minor | DEALER_* chỉ dành cho admin dẫn sang `/dealer`; COMMUNITY_* không gửi `post_id` | **Đã sửa**: (`281d954`) DEALER_CREDIT_PAYMENT_REPORTED, DEALER_REWARD_CLAIM_NEW (đã xác minh chỉ gửi cho user ADMIN ở `dealer.service.ts:394/920`) không còn nút; (`8740771`) `community-feed.service.ts` gửi `post_id` ở 3 lệnh notify (COMMUNITY_POST_APPROVED, NEW_ANSWER/EXPERT_REPLIED, BEST_ANSWER — đều kênh INAPP nên khoá thêm không ảnh hưởng ZNS). File module feed ngoài nhóm: sửa tối thiểu 3 dòng + 4 kỳ vọng spec. |
+| 8 | minor | `toggleNotify` không chặn bấm chồng | **Đã sửa** (`f5d57a6`): công tắc khoá (`aria-disabled`) khi đang lưu; test đỏ→xanh "bấm hai lần liên tiếp khi đang lưu → chỉ gửi một yêu cầu". |
+
+### Lệnh kiểm chứng + output
+```
+cd apps/api && npx jest src/modules/notifications/notification-prefs.spec.ts --maxWorkers=1
+  trước sửa: Tests: 3 failed, 25 passed, 28 total   sau sửa: Tests: 28 passed, 28 total
+cd apps/api && npx jest src/modules/feed/community-feed.service.spec.ts --maxWorkers=1
+  trước sửa: Tests: 3 failed, 207 passed            sau sửa: Tests: 210 passed, 210 total
+cd apps/api && npx jest src/modules/flash-sale src/modules/notifications src/modules/users --maxWorkers=1
+  Test Suites: 5 passed, 5 total / Tests: 97 passed, 97 total
+cd apps/api && DATABASE_URL=postgresql://tubu:tubu@localhost:5564/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand account-deletion
+  trước sửa: Tests: 1 failed, 11 passed (Expected: not "9CSJNQZ9TA")   sau sửa: Tests: 12 passed, 12 total
+  ... notification-prefs: Tests: 3 passed, 3 total
+cd apps/miniapp && npx vitest run src/pages/settings-legacy-sync.spec.tsx src/pages/settings.spec.tsx
+  Test Files 2 passed / Tests 10 passed (settings.spec trước sửa: 1 failed | 5 passed)
+cd apps/miniapp && npx vitest run src/pages/notifications.spec.ts
+  trước sửa: 1 failed | 29 passed   sau sửa: Tests 30 passed (30)
+npx tsc --noEmit -p tsconfig.json (api), npx tsc --noEmit (miniapp): không lỗi
+ESLint file đã sửa: 0 lỗi (chỉ cảnh báo consistent-type-imports ở spec, cùng mẫu với spec có sẵn)
+```
+
+### Migration
+Không có migration mới.
+
+### Giả định (lượt review)
+- Tin "nhắc giờ vàng" (khách tự đăng ký) và "thưởng mốc giới thiệu" là tin khách yêu cầu/được hưởng → luôn gửi. Mã chào mừng/sinh nhật/winback vẫn coi là tiếp thị.
+- Lựa chọn tắt cũ trên máy được gán cho tài khoản đăng nhập đầu tiên trên máy đó sau khi cập nhật (máy dùng chung là trường hợp hiếm; luôn chỉ đẩy "tắt", không bao giờ bật lại).
+
+### Việc còn lại
+- Quyết định có kiểm `isBlocked`/tokenVersion trong JwtStrategy hay không (ảnh hưởng toàn API; hiện rủi ro giới hạn 15 phút).
+- Xác nhận nghiệp vụ phân loại WELCOME/BIRTHDAY_VOUCHER.
