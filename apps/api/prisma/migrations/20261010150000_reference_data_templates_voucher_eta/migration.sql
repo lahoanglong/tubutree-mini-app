@@ -9,7 +9,7 @@ INSERT INTO "notification_templates" ("id", "code", "channel", "bodyTemplate") V
   ('nt-dealer-credit-confirmed', 'DEALER_CREDIT_PAYMENT_CONFIRMED', 'INAPP', '✅ Tubu Tree đã xác nhận nhận {{amount}}đ trả nợ của bạn — công nợ đã được cập nhật. Cảm ơn bạn 🌿'),
   ('nt-dealer-credit-reported', 'DEALER_CREDIT_PAYMENT_REPORTED', 'INAPP', '📥 Đại lý {{dealer}} báo đã chuyển khoản {{amount}}đ trả nợ. Vào trang quản trị (Đại lý → Công nợ) để kiểm tra sao kê và xác nhận.'),
   ('nt-flash-starting', 'FLASH_STARTING', 'INAPP', '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.'),
-  ('nt-points-expiring', 'POINTS_EXPIRING', 'INAPP', '⏳ Bạn có {{points}} điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿'),
+  ('nt-points-expiring', 'POINTS_EXPIRING', 'INAPP', '⏳ Bạn có {{points}} Điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿'),
   ('nt-return-ok-no-refund', 'RETURN_APPROVED_NO_REFUND', 'INAPP', 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt.'),
   ('nt-storefront-trending', 'STOREFRONT_TRENDING_PRODUCTS', 'INAPP', '✨ Có {{count}} sản phẩm nổi bật (như {{sample}}) bạn chưa thêm vào gian hàng — thêm ngay để không bỏ lỡ khách quan tâm!'),
   ('nt-sub-order-failed', 'SUBSCRIPTION_ORDER_FAILED', 'INAPP', 'Đơn định kỳ kỳ này chưa đặt được: {{reason}}. Lịch vẫn giữ, Tubu sẽ thử lại kỳ sau 🌿')

@@ -85,6 +85,28 @@ describe('seed mẫu thông báo', () => {
     expect(byCode.size).toBe(templates.length);
   });
 
+  describe('migration đưa mẫu thiếu lên prod (prod không chạy seed)', () => {
+    const MIGRATION = join(__dirname, '../../../prisma/migrations/20261010150000_reference_data_templates_voucher_eta/migration.sql');
+    const inserted = [...readFileSync(MIGRATION, 'utf-8').matchAll(/\('([^']+)', '([A-Z_]+)', '([A-Z]+)', '([^']*)'\)/g)].map((m) => ({
+      id: m[1]!,
+      code: m[2]!,
+      channel: m[3]!,
+      bodyTemplate: m[4]!,
+    }));
+
+    it('chèn đủ tám mã A1-019 và lời tin trùng từng chữ với seed (nếu lệch thì prod và dev nói hai câu khác nhau)', () => {
+      expect(inserted.map((t) => t.code).sort()).toEqual(REQUIRED_CODES.slice(0, 8).sort());
+      for (const t of inserted) expect(byCode.get(t.code)).toMatchObject({ id: t.id, channel: t.channel, bodyTemplate: t.bodyTemplate });
+    });
+
+    it('POINTS_EXPIRING viết "Điểm Xanh" hoa đúng thuật ngữ Q-26, cả seed lẫn migration', () => {
+      for (const body of [byCode.get('POINTS_EXPIRING')!.bodyTemplate, inserted.find((t) => t.code === 'POINTS_EXPIRING')!.bodyTemplate]) {
+        expect(body).toContain('Điểm Xanh');
+        expect(body).not.toContain('điểm Xanh');
+      }
+    });
+  });
+
   describe('lời tin đúng sự thật', () => {
     function makeSvc(code: string) {
       const tpl = byCode.get(code)!;
