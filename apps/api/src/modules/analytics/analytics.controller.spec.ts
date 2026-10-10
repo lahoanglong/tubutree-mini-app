@@ -3,6 +3,8 @@ import type { JwtPayload } from '@tubutree/shared-types';
 import { AnalyticsController } from './analytics.controller';
 import type { AnalyticsEventsService } from './analytics-events.service';
 import { IngestEventsDto } from './dto/ingest-events.dto';
+import { SERVER_EVENT_NAMES } from '@tubutree/shared-types';
+import { THROTTLER_LIMIT, THROTTLER_TRACKER, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
 
 const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
 const asBody = (metatype: new () => object, value: Record<string, unknown>) =>
@@ -47,7 +49,7 @@ describe('AnalyticsController.ingest', () => {
       await expect(
         asBody(IngestEventsDto, {
           events: [
-            { eventId: 'e3', eventName: 'test', occurredAt: '2026-09-27T00:00:00Z', platform: 'admin' },
+            { eventId: 'e3', eventName: 'app_opened', occurredAt: '2026-09-27T00:00:00Z', platform: 'admin' },
           ],
         }),
       ).rejects.toThrow();
@@ -57,7 +59,7 @@ describe('AnalyticsController.ingest', () => {
       await expect(
         asBody(IngestEventsDto, {
           events: [
-            { eventId: 'e4', eventName: 'test', occurredAt: '2026-09-27T00:00:00Z', platform: 'pos' },
+            { eventId: 'e4', eventName: 'app_opened', occurredAt: '2026-09-27T00:00:00Z', platform: 'pos' },
           ],
         }),
       ).rejects.toThrow();
@@ -67,7 +69,7 @@ describe('AnalyticsController.ingest', () => {
       await expect(
         asBody(IngestEventsDto, {
           events: [
-            { eventId: 'e5', eventName: 'test', occurredAt: '2026-09-27T00:00:00Z', platform: 'system' },
+            { eventId: 'e5', eventName: 'app_opened', occurredAt: '2026-09-27T00:00:00Z', platform: 'system' },
           ],
         }),
       ).rejects.toThrow();
@@ -77,10 +79,64 @@ describe('AnalyticsController.ingest', () => {
       await expect(
         asBody(IngestEventsDto, {
           events: [
-            { eventId: 'e6', eventName: 'test', occurredAt: '2026-09-27T00:00:00Z', platform: 'invalid' },
+            { eventId: 'e6', eventName: 'app_opened', occurredAt: '2026-09-27T00:00:00Z', platform: 'invalid' },
           ],
         }),
       ).rejects.toThrow();
+    });
+  });
+
+  describe('IngestEventsDto - whitelist eventName (C-030)', () => {
+    const base = { eventId: '11111111-1111-4111-8111-111111111111', occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp' };
+    const ingest = (events: Array<Record<string, unknown>>) => asBody(IngestEventsDto, { events });
+
+    it.each(SERVER_EVENT_NAMES)('chặn sự kiện server-side %s do client gửi', async (eventName) => {
+      await expect(ingest([{ ...base, eventName }])).rejects.toThrow();
+    });
+
+    it('chặn tên lạ', async () => {
+      await expect(ingest([{ ...base, eventName: 'not_a_real_event' }])).rejects.toThrow();
+    });
+
+    it('một sự kiện server-side lẫn trong lô hợp lệ làm cả lô bị 400', async () => {
+      await expect(
+        ingest([{ ...base, eventName: 'screen_viewed' }, { ...base, eventName: 'order_paid' }]),
+      ).rejects.toThrow();
+    });
+
+    it('nhận các sự kiện client đang phát', async () => {
+      await expect(ingest([{ ...base, eventName: 'screen_viewed', props: { route: '/home' } }])).resolves.toBeDefined();
+    });
+
+    it('props quá 4KB bị chặn', async () => {
+      await expect(
+        ingest([{ ...base, eventName: 'client_error', props: { blob: 'x'.repeat(5000) } }]),
+      ).rejects.toThrow();
+    });
+
+    it('props quá 30 khoá bị chặn', async () => {
+      const props = Object.fromEntries(Array.from({ length: 31 }, (_, i) => [`k${i}`, i]));
+      await expect(ingest([{ ...base, eventName: 'client_error', props }])).rejects.toThrow();
+    });
+
+    it('trường chuỗi quá dài bị chặn', async () => {
+      await expect(
+        ingest([{ ...base, eventName: 'app_opened', sessionId: 's'.repeat(500) }]),
+      ).rejects.toThrow();
+    });
+
+    it('lô quá 50 sự kiện bị chặn', async () => {
+      const events = Array.from({ length: 51 }, () => ({ ...base, eventName: 'screen_viewed' }));
+      await expect(ingest(events)).rejects.toThrow();
+    });
+  });
+
+  describe('throttle', () => {
+    it('đếm theo khoá toàn cục (userId/IP), KHÔNG theo x-device-id', () => {
+      const handler = AnalyticsController.prototype.ingest;
+      expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, handler)).toBeLessThanOrEqual(120);
+      expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, handler)).toBe(60_000);
+      expect(Reflect.getMetadata(`${THROTTLER_TRACKER}default`, handler)).toBeUndefined();
     });
   });
 });
