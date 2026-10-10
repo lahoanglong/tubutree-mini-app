@@ -12,6 +12,7 @@ import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 import { CouponsModule } from './modules/coupons/coupons.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { DataRetentionModule } from './modules/data-retention/data-retention.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
@@ -67,6 +68,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     CouponsModule,
     NotificationsModule,
     AnalyticsModule,
+    DataRetentionModule,
     // Features
     AuthModule,
     HealthModule,

@@ -9,24 +9,9 @@ import { IngestEventsDto } from './dto/ingest-events.dto';
 export class AnalyticsController {
   constructor(private readonly analytics: AnalyticsEventsService) {}
 
-  // Track theo X-Device-Id thay vì IP — Wi-Fi cửa hàng/CGNAT dùng chung IP không được lấy hết
-  // hạn mức của nhau ở endpoint này (A7-02). getTracker được ĐỌC bởi guard APP_GUARD toàn cục có
-  // sẵn (ThrottlerGuard trong app.module.ts) — không cần một guard riêng chồng lên (guard riêng
-  // trước đây chạy SONG SONG với guard IP toàn cục chứ không thay thế, nên throttle theo IP vẫn
-  // áp dụng — phát hiện ở review cuối).
-  @Throttle({
-    default: {
-      ttl: 60_000,
-      limit: 200,
-      getTracker: (req: Record<string, unknown>) => {
-        const headers = req.headers as Record<string, unknown> | undefined;
-        const deviceId = headers?.['x-device-id'];
-        if (typeof deviceId === 'string' && deviceId.length > 0) return deviceId;
-        const sub = (req.user as { sub?: string } | undefined)?.sub;
-        return sub ?? (req.ip as string | undefined) ?? 'unknown';
-      },
-    },
-  })
+  // Không tự đặt getTracker: AppThrottlerGuard toàn cục đã đếm theo userId (JWT) hoặc IP. Khoá theo
+  // x-device-id trước đây cho phép đổi header mỗi request để né giới hạn.
+  @Throttle({ default: { ttl: 60_000, limit: 120 } })
   @Post()
   async ingest(
     @CurrentUser() user: JwtPayload | undefined,

@@ -57,6 +57,8 @@ async function bootstrap() {
   // mọi request share 1 counter trong ThrottlerGuard → 60req/min cho toàn site, dễ DOS lẫn nhau.
   // Set trust proxy=1 để Express lấy IP thật từ X-Forwarded-For (1 hop = reverse proxy chuẩn).
   app.set('trust proxy', 1);
+  // /events nhận tối đa 50 sự kiện × 4KB props (+ envelope, escape unicode): parser riêng đặt TRƯỚC parser 10MB (body đã parse thì parser sau bỏ qua).
+  app.use('/api/events', json({ limit: '512kb' }));
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ limit: '10mb', extended: true }));
   app.use(helmet());
