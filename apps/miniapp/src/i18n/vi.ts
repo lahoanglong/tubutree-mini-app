@@ -446,6 +446,15 @@ export const vi = {
     outOfStock: 'Tạm hết hàng',
   },
 
+  dealerOrder: {
+    outOfStockPreorder: 'Hết hàng — được đặt trước',
+    preorderLine: (n: number) => `Đặt trước ${n}, giao khi hàng về`,
+    preorderNote: (lines: number) =>
+      `${lines} mặt hàng đặt vượt tồn: phần thiếu giao khi hàng về, giữ giá hôm nay.`,
+    createdWithPreorder: 'Đã tạo đơn đại lý — phần đặt trước sẽ giao khi hàng về.',
+    created: 'Đã tạo đơn đại lý!',
+  },
+
   shareFallback: {
     failedCopied: 'Chưa chia sẻ được qua Zalo — đã sao chép liên kết, bạn dán vào tin nhắn để gửi nhé.',
     failedManual: 'Chưa chia sẻ được qua Zalo và cũng không sao chép được — hãy chọn rồi chép liên kết thủ công.',

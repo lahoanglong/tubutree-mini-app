@@ -43,6 +43,7 @@ import { ImageUpload } from '../components/image-upload';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { QuantitySelector } from '../components/ui/quantity-selector';
+import { DEALER_MAX_QTY, preorderQty, realDiscountPct } from './dealer-pricing';
 
 export default function DealerPage() {
   const meQ = useQuery({ queryKey: ['dealer-me'], queryFn: getDealerMe });
@@ -340,6 +341,10 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
     const map = new Map((priceQ.data ?? []).map((r) => [r.variationId, r.dealerPrice]));
     return cart.reduce((s, [id, n]) => s + (map.get(id) ?? 0) * n, 0);
   }, [cart, priceQ.data]);
+  const preorderLines = useMemo(() => {
+    const stockOf = new Map((priceQ.data ?? []).map((r) => [r.variationId, r.stock]));
+    return cart.filter(([id, n]) => preorderQty(n, stockOf.get(id) ?? 0) > 0).length;
+  }, [cart, priceQ.data]);
 
   // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lần đặt đơn (double-tap/timeout mạng) →
   // BE không tạo đơn công nợ đôi; regenerate sau khi đặt thành công (đơn sau là đơn mới, mirror wallet.withdraw).
@@ -355,7 +360,11 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
       ),
     onSuccess: (order, method) => {
       haptic('medium');
-      openSnackbar({ text: 'Đã tạo đơn đại lý!', type: 'success' });
+      const hasPreorder = order.items?.some((it) => (it.backorderedQty ?? 0) > 0) ?? false;
+      openSnackbar({
+        text: hasPreorder ? vi.dealerOrder.createdWithPreorder : vi.dealerOrder.created,
+        type: 'success',
+      });
       orderKey.current = newIdempotencyKey();
       setQty({});
       void qc.invalidateQueries({ queryKey: ['dealer-orders'] });
@@ -552,6 +561,11 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
               {formatVnd(total)}
             </Text>
           </Box>
+          {preorderLines > 0 && (
+            <Text size="xSmall" style={{ color: 'var(--warning)', display: 'block', marginBottom: 6 }}>
+              {vi.dealerOrder.preorderNote(preorderLines)}
+            </Text>
+          )}
           {overLimit && (
             <Box flex alignItems="center" style={{ gap: 4, marginBottom: 6 }}>
               <AlertTriangle size={13} color="var(--danger)" style={{ flexShrink: 0 }} />
@@ -595,6 +609,8 @@ function PriceRow({
   onQty: (n: number) => void;
   top: boolean;
 }) {
+  const preorder = preorderQty(qty, row.stock);
+  const discountPct = realDiscountPct(row.retailPrice, row.dealerPrice);
   return (
     <Box
       flex
@@ -607,7 +623,7 @@ function PriceRow({
           {row.product} · {row.variation}
         </Text>
         <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-          {row.sku} · tồn {row.stock}
+          {row.sku} · {row.stock > 0 ? `tồn ${row.stock}` : vi.dealerOrder.outOfStockPreorder}
         </Text>
         <Box flex alignItems="baseline" style={{ gap: 6 }}>
           <Text size="small" bold style={{ color: 'var(--dealer-ink)' }}>
@@ -616,13 +632,26 @@ function PriceRow({
           <Text size="xSmall" style={{ color: 'var(--neutral-400)', textDecoration: 'line-through' }}>
             {formatVnd(row.retailPrice)}
           </Text>
-          <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-            -{row.discountPct}%
-          </Text>
+          {discountPct > 0 && (
+            <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+              -{discountPct}%
+            </Text>
+          )}
         </Box>
+        {preorder > 0 && (
+          <Text
+            size="xSmall"
+            style={{
+              color: 'var(--warning)', background: 'var(--warning-bg)',
+              display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--radius-full)', marginTop: 4,
+            }}
+          >
+            {vi.dealerOrder.preorderLine(preorder)}
+          </Text>
+        )}
       </Box>
       <Box style={{ flex: '0 0 auto' }}>
-        <QuantitySelector value={qty} min={0} max={row.stock} size="sm" onChange={onQty} />
+        <QuantitySelector value={qty} min={0} max={DEALER_MAX_QTY} size="md" onChange={onQty} />
       </Box>
     </Box>
   );
