@@ -215,3 +215,85 @@ npx tsc --noEmit → exit 0 ; npx eslint src/app/admin/page.tsx src/components/a
 - Dữ liệu cũ: DB local có 1 DEALER không tier; sau deploy admin cần gán bậc qua form mới (cấp lại DEALER kèm Tier ID).
 - Danh sách bậc vẫn nhập tay Tier ID (giống form duyệt hồ sơ); có thể đổi sang dropdown khi có endpoint liệt kê bậc.
 - Deploy API trước web (web dựa vào `allowedTransitions`; API cũ → khối nút trống, không sai tiền).
+
+## Review lượt 1 (reviewer độc lập: 1 major + 7 minor)
+
+Commit: `c87d8bf` (major + minor 2), `458f27f` (minor 7), `7e5447e` (minor 4), `ee65130` (minor 5) + commit báo cáo này.
+
+| # | Mức | Finding | Xử lý |
+|---|-----|---------|-------|
+| 1 | major | Đơn trả trước chưa trả ở PENDING_PAYMENT vẫn đi được sang CONFIRMED/PACKED (nút "Xác nhận" hiện cạnh "Đã nhận tiền"); cron chỉ quét PENDING_PAYMENT → kho/flash/coupon bị giữ vĩnh viễn | **ĐÃ SỬA** (`c87d8bf`) — xác minh đúng: `allowedNextStatuses` trả `['CONFIRMED','PACKED','CANCELLED']` cho đơn CK chưa trả (test cũ còn khẳng định điều đó). Chọn phương án (a) |
+| 2 | minor | `onlyIfUnpaid` không giữ trạng thái lúc cron quét; admin đẩy đơn đi tiếp giữa `findMany` và `setStatus` thì cron vẫn huỷ | **ĐÃ SỬA** (`c87d8bf`) — thêm `expectedStatus` cho `setStatus`, cron truyền `'PENDING_PAYMENT'` |
+| 3 | minor | `markPaid` là bản thứ 4 của logic lật PAID (ZaloPay, Pancake, dealer có bản riêng) | **KHÔNG SỬA** — ngoài nhóm file của gói (zalopay.service, pancake.processor thuộc PA-4, dealer.service thuộc PA-4). Việc tiếp: cho callback ZaloPay và `onPaymentReconcile` gọi `OrderStatusService.markPaid` với actor SYSTEM/PANCAKE |
+| 4 | minor | Cron huỷ đơn ZALOPAY mà không tra trạng thái cổng; callback mất thì đơn khách đã trả bị huỷ lặng lẽ | **ĐÃ SỬA một phần** (`7e5447e`) — không có API tra cổng nên chưa thể tra. Đơn qua cổng (khác BANK_TRANSFER) có `PaymentAttempt` khi bị tự huỷ: ghi chú huỷ (hiện trong ghi chú + lịch sử đơn) ghi "đã mở lệnh ZALOPAY: đối chiếu ZALOPAY, đã trừ tiền thì hoàn thủ công" + `logger.warn`. Vẫn huỷ để nhả kho (giả định bên dưới) |
+| 5 | minor | Webhook Pancake/Gomdon báo SHIPPING/DELIVERED cho đơn chưa trả bị chặn và nuốt êm, không phát lại sau khi tiền về | **ĐÃ SỬA** (`ee65130`) — `setStatus` với actor không phải người (PANCAKE/SYSTEM/không truyền) bị chặn vì chưa trả thì nối 1 dấu vào `orders.note` ("[Chờ thanh toán: vận chuyển đã báo DELIVERED — đẩy tay sau khi nhận tiền]"), chống lặp bằng `position()` trong cùng câu UPDATE; lỗi ghi dấu không thay lỗi gốc. Admin/merchant bấm tay vẫn chỉ nhận 400 |
+| 6 | minor | DTO đổi trả vẫn nhận `data:image/...;base64` (lệch đặc tả "chỉ https") | **KHÔNG SỬA** — lệch có chủ đích, đã ghi ở Giả định lượt 3 (PROD chưa cấu hình Cloudinary, miniapp gửi base64; chặn sẽ làm mọi đổi trả có ảnh bị 400). Cần chủ dự án xác nhận; bỏ nhánh base64 khi bật Cloudinary |
+| 7 | minor | `orders.pending_payment_ttl_hours` không có luật ghi → lưu 0/1000/1.5 thấy "đã lưu" nhưng cron chạy số khác | **ĐÃ SỬA** (`458f27f`) — `admin-config-rules`: số nguyên `MIN_TTL_HOURS..MAX_TTL_HOURS` (1..720) giờ, hằng xuất từ cron dùng chung |
+| 8 | minor | Cron lọc `type: 'RETAIL'` bỏ cả đơn đại lý trả trước (không ghi công nợ) kẹt PENDING_PAYMENT | **KHÔNG SỬA, ghi rõ loại trừ** — đơn đại lý có luồng xác nhận riêng (`DealerPaymentPanel` / `confirmDealerOrderPayment`, gói PA-4), quan hệ đại lý thường trả chậm theo thoả thuận; tự huỷ đơn sỉ là quyết định nghiệp vụ chưa có trong Q-06 (Q-06 chỉ nói đơn khách lẻ/CTV). Câu hỏi mở cho chủ dự án |
+
+### Finding 1 — vì sao chọn (a) chứ không mở rộng cron (b)
+- Trước gói này admin **không có** nút "Đã nhận tiền": cách duy nhất xử lý đơn CK đã nhận tiền là bấm "Xác nhận" → PROD có
+  thể đang có nhiều đơn `CONFIRMED/PACKED + UNPAID + BANK_TRANSFER` mà khách **đã trả thật**. Phương án (b) (cron quét cả
+  CONFIRMED/PACKED quá 24 giờ) sẽ tự huỷ hàng loạt đơn đã trả ở lượt chạy đầu sau deploy. (a) không đụng dữ liệu cũ.
+- Luật mới (`requiresPaymentBefore(from, to)`): đơn trả trước chưa PAID (không ghi công nợ) **không được rời PENDING_PAYMENT
+  trừ sang CANCELLED**; lối ra duy nhất là `markPaid` / callback thanh toán (vốn tự lật PENDING_PAYMENT → CONFIRMED + PAID).
+  Áp cho mọi actor (admin, merchant, webhook) vì cùng đi qua `setStatus`; web admin tự ẩn nút "Xác nhận"/"Đóng gói" vì đọc
+  `allowedTransitions` từ API. Đơn tạo mới không bị ảnh hưởng: COD và đơn trả bằng ví/xu được tạo thẳng ở CONFIRMED
+  (`checkout.service.ts:196`, `affiliate.service.ts:306`, `dealer.service.ts:232`), PENDING_PAYMENT luôn là trả trước chưa trả.
+- Pancake báo "confirmed" cho đơn CK chưa đối soát giờ bị chặn và nuốt êm (có dấu ghi chú theo finding 5) — vô hại vì
+  `onPaymentReconcile` lật PENDING_PAYMENT → CONFIRMED khi tiền về.
+- Dữ liệu cũ CONFIRMED/PACKED + UNPAID: vẫn đi PACKED/CANCELLED được, bấm "Đã nhận tiền" để giao tiếp (khoá SHIPPING/DELIVERED
+  giữ nguyên như lượt 1).
+
+### Test thêm (đỏ → xanh)
+- `order-transition.spec.ts`: rời PENDING_PAYMENT sang mốc tiến cần thanh toán; PENDING_PAYMENT chưa trả → CONFIRMED/PACKED
+  ném `UnpaidPrepaidTransitionError` (BANK_TRANSFER, ZALOPAY); `allowedNextStatuses` của đơn PENDING_PAYMENT chưa trả = `['CANCELLED']`.
+- `order-status.service.spec.ts`: setStatus PENDING_PAYMENT → CONFIRMED/PACKED bị chặn, không mở tx; đã PAID → CONFIRMED đi được
+  với guard `paymentStatus=PAID`; `expectedStatus` lệch → không mở tx/không huỷ; webhook (PANCAKE/SYSTEM/không actor) bị chặn →
+  ghi dấu 1 lần, admin → không ghi; ghi dấu lỗi → vẫn ném lỗi gốc.
+- `pending-payment-expiry.cron.spec.ts`: cron truyền `expectedStatus: 'PENDING_PAYMENT'`; đơn ZALOPAY có PaymentAttempt → ghi
+  chú đối chiếu + 1 warn, đơn không có lệnh / BANK_TRANSFER → không.
+- `admin-config-rules.spec.ts`: TTL 1/24/720 nhận; 0, 721, 1.5, "24" bị 400.
+- `admin.service.spec.ts`: cập nhật kỳ vọng `allowedTransitions` của đơn A (PENDING_PAYMENT chưa trả) thành `['CANCELLED']`.
+- Race spec `test/integration-race/pending-payment-expiry.race-spec.ts` (Postgres thật):
+  - (f) admin bấm "Xác nhận"/"Đóng gói" đơn CK chưa trả → `UnpaidPrepaidTransitionError`, đơn vẫn PENDING_PAYMENT, cron vẫn huỷ + hoàn kho 1 lần.
+  - (g) đơn bị đẩy sang CONFIRMED giữa `findMany` của cron và `setStatus` → cron không huỷ, kho nguyên. **Đỏ khi bỏ
+    `expectedStatus` khỏi cron** (`1 failed, 6 passed`), xanh khi có.
+  - (h) 2 webhook DELIVERED song song + 1 lặp cho đơn PACKED chưa trả → cả 3 bị chặn, đơn giữ PACKED, ghi chú cũ giữ nguyên
+    và có đúng 1 dấu (kiểm SQL `position()` thật).
+
+### Lệnh kiểm chứng (output thật)
+```
+cd apps/api
+npx jest --maxWorkers=1 src/modules/orders/order-transition.spec.ts src/modules/orders/order-status.service.spec.ts \
+  src/modules/orders/pending-payment-expiry.cron.spec.ts src/modules/admin/admin.service.spec.ts   # trước sửa
+  Tests:       10 failed, 139 passed, 149 total
+  # sau sửa
+  Tests:       149 passed, 149 total
+npx jest --maxWorkers=1 src/modules/integrations/pancake/pancake.processor.spec.ts \
+  src/modules/integrations/gomdon/gomdon-webhook.service.spec.ts src/modules/merchant src/modules/admin
+  Tests:       255 passed, 255 total
+npx jest --maxWorkers=1 src/modules/orders/order-status.service.spec.ts      → Tests: 50 passed, 50 total
+npx jest --maxWorkers=1 src/modules/orders/pending-payment-expiry.cron.spec.ts → Tests: 14 passed, 14 total
+DATABASE_URL=postgresql://tubu:tubu@localhost:5543/tubutree_it?schema=public \
+  npx jest -c test/integration-race/jest.config.js --runInBand pending-payment-expiry admin-confirm-payment gomdon cod-return-refund
+  Test Suites: 4 passed, 4 total
+  Tests:       18 passed, 18 total
+npx tsc --noEmit -p tsconfig.json → exit 0 ; npx eslint <các file đã sửa> → exit 0
+```
+
+**Migration:** không có (ghi chú dùng cột `orders.note` sẵn có).
+
+**Giả định (lượt review)**
+- Finding 4: vẫn tự huỷ đơn ZaloPay/VNPay quá hạn (nhả kho/coupon) thay vì giữ vô hạn; tiền có thể đã trừ thì xử lý bằng
+  đối chiếu + hoàn thủ công theo ghi chú/log. Lý do: bỏ qua đơn có PaymentAttempt sẽ giữ kho mãi cho mọi lần khách mở cổng
+  rồi bỏ ngang (trường hợp phổ biến nhất), và cũng không ai biết đơn đã trả.
+- Finding 1: luật "chưa trả không rời PENDING_PAYMENT" áp cả đơn đại lý trả trước (cùng hàm, đại lý có nút xác nhận tiền riêng);
+  đơn ghi công nợ được tạo thẳng CONFIRMED nên không bị ảnh hưởng.
+
+**Việc còn lại (sau review)**
+- Gom `markPaid` cho callback ZaloPay + Pancake `onPaymentReconcile` + `confirmDealerOrderPayment` (finding 3) — gói sau, ngoài phạm vi PA-3.
+- API tra trạng thái ZaloPay trước khi tự huỷ (finding 4) — cần tích hợp mới.
+- Chủ dự án quyết: (finding 6) bỏ nhánh base64 khi bật Cloudinary; (finding 8) có tự huỷ đơn đại lý trả trước kẹt PENDING_PAYMENT không.
+- Runbook deploy: sau deploy, đơn CK chưa trả không còn nút "Xác nhận" — vận hành dùng "Đã nhận tiền"; ghi chú
+  "[Chờ thanh toán: vận chuyển đã báo …]" trên đơn nghĩa là cần đẩy trạng thái tay sau khi nhận tiền.
