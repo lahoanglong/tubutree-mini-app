@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { act, useState } from 'react';
 import { useConfirm, type ConfirmOptions } from './confirm-dialog';
-import { answerConfirm, click, confirmDialog, flush, render, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, click, confirmDialog, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -166,5 +166,76 @@ describe('useConfirm / ConfirmDialog', () => {
     await flush(1);
     expect(onResult).toHaveBeenCalledWith(false);
     expect(confirmDialog()).toBeNull();
+  });
+});
+
+// C-122 (review): window.prompt nhập lý do từ chối cũng phải đi qua hộp thoại DS, không còn hộp thoại gốc.
+describe('useConfirm.ask — hộp thoại có ô nhập lý do', () => {
+  function AskHarness({ options }: { options: ConfirmOptions }) {
+    const { ask: askReason, dialog } = useConfirm();
+    const [result, setResult] = useState('chưa hỏi');
+    return (
+      <div>
+        <button type="button" onClick={async () => setResult(JSON.stringify(await askReason(options)))}>
+          hỏi
+        </button>
+        <output>{result}</output>
+        {dialog}
+      </div>
+    );
+  }
+  const REASON = { label: 'Lý do từ chối', placeholder: 'Khách sẽ không nhận tiền', maxLength: 200 };
+
+  it('hiện ô nhập có nhãn + giới hạn ký tự, focus vào ô nhập; không gọi window.prompt', async () => {
+    const native = vi.spyOn(window, 'prompt');
+    const { container } = mount(<AskHarness options={{ title: 'Từ chối', message: 'M', input: REASON }} />);
+    await ask(container);
+    const box = confirmDialog()!.querySelector('textarea')!;
+    expect(box.getAttribute('maxlength')).toBe('200');
+    expect(box.getAttribute('placeholder')).toBe('Khách sẽ không nhận tiền');
+    expect(confirmDialog()!.textContent).toContain('Lý do từ chối');
+    expect(document.activeElement).toBe(box);
+    expect(native).not.toHaveBeenCalled();
+  });
+
+  it('Xác nhận → trả về lý do đã gõ (cắt khoảng trắng đầu/cuối); Huỷ → null', async () => {
+    const { container } = mount(<AskHarness options={{ title: 'Từ chối', message: 'M', input: REASON }} />);
+    await ask(container);
+    typeInto(confirmDialog()!.querySelector('textarea'), '  Sai mã đơn  ');
+    answerConfirm(true);
+    await flush(1);
+    expect(container.querySelector('output')?.textContent).toBe('"Sai mã đơn"');
+    expect(confirmDialog()).toBeNull();
+
+    await ask(container);
+    typeInto(confirmDialog()!.querySelector('textarea'), 'gõ rồi huỷ');
+    answerConfirm(false);
+    await flush(1);
+    expect(container.querySelector('output')?.textContent).toBe('null');
+  });
+
+  it('để trống mà vẫn xác nhận được khi lý do không bắt buộc → chuỗi rỗng (khác null của Huỷ)', async () => {
+    const { container } = mount(<AskHarness options={{ title: 'T', message: 'M', input: REASON }} />);
+    await ask(container);
+    answerConfirm(true);
+    await flush(1);
+    expect(container.querySelector('output')?.textContent).toBe('""');
+  });
+
+  it('lý do bắt buộc: nút Xác nhận bị khoá tới khi có chữ', async () => {
+    const { container } = mount(<AskHarness options={{ title: 'T', message: 'M', input: { ...REASON, required: true } }} />);
+    await ask(container);
+    const accept = confirmDialog()!.querySelector<HTMLButtonElement>('[data-confirm="accept"]')!;
+    expect(accept.disabled).toBe(true);
+    typeInto(confirmDialog()!.querySelector('textarea'), '   ');
+    expect(accept.disabled).toBe(true);
+    typeInto(confirmDialog()!.querySelector('textarea'), 'Có lý do');
+    expect(accept.disabled).toBe(false);
+  });
+
+  it('confirm() thường không có ô nhập', async () => {
+    const { container } = mount(<Harness options={{ title: 'T', message: 'M' }} />);
+    await ask(container);
+    expect(confirmDialog()!.querySelector('textarea')).toBeNull();
   });
 });
