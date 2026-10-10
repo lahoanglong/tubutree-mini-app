@@ -7,6 +7,7 @@ import {
   UnpaidPrepaidTransitionError,
   assertPaidBeforeFulfilment,
   requiresPaymentBefore,
+  allowedNextStatuses,
 } from './order-transition';
 
 describe('order-transition', () => {
@@ -120,5 +121,44 @@ describe('order-transition — đơn trả trước phải PAID trước khi gia
   it('trạng thái không cần thanh toán (PACKED, CANCELLED) → không chặn', () => {
     expect(() => assertPaidBeforeFulfilment(unpaidBank, 'PENDING_PAYMENT', 'PACKED')).not.toThrow();
     expect(() => assertPaidBeforeFulfilment(unpaidBank, 'PENDING_PAYMENT', 'CANCELLED')).not.toThrow();
+  });
+});
+
+// Web admin chỉ hiện nút chuyển trạng thái hợp lệ theo API (C-024 yêu cầu 3) — trước đây tự đoán bằng điều
+// kiện cứng nên hiện "Hủy đơn" trên đơn DELIVERED, "Đã giao hàng" trên đơn chuyển khoản chưa trả… bấm mới 400.
+describe('allowedNextStatuses', () => {
+  const base = { code: 'TB-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' };
+
+  it('không gồm chính nó; khớp bảng chuyển trạng thái với đơn đã PAID/COD', () => {
+    expect(allowedNextStatuses({ ...base, status: 'CONFIRMED', paymentStatus: 'PAID' })).toEqual([
+      'PACKED',
+      'SHIPPING',
+      'DELIVERED',
+      'CANCELLED',
+    ]);
+    expect(allowedNextStatuses({ ...base, status: 'PACKED', paymentMethod: 'COD' })).toEqual([
+      'SHIPPING',
+      'DELIVERED',
+      'CANCELLED',
+    ]);
+  });
+
+  it('trả trước chưa PAID → bỏ SHIPPING/DELIVERED, giữ CONFIRMED/PACKED/CANCELLED', () => {
+    expect(allowedNextStatuses({ ...base, status: 'PENDING_PAYMENT' })).toEqual(['CONFIRMED', 'PACKED', 'CANCELLED']);
+    expect(allowedNextStatuses({ ...base, status: 'PACKED', paymentMethod: 'ZALOPAY' })).toEqual(['CANCELLED']);
+  });
+
+  it('đơn đại lý ghi công nợ → không bị khoá giao', () => {
+    expect(allowedNextStatuses({ ...base, status: 'CONFIRMED', onCredit: true })).toContain('DELIVERED');
+  });
+
+  it('DELIVERED chỉ còn RETURNED; CANCELLED/RETURNED không còn đường ra', () => {
+    expect(allowedNextStatuses({ ...base, status: 'DELIVERED', paymentStatus: 'PAID' })).toEqual(['RETURNED']);
+    expect(allowedNextStatuses({ ...base, status: 'CANCELLED' })).toEqual([]);
+    expect(allowedNextStatuses({ ...base, status: 'RETURNED' })).toEqual([]);
+  });
+
+  it('trạng thái lạ (dữ liệu hỏng) → rỗng, không ném', () => {
+    expect(allowedNextStatuses({ ...base, status: 'SHIPPED' })).toEqual([]);
   });
 });

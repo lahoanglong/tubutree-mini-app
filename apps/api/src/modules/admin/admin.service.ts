@@ -9,6 +9,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
+import { allowedNextStatuses } from '../orders/order-transition';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
@@ -16,6 +17,20 @@ import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-confi
 import { buildAdminOrderWhere, type RecyclingFilter } from './admin-order-filter';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { validateAdminConfigValue } from './admin-config-rules';
+
+/**
+ * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
+ * Đơn đại lý đi panel riêng (DealerPaymentPanel / confirmDealerOrderPayment).
+ */
+function canAdminConfirmRetailPayment(o: { type: string; paymentMethod: string; paymentStatus: string; status: string }) {
+  return (
+    o.type !== 'DEALER' &&
+    o.paymentMethod === 'BANK_TRANSFER' &&
+    o.paymentStatus === 'UNPAID' &&
+    o.status !== 'CANCELLED' &&
+    o.status !== 'RETURNED'
+  );
+}
 
 @Injectable()
 export class AdminService {
@@ -430,13 +445,24 @@ export class AdminService {
     // nên màn admin không tự phân biệt được với đơn trả trước đang chờ chuyển khoản; không có cờ này thì
     // nút "Xác nhận đã nhận chuyển khoản" hiện cả trên đơn công nợ rồi bấm vào mới bị từ chối.
     const dealerIds = items.filter((o) => o.type === 'DEALER').map((o) => o.id);
-    if (dealerIds.length === 0) return paginated(items, page, limit, total);
-    const debits = await this.prisma.dealerCreditLedger.findMany({
-      where: { refType: 'ORDER', refId: { in: dealerIds } },
-      select: { refId: true },
-    });
+    const debits = dealerIds.length
+      ? await this.prisma.dealerCreditLedger.findMany({
+          where: { refType: 'ORDER', refId: { in: dealerIds } },
+          select: { refId: true },
+        })
+      : [];
     const onCredit = new Set(debits.map((d) => d.refId));
-    const data = items.map((o) => (o.type === 'DEALER' ? { ...o, dealerOnCredit: onCredit.has(o.id) } : o));
+    // allowedTransitions/canConfirmPayment: web admin chỉ hiện nút API sẽ nhận (C-024) — cùng luật với
+    // OrderStatusService.setStatus và confirmOrderPayment, không để UI tự đoán theo điều kiện cứng.
+    const data = items.map((o) => {
+      const dealerOnCredit = o.type === 'DEALER' ? onCredit.has(o.id) : undefined;
+      return {
+        ...o,
+        ...(o.type === 'DEALER' ? { dealerOnCredit } : {}),
+        allowedTransitions: allowedNextStatuses({ ...o, onCredit: dealerOnCredit === true }),
+        canConfirmPayment: canAdminConfirmRetailPayment(o),
+      };
+    });
     return paginated(data, page, limit, total);
   }
 

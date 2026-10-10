@@ -122,3 +122,28 @@ export function assertPaidBeforeFulfilment(
   if (order.paymentStatus === 'PAID' || order.onCredit) return;
   throw new UnpaidPrepaidTransitionError(order.code, order.paymentMethod, from, to);
 }
+
+/**
+ * Các trạng thái đơn được phép chuyển tới ngay lúc này (không gồm chính nó) — cùng luật với
+ * OrderStatusService.setStatus (bảng chuyển + khoá giao khi trả trước chưa PAID), để web admin chỉ hiện nút
+ * mà API sẽ nhận. Trạng thái lạ trả rỗng thay vì ném: dùng cho danh sách, một dòng hỏng không được làm sập cả trang.
+ */
+export function allowedNextStatuses(order: {
+  status: string;
+  code: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  onCredit?: boolean;
+}): OrderStatus[] {
+  const from = order.status as OrderStatus;
+  if (!Object.prototype.hasOwnProperty.call(ORDER_TRANSITIONS, from)) return [];
+  return ORDER_TRANSITIONS[from].filter((to) => {
+    if (to === from) return false;
+    try {
+      assertPaidBeforeFulfilment(order, from, to);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}

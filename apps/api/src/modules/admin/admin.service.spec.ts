@@ -904,6 +904,69 @@ describe('AdminService.listOrders with search', () => {
   });
 });
 
+// C-024 yêu cầu 3: web admin dựng nút trạng thái + nút "Đã nhận tiền" từ API thay vì tự đoán.
+describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-024)', () => {
+  const row = (o: Record<string, unknown>) => ({
+    id: String(o.code),
+    type: 'RETAIL',
+    paymentMethod: 'BANK_TRANSFER',
+    paymentStatus: 'UNPAID',
+    items: [],
+    user: null,
+    ...o,
+  });
+  const list = async (items: Record<string, unknown>[], debits: { refId: string }[] = []) => {
+    const prisma = makePrisma({
+      order: { findMany: jest.fn().mockResolvedValue(items.map(row)), count: jest.fn().mockResolvedValue(items.length) },
+      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue(debits) },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    const res = (await mkAdmin(prisma).listOrders(1, 20)) as unknown as {
+      data: { code: string; allowedTransitions: string[]; canConfirmPayment: boolean }[];
+    };
+    return Object.fromEntries(res.data.map((o) => [o.code, o])) as Record<
+      string,
+      { allowedTransitions: string[]; canConfirmPayment: boolean }
+    >;
+  };
+
+  it('chuyển khoản lẻ chưa trả: không có SHIPPING/DELIVERED, có nút Đã nhận tiền', async () => {
+    const by = await list([{ code: 'A', status: 'PENDING_PAYMENT' }, { code: 'B', status: 'PACKED' }]);
+    expect(by.A).toMatchObject({ allowedTransitions: ['CONFIRMED', 'PACKED', 'CANCELLED'], canConfirmPayment: true });
+    expect(by.B).toMatchObject({ allowedTransitions: ['CANCELLED'], canConfirmPayment: true });
+  });
+
+  it('đã PAID / COD / ZaloPay / đơn huỷ → không có nút Đã nhận tiền; DELIVERED chỉ còn RETURNED', async () => {
+    const by = await list([
+      { code: 'P', status: 'CONFIRMED', paymentStatus: 'PAID' },
+      { code: 'C', status: 'CONFIRMED', paymentMethod: 'COD' },
+      { code: 'Z', status: 'PENDING_PAYMENT', paymentMethod: 'ZALOPAY' },
+      { code: 'X', status: 'CANCELLED' },
+      { code: 'D', status: 'DELIVERED', paymentStatus: 'PAID' },
+    ]);
+    expect(by.P).toMatchObject({ allowedTransitions: ['PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED'], canConfirmPayment: false });
+    expect(by.C).toMatchObject({ allowedTransitions: ['PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED'], canConfirmPayment: false });
+    expect(by.Z).toMatchObject({ canConfirmPayment: false });
+    expect(by.Z?.allowedTransitions).not.toContain('DELIVERED');
+    expect(by.X).toMatchObject({ allowedTransitions: [], canConfirmPayment: false });
+    expect(by.D).toMatchObject({ allowedTransitions: ['RETURNED'], canConfirmPayment: false });
+  });
+
+  it('đơn đại lý: công nợ giao được; trả trước chưa trả bị khoá giao; nút xác nhận đại lý ở panel riêng', async () => {
+    const by = await list(
+      [
+        { code: 'DC', id: 'dc', type: 'DEALER', status: 'CONFIRMED' },
+        { code: 'DP', id: 'dp', type: 'DEALER', status: 'PENDING_PAYMENT' },
+      ],
+      [{ refId: 'dc' }],
+    );
+    expect(by.DC?.allowedTransitions).toContain('DELIVERED');
+    expect(by.DP?.allowedTransitions).not.toContain('SHIPPING');
+    expect(by.DC?.canConfirmPayment).toBe(false);
+    expect(by.DP?.canConfirmPayment).toBe(false);
+  });
+});
+
 describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () => {
   it('listPendingMerchantProducts chỉ lấy sản phẩm có approvalStatus=PENDING_REVIEW, có phân trang thật', async () => {
     const findMany = jest.fn().mockResolvedValue([
