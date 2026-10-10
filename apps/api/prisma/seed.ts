@@ -235,6 +235,10 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   // ghi "→ auto checkout" khiến admin tưởng đang bật chống gian lận.
   { key: 'attendance.heartbeat_stale_min', value: 10, category: 'attendance', description: 'Ngưỡng coi heartbeat là cũ (hiện CHƯA dùng để tự checkout)' },
   { key: 'attendance.enforce_ip', value: true, category: 'attendance', description: 'Bật kiểm IP (tắt nếu chưa có IP tĩnh)' },
+  // C-056: GPS nhảy một nhịp không được tự chấm ra. createOnly: admin chỉnh theo độ ổn định GPS thực tế
+  // của văn phòng, deploy lại không được reset.
+  { key: 'attendance.out_of_range_max_count', value: 3, category: 'attendance', description: 'Tự checkout (OUT_OF_RANGE) sau X heartbeat ngoài vùng LIÊN TIẾP (miniapp gửi 3 phút/nhịp; tối thiểu 1)', createOnly: true },
+  { key: 'attendance.out_of_range_max_min', value: 15, category: 'attendance', description: 'Hoặc tự checkout khi chuỗi ngoài vùng kéo dài quá X phút (heartbeat thưa vì app bị cất đi)', createOnly: true },
   // Job dọn log theo lô (data-retention.service.ts, C-046/Q-21). createOnly: admin chỉnh rồi thì seed không reset.
   { key: 'retention.analytics_events_days', value: 395, category: 'retention', description: 'Giữ analytics_events thô bao nhiêu ngày (13 tháng; sàn 90)', createOnly: true },
   { key: 'retention.notification_logs_days', value: 180, category: 'retention', description: 'Giữ notification_logs bao nhiêu ngày (sàn 30)', createOnly: true },
