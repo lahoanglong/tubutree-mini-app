@@ -106,6 +106,15 @@ describe('xử lý 429 ở client miniapp', () => {
     expect(getErrorMessage(err)).toBe(RATE_LIMITED_MESSAGE);
   });
 
+  it('Retry-After 60 như server thật gửi (blockDuration mặc định = ttl 60s) → không thử lại, báo thân thiện ngay', async () => {
+    const { adapter, calls } = scripted([tooMany({ 'retry-after': '60' }), { status: 200 }]);
+    const settled = api.get('/products', { adapter }).catch((e: unknown) => e);
+    await until(() => calls.length === 1);
+    const err = await settled;
+    expect(calls).toHaveLength(1);
+    expect(getErrorMessage(err)).toBe(RATE_LIMITED_MESSAGE);
+  });
+
   it('POST bị 429 → KHÔNG thử lại (tránh tạo đơn/ghi trùng)', async () => {
     const { adapter, calls } = scripted([tooMany({ 'retry-after': '1' }), { status: 200 }]);
     const settled = api.post('/orders', {}, { adapter }).catch((e: unknown) => e);

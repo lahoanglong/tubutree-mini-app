@@ -38,9 +38,11 @@ const AUTH_READY_TIMEOUT_MS = 15_000;
 let refreshInFlight: Promise<string | null> | null = null;
 
 /**
- * 429: GET được thử lại đúng một lần sau Retry-After (bộ đếm throttle thường chỉ còn vài giây).
- * Server bảo chờ lâu hơn trần thì trả lỗi ngay, không giữ màn hình quay vô hạn. Không bao giờ
- * thử lại POST/PUT/PATCH/DELETE: request đầu có thể đã được xử lý xong ở server.
+ * 429: GET được thử lại đúng một lần nếu Retry-After ngắn (hoặc vắng — vd 429 từ proxy phía
+ * trước). Throttler của API khoá trọn ttl 60s nên 429 từ chính API thường vượt trần và báo lỗi
+ * ngay: không giữ màn hình quay cả phút. Không rút ngắn blockDuration phía server được, vì hết
+ * khoá là bộ đếm về 0 và giới hạn/phút sẽ thành giới hạn/vài giây. Không bao giờ thử lại
+ * POST/PUT/PATCH/DELETE: request đầu có thể đã được xử lý xong ở server.
  */
 const RATE_LIMIT_DEFAULT_WAIT_MS = 1_500;
 const RATE_LIMIT_MAX_WAIT_MS = 5_000;
