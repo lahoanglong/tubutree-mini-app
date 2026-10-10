@@ -1140,6 +1140,8 @@ model Commission {
   // lockCommissionsForOrder/reverseCommissionsForOrder (affiliate.service.ts) updateMany theo
   // orderId trên mỗi chuyển trạng thái đơn — không có index riêng cho orderId trước đây.
   @@index([orderId])
+  // Khoá idempotency tạo hoa hồng (createCommissionForOrder: INSERT ... ON CONFLICT DO NOTHING).
+  @@unique([orderId, affiliateUserId])
   @@map("commissions")
 }
 
