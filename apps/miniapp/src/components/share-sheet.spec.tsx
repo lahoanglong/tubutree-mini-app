@@ -63,6 +63,16 @@ describe('ShareSheet — lỗi chia sẻ không bị nuốt (C-067)', () => {
     expect(arg.text).toMatch(/chép/i);
   });
 
+  it('người dùng huỷ hộp thoại (mã USER_CANCEL -2003): không ghi đè clipboard, không báo lỗi', async () => {
+    mocks.shareLink.mockRejectedValue({ code: -2003, message: 'User cancel' });
+    renderSheet();
+    fireEvent.click(screen.getByRole('button', { name: /Chia sẻ qua Zalo/ }));
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    expect(mocks.copyText).not.toHaveBeenCalled();
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+  });
+
   it('nút chia sẻ có vùng chạm >= 44px (DS v2 Button)', () => {
     mocks.shareLink.mockResolvedValue(undefined);
     renderSheet();

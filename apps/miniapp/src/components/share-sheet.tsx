@@ -10,11 +10,14 @@ import { copyText } from '../utils/clipboard';
 
 type ShareParams = Parameters<typeof shareLink>[0];
 
+/** RESPONSE_CODE.USER_CANCEL của zmp-sdk: người dùng chủ động đóng hộp thoại, không phải lỗi. */
+const ZMP_USER_CANCEL = -2003;
+
 /**
- * Chia sẻ qua Zalo, không nuốt lỗi: API Zalo từ chối (chưa cấp quyền, webview cũ, người dùng đóng
- * hộp thoại...) thì CTV bấm nút mà không thấy gì xảy ra — mất cơ hội chia sẻ mà không biết vì sao.
+ * Chia sẻ qua Zalo, không nuốt lỗi: API Zalo từ chối (chưa cấp quyền, webview cũ...) thì CTV bấm
+ * nút mà không thấy gì xảy ra — mất cơ hội chia sẻ mà không biết vì sao.
  * Lỗi thì chép sẵn `fallbackText` (đã gồm liên kết có mã giới thiệu) vào clipboard và báo bằng
- * snackbar để họ dán gửi tay.
+ * snackbar để họ dán gửi tay. Người dùng huỷ hộp thoại thì để yên: không ghi đè clipboard của họ.
  */
 export function useShareWithFallback() {
   const { openSnackbar } = useSnackbar();
@@ -22,7 +25,8 @@ export function useShareWithFallback() {
     async (params: ShareParams, fallbackText: string) => {
       try {
         await shareLink(params);
-      } catch {
+      } catch (err) {
+        if ((err as { code?: number } | null)?.code === ZMP_USER_CANCEL) return;
         const copied = await copyText(fallbackText);
         openSnackbar(
           copied
