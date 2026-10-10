@@ -35,7 +35,7 @@ export class AffiliateController {
     return this.affiliate.register(userId);
   }
 
-  // Ghi "chạm" giới thiệu để attribution sống 3 ngày (fallback khi phiên mất).
+  // Ghi "chạm" giới thiệu để attribution sống affiliate.attribution_days ngày (fallback khi phiên mất).
   @Post('touch')
   touch(@CurrentUser('sub') userId: string, @Body() dto: TouchDto) {
     return this.affiliate.recordTouch(userId, dto);

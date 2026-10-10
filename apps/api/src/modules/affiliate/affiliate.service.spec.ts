@@ -1039,7 +1039,7 @@ describe('AffiliateService analytics', () => {
   });
 });
 
-describe('AffiliateService.recordTouch / getActiveTouch (attribution 3 ngày)', () => {
+describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-31)', () => {
   const NOW = new Date('2026-06-27T00:00:00Z');
   function makePrisma(over: any = {}) {
     return {
@@ -1049,14 +1049,25 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 3 ngày)', 
     } as unknown as PrismaService;
   }
 
-  it('recordTouch: resolve referralCode → upsert với expiresAt = now + 3 ngày', async () => {
+  it('recordTouch: resolve referralCode → upsert với expiresAt = now + 7 ngày (mặc định Q-31)', async () => {
     const prisma = makePrisma();
     (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1' });
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).recordTouch('buyer1', { referralCode: 'LINH', storefrontSlug: 'LINH', kind: 'ctv' }, NOW);
     const call = (prisma as any).referralTouch.upsert.mock.calls[0][0];
     expect(call.where).toEqual({ userId: 'buyer1' });
     expect(call.create.referrerUserId).toBe('ctv1');
-    expect(call.create.expiresAt.getTime()).toBe(NOW.getTime() + 3 * 86400000);
+    expect(call.create.expiresAt.getTime()).toBe(NOW.getTime() + 7 * 86400000);
+  });
+
+  it('recordTouch: đọc affiliate.attribution_days từ config (admin chỉnh được)', async () => {
+    const prisma = makePrisma();
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1' });
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.attribution_days' ? (10 as unknown as T) : (fb as T)),
+    } as unknown as SystemConfigService;
+    await new AffiliateService(prisma, cfg, pricing, pancakeOrder, coins, analytics).recordTouch('buyer1', { referralCode: 'LINH' }, NOW);
+    const call = (prisma as any).referralTouch.upsert.mock.calls[0][0];
+    expect(call.create.expiresAt.getTime()).toBe(NOW.getTime() + 10 * 86400000);
   });
 
   it('recordTouch: ghi thành công → phát referral_touched (best-effort, đúng refCode/storefrontSlug/kind)', async () => {

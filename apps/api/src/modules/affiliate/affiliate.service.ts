@@ -71,7 +71,7 @@ export class AffiliateService {
 
   /**
    * Ghi "chạm" giới thiệu (attribution last-touch persistent §quyết-định). Khi khách (đã đăng nhập)
-   * mở link CTV/nhãn → lưu referrerUserId + slug, hạn = now + config(attribution_days, mặc định 3).
+   * mở link CTV/nhãn → lưu referrerUserId + slug, hạn = now + config(attribution_days, mặc định 7 — Q-31).
    * Mỗi lần mở làm mới hạn. Bỏ qua nếu thiếu code / code không tồn tại / trỏ chính mình.
    */
   async recordTouch(
@@ -92,7 +92,7 @@ export class AffiliateService {
       select: { id: true },
     });
     if (!ref || ref.id === userId) return { ok: false };
-    const days = await this.config.get<number>('affiliate.attribution_days', 3);
+    const days = await this.config.get<number>('affiliate.attribution_days', 7);
     const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     const data = {
       referrerUserId: ref.id,
