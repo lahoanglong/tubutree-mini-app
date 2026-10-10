@@ -48,7 +48,7 @@
   --neutral-150: var(--stone-100);
   --neutral-200: var(--stone-200);
   --neutral-300: var(--stone-300);
-  --neutral-400: var(--stone-400);
+  --neutral-400: var(--stone-500); /* hầu hết chỗ dùng là `color:` chữ phụ; stone-400 chỉ 2.6:1 (WCAG 1.4.3) */
   --neutral-500: var(--stone-500);
   --neutral-600: var(--stone-600);
   --neutral-700: var(--stone-700);
