@@ -72,8 +72,14 @@ export function assertTransition(from: OrderStatus, to: OrderStatus): void {
  */
 const PAYMENT_GATED_STATUSES: readonly OrderStatus[] = ['SHIPPING', 'DELIVERED'];
 
-export function requiresPaymentBefore(to: OrderStatus): boolean {
-  return PAYMENT_GATED_STATUSES.includes(to);
+/**
+ * Ngoài SHIPPING/DELIVERED, đơn trả trước cũng không được RỜI PENDING_PAYMENT (trừ huỷ) khi chưa PAID: lối ra
+ * hợp lệ duy nhất là "Đã nhận tiền"/callback thanh toán. Đẩy tay sang CONFIRMED/PACKED khi chưa trả làm đơn
+ * thoát khỏi cron tự huỷ quá hạn (chỉ quét PENDING_PAYMENT) → kho, quota flash, coupon bị giữ vĩnh viễn.
+ */
+export function requiresPaymentBefore(from: OrderStatus, to: OrderStatus): boolean {
+  if (PAYMENT_GATED_STATUSES.includes(to)) return true;
+  return from === 'PENDING_PAYMENT' && to !== 'PENDING_PAYMENT' && to !== 'CANCELLED';
 }
 
 /**
@@ -118,7 +124,7 @@ export function assertPaidBeforeFulfilment(
   from: OrderStatus,
   to: OrderStatus,
 ): void {
-  if (!requiresPaymentBefore(to) || !isPrepaidMethod(order.paymentMethod)) return;
+  if (!requiresPaymentBefore(from, to) || !isPrepaidMethod(order.paymentMethod)) return;
   if (order.paymentStatus === 'PAID' || order.onCredit) return;
   throw new UnpaidPrepaidTransitionError(order.code, order.paymentMethod, from, to);
 }

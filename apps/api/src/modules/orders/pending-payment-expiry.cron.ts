@@ -91,6 +91,7 @@ export class PendingPaymentExpiryCron {
           actorType: 'SYSTEM',
           note: `Tự huỷ: quá ${ttlHours} giờ chưa thanh toán`,
           onlyIfUnpaid: true,
+          expectedStatus: 'PENDING_PAYMENT',
         });
         if (res.status === 'CANCELLED') cancelled += 1;
       } catch (err) {

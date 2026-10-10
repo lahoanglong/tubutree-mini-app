@@ -60,7 +60,12 @@ describe('PendingPaymentExpiryCron (C-024)', () => {
     expect(orderStatus.setStatus).toHaveBeenCalledWith(
       'o1',
       'CANCELLED',
-      expect.objectContaining({ actorType: 'SYSTEM', onlyIfUnpaid: true, note: expect.stringContaining('6 giờ') }),
+      expect.objectContaining({
+        actorType: 'SYSTEM',
+        onlyIfUnpaid: true,
+        expectedStatus: 'PENDING_PAYMENT',
+        note: expect.stringContaining('6 giờ'),
+      }),
     );
     expect(res).toMatchObject({ scanned: 2, cancelled: 2, failed: 0 });
   });

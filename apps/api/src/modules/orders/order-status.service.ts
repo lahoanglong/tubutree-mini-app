@@ -84,6 +84,11 @@ export class OrderStatusService {
        * khách vừa trả.
        */
       onlyIfUnpaid?: boolean;
+      /**
+       * Chỉ đổi khi đơn vẫn ở trạng thái này. Caller quét danh sách rồi xử lý dần (cron) dùng để không tác động
+       * lên đơn mà người khác vừa đẩy sang trạng thái khác sau lúc quét — setStatus tự đọc lại nên không tự biết.
+       */
+      expectedStatus?: OrderStatus;
     } = {},
   ) {
     const order = await this.prisma.order.findFirst({
@@ -94,9 +99,11 @@ export class OrderStatusService {
 
     if (order.status === targetStatus) return order; // no-op idempotent (webhook lặp lại)
     if (opts.onlyIfUnpaid && order.paymentStatus !== 'UNPAID') return order;
-    assertTransition(order.status as OrderStatus, targetStatus);
+    if (opts.expectedStatus && order.status !== opts.expectedStatus) return order;
+    const from = order.status as OrderStatus;
+    assertTransition(from, targetStatus);
     const paymentGated =
-      requiresPaymentBefore(targetStatus) && isPrepaidMethod(order.paymentMethod) && order.paymentStatus !== 'PAID';
+      requiresPaymentBefore(from, targetStatus) && isPrepaidMethod(order.paymentMethod) && order.paymentStatus !== 'PAID';
     if (paymentGated) {
       assertPaidBeforeFulfilment(
         { ...order, onCredit: await this.isOnDealerCredit(order.id) },
@@ -113,7 +120,7 @@ export class OrderStatusService {
         where: {
           id: order.id,
           status: order.status,
-          ...(requiresPaymentBefore(targetStatus) && order.paymentStatus === 'PAID' ? { paymentStatus: 'PAID' as const } : {}),
+          ...(requiresPaymentBefore(from, targetStatus) && order.paymentStatus === 'PAID' ? { paymentStatus: 'PAID' as const } : {}),
           ...(opts.onlyIfUnpaid ? { paymentStatus: 'UNPAID' as const } : {}),
         },
         data: {

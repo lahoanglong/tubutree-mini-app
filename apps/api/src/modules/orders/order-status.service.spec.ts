@@ -431,6 +431,21 @@ describe('OrderStatusService — chặn giao đơn trả trước chưa thanh to
     await expect(b.svc.setStatus('o1', 'CANCELLED' as never)).resolves.toBeDefined();
   });
 
+  it.each(['CONFIRMED', 'PACKED'])(
+    'PENDING_PAYMENT chuyển khoản chưa trả → %s bị chặn (không để lọt khỏi cron huỷ quá hạn)',
+    async (to) => {
+      const { svc, prisma } = make(makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }));
+      await expect(svc.setStatus('o1', to as never, { actorType: 'ADMIN' })).rejects.toThrow(UnpaidPrepaidTransitionError);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    },
+  );
+
+  it('PENDING_PAYMENT đã PAID → CONFIRMED đi được, lật có guard paymentStatus=PAID', async () => {
+    const { svc, tx } = make(makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' }));
+    await svc.setStatus('o1', 'CONFIRMED' as never);
+    expect(tx.order.updateMany.mock.calls[0][0].where).toMatchObject({ status: 'PENDING_PAYMENT', paymentStatus: 'PAID' });
+  });
+
   it('chuyển lùi vẫn bị chặn như cũ (DELIVERED → CONFIRMED)', async () => {
     const { svc } = make(makeOrder({ status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' }));
     await expect(svc.setStatus('o1', 'CONFIRMED' as never)).rejects.toThrow(InvalidOrderTransitionError);
@@ -632,6 +647,22 @@ describe('OrderStatusService.setStatus — onlyIfUnpaid (cron huỷ đơn quá h
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(reversal.reverseFinancials).not.toHaveBeenCalled();
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  // Review lượt 1: cron đọc danh sách rồi huỷ tuần tự; admin đẩy đơn đi tiếp chen giữa thì setStatus đọc lại
+  // thấy trạng thái mới (vẫn huỷ được) — expectedStatus giữ đúng ảnh chụp lúc quét.
+  it('expectedStatus khác trạng thái hiện tại → không mở tx, không huỷ', async () => {
+    const { svc, prisma, reversal } = make(makeOrder({ status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }));
+    const res = await svc.setStatus('o1', 'CANCELLED' as never, { onlyIfUnpaid: true, expectedStatus: 'PENDING_PAYMENT' });
+    expect(res.status).toBe('CONFIRMED');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(reversal.reverseFinancials).not.toHaveBeenCalled();
+  });
+
+  it('expectedStatus khớp → lật như thường', async () => {
+    const { svc, tx } = make(makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }));
+    await svc.setStatus('o1', 'CANCELLED' as never, { onlyIfUnpaid: true, expectedStatus: 'PENDING_PAYMENT' });
+    expect(tx.order.updateMany.mock.calls[0][0].where).toEqual({ id: 'o1', status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' });
   });
 
   it('không truyền onlyIfUnpaid → where giữ nguyên như cũ', async () => {

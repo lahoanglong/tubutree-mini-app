@@ -81,11 +81,21 @@ describe('order-transition — đơn trả trước phải PAID trước khi gia
   const unpaidBank = { code: 'TUBU1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' };
 
   it('SHIPPING/DELIVERED cần thanh toán trước; các trạng thái khác thì không', () => {
-    expect(requiresPaymentBefore('SHIPPING')).toBe(true);
-    expect(requiresPaymentBefore('DELIVERED')).toBe(true);
-    for (const s of ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'CANCELLED', 'RETURNED'] as const) {
-      expect(requiresPaymentBefore(s)).toBe(false);
+    expect(requiresPaymentBefore('CONFIRMED', 'SHIPPING')).toBe(true);
+    expect(requiresPaymentBefore('PACKED', 'DELIVERED')).toBe(true);
+    for (const s of ['CONFIRMED', 'PACKED', 'CANCELLED', 'RETURNED'] as const) {
+      expect(requiresPaymentBefore('CONFIRMED', s)).toBe(false);
     }
+  });
+
+  // Review lượt 1: "Xác nhận" đơn chuyển khoản chưa trả đẩy nó sang CONFIRMED+UNPAID — cron chỉ quét
+  // PENDING_PAYMENT nên kho/quota flash/coupon bị giữ vĩnh viễn. Rời PENDING_PAYMENT (trừ huỷ) chỉ qua markPaid.
+  it('rời PENDING_PAYMENT sang bất kỳ mốc tiến nào cũng cần thanh toán; huỷ thì không', () => {
+    for (const to of ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'] as const) {
+      expect(requiresPaymentBefore('PENDING_PAYMENT', to)).toBe(true);
+    }
+    expect(requiresPaymentBefore('PENDING_PAYMENT', 'CANCELLED')).toBe(false);
+    expect(requiresPaymentBefore('PENDING_PAYMENT', 'PENDING_PAYMENT')).toBe(false);
   });
 
   it('BANK_TRANSFER/ZALOPAY/VNPAY chưa PAID → chặn SHIPPING và DELIVERED bằng lỗi chuyển trạng thái (400 / webhook bỏ qua êm)', () => {
@@ -118,9 +128,19 @@ describe('order-transition — đơn trả trước phải PAID trước khi gia
     ).not.toThrow();
   });
 
-  it('trạng thái không cần thanh toán (PACKED, CANCELLED) → không chặn', () => {
-    expect(() => assertPaidBeforeFulfilment(unpaidBank, 'PENDING_PAYMENT', 'PACKED')).not.toThrow();
+  it('đơn đã CONFIRMED (dữ liệu cũ) → PACKED/CANCELLED không chặn; PENDING_PAYMENT → CANCELLED không chặn', () => {
+    expect(() => assertPaidBeforeFulfilment(unpaidBank, 'CONFIRMED', 'PACKED')).not.toThrow();
+    expect(() => assertPaidBeforeFulfilment(unpaidBank, 'CONFIRMED', 'CANCELLED')).not.toThrow();
     expect(() => assertPaidBeforeFulfilment(unpaidBank, 'PENDING_PAYMENT', 'CANCELLED')).not.toThrow();
+  });
+
+  it('PENDING_PAYMENT chưa trả → CONFIRMED/PACKED bị chặn (chỉ "Đã nhận tiền" mới xác nhận)', () => {
+    for (const to of ['CONFIRMED', 'PACKED'] as const) {
+      expect(() => assertPaidBeforeFulfilment(unpaidBank, 'PENDING_PAYMENT', to)).toThrow(UnpaidPrepaidTransitionError);
+      expect(() =>
+        assertPaidBeforeFulfilment({ ...unpaidBank, paymentMethod: 'ZALOPAY' }, 'PENDING_PAYMENT', to),
+      ).toThrow(UnpaidPrepaidTransitionError);
+    }
   });
 });
 
@@ -143,8 +163,9 @@ describe('allowedNextStatuses', () => {
     ]);
   });
 
-  it('trả trước chưa PAID → bỏ SHIPPING/DELIVERED, giữ CONFIRMED/PACKED/CANCELLED', () => {
-    expect(allowedNextStatuses({ ...base, status: 'PENDING_PAYMENT' })).toEqual(['CONFIRMED', 'PACKED', 'CANCELLED']);
+  it('trả trước chưa PAID → ở PENDING_PAYMENT chỉ còn huỷ; đã CONFIRMED/PACKED thì bỏ SHIPPING/DELIVERED', () => {
+    expect(allowedNextStatuses({ ...base, status: 'PENDING_PAYMENT' })).toEqual(['CANCELLED']);
+    expect(allowedNextStatuses({ ...base, status: 'CONFIRMED' })).toEqual(['PACKED', 'CANCELLED']);
     expect(allowedNextStatuses({ ...base, status: 'PACKED', paymentMethod: 'ZALOPAY' })).toEqual(['CANCELLED']);
   });
 

@@ -932,7 +932,7 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
 
   it('chuyển khoản lẻ chưa trả: không có SHIPPING/DELIVERED, có nút Đã nhận tiền', async () => {
     const by = await list([{ code: 'A', status: 'PENDING_PAYMENT' }, { code: 'B', status: 'PACKED' }]);
-    expect(by.A).toMatchObject({ allowedTransitions: ['CONFIRMED', 'PACKED', 'CANCELLED'], canConfirmPayment: true });
+    expect(by.A).toMatchObject({ allowedTransitions: ['CANCELLED'], canConfirmPayment: true });
     expect(by.B).toMatchObject({ allowedTransitions: ['CANCELLED'], canConfirmPayment: true });
   });
 

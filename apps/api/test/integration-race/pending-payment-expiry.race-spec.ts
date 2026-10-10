@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
+import { UnpaidPrepaidTransitionError } from '../../src/modules/orders/order-transition';
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { PENDING_PAYMENT_TTL_KEY, PendingPaymentExpiryCron } from '../../src/modules/orders/pending-payment-expiry.cron';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
@@ -222,6 +223,40 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
       (c) => c[1] === 'ORDER_CANCELLED' && codes.has((c[2] as { order_code: string }).order_code),
     );
     expect(notices).toHaveLength(5);
+  });
+
+  // Review lượt 1: trước đây admin bấm "Xác nhận" đơn chưa trả → CONFIRMED+UNPAID, cron (chỉ quét
+  // PENDING_PAYMENT) bỏ qua mãi mãi, kho bị giữ vĩnh viễn.
+  it('(f) admin bấm "Xác nhận" đơn chuyển khoản chưa trả → bị chặn, đơn vẫn PENDING_PAYMENT và cron vẫn huỷ + hoàn kho', async () => {
+    const { order, variationId, user } = await staleOrder();
+    await expect(orderStatus.setStatus(order.id, 'CONFIRMED', { actorType: 'ADMIN', actorId: 'admin-1' })).rejects.toThrow(
+      UnpaidPrepaidTransitionError,
+    );
+    await expect(orderStatus.setStatus(order.id, 'PACKED', { actorType: 'ADMIN' })).rejects.toThrow(UnpaidPrepaidTransitionError);
+    await newCron().expireStale();
+    const st = await state(order.id, variationId, user.id);
+    expect(st.order.status).toBe('CANCELLED');
+    expectConsistent(st);
+  });
+
+  it('(g) đơn bị đẩy sang CONFIRMED (vẫn UNPAID) giữa lúc cron quét danh sách và lúc huỷ → cron không huỷ (expectedStatus)', async () => {
+    const { order, variationId, user } = await staleOrder();
+    // Chen giữa findMany của cron và lần đọc lại của setStatus (khác runCronWithPaymentBetween: chen sau lần đọc lại).
+    const original = prisma.order.findMany.bind(prisma.order);
+    const spy = jest.spyOn(prisma.order, 'findMany').mockImplementationOnce((async (args: Parameters<typeof original>[0]) => {
+      const rows = await original(args);
+      await prisma.order.updateMany({ where: { id: order.id, status: 'PENDING_PAYMENT' }, data: { status: 'CONFIRMED' } });
+      return rows;
+    }) as never);
+    try {
+      await newCron().expireStale();
+    } finally {
+      spy.mockRestore();
+    }
+    const st = await state(order.id, variationId, user.id);
+    expect(st.order).toMatchObject({ status: 'CONFIRMED', paymentStatus: 'UNPAID' });
+    expect(st.history.filter((h) => h.toStatus === 'CANCELLED')).toHaveLength(0);
+    expect(st.stock).toBe(START_STOCK);
   });
 
   it('(e) phạm vi: đơn mới đặt, đơn đại lý, đơn COD, đơn đã PAID → không bị đụng tới', async () => {
