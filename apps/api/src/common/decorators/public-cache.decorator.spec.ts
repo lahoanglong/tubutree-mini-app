@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { HEADERS_METADATA } from '@nestjs/common/constants';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import { PUBLIC_CACHE, PUBLIC_CACHE_POLICY_KEY } from './public-cache.decorator';
 import { CatalogController } from '../../modules/catalog/catalog.controller';
 import { HomeController } from '../../modules/catalog/home.controller';
 import { SystemConfigController } from '../../modules/system-config/system-config.controller';
@@ -12,9 +13,10 @@ import { BrandController } from '../../modules/brand/brand.controller';
 type Ctor = { prototype: object };
 
 function cacheControl(ctor: Ctor, method: string): string | undefined {
-  const headers = Reflect.getMetadata(HEADERS_METADATA, (ctor.prototype as Record<string, object>)[method]!) as
-    | { name: string; value: string }[]
-    | undefined;
+  const handler = (ctor.prototype as Record<string, object>)[method]!;
+  const policy = Reflect.getMetadata(PUBLIC_CACHE_POLICY_KEY, handler) as keyof typeof PUBLIC_CACHE | undefined;
+  if (policy) return PUBLIC_CACHE[policy];
+  const headers = Reflect.getMetadata(HEADERS_METADATA, handler) as { name: string; value: string }[] | undefined;
   return headers?.find((h) => h.name.toLowerCase() === 'cache-control')?.value;
 }
 

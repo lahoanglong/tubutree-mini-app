@@ -1,4 +1,6 @@
-import { Header } from '@nestjs/common';
+import { applyDecorators, CallHandler, ExecutionContext, Injectable, NestInterceptor, SetMetadata, UseInterceptors } from '@nestjs/common';
+import type { Response } from 'express';
+import { Observable, tap } from 'rxjs';
 
 /**
  * Cache-Control cho endpoint công khai KHÔNG phụ thuộc người gọi (không đọc JWT, không giá sỉ/PII).
@@ -16,4 +18,25 @@ export const PUBLIC_CACHE = {
   LIVE: 'public, max-age=5, s-maxage=10',
 } as const;
 
-export const PublicCache = (policy: keyof typeof PUBLIC_CACHE) => Header('Cache-Control', PUBLIC_CACHE[policy]);
+export const PUBLIC_CACHE_POLICY_KEY = 'public-cache-policy';
+
+/**
+ * Chỉ gắn Cache-Control khi handler trả thành công. `@Header` của Nest set trước khi handler chạy nên
+ * 404/400/5xx cũng mang `public, s-maxage` và bị proxy/CDN giữ lại.
+ */
+@Injectable()
+export class PublicCacheInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const policy = Reflect.getMetadata(PUBLIC_CACHE_POLICY_KEY, context.getHandler()) as keyof typeof PUBLIC_CACHE | undefined;
+    if (!policy) return next.handle();
+    const res = context.switchToHttp().getResponse<Response>();
+    return next.handle().pipe(
+      tap(() => {
+        if (res.statusCode >= 200 && res.statusCode < 300) res.setHeader('Cache-Control', PUBLIC_CACHE[policy]);
+      }),
+    );
+  }
+}
+
+export const PublicCache = (policy: keyof typeof PUBLIC_CACHE) =>
+  applyDecorators(SetMetadata(PUBLIC_CACHE_POLICY_KEY, policy), UseInterceptors(PublicCacheInterceptor));
