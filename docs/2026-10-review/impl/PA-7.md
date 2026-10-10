@@ -110,3 +110,41 @@ Migration: không (dùng partial unique index `coin_transactions_referral_unique
 - `REFERRAL_DEBT` chưa có màn admin; hiện chỉ truy được bằng SQL + log warn. Cần gộp vào PD-3 (Điểm Xanh/TubuXu) hoặc màn đối soát.
 - Lời trên miniapp về chương trình giới thiệu (nếu còn nhắc "voucher 50k" hay "bạn có cashback đầu") nằm ngoài nhóm file gói này, chưa sửa — giao PC-4.
 - Comment cột `CoinTransaction.reason` trong `schema.prisma` chưa liệt kê `REFERRAL_ORDER2*` (không sửa schema để tránh đụng gói khác).
+
+## Q-31 — Cửa sổ ghi nhận giới thiệu CTV 7 ngày (cấu hình được) — XONG
+
+Commit: `d18e128` fix(affiliate): cửa sổ ghi nhận giới thiệu CTV mặc định 7 ngày, thêm khoá affiliate.attribution_days vào seed (Q-31)
+
+### Đã sửa
+- `affiliate.service.ts` `recordTouch`: mặc định `affiliate.attribution_days` 3 → 7 (vẫn đọc config trước).
+- `seed.ts`: thêm `affiliate.attribution_days = 7` (createOnly: admin đã chỉnh thì seed không ghi đè). `referral.window_days = 30` (thêm ở commit C-003) chuyển sang createOnly cho cùng lý do.
+- Comment `schema.prisma` (`ReferralTouch.expiresAt`) và `affiliate.controller.ts` sửa "3 ngày" theo khoá mới. Không đổi schema, không migration.
+
+### Test (đỏ → xanh)
+`src/modules/affiliate/affiliate.service.spec.ts`: ca "expiresAt = now + 7 ngày (mặc định Q-31)" + ca mới "đọc affiliate.attribution_days từ config" (config trả 10 → now + 10 ngày).
+ĐỎ: `Expected: 1783123200000  Received: 1782777600000` (now + 3 ngày) — `Tests: 1 failed, 10 passed`.
+XANH:
+```
+$ npx jest --maxWorkers=1 src/modules/affiliate/affiliate.service.spec.ts
+Tests:       88 passed, 88 total
+$ npx jest --maxWorkers=1 src/modules/system-config/config-seed.spec.ts
+Tests:       2 passed, 2 total
+```
+`npx tsc --noEmit -p tsconfig.json` (apps/api) → không lỗi; `npx eslint` 4 file đã sửa → không lỗi; `npx prisma validate` → valid.
+
+### Ghi chú
+- Khoá `affiliate.last_click_window_days` (seed = 30) **vẫn chết**: không có code nào đọc. Giữ nguyên dòng (không xoá dữ liệu config), chỉ đổi mô tả seed thành "Không còn dùng: cửa sổ ghi nhận giới thiệu là affiliate.attribution_days". Seed upsert ghi đè mô tả này ở lần chạy seed sau.
+- PROD hiện chưa có dòng `affiliate.attribution_days` → trước khi chạy seed, code đã dùng mặc định 7 ngay khi deploy. Admin muốn khác thì sửa config.
+- Còn chữ "3 ngày" trong comment/doc ngoài nhóm file gói: `apps/web/src/components/storefront-tracker.tsx`, `apps/web/src/lib/shop-client.ts`, `apps/miniapp/src/services/affiliate-api.ts`, `apps/miniapp/src/components/app.tsx`, test `checkout.service.spec.ts` (gói PA-6). Chỉ là comment/tên test, không ảnh hưởng hành vi; chưa sửa.
+
+## Tổng kết gói PA-7
+
+| Mục | Trạng thái | Commit |
+|---|---|---|
+| C-059 voucher chào mừng/sinh nhật/winback chỉ user thật + birthday/winback theo lô | XONG | `c7a5662`, báo cáo `91c8b97` |
+| C-003 một chương trình giới thiệu: xu theo đơn thứ 2, thu hồi khi trả, gỡ REFER + trigger cashback | XONG | `10b1c2c`, báo cáo `9b5bcf8` |
+| Q-31 attribution_days mặc định 7 + seed; referral.window_days trong seed | XONG | `d18e128` |
+
+Migration của cả gói: không có.
+Race spec thêm: `test/integration-race/vouchers-real-user.race-spec.ts`, `test/integration-race/referral-order2.race-spec.ts` (Postgres riêng `tubu_it_pa7:5547`).
+Việc còn lại: xem mục "Việc còn lại" từng phần (thu hồi mốc referral_milestones cần quyết định; màn admin cho `REFERRAL_DEBT`; `milestoneVouchers` LIMIT 1000; lời trên miniapp về chương trình giới thiệu; khoá chết `last_click_window_days`).
