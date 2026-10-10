@@ -108,6 +108,8 @@ export interface ConfigRow {
   value: unknown;
   description: string | null;
   category: string;
+  /** true = khoá không code nào đọc (GET /admin/config gắn): sửa vô tác dụng, API từ chối ghi. */
+  deprecated?: boolean;
 }
 export interface Page<T> {
   data: T[];
@@ -850,6 +852,9 @@ export interface RetentionDailyRow {
   ordersPerBuyerMtd: number;
   dauProxyRefreshToken: number;
   dauEventBased: number | null;
+  /** NS-1 của cohort "đơn đầu tiên rơi vào ngày date − 30": số khách và số khách có đơn thứ 2 trong 30 ngày. null = chưa tính. */
+  ns1CohortSize: number | null;
+  ns1RepeatCount: number | null;
 }
 export const getRetentionDaily = (days = 30) =>
   apiFetch<RetentionDailyRow[]>(`/admin/analytics/retention-daily?days=${days}`);

@@ -18,7 +18,6 @@ import {
   getDashboardStats,
   type DashboardStats,
   getConfig,
-  setConfig,
   createCoupon,
   listBrands,
   createBrand,
@@ -58,7 +57,6 @@ import {
   listReturnRequests,
   reviewReturnRequest,
   type AdminReturnRequest,
-  type ConfigRow,
   type AdminBrand,
   type BrandCert,
   type AdminFlashSale,
@@ -81,6 +79,7 @@ import { DealerCreditPanel } from '@/components/admin/dealer-credit-panel';
 import { OrderStatusActions } from '@/components/admin/order-status-actions';
 import { EvidenceImages } from '@/components/admin/evidence-images';
 import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
+import { ConfigItem } from '@/components/admin/config-item';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
 import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
 import { MerchantProductsTab } from '@/components/admin/merchant-products-tab';
@@ -1272,47 +1271,6 @@ function ConfigTab() {
           ))}
         </div>
       </div>
-    </div>
-  );
-}
-
-function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => void }) {
-  const [val, setVal] = useState(JSON.stringify(row.value));
-  const [err, setErr] = useState<string | null>(null);
-  const save = useMutation({
-    mutationFn: () => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(val);
-      } catch {
-        throw new Error('JSON không hợp lệ');
-      }
-      return setConfig(row.key, parsed);
-    },
-    onSuccess: () => {
-      setErr(null);
-      onSaved();
-    },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Lỗi'),
-  });
-  return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-3">
-      <div className="text-sm font-medium">{row.key}</div>
-      {row.description && <div className="text-xs text-neutral-400">{row.description}</div>}
-      <div className="mt-1 flex gap-2">
-        <input value={val} onChange={(e) => setVal(e.target.value)} className="flex-1 rounded border border-neutral-200 px-2 py-1 font-mono text-sm" />
-        <button
-          onClick={() => {
-            setErr(null);
-            save.mutate();
-          }}
-          disabled={save.isPending}
-          className="rounded bg-green-600 px-3 py-1 text-sm text-white disabled:bg-neutral-300"
-        >
-          {save.isPending ? 'Đang lưu…' : 'Lưu'}
-        </button>
-      </div>
-      {err && <div className="text-xs text-red-600">{err}</div>}
     </div>
   );
 }
