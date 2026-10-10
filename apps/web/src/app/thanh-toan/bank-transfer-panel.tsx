@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, Clock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getBankQr, formatVnd, type OrderDTO } from '@/lib/shop-client';
@@ -18,7 +18,7 @@ import { ui } from '@/lib/guest-ui';
  * export thêm một component thường sẽ FAIL tsc (kiểm tra kiểu sinh ra trong .next/types/app cho
  * từng trang).
  */
-export function BankTransferPanel({ order }: { order: OrderDTO }) {
+export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?: () => void }) {
   const isBankTransfer = order.paymentMethod === 'BANK_TRANSFER';
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['bank-qr', order.code],
@@ -28,6 +28,13 @@ export function BankTransferPanel({ order }: { order: OrderDTO }) {
     refetchInterval: (q) => (q.state.data?.paymentStatus === 'PAID' ? false : 4000),
   });
   const [checking, setChecking] = useState(false);
+
+  // Trang chứa khung này (chi tiết đơn) cần tải lại trạng thái đơn khi tiền về, nếu không thì
+  // khung báo "Đã nhận thanh toán" còn nhãn đơn vẫn là "Chờ thanh toán".
+  const paid = data?.paymentStatus === 'PAID';
+  useEffect(() => {
+    if (paid) onPaid?.();
+  }, [paid, onPaid]);
 
   if (!isBankTransfer) return null;
 

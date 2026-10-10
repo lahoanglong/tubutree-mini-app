@@ -141,6 +141,29 @@ export const placeOrder = (
 export const fetchOrders = () =>
   apiFetch<{ data: OrderDTO[]; meta: unknown }>('/orders').then((r) => r.data);
 
+/** GET /orders/:code — API trả nguyên cột của Order kèm ảnh từng dòng; chỉ khai các trường web đang dùng. */
+export interface OrderDetailDTO extends OrderDTO {
+  couponCode?: string | null;
+  /** Số Điểm Xanh đã dùng (đã nằm trong `discount`, không trừ thêm lần nữa). */
+  pointsUsed?: number;
+  note?: string | null;
+  /** Ảnh chụp địa chỉ lúc đặt; đơn đại lý không có địa chỉ khách lẻ, chỉ có `note`. */
+  shippingAddress?: {
+    recipient?: string;
+    phone?: string;
+    province?: string;
+    district?: string;
+    ward?: string;
+    street?: string;
+    note?: string | null;
+  } | null;
+  shippingPartner?: string | null;
+  shippingCode?: string | null;
+  trackingLink?: string | null;
+  items: (OrderDTO['items'][number] & { thumbnail?: string | null })[];
+}
+export const fetchOrder = (code: string) => apiFetch<OrderDetailDTO>(`/orders/${encodeURIComponent(code)}`);
+
 // Thanh toán chuyển khoản (VietQR) — A2-02 = A6-01 (docs/audit-2026-09): web chọn được
 // BANK_TRANSFER nhưng trước đây không có cách nào gọi endpoint này nên khách không bao giờ thấy
 // QR/STK để trả tiền. Cùng contract BE với apps/miniapp/src/services/payment-api.ts
