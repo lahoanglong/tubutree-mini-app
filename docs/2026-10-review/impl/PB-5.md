@@ -36,3 +36,22 @@ Không.
 ### Giả định / việc còn lại
 - Giả định: đặt TZ=UTC cho jest toàn apps/api là chấp nhận được (chỉ 1 spec dùng Date local trước đó và vẫn xanh).
 - Triển khai: compose đổi env + Dockerfile thêm tzdata nên cần build lại image api; áp dụng khi deploy. Các mục còn lại của gói (C-042 feed, C-100 danh sách chưa giới hạn) do lượt khác làm.
+
+## C-042 - XONG (mục 2/2, phần feed)
+- `getFeed`/`getPost`/`eventPosts` bỏ `_count` trong include (Prisma biến nó thành LEFT JOIN hai subquery GROUP BY quét cả `feed_reactions` và `feed_comments`). Thay bằng `countsForPage(postIds)`: hai `groupBy` có `WHERE postId IN (id của trang)` chạy song song, bình luận vẫn lọc `isRemoved=false`; trang rỗng thì không truy vấn.
+- Sort "Phổ biến" cần xếp theo số tim nên thêm cột `feed_posts.likeCount` (migration `20261010043402_feed_post_like_count`: ADD COLUMN NOT NULL DEFAULT 0 + backfill từ feed_reactions + index `(status, isPinned DESC, likeCount DESC, createdAt DESC)`). `toggleReaction` cập nhật cùng transaction: tạo tim + `increment` (P2002 rollback cả hai), bỏ tim + `decrement` theo `count` thực xoá, chặn âm. Số hiển thị vẫn đếm thật theo trang, cột chỉ dùng xếp hạng.
+- EXPLAIN (tubutree_perf, 20k bài / 100k tim / 50k bình luận, chỉ EXPLAIN ANALYZE): trước (câu join gộp Prisma) 86,7 ms, Seq Scan on feed_reactions 100k dòng + feed_comments 50k dòng; sau: đếm tim cho 20 id của trang 0,23-0,28 ms (Index Only Scan feed_reactions_postId_idx), đếm bình luận 0,84-1,5 ms (Bitmap Index Scan feed_comments_postId_idx), không còn Seq Scan trên hai bảng đó. Sort popular trên DB thử (tubu_it_pb5, seed 20k bài trong transaction rồi ROLLBACK): Incremental Sort trên index mới, 0,18 ms.
+- Test: unit `community-feed.service.spec` (đếm theo id trang, không `_count`, likeCount tăng/giảm, 0 dòng xoá thì không trừ); race spec mới `test/integration-race/feed-like-count.race-spec.ts` trên Postgres thật (20 người thả đồng thời, bấm đúp 2 thiết bị, thả rồi bỏ, getFeed popular + số liệu đúng) 4/4 xanh. Ghi chú trung thực: các test này viết sau khi sửa code nên chưa có lượt "đỏ" ghi lại cho C-042 (spec unit cũ đã phải đổi vì mock `_count`).
+- Giả định: người dùng bị xoá (cascade reactions) làm `likeCount` của các bài họ từng thả tim lệch nhẹ; chỉ ảnh hưởng thứ tự "Phổ biến", số hiển thị vẫn đúng. Sort "new" dùng index `(status, createdAt)` còn `ORDER BY isPinned` nên vẫn Seq Scan + top-N trên feed_posts ở perf DB (ngoài phạm vi C-042).
+
+## C-100 - XONG
+- `AffiliateService.listLinks(userId, {take, cursor})` và `SubscriptionsService.list(userId, {take, cursor})`: mặc định 100, tối đa 200, thứ tự `(createdAt desc, id desc)`, cursor = id cuối trang trước. Controller nhận `?take=&cursor=` qua helper `clampTake` mới ở `src/common/pagination.ts`. Phản hồi vẫn là mảng như cũ nên FE miniapp (không truyền tham số) tương thích; không trả tổng vì FE không dùng.
+- Test đỏ rồi xanh: 3 test fail trước khi sửa (2 listLinks, 1 subscriptions list) + `pagination.spec.ts` (clampTake); xanh sau sửa.
+
+### Kiểm chứng (apps/api)
+- `npx jest --maxWorkers=1 src/common src/modules/affiliate src/modules/subscriptions src/modules/feed`: 14 suite / 445 test xanh.
+- `DATABASE_URL=...:5555/tubutree_it npx jest -c test/integration-race/jest.config.js --runInBand feed-like-count subscription-duplicate affiliate.race`: 3 suite / 13 test xanh.
+- `npx tsc --noEmit -p tsconfig.json` sạch; ESLint các file đã sửa sạch. `prisma migrate deploy` áp thử thành công trên Postgres riêng.
+
+### Migration
+`20261010043402_feed_post_like_count` (additive, backfill rõ ràng, không unique mới).
