@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { Gift } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -13,8 +13,11 @@ import {
 import { getErrorMessage } from '../services/api';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { Button } from '../components/ui/button';
+import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { ImageUpload } from '../components/image-upload';
 import { haptic } from '../utils/haptic';
+import { BrandSalesTab } from './brand-owner-sales';
 
 export default function BrandOwnerPage() {
   const q = useQuery({ queryKey: ['owned-brand'], queryFn: getOwnedBrand, retry: false });
@@ -43,11 +46,18 @@ export default function BrandOwnerPage() {
   return <Editor brand={q.data} />;
 }
 
+type OwnerTab = 'profile' | 'sales';
+const OWNER_TABS = [
+  { key: 'profile', label: 'Hồ sơ & khuyến mãi' },
+  { key: 'sales', label: 'Doanh thu' },
+];
+
 function Editor({ brand }: { brand: OwnedBrand }) {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
   const navigate = useNavigate();
   const refresh = () => qc.invalidateQueries({ queryKey: ['owned-brand'] });
+  const [tab, setTab] = useState<OwnerTab>('profile');
 
   const [f, setF] = useState({
     logoUrl: brand.logoUrl ?? '',
@@ -91,7 +101,8 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const updPromo = useMutation({
-    mutationFn: () => updateOwnedPromotion(editingId!, promoIso()),
+    // Khi sửa, ô mã trống nghĩa là GỠ mã (chuỗi rỗng) — `undefined` bị bỏ qua nên mã cũ sẽ ở lại.
+    mutationFn: () => updateOwnedPromotion(editingId!, { ...promoIso(), couponCode: promo.couponCode.trim().toUpperCase() }),
     onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã cập nhật khuyến mãi', type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -133,10 +144,9 @@ function Editor({ brand }: { brand: OwnedBrand }) {
         {/* Sửa logo/ảnh bìa/câu chuyện mà không xem được kết quả thì chỉ đoán — trang nhãn
             công khai đã có sẵn ở /brand/:slug, chỉ thiếu lối sang. */}
         <Button
-          size="small"
           variant="secondary"
           style={{ marginTop: 10 }}
-          onClick={() => {
+          onPress={() => {
             if (!brand.isPublished) {
               openSnackbar({ text: 'Nhãn đang là nháp — Tubu duyệt xong khách mới xem được.', type: 'warning' });
               return;
@@ -148,94 +158,104 @@ function Editor({ brand }: { brand: OwnedBrand }) {
         </Button>
       </Box>
 
-      {/* Thông tin nhãn */}
-      <Box mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-        <Text bold size="small" style={{ marginBottom: 8 }}>Thông tin nhãn</Text>
-        <Box mb={2}><ImageUpload label="Logo" value={f.logoUrl} onChange={(url) => setF({ ...f, logoUrl: url })} /></Box>
-        <Box mb={2}><ImageUpload label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF({ ...f, coverUrl: url })} /></Box>
-        <Box mb={2}><Input label="Tagline" value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} /></Box>
-        <Box mb={2}><Input label="Nguồn gốc" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} /></Box>
-        <Box mb={2}><Input.TextArea label="Câu chuyện thương hiệu" value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} /></Box>
-        <Button fullWidth style={{ background: 'var(--primary-600)' }} loading={saveMut.isPending} disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
-          Lưu thông tin
-        </Button>
+      <Box px={4} mb={3}>
+        <SegmentedTabs items={OWNER_TABS} value={tab} onChange={(k) => setTab(k as OwnerTab)} />
       </Box>
 
-      {/* Khuyến mãi */}
-      <Box mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-        <Box flex alignItems="center" style={{ gap: 6, marginBottom: 8 }}>
-          <Gift size={16} color="var(--primary-700)" />
-          <Text bold size="small">Khuyến mãi</Text>
-        </Box>
-        {brand.promotions.map((p) => (
-          <Box key={p.id} flex alignItems="center" justifyContent="space-between" style={{ gap: 8, padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
-            <Box style={{ flex: 1 }}>
-              <Text size="small">{p.title}</Text>
-              {p.subtitle && <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>{p.subtitle}</Text>}
+      {tab === 'sales' && <BrandSalesTab />}
+
+      {tab === 'profile' && (
+        <>
+          {/* Thông tin nhãn */}
+          <Box mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
+            <Text bold size="small" style={{ marginBottom: 8 }}>Thông tin nhãn</Text>
+            <Box mb={2}><ImageUpload label="Logo" value={f.logoUrl} onChange={(url) => setF({ ...f, logoUrl: url })} /></Box>
+            <Box mb={2}><ImageUpload label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF({ ...f, coverUrl: url })} /></Box>
+            <Box mb={2}><Input label="Tagline" value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} /></Box>
+            <Box mb={2}><Input label="Nguồn gốc" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} /></Box>
+            <Box mb={2}><Input.TextArea label="Câu chuyện thương hiệu" value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} /></Box>
+            <Button fullWidth loading={saveMut.isPending} onPress={() => saveMut.mutate()}>
+              Lưu thông tin
+            </Button>
+          </Box>
+
+          {/* Khuyến mãi */}
+          <Box mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
+            <Box flex alignItems="center" style={{ gap: 6, marginBottom: 8 }}>
+              <Gift size={16} color="var(--primary-700)" />
+              <Text bold size="small">Khuyến mãi</Text>
             </Box>
-            <Box flex style={{ gap: 12 }}>
-              <Text size="xSmall" className="tubu-press" style={{ color: 'var(--primary-600)' }} onClick={() => startEdit(p)}>Sửa</Text>
-              <Text size="xSmall" className="tubu-press" style={{ color: 'var(--danger)' }} onClick={() => setConfirmDeleteId(p.id)}>Xoá</Text>
+            {brand.promotions.map((p) => (
+              <Box key={p.id} flex alignItems="center" justifyContent="space-between" style={{ gap: 8, padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
+                <Box style={{ flex: 1 }}>
+                  <Text size="small">{p.title}</Text>
+                  {p.subtitle && <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>{p.subtitle}</Text>}
+                </Box>
+                <Box flex style={{ gap: 4 }}>
+                  <Button variant="ghost" onPress={() => startEdit(p)}>Sửa</Button>
+                  <Button variant="ghost" style={{ color: 'var(--color-text-danger)' }} onPress={() => setConfirmDeleteId(p.id)}>Xoá</Button>
+                </Box>
+              </Box>
+            ))}
+            <Box mt={2} flex flexDirection="column" style={{ gap: 6 }}>
+              <Input placeholder="Tiêu đề (MUA 2 TẶNG 1)" value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} />
+              <Input placeholder="Mô tả" value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} />
+              {/* Không có mã thì banner chỉ là lời quảng cáo: khách đọc "MUA 2 TẶNG 1" rồi không
+                  biết làm gì tiếp. Máy chủ chỉ nhận mã có thật, công khai và còn hạn. */}
+              <Input
+                placeholder="Mã giảm giá (tuỳ chọn) — VD: TUBU20"
+                value={promo.couponCode}
+                onChange={(e) => setPromo({ ...promo, couponCode: e.target.value.toUpperCase() })}
+              />
+              <Text size="xxxxSmall" style={{ color: 'var(--neutral-400)' }}>
+                Có mã thì khách chạm để sao chép ngay trên trang nhãn. Mã giảm giá phải do Tubu tạo sẵn, công khai
+                và còn hạn — mã không có trong hệ thống sẽ bị từ chối khi lưu. Để trống ô này khi sửa để gỡ mã.
+              </Text>
+              <Box flex style={{ gap: 6 }}>
+                <input
+                  type="date"
+                  aria-label="Từ ngày"
+                  value={promo.startAt}
+                  onChange={(e) => setPromo({ ...promo, startAt: e.target.value })}
+                  style={{ flex: 1, minHeight: 44, padding: 8, borderRadius: 8, border: '1px solid var(--neutral-200)' }}
+                />
+                <input
+                  type="date"
+                  aria-label="Đến ngày"
+                  value={promo.endAt}
+                  onChange={(e) => setPromo({ ...promo, endAt: e.target.value })}
+                  style={{ flex: 1, minHeight: 44, padding: 8, borderRadius: 8, border: '1px solid var(--neutral-200)' }}
+                />
+              </Box>
+              {dateRangeInvalid && (
+                <Text size="xSmall" style={{ color: 'var(--danger)' }}>Ngày kết thúc phải sau ngày bắt đầu.</Text>
+              )}
+              {editingId ? (
+                <Box flex style={{ gap: 6 }}>
+                  <Button variant="secondary" style={{ flex: 1 }} disabled={!promo.title.trim() || dateRangeInvalid} loading={updPromo.isPending} onPress={() => updPromo.mutate()}>Lưu thay đổi</Button>
+                  <Button variant="ghost" onPress={resetPromoForm}>Huỷ</Button>
+                </Box>
+              ) : (
+                <Button variant="secondary" disabled={!promo.title.trim() || dateRangeInvalid} loading={addPromo.isPending} onPress={() => addPromo.mutate()}>+ Thêm khuyến mãi</Button>
+              )}
             </Box>
           </Box>
-        ))}
-        <Box mt={2} flex flexDirection="column" style={{ gap: 6 }}>
-          <Input placeholder="Tiêu đề (MUA 2 TẶNG 1)" value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} />
-          <Input placeholder="Mô tả" value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} />
-          {/* Không có mã thì banner chỉ là lời quảng cáo: khách đọc "MUA 2 TẶNG 1" rồi không
-              biết làm gì tiếp. Cột couponCode đã có sẵn ở BE, chỉ thiếu ô nhập. */}
-          <Input
-            placeholder="Mã giảm giá (tuỳ chọn) — VD: TUBU20"
-            value={promo.couponCode}
-            onChange={(e) => setPromo({ ...promo, couponCode: e.target.value.toUpperCase() })}
-          />
-          <Text size="xxxxSmall" style={{ color: 'var(--neutral-400)' }}>
-            Có mã thì khách chạm để sao chép ngay trên trang nhãn. Mã phải được Tubu tạo trước
-            trong hệ thống voucher thì mới dùng được khi thanh toán.
-          </Text>
-          <Box flex style={{ gap: 6 }}>
-            <input
-              type="date"
-              aria-label="Từ ngày"
-              value={promo.startAt}
-              onChange={(e) => setPromo({ ...promo, startAt: e.target.value })}
-              style={{ flex: 1, padding: 8, borderRadius: 8, border: '1px solid var(--neutral-200)' }}
-            />
-            <input
-              type="date"
-              aria-label="Đến ngày"
-              value={promo.endAt}
-              onChange={(e) => setPromo({ ...promo, endAt: e.target.value })}
-              style={{ flex: 1, padding: 8, borderRadius: 8, border: '1px solid var(--neutral-200)' }}
-            />
-          </Box>
-          {dateRangeInvalid && (
-            <Text size="xSmall" style={{ color: 'var(--danger)' }}>Ngày kết thúc phải sau ngày bắt đầu.</Text>
-          )}
-          {editingId ? (
-            <Box flex style={{ gap: 6 }}>
-              <Button variant="secondary" style={{ flex: 1 }} disabled={!promo.title.trim() || dateRangeInvalid || updPromo.isPending} loading={updPromo.isPending} onClick={() => updPromo.mutate()}>Lưu thay đổi</Button>
-              <Button variant="tertiary" onClick={resetPromoForm}>Huỷ</Button>
-            </Box>
-          ) : (
-            <Button variant="secondary" disabled={!promo.title.trim() || dateRangeInvalid || addPromo.isPending} loading={addPromo.isPending} onClick={() => addPromo.mutate()}>+ Thêm khuyến mãi</Button>
-          )}
-        </Box>
-      </Box>
+        </>
+      )}
 
       {/* Xác nhận xoá khuyến mãi (thao tác không hoàn tác) */}
       <Sheet visible={!!confirmDeleteId} onClose={() => setConfirmDeleteId(null)} autoHeight>
         <Box p={5} style={{ textAlign: 'center' }}>
           <Text.Title size="small">Xoá khuyến mãi này?</Text.Title>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
-            <Button fullWidth variant="secondary" onClick={() => setConfirmDeleteId(null)}>
+            <Button fullWidth variant="secondary" onPress={() => setConfirmDeleteId(null)}>
               Huỷ
             </Button>
             <Button
               fullWidth
-              loading={delPromo.isPending} disabled={delPromo.isPending}
-              onClick={() => delPromo.mutate(confirmDeleteId!)}
-              style={{ background: 'var(--danger)' }}
+              variant="danger"
+              loading={delPromo.isPending}
+              onPress={() => delPromo.mutate(confirmDeleteId!)}
             >
               Xoá
             </Button>
