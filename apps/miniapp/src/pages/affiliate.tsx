@@ -173,7 +173,7 @@ function RegisterGate() {
         <Button
           fullWidth
           loading={reg.isPending}
-          disabled={!agreed || reg.isPending}
+          disabled={!agreed}
           onPress={() => reg.mutate()}
           style={{ marginTop: 16 }}
         >

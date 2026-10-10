@@ -119,6 +119,18 @@ describe('Đăng ký CTV — đồng ý điều khoản hoa hồng & thuế (C-1
     expect(mocks.registerAffiliate).toHaveBeenCalledWith('2026-10');
   });
 
+  it('đang gửi đăng ký: nút hiện spinner (không bị disabled), bấm lại không gửi lần 2', async () => {
+    mocks.registerAffiliate.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
+    fireEvent.click(screen.getByRole('checkbox', { name: /đồng ý với điều khoản hoa hồng/ }));
+    fireEvent.click(btn);
+    await waitFor(() => expect(btn).toHaveClass('zaui-btn-loading'));
+    expect(btn).not.toBeDisabled();
+    fireEvent.click(btn);
+    expect(mocks.registerAffiliate).toHaveBeenCalledTimes(1);
+  });
+
   it('bỏ tick lại thì khoá nút trở lại', async () => {
     renderPage();
     const btn = await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });

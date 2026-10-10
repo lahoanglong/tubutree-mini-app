@@ -132,6 +132,20 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm (C-064)', () => {
     expect(dto.paymentMethod).toBe('COD');
   });
 
+  it('đang gửi đơn: nút hiện spinner (không bị disabled), bấm lại không tạo đơn lần 2', async () => {
+    mocks.createCtvOrder.mockReturnValue(new Promise(() => {}));
+    saveRecentCustomer('ctv1', AN, 1);
+    renderSheet();
+    fireEvent.click(screen.getByRole('button', { name: 'Nguyễn An · …567' }));
+    await addProduct();
+    const btn = screen.getByRole('button', { name: 'Tạo đơn hộ khách' });
+    fireEvent.click(btn);
+    await waitFor(() => expect(btn).toHaveClass('zaui-btn-loading'));
+    expect(btn).not.toBeDisabled();
+    fireEvent.click(btn);
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1);
+  });
+
   it('khách nhập tay, đơn tạo thành công thì được nhớ cho lần sau (SĐT bỏ khoảng trắng)', async () => {
     renderSheet();
     fireEvent.change(inputNear('Tên người nhận'), { target: { value: 'Lê Cúc' } });
