@@ -238,3 +238,41 @@ Migration: không.
 - Màn admin/đối soát cho `REFERRAL_DEBT` và cơ chế trừ nợ: gộp vào Đợt D (Q-03 gộp TubuXu vào Điểm Xanh), hoặc chủ dự án chọn giữ thưởng tới hết cửa sổ trả hàng.
 - Đường resync thưởng giới thiệu cho người được mời có từ 2 đơn giao mà chưa có dòng thưởng (khi lần xét lúc DELIVERED lỗi và không có đơn giao sau): chưa có cron/endpoint.
 - Chờ chủ dự án xác nhận: (a) không thưởng lại cặp đã bị thu hồi; (b) ngưỡng `referral.min_order_amount` 200.000.
+
+## Review lượt 2
+
+### Gộp phiên khách làm thưởng 2 lần + bỏ sót thu hồi (major) — ĐÃ SỬA
+Lỗi: thu hồi và chặn trùng thưởng đều tra theo `order.userId` lúc chạy. `AuthService.mergeGuestInto` chuyển đơn của khách G sang tài khoản đích T nhưng dòng sổ `REFERRAL_ORDER2:<G>` (thuộc người mời) giữ nguyên. Hệ quả: (1) T cùng người mời R → đơn mới của T giao xong, R được thưởng lần 2 cho chính cặp O1:O2; (2) trả O1/O2 chỉ tìm `REFERRAL_ORDER2:<T>`, nên thưởng của G không bao giờ bị thu hồi (T không có người mời thì càng không).
+
+Sửa (`apps/api/src/modules/wallet/referral-reward.ts`, `coins.service.ts`), không migration:
+- **Thu hồi theo đơn**: `revokeReferralRewardForOrder` tìm mọi dòng `REFERRAL_ORDER2:*` có `refId` chứa id đơn (`<id>:…` hoặc `…:<id>`, lọc lại bằng `split(':')`), lấy refereeId từ reason để ghi đúng `REFERRAL_ORDER2_REVOKE:<refereeId>` / `REFERRAL_ORDER2_DEBT:<refereeId>`, rồi thu hồi mốc như lượt 1. Vẫn khoá chủ đơn hiện tại trước khi đọc; không khoá thêm dòng khách vì lần gộp khoá khách trước khi chuyển đơn và mọi lần thưởng cho khách khoá khách + đọc đơn theo userId khách, nên đơn đã thuộc T thì dòng thưởng của G đã commit. Idempotent: dòng thu hồi vẫn insert `skipDuplicates` (ON CONFLICT DO NOTHING) trên partial unique theo reason.
+- **Chặn dùng lại đơn khi cấp**: `findReferralRewardedOrders(tx, refereeId)` (SQL join `orders` theo `split_part(refId)`) trả các đơn hiện của người được mời đã nằm trong một lần thưởng `REFERRAL_ORDER2` (kể cả đã thu hồi) cùng người mời đã nhận. Đã có lần thưởng cho CÙNG người mời → không thưởng (cùng một người đã được tính, giống quy tắc "đã thu hồi thì không thưởng lại"); khác người mời → chỉ loại các đơn đó khỏi việc chọn đơn đầu/đơn thứ 2.
+- Không bắt P2002 trong tx; mốc thưởng không đổi (đếm theo người mời, vẫn đúng).
+
+### Test (đỏ → xanh)
+Thêm describe "Thưởng giới thiệu sau khi gộp phiên khách" trong `test/integration-race/referral-order2.race-spec.ts` (gộp thật qua `AuthService.ensurePhoneForCurrentUser`):
+- (g1) T cùng người mời R: đơn mới của T giao xong không thưởng lại O1:O2; trả O1+O2 thu hồi đủ (R về 0).
+- (g2) T không có người mời: trả O1 sau gộp vẫn thu hồi thưởng của G; trả O2 không trừ thêm.
+- (g3) T có người mời khác R2: R2 chỉ được thưởng từ 2 đơn chưa dùng của T; trả O1 chỉ thu hồi của R.
+- (g4) không gộp: 2 người được mời cùng R, trả đơn của A chỉ thu hồi lượt của A.
+
+ĐỎ: `Tests: 3 failed, 17 skipped, 1 passed, 21 total` (g1, g2, g3 đỏ; g4 xanh).
+
+XANH:
+
+```
+$ DATABASE_URL=postgresql://tubu:tubu@localhost:5547/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand referral-order2 auth-merge-guest vouchers-real-user
+Test Suites: 3 passed, 3 total
+Tests:       36 passed, 36 total
+$ npx jest --maxWorkers=1 src/modules/wallet src/modules/vouchers src/modules/affiliate src/modules/orders/order-reversal src/modules/orders/order-status src/modules/auth
+Test Suites: 11 passed, 11 total
+Tests:       298 passed, 298 total
+```
+
+- `order-reversal.service.spec.ts`: tx giả đổi `coinTransaction.findFirst` → `findMany` (thu hồi nay tra nhiều dòng theo đơn).
+- `npx tsc --noEmit -p tsconfig.json` (apps/api): không lỗi; `npx eslint` 4 file sửa: không lỗi.
+
+Migration: không. Tra theo `refId` quét các dòng `refType='REFERRAL'` (index partial unique theo reason chỉ phủ đúng tập này); số dòng = số lượt giới thiệu nên chấp nhận được. Nếu bảng lớn, cân nhắc bảng liên kết thưởng↔đơn (`orderId` unique) + backfill.
+
+### Giả định (chờ chủ dự án xác nhận)
+- Tài khoản đích nhận đơn của khách đã từng được thưởng cho CÙNG người mời thì coi là cùng một người được mời → không thưởng thêm cho người mời đó dù T có thêm 2 đơn mới.
