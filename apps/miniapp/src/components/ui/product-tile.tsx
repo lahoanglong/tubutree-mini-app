@@ -146,13 +146,6 @@ export function ProductTile({
           </div>
         )}
       </div>
-      {/* Anh em của nút tên (không phải con) để không lồng phần tử tương tác; khối 0x0 ở góc phải-trên
-          thẻ giữ nguyên vị trí cũ của tim (top/right 2px của chính nút) và nâng nó lên trên lớp phủ. */}
-      {showWishlist && !isLine && (
-        <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 1 }}>
-          <WishlistHeart productId={p.id} floating size={18} />
-        </div>
-      )}
       <div style={{ padding: isLine ? 0 : 10, flex: isLine ? 1 : undefined, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span
@@ -187,6 +180,14 @@ export function ProductTile({
             {p.name}
           </Text>
         </button>
+        {/* Anh em của nút tên (không phải con) để không lồng phần tử tương tác. Đứng NGAY SAU nút tên trong DOM
+            để Tab/đọc đi tên rồi tới tim; vị trí thật do absolute theo vỏ thẻ (cha định vị gần nhất), khối 0x0
+            ở góc phải-trên giữ nguyên chỗ cũ của tim và nâng nó lên trên lớp phủ. */}
+        {showWishlist && !isLine && (
+          <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 1 }}>
+            <WishlistHeart productId={p.id} floating size={18} />
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, minHeight: 16 }}>
           {(p.reviewCount ?? 0) > 0 ? (
             <>

@@ -81,6 +81,14 @@ describe('ProductTile', () => {
     await user.keyboard('{Enter}');
     expect(onPress).toHaveBeenCalledTimes(2);
   });
+  it('thứ tự Tab và đọc: nút tên trước, tim yêu thích sau (tim không chen lên trước tên sản phẩm)', async () => {
+    const user = userEvent.setup();
+    renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={() => {}} />);
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', { name: /yêu thích/i })).toHaveFocus();
+  });
   it('tên truy cập = tên sản phẩm; giá đang hiển thị nằm trong mô tả truy cập', () => {
     renderTile(<ProductTile product={{ ...PRODUCT, salePrice: 45000 }} priceOverride={{ price: 39000 }} variant="grid" onPress={() => {}} />);
     expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(/39.000/);
