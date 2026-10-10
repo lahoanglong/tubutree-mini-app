@@ -18,10 +18,12 @@ export class AnalyticsController {
     default: {
       ttl: 60_000,
       limit: 200,
-      getTracker: (req: Record<string, any>) => {
-        const deviceId = req.headers?.['x-device-id'];
+      getTracker: (req: Record<string, unknown>) => {
+        const headers = req.headers as Record<string, unknown> | undefined;
+        const deviceId = headers?.['x-device-id'];
         if (typeof deviceId === 'string' && deviceId.length > 0) return deviceId;
-        return req.user?.sub ?? req.ip ?? 'unknown';
+        const sub = (req.user as { sub?: string } | undefined)?.sub;
+        return sub ?? (req.ip as string | undefined) ?? 'unknown';
       },
     },
   })

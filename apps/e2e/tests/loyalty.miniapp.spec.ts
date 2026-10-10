@@ -9,6 +9,7 @@ import type {
   RewardCatalogResponse,
 } from '../../miniapp/src/services/account-api';
 import { test, expect, makeUser, mockSession, reply, type MockApi } from './support/mock-api';
+import { flushEvents } from './support/events';
 
 /**
  * Zalo Mini App E2E — Hạng thành viên / Điểm Xanh (apps/miniapp/src/pages/loyalty.tsx).
@@ -92,6 +93,8 @@ function mockLoyalty(
 ): LoyaltyState {
   const s: LoyaltyState = { points: 60, checkedInToday: false, coupons: [], locked: opts.locked };
   mockSession(api, makeUser({ id: 'user-loyal', fullName: 'Lê Thành Viên', referralCode: 'E2EREF', pointsBalance: 60 }));
+  // Analytics tracker (services/analytics.ts) xả lô khi ẩn app / mỗi 10s: spec chạy chậm sẽ chạm POST /events.
+  api.post('/events', { accepted: 1 });
   api.get('/me/loyalty', () => overview(s));
   api.get('/me/coupons', () => s.coupons);
   api.get('/me/points/transactions', []);
@@ -151,6 +154,15 @@ function mockLoyalty(
 }
 
 test.describe('Hạng thành viên — Điểm Xanh', () => {
+  test('Xả hàng đợi analytics (POST /events) khi đang ở trang Điểm Xanh không vỡ mock', async ({ page, api }) => {
+    mockLoyalty(api);
+    await page.goto('/loyalty');
+    await expect(page.getByText('Điểm danh nhận Điểm Xanh')).toBeVisible({ timeout: 15_000 });
+
+    await flushEvents(page);
+    await expect.poll(() => api.callsTo('POST', '/events').length, { timeout: 5_000 }).toBeGreaterThan(0);
+  });
+
   test('Điểm danh hằng ngày: nút ghi đúng điểm hôm nay, chạm đúp chỉ gọi API 1 lần, xong thì khoá', async ({ page, api }) => {
     mockLoyalty(api);
     await page.goto('/loyalty');

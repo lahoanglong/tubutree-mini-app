@@ -10,6 +10,7 @@
  */
 import { createHmac } from 'crypto';
 import { readFileSync } from 'fs';
+import { createRequire } from 'module';
 import path from 'path';
 
 function parseEnvFile(filePath: string): Record<string, string> {
@@ -37,21 +38,52 @@ function parseEnvFile(filePath: string): Record<string, string> {
   }
 }
 
+const E2E_USER_ID = 'e2e-test-user-00000000';
+
+/**
+ * Upsert user E2E vào DB mà API đang dùng (DATABASE_URL của process, rơi về apps/api/.env).
+ * Prisma client lấy từ apps/api để không thêm dependency vào apps/e2e.
+ */
+async function seedE2eUser(apiDir: string, databaseUrl: string): Promise<void> {
+  const requireFromApi = createRequire(path.join(apiDir, 'package.json'));
+  const { PrismaClient } = requireFromApi('@prisma/client') as {
+    PrismaClient: new (opts: { datasources: { db: { url: string } } }) => {
+      user: { upsert(args: Record<string, unknown>): Promise<unknown> };
+      $disconnect(): Promise<void>;
+    };
+  };
+  const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+  try {
+    await prisma.user.upsert({
+      where: { id: E2E_USER_ID },
+      update: { isBlocked: false },
+      create: {
+        id: E2E_USER_ID,
+        zaloId: 'e2e-zalo-id',
+        role: 'CUSTOMER',
+        fullName: 'E2E Test User',
+        referralCode: 'E2ETEST0',
+      },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 function b64url(input: Buffer | string): string {
   return Buffer.from(input).toString('base64url');
 }
 
 /**
  * Ký JWT HS256 — cùng logic với scripts/dev-token.ts (không dùng thư viện ngoài).
- * sub = 'e2e-test-user' (user giả, chỉ cần JWT format hợp lệ để qua Guard).
+ * sub = E2E_USER_ID — user thật được seedE2eUser() upsert vào DB, vì checkout ghi các bảng có
+ * khoá ngoại tới User (sub không tồn tại → P2003 "tham chiếu không hợp lệ" thay vì lỗi nghiệp vụ).
  */
 function signTestJwt(secret: string): string {
   const header = { alg: 'HS256', typ: 'JWT' };
   const now = Math.floor(Date.now() / 1000);
-  // sub phải là UUID-like để CurrentUser('sub') không crash khi Prisma query
-  // Dùng sub giả — checkout sẽ fail 400 "giỏ hàng trống" thay vì 401
   const payload = {
-    sub: 'e2e-test-user-00000000',
+    sub: E2E_USER_ID,
     role: 'CUSTOMER',
     zaloId: 'e2e-zalo-id',
     iat: now,
@@ -75,6 +107,18 @@ export default async function globalSetup() {
     console.warn(
       '[E2E Setup] ⚠️  JWT_ACCESS_SECRET không tìm thấy hoặc quá ngắn. ' +
         'Hãy kiểm tra apps/api/.env. API tests sẽ bị skip.'
+    );
+    process.env.E2E_API_TOKEN = '';
+    return;
+  }
+
+  const databaseUrl = process.env.DATABASE_URL ?? apiEnv['DATABASE_URL'] ?? '';
+  try {
+    await seedE2eUser(apiDir, databaseUrl);
+  } catch (err) {
+    console.warn(
+      '[E2E Setup] ⚠️  Không seed được user E2E (DB chưa chạy / chưa migrate?). API tests sẽ bị skip.',
+      err instanceof Error ? err.message : err
     );
     process.env.E2E_API_TOKEN = '';
     return;
