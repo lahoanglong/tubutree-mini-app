@@ -19,7 +19,7 @@ import {
   type CtvMilestoneItem,
 } from '../services/affiliate-api';
 import { getErrorMessage } from '../services/api';
-import { shareLink } from '../services/zmp-bridge';
+import { useShareWithFallback } from '../components/share-sheet';
 import { useAuthStore } from '../store/auth';
 import { formatVnd, formatVndShort, formatXu } from '../utils/format';
 import { haptic } from '../utils/haptic';
@@ -275,13 +275,15 @@ function Dashboard() {
   const d = dashQ.data;
   const referral = meQ.data?.referralCode ?? '';
 
+  const shareWithFallback = useShareWithFallback();
   const shareReferral = () => {
     haptic('light');
-    void shareLink({
-      title: 'Tubu Tree — Sống xanh An Lành',
-      description: `Mua sắm sản phẩm thiên nhiên cùng mình, dùng mã ${referral} nhé!`,
-      path: `/?ref=${referral}`,
-    }).catch(() => {});
+    const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
+    const description = `Mua sắm sản phẩm thiên nhiên cùng mình, dùng mã ${referral} nhé!`;
+    void shareWithFallback(
+      { title: 'Tubu Tree — Sống xanh An Lành', description, path: `/?ref=${referral}` },
+      `${description} ${base}/?ref=${referral}`,
+    );
   };
 
   return (

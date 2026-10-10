@@ -446,6 +446,11 @@ export const vi = {
     outOfStock: 'Tạm hết hàng',
   },
 
+  shareFallback: {
+    failedCopied: 'Chưa chia sẻ được qua Zalo — đã sao chép liên kết, bạn dán vào tin nhắn để gửi nhé.',
+    failedManual: 'Chưa chia sẻ được qua Zalo và cũng không sao chép được — hãy chọn rồi chép liên kết thủ công.',
+  },
+
   contentKit: {
     entryLabel: 'Nội dung',
     sheetTitle: 'Nội dung bán hàng',
