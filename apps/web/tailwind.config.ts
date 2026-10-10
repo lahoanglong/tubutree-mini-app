@@ -27,8 +27,10 @@ const legacyV1Colors = {
     100: '#FBE4C4',
     200: '#F4C98A',
     400: '#EBA94A',
-    600: '#E08C1C',
-    700: '#B86A10',
+    // 600/700 darkened from #E08C1C/#B86A10 (2.65:1 / 4.11:1 with white) so the CTA label and the
+    // orange text clear WCAG 1.4.3 (4.5:1); the logo orange stays in design-tokens as tubu-orange.
+    600: '#A35A0B',
+    700: '#8F4F08',
     900: '#5C3505',
   },
   leaf: {
