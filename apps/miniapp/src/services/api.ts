@@ -37,6 +37,27 @@ const AUTH_READY_TIMEOUT_MS = 15_000;
 /** Refresh đang chạy — các 401 song song chờ chung 1 promise, tránh refresh bão. */
 let refreshInFlight: Promise<string | null> | null = null;
 
+/**
+ * 429: GET được thử lại đúng một lần sau Retry-After (bộ đếm throttle thường chỉ còn vài giây).
+ * Server bảo chờ lâu hơn trần thì trả lỗi ngay, không giữ màn hình quay vô hạn. Không bao giờ
+ * thử lại POST/PUT/PATCH/DELETE: request đầu có thể đã được xử lý xong ở server.
+ */
+const RATE_LIMIT_DEFAULT_WAIT_MS = 1_500;
+const RATE_LIMIT_MAX_WAIT_MS = 5_000;
+const RATE_LIMIT_RETRY_METHODS = new Set(['get', 'head']);
+export const RATE_LIMITED_MESSAGE = 'Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.';
+
+/** Retry-After dạng số giây hoặc HTTP-date; không đọc được thì null. */
+function retryAfterMs(headers: unknown): number | null {
+  const h = headers as { get?: (name: string) => unknown; [key: string]: unknown } | undefined;
+  const raw = typeof h?.get === 'function' ? h.get('retry-after') : h?.['retry-after'];
+  if (raw == null || raw === '') return null;
+  const secs = Number(raw);
+  if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+  const at = Date.parse(String(raw));
+  return Number.isNaN(at) ? null : Math.max(0, at - Date.now());
+}
+
 export function setAccessToken(token: string | null): void {
   accessToken = token;
 }
@@ -74,7 +95,22 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
 api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
-    const original = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
+    const original = error.config as
+      | (InternalAxiosRequestConfig & { _retried?: boolean; _retried429?: boolean })
+      | undefined;
+    if (
+      error.response?.status === 429 &&
+      original &&
+      !original._retried429 &&
+      RATE_LIMIT_RETRY_METHODS.has((original.method ?? 'get').toLowerCase())
+    ) {
+      const wait = retryAfterMs(error.response.headers) ?? RATE_LIMIT_DEFAULT_WAIT_MS;
+      if (wait <= RATE_LIMIT_MAX_WAIT_MS) {
+        original._retried429 = true;
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        return api.request(original);
+      }
+    }
     // KHÔNG refresh cho chính endpoint /auth/* — nếu /auth/refresh trả 401, gọi lại
     // refresh sẽ await chính promise đang chờ nó → deadlock tới khi timeout 15s.
     const isAuthCall = original?.url?.includes('/auth/');
@@ -100,6 +136,8 @@ api.interceptors.response.use(
  */
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
+    // Message của throttler là tiếng Anh kỹ thuật ("ThrottlerException: ...") — không hiển thị.
+    if (error.response?.status === 429) return RATE_LIMITED_MESSAGE;
     const data = error.response?.data as { message?: string | string[] } | undefined;
     const backendMsg = Array.isArray(data?.message) ? data.message[0] : data?.message;
     // Message backend 4xx là nghiệp vụ (viết sẵn tiếng Việt) — hiển thị thẳng.
