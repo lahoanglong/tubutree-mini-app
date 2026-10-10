@@ -25,8 +25,8 @@ export interface ButtonProps extends AriaAttributes {
   disabled?: boolean;
   icon?: LucideIcon;
   fullWidth?: boolean;
-  /** Trả Promise thì Button tự khoá bấm lại cho tới khi Promise xong (xem `Button`). */
-  onPress?: () => void | Promise<unknown>;
+  /** Kiểu `() => void` để nhận cả handler trả giá trị bất kỳ; nếu trả Promise thì Button khoá bấm lại tới khi Promise xong. */
+  onPress?: () => void;
   className?: string;
   style?: CSSProperties;
 }
