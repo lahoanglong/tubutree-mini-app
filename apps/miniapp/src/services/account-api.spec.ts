@@ -154,6 +154,14 @@ describe('lockedPointsNote', () => {
     expect(note).toContain('40');
   });
 
+  it('số từ nghìn trở lên có dấu phân cách, cùng kiểu với số dư trên trang (C-083)', () => {
+    const note = lockedPointsNote(
+      overview({ pointsBalance: 5_000, lockedPoints: 1_250, lockedReturnPoints: 0, lockedUntil: '2026-10-03T17:30:00.000Z', redeemablePoints: 3_750 }),
+    );
+    expect(note).toContain('1.250 điểm từ đơn mới giao');
+    expect(note).toContain('dùng được 3.750 điểm');
+  });
+
   it('điểm của đơn đang chờ xử lý đổi/trả → không hứa ngày cụ thể', () => {
     const note = lockedPointsNote(
       overview({ pointsBalance: 100, lockedPoints: 30, lockedReturnPoints: 30, lockedUntil: null, redeemablePoints: 70 }),
@@ -170,6 +178,9 @@ describe('rewardButtonLabel', () => {
   });
   it('số dư chưa đủ → "Cần X điểm"', () => {
     expect(rewardButtonLabel(r, { pointsBalance: 20 })).toBe('Cần 50 điểm');
+  });
+  it('quà đắt có dấu nghìn: "Cần 5.000 điểm"', () => {
+    expect(rewardButtonLabel({ pointsCost: 5_000, canRedeem: false }, { pointsBalance: 20 })).toBe('Cần 5.000 điểm');
   });
   it('số dư đủ nhưng điểm đang khoá (đơn mới giao) → không nói "Cần X điểm" sai sự thật', () => {
     expect(rewardButtonLabel(r, { pointsBalance: 100, redeemablePoints: 40 })).toBe('Chờ mở khoá điểm');

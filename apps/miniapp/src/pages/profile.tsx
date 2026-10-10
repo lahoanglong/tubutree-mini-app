@@ -9,7 +9,7 @@ import { getCoupons, getLoyalty, getNotifications, getWallet } from '../services
 import { Button } from '../components/ui/button';
 import { getOwnedBrand } from '../services/brand-owner-api';
 import { getDealerMe } from '../services/dealer-api';
-import { formatVnd, formatPoints } from '../utils/format';
+import { formatVnd, formatPoints, formatXu } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 
@@ -276,7 +276,7 @@ export default function ProfilePage() {
         />
         <Stat
           label="TubuXu"
-          value={walletQ.data ? `${walletQ.data.coinsBalance.toLocaleString('vi-VN')} xu` : '—'}
+          value={walletQ.data ? formatXu(walletQ.data.coinsBalance) : '—'}
           onClick={() => navigate('/wallet', { state: { from: '/profile' } })}
         />
         <Stat

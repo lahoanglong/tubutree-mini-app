@@ -42,6 +42,7 @@ import { getErrorMessage } from '../services/api';
 import { vi } from '../i18n/vi';
 import { ChevronRight, MessagesSquare, Recycle } from 'lucide-react';
 import { copyText } from '../utils/clipboard';
+import { formatDrops, formatNumber, formatXu } from '../utils/format';
 
 // Cùng ngày theo giờ VN (UTC+7) — khớp dayKey backend, để khoá nút đã dùng trong ngày.
 function isSameVNDay(iso: string | null): boolean {
@@ -100,7 +101,7 @@ export default function GamePage() {
   const checkInM = useMutation({
     mutationFn: checkIn,
     onSuccess: (r) => {
-      const parts = [`+${r.seedsEarned}💧`];
+      const parts = [`+${formatDrops(r.seedsEarned)}`];
       if (r.streakFrozeUsed) parts.push('🧊 đã dùng vé giữ lửa');
       if (r.bonusNote) parts.push(r.bonusNote);
       openSnackbar({ text: parts.join(' · '), type: 'success' });
@@ -111,7 +112,7 @@ export default function GamePage() {
   const dewM = useMutation({
     mutationFn: collectDew,
     onSuccess: (r) => {
-      openSnackbar({ text: `Hứng được +${r.seedsEarned}💧 từ giọt sương sáng 💦`, type: 'success' });
+      openSnackbar({ text: `Hứng được +${formatDrops(r.seedsEarned)} từ giọt sương sáng 💦`, type: 'success' });
       refresh();
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -136,7 +137,7 @@ export default function GamePage() {
   const giftM = useMutation({
     mutationFn: (recipientId: string) => giftWater(recipientId),
     onSuccess: (r) => {
-      openSnackbar({ text: `Đã tặng ${r.amount}💧 cho bạn 🎁`, type: 'success' });
+      openSnackbar({ text: `Đã tặng ${formatDrops(r.amount)} cho bạn 🎁`, type: 'success' });
       refresh();
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -160,7 +161,7 @@ export default function GamePage() {
         setHarvestSpecies(r.reward?.species ?? null);
         setHarvested(true); // mở modal celebration
       } else {
-        openSnackbar({ text: `Đã tưới · ${r.progress}/${r.target}💧`, type: 'success' });
+        openSnackbar({ text: `Đã tưới · ${formatNumber(r.progress)}/${formatDrops(r.target)}`, type: 'success' });
       }
       refresh();
       void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
@@ -170,7 +171,7 @@ export default function GamePage() {
   const buyTreeM = useMutation({
     mutationFn: buyTree,
     onSuccess: (r) => {
-      openSnackbar({ text: `Đã mua 1 cây thật 🌳 (−${r.cost} xu) · mã ${r.certificateCode}`, type: 'success' });
+      openSnackbar({ text: `Đã mua 1 cây thật 🌳 (−${formatXu(r.cost)}) · mã ${r.certificateCode}`, type: 'success' });
       refresh();
       void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
       void queryClient.invalidateQueries({ queryKey: ['coins'] });
@@ -185,7 +186,7 @@ export default function GamePage() {
       setHarvestSpecies(r.reward?.species ?? null);
       setHarvested(true);
     } else {
-      openSnackbar({ text: `Đã tưới lô · ${r.progress}/${r.target}💧`, type: 'success' });
+      openSnackbar({ text: `Đã tưới lô · ${formatNumber(r.progress)}/${formatDrops(r.target)}`, type: 'success' });
     }
     refresh();
     void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
@@ -307,7 +308,7 @@ export default function GamePage() {
           <Box style={{ width: `${pct}%`, height: 8, background: 'white', borderRadius: 99, transition: 'width var(--dur-slow) var(--ease-out)' }} />
         </Box>
         <Text size="xSmall" style={{ color: 'white' }}>
-          {eco?.progress ?? 0}/{eco?.target ?? 0}💧 · 💧 {profile?.totalSeeds ?? 0} · 🔥 {profile?.streakDays ?? 0} ngày · 🌳 thật: {eco?.treesPlanted ?? 0}
+          {formatNumber(eco?.progress)}/{formatDrops(eco?.target)} · 💧 {formatNumber(profile?.totalSeeds)} · 🔥 {formatNumber(profile?.streakDays)} ngày · 🌳 thật: {formatNumber(eco?.treesPlanted)}
         </Text>
       </Box>
 
@@ -474,7 +475,7 @@ export default function GamePage() {
               onClick={() => freezeM.mutate()}
               style={{ color: 'var(--leaf-700)' }}
             >
-              Mua ({(profile?.streakFreezeCost ?? 80).toLocaleString('vi-VN')}💧)
+              Mua ({formatDrops(profile?.streakFreezeCost ?? 80)})
             </Button>
           </Box>
           <Button
@@ -542,7 +543,7 @@ export default function GamePage() {
         <Box flex style={{ gap: 8, marginTop: 8 }}>
           <Button style={{ flex: 1 }} size="small" disabled={buyTreeM.isPending} loading={buyTreeM.isPending} onClick={() => buyTreeM.mutate()}>
             🌳 Mua cây thật
-            {profile?.treeXuPrice != null && ` (${profile.treeXuPrice.toLocaleString('vi-VN')} xu)`}
+            {profile?.treeXuPrice != null && ` (${formatXu(profile.treeXuPrice)})`}
           </Button>
         </Box>
         <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, textAlign: 'center' }}>
@@ -571,7 +572,7 @@ export default function GamePage() {
                       <Box>
                         <Text size="small" bold>Lô {p.slot} · {p.treeType}</Text>
                         <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                          {p.progress}/{p.target}💧 · 🌳 {p.treesPlanted}
+                          {formatNumber(p.progress)}/{formatDrops(p.target)} · 🌳 {formatNumber(p.treesPlanted)}
                           {p.treeHealth === 'WILTED' ? ' · 🥀 héo' : p.treeHealth === 'DEAD' ? ' · 🍂 chết' : ''}
                         </Text>
                       </Box>
@@ -601,7 +602,7 @@ export default function GamePage() {
                 loading={unlockM.isPending && unlockM.variables === 'SEEDS'}
                 onClick={() => unlockM.mutate('SEEDS')}
               >
-                🔓 Mở lô ({garden.nextUnlock.seedCost}💧)
+                🔓 Mở lô ({formatDrops(garden.nextUnlock.seedCost)})
               </Button>
               <Button
                 style={{ flex: 1 }}
@@ -611,7 +612,7 @@ export default function GamePage() {
                 loading={unlockM.isPending && unlockM.variables === 'XU'}
                 onClick={() => unlockM.mutate('XU')}
               >
-                🔓 Mở lô ({garden.nextUnlock.xuCost} xu)
+                🔓 Mở lô ({formatXu(garden.nextUnlock.xuCost)})
               </Button>
             </Box>
           ) : (
@@ -763,10 +764,10 @@ export default function GamePage() {
           </Box>
           <Box flex justifyContent="space-between">
             <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-              {community.goal.currentDrops.toLocaleString('vi-VN')}/{community.goal.targetDrops.toLocaleString('vi-VN')}💧 ({community.pct}%)
+              {formatNumber(community.goal.currentDrops)}/{formatDrops(community.goal.targetDrops)} ({community.pct}%)
             </Text>
             <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-              Bạn đã góp {community.myDrops.toLocaleString('vi-VN')}💧
+              Bạn đã góp {formatDrops(community.myDrops)}
             </Text>
           </Box>
           <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6 }}>
@@ -835,14 +836,14 @@ export default function GamePage() {
       {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
       <Card title="🌍 Tác động xanh của bạn">
         <Box flex style={{ gap: 10 }}>
-          <EcoStat icon="🌳" value={String(eco?.treesPlanted ?? 0)} label="Cây thật đã trồng" />
-          <EcoStat icon="💨" value={`~${(eco?.treesPlanted ?? 0) * 21}kg`} label="CO₂ hấp thụ/năm (ước tính)" />
-          <EcoStat icon="💧" value={String(profile?.totalSeeds ?? 0)} label="Giọt nước đã góp" />
+          <EcoStat icon="🌳" value={formatNumber(eco?.treesPlanted)} label="Cây thật đã trồng" />
+          <EcoStat icon="💨" value={`~${formatNumber((eco?.treesPlanted ?? 0) * 21)}kg`} label="CO₂ hấp thụ/năm (ước tính)" />
+          <EcoStat icon="💧" value={formatNumber(profile?.totalSeeds)} label="Giọt nước đã góp" />
         </Box>
         {(forest?.count ?? 0) > 0 ? (
           <>
             <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 8 }}>
-              Cảm ơn bạn! Tubu đã cam kết góp {forest?.count} cây thật vào "Rừng Xanh Lên" cùng PanNature 🌿
+              Cảm ơn bạn! Tubu đã cam kết góp {formatNumber(forest?.count)} cây thật vào "Rừng Xanh Lên" cùng PanNature 🌿
             </Text>
             {/* Khu rừng của tôi — chứng nhận từng cây (§6.7.7) */}
             <Box mt={3} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -868,7 +869,7 @@ export default function GamePage() {
                 </Box>
               ))}
               {forest!.count > 5 && (
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>…và {forest!.count - 5} cây khác</Text>
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>…và {formatNumber(forest!.count - 5)} cây khác</Text>
               )}
             </Box>
           </>
@@ -892,7 +893,7 @@ export default function GamePage() {
                 {quiz && quiz.length > 1 ? ` · Câu ${answeredIds.size + 1}/${quiz.length}` : ''}
               </Text>
               <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                +{currentQuiz.waterReward}💧
+                +{formatDrops(currentQuiz.waterReward)}
               </Text>
             </Box>
             <QuizBlock
@@ -911,7 +912,7 @@ export default function GamePage() {
                 }}
               >
                 <Text size="small" bold style={{ color: reveal.isCorrect ? 'var(--leaf-700)' : 'var(--warning)' }}>
-                  {reveal.isCorrect ? `Chính xác! +${reveal.waterEarned}💧` : 'Chưa đúng — cùng học nhé 🌿'}
+                  {reveal.isCorrect ? `Chính xác! +${formatDrops(reveal.waterEarned)}` : 'Chưa đúng — cùng học nhé 🌿'}
                 </Text>
                 {reveal.explanation && (
                   <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
@@ -956,7 +957,7 @@ export default function GamePage() {
                     {m.claimed ? '✓ ' : ''}{m.title}
                   </Text>
                   <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-                    +{m.rewardPoints} Điểm Xanh
+                    +{formatNumber(m.rewardPoints)} Điểm Xanh
                   </Text>
                 </Box>
                 {m.description && (
@@ -1006,7 +1007,7 @@ export default function GamePage() {
                 {r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : `#${r.rank}`} {r.nickname}
               </Text>
               <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                {r.drops.toLocaleString('vi-VN')}💧
+                {formatDrops(r.drops)}
               </Text>
             </Box>
           ))}

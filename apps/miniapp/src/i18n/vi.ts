@@ -3,6 +3,8 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
+import { formatDrops, formatNumber, formatXu } from '../utils/format';
+
 export const vi = {
   common: {
     retry: 'Thử lại',
@@ -36,7 +38,7 @@ export const vi = {
   home: {
     tagline: 'Sống xanh An Lành',
     greeting: (name: string) => `Chào ${name} 🌿`,
-    pointsChip: (n: number) => `${n} điểm Xanh`,
+    pointsChip: (n: number) => `${formatNumber(n)} điểm Xanh`,
     searchPlaceholder: 'Bạn đang tìm gì hôm nay?',
     featured: 'Tubu chọn cho bạn',
     forYou: 'Dành cho bạn',
@@ -171,7 +173,7 @@ export const vi = {
     summary: 'Tóm tắt đơn hàng',
     shippingFee: 'Phí vận chuyển',
     total: 'Tổng cộng',
-    pointsEarn: (n: number) => `+${n} điểm Xanh khi giao thành công`,
+    pointsEarn: (n: number) => `+${formatNumber(n)} điểm Xanh khi giao thành công`,
     placeOrder: 'Đặt hàng',
     placeOrderWith: (total: string) => `Đặt hàng · ${total}`,
     placing: 'Đang gửi đơn...',
@@ -187,8 +189,8 @@ export const vi = {
     copyFailed: (code: string) => `Không sao chép được — mã đơn: ${code}`,
     total: 'Tổng thanh toán',
     pointsLabel: 'Điểm Xanh sẽ nhận',
-    pointsValue: (n: number) => `+${n} điểm`,
-    pointsComing: (n: number) => `${n} điểm Xanh sẽ về tay khi đơn giao thành công`,
+    pointsValue: (n: number) => `+${formatNumber(n)} điểm`,
+    pointsComing: (n: number) => `${formatNumber(n)} điểm Xanh sẽ về tay khi đơn giao thành công`,
     etaLabel: 'Giao dự kiến',
     nextTitle: 'Tiếp theo',
     steps: [
@@ -317,7 +319,7 @@ export const vi = {
       price_asc: 'Giá tăng',
       price_desc: 'Giá giảm',
     },
-    resultCount: (n: number) => `${n.toLocaleString('vi-VN')} sản phẩm`,
+    resultCount: (n: number) => `${formatNumber(n)} sản phẩm`,
     filterButton: 'Bộ lọc',
     filterButtonCount: (n: number) => `Bộ lọc (${n})`,
     activeFilters: 'Đang lọc',
@@ -339,7 +341,7 @@ export const vi = {
       rating: 'Đánh giá',
       rating4: 'Từ 4★ trở lên',
       reset: 'Xoá bộ lọc',
-      apply: (n: number) => `Xem ${n.toLocaleString('vi-VN')} sản phẩm`,
+      apply: (n: number) => `Xem ${formatNumber(n)} sản phẩm`,
       applyLoading: 'Xem kết quả',
       applyFallback: 'Áp dụng',
     },
@@ -597,15 +599,15 @@ export const vi = {
 
   game: {
     streakRepair: {
-      title: (n: number) => `🔥 Bạn vừa mất chuỗi ${n} ngày`,
+      title: (n: number) => `🔥 Bạn vừa mất chuỗi ${formatNumber(n)} ngày`,
       body: 'Hồi sinh ngay để giữ lại thành tích trước khi hết hạn.',
-      cta: (cost: number) => `Hồi sinh (${cost} 💧)`,
+      cta: (cost: number) => `Hồi sinh (${formatDrops(cost)})`,
       ok: 'Đã hồi sinh chuỗi! 🌿',
     },
     seasonPass: {
       title: '🎟️ Chặng Mùa (Season Pass)',
       subtitle: (title: string) => `Điểm danh mỗi ngày để lên bậc mùa "${title}"`,
-      xp: (n: number) => `${n} XP`,
+      xp: (n: number) => `${formatNumber(n)} XP`,
       tier: (n: number) => `Bậc ${n}`,
       free: 'Miễn phí',
       premium: 'Premium',
@@ -614,12 +616,12 @@ export const vi = {
       locked: '🔒 Chưa mở',
       premiumHint: '🔒 Cần đăng ký định kỳ để mở phần thưởng Premium.',
       reward: (r: { type: 'SEEDS' | 'XU'; amount: number }) =>
-        r.type === 'SEEDS' ? `${r.amount} 💧` : `${r.amount.toLocaleString('vi-VN')} xu`,
+        r.type === 'SEEDS' ? formatDrops(r.amount) : formatXu(r.amount),
       claimOk: 'Đã nhận thưởng chặng mùa! 🎉',
     },
     missions: {
       claim: 'Nhận thưởng',
-      claimOk: (points: number) => `Đã nhận +${points} Điểm Xanh! 🌿`,
+      claimOk: (points: number) => `Đã nhận +${formatNumber(points)} Điểm Xanh! 🌿`,
     },
   },
 

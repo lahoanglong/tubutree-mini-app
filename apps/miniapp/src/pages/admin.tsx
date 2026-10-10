@@ -43,7 +43,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { TimeInput } from '../components/ui/time-input';
 import { ImageUpload } from '../components/image-upload';
-import { formatVnd } from '../utils/format';
+import { formatVnd, formatDateTime } from '../utils/format';
 import {
   mondayKeyOf,
   addDaysKey,
@@ -919,7 +919,7 @@ function RefillAdminSection() {
       csvField(r.user.phone ?? ''),
       r.quantity,
       r.seedsAwarded,
-      csvField(new Date(r.createdAt).toLocaleString('vi-VN')),
+      csvField(formatDateTime(r.createdAt)),
     ]);
     const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);

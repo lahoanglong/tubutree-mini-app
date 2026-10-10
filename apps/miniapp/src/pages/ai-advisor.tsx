@@ -3,6 +3,7 @@ import { Box, Page, Text, Button, Input, Spinner, useNavigate, useSnackbar } fro
 import { useMutation } from '@tanstack/react-query';
 import { aiChat, type AiChatTurn, type AiProduct } from '../services/ai-api';
 import { getErrorMessage } from '../services/api';
+import { formatVnd } from '../utils/format';
 import { Sparkles, Sprout, ChevronRight } from 'lucide-react';
 
 interface ChatMessage {
@@ -138,7 +139,7 @@ export default function AiAdvisorPage() {
                     <Box style={{ flex: 1, minWidth: 0 }}>
                       <Text size="xSmall" bold style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</Text>
                       <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-                        {(p.salePrice ?? p.basePrice).toLocaleString('vi-VN')}đ
+                        {formatVnd(p.salePrice ?? p.basePrice)}
                       </Text>
                     </Box>
                     <ChevronRight size={16} color="var(--neutral-400)" />

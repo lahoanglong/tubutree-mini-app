@@ -1,6 +1,7 @@
 import { api } from './api';
 import { takeMeBlock } from './home-feed';
 import type { AddressDTO } from './shop-api';
+import { formatNumber } from '../utils/format';
 
 /** Loyalty overview (§6.6) — hạng hiện tại, tiến độ lên hạng kế. */
 export interface LoyaltyOverview {
@@ -164,7 +165,7 @@ export interface CheckInReward {
   isToday: boolean;
 }
 
-/** GET /me/loyalty/check-in — điểm danh Điểm Xanh (tách riêng với điểm danh hạt giống Vườn Xanh). */
+/** GET /me/loyalty/check-in — điểm danh Điểm Xanh (tách riêng với điểm danh giọt nước Vườn Xanh). */
 export interface CheckInStatusResponse {
   checkedInToday: boolean;
   /** Chuỗi ngày liên tiếp tới hôm qua (chưa điểm danh) hoặc tới hôm nay (đã điểm danh); đứt = 0. */
@@ -250,12 +251,12 @@ export function lockedPointsNote(
   const inWindow = locked - ret;
   const parts: string[] = [];
   if (inWindow > 0 && ov.lockedUntil) {
-    parts.push(`${inWindow} điểm từ đơn mới giao sẽ dùng được sau ngày ${vnDate(ov.lockedUntil)} (hết hạn đổi/trả hàng)`);
+    parts.push(`${formatNumber(inWindow)} điểm từ đơn mới giao sẽ dùng được sau ngày ${vnDate(ov.lockedUntil)} (hết hạn đổi/trả hàng)`);
   }
-  if (ret > 0) parts.push(`${ret} điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong`);
-  if (parts.length === 0) parts.push(`${locked} điểm từ đơn mới giao chưa dùng được`);
+  if (ret > 0) parts.push(`${formatNumber(ret)} điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong`);
+  if (parts.length === 0) parts.push(`${formatNumber(locked)} điểm từ đơn mới giao chưa dùng được`);
   const usable = ov.redeemablePoints ?? Math.max(0, ov.pointsBalance - locked);
-  return `Đổi quà dùng được ${usable} điểm: ${parts.join('; ')}.`;
+  return `Đổi quà dùng được ${formatNumber(usable)} điểm: ${parts.join('; ')}.`;
 }
 
 /** Nhãn nút đổi quà — không nói "Cần X điểm" khi số dư đủ mà chỉ đang chờ mở khoá điểm. */
@@ -265,7 +266,7 @@ export function rewardButtonLabel(
 ): string {
   if (r.canRedeem) return 'Đổi ngay';
   if (catalog.redeemablePoints !== undefined && catalog.pointsBalance >= r.pointsCost) return 'Chờ mở khoá điểm';
-  return `Cần ${r.pointsCost} điểm`;
+  return `Cần ${formatNumber(r.pointsCost)} điểm`;
 }
 
 /** Nút điểm danh: ghi đúng số điểm của ô hôm nay (ô backend sẽ trả khi bấm). */
