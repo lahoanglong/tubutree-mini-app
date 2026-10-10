@@ -80,3 +80,15 @@ export function mockFetch(routes: Record<string, { status?: number; body: unknow
   };
   return { fn, calls };
 }
+
+/** Hộp thoại useConfirm render qua portal vào document.body, không nằm trong container của test. */
+export function confirmDialog(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="alertdialog"]');
+}
+
+/** Bấm "Xác nhận" (true) hoặc "Huỷ" (false) trên hộp thoại useConfirm đang mở. */
+export function answerConfirm(accept: boolean) {
+  const d = confirmDialog();
+  if (!d) throw new Error('answerConfirm: không có hộp thoại xác nhận đang mở');
+  click(d.querySelector(`[data-confirm="${accept ? 'accept' : 'cancel'}"]`));
+}

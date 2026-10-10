@@ -752,6 +752,12 @@ export const markDealerRewardClaimPaid = (id: string, note?: string) =>
     method: 'POST',
     body: note?.trim() ? { note: note.trim() } : {},
   });
+/** REJECTED → PENDING khi từ chối nhầm (Q-09); lý do từ chối cũ được BE giữ lại trong ghi chú admin. */
+export const reopenDealerRewardClaim = (id: string, note?: string) =>
+  apiFetch<AdminDealerRewardClaim>(`/admin/dealer-reward-claims/${encodeURIComponent(id)}/reopen`, {
+    method: 'POST',
+    body: note?.trim() ? { note: note.trim() } : {},
+  });
 
 // ── Duyệt yêu cầu rút tiền (P0 A5-08 = A6-05): hoa hồng CTV / Ví Tubu → ngân hàng ──
 export type AdminPayoutStatus = 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';

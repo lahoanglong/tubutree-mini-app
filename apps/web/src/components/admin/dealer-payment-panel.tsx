@@ -10,6 +10,7 @@ import {
   type AdminOrder,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
+import { useConfirm } from './confirm-dialog';
 
 /**
  * Hiện "Xác nhận đã nhận chuyển khoản" khi: đơn ĐẠI LÝ, còn UNPAID, BE xác nhận KHÔNG phải đơn "Ghi công
@@ -40,6 +41,7 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // Chặn bấm lặp trước khi React kịp render lại nút disabled (double-submit ghi 2 dòng lịch sử / 2 thông báo).
   const inFlight = useRef(false);
+  const { confirm, dialog } = useConfirm();
 
   const confirmMut = useMutation({
     mutationFn: () => confirmDealerOrderPayment(order.id, { bankRef, note }),
@@ -65,14 +67,17 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
     ) : null;
   }
 
-  const onConfirm = () => {
+  const onConfirm = async () => {
     if (inFlight.current || confirmMut.isPending) return;
-    const ok = window.confirm(
-      `Xác nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn đại lý ${order.code}?\n\n` +
+    const ok = await confirm({
+      title: 'Xác nhận đã nhận chuyển khoản',
+      message:
+        `Xác nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn đại lý ${order.code}?\n\n` +
         `Đơn sẽ được ghi nhận "Đã thanh toán"${order.status === 'PENDING_PAYMENT' ? ' và chuyển sang "Đã xác nhận"' : ''}, ` +
         'được tính vào doanh số đại lý. Không có thao tác huỷ xác nhận — chỉ bấm khi đã thấy tiền về tài khoản.',
-    );
-    if (!ok) return;
+      confirmLabel: 'Đã nhận tiền',
+    });
+    if (!ok || inFlight.current || confirmMut.isPending) return;
     inFlight.current = true;
     setMsg(null);
     confirmMut.mutate();
@@ -124,6 +129,7 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
           {msg.text}
         </p>
       )}
+      {dialog}
     </section>
   );
 }

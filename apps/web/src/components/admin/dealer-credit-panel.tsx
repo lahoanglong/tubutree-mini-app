@@ -11,6 +11,7 @@ import {
   type AdminOrder,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
+import { useConfirm } from './confirm-dialog';
 
 /**
  * A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): trước đây đại lý tự bấm "Báo đã CK" là TRỪ NỢ
@@ -29,6 +30,7 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const inFlight = useRef(false);
+  const { confirm, dialog } = useConfirm();
 
   const userId = order.user?.id;
   const enabled = open && order.type === 'DEALER' && !!userId;
@@ -60,18 +62,21 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
 
   if (order.type !== 'DEALER' || !userId) return null;
 
-  const onConfirm = () => {
+  const onConfirm = async () => {
     if (inFlight.current || payMut.isPending) return;
     const amt = Math.trunc(Number(amount));
     if (!amt || amt <= 0) {
       setMsg({ ok: false, text: 'Nhập số tiền hợp lệ (đơn vị đồng, số nguyên dương).' });
       return;
     }
-    const ok = window.confirm(
-      `Xác nhận đã nhận ${formatVnd(amt)} trả nợ từ đại lý này?\n\n` +
+    const ok = await confirm({
+      title: 'Xác nhận đã nhận tiền trả nợ',
+      message:
+        `Xác nhận đã nhận ${formatVnd(amt)} trả nợ từ đại lý này?\n\n` +
         'Số tiền sẽ bị chặn không vượt quá dư nợ hiện tại tại thời điểm xác nhận. Không có thao tác huỷ — chỉ bấm khi đã thấy tiền về tài khoản.',
-    );
-    if (!ok) return;
+      confirmLabel: 'Đã nhận tiền',
+    });
+    if (!ok || inFlight.current || payMut.isPending) return;
     inFlight.current = true;
     setMsg(null);
     payMut.mutate();
@@ -162,6 +167,7 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
           )}
         </div>
       )}
+      {dialog}
     </section>
   );
 }

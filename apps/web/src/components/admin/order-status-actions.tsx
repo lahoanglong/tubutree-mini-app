@@ -9,12 +9,13 @@ import {
   type AdminOrder,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
+import { useConfirm, type ConfirmOptions } from './confirm-dialog';
 
 export interface OrderStatusAction {
   status: string;
   label: string;
   className: string;
-  /** true = hỏi window.confirm trước khi gửi (kích hoạt điểm/hoa hồng hoặc huỷ đơn). */
+  /** true = hỏi hộp thoại xác nhận trước khi gửi (kích hoạt điểm/hoa hồng hoặc huỷ đơn). */
   confirm: boolean;
 }
 
@@ -40,13 +41,25 @@ export function orderStatusActions(order: Pick<AdminOrder, 'allowedTransitions'>
   return ACTIONS.filter((a) => allowed.has(a.status));
 }
 
-function confirmQuestion(order: AdminOrder, status: string): string {
-  if (status === 'DELIVERED') return `Xác nhận hoàn tất giao đơn ${order.code}? Điểm xanh & hoa hồng CTV sẽ được kích hoạt.`;
+function confirmQuestion(order: AdminOrder, status: string): ConfirmOptions {
+  if (status === 'DELIVERED') {
+    return {
+      title: 'Xác nhận đã giao hàng',
+      message: `Xác nhận hoàn tất giao đơn ${order.code}? Điểm Xanh & hoa hồng CTV sẽ được kích hoạt.`,
+      confirmLabel: 'Đã giao hàng',
+    };
+  }
   const gomdonNote =
     order.hasRecyclingPickup && order.gomdonOrderId
       ? ` Vận đơn thu gom Gomdon ${order.gomdonPartnerCode ?? ''} sẽ được huỷ tự động (nếu bưu tá chưa lấy hàng).`
       : '';
-  return `Xác nhận hủy đơn ${order.code}?${gomdonNote}`;
+  return {
+    title: 'Huỷ đơn hàng',
+    message: `Xác nhận huỷ đơn ${order.code}?${gomdonNote}`,
+    confirmLabel: 'Huỷ đơn',
+    cancelLabel: 'Giữ đơn',
+    tone: 'danger',
+  };
 }
 
 /** Khối "Chuyển trạng thái" + "Đã nhận tiền" trong chi tiết đơn admin. */
@@ -56,6 +69,7 @@ export function OrderStatusActions({ order }: { order: AdminOrder }) {
   const [payMsg, setPayMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // Chặn bấm lặp trước khi React kịp render nút disabled.
   const payInFlight = useRef(false);
+  const { confirm, dialog } = useConfirm();
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['admin-orders'] });
@@ -81,21 +95,24 @@ export function OrderStatusActions({ order }: { order: AdminOrder }) {
     },
   });
 
-  const onConfirmPayment = () => {
+  const onConfirmPayment = async () => {
     if (payInFlight.current || payMut.isPending) return;
-    const ok = window.confirm(
-      `Xác nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn ${order.code}?\n\n` +
+    const ok = await confirm({
+      title: 'Xác nhận đã nhận tiền',
+      message:
+        `Xác nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn ${order.code}?\n\n` +
         `Đơn sẽ được ghi nhận "Đã thanh toán"${order.status === 'PENDING_PAYMENT' ? ' và chuyển sang "Đã xác nhận"' : ''}. ` +
         'Không có thao tác huỷ xác nhận — chỉ bấm khi đã thấy tiền về tài khoản.',
-    );
-    if (!ok) return;
+      confirmLabel: 'Đã nhận tiền',
+    });
+    if (!ok || payInFlight.current || payMut.isPending) return;
     payInFlight.current = true;
     setPayMsg(null);
     payMut.mutate();
   };
 
-  const onStatus = (a: OrderStatusAction) => {
-    if (a.confirm && !window.confirm(confirmQuestion(order, a.status))) return;
+  const onStatus = async (a: OrderStatusAction) => {
+    if (a.confirm && !(await confirm(confirmQuestion(order, a.status)))) return;
     statusMut.mutate(a.status);
   };
 
@@ -153,6 +170,7 @@ export function OrderStatusActions({ order }: { order: AdminOrder }) {
           )}
         </div>
       )}
+      {dialog}
     </div>
   );
 }

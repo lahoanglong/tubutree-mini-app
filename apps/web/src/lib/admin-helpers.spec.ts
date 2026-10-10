@@ -118,11 +118,11 @@ describe('Yêu cầu nhận thưởng đại lý', () => {
     });
   });
 
-  it('thao tác theo trạng thái: PENDING duyệt/từ chối; APPROVED đánh dấu đã trao; còn lại không', () => {
-    expect(claimActions('PENDING')).toEqual({ approve: true, reject: true, markPaid: false });
-    expect(claimActions('APPROVED')).toEqual({ approve: false, reject: false, markPaid: true });
-    expect(claimActions('PAID')).toEqual({ approve: false, reject: false, markPaid: false });
-    expect(claimActions('REJECTED')).toEqual({ approve: false, reject: false, markPaid: false });
+  it('thao tác theo trạng thái: PENDING duyệt/từ chối; APPROVED đánh dấu đã trao; REJECTED mở lại (Q-09); PAID không', () => {
+    expect(claimActions('PENDING')).toEqual({ approve: true, reject: true, markPaid: false, reopen: false });
+    expect(claimActions('APPROVED')).toEqual({ approve: false, reject: false, markPaid: true, reopen: false });
+    expect(claimActions('PAID')).toEqual({ approve: false, reject: false, markPaid: false, reopen: false });
+    expect(claimActions('REJECTED')).toEqual({ approve: false, reject: false, markPaid: false, reopen: true });
   });
 
   it('lý do từ chối bắt buộc, tối đa 500 ký tự', () => {

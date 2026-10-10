@@ -13,6 +13,7 @@ import {
 import { formatVnd } from '@/lib/shop-client';
 import { PAYOUT_STATUS_LABEL, PAYOUT_STATUS_ORDER, payoutActions, rejectPayoutReasonError } from '@/lib/payout-admin';
 import { INPUT_CLASS, ToneBadge } from './ui';
+import { useConfirm } from './confirm-dialog';
 import type { Tone } from '@/lib/recycling';
 
 const STATUS_TONE: Record<AdminPayoutStatus, Tone> = {
@@ -112,12 +113,13 @@ export function PayoutAdminTab() {
 
 type Action = 'approve' | 'reject' | 'markPaid';
 
-function PayoutRow({ payout: p }: { payout: AdminPayout }) {
+export function PayoutRow({ payout: p }: { payout: AdminPayout }) {
   const qc = useQueryClient();
   const [text, setText] = useState('');
   const [bankRef, setBankRef] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const acts = payoutActions(p.status);
+  const { confirm, dialog } = useConfirm();
 
   const mut = useMutation({
     mutationFn: (a: Action) => {
@@ -138,14 +140,28 @@ function PayoutRow({ payout: p }: { payout: AdminPayout }) {
     },
   });
 
-  const run = (a: Action) => {
+  const run = async (a: Action) => {
     setErr(null);
     if (a === 'reject') {
       const e = rejectPayoutReasonError(text);
       if (e) return setErr(e);
-      if (!window.confirm(`Từ chối lệnh rút ${formatVnd(p.amount)}? Tiền/hoa hồng sẽ được HOÀN LẠI cho CTV.`)) return;
+      const ok = await confirm({
+        title: 'Từ chối lệnh rút tiền',
+        message: `Từ chối lệnh rút ${formatVnd(p.amount)}? Tiền/hoa hồng sẽ được HOÀN LẠI cho CTV.`,
+        confirmLabel: 'Từ chối',
+        cancelLabel: 'Không từ chối',
+        tone: 'danger',
+      });
+      if (!ok) return;
     }
-    if (a === 'markPaid' && !window.confirm(`Xác nhận ĐÃ CHUYỂN KHOẢN ${formatVnd(p.amount)} cho CTV?`)) return;
+    if (a === 'markPaid') {
+      const ok = await confirm({
+        title: 'Xác nhận đã chuyển khoản',
+        message: `Xác nhận ĐÃ CHUYỂN KHOẢN ${formatVnd(p.amount)} cho CTV?`,
+        confirmLabel: 'Đã chuyển khoản',
+      });
+      if (!ok) return;
+    }
     mut.mutate(a);
   };
 
@@ -257,6 +273,7 @@ function PayoutRow({ payout: p }: { payout: AdminPayout }) {
           {err}
         </p>
       )}
+      {dialog}
     </div>
   );
 }

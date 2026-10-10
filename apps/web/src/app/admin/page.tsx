@@ -85,6 +85,7 @@ import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
 import { MerchantProductsTab } from '@/components/admin/merchant-products-tab';
 import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
 import { PosCreditsTab } from '@/components/admin/pos-credits-tab';
+import { useConfirm } from '@/components/admin/confirm-dialog';
 import { AnalyticsTab } from './analytics-tab';
 import {
   exportOrdersToCsv,
@@ -1193,6 +1194,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const [tierId, setTierId] = useState('');
   const needsTier = role === 'DEALER';
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const { confirm, dialog } = useConfirm();
   const mut = useMutation({
     mutationFn: () => setUserRole(phone.trim(), role, needsTier ? tierId : undefined),
     onSuccess: (r) => {
@@ -1202,9 +1204,17 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
     },
     onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi cấp quyền' }),
   });
-  const submit = () => {
+  const submit = async () => {
     setMsg(null);
-    if (role === 'ADMIN' && !window.confirm(`Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`)) return;
+    if (role === 'ADMIN') {
+      const ok = await confirm({
+        title: 'Cấp quyền ADMIN',
+        message: `Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`,
+        confirmLabel: 'Cấp quyền ADMIN',
+        tone: 'danger',
+      });
+      if (!ok) return;
+    }
     mut.mutate();
   };
   return (
@@ -1248,6 +1258,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
       {msg && (
         <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>
       )}
+      {dialog}
     </div>
   );
 }

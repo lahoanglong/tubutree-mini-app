@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { DealerCreditPanel } from './dealer-credit-panel';
-import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminOrder } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
@@ -48,7 +48,7 @@ describe('DealerCreditPanel (chi tiết đơn admin) — A5-09', () => {
       '/credit-payment': { body: { balance: -1_000_000 } },
     });
     vi.stubGlobal('fetch', vi.fn(api.fn));
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const native = vi.spyOn(window, 'confirm');
 
     const { container } = mount(<DealerCreditPanel order={dealerOrder()} />);
     click(byText(container, 'button', 'Công nợ đại lý'));
@@ -64,12 +64,16 @@ describe('DealerCreditPanel (chi tiết đơn admin) — A5-09', () => {
 
     click(btn);
     await flush();
-    expect(confirm).toHaveBeenCalledTimes(1);
-    expect(String(confirm.mock.calls[0]![0])).toMatch(/2\.000\.000/);
+    expect(confirmDialog()?.textContent).toMatch(/2\.000\.000/);
+    answerConfirm(false);
+    await flush();
     expect(api.calls).toHaveLength(1); // huỷ hộp thoại → chưa gọi POST
 
     click(btn);
     await flush();
+    answerConfirm(true);
+    await flush();
+    expect(native).not.toHaveBeenCalled();
     // Sau khi POST thành công, panel invalidate query nên sổ công nợ được tải lại (thêm 1 GET) —
     // tìm đúng lượt POST theo URL/method thay vì đoán số thứ tự.
     const postCall = api.calls.find((c) => c.init?.method === 'POST');
@@ -98,12 +102,13 @@ describe('DealerCreditPanel (chi tiết đơn admin) — A5-09', () => {
       '/credit-payment': { status: 400, body: { statusCode: 400, message: msg } },
     });
     vi.stubGlobal('fetch', vi.fn(api.fn));
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = mount(<DealerCreditPanel order={dealerOrder()} />);
     click(byText(container, 'button', 'Công nợ đại lý'));
     await flush();
     typeInto(container.querySelector('input[aria-label="Số tiền đã nhận (đ)"]'), '99000000');
     click(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ'));
+    await flush();
+    answerConfirm(true);
     await flush();
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(msg);
   });
