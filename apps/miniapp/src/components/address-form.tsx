@@ -1,12 +1,21 @@
-import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar, Input } from 'zmp-ui';
+import { UserRound } from 'lucide-react';
 import { createAddress, type AddressDTO } from '../services/shop-api';
 import { updateAddress } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
+import { requestZaloProfile, usableProfileName } from '../services/zalo-profile';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import {
+  hasAskedZaloPrefill,
+  markZaloPrefillAsked,
+  pickLastGeo,
+  recallLastGeo,
+  rememberLastGeo,
+} from '../utils/address-memory';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from './geo-picker';
 import { Field } from './ui/form';
 import { Button } from './ui/button';
@@ -42,6 +51,8 @@ function validateGeo(g: GeoValue): { province?: string; ward?: string } {
 
 export interface AddressFormProps {
   initial?: AddressDTO | null;
+  /** Địa chỉ đầu tiên của đơn đầu: tự xin tên + SĐT Zalo 1 lần khi mở form (Q-27). Chỉ có tác dụng ở chế độ tạo mới. */
+  askZaloProfile?: boolean;
   onCancel: () => void;
   onSaved: (a: AddressDTO) => void;
 }
@@ -52,29 +63,62 @@ export interface AddressFormProps {
  * checkout/address-section.tsx và pages/addresses.tsx (audit A4-19). `initial` quyết định
  * create/edit; phần header + sheet bao ngoài vẫn do trang gọi tự vẽ, form này CHỈ vẽ các field.
  */
-export function AddressForm({ initial, onCancel, onSaved }: AddressFormProps) {
+export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved }: AddressFormProps) {
   const { openSnackbar } = useSnackbar();
+  const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const [form, setForm] = useState<FormState>(
     initial
       ? { recipient: initial.recipient, phone: initial.phone, street: initial.street }
       : // Địa chỉ mới: điền sẵn tên + SĐT lấy từ tài khoản Zalo (spec §6.1) để bớt thao tác.
-        { ...EMPTY_FORM, recipient: user?.fullName ?? '', phone: user?.phone ?? '' },
+        { ...EMPTY_FORM, recipient: usableProfileName(user?.fullName), phone: user?.phone ?? '' },
   );
   // Prefill địa giới chỉ khi mã hợp lệ (địa chỉ cũ '00' → buộc chọn lại để có mã Pancake thật).
-  const [geo, setGeo] = useState<GeoValue>(
-    initial && initial.provinceCode && initial.provinceCode !== '00'
-      ? {
-          province: initial.province,
-          provinceCode: initial.provinceCode,
-          ward: initial.ward,
-          wardCode: initial.wardCode && initial.wardCode !== '00' ? initial.wardCode : '',
-        }
-      : EMPTY_GEO,
+  // Địa chỉ mới: điền sẵn tỉnh/phường của lần lưu trước (Q-27), dự phòng từ sổ địa chỉ đã tải.
+  const [geo, setGeo] = useState<GeoValue>(() =>
+    initial
+      ? initial.provinceCode && initial.provinceCode !== '00'
+        ? {
+            province: initial.province,
+            provinceCode: initial.provinceCode,
+            ward: initial.ward,
+            wardCode: initial.wardCode && initial.wardCode !== '00' ? initial.wardCode : '',
+          }
+        : EMPTY_GEO
+      : (recallLastGeo() ?? pickLastGeo(queryClient.getQueryData<AddressDTO[]>(['addresses'])) ?? EMPTY_GEO),
   );
   const [errors, setErrors] = useState<Partial<Record<FormFields, string>>>({});
   const [touched, setTouched] = useState<Partial<Record<FormFields, boolean>>>({});
   const [geoErr, setGeoErr] = useState<{ province?: string; ward?: string }>({});
+  const [askingZalo, setAskingZalo] = useState(false);
+
+  // Chỉ điền vào ô còn trống: khách có thể đã gõ trong lúc sheet quyền của Zalo còn mở.
+  const fillFromZalo = async (announceMiss: boolean) => {
+    setAskingZalo(true);
+    try {
+      const p = await requestZaloProfile();
+      setForm((f) => ({
+        ...f,
+        recipient: f.recipient.trim() ? f.recipient : p.name,
+        phone: f.phone.trim() ? f.phone : p.phone,
+      }));
+      if (announceMiss && !p.name && !p.phone) {
+        openSnackbar({ text: 'Chưa lấy được thông tin từ Zalo, bạn nhập tay giúp Tubu nhé.', type: 'info' });
+      }
+    } finally {
+      setAskingZalo(false);
+    }
+  };
+
+  // Xin quyền tên + SĐT Zalo đúng 1 lần ở địa chỉ đầu tiên (Q-27): từ chối thì để khách nhập tay,
+  // không hỏi lại mỗi lần mở form — muốn thử lại thì có nút "Điền nhanh từ Zalo".
+  useEffect(() => {
+    if (initial || !askZaloProfile) return;
+    if (form.recipient.trim() && form.phone.trim()) return;
+    if (hasAskedZaloPrefill()) return;
+    markZaloPrefillAsked();
+    void fillFromZalo(false);
+  }, []);
 
   const save = useMutation({
     mutationFn: () => {
@@ -93,6 +137,7 @@ export function AddressForm({ initial, onCancel, onSaved }: AddressFormProps) {
     },
     onSuccess: (a) => {
       haptic('medium');
+      rememberLastGeo(geo);
       openSnackbar({ text: initial ? 'Đã cập nhật địa chỉ.' : 'Đã thêm địa chỉ.', type: 'success' });
       onSaved(a);
     },
@@ -131,6 +176,11 @@ export function AddressForm({ initial, onCancel, onSaved }: AddressFormProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {!initial && (!form.recipient.trim() || !form.phone.trim()) && (
+        <Button variant="secondary" icon={UserRound} loading={askingZalo} onPress={() => void fillFromZalo(true)}>
+          Điền nhanh từ Zalo
+        </Button>
+      )}
       {renderField('recipient')}
       {renderField('phone')}
       <GeoPicker
