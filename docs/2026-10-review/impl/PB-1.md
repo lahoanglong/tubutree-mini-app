@@ -138,3 +138,53 @@ $ npx eslint <7 file catalog + race spec>   -> sạch
 ### Việc còn lại
 - Ai đổi bảng ký tự trong `search-text.ts` phải thêm migration `CREATE OR REPLACE FUNCTION vn_search_fold` và backfill lại. Nếu quên, `catalog-search-index.race-spec.ts` sẽ đỏ.
 - Miniapp `product-picker.tsx` / `ctv-order-sheet.tsx` vẫn gọi suggest từ 1 ký tự (ngoài nhóm file PB-1). Có thể nâng lên 2 cho đồng bộ.
+
+## C-045 — Webhook Pancake: dedupe, claim nguyên tử, cron cứu sự kiện kẹt — XONG
+
+### Đã làm
+- Migration `20261010070000_pancake_webhook_dedupe` (additive): cột `dedupeKey TEXT NULL` + unique, `claimedAt TIMESTAMP(3) NULL`, index `(status, receivedAt)` cho cron. Không backfill: dòng cũ để `dedupeKey` NULL (Postgres cho nhiều NULL trong unique) nên unique không thể vỡ trên dữ liệu PROD có sẵn, kể cả khi đã có sự kiện trùng. SQL khớp đúng `prisma migrate diff` (không drift).
+- `pancake-webhook-dedupe.ts`: `pancakeDedupeKey(eventType, body)` = `eventType|sha256(JSON chuẩn hoá thứ tự key)`; hằng trạng thái `RECEIVED|PROCESSING|PROCESSED|FAILED`.
+- `PancakeWebhookController`: INSERT kèm `dedupeKey`, không đọc trước. P2002 thì: sự kiện cũ đã PROCESSED trả `{received:true, duplicate:true}` và không enqueue; chưa xong thì enqueue lại đúng event cũ. Enqueue lỗi (Redis chập) thì vẫn trả 200 vì sự kiện đã lưu RECEIVED, cron sẽ cứu. Trước đây trả 500 và Pancake gửi lại, tạo thêm một dòng mới.
+- `PancakeProcessor.process`: claim bằng `updateMany` → PROCESSING (+`attempts`, +`claimedAt`). Chỉ claim được khi status khác PROCESSED/PROCESSING, hoặc PROCESSING quá 15 phút (worker đã chết). `count = 0` thì bỏ qua: một sự kiện chỉ chạy handler một lần dù tới từ BullMQ retry/stalled, cron, hay Pancake gửi lại. `attempts` tăng lúc claim, nên worker chết giữa chừng vẫn bị tính lượt.
+- `PancakeEventsReconcileService` (mới, `@Cron('45 */10 * * * *')`): quét RECEIVED/FAILED đã quá 5 phút, cộng PROCESSING có claim quá hạn. Giới hạn: `attempts < 15`, nhận trong 24 giờ, bỏ `variation.stock_changed`, mỗi lô 100, cũ trước. Enqueue lại bằng `addGomdonJob` (xoá job completed/failed cùng jobId rồi add, vì BullMQ giữ hash job cũ nên add trơn là no-op). Chống chạy chồng: cờ `running` trong process + `pg_try_advisory_xact_lock(hashtext('pancake.events-reconcile'))`, nên nhiều instance cùng lịch thì chỉ một instance quét. Toàn thân bọc try/catch.
+
+### Test (đỏ → xanh)
+- `test/integration-race/pancake-webhook-dedupe.race-spec.ts` (Postgres thật, 6 test). Trước khi sửa: đỏ (chưa có cột/module, suite không biên dịch được).
+  - (a) cùng payload gửi đồng thời 5 lần: 5 INSERT, chỉ 1 dòng, mọi enqueue cùng jobId.
+  - (b) đảo thứ tự key vẫn trùng khoá; đổi status là sự kiện riêng.
+  - (c) gửi lại sự kiện đã PROCESSED thì không enqueue.
+  - (d) 5 worker cùng `process()` một sự kiện: handler chạy đúng 1 lần, attempts = 1.
+  - (e) lỗi chuyển sang FAILED, lần sau claim lại được (attempts = 2); PROCESSING mới claim thì worker khác không chạy.
+  - (f) cron chỉ enqueue 3 sự kiện đủ điều kiện, bỏ 5 sự kiện còn lại (mới nhận, hết lượt, quá 24 giờ, đang PROCESSING, tồn kho). 2 instance chạy đồng thời thì 1 instance trả `LOCKED`.
+- `pancake-webhook.controller.spec.ts` (+3 test: P2002 với PROCESSED/FAILED, enqueue lỗi vẫn 200). `pancake.processor.spec.ts` (+1 test: claim thua thì không chạy handler; mock thêm `updateMany`).
+- `pancake-paid-status.race-spec.ts` và `cod-return-refund.race-spec.ts` vẫn xanh. Spec cũ tạo event status `PENDING`, nên claim nhận mọi status khác PROCESSED/PROCESSING.
+
+```
+$ DATABASE_URL=postgresql://tubu:tubu@localhost:5551/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand pancake-webhook-dedupe pancake-paid-status cod-return-refund
+      [a] fulfilled=5 rejected=0 inserts=5 rows=1 errors=[]
+      [d] handleCalls=1 status=PROCESSED attempts=1 errors=[]
+      [f] r1={"enqueued":3} r2={"skipped":"LOCKED"} enqueued=3
+Test Suites: 3 passed, 3 total
+Tests:       13 passed, 13 total
+$ npx jest --maxWorkers=1 src/modules/integrations/pancake
+Test Suites: 8 passed, 8 total
+Tests:       102 passed, 102 total
+$ npx tsc --noEmit -p tsconfig.json   -> exit 0
+$ npx eslint src/modules/integrations/pancake/ test/integration-race/pancake-webhook-dedupe.race-spec.ts   -> sạch
+```
+
+### Migration — áp thử
+- DB trống (`pb1_empty` trong `tubu_it_pb1`): `migrate deploy` áp đủ 110 migration, có đủ 3 index `pancake_webhook_events_{pkey,dedupeKey_key,status_receivedAt_idx}`. Đã DROP sau khi thử.
+- `tubutree_it` (pb1): `migrate deploy` OK.
+- Bản sao dữ liệu: `tubutree_perf` có 0 dòng `pancake_webhook_events`. Sau khi `pg_dump | psql` sang `tubutree_pb1_copy` (22 s), mình chèn thêm **200.000 sự kiện giả** vào bản sao, trong đó chỉ có 50.000 payload khác nhau (cố ý trùng, 10% FAILED). `migrate deploy` áp 7 migration còn thiếu trong 4,7 s; riêng migration này **229 ms**. Unique không vỡ: 200.000 dòng giữ `dedupeKey` NULL. Kích thước index: `dedupeKey_key` 4,4 MB, `status_receivedAt` 7,8 MB. Câu quét của cron trên 200k dòng: Bitmap Index Scan `pancake_webhook_events_status_receivedAt_idx`, **4,5 ms**. Đã `DROP DATABASE tubutree_pb1_copy`. Không ghi gì vào `tubutree_perf`.
+- Khoá bảng: ALTER ADD COLUMN nullable không ghi lại bảng. CREATE INDEX thì chặn webhook ghi vào `pancake_webhook_events` khoảng 0,2 s ở cỡ 200k dòng. Chấp nhận được.
+
+### Giả định
+- Khoá dedupe băm TOÀN BỘ payload chứ không dùng (id đơn, updated_at): Pancake không công bố id sự kiện. Nếu gộp nhầm hai lần sửa đơn khác nhau thì mất hẳn một cập nhật tiền/trạng thái, nên chỉ gộp lần gửi lại y hệt. Nếu Pancake chèn field thay đổi theo từng lần gửi (vd giờ gửi), lần gửi lại sẽ thành dòng mới. Khi đó vẫn an toàn tiền vì handler idempotent (setStatus có guard, lật PAID dùng `updateMany` có guard, hoá đơn có guard ISSUED).
+- Cron không cứu sự kiện quá 24 giờ, và không bao giờ cứu `variation.stock_changed`: áp số tồn kho cũ muộn có thể hồi sinh hàng đã bán, còn `PancakeSyncService` vẫn đồng bộ tồn kho mỗi 15 phút. Sự kiện hết 15 lượt hoặc quá 24 giờ nằm lại ở FAILED/RECEIVED, có cột `error`, để vận hành xử lý tay.
+- Claim PROCESSING quá hạn = 15 phút. Handler thường xong trong vài giây.
+- Dùng lại `addGomdonJob` (gomdon-queue.ts, chỉ import, không sửa) vì nó đúng là helper "xoá job đã xong rồi add" cần ở đây.
+
+### Việc còn lại
+- Chưa có màn admin xem/đẩy tay sự kiện Pancake FAILED đã hết lượt. Hiện chỉ có log `warn` của cron và dữ liệu trong bảng.
+- Dòng cũ trước migration không có `dedupeKey`. Chỉ sự kiện nhận sau deploy mới được dedupe.
