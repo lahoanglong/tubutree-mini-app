@@ -18,7 +18,6 @@ import {
   getDashboardStats,
   type DashboardStats,
   getConfig,
-  setConfig,
   createCoupon,
   listBrands,
   createBrand,
@@ -58,7 +57,6 @@ import {
   listReturnRequests,
   reviewReturnRequest,
   type AdminReturnRequest,
-  type ConfigRow,
   type AdminBrand,
   type BrandCert,
   type AdminFlashSale,
@@ -68,12 +66,11 @@ import {
   type AdminLesson,
   type AcademyLessonContentType,
   type AdminQuickReply,
-  listCashbackTxns,
-  reviewCashbackTxn,
   countRecyclingAttention,
   listDealerRewardClaims,
   listPayouts,
   type RecyclingFilter,
+  type InvoiceFilter,
 } from '@/lib/admin-client';
 import { RecyclingBadge, RecyclingPanel } from '@/components/admin/recycling-panel';
 import { DealerPaymentPanel } from '@/components/admin/dealer-payment-panel';
@@ -81,12 +78,23 @@ import { DealerCreditPanel } from '@/components/admin/dealer-credit-panel';
 import { OrderStatusActions } from '@/components/admin/order-status-actions';
 import { EvidenceImages } from '@/components/admin/evidence-images';
 import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
+import { ConfigItem } from '@/components/admin/config-item';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
+import { CashbackTab } from '@/components/admin/cashback-tab';
 import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
 import { MerchantProductsTab } from '@/components/admin/merchant-products-tab';
 import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
 import { PosCreditsTab } from '@/components/admin/pos-credits-tab';
 import { AccountDeletionPanel } from '@/components/admin/account-deletion-panel';
+import { useConfirm } from '@/components/admin/confirm-dialog';
+import { InvoiceFilterChips } from '@/components/admin/invoice-filter-chips';
+import { OrderInvoicePanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
+import { DealerTierSelect } from '@/components/admin/dealer-tier-select';
+import { ProductPicker, useVariationLabels } from '@/components/admin/product-picker';
+import { ReviewsTab } from '@/components/admin/reviews-tab';
+import type { PickedItem } from '@/components/admin/search-picker';
+import { SubscriptionsTab } from '@/components/admin/subscriptions-tab';
+import { UserPicker } from '@/components/admin/user-picker';
 import { AnalyticsTab } from './analytics-tab';
 import {
   exportOrdersToCsv,
@@ -114,6 +122,8 @@ type Tab =
   | 'merchantProducts'
   | 'cashback'
   | 'posCredits'
+  | 'reviews'
+  | 'subscriptions'
   | 'analytics';
 const TABS: { k: Tab; label: string }[] = [
   { k: 'dashboard', label: 'Tổng quan KPI' },
@@ -125,6 +135,8 @@ const TABS: { k: Tab; label: string }[] = [
   { k: 'cashback', label: 'Hoàn tiền sàn ngoài' },
   { k: 'posCredits', label: 'Tích điểm tại quầy' },
   { k: 'users', label: 'Người dùng' },
+  { k: 'reviews', label: 'Đánh giá' },
+  { k: 'subscriptions', label: 'Gói định kỳ' },
   { k: 'config', label: 'Cấu hình' },
   { k: 'coupons', label: 'Voucher' },
   { k: 'brands', label: 'Nhãn hàng' },
@@ -234,6 +246,8 @@ export default function AdminPage() {
         {tab === 'posCredits' && <PosCreditsTab />}
         {tab === 'users' && <UsersTab />}
         {tab === 'users' && <AccountDeletionPanel />}
+        {tab === 'reviews' && <ReviewsTab />}
+        {tab === 'subscriptions' && <SubscriptionsTab />}
         {tab === 'config' && <ConfigTab />}
         {tab === 'coupons' && <CouponsTab />}
         {tab === 'brands' && <BrandsTab />}
@@ -348,17 +362,12 @@ function DealerRow({ app: a }: { app: DealerApp }) {
         {a.cccdBackUrl && <img src={a.cccdBackUrl} alt="CCCD sau" className="h-16 rounded border" />}
       </div>
       {a.status === 'PENDING' && (
-        <div className="mt-3 flex items-center gap-2">
-          <input
-            placeholder="Tier ID (bắt buộc, vd dealer_l3)"
-            value={tierId}
-            onChange={(e) => setTierId(e.target.value)}
-            className="rounded border border-neutral-200 px-2 py-1 text-sm"
-          />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />
           <button
             onClick={() => review.mutate(true)}
             disabled={review.isPending || !tierId.trim()}
-            title={!tierId.trim() ? 'Cần nhập Tier ID để duyệt' : undefined}
+            title={!tierId.trim() ? 'Cần chọn bậc đại lý để duyệt' : undefined}
             className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
           >
             Duyệt
@@ -569,10 +578,11 @@ function OrdersTab({
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [invoice, setInvoice] = useState<InvoiceFilter | ''>('');
 
   const q = useQuery({
-    queryKey: ['admin-orders', page, status, search, recycling],
-    queryFn: () => listOrders(page, status || undefined, search || undefined, recycling || undefined),
+    queryKey: ['admin-orders', page, status, search, recycling, invoice],
+    queryFn: () => listOrders(page, status || undefined, search || undefined, recycling || undefined, 20, invoice || undefined),
   });
   const attentionQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
 
@@ -689,6 +699,16 @@ function OrdersTab({
         )}
       </div>
 
+      {/* Bộ lọc đơn yêu cầu hoá đơn VAT */}
+      <InvoiceFilterChips
+        value={invoice}
+        onChange={(v) => {
+          setPage(1);
+          setExpandedId(null);
+          setInvoice(v);
+        }}
+      />
+
       {/* Orders Table */}
       {q.isError && (
         <p className="text-sm text-red-600">
@@ -800,6 +820,8 @@ function OrdersTab({
                                 )}
                               </div>
 
+                              <OrderShippingAddress order={o} />
+
                               {o.note && (
                                 <div className="text-xs text-neutral-600">
                                   <span className="font-semibold">Ghi chú từ khách:</span> {o.note}
@@ -813,6 +835,8 @@ function OrdersTab({
                                 </div>
                               )}
 
+                              <OrderInvoicePanel order={o} />
+
                               <RecyclingPanel order={o} />
 
                               {/* Đơn đại lý trả trước chờ chuyển khoản: admin xác nhận đã nhận tiền (tự ẩn khi không đủ điều kiện). */}
@@ -823,6 +847,8 @@ function OrdersTab({
 
                               {/* Nút trạng thái + "Đã nhận tiền" theo allowedTransitions/canConfirmPayment của API (C-024). */}
                               <OrderStatusActions order={o} />
+
+                              <OrderStatusHistory order={o} />
                             </div>
                           </td>
                         </tr>
@@ -863,96 +889,6 @@ function OrdersTab({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * Duyệt tay hoàn tiền sàn ngoài. Trước đây trạng thái chỉ đổi qua postback của sàn, mà cron đối
- * soát thì tắt khi chưa có API key — postback rớt là giao dịch treo PENDING vĩnh viễn, khách
- * thấy "Chờ duyệt" vô thời hạn và không ai trong tổ chức xử lý được.
- */
-function CashbackTab() {
-  const qc = useQueryClient();
-  const [filter, setFilter] = useState('PENDING');
-  const [err, setErr] = useState<string | null>(null);
-  const q = useQuery({
-    queryKey: ['admin-cashback', filter],
-    queryFn: () => listCashbackTxns(filter || undefined),
-  });
-  const review = useMutation({
-    mutationFn: (v: { id: string; status: 'CONFIRMED' | 'REJECTED'; note?: string }) =>
-      reviewCashbackTxn(v.id, v.status, v.note),
-    onSuccess: () => {
-      setErr(null);
-      void qc.invalidateQueries({ queryKey: ['admin-cashback'] });
-    },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Không cập nhật được'),
-  });
-
-  return (
-    <div>
-      <div className="mb-3 flex gap-2">
-        {['PENDING', 'CONFIRMED', 'REJECTED', 'PAID', ''].map((s) => (
-          <button
-            key={s || 'all'}
-            onClick={() => setFilter(s)}
-            className={`rounded px-3 py-1 text-sm ${filter === s ? 'bg-green-600 text-white' : 'bg-neutral-100'}`}
-          >
-            {s || 'Tất cả'}
-          </button>
-        ))}
-      </div>
-      {err && <p className="mb-2 text-sm text-red-600">{err}</p>}
-      {q.isLoading && <p className="text-sm text-neutral-500">Đang tải…</p>}
-      {q.isError && <p className="text-sm text-red-600">Không tải được danh sách.</p>}
-      <div className="space-y-2">
-        {q.data?.map((t) => (
-          <div key={t.id} className="rounded-lg border border-neutral-100 bg-white p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">
-                {t.merchant?.name ?? t.provider} · {t.merchantOrderId}
-              </span>
-              <span className="text-xs text-neutral-500">{t.status}</span>
-            </div>
-            <div className="mt-1 text-xs text-neutral-500">
-              Khách: {t.user?.fullName ?? 'Khách hàng'}
-              {t.user?.phone ? ` · ${t.user.phone}` : ''}
-            </div>
-            <div className="mt-1 text-xs text-neutral-600">
-              Đơn {formatVnd(t.orderAmount)} · hoa hồng {formatVnd(t.commission)} · khách nhận{' '}
-              <b>{formatVnd(t.userReward)}</b>
-            </div>
-            {t.status !== 'PAID' && (
-              <div className="mt-2 flex gap-2">
-                {t.status !== 'CONFIRMED' && (
-                  <button
-                    onClick={() => review.mutate({ id: t.id, status: 'CONFIRMED' })}
-                    disabled={review.isPending}
-                    className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white disabled:bg-neutral-300"
-                  >
-                    Duyệt hoàn tiền
-                  </button>
-                )}
-                {t.status !== 'REJECTED' && (
-                  <button
-                    onClick={() => {
-                      const note = window.prompt('Lý do từ chối (khách sẽ không nhận tiền):') ?? undefined;
-                      if (note === undefined) return;
-                      review.mutate({ id: t.id, status: 'REJECTED', note });
-                    }}
-                    disabled={review.isPending}
-                    className="rounded border border-red-200 px-3 py-1 text-xs font-medium text-red-600 disabled:opacity-50"
-                  >
-                    Từ chối
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-        {q.data?.length === 0 && <p className="text-sm text-neutral-500">Không có giao dịch nào.</p>}
-      </div>
     </div>
   );
 }
@@ -1196,6 +1132,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const [tierId, setTierId] = useState('');
   const needsTier = role === 'DEALER';
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const { confirm, dialog } = useConfirm();
   const mut = useMutation({
     mutationFn: () => setUserRole(phone.trim(), role, needsTier ? tierId : undefined),
     onSuccess: (r) => {
@@ -1205,9 +1142,17 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
     },
     onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi cấp quyền' }),
   });
-  const submit = () => {
+  const submit = async () => {
     setMsg(null);
-    if (role === 'ADMIN' && !window.confirm(`Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`)) return;
+    if (role === 'ADMIN') {
+      const ok = await confirm({
+        title: 'Cấp quyền ADMIN',
+        message: `Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`,
+        confirmLabel: 'Cấp quyền ADMIN',
+        tone: 'danger',
+      });
+      if (!ok) return;
+    }
     mut.mutate();
   };
   return (
@@ -1229,20 +1174,11 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
             <option key={r} value={r}>{r}</option>
           ))}
         </select>
-        {needsTier && (
-          <input
-            className="rounded border border-neutral-300 px-3 py-1.5 text-sm"
-            aria-label="Bậc đại lý"
-            placeholder="Tier ID (bắt buộc, vd dealer_l3)"
-            maxLength={100}
-            value={tierId}
-            onChange={(e) => setTierId(e.target.value)}
-          />
-        )}
+        {needsTier && <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />}
         <button
           className="rounded bg-green-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
           disabled={!phone.trim() || (needsTier && !tierId.trim()) || mut.isPending}
-          title={needsTier && !tierId.trim() ? 'Cần nhập Tier ID để cấp vai trò DEALER' : undefined}
+          title={needsTier && !tierId.trim() ? 'Cần chọn bậc đại lý để cấp vai trò DEALER' : undefined}
           onClick={submit}
         >
           {mut.isPending ? 'Đang lưu…' : 'Cấp quyền'}
@@ -1251,6 +1187,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
       {msg && (
         <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>
       )}
+      {dialog}
     </div>
   );
 }
@@ -1274,47 +1211,6 @@ function ConfigTab() {
           ))}
         </div>
       </div>
-    </div>
-  );
-}
-
-function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => void }) {
-  const [val, setVal] = useState(JSON.stringify(row.value));
-  const [err, setErr] = useState<string | null>(null);
-  const save = useMutation({
-    mutationFn: () => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(val);
-      } catch {
-        throw new Error('JSON không hợp lệ');
-      }
-      return setConfig(row.key, parsed);
-    },
-    onSuccess: () => {
-      setErr(null);
-      onSaved();
-    },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Lỗi'),
-  });
-  return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-3">
-      <div className="text-sm font-medium">{row.key}</div>
-      {row.description && <div className="text-xs text-neutral-400">{row.description}</div>}
-      <div className="mt-1 flex gap-2">
-        <input value={val} onChange={(e) => setVal(e.target.value)} className="flex-1 rounded border border-neutral-200 px-2 py-1 font-mono text-sm" />
-        <button
-          onClick={() => {
-            setErr(null);
-            save.mutate();
-          }}
-          disabled={save.isPending}
-          className="rounded bg-green-600 px-3 py-1 text-sm text-white disabled:bg-neutral-300"
-        >
-          {save.isPending ? 'Đang lưu…' : 'Lưu'}
-        </button>
-      </div>
-      {err && <div className="text-xs text-red-600">{err}</div>}
     </div>
   );
 }
@@ -1442,10 +1338,10 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
     onSuccess: () => { setRowErr(null); refreshBrands(); },
     onError: onRowError,
   });
-  const [ownerInput, setOwnerInput] = useState('');
+  const [owner, setOwner] = useState<PickedItem | null>(null);
   const assignOwner = useMutation({
-    mutationFn: () => updateBrand(brand.id, { ownerUserId: ownerInput.trim() }),
-    onSuccess: () => { setOwnerInput(''); refreshBrands(); },
+    mutationFn: () => updateBrand(brand.id, { ownerUserId: owner?.id ?? '' }),
+    onSuccess: () => { setOwner(null); refreshBrands(); },
   });
   const products = useQuery({ queryKey: ['admin-brand-products', brand.id], queryFn: () => listBrandProducts(brand.id), enabled: open });
   const promos = useQuery({ queryKey: ['admin-brand-promos', brand.id], queryFn: () => listPromotions(brand.id), enabled: open });
@@ -1507,14 +1403,9 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
 
           {/* Gán chủ nhãn (lộ trình B) — đối tác tự quản nhãn trong Mini App */}
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-neutral-500">Chủ nhãn (userId):</span>
-            <input
-              placeholder="userId đối tác"
-              value={ownerInput}
-              onChange={(e) => setOwnerInput(e.target.value)}
-              className="flex-1 rounded border border-neutral-200 px-2 py-1"
-            />
-            <button onClick={() => assignOwner.mutate()} disabled={!ownerInput.trim() || assignOwner.isPending} className="rounded border border-neutral-200 px-3 py-1 disabled:opacity-50">
+            <span className="text-neutral-500">Chủ nhãn:</span>
+            <UserPicker value={owner} onChange={setOwner} label="Chọn đối tác làm chủ nhãn" className="min-w-0 flex-1" />
+            <button onClick={() => assignOwner.mutate()} disabled={!owner || assignOwner.isPending} className="min-h-[44px] rounded border border-neutral-200 px-3 py-1 disabled:opacity-50 sm:min-h-0">
               Gán chủ nhãn
             </button>
             {assignOwner.isSuccess && <span className="text-green-700">Đã gán ✓</span>}
@@ -1750,7 +1641,9 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
     onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
   });
   const [item, setItem] = useState({ variationId: '', flashPrice: 0, quota: 0, perUserLimit: '' });
+  const [pickedVariation, setPickedVariation] = useState<PickedItem | null>(null);
   const [itemErr, setItemErr] = useState<string | null>(null);
+  const variationLabels = useVariationLabels(sale.items.map((it) => it.variationId));
   const addItem = useMutation({
     mutationFn: () =>
       addFlashSaleItem(sale.id, {
@@ -1761,6 +1654,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
       }),
     onSuccess: () => {
       setItem({ variationId: '', flashPrice: 0, quota: 0, perUserLimit: '' });
+      setPickedVariation(null);
       setItemErr(null);
       refresh();
     },
@@ -1793,7 +1687,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
           {sale.items.map((it) => (
             <div key={it.id} className="flex items-center justify-between rounded border border-neutral-100 px-2 py-1 text-sm">
               <span className="truncate">
-                Variation {it.variationId} · {formatVnd(it.flashPrice)} · đã bán {it.soldCount}/{it.quota} · giới hạn {it.perUserLimit}/khách
+                {variationLabels.labelFor(it.variationId)} · {formatVnd(it.flashPrice)} · đã bán {it.soldCount}/{it.quota} · giới hạn {it.perUserLimit}/khách
               </span>
               <button onClick={() => delItem.mutate(it.id)} className="ml-2 shrink-0 text-xs text-red-600">Xoá</button>
             </div>
@@ -1801,8 +1695,17 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
           {sale.items.length === 0 && <p className="text-xs text-neutral-400">Chưa có sản phẩm nào trong đợt này.</p>}
         </div>
 
-        <div className="mt-2 flex flex-wrap items-end gap-2">
-          <input placeholder="Variation ID" value={item.variationId} onChange={(e) => setItem({ ...item, variationId: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1 text-sm" />
+        <div className="mt-2 flex flex-wrap items-start gap-2">
+          <ProductPicker
+            mode="variation"
+            label="Chọn biến thể sản phẩm cho đợt Flash Sale"
+            value={pickedVariation}
+            onChange={(v) => {
+              setPickedVariation(v);
+              setItem((cur) => ({ ...cur, variationId: v?.id ?? '' }));
+            }}
+            className="min-w-[14rem] flex-1"
+          />
           <input type="number" placeholder="Giá flash" value={item.flashPrice} onChange={(e) => setItem({ ...item, flashPrice: Number(e.target.value) })} className="w-28 rounded border border-neutral-200 px-2 py-1 text-sm" />
           <input type="number" placeholder="Quota" value={item.quota} onChange={(e) => setItem({ ...item, quota: Number(e.target.value) })} className="w-24 rounded border border-neutral-200 px-2 py-1 text-sm" />
           <input type="number" placeholder="Giới hạn/khách" value={item.perUserLimit} onChange={(e) => setItem({ ...item, perUserLimit: e.target.value })} className="w-32 rounded border border-neutral-200 px-2 py-1 text-sm" />
@@ -1810,7 +1713,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
             Thêm SP
           </button>
         </div>
-        <p className="mt-1 text-xs text-neutral-400">Variation ID là id của biến thể sản phẩm (lấy từ trang quản lý sản phẩm).</p>
+        <p className="mt-1 text-xs text-neutral-400">Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.</p>
         {itemErr && <p className="mt-1 text-sm text-red-600">{itemErr}</p>}
       </div>
     </div>
@@ -2155,7 +2058,7 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
 
 // ── Content Kit CTV (bài mẫu/USP/FAQ/media per-sản phẩm) ──
 function ContentKitTab() {
-  const [productId, setProductId] = useState('');
+  const [pickedProduct, setPickedProduct] = useState<PickedItem | null>(null);
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const q = useQuery({
     queryKey: ['admin-content-kit', loadedId],
@@ -2168,19 +2071,14 @@ function ContentKitTab() {
       <div className="rounded-lg border border-neutral-100 bg-white p-4">
         <h3 className="mb-2 text-sm font-semibold">Soạn Content Kit theo sản phẩm</h3>
         <p className="mb-2 text-xs text-neutral-400">
-          Nhập Product ID (lấy từ trang quản lý nhãn hàng/sản phẩm). Trong caption dùng{' '}
+          Chọn sản phẩm bằng cách gõ tên (không cần dấu) hoặc SKU. Trong caption dùng{' '}
           <code>{'{ten_ctv}'}</code> và <code>{'{link}'}</code> — hệ thống sẽ tự chèn tên CTV + link giới thiệu khi CTV xem.
         </p>
-        <div className="flex gap-2">
-          <input
-            placeholder="Product ID"
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm"
-          />
+        <div className="flex flex-wrap items-start gap-2">
+          <ProductPicker mode="product" label="Chọn sản phẩm cho Content Kit" value={pickedProduct} onChange={setPickedProduct} className="min-w-[14rem] flex-1" />
           <button
-            onClick={() => setLoadedId(productId.trim())}
-            disabled={!productId.trim()}
+            onClick={() => pickedProduct && setLoadedId(pickedProduct.id)}
+            disabled={!pickedProduct}
             className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
           >
             Tải

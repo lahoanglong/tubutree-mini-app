@@ -186,6 +186,43 @@ describe('OrderStatusService', () => {
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' });
   });
 
+  // C-053 (A1-019): lời ORDER_DELIVERED từng khẳng định "Điểm Xanh đã được cộng" kể cả đơn trả bằng xu (không tích điểm).
+  it('DELIVERED: đơn có tích điểm → tin báo kèm số Điểm Xanh được cộng (points_note)', async () => {
+    const order = makeOrder({ status: 'SHIPPING', pointsEarned: 12 });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'DELIVERED' });
+    mockTx();
+
+    await service.setStatus('o1', 'DELIVERED' as never);
+
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', {
+      order_code: 'TUBU1',
+      points_note: ' Bạn được cộng 12 Điểm Xanh.',
+    });
+  });
+
+  it('DELIVERED: đơn không tích điểm (trả bằng xu) → tin báo KHÔNG nhắc điểm', async () => {
+    const order = makeOrder({ status: 'SHIPPING', paymentMethod: 'XU', pointsEarned: 0 });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'DELIVERED' });
+    mockTx();
+
+    await service.setStatus('o1', 'DELIVERED' as never);
+
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' });
+  });
+
+  it('chỉ DELIVERED mới có points_note: đơn tích điểm chuyển PACKED vẫn chỉ gửi order_code', async () => {
+    const order = makeOrder({ status: 'CONFIRMED', pointsEarned: 12 });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'PACKED' });
+    mockTx();
+
+    await service.setStatus('o1', 'PACKED' as never);
+
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_PACKED', { order_code: 'TUBU1' });
+  });
+
   it('DELIVERED: xét thưởng giới thiệu lỗi (khoá/deadlock) → đơn vẫn giao xong, vẫn notify', async () => {
     const order = makeOrder({ status: 'SHIPPING' });
     prisma.order.findFirst.mockResolvedValue(order);

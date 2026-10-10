@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { OrderStatusActions, orderStatusActions } from './order-status-actions';
-import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 import type { AdminOrder } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
@@ -83,18 +83,23 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
       '/confirm-payment': { body: { ok: true, alreadyPaid: false, message: 'Đã xác nhận nhận tiền đơn TB-300.', order: {} } },
     });
     vi.stubGlobal('fetch', vi.fn(api.fn));
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const native = vi.spyOn(window, 'confirm');
     const { container } = mount(<OrderStatusActions order={order()} />);
     const btn = byText(container, 'button', 'Đã nhận tiền');
 
     click(btn);
     await flush();
-    expect(String(confirm.mock.calls[0]![0])).toContain('TB-300');
-    expect(String(confirm.mock.calls[0]![0])).toMatch(/450\.000/);
+    expect(confirmDialog()?.textContent).toContain('TB-300');
+    expect(confirmDialog()?.textContent).toMatch(/450\.000/);
+    answerConfirm(false);
+    await flush();
     expect(api.calls).toHaveLength(0);
 
     click(btn);
     await flush();
+    answerConfirm(true);
+    await flush();
+    expect(native).not.toHaveBeenCalled();
     expect(api.calls).toHaveLength(1);
     expect(api.calls[0]!.url).toContain('/admin/orders/o1/confirm-payment');
     expect(api.calls[0]!.init?.method).toBe('POST');
@@ -117,7 +122,6 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
         });
       }),
     );
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = mount(<OrderStatusActions order={order()} />);
     const btn = byText(container, 'button', 'Đã nhận tiền') as HTMLButtonElement;
     act(() => {
@@ -125,9 +129,52 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
       btn.click();
     });
     await flush();
+    expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    answerConfirm(true);
+    await flush();
     expect(calls).toHaveLength(1);
     release();
     await flush();
+  });
+
+  // C-122: huỷ đơn / giao xong là thao tác kích hoạt hoặc đảo ngược tiền-điểm, nên có hộp thoại xác nhận riêng (không còn window.confirm).
+  it('"Hủy đơn": hộp thoại tông đỏ nêu mã đơn — "Giữ đơn" thì KHÔNG gọi API, "Huỷ đơn" thì PUT CANCELLED', async () => {
+    const api = mockFetch({ '/status': { body: { id: 'o1', status: 'CANCELLED' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const native = vi.spyOn(window, 'confirm');
+    const { container } = mount(<OrderStatusActions order={order({ canConfirmPayment: false })} />);
+    click(byText(container, 'button', 'Hủy đơn'));
+    await flush();
+    const d = confirmDialog()!;
+    expect(d.textContent).toContain('TB-300');
+    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-red-600');
+    expect(d.querySelector('[data-confirm="cancel"]')?.textContent).toBe('Giữ đơn');
+    answerConfirm(false);
+    await flush();
+    expect(api.calls).toHaveLength(0);
+
+    click(byText(container, 'button', 'Hủy đơn'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.calls[0]!.url).toContain('/admin/orders/o1/status');
+    expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({ status: 'CANCELLED' });
+    expect(native).not.toHaveBeenCalled();
+  });
+
+  it('"Đã giao hàng": hộp thoại nhắc điểm Xanh + hoa hồng sẽ kích hoạt; đồng ý mới PUT DELIVERED', async () => {
+    const api = mockFetch({ '/status': { body: { id: 'o1', status: 'DELIVERED' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(
+      <OrderStatusActions order={order({ status: 'SHIPPING', paymentStatus: 'PAID', canConfirmPayment: false, allowedTransitions: ['DELIVERED'] })} />,
+    );
+    click(byText(container, 'button', 'Đã giao hàng'));
+    await flush();
+    expect(confirmDialog()?.textContent).toMatch(/Điểm Xanh/);
+    expect(api.calls).toHaveLength(0);
+    answerConfirm(true);
+    await flush();
+    expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({ status: 'DELIVERED' });
   });
 
   it('nút trạng thái gọi PUT /admin/orders/:id/status; lỗi 400 hiện nguyên văn', async () => {

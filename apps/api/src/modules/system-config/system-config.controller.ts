@@ -31,7 +31,6 @@ export class SystemConfigController {
     const [
       freeshipThreshold,
       subscribeDiscountPct,
-      affiliateWalletMultiplier,
       affiliateMinWithdrawBank,
       cashbackHoldDays,
       recyclingEnabled,
@@ -43,7 +42,6 @@ export class SystemConfigController {
     ] = await Promise.all([
       this.config.get<number>('shipping.free_threshold', 200000),
       this.config.get<number>('subscribe.discount_pct', 0.12),
-      this.config.get<number>('affiliate.tubu_wallet_multiplier', 1.5),
       this.config.get<number>('affiliate.min_withdraw_bank', 50000),
       this.config.get<number>('cashback.hold_days', 30),
       // Chỉ trả boolean — KHÔNG lộ cấu hình/tài khoản Gomdon. true khi Gomdon đã cấu hình VÀ admin
@@ -58,7 +56,9 @@ export class SystemConfigController {
     return {
       freeshipThreshold,
       subscribeDiscountPct,
-      affiliateWalletMultiplier,
+      // Luật Ví ×1,5 đã bỏ: rút hoa hồng về Ví Tubu là 1:1 (affiliate.service). Giữ trường (cố định 1) để miniapp
+      // đã phát hành không vỡ kiểu dữ liệu; không đọc khoá affiliate.tubu_wallet_multiplier còn sót trong DB.
+      affiliateWalletMultiplier: 1,
       affiliateMinWithdrawBank,
       cashbackHoldDays,
       recyclingEnabled,

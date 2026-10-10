@@ -1016,6 +1016,40 @@ export class DealerService {
     return claimView(claim);
   }
 
+  /**
+   * Mở lại yêu cầu bị từ chối nhầm: REJECTED → PENDING (quyết định Q-09). Với đại lý, từ chối là trạng thái
+   * cuối (unique [userId, periodKey, rewardId] chặn gửi lại), nên đây là đường sống duy nhất thay cho sửa DB.
+   * Không báo đại lý: kết quả duyệt/từ chối sau đó vẫn gửi thông báo như bình thường, và doanh số đã chốt
+   * vẫn được kiểm lại lúc duyệt. Lý do từ chối cũ chuyển vào adminNote để còn dấu vết ai từ chối, vì sao.
+   */
+  async reopenRewardClaim(adminId: string, id: string, note?: string) {
+    const row = await this.prisma.dealerRewardClaim.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Không tìm thấy yêu cầu nhận thưởng.');
+    if (row.status !== 'REJECTED') {
+      throw new BadRequestException(`Yêu cầu đang ở trạng thái "${CLAIM_STATUS_LABEL[row.status]}" — chỉ mở lại được yêu cầu đã bị từ chối.`);
+    }
+    const trail = [
+      `Mở lại ${new Date().toISOString()} bởi admin ${adminId}`,
+      `lần từ chối trước${row.reviewedBy ? ` (admin ${row.reviewedBy}${row.reviewedAt ? `, ${row.reviewedAt.toISOString()}` : ''})` : ''}: ${row.rejectionReason ?? 'không ghi lý do'}`,
+      note?.trim() ? `lý do mở lại: ${note.trim()}` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const res = await this.prisma.dealerRewardClaim.updateMany({
+      where: { id, status: 'REJECTED' },
+      data: {
+        status: 'PENDING',
+        rejectionReason: null,
+        reviewedBy: null,
+        reviewedAt: null,
+        adminNote: row.adminNote ? `${row.adminNote} | ${trail}` : trail,
+      },
+    });
+    const claim = await this.claimAfterTransition(id, res.count, 'mở lại');
+    this.logger.warn(`Admin ${adminId} mở lại yêu cầu nhận thưởng ${id} (${claim.rewardTitle}, kỳ ${claim.periodKey}).`);
+    return claimView(claim);
+  }
+
   /** Xác nhận đã trao thưởng: chỉ từ APPROVED → PAID. */
   async markRewardClaimPaid(adminId: string, id: string, note?: string) {
     const res = await this.prisma.dealerRewardClaim.updateMany({

@@ -213,8 +213,14 @@ export class OrderStatusService {
       await this.enqueueGomdonCancel(order);
     }
 
+    // Điểm Xanh chỉ được cộng khi đơn có pointsEarned > 0 (đơn trả bằng xu, đơn CTV lên hộ thì không): lời tin
+    // ORDER_DELIVERED chỉ nhắc điểm khi thật sự có, qua {{points_note}}.
+    const notifyData: Record<string, string> = { order_code: order.code };
+    if (targetStatus === 'DELIVERED' && order.pointsEarned > 0) {
+      notifyData.points_note = ` Bạn được cộng ${order.pointsEarned} Điểm Xanh.`;
+    }
     await this.notifications
-      .notify(order.userId, opts.notifyEvent ?? `ORDER_${targetStatus}`, { order_code: order.code })
+      .notify(order.userId, opts.notifyEvent ?? `ORDER_${targetStatus}`, notifyData)
       .catch(() => undefined);
 
     return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });

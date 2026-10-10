@@ -18,6 +18,7 @@ import {
   needsRecyclingAttention,
 } from '@/lib/recycling';
 import { Notice, ToneBadge } from './ui';
+import { useConfirm } from './confirm-dialog';
 
 /** Badge ở dòng danh sách đơn: có thu gom / cần xử lý thu gom. */
 export function RecyclingBadge({ order }: { order: AdminOrder }) {
@@ -47,6 +48,7 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // Chặn bấm lặp trước khi React kịp render lại nút disabled (double-submit).
   const handledInFlight = useRef(false);
+  const { confirm, dialog } = useConfirm();
 
   const onDone = (text: string) => {
     setMsg({ ok: true, text });
@@ -78,13 +80,16 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
   });
   const busy = retry.isPending || cancel.isPending || markHandled.isPending;
 
-  const onMarkHandled = () => {
+  const onMarkHandled = async () => {
     if (handledInFlight.current || busy) return;
-    const ok = window.confirm(
-      `Đánh dấu thu gom của đơn ${order.code} là "Đã xử lý tay"? Đơn sẽ rời hàng đợi "Cần xử lý thu gom" và hệ thống ` +
+    const ok = await confirm({
+      title: 'Đánh dấu đã xử lý tay',
+      message:
+        `Đánh dấu thu gom của đơn ${order.code} là "Đã xử lý tay"? Đơn sẽ rời hàng đợi "Cần xử lý thu gom" và hệ thống ` +
         'KHÔNG tự tạo vận đơn Gomdon cho đơn này nữa. Chỉ bấm khi đã xử lý xong ngoài hệ thống (tạo vận đơn tay / hẹn thu gom riêng / báo khách).',
-    );
-    if (!ok) return;
+      confirmLabel: 'Đã xử lý tay',
+    });
+    if (!ok || handledInFlight.current || busy) return;
     handledInFlight.current = true;
     setMsg(null);
     markHandled.mutate(handledNote);
@@ -172,12 +177,19 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
             {actions.canCancel && (
               <button
                 type="button"
-                onClick={() => {
-                  const text =
+                onClick={async () => {
+                  const message =
                     order.status === 'CANCELLED'
                       ? `Thử huỷ lại vận đơn Gomdon ${order.gomdonPartnerCode ?? ''} của đơn đã huỷ ${order.code}?`
                       : `Huỷ vận đơn Gomdon ${order.gomdonPartnerCode ?? ''} của đơn ${order.code}? Đơn vẫn hiệu lực — sau đó cần tạo vận đơn mới hoặc giao bằng hãng khác.`;
-                  if (!window.confirm(text)) return;
+                  const ok = await confirm({
+                    title: 'Huỷ vận đơn Gomdon',
+                    message,
+                    confirmLabel: 'Huỷ vận đơn',
+                    cancelLabel: 'Không huỷ',
+                    tone: 'danger',
+                  });
+                  if (!ok) return;
                   setMsg(null);
                   cancel.mutate();
                 }}
@@ -218,6 +230,7 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
           {msg.text}
         </p>
       )}
+      {dialog}
     </section>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { getRetentionDaily } from '@/lib/admin-client';
+import { Ns1Card } from '@/components/admin/ns1-card';
 
 export function AnalyticsTab() {
   const q = useQuery({ queryKey: ['admin-analytics-retention'], queryFn: () => getRetentionDaily(30) });
@@ -16,6 +17,7 @@ export function AnalyticsTab() {
 
   return (
     <div>
+      <Ns1Card rows={rows} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Khách mới hôm qua" value={latest.newBuyers} />
         <StatCard label="Khách hoạt động hôm qua" value={latest.activeBuyers} />

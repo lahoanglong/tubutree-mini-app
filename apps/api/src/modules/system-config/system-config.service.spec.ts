@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { SystemConfigService } from './system-config.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
@@ -172,6 +173,33 @@ describe('SystemConfigService.set — biên đơn vị cho khoá nhạy cảm', 
   });
 });
 
+describe('SystemConfigService.set — khoá seed null = "chưa đặt" (ETA giao hàng, C-054)', () => {
+  function mk(existing: { value: unknown } | null) {
+    const tx = {
+      systemConfig: { findUnique: jest.fn().mockResolvedValue(existing), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+
+  it('dòng đang null → đặt được số (null không bị coi là kiểu "object" chặn đổi kiểu), history ghi oldValue là JSON null', async () => {
+    const { svc, tx } = mk({ value: null });
+    await svc.set('shipping.eta_min_days', 2, 'admin1');
+    expect(tx.systemConfig.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: { value: 2, updatedBy: 'admin1' } }));
+    expect(tx.systemConfigHistory.create).toHaveBeenCalledWith({
+      data: { key: 'shipping.eta_min_days', oldValue: Prisma.JsonNull, newValue: 2, changedBy: 'admin1' },
+    });
+  });
+
+  it('dòng đã có số → vẫn chặn đổi sang chuỗi (luật đổi kiểu không đổi)', async () => {
+    const { svc } = mk({ value: 2 });
+    await expect(svc.set('shipping.eta_min_days', 'hai' as unknown as number, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
 describe('SystemConfigService.set — biên cho khoá hạn ngày (đúng tên khoá code đọc)', () => {
   function mk() {
     const tx = {
@@ -208,5 +236,22 @@ describe('SystemConfigService.set — biên cho khoá hạn ngày (đúng tên k
     const ok = mk();
     await ok.svc.set('dealer.reward_claim_grace_days', 30, 'admin1');
     expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+  });
+
+  // Cron cấp mã giảm giá đọc thẳng các khoá voucher.* — gõ nhầm đơn vị/số âm sẽ cấp mã hàng loạt sai giá trị.
+  it.each([
+    ['voucher.welcome_amount', 30_000, [0, -1, 999, 1_000_001]],
+    ['voucher.birthday_amount', 50_000, [0, -5000, 1_000_001]],
+    ['voucher.winback_amount', 50_000, [0, -5000, 1_000_001]],
+    ['voucher.welcome_min_order', 199_000, [-1, 50_000_001]],
+    ['voucher.winback_days', 60, [0, -1, 366]],
+  ] as const)('%s: nhận giá trị hợp lý, từ chối %j ngoài biên', async (key, fine, badValues) => {
+    const ok = mk();
+    await ok.svc.set(key, fine, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    for (const v of badValues) {
+      await expect(mk().svc.set(key, v, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    }
+    await expect(mk().svc.set(key, '30000' as unknown as number, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
   });
 });

@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { DealerPaymentPanel, canConfirmDealerPayment } from './dealer-payment-panel';
-import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminOrder } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
@@ -67,7 +67,7 @@ describe('DealerPaymentPanel (chi tiết đơn admin)', () => {
   it('hỏi xác nhận (mã đơn + số tiền) — huỷ thì KHÔNG gọi API; đồng ý thì POST kèm mã GD + ghi chú, hiện message của API', async () => {
     const api = mockFetch({ '/confirm-payment': { body: OK_BODY } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const native = vi.spyOn(window, 'confirm');
     const { container } = mount(<DealerPaymentPanel order={dealerOrder()} />);
     typeInto(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]'), ' FT26270123 ');
     typeInto(container.querySelector('input[aria-label="Ghi chú xác nhận thanh toán"]'), 'đã đối soát sao kê');
@@ -75,14 +75,18 @@ describe('DealerPaymentPanel (chi tiết đơn admin)', () => {
 
     click(btn);
     await flush();
-    expect(confirm).toHaveBeenCalledTimes(1);
-    const question = String(confirm.mock.calls[0]![0]);
+    const question = confirmDialog()?.textContent ?? '';
     expect(question).toContain('TB-200');
     expect(question).toMatch(/12\.500\.000/);
+    answerConfirm(false);
+    await flush();
     expect(api.calls).toHaveLength(0);
 
     click(btn);
     await flush();
+    answerConfirm(true);
+    await flush();
+    expect(native).not.toHaveBeenCalled();
     expect(api.calls).toHaveLength(1);
     expect(api.calls[0]!.url).toContain('/admin/dealer-orders/o1/confirm-payment');
     expect(api.calls[0]!.init?.method).toBe('POST');
@@ -93,9 +97,10 @@ describe('DealerPaymentPanel (chi tiết đơn admin)', () => {
   it('không nhập gì → body {} (mã GD và ghi chú đều tuỳ chọn)', async () => {
     const api = mockFetch({ '/confirm-payment': { body: OK_BODY } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = mount(<DealerPaymentPanel order={dealerOrder()} />);
     click(byText(container, 'button', 'Xác nhận đã nhận chuyển khoản'));
+    await flush();
+    answerConfirm(true);
     await flush();
     expect(api.calls[0]!.init?.body).toBe('{}');
   });
@@ -104,9 +109,10 @@ describe('DealerPaymentPanel (chi tiết đơn admin)', () => {
     const msg = 'Đơn TB-200 là đơn "Ghi công nợ" — ghi nhận thanh toán qua sổ công nợ đại lý, không xác nhận ở đây.';
     const api = mockFetch({ '/confirm-payment': { status: 400, body: { statusCode: 400, message: msg } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = mount(<DealerPaymentPanel order={dealerOrder({ status: 'CONFIRMED' })} />);
     click(byText(container, 'button', 'Xác nhận đã nhận chuyển khoản'));
+    await flush();
+    answerConfirm(true);
     await flush();
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(msg);
     expect(container.querySelector('[role="status"]')).toBeNull();
@@ -124,18 +130,21 @@ describe('DealerPaymentPanel (chi tiết đơn admin)', () => {
         return new Response(JSON.stringify(OK_BODY), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }),
     );
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = mount(<DealerPaymentPanel order={dealerOrder()} />);
     const btn = byText(container, 'button', 'Xác nhận đã nhận chuyển khoản') as HTMLButtonElement;
-    // 2 cú bấm trong CÙNG 1 lượt (React chưa kịp render nút disabled) + 1 cú sau khi render.
+    // 2 cú bấm trong CÙNG 1 lượt (React chưa kịp render): chỉ còn MỘT hộp thoại, trả lời đồng ý → 1 request.
     act(() => {
       btn.click();
       btn.click();
     });
-    click(btn);
     await flush();
+    expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    answerConfirm(true);
+    await flush();
+    click(btn); // sau khi đã gửi: nút khoá, không mở thêm hộp thoại
+    await flush();
+    expect(confirmDialog()).toBeNull();
     expect(calls).toHaveLength(1);
-    expect(confirm).toHaveBeenCalledTimes(1);
     expect((byText(container, 'button', /Đang xác nhận|Xác nhận đã nhận chuyển khoản/) as HTMLButtonElement).disabled).toBe(true);
     release();
     await flush();
@@ -146,9 +155,10 @@ describe('DealerPaymentPanel (chi tiết đơn admin)', () => {
     const already = { ...OK_BODY, alreadyPaid: true, message: 'Đơn TB-200 đã được ghi nhận thanh toán trước đó.' };
     const api = mockFetch({ '/confirm-payment': { body: already } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = mount(<DealerPaymentPanel order={dealerOrder()} />);
     click(byText(container, 'button', 'Xác nhận đã nhận chuyển khoản'));
+    await flush();
+    answerConfirm(true);
     await flush();
     expect(container.querySelector('[role="status"]')?.textContent).toBe('Đơn TB-200 đã được ghi nhận thanh toán trước đó.');
   });

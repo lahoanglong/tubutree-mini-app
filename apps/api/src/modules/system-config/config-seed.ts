@@ -3,7 +3,8 @@ import type { Prisma } from '@prisma/client';
 /** Một dòng SystemConfig mặc định trong prisma/seed.ts. */
 export type ConfigSeed = {
   key: string;
-  value: Prisma.InputJsonValue;
+  /** `Prisma.JsonNull` = khoá có dòng nhưng chưa đặt giá trị (vd ETA giao hàng: null thì app ẩn dòng đó). */
+  value: Prisma.InputJsonValue | Prisma.JsonNullValueInput;
   category: string;
   description: string;
   /**

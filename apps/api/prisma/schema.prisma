@@ -2433,6 +2433,10 @@ model RetentionDailySnapshot {
   ordersPerBuyerMtd    Decimal
   dauProxyRefreshToken Int
   dauEventBased        Int?
+  /// NS-1 của cohort "đơn đầu tiên rơi vào ngày VN (date − 30 ngày)": số khách trong cohort và số khách có đơn thứ 2
+  /// trong 30 ngày kể từ đơn đầu. NULL = dòng tính trước khi có NS-1 (chưa backfill).
+  ns1CohortSize        Int?
+  ns1RepeatCount       Int?
   computedAt           DateTime @default(now())
 
   @@map("retention_daily_snapshot")

@@ -289,6 +289,22 @@ describe('AdminService.getConfig / setConfig — che bí mật khi đọc, khôn
     expect(rows[2]!.value).toBe(200000);
   });
 
+  it('GET không category: gắn deprecated cho khoá chết để tab Cấu hình hiện nhãn "Không dùng" (C-054)', async () => {
+    const prisma = {
+      systemConfig: {
+        findMany: jest.fn().mockResolvedValue([
+          { key: 'payment.cod_max_amount', value: 5000000, category: 'payment', description: null },
+          { key: 'voucher.welcome_amount', value: 30000, category: 'voucher', description: null },
+        ]),
+      },
+    };
+    const rows = (await mkAdmin(prisma).getConfig()) as { key: string; deprecated?: boolean }[];
+    expect(rows.map((r) => [r.key, r.deprecated])).toEqual([
+      ['payment.cod_max_amount', true],
+      ['voucher.welcome_amount', false],
+    ]);
+  });
+
   it('GET theo category cũng che', async () => {
     const out = await mkAdmin(
       {},
@@ -308,6 +324,18 @@ describe('AdminService.getConfig / setConfig — che bí mật khi đọc, khôn
     });
     expect(set).toHaveBeenCalledWith('shipping.gomdon.config', { password: 'real-pw', defaultWeightFallback: 800 }, 'admin-1');
     expect(res.value).toEqual({ password: REDACTED, defaultWeightFallback: 800 });
+  });
+
+  it('PUT ETA max nhỏ hơn min đang lưu trong DB → 400 nêu khoá min, KHÔNG ghi; max hợp lệ thì ghi', async () => {
+    const set = jest.fn().mockResolvedValue(undefined);
+    const findUnique = jest.fn(async ({ where }: { where: { key: string } }) =>
+      where.key === 'shipping.eta_min_days' ? { value: 3 } : { value: null },
+    );
+    const prisma = { systemConfig: { findUnique } };
+    await expect(mkAdmin(prisma, { config: { set } }).setConfig('admin-1', 'shipping.eta_max_days', 2)).rejects.toThrow(/shipping\.eta_min_days/);
+    expect(set).not.toHaveBeenCalled();
+    await mkAdmin(prisma, { config: { set } }).setConfig('admin-1', 'shipping.eta_max_days', 5);
+    expect(set).toHaveBeenCalledWith('shipping.eta_max_days', 5, 'admin-1');
   });
 
   it('PUT sai luật khoá có form riêng (checkin_points 6 số) → 400, KHÔNG ghi', async () => {

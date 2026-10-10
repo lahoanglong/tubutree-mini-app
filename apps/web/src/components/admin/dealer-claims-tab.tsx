@@ -7,6 +7,7 @@ import {
   listDealerRewardClaims,
   markDealerRewardClaimPaid,
   rejectDealerRewardClaim,
+  reopenDealerRewardClaim,
   type AdminDealerRewardClaim,
   type DealerRewardClaimStatus,
 } from '@/lib/admin-client';
@@ -19,6 +20,7 @@ import {
   rejectReasonError,
 } from '@/lib/dealer-claims';
 import { INPUT_CLASS, ToneBadge } from './ui';
+import { useConfirm } from './confirm-dialog';
 import type { Tone } from '@/lib/recycling';
 
 const STATUS_TONE: Record<DealerRewardClaimStatus, Tone> = {
@@ -30,7 +32,7 @@ const STATUS_TONE: Record<DealerRewardClaimStatus, Tone> = {
 
 /**
  * "Yêu cầu nhận thưởng đại lý": đại lý đạt mốc doanh số (tour/quà) gửi yêu cầu → admin duyệt / từ chối
- * (bắt buộc lý do) → xác nhận đã trao. Luồng + kiểm doanh số đã chốt nằm ở DealerService; lỗi (vd doanh
+ * (bắt buộc lý do) → xác nhận đã trao. Từ chối là cuối với đại lý; admin từ chối nhầm thì "Mở lại yêu cầu". Luồng + kiểm doanh số đã chốt nằm ở DealerService; lỗi (vd doanh
  * số tụt dưới mốc vì có đơn huỷ/trả sau khi gửi) hiện NGUYÊN VĂN.
  */
 export function DealerClaimsTab() {
@@ -115,18 +117,20 @@ export function DealerClaimsTab() {
   );
 }
 
-type Action = 'approve' | 'reject' | 'markPaid';
+type Action = 'approve' | 'reject' | 'markPaid' | 'reopen';
 
 export function ClaimRow({ claim: c }: { claim: AdminDealerRewardClaim }) {
   const qc = useQueryClient();
   const [text, setText] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const acts = claimActions(c.status);
+  const { confirm, dialog } = useConfirm();
 
   const mut = useMutation({
     mutationFn: (a: Action) => {
       if (a === 'approve') return approveDealerRewardClaim(c.id, text);
       if (a === 'reject') return rejectDealerRewardClaim(c.id, text);
+      if (a === 'reopen') return reopenDealerRewardClaim(c.id, text);
       return markDealerRewardClaimPaid(c.id, text);
     },
     onSuccess: () => {
@@ -141,18 +145,35 @@ export function ClaimRow({ claim: c }: { claim: AdminDealerRewardClaim }) {
     },
   });
 
-  const run = (a: Action) => {
+  const run = async (a: Action) => {
     setErr(null);
     if (a === 'reject') {
       const e = rejectReasonError(text);
       if (e) return setErr(e);
     }
-    if (a === 'markPaid' && !window.confirm(`Xác nhận ĐÃ TRAO "${c.rewardTitle}" cho đại lý?`)) return;
+    if (a === 'markPaid') {
+      const ok = await confirm({
+        title: 'Xác nhận đã trao thưởng',
+        message: `Xác nhận ĐÃ TRAO "${c.rewardTitle}" cho đại lý?`,
+        confirmLabel: 'Đã trao thưởng',
+      });
+      if (!ok) return;
+    }
+    if (a === 'reopen') {
+      const ok = await confirm({
+        title: 'Mở lại yêu cầu nhận thưởng',
+        message:
+          `Mở lại yêu cầu "${c.rewardTitle}" (kỳ ${c.periodKey}) của đại lý? Yêu cầu quay về "Đang chờ duyệt"; lý do từ chối cũ được giữ trong ghi chú admin. ` +
+          'Doanh số đã chốt sẽ được kiểm lại khi bạn duyệt.',
+        confirmLabel: 'Mở lại',
+      });
+      if (!ok) return;
+    }
     mut.mutate(a);
   };
 
   const dealerName = c.dealer?.businessName || c.dealer?.fullName || c.dealer?.phone || c.userId;
-  const actionable = acts.approve || acts.reject || acts.markPaid;
+  const actionable = acts.approve || acts.reject || acts.markPaid || acts.reopen;
 
   return (
     <div className="rounded-lg border border-neutral-100 bg-white p-4">
@@ -194,7 +215,13 @@ export function ClaimRow({ claim: c }: { claim: AdminDealerRewardClaim }) {
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3">
           <input
             aria-label="Ghi chú / lý do"
-            placeholder={acts.reject ? 'Ghi chú duyệt (tuỳ chọn) — BẮT BUỘC khi từ chối' : 'Ghi chú trao thưởng (tuỳ chọn)'}
+            placeholder={
+              acts.reject
+                ? 'Ghi chú duyệt (tuỳ chọn) — BẮT BUỘC khi từ chối'
+                : acts.reopen
+                  ? 'Lý do mở lại (tuỳ chọn)'
+                  : 'Ghi chú trao thưởng (tuỳ chọn)'
+            }
             value={text}
             maxLength={500}
             onChange={(e) => setText(e.target.value)}
@@ -231,6 +258,16 @@ export function ClaimRow({ claim: c }: { claim: AdminDealerRewardClaim }) {
               Đã trao thưởng
             </button>
           )}
+          {acts.reopen && (
+            <button
+              type="button"
+              onClick={() => run('reopen')}
+              disabled={mut.isPending}
+              className="min-h-[44px] rounded border border-green-600 px-3.5 py-1.5 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+            >
+              Mở lại yêu cầu
+            </button>
+          )}
           {mut.isPending && <span className="text-xs text-neutral-500">Đang lưu…</span>}
         </div>
       )}
@@ -239,6 +276,7 @@ export function ClaimRow({ claim: c }: { claim: AdminDealerRewardClaim }) {
           {err}
         </p>
       )}
+      {dialog}
     </div>
   );
 }

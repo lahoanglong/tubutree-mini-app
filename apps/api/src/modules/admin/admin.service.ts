@@ -7,6 +7,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
+import { foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { allowedNextStatuses } from '../orders/order-transition';
@@ -18,10 +19,12 @@ import {
   ADMIN_SEARCH_MIN_TRGM_LENGTH,
   ADMIN_SEARCH_USER_CAP,
   buildAdminOrderWhere,
+  type InvoiceFilter,
   type RecyclingFilter,
 } from './admin-order-filter';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
-import { validateAdminConfigValue } from './admin-config-rules';
+import { isDeadConfigKey } from '../system-config/dead-config-keys';
+import { configPartnerKey, validateAdminConfigValue } from './admin-config-rules';
 
 /**
  * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
@@ -283,9 +286,14 @@ export class AdminService {
   }
 
   // ── Users & orders ──
-  async listUsers(page: number, limit: number) {
+  async listUsers(page: number, limit: number, search?: string) {
+    const s = search?.trim();
+    const where: Prisma.UserWhereInput | undefined = s
+      ? { OR: [{ phone: { contains: s } }, { fullName: { contains: s, mode: 'insensitive' } }, { id: s }] }
+      : undefined;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
+        where,
         orderBy: { createdAt: 'desc' },
         ...skipTake(page, limit),
         select: {
@@ -293,7 +301,139 @@ export class AdminService {
           pointsBalance: true, walletBalance: true, tierId: true, createdAt: true,
         },
       }),
-      this.prisma.user.count(),
+      this.prisma.user.count({ where }),
+    ]);
+    return paginated(items, page, limit, total);
+  }
+
+  // ── Tra cứu cho ô chọn (thay nhập ID thô) + màn duyệt đánh giá / gói định kỳ (C-092) ──
+
+  /**
+   * Tìm sản phẩm kèm biến thể cho ô chọn của admin (Flash Sale cần Variation ID, Content Kit cần Product ID).
+   * Khớp tên không dấu (cột nameSearch có index trigram), slug hoặc SKU; KHÔNG lọc isActive để admin thấy cả
+   * hàng đang ẩn — cờ isActive đi kèm để ô chọn cảnh báo. Tối đa 20 sản phẩm.
+   */
+  async searchProducts(raw: string) {
+    const q = raw.trim();
+    if (q.length < 2) return [];
+    const folded = foldVietnamese(q);
+    const products = await this.prisma.product.findMany({
+      where: {
+        OR: [
+          { nameSearch: { contains: folded } },
+          { slug: { contains: folded.replace(/ /g, '-') } },
+          { variations: { some: { sku: { contains: q, mode: 'insensitive' } } } },
+        ],
+      },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+      take: 20,
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        brand: true,
+        thumbnail: true,
+        isActive: true,
+        variations: {
+          orderBy: { retailPrice: 'asc' },
+          select: { id: true, name: true, sku: true, retailPrice: true, salePrice: true, stock: true, isActive: true },
+        },
+      },
+    });
+    return products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      brand: p.brand,
+      thumbnail: p.thumbnail,
+      isActive: p.isActive,
+      variations: p.variations.map((v) => ({
+        id: v.id,
+        name: v.name,
+        sku: v.sku,
+        price: v.salePrice ?? v.retailPrice,
+        stock: v.stock,
+        isActive: v.isActive,
+      })),
+    }));
+  }
+
+  /** Nhãn "Sản phẩm · Biến thể (SKU)" cho các Variation ID đã lưu (vd danh sách mặt hàng của đợt Flash Sale). */
+  async lookupVariations(idsCsv: string) {
+    const ids = [...new Set(idsCsv.split(',').map((x) => x.trim()).filter(Boolean))].slice(0, 100);
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.variation.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, sku: true, productId: true, product: { select: { name: true } } },
+    });
+    return rows.map((v) => ({ id: v.id, name: v.name, sku: v.sku, productId: v.productId, productName: v.product.name }));
+  }
+
+  /** Bậc đại lý để chọn khi duyệt/cấp vai trò DEALER (thay nhập Tier ID). */
+  async listDealerTiers() {
+    const tiers = await this.prisma.dealerTier.findMany({ orderBy: { minOrderVolume: 'asc' } });
+    return tiers.map((t) => ({
+      id: t.id,
+      name: t.name,
+      minOrderVolume: t.minOrderVolume,
+      creditLimit: t.creditLimit,
+      paymentTerms: t.paymentTerms,
+    }));
+  }
+
+  /**
+   * Danh sách đánh giá cho admin duyệt (kể cả đã ẩn). Ẩn/hiện dùng POST /reviews/:id/visibility sẵn có — nó tính
+   * lại điểm sao của sản phẩm, nên không viết lại ở đây.
+   */
+  async listReviews(page: number, limit: number, visibility?: 'visible' | 'hidden', rating?: number) {
+    const where: Prisma.ReviewWhereInput = {
+      ...(visibility ? { isVisible: visibility === 'visible' } : {}),
+      ...(rating ? { rating } : {}),
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.review.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        ...skipTake(page, limit),
+        select: {
+          id: true,
+          rating: true,
+          comment: true,
+          images: true,
+          videoUrl: true,
+          isVisible: true,
+          isVerified: true,
+          createdAt: true,
+          user: { select: { id: true, fullName: true, phone: true } },
+          product: { select: { id: true, name: true, slug: true } },
+        },
+      }),
+      this.prisma.review.count({ where }),
+    ]);
+    return paginated(items, page, limit, total);
+  }
+
+  /** Gói mua định kỳ để CSKH tra (chỉ xem; khách tự tạm dừng/huỷ trong app). Không trả addressId. */
+  async listSubscriptions(page: number, limit: number, status?: 'ACTIVE' | 'PAUSED' | 'CANCELLED') {
+    const where: Prisma.SubscriptionWhereInput = status ? { status } : {};
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.subscription.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        ...skipTake(page, limit),
+        select: {
+          id: true,
+          status: true,
+          quantity: true,
+          intervalWeeks: true,
+          nextRunAt: true,
+          lastOrderId: true,
+          createdAt: true,
+          user: { select: { id: true, fullName: true, phone: true } },
+          variation: { select: { id: true, name: true, sku: true, product: { select: { id: true, name: true } } } },
+        },
+      }),
+      this.prisma.subscription.count({ where }),
     ]);
     return paginated(items, page, limit, total);
   }
@@ -443,9 +583,16 @@ export class AdminService {
    * web admin cần để hiện thu gom. `recycling='attention'` = hàng đợi "Cần xử lý thu gom"
    * (xem admin-order-filter.ts).
    */
-  async listOrders(page: number, limit: number, status?: string, search?: string, recycling?: RecyclingFilter) {
+  async listOrders(
+    page: number,
+    limit: number,
+    status?: string,
+    search?: string,
+    recycling?: RecyclingFilter,
+    invoice?: InvoiceFilter,
+  ) {
     const searchUserIds = await this.findSearchUserIds(search);
-    const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling, searchUserIds });
+    const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling, invoice, searchUserIds });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
@@ -570,6 +717,43 @@ export class AdminService {
     };
   }
 
+  // ── Hoá đơn VAT (thao tác admin) ──
+
+  /**
+   * "Đã xuất hoá đơn": admin phát hành hoá đơn ở hệ thống hoá đơn điện tử rồi ghi nhận ở đây (kèm link nếu có).
+   * Hệ quả y hệt webhook Pancake `invoice.issued` (pancake.processor.ts onInvoiceIssued): invoiceStatus → ISSUED,
+   * giữ invoiceUrl cũ nếu không có link mới, báo khách INVOICE_ISSUED. Dành cho đơn mà Pancake không tự xuất
+   * (chưa cấu hình, webhook rớt). Guard atomic trên invoiceStatus nên hai admin bấm cùng lúc chỉ một người ghi và
+   * báo khách; đơn đã huỷ/trả không xuất hoá đơn.
+   */
+  async issueOrderInvoice(adminId: string, idOrCode: string, dto: { invoiceUrl?: string } = {}) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
+      select: { id: true, code: true, userId: true, status: true, invoiceRequest: true, invoiceStatus: true, invoiceUrl: true },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (!order.invoiceRequest) throw new BadRequestException(`Đơn ${order.code} chưa có yêu cầu xuất hóa đơn VAT.`);
+    if (order.invoiceStatus === 'ISSUED') throw new BadRequestException(`Hóa đơn của đơn ${order.code} đã được phát hành.`);
+    if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
+      throw new BadRequestException(`Đơn ${order.code} đã huỷ/trả — không xuất hóa đơn VAT.`);
+    }
+    const invoiceUrl = dto.invoiceUrl?.trim() || undefined;
+    const res = await this.prisma.order.updateMany({
+      where: { id: order.id, OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }] },
+      data: { invoiceStatus: 'ISSUED', ...(invoiceUrl ? { invoiceUrl } : {}) },
+    });
+    if (res.count === 0) throw new BadRequestException(`Hóa đơn của đơn ${order.code} vừa được phát hành bởi người khác — vui lòng tải lại.`);
+    this.logger.warn(`Admin ${adminId} ghi nhận đã xuất hóa đơn VAT đơn ${order.code}${invoiceUrl ? ` (${invoiceUrl})` : ''}.`);
+    await this.notifications
+      .notify(order.userId, 'INVOICE_ISSUED', { order_code: order.code })
+      .catch((e) => this.logger.warn(`notify INVOICE_ISSUED lỗi (${order.userId}): ${(e as Error).message}`));
+    return {
+      ok: true,
+      message: `Đã ghi nhận xuất hóa đơn VAT cho đơn ${order.code}.`,
+      order: { id: order.id, code: order.code, invoiceStatus: 'ISSUED' as const, invoiceUrl: invoiceUrl ?? order.invoiceUrl },
+    };
+  }
+
   // ── Vận đơn thu gom Gomdon (thao tác admin) ──
   //
   // KHÔNG tự viết lại logic: GomdonOrderService.retryPush/cancelWaybill đã có claim nguyên tử + luật
@@ -670,7 +854,9 @@ export class AdminService {
    */
   async getConfig(category?: string) {
     if (category) return redactConfigRows(await this.config.getByCategory(category));
-    return redactConfigRows(await this.prisma.systemConfig.findMany({ orderBy: { category: 'asc' } }));
+    const rows = redactConfigRows(await this.prisma.systemConfig.findMany({ orderBy: { category: 'asc' } }));
+    // Khoá không còn code nào đọc (dead-config-keys.ts): UI hiện nhãn "Không dùng" thay vì để admin sửa vô ích.
+    return rows.map((r) => ({ ...r, deprecated: isDeadConfigKey(r.key) }));
   }
 
   /**
@@ -681,7 +867,9 @@ export class AdminService {
   async setConfig(adminId: string, key: string, value: object | string | number | boolean) {
     const existing = await this.prisma.systemConfig.findUnique({ where: { key }, select: { value: true } });
     const restored = restoreRedactedSecrets(key, value, existing?.value) as object | string | number | boolean;
-    validateAdminConfigValue(key, restored);
+    const partnerKey = configPartnerKey(key);
+    const partner = partnerKey ? await this.prisma.systemConfig.findUnique({ where: { key: partnerKey }, select: { value: true } }) : null;
+    validateAdminConfigValue(key, restored, partner?.value);
     await this.config.set(key, restored, adminId);
     this.logger.warn(`Admin ${adminId} cập nhật cấu hình ${key}.`);
     return { ok: true, key, value: redactValueForKey(key, restored) };

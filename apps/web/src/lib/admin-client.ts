@@ -37,6 +37,23 @@ export interface AdminOrderItem {
   /** Số lượng đang đặt trước (đơn đại lý vượt tồn) — 0 với đơn khác. */
   backorderedQty?: number;
 }
+/** Ảnh chụp địa chỉ giao lúc đặt (Order.shippingAddress). Mọi trường có thể thiếu với đơn cũ / đơn tạo tay. */
+export interface AdminShippingAddress {
+  recipient?: string;
+  phone?: string;
+  street?: string;
+  ward?: string;
+  district?: string;
+  province?: string;
+}
+/** Yêu cầu xuất hoá đơn VAT khách gửi lúc thanh toán (Order.invoiceRequest). */
+export interface AdminInvoiceRequest {
+  taxCode?: string;
+  companyName?: string;
+  address?: string;
+  email?: string;
+}
+export type AdminInvoiceStatus = 'NOT_REQUESTED' | 'REQUESTED' | 'ISSUED' | 'FAILED';
 export interface AdminOrder {
   id: string;
   code: string;
@@ -56,6 +73,10 @@ export interface AdminOrder {
   note?: string | null;
   createdAt: string;
   updatedAt?: string;
+  shippingAddress?: AdminShippingAddress | null;
+  invoiceRequest?: AdminInvoiceRequest | null;
+  invoiceStatus?: AdminInvoiceStatus | null;
+  invoiceUrl?: string | null;
   shippingPartner?: string | null;
   shippingCode?: string | null;
   shippingStatus?: string | null;
@@ -108,6 +129,8 @@ export interface ConfigRow {
   value: unknown;
   description: string | null;
   category: string;
+  /** true = khoá không code nào đọc (GET /admin/config gắn): sửa vô tác dụng, API từ chối ghi. */
+  deprecated?: boolean;
 }
 export interface Page<T> {
   data: T[];
@@ -249,11 +272,55 @@ export const getDashboardStats = () =>
   apiFetch<DashboardStats>('/admin/dashboard/stats');
 /** attention = hàng đợi "Cần xử lý thu gom"; all = mọi đơn có chọn thu gom tái chế. */
 export type RecyclingFilter = 'attention' | 'all';
-export const listOrders = (page = 1, status?: string, search?: string, recycling?: RecyclingFilter, limit = 20) =>
+/** pending = đơn VAT chưa xuất xong (REQUESTED/FAILED); issued = đã phát hành; all = mọi đơn có yêu cầu VAT. */
+export type InvoiceFilter = 'pending' | 'issued' | 'all';
+export const listOrders = (
+  page = 1,
+  status?: string,
+  search?: string,
+  recycling?: RecyclingFilter,
+  limit = 20,
+  invoice?: InvoiceFilter,
+) =>
   apiFetch<Page<AdminOrder>>(
     `/admin/orders?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}${
       recycling ? `&recycling=${recycling}` : ''
-    }`,
+    }${invoice ? `&invoice=${invoice}` : ''}`,
+  );
+/** Số đơn VAT chưa xuất xong (đọc meta.total, không tải danh sách). */
+export const countInvoicePending = () =>
+  listOrders(1, undefined, undefined, undefined, 1, 'pending').then((r) => r.meta.total);
+
+// ── Hoá đơn VAT: ghi nhận đã xuất ──
+/** Trùng @MaxLength(500) của IssueInvoiceDto. */
+export const INVOICE_URL_MAX = 500;
+export interface IssueInvoiceResult {
+  ok: boolean;
+  message: string;
+  order: { id: string; code: string; invoiceStatus: AdminInvoiceStatus; invoiceUrl: string | null };
+}
+/** POST /admin/orders/:id/issue-invoice — link tuỳ chọn (chỉ gửi khi có), BE chỉ nhận https. Lỗi 400 hiện NGUYÊN VĂN. */
+export const issueOrderInvoice = (orderId: string, invoiceUrl?: string) =>
+  apiFetch<IssueInvoiceResult>(`/admin/orders/${encodeURIComponent(orderId)}/issue-invoice`, {
+    method: 'POST',
+    body: invoiceUrl?.trim() ? { invoiceUrl: invoiceUrl.trim() } : {},
+  });
+
+// ── Lịch sử đổi trạng thái đơn ──
+export interface AdminOrderStatusHistoryRow {
+  id: string;
+  fromStatus: string;
+  toStatus: string;
+  /** ADMIN | CUSTOMER | MERCHANT | PANCAKE | SYSTEM */
+  actorType: string;
+  actorId: string | null;
+  note: string | null;
+  createdAt: string;
+  actor: { id: string; fullName: string | null; phone: string | null } | null;
+}
+export const getOrderStatusHistory = (orderId: string) =>
+  apiFetch<{ orderCode: string; history: AdminOrderStatusHistoryRow[] }>(
+    `/admin/orders/${encodeURIComponent(orderId)}/status-history`,
   );
 /** Số đơn trong hàng đợi "Cần xử lý thu gom" (đọc meta.total, không tải danh sách). */
 export const countRecyclingAttention = () =>
@@ -750,6 +817,12 @@ export const markDealerRewardClaimPaid = (id: string, note?: string) =>
     method: 'POST',
     body: note?.trim() ? { note: note.trim() } : {},
   });
+/** REJECTED → PENDING khi từ chối nhầm (Q-09); lý do từ chối cũ được BE giữ lại trong ghi chú admin. */
+export const reopenDealerRewardClaim = (id: string, note?: string) =>
+  apiFetch<AdminDealerRewardClaim>(`/admin/dealer-reward-claims/${encodeURIComponent(id)}/reopen`, {
+    method: 'POST',
+    body: note?.trim() ? { note: note.trim() } : {},
+  });
 
 // ── Duyệt yêu cầu rút tiền (P0 A5-08 = A6-05): hoa hồng CTV / Ví Tubu → ngân hàng ──
 export type AdminPayoutStatus = 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';
@@ -850,6 +923,96 @@ export interface RetentionDailyRow {
   ordersPerBuyerMtd: number;
   dauProxyRefreshToken: number;
   dauEventBased: number | null;
+  /** NS-1 của cohort "đơn đầu tiên rơi vào ngày date − 30": số khách và số khách có đơn thứ 2 trong 30 ngày. null = chưa tính. */
+  ns1CohortSize: number | null;
+  ns1RepeatCount: number | null;
 }
 export const getRetentionDaily = (days = 30) =>
   apiFetch<RetentionDailyRow[]>(`/admin/analytics/retention-daily?days=${days}`);
+
+// ── Ô chọn (khách / sản phẩm / bậc đại lý), duyệt đánh giá, gói định kỳ (C-092) ──
+export interface AdminVariationHit {
+  id: string;
+  name: string;
+  sku: string;
+  /** Giá đang bán (giá khuyến mãi nếu có, không thì giá lẻ). */
+  price: number;
+  stock: number;
+  isActive: boolean;
+}
+export interface AdminProductHit {
+  id: string;
+  name: string;
+  slug: string;
+  brand: string | null;
+  thumbnail: string | null;
+  isActive: boolean;
+  variations: AdminVariationHit[];
+}
+export interface AdminVariationLabel {
+  id: string;
+  name: string;
+  sku: string;
+  productId: string;
+  productName: string;
+}
+/** Ô chọn chỉ tìm khi đủ ký tự này — khớp ngưỡng của BE (ngắn hơn trả mảng rỗng). */
+export const PICKER_MIN_CHARS = 2;
+export const searchAdminProducts = (q: string) =>
+  apiFetch<AdminProductHit[]>(`/admin/products/search?q=${encodeURIComponent(q.trim())}`);
+export const lookupVariations = (ids: string[]) =>
+  ids.length === 0
+    ? Promise.resolve<AdminVariationLabel[]>([])
+    : apiFetch<AdminVariationLabel[]>(`/admin/variations/lookup?ids=${encodeURIComponent(ids.join(','))}`);
+export const searchAdminUsers = (search: string, limit = 8) =>
+  apiFetch<Page<AdminUser>>(`/admin/users?page=1&limit=${limit}&search=${encodeURIComponent(search.trim())}`);
+
+export interface AdminDealerTier {
+  id: string;
+  name: string;
+  minOrderVolume: number;
+  creditLimit: number;
+  paymentTerms: string | null;
+}
+export const listDealerTiers = () => apiFetch<AdminDealerTier[]>('/admin/dealer-tiers');
+
+export type ReviewVisibilityFilter = 'visible' | 'hidden';
+export interface AdminReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  images: string[];
+  videoUrl: string | null;
+  isVisible: boolean;
+  isVerified: boolean;
+  createdAt: string;
+  user: { id: string; fullName: string | null; phone: string | null };
+  product: { id: string; name: string; slug: string };
+}
+export const listAdminReviews = (page = 1, visibility?: ReviewVisibilityFilter, rating?: number, limit = 20) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (visibility) params.set('visibility', visibility);
+  if (rating) params.set('rating', String(rating));
+  return apiFetch<Page<AdminReview>>(`/admin/reviews?${params.toString()}`);
+};
+/** Route của module reviews (không nằm dưới /admin): BE tự tính lại điểm sao của sản phẩm sau khi ẩn/hiện. */
+export const setReviewVisibility = (id: string, isVisible: boolean) =>
+  apiFetch<{ ok: boolean; isVisible: boolean }>(`/reviews/${id}/visibility`, { method: 'POST', body: { isVisible } });
+
+export type SubscriptionStatus = 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+export interface AdminSubscription {
+  id: string;
+  status: SubscriptionStatus;
+  quantity: number;
+  intervalWeeks: number;
+  nextRunAt: string;
+  lastOrderId: string | null;
+  createdAt: string;
+  user: { id: string; fullName: string | null; phone: string | null };
+  variation: { id: string; name: string; sku: string; product: { id: string; name: string } };
+}
+export const listAdminSubscriptions = (page = 1, status?: SubscriptionStatus, limit = 20) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (status) params.set('status', status);
+  return apiFetch<Page<AdminSubscription>>(`/admin/subscriptions?${params.toString()}`);
+};
