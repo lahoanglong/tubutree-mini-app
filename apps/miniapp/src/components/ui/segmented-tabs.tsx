@@ -1,3 +1,5 @@
+import { useScrollHints } from './use-scroll-hints';
+
 export interface SegmentedTabItem {
   key: string;
   label: string;
@@ -14,10 +16,12 @@ export interface SegmentedTabsProps {
 /** Thay 5 kiểu tab khác nhau hiện tại (pill cam, TabChip, Button ZaUI đổi variant, Chip, Text-chip
  * — audit A4-19). role="tablist"/"tab" cho a11y (0 chỗ dùng hiện tại). */
 export function SegmentedTabs({ items, value, onChange, scroll }: SegmentedTabsProps) {
+  const hints = useScrollHints<HTMLDivElement>();
   return (
     <div
+      {...(scroll ? hints : {})}
       role="tablist"
-      className={scroll ? 'scroll-x' : undefined}
+      className={scroll ? 'scroll-x tubu-scroll-fade' : undefined}
       style={{
         display: 'flex',
         gap: 4,

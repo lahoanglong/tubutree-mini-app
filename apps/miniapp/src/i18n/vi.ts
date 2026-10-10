@@ -42,6 +42,7 @@ export const vi = {
     newArrivals: 'Mới về vườn',
     bestSellers: 'Bán chạy',
     brandsTitle: 'Thương hiệu Việt',
+    brandsRail: 'Dải thương hiệu, vuốt ngang để xem thêm',
     allBrands: 'Tất cả',
     notifications: 'Thông báo',
     unreadBadge: (n: number) => `${n} thông báo chưa đọc`,

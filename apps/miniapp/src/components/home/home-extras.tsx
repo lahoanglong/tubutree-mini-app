@@ -10,6 +10,7 @@ import { Card } from '../ui/card';
 import { Chip } from '../ui/chip';
 import { Icon } from '../ui/icon';
 import { ListRow } from '../ui/list-row';
+import { ScrollRow } from '../ui/scroll-row';
 import { Skeleton } from '../ui/skeleton';
 import { Heading, Text } from '../ui/text';
 
@@ -67,7 +68,7 @@ export function HomeExtras() {
           <Heading variant="title-sm" as="h2" style={{ marginBottom: 4 }}>
             {vi.home.brandsTitle}
           </Heading>
-          <div className="scroll-x" style={{ gap: 8, padding: BRAND_RAIL_PADDING }}>
+          <ScrollRow label={vi.home.brandsRail} style={{ gap: 8, padding: BRAND_RAIL_PADDING }}>
             {brands.isLoading
               ? Array.from({ length: BRAND_CHIP_SKELETON_COUNT }, (_, i) => (
                   <div key={i} data-testid="brand-chip-skeleton" style={{ flex: '0 0 auto' }}>
@@ -79,7 +80,7 @@ export function HomeExtras() {
                     {b.brand}
                   </Chip>
                 ))}
-          </div>
+          </ScrollRow>
         </section>
       )}
 

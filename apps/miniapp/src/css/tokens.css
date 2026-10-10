@@ -237,6 +237,21 @@ body.with-back-btn .page.page-bleed {
   transform: translateY(-50%);
 }
 
+/* ── Gợi ý cuộn ngang (ScrollRow / SegmentedTabs scroll): mờ mép phía còn nội dung bằng mask nên không
+   cần biết màu nền. Thuộc tính data-fade-* do use-scroll-hints.ts bật theo vị trí cuộn. ── */
+.tubu-scroll-fade[data-fade-end] {
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+}
+.tubu-scroll-fade[data-fade-start] {
+  -webkit-mask-image: linear-gradient(to left, black calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to left, black calc(100% - 28px), transparent);
+}
+.tubu-scroll-fade[data-fade-start][data-fade-end] {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent);
+}
+
 /* ── Thẻ sản phẩm (ProductTile): nút tên là phần tử bấm được duy nhất; ::after phủ kín vỏ thẻ
    (position:relative) để chạm đâu trên thẻ cũng mở chi tiết, còn tim / Mua lại là anh em nổi lên
    bằng z-index (không lồng phần tử tương tác — axe nested-interactive). Vòng focus vẽ trên lớp phủ
