@@ -70,6 +70,39 @@ describe('HomeService.getPublic', () => {
     expect(catalog.categories).toHaveBeenCalledTimes(1);
   });
 
+  it('flash sale tươi hơn phần còn lại: sau 6s dựng lại flashActive, categories/bestSellers vẫn dùng cache 20s', async () => {
+    const { svc, catalog, flashSale } = setup();
+    await svc.getPublic(1000);
+    flashSale.listActive.mockResolvedValue([{ itemId: 'f2' }]);
+    const r = await svc.getPublic(1000 + 6_000);
+    expect(flashSale.listActive).toHaveBeenCalledTimes(2);
+    expect(r.flashActive).toEqual([{ itemId: 'f2' }]);
+    expect(catalog.categories).toHaveBeenCalledTimes(1);
+    expect(catalog.list).toHaveBeenCalledTimes(3);
+  });
+
+  it('flash trong 2s đầu vẫn dùng cache (không đổ dồn xuống DB)', async () => {
+    const { svc, flashSale } = setup();
+    await svc.getPublic(1000);
+    await svc.getPublic(1000 + 2_000);
+    expect(flashSale.listActive).toHaveBeenCalledTimes(1);
+  });
+
+  it('khối chậm quá hạn thì thành null, không giữ cả trang', async () => {
+    jest.useFakeTimers();
+    try {
+      const { svc, catalog } = setup();
+      catalog.brands.mockReturnValue(new Promise(() => undefined));
+      const pending = svc.getPublic(1000);
+      await jest.advanceTimersByTimeAsync(3_000);
+      const r = await pending;
+      expect(r.brands).toBeNull();
+      expect(r.categories).toEqual([{ id: 'c1' }]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('không nhận userId: khối công khai không gọi API theo người dùng', async () => {
     const { svc, orders, flashSale, catalog } = setup();
     await svc.getPublic(1000);

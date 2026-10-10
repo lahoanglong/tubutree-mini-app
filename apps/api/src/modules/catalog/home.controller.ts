@@ -11,7 +11,8 @@ export class HomeController {
 
   /** Khối công khai của Trang chủ, gộp một request. Không đọc người dùng → an toàn cache chung. */
   @Public()
-  @PublicCache('CATALOG')
+  // LIVE vì blob chứa khối flash sale (quota giảm theo từng đơn).
+  @PublicCache('LIVE')
   @Get()
   publicBlocks() {
     return this.home.getPublic();
