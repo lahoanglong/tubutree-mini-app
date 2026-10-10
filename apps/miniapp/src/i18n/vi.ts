@@ -15,6 +15,7 @@ export const vi = {
     undo: 'Hoàn tác',
     seeProducts: 'Xem sản phẩm',
     backHome: 'Về trang chủ',
+    timeInput: 'Giờ',
   },
 
   errors: {
