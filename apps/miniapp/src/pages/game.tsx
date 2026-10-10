@@ -11,7 +11,6 @@ import {
   getTodayQuiz,
   answerQuiz,
   waterTree,
-  buySeeds,
   buyTree,
   getLeaderboard,
   getMissions,
@@ -43,11 +42,6 @@ import { getErrorMessage } from '../services/api';
 import { vi } from '../i18n/vi';
 import { ChevronRight, MessagesSquare, Recycle } from 'lucide-react';
 import { copyText } from '../utils/clipboard';
-
-// Số giọt mỗi lần bấm "Mua nước" — đây là lựa chọn của FE (gửi lên BE), không phải giá.
-// Mọi GIÁ (đóng băng chuỗi, xu mỗi giọt, giá cây thật) đọc từ /game/profile: admin đổi config
-// mà FE chép cứng thì nhãn trên nút hiện giá cũ, bấm xong mới biết bị trừ khác.
-const BUY_SEEDS_PACK = 50;
 
 // Cùng ngày theo giờ VN (UTC+7) — khớp dayKey backend, để khoá nút đã dùng trong ngày.
 function isSameVNDay(iso: string | null): boolean {
@@ -170,16 +164,6 @@ export default function GamePage() {
       }
       refresh();
       void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const buySeedsM = useMutation({
-    mutationFn: () => buySeeds(BUY_SEEDS_PACK),
-    onSuccess: (r) => {
-      openSnackbar({ text: `Đã mua +${r.seeds}💧 (−${r.cost} xu) · còn ${r.totalSeeds}💧`, type: 'success' });
-      refresh();
-      void queryClient.invalidateQueries({ queryKey: ['coins'] });
-      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -556,10 +540,6 @@ export default function GamePage() {
           🚿 Tưới cây (20💧)
         </Button>
         <Box flex style={{ gap: 8, marginTop: 8 }}>
-          <Button style={{ flex: 1 }} size="small" disabled={buySeedsM.isPending} loading={buySeedsM.isPending} onClick={() => buySeedsM.mutate()}>
-            💧 Mua {BUY_SEEDS_PACK} nước
-            {profile?.xuPerSeed != null && ` (${(BUY_SEEDS_PACK * profile.xuPerSeed).toLocaleString('vi-VN')} xu)`}
-          </Button>
           <Button style={{ flex: 1 }} size="small" disabled={buyTreeM.isPending} loading={buyTreeM.isPending} onClick={() => buyTreeM.mutate()}>
             🌳 Mua cây thật
             {profile?.treeXuPrice != null && ` (${profile.treeXuPrice.toLocaleString('vi-VN')} xu)`}

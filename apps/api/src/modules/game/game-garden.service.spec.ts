@@ -319,13 +319,24 @@ describe('GameGardenService.waterPlot', () => {
     await expect(svc.waterPlot('u1', 'p1', 20)).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('grantCoupon set minOrder = giá trị coupon (P0-2, chặn coupon dùng free trên đơn bất kỳ)', async () => {
+  it('coupon thu hoạch lô phụ: minOrder mặc định 199.000đ (C-009, cùng khoá config với lô nhà)', async () => {
     const prisma = makePrisma();
     (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 590, target: 600 }));
     const svc = new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_amount': 30000 }));
     await svc.waterPlot('u1', 'p1', 20);
     const couponData = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data;
     expect(couponData.value).toBe(30000);
-    expect(couponData.minOrder).toBe(30000);
+    expect(couponData.minOrder).toBe(199000);
+  });
+
+  it('coupon thu hoạch lô phụ: config minOrder thấp hơn giá trị coupon → vẫn giữ minOrder = giá trị', async () => {
+    const prisma = makePrisma();
+    (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 590, target: 600 }));
+    const svc = new GameGardenService(
+      prisma,
+      makeConfig({ 'game.harvest_coupon_amount': 30000, 'game.harvest_coupon_min_order': 10000 }),
+    );
+    await svc.waterPlot('u1', 'p1', 20);
+    expect((prisma.coupon.create as jest.Mock).mock.calls[0][0].data.minOrder).toBe(30000);
   });
 });
