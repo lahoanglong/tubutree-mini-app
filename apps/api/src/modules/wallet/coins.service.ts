@@ -3,10 +3,13 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import {
+  countReferralSuccesses,
   LEGACY_REFERRAL_CASHBACK_PREFIX,
   lockReferee,
+  lockReferrer,
+  milestoneGrantReason,
+  readMilestoneState,
   REFERRAL_ORDER2_PREFIX,
-  REFERRAL_ORDER2_REVOKE_PREFIX,
 } from './referral-reward';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -43,7 +46,7 @@ export class CoinsService {
         where: { userId, refType: 'REFERRAL' },
         _sum: { delta: true },
       }),
-      this.countReferralSuccesses(userId),
+      countReferralSuccesses(this.prisma, userId),
       this.config.get<{ count: number; bonus: number }[]>('coins.referral_milestones', []),
     ]);
     const sortedMilestones = [...milestones].sort((a, b) => a.count - b.count);
@@ -134,9 +137,10 @@ export class CoinsService {
     const referrer = await this.prisma.user.findUnique({ where: { id: referrerId }, select: { role: true } });
     if (!referrer || referrer.role === 'AFFILIATE') return false;
 
-    const [reward, windowDays] = await Promise.all([
+    const [reward, windowDays, minOrder] = await Promise.all([
       this.config.get<number>('coins.referrer_reward', 5000),
       this.config.get<number>('referral.window_days', 30),
+      this.config.get<number>('referral.min_order_amount', 200000),
     ]);
     if (!(reward > 0)) return false;
 
@@ -151,7 +155,13 @@ export class CoinsService {
       });
       if (already) return false;
       const [first, second] = await tx.order.findMany({
-        where: { userId: refereeId, status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false },
+        where: {
+          userId: refereeId,
+          status: 'DELIVERED',
+          type: 'RETAIL',
+          placedForCustomer: false,
+          total: { gte: Math.max(Number(minOrder) || 0, 0) },
+        },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         take: 2,
         select: { id: true, createdAt: true },
@@ -179,31 +189,26 @@ export class CoinsService {
     return granted;
   }
 
-  /** Số bạn giới thiệu thành công còn hiệu lực: thưởng (kể cả kiểu cũ qua cashback) trừ lần đã thu hồi. */
-  private async countReferralSuccesses(referrerId: string): Promise<number> {
-    const [legacy = 0, granted = 0, revoked = 0] = await Promise.all(
-      [LEGACY_REFERRAL_CASHBACK_PREFIX, REFERRAL_ORDER2_PREFIX, REFERRAL_ORDER2_REVOKE_PREFIX].map((prefix) =>
-        this.prisma.coinTransaction.count({
-          where: { userId: referrerId, refType: 'REFERRAL', reason: { startsWith: prefix } },
-        }),
-      ),
-    );
-    return legacy + granted - revoked;
-  }
-
   /**
-   * Thưởng thêm khi số bạn giới thiệu thành công (cộng dồn) của referrer chạm mốc cấu hình
-   * (coins.referral_milestones). Reason nhúng referrerId + số mốc → globally unique, cùng
-   * partial unique index (reason WHERE refType='REFERRAL') đảm bảo mỗi mốc chỉ thưởng 1 lần.
+   * Thưởng thêm khi số bạn giới thiệu thành công còn hiệu lực của referrer chạm mốc cấu hình
+   * (coins.referral_milestones). Mốc đã cấp có thể bị thu hồi khi lượt giới thiệu bị thu hồi
+   * (revokeReferralRewardForOrder); đạt lại thì cấp đời mới. Đọc số đếm sau khoá dòng người mời để
+   * không chạy chéo với lần thu hồi; reason duy nhất theo đời chặn cấp trùng.
    */
   private async awardReferralMilestones(referrerId: string): Promise<void> {
     const milestones = await this.config.get<{ count: number; bonus: number }[]>('coins.referral_milestones', []);
     if (!milestones.length) return;
-    const successCount = await this.countReferralSuccesses(referrerId);
-    for (const m of milestones) {
-      if (successCount >= m.count && m.bonus > 0) {
-        await this.grantCoins(referrerId, m.bonus, `REFERRAL_MILESTONE:${referrerId}:${m.count}`, 'REFERRAL', referrerId);
+    await this.prisma.$transaction(async (tx) => {
+      await lockReferrer(tx, referrerId);
+      const successCount = await countReferralSuccesses(tx, referrerId);
+      const state = await readMilestoneState(tx, referrerId);
+      for (const m of milestones) {
+        if (successCount < m.count || !(m.bonus > 0)) continue;
+        const s = state.get(m.count);
+        const gen = s?.grants.size ?? 0;
+        if (gen > (s?.revokes ?? 0)) continue;
+        await this.grantCoins(referrerId, m.bonus, milestoneGrantReason(referrerId, m.count, gen), 'REFERRAL', referrerId, tx);
       }
-    }
+    });
   }
 }

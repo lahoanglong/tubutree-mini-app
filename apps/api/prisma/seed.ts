@@ -56,6 +56,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'coins.referrer_reward', value: 5000, category: 'coins', description: 'Xu thưởng người giới thiệu khi bạn được mời có đơn thứ 2 giao thành công trong referral.window_days ngày (thu hồi nếu trả hàng; CTV không nhận)' },
   { key: 'coins.referee_reward', value: 5000, category: 'coins', description: 'Không còn dùng: người được mời chỉ nhận voucher chào mừng (Q-05)' },
   { key: 'referral.window_days', value: 30, category: 'referral', description: 'Đơn thứ 2 phải đặt trong số ngày này kể từ đơn đầu thì người mời mới được thưởng xu', createOnly: true },
+  { key: 'referral.min_order_amount', value: 200000, category: 'referral', description: 'Chỉ đơn có tổng tiền từ mức này mới được tính là đơn đầu/đơn thứ 2 của chương trình giới thiệu', createOnly: true },
   {
     key: 'coins.referral_milestones',
     value: [

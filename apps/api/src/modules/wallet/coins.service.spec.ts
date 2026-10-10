@@ -114,6 +114,7 @@ describe('CoinsService.grantReferralOrderReward (Q-05: thưởng người mời 
     already?: unknown;
     inserted?: number;
     count?: jest.Mock;
+    milestoneRows?: { reason: string; delta: number }[];
   }) {
     const createMany = jest.fn().mockResolvedValue({ count: opts.inserted ?? 1 });
     const userUpdate = jest.fn().mockResolvedValue({});
@@ -129,6 +130,7 @@ describe('CoinsService.grantReferralOrderReward (Q-05: thưởng người mời 
         createMany,
         findFirst: jest.fn().mockResolvedValue(opts.already ?? null),
         count: opts.count ?? jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue(opts.milestoneRows ?? []),
       },
       $queryRaw: jest.fn().mockResolvedValue([]),
       $transaction: jest.fn().mockImplementation(async (cb: (t: unknown) => unknown) => cb(prisma)),
@@ -217,6 +219,28 @@ describe('CoinsService.grantReferralOrderReward (Q-05: thưởng người mời 
       await new CoinsService(prisma, milestoneConfig).grantReferralOrderReward('referee1');
       const reasons = createMany.mock.calls.map((c) => c[0].data[0].reason);
       expect(reasons.some((r) => r.startsWith('REFERRAL_MILESTONE:'))).toBe(false);
+    });
+
+    it('mốc đang giữ → không cấp lại', async () => {
+      const count = countByPrefix({ 'REFERRAL_ORDER2:': 3 });
+      const milestoneRows = [{ reason: 'REFERRAL_MILESTONE:referrer1:3', delta: 20000 }];
+      const { prisma, createMany } = refPrisma({ referredById: 'referrer1', orders: twoOrders(10), count, milestoneRows });
+      await new CoinsService(prisma, milestoneConfig).grantReferralOrderReward('referee1');
+      const reasons = createMany.mock.calls.map((c) => c[0].data[0].reason);
+      expect(reasons.some((r) => r.startsWith('REFERRAL_MILESTONE:'))).toBe(false);
+    });
+
+    it('mốc đã bị thu hồi, đạt lại → cấp đời mới (#1)', async () => {
+      const count = countByPrefix({ 'REFERRAL_ORDER2:': 4, 'REFERRAL_ORDER2_REVOKE:': 1 });
+      const milestoneRows = [
+        { reason: 'REFERRAL_MILESTONE:referrer1:3', delta: 20000 },
+        { reason: 'REFERRAL_MILESTONE_REVOKE:referrer1:3#0', delta: -20000 },
+      ];
+      const { prisma, createMany } = refPrisma({ referredById: 'referrer1', orders: twoOrders(10), count, milestoneRows });
+      await new CoinsService(prisma, milestoneConfig).grantReferralOrderReward('referee1');
+      const reasons = createMany.mock.calls.map((c) => c[0].data[0].reason);
+      expect(reasons).toContain('REFERRAL_MILESTONE:referrer1:3#1');
+      expect(reasons).not.toContain('REFERRAL_MILESTONE:referrer1:3');
     });
   });
 });
