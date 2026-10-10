@@ -104,3 +104,35 @@ DATABASE_URL=postgresql://tubu:tubu@localhost:5541/tubutree_it?schema=public npx
 ### Giả định
 
 - "Không để nửa vời làm hỏng màn CTV" được ưu tiên hơn việc làm xong yêu cầu 5 trong gói này.
+
+## C-028 — Chặn CTV lên đơn hộ với SĐT của chính mình — XONG
+
+- `affiliate.service.ts` `placeOrderForCustomer`: sau kiểm vai trò, chuẩn hoá SĐT tài khoản CTV và SĐT người nhận về dạng `0xxxxxxxxx` (cùng `normalizeToLocalPhone` dùng cho `endCustomerKey`); trùng → `400 "Không thể lên đơn hộ với SĐT của chính bạn..."` TRƯỚC khi giữ kho, tạo đơn, tạo hoa hồng. Miniapp `ctv-order-sheet.tsx` đã hiện thông báo lỗi API qua snackbar (`getErrorMessage`) nên không cần sửa FE.
+- Đơn cũ đã lỡ tạo với SĐT CTV: đường hoàn tiền đã xử lý ở C-001 (race spec `ctv-assisted-refund` ca "CTV nhập SĐT của chính mình" → hoàn thủ công, không vào ví CTV).
+
+### Test (đỏ → xanh)
+
+`affiliate.service.spec.ts` thêm 4 ca: trùng SĐT dạng `0x`/`0x`, tài khoản `0x` + nhập `+84 ...`, tài khoản `84x` + nhập `090.123.4567` → BadRequest, không gọi `$executeRaw`/`order.create`/`commission.create`; CTV chưa có SĐT → lên đơn bình thường.
+
+```
+cd apps/api
+npx jest --maxWorkers=1 src/modules/affiliate/affiliate.service.spec.ts -t placeOrderForCustomer   # trước khi sửa
+  Tests: 3 failed, 67 skipped, 19 passed, 89 total
+npx jest --maxWorkers=1 src/modules/affiliate                                                      # sau khi sửa
+  Test Suites: 3 passed, 3 total
+  Tests: 110 passed, 110 total
+npx tsc --noEmit -p tsconfig.json   -> exit 0
+npx eslint src/modules/affiliate/affiliate.service.ts src/modules/affiliate/affiliate.service.spec.ts   -> exit 0
+```
+
+Migration: không.
+
+### Giả định
+
+- "SĐT trùng tài khoản CTV" hiểu là SĐT của chính tài khoản CTV đang lên đơn (`User.phone`). Không chặn SĐT của CTV KHÁC: người đó là người mua thật (đổi chéo giữa 2 CTV là thông đồng, cần luật nghiệp vụ riêng — để chủ dự án quyết).
+- Áp dụng cả khi người lên đơn là ADMIN (cùng endpoint, cùng rủi ro tự hưởng hoa hồng).
+- CTV chưa khai SĐT thì không có gì để so — vẫn cho lên đơn.
+
+### Việc còn lại
+
+- Khi làm thiết kế "userId = khách cuối" (yêu cầu 5), bước chặn này phải chạy trước bước khớp tài khoản theo SĐT (đã ghi ở mục 5 của thiết kế).
