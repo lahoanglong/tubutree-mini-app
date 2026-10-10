@@ -6,6 +6,7 @@ import type { Request, Response } from 'express';
 import type { JwtPayload, LoginResponse } from '@tubutree/shared-types';
 import type { Env } from '../../config/env.validation';
 import { Public } from '../../common/decorators/public.decorator';
+import { AuthThrottle, type AuthIdentity } from '../../common/throttle/throttle.config';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from './auth.service';
@@ -29,6 +30,19 @@ class GuestLoginDto {
   @IsString() @IsOptional() referralCode?: string;
 }
 
+function bodyField(req: Request, field: string): string | undefined {
+  const body = req.body as Record<string, unknown> | undefined;
+  const v = body?.[field];
+  return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
+// Khoá đếm theo định danh của chính người đăng nhập, không theo IP: nhiều máy chung wifi/CGNAT
+// không được ăn chung 1 suất. IP chỉ còn là trần nới rộng (xem AuthThrottle).
+const guestIdentity: AuthIdentity = (req) => bodyField(req, 'deviceId');
+const zaloMiniAppIdentity: AuthIdentity = (req) => bodyField(req, 'accessToken') ?? bodyField(req, 'code');
+const zaloOAuthIdentity: AuthIdentity = (req) => bodyField(req, 'code');
+const refreshIdentity: AuthIdentity = (req) => bodyField(req, 'refreshToken') ?? readRefreshCookie(req);
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -50,7 +64,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @AuthThrottle(zaloMiniAppIdentity)
   @Post('zalo-mini-app')
   @HttpCode(HttpStatus.OK)
   async loginZaloMiniApp(
@@ -64,7 +78,7 @@ export class AuthController {
 
   /** Đăng nhập khách theo deviceId (fallback khi Zalo login chưa khả dụng). */
   @Public()
-  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @AuthThrottle(guestIdentity)
   @Post('guest')
   @HttpCode(HttpStatus.OK)
   async loginGuest(
@@ -77,7 +91,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @AuthThrottle(zaloOAuthIdentity)
   @Post('zalo-oauth')
   @HttpCode(HttpStatus.OK)
   async loginZaloOAuth(
@@ -90,7 +104,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @AuthThrottle(refreshIdentity)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(
