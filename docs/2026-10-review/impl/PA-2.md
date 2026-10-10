@@ -144,3 +144,55 @@ Không có.
 - PROD cần đặt `THROTTLE_BYPASS_TOKEN` (`openssl rand -hex 32`) trong `.env` của VPS rồi tạo lại container api + web. Chưa đặt thì SSR vẫn bị đếm theo IP máy chủ web, ở mức 300/phút cho mỗi route.
 - Bộ đếm vẫn nằm trong RAM của từng instance (Q-23: giữ 1 instance).
 - Comment cũ ở `apps/api/src/main.ts:55` còn nhắc "60req/min". File này nằm ngoài nhóm file nên chưa sửa.
+
+## C-033: web SSR không biến 429/5xx thành 404, miniapp xử lý 429 (A3-002, A3-003; Q-22). XONG
+
+Phần API (khoá đếm theo userId/IP, 300/phút, bypass SSR) đã làm ở C-005. Lượt này làm yêu cầu 3 và 4.
+
+### Đã sửa
+
+- `apps/web/src/lib/api.ts`:
+  - `getProduct`, `getStorefront`, `getBrand` đi qua `fetchDetail`: chỉ HTTP 404 trả `null` (trang gọi `notFound()` như cũ). 429, 5xx và lỗi kết nối ném `ApiUnavailableError`, nên Next hiện `app/error.tsx` ("Có chút trục trặc", nút Thử lại) và ISR giữ bản đã render. Trước đây mọi `!res.ok` và mọi exception đều thành `null`, tức là 404.
+  - Mọi fetch phía server (kể cả `getProducts`, `getBrands`, `getStorefrontList`) gửi `x-throttle-bypass: $THROTTLE_BYPASS_TOKEN` khi biến có giá trị và `typeof window === 'undefined'`. Biến không có tiền tố `NEXT_PUBLIC_`, nên không bị inline vào bundle client.
+  - Các hàm danh sách vẫn trả `[]` khi lỗi (trang chủ và sitemap xuống cấp nhẹ, build không có API vẫn chạy). Không đổi hành vi này.
+- `apps/miniapp/src/services/api.ts`:
+  - Interceptor response: 429 với GET/HEAD thì chờ `Retry-After` (số giây hoặc HTTP-date; thiếu header thì 1,5 s) rồi gửi lại đúng 1 lần (`_retried429`). Nếu server bảo chờ quá 5 s thì trả lỗi ngay, không giữ màn hình chờ. POST/PUT/PATCH/DELETE không bao giờ gửi lại.
+  - `getErrorMessage`: 429 trả `RATE_LIMITED_MESSAGE` = "Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé." thay cho message tiếng Anh của throttler (trước đây 429 < 500 nên "ThrottlerException: Too Many Requests" hiện thẳng lên UI).
+  - React Query (`components/app.tsx`) đã không retry 4xx, nên tổng cộng chỉ có 1 lần gửi lại.
+- `apps/api/src/main.ts` (ngoài nhóm file, sửa 1 dòng): CORS thêm `exposedHeaders: ['Retry-After']`. Lý do: `Retry-After` không thuộc nhóm header CORS-safelisted. Miniapp chạy ở origin `h5.zdn.vn`, khác origin API, nên không expose thì axios không đọc được header và yêu cầu "tôn trọng Retry-After" không làm được.
+
+### Test thêm (đỏ → xanh)
+
+- `apps/web/src/lib/api-ssr.spec.ts` (24 ca): 3 hàm chi tiết × (404 → null, 200 → dữ liệu, 429/500/502/503 → ném lỗi, mất kết nối → ném lỗi); header bypass có / biến rỗng không gửi / chạy trong trình duyệt không gửi. Trước khi sửa: 16 ca đỏ, 8 xanh.
+- `apps/miniapp/src/services/api-throttle.spec.ts` (6 ca, adapter axios giả + đồng hồ giả): GET 429 + `Retry-After: 2` thì chưa gửi lại ở 1999 ms, gửi lại ở 2000 ms và thành công; thiếu header thì chờ backoff; 429 hai lần thì chỉ gửi lại 1 lần rồi báo câu tiếng Việt; `Retry-After: 45` thì không chờ; POST 429 không gửi lại; `getErrorMessage` 429 không lộ "ThrottlerException". Trước khi sửa: 6/6 đỏ.
+
+### Lệnh kiểm chứng
+
+```
+cd apps/web && npx vitest run src/lib/api-ssr.spec.ts src/lib/api.spec.ts
+  -> Test Files 2 passed, Tests 44 passed
+cd apps/web && npx tsc --noEmit && npx eslint src/lib/api.ts src/lib/api-ssr.spec.ts   -> exit 0, không lỗi
+cd apps/miniapp && npx vitest run src/services/api-throttle.spec.ts src/services/api.spec.ts src/services/auth-gate.spec.ts
+  -> Test Files 3 passed, Tests 18 passed
+cd apps/miniapp && npx tsc --noEmit && npx eslint src/services/api.ts src/services/api-throttle.spec.ts   -> exit 0
+cd apps/api && npx tsc --noEmit -p tsconfig.json && npx eslint src/main.ts   -> exit 0
+API thật (nest build; node dist/main.js, PORT=3542, DB tubu_it_pa2:5542), 320 GET /api/products song song, Origin https://h5.zdn.vn:
+  -> { '200': 299, '429': 21 }
+  -> 429 retry-after= 60 expose= Retry-After acao= https://h5.zdn.vn
+```
+
+### Migration
+
+Không có.
+
+### Giả định
+
+- Trần chờ 5 s cho lần gửi lại. Server nói chờ lâu hơn thì báo người dùng luôn, vì gửi lại sớm hơn `Retry-After` chắc chắn lại bị 429.
+- Câu thông báo 429 để trong `services/api.ts` (`RATE_LIMITED_MESSAGE`) chứ không trong `i18n/vi.ts`, để không sửa file ngoài nhóm file. Có thể chuyển vào `vi.errors` sau.
+- Lỗi tạm thời ở trang chi tiết dùng error boundary sẵn có (`app/error.tsx`), không sửa các trang `san-pham/[slug]`, `s/[slug]`, `brand/[slug]` vì chúng vẫn chỉ gọi `notFound()` khi nhận `null`, và `null` giờ chỉ còn nghĩa là 404.
+
+### Việc còn lại
+
+- Throttler 6.5 đặt `Retry-After` = thời gian còn bị chặn, và `blockDuration` mặc định bằng `ttl` (60 s). Vì vậy lần 429 đầu thường báo `Retry-After: 60`, và miniapp sẽ báo lỗi ngay chứ không gửi lại. Việc gửi lại chỉ xảy ra khi khoảng chặn còn ≤ 5 s. Muốn gửi lại có ích hơn thì đặt `blockDuration` ngắn (vd 5–10 s) trong `throttle.config.ts`. Đây là quyết định chính sách, chưa làm.
+- Chưa chạy `next build` + `scripts/loadtest/web-crawl-probe.cjs` (job nặng, máy 15,5 GB). Mới kiểm chứng bằng unit test của `lib/api.ts`.
+- Comment ở `apps/api/src/main.ts:57` vẫn nhắc "60req/min" (đã ghi ở C-005).
