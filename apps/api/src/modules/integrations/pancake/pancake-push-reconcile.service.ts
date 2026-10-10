@@ -49,10 +49,15 @@ export class PancakePushReconcileService {
           pancakeOrderId: null,
           status: { notIn: ['CANCELLED'] }, // đơn đã hủy không cần đẩy — không tồn tại để giao
           createdAt: { lt: cutoff },
+          // Đơn đại lý còn hàng đặt trước (chưa đủ 100%) chỉ được đẩy khi DealerBackorderService lấp đủ
+          // (thiết kế duyệt 12/09): lọc ngay trong query để chúng không chiếm lô BATCH_SIZE của đơn khác.
+          NOT: { type: 'DEALER', items: { some: { backorderedQty: { gt: 0 } } } },
         },
         select: {
           id: true,
           code: true,
+          type: true,
+          items: { select: { backorderedQty: true } },
           createdAt: true,
           hasRecyclingPickup: true,
           gomdonOrderId: true,
@@ -69,6 +74,7 @@ export class PancakePushReconcileService {
       this.logger.warn(`Phát hiện ${stale.length} đơn chưa đẩy Pancake sau ${PancakePushReconcileService.STALE_MINUTES} phút — re-enqueue.`);
       for (const order of stale) {
         try {
+          if (order.type === 'DEALER' && order.items?.some((i) => i.backorderedQty > 0)) continue;
           const waitingGomdon =
             order.hasRecyclingPickup &&
             !order.gomdonOrderId &&

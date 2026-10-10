@@ -204,7 +204,11 @@ export class CatalogService {
     if (!product || !product.isActive || product.approvalStatus !== 'APPROVED') {
       throw new NotFoundException('Không tìm thấy sản phẩm.');
     }
-    return { ...product, sold: product.soldExternal + product.soldApp };
+    // pancakeId là khoá nội bộ của hệ thống Pancake (endpoint này @Public) — không có lý do để FE công
+    // khai cần; admin dùng endpoint admin riêng. include trả mọi cột scalar nên phải bỏ tại đây
+    // (variations đã loại qua publicVariationSelect).
+    const { pancakeId: _pancakeId, ...publicProduct } = product;
+    return { ...publicProduct, sold: product.soldExternal + product.soldApp };
   }
 
   async related(slug: string) {
