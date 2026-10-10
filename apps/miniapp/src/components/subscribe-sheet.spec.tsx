@@ -111,7 +111,7 @@ describe('SubscribeSheet (C-015: ngày bắt đầu + cách trả + địa chỉ
     fireEvent.click(screen.getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu đặt định kỳ' }));
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TB-2'));
-    expect(mocks.createSubscription.mock.calls[0][0].paymentMethod).toBe('BANK_TRANSFER');
+    expect(mocks.createSubscription).toHaveBeenCalledWith(expect.objectContaining({ paymentMethod: 'BANK_TRANSFER' }));
   });
 
   it('API từ chối (Ví thiếu) → hiện lỗi, sheet vẫn mở', async () => {
