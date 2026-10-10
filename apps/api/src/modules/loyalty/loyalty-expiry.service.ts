@@ -3,6 +3,8 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CRON_TZ } from '../../common/cron-tz';
+import { formatVnDate } from '../../common/vn-time';
 
 const DAY = 864e5;
 const BATCH = 500; // kích thước mỗi trang candidate.
@@ -125,7 +127,7 @@ export class LoyaltyExpiryService {
    * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi xử lý từng user đã được
    * expireUser().catch() cô lập.
    */
-  @Cron('0 1 * * *')
+  @Cron('0 1 * * *', { timeZone: CRON_TZ })
   async expirePoints(): Promise<void> {
     try {
       const now = new Date();
@@ -204,7 +206,7 @@ export class LoyaltyExpiryService {
    * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi nhắc từng user đã được
    * remindUser().catch() cô lập.
    */
-  @Cron('0 8 * * *')
+  @Cron('0 8 * * *', { timeZone: CRON_TZ })
   async remindExpiringPoints(): Promise<void> {
     try {
       const reminderDays = await this.config.get<number>('loyalty.point_expiry_reminder_days', 7);
@@ -264,7 +266,7 @@ export class LoyaltyExpiryService {
     await this.notifications
       .notify(userId, 'POINTS_EXPIRING', {
         points: String(expiringSoon.amount),
-        date: expiringSoon.earliestExpiresAt.toLocaleDateString('vi-VN'),
+        date: formatVnDate(expiringSoon.earliestExpiresAt),
       })
       .catch(() => undefined); // gửi lỗi không chặn lô (notify tự nuốt lỗi ZNS)
     return true;

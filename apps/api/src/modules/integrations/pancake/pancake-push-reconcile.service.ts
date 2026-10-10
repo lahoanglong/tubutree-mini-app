@@ -5,6 +5,7 @@ import { PancakeClient } from './pancake.client';
 import { PancakeOrderService } from './pancake-order.service';
 import { GOMDON_STATE, isGomdonPayable } from '../gomdon/gomdon-status';
 import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
+import { CRON_TZ } from '../../../common/cron-tz';
 
 /**
  * Lưới an toàn cuối cho P0-2 (docs/2026-09-08-review-progress.md): nếu enqueuePush() ở
@@ -38,7 +39,7 @@ export class PancakePushReconcileService {
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — findMany lỗi (DB blip...) ném ra ngoài là
   // unhandledRejection, Node 20 mặc định crash cả process. Lỗi enqueuePush từng đơn đã được cô
   // lập ở try/catch trong vòng lặp bên dưới; lớp ngoài này bắt phần còn lại (query, v.v).
-  @Cron('0 */15 * * * *') // mỗi 15 phút, lệch mốc với PancakeSyncService cho dễ đọc log
+  @Cron('0 */15 * * * *', { timeZone: CRON_TZ }) // mỗi 15 phút, lệch mốc với PancakeSyncService cho dễ đọc log
   async reconcile(): Promise<void> {
     try {
       if (!this.client.isConfigured()) return; // dev: Pancake chưa cấu hình, bỏ qua như pushOrder()

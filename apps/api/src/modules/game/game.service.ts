@@ -9,6 +9,7 @@ import { CoinsService } from '../wallet/coins.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
 import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { startOfVnDay } from '../../common/vn-time';
 
 interface SpinPrize {
   id: string;
@@ -195,8 +196,7 @@ export class GameService {
     // (P0-1, docs/2026-09-08-review-progress.md). Đặt trần bằng CODE thay vì chỉ dựa vào
     // admin cấu hình đúng giá — admin sửa nhầm config không được vô tình tắt lưới an toàn.
     const dailyCap = await this.config.get<number>('game.harvest_coupon_daily_cap', 3);
-    const dayStart = new Date();
-    dayStart.setHours(0, 0, 0, 0);
+    const dayStart = startOfVnDay();
 
     let harvestCount = 0;
     let couponCode: string | undefined;

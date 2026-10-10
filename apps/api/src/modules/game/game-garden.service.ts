@@ -8,6 +8,7 @@ import { GameCollectionService } from './game-collection.service';
 import { CoinsService } from '../wallet/coins.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
 import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
+import { startOfVnDay } from '../../common/vn-time';
 
 type TreeHealth = 'HEALTHY' | 'WILTED' | 'DEAD';
 type UnlockCurrency = 'SEEDS' | 'XU';
@@ -146,8 +147,7 @@ export class GameGardenService {
     // nước rẻ hơn nhiều giá trị coupon thu hoạch, không có trần thì vòng mua-nước→tưới→thu-hoạch
     // in coupon vô hạn ở LÔ PHỤ cũng như lô nhà.
     const dailyCap = await this.config.get<number>('game.harvest_coupon_daily_cap', 3);
-    const dayStart = new Date();
-    dayStart.setHours(0, 0, 0, 0);
+    const dayStart = startOfVnDay();
 
     let progress = 0;
     let target = 600;

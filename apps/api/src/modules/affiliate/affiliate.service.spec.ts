@@ -1410,3 +1410,33 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
     ).rejects.toThrow('tải lại');
   });
 });
+
+describe('AffiliateService.listLinks (giới hạn, C-100)', () => {
+  const svcWith = (findMany: jest.Mock) =>
+    new AffiliateService(
+      { affiliateLink: { findMany } } as unknown as PrismaService,
+      config,
+      pricing,
+      pancakeOrder,
+      coins,
+      analytics,
+    );
+
+  it('mặc định chỉ lấy 100 liên kết mới nhất, thứ tự ổn định theo (createdAt, id)', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await svcWith(findMany).listLinks('u1');
+    expect(findMany).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 100,
+    });
+  });
+
+  it('take bị kẹp ở 200; cursor được chuyển thành cursor+skip', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await svcWith(findMany).listLinks('u1', { take: 5000, cursor: 'l9' });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 200, cursor: { id: 'l9' }, skip: 1 }),
+    );
+  });
+});

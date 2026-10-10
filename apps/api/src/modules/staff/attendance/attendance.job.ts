@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { CRON_TZ } from '../../../common/cron-tz';
 
 export interface OpenSessionLike {
   shift: { approvedEnd: Date | null; endAt: Date };
@@ -30,7 +31,7 @@ export class AttendanceJob {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Mỗi 5 phút: đóng phiên đã quá giờ hết ca (chốt tại giờ hết ca). Không cắt theo heartbeat. */
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron(CronExpression.EVERY_5_MINUTES, { timeZone: CRON_TZ })
   async sweep(): Promise<{ closed: number }> {
     const now = new Date();
     const open = await this.prisma.attendanceSession.findMany({

@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CRON_TZ } from '../../common/cron-tz';
 
 export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
 export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
@@ -280,7 +281,7 @@ export class FlashSaleService {
    * thì claim atomic (updateMany guard notifiedAt: null) rồi notify FLASH_STARTING. notify() nuốt lỗi
    * để 1 lần gửi hỏng không chặn cả lô.
    */
-  @Cron('0 * * * *')
+  @Cron('0 * * * *', { timeZone: CRON_TZ })
   async notifyStartedFlashSales(now: Date = new Date()): Promise<void> {
     try {
       // Lọc cửa sổ sale NGAY TRONG TRUY VẤN. Trước đây chỉ lọc `notifiedAt: null` rồi mới xét

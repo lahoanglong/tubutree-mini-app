@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CRON_TZ } from '../../common/cron-tz';
 
 interface ReorderRow {
   userId: string;
@@ -60,7 +61,7 @@ export class LifecycleService {
    * cả process. Lỗi gửi từng user đã được cô lập ở try/catch trong vòng lặp; lớp ngoài này bắt
    * phần còn lại.
    */
-  @Cron('0 4 * * *')
+  @Cron('0 4 * * *', { timeZone: CRON_TZ })
   async sendReorderReminders(): Promise<void> {
     try {
       // Mặc định mới 30 ngày × 0,8 = nhắc ở ngày 24: SP tiêu dùng phổ thông (dầu gội/tắm/tẩy rửa

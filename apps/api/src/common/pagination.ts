@@ -26,6 +26,13 @@ export function paginated<T>(data: T[], page: number, limit: number, total: numb
   return { data, meta: { page, limit, total } };
 }
 
+/** Kẹp `take` từ query string vào [1, max]; thiếu/không phải số thì dùng mặc định. */
+export function clampTake(raw: unknown, def: number, max: number): number {
+  const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : typeof raw === 'number' ? raw : NaN;
+  if (!Number.isFinite(n)) return def;
+  return Math.min(Math.max(Math.floor(n), 1), max);
+}
+
 export function skipTake(page: number, limit: number): { skip: number; take: number } {
   return { skip: (page - 1) * limit, take: limit };
 }

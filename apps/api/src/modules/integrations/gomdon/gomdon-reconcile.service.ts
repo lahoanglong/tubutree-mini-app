@@ -8,6 +8,7 @@ import { GomdonOrderService } from './gomdon-order.service';
 import { GOMDON_JOB_EVENT, addGomdonJob } from './gomdon-queue';
 import { GOMDON_STATE } from './gomdon-status';
 import { GOMDON_EVENT_STATUS } from './gomdon-webhook.service';
+import { CRON_TZ } from '../../../common/cron-tz';
 
 /**
  * Lưới an toàn cho tích hợp Gomdon — KHÔNG phụ thuộc Pancake đã cấu hình hay chưa (trước đây phần
@@ -39,7 +40,7 @@ export class GomdonReconcileService {
 
   // Mỗi bước bọc try/catch riêng: @Cron không tự bắt lỗi (unhandledRejection làm sập process), và
   // một bước lỗi không được chặn các bước còn lại.
-  @Cron('30 */10 * * * *')
+  @Cron('30 */10 * * * *', { timeZone: CRON_TZ })
   async reconcile(): Promise<void> {
     for (const [name, step] of [
       ['events', () => this.redriveEvents()],

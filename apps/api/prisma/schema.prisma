@@ -1720,6 +1720,9 @@ model FeedPost {
   bestCommentId String?            @unique
   editedAt      DateTime?
   viewCount     Int                @default(0)
+  // Bộ đếm tim phi chuẩn hoá chỉ để SẮP XẾP "Phổ biến" (khỏi đếm cả bảng feed_reactions mỗi lần
+  // tải feed). Cập nhật cùng transaction với thả/bỏ tim; số hiển thị vẫn đếm thật theo trang.
+  likeCount     Int                @default(0)
   createdAt     DateTime           @default(now())
   reactions     FeedReaction[]
   comments      FeedComment[]
@@ -1729,6 +1732,7 @@ model FeedPost {
   @@index([status, createdAt])
   @@index([categoryId, status, createdAt])
   @@index([kind, status, createdAt])
+  @@index([status, isPinned(sort: Desc), likeCount(sort: Desc), createdAt(sort: Desc)])
   @@map("feed_posts")
 }
 
