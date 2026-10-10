@@ -227,3 +227,94 @@ npx eslint <8 file đã sửa/thêm>           -> 0 lỗi
 - C-015: XONG (API + miniapp). C-017: XONG (API; miniapp dùng lại CTA có sẵn).
 - Migration của gói: `20261010180000_subscription_payment_method`, `20261010190500_order_review_invite_second_order`
   (cả hai additive).
+- Migration thêm sau review lượt 1: `20261010191000_subscription_second_order_templates_fix` (chỉ INSERT ... ON CONFLICT DO
+  NOTHING và UPDATE có điều kiện "đúng câu cũ", không đổi schema).
+
+## Review lượt 1
+
+| # | Mức | Finding | Kết quả |
+|---|---|---|---|
+| 1 | major | Mẫu `SUBSCRIPTION_ORDER_AWAITING_PAYMENT` và lời mới của `SUBSCRIPTION_PAUSED` chỉ có trong seed, prod không có | ĐÃ SỬA (commit `92ac635`) |
+| 2 | major | Không chặn số lượng tối đa và hạn mức COD, nên đơn đầu giao ngay lách được trần 5.000.000đ của checkout | ĐÃ SỬA (commit `d238873`) |
+| 3 | minor | Gói trùng nhưng khác cách trả bị coi là bấm đúp, nên cách trả khách chọn bị bỏ; FE hiện "đơn đầu giao từ undefined" | ĐÃ SỬA (commit `894ab1d`) |
+| 4 | minor | Gói tạm dừng vì ví thiếu/địa chỉ hỏng mất luôn kỳ đó, tin lại bảo "bật lại lịch" | SỬA MỘT PHẦN (commit `85dd7fc`): tin giờ nói thật |
+| 5 | minor | Tin SECOND_ORDER_VOUCHER lặp "cho đơn", số tiền chưa định dạng vi-VN | ĐÃ SỬA (`92ac635` sửa lời, `8b2b352` định dạng số) |
+| 6 | minor | Chiết khấu Subscribe & Save áp ngay đơn đầu, khách tạo gói rồi huỷ thì thành giảm giá một lần | KHÔNG SỬA, cần chủ dự án quyết |
+
+### 1. Mẫu tin lên prod qua migration (đã xác minh: reviewer đúng)
+- Bằng chứng: trước khi sửa, grep `nt-sub-pause` / `SUBSCRIPTION_ORDER_AWAITING` trong `apps/api/prisma/migrations` không ra
+  kết quả nào. Prod không chạy seed (runbook), nên `notify()` rơi về câu mặc định.
+- Sửa: migration mới `20261010191000_subscription_second_order_templates_fix`:
+  - INSERT `nt-sub-order-awaiting-payment` và `nt-sub-pause` (bản có `{{reason}}`), ON CONFLICT DO NOTHING.
+  - UPDATE `SUBSCRIPTION_PAUSED` chỉ khi body vẫn đúng câu seed cũ, để không ghi đè nội dung admin đã chỉnh.
+  - UPDATE `SECOND_ORDER_VOUCHER` sang lời mới (finding 5), cùng điều kiện như trên.
+  - Không sửa migration `20261010190500`: DB thử của gói đã áp nó rồi, đổi file thì lệch checksum.
+- Test (đỏ → xanh), trong `notification-templates-seed.spec.ts`: áp lần lượt mọi migration (INSERT trước, UPDATE sau) cho 4 mã
+  `SUBSCRIPTION_PAUSED`, `SUBSCRIPTION_ORDER_AWAITING_PAYMENT`, `SECOND_ORDER_VOUCHER`, `REVIEW_REQUEST`, rồi đối chiếu từng chữ
+  với seed. Trước khi sửa: 3 test đỏ (PAUSED, AWAITING, lặp "cho đơn"). Sau khi sửa: 13/13 xanh.
+- Áp thử trên Postgres riêng (5576): chèn dòng `nt-sub-pause` mang lời cũ, chạy `prisma migrate deploy` rồi query lại:
+  ```
+  All migrations have been successfully applied.
+   SUBSCRIPTION_ORDER_AWAITING_PAYMENT | Đơn định kỳ {{order_code}} đã được tạo, vui lòng chuyển khoản {{amount
+   SUBSCRIPTION_PAUSED                 | Lịch đặt định kỳ đã tạm dừng: {{reason}}. Vui lòng kiểm tra lại rồi bậ
+   SECOND_ORDER_VOUCHER: Cảm ơn bạn đã tin dùng Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng cho lần mua tiếp theo trước {{expires}} 🌿
+  ```
+- Ngoài nhóm file: `notification-templates-seed.spec.ts` (thư mục notifications) chỉ được thêm một khối test. Đây là chỗ kiểm
+  seed khớp migration sẵn có, nên không tách sang file khác.
+
+### 2. Hạn mức COD và trần số lượng (đã xác minh: reviewer đúng)
+- Bằng chứng: `checkout.service.ts:191` chặn COD > 5.000.000đ, còn `placeCycleOrder` không có bước kiểm này. DTO mới có
+  `@Min(1)`, chưa có `@Max`.
+- Sửa:
+  - `CreateSubDto`/`UpdateSubDto` thêm `@Max(999)`, bằng trần một dòng giỏ hàng ở `cart.dto`. Service kiểm lại bằng `assertQuantity`.
+  - `placeCycleOrder`: trả COD mà `total > 5.000.000đ` thì ném `SubscriptionCodLimitError` trước khi giữ kho. Trường hợp
+    này đơn đầu trả 400 ("Đơn vượt hạn mức thanh toán khi nhận hàng (5.000.000đ)…"), còn cron tạm dừng gói với lý do
+    `cod_limit` và báo khách đổi sang Ví Tubu/chuyển khoản. Ví Tubu và chuyển khoản không bị hạn mức này.
+  - Hằng số `SUBSCRIPTION_COD_MAX` lặp lại số trong checkout chứ không dùng chung, vì checkout không thuộc nhóm file của gói.
+    Hiện checkout cũng hard-code con số này (`payment.cod_max_amount` vẫn là khoá chết).
+- Test (đỏ → xanh, `subscriptions.service.spec.ts`): COD 60 × 100.000đ ở cron cho ra tạm dừng + reason chứa "5.000.000đ" +
+  `cod_limit`, không giữ kho, không tạo đơn. Đơn đầu COD vượt hạn mức trả 400, không giữ kho. Ví Tubu và chuyển khoản không bị
+  chặn. create/update với số lượng 1000 trả 400. Trước khi sửa 4 test đỏ, sau khi sửa 52/52 xanh.
+
+### 3. Gói trùng khác cách trả (minor, đã sửa)
+- `resolveDuplicate` giờ chỉ coi là bấm đúp (trả lại gói cũ) khi trùng cả số lượng, chu kỳ và **cách trả**. Khác cách trả thì
+  trả 409 `SUBSCRIPTION_DUPLICATE` để khách sửa gói cũ. Test mới: gói COD cũ, yêu cầu WALLET → 409.
+- Miniapp `subscribe-sheet.tsx`: nếu giao ngay mà API không trả `firstOrder` (gói y hệt đã có) thì báo "Bạn đã có lịch định kỳ
+  này rồi, xem ở tab Định kỳ trong Đơn hàng". Trước đây chỗ này định dạng một ngày rỗng. Test vitest mới: đỏ trước khi sửa,
+  7/7 xanh sau khi sửa. Có thêm 1 chuỗi vào `i18n/vi.ts` (khối subscribe sẵn có).
+
+### 4. Kỳ bị bỏ khi hệ thống tạm dừng gói (minor, sửa một phần)
+- Xác minh: đúng. Bước claim đã dời `nextRunAt` sang kỳ kế. Bật lại lịch thì `setStatus` giữ ngày đó, nên kỳ bị lỗi không giao.
+- Phương án reviewer đề xuất (đặt lại `nextRunAt = cycleAt`) **không** giúp gì: `setStatus` thấy ngày đã qua sẽ dời sang
+  `now + chu kỳ`, khách còn chờ lâu hơn. Muốn "bật lại là giao bù ngay" thì phải đổi nghĩa của bật lại lịch, và cần phân
+  biệt gói do hệ thống tạm dừng với gói khách tự tạm dừng (cần thêm cột). Đó là quyết định nghiệp vụ, nằm ngoài mức sửa rẻ.
+- Đã làm: tin tạm dừng nói thật "(kỳ này không giao, kỳ kế tiếp ngày dd/mm/yyyy)" cho các nhánh ví thiếu, địa chỉ hỏng và
+  vượt hạn mức COD. Ngày lấy đúng giá trị bước claim đã ghi. Test mới: đỏ trước khi sửa, xanh sau khi sửa.
+- Cần chủ dự án quyết: có giao bù kỳ bị lỗi khi khách bật lại trong vòng một chu kỳ không.
+
+### 5. Lời tin SECOND_ORDER_VOUCHER (minor, đã sửa)
+- Lời mới: "…Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng cho lần mua tiếp theo trước {{expires}} 🌿". Seed
+  và migration giống nhau từng chữ (có test kiểm).
+- `VouchersService.grant`: mã giảm tiền (AMOUNT) truyền `value` dạng `toLocaleString('vi-VN')` (30.000). Mã % giữ nguyên. Thay
+  đổi này áp cho mọi tin voucher (WELCOME, BIRTHDAY, WINBACK, MILESTONE…), và chỉ đổi cách hiển thị số. Test cập nhật
+  "30000" → "30.000": đỏ trước khi sửa, xanh sau khi sửa.
+
+### 6. Chiết khấu đơn đầu rồi huỷ gói (minor, không sửa)
+- Hành vi này đúng theo Q-13 (đơn đầu giao ngay, có chiết khấu Subscribe & Save). Thu hồi chiết khấu hoặc chỉ cho bậc cơ bản ở
+  đơn đầu là thay đổi giá, không tự quyết được. Việc mở nhiều gói cùng lúc để đẩy bậc thì hiện bị giới hạn bởi unique (SP +
+  địa chỉ). Hạn mức COD (finding 2) và trần 999 cũng giới hạn quy mô lạm dụng.
+- Cần chủ dự án quyết: chấp nhận, hay đơn đầu chỉ được bậc cơ bản, hay thu hồi khi huỷ trước kỳ 2. Theo dõi được qua event
+  `subscription_changed` (created/cancelled) có sẵn.
+
+### Lệnh kiểm chứng (review lượt 1)
+```
+apps/api: npx jest --maxWorkers=1 src/modules/subscriptions/subscriptions.service.spec.ts   -> Tests: 54 passed, 54 total
+apps/api: npx jest --maxWorkers=1 src/modules/vouchers/vouchers.service.spec.ts src/modules/notifications/notification-templates-seed.spec.ts src/modules/lifecycle
+          -> Tests: 65 passed, 65 total
+apps/api: DATABASE_URL=...5576/tubutree_it npx jest -c test/integration-race/jest.config.js --runInBand
+          subscription-cycle-payment -> 15 passed; address-subscription -> 7 passed; subscription-duplicate -> 8 passed
+apps/api: npx prisma migrate deploy (5576) -> All migrations have been successfully applied.
+apps/api: npx tsc --noEmit -p tsconfig.json -> 0 lỗi; npx eslint <file đã sửa> -> 0 lỗi
+apps/miniapp: npx vitest run src/components/subscribe-sheet.spec.tsx -> 7 passed; npx tsc --noEmit -> 0 lỗi; eslint -> 0 lỗi
+```
+- Deploy: thêm `20261010191000_subscription_second_order_templates_fix` vào lượt `prisma migrate deploy`.
