@@ -2274,6 +2274,8 @@ model Subscription {
   // RESTRICT (C-014): xoá địa chỉ không được kéo theo xoá cứng gói định kỳ; users.deleteAddress báo lỗi rõ.
   address       Address   @relation(fields: [addressId], references: [id], onDelete: Restrict)
   status        String    @default("ACTIVE") // ACTIVE | PAUSED | CANCELLED
+  // Chỉ COD | WALLET | BANK_TRANSFER (Q-13); WALLET trừ ví ngay lúc sinh đơn kỳ, thiếu số dư thì gói tạm dừng.
+  paymentMethod PaymentMethod @default(COD)
   nextRunAt     DateTime
   lastOrderId   String?
   createdAt     DateTime  @default(now())
