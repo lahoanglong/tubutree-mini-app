@@ -43,7 +43,7 @@ describe('web tailwind.config', () => {
 
   // C-023 (A4-006): the legacy orange (#E08C1C) was the CTA fill with white text at 2.65:1 and the
   // text colour on #FAFAF8 at 2.53:1. The CTA shades must clear WCAG 1.4.3 (4.5:1) in both roles.
-  describe('legacy orange CTA reaches WCAG AA (4.5:1)', () => {
+  describe('legacy web palette reaches WCAG AA (4.5:1) where it carries text', () => {
     const channel = (hex: string, at: number) => {
       const c = parseInt(hex.slice(at, at + 2), 16) / 255;
       return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
@@ -62,6 +62,8 @@ describe('web tailwind.config', () => {
     const neutral = colors.neutral as Shades;
     const p = (key: number) => shade(primary, key);
     const n = (key: number) => shade(neutral, key);
+    const green = colors.green as Shades;
+    const g = (key: number) => shade(green, key);
 
     it('white label on the primary-600 button fill', () => {
       expect(contrast('#FFFFFF', p(600))).toBeGreaterThanOrEqual(4.5);
@@ -73,6 +75,20 @@ describe('web tailwind.config', () => {
       expect(luminance(p(700))).toBeLessThan(luminance(p(600)));
       expect(contrast('#FFFFFF', p(700))).toBeGreaterThanOrEqual(4.5);
       for (const bg of [p(50), p(100)]) expect(contrast(p(700), bg)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    // `text-neutral-400` (#A8A8A0, 2.39:1 on white) carried ~70 secondary labels; `bg-neutral-400` is the
+    // grey status pill with a white label.
+    it('neutral-400 is readable as text on white / page / grey surfaces and carries a white label', () => {
+      for (const bg of ['#FFFFFF', n(50), n(100)]) expect(contrast(n(400), bg)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast('#FFFFFF', n(400))).toBeGreaterThanOrEqual(4.5);
+    });
+
+    // Tailwind's stock green-600 (#16A34A) is the white-label confirm button at 3.3:1.
+    it('green-600 button fill carries a white label; green-700 hover is darker and also passes', () => {
+      expect(contrast('#FFFFFF', g(600))).toBeGreaterThanOrEqual(4.5);
+      expect(luminance(g(700))).toBeLessThan(luminance(g(600)));
+      expect(contrast('#FFFFFF', g(700))).toBeGreaterThanOrEqual(4.5);
     });
   });
 });
