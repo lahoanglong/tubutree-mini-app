@@ -163,10 +163,13 @@ export class SubscriptionsService {
     return sub;
   }
 
-  async list(userId: string) {
+  /** Mặc định 100 gói mới nhất (tối đa 200); cursor = id gói cuối của trang trước. */
+  async list(userId: string, opts: { take?: number; cursor?: string } = {}) {
     const subs = await this.prisma.subscription.findMany({
       where: { userId, status: { not: 'CANCELLED' } },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: Math.min(Math.max(opts.take ?? 100, 1), 200),
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
     if (subs.length === 0) return [];
     const [variations, effectiveDiscountPct] = await Promise.all([

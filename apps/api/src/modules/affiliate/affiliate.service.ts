@@ -139,8 +139,14 @@ export class AffiliateService {
     });
   }
 
-  listLinks(userId: string) {
-    return this.prisma.affiliateLink.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
+  /** Mới nhất trước; mặc định 100 (tối đa 200) — CTV tạo link vô hạn nên không thể trả hết một lần. */
+  listLinks(userId: string, opts: { take?: number; cursor?: string } = {}) {
+    return this.prisma.affiliateLink.findMany({
+      where: { userId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: Math.min(Math.max(opts.take ?? 100, 1), 200),
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+    });
   }
 
   /** Track click (web redirect /r/:shortCode). Trả target để redirect. */

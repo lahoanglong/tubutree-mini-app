@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { IsIn, IsInt, IsString, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { clampTake } from '../../common/pagination';
 import { SubscriptionsService } from './subscriptions.service';
 
 class CreateSubDto {
@@ -18,8 +19,8 @@ export class SubscriptionsController {
   constructor(private readonly subs: SubscriptionsService) {}
 
   @Get()
-  list(@CurrentUser('sub') userId: string) {
-    return this.subs.list(userId);
+  list(@CurrentUser('sub') userId: string, @Query('take') take?: string, @Query('cursor') cursor?: string) {
+    return this.subs.list(userId, { take: clampTake(take, 100, 200), cursor: cursor || undefined });
   }
 
   @Post()

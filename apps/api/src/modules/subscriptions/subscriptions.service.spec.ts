@@ -536,4 +536,18 @@ describe('SubscriptionsService.list', () => {
     const result = await svc.list('u1');
     expect(result[0]?.effectiveDiscountPct).toBe(0.14);
   });
+
+  it('giới hạn số gói trả về (mặc định 100, tối đa 200) và hỗ trợ cursor, C-100', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { subscription: { findMany } } as unknown as PrismaService;
+    const svc = new SubscriptionsService(prisma, {} as SystemConfigService, pricing, loyalty, notifications, pancakeStub(), makeAnalytics());
+    await svc.list('u1');
+    expect(findMany).toHaveBeenLastCalledWith({
+      where: { userId: 'u1', status: { not: 'CANCELLED' } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 100,
+    });
+    await svc.list('u1', { take: 9999, cursor: 's7' });
+    expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 200, cursor: { id: 's7' }, skip: 1 }));
+  });
 });

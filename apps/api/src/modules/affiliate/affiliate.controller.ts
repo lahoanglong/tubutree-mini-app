@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
 import { IsIn, IsInt, IsObject, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { clampTake } from '../../common/pagination';
 import { AffiliateService } from './affiliate.service';
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 
@@ -52,8 +53,8 @@ export class AffiliateController {
   }
 
   @Get('links')
-  links(@CurrentUser('sub') userId: string) {
-    return this.affiliate.listLinks(userId);
+  links(@CurrentUser('sub') userId: string, @Query('take') take?: string, @Query('cursor') cursor?: string) {
+    return this.affiliate.listLinks(userId, { take: clampTake(take, 100, 200), cursor: cursor || undefined });
   }
 
   @Get('dashboard')
