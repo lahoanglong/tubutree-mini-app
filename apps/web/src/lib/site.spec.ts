@@ -56,3 +56,15 @@ describe('NEXT_PUBLIC_SITE_URL lúc build', () => {
     expect(build).toBeGreaterThan(env);
   });
 });
+
+describe('isPortalPath', () => {
+  it('nhận /admin, /merchant, /brand và cây con; không nhận trang khách', async () => {
+    const { isPortalPath } = await loadSite();
+    for (const p of ['/admin', '/admin/orders', '/merchant', '/merchant/x', '/brand', '/brand/abc']) {
+      expect(isPortalPath(p), p).toBe(true);
+    }
+    for (const p of ['/', '/san-pham/abc', '/brands-new', '/administrator', '/s/abc', '/tai-khoan', null, undefined]) {
+      expect(isPortalPath(p), String(p)).toBe(false);
+    }
+  });
+});

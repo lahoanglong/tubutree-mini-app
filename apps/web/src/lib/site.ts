@@ -11,3 +11,14 @@ export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://app.tubutr
 
 /** Trang riêng tư/nội bộ — không được để công cụ tìm kiếm lập chỉ mục. */
 export const PRIVATE_PATHS = ['/admin', '/merchant', '/tai-khoan', '/gio-hang', '/thanh-toan', '/dang-nhap'];
+
+/**
+ * Cổng nội bộ có giao diện riêng — chân trang bán hàng (hotline khách) không hiển thị ở đây.
+ * Dùng chung đường dẫn chuẩn với PRIVATE_PATHS để hai danh sách không lệch nhau.
+ */
+export const PORTAL_PATHS = ['/admin', '/merchant', '/brand'];
+
+export function isPortalPath(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  return PORTAL_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}

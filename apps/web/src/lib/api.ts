@@ -225,6 +225,34 @@ export async function getBrand(slug: string): Promise<BrandDetail | null> {
   return fetchDetail<BrandDetail>(`/brand/public/${slug}`, 300);
 }
 
+/** Thông tin liên hệ hiển thị ở chân trang. */
+export interface SupportContact {
+  hotline: string;
+  email: string;
+}
+
+/** Khớp giá trị mặc định của API (system-config.controller: support.hotline / support.email). */
+export const DEFAULT_SUPPORT: SupportContact = { hotline: '0899 149 229', email: 'tubutree@gmail.com' };
+
+/**
+ * Hotline/email do admin cấu hình (GET /config/public → support). Chân trang nằm trên MỌI trang
+ * nên không được để API chậm/hỏng làm sập hay làm trống nó: lỗi gì cũng rơi về giá trị mặc định,
+ * và trường admin để trống (null) chỉ thay đúng trường đó.
+ */
+export async function getPublicSupport(): Promise<SupportContact> {
+  try {
+    const res = await fetch(`${BASE}/config/public`, serverInit({ revalidate: 3600 }));
+    if (!res.ok) return DEFAULT_SUPPORT;
+    const json = (await res.json()) as { support?: { hotline?: string | null; email?: string | null } };
+    return {
+      hotline: json.support?.hotline?.trim() || DEFAULT_SUPPORT.hotline,
+      email: json.support?.email?.trim() || DEFAULT_SUPPORT.email,
+    };
+  } catch {
+    return DEFAULT_SUPPORT;
+  }
+}
+
 export function formatVnd(n: number): string {
   return `${n.toLocaleString('vi-VN')}đ`;
 }
