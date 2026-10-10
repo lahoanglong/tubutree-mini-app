@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ZnsClient } from '../integrations/zns/zns.client';
 import { QUEUE_NOTIFICATIONS } from '../../jobs/queues';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { isAllowedByPrefs, type NotificationPrefs } from './notification-categories';
 
 /** Nội dung dùng khi template chưa được seed — tuyệt đối không in mã code ra cho khách. */
 const MISSING_TEMPLATE_BODY = 'Tubu Tree có cập nhật mới cho bạn. Mở mục liên quan trong app để xem chi tiết nhé 🌿';
@@ -43,6 +44,10 @@ export class NotificationsService {
   ): Promise<void> {
     const tpl = await this.prisma.notificationTemplate.findUnique({ where: { code: templateCode } });
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!isAllowedByPrefs(templateCode, user)) {
+      this.logger.debug(`Bỏ qua ${templateCode} cho ${userId}: khách đã tắt nhóm tin này.`);
+      return;
+    }
 
     // In-app luôn lưu để hiển thị danh sách thông báo.
     // Thiếu template KHÔNG được in mã code ra cho khách (họ nhận thông báo nội dung là
@@ -108,6 +113,22 @@ export class NotificationsService {
       });
     }
     return ok;
+  }
+
+  async getPrefs(userId: string): Promise<NotificationPrefs> {
+    const u = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    return { notifyPromo: u.notifyPromo, notifyGarden: u.notifyGarden };
+  }
+
+  updatePrefs(userId: string, patch: Partial<NotificationPrefs>): Promise<NotificationPrefs> {
+    const data: Partial<NotificationPrefs> = {};
+    if (patch.notifyPromo !== undefined) data.notifyPromo = patch.notifyPromo;
+    if (patch.notifyGarden !== undefined) data.notifyGarden = patch.notifyGarden;
+    return this.prisma.user.update({
+      where: { id: userId },
+      data,
+      select: { notifyPromo: true, notifyGarden: true },
+    });
   }
 
   listForUser(userId: string) {
