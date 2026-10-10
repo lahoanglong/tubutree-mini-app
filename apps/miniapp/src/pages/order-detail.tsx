@@ -59,6 +59,7 @@ export default function OrderDetailPage() {
   // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
   const authStatus = useAuthStore((s) => s.status);
+  const meId = useAuthStore((s) => s.user?.id);
 
   // Guard auth: tránh gọi /orders/:code khi chưa silent-login xong (deeplink từ thông báo
   // đơn hàng ngay lúc app vừa mở → 401 hiện lỗi trong khi chỉ cần chờ vài trăm ms là có phiên).
@@ -185,9 +186,15 @@ export default function OrderDetailPage() {
   // Bỏ entry shape cũ ({at,data} trước khi chuẩn hoá) — chỉ hiện mốc có trạng thái/mã.
   const journey = (o.shippingHistory ?? []).filter((e) => e && (e.status || e.code));
   // Đơn thu gom tái chế mà bưu tá đã lấy hàng: BE chặn khách tự huỷ → ẩn nút (liên hệ Zalo OA).
+  // Đơn CTV lên hộ khách đã thanh toán: BE chỉ cho admin huỷ (tiền là của khách cuối) → ẩn nút với CTV.
+  // OrderDTO chung chưa khai báo 2 cột này dù API trả nguyên bản ghi đơn.
+  const assisted = o as { placedForCustomer?: boolean; referrerUserId?: string | null };
+  const isPaidAssistedByMe =
+    !!assisted.placedForCustomer && o.paymentStatus === 'PAID' && !!meId && assisted.referrerUserId === meId;
   const canCancel =
     (o.status === 'PENDING_PAYMENT' || o.status === 'CONFIRMED') &&
-    !(o.hasRecyclingPickup && isRecyclingPickedUp(o.gomdonStatus));
+    !(o.hasRecyclingPickup && isRecyclingPickedUp(o.gomdonStatus)) &&
+    !isPaidAssistedByMe;
   const recycling = o.hasRecyclingPickup ? recyclingPickupView(o) : null;
   // Đơn chuyển khoản chưa trả tiền: trước đây màn QR (/bank-payment/:code) CHỈ tới được đúng
   // một lần ngay sau khi đặt hàng (checkout.tsx). Rời khỏi đó là mất luôn mã QR/số tài khoản —
