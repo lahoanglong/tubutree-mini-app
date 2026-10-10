@@ -17,10 +17,16 @@ import {
   InvalidOrderTransitionError,
   isPrepaidMethod,
   requiresPaymentBefore,
+  UnpaidPrepaidTransitionError,
 } from './order-transition';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 type StatusActor = 'ADMIN' | 'CUSTOMER' | 'MERCHANT' | 'PANCAKE' | 'SYSTEM';
+
+/** Người bấm nhận 400 ngay trên màn hình; chỉ webhook/cron (bị nuốt lỗi êm) mới cần để lại dấu. */
+function isHumanActor(actor: StatusActor | undefined): boolean {
+  return actor === 'ADMIN' || actor === 'MERCHANT' || actor === 'CUSTOMER';
+}
 
 /**
  * PAID: lần gọi này lật thanh toán. ALREADY_PAID: đã PAID từ trước (bấm lặp / người khác thắng race).
@@ -105,11 +111,14 @@ export class OrderStatusService {
     const paymentGated =
       requiresPaymentBefore(from, targetStatus) && isPrepaidMethod(order.paymentMethod) && order.paymentStatus !== 'PAID';
     if (paymentGated) {
-      assertPaidBeforeFulfilment(
-        { ...order, onCredit: await this.isOnDealerCredit(order.id) },
-        order.status as OrderStatus,
-        targetStatus,
-      );
+      try {
+        assertPaidBeforeFulfilment({ ...order, onCredit: await this.isOnDealerCredit(order.id) }, from, targetStatus);
+      } catch (err) {
+        if (err instanceof UnpaidPrepaidTransitionError && !isHumanActor(opts.actorType)) {
+          await this.flagDroppedStatus(order.id, order.code, targetStatus);
+        }
+        throw err;
+      }
     }
 
     // Atomic flip guard theo status hiện tại — 2 caller song song (vd admin + webhook)
@@ -275,6 +284,25 @@ export class OrderStatusService {
       };
     }
     throw new ConflictException('Đơn đang thay đổi trạng thái liên tục — vui lòng tải lại rồi thử lại.');
+  }
+
+  /**
+   * Webhook (Pancake/Gomdon) báo trạng thái vận đơn cho đơn trả trước chưa PAID bị chặn và nuốt êm, không phát lại
+   * sau khi tiền về — đơn sẽ đứng yên ở trạng thái cũ. Để lại dấu trên ghi chú đơn (mỗi trạng thái một lần, webhook
+   * retry không nhân bản) để sau khi xác nhận "Đã nhận tiền" admin biết cần đẩy tiếp tay. Best-effort: lỗi ghi dấu
+   * không được thay lỗi chuyển trạng thái gốc (webhook dựa vào loại lỗi đó để bỏ qua êm).
+   */
+  private async flagDroppedStatus(orderId: string, code: string, target: OrderStatus): Promise<void> {
+    const marker = `[Chờ thanh toán: vận chuyển đã báo ${target} — đẩy tay sau khi nhận tiền]`;
+    try {
+      await this.prisma.$executeRaw`
+        UPDATE "orders"
+        SET "note" = CASE WHEN "note" IS NULL OR "note" = '' THEN ${marker} ELSE "note" || ' | ' || ${marker} END
+        WHERE "id" = ${orderId} AND ("note" IS NULL OR position(${marker} in "note") = 0)`;
+      this.logger.warn(`Đơn ${code} chưa thanh toán nhưng vận chuyển báo ${target} — đã ghi chú để admin đẩy tay sau khi nhận tiền.`);
+    } catch (err) {
+      this.logger.error(`Không ghi được dấu trạng thái bị chặn cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   /** Đơn đại lý ghi công nợ — cùng điều kiện DealerService.confirmDealerOrderPayment dùng để nhận diện. */

@@ -355,6 +355,7 @@ describe('OrderStatusService — chặn giao đơn trả trước chưa thanh to
       order: { findFirst: jest.fn().mockResolvedValue(order), findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
       dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(opts.creditDebit ? { id: 'l1' } : null) },
       $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
+      $executeRaw: jest.fn().mockResolvedValue(1),
     };
     const loyalty = { creditOrderPoints: jest.fn().mockResolvedValue(undefined), reverseOrderPoints: jest.fn() };
     const affiliate = {
@@ -444,6 +445,36 @@ describe('OrderStatusService — chặn giao đơn trả trước chưa thanh to
     const { svc, tx } = make(makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' }));
     await svc.setStatus('o1', 'CONFIRMED' as never);
     expect(tx.order.updateMany.mock.calls[0][0].where).toMatchObject({ status: 'PENDING_PAYMENT', paymentStatus: 'PAID' });
+  });
+
+  // Review lượt 1: webhook vận chuyển báo giao/đang giao khi tiền chuyển khoản chưa đối soát bị bỏ qua êm và không
+  // bao giờ phát lại — để lại dấu trên ghi chú đơn để sau khi nhận tiền admin biết cần đẩy trạng thái tay.
+  it.each(['PANCAKE', 'SYSTEM', undefined])(
+    'webhook (%s) báo DELIVERED cho đơn chưa trả → vẫn chặn, nhưng ghi dấu vào ghi chú đơn (không lặp)',
+    async (actorType) => {
+      const { svc, prisma } = make(makeOrder({ status: 'PACKED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }));
+      await expect(
+        svc.setStatus('o1', 'DELIVERED' as never, actorType ? { actorType: actorType as never } : {}),
+      ).rejects.toThrow(UnpaidPrepaidTransitionError);
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+      const sqlParts = (prisma.$executeRaw.mock.calls[0] as unknown[])[0] as string[];
+      const values = (prisma.$executeRaw.mock.calls[0] as unknown[]).slice(1);
+      expect(sqlParts.join('?')).toMatch(/position\(/);
+      expect(values).toEqual(expect.arrayContaining([expect.stringContaining('DELIVERED'), 'o1']));
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    },
+  );
+
+  it('admin bấm DELIVERED cho đơn chưa trả → chỉ 400, không ghi dấu', async () => {
+    const { svc, prisma } = make(makeOrder({ status: 'PACKED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }));
+    await expect(svc.setStatus('o1', 'DELIVERED' as never, { actorType: 'ADMIN' })).rejects.toThrow(UnpaidPrepaidTransitionError);
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('ghi dấu lỗi (DB) → vẫn ném lỗi chuyển trạng thái gốc để webhook bỏ qua êm', async () => {
+    const { svc, prisma } = make(makeOrder({ status: 'PACKED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }));
+    prisma.$executeRaw.mockRejectedValueOnce(new Error('db blip'));
+    await expect(svc.setStatus('o1', 'SHIPPING' as never, { actorType: 'PANCAKE' })).rejects.toThrow(UnpaidPrepaidTransitionError);
   });
 
   it('chuyển lùi vẫn bị chặn như cũ (DELIVERED → CONFIRMED)', async () => {

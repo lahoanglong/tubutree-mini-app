@@ -259,6 +259,24 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
     expect(st.stock).toBe(START_STOCK);
   });
 
+  it('(h) webhook vận chuyển báo DELIVERED cho đơn chưa trả (2 lần song song + 1 lần lặp) → bị chặn, ghi chú đơn có đúng 1 dấu', async () => {
+    const { order } = await staleOrder({ createdAt: new Date(), status: 'PACKED', note: 'Giao giờ hành chính' });
+    const calls = [
+      orderStatus.setStatus(order.id, 'DELIVERED', { actorType: 'PANCAKE' }),
+      orderStatus.setStatus(order.id, 'DELIVERED', { actorType: 'PANCAKE' }),
+    ];
+    const settled = await Promise.allSettled(calls);
+    await orderStatus.setStatus(order.id, 'DELIVERED', { actorType: 'PANCAKE' }).catch(() => undefined);
+    for (const r of settled) {
+      expect(r.status).toBe('rejected');
+      expect((r as PromiseRejectedResult).reason).toBeInstanceOf(UnpaidPrepaidTransitionError);
+    }
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.status).toBe('PACKED');
+    expect(after.note?.startsWith('Giao giờ hành chính | ')).toBe(true);
+    expect(after.note?.split('vận chuyển đã báo DELIVERED')).toHaveLength(2);
+  });
+
   it('(e) phạm vi: đơn mới đặt, đơn đại lý, đơn COD, đơn đã PAID → không bị đụng tới', async () => {
     const fresh = await staleOrder({ createdAt: new Date() });
     const dealer = await staleOrder({ type: 'DEALER' });
