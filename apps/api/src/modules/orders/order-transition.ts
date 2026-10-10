@@ -89,6 +89,10 @@ const PREPAID_METHOD: Record<PaymentMethod, boolean> = {
   XU: true,
 };
 
+export const PREPAID_METHODS: readonly PaymentMethod[] = (Object.keys(PREPAID_METHOD) as PaymentMethod[]).filter(
+  (m) => PREPAID_METHOD[m],
+);
+
 export function isPrepaidMethod(paymentMethod: string): boolean {
   return PREPAID_METHOD[paymentMethod as PaymentMethod] === true;
 }
