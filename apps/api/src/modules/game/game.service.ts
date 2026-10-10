@@ -104,6 +104,9 @@ export class GameService {
   // ── Spin wheel ─────────────────────────────────────
   async spin(userId: string) {
     const cost = await this.config.get<number>('game.spin_buy_cost_points', 10);
+    const rawLimit = Number(await this.config.get<number>('game.spin_buy_daily_limit', 5));
+    // Config hỏng rơi về mặc định; 0/âm nghĩa là khoá vòng quay (không hiểu thành "không giới hạn").
+    const dailyLimit = Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 5;
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.pointsBalance < cost) {
       throw new BadRequestException(`Cần ${cost} điểm Xanh để quay.`);
@@ -120,6 +123,17 @@ export class GameService {
         data: { pointsBalance: { decrement: cost } },
       });
       if (dec.count === 0) throw new BadRequestException(`Cần ${cost} điểm Xanh để quay.`);
+      // Đếm SAU updateMany ở trên: lệnh đó giữ khoá dòng user tới hết tx, nên các lượt quay song
+      // song của cùng user xếp hàng ở đây, và (READ COMMITTED) mỗi câu lệnh mới thấy lượt quay mà
+      // tx trước đã commit — không thể cùng đọc "còn lượt" rồi cùng vượt trần.
+      const spunToday = await tx.gameSpin.count({
+        where: { userId, spunAt: { gte: this.startOfDay(new Date()) } },
+      });
+      if (spunToday >= dailyLimit) {
+        throw new BadRequestException(
+          dailyLimit > 0 ? `Bạn đã quay đủ ${dailyLimit} lượt hôm nay. Hẹn bạn ngày mai nhé!` : 'Vòng quay đang tạm đóng.',
+        );
+      }
       await tx.pointsTransaction.create({
         data: { userId, delta: -cost, reason: 'GAME_SPIN_COST', refType: 'GAME' },
       });

@@ -39,7 +39,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       count: jest.fn().mockResolvedValue(0),
     },
     pointsTransaction: { create: jest.fn() },
-    gameSpin: { create: jest.fn().mockResolvedValue({}) },
+    gameSpin: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
     gameQuiz: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     gameQuizAttempt: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), create: jest.fn().mockResolvedValue({}) },
     coupon: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
@@ -117,6 +117,53 @@ describe('GameService.spin', () => {
     expect(prisma.gameSpin.create).not.toHaveBeenCalled();
   });
 
+  // C-043: game.spin_buy_daily_limit từng là khoá chết — vòng quay không có trần lượt/ngày.
+  it('đã quay đủ trần lượt/ngày → BadRequest, không ghi lượt quay, không trao thưởng', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
+    (prisma.gameSpin.count as jest.Mock).mockResolvedValue(5);
+    jest.spyOn(Math, 'random').mockReturnValue(0.1);
+    const svc = new GameService(
+      prisma,
+      makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES, 'game.spin_buy_daily_limit': 5 }),
+      analytics,
+    );
+    await expect(svc.spin('u1')).rejects.toThrow('lượt');
+    expect(prisma.gameSpin.create).not.toHaveBeenCalled();
+    expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+    (Math.random as jest.Mock).mockRestore();
+  });
+
+  it('trần lượt/ngày mặc định 5 khi thiếu config; còn dưới trần → quay bình thường', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
+    (prisma.gameSpin.count as jest.Mock).mockResolvedValueOnce(4).mockResolvedValueOnce(5);
+    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }), analytics);
+    await expect(svc.spin('u1')).resolves.toBeDefined();
+    await expect(svc.spin('u1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.gameSpin.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('đếm lượt TRONG tx, SAU khi trừ điểm (khoá dòng user) và theo ngày giờ VN', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
+    const svc = new GameService(
+      prisma,
+      makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES, 'game.spin_buy_daily_limit': 5 }),
+      analytics,
+    );
+    await svc.spin('u1');
+    const dec = (prisma.user.updateMany as jest.Mock).mock.invocationCallOrder[0]!;
+    const cnt = (prisma.gameSpin.count as jest.Mock).mock.invocationCallOrder[0]!;
+    expect(cnt).toBeGreaterThan(dec);
+    const where = (prisma.gameSpin.count as jest.Mock).mock.calls[0][0].where;
+    expect(where.userId).toBe('u1');
+    const since: Date = where.spunAt.gte;
+    // 00:00 giờ VN = 17:00 UTC hôm trước.
+    expect(since.getUTCHours()).toBe(17);
+    expect(Date.now() - since.getTime()).toBeLessThan(864e5);
+  });
+
   /**
    * Task 9: quay xong → engagement_action ghi qua record(tx,...) — PHẢI dùng đúng `tx` của
    * transaction đang chạy (atomic cùng transaction), KHÔNG phải recordBestEffort. Dựng tx RIÊNG
@@ -131,7 +178,7 @@ describe('GameService.spin', () => {
       user: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), update: jest.fn().mockResolvedValue({}) },
       pointsTransaction: { create: jest.fn().mockResolvedValue({}) },
       gameProfile: { update: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      gameSpin: { create: jest.fn().mockResolvedValue({}) },
+      gameSpin: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
       coupon: { create: jest.fn().mockResolvedValue({}) },
     };
     (prisma.$transaction as jest.Mock).mockImplementation((cb: (t: unknown) => unknown) => cb(tx));
