@@ -437,9 +437,10 @@ function CartLineRow({
             </Text>
           </Box>
         )}
-        <Box flex alignItems="center" style={{ marginTop: 8 }}>
+        {/* Stepper 44px + thùng rác 44px rộng ~180px: máy hẹp (320px) cho thùng rác xuống dòng thay vì tràn khỏi thẻ. */}
+        <Box flex alignItems="center" style={{ marginTop: 8, flexWrap: 'wrap', rowGap: 4 }}>
           <QuantitySelector
-            size="sm"
+            size="md"
             value={localQty}
             max={Math.max(1, line.stock)}
             onChange={setLocalQty}

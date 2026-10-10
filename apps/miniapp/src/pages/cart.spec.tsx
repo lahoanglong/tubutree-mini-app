@@ -128,4 +128,14 @@ describe('CartPage — vùng chạm >= 44px (C-021)', () => {
     const undo = await screen.findByRole('button', { name: 'Hoàn tác' });
     expect(undo.className).toContain('tubu-hit-44');
   });
+
+  it('nút tăng/giảm số lượng vuông tối thiểu 44x44 (trước đây 36x36)', async () => {
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    for (const name of ['Giảm số lượng', 'Tăng số lượng']) {
+      const btn = screen.getByRole('button', { name });
+      expect(Number.parseFloat(btn.style.width)).toBeGreaterThanOrEqual(44);
+      expect(Number.parseFloat(btn.style.height)).toBeGreaterThanOrEqual(44);
+    }
+  });
 });
