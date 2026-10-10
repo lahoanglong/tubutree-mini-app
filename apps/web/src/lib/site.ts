@@ -23,3 +23,18 @@ export function isPortalPath(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
   return PORTAL_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
+
+const SYSTEM_SUBDOMAINS = ['www', 'admin', 'api', 'app', 'mail'];
+
+/**
+ * Subdomain gian hàng CTV của một host, hoặc null khi là host gốc/hệ thống. Khớp quy tắc ở
+ * middleware.ts, nơi `/` trên host này bị rewrite sang /s/{subdomain} (nên ?q= ở trang chủ không tới được).
+ */
+export function tenantSubdomainOf(host: string | null | undefined): string | null {
+  const hostname = (host ?? '').split(':')[0]!.toLowerCase();
+  const parts = hostname.split('.');
+  let sub: string | null = null;
+  if (hostname.endsWith('.localhost') && parts.length === 2) sub = parts[0]!;
+  else if (parts.length >= 3 && !hostname.endsWith('.localhost')) sub = parts[0]!;
+  return sub && !SYSTEM_SUBDOMAINS.includes(sub) ? sub : null;
+}

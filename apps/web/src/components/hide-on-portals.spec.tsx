@@ -19,11 +19,12 @@ describe('HideOnPortals', () => {
   it('hiện ở trang khách', () => {
     expect(out('/')).toBe('<footer>chân trang</footer>');
     expect(out('/san-pham/xa-phong')).toContain('chân trang');
+    // /brand/[slug] là trang nhãn hàng công khai, khách vẫn cần lối liên hệ.
+    expect(out('/brand/abc')).toContain('chân trang');
   });
 
-  it('ẩn ở /admin, /merchant, /brand', () => {
+  it('ẩn ở /admin, /merchant', () => {
     expect(out('/admin')).toBe('');
     expect(out('/merchant/doanh-thu')).toBe('');
-    expect(out('/brand/abc')).toBe('');
   });
 });

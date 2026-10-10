@@ -8,7 +8,32 @@ import { accessibleName, smallTouchTargets, unnamedControls } from '@/test-utils
 // header (mọi trang khách) và đưa khách về trang chủ kèm ?q=.
 
 const push = vi.hoisted(() => vi.fn());
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
+// useSearchParams giả có thể đổi giữa chừng (như điều hướng mềm đổi ?q=) để kiểm ô nhập đồng bộ theo URL.
+const nav = vi.hoisted(() => ({
+  params: new URLSearchParams(),
+  listeners: new Set<() => void>(),
+}));
+vi.mock('next/navigation', async () => {
+  const React = await import('react');
+  return {
+    useRouter: () => ({ push }),
+    useSearchParams: () =>
+      React.useSyncExternalStore(
+        (cb) => {
+          nav.listeners.add(cb);
+          return () => nav.listeners.delete(cb);
+        },
+        () => nav.params,
+        () => nav.params,
+      ),
+  };
+});
+const setUrlQuery = (qs: string) => {
+  act(() => {
+    nav.params = new URLSearchParams(qs);
+    nav.listeners.forEach((l) => l());
+  });
+};
 
 import SiteSearch from './site-search';
 
@@ -24,13 +49,35 @@ const submit = (container: HTMLElement) => {
   });
 };
 
-beforeEach(() => push.mockReset());
+beforeEach(() => {
+  push.mockReset();
+  nav.params = new URLSearchParams();
+});
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
 });
 
 describe('SiteSearch', () => {
+  it('vào thẳng /?q=... thì ô nhập hiện từ khoá đang tìm', () => {
+    nav.params = new URLSearchParams('q=dầu gội');
+    const { container } = mount();
+    expect(container.querySelector('input')!.value).toBe('dầu gội');
+  });
+
+  it('URL đổi q (vd. bấm "Xóa tìm kiếm") thì ô nhập đổi theo, còn đang gõ dở thì không bị ghi đè', () => {
+    nav.params = new URLSearchParams('q=dầu gội');
+    const { container } = mount();
+    const field = () => container.querySelector('input')!;
+    typeInto(field(), 'dầu gội bồ kết');
+    expect(field().value).toBe('dầu gội bồ kết');
+    setUrlQuery('');
+    expect(field().value).toBe('');
+    setUrlQuery('q=xà phòng');
+    expect(field().value).toBe('xà phòng');
+  });
+
+
   it('là landmark tìm kiếm, ô nhập và nút có tên truy cập, vùng chạm 44px', () => {
     const { container } = mount();
     const form = container.querySelector('form')!;
