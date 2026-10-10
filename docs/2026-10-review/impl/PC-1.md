@@ -65,5 +65,80 @@ Không có.
 - Web: đổi shade trong khối palette v1 tạm thời thay vì đổi hàng trăm class; khi PC-7 chuyển web sang palette DS v2 thì khối này bị xoá và test tương phản trong `tailwind.config.spec.ts` cần chuyển sang token mới.
 - `display: contents` cho `<main>`: nếu WebView Zalo đời cũ không phơi landmark qua `display: contents` thì chỉ mất lợi ích a11y, không ảnh hưởng bố cục.
 
-### Việc còn lại (mục 2/2 của gói)
-C-068 (Chip 44px), C-070 (Button khoá bấm đúp), C-071 (vùng cuộn ngang), C-072 (thẻ SP không lồng tương tác), C-077 phần `components/ui`, C-021 phần component; phần `<h1>` của C-114 cho các trang chưa dùng `PageHeader`.
+### Việc còn lại sau mục 1/2
+Đã làm ở mục 2/2 bên dưới. Riêng phần `<h1>` của C-114 cho các trang chưa dùng `PageHeader` vẫn còn (thuộc `pages/**`).
+
+## Mục 2/2 — C-068, C-070, C-071, C-072, C-077 (phần ui), C-021 (phần component)
+
+Trạng thái: C-068 XONG, C-070 XONG, C-071 XONG (component + dải thương hiệu Home; các rail ngoài nhóm file chưa chuyển), C-072 XONG, C-077 MỘT PHẦN (đúng phần `components/ui`), C-021 XONG phần component (các trang để gói khác).
+Chưa chạy axe/Playwright (quy định RAM): các kiểm chứng bên dưới là vitest + đọc CSSOM/DOM; số đo `tap<44`, `nested-interactive`, `scrollable-region-focusable`, `label` thật cần chạy `capture.mjs` + `build-report-data.mjs` ở máy được phép.
+
+### C-068 — Chip 44px (XONG)
+
+- Phát hiện gốc đã lỗi thời một phần: `chip.tsx` có `.tubu-hit-44` (::after cao 44px) từ đợt 4b. Chỗ còn hở là chiều RỘNG: `::after` chỉ giãn dọc nên chip một ký tự ("5", "x") hẹp hơn 44px. Thêm `minWidth: 44` cho cả `sm` và `md`, hình dạng nhìn thấy (36/32px cao) không đổi.
+- Test: `chip.spec.tsx` +1 ca (đỏ: `minWidth` rỗng; xanh sau sửa) — đọc `tokens.css` kiểm `.tubu-hit-44::after` cao 44px và cả hai cỡ có `tubu-hit-44` + `minWidth 44px`.
+
+### C-070 — Button khoá bấm đúp đồng bộ (XONG)
+
+- `button.tsx`: `useRef` `inFlight`; khi `onPress` trả thenable, khoá tới khi settle (cả resolve lẫn reject). `onPress` đồng bộ KHÔNG khoá (nút +/- phải bấm dồn được). Lỗi reject được ném lại trong nhánh dẫn xuất để `unhandledrejection` toàn cục (`app.tsx:142`) vẫn thấy đúng như trước, không bị nuốt.
+- Kiểu `onPress` giữ `() => void` (thử mở rộng thành `void | Promise<unknown>` làm vỡ `subscriptions-panel.tsx:131` trả `"" | null`; đã hoàn lại, `() => Promise` vẫn gán được vào `() => void`).
+- Test `button.spec.tsx` +5 ca (đỏ: bấm 2 lần đồng bộ gọi 2 lần): bấm đôi đồng bộ chỉ chạy 1 lần; Promise xong thì nhả khoá; reject cũng nhả (dùng thenable giả để vitest không coi unhandledrejection là lỗi); lỗi tới nơi báo lỗi toàn cục; onPress đồng bộ không bị khoá. Ca hành vi đặt ở `button.spec.tsx` thay vì `button-guard.spec.ts` (file đó là quét mã nguồn, không render); `button-guard.spec.ts` vẫn xanh.
+
+### C-071 — vùng cuộn ngang focus được + gợi ý cuộn (XONG phần component)
+
+- Mới: `ui/use-scroll-hints.ts` (đo `scrollWidth/clientWidth/scrollLeft` sau mỗi render, khi cuộn, khi đổi kích thước bằng `ResizeObserver`, lùi về `resize` nếu thiếu) và `ui/scroll-row.tsx` (`ScrollRow`: `role="region"` + `aria-label`, `.scroll-x`). `tabIndex=0` chỉ khi hàng tràn mà KHÔNG có phần tử focus được bên trong (đúng điều kiện axe `scrollable-region-focusable`, không thêm điểm dừng Tab thừa cho hàng chip/nút). Gợi ý cuộn: thuộc tính `data-fade-start/end` + 3 quy tắc `.tubu-scroll-fade` trong `tokens.css` mờ mép bằng `mask-image` (không cần biết màu nền, khác gradient phủ).
+- Áp dụng: `segmented-tabs.tsx` (chế độ `scroll`, giữ `role="tablist"`), `home-extras.tsx` dải thương hiệu (`vi.home.brandsRail`, nhãn khác nhãn `section` bao ngoài để không trùng landmark).
+- Test: `scroll-row.spec.tsx` (9 ca; đỏ do thiếu module) + `home-parts.spec.tsx` +1 ca (đỏ: không tìm thấy vùng có tên).
+- KHÔNG sửa `purchased-rail.tsx` cho C-071: thẻ bên trong đã có nút focus được nên axe không báo, và gói PC-3 đang sửa file này. Rail ngoài nhóm file chưa chuyển sang `ScrollRow`: `catalog/sort-chips`, `catalog/result-header`, `catalog/recently-viewed-rail`, `pages/feed`, `pages/product-detail`, `pages/brand-view`, `flash-sale.tsx`, `pages/about`, `pages/dealer` — gói sở hữu các file đó thay `<div className="scroll-x">` bằng `<ScrollRow label=...>`.
+
+### C-072 — thẻ sản phẩm không lồng tương tác (XONG)
+
+- `product-tile.tsx`: vỏ thẻ không còn `role=button`/`tabIndex`/`onKeyDown`. Phần tử bấm được là nút tên `<button class="tubu-tile-link">` (giữ `aria-label` = tên SP và `aria-describedby` = giá, nên mọi nơi tìm thẻ theo tên truy cập vẫn chạy); `::after` của nó phủ kín vỏ thẻ (`position:relative`) nên chạm đâu trên thẻ cũng mở chi tiết. Tim yêu thích và "Mua lại" là anh em của nút tên, nổi lên bằng `z-index:1`; vỏ thẻ `isolation:isolate` để z-index đó không vượt lên thanh dính của trang. Ảnh `alt=""` (tên đã có ở nút tên, tránh đọc đôi). Vòng focus vẽ trên `::after` để bao cả thẻ. Enter/Space do `<button>` native lo, bỏ `onKeyDown` tự chế.
+- CSS thêm vào `apps/miniapp/src/css/tokens.css` (`.tubu-tile-link::after` + focus-visible), cạnh `.tubu-hit-44`.
+- `purchased-rail.tsx` KHÔNG cần đổi: nó chỉ bọc `ProductTile` trong `div` không tương tác; hết lồng là nhờ `ProductTile`.
+- Test `product-tile.spec.tsx`: viết lại ca bàn phím bằng `userEvent` (bỏ ca Space/repeat vì không còn mã tự chế), +7 ca C-072 (đỏ: 6/6 trước sửa, ca `isolation` thêm sau và cũng đỏ trước sửa): không phần tử bấm được nào chứa phần tử bấm được khác (lưới có tim, kệ Mua lại), nút tên không có `position` còn vỏ `relative`, tim/Mua lại có `zIndex 1`, `isolation`, CSS `::after` kín thẻ + vòng focus.
+- Sửa kèm vì phụ thuộc cấu trúc cũ (ngoài nhóm file, thay đổi tối thiểu): `components/catalog/catalog-grid.spec.tsx` (selector `[role="button"][aria-label]` thành `button.tubu-tile-link`; ca bàn phím dùng `userEvent`), `apps/e2e/tests/buy-flow-4b-browse.miniapp.spec.ts` dòng 22 `tilesOf` (cùng lý do; Playwright chưa chạy nên chưa kiểm chứng; các chỗ khác trong e2e dùng `getByRole('button', {name})`/`[aria-label=...]` vẫn khớp nút tên).
+
+### C-077 — phần `components/ui` (MỘT PHẦN)
+
+- `Field` (`form.tsx`): trước đây nhãn là `Text` anh em, không gắn với control (comment cũ trong `address-form.spec.tsx` thừa nhận `getByLabelText` không match). Nay nhãn là `<label htmlFor>`; khi con là đúng một phần tử, Field `cloneElement` cấp `id` (xuyên qua `Input` ZaUI xuống `<input>`; giữ `id` có sẵn), có lỗi thì thêm `aria-invalid` + `aria-describedby` trỏ vào khối lỗi. Nhiều con thì bọc `role="group"` có tên theo nhãn.
+- `Checkbox`/`Radio`/`Switch` (`form.tsx`): control KHÔNG có tên (không `label`/`children`/`aria-label`/`aria-labelledby`) — chính là 6 ô `label` ở `checkout` (chấm chọn thị giác trong hàng cha `role=radio/checkbox` đã có tên và tự xử lý bấm) — được coi là trang trí: khối bọc `aria-hidden`, `<input tabIndex=-1>`, vẫn bấm/đổi giá trị bình thường. Control có tên giữ nguyên.
+- `TimeInput` nhận `id`/`aria-*`; luôn có tên (mặc định "Giờ", `vi.common.timeInput`) trừ khi có nguồn tên khác (Field cấp `id`, hoặc `aria-label`/`aria-labelledby`), vì `aria-label` thắng `<label for>`.
+- `QuantitySelector`: hai nút từ `Box role="button"` (không focus được) thành `<button type="button">` có tên, Tab/Enter/Space chạy.
+- `IconButton`: đã bắt buộc `label` ở kiểu + lint (không đổi). `SearchField` (nhãn + nhãn nút xoá bắt buộc) đã đạt.
+- Test (đỏ rồi xanh): `form.spec.tsx` +11 ca (9 đỏ), `time-input.spec.tsx` mới 4 ca (4 đỏ), `quantity-selector.spec.tsx` mới 6 ca (3 đỏ). `address-form.spec.tsx` chỉ đổi helper `inputNear` sang `getByLabelText` (phản ánh việc nhãn nay đã gắn).
+- CHƯA làm (thuộc `pages/**`, gói khác): `settings.tsx:132` switch tự chế `role=switch` không tên (nên dùng `ui/form` `Switch label=...`), `feed`/`refill`/`my-payroll`/`staff` nút icon thô (dùng `IconButton`), `edit-profile`/`brand-owner` ô nhập (bọc `Field`), `<select>` admin web (PC-11). Quan sát thêm, chưa sửa vì không thuộc mục: `ui/card.tsx` và `ui/tiles.tsx` (`StatTile`) có `role="button"` nhưng không `tabIndex`/bàn phím (`ListRow` đã làm đúng).
+
+### C-021 — vùng chạm phần component (XONG)
+
+- `QuantitySelector`: `sm` (dòng giỏ, dealer) nhìn 36px nhưng chạm 44x44 nhờ lớp mới `.tubu-hit-44-square` (`::after` 44x44 căn giữa); `md` đã 44. Không đổi bố cục/footprint dòng giỏ. Giữ nguyên style `border/background` trên chính nút và `aria-disabled` (e2e `design-system-pilot` kiểm đúng hai thứ này).
+- `SegmentedTabs` thêm `minWidth: 44`.
+- Test: `hit-target-guard.spec.tsx` mới (13 ca) quét mọi component bấm được của DS v2 (Button md/lg, IconButton md/sm, Chip md/sm, SegmentedTabs, QuantitySelector md/sm, ListRow, Checkbox/Radio/Switch) kiểm kích thước khai báo >= 44x44 hoặc lớp `tubu-hit-44*` (đỏ: SegmentedTabs thiếu chiều rộng); component mới thêm vào danh sách mà quên sẽ bị bắt.
+- Các trang trong catalog C-021 (`cart`, `checkout`, `storefront-builder`, `feed`, `dealer`, `about`) dùng component trên nên được hưởng phần `QuantitySelector`; nút thô riêng của từng trang (xoá, chip tự chế) thuộc gói trang.
+
+### Lệnh kiểm chứng và output thật (mục 2/2)
+
+```
+apps/miniapp: npx vitest run src/components  -> Test Files 56 passed (56), Tests 390 passed (390)
+              npx vitest run src/pages src/*.spec.ts src/*.spec.tsx -> Test Files 13 passed (13), Tests 190 passed (190)
+              npx vitest run src/components/ui src/components/catalog src/components/reorder src/components/home -> 44 files, 337 tests passed (lần cuối, sau commit cuối)
+              npx tsc --noEmit  -> sạch (lần đầu bắt 1 lỗi `subscriptions-panel.tsx:131` do mở rộng kiểu onPress; đã hoàn kiểu)
+              npx eslint <mọi file đã sửa/mới>  -> 0 lỗi
+packages/design-tokens: npx vitest run -> Test Files 3 passed (3), Tests 30 passed (30)
+```
+
+### Migration
+Không có.
+
+### Giả định
+- `ScrollRow` dùng `role="region"` (theo đề xuất A4-029) thay vì `group`; mỗi rail cần nhãn khác nhãn `section` bao ngoài để không trùng landmark.
+- Control form không tên = trang trí (ẩn khỏi AT + khỏi Tab). An toàn vì mọi chỗ dùng hiện nay là chấm chọn thị giác có hàng cha lo ngữ nghĩa; nếu sau này ai dùng control không tên làm control thật, nó sẽ biến mất khỏi bàn phím — test ghi rõ hành vi này. Gói trang `checkout` nên kiểm hàng cha đã có `tabIndex`/phím (hàng `role=radio` ở `checkout.tsx:433` hiện chưa có `tabIndex`).
+- `Field` dùng `cloneElement` nên chỉ gắn nhãn tự động khi con là đúng một phần tử và component đó chuyển `id` xuống DOM (Input ZaUI, `<input>`, `TimeInput`, `Checkbox/Radio/Switch` của DS đều đạt); trường hợp khác rơi về nhóm `role="group"`.
+- `Button`: chỉ khoá khi `onPress` trả thenable; handler trả Promise mà không bao giờ settle sẽ khoá nút vĩnh viễn (tương đương `loading` treo mãi).
+- Mờ mép bằng `mask-image` (có tiền tố `-webkit-`): chưa kiểm chứng trên WebView Zalo đời cũ; nếu không hỗ trợ thì chỉ mất gợi ý, không ảnh hưởng cuộn/bấm.
+
+### Việc còn lại của gói
+- ĐI KÈM BẮT BUỘC với thay đổi Checkbox/Radio/Switch không tên: hàng cha `role=radio/checkbox` ở `pages/checkout.tsx` (khoảng dòng 433-600: phương thức thanh toán, dùng điểm, thu gom, hoá đơn) hiện KHÔNG có `tabIndex`/phím; trước đây người dùng bàn phím tới được `<input>` không tên bên trong, nay input đó bị ẩn khỏi Tab. Trình đọc màn hình cảm ứng (TalkBack/VoiceOver) không bị ảnh hưởng vì dùng cây truy cập của hàng cha. Gói sở hữu `checkout` cần thêm `tabIndex={0}` + Enter/Space cho các hàng này (hoặc dùng `ListRow`/`Radio label=...`).
+- C-114: `<h1>` cho các trang chưa dùng `PageHeader` (`pages/**`; web 3 trang thuộc PC-7/PC-8).
+- Chuyển các rail ngoài nhóm file sang `ScrollRow`; chuyển `settings.tsx` switch / nút icon thô sang component DS (các gói trang).
+- Chạy axe + `capture.mjs` (cả mục 1 và 2) khi có máy được phép dùng Playwright; chạy lại e2e `buy-flow-4b-browse` (selector `tilesOf` mới) và `design-system-pilot` (nút +/-).
