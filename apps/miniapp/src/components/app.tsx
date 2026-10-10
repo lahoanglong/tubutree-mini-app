@@ -15,6 +15,7 @@ import { recordReferralTouch } from '../services/affiliate-api';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
 import { NavigationTypeProvider } from '../hooks/use-navigation-type';
 import { trackEvent, flushEventQueueOnHide } from '../services/analytics';
+import { useLegacyNotifyPrefsSync } from '../pages/settings-legacy-sync';
 
 import { applyFontScale } from '../utils/font-scale';
 
@@ -126,6 +127,7 @@ export default function MyApp() {
     void restore(); // silent login từ refresh token đã lưu
     applySavedFontScale();
   }, [restore]);
+  useLegacyNotifyPrefsSync(authed);
 
   // Phát đúng 1 lần lúc mở app (deps rỗng — không phụ thuộc state nào nên không chạy lại
   // khi re-render). Cùng effect này gắn luôn global error handler (window.onerror +
