@@ -4,20 +4,22 @@ import { tailwindPreset } from '@tubutree/design-tokens';
 
 // Design System v2 (docs/superpowers/plans/2026-09-28-design-system-v2.md, Task 5) shares the
 // `@tubutree/design-tokens` preset (forest-*/sage-*/stone-*/honey-*/terracotta-*, fonts, semantic
-// radii) with apps/miniapp.
+// radii) with apps/miniapp. Web khách (trang chủ, header/footer, thẻ sản phẩm...) đã chuyển sang các
+// thang này (C-097, Q-25); danh sách file đã chuyển được khoá bởi src/ds-v2-guest.spec.ts.
 //
-// ─── LEGACY v1 WEB PALETTE — TẠM THỜI (final review C2) ─────────────────────────────────────
-// apps/web is NOT migrated in sub-project 3 (spec §7). Removing this palette made 1,049
-// primary-/leaf-/sun-/neutral- class uses across 36 files emit NO CSS (login + checkout CTAs
-// became white text on a transparent background). The block below restores, VERBATIM from the
-// merge-base (22e36d4), what web rendered in production before this branch:
+// ─── LEGACY v1 WEB PALETTE — CHỈ CÒN CHO TRANG CHƯA CHUYỂN ─────────────────────────────────
+// Trang khách còn lại và toàn bộ /admin, /merchant, /brand (gói PC-11/PD-1) vẫn dùng
+// primary-/leaf-/sun-/neutral-. Removing this palette made 1,049 class uses across 36 files emit NO
+// CSS (login + checkout CTAs became white text on a transparent background). The block below
+// restores, VERBATIM from the merge-base (22e36d4), what web rendered in production before DS v2:
 //   - custom primary/leaf/clay/sun/neutral hex;
 //   - Tailwind's STOCK neutral shades web relied on implicitly (old `extend.neutral` merged
 //     per-shade over the stock scale; the preset now sets `neutral: undefined`, which wipes the
 //     stock scale — so the shades web still uses are re-added explicitly from tailwindcss/colors);
 //   - old custom borderRadius sm/md/lg/xl.
 // `extend` here merges AFTER the preset, so it wins over the preset's `neutral: undefined` and
-// its clay-50/500/700. Delete shade-by-shade as web pages migrate to DS v2 (sub-project 4+).
+// its clay-50/500/700 — nên trang đã chuyển KHÔNG dùng `clay-*` mà dùng `promo-*` bên dưới.
+// Delete shade-by-shade as web pages migrate to DS v2; xoá cả khối khi trang cuối cùng chuyển xong.
 // Shades web references that were ALSO undefined at the merge-base (primary-300/500/800,
 // leaf-300/500/800, clay-800) are intentionally NOT invented here — parity with prod, not a
 // redesign; see .superpowers/sdd/2026-09-28-design-system-v2/final-fix-report.md.
@@ -60,13 +62,20 @@ const legacyV1Colors = {
   },
 };
 
+// Màu khuyến mãi theo token --color-promo-* (tokens.css). Đọc thẳng từ clay của preset để không lệch
+// hex, và đặt tên riêng vì `clay-*` của web bị khối legacy ghi đè (xem chú thích trên).
+const presetClay = (tailwindPreset.theme?.extend?.colors as unknown as { clay: Record<number, string> }).clay;
+const promo = { fg: presetClay[700]!, bg: presetClay[50]!, solid: presetClay[600]! };
+
 const config: Config = {
   presets: [tailwindPreset],
   content: ['./src/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      colors: legacyV1Colors,
+      colors: { ...legacyV1Colors, promo },
       borderRadius: { sm: '6px', md: '10px', lg: '16px', xl: '24px' },
+      // Bóng đổ ấm của DS v2 (tokens.css --elevation-*); cần tokens.css được nạp trong globals.css.
+      boxShadow: { card: 'var(--elevation-1)', raised: 'var(--elevation-2)' },
     },
   },
   plugins: [],
