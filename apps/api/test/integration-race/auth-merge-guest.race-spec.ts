@@ -252,12 +252,32 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     ]);
     gate.mockRestore();
     const s = summarize(results);
-    // eslint-disable-next-line no-console
     console.log('[race] fulfilled=%d rejected=%d errors=%j', s.fulfilled.length, s.rejected.length, s.errors);
 
     expect(s.fulfilled).toHaveLength(2);
     for (const r of s.fulfilled) expect(r.value.user.id).toBe(target.id);
     const t = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
     expect([t.pointsBalance, t.coinsBalance, t.walletBalance, t.cashbackPending]).toEqual([51, 11, 30_001, 2_001]);
+  });
+
+  it('merge: two guest devices upgrading to the same new Zalo account at once -> loser merges into winner, no 500', async () => {
+    const g1 = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}`, pointsBalance: 3 });
+    const g2 = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}`, pointsBalance: 4 });
+    zaloIdForNextCall = `zalo_new_${randCode(10)}`;
+
+    // Cả hai cùng thấy "chưa ai giữ zaloId này" rồi cùng nâng cấp tại chỗ.
+    const gate = barrierOnFirstCalls(prisma.user, 'findUnique', 2);
+    const results = await Promise.allSettled([
+      auth.ensurePhoneForCurrentUser(g1.id, 'code', 'access'),
+      auth.ensurePhoneForCurrentUser(g2.id, 'code', 'access'),
+    ]);
+    gate.mockRestore();
+    const s = summarize(results);
+    console.log('[upgrade-race] fulfilled=%d rejected=%d errors=%j', s.fulfilled.length, s.rejected.length, s.errors);
+
+    expect(s.fulfilled).toHaveLength(2);
+    const winner = await prisma.user.findUniqueOrThrow({ where: { zaloId: zaloIdForNextCall } });
+    for (const r of s.fulfilled) expect(r.value.user.id).toBe(winner.id);
+    expect(winner.pointsBalance).toBe(7);
   });
 });
