@@ -7,7 +7,7 @@ import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
 import { CoinsService } from '../wallet/coins.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
-import { DEFAULT_TREE_TYPE } from './game.constants';
+import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
 
 type TreeHealth = 'HEALTHY' | 'WILTED' | 'DEAD';
 type UnlockCurrency = 'SEEDS' | 'XU';
@@ -141,6 +141,7 @@ export class GameGardenService {
 
     const deathDays = await this.config.get<number>('game.death_days', 7);
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
+    const harvestMinOrder = await harvestCouponMinOrder(this.config, harvestAmount);
     // Trần cứng số coupon thu hoạch/ngày — mirror waterTree() ở game.service.ts (P0-1): xu mua
     // nước rẻ hơn nhiều giá trị coupon thu hoạch, không có trần thì vòng mua-nước→tưới→thu-hoạch
     // in coupon vô hạn ở LÔ PHỤ cũng như lô nhà.
@@ -214,7 +215,7 @@ export class GameGardenService {
             // Cây thật + chứng nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn/ngày.
             certificate = await this.plantTree(userId, plot.treeType, db);
             if (couponsToday < dailyCap) {
-              coupon = await this.grantCoupon(userId, harvestAmount, db);
+              coupon = await this.grantCoupon(userId, harvestAmount, harvestMinOrder, db);
               couponsToday += 1;
             }
           }
@@ -324,11 +325,11 @@ export class GameGardenService {
   }
 
   /**
-   * minOrder = chính giá trị coupon (mirror groupbuy.service.ts grantCoupon + game.service.ts
-   * grantCoupon, P0-2): không có ràng buộc này, coupon AMOUNT dùng được trên BẤT KỲ đơn nào
+   * minOrder không bao giờ thấp hơn giá trị coupon (mirror groupbuy.service.ts grantCoupon, P0-2):
+   * không có ràng buộc này, coupon AMOUNT dùng được trên BẤT KỲ đơn nào
    * (CouponsService.validateAndCompute chỉ trừ min(value, subtotal), không xét sản phẩm).
    */
-  private async grantCoupon(userId: string, amount: number, db: Db = this.prisma): Promise<string> {
+  private async grantCoupon(userId: string, amount: number, minOrder: number, db: Db = this.prisma): Promise<string> {
     const code = `GARDEN${amount}-${userId.slice(-5)}-${Math.floor(Math.random() * 9000 + 1000)}`.toUpperCase();
     const end = new Date();
     end.setDate(end.getDate() + 30);
@@ -337,7 +338,7 @@ export class GameGardenService {
         code,
         type: 'AMOUNT',
         value: amount,
-        minOrder: amount,
+        minOrder: Math.max(amount, minOrder),
         startAt: new Date(),
         endAt: end,
         perUserLimit: 1,

@@ -282,9 +282,9 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
             },
           },
           coinTransaction: {
-            create: async ({ data }: { data: { delta: number } }) => {
-              pending.ledger.push(data.delta);
-              return {};
+            createMany: async ({ data }: { data: { delta: number }[] }) => {
+              pending.ledger.push(...data.map((d) => d.delta));
+              return { count: data.length };
             },
           },
           user: {

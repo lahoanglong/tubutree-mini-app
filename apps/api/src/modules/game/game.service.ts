@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, GoneException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -7,7 +7,7 @@ import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
 import { CoinsService } from '../wallet/coins.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
-import { DEFAULT_TREE_TYPE } from './game.constants';
+import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 interface SpinPrize {
@@ -104,6 +104,9 @@ export class GameService {
   // ── Spin wheel ─────────────────────────────────────
   async spin(userId: string) {
     const cost = await this.config.get<number>('game.spin_buy_cost_points', 10);
+    const rawLimit = Number(await this.config.get<number>('game.spin_buy_daily_limit', 5));
+    // Config hỏng rơi về mặc định; 0/âm nghĩa là khoá vòng quay (không hiểu thành "không giới hạn").
+    const dailyLimit = Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 5;
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.pointsBalance < cost) {
       throw new BadRequestException(`Cần ${cost} điểm Xanh để quay.`);
@@ -120,6 +123,17 @@ export class GameService {
         data: { pointsBalance: { decrement: cost } },
       });
       if (dec.count === 0) throw new BadRequestException(`Cần ${cost} điểm Xanh để quay.`);
+      // Đếm SAU updateMany ở trên: lệnh đó giữ khoá dòng user tới hết tx, nên các lượt quay song
+      // song của cùng user xếp hàng ở đây, và (READ COMMITTED) mỗi câu lệnh mới thấy lượt quay mà
+      // tx trước đã commit — không thể cùng đọc "còn lượt" rồi cùng vượt trần.
+      const spunToday = await tx.gameSpin.count({
+        where: { userId, spunAt: { gte: this.startOfDay(new Date()) } },
+      });
+      if (spunToday >= dailyLimit) {
+        throw new BadRequestException(
+          dailyLimit > 0 ? `Bạn đã quay đủ ${dailyLimit} lượt hôm nay. Hẹn bạn ngày mai nhé!` : 'Vòng quay đang tạm đóng.',
+        );
+      }
       await tx.pointsTransaction.create({
         data: { userId, delta: -cost, reason: 'GAME_SPIN_COST', refType: 'GAME' },
       });
@@ -173,6 +187,7 @@ export class GameService {
     if (drops <= 0) throw new BadRequestException('Số giọt nước không hợp lệ.');
 
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
+    const harvestMinOrder = await harvestCouponMinOrder(this.config, harvestAmount);
     const deathDays = await this.config.get<number>('game.death_days', 7);
     // Trần cứng số coupon thu hoạch/ngày — ĐỘC LẬP với giá xu/giọt nước trong config.
     // Xu mua nước (mặc định 1 xu/giọt ≈ 0,83đ quy đổi) rẻ hơn nhiều lần giá trị coupon
@@ -243,7 +258,7 @@ export class GameService {
             // Cây thật + chứng nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn/ngày.
             certificateCode = await this.plantTree(userId, eco.treeType, tx);
             if (couponsToday < dailyCap) {
-              couponCode = await this.grantCoupon(userId, harvestAmount, tx);
+              couponCode = await this.grantCoupon(userId, harvestAmount, tx, harvestMinOrder);
               couponsToday += 1;
             }
           }
@@ -335,34 +350,13 @@ export class GameService {
   }
 
   // ── Mua bằng TubuXu (sink tiêu xu) ─────────────────
-  /** Mua nước (giọt) bằng TubuXu. Trừ xu + cộng totalSeeds ATOMIC, không vượt sức chứa bình. */
-  async buySeeds(userId: string, seeds: number) {
-    if (!this.coins) throw new BadRequestException('Tính năng mua nước chưa khả dụng.');
-    if (!Number.isInteger(seeds) || seeds <= 0) throw new BadRequestException('Số giọt nước không hợp lệ.');
-    const xuPerSeed = await this.config.get<number>('game.xu_per_seed', 1);
-    const cap = await this.config.get<number>('game.tank_capacity', 500);
-    const cost = seeds * xuPerSeed;
-
-    const profile = await this.ensureProfile(userId);
-    const newTotal = profile.totalSeeds + seeds;
-    // Check sớm (UX, fail-fast trước khi trừ xu); guard THẬT là updateMany atomic bên dưới.
-    if (newTotal > cap) {
-      throw new BadRequestException(`Bình chứa tối đa ${cap}💧 — không thể mua thêm ${seeds}💧.`);
-    }
-    await this.prisma.$transaction(async (tx) => {
-      await this.coins!.spendCoins(userId, cost, 'GAME_BUY_SEEDS', 'GAME', undefined, tx);
-      // Cộng totalSeeds ATOMIC bằng increment + guard cap trong CÙNG tx — chống lost-update khi
-      // 2 lệnh mua song song (set giá trị tuyệt đối đọc-ngoài-tx sẽ ghi đè nhau → mất xu/quá cap).
-      // count=0 = đã đầy bình do lệnh khác → throw rollback (hoàn lại xu vừa spendCoins).
-      const inc = await tx.gameProfile.updateMany({
-        where: { userId, totalSeeds: { lte: cap - seeds } },
-        data: { totalSeeds: { increment: seeds } },
-      });
-      if (inc.count === 0) {
-        throw new BadRequestException(`Bình chứa tối đa ${cap}💧 — không thể mua thêm ${seeds}💧.`);
-      }
-    });
-    return { seeds, cost, totalSeeds: newTotal };
+  /**
+   * Đã ngừng (C-009, quyết định Q-02): xu mua nước rẻ hơn rất nhiều so với coupon thu hoạch nên
+   * Ví → xu → 💧 → coupon thành vòng in tiền. Route vẫn giữ để bản miniapp cũ nhận lỗi đọc được
+   * thay vì 404.
+   */
+  async buySeeds(_userId: string, _seeds: number): Promise<never> {
+    throw new GoneException('Tính năng mua giọt nước bằng xu đã ngừng. Hãy điểm danh, làm quiz hoặc nhận sương sớm để có thêm nước.');
   }
 
   /** Mua 1 cây THẬT (PlantedTree, cam kết trồng qua PanNature) bằng TubuXu. */
@@ -566,12 +560,18 @@ export class GameService {
 
   /**
    * Tạo coupon cá nhân AMOUNT cho user (thưởng game). Trả về code.
-   * minOrder = chính giá trị coupon (mirror groupbuy.service.ts grantCoupon, P0-2): không có
-   * ràng buộc này, coupon AMOUNT không có product/minOrder restriction dùng được trên BẤT KỲ
+   * minOrder mặc định = chính giá trị coupon (mirror groupbuy.service.ts grantCoupon, P0-2): không
+   * có ràng buộc này, coupon AMOUNT không có product/minOrder restriction dùng được trên BẤT KỲ
    * đơn nào (CouponsService.validateAndCompute chỉ trừ min(value, subtotal), không xét sản
    * phẩm) — thu hoạch xong là có "tiền free" tiêu ở đơn bất kỳ, không cần đơn thật tương xứng.
+   * Coupon thu hoạch truyền minOrder riêng (harvestCouponMinOrder) — không bao giờ thấp hơn value.
    */
-  private async grantCoupon(userId: string, amount: number, tx?: Prisma.TransactionClient): Promise<string> {
+  private async grantCoupon(
+    userId: string,
+    amount: number,
+    tx?: Prisma.TransactionClient,
+    minOrder: number = amount,
+  ): Promise<string> {
     const code = `GAME${amount}-${userId.slice(-5)}-${Math.floor(Math.random() * 9000 + 1000)}`.toUpperCase();
     const end = new Date();
     end.setDate(end.getDate() + 30);
@@ -581,7 +581,7 @@ export class GameService {
         code,
         type: 'AMOUNT',
         value: amount,
-        minOrder: amount,
+        minOrder: Math.max(amount, minOrder),
         startAt: new Date(),
         endAt: end,
         perUserLimit: 1,

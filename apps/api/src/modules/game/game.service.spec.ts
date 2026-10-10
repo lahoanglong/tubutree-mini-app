@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, GoneException, NotFoundException } from '@nestjs/common';
 import { GameService } from './game.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -39,7 +39,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       count: jest.fn().mockResolvedValue(0),
     },
     pointsTransaction: { create: jest.fn() },
-    gameSpin: { create: jest.fn().mockResolvedValue({}) },
+    gameSpin: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
     gameQuiz: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     gameQuizAttempt: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), create: jest.fn().mockResolvedValue({}) },
     coupon: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
@@ -117,6 +117,53 @@ describe('GameService.spin', () => {
     expect(prisma.gameSpin.create).not.toHaveBeenCalled();
   });
 
+  // C-043: game.spin_buy_daily_limit từng là khoá chết — vòng quay không có trần lượt/ngày.
+  it('đã quay đủ trần lượt/ngày → BadRequest, không ghi lượt quay, không trao thưởng', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
+    (prisma.gameSpin.count as jest.Mock).mockResolvedValue(5);
+    jest.spyOn(Math, 'random').mockReturnValue(0.1);
+    const svc = new GameService(
+      prisma,
+      makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES, 'game.spin_buy_daily_limit': 5 }),
+      analytics,
+    );
+    await expect(svc.spin('u1')).rejects.toThrow('lượt');
+    expect(prisma.gameSpin.create).not.toHaveBeenCalled();
+    expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+    (Math.random as jest.Mock).mockRestore();
+  });
+
+  it('trần lượt/ngày mặc định 5 khi thiếu config; còn dưới trần → quay bình thường', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
+    (prisma.gameSpin.count as jest.Mock).mockResolvedValueOnce(4).mockResolvedValueOnce(5);
+    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }), analytics);
+    await expect(svc.spin('u1')).resolves.toBeDefined();
+    await expect(svc.spin('u1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.gameSpin.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('đếm lượt TRONG tx, SAU khi trừ điểm (khoá dòng user) và theo ngày giờ VN', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
+    const svc = new GameService(
+      prisma,
+      makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES, 'game.spin_buy_daily_limit': 5 }),
+      analytics,
+    );
+    await svc.spin('u1');
+    const dec = (prisma.user.updateMany as jest.Mock).mock.invocationCallOrder[0]!;
+    const cnt = (prisma.gameSpin.count as jest.Mock).mock.invocationCallOrder[0]!;
+    expect(cnt).toBeGreaterThan(dec);
+    const where = (prisma.gameSpin.count as jest.Mock).mock.calls[0][0].where;
+    expect(where.userId).toBe('u1');
+    const since: Date = where.spunAt.gte;
+    // 00:00 giờ VN = 17:00 UTC hôm trước.
+    expect(since.getUTCHours()).toBe(17);
+    expect(Date.now() - since.getTime()).toBeLessThan(864e5);
+  });
+
   /**
    * Task 9: quay xong → engagement_action ghi qua record(tx,...) — PHẢI dùng đúng `tx` của
    * transaction đang chạy (atomic cùng transaction), KHÔNG phải recordBestEffort. Dựng tx RIÊNG
@@ -131,7 +178,7 @@ describe('GameService.spin', () => {
       user: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), update: jest.fn().mockResolvedValue({}) },
       pointsTransaction: { create: jest.fn().mockResolvedValue({}) },
       gameProfile: { update: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      gameSpin: { create: jest.fn().mockResolvedValue({}) },
+      gameSpin: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
       coupon: { create: jest.fn().mockResolvedValue({}) },
     };
     (prisma.$transaction as jest.Mock).mockImplementation((cb: (t: unknown) => unknown) => cb(tx));
@@ -209,6 +256,43 @@ describe('GameService.waterTree', () => {
     expect(r.progress).toBe(10);
     expect(prisma.coupon.create).toHaveBeenCalledTimes(2);
     expect(prisma.plantedTree.create).toHaveBeenCalledTimes(2); // 2 cây thật cam kết
+  });
+
+  // C-009 (Q-02): coupon thu hoạch chỉ dùng được cho đơn từ 199.000đ (đọc config), không còn
+  // minOrder = giá trị coupon (30k) — chặn biến nước miễn phí thành tiền free trên đơn nhỏ.
+  it('coupon thu hoạch: minOrder mặc định 199.000đ (game.harvest_coupon_min_order)', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, ecoImpact: { progress: 590, target: 600, treeType: 't', treesPlanted: 0 } }),
+    );
+    await new GameService(prisma, makeConfig(), analytics).waterTree('u1', 20);
+    const data = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data;
+    expect(data.value).toBe(30000);
+    expect(data.minOrder).toBe(199000);
+  });
+
+  it('coupon thu hoạch: minOrder theo config, nhưng KHÔNG bao giờ thấp hơn giá trị coupon', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, ecoImpact: { progress: 0, target: 30, treeType: 't', treesPlanted: 0 } }),
+    );
+    await new GameService(
+      prisma,
+      makeConfig({ 'game.harvest_coupon_min_order': 250000, 'game.harvest_coupon_amount': 30000 }),
+      analytics,
+    ).waterTree('u1', 30);
+    expect((prisma.coupon.create as jest.Mock).mock.calls[0][0].data.minOrder).toBe(250000);
+
+    const prisma2 = makePrisma();
+    (prisma2.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 100, ecoImpact: { progress: 0, target: 30, treeType: 't', treesPlanted: 0 } }),
+    );
+    await new GameService(
+      prisma2,
+      makeConfig({ 'game.harvest_coupon_min_order': 0, 'game.harvest_coupon_amount': 30000 }),
+      analytics,
+    ).waterTree('u1', 30);
+    expect((prisma2.coupon.create as jest.Mock).mock.calls[0][0].data.minOrder).toBe(30000);
   });
 
   // P0-1 (docs/2026-09-08-review-progress.md): xu mua nước rẻ hơn NHIỀU giá trị coupon thu
@@ -459,38 +543,18 @@ describe('GameService.buySeeds / buyTree (mua bằng TubuXu)', () => {
   }
   const coinsStub = () => ({ spendCoins: jest.fn().mockResolvedValue(undefined) });
 
-  it('mua nước: trừ xu (seeds×1) + cộng totalSeeds ATOMIC (increment, guard cap), không vượt sức chứa', async () => {
+  // C-009 (Q-02): 500đ Ví → 600 xu → 600💧 → coupon thu hoạch 30k. Chủ dự án chốt bỏ hẳn mua nước
+  // bằng xu; route vẫn giữ để client cũ nhận lỗi rõ thay vì 404.
+  it('mua nước bằng xu đã ngừng → GoneException rõ ràng, KHÔNG trừ xu, KHÔNG cộng giọt', async () => {
     const prisma = buyPrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 100 }));
     const coins = coinsStub();
     const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, coins as never);
-    const r = await svc.buySeeds('u1', 50);
-    expect(r).toMatchObject({ seeds: 50, cost: 50, totalSeeds: 150 });
-    expect(coins.spendCoins).toHaveBeenCalledWith('u1', 50, 'GAME_BUY_SEEDS', 'GAME', undefined, prisma);
-    // Cộng ATOMIC qua updateMany increment + guard cap (chống lost-update khi mua song song),
-    // KHÔNG set giá trị tuyệt đối đọc-ngoài-tx.
-    const call = (prisma.gameProfile.updateMany as jest.Mock).mock.calls[0][0];
-    expect(call.where).toEqual({ userId: 'u1', totalSeeds: { lte: 500 - 50 } });
-    expect(call.data).toEqual({ totalSeeds: { increment: 50 } });
-  });
-
-  it('mua nước vượt sức chứa bình (check sớm) → throw, KHÔNG trừ xu', async () => {
-    const prisma = buyPrisma();
-    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 480 }));
-    const coins = coinsStub();
-    const svc = new GameService(prisma, makeConfig({ 'game.tank_capacity': 500 }), analytics, undefined, undefined, coins as never);
-    await expect(svc.buySeeds('u1', 50)).rejects.toThrow('Bình chứa');
+    await expect(svc.buySeeds('u1', 50)).rejects.toBeInstanceOf(GoneException);
+    await expect(svc.buySeeds('u1', 50)).rejects.toThrow('ngừng');
     expect(coins.spendCoins).not.toHaveBeenCalled();
-  });
-
-  it('lost-update race: updateMany guard cap count=0 (bình đầy do lệnh song song) → throw rollback', async () => {
-    const prisma = buyPrisma();
-    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 100 }));
-    (prisma.gameProfile.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
-    const coins = coinsStub();
-    const svc = new GameService(prisma, makeConfig({ 'game.tank_capacity': 500 }), analytics, undefined, undefined, coins as never);
-    // Vượt cap atomic → throw → tx rollback (xu vừa trừ được hoàn lại do rollback).
-    await expect(svc.buySeeds('u1', 50)).rejects.toThrow('Bình chứa');
+    expect(prisma.gameProfile.updateMany).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('mua cây thật: trừ xu (tree_xu_price) + tạo PlantedTree có chứng nhận', async () => {
