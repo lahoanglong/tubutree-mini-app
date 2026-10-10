@@ -184,6 +184,49 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
     expect(req.reviewedAt).not.toBeNull();
   });
 
+  it('mã/link giới thiệu cũ không còn ghi công cho tài khoản đã ẩn danh; gian hàng và hoá đơn bỏ thông tin cá nhân', async () => {
+    const { user, request } = await customerWithRequest({ role: 'AFFILIATE' });
+    const oldCode = user.referralCode;
+    const storefront = await prisma.storefront.create({
+      data: {
+        type: 'CTV',
+        slug: oldCode.toLowerCase(),
+        ownerUserId: user.id,
+        title: 'Shop của Nguyễn Văn Thật',
+        headerNote: 'Gọi Thật: 0912345678',
+        avatarUrl: 'https://example.com/that.png',
+        coverUrl: 'https://example.com/that-cover.png',
+        isPublished: true,
+      },
+    });
+    const order = await createOrder(prisma, {
+      userId: user.id,
+      status: 'DELIVERED',
+      invoiceRequest: { taxCode: '0101234567', companyName: 'Công ty IT', address: '1 Phố IT', email: 'that@example.com' },
+      invoiceStatus: 'ISSUED',
+    });
+    const buyer = await createUser(prisma);
+    await prisma.referralTouch.create({
+      data: { userId: buyer.id, referrerUserId: user.id, storefrontSlug: storefront.slug, expiresAt: new Date(Date.now() + 86_400_000) },
+    });
+
+    await svc.process(request.id, admin.id);
+
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(after.referralCode).not.toBe(oldCode);
+    await expect(prisma.user.findUnique({ where: { referralCode: oldCode.toUpperCase() } })).resolves.toBeNull();
+    const touch = await prisma.referralTouch.findUniqueOrThrow({ where: { userId: buyer.id } });
+    expect(touch.expiresAt.getTime()).toBeLessThanOrEqual(Date.now());
+
+    const sf = await prisma.storefront.findUniqueOrThrow({ where: { id: storefront.id } });
+    expect(sf).toMatchObject({ title: ANONYMIZED_NAME, headerNote: null, avatarUrl: null, coverUrl: null, isPublished: false });
+
+    const o = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    const inv = o.invoiceRequest as Record<string, unknown>;
+    expect(inv.email).toBeUndefined();
+    expect(inv).toMatchObject({ taxCode: '0101234567', companyName: 'Công ty IT' });
+  });
+
   async function expectBlocked(requestId: string, userId: string, fragment: RegExp) {
     const err = await svc.process(requestId, admin.id).then(
       () => null,

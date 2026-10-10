@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -39,6 +40,11 @@ const vnd = (n: number) => `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}đ
  * lệnh rút, công nợ đại lý là chứng từ kế toán/thuế phải giữ và đang trỏ khoá ngoại về users. Chỉ thay
  * các trường nhận diện được con người (tên, SĐT, email, ngày sinh, ảnh, zaloId, địa chỉ, CCCD, tài khoản
  * ngân hàng gian hàng) và khoá đăng nhập.
+ * Cố ý GIỮ: lệnh rút (Payout.bankInfo) và hoàn tiền đơn (OrderCustomerRefund) vì là chứng từ chi tiền
+ * phải đối soát được; MST/tên công ty/địa chỉ trong yêu cầu hoá đơn vì hoá đơn VAT đã/sẽ xuất phải lưu
+ * theo luật kế toán (chỉ bỏ email liên hệ).
+ * Access token đã cấp vẫn dùng được tới hết hạn (JWT_ACCESS_TTL, mặc định 15 phút) vì JwtStrategy không
+ * tra DB; refresh token bị thu hồi và isBlocked chặn cấp token mới.
  */
 @Injectable()
 export class AccountDeletionService {
@@ -217,9 +223,13 @@ export class AccountDeletionService {
         zaloAccessToken: null,
         zaloRefreshToken: null,
         isBlocked: true,
+        // Link/mã giới thiệu cũ còn lưu ngoài kia sẽ tiếp tục ghi công (tạo hoa hồng PENDING không ai
+        // nhận được) nếu giữ mã; đổi sang mã ngẫu nhiên không đoán được để mọi tra cứu theo mã cũ trượt.
+        referralCode: `DEL${randomBytes(8).toString('hex').toUpperCase()}`,
         metadata: { anonymizedAt: now.toISOString(), deletionRequestId: requestId },
       },
     });
+    await tx.referralTouch.updateMany({ where: { referrerUserId: userId, expiresAt: { gt: now } }, data: { expiresAt: now } });
     // Giữ dòng địa chỉ (gói định kỳ đã huỷ vẫn trỏ FK RESTRICT tới) nhưng xoá phần nhận diện; tỉnh/huyện
     // giữ lại vì đơn cũ và thống kê vùng giao còn dùng, một mình chúng không chỉ ra được ai.
     await tx.address.updateMany({ where: { userId }, data: { recipient: ANONYMIZED_NAME, phone: '', street: '' } });
@@ -228,6 +238,9 @@ export class AccountDeletionService {
       SET "shippingAddress" = "shippingAddress" || jsonb_build_object('recipient', ${ANONYMIZED_NAME}::text, 'phone', '', 'street', '')
       WHERE "userId" = ${userId} AND jsonb_typeof("shippingAddress") = 'object'`;
     await tx.order.updateMany({ where: { userId }, data: { note: null, recyclingNote: null } });
+    await tx.$executeRaw`
+      UPDATE "orders" SET "invoiceRequest" = "invoiceRequest" - 'email'
+      WHERE "userId" = ${userId} AND jsonb_typeof("invoiceRequest") = 'object'`;
     await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
     await tx.dealerApplication.updateMany({
       where: { userId },
@@ -237,6 +250,10 @@ export class AccountDeletionService {
       where: { ownerUserId: userId },
       data: {
         isPublished: false,
+        title: ANONYMIZED_NAME,
+        headerNote: null,
+        avatarUrl: null,
+        coverUrl: null,
         bankName: null,
         bankBin: null,
         bankAccountNo: null,
