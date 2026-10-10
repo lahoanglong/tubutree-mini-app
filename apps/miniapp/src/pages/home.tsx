@@ -17,6 +17,7 @@ import { HomeExtras } from '../components/home/home-extras';
 import { HomeHeader } from '../components/home/home-header';
 import { HomeSection, type SectionQuery } from '../components/home/home-section';
 import { OrderStrip } from '../components/home/order-strip';
+import { useHomeFeed } from '../components/home/use-home-feed';
 import { dedupeAgainst, homeBlockOrder, refreshHomeQueries, type HomeBlockId } from '../components/home/home-blocks';
 import { Icon } from '../components/ui/icon';
 import { Text } from '../components/ui/text';
@@ -37,6 +38,7 @@ const FEATURED_FETCH_LIMIT = SECTION_LIMIT * 2;
 export default function HomePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  useHomeFeed();
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const userId = useAuthStore((s) => s.user?.id);
   // Chuông ở đây trước đây trơ, không báo gì — trong khi voucher sinh nhật, nhắc giỏ, hoa hồng

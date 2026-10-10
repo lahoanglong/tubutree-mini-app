@@ -1,5 +1,6 @@
 import { isAxiosError } from 'axios';
 import { api } from './api';
+import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
 import type { OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
 
 /** Shape phân trang backend trả về (§12.1): { data, meta }. */
@@ -145,6 +146,11 @@ export interface PublicConfig {
 export const getPublicConfig = () =>
   api.get<PublicConfig>('/config/public').then((r) => r.data);
 export const fetchProducts = async (params: Record<string, string | number> = {}): Promise<PageResponse<ProductCard>> => {
+  const homeSlot = homeProductSlot(params);
+  if (homeSlot) {
+    const fromFeed = await takePublicBlock(homeSlot);
+    if (fromFeed) return fromFeed;
+  }
   const brandParam = params.brand ? String(params.brand) : '';
   const brandList = brandParam ? brandParam.split(',').map((b) => b.trim()).filter(Boolean) : [];
 
@@ -201,13 +207,13 @@ export const fetchProducts = async (params: Record<string, string | number> = {}
 };
 export const fetchProduct = (slug: string) =>
   api.get<ProductDetail>(`/products/${slug}`).then((r) => r.data);
-export const fetchBrands = () =>
-  api.get<{ brand: string; count: number }[]>('/brands').then((r) => r.data);
+export const fetchBrands = async () =>
+  (await takePublicBlock('brands')) ?? api.get<{ brand: string; count: number }[]>('/brands').then((r) => r.data);
 export const fetchRelated = (slug: string) =>
   api.get<ProductCard[]>(`/products/${slug}/related`).then((r) => r.data);
 /** Feed "Dành cho bạn" — gợi ý cá nhân hoá (cần đăng nhập, xem home.tsx). */
-export const fetchForYou = () =>
-  api.get<ProductCard[]>('/products/for-you').then((r) => r.data);
+export const fetchForYou = async () =>
+  (await takeMeBlock('forYou')) ?? api.get<ProductCard[]>('/products/for-you').then((r) => r.data);
 export const fetchBoughtTogether = (slug: string) =>
   api.get<ProductCard[]>(`/products/${slug}/bought-together`).then((r) => r.data);
 
@@ -283,7 +289,8 @@ export interface CategoryDTO {
   /** Số SP đang bán (API từ 4b). Thiếu = API cũ → miniapp dùng 4 phân khúc. */
   productCount?: number;
 }
-export const fetchCategories = () => api.get<CategoryDTO[]>('/categories').then((r) => r.data);
+export const fetchCategories = async () =>
+  (await takePublicBlock('categories')) ?? api.get<CategoryDTO[]>('/categories').then((r) => r.data);
 
 // Flash sale (public)
 export interface FlashSaleActiveItem {
@@ -298,8 +305,8 @@ export interface FlashSaleActiveItem {
   quota: number;
   endAt: string;
 }
-export const fetchActiveFlashSales = () =>
-  api.get<FlashSaleActiveItem[]>('/flash-sales/active').then((r) => r.data);
+export const fetchActiveFlashSales = async () =>
+  (await takePublicBlock('flashActive')) ?? api.get<FlashSaleActiveItem[]>('/flash-sales/active').then((r) => r.data);
 
 export interface UpcomingFlashItem {
   itemId: string;
@@ -312,8 +319,8 @@ export interface UpcomingFlashItem {
   startAt: string;
   reminded: boolean;
 }
-export const fetchUpcomingFlashSales = () =>
-  api.get<UpcomingFlashItem[]>('/flash-sales/upcoming').then((r) => r.data);
+export const fetchUpcomingFlashSales = async () =>
+  (await takeMeBlock('flashUpcoming')) ?? api.get<UpcomingFlashItem[]>('/flash-sales/upcoming').then((r) => r.data);
 export const setFlashReminder = (itemId: string) =>
   api.post(`/flash-sales/items/${itemId}/remind`).then((r) => r.data);
 export const cancelFlashReminder = (itemId: string) =>
@@ -423,8 +430,13 @@ export interface OrderListFilter {
 
 // Bug 1 fix: truoc day khong truyen page/limit -> BE mac dinh page=1 limit=20, khach co >20 don
 // khong bao gio xem duoc don cu hon qua app. Nhan them page/limit de orders.tsx phan trang duoc.
-export const fetchOrders = (filter: OrderListFilter = {}, page = 1, limit = 20) =>
-  api
+export const fetchOrders = async (filter: OrderListFilter = {}, page = 1, limit = 20) => {
+  // Dải "đang giao" ở Trang chủ (1 đơn SHIPPING mới nhất) đã có sẵn trong /home/me.
+  if (filter.status === 'SHIPPING' && page === 1 && limit === 1) {
+    const fromFeed = await takeMeBlock('shippingOrders');
+    if (fromFeed) return fromFeed;
+  }
+  return api
     .get<PageResponse<OrderView>>('/orders', {
       params: {
         ...(filter.status ? { status: filter.status } : filter.group ? { group: filter.group } : {}),
@@ -433,11 +445,14 @@ export const fetchOrders = (filter: OrderListFilter = {}, page = 1, limit = 20) 
       },
     })
     .then((r) => r.data);
+};
 export const fetchOrder = (code: string) =>
   api.get<OrderView>(`/orders/${code}`).then((r) => r.data);
 /** Badge tab Đơn hàng. Dữ liệu lạ (vd mock/route khác trả nhầm) → 0 thay vì NaN. */
-export const fetchActiveOrderCount = () =>
-  api.get<{ count?: unknown }>('/orders/active-count').then((r) => (typeof r.data?.count === 'number' ? r.data.count : 0));
+export const fetchActiveOrderCount = async () => {
+  const body = (await takeMeBlock('activeOrderCount')) ?? (await api.get<{ count?: unknown }>('/orders/active-count').then((r) => r.data));
+  return typeof body?.count === 'number' ? body.count : 0;
+};
 
 export interface PurchasedItem {
   variationId: string;
@@ -458,8 +473,8 @@ export interface PurchasedItemsPage {
   items: PurchasedItem[];
   nextCursor: string | null;
 }
-export const fetchPurchasedItems = (params: { cursor?: string; limit?: number; variationId?: string } = {}) =>
-  api.get<PurchasedItemsPage>('/me/purchased-items', { params }).then((r) => r.data);
+export const fetchPurchasedItems = async (params: { cursor?: string; limit?: number; variationId?: string } = {}) =>
+  (await takePurchasedItems(params)) ?? api.get<PurchasedItemsPage>('/me/purchased-items', { params }).then((r) => r.data);
 
 export const cancelOrder = (code: string) =>
   api.post<OrderDTO>(`/orders/${code}/cancel`).then((r) => r.data);
