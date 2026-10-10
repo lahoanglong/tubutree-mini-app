@@ -29,7 +29,7 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
       { Icon: Sparkles, label: 'Trợ lý AI 24/7', to: '/ai-advisor', hint: 'Tư vấn sản phẩm' },
       { Icon: Heart, label: 'Sản phẩm yêu thích', to: '/wishlist' },
       { Icon: MapPin, label: 'Sổ địa chỉ', to: '/addresses' },
-      { Icon: MessagesSquare, label: 'Cộng đồng hỏi đáp', to: '/feed', hint: 'Hỏi chăm cây · khoe vườn' },
+      { Icon: MessagesSquare, label: 'Cộng đồng hỏi đáp', to: '/feed', hint: 'Hỏi cách dùng · chia sẻ trải nghiệm' },
     ],
   },
   {
