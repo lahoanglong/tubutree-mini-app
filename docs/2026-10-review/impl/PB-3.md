@@ -144,3 +144,84 @@ $ npx eslint src/modules/wallet/wallet-ledger.service.ts → exit 0
 
 ### Việc còn lại (lượt 3)
 - API sao kê `GET /me/wallet/transactions` + màn miniapp; script reconcile ví (sum sổ vs số dư).
+
+## Lượt 3/3 — Yêu cầu 3, 4, 5: sao kê, đối soát, race song song + tổng kết
+
+Trạng thái lượt: **XONG**. Trạng thái **C-060: XONG** (cả 5 yêu cầu của gói).
+
+### Thay đổi
+- **Sao kê (yêu cầu 3)** — trước đó chưa có endpoint nào đọc lịch sử ví (chỉ có `me/points/transactions`,
+  `cashback/transactions`), nên thêm mới:
+  - `GET /me/wallet/transactions?page=&limit=` (`wallet.controller.ts`, dùng `PaginationQuery` chung,
+    limit ≤ 100) → `WalletService.getTransactions`: chỉ sổ của chính user, mới nhất trước
+    (`createdAt desc, id desc`), trả `{ data, meta: { page, limit, total } }`. Mỗi dòng: id, delta (có dấu),
+    balanceAfter, type, reason, createdAt, `orderId` (chỉ khi refType = ORDER). Không trả refId khác
+    (id payout, giao dịch cashback, **id tài khoản khách bị gộp**). Commit `6cc465b`.
+  - Miniapp: mục "Lịch sử Ví" cuối màn `/wallet` (`pages/wallet.tsx`, `useInfiniteQuery` + nút
+    "Xem thêm" bằng `Button` DS v2), nhãn tiếng Việt theo loại (`utils/wallet-rules.ts: walletTxLabel`,
+    loại lạ → "Biến động ví"), giờ `dd/MM HH:mm`, số dư sau giao dịch. Khoá query `['wallet','transactions']`
+    là con của `['wallet']` nên rút/đổi xu xong tự làm mới. Commit `cd0d4bd`.
+- **Đối soát (yêu cầu 4)** — `src/modules/wallet/wallet-reconcile.ts`: `diffWalletBalances` (thuần) +
+  `findWalletLedgerDrift(db, { userIds? })` (LEFT JOIN `users` × SUM/COUNT `wallet_transactions`, bắt cả
+  user có số dư mà chưa có dòng sổ). Script `pnpm --filter @tubutree/api reconcile:wallet`
+  (`scripts/reconcile-wallet.ts`): **chỉ báo cáo**, thoát mã 1 khi có lệch để gắn cron/giám sát.
+  Commit `70d4692`.
+- **Race (yêu cầu 5)** — `test/integration-race/wallet-reconcile.race-spec.ts` (Postgres thật), commit `2fd2cad`:
+  1. Ví còn 150k, song song: admin từ chối lệnh rút cũ ×2 (+150k), rút 100k ×3, đổi xu 60k ×2, cron
+     cashback ×2 (+35k) — tổng lệnh trừ 420k > tối đa 335k. Kiểm: đối soát không lệch, số dư ≥ 0, mọi
+     `balanceAfter` ≥ 0, WITHDRAW_REFUND và CASHBACK đúng 1 dòng, mỗi `(type, refId)` 1 dòng, mỗi payout
+     đúng 1 dòng WITHDRAW, sao kê phân trang (limit 3) phủ đủ đúng các dòng, thứ tự mới nhất trước.
+  2. Đối soát bắt được ví bị `UPDATE` tay bỏ qua sổ (+7.000) và user có số dư không có dòng sổ nào; ví
+     khớp sổ không bị báo.
+  (Các race của lượt 1–2 — 20 lệnh trừ song song, cùng refId ×10, rút/đổi xu/cashback/trả đơn/hoàn đơn/gộp
+  khách — vẫn xanh.)
+
+### Test thêm (đỏ → xanh)
+- Unit `wallet.service.spec.ts` (+2: phân trang/thứ tự/phạm vi user; ẩn refId không phải ORDER) và
+  `wallet-reconcile.spec.ts` (3): ĐỎ trước khi code (`getTransactions is not a function`,
+  `Cannot find module './wallet-reconcile'`), XANH sau.
+- Race `wallet-reconcile.race-spec.ts`: bỏ tạm `FOR NO KEY UPDATE` trong `applyWalletDelta` → case 1 ĐỎ
+  3/3 lần (`Expected: >= 0, Received: -85000`); trả lại → XANH. (Bản đầu của case 1 để dư tiền nên không
+  bắt được lỗi khoá; đã siết để tổng lệnh trừ vượt số dư tối đa.)
+- Miniapp `utils/wallet-rules.spec.ts` (+3: nhãn theo loại, loại lạ, định dạng giờ): ĐỎ → XANH.
+
+### Lệnh kiểm chứng (output thật, lượt 3)
+```
+$ cd apps/api && npx jest --maxWorkers=1 src/modules/wallet/
+Test Suites: 4 passed, 4 total
+Tests:       57 passed, 57 total
+
+$ DATABASE_URL=postgresql://tubu:tubu@localhost:5553/tubutree_it?schema=public npx jest \
+  -c test/integration-race/jest.config.js --runInBand "wallet-reconcile|wallet-ledger"
+PASS test/integration-race/wallet-reconcile.race-spec.ts
+PASS test/integration-race/wallet-ledger-flows.race-spec.ts
+PASS test/integration-race/wallet-ledger.race-spec.ts
+Tests:       14 passed, 14 total
+
+$ DATABASE_URL=...5553/tubutree_it npx tsx scripts/reconcile-wallet.ts   # DB test, còn rác từ lượt đỏ trước
+=== ĐỐI SOÁT Ví Tubu vs sổ cái wallet_transactions ===
+User bị lệch   : 40
+  user=cmv1w9f47002tob81ues0apay  ví=220000  sổ=0 (0 dòng)  lệch +220000
+exit=1
+
+$ npx tsc --noEmit -p tsconfig.json (apps/api) → exit 0 ; eslint các file api đã sửa → exit 0
+$ cd apps/miniapp && npx tsc --noEmit → exit 0
+$ npx vitest run src/utils/wallet-rules.spec.ts src/pages → Test Files 9 passed, Tests 111 passed
+$ npx eslint src/pages/wallet.tsx ... → 6 lỗi, đều CÓ SẴN ở HEAD trước lượt này (import Button zmp-ui
+  dòng 3, 5 màu rgba trên thẻ Ví/TubuXu); code mới không thêm lỗi nào.
+```
+
+### Giả định (lượt 3)
+- Đối soát KHÔNG có `--apply` (khác reconcile:points): ví là tiền thật rút được, đặt số dư = tổng sổ có thể
+  xoá tiền thật của khách khi lỗi nằm ở sổ. Sửa lệch = tra nguyên nhân rồi ghi dòng ADJUST qua
+  `applyWalletDelta` (chưa có màn admin, xem việc còn lại).
+- Sao kê không lộ refId nội bộ; chỉ `orderId`. Màn miniapp chưa bấm sang chi tiết đơn vì route chi tiết
+  dùng `/order/:code`, API sổ chỉ có id đơn.
+
+### Việc còn lại (sau gói)
+- Deploy: migration `20261010041004_wallet_ledger` và code mới phải lên CÙNG đợt; ngay sau deploy chạy
+  `reconcile:wallet` trên PROD (kỳ vọng 0 user lệch) và gắn chạy định kỳ.
+- Chưa kiểm endpoint qua HTTP thật / chưa xem màn "Lịch sử Ví" trên Zalo (unverified ở mức UI; đã có
+  tsc + unit + race ở tầng service).
+- Màn admin điều chỉnh ví (ADJUST có lý do + người duyệt) nếu chủ dự án cần; web (apps/web) chưa có sao kê ví.
+- Liên kết dòng ORDER sang chi tiết đơn (cần trả thêm `orderCode` hoặc route theo id).
