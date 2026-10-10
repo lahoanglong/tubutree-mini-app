@@ -68,8 +68,63 @@ npx eslint src/modules/subscriptions test/integration-race/{subscription-*,addre
 - Phạm vi ngày bắt đầu: tối đa 60 ngày tới (`MAX_START_DAYS_AHEAD`).
 
 ### Còn lại (lượt khác)
-- C-015 phần miniapp: tab "Định kỳ" ở trang Đơn hàng (chọn ngày bắt đầu, cách trả, sửa số lượng/địa chỉ) và client
-  `services` cho `PATCH /subscriptions/:id`.
+- ~~C-015 phần miniapp~~: xong, xem mục dưới.
 - C-017.
+
+## C-015 — phần miniapp: XONG
+
+Commit: `c7b20aa` (sheet đặt định kỳ + client), `053ca31` (tab Định kỳ sửa gói), `052b1ab` (sửa kiểu trong spec).
+
+Đã làm:
+- **Client** `services/subscriptions-api.ts`: `createSubscription` gửi thêm `paymentMethod` và `startDate` (khi có), trả
+  `firstOrder`. Có thêm `updateSubscription` (`PATCH /me/subscriptions/:id`). DTO có `addressId`/`paymentMethod`/`lastOrderId`
+  (để tuỳ chọn vì khối home feed trong cache có thể còn từ bản API cũ). Hằng `SUBSCRIPTION_PAYMENT_METHODS` và
+  `MAX_START_DAYS_AHEAD = 60` khớp API.
+- **Sheet "Đặt định kỳ"** (`components/subscribe-sheet.tsx`, mở từ PDP và trang đặt hàng thành công) chuyển sang DS v2
+  (`BottomSheet`, `Chip`, `Button`, `Field`, `Text`). Thêm:
+  - Đơn đầu tiên: chip "Giao ngay" (mặc định) hoặc "Chọn ngày". Ô ngày có `min` = ngày mai, `max` = +60 ngày, tính theo
+    giờ VN. Ngày ngoài khoảng thì báo lỗi qua `Field` và khoá nút tạo.
+  - Thanh toán mỗi kỳ: COD / Ví Tubu (kèm số dư) / Chuyển khoản ngân hàng. Hàng `role=radio` có `rowKeyboardProps`, cao
+    ≥44px. Hàng đang chọn hiện giải thích, ví dụ "Ví không đủ tiền thì gói tạm dừng".
+  - Địa chỉ: chọn trong sổ địa chỉ, mặc định là địa chỉ mặc định. Nhờ vậy khách tạo được nhiều gói cùng SP ở các địa chỉ khác nhau.
+  - Kết quả: có đơn đầu thì báo mã đơn. Chuyển khoản mà đơn `PENDING_PAYMENT` thì mở `/bank-payment/<mã>` (luồng chuyển khoản
+    hiện có). Hẹn ngày thì báo "đơn đầu giao từ dd/mm/yyyy". Lỗi API (Ví thiếu, hết hàng, trùng gói) hiện snackbar và
+    sheet vẫn mở.
+- **Tab "Định kỳ"** (`components/subscriptions-panel.tsx`): mỗi thẻ hiện "Thanh toán: …" và "Giao tới: …" (để phân biệt
+  các gói cùng SP), thêm nút "Sửa". Nút này mở `components/subscription-edit-sheet.tsx` (DS v2: `QuantitySelector`, chọn
+  cách trả, chọn địa chỉ) cho gói đang chạy hoặc tạm dừng. Sheet chỉ PATCH các trường đã đổi, nên đổi số lượng không gửi
+  lại địa chỉ và không phải qua kiểm trùng. Không đổi gì thì nút lưu bị khoá. 409/400 từ API hiện snackbar.
+- `components/subscription-options.tsx`: helper ngày giờ VN (`vnDateOf`, `startDateRange`, `isStartDateAllowed`,
+  `formatVnDate`), cùng `PaymentMethodPicker`/`AddressPicker` dùng chung cho cả 2 sheet. Chuỗi mới nằm trong
+  `i18n/vi.ts` → `subscriptions.*`, dùng thuật ngữ "Ví Tubu".
+
+### Test (đỏ → xanh)
+- Mới: `subscription-options.spec.tsx` (4), `subscribe-sheet.spec.tsx` (6), `subscriptions-panel.spec.tsx` có thêm 4 ca
+  (thẻ hiện cách trả/địa chỉ, sửa 3 trường, chỉ đổi số lượng, gói tạm dừng + 409). `orders.spec.tsx` mock thêm `getAddresses`.
+- Đỏ: chạy chính các spec mới trên bản gốc `ee97986` của `subscriptions-panel.tsx`/`subscribe-sheet.tsx` (bản sao tạm, đã
+  xoá) → `Tests 9 failed | 8 passed (17)`. Các ca hành vi mới đều đỏ, chỉ ca cũ xanh.
+- Xanh:
+```
+cd apps/miniapp && npx vitest run src/components/subscribe-sheet.spec.tsx src/components/subscription-options.spec.tsx \
+  src/components/subscriptions-panel.spec.tsx src/pages/orders.spec.tsx src/ds-legacy-vars-4a.spec.ts \
+  src/components/ui/button-guard.spec.ts src/components/ui/hit-target-guard.spec.tsx \
+  src/components/checkout/order-success.spec.tsx src/components/home/order-strip.spec.tsx src/services/home-feed.spec.ts
+  Test Files  10 passed (10)
+  Tests  92 passed (92)
+npx tsc --noEmit                                  -> exit 0
+npx eslint <các file đã sửa/thêm>                 -> 0 lỗi (1 cảnh báo có sẵn ở orders.spec.tsx:11, không phải dòng mới)
+```
+
+### Giả định (miniapp)
+- Ngày bắt đầu chỉ chọn được lúc tạo gói, vì API `PATCH` không nhận `startDate`. Muốn đổi lịch thì dùng "Bỏ qua kỳ này"
+  hoặc tạm dừng như trước.
+- Số lượng mỗi kỳ ở client chặn trần 99, chỉ để nút + không tăng vô hạn. Còn hàng hay không do API kiểm khi sinh đơn kỳ.
+- Chọn Ví Tubu khi số dư thấp vẫn được phép (nhất là khi hẹn ngày, khách còn kịp nạp). Đơn giao ngay mà Ví thiếu thì API trả
+  400 và sheet hiện lỗi.
+- Sheet sửa được mount khi mở (theo `key` gói), nên đóng sheet không có hiệu ứng trượt xuống. Đổi lại, state luôn lấy đúng từ
+  gói đang chọn.
+
+### Việc còn lại (miniapp)
+- Chưa kiểm trực quan trên Zalo thật/Playwright (máy giới hạn RAM). Cần UAT tay: ô `type=date` trên WebView Zalo iOS/Android.
 - Deploy: `prisma migrate deploy` (1 migration) + seed lại mẫu thông báo `SUBSCRIPTION_PAUSED`/
   `SUBSCRIPTION_ORDER_AWAITING_PAYMENT`.
