@@ -2,6 +2,7 @@
 
 import { Recycle } from 'lucide-react';
 import { RECYCLING_NOTE_MAX, recyclingBookedAfterPayment } from '@/lib/recycling';
+import { ui } from '@/lib/guest-ui';
 
 /**
  * Lựa chọn "Gửi lại vật liệu tái chế" ở checkout web — cùng nội dung với miniapp (checkout.tsx). Trang
@@ -24,15 +25,15 @@ export function RecyclingCheckoutSection({
   disabled?: boolean;
 }) {
   return (
-    <section id="checkout-recycling" className="rounded-lg border border-neutral-100 bg-white p-4">
-      <label className="flex cursor-pointer items-center justify-between gap-3">
+    <section id="checkout-recycling" className={`${ui.card} p-4`}>
+      <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3">
         <span className="flex items-center gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-leaf-50">
-            <Recycle className="h-5 w-5 text-leaf-600" aria-hidden />
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-control bg-forest-50">
+            <Recycle className="h-5 w-5 text-forest-600" aria-hidden="true" />
           </span>
           <span>
-            <span className="block text-sm font-semibold text-neutral-900">Gửi lại vật liệu tái chế (Bảo vệ môi trường)</span>
-            <span className="block text-xs font-medium text-leaf-700">Bưu tá nhận lại vật liệu ngay khi giao hàng</span>
+            <span className="block text-sm font-semibold text-stone-900">Gửi lại vật liệu tái chế (Bảo vệ môi trường)</span>
+            <span className="block text-xs font-medium text-forest-700">Bưu tá nhận lại vật liệu ngay khi giao hàng</span>
           </span>
         </span>
         <input
@@ -43,18 +44,18 @@ export function RecyclingCheckoutSection({
           checked={selected}
           disabled={disabled}
           onChange={(e) => onSelectedChange(e.target.checked)}
-          className="h-5 w-5 accent-leaf-600"
+          className="h-5 w-5 accent-forest-600"
         />
       </label>
 
       {selected && (
         <div className="mt-3 space-y-2">
-          <p className="rounded-md border border-leaf-200 bg-leaf-50 p-3 text-xs leading-relaxed text-leaf-900">
+          <p className="rounded-control border border-forest-200 bg-forest-50 p-3 text-xs leading-relaxed text-forest-800">
             Chúng tôi sẽ thu gom lại các vật liệu tái chế được đóng gói gọn gàng như bọc nilong, hoặc quần áo cũ, pin, vỏ sữa làm
             sạch → giúp bảo vệ môi trường. Số kg thu gom tối đa bằng số kg của đơn hàng.
           </p>
           {recyclingBookedAfterPayment(paymentMethod) && (
-            <p className="text-xs leading-relaxed text-neutral-600">Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.</p>
+            <p className="text-xs leading-relaxed text-stone-600">Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.</p>
           )}
           <textarea
             aria-label="Ghi chú vật liệu tái chế"
@@ -64,9 +65,9 @@ export function RecyclingCheckoutSection({
             rows={2}
             disabled={disabled}
             onChange={(e) => onNoteChange(e.target.value)}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={`${ui.field} py-2`}
           />
-          <div className="text-right text-[11px] text-neutral-400">
+          <div className="text-right text-xs text-stone-600">
             {note.length}/{RECYCLING_NOTE_MAX}
           </div>
         </div>

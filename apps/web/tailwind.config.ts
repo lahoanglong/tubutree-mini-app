@@ -67,12 +67,22 @@ const legacyV1Colors = {
 const presetClay = (tailwindPreset.theme?.extend?.colors as unknown as { clay: Record<number, string> }).clay;
 const promo = { fg: presetClay[700]!, bg: presetClay[50]!, solid: presetClay[600]! };
 
+// Màu trạng thái (lỗi/cảnh báo/thành công/thông tin) theo token --color-status-* của tokens.css. Preset không
+// có tên cho nhóm này, và các thang `red/amber/green/emerald` của Tailwind không thuộc DS v2 nên trang
+// đã chuyển dùng `danger/warning/success/info-{fg,bg}`. Là biến CSS nên không dùng được hậu tố độ trong suốt (`/40`).
+const statusColors = {
+  danger: { fg: 'var(--color-status-danger-fg)', bg: 'var(--color-status-danger-bg)' },
+  warning: { fg: 'var(--color-status-warning-fg)', bg: 'var(--color-status-warning-bg)' },
+  success: { fg: 'var(--color-status-success-fg)', bg: 'var(--color-status-success-bg)' },
+  info: { fg: 'var(--color-status-info-fg)', bg: 'var(--color-status-info-bg)' },
+};
+
 const config: Config = {
   presets: [tailwindPreset],
   content: ['./src/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      colors: { ...legacyV1Colors, promo },
+      colors: { ...legacyV1Colors, promo, ...statusColors },
       borderRadius: { sm: '6px', md: '10px', lg: '16px', xl: '24px' },
       // Bóng đổ ấm của DS v2 (tokens.css --elevation-*); cần tokens.css được nạp trong globals.css.
       boxShadow: { card: 'var(--elevation-1)', raised: 'var(--elevation-2)' },
