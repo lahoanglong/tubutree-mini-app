@@ -248,7 +248,8 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
     mocks.getNotifications.mockResolvedValue([{ id: 'n1', status: 'UNREAD' }, { id: 'n2', status: 'READ' }, { id: 'n3', status: 'UNREAD' }]);
     renderHome();
-    expect(await screen.findByLabelText(/2/, { selector: '[aria-label*="chưa đọc"]' })).toBeInTheDocument();
+    expect(await screen.findByLabelText(/2/, { selector: 'span[aria-label*="chưa đọc"]' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thông báo, 2 chưa đọc' })).toBeInTheDocument();
   });
 
   it('kéo để làm mới làm mới MỌI truy vấn của Trang chủ (không chỉ danh sách SP)', async () => {
