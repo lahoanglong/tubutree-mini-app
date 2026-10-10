@@ -86,6 +86,7 @@ import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
 import { MerchantProductsTab } from '@/components/admin/merchant-products-tab';
 import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
 import { PosCreditsTab } from '@/components/admin/pos-credits-tab';
+import { AccountDeletionPanel } from '@/components/admin/account-deletion-panel';
 import { AnalyticsTab } from './analytics-tab';
 import {
   exportOrdersToCsv,
@@ -232,6 +233,7 @@ export default function AdminPage() {
         {tab === 'cashback' && <CashbackTab />}
         {tab === 'posCredits' && <PosCreditsTab />}
         {tab === 'users' && <UsersTab />}
+        {tab === 'users' && <AccountDeletionPanel />}
         {tab === 'config' && <ConfigTab />}
         {tab === 'coupons' && <CouponsTab />}
         {tab === 'brands' && <BrandsTab />}
