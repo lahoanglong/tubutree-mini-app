@@ -140,3 +140,79 @@ Không chạy Playwright/chụp màn hình (quy định máy 15,5GB); bố cục
 ### Chưa làm (mục 3/3)
 - C-025 phần còn lại: trang chi tiết đơn + QR trả lại đơn, danh sách mã giảm giá ở thanh toán, ô tìm kiếm ở header.
 - `merchant-denied` thiếu h1 và khối `legacyV1Colors` của `tailwind.config.ts`: chờ PC-11/PD-1 (cổng admin/merchant/brand).
+
+## Mục 3/3 — C-025 (chi tiết đơn + QR trả lại, Mã giảm giá ở thanh toán, tìm kiếm ở header, footer, gỡ lối vào Kênh Đối Tác)
+
+| Mục | Trạng thái | Commit |
+| --- | --- | --- |
+| C-025 trang chi tiết đơn `/tai-khoan/don-hang/[code]` dựng lại QR/STK/nội dung chuyển khoản cho đơn chuyển khoản còn chờ thanh toán | XONG | 22ed408 (thư viện nhãn/`canPayAgain`: 54feff3) |
+| C-025 danh sách đơn có lối vào chi tiết ("Xem chi tiết"; đơn chuyển khoản chờ tiền: nút "Thanh toán"); trang đặt hàng thành công có "Xem chi tiết đơn" | XONG | 4c20dd7 |
+| C-025 ô "Mã giảm giá" + danh sách mã trong ví ở `/thanh-toan` (component dùng chung với giỏ hàng) | XONG | 4932eb9 |
+| C-025 ô tìm kiếm ở header (`SiteSearch`), trang chủ lọc theo `?q=` | XONG | a8f264c, 43cbd64 |
+| C-025 footer có hotline `0899 149 229` + email `tubutree@gmail.com` từ cấu hình công khai | XONG (mục 1/3, f6eb723) | |
+| C-025 gỡ "Kênh Đối Tác" (/merchant) khỏi header, footer, trang chủ khách | XONG (mục 1/3, dbe8f2b); xác nhận lại lượt này | |
+
+Lệnh kiểm của catalog: `grep -rn "merchant\|Đối Tác"` trên header, footer, `page.tsx`, `layout.tsx` và các thư mục `thanh-toan, gio-hang, tai-khoan, san-pham, dang-nhap, s` (bỏ spec) trả rỗng.
+
+### Thay đổi chính
+- `lib/shop-client.ts`: `OrderDetailDTO` + `fetchOrder(code)` gọi `GET /orders/:code` (API `OrdersService.detailView`: 404 cho cả đơn không tồn tại lẫn đơn của người khác; kèm ảnh từng dòng; các cột `shippingAddress/shippingPartner/shippingCode/trackingLink/couponCode/pointsUsed/note` đã đối chiếu với `schema.prisma`).
+- `lib/order-view.ts` (mới): nhãn trạng thái/phương thức/tình trạng thanh toán, `canPayAgain` (cùng điều kiện miniapp `canPayNow` và API: `GET /payments/bank-qr` từ chối đơn đã hủy/trả nên chỉ dựng QR khi `PENDING_PAYMENT` + `BANK_TRANSFER`),
+  `addressLine`, `safeHttpUrl` (link tra cứu vận đơn chỉ mở http/https, không `javascript:`/`data:`).
+- `tai-khoan/don-hang/[code]/page.tsx` (mới): h1 "Đơn hàng #mã", trạng thái, sản phẩm (ảnh, phân loại, đơn giá x số lượng), thanh toán (tạm tính, giảm giá kèm mã, phí ship, tổng, Điểm Xanh đã dùng, phương thức, tình trạng), giao hàng (người nhận, địa chỉ, đơn vị vận chuyển, mã vận đơn, tra cứu hành trình), thu gom tái chế, ghi chú.
+  Đơn chuyển khoản chờ: dùng lại `BankTransferPanel` (VietQR, STK, nội dung CK, sao chép, "Tôi đã chuyển khoản"). `BankTransferPanel` thêm prop `onPaid` để trang chi tiết tải lại đơn khi tiền về (không thì khung báo "Đã nhận thanh toán" còn nhãn đơn vẫn "Chờ thanh toán").
+  Trạng thái: chưa đăng nhập (mời đăng nhập), đang tải, 404 ("Không tìm thấy", không thử lại), lỗi khác (có "Thử lại", tự thử lại 1 lần). Luôn đúng một h1 và có đường về `/tai-khoan`. Nằm dưới `/tai-khoan` nên thừa hưởng `noindex` của layout và `robots.ts`.
+- `tai-khoan/page.tsx`: mỗi đơn có liên kết "Xem chi tiết" (aria-label kèm mã đơn); đơn chuyển khoản chờ thanh toán có nút "Thanh toán" (aria-label "Thanh toán đơn <mã>"). Dùng nhãn từ `order-view` thay bản sao cục bộ.
+- `thanh-toan/page.tsx`: sau khi đặt, nút chính "Xem chi tiết đơn" (link tới chi tiết), "Đơn của tôi", "Tiếp tục mua sắm"; QR vẫn hiện ngay tại chỗ. Thêm `CouponBox` dưới các dòng tiền và dòng "Giảm giá (MÃ)".
+- `components/coupon-box.tsx` (mới, tách từ `gio-hang/page.tsx`): ô nhập có nhãn "Mã giảm giá" (`id/name=coupon-code`), nút Áp dụng, tối đa 6 mã trong ví (`GET /me/coupons`) bấm để áp, mã đòi đơn tối thiểu cao hơn tạm tính bị khoá kèm `title`, nút bỏ mã, lỗi của server hiện `role="alert"`.
+  Khác bản cũ: đổi mã xong gọi `invalidateQueries(['quote'])` để báo giá thanh toán tính lại (mã nằm trên giỏ; `/checkout/quote` và `place-order` đọc `cart.couponCode` phía server, nên không đổi hợp đồng API). Hai mutation dùng chung `mutationKey` để trang thanh toán biết mã đang đổi.
+- `thanh-toan/page.tsx`: nút "Đặt hàng" khoá khi mã đang đổi hoặc báo giá đang tính lại (`couponChanging || quoteQ.isFetching`); trước đây báo giá cũ vẫn hiện đủ để bấm đặt khi con số trên màn hình đã lỗi thời.
+- `components/site-search.tsx` (mới) + `site-header.tsx`: form `role="search"` GET về `/` (tìm được cả khi JS chưa chạy); có JS thì `router.push('/?q=…#san-pham')`. Nhãn ẩn "Tìm sản phẩm", nút "Tìm kiếm", `maxLength` 100 (như `SEARCH_Q_MAX_LENGTH` của API, quá hạn thì API trả 400), từ khoá rỗng/chỉ khoảng trắng không điều hướng. Hàng riêng ở điện thoại, nằm giữa logo và giỏ từ màn `sm`.
+- `lib/catalog-filter.ts` + `page.tsx`: `?q=` chuẩn hoá (gộp khoảng trắng, cắt 100 ký tự) rồi truyền `GET /products?q=`; `firstParam` xử lý tham số lặp (`?q=a&q=b` là mảng ở runtime, nếu không sẽ ném lỗi ở `.replace`). Dòng "Kết quả tìm kiếm cho “…” · Xóa tìm kiếm", chip thương hiệu giữ từ khoá, "Xóa tìm kiếm" giữ thương hiệu,
+  câu báo riêng khi không có kết quả, `generateMetadata` đặt `noindex` cho trang kết quả (mỗi từ khoá là một URL). `#san-pham` đổi `scroll-mt-20` thành `scroll-mt-32 sm:scroll-mt-20` vì header cao hơn ở điện thoại (thêm hàng tìm kiếm).
+- `ds-v2-guest.spec.ts`: thêm `coupon-box.tsx`, `site-search.tsx`, `tai-khoan/don-hang/[code]/page.tsx` vào bánh cóc `MIGRATED` (24 thành 27 file).
+
+### Test (đỏ→xanh)
+Mỗi bước viết test trước, chạy thấy đỏ, rồi sửa:
+- `guest-pages.a11y.spec.tsx` (+2 test; đỏ 2/14 trước khi sửa tai-khoan/thanh-toan: chưa có link chi tiết, chưa có "Xem chi tiết đơn"): danh sách đơn có lối vào chi tiết/Thanh toán đúng loại đơn; đặt xong có link tới đơn vừa đặt.
+- `tai-khoan/don-hang/[code]/page.spec.tsx` (9 test): đơn chuyển khoản chờ dựng lại QR/STK/tên TK/nội dung CK và nút Sao chép có tên; đủ truy cập (một h1, không nhảy cấp, mọi điều khiển có tên, vùng chạm 44px); đơn COD đã giao có vận chuyển và KHÔNG dựng QR (0 lần gọi `getBankQr`); đơn đã hủy không dựng QR;
+  link `javascript:` bị bỏ; tiền về (QR báo PAID) thì đơn tải lại và hết "Chờ thanh toán"; 404 khác lỗi mạng; chưa đăng nhập không gọi API.
+- `thanh-toan/coupon.spec.tsx` (8 test; đỏ 7/8 trước khi sửa): ô có nhãn + mã trong ví; chọn mã thì báo giá tính lại, hiện "Giảm giá (WELCOME30)" -90.000đ và tổng 240.000đ; nhập tay được viết hoa/cắt khoảng trắng; mã bị từ chối hiện lý do server, giá không đổi; bỏ mã về nguyên giá; mã đòi tối thiểu cao hơn bị khoá + lý do;
+  nút Đặt hàng khoá trong lúc mã/báo giá đang tính (kiểm đột biến: bỏ `quoteStale` khỏi điều kiện `disabled` thì test này đỏ); truy cập.
+- `lib/catalog-filter.spec.ts` (3; 1 đỏ trước khi thêm `firstParam`), `components/site-search.spec.tsx` (4; đỏ do chưa có component), `app/page.spec.tsx` (7; 6 đỏ trước khi sửa trang chủ), `components/site-header.spec.tsx` (+1; đỏ trước khi gắn ô tìm kiếm), `lib/order-view.spec.ts` (7).
+
+### Kiểm chứng (lượt này)
+```
+cd apps/web && npx vitest run tailwind.config.spec.ts src/ds-v2-guest.spec.ts src/app/guest-pages.a11y.spec.tsx src/app/page.spec.tsx \
+  src/app/tai-khoan/don-hang src/app/thanh-toan src/components/hide-on-portals.spec.tsx src/components/site-footer.spec.tsx \
+  src/components/site-header.spec.tsx src/components/site-search.spec.tsx src/lib/public-support.spec.ts src/lib/site.spec.ts \
+  src/lib/recycling.spec.ts src/lib/checkout-points.spec.ts src/lib/storefront-context.spec.ts src/lib/order-view.spec.ts src/lib/catalog-filter.spec.ts
+ Test Files  18 passed (18)
+      Tests  266 passed (266)
+cd apps/web && npx tsc --noEmit                      -> exit 0
+cd apps/web && npx eslint <mọi file đã sửa/thêm>     -> exit 0, 0 lỗi
+```
+Không chạy Playwright/`next build`/chụp màn hình (quy định máy 15,5GB); bố cục chỉ kiểm bằng spec jsdom và đọc mã.
+
+### Giả định
+- Mã giảm giá áp lên GIỎ (đúng như miniapp và API `POST /cart/coupon`), không thêm trường `couponCode` vào `place-order`/`quote`: server đọc mã từ giỏ, nên hợp đồng API và tiền không đổi.
+- Chặn nút "Đặt hàng" khi báo giá đang tính lại là thay đổi hành vi nhỏ, chọn theo hướng an toàn tiền (khách luôn thấy đúng con số trước khi đặt; server vẫn tính lại giá lúc đặt).
+- Trang chi tiết đơn không có nút "Hủy đơn"/"Mua lại": catalog C-025 yêu cầu chi tiết + QR trả lại; hủy/mua lại có API (`POST /orders/:code/cancel`, repurchase) nhưng cần quyết định nghiệp vụ về hoàn tiền/điểm trên web nên để dòng hướng dẫn liên hệ hotline/Zalo OA.
+- Tìm kiếm ở trang chủ lấy tối đa 30 sản phẩm (giới hạn sẵn có của `getProducts`), chưa phân trang/danh mục/sắp xếp: A1-014 mục 3 có nhắc "danh mục" nhưng gói chỉ yêu cầu ô tìm kiếm.
+- Header khách cao hơn ở điện thoại (thêm hàng tìm kiếm, vẫn `sticky`); nếu chủ dự án thấy chiếm màn hình thì chuyển hàng tìm kiếm thành nút mở rộng ở lượt thiết kế sau.
+- Footer chỉ có hotline + email theo đặc tả gói; "thông tin pháp lý" (A1-014 mục 5) chưa có nội dung do chủ dự án cung cấp.
+
+### Việc còn lại / không làm
+- A1-014: danh mục + sắp xếp/lọc giá ở web, ví/xu trong tài khoản web, hủy/mua lại đơn trên web (xem Giả định).
+- `merchant-denied` thiếu h1 và khối `legacyV1Colors` của `tailwind.config.ts`: chờ PC-11/PD-1.
+- Build web phải có `NEXT_PUBLIC_SITE_URL` (đã thêm ở docker-compose.vietnix.yml, mục 1/3): build lại image web khi deploy.
+
+## Tổng kết gói PC-7
+
+| Mã | Trạng thái |
+| --- | --- |
+| C-097 web khách theo DS v2 (tailwind preset, tokens.css, Fraunces, bỏ palette v1 ở 27 file khách, màu trạng thái, bánh cóc) | XONG; `/admin`, `/merchant`, `/brand` để PC-11/PD-1 |
+| C-025 chi tiết đơn + QR, Mã giảm giá ở thanh toán, tìm kiếm, footer, gỡ Kênh Đối Tác | XONG (chưa có hủy/mua lại, danh mục) |
+| C-116 phần web (chữ < 12px) | XONG (bánh cóc 0 chỗ trên file khách) |
+| C-123 heading web khách | XONG (trừ `merchant-denied` thuộc cổng) |
+| C-077 phần web khách (tên truy cập, nhãn ô nhập) | XONG (spec truy cập 14 + 9 + 8 test) |
+| Q-20 SITE_URL/canonical/sitemap, `NEXT_PUBLIC_SITE_URL` trong docker-compose.vietnix.yml | XONG |
