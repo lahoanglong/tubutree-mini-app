@@ -130,3 +130,50 @@ Thử tay trong transaction rồi ROLLBACK: xoá một user có địa chỉ và
 ### Việc còn lại
 - Hiện chưa có API đổi địa chỉ của gói, nên "hãy đổi địa chỉ của gói trước" chỉ làm được bằng cách huỷ gói. Phần sửa gói thuộc gói việc khác (Q-13).
 - `subscriptions.variationId` vẫn là CASCADE (A2-003 có nhắc). Ngoài phạm vi Q-12, để lại.
+
+## C-057 (A2-011, Q-13 phần chống trùng): chống trùng gói giao định kỳ — XONG
+
+Commit `74be645`.
+
+### Đã làm
+- `subscriptions.service.ts` `create`: trong transaction tìm gói còn chạy (`ACTIVE`/`PAUSED`) cùng `(userId, variationId, addressId)` trước khi ghi. Request song song cùng lọt qua bước đọc thì partial unique index chặn kẻ đến sau (P2002); bắt lỗi đó ngoài transaction, đọc lại gói đã có rồi xử lý như trường hợp trùng.
+- Xử lý trùng (idempotent cho bấm đúp/retry): gói cũ `ACTIVE` cùng số lượng và chu kỳ thì trả lại chính gói đó (200, FE không đổi gì). Khác số lượng/chu kỳ, hoặc gói cũ đang `PAUSED`, thì 409 `code: SUBSCRIPTION_DUPLICATE`, kèm `subscriptionId` của gói cũ và câu tiếng Việt nêu tên SP ("... đang tạm dừng, hãy bật lại gói đó thay vì tạo gói mới" / "... hãy sửa gói đó hoặc chọn địa chỉ khác").
+- `setStatus`: bật lại gói đã huỷ khi khách đã có gói mới cùng SP + địa chỉ trước đây sẽ ra 500 (P2002 từ index mới); nay trả 409 `SUBSCRIPTION_DUPLICATE` như trên, gói huỷ giữ nguyên.
+- Cùng SP khác địa chỉ vẫn tạo được (Q-13). Gói đã huỷ không tính.
+- Miniapp: `subscribe-sheet.tsx` đã hiện `getErrorMessage(e)` ở onError, nên câu 409 hiện thẳng cho khách; không sửa FE.
+
+### Test thêm (đỏ → xanh)
+- `apps/api/test/integration-race/subscription-duplicate.race-spec.ts` (Postgres thật, 8 ca): index tồn tại đúng định nghĩa; **5 request song song × 10 vòng** (rào chắn ép cả 5 qua bước đọc địa chỉ cùng lúc) → đúng 1 gói, cả 5 nhận cùng id, và khẳng định nhánh đọc lại sau P2002 thật sự chạy; gửi lại tuần tự trả gói cũ; khác địa chỉ được tạo; khác số lượng/chu kỳ → 409; gói PAUSED → 409; gói đã huỷ → tạo mới được; bật lại gói huỷ khi đã có gói mới → 409.
+  - Trước khi sửa: `Tests: 6 failed, 2 passed, 8 total` (vòng song song tạo nhiều gói, gửi lại tạo gói thứ 2, không có 409).
+  - Sau khi sửa: `Tests: 8 passed, 8 total`.
+- `subscriptions.service.spec.ts`: mock thêm `subscription.findFirst`; 2 ca mới (trả gói cũ khi gửi lại y hệt, 409 khi khác chu kỳ).
+
+### Lệnh kiểm chứng + output
+```
+# apps/api
+DATABASE_URL=postgresql://tubu:tubu@localhost:5546/tubutree_it?schema=public npx prisma migrate deploy
+  (lần đầu) ERROR: subscriptions có 15 nhóm gói ACTIVE/PAUSED trùng (userId, variationId, addressId); xử lý tay (xem đầu migration.sql) rồi chạy lại migrate deploy
+  -> dữ liệu trùng do chính lần chạy test ĐỎ tạo ra trong DB test; huỷ bớt gói thừa trong DB test, migrate resolve --rolled-back, deploy lại:
+  All migrations have been successfully applied.
+npx prisma migrate diff --from-url $DATABASE_URL --to-schema-datamodel prisma/schema.prisma --script
+  -- This is an empty migration.
+DATABASE_URL=... npx jest -c test/integration-race/jest.config.js --runInBand --verbose "subscription-duplicate|address-subscription"
+  Tests:       15 passed, 15 total
+npx jest --maxWorkers=1 src/modules/subscriptions
+  Tests:       40 passed, 40 total
+npx tsc --noEmit -p tsconfig.json   -> (không lỗi)
+npx eslint src/modules/subscriptions/ test/integration-race/subscription-duplicate.race-spec.ts -> (không lỗi)
+npx prisma validate -> The schema at prisma\schema.prisma is valid
+```
+
+### Migration
+`20261010030000_subscription_open_unique`: đếm nhóm gói `ACTIVE`/`PAUSED` trùng `(userId, variationId, addressId)`; có thì `RAISE EXCEPTION` kèm số nhóm, KHÔNG xoá/huỷ gì (truy vấn liệt kê nằm ở đầu file). Không trùng thì `CREATE UNIQUE INDEX "subscriptions_user_variation_address_open_key" ... WHERE "status" IN ('ACTIVE','PAUSED')`. Guard đã được thử thật (output ở trên). Schema Prisma chỉ thêm comment trỏ tới index này (Prisma không biểu diễn được partial index, xem A2-022).
+
+### Giả định
+- Khoá chống trùng theo `variationId` (đúng đặc tả gói), không theo `productId`: hai phân loại khác nhau của cùng SP tới cùng địa chỉ vẫn được tạo hai gói.
+- Gửi lại y hệt trả lại gói cũ thay vì 409, để bấm đúp/retry mạng không hiện lỗi. Chỉ coi là "y hệt" khi gói cũ đang `ACTIVE` và cùng số lượng + chu kỳ; còn lại 409 để khách không tưởng gói mới đã được tạo.
+- Trước khi deploy PROD nên chạy truy vấn liệt kê ở đầu migration; nếu PROD đã có gói trùng do lỗi cũ thì migration dừng, cần chủ dự án chọn gói giữ lại.
+
+### Việc còn lại
+- FE chưa dùng `subscriptionId` trong 409 để đưa khách tới gói cũ (chỉ hiện câu lỗi). Có thể làm cùng phần sửa gói (PC-6).
+- Chưa có Idempotency-Key ở FE (A2-011 có gợi ý); index + trả gói cũ đã đủ chặn trùng nên không làm.
