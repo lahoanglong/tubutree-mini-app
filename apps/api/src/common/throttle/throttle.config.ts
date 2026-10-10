@@ -12,6 +12,8 @@ import type { Request } from 'express';
  *   chung IP (CGNAT) không bị cộng dồn mọi màn hình vào một bộ đếm.
  * - `authIp`: chỉ bật trên route gắn @AuthThrottle, là trần theo IP nới rộng cho đăng nhập/refresh,
  *   còn giới hạn chặt nằm ở `default` với khoá theo thiết bị/token.
+ * - blockDuration để mặc định (= ttl, 60s): bộ nhớ của throttler 6.5 đưa bộ đếm về 0 khi hết khoá,
+ *   nên khoá ngắn hơn sẽ biến "N request/phút" thành "N request mỗi lần khoá".
  */
 export const THROTTLE_TTL_MS = 60_000;
 export const THROTTLE_DEFAULT_LIMIT = 300;
