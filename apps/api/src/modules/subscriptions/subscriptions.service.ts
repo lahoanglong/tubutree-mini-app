@@ -24,6 +24,7 @@ import {
   PENDING_PAYMENT_TTL_KEY,
 } from '../orders/pending-payment-expiry.cron';
 import { CRON_TZ } from '../../common/cron-tz';
+import { formatVnDate } from '../../common/vn-time';
 
 /** Phương thức trả cho gói định kỳ (Q-13). Cổng ZaloPay/VNPAY cần khách thao tác mỗi kỳ nên không nhận. */
 export const SUBSCRIPTION_PAYMENT_METHODS = ['COD', 'WALLET', 'BANK_TRANSFER'] as const;
@@ -485,13 +486,14 @@ export class SubscriptionsService {
       for (const sub of due) {
         // CLAIM atomic: advance nextRunAt TRƯỚC khi tạo đơn. Chỉ instance đầu tiên
         // (count=1) được xử lý → multi-instance cron không tạo đơn TRÙNG cho khách.
+        const nextRunAt = this.addWeeks(now, sub.intervalWeeks);
         const claimed = await this.prisma.subscription.updateMany({
           where: { id: sub.id, status: 'ACTIVE', nextRunAt: { lte: now } },
-          data: { nextRunAt: this.addWeeks(now, sub.intervalWeeks) },
+          data: { nextRunAt },
         });
         if (claimed.count === 0) continue; // instance khác đã claim
         try {
-          if (await this.runCycle(sub, sub.nextRunAt)) created++;
+          if (await this.runCycle(sub, sub.nextRunAt, nextRunAt)) created++;
         } catch (err) {
           // nextRunAt đã advance → bỏ qua chu kỳ này (không double-charge), chờ chu kỳ kế.
           this.logger.error(`Subscription ${sub.id} lỗi: ${err instanceof Error ? err.message : err}`);
@@ -503,10 +505,14 @@ export class SubscriptionsService {
     }
   }
 
-  /** Một kỳ đã claim: ghi đơn rồi xử lý hậu quả từng loại lỗi. Trả true nếu có đơn mới. */
-  private async runCycle(sub: { id: string; userId: string }, cycleAt: Date): Promise<boolean> {
+  /**
+   * Một kỳ đã claim: ghi đơn rồi xử lý hậu quả từng loại lỗi. Trả true nếu có đơn mới. `nextRunAt` = kỳ kế mà bước
+   * claim đã ghi; bật lại lịch giữ nguyên ngày đó nên tin tạm dừng nói rõ kỳ này không giao và ngày kỳ kế tiếp.
+   */
+  private async runCycle(sub: { id: string; userId: string }, cycleAt: Date, nextRunAt: Date): Promise<boolean> {
     const code = await this.generateCode();
     let placed: PlacedCycleOrder | null;
+    const missed = ` (kỳ này không giao, kỳ kế tiếp ngày ${formatVnDate(nextRunAt)})`;
     try {
       placed = await this.prisma.$transaction((tx) => this.placeCycleOrder(tx, sub.id, cycleAt, code));
     } catch (err) {
@@ -515,17 +521,17 @@ export class SubscriptionsService {
         return false;
       }
       if (err instanceof SubscriptionAddressError) {
-        await this.pauseSubscription(sub, 'Địa chỉ giao hàng không còn hợp lệ', 'invalid_address');
+        await this.pauseSubscription(sub, `Địa chỉ giao hàng không còn hợp lệ${missed}`, 'invalid_address');
         return false;
       }
       if (err instanceof SubscriptionWalletShortError) {
-        await this.pauseSubscription(sub, 'Số dư Ví Tubu không đủ để thanh toán đơn kỳ này', 'insufficient_wallet');
+        await this.pauseSubscription(sub, `Số dư Ví Tubu không đủ để thanh toán đơn kỳ này${missed}`, 'insufficient_wallet');
         return false;
       }
       if (err instanceof SubscriptionCodLimitError) {
         await this.pauseSubscription(
           sub,
-          `Giá trị đơn kỳ vượt hạn mức thanh toán khi nhận hàng (${COD_LIMIT_TEXT}), hãy giảm số lượng hoặc đổi sang Ví Tubu/chuyển khoản`,
+          `Giá trị đơn kỳ vượt hạn mức thanh toán khi nhận hàng (${COD_LIMIT_TEXT}), hãy giảm số lượng hoặc đổi sang Ví Tubu/chuyển khoản${missed}`,
           'cod_limit',
         );
         return false;

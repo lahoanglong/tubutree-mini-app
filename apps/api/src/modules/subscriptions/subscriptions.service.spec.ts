@@ -7,6 +7,7 @@ import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { WalletLedgerService } from '../wallet/wallet-ledger.service';
+import { formatVnDate } from '../../common/vn-time';
 
 /** Stub tối thiểu cho các test không quan tâm việc đẩy Pancake. */
 const pancakeStub = () => ({ enqueuePush: jest.fn().mockResolvedValue(undefined) }) as unknown as PancakeOrderService;
@@ -416,6 +417,19 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       expect(analytics.recordBestEffort).toHaveBeenCalledWith(
         expect.objectContaining({ props: expect.objectContaining({ action: 'order_failed', reason: 'insufficient_wallet' }) }),
       );
+    });
+
+    // Bước claim đã dời nextRunAt sang kỳ kế; bật lại lịch (setStatus) giữ ngày đó, nên tin phải nói thật là kỳ này
+    // không giao và ngày của kỳ kế tiếp, không để khách tưởng bật lại là có đơn ngay.
+    it('tạm dừng vì Ví Tubu thiếu → tin nói rõ kỳ này không giao + ngày kỳ kế tiếp (review)', async () => {
+      const applyDelta = jest.fn().mockRejectedValue(new BadRequestException('Số dư ví không đủ.'));
+      const { svc, notify, updateMany } = makeProcess(1, { paymentMethod: 'WALLET', applyDelta });
+      await svc.processDue();
+      const claimedNext = updateMany.mock.calls[0][0].data.nextRunAt as Date;
+      const vnDate = formatVnDate(claimedNext);
+      const reason = notify.mock.calls.find((c) => c[1] === 'SUBSCRIPTION_PAUSED')![2].reason as string;
+      expect(reason).toContain('kỳ này không giao');
+      expect(reason).toContain(vnDate);
     });
 
     it('chuyển khoản → đơn PENDING_PAYMENT chưa trả + báo khách chuyển khoản trong hạn', async () => {
