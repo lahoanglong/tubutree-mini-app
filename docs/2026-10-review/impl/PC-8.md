@@ -148,3 +148,17 @@ Reviewer độc lập báo 1 major + 5 minor. Cả 6 đã xác minh lại bằng
 - `cd apps/api && npx tsc --noEmit -p tsconfig.json` exit 0; ESLint các file api đã sửa exit 0.
 - `cd apps/web && npx tsc --noEmit` exit 0; `npx eslint` các file web đã sửa exit 0.
 - Migration mới: không (sửa tại chỗ `20261010150000`, chưa deploy).
+
+## Review lượt 2
+
+Review độc lập sau lượt 1 còn một lỗi MAJOR mở; đã sửa, các minor còn lại không sửa.
+
+### 1. E2E duyệt đại lý còn gõ vào ô Tier cũ (C-092, major)
+- Xác minh (đọc code): `DealerRow` trong `apps/web/src/app/admin/page.tsx` dùng `DealerTierSelect` (`<select aria-label="Bậc đại lý">`, nạp từ `GET /admin/dealer-tiers`), không còn `input` có placeholder "Tier". `apps/e2e/tests/admin.spec.ts` vẫn `p.fill('input[placeholder*="Tier"]', ...)` và không mock `/admin/dealer-tiers` -> sẽ hết thời gian chờ ở `fill`; test thứ hai (hàng chờ nhiều trang) cũng render `DealerTierSelect` cho mỗi hồ sơ PENDING nên sẽ rơi vào `E2E_UNMOCKED` của fixture.
+- Sửa (`apps/e2e/tests/admin.spec.ts`): thêm `mockDealerTiers(api)` (2 bậc đúng shape `AdminDealerTier`: `id`, `name`, `minOrderVolume`, `creditLimit`, `paymentTerms`) gọi trong `beforeEach` cho cả hai test; bước chọn đổi thành `p.getByLabel('Bậc đại lý').selectOption('dealer_l1')` rồi `expect(approve).toBeEnabled()`; giữ assert body `{ approve: true, tierId: 'dealer_l1' }`.
+- Rà: chỉ `admin.spec.ts` và `admin-analytics.spec.ts` mở trang `/admin`; chỉ `admin.spec.ts` chạm luồng đại lý. Không còn chỗ nào dùng ô Tier cũ trong `apps/e2e/tests`.
+- Kiểm chứng: `cd apps/e2e && npx tsc --noEmit -p tsconfig.json` không có lỗi ở `admin.spec.ts`. Có 1 lỗi sẵn có ở `tests/admin-analytics.spec.ts(43,7)` (thiếu `ns1CohortSize`, `ns1RepeatCount` trong `RetentionDailyRow`), file này không thuộc lượt sửa này (commit 422a6ff) nên không sửa.
+- Trạng thái: unverified, chưa chạy Playwright (máy hạn chế RAM, điều phối viên chạy E2E); chạy ở T3.
+
+### Minor còn lại
+- Không sửa theo yêu cầu của điều phối viên.
