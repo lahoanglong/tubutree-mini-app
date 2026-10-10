@@ -74,3 +74,73 @@ Không có. Dữ liệu đang kẹt trên PROD (dòng CHECKIN trùng ngày) tự
 
 - Các bảng vẫn để lại ở dòng khách: staffProfile, communityProfile, subscriptions, affiliate, dealer, feed, wishlist, brandFollow, flashSaleReminder, notificationLog, referralTouch… Đa số là quan hệ 1-1 hoặc ít giá trị, cần quyết định nghiệp vụ "bên nào thắng".
 - Khi target bị khoá dòng (`FOR UPDATE`), một lần điểm danh đồng thời của target có thể làm lần gộp lỗi unique và rollback sạch; lần gọi lại sẽ thành công. Không cộng sai tiền.
+
+## C-005: throttle theo userId/IP, route đăng nhập theo thiết bị/token, miễn cho SSR web (A3-004; phần API của C-033, Q-22). XONG phần API
+
+Commit: `64db96c` (spec đỏ + điểm nối trung tính), `e9d1564` (sửa), `bbd36b1` (biến môi trường).
+
+### Đã sửa
+
+- `apps/api/src/common/throttle/app-throttler.guard.ts` (`AppThrottlerGuard`, thay `ThrottlerGuard` ở `APP_GUARD` trong `app.module.ts`):
+  - Khoá đếm là `u:<userId>` khi có JWT hợp lệ, `ip:<req.ip>` khi chưa. Route cần đăng nhập lấy `req.user` do `JwtAuthGuard` gắn trước. Route `@Public` tự xác minh `Authorization: Bearer` bằng `JWT_ACCESS_SECRET`, JWT sai/hết hạn thì đếm theo IP.
+  - Miễn throttle khi header `x-throttle-bypass` khớp `THROTTLE_BYPASS_TOKEN`. So sánh `timingSafeEqual` trên sha256 (cùng 32 byte, không lộ độ dài). Biến rỗng thì tắt hẳn, header rỗng không bao giờ khớp.
+- `apps/api/src/common/throttle/throttle.config.ts`:
+  - Throttler `default` 300 request/phút.
+  - Throttler `authIp` 30/phút/IP, chỉ bật trên route gắn `@AuthThrottle`.
+  - `@AuthThrottle(identify)`: giới hạn 10/phút theo định danh đã băm (sha256), cộng trần 30/phút/IP.
+- `auth.controller.ts`: 4 route `@Throttle(5/phút/IP)` đổi sang `@AuthThrottle`:
+  - `guest` đếm theo `deviceId`.
+  - `refresh` đếm theo refresh token (thân request hoặc cookie web `tubu_rt`).
+  - `zalo-mini-app` đếm theo `accessToken` (hoặc `code`).
+  - `zalo-oauth` đếm theo `code`.
+  - `ensure-phone` giữ `@Throttle(10/phút)`, nay tự đếm theo userId.
+- Các `@Throttle` riêng sẵn có (checkout 10/phút, feed, analytics, loyalty…) không đổi số, nhưng giờ đếm theo userId khi có JWT, nên người dùng chung wifi không còn chung suất.
+- **Khoá vẫn theo class+handler** (hành vi của @nestjs/throttler 6.5.0, verifier A3 đã ghi): 300/phút là của mỗi route, không cộng mọi route vào một bộ đếm. Giữ cách này để khách vô danh chung IP (CGNAT) không bị cộng mọi màn hình vào một suất, và một route nóng không ăn hết suất của route khác.
+- Tiền tố `u:` giữ khoá khác với `UserThrottlerGuard` của ai-advisor (tracker = sub trần). Nếu trùng khoá, hai guard cùng cộng và route chat chỉ còn 5/phút.
+- `env.validation.ts` (ngoài nhóm file của gói, thêm tối thiểu): `THROTTLE_BYPASS_TOKEN` mặc định rỗng; đặt thì tối thiểu 32 ký tự, ngắn hơn là không boot.
+- Biến môi trường được thêm vào:
+  - `apps/api/.env.example` và `.env.production.example`. File thứ hai nằm ngoài nhóm file, nhưng là nguồn `.env` mà compose đọc.
+  - `docker-compose.prod.yml` và `docker-compose.vietnix.yml`: thêm `THROTTLE_BYPASS_TOKEN: ${THROTTLE_BYPASS_TOKEN:-}` cho cả `api` và `web`.
+  - `docker-compose.dev.yml` không có service api/web, nên không đổi.
+
+### Test thêm (đỏ → xanh)
+
+`apps/api/src/common/throttle/app-throttler.guard.spec.ts`, 13 ca. Spec gọi HTTP thật (`app.listen(0)` + `fetch`, `X-Forwarded-For`, `trust proxy 1`), dùng đúng `AuthController` thật và thứ tự guard toàn cục như `app.module`.
+
+- Đỏ ở `64db96c`: 13/13 fail. Ví dụ:
+  - refresh 12 token khác nhau chung IP cho `Received: 7` lần 429 (khớp A3-004).
+  - 2 user chung IP, 140 request: 80 lần 429.
+  - Header bypass đúng token: 260 lần 429.
+- Xanh sau `e9d1564`: `Tests: 13 passed, 13 total`.
+- `env.validation.spec.ts` thêm 3 ca cho `THROTTLE_BYPASS_TOKEN`.
+
+### Lệnh kiểm chứng
+
+```
+cd apps/api
+npx jest --maxWorkers=1 src/common/throttle src/config/env.validation.spec.ts src/modules/auth
+  -> Test Suites: 5 passed, 5 total; Tests: 71 passed, 71 total
+npx jest --maxWorkers=1 src/config/env.validation.spec.ts src/modules/auth src/modules/ai-advisor src/modules/analytics
+  -> Test Suites: 11 passed, 11 total; Tests: 97 passed, 97 total
+npx tsc --noEmit -p tsconfig.json -> không lỗi
+npx eslint src/common/throttle src/app.module.ts src/modules/auth/auth.controller.ts src/config/env.validation.ts src/config/env.validation.spec.ts -> sạch
+docker compose -f docker-compose.{prod,vietnix}.yml config (bản sao trong scratchpad, THROTTLE_BYPASS_TOKEN=abc)
+  -> mỗi file 2 dòng "THROTTLE_BYPASS_TOKEN: abc" (api + web)
+```
+
+### Migration
+
+Không có.
+
+### Giả định
+
+- **Giới hạn theo định danh trên route đăng nhập là 10/phút**, trần IP 30/phút cho mỗi route. Đăng nhập khách tạo user mới, nên một IP tạo được tối đa 30 khách/phút (trước là 5). Đây là đánh đổi mà Q-22 đã chọn.
+- **Refresh token xoay vòng**, nên mỗi lần refresh là một định danh mới. Giới hạn 10/phút chỉ chặn việc phát lại cùng một token; trần IP 30/phút chặn việc rải token.
+- **Bypass miễn mọi throttler**, kể cả route đăng nhập. Token chỉ nằm ở máy chủ web, không bao giờ xuống trình duyệt.
+
+### Việc còn lại
+
+- Yêu cầu 3 (web SSR gửi header `x-throttle-bypass` khi chạy phía server; chỉ `notFound()` khi 404) và yêu cầu 4 (miniapp retry 429) do lượt khác làm.
+- PROD cần đặt `THROTTLE_BYPASS_TOKEN` (`openssl rand -hex 32`) trong `.env` của VPS rồi tạo lại container api + web. Chưa đặt thì SSR vẫn bị đếm theo IP máy chủ web, ở mức 300/phút cho mỗi route.
+- Bộ đếm vẫn nằm trong RAM của từng instance (Q-23: giữ 1 instance).
+- Comment cũ ở `apps/api/src/main.ts:55` còn nhắc "60req/min". File này nằm ngoài nhóm file nên chưa sửa.
