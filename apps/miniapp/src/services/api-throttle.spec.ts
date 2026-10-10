@@ -1,4 +1,4 @@
-import { describe, it, expect, vi as vitestVi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi as vitestVi, beforeAll, beforeEach, afterEach } from 'vitest';
 import type { AxiosAdapter, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { api, getErrorMessage, RATE_LIMITED_MESSAGE } from './api';
 
@@ -33,9 +33,12 @@ function scripted(replies: Reply[]) {
 /**
  * Interceptor request có `await import(...)` — việc nạp module không đi qua setTimeout nên đồng
  * hồ giả không đẩy được; nhường vòng lặp thật (setImmediate) cho tới khi adapter được gọi.
+ * Hạn chờ tính bằng performance.now() (không bị làm giả) thay vì số vòng cố định: lần nạp lạnh
+ * đầu tiên có thể cần hàng trăm vòng lặp tuỳ tải máy.
  */
-async function until(cond: () => boolean): Promise<void> {
-  for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setImmediate(r));
+async function until(cond: () => boolean, timeoutMs = 3_000): Promise<void> {
+  const deadline = performance.now() + timeoutMs;
+  while (!cond() && performance.now() < deadline) await new Promise((r) => setImmediate(r));
   if (!cond()) throw new Error('điều kiện không xảy ra');
 }
 
@@ -46,6 +49,9 @@ const tooMany = (headers: Record<string, string> = {}): Reply => ({
 });
 
 describe('xử lý 429 ở client miniapp', () => {
+  beforeAll(async () => {
+    await import('../store/auth');
+  });
   beforeEach(() => {
     vitestVi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   });
