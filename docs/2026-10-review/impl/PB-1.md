@@ -188,3 +188,110 @@ $ npx eslint src/modules/integrations/pancake/ test/integration-race/pancake-web
 ### Việc còn lại
 - Chưa có màn admin xem/đẩy tay sự kiện Pancake FAILED đã hết lượt. Hiện chỉ có log `warn` của cron và dữ liệu trong bảng.
 - Dòng cũ trước migration không có `dedupeKey`. Chỉ sự kiện nhận sau deploy mới được dedupe.
+
+## C-055 — Cột tích luỹ Int 32-bit, tổng đơn đại lý tràn INT4 — XONG (BigInt, theo Q-10 phương án 1)
+
+### Đếm nơi dùng (quyết định BigInt hay trần DTO)
+- Grep `threshold|volumeAtClaim|minOrderVolume|dealerReward|dealerRewardClaim|ctvMilestoneClaim|affiliateLink|dealerCreditLedger` trong api + web + miniapp + shared-types: chỉ **2 service** đọc/ghi các cột ngưỡng/doanh số tích luỹ (`brand.service.ts`, `dealer.service.ts`). `CtvMilestoneClaim.revenue` chỉ được ghi (snapshot đối soát), không đọc ở đâu. Web/miniapp đọc qua API dạng `number` nên không phải sửa nếu API vẫn trả number.
+- Tổng số file phải sửa: **7** (5 mã + 2 test), dưới trần 25, nên làm BigInt.
+- Không đổi kiểu: `AffiliateLink.revenue` (cột chết, không nơi nào ghi, luôn 0), `DealerTier.minOrderVolume` (ngưỡng theo tháng, 200 triệu), `DealerCreditLedger.delta` (mỗi dòng = 1 đơn, đã có trần 2 tỷ/đơn; tổng nợ do Postgres `SUM(int4)` trả int8 nên không tràn).
+
+### Đã làm
+- Migration `20261010080000_dealer_volume_bigint`: `dealer_rewards.threshold`, `dealer_reward_claims.threshold`, `dealer_reward_claims.volumeAtClaim`, `ctv_milestone_claims.revenue` từ INT4 sang BIGINT. Nới kiểu không mất dữ liệu. SQL do `prisma migrate dev --create-only` sinh, không drift.
+- `brand.service.ts`, `dealer.service.ts`: đổi BigInt sang number ngay ở chỗ đọc (`rewardView`, `claimView`). Vì vậy mọi payload API vẫn là number JSON: tiến độ thưởng, gửi/duyệt/từ chối/đã trao claim, danh sách claim admin, trang nhãn công khai, CRUD thưởng mốc admin. Không vá `BigInt.prototype.toJSON` toàn cục. Phép tính `toGo = threshold - settled` và `vnd()` chạy trên number.
+- `brand.dto.ts`: `threshold` có `@Max(DEALER_REWARD_THRESHOLD_MAX = 1.000.000.000.000)`. Vượt trần thì trả 400, và giá trị luôn nằm trong `Number.MAX_SAFE_INTEGER` nên đổi qua lại BigInt/number không mất chính xác.
+- A5N-10: `DealerService.placeOrder` chặn `subtotal > DEALER_ORDER_TOTAL_MAX` (2 tỷ) bằng 400, câu báo "vui lòng tách thành nhiều đơn". Kiểm tra này chạy trước kiểm tra hạn mức và trước khi ghi DB. `Order.total`, `OrderItem.total`, `DealerCreditLedger.delta` vẫn là INT4 (tiền một đơn).
+
+### Test (đỏ → xanh)
+- `test/integration-race/dealer-bigint-volume.race-spec.ts` (Postgres thật, 3 test). **Trước khi sửa: đỏ cả 3**, với lỗi thật `ConversionError("Unable to fit integer value '3000000000' into an INT4")` (500), và với đơn quantity 100.000 thì nhận `PrismaClientUnknownRequestError` thay vì `BadRequestException`.
+  1. Admin tạo, sửa và liệt kê thưởng mốc ngưỡng 3 tỷ; trang nhãn công khai trả `threshold` là number 3.000.000.000 sau `JSON.stringify`.
+  2. Đại lý có doanh số đã chốt 3,2 tỷ (2 đơn 1,6 tỷ): tiến độ đạt mốc (`toGo` 0), gửi claim (`volumeAtClaim` 3,2 tỷ), admin thấy trong danh sách, duyệt rồi đánh dấu đã trao. Mọi payload serialize được. Thông báo admin hiển thị `3.200.000.000`.
+  3. Đơn đại lý quantity 100.000 (tổng 10 tỷ) bị 400 ở cả PREPAID lẫn CREDIT, và không tạo đơn nào.
+- `src/modules/brand/dto/brand.dto.spec.ts` (3 test): 3 tỷ hợp lệ; vượt trần trả `max`; trần nhỏ hơn `MAX_SAFE_INTEGER`. Spec này viết sau khi đã thêm `@Max`, nên không có lần chạy đỏ riêng.
+- Spec cũ vẫn xanh: `dealer.race-spec` (claim đồng thời), `dealer-bonus`, `dealer-credit-limit`, `affiliate.race-spec`; unit `src/modules/brand` + `src/modules/dealer` (9 suite) + `src/modules/affiliate` (3 suite).
+
+```
+$ DATABASE_URL=postgresql://tubu:tubu@localhost:5551/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand dealer-bigint-volume
+    √ admin creates/updates/lists a DealerReward with threshold 3 billion; API payload is a plain number
+    √ dealer with settled volume 3.2 billion claims a 3-billion reward; admin approves; every payload serializes
+    √ dealer order whose total exceeds the per-order cap is rejected with 400, not a DB overflow 500
+Tests:       3 passed, 3 total
+$ ... --runInBand affiliate.race dealer-bonus dealer-credit-limit    -> Tests: 7 passed, 7 total
+$ ... --runInBand dealer.race-spec                                  -> [e1] fulfilled=5 insertsAttempted=5 ... PASS
+$ npx jest --maxWorkers=1 src/modules/brand src/modules/dealer      -> Test Suites: 9 passed; Tests: 178 passed
+$ npx jest --maxWorkers=1 src/modules/affiliate                     -> Test Suites: 3 passed; Tests: 110 passed
+$ npx tsc --noEmit -p tsconfig.json                                 -> exit 0
+$ npx eslint <5 file đã sửa/thêm>                                   -> sạch
+```
+
+### Migration — áp thử
+- `tubutree_it` (pb1, DB đã có đủ migration trước): `migrate deploy` OK.
+- Bản sao dữ liệu: `tubutree_perf` có 0 dòng ở cả 3 bảng. Sau `pg_dump | psql` sang `tubutree_pb1_copy` (39 s), mình chèn **1.000 thưởng mốc, 50.000 claim (`volumeAtClaim` 2 tỷ), 50.000 claim mốc CTV (`revenue` 2,1 tỷ)** vào bản sao. `migrate deploy` áp 8 migration còn thiếu trong 7,4 s; riêng migration này **693 ms**. Sau migrate cả 4 cột là `bigint`. Tổng kiểm trước = sau: `sum(threshold)` = 1.275.000.000.000, `sum(volumeAtClaim)` = 100.000.000.000.000, `sum(revenue)` = 105.000.000.000.000. Đã `DROP DATABASE tubutree_pb1_copy`. Không ghi gì vào `tubutree_perf`.
+- Khoá bảng: ALTER TYPE int4→int8 viết lại bảng dưới ACCESS EXCLUSIVE. Ở PROD 3 bảng này chỉ có vài chục/trăm dòng, nên khoá chỉ vài ms.
+
+### Giả định
+- Trần ngưỡng thưởng là 1.000 tỷ, đủ rộng cho doanh số năm của đại lý lớn nhất. Trần một đơn đại lý là 2 tỷ: đơn lớn hơn phải tách, vì cột tiền một đơn vẫn INT4 (A2-009 đề xuất giữ Int cho tiền một đơn).
+- API vẫn trả number chứ không trả chuỗi BigInt, để web/miniapp không phải đổi kiểu.
+
+### Việc còn lại
+- `dealer.service.ts` nằm ngoài nhóm "DTO brand/dealer" nhưng là nơi duy nhất đọc các cột này. Mình chỉ sửa ở chỗ đọc thưởng/claim và thêm một kiểm tra trong `placeOrder`. Gói khác (PB-5 timeZone thưởng quý, PC-8 nút mở lại claim) có thể cũng sửa file này, nên lúc gộp có thể đụng nhau ở `approveRewardClaim` / `rejectRewardClaim`.
+- Nếu sau này cần đơn đại lý trên 2 tỷ: chuyển `Order.total/subtotal`, `OrderItem.total`, `DealerCreditLedger.delta` sang BigInt. Phạm vi này lớn (checkout, orders, wallet, báo cáo, ước tính trên 25 file), nên không làm ở đây.
+
+## C-109 — Partial unique index chốt tiền mà Prisma không thấy — XONG
+
+### Đã làm
+- `apps/api/prisma/check-partial-indexes.ts` (chạy bằng `npx tsx prisma/check-partial-indexes.ts`):
+  - Đọc lần lượt `migrations/*/migration.sql`: bỏ comment `--` (cả CRLF), tách câu, rồi lấy mọi `CREATE UNIQUE INDEX … WHERE …`. Có theo dõi `DROP INDEX` và `ALTER INDEX … RENAME`.
+  - Gộp với danh sách cứng 14 khoá đã biết (`KNOWN_PARTIAL_UNIQUE_INDEXES`). Nhờ vậy, nếu bộ đọc SQL hỏng thì vẫn còn danh sách sàn để kiểm.
+  - So với `pg_indexes` của schema hiện tại. Thiếu index nào thì in tên và `exit 1`. Index có trong DB mà không có trong migration thì chỉ cảnh báo.
+- CI: `.github/workflows/e2e.yml` thêm bước "Check partial unique indexes" ngay sau `prisma migrate deploy` trên DB trống. Đây là workflow duy nhất dựng DB bằng migrate. File này nằm ngoài nhóm file của gói, mình chỉ thêm 4 dòng.
+- Hiện có **14** partial unique index, chứ không phải 13 như lúc audit: PA-6 đã thêm `subscriptions_user_variation_address_open_key`.
+
+### KHÔNG BAO GIỜ dùng `prisma db push` cho DB thật (PROD, staging, DB dev có dữ liệu)
+`db push` dựng hoặc đồng bộ DB theo `schema.prisma`, mà schema không biểu diễn được index có `WHERE`. Kết quả đo được: DB trống chạy `db push` thì có **0/14** khoá. Các khoá chống cộng điểm/xu/coupon/đơn trùng biến mất mà không báo lỗi gì. Muốn đổi schema thì luôn dùng `prisma migrate dev --create-only`, rồi `prisma migrate deploy`.
+
+### Test (đỏ → xanh)
+- `test/integration-race/partial-unique-indexes.race-spec.ts` (Postgres thật, 4 test):
+  1. Bộ đọc lấy đủ 14 khoá đã biết, không tính nhầm unique thường có comment chứa chữ WHERE ngay sau (`reputation_events_userId_reason_refId_key`). **Lần chạy đầu đỏ**: migration có CRLF nên comment không bị bỏ, chỉ đọc ra 4/14. Sửa bằng cách tách dòng theo `/\r?\n/`, sau đó xanh.
+  2. Theo dõi đúng DROP và RENAME qua nhiều migration (chuỗi SQL có CRLF và `;` trong comment).
+  3. DB dựng bằng `migrate deploy` (`tubutree_it`) có 14/14, `missing = []`.
+  4. Một schema có bảng nhưng không có index điều kiện (tình trạng `db push` để lại) thì bị báo thiếu cả 14.
+- Kiểm chứng tay bằng CLI:
+
+```
+$ DATABASE_URL=...5551/tubutree_it npx tsx prisma/check-partial-indexes.ts
+Partial unique index: mong đợi 14, có trong DB 14.            exit=0
+$ DATABASE_URL=...5434/tubutree_pb1_copy (bản sao perf đã migrate deploy) npx tsx prisma/check-partial-indexes.ts
+Partial unique index: mong đợi 14, có trong DB 14.            exit=0
+$ CREATE DATABASE tubutree_pb1_push (tubu_it_pb1); CREATE EXTENSION pg_trgm; npx prisma db push --skip-generate
+Your database is now in sync with your Prisma schema. Done in 2.31s
+$ DATABASE_URL=...5551/tubutree_pb1_push npx tsx prisma/check-partial-indexes.ts
+Partial unique index: mong đợi 14, có trong DB 0.
+THIẾU 14 partial unique index (DB dựng bằng db push hoặc migration chưa áp?): attendance_sessions_open_staff_key, coin_transactions_community_reason_key, ... subscriptions_user_variation_address_open_key
+exit=1
+$ DROP DATABASE tubutree_pb1_push
+```
+(Ngoài ra, `db push` lên DB chưa có `pg_trgm` giờ thất bại ngay: `operator class "gin_trgm_ops" does not exist`, vì C-027/C-038 đã thêm index trigram. Thêm một lý do để không dùng `db push`.)
+
+### Giả định
+- Chỉ kiểm partial **unique** index, tức các khoá chốt tiền. Partial index thường (chỉ phục vụ hiệu năng) không nằm trong phạm vi.
+
+### Việc còn lại
+- `ci.yml` (typecheck/lint/unit) không dựng Postgres nên không gắn bước kiểm ở đó. Bước kiểm chạy trong `e2e.yml`. Trước khi deploy PROD có thể chạy tay `npx tsx prisma/check-partial-indexes.ts` với `DATABASE_URL` PROD (chỉ đọc `pg_indexes`).
+- Race spec cũng chạy được trong CI nếu sau này có job chạy `test/integration-race`.
+
+## Tổng kết gói PB-1
+
+| Mục | Kết quả | Migration |
+|---|---|---|
+| C-027 + C-052 | XONG | `20261010042435_admin_cron_query_indexes` |
+| C-038 | XONG | `20261010053812_catalog_name_search_index` |
+| C-045 | XONG | `20261010070000_pancake_webhook_dedupe` |
+| C-055 | XONG (BigInt + trần DTO + trần 2 tỷ/đơn đại lý) | `20261010080000_dealer_volume_bigint` |
+| C-109 | XONG (script + race spec + bước CI e2e) | — |
+
+Yêu cầu chung khi deploy:
+- Áp 4 migration theo thứ tự tên. Cần extension `pg_trgm`: migration `20261010042435_admin_cron_query_indexes` tự `CREATE EXTENSION IF NOT EXISTS pg_trgm`, nên user DB PROD phải có quyền tạo extension, hoặc DBA tạo sẵn.
+- Migration index dùng CREATE INDEX thường nên sẽ khoá ghi các bảng lớn trong vài giây (xem mục C-027).
+- Sau `migrate deploy` chạy `npx tsx prisma/check-partial-indexes.ts`.
+- File ngoài nhóm của gói: `apps/api/src/modules/dealer/dealer.service.ts` (C-055) và `.github/workflows/e2e.yml` (C-109).
