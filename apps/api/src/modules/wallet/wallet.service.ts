@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { paginated, skipTake } from '../../common/pagination';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { applyWalletDelta } from './wallet-ledger.service';
@@ -41,6 +42,25 @@ export class WalletService {
       withdrawMin, // rút tối thiểu
       withdrawFee, // phí chuyển khoản ngân hàng
     };
+  }
+
+  /**
+   * Sao kê Ví Tubu từ sổ cái wallet_transactions (C-060), mới nhất trước. Chỉ trả mã đơn (để mở
+   * chi tiết đơn); refId khác là id nội bộ (payout, giao dịch cashback, tài khoản khách đã gộp).
+   */
+  async getTransactions(userId: string, page: number, limit: number) {
+    const where = { userId };
+    const [rows, total] = await Promise.all([
+      this.prisma.walletTransaction.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        ...skipTake(page, limit),
+        select: { id: true, delta: true, balanceAfter: true, type: true, refType: true, refId: true, reason: true, createdAt: true },
+      }),
+      this.prisma.walletTransaction.count({ where }),
+    ]);
+    const data = rows.map(({ refType, refId, ...r }) => ({ ...r, orderId: refType === 'ORDER' ? refId : null }));
+    return paginated(data, page, limit, total);
   }
 
   /**

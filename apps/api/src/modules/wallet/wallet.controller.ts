@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Headers, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsInt, IsNotEmpty, IsObject, IsString, Min, ValidateNested } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { PaginationQuery } from '../../common/pagination';
 import { WalletService } from './wallet.service';
 import { CoinsService } from './coins.service';
 
@@ -30,6 +31,11 @@ export class WalletController {
   @Get('me/wallet')
   get(@CurrentUser('sub') userId: string) {
     return this.wallet.getWallet(userId);
+  }
+
+  @Get('me/wallet/transactions')
+  transactions(@CurrentUser('sub') userId: string, @Query() q: PaginationQuery) {
+    return this.wallet.getTransactions(userId, q.page, q.limit);
   }
 
   @Post('wallet/withdraw')

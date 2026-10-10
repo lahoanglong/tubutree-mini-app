@@ -191,3 +191,46 @@ describe('WalletService.convertToXu (Ví → TubuXu ×1.2)', () => {
     );
   });
 });
+
+describe('WalletService.getTransactions (sao kê Ví, C-060)', () => {
+  function makeLedgerPrisma(rows: Record<string, unknown>[], total: number) {
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const count = jest.fn().mockResolvedValue(total);
+    const prisma = { walletTransaction: { findMany, count } } as unknown as PrismaService;
+    return { prisma, findMany, count };
+  }
+
+  const at = new Date('2026-10-01T03:00:00Z');
+
+  it('chỉ đọc sổ của chính user, mới nhất trước, phân trang skip/take + meta.total', async () => {
+    const { prisma, findMany, count } = makeLedgerPrisma([], 45);
+    const r = await new WalletService(prisma, config).getTransactions('u1', 3, 20);
+    const args = findMany.mock.calls[0]![0] as Record<string, unknown>;
+    expect(args).toMatchObject({
+      where: { userId: 'u1' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: 40,
+      take: 20,
+    });
+    expect(count).toHaveBeenCalledWith({ where: { userId: 'u1' } });
+    expect(r.meta).toEqual({ page: 3, limit: 20, total: 45 });
+  });
+
+  it('chỉ lộ mã đơn với dòng tham chiếu ORDER; mã payout/user bên kia (gộp phiên) không trả ra', async () => {
+    const { prisma } = makeLedgerPrisma(
+      [
+        { id: 'w3', delta: 100_000, balanceAfter: 150_000, type: 'ORDER_REFUND', refType: 'ORDER', refId: 'ord-1', reason: 'Hoàn tiền đơn', createdAt: at },
+        { id: 'w2', delta: 20_000, balanceAfter: 50_000, type: 'MERGE_IN', refType: 'USER', refId: 'guest-9', reason: null, createdAt: at },
+        { id: 'w1', delta: -103_000, balanceAfter: 30_000, type: 'WITHDRAW', refType: 'PAYOUT', refId: 'po-1', reason: null, createdAt: at },
+      ],
+      3,
+    );
+    const r = await new WalletService(prisma, config).getTransactions('u1', 1, 20);
+    expect(r.data).toEqual([
+      { id: 'w3', delta: 100_000, balanceAfter: 150_000, type: 'ORDER_REFUND', reason: 'Hoàn tiền đơn', orderId: 'ord-1', createdAt: at },
+      { id: 'w2', delta: 20_000, balanceAfter: 50_000, type: 'MERGE_IN', reason: null, orderId: null, createdAt: at },
+      { id: 'w1', delta: -103_000, balanceAfter: 30_000, type: 'WITHDRAW', reason: null, orderId: null, createdAt: at },
+    ]);
+    expect(JSON.stringify(r.data)).not.toContain('guest-9');
+  });
+});
