@@ -138,7 +138,92 @@ Không có.
 - Mờ mép bằng `mask-image` (có tiền tố `-webkit-`): chưa kiểm chứng trên WebView Zalo đời cũ; nếu không hỗ trợ thì chỉ mất gợi ý, không ảnh hưởng cuộn/bấm.
 
 ### Việc còn lại của gói
-- ĐI KÈM BẮT BUỘC với thay đổi Checkbox/Radio/Switch không tên: hàng cha `role=radio/checkbox` ở `pages/checkout.tsx` (khoảng dòng 433-600: phương thức thanh toán, dùng điểm, thu gom, hoá đơn) hiện KHÔNG có `tabIndex`/phím; trước đây người dùng bàn phím tới được `<input>` không tên bên trong, nay input đó bị ẩn khỏi Tab. Trình đọc màn hình cảm ứng (TalkBack/VoiceOver) không bị ảnh hưởng vì dùng cây truy cập của hàng cha. Gói sở hữu `checkout` cần thêm `tabIndex={0}` + Enter/Space cho các hàng này (hoặc dùng `ListRow`/`Radio label=...`).
+- ~~ĐI KÈM BẮT BUỘC với thay đổi Checkbox/Radio/Switch không tên~~ (ĐÃ XỬ LÝ ở mục Review lượt 1 bên dưới, commit a0af9ca): hàng cha `role=radio/checkbox` ở `pages/checkout.tsx` (khoảng dòng 433-600: phương thức thanh toán, dùng điểm, thu gom, hoá đơn) hiện KHÔNG có `tabIndex`/phím; trước đây người dùng bàn phím tới được `<input>` không tên bên trong, nay input đó bị ẩn khỏi Tab. Trình đọc màn hình cảm ứng (TalkBack/VoiceOver) không bị ảnh hưởng vì dùng cây truy cập của hàng cha. Gói sở hữu `checkout` cần thêm `tabIndex={0}` + Enter/Space cho các hàng này (hoặc dùng `ListRow`/`Radio label=...`).
 - C-114: `<h1>` cho các trang chưa dùng `PageHeader` (`pages/**`; web 3 trang thuộc PC-7/PC-8).
 - Chuyển các rail ngoài nhóm file sang `ScrollRow`; chuyển `settings.tsx` switch / nút icon thô sang component DS (các gói trang).
 - Chạy axe + `capture.mjs` (cả mục 1 và 2) khi có máy được phép dùng Playwright; chạy lại e2e `buy-flow-4b-browse` (selector `tilesOf` mới) và `design-system-pilot` (nút +/-).
+
+## Review lượt 1
+
+Reviewer độc lập nêu 8 phát hiện (1 major, 7 minor). Mỗi phát hiện đã đối chiếu lại với mã nguồn trước khi sửa; tất cả mô tả đều đúng sự thật. Chưa chạy Playwright/axe (quy định RAM).
+
+| # | Mức | Phát hiện | Kết quả | Commit |
+|---|---|---|---|---|
+| 1 | major | Hàng cha `role=radio/checkbox` ở checkout không có bàn phím, chấm chọn không tên đã ẩn khỏi Tab | ĐÃ SỬA | `a0af9ca` |
+| 2 | minor | Khoá `Button` chỉ phủ handler trả Promise | CHỈ GHI TÀI LIỆU | `774a142` |
+| 3 | minor | C-114 mới xong `<main>`, 36 trang chưa có `<h1>` | KHÔNG SỬA (chuyển gói pages) | - |
+| 4 | minor | `QuantitySelector` có cả `fontSize` và `font:'inherit'` | ĐÃ SỬA | `5e60e61` |
+| 5 | minor | Bỏ chặn zoom nhưng ô nhập 15px làm iOS tự phóng to khi focus | ĐÃ SỬA | `cd338ee`, `e8895e3` |
+| 6 | minor | Tương phản chữ mờ trên nền stone-100 / neutral-200, thứ tự bậc neutral | MỘT PHẦN | `62a9b0f` |
+| 7 | minor | `TimeInput` tên mặc định "Giờ" trùng ở các cặp vào/ra | KHÔNG SỬA (chuyển gói pages) | - |
+| 8 | minor | Hành vi `::after` phủ thẻ chỉ được test bằng chuỗi CSS, thứ tự Tab đổi | MỘT PHẦN | `d5a7851` |
+
+### 1. Hàng cha ở checkout mất bàn phím (major) — ĐÃ SỬA
+
+- Xác minh: `grep` `tabIndex|onKeyDown` trong `pages/checkout.tsx` rỗng; 4 hàng (`role="radio"` phương thức thanh toán; `role="checkbox"` Điểm Xanh, thu gom tái chế, hoá đơn VAT) chỉ có `onClick`. Mọi chỗ dùng Checkbox/Radio/Switch không tên trong `apps/miniapp/src` chỉ là 4 chấm chọn này (`grep "<Radio|<Checkbox|<Switch"`), nên hồi quy đúng như mô tả: trước đây `<input>` bên trong là điểm Tab duy nhất, sau commit `9cb945f` nó bị `tabIndex=-1` + `aria-hidden`.
+- Sửa: hàm mới `components/ui/row-keyboard.ts` (`rowKeyboardProps()` trả `tabIndex: 0` + `onKeyDown`: Enter/Space trên CHÍNH hàng gọi `currentTarget.click()`, bỏ qua phím từ phần tử lồng bên trong và phím lặp). Logic chọn vẫn một chỗ ở `onClick` của hàng. `pages/checkout.tsx` thêm 1 import + 4 dòng `{...rowKeyboardProps()}` (ngoài nhóm file, buộc phải vì đây là hồi quy do chính gói gây ra; thay đổi tối thiểu, không đụng logic; gói sở hữu `checkout` chỉ cần giữ 4 dòng này khi merge).
+- Test (đỏ rồi xanh) `components/ui/row-keyboard.spec.tsx` 9 ca: Tab tới hàng role=radio, Space/Enter kích hoạt đúng một lần mỗi phím; chấm chọn trang trí bên trong không thành điểm dừng Tab thứ hai (không bắn đôi); phím từ nút lồng, phím lặp, phím khác không kích hoạt; Space chặn mặc định; guard quét `checkout.tsx`: phải có đúng 4 hàng role radio/checkbox và mỗi hàng gắn `rowKeyboardProps`/`tabIndex`. Đỏ: khi tạm gỡ 4 dòng spread khỏi `checkout.tsx` thì 4 ca guard đỏ, khôi phục thì xanh (đã kiểm bằng cách sao chép file, không dùng git).
+- Quan sát không thuộc hồi quy, không sửa: hàng `role="radio"` chọn địa chỉ ở `components/checkout/address-section.tsx:103` cũng không có `tabIndex`/phím (không chứa Radio bên trong nên đây là thiếu sót có từ trước). Gói sở hữu `components/checkout` nên thêm cùng `rowKeyboardProps()`.
+
+### 2. Khoá `Button` chỉ phủ onPress trả Promise (minor) — CHỈ GHI TÀI LIỆU
+
+- Đúng: các nơi dùng `onPress={() => void fn()}` trả `undefined` nên không bị khoá, chỉ còn prop `loading` chặn: `reorder-sheet.tsx:93` (`submit`, PC-3), `pages/bank-payment.tsx:119`, `pages/order-detail.tsx:235/438/586`, `pages/notifications.tsx:372` (đã đối chiếu từng dòng).
+- Không đổi hành vi: khoá sau khi trả `undefined` không có ý nghĩa thật. Hai cú chạm của người dùng là hai sự kiện riêng; phần chặn đúng là `loading` (React flush đồng bộ sau sự kiện rời rạc) hoặc Promise trả về; khoá theo tick chỉ che được cú bấm đồng bộ trong test. Ghi giới hạn vào JSDoc `ButtonProps.onPress` (`button.tsx`).
+- Việc còn lại cho gói pages/PC-3: đổi `() => void submit()` thành `() => submit()` (trả Promise) ở các nơi trên, hoặc bảo đảm `loading` bật đồng bộ trong cùng handler. `reorder-sheet.tsx:93` thuộc PC-3.
+
+### 3. C-114 `<h1>` còn thiếu (minor) — KHÔNG SỬA
+
+- Đúng: `<h1>` hiện có ở `PageHeader` (cart, checkout, order-detail, orders), `StorePageShell`, `home-header`, `order-success`; phần còn lại của 40 trang chưa có. Tiêu chí "axe page-has-heading-one = 0" KHÔNG đạt được bằng gói này và phải ghi vào tiêu chí nghiệm thu của gói sở hữu `pages/**` (chuyển trang sang `PageHeader`).
+- Không thêm `<h1>` dự phòng ở `MainLandmark`: app không có nguồn tên trang theo route (`app-config.json` chỉ có "Tubu Tree"), một `<h1>` chung "Tubu Tree" ở mọi trang không đạt WCAG 2.4.6 (tiêu đề mô tả được) và `<h1>` hard-code cho 40 route dễ lệch với tiêu đề thấy được. Phương án đúng là mỗi trang tự khai `<h1>` bằng `PageHeader`.
+
+### 4. `QuantitySelector` xung đột `fontSize`/`font` (minor) — ĐÃ SỬA
+
+- Xác minh: test mới bắt đúng cảnh báo React "Updating a style property during rerender (fontSize) when a conflicting property is set (font)" khi đổi cỡ sm sang md (đỏ). Nút chỉ chứa icon SVG nên bỏ `fontSize`. Test `quantity-selector.spec.tsx` +1 ca (spy `console.error`, đỏ rồi xanh).
+
+### 5. iOS tự phóng to ô nhập < 16px (minor) — ĐÃ SỬA
+
+- `apps/miniapp/index.html`: `@supports (-webkit-touch-callout: none) { input, textarea, select { font-size: 16px !important } }`. `!important` vì `search-field.tsx` đặt cỡ chữ inline (`--type-body-md-size` 15px). Chỉ ảnh hưởng iOS; Android không tự phóng to khi focus.
+- Test `index-html.spec.ts` +1 ca (đỏ rồi xanh); commit sau sửa kiểu để qua `tsc`.
+- Chưa kiểm chứng trên iOS Zalo thật (cần máy). Cỡ chữ ô tìm kiếm tăng 1px trên iOS.
+
+### 6. Tương phản trên stone-100 / neutral-200 và bậc neutral (minor) — MỘT PHẦN
+
+- Đúng: `#746D61` (stone-500) trên stone-100 `#EFEBE2` chỉ 4,30:1, mà stone-100 là nền badge xám (`--color-status-neutral-bg`), placeholder ảnh và alias `--neutral-100` (42 file).
+- Sửa: `--stone-500` từ `#746D61` thành `#6E675B` (`tokens.css` + bản sao trong `tailwind-preset.ts`). Kết quả: stone-100 4,70; trắng 5,59; stone-25 5,36; stone-50 5,09; forest-50 5,01; sage-50 5,07. Chữ tertiary / disabled / price-compare / alias `--neutral-400` đều hưởng. Test: `tokens.spec.ts` thêm nền `--color-status-neutral-bg` vào vòng 5 token chữ x nền (đỏ 3 ca trước khi sửa) và cập nhật hằng `--stone-500` (đỏ 1 ca); `ds-legacy-alias-contrast.spec.ts` thêm `--stone-100` (đỏ 1 ca).
+- Không sửa, có lý do:
+  - neutral-200 (web `#E5E5E0`, miniapp stone-200): chỉ là viền/ô nền control vô hiệu, không là nền chữ phụ. `grep` web: không có `bg-neutral-200` nào đi kèm `text-neutral-400/500`. Ghi nhận là ngoại lệ trong chú thích test.
+  - Web neutral-400 `#6B6B64` nay đậm hơn neutral-500 stock `#737373` (thứ tự đảo): khối palette v1 này tạm thời và bị xoá khi PC-7 chuyển web sang DS v2; đổi neutral-500 sẽ làm tối 116 chỗ `text-neutral-500` ngoài mục tiêu và phá test "giữ nguyên shade stock". Hệ quả: `text-neutral-500` trên `neutral-100` web vẫn dưới 4,5 (khoảng 4,2); thuộc PC-7.
+  - Miniapp neutral-400 trùng neutral-500 (mất một bậc chữ mờ): hệ quả đã ghi ở "Giả định" mục 1; alias legacy, code mới dùng token semantic.
+  - Chỗ dùng `--neutral-400` không phải chữ (icon `ChevronRight`/`Trash2`/`Ticket`/`X`, thanh `affiliate.tsx:231`, màu rank `game.tsx:1260`) giờ đậm hơn; chỉ làm tăng tương phản phi chữ, không ảnh hưởng bố cục. Cần mắt người xem lại ở `affiliate`/`game` nếu muốn giữ độ nhạt cũ.
+
+### 7. `TimeInput` tên "Giờ" trùng (minor) — KHÔNG SỬA
+
+- Đúng: `pages/admin.tsx:374-375`, `pages/staff.tsx:626/632` và `672/676` có cặp `TimeInput` cùng tên truy cập "Giờ". Sửa là truyền `aria-label` ("Giờ vào", "Giờ ra", "Bắt đầu", "Kết thúc") hoặc bọc `Field` ở trang; thuộc `pages/**` và gói khác đang sửa song song, nên chuyển cho gói sở hữu. So với trước (không tên) vẫn là cải thiện; tên mặc định chỉ là phương án cuối.
+
+### 8. Chỉ test CSS cho phần phủ thẻ, đổi thứ tự Tab (minor) — MỘT PHẦN
+
+- Thứ tự Tab/đọc: đúng, tim từng đứng trước nút tên. Đã chuyển khối tim ngay SAU nút tên trong DOM (vẫn `position:absolute` theo vỏ thẻ, `z-index:1`, nên vị trí thị giác và việc nổi trên lớp phủ không đổi). Test `product-tile.spec.tsx` +1 ca: Tab thứ nhất vào nút tên, thứ hai vào tim (đỏ rồi xanh).
+- Chưa làm: ca Playwright (bấm ảnh và vùng giá của thẻ lưới/kệ Mua lại phải điều hướng, bấm tim/Mua lại thì không) và chạy lại e2e `buy-flow-4a/4b` vì quy định cấm Playwright trên máy này. Điều phối viên cần chạy khi có máy trống; jsdom không có layout nên không thay thế được.
+
+### Lệnh kiểm chứng và output thật (review lượt 1)
+
+```
+apps/miniapp: npx tsc --noEmit                      -> sạch
+              npx eslint <file đã sửa/mới>          -> 0 lỗi (button.tsx, quantity-selector, product-tile, row-keyboard, checkout.tsx, index-html.spec)
+              npx vitest run src/components src/index-html.spec.ts src/ds-legacy-alias-contrast.spec.ts
+                                                    -> Test Files 59 passed (59), Tests 413 passed (413)
+              npx vitest run src/pages src/*.spec.ts src/*.spec.tsx -> Test Files 13 passed (13), Tests 192 passed (192)
+packages/design-tokens: npx vitest run              -> Test Files 3 passed (3), Tests 35 passed (35); npx tsc --noEmit sạch
+apps/web:     npx vitest run tailwind.config.spec.ts -> Tests 10 passed (10)
+```
+
+### Migration
+Không có.
+
+### Giả định (review lượt 1)
+- Hàng tự làm role radio/checkbox cho cả Enter lẫn Space kích hoạt (như `ListRow`), chưa làm mũi tên theo mẫu radiogroup của ARIA; mỗi hàng là một điểm Tab như `<input>` cũ.
+- `--stone-500` là primitive dùng chung: tối đi một nấc (`#746D61` thành `#6E675B`) được chấp nhận để đạt 4,5:1 trên nền stone-100 cho mọi chữ phụ, đổi lại bậc stone-500 và stone-600 gần nhau hơn một chút.
+
+### Việc còn lại (sau review lượt 1)
+- Gói pages: `<h1>` cho các trang chưa dùng `PageHeader`; `aria-label` cho cặp `TimeInput`; đổi `() => void asyncFn()` thành trả Promise; thêm `rowKeyboardProps()` cho hàng `role=radio` ở `address-section.tsx`; chuyển các rail `scroll-x` sang `ScrollRow`.
+- Điều phối viên khi có máy trống: Playwright cho thẻ sản phẩm (buy-flow-4a/4b, design-system-pilot) + axe `color-contrast`/`nested-interactive`/`scrollable-region-focusable`/`label`; kiểm tay ô nhập trên iOS Zalo.
