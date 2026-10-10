@@ -51,15 +51,22 @@ export const ADMIN_ORDER_STATUSES = [
 export type RecyclingFilter = 'attention' | 'all';
 
 /**
- * Đơn có yêu cầu hoá đơn VAT: pending = chưa xuất xong (REQUESTED, FAILED); issued = đã phát hành; all = cả hai.
- * Chỉ lọc theo `invoiceStatus` (checkout đặt REQUESTED đúng khi khách gửi invoiceRequest) nên khớp partial index
- * `orders_invoice_open_idx`.
+ * Đơn có yêu cầu hoá đơn VAT: pending = chưa xuất xong (REQUESTED, FAILED) mà đơn còn sống; issued = đã phát hành;
+ * all = cả hai. Đơn HUỶ/TRẢ không bao giờ vào hàng chờ xuất — không code nào đổi `invoiceStatus` khi huỷ/trả, nên
+ * nếu không loại ở đây chúng nằm đó mãi và CSKH không làm rỗng được hàng đợi (UI cũng không cho xuất cho các đơn này).
+ * Hoá đơn ĐÃ phát hành của đơn huỷ/trả vẫn tra được ở issued/all vì kế toán còn phải điều chỉnh/huỷ hoá đơn.
+ * Mọi nhánh đều có vị từ `invoiceStatus IN (...)` nên khớp partial index `orders_invoice_open_idx`.
  */
 export type InvoiceFilter = 'pending' | 'issued' | 'all';
+const INVOICE_OPEN_WHERE: Prisma.OrderWhereInput = {
+  invoiceStatus: { in: ['REQUESTED', 'FAILED'] },
+  status: { notIn: ['CANCELLED', 'RETURNED'] },
+};
+const INVOICE_ISSUED_WHERE: Prisma.OrderWhereInput = { invoiceStatus: 'ISSUED' };
 const INVOICE_STATUS_WHERE: Record<InvoiceFilter, Prisma.OrderWhereInput> = {
-  pending: { invoiceStatus: { in: ['REQUESTED', 'FAILED'] } },
-  issued: { invoiceStatus: 'ISSUED' },
-  all: { invoiceStatus: { in: ['REQUESTED', 'ISSUED', 'FAILED'] } },
+  pending: INVOICE_OPEN_WHERE,
+  issued: INVOICE_ISSUED_WHERE,
+  all: { OR: [INVOICE_OPEN_WHERE, INVOICE_ISSUED_WHERE] },
 };
 
 export interface AdminOrderFilter {

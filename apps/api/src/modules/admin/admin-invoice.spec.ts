@@ -65,16 +65,18 @@ function fakePrisma(order: FakeOrder | null, opts: { updateCount?: number } = {}
 }
 
 describe('buildAdminOrderWhere — lọc đơn yêu cầu hoá đơn VAT', () => {
-  it('pending = REQUESTED + FAILED; issued = ISSUED; all = cả ba', () => {
-    expect(buildAdminOrderWhere({ invoice: 'pending' })).toEqual({ invoiceStatus: { in: ['REQUESTED', 'FAILED'] } });
+  const OPEN = { invoiceStatus: { in: ['REQUESTED', 'FAILED'] }, status: { notIn: ['CANCELLED', 'RETURNED'] } };
+
+  it('pending = REQUESTED + FAILED của đơn còn sống; issued = ISSUED; all = hai nhóm đó', () => {
+    expect(buildAdminOrderWhere({ invoice: 'pending' })).toEqual(OPEN);
     expect(buildAdminOrderWhere({ invoice: 'issued' })).toEqual({ invoiceStatus: 'ISSUED' });
-    expect(buildAdminOrderWhere({ invoice: 'all' })).toEqual({ invoiceStatus: { in: ['REQUESTED', 'ISSUED', 'FAILED'] } });
+    expect(buildAdminOrderWhere({ invoice: 'all' })).toEqual({ OR: [OPEN, { invoiceStatus: 'ISSUED' }] });
   });
 
   it('không có bộ lọc → không thêm điều kiện hoá đơn; ghép AND với trạng thái đơn', () => {
     expect(buildAdminOrderWhere({})).toEqual({});
     expect(buildAdminOrderWhere({ status: 'DELIVERED', invoice: 'pending' })).toEqual({
-      AND: [{ status: 'DELIVERED' }, { invoiceStatus: { in: ['REQUESTED', 'FAILED'] } }],
+      AND: [{ status: 'DELIVERED' }, OPEN],
     });
   });
 });
@@ -86,8 +88,9 @@ describe('AdminService.listOrders — tham số invoice', () => {
     const prisma = { order: { findMany, count }, $transaction: jest.fn((arr: Promise<unknown>[]) => Promise.all(arr)) };
     const { svc } = mkAdmin(prisma);
     await svc.listOrders(1, 20, undefined, undefined, undefined, 'pending');
-    expect(findMany.mock.calls[0][0].where).toEqual({ invoiceStatus: { in: ['REQUESTED', 'FAILED'] } });
-    expect(count.mock.calls[0][0].where).toEqual({ invoiceStatus: { in: ['REQUESTED', 'FAILED'] } });
+    const open = { invoiceStatus: { in: ['REQUESTED', 'FAILED'] }, status: { notIn: ['CANCELLED', 'RETURNED'] } };
+    expect(findMany.mock.calls[0][0].where).toEqual(open);
+    expect(count.mock.calls[0][0].where).toEqual(open);
   });
 });
 

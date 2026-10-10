@@ -89,4 +89,29 @@ describe('AdminService.issueOrderInvoice (real Postgres)', () => {
     expect(new Set(all)).toEqual(new Set([req.code, iss.code, fail.code]));
     expect(all).not.toContain(none.code);
   });
+
+  it('đơn HUỶ/TRẢ chưa xuất hoá đơn không nằm trong hàng đợi pending (và số đếm meta.total), đơn đã ISSUED thì vẫn tra được', async () => {
+    const phone = `09${String(Date.now()).slice(-8)}`;
+    const u = await createUser(prisma, { phone });
+    const mk = (status: 'CONFIRMED' | 'CANCELLED' | 'RETURNED', invoiceStatus: 'REQUESTED' | 'ISSUED' | 'FAILED') =>
+      createOrder(prisma, { userId: u.id, status, invoiceStatus, invoiceRequest: REQUEST });
+    const [open, cancelled, returned, failedCancelled, issuedCancelled] = await Promise.all([
+      mk('CONFIRMED', 'REQUESTED'),
+      mk('CANCELLED', 'REQUESTED'),
+      mk('RETURNED', 'REQUESTED'),
+      mk('CANCELLED', 'FAILED'),
+      mk('CANCELLED', 'ISSUED'),
+    ]);
+    const pageOf = (filter: 'pending' | 'issued' | 'all') => admin.listOrders(1, 200, undefined, phone, undefined, filter);
+    const pending = await pageOf('pending');
+    const all = await pageOf('all');
+    const issued = await pageOf('issued');
+    const mine = (p: { data: { userId: string; code: string }[] }) => new Set(p.data.filter((o) => o.userId === u.id).map((o) => o.code));
+    console.log('[invoice] pending=%j total=%d', [...mine(pending)], pending.meta.total);
+    expect(mine(pending)).toEqual(new Set([open.code]));
+    expect(pending.meta.total).toBe(1);
+    expect(mine(all)).toEqual(new Set([open.code, issuedCancelled.code]));
+    expect(mine(issued)).toEqual(new Set([issuedCancelled.code]));
+    for (const o of [cancelled, returned, failedCancelled]) expect(mine(pending)).not.toContain(o.code);
+  });
 });
