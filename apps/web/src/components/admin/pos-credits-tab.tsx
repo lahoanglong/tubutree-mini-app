@@ -6,6 +6,9 @@ import { useQuery } from '@tanstack/react-query';
 import { listPosCredits, type AdminPosCredit } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { vnDayKey } from '@/lib/loyalty-pos';
+import { personLabel } from '@/lib/admin-pickers';
+import type { PickedItem } from './search-picker';
+import { UserPicker } from './user-picker';
 import { INPUT_CLASS } from './ui';
 
 /** Tổng hợp nhanh cho dòng tóm tắt đầu bảng. */
@@ -22,8 +25,10 @@ export function summarizePosCredits(rows: AdminPosCredit[]) {
  */
 export function PosCreditsTab() {
   const [day, setDay] = useState(() => vnDayKey());
-  const [staffUserId, setStaffUserId] = useState('');
-  const [memberId, setMemberId] = useState('');
+  const [staff, setStaff] = useState<PickedItem | null>(null);
+  const [member, setMember] = useState<PickedItem | null>(null);
+  const staffUserId = staff?.id ?? '';
+  const memberId = member?.id ?? '';
   const q = useQuery({
     queryKey: ['admin-pos-credits', day, staffUserId, memberId],
     queryFn: () => listPosCredits({ day: day || undefined, staffUserId, memberId }),
@@ -45,33 +50,21 @@ export function PosCreditsTab() {
           <span className="font-medium text-neutral-700">Ngày (giờ VN)</span>
           <input type="date" className={`${INPUT_CLASS} mt-1 w-40`} value={day} onChange={(e) => setDay(e.target.value)} />
         </label>
-        <label className="text-xs">
-          <span className="font-medium text-neutral-700">Mã nhân viên</span>
-          <input
-            className={`${INPUT_CLASS} mt-1 w-56 font-mono`}
-            placeholder="userId nhân viên"
-            value={staffUserId}
-            maxLength={40}
-            onChange={(e) => setStaffUserId(e.target.value.trim())}
-          />
-        </label>
-        <label className="text-xs">
-          <span className="font-medium text-neutral-700">Mã thành viên</span>
-          <input
-            className={`${INPUT_CLASS} mt-1 w-56 font-mono`}
-            placeholder="userId thành viên"
-            value={memberId}
-            maxLength={40}
-            onChange={(e) => setMemberId(e.target.value.trim())}
-          />
-        </label>
+        <div className="w-full text-xs sm:w-64">
+          <span className="font-medium text-neutral-700">Nhân viên</span>
+          <UserPicker className="mt-1 w-full" label="Lọc theo nhân viên" value={staff} onChange={setStaff} />
+        </div>
+        <div className="w-full text-xs sm:w-64">
+          <span className="font-medium text-neutral-700">Thành viên</span>
+          <UserPicker className="mt-1 w-full" label="Lọc theo thành viên" value={member} onChange={setMember} />
+        </div>
         {(filtered || day) && (
           <button
             type="button"
             onClick={() => {
               setDay('');
-              setStaffUserId('');
-              setMemberId('');
+              setStaff(null);
+              setMember(null);
             }}
             className="rounded border border-neutral-300 px-2.5 py-1.5 text-xs text-neutral-600 hover:bg-neutral-50"
           >
@@ -117,7 +110,7 @@ export function PosCreditsTab() {
                         {r.note && <div className="text-[11px] text-neutral-500">{r.note}</div>}
                       </td>
                       <td className="px-3 py-2">
-                        <button type="button" className="text-left hover:underline" onClick={() => setMemberId(r.member.id)} title="Lọc theo thành viên này">
+                        <button type="button" className="text-left hover:underline" onClick={() => setMember({ id: r.member.id, label: personLabel(r.member.name, r.member.phone, 'Thành viên') })} title="Lọc theo thành viên này">
                           <div className="font-medium">{r.member.name ?? 'Thành viên'}</div>
                           <div className="text-[11px] text-neutral-500">
                             {r.member.memberCode}
@@ -126,7 +119,7 @@ export function PosCreditsTab() {
                         </button>
                       </td>
                       <td className="px-3 py-2">
-                        <button type="button" className="text-left hover:underline" onClick={() => setStaffUserId(r.staff.id)} title="Lọc theo nhân viên này">
+                        <button type="button" className="text-left hover:underline" onClick={() => setStaff({ id: r.staff.id, label: personLabel(r.staff.name, r.staff.phone, 'Nhân viên') })} title="Lọc theo nhân viên này">
                           <div className="font-medium">{r.staff.name ?? 'Nhân viên'}</div>
                           {r.staff.phone && <div className="text-[11px] text-neutral-500">{r.staff.phone}</div>}
                         </button>

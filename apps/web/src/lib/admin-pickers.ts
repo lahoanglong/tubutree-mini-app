@@ -19,8 +19,13 @@ export function variationLabel(v: AdminVariationLabel | undefined, fallbackId = 
   return `${v.productName} · ${v.name} (${v.sku})`;
 }
 
+/** "Tên · SĐT" cho khách/nhân viên; thiếu thì có chữ thay thế để dòng không bị trống. */
+export function personLabel(name: string | null | undefined, phone: string | null | undefined, fallbackName = 'Chưa có tên'): string {
+  return `${name?.trim() || fallbackName} · ${phone?.trim() || 'chưa có SĐT'}`;
+}
+
 export function userOptionLabel(u: AdminUser): string {
-  return `${u.fullName?.trim() || 'Chưa có tên'} · ${u.phone?.trim() || 'chưa có SĐT'}`;
+  return personLabel(u.fullName, u.phone);
 }
 
 export function tierOptionLabel(t: AdminDealerTier): string {

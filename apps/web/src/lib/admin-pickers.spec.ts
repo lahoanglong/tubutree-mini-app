@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   intervalLabel,
+  personLabel,
   reviewStars,
   safeHttpsLink,
   subscriptionStatusLabel,
@@ -44,6 +45,13 @@ describe('userOptionLabel', () => {
     expect(userOptionLabel({ id: 'u2', fullName: null, phone: null, role: 'CUSTOMER', pointsBalance: 0, createdAt: '' })).toBe(
       'Chưa có tên · chưa có SĐT',
     );
+  });
+});
+
+describe('personLabel', () => {
+  it('chữ thay thế cho tên tuỳ ngữ cảnh (nhân viên / thành viên)', () => {
+    expect(personLabel(null, null, 'Thành viên')).toBe('Thành viên · chưa có SĐT');
+    expect(personLabel('  Thu Hà ', '0900000002')).toBe('Thu Hà · 0900000002');
   });
 });
 
