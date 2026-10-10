@@ -89,3 +89,62 @@ describe('OrderDetailPage — vùng chạm >= 44px (C-021)', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/product/xa-bong');
   });
 });
+
+describe('OrderDetailPage — lịch sử vận chuyển bằng tiếng Việt (C-120)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  const withShipping = (shippingHistory: unknown[], extra: Record<string, unknown> = {}) => ({
+    ...ORDER,
+    status: 'SHIPPING',
+    shippingPartner: 'GHN',
+    shippingCode: 'GHN001',
+    shippingHistory,
+    ...extra,
+  });
+
+  it('mã hãng "delivering" hiện "Đang giao hàng", không lộ mã gốc', async () => {
+    mocks.fetchOrder.mockResolvedValue(
+      withShipping([{ at: '2026-10-02T03:00:00.000Z', status: 'delivering', carrier: 'GHN', code: 'GHN001' }], {
+        shippingStatus: 'delivering',
+      }),
+    );
+    const { container } = renderPage();
+    await screen.findByText('Mã vận đơn:', { exact: false });
+    expect(screen.getAllByText('Đang giao hàng').length).toBeGreaterThanOrEqual(1);
+    expect(container.textContent).not.toContain('delivering');
+  });
+
+  it('mã lạ → "Đang cập nhật"; trạng thái rỗng → "—"; chuỗi tiếng Việt giữ nguyên', async () => {
+    mocks.fetchOrder.mockResolvedValue(
+      withShipping([
+        { at: '2026-10-02T03:00:00.000Z', status: 'Đã lấy hàng', carrier: 'GHN', code: 'GHN001' },
+        { at: '2026-10-02T05:00:00.000Z', status: 'xyz_weird_code', carrier: 'GHN', code: 'GHN001' },
+        { at: '2026-10-02T06:00:00.000Z', status: null, carrier: 'GHN', code: 'GHN001' },
+      ]),
+    );
+    const { container } = renderPage();
+    await screen.findByText('Mã vận đơn:', { exact: false });
+    expect(screen.getByText('Đã lấy hàng')).toBeInTheDocument();
+    expect(screen.getByText('Đang cập nhật')).toBeInTheDocument();
+    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('xyz_weird_code');
+  });
+
+  it('mốc thời gian hiện dạng "HH:mm dd/MM/yyyy" cùng một kiểu với các màn khác', async () => {
+    mocks.fetchOrder.mockResolvedValue(
+      withShipping([{ at: new Date(2026, 9, 2, 8, 5).toISOString(), status: 'delivered', carrier: 'GHN', code: 'GHN001' }]),
+    );
+    renderPage();
+    await screen.findByText('Mã vận đơn:', { exact: false });
+    expect(screen.getByText('08:05 02/10/2026')).toBeInTheDocument();
+  });
+
+  it('điểm đã dùng có dấu nghìn: "12.000 điểm"', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, pointsUsed: 12_000, discount: 12_000 });
+    renderPage();
+    expect(await screen.findByText('12.000 điểm')).toBeInTheDocument();
+  });
+});
