@@ -466,8 +466,8 @@ export const vi = {
     outOfStockPreorder: 'Hết hàng — được đặt trước',
     preorderLine: (n: number) => `Đặt trước ${n}, giao khi hàng về`,
     preorderNote: (lines: number) =>
-      `${lines} mặt hàng đặt vượt tồn: phần thiếu giao khi hàng về, giữ giá hôm nay.`,
-    createdWithPreorder: 'Đã tạo đơn đại lý — phần đặt trước sẽ giao khi hàng về.',
+      `${lines} mặt hàng đặt vượt tồn: cả đơn sẽ giao khi đủ hàng, giữ giá hôm nay. Đơn trả trước vẫn thanh toán đủ ngay.`,
+    createdWithPreorder: 'Đã tạo đơn đại lý — đơn sẽ giao khi đủ hàng, giữ giá hôm nay.',
     created: 'Đã tạo đơn đại lý!',
   },
 

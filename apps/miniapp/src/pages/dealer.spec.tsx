@@ -101,16 +101,18 @@ describe('DealerPage bảng giá — đặt trước hàng chưa về (C-081)', 
     expect(screen.getByText('Đặt trước 2, giao khi hàng về')).toBeInTheDocument();
   });
 
-  it('thanh tổng nhắc phần thiếu giao khi hàng về và giữ giá hôm nay', async () => {
+  it('thanh tổng nói thật: cả đơn giao khi đủ hàng, giữ giá hôm nay, trả trước vẫn thanh toán đủ', async () => {
     mocks.getPricelist.mockResolvedValue([row({ stock: 0 })]);
     renderPage();
     await screen.findByText(/Hết hàng — được đặt trước/);
     fireEvent.click(plus());
     expect(await screen.findByText(/1 mặt hàng đặt vượt tồn/)).toBeInTheDocument();
+    expect(screen.getByText(/cả đơn sẽ giao khi đủ hàng/)).toBeInTheDocument();
     expect(screen.getByText(/giữ giá hôm nay/)).toBeInTheDocument();
+    expect(screen.getByText(/Đơn trả trước vẫn thanh toán đủ/)).toBeInTheDocument();
   });
 
-  it('đặt đơn có phần đặt trước: thông báo rõ phần đặt trước giao khi hàng về', async () => {
+  it('đặt đơn có phần đặt trước: thông báo rõ cả đơn giao khi đủ hàng', async () => {
     mocks.getPricelist.mockResolvedValue([row({ stock: 0 })]);
     mocks.placeDealerOrder.mockResolvedValue({ code: 'TUBU1', items: [{ backorderedQty: 1, quantity: 1 }] });
     renderPage();
@@ -121,7 +123,7 @@ describe('DealerPage bảng giá — đặt trước hàng chưa về (C-081)', 
     expect(mocks.placeDealerOrder.mock.calls[0]![0]).toEqual([{ variationId: 'v1', quantity: 1 }]);
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith(
-        expect.objectContaining({ text: 'Đã tạo đơn đại lý — phần đặt trước sẽ giao khi hàng về.' }),
+        expect.objectContaining({ text: 'Đã tạo đơn đại lý — đơn sẽ giao khi đủ hàng, giữ giá hôm nay.' }),
       ),
     );
   });
