@@ -247,7 +247,10 @@ function UpcomingFlashCard({
           }}
           style={{
             textAlign: 'center',
-            padding: '6px 0',
+            minHeight: 44,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             borderRadius: 'var(--radius-full)',
             fontSize: 12,
             fontWeight: 600,
