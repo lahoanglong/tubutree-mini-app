@@ -32,7 +32,7 @@ describe('CartService guard tồn kho', () => {
     const prisma = {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
       variation: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { approvalStatus: 'PENDING_REVIEW' } }),
+        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { isActive: true, approvalStatus: 'PENDING_REVIEW' } }),
       },
     } as unknown as PrismaService;
     const svc = new CartService(prisma, coupons, config, flash, analytics);
@@ -40,7 +40,7 @@ describe('CartService guard tồn kho', () => {
     const rejected = {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
       variation: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { approvalStatus: 'REJECTED' } }),
+        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { isActive: true, approvalStatus: 'REJECTED' } }),
       },
     } as unknown as PrismaService;
     await expect(new CartService(rejected, coupons, config, flash, analytics).addItem('u1', { variationId: 'v1', quantity: 1 })).rejects.toThrow(
@@ -48,11 +48,67 @@ describe('CartService guard tồn kho', () => {
     );
   });
 
+  it('addItem: chặn SP cha đã ngừng bán (Product.isActive=false) dù variation còn active (C-007)', async () => {
+    const prisma = {
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
+      variation: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { isActive: false, approvalStatus: 'APPROVED' } }),
+      },
+    } as unknown as PrismaService;
+    const svc = new CartService(prisma, coupons, config, flash, analytics);
+    await expect(svc.addItem('u1', { variationId: 'v1', quantity: 1 })).rejects.toThrow('không khả dụng');
+  });
+
+  it('getCart: dòng SP ngừng bán/chưa duyệt bị tách ra unavailableItems, không tính vào items/subtotal (C-007)', async () => {
+    const line = (id: string, product: { isActive: boolean; approvalStatus: string }, isActive = true) => ({
+      id: `ci-${id}`,
+      variationId: id,
+      quantity: 1,
+      variation: {
+        isActive,
+        productId: `p-${id}`,
+        salePrice: null,
+        retailPrice: 10000,
+        stock: 5,
+        name: id,
+        product: { name: `SP ${id}`, slug: id, thumbnail: null, ...product },
+      },
+    });
+    const prisma = {
+      cart: {
+        upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: 'c1',
+          couponCode: null,
+          items: [
+            line('ok', { isActive: true, approvalStatus: 'APPROVED' }),
+            line('off', { isActive: false, approvalStatus: 'APPROVED' }),
+            line('rej', { isActive: true, approvalStatus: 'REJECTED' }),
+            line('pend', { isActive: true, approvalStatus: 'PENDING_REVIEW' }),
+            line('vOff', { isActive: true, approvalStatus: 'APPROVED' }, false),
+          ],
+        }),
+      },
+    } as unknown as PrismaService;
+    const resolveEffective = jest.fn().mockResolvedValue(new Map());
+    const svc = new CartService(prisma, coupons, config, { resolveEffective } as unknown as FlashSaleService, analytics);
+    const c = await svc.getCart('u1');
+    expect(c.items.map((l) => l.variationId)).toEqual(['ok']);
+    expect(c.subtotal).toBe(10000);
+    expect(c.itemCount).toBe(1);
+    expect(c.unavailableItems.map((l) => l.variationId)).toEqual(['off', 'rej', 'pend', 'vOff']);
+    expect(c.unavailableItems[0]).toEqual(
+      expect.objectContaining({ id: 'ci-off', productName: 'SP off', quantity: 1 }),
+    );
+    // Giá giờ vàng chỉ tra cho dòng còn bán.
+    expect(resolveEffective).toHaveBeenCalledWith(['ok'], expect.any(Date));
+  });
+
   it('addItem: chặn khi tổng số lượng vượt tồn kho', async () => {
     const prisma = {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
       variation: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { approvalStatus: 'APPROVED' } }),
+        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { isActive: true, approvalStatus: 'APPROVED' } }),
       },
       cartItem: { findUnique: jest.fn().mockResolvedValue({ quantity: 2 }), upsert: jest.fn() },
     } as unknown as PrismaService;
@@ -83,7 +139,7 @@ describe('CartService guard tồn kho', () => {
       variation: {
         findUnique: jest
           .fn()
-          .mockResolvedValue({ id: 'v1', isActive: true, stock: 10, product: { approvalStatus: 'APPROVED' } }),
+          .mockResolvedValue({ id: 'v1', isActive: true, stock: 10, product: { isActive: true, approvalStatus: 'APPROVED' } }),
       },
       cartItem: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() },
       $transaction: transactionSpy,
@@ -119,6 +175,7 @@ describe('CartService guard tồn kho', () => {
       freeship: false,
       freeshipThreshold: 200000,
       itemCount: 0,
+      unavailableItems: [],
     });
   });
 
@@ -136,7 +193,7 @@ describe('CartService guard tồn kho', () => {
       variation: {
         findUnique: jest
           .fn()
-          .mockResolvedValue({ id: 'v1', isActive: true, stock: 10, product: { approvalStatus: 'APPROVED' } }),
+          .mockResolvedValue({ id: 'v1', isActive: true, stock: 10, product: { isActive: true, approvalStatus: 'APPROVED' } }),
       },
       cartItem: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn().mockImplementation((fn: (tx: unknown) => unknown) => fn(tx)),
@@ -209,12 +266,12 @@ describe('CartService guard tồn kho', () => {
               variationId: 'v1',
               quantity: 1,
               variation: {
-                productId: 'p1',
+                isActive: true, productId: 'p1',
                 salePrice: null,
                 retailPrice: 100000,
                 stock: 5,
                 name: 'A',
-                product: { name: 'A', slug: 'a', thumbnail: null },
+                product: { name: 'A', slug: 'a', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' },
               },
             },
             {
@@ -222,12 +279,12 @@ describe('CartService guard tồn kho', () => {
               variationId: 'v2',
               quantity: 2,
               variation: {
-                productId: 'p2',
+                isActive: true, productId: 'p2',
                 salePrice: null,
                 retailPrice: 50000,
                 stock: 5,
                 name: 'B',
-                product: { name: 'B', slug: 'b', thumbnail: null },
+                product: { name: 'B', slug: 'b', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' },
               },
             },
           ],
@@ -265,12 +322,12 @@ describe('CartService guard tồn kho', () => {
               variationId: 'v1',
               quantity: 1,
               variation: {
-                productId: 'p1',
+                isActive: true, productId: 'p1',
                 salePrice: null,
                 retailPrice: 60000,
                 stock: 5,
                 name: 'A',
-                product: { name: 'A', slug: 'a', thumbnail: null },
+                product: { name: 'A', slug: 'a', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' },
               },
             },
           ],
@@ -305,13 +362,13 @@ describe('CartService guard tồn kho', () => {
               id: 'ci1',
               variationId: 'v1',
               quantity: 1,
-              variation: { productId: 'p1', salePrice: null, retailPrice: 100000, stock: 5, name: 'A', product: { name: 'A', slug: 'a', thumbnail: null } },
+              variation: { isActive: true, productId: 'p1', salePrice: null, retailPrice: 100000, stock: 5, name: 'A', product: { name: 'A', slug: 'a', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
             },
             {
               id: 'ci2',
               variationId: 'v2',
               quantity: 2,
-              variation: { productId: 'p2', salePrice: null, retailPrice: 50000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null } },
+              variation: { isActive: true, productId: 'p2', salePrice: null, retailPrice: 50000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
             },
           ],
         }),
@@ -351,13 +408,13 @@ describe('CartService guard tồn kho', () => {
               id: 'ci1',
               variationId: 'v1',
               quantity: 1,
-              variation: { productId: 'p1', salePrice: null, retailPrice: 100000, stock: 5, name: 'A', product: { name: 'A', slug: 'a', thumbnail: null } },
+              variation: { isActive: true, productId: 'p1', salePrice: null, retailPrice: 100000, stock: 5, name: 'A', product: { name: 'A', slug: 'a', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
             },
             {
               id: 'ci2',
               variationId: 'v2',
               quantity: 1,
-              variation: { productId: 'p2', salePrice: null, retailPrice: 30000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null } },
+              variation: { isActive: true, productId: 'p2', salePrice: null, retailPrice: 30000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
             },
           ],
         }),
@@ -390,7 +447,7 @@ describe('CartService guard tồn kho', () => {
               id: 'ci2',
               variationId: 'v2',
               quantity: 1,
-              variation: { productId: 'p2', salePrice: null, retailPrice: 30000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null } },
+              variation: { isActive: true, productId: 'p2', salePrice: null, retailPrice: 30000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
             },
           ],
         }),
@@ -421,7 +478,7 @@ describe('CartService guard tồn kho', () => {
               id: 'ci2',
               variationId: 'v2',
               quantity: 1,
-              variation: { productId: 'p2', salePrice: null, retailPrice: 30000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null } },
+              variation: { isActive: true, productId: 'p2', salePrice: null, retailPrice: 30000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
             },
           ],
         }),

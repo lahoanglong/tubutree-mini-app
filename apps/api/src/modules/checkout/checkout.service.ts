@@ -16,6 +16,7 @@ import { ComboService } from '../storefront/combo.service';
 import { FlashSaleService, FLASH_OVER_LIMIT_MSG } from '../flash-sale/flash-sale.service';
 import { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 import { reserveVariationStock } from '../catalog/variation-stock';
+import { assertVariationsSellable, productDiscontinuedError } from '../cart/sellable';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { classifyOrderError } from '../analytics/order-error-classifier';
 
@@ -211,6 +212,8 @@ export class CheckoutService {
         // Giữ chỗ tồn kho ATOMIC từng line — chống oversell khi flash-sale/hàng giới hạn:
         // 2 đơn cùng grab variation cuối → chỉ 1 câu UPDATE sửa được dòng; thua thì throw rollback.
         // Đặt TRƯỚC order.create để fail-fast, không tốn resource ghi Order/Item rồi rollback.
+        // SP có thể bị gỡ/từ chối giữa lúc tính giá (compute) và lúc ghi đơn — kiểm lại ở đây.
+        await assertVariationsSellable(tx, cart.items);
         for (const line of cart.items) {
           const reserved = await reserveVariationStock(tx, line.variationId, line.quantity);
           if (!reserved) {
@@ -497,6 +500,15 @@ export class CheckoutService {
     // Checkout TẬP CON: chỉ tính trên các dòng được chọn, tính lại subtotal từ subset (combo/
     // coupon/điểm/ship đều dựa subtotal này). Rỗng/thiếu itemIds = toàn giỏ (tương thích ngược).
     const subset = Array.isArray(itemIds) && itemIds.length > 0;
+    // getCart đã loại dòng ngừng bán khỏi `items`. Toàn giỏ: bỏ qua chúng (giỏ đã báo khách). Nhưng
+    // khách CHỌN đích danh dòng đó (mua ngay/tập con), hoặc giỏ chỉ còn toàn dòng ngừng bán, thì
+    // phải báo rõ thay vì âm thầm đặt thiếu hay báo "chưa chọn sản phẩm".
+    const droppedSelected = subset
+      ? fullCart.unavailableItems.filter((l) => itemIds!.includes(l.id))
+      : fullCart.items.length === 0
+        ? fullCart.unavailableItems
+        : [];
+    if (droppedSelected.length > 0) throw productDiscontinuedError(droppedSelected[0]!.productName);
     const items = subset ? fullCart.items.filter((l) => itemIds!.includes(l.id)) : fullCart.items;
     const subtotal = subset ? items.reduce((s, l) => s + l.total, 0) : fullCart.subtotal;
     const cart = { ...fullCart, items, subtotal };

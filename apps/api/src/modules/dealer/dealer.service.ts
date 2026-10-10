@@ -8,6 +8,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
 import { reserveAvailableVariationStock } from '../catalog/variation-stock';
+import { assertVariationsSellable, isSellableVariation, productDiscontinuedError } from '../cart/sellable';
 import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
@@ -165,7 +166,7 @@ export class DealerService {
 
     const variations = await this.prisma.variation.findMany({
       where: { id: { in: dto.items.map((i) => i.variationId) } },
-      include: { product: { select: { name: true, slug: true } } },
+      include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true } } },
     });
     const vmap = new Map(variations.map((v) => [v.id, v]));
 
@@ -175,6 +176,7 @@ export class DealerService {
     const items = dto.items.map((line) => {
       const v = vmap.get(line.variationId);
       if (!v) throw new BadRequestException(`Sản phẩm ${line.variationId} không tồn tại.`);
+      if (!isSellableVariation(v)) throw productDiscontinuedError(v.product.name);
       const unitPrice = this.unitPrice(v, tier?.id, discountPct);
       const total = unitPrice * line.quantity;
       subtotal += total;
@@ -223,6 +225,8 @@ export class DealerService {
           // giữ tối đa có thể, phần còn thiếu ghi vào `backorderedQty` để job đối soát lấp dần
           // khi hàng về (xem DealerBackorderService). Huỷ/trả đơn vẫn phải chỉ hoàn đúng phần
           // ĐÃ giữ (`quantity - backorderedQty`) — xem OrderReversalService.
+          // SP có thể bị gỡ giữa lúc dựng giá và lúc ghi đơn — kiểm lại trong tx.
+          await assertVariationsSellable(tx, items);
           let hasBackorder = false;
           const itemsWithBackorder = [];
           for (const line of items) {
