@@ -27,7 +27,7 @@
   --stone-300: #CBC5B8;
   --stone-400: #9E978A;
   --stone-450: #938B7E;
-  --stone-500: #746D61;
+  --stone-500: #6E675B;
   --stone-600: #5A544A;
   --stone-700: #423D34;
   --stone-800: #2B2721;
@@ -97,14 +97,14 @@
   --color-text-secondary: var(--stone-600);
   --color-text-tertiary: var(--stone-500);
   /* Used for muted INFORMATIVE text (rating count, "★ Mới") on canvas/surface/tints, so it must clear
-     4.5:1 (WCAG 1.4.3) — stone-500 is 4.59:1 on forest-50, the darkest surface. A truly inert control
+     4.5:1 (WCAG 1.4.3) — stone-500 is 4.70:1 on stone-100, the darkest text surface. A truly inert control
      is exempt and keeps the lighter --color-action-primary-fg-disabled. */
   --color-text-disabled: var(--stone-500);
   --color-text-inverse: var(--stone-0);
   --color-text-brand: var(--forest-600);
   --color-text-link: var(--forest-600);
   --color-text-price: var(--stone-900);
-  --color-text-price-compare: var(--stone-500); /* 5.12:1 on surface — informative text (WCAG 1.4.3), not "disabled" */
+  --color-text-price-compare: var(--stone-500); /* 5.59:1 on surface — informative text (WCAG 1.4.3), not "disabled" */
   --color-text-success: #2F7A48;
   --color-text-warning: var(--amber-600);
   --color-text-danger: var(--red-600);

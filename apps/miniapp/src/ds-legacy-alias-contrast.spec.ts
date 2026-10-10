@@ -33,7 +33,7 @@ function contrast(fg: string, bg: string): number {
 // C-023 (A4-006): ~190 legacy call sites set `color: var(--neutral-400)` for secondary text; the alias
 // pointed at stone-400 (2.6-2.9:1), the main source of the 131 axe color-contrast nodes.
 describe('legacy --neutral-400 alias (text colour at ~190 call sites)', () => {
-  for (const surface of ['--stone-0', '--stone-25', '--stone-50', '--forest-50', '--sage-50']) {
+  for (const surface of ['--stone-0', '--stone-25', '--stone-50', '--stone-100', '--forest-50', '--sage-50']) {
     it(`reaches 4.5:1 on ${surface}`, () => {
       expect(contrast(resolve('--neutral-400'), resolve(surface))).toBeGreaterThanOrEqual(4.5);
     });

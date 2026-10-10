@@ -43,7 +43,7 @@ describe('design-tokens/tokens.css', () => {
 
   it('defines the warm stone neutral scale (replaces old cool neutral-*)', () => {
     expect(css).toMatch(/--stone-50:\s*#F6F4EF/i);
-    expect(css).toMatch(/--stone-500:\s*#746D61/i);
+    expect(css).toMatch(/--stone-500:\s*#6E675B/i);
   });
 
   it('does not define the old --primary-* (orange) scale as a UI color — only as tubu-orange for logo use', () => {
@@ -63,7 +63,9 @@ describe('design-tokens/tokens.css', () => {
   // because the token is used for INFORMATIVE text (rating count, "★ Mới"), not only inert controls.
   // WCAG 1.4.3 needs 4.5:1 on every surface that text sits on.
   describe('WCAG 1.4.3 — informational text tokens reach 4.5:1 on every page surface', () => {
-    const surfaces = ['--color-bg-surface', '--color-bg-canvas', '--color-bg-subtle'];
+    // --color-status-neutral-bg (stone-100) is also the fill behind grey badges, chips and image placeholders.
+    // stone-200 is deliberately absent: it only fills inert controls and borders, never a text surface.
+    const surfaces = ['--color-bg-surface', '--color-bg-canvas', '--color-bg-subtle', '--color-status-neutral-bg'];
     const textTokens = [
       '--color-text-primary',
       '--color-text-secondary',
