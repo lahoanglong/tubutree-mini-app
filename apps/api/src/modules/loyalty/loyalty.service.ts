@@ -491,9 +491,27 @@ export class LoyaltyService {
   async getAvailableCoupons(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const now = new Date();
-    const coupons = await this.prisma.coupon.findMany({
-      where: { startAt: { lte: now }, endAt: { gte: now } },
-    });
+    // Lọc scope + hạn NGAY trong SQL: trước đây nạp mọi coupon còn hạn của mọi khách (hàng chục
+    // nghìn coupon cá nhân) rồi lọc bằng JS (A3-001). Hai nhánh UNION ALL khớp 2 partial index
+    // (coupons_scope_shared_endAt_idx, coupons_user_group_userId_idx) để mỗi nhánh là index scan.
+    const tierId = user.tierId ?? null;
+    const idRows = await this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT id FROM coupons
+      WHERE scope IN ('PUBLIC', 'TIER')
+        AND "startAt" <= ${now} AND "endAt" >= ${now}
+        AND (scope = 'PUBLIC' OR (${tierId}::text IS NOT NULL AND "scopeMeta" ->> 'tierId' = ${tierId}::text))
+      UNION ALL
+      SELECT id FROM coupons
+      WHERE scope = 'USER_GROUP'
+        AND "scopeMeta" ->> 'userId' = ${userId}
+        AND "startAt" <= ${now} AND "endAt" >= ${now}
+    `);
+    const coupons = idRows.length
+      ? await this.prisma.coupon.findMany({
+          where: { id: { in: idRows.map((r) => r.id) } },
+          orderBy: { id: 'asc' },
+        })
+      : [];
 
     // Pre-filter theo scope trước, rồi 1 groupBy duy nhất đếm used count cho mọi coupon.
     // Trước đây loop từng coupon gọi count() → 1 + N query khi user có nhiều voucher khả dụng.
