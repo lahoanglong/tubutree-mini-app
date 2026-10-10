@@ -277,3 +277,36 @@ describe('CheckoutPage — Ví/TubuXu bị mờ phải nói lý do, số điểm
     expect(await screen.findByText('+1.250 điểm Xanh khi giao thành công')).toBeInTheDocument();
   });
 });
+
+describe('CheckoutPage — vùng chạm >= 44px (C-021)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0, coinsBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('hàng "Mã giảm giá" cao tối thiểu 44px (trước đây 38px)', async () => {
+    renderPage();
+    const row = (await screen.findByText('Mã giảm giá')).closest('.tubu-press') as HTMLElement;
+    expect(row).not.toBeNull();
+    expect(row.style.minHeight).toBe('44px');
+  });
+
+  it('báo giá lỗi → "Thử lại" có vùng chạm 44px và bấm là tải lại báo giá', async () => {
+    mocks.checkoutQuote.mockRejectedValueOnce(new Error('Mạng lỗi'));
+    renderPage();
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    expect(retry.className).toContain('tubu-hit-44');
+    fireEvent.click(retry);
+    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledTimes(2));
+  });
+});

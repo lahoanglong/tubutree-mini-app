@@ -369,7 +369,7 @@ export default function CheckoutPage() {
           flex
           alignItems="center"
           justifyContent="space-between"
-          style={{ cursor: 'pointer' }}
+          style={{ cursor: 'pointer', minHeight: 44 }}
         >
           <Box flex alignItems="center" style={{ gap: 10 }}>
             <Box
@@ -693,7 +693,14 @@ export default function CheckoutPage() {
                 {getErrorMessage(quote.error)}
               </Text>
             </Box>
-            <Text role="button" size="xSmall" bold onClick={(e) => { e.stopPropagation(); void quote.refetch(); }} style={{ color: 'var(--color-text-brand)', padding: 8 }}>
+            <Text
+              role="button"
+              size="xSmall"
+              bold
+              className="tubu-hit-44"
+              onClick={(e) => { e.stopPropagation(); void quote.refetch(); }}
+              style={{ color: 'var(--color-text-brand)', padding: 8, display: 'inline-block' }}
+            >
               {vi.common.retry}
             </Text>
           </Box>
