@@ -8,7 +8,12 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
 import { reserveAvailableVariationStock } from '../catalog/variation-stock';
-import { assertVariationsSellable, isSellableVariation, productDiscontinuedError } from '../cart/sellable';
+import {
+  assertVariationsSellable,
+  isSellableVariation,
+  productDiscontinuedError,
+  SELLABLE_VARIATION_WHERE,
+} from '../cart/sellable';
 import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
@@ -147,8 +152,10 @@ export class DealerService {
   /** Bảng giá đại lý theo bậc của user. */
   async pricelist(userId: string) {
     const { discountPct, tier } = await this.dealerContext(userId);
+    // Cùng điều kiện với placeOrder: FE cho đặt trước cả hàng tồn 0, nên một dòng không bán được mà vẫn
+    // lên bảng giá sẽ làm cả đơn bị PRODUCT_DISCONTINUED.
     const variations = await this.prisma.variation.findMany({
-      where: { isActive: true },
+      where: SELLABLE_VARIATION_WHERE,
       include: { product: { select: { name: true, brand: true } } },
     });
     return variations.map((v) => {
