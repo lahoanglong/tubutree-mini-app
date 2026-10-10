@@ -132,37 +132,34 @@ export class AnalyticsAggregationService {
 
   /**
    * Trong các khoá khách của ngày `dateKey`, khoá nào đã có đơn tính-retention TRƯỚC ngày đó (= khách cũ).
-   * Mỗi loại khoá tra theo đường riêng: đơn lên hộ theo endCustomerKey; SĐT qua mọi tài khoản có cùng SĐT
-   * chuẩn hoá (khác định dạng vẫn là một khách); còn lại theo userId. Hai loại sau đều đi qua index
-   * (userId, status) — tra theo danh sách userId cụ thể để planner không chọn quét cả bảng orders.
+   * Mọi loại khoá chung MỘT không gian: endCustomerKey của đơn lên hộ là SĐT nội địa, cùng định dạng với SĐT
+   * chuẩn hoá của tài khoản, nên khách tự mua và CTV lên hộ cho chính khách đó là một người. Vì vậy mọi khoá
+   * đều được tra ở cả hai phía: đơn lên hộ theo endCustomerKey, và đơn thường qua mọi tài khoản có cùng SĐT
+   * chuẩn hoá (khác định dạng vẫn là một khách) hoặc theo userId. Phía đơn thường đi qua index (userId, status)
+   * bằng danh sách userId cụ thể để planner không chọn quét cả bảng orders.
    */
   private async keysWithEarlierOrder(
     dateKey: string,
     dayRows: Array<{ customer_key: string; kind: CustomerKeyKind }>,
   ): Promise<Set<string>> {
-    const keysOf = (kind: CustomerKeyKind) => dayRows.filter((r) => r.kind === kind).map((r) => r.customer_key);
     const before = `o."createdAt" < ${DAY_START_SQL}`;
-    const proxyKeys = keysOf('PROXY');
-    const phoneKeys = keysOf('PHONE');
-    const userKeys = keysOf('USER');
+    const allKeys = dayRows.map((r) => r.customer_key);
+    const userKeys = dayRows.filter((r) => r.kind === 'USER').map((r) => r.customer_key);
     const returning = new Set<string>();
+    if (allKeys.length === 0) return returning;
 
-    if (proxyKeys.length > 0) {
-      const rows = await this.prisma.$queryRawUnsafe<Array<{ customer_key: string }>>(`
-        SELECT DISTINCT o."endCustomerKey" AS customer_key FROM orders o
-        WHERE ${IS_PROXY_ORDER_SQL} AND o."endCustomerKey" = ANY($3::text[]) AND ${COUNTED_ORDER_SQL} AND ${before}
-      `, dateKey, COUNTED_STATUSES, proxyKeys);
-      for (const r of rows) returning.add(r.customer_key);
-    }
+    const proxyRows = await this.prisma.$queryRawUnsafe<Array<{ customer_key: string }>>(`
+      SELECT DISTINCT o."endCustomerKey" AS customer_key FROM orders o
+      WHERE ${IS_PROXY_ORDER_SQL} AND o."endCustomerKey" = ANY($3::text[]) AND ${COUNTED_ORDER_SQL} AND ${before}
+    `, dateKey, COUNTED_STATUSES, allKeys);
+    for (const r of proxyRows) returning.add(r.customer_key);
 
     const digitsByUserId = new Map<string, string>();
-    if (phoneKeys.length > 0) {
-      const users = await this.prisma.$queryRawUnsafe<Array<{ id: string; customer_key: string }>>(`
-        SELECT u.id, ${PHONE_DIGITS_SQL} AS customer_key FROM users u
-        WHERE u.phone IS NOT NULL AND ${PHONE_DIGITS_SQL} = ANY($1::text[])
-      `, phoneKeys);
-      for (const u of users) digitsByUserId.set(u.id, u.customer_key);
-    }
+    const users = await this.prisma.$queryRawUnsafe<Array<{ id: string; customer_key: string }>>(`
+      SELECT u.id, ${PHONE_DIGITS_SQL} AS customer_key FROM users u
+      WHERE u.phone IS NOT NULL AND ${PHONE_DIGITS_SQL} = ANY($1::text[])
+    `, allKeys);
+    for (const u of users) digitsByUserId.set(u.id, u.customer_key);
 
     const userIds = [...digitsByUserId.keys(), ...userKeys];
     if (userIds.length > 0) {

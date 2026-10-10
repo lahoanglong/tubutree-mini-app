@@ -88,6 +88,31 @@ describe('Retention snapshot (real Postgres)', () => {
     expect(result.newBuyers).toBe(5);
   });
 
+  it('endCustomerKey của đơn lên hộ trùng SĐT chuẩn hoá của tài khoản: cùng một khách ở cả hai chiều', async () => {
+    // endCustomerKey là SĐT nội địa 0xxxxxxxxx - cùng không gian khoá với User.phone chuẩn hoá.
+    const ctv = await createUser(prisma, { phone: `93${phoneBase}` });
+
+    // Chiều 1: khách tự mua trước, CTV lên hộ cho đúng SĐT đó trong ngày -> khách cũ.
+    const selfFirst = await createUser(prisma, { phone: `0${phoneBase.slice(1)}9` });
+    await order(selfFirst.id, '2030-09-01T05:00:00Z');
+    await order(ctv.id, '2030-09-05T05:00:00Z', { placedForCustomer: true, endCustomerKey: `0${phoneBase.slice(1)}9` });
+
+    // Chiều 2: CTV lên hộ trước, chính khách đó tự mua trong ngày -> khách cũ.
+    const proxyKey = `0${phoneBase.slice(1)}8`;
+    const selfLater = await createUser(prisma, { phone: proxyKey });
+    await order(ctv.id, '2030-09-02T05:00:00Z', { placedForCustomer: true, endCustomerKey: proxyKey });
+    await order(selfLater.id, '2030-09-05T06:00:00Z');
+
+    // Đối chứng: khách thật sự mới trong ngày.
+    const brandNew = await createUser(prisma, { phone: `0${phoneBase.slice(1)}7` });
+    await order(brandNew.id, '2030-09-05T07:00:00Z');
+
+    const result = await svc.computeRetentionSnapshot('2030-09-05');
+
+    expect(result.activeBuyers).toBe(3);
+    expect(result.newBuyers).toBe(1);
+  });
+
   it('luỹ kế tháng chỉ tính trong tháng VN, tới hết ngày đang tính', async () => {
     // Tháng 2030-07, ngày tính 2030-07-10.
     const u1 = await createUser(prisma, { phone: `91${phoneBase}` });
