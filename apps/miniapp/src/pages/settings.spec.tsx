@@ -73,6 +73,20 @@ describe('Cài đặt thông báo lưu trên server (C-022)', () => {
     expect(mocks.setStorage).toHaveBeenCalledWith({ data: { tubu_prefs: JSON.stringify({ fontScale: 'large' }) } });
   });
 
+  it('bấm hai lần liên tiếp khi đang lưu → chỉ gửi một yêu cầu', async () => {
+    let resolveSave: (v: object) => void = () => undefined;
+    mocks.saveNotifyPrefs.mockReturnValue(new Promise((r) => (resolveSave = r)));
+    render(<SettingsPage />);
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(promoSwitch());
+    fireEvent.click(promoSwitch());
+    expect(mocks.saveNotifyPrefs).toHaveBeenCalledTimes(1);
+    expect(promoSwitch()).toHaveAttribute('aria-disabled', 'true');
+    resolveSave({ notifyPromo: false, notifyGarden: true });
+    await waitFor(() => expect(promoSwitch()).not.toHaveAttribute('aria-disabled'));
+    expect(promoSwitch()).toHaveAttribute('aria-checked', 'false');
+  });
+
   it('tin đơn hàng không còn công tắc giả; công tắc khoá cho tới khi tải xong', async () => {
     mocks.fetchNotifyPrefs.mockReturnValue(new Promise(() => undefined));
     render(<SettingsPage />);

@@ -37,6 +37,7 @@ export default function SettingsPage() {
   const { logout } = useAuthStore();
   const [local, setLocal] = useState<LocalPrefs>(DEFAULT_LOCAL);
   const [notify, setNotify] = useState<NotifyPrefs | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -69,9 +70,11 @@ export default function SettingsPage() {
     haptic('light');
   };
 
+  // Khoá công tắc khi đang lưu: hai PATCH ngược chiều về lệch thứ tự sẽ làm màn hình khác server.
   const toggleNotify = async (key: keyof NotifyPrefs) => {
-    if (!notify) return;
+    if (!notify || saving) return;
     const before = notify;
+    setSaving(true);
     setNotify({ ...before, [key]: !before[key] });
     haptic('light');
     try {
@@ -79,6 +82,8 @@ export default function SettingsPage() {
     } catch {
       setNotify(before);
       openSnackbar({ type: 'error', text: 'Chưa lưu được cài đặt. Kiểm tra mạng rồi thử lại.' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -95,13 +100,13 @@ export default function SettingsPage() {
         <Toggle
           label="Khuyến mãi & mã giảm giá"
           on={notify?.notifyPromo ?? false}
-          disabled={!notify}
+          disabled={!notify || saving}
           onToggle={() => void toggleNotify('notifyPromo')}
         />
         <Toggle
           label="Nhắc nhở Vườn Xanh"
           on={notify?.notifyGarden ?? false}
-          disabled={!notify}
+          disabled={!notify || saving}
           onToggle={() => void toggleNotify('notifyGarden')}
           last
         />
