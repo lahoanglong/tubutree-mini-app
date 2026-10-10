@@ -467,3 +467,67 @@ describe('DealerService.placeOrder — tồn kho', () => {
     expect(created.data.items.create[0]!.total).toBe(320000);
   });
 });
+
+describe('DealerService.placeOrder — hạn mức công nợ (C-008)', () => {
+  function prismaForCredit(tier: { id: string; creditLimit: number } | null, currentDebt = 0) {
+    const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
+    const ledgerCreate = jest.fn().mockResolvedValue({});
+    const base: Record<string, unknown> = {
+      user: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: 'd1',
+          role: 'DEALER',
+          metadata: tier ? { dealerTierId: tier.id } : null,
+        }),
+      },
+      dealerTier: { findUnique: jest.fn().mockResolvedValue(tier) },
+      variation: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', retailPrice: 20_000, dealerPrices: null, name: '500ml', product: { name: 'SP', slug: 'sp' } },
+        ]),
+      },
+      order: {
+        create: orderCreate,
+        findUnique: jest.fn().mockResolvedValue(null),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }),
+      },
+      dealerCreditLedger: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: currentDebt } }), create: ledgerCreate },
+      $queryRaw: fullReserveQueryRaw(),
+    };
+    base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
+    return { prisma: base as unknown as PrismaService, orderCreate, ledgerCreate };
+  }
+  const creditOrder = { items: [{ variationId: 'v1', quantity: 100_000 }], paymentMethod: 'CREDIT' } as never;
+
+  it('đại lý KHÔNG có tier → hạn mức = 0: từ chối đơn CREDIT, không tạo đơn, không ghi công nợ', async () => {
+    const { prisma, orderCreate, ledgerCreate } = prismaForCredit(null);
+    await expect(new DealerService(prisma, makeConfig()).placeOrder('d1', creditOrder)).rejects.toThrow(/chưa được gán bậc/);
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(ledgerCreate).not.toHaveBeenCalled();
+  });
+
+  it('đại lý không tier vẫn đặt được đơn trả trước (PREPAID)', async () => {
+    const { prisma, orderCreate } = prismaForCredit(null);
+    await new DealerService(prisma, makeConfig()).placeOrder('d1', {
+      items: [{ variationId: 'v1', quantity: 1 }],
+      paymentMethod: 'PREPAID',
+    } as never);
+    expect(orderCreate).toHaveBeenCalled();
+  });
+
+  it('có tier, đơn vượt hạn mức → vẫn từ chối "Vượt hạn mức công nợ"', async () => {
+    const { prisma, orderCreate } = prismaForCredit({ id: 't1', creditLimit: 1_000_000 });
+    await expect(new DealerService(prisma, makeConfig()).placeOrder('d1', creditOrder)).rejects.toThrow('Vượt hạn mức công nợ.');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('có tier, trong hạn mức → ghi đơn CREDIT + công nợ', async () => {
+    const { prisma, orderCreate, ledgerCreate } = prismaForCredit({ id: 't1', creditLimit: 1_000_000 });
+    await new DealerService(prisma, makeConfig()).placeOrder('d1', {
+      items: [{ variationId: 'v1', quantity: 10 }],
+      paymentMethod: 'CREDIT',
+    } as never);
+    expect(orderCreate).toHaveBeenCalled();
+    expect(ledgerCreate).toHaveBeenCalled();
+  });
+});

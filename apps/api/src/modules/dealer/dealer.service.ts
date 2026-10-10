@@ -192,11 +192,18 @@ export class DealerService {
     const onCredit = dto.paymentMethod === 'CREDIT';
     // Fast-fail thân thiện (không tốn generateCode khi rõ ràng vượt). Check
     // QUYẾT ĐỊNH nằm trong transaction Serializable bên dưới để chống TOCTOU.
-    if (onCredit && tier) {
+    // Đại lý chưa có tier = hạn mức 0 (không phải "không giới hạn"): admin có thể cấp role DEALER
+    // mà chưa gán tier, trước đây nhánh `&& tier` bỏ qua hẳn kiểm tra và đặt được CREDIT vô hạn.
+    const creditLimit = tier?.creditLimit ?? 0;
+    const overLimitError = () =>
+      new BadRequestException(
+        tier
+          ? 'Vượt hạn mức công nợ.'
+          : 'Tài khoản đại lý chưa được gán bậc nên chưa có hạn mức công nợ. Vui lòng chọn thanh toán trả trước hoặc liên hệ Tubu Tree để được gán bậc.',
+      );
+    if (onCredit) {
       const pre = await this.prisma.dealerCreditLedger.aggregate({ where: { userId }, _sum: { delta: true } });
-      if ((pre._sum.delta ?? 0) + subtotal > tier.creditLimit) {
-        throw new BadRequestException('Vượt hạn mức công nợ.');
-      }
+      if ((pre._sum.delta ?? 0) + subtotal > creditLimit) throw overLimitError();
     }
 
     const code = await this.generateCode();
@@ -206,10 +213,10 @@ export class DealerService {
         async (tx) => {
           // Kiểm tra hạn mức công nợ TRONG transaction Serializable: 2 đơn CREDIT
           // đồng thời không thể cùng vượt trần (một trong hai sẽ serialization-fail).
-          if (onCredit && tier) {
+          if (onCredit) {
             const agg = await tx.dealerCreditLedger.aggregate({ where: { userId }, _sum: { delta: true } });
             const debt = agg._sum.delta ?? 0;
-            if (debt + subtotal > tier.creditLimit) throw new BadRequestException('Vượt hạn mức công nợ.');
+            if (debt + subtotal > creditLimit) throw overLimitError();
           }
           // Giữ chỗ tồn kho như mọi đường tạo đơn khác (checkout, CTV lên đơn hộ, đơn định
           // kỳ) — NHƯNG đại lý được phép đặt trước phần vượt tồn thay vì bị từ chối cả đơn:
