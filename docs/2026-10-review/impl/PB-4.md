@@ -51,3 +51,12 @@ Module mới `apps/api/src/modules/data-retention/` (`DataRetentionService`, đ�
 - `refresh_tokens` không có index createdAt: DAU vẫn Seq Scan nhưng bảng đã bị C-046 giới hạn ~30 ngày sau hết hạn.
 - Sự kiện lạ từ client bị 400 cả lô. Chấp nhận vì miniapp chỉ phát tên trong danh sách và gửi best-effort; nếu một bản miniapp cũ phát tên ngoài danh sách thì lô đó mất (không ảnh hưởng nghiệp vụ).
 - Cohort 30/60/90 và funnel (nhắc trong TODO của service) chưa có job; không thuộc C-101.
+
+## Review lượt 1
+
+1. **major - khách cũ tách theo loại khoá (analytics-aggregation.service.ts): ĐÚNG, ĐÃ SỬA.** `endCustomerKey` là SĐT nội địa (affiliate.service `normalizeToLocalPhone`) nên cùng không gian khoá với SĐT chuẩn hoá của User; bản gốc gộp mọi khoá vào một `customer_key`. Test đỏ trước: race spec thêm case hai chiều (khách tự mua ngày 1 rồi CTV lên hộ ngày 5; CTV lên hộ ngày 2 rồi chính khách tự mua ngày 5) -> `newBuyers` nhận 3, kỳ vọng 1. Sửa: `keysWithEarlierOrder` tra MỌI khoá của ngày ở cả hai phía (đơn lên hộ theo endCustomerKey; đơn thường qua user cùng SĐT chuẩn hoá hoặc userId) -> xanh. Unit test viết lại cho khớp (khoá được tra ở cả hai phía; ngày không có khoá thì không truy vấn). Commit d5f5387 + commit test unit.
+2. **minor - thiếu index cho nhánh đơn lên hộ: ĐÃ SỬA (một phần).** Migration `20261010040000_orders_end_customer_key_index`: partial index `orders(endCustomerKey) WHERE placedForCustomer AND endCustomerKey IS NOT NULL` (additive, `IF NOT EXISTS`, không đổi dữ liệu; áp bằng `migrate deploy` trên Postgres riêng OK, EXPLAIN dùng `Index Scan using orders_end_customer_key_proxy_idx`). Chưa đo trên perf DB vì DB đó không có đơn lên hộ và gói chỉ được đọc. Index biểu thức trên SĐT chuẩn hoá của `users` KHÔNG làm (thêm chi phí ghi cho bảng users, quét ~27 ms ở 50k user): hoãn.
+3. **minor - ngân sách 90 phút bị bảng đầu nuốt: ĐÃ SỬA phần chia ngân sách.** Mỗi bảng chỉ được dùng (thời gian còn lại / số bảng chưa chạy); unit test đỏ trước (refresh_tokens chỉ 1 lô khi analytics_events tồn đọng vô hạn) rồi xanh. Không thêm index receivedAt/sentAt (đo chưa thấy chậm, thêm index lên bảng log ghi nhiều tốn hơn lợi; để theo dõi lần dọn đầu trên PROD).
+4. **minor - parser 256kb sát biên: ĐÃ SỬA.** Nâng `/api/events` lên 512kb (giữ MAX_EVENTS_PER_BATCH/props như cũ).
+
+Kiểm chứng: `jest --maxWorkers=1 src/modules/analytics src/modules/data-retention` 58 passed; race spec `retention-snapshot` + `data-retention` trên Postgres 5554 7 passed; `tsc --noEmit` và ESLint file đã sửa sạch.
