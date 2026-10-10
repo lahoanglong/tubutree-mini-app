@@ -135,3 +135,83 @@ npx tsc --noEmit -p tsconfig.json → exit 0 ; npx eslint <file đã sửa> → 
 **Việc còn lại**
 - Yêu cầu 3 (web admin), 5 (C-008 phần admin), 6 (C-050) — các lượt sau.
 - Sau deploy: chạy seed (hoặc thêm tay khoá `orders.pending_payment_ttl_hours`), nếu không cron dùng mặc định 24 giờ.
+
+## Lượt 3 — C-024 yêu cầu 3 (web admin) + C-008 phần admin + C-050
+
+### C-024 — yêu cầu 3 XONG (cả gói C-024: yêu cầu 1–4 XONG)
+
+**API** (commit `1dbb21b`)
+- `orders/order-transition.ts` `allowedNextStatuses(order)`: bảng `ORDER_TRANSITIONS` trừ chính nó, lọc qua
+  `assertPaidBeforeFulfilment` (cùng luật `setStatus`); trạng thái lạ → `[]`.
+- `AdminService.listOrders` trả thêm mỗi đơn `allowedTransitions` (đơn đại lý dùng cờ `dealerOnCredit` làm `onCredit`)
+  và `canConfirmPayment` (RETAIL + BANK_TRANSFER + UNPAID + chưa CANCELLED/RETURNED — đúng điều kiện `confirmOrderPayment`).
+
+**Web** (commit `9ac420b`)
+- Component mới `components/admin/order-status-actions.tsx` thay khối nút cứng ở `app/admin/page.tsx` (cũ :832-899):
+  nút trạng thái = đúng `allowedTransitions` (không có RETURNED — trả hàng đi tab Đổi/Trả); API cũ không có trường →
+  không hiện nút. DELIVERED/CANCELLED vẫn hỏi xác nhận (giữ câu hỏi Gomdon). Khối "Đã nhận tiền" khi `canConfirmPayment`:
+  ô mã giao dịch tuỳ chọn, `window.confirm` có mã đơn + số tiền, chống bấm dồn (ref), message API hiện nguyên văn.
+- `lib/admin-client.ts`: `AdminOrder.allowedTransitions/canConfirmPayment`, `confirmOrderPayment()`.
+
+### C-008 (A5N-03) phần admin — XONG (commit `2385ea8`, web ở `9ac420b`)
+- `POST /admin/users/role`: `SetUserRoleDto.tierId?` (IsString, MaxLength 100). `AdminService.setUserRole(..., tierId)`:
+  role DEALER thiếu/rỗng tierId → 400 "Cần chọn bậc đại lý…"; tier không tồn tại → 400; hợp lệ → `role` +
+  `metadata.dealerTierId` merge vào metadata cũ (giống duyệt hồ sơ). Role khác bỏ qua tierId.
+- Web `GrantRoleForm`: chọn DEALER thì hiện ô "Tier ID (bắt buộc)", nút khoá khi trống; `setUserRole` chỉ gửi tierId khi DEALER.
+
+### C-050 (A5N-05) — XONG (API `9c4a291`, web `9ac420b`)
+- `orders/dto/return-request.dto.ts` (tách khỏi `orders.controller.ts`): `images` mỗi phần tử phải là
+  `https://res.cloudinary.com/...` (không user:pass) HOẶC `data:image/(png|jpeg|webp|gif);base64,...` ≤ 1.500.000 ký tự.
+  Từ chối `javascript:`, `data:text/html`, `data:image/svg+xml`, `http:`, host lạ/`res.cloudinary.com.attacker…`, `//host`.
+- Web `components/admin/evidence-images.tsx`: thay `<img onClick={() => window.open(img)}>`; chỉ render https (bọc
+  `<a target=_blank rel="noopener noreferrer">`) và base64 raster (chỉ ảnh, không link); dòng cũ trong DB chứa URL xấu bị
+  ẩn kèm dòng "Đã ẩn N ảnh không hợp lệ".
+
+**Test thêm (đỏ → xanh)**
+- `admin.service.spec.ts` +4 (C-008): trước khi sửa `Tests: 3 failed, 1 passed` (-t C-008); +3 (listOrders
+  allowedTransitions/canConfirmPayment): trước khi sửa `3 failed`. `admin-recycling-config.spec.ts`: đổi `toEqual` →
+  `toMatchObject` + kiểm đơn lẻ không có `dealerOnCredit` (đơn giờ có thêm 2 trường).
+- `admin.controller.spec.ts` +2 (DTO nhận tierId qua ValidationPipe thật, chuyển xuống service; sai kiểu/quá dài → 400).
+- `order-transition.spec.ts` +5 (`allowedNextStatuses`): trước khi có hàm `5 failed, 15 passed`.
+- `return-request.dto.spec.ts` mới 14 test: chạy với DTO cũ (chỉ @IsString) → `12 failed, 2 passed`; sau sửa 14/14.
+  `orders.controller.spec.ts` +1 (route dùng ReturnRequestDto).
+- Web (vitest): `order-status-actions.spec.tsx` 9 test, `evidence-images.spec.tsx` 12 test — trước khi có component: suite FAIL
+  (không import được); sau: xanh.
+
+**Lệnh kiểm chứng + output thật**
+```
+cd apps/api
+npx jest --maxWorkers=1 src/modules/admin src/modules/orders
+  Test Suites: 15 passed, 15 total
+  Tests:       370 passed, 370 total
+npx tsc --noEmit -p tsconfig.json → exit 0 ; npx eslint <file api đã sửa> → exit 0
+cd apps/web
+npx vitest run src/components/admin src/lib src/app/admin
+  Test Files  13 passed (13)
+  Tests  170 passed (170)
+npx tsc --noEmit → exit 0 ; npx eslint src/app/admin/page.tsx src/components/admin/{order-status-actions,evidence-images}*.tsx src/lib/admin-client.ts → exit 0
+```
+
+**Migration:** không có.
+
+**File ngoài nhóm file của gói (giữ tối thiểu):** `apps/web/src/lib/admin-client.ts` (thêm 2 trường kiểu, hàm
+`confirmOrderPayment`, tham số `tierId` cho `setUserRole`) — page.tsx gọi API qua file này; component mới
+`apps/web/src/components/admin/{order-status-actions,evidence-images}.tsx` (file mới, không đụng file của gói khác);
+`apps/api/src/modules/admin/admin-recycling-config.spec.ts` (sửa 1 assert do listOrders thêm trường).
+
+**Giả định**
+- C-050: đặc tả nói "chỉ https", nhưng ImageUpload của miniapp fallback sang ảnh base64 khi thiếu `VITE_CLOUDINARY_*` —
+  repo chính không có biến này trong .env nào, nên PROD đang gửi ảnh đổi trả dạng `data:image/jpeg;base64`. Chặn hẳn sẽ làm
+  mọi yêu cầu đổi trả có ảnh bị 400. Chọn: nhận https host Cloudinary + base64 ảnh raster (png/jpeg/webp/gif, không SVG);
+  admin chỉ hiện base64 trong `<img>` (không chạy script) và không làm link. Khi bật Cloudinary có thể bỏ nhánh base64.
+- Host upload hợp lệ = `res.cloudinary.com` (hằng `RETURN_IMAGE_HOSTS`); thêm CDN khác thì thêm vào hằng này.
+- Web không hiện nút RETURNED dù API cho DELIVERED → RETURNED: trả hàng có hoàn tiền đi qua duyệt yêu cầu ở tab Đổi/Trả.
+- "Xác nhận" (PENDING_PAYMENT → CONFIRMED khi chưa trả) vẫn hiện vì API cho phép (giả định lượt 1); khối "Đã nhận tiền" ghi
+  rõ đơn chưa giao được tới khi xác nhận tiền.
+- C-008: hạ DEALER sang vai trò khác không xoá `metadata.dealerTierId` (cấp lại DEALER vẫn bắt buộc chọn bậc).
+
+**Việc còn lại**
+- C-008 phần hạn mức trong `dealer.service` (creditLimit mặc định 0 khi không tier) — gói PA-4.
+- Dữ liệu cũ: DB local có 1 DEALER không tier; sau deploy admin cần gán bậc qua form mới (cấp lại DEALER kèm Tier ID).
+- Danh sách bậc vẫn nhập tay Tier ID (giống form duyệt hồ sơ); có thể đổi sang dropdown khi có endpoint liệt kê bậc.
+- Deploy API trước web (web dựa vào `allowedTransitions`; API cũ → khối nút trống, không sai tiền).
