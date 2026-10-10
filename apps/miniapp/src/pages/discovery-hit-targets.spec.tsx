@@ -1,7 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import type * as ZmpUi from 'zmp-ui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -9,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   user: { fullName: 'Lan', pointsBalance: 60 } as { fullName: string; pointsBalance: number } | null,
   authed: true,
 }));
-vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
+vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
 vi.mock('../services/shop-api', () => ({
   fetchBrands: vi.fn().mockResolvedValue([{ brand: 'Tubu', count: 3 }, { brand: 'Cỏ Mềm', count: 2 }]),
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
