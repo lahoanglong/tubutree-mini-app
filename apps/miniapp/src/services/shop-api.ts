@@ -69,8 +69,21 @@ export interface CartLine {
   soldPct?: number | null;
 }
 
+/** Dòng giỏ có SP đã ngừng bán/chưa duyệt — server không tính tiền, không đặt được. */
+export interface UnavailableCartLine {
+  id: string;
+  variationId: string;
+  productName: string;
+  variationName: string;
+  slug: string;
+  thumbnail: string | null;
+  quantity: number;
+}
+
 export interface CartSummary {
   items: CartLine[];
+  /** API cũ chưa có trường này → coi như rỗng. */
+  unavailableItems?: UnavailableCartLine[];
   couponCode: string | null;
   subtotal: number;
   discount: number;

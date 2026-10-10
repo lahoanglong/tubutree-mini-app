@@ -9,6 +9,7 @@ import {
   addToCart,
   type CartSummary,
   type CartLine,
+  type UnavailableCartLine,
 } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -182,6 +183,14 @@ export default function CartPage() {
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 190 }}>
       <PageHeader title="Giỏ hàng" />
       <StorefrontContextBar />
+      <DiscontinuedNotice
+        lines={summary.unavailableItems ?? []}
+        onRemove={(id) =>
+          removeCartItem(id)
+            .then((c) => queryClient.setQueryData(CART_KEY, c))
+            .catch((e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }))
+        }
+      />
       {empty ? (
         <EmptyState
           art="basket"
@@ -257,6 +266,44 @@ export default function CartPage() {
         />
       )}
     </Page>
+  );
+}
+
+function DiscontinuedNotice({ lines, onRemove }: { lines: UnavailableCartLine[]; onRemove: (id: string) => void }) {
+  if (lines.length === 0) return null;
+  return (
+    <Box
+      role="status"
+      mx={3}
+      mt={2}
+      p={3}
+      style={{
+        background: 'var(--color-bg-surface)',
+        border: '1px solid var(--color-border-default)',
+        borderRadius: 'var(--radius-control)',
+      }}
+    >
+      <Box flex alignItems="center" style={{ gap: 6 }}>
+        <AlertTriangle size={16} color="var(--color-text-warning)" aria-hidden />
+        <Text size="small" bold style={{ color: 'var(--color-text-warning)' }}>
+          {vi.cart.discontinuedHeading(lines.length)}
+        </Text>
+      </Box>
+      <Text size="xSmall" style={{ marginTop: 4, color: 'var(--color-text-secondary)' }}>
+        {vi.cart.discontinuedBody}
+      </Text>
+      {lines.map((l) => (
+        <Box key={l.id} flex alignItems="center" justifyContent="space-between" style={{ gap: 8, marginTop: 8 }}>
+          <Text size="small" style={{ flex: 1, minWidth: 0, textDecoration: 'line-through' }}>
+            {l.productName}
+            {l.variationName ? ` · ${l.variationName}` : ''} × {l.quantity}
+          </Text>
+          <Button variant="ghost" onPress={() => onRemove(l.id)}>
+            {vi.cart.discontinuedRemove}
+          </Button>
+        </Box>
+      ))}
+    </Box>
   );
 }
 
