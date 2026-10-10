@@ -11,3 +11,24 @@
 
 ### Giả định
 - Số đo trên tubutree_perf (yêu cầu 3) và job dọn (yêu cầu 2) do lượt khác làm.
+
+## Mục 2/2 (C-012, yêu cầu 2 + 3): job dọn coupon cá nhân hết hạn + đo trước/sau - XONG
+
+### Job dọn (yêu cầu 2)
+- `apps/api/src/modules/coupons/coupon-cleanup.cron.ts` (`CouponCleanupCron`, đăng ký trong `CouponsModule`): `@Cron('0 30 4 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })`, xoá theo lô `DELETE ... WHERE id IN (SELECT ... LIMIT n FOR UPDATE SKIP LOCKED)`, mặc định lô 1000, tối đa 50 lô mỗi lượt (lượt sau xoá tiếp phần còn lại).
+- Chống chạy chồng 2 tầng: cờ `running` trong instance + `pg_try_advisory_xact_lock(hashtext('cron:coupons.cleanup_personal_expired'))` (nhiều instance). Lỗi được bắt trong `handleCron`.
+- Chỉ xoá coupon cá nhân = `scope='USER_GROUP'` và `scopeMeta->>'userId'` không null, `endAt < now - N ngày`, `usedCount = 0` và không có `CouponRedemption` (giữ lịch sử dùng; FK redemption cũng chặn xoá). N = config `coupons.personal_expired_retention_days`, mặc định 90, sàn 30 (giá trị rác/NaN rơi về 90).
+- Test đỏ -> xanh: `apps/api/test/integration-race/coupon-cleanup.race-spec.ts` (Postgres thật, 5 ca: phạm vi xoá/giữ, ngưỡng cấu hình, config rác/sàn, giới hạn lô, khoá advisory do kết nối khác giữ). Bước đỏ = module chưa tồn tại ("Cannot find module coupon-cleanup.cron"), sau khi cài đặt 5/5 xanh. Unit `coupon-cleanup.cron.spec.ts` 5 ca (timezone, lô, LOCKED, RUNNING, lỗi DB).
+- Không cần migration thêm: EXPLAIN (ANALYZE) một lô xoá 1000 trên tubutree_perf (105k coupon, 30k giả lập hết hạn, ROLLBACK) = 83.8 ms (seq scan coupons + hash anti join redemptions); tối đa 50 lô ~ vài giây mỗi đêm nên không thêm index cho job.
+
+### Đo trước/sau (yêu cầu 3), DB tubutree_perf (105k coupon, 35.0k còn hạn), API riêng cổng 3302, Redis db 6, key tích hợp trống
+Kịch bản `scripts/loadtest/coupons-me.cjs` (mới; 8 VU x 40 request = 320 request, user perf_u_10000..10049, X-Forwarded-For riêng mỗi request), `scripts/loadtest/start-api-3302.sh`.
+- TRƯỚC (dist của repo chính = thuật toán cũ, chưa có index): tuần tự 20 req p50 1070.5 ms, p95 1291.8 ms; 8 song song p50 2791 ms, **p95 3908 ms**, p99 4157 ms, max 4522 ms, 2.8 rps, 0 lỗi. EXPLAIN truy vấn cũ: Seq Scan coupons, 35019 dòng trả về, 14.8 ms ở DB (phần còn lại là Prisma dựng 35k object + lọc JS).
+- SAU (build worktree nhánh hz4/PB-2 + áp migration 20261010040000 lên perf DB): tuần tự p50 9.1-13.9 ms, p95 11.4-16.5 ms; 8 song song (2 lần chạy) p50 14.7/17.1 ms, **p95 20.7/31.0 ms**, p99 41.6/35.8 ms, max 61.0 ms, 509.6/429.0 rps, 0 lỗi. Đạt mục tiêu p95 < 50 ms (giảm ~190 lần ở p95 song song).
+- EXPLAIN (ANALYZE) truy vấn mới: Append của Index Scan `coupons_scope_shared_endAt_idx` + Bitmap Index Scan `coupons_user_group_userId_idx`, 0.694 ms.
+- Đã tắt instance 3302 sau đo (port không còn listen). Perf DB giờ có 2 index của migration (cố ý, để giữ trạng thái "sau"); không có dữ liệu coupon nào bị đổi (phần mô phỏng hết hạn nằm trong transaction ROLLBACK).
+
+### Giả định / lưu ý
+- Số "trước" dùng dist đã build sẵn của repo chính (thuật toán cũ trong getAvailableCoupons, cùng code cho đường /me/coupons); phần còn lại của dist có thể lệch nhẹ so với 5598f9b nhưng không nằm trên đường chạy endpoint này.
+- Coupon cá nhân sinh theo reason tất định (WELCOME/BIRTHDAY-kỳ/WINBACK-ngày) có thể được cấp lại về lý thuyết nếu cron cấp chạy lại cho đúng kỳ cũ sau khi bị xoá; các cron đó chỉ xét kỳ hiện tại nên chấp nhận. Nhóm mua chung cấp lại chỉ khi `couponsGrantedAt` null và trong cửa sổ ngắn, xa hơn 90 ngày sau hết hạn.
+- Chỉ dọn USER_GROUP có userId; BIRTHDAY/INVITE/PUBLIC/TIER không đụng.
