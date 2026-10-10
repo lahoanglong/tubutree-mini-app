@@ -1,11 +1,12 @@
-import { Box, Page, Text, Button, Avatar, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box, Page, Text, Avatar, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Heart, MapPin, Leaf, Wallet, Users, BadgePercent, Pencil,
+  Heart, MapPin, Leaf, Wallet, Users, Pencil,
   Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, ShieldCheck, CalendarClock, Sprout, Recycle, Sparkles, BookOpen, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
-import { getLoyalty, getNotifications } from '../services/account-api';
+import { getCoupons, getLoyalty, getNotifications, getWallet } from '../services/account-api';
+import { Button } from '../components/ui/button';
 import { getOwnedBrand } from '../services/brand-owner-api';
 import { getDealerMe } from '../services/dealer-api';
 import { formatVnd, formatPoints } from '../utils/format';
@@ -18,34 +19,6 @@ interface MenuItem {
   to: string;
   hint?: string;
 }
-
-/**
- * Route đã build xong (điều hướng thật). Mục chưa có trong set → báo "đang hoàn thiện"
- * thay vì điều hướng tới trang trắng. Mở khóa dần theo từng vòng phát triển.
- */
-const READY = new Set([
-  '/loyalty',
-  '/wallet',
-  '/addresses',
-  '/notifications',
-  '/affiliate',
-  '/cashback',
-  '/dealer',
-  '/about',
-  '/wishlist',
-  '/settings',
-  '/edit-profile',
-  '/brand-owner',
-  '/storefront',
-  '/feed',
-  '/admin',
-  '/staff',
-  '/my-payroll',
-  '/refill',
-  '/ai-advisor',
-  '/group-buy',
-  '/brand-story',
-]);
 
 export const MENU: { group: string; items: MenuItem[] }[] = [
   {
@@ -67,10 +40,12 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
     ],
   },
   {
-    group: 'Kiếm thưởng',
+    // Q-15: mục CTV/đại lý/nhãn hàng gom riêng để không chen vào hành trình mua của khách;
+    // "Hoàn tiền sàn ngoài" bỏ khỏi hub (kéo khách sang sàn khác, ngược north-star mua lại).
+    group: 'Hợp tác',
     items: [
       { Icon: Users, label: 'Cộng tác viên', to: '/affiliate', hint: 'Chia sẻ — nhận hoa hồng' },
-      { Icon: BadgePercent, label: 'Hoàn tiền sàn ngoài', to: '/cashback' },
+      { Icon: Store, label: 'Đăng ký đại lý', to: '/dealer' },
     ],
   },
   {
@@ -78,7 +53,6 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
     items: [
       { Icon: Bell, label: 'Thông báo', to: '/notifications' },
       { Icon: BookOpen, label: 'Câu chuyện thương hiệu', to: '/brand-story' },
-      { Icon: Store, label: 'Đăng ký đại lý', to: '/dealer' },
       { Icon: Settings, label: 'Cài đặt', to: '/settings' },
       { Icon: Info, label: 'Về Tubu Tree & Hỗ trợ', to: '/about' },
     ],
@@ -100,6 +74,9 @@ export default function ProfilePage() {
     enabled: status === 'authenticated',
   });
   const unreadCount = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
+  // Cùng queryKey với trang Ví/Ưu đãi nên mở hub không tốn thêm request khi đã có cache.
+  const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: status === 'authenticated' });
+  const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: status === 'authenticated' });
 
   // Brand-owner (lộ trình B): chỉ hiện mục "Quản lý nhãn" khi user sở hữu 1 nhãn.
   // Dùng CHUNG queryKey ['owned-brand'] với brand-owner.tsx → 1 lần fetch phục vụ cả 2 màn,
@@ -124,13 +101,13 @@ export default function ProfilePage() {
       ? { Icon: Store, label: 'Hồ sơ đại lý', to: '/dealer', hint: 'Đang chờ duyệt' }
       : { Icon: Store, label: 'Đăng ký đại lý', to: '/dealer' };
   const withDealer = MENU.map((s) =>
-    s.group === 'Khác'
+    s.group === 'Hợp tác'
       ? { ...s, items: s.items.map((it) => (it.to === '/dealer' ? dealerItem : it)) }
       : s,
   );
   const baseMenu = ownedBrandQ.data
     ? withDealer.map((s) =>
-        s.group === 'Kiếm thưởng'
+        s.group === 'Hợp tác'
           ? { ...s, items: [...s.items, { Icon: Store, label: 'Quản lý nhãn hàng', to: '/brand-owner', hint: ownedBrandQ.data!.name }] }
           : s,
       )
@@ -164,7 +141,7 @@ export default function ProfilePage() {
               <Text size="small" style={{ color: 'var(--neutral-500)' }}>
                 Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn.
               </Text>
-              <Button onClick={() => void useAuthStore.getState().login()} style={{ background: 'var(--leaf-600)', minWidth: 180, marginTop: 8, borderRadius: 'var(--radius-full)' }}>
+              <Button onPress={() => void useAuthStore.getState().login()} style={{ minWidth: 180, marginTop: 8 }}>
                 Đăng nhập ngay
               </Button>
             </>
@@ -174,7 +151,7 @@ export default function ProfilePage() {
                 <Leaf size={32} color="var(--danger)" strokeWidth={2} />
               </Box>
               <Text style={{ color: 'var(--neutral-600)' }}>{error ?? 'Chưa kết nối được, vui lòng thử lại.'}</Text>
-              <Button onClick={() => void restore()} style={{ background: 'var(--leaf-600)', minWidth: 180, borderRadius: 'var(--radius-full)' }}>
+              <Button onPress={() => void restore()} style={{ minWidth: 180 }}>
                 Thử lại
               </Button>
             </>
@@ -254,8 +231,9 @@ export default function ProfilePage() {
               >
                 <Pencil size={11} color="var(--neutral-0)" strokeWidth={2} />
                 <Text size="xSmall" bold style={{ color: 'var(--neutral-0)' }}>
-                  Sửa hồ sơ ›
+                  Sửa hồ sơ
                 </Text>
+                <ChevronRight size={12} color="var(--neutral-0)" strokeWidth={2} />
               </Box>
             </Box>
           </Box>
@@ -271,7 +249,7 @@ export default function ProfilePage() {
             style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 'var(--radius-md)' }}
             onClick={copyReferral}
           >
-            <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>
+            <Text size="xSmall" style={{ color: 'var(--neutral-0)', opacity: 0.9 }}>
               Mã giới thiệu: <b>{user.referralCode}</b>
             </Text>
             <Box flex alignItems="center" style={{ gap: 4 }}>
@@ -285,13 +263,27 @@ export default function ProfilePage() {
       </Box>
 
       {/* Quick stats */}
-      <Box flex p={3} style={{ gap: 10, marginTop: -20 }}>
+      <Box p={3} style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: -20 }}>
         <Stat
           label="Điểm Xanh"
           value={formatPoints(loyaltyQ.data?.pointsBalance ?? user.pointsBalance)}
           onClick={() => navigate('/loyalty')}
         />
-        <Stat label="Ví Tubu" value={formatVnd(user.walletBalance)} onClick={() => navigate('/wallet', { state: { from: '/profile' } })} />
+        <Stat
+          label="Ví Tubu"
+          value={formatVnd(walletQ.data?.walletBalance ?? user.walletBalance)}
+          onClick={() => navigate('/wallet', { state: { from: '/profile' } })}
+        />
+        <Stat
+          label="TubuXu"
+          value={walletQ.data ? `${walletQ.data.coinsBalance.toLocaleString('vi-VN')} xu` : '—'}
+          onClick={() => navigate('/wallet', { state: { from: '/profile' } })}
+        />
+        <Stat
+          label="Mã giảm giá"
+          value={couponsQ.data ? `${couponsQ.data.length} mã` : '—'}
+          onClick={() => navigate('/loyalty')}
+        />
       </Box>
 
       {/* Menu */}
@@ -315,8 +307,7 @@ export default function ProfilePage() {
                 }}
                 onClick={() => {
                   haptic('light');
-                  if (READY.has(item.to)) navigate(item.to, item.to === '/wallet' ? { state: { from: '/profile' } } : undefined);
-                  else openSnackbar({ text: 'Tính năng đang được hoàn thiện 🌱', type: 'info' });
+                  navigate(item.to, item.to === '/wallet' ? { state: { from: '/profile' } } : undefined);
                 }}
               >
                 <Box style={{ width: 34, height: 34, borderRadius: 'var(--radius-md)', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
@@ -357,7 +348,7 @@ export default function ProfilePage() {
       ))}
 
       <Box p={4}>
-        <Button fullWidth variant="secondary" onClick={() => void logout()}>
+        <Button fullWidth variant="secondary" onPress={() => void logout()}>
           Đăng xuất
         </Button>
       </Box>
@@ -369,9 +360,12 @@ function Stat({ label, value, onClick }: { label: string; value: string; onClick
   return (
     <Box
       className="tubu-press"
+      role="button"
+      aria-label={`${label}: ${value}`}
       p={3}
       onClick={onClick}
       style={{
+        minHeight: 44,
         flex: 1,
         background: 'var(--neutral-0)',
         borderRadius: 'var(--radius-lg)',
