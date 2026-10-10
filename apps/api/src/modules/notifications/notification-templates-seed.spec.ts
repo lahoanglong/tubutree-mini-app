@@ -113,7 +113,7 @@ describe('seed mẫu thông báo', () => {
       const create = jest.fn().mockResolvedValue({ id: 'log-1' });
       const prisma = {
         notificationTemplate: { findUnique: jest.fn().mockResolvedValue({ ...tpl, zaloTemplateId: null }) },
-        user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: null }) },
+        user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: null, notifyPromo: true, notifyGarden: true }) },
         notificationLog: { create },
       } as unknown as PrismaService;
       const analytics = { recordBestEffort: jest.fn().mockResolvedValue(undefined) } as unknown as AnalyticsEventsService;
