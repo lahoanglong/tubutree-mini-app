@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CRON_TZ } from '../../common/cron-tz';
 
 interface RetentionResult {
   newBuyers: number;
@@ -33,7 +34,7 @@ export class AnalyticsAggregationService {
    * xem finding review Task 14: tính "hôm qua" bằng UTC-24h chỉ đúng nếu host cũng chạy UTC;
    * nếu host chạy giờ VN, kết quả lùi thêm 1 ngày).
    */
-  @Cron('0 3 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
+  @Cron('0 3 * * *', { timeZone: CRON_TZ })
   async runNightly(): Promise<void> {
     // Ngày VN hôm qua, tính TƯỜNG MINH bằng offset +7h thay vì phụ thuộc giờ host (cùng cách
     // game-economy.service.ts/loyalty.service.ts đã dùng cho "ngày VN" ở nơi khác).

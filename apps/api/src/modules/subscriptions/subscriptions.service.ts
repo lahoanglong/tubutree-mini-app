@@ -16,6 +16,7 @@ import {
   productDiscontinuedError,
 } from '../cart/sellable';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { CRON_TZ } from '../../common/cron-tz';
 
 interface CreateSubInput {
   variationId: string;
@@ -272,7 +273,7 @@ export class SubscriptionsService {
    * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi tạo đơn từng subscription
    * đã được cô lập ở try/catch trong vòng lặp bên dưới.
    */
-  @Cron('0 3 * * *')
+  @Cron('0 3 * * *', { timeZone: CRON_TZ })
   async processDue(): Promise<void> {
     try {
       const now = new Date();

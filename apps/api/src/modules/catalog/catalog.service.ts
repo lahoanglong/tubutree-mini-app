@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
 import { SQL_WHITESPACE_RE, VN_FOLD_FROM, VN_FOLD_TO, foldVietnamese, likeContainsPattern } from './search-text';
+import { CRON_TZ } from '../../common/cron-tz';
 
 /** Trần số id trả về từ SQL tìm không dấu — catalog hiện vài trăm SP; chặn trường hợp từ khoá quá chung. */
 const TEXT_MATCH_LIMIT = 2000;
@@ -474,7 +475,7 @@ export class CatalogService {
   }
 
   /** Cron 03:00 hằng ngày — tính lại số đã bán (social proof không cần realtime). */
-  @Cron('0 3 * * *')
+  @Cron('0 3 * * *', { timeZone: CRON_TZ })
   async recomputeSoldCron(): Promise<void> {
     // Nuốt lỗi im lặng ở đây từng khiến hỏng mà không ai biết — số "đã bán" sai cả ngày và
     // không có một dòng log nào để lần ra.

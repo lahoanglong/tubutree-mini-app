@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CRON_TZ } from '../../common/cron-tz';
 
 /**
  * "User thật" (Q-05): có zaloId Zalo thật hoặc SĐT. Khách đăng nhập theo deviceId mang zaloId
@@ -100,7 +101,7 @@ export class VouchersService {
    * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi cấp/notify từng user đã
    * được `grant()` tự cô lập (P2002 nuốt, notify `.catch(() => undefined)`).
    */
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(CronExpression.EVERY_HOUR, { timeZone: CRON_TZ })
   async welcomeVouchers(): Promise<void> {
     try {
       const since = new Date(Date.now() - 24 * 3600 * 1000);
@@ -147,7 +148,7 @@ export class VouchersService {
    * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — $queryRaw lỗi ném ra ngoài là
    * unhandledRejection, Node 20 mặc định crash cả process.
    */
-  @Cron('0 1 * * *')
+  @Cron('0 1 * * *', { timeZone: CRON_TZ })
   async birthdayVouchers(): Promise<void> {
     try {
       const today = new Date();
@@ -194,7 +195,7 @@ export class VouchersService {
    * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — $queryRaw lỗi ném ra ngoài là
    * unhandledRejection, Node 20 mặc định crash cả process.
    */
-  @Cron('0 2 * * *')
+  @Cron('0 2 * * *', { timeZone: CRON_TZ })
   async winbackVouchers(): Promise<void> {
     try {
       const days = await this.config.get<number>('voucher.winback_days', 60);
@@ -233,7 +234,7 @@ export class VouchersService {
    * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — $queryRaw lỗi ném ra ngoài là
    * unhandledRejection, Node 20 mặc định crash cả process.
    */
-  @Cron('0 5 * * *')
+  @Cron('0 5 * * *', { timeZone: CRON_TZ })
   async milestoneVouchers(): Promise<void> {
     try {
       const milestones = await this.config.get<{ spend: number; reward: number }[]>('voucher.milestones', [

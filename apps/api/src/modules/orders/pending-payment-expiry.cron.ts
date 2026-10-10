@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { OrderStatusService } from './order-status.service';
 import { PREPAID_METHODS } from './order-transition';
+import { CRON_TZ } from '../../common/cron-tz';
 
 export const PENDING_PAYMENT_TTL_KEY = 'orders.pending_payment_ttl_hours';
 export const DEFAULT_PENDING_PAYMENT_TTL_HOURS = 24;
@@ -35,7 +36,7 @@ export class PendingPaymentExpiryCron {
   ) {}
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
-  @Cron('0 */10 * * * *', { name: 'orders.pending-payment-expiry', timeZone: 'Asia/Ho_Chi_Minh' })
+  @Cron('0 */10 * * * *', { name: 'orders.pending-payment-expiry', timeZone: CRON_TZ })
   async handleCron(): Promise<void> {
     try {
       const res = await this.expireStale();

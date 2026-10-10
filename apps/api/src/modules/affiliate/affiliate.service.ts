@@ -23,6 +23,7 @@ import {
   vnMonthBounds,
   type VnMonth,
 } from './ctv-milestones';
+import { CRON_TZ } from '../../common/cron-tz';
 
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
@@ -727,7 +728,7 @@ export class AffiliateService {
    * toàn bộ process mỗi khi cron này lỗi, tức sập API cho MỌI user mỗi giờ vì một lỗi có thể chỉ
    * là nhất thời. Bắt lỗi + log để cron thử lại giờ sau thay vì sập process.
    */
-  @Cron('0 0 * * * *')
+  @Cron('0 0 * * * *', { timeZone: CRON_TZ })
   async approveDueCommissions(): Promise<void> {
     try {
       const holdDays = await this.effectiveHoldDays();

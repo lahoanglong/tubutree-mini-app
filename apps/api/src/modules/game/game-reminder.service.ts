@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CRON_TZ } from '../../common/cron-tz';
 
 const DAY = 864e5;
 
@@ -44,7 +45,7 @@ export class GameReminderService {
    * process. Lỗi gửi từng user đã được `.catch(() => undefined)` cô lập bên trong hai hàm đó; lớp
    * ngoài này bắt phần còn lại (vd truy vấn gameProfile/notificationLog lỗi giữa chừng).
    */
-  @Cron('0 11 * * *')
+  @Cron('0 11 * * *', { timeZone: CRON_TZ })
   async sendDailyReminders(): Promise<void> {
     try {
       const checkin = await this.sendCheckInReminders();

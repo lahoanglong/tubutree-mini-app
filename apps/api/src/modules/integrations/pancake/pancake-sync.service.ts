@@ -5,6 +5,7 @@ import { PancakeClient } from './pancake.client';
 import { LifecycleService } from '../../lifecycle/lifecycle.service';
 import { applyPancakeStock, forcePancakeStock } from '../../catalog/variation-stock';
 import type { PancakeProductDTO } from './pancake.types';
+import { CRON_TZ } from '../../../common/cron-tz';
 
 /**
  * Đồng bộ catalog Pancake → Tubu (Build Spec §8.2).
@@ -43,7 +44,7 @@ export class PancakeSyncService implements OnModuleInit {
     );
   }
 
-  @Cron('0 */15 * * * *') // mỗi 15 phút
+  @Cron('0 */15 * * * *', { timeZone: CRON_TZ }) // mỗi 15 phút
   async scheduledSync(): Promise<void> {
     if (!this.client.isConfigured()) return; // dev: bỏ qua khi chưa có key
     // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — syncProducts() ném ra ngoài (Pancake
