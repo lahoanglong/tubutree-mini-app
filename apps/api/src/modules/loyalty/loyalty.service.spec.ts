@@ -37,6 +37,8 @@ describe('LoyaltyService.getAvailableCoupons', () => {
     ];
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: 't1' }) },
+      // SQL đã thu hẹp ứng viên; mock trả sẵn tập đó, isCouponEligible vẫn là chốt chặn cuối.
+      $queryRaw: jest.fn().mockResolvedValue(coupons.map((c) => ({ id: c.id }))),
       coupon: { findMany: jest.fn().mockResolvedValue(coupons) },
       couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) },
     } as unknown as PrismaService;
@@ -48,9 +50,24 @@ describe('LoyaltyService.getAvailableCoupons', () => {
     expect(codes).toEqual(['MINE', 'PUB', 'TIER_OK']);
   });
 
+  it('không có ứng viên nào từ SQL thì không nạp coupon nào', async () => {
+    const findMany = jest.fn();
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: null }) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      coupon: { findMany },
+      couponRedemption: { groupBy: jest.fn() },
+    } as unknown as PrismaService;
+
+    const result = await new LoyaltyService(prisma, makeConfig()).getAvailableCoupons('me');
+    expect(result).toEqual([]);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
   it('ẩn coupon đã dùng hết lượt cá nhân (perUserLimit)', async () => {
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: null }) },
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'PUB' }]),
       coupon: { findMany: jest.fn().mockResolvedValue([coupon('PUB', 'PUBLIC', null)]) },
       // groupBy trả về số redemption của user cho từng coupon (đã dùng 1 = perUserLimit).
       couponRedemption: {
