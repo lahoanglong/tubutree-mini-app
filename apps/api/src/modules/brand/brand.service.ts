@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { BrandSalesPeriod } from './dto/brand.dto';
 
 interface Cert {
   code: string;
@@ -43,6 +44,36 @@ function couponUsableNow(c: PromotableCoupon, now: Date): boolean {
   if (c.scope != null && c.scope !== 'PUBLIC') return false;
   if (now < c.startAt || now > c.endAt) return false;
   return c.usageLimit == null || c.usedCount < c.usageLimit;
+}
+
+const VN_OFFSET_MS = 7 * 3600e3;
+const DAY_MS = 864e5;
+const SALES_TOP_PRODUCTS = 10;
+
+// Đơn nào tính là doanh thu của nhãn: đã qua bước chờ thanh toán, chưa huỷ/trả, chưa hoàn tiền/lỗi thanh toán.
+// Đơn COD vào thẳng CONFIRMED nên được tính ngay; đơn chuyển khoản chỉ tính sau khi đã trả.
+const SALES_ORDER_STATUS_EXCLUDED = ['PENDING_PAYMENT', 'CANCELLED', 'RETURNED'] as const;
+const SALES_ORDER_PAYMENT_EXCLUDED = ['REFUNDED', 'FAILED'] as const;
+
+/** Khoảng thời gian [from, to] của kỳ báo cáo; "tháng" tính theo lịch giờ VN (UTC+7, không có giờ mùa hè). */
+function brandSalesRange(period: BrandSalesPeriod, now: Date): { from: Date; to: Date } {
+  const vnNow = new Date(now.getTime() + VN_OFFSET_MS);
+  const monthStart = (year: number, month: number) => new Date(Date.UTC(year, month, 1) - VN_OFFSET_MS);
+  const y = vnNow.getUTCFullYear();
+  const m = vnNow.getUTCMonth();
+  switch (period) {
+    case '7d':
+      return { from: new Date(now.getTime() - 7 * DAY_MS), to: now };
+    case '90d':
+      return { from: new Date(now.getTime() - 90 * DAY_MS), to: now };
+    case 'month':
+      return { from: monthStart(y, m), to: now };
+    case 'prev_month':
+      return { from: monthStart(y, m - 1), to: new Date(monthStart(y, m).getTime() - 1) };
+    case '30d':
+    default:
+      return { from: new Date(now.getTime() - 30 * DAY_MS), to: now };
+  }
 }
 
 @Injectable()
@@ -499,6 +530,80 @@ export class BrandService {
   async deleteOwnedPromotion(userId: string, promoId: string) {
     await this.assertOwnedPromotion(userId, promoId);
     return this.deletePromotion(promoId);
+  }
+
+  /**
+   * Doanh thu nhãn cho chính chủ nhãn xem (Q-18) — CHỈ ĐỌC và CHỈ SỐ TỔNG HỢP: số đơn, doanh thu,
+   * sản phẩm bán chạy. Không có truy vấn nào đọc bản ghi đơn nên không thể kéo tên/SĐT/địa chỉ khách.
+   * Quyền: nhãn lấy từ chính `Brand.ownerUserId` của người gọi — không nhận brandId từ client.
+   * Doanh thu = tổng `OrderItem.total` của các dòng thuộc SP của nhãn (giá bán gốc × số lượng, trước mã giảm
+   * giá toàn đơn và chưa gồm phí ship — giảm giá theo đơn không chia được cho từng nhãn một cách công bằng).
+   * Một đơn có hàng của nhiều nhãn chỉ tính phần dòng của nhãn này. `now` truyền vào để test tất định.
+   */
+  async getOwnedSales(userId: string, period: BrandSalesPeriod = '30d', now: Date = new Date()) {
+    const brand = await this.assertOwnedBrand(userId);
+    const { from, to } = brandSalesRange(period, now);
+    const base = { period, from: from.toISOString(), to: to.toISOString() };
+
+    const variations = await this.prisma.variation.findMany({
+      where: { product: { brandId: brand.id } },
+      select: { id: true, product: { select: { id: true, name: true, slug: true } } },
+    });
+    if (variations.length === 0) {
+      return { ...base, orderCount: 0, unitsSold: 0, revenue: 0, delivered: { orderCount: 0, revenue: 0 }, topProducts: [] };
+    }
+
+    const variationIds = variations.map((v) => v.id);
+    const productOf = new Map(variations.map((v) => [v.id, v.product]));
+    const orderWhere = {
+      createdAt: { gte: from, lte: to },
+      status: { notIn: [...SALES_ORDER_STATUS_EXCLUDED] },
+      paymentStatus: { notIn: [...SALES_ORDER_PAYMENT_EXCLUDED] },
+    } satisfies Prisma.OrderWhereInput;
+    const deliveredWhere = { ...orderWhere, status: 'DELIVERED' } satisfies Prisma.OrderWhereInput;
+    const hasBrandLine = { some: { variationId: { in: variationIds } } };
+
+    const [lines, orderCount, deliveredOrderCount, deliveredLines] = await Promise.all([
+      this.prisma.orderItem.groupBy({
+        by: ['variationId'],
+        where: { variationId: { in: variationIds }, order: orderWhere },
+        _sum: { quantity: true, total: true },
+      }),
+      this.prisma.order.count({ where: { ...orderWhere, items: hasBrandLine } }),
+      this.prisma.order.count({ where: { ...deliveredWhere, items: hasBrandLine } }),
+      this.prisma.orderItem.aggregate({
+        where: { variationId: { in: variationIds }, order: deliveredWhere },
+        _sum: { total: true },
+      }),
+    ]);
+
+    const byProduct = new Map<string, { productId: string; name: string; slug: string; quantity: number; revenue: number }>();
+    let revenue = 0;
+    let unitsSold = 0;
+    for (const line of lines) {
+      const product = productOf.get(line.variationId);
+      if (!product) continue;
+      const quantity = line._sum.quantity ?? 0;
+      const lineRevenue = line._sum.total ?? 0;
+      revenue += lineRevenue;
+      unitsSold += quantity;
+      const row = byProduct.get(product.id) ?? { productId: product.id, name: product.name, slug: product.slug, quantity: 0, revenue: 0 };
+      row.quantity += quantity;
+      row.revenue += lineRevenue;
+      byProduct.set(product.id, row);
+    }
+    const topProducts = [...byProduct.values()]
+      .sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity)
+      .slice(0, SALES_TOP_PRODUCTS);
+
+    return {
+      ...base,
+      orderCount,
+      unitsSold,
+      revenue,
+      delivered: { orderCount: deliveredOrderCount, revenue: deliveredLines._sum.total ?? 0 },
+      topProducts,
+    };
   }
 
   /** Trạng thái theo dõi của user với nhãn (cho FE hiện nút). */

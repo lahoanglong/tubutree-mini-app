@@ -9,6 +9,14 @@ const IMAGE_MAX = 1_500_000;
 // doanh số năm thực tế, vừa nằm xa dưới Number.MAX_SAFE_INTEGER nên không mất chính xác.
 export const DEALER_REWARD_THRESHOLD_MAX = 1_000_000_000_000;
 
+// Kỳ báo cáo doanh thu của chủ nhãn (tính theo giờ Việt Nam) — danh sách cố định, không nhận khoảng ngày tự do.
+export const BRAND_SALES_PERIODS = ['7d', '30d', '90d', 'month', 'prev_month'] as const;
+export type BrandSalesPeriod = (typeof BRAND_SALES_PERIODS)[number];
+
+export class BrandSalesQueryDto {
+  @IsOptional() @IsIn([...BRAND_SALES_PERIODS]) period?: BrandSalesPeriod;
+}
+
 export class CreateBrandDto {
   @IsString() name!: string;
   @IsOptional() @IsString() slug?: string;
