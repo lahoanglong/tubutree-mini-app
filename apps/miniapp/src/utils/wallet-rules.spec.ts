@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canWithdraw, canConvertToXu, type WithdrawBankInfo } from './wallet-rules';
+import { canWithdraw, canConvertToXu, walletTxLabel, formatWalletTxTime, type WithdrawBankInfo } from './wallet-rules';
 
 const validBank: WithdrawBankInfo = {
   bankName: 'Vietcombank',
@@ -44,5 +44,27 @@ describe('canConvertToXu', () => {
 
   it('hợp lệ → true', () => {
     expect(canConvertToXu(100_000, { walletBalance: 100_000 })).toBe(true);
+  });
+});
+
+describe('walletTxLabel (sao kê Ví)', () => {
+  it('mỗi loại biến động có nhãn tiếng Việt riêng', () => {
+    expect(walletTxLabel('OPENING')).toBe('Số dư đầu kỳ');
+    expect(walletTxLabel('ORDER_PAY')).toBe('Thanh toán đơn hàng');
+    expect(walletTxLabel('ORDER_REFUND')).toBe('Hoàn tiền đơn hàng');
+    expect(walletTxLabel('WITHDRAW')).toBe('Rút về ngân hàng');
+    expect(walletTxLabel('WITHDRAW_REFUND')).toBe('Hoàn lệnh rút bị từ chối');
+    expect(walletTxLabel('XU_CONVERT')).toBe('Đổi sang TubuXu');
+  });
+
+  it('loại mới BE thêm sau mà FE chưa biết → nhãn chung, không vỡ màn', () => {
+    expect(walletTxLabel('SOMETHING_NEW')).toBe('Biến động ví');
+  });
+});
+
+describe('formatWalletTxTime', () => {
+  it('dd/MM HH:mm theo giờ máy', () => {
+    const d = new Date(2026, 9, 5, 8, 7);
+    expect(formatWalletTxTime(d.toISOString())).toBe('05/10 08:07');
   });
 });

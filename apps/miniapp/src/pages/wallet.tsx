@@ -1,15 +1,16 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock, CheckCircle2, ShoppingBag, Coins, Gift, Leaf, ChevronRight, ArrowRightLeft, Landmark, type LucideIcon } from 'lucide-react';
-import { getWallet, withdraw, getCoins, convertToXu, getLoyalty, type BankInfo } from '../services/account-api';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Clock, CheckCircle2, ShoppingBag, Coins, Gift, Leaf, ChevronRight, ArrowRightLeft, Landmark, History, type LucideIcon } from 'lucide-react';
+import { getWallet, getWalletTransactions, withdraw, getCoins, convertToXu, getLoyalty, type BankInfo } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
 import { useAuthStore } from '../store/auth';
 import { newIdempotencyKey } from '../utils/idempotency';
-import { canWithdraw as canWithdrawRule, canConvertToXu } from '../utils/wallet-rules';
+import { canWithdraw as canWithdrawRule, canConvertToXu, walletTxLabel, formatWalletTxTime } from '../utils/wallet-rules';
 import { formatVnd, formatPoints, formatXu } from '../utils/format';
+import { Button as DsButton } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { vi } from '../i18n/vi';
@@ -303,6 +304,8 @@ export default function WalletPage() {
               ngân hàng (phí chuyển khoản {formatVnd(fee)}/lần).
             </Text>
           </Box>
+
+          <WalletHistory enabled={authed} />
         </>
       ) : null}
 
@@ -395,6 +398,76 @@ export default function WalletPage() {
         </Box>
       </Sheet>
     </Page>
+  );
+}
+
+/** Sao kê Ví Tubu từ sổ cái: mỗi biến động một dòng kèm số dư sau giao dịch. */
+function WalletHistory({ enabled }: { enabled: boolean }) {
+  // Khoá con của ['wallet'] → refreshAll() sau rút/đổi xu làm mới luôn sao kê.
+  const q = useInfiniteQuery({
+    queryKey: ['wallet', 'transactions'],
+    queryFn: ({ pageParam }) => getWalletTransactions(pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
+    enabled,
+  });
+  const rows = q.data?.pages.flatMap((p) => p.data) ?? [];
+
+  return (
+    <Box mx={4} mb={6} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xs)' }}>
+      <Box flex style={{ alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <History size={18} color="var(--leaf-700)" strokeWidth={1.9} />
+        <Text bold>Lịch sử Ví</Text>
+      </Box>
+      {q.isLoading ? (
+        <Box flex flexDirection="column" style={{ gap: 8, marginTop: 8 }}>
+          <Skeleton style={{ height: 44, borderRadius: 8 }} />
+          <Skeleton style={{ height: 44, borderRadius: 8 }} />
+        </Box>
+      ) : q.isError ? (
+        <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+      ) : rows.length === 0 ? (
+        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+          Chưa có biến động nào trong Ví.
+        </Text>
+      ) : (
+        <>
+          {rows.map((t) => (
+            <Box
+              key={t.id}
+              flex
+              style={{ alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--neutral-100)' }}
+            >
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <Text size="small" style={{ color: 'var(--neutral-900)' }}>{walletTxLabel(t.type)}</Text>
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                  {formatWalletTxTime(t.createdAt)}
+                  {t.reason ? ` · ${t.reason}` : ''}
+                </Text>
+              </Box>
+              <Box style={{ textAlign: 'right', flex: '0 0 auto' }}>
+                <Text bold size="small" style={{ color: t.delta > 0 ? 'var(--leaf-700)' : 'var(--neutral-900)' }}>
+                  {t.delta > 0 ? '+' : '−'}
+                  {formatVnd(Math.abs(t.delta))}
+                </Text>
+                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>Số dư {formatVnd(t.balanceAfter)}</Text>
+              </Box>
+            </Box>
+          ))}
+          {q.hasNextPage && (
+            <DsButton
+              fullWidth
+              variant="ghost"
+              loading={q.isFetchingNextPage}
+              onPress={() => void q.fetchNextPage()}
+              style={{ marginTop: 8 }}
+            >
+              Xem thêm
+            </DsButton>
+          )}
+        </>
+      )}
+    </Box>
   );
 }
 
