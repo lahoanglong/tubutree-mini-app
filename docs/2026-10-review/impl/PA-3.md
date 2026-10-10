@@ -297,3 +297,46 @@ npx tsc --noEmit -p tsconfig.json → exit 0 ; npx eslint <các file đã sửa>
 - Chủ dự án quyết: (finding 6) bỏ nhánh base64 khi bật Cloudinary; (finding 8) có tự huỷ đơn đại lý trả trước kẹt PENDING_PAYMENT không.
 - Runbook deploy: sau deploy, đơn CK chưa trả không còn nút "Xác nhận" — vận hành dùng "Đã nhận tiền"; ghi chú
   "[Chờ thanh toán: vận chuyển đã báo …]" trên đơn nghĩa là cần đẩy trạng thái tay sau khi nhận tiền.
+
+## Review lượt 2 (reviewer độc lập: 1 major)
+
+Commit: `6be7bbd` + commit báo cáo này.
+
+| # | Mức | Finding | Xử lý |
+|---|-----|---------|-------|
+| 1 | major | Cổng chặn thanh toán của PA-3 làm hỏng đường Pancake chuyển khoản chính: `PancakeProcessor.handle()` chạy `onStatusUpdated` TRƯỚC `onPaymentReconcile` trong cùng sự kiện `orders`/`order.updated`. Nhân viên Pancake ghi nhận tiền + đổi trạng thái trong một lần lưu (status 1/2/3 kèm `bank_payment>=total`) → `setStatus` ném `UnpaidPrepaidTransitionError`, ghi dấu "[Chờ thanh toán: … đẩy tay sau khi nhận tiền]" sai, rồi đối soát mới lật PAID+CONFIRMED → đơn đã trả kẹt ở CONFIRMED với ghi chú sai | **ĐÃ SỬA** (`6be7bbd`) — xác minh đúng bằng race spec (đỏ: SHIPPING/PACKED nhận `CONFIRMED`). `handle()` giờ đối soát thanh toán TRƯỚC rồi mới áp trạng thái; ngoại lệ khi status Pancake map ra CANCELLED/RETURNED thì giữ thứ tự cũ |
+
+**Vì sao giữ thứ tự cũ cho huỷ/trả:** đảo thứ tự cho mọi trạng thái thì sự kiện "huỷ + đã nhận tiền" sẽ lật PAID+CONFIRMED (kèm
+thông báo ORDER_CONFIRMED cho khách) rồi huỷ ngay và tự hoàn tiền — đổi hành vi P1-3 hiện có (đơn huỷ nhận tiền → cảnh báo hoàn
+tiền thủ công, không lật PAID). Phương án "bỏ dấu khi payload chứng minh đã trả" bị loại vì không giải được việc đơn kẹt ở CONFIRMED.
+
+**Độc lập thứ tự / idempotent:** `onPaymentReconcile` và `onStatusUpdated` mỗi hàm tự đọc lại đơn (`findOrder`), không dùng
+chung ảnh chụp; `onShippingUpdated` không đụng status/payment. Sự kiện lặp: đối soát no-op (đã PAID, guard `paymentStatus=UNPAID`
+trong `updateMany`), `setStatus` no-op (cùng trạng thái). Status 0 (PENDING_PAYMENT) + tiền: đối soát lật CONFIRMED, status lùi
+bị `InvalidOrderTransitionError` nuốt êm — cùng kết quả cuối với trước.
+
+### Test thêm (đỏ → xanh)
+- Race spec mới `test/integration-race/pancake-paid-status.race-spec.ts` (Postgres thật, `PancakeProcessor.process()` +
+  `OrderStatusService` thật, không mock `setStatus`):
+  - status=3 + `bank_payment=total` → SHIPPING + PAID, không có dấu; lịch sử đúng 1 dòng; gửi lại cùng sự kiện → không đổi, 1 `order_paid`.
+  - status=2 + `bank_payment=total` → PACKED + PAID.
+  - status=3 không có tiền → vẫn PENDING_PAYMENT + UNPAID, có dấu, event PROCESSED (không FAILED).
+  - status=6 + `bank_payment=total` → CANCELLED + UNPAID (giữ đường hoàn tiền thủ công).
+  - Trước sửa: `Tests: 2 failed, 2 passed, 4 total` (2 ca đã trả nhận `CONFIRMED`); sau sửa: `4 passed`.
+
+### Lệnh kiểm chứng (output thật)
+```
+cd apps/api
+DATABASE_URL=postgresql://tubu:tubu@localhost:5543/tubutree_it?schema=public \
+  npx jest -c test/integration-race/jest.config.js --runInBand pancake-paid-status   # trước sửa
+  Tests:       2 failed, 2 passed, 4 total
+DATABASE_URL=... npx jest -c test/integration-race/jest.config.js --runInBand \
+  pancake-paid-status cod-return-refund admin-confirm-payment pending-payment-expiry
+  Tests:       19 passed, 19 total
+npx jest --maxWorkers=1 src/modules/integrations/pancake src/modules/orders/order-status src/modules/orders/order-transition
+  Test Suites: 10 passed ; Tests: 166 passed, 166 total
+npx tsc --noEmit -p tsconfig.json → exit 0 ; npx eslint pancake.processor.ts pancake-paid-status.race-spec.ts → exit 0
+```
+
+**Ghi chú phạm vi:** `pancake.processor.ts` nằm ngoài nhóm file của PA-3 (thuộc PA-4) — sửa tối thiểu ở `handle()` vì lỗi do cổng
+của PA-3 gây ra; PA-4 chỉ sửa `pancake-push-reconcile.service.ts` nên không xung đột.
