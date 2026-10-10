@@ -45,3 +45,75 @@ Không cần: bảng `account_deletion_requests` đã có `status/adminNote/revi
 - `JwtAuthGuard` không kiểm `isBlocked`: access token cũ còn dùng được tới hết `JWT_ACCESS_TTL` (15 phút) sau khi ẩn danh; refresh đã bị chặn. Nên kiểm `isBlocked` ở guard hoặc checkout.
 - Link CTV/`referralCode` của tài khoản đã ẩn danh vẫn gắn được hoa hồng cho đơn mới (affiliate/checkout không kiểm `isBlocked` của người giới thiệu).
 - Dữ liệu đã đẩy sang Pancake, ảnh CCCD/ảnh trong kho lưu trữ, nội dung bài viết cộng đồng do khách tự viết không bị xoá (cần quy trình xoá ở dịch vụ ngoài / storage).
+
+---
+
+## C-022 — Công tắc tắt thông báo khuyến mãi lưu server, server tôn trọng — XONG
+
+Commit: `458722a` (API + migration + race spec), `afa0f1f` (miniapp Cài đặt).
+
+### Đã làm
+- Migration `20261010090000_user_notify_prefs`: thêm `users.notifyPromo`, `users.notifyGarden` BOOLEAN NOT NULL DEFAULT true (additive; khách cũ giữ hành vi gửi như hiện tại).
+- `notifications/notification-categories.ts` (mới): phân nhóm theo templateCode. PROMO = CART_ABANDONED, PRICE_DROP_ALERT, FLASH_STARTING, VOUCHER_EXPIRING, WELCOME/BIRTHDAY/WINBACK/MILESTONE_VOUCHER, REORDER_REMINDER, STOREFRONT_TRENDING_PRODUCTS; GARDEN = GAME_CHECKIN_REMINDER, GAME_TREE_THIRSTY; còn lại là tin giao dịch, luôn gửi.
+- `NotificationsService.notify`: khách đã tắt nhóm (hoặc không tìm thấy user) thì bỏ qua hoàn toàn (không ghi tin trong app, không gửi ZNS). Đây là điểm gửi chung của mọi luồng marketing (lifecycle, remarketing, vouchers, flash-sale, storefront-reminder đều gọi `notify`), nên không phải sửa từng nơi gửi.
+- API `GET/PATCH /me/notifications/prefs` (`{ notifyPromo?, notifyGarden? }`, kiểm boolean bằng class-validator).
+- Miniapp `settings.tsx`: công tắc đọc/ghi server (khoá cho tới khi tải xong; lưu lỗi thì trả về như cũ và báo lỗi). Khách từng tắt trên máy (bản cũ lưu `tubu_prefs`): lần mở Cài đặt đầu tiên đẩy lựa chọn TẮT lên server rồi xoá khỏi máy (không bao giờ tự bật lại). Bỏ công tắc giả "Cập nhật đơn hàng" (tin giao dịch luôn gửi), thay bằng dòng thông tin. Cả hàng là `role=switch` cao >= 44px.
+
+### Test (đỏ → xanh)
+- `apps/api/src/modules/notifications/notification-prefs.spec.ts` (25 test): đỏ trước khi có module (`Cannot find module './notification-categories'`).
+- `apps/api/test/integration-race/notification-prefs.race-spec.ts` (Postgres thật, 3 test): mặc định true; tắt thì DB lưu false, `notify(CART_ABANDONED)` không tạo `notification_logs`, ZNS không gọi, `ORDER_CONFIRMED` vẫn ghi; bật lại thì gửi.
+- `apps/miniapp/src/pages/settings.spec.tsx` (5 test, gồm cả C-078): chạy với `settings.tsx` cũ thì 5 failed; bản mới 5 passed.
+
+## C-018 — Quiz onboarding — XONG
+Commit `b392e6d`. `components/onboarding-rules.ts` (mới) + `onboarding.tsx`: quiz chỉ hiện ở `/` cho khách chưa làm; không hiện ở route khác (sản phẩm, gian hàng, checkout...), khi URL có `?s=`/`?ref=`, hoặc khi app được mở bằng link CTV/gian hàng (đọc `window.location` lúc khởi động). "Để sau" là nút thật, nhớ 7 ngày (`tubu_onboarding_snooze_until` trong bộ nhớ Zalo); chưa đọc xong bộ nhớ thì không hiện (tránh nháy). Bỏ lời hứa "nhận quà chào mừng" và "sẽ gợi ý sản phẩm phù hợp hơn" (segments chưa nơi nào dùng; quà chào mừng do cron cấp cho mọi khách mới, không phụ thuộc quiz). Test `components/onboarding.spec.tsx` 12 test; với `onboarding.tsx` cũ: 4 failed.
+
+## C-019 — Trang Về Tubu Tree (Q-17) — XONG
+Commit `32db9b9` (API), `8fa3218` (miniapp).
+- `seed.ts` thêm 3 khoá `createOnly`: `support.hotline` = "0899 149 229", `support.email` = "tubutree@gmail.com", `support.zalo_oa_name` = "" (chưa có OA). Admin sửa ở tab Cấu hình (`PUT /admin/config`; tên khoá không khớp regex bí mật).
+- `GET /config/public` trả thêm `support: { hotline, email, zaloOaName }`; giá trị trống hoặc sai kiểu thành null. Thiếu khoá thì mặc định giá trị Q-17. (Sửa `system-config.controller.ts` ngoài nhóm file: bắt buộc vì đặc tả C-019 yêu cầu SystemConfig public; chỉ thêm 3 khoá đọc + 1 trường trả về.)
+- `about.tsx`: khối Hỗ trợ đọc config, ẩn dòng null (ẩn cả khối nếu trống hết). FAQ đọc `GET /faqs` (FAQ admin), nhóm lọc theo `category` admin nhập; admin chưa có FAQ hoặc lỗi mạng thì dùng bản dự phòng trong `about-data.ts`, đã sửa câu thanh toán (COD, chuyển khoản, Ví Tubu, TubuXu; bỏ ZaloPay). Bỏ khỏi bản dự phòng 2 câu chưa kiểm chứng được: phí ship cố định 19.000đ/200.000đ (ngưỡng là config) và "góp 1 cây thật" (Q-16 do PD-1). Đổi nút sang Button DS v2.
+- Test: `system-config.controller.spec.ts` +2 (đỏ 2 failed → xanh); `pages/about.spec.tsx` 4 test (bản cũ: 3 failed). `grep -n 1900 apps/miniapp/src/pages/about.tsx` rỗng; `grep -rn "'/faqs'" apps/miniapp/src` có kết quả.
+
+## C-078 — ActionLink + mũi tên — XONG
+Commit `afa0f1f` (settings), `5eefdd6` (addresses). Sổ địa chỉ: Đặt mặc định/Sửa/Xóa là `<button>` cao 44px; nút thêm/xoá dùng Button DS v2 (icon Lucide `Plus`). Cài đặt: hàng điều hướng dùng `ListRow` (role=button, minHeight 44, icon `ChevronRight`), không còn ký tự `›`. Hub Cá nhân: "Sửa hồ sơ ›" thay bằng icon. Test `addresses.spec.tsx` 3 test (bản cũ 3 failed) + 1 test trong `settings.spec.tsx`.
+
+## C-085 — Nút trong thông báo — XONG (đích bài cộng đồng cụ thể: chờ module feed gửi post_id)
+Commit `f6bd0ef` (lifecycle), `deb069e` (miniapp).
+- `notificationAction(templateCode, data)` trong `notifications.tsx`: quyết định nút theo loại tin + dữ liệu có cấu trúc (order_code, product_slug, post_id, `data.route` nội bộ an toàn); bỏ hết regex theo nội dung. Thêm đích: PRICE_DROP_ALERT → sản phẩm (thiếu slug → Yêu thích), COMMUNITY_* → `/feed/:post_id` hoặc `/feed`, VOUCHER → "Xem mã giảm giá", POINTS → "Xem Điểm Xanh", CASHBACK → Ví Tubu, SUBSCRIPTION → gói định kỳ, DEALER, GROUP_BUY, REFILL. OPS_* không có nút. Mọi nút dùng Button DS v2.
+- `lifecycle.service.ts`: PRICE_DROP_ALERT gửi kèm `product_slug` (tra theo productId, một truy vấn cho cả lô).
+- Test: `notifications.spec.ts` +15 (bản cũ 15 failed); `lifecycle.service.spec.ts` sửa 1 + thêm 1 (đỏ 1 failed → xanh). `grep -n 'cây\|vườn' apps/miniapp/src/pages/notifications.tsx` rỗng.
+
+## C-086 — Hub Cá nhân (Q-15) — XONG
+Commit `81375f7`. Bỏ "Hoàn tiền sàn ngoài" khỏi hub (trang `/cashback` vẫn còn, chỉ ẩn lối vào); CTV + đại lý (+ nhãn hàng nếu có) gom nhóm "Hợp tác"; xoá set `READY` chết và snackbar "đang hoàn thiện"; thanh số dư 2×2: Điểm Xanh, Ví Tubu, TubuXu (`/me/wallet`, chung cache `['wallet']`), Mã giảm giá (số mã, chung cache `['coupons']`); ô số dư có role=button + aria-label. Test `profile.spec.ts` +3, `profile-hub.spec.tsx` 2 (bản cũ: 4 failed).
+
+### Lệnh kiểm chứng (lượt C-022..C-086) + output
+```
+cd apps/api && npx jest --maxWorkers=1 src/modules/notifications src/modules/lifecycle src/modules/system-config src/modules/users src/modules/admin/config-redaction
+Test Suites: 10 passed, 10 total
+Tests:       148 passed, 148 total
+cd apps/api && DATABASE_URL=postgresql://tubu:tubu@localhost:5564/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand notification-prefs account-deletion
+PASS test/integration-race/notification-prefs.race-spec.ts
+PASS test/integration-race/account-deletion.race-spec.ts
+Tests:       14 passed, 14 total
+cd apps/miniapp && npx vitest run src/pages/settings.spec.tsx src/pages/addresses.spec.tsx src/pages/about.spec.tsx src/pages/notifications.spec.ts src/pages/profile.spec.ts src/pages/profile-hub.spec.tsx src/components/onboarding.spec.tsx
+Test Files  7 passed (7)
+Tests  60 passed (60)
+npx tsc --noEmit -p tsconfig.json (api), npx tsc --noEmit (miniapp): không lỗi
+npx prisma migrate deploy + migrate diff (Postgres 5564): "All migrations have been successfully applied." / "-- This is an empty migration."
+ESLint file đã sửa: 0 lỗi mới. settings/addresses/about/notifications/onboarding nay 0 lỗi (trước có lỗi import Button zmp-ui / màu thô); profile.tsx còn 3 lỗi màu nền rgba có sẵn từ trước (trước 5).
+```
+
+### Migration
+`apps/api/prisma/migrations/20261010090000_user_notify_prefs` (2 cột BOOLEAN NOT NULL DEFAULT true, không cần backfill).
+
+### Giả định
+- Khách tắt "Khuyến mãi & mã giảm giá" thì không nhận cả tin trong app lẫn ZNS của nhóm PROMO; mã giảm giá vẫn được CẤP (chỉ không báo), khách thấy trong mục Mã giảm giá. REORDER_REMINDER và STOREFRONT_TRENDING_PRODUCTS xếp vào PROMO (tiếp thị); POINTS_EXPIRING, GAME_WATER_GIFT (bạn tặng nước) là tin tài khoản, luôn gửi.
+- Không cho tắt tin đơn hàng (tin giao dịch: giao hàng, hoàn tiền); hiện dòng "luôn bật" thay công tắc giả.
+- "Để sau" của quiz nhớ 7 ngày theo đề xuất A1-010.
+- Thanh số dư dùng nhãn "TubuXu" như checkout/i18n hiện có.
+
+### Việc còn lại (ngoài nhóm file của gói)
+- `community-feed.service.ts` (module feed) chưa gửi `post_id` trong tin COMMUNITY_*: nút hiện dẫn tới `/feed`; thêm `post_id: post.id` ở 3 lệnh `notify` thì FE tự mở thẳng bài (đã hỗ trợ).
+- Lựa chọn tắt cũ lưu trên máy chỉ được chuyển lên server khi khách mở trang Cài đặt; muốn chuyển ngay lúc mở app thì gọi `legacyOptOuts` trong `components/app.tsx` (ngoài nhóm file).
+- `services/account-api.ts`/`shop-api.ts` chưa khai báo kiểu `support`/prefs (để tránh đụng gói khác, kiểu khai báo cục bộ ở `pages/about-data.ts`, `pages/settings-notify-prefs.ts`).
+- Template tin tiếp thị mới phải được thêm vào `notification-categories.ts`; nếu không sẽ bị coi là tin giao dịch và gửi cả khi khách đã tắt.
