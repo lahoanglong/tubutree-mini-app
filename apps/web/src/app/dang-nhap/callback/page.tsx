@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { ui } from '@/lib/guest-ui';
 
 function CallbackInner() {
   const router = useRouter();
@@ -31,21 +32,29 @@ function CallbackInner() {
   }, [params, handleCallback, router]);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
+    <main className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-6 py-10 text-center">
       {error ? (
         <>
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-600 shadow-sm ring-8 ring-red-50/50">
-            <AlertCircle className="h-8 w-8 text-red-600" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-danger-bg text-danger-fg shadow-card">
+            <AlertCircle className="h-8 w-8" aria-hidden="true" />
           </div>
-          <p className="mt-4 text-red-600 font-medium">{error}</p>
-          <a href="/dang-nhap" className="mt-6 rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white shadow-sm hover:bg-primary-700 transition">
+          <h1 className="mt-4 font-display text-xl font-semibold text-stone-900">Đăng nhập chưa thành công</h1>
+          <p role="alert" className={`mt-2 font-medium ${ui.error}`}>
+            {error}
+          </p>
+          <a href="/dang-nhap" className={`${ui.btnPrimary} mt-6`}>
             Thử lại
           </a>
         </>
       ) : (
         <>
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
-          <p className="mt-4 text-neutral-600">Đang đăng nhập…</p>
+          <div
+            aria-hidden="true"
+            className="h-10 w-10 animate-spin rounded-full border-4 border-forest-200 border-t-forest-600"
+          />
+          <h1 className="mt-4 text-base font-normal text-stone-700">
+            Đang đăng nhập…
+          </h1>
         </>
       )}
     </main>
@@ -54,7 +63,7 @@ function CallbackInner() {
 
 export default function CallbackPage() {
   return (
-    <Suspense fallback={<div className="p-10 text-center text-neutral-400">Đang tải…</div>}>
+    <Suspense fallback={<div className="p-10 text-center text-stone-600">Đang tải…</div>}>
       <CallbackInner />
     </Suspense>
   );
