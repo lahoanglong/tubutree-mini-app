@@ -27,6 +27,11 @@ interface EventData {
 /** Số cặp (đơn, mã vận đơn lạ) nhớ để không báo trùng — Pancake gửi lại webhook mỗi lần đơn đổi. */
 const WAYBILL_CONFLICT_MEMORY = 500;
 
+function isTerminalPancakeStatus(data: Record<string, unknown>): boolean {
+  const status = mapPancakeStatus(data['status'] ?? data['status_name']);
+  return status === 'CANCELLED' || status === 'RETURNED';
+}
+
 @Processor(QUEUE_PANCAKE_EVENTS)
 export class PancakeProcessor extends WorkerHost {
   private readonly logger = new Logger(PancakeProcessor.name);
@@ -87,9 +92,18 @@ export class PancakeProcessor extends WorkerHost {
       case 'order':
       case 'order.status_updated':
       case 'order.updated':
-        await this.onStatusUpdated(data);
-        // Đối soát thanh toán: Pancake ghi nhận chuyển khoản (QR) → lật đơn UNPAID→PAID.
-        await this.onPaymentReconcile(data);
+        // Đối soát thanh toán (Pancake ghi nhận chuyển khoản → lật UNPAID→PAID) chạy TRƯỚC trạng thái: nhân viên
+        // Pancake hay ghi nhận tiền và đổi trạng thái trong cùng một lần lưu, mà OrderStatusService chặn đơn trả
+        // trước chưa PAID rời PENDING_PAYMENT/đi giao — chạy trạng thái trước thì đơn đã trả bị kẹt ở CONFIRMED
+        // kèm dấu "đẩy tay" sai. Ngoại lệ huỷ/trả: giữ trạng thái trước để tiền về đơn đã huỷ vẫn đi đường cảnh
+        // báo hoàn tiền thủ công, không bị lật PAID+CONFIRMED (kèm báo "đã xác nhận") rồi huỷ ngay sau đó.
+        if (isTerminalPancakeStatus(data)) {
+          await this.onStatusUpdated(data);
+          await this.onPaymentReconcile(data);
+        } else {
+          await this.onPaymentReconcile(data);
+          await this.onStatusUpdated(data);
+        }
         // Đơn Pancake kèm thông tin vận chuyển → cập nhật luôn nếu có (field thật ở `partner`).
         if (data['partner'] || data['tracking_link'] || data['shipping_status'] || data['tracking_number']) {
           await this.onShippingUpdated(data);

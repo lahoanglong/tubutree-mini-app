@@ -5,6 +5,7 @@ import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import {
   AdminController,
+  ConfirmOrderPaymentDto,
   CreateCouponDto,
   DealerAppsQuery,
   DealerPriceHistoryQuery,
@@ -12,6 +13,7 @@ import {
   GomdonRetryDto,
   ListOrdersQuery,
   ReturnRequestsQuery,
+  SetUserRoleDto,
 } from './admin.controller';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 
@@ -290,5 +292,41 @@ describe('AdminController — quyền + passthrough endpoint thu gom', () => {
     expect(admin.markGomdonHandled).toHaveBeenCalledWith('admin-1', 'o1', 'đã hẹn lại');
     expect(Reflect.getMetadata(PATH_METADATA, AdminController.prototype.markGomdonHandled)).toBe('orders/:id/gomdon/mark-handled');
     expect(Reflect.getMetadata(METHOD_METADATA, AdminController.prototype.markGomdonHandled)).toBe(RequestMethod.POST);
+  });
+});
+
+describe('POST /admin/orders/:id/confirm-payment (C-024)', () => {
+  it('route POST, chỉ ADMIN (kế thừa class), chuyển adminId + id + body xuống AdminService', async () => {
+    const admin = { confirmOrderPayment: jest.fn().mockResolvedValue({ ok: true }) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await ctrl.confirmOrderPayment('admin-1', 'TB-1', { bankRef: 'FT1' });
+    expect(admin.confirmOrderPayment).toHaveBeenCalledWith('admin-1', 'TB-1', { bankRef: 'FT1' });
+    expect(Reflect.getMetadata(PATH_METADATA, AdminController.prototype.confirmOrderPayment)).toBe('orders/:id/confirm-payment');
+    expect(Reflect.getMetadata(METHOD_METADATA, AdminController.prototype.confirmOrderPayment)).toBe(RequestMethod.POST);
+    expect(Reflect.getMetadata(ROLES_KEY, AdminController)).toEqual(['ADMIN']);
+  });
+
+  it('body rỗng hợp lệ; mã GD quá dài hoặc không phải chuỗi → lỗi validate', async () => {
+    expect(await validate(plainToInstance(ConfirmOrderPaymentDto, {}))).toHaveLength(0);
+    const long = await validate(plainToInstance(ConfirmOrderPaymentDto, { bankRef: 'x'.repeat(101) }));
+    expect(long.some((e) => e.property === 'bankRef')).toBe(true);
+    const notString = await validate(plainToInstance(ConfirmOrderPaymentDto, { note: 123 }));
+    expect(notString.some((e) => e.property === 'note')).toBe(true);
+  });
+});
+
+describe('POST /admin/users/role — tierId cho DEALER (C-008)', () => {
+  it('DTO nhận tierId (forbidNonWhitelisted không chặn) và controller chuyển xuống AdminService', async () => {
+    const dto = (await asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 'dealer_l3' })) as SetUserRoleDto;
+    expect(dto).toEqual(expect.objectContaining({ phone: '0899625240', role: 'DEALER', tierId: 'dealer_l3' }));
+    const admin = { setUserRole: jest.fn().mockResolvedValue({ ok: true }) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await ctrl.setUserRole('admin-1', dto);
+    expect(admin.setUserRole).toHaveBeenCalledWith('admin-1', '0899625240', 'DEALER', 'dealer_l3');
+  });
+
+  it('tierId sai kiểu / quá dài → 400', async () => {
+    await expect(asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 5 })).rejects.toThrow();
+    await expect(asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 'x'.repeat(101) })).rejects.toThrow();
   });
 });

@@ -16,7 +16,6 @@ import {
   type UserRole,
   listOrders,
   getDashboardStats,
-  updateOrderStatus,
   type DashboardStats,
   getConfig,
   setConfig,
@@ -79,6 +78,8 @@ import {
 import { RecyclingBadge, RecyclingPanel } from '@/components/admin/recycling-panel';
 import { DealerPaymentPanel } from '@/components/admin/dealer-payment-panel';
 import { DealerCreditPanel } from '@/components/admin/dealer-credit-panel';
+import { OrderStatusActions } from '@/components/admin/order-status-actions';
+import { EvidenceImages } from '@/components/admin/evidence-images';
 import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
 import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
@@ -561,7 +562,6 @@ function OrdersTab({
   recycling: RecyclingFilter | '';
   onRecyclingChange: (r: RecyclingFilter | '') => void;
 }) {
-  const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -573,16 +573,6 @@ function OrdersTab({
     queryFn: () => listOrders(page, status || undefined, search || undefined, recycling || undefined),
   });
   const attentionQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
-
-  const updateStatusMut = useMutation({
-    mutationFn: ({ id, newStatus }: { id: string; newStatus: string }) =>
-      updateOrderStatus(id, newStatus),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['admin-orders'] });
-      void qc.invalidateQueries({ queryKey: ['admin-dashboard-stats'] });
-      void qc.invalidateQueries({ queryKey: ['admin-recycling-count'] });
-    },
-  });
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -829,75 +819,8 @@ function OrdersTab({
                               {/* Sổ công nợ đại lý (mọi đơn ĐẠI LÝ, không riêng đơn ghi công nợ) — A5-09. */}
                               <DealerCreditPanel order={o} />
 
-                              {/* Quick status transitions */}
-                              <div className="flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-2">
-                                <span className="text-xs font-semibold text-neutral-700">Chuyển trạng thái:</span>
-                                {o.status !== 'CONFIRMED' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && (
-                                  <button
-                                    onClick={() => updateStatusMut.mutate({ id: o.id || o.code, newStatus: 'CONFIRMED' })}
-                                    disabled={updateStatusMut.isPending}
-                                    className="rounded bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                                  >
-                                    Xác nhận
-                                  </button>
-                                )}
-                                {o.status === 'CONFIRMED' && (
-                                  <button
-                                    onClick={() => updateStatusMut.mutate({ id: o.id || o.code, newStatus: 'PACKED' })}
-                                    disabled={updateStatusMut.isPending}
-                                    className="rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                                  >
-                                    Đã đóng gói
-                                  </button>
-                                )}
-                                {(o.status === 'CONFIRMED' || o.status === 'PACKED') && (
-                                  <button
-                                    onClick={() => updateStatusMut.mutate({ id: o.id || o.code, newStatus: 'SHIPPING' })}
-                                    disabled={updateStatusMut.isPending}
-                                    className="rounded bg-purple-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-purple-700 disabled:opacity-50"
-                                  >
-                                    Giao vận
-                                  </button>
-                                )}
-                                {o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && o.status !== 'RETURNED' && (
-                                  <button
-                                    onClick={() => {
-                                      if (window.confirm(`Xác nhận hoàn tất giao đơn ${o.code}? Điểm xanh & hoa hồng CTV sẽ được kích hoạt.`)) {
-                                        updateStatusMut.mutate({ id: o.id || o.code, newStatus: 'DELIVERED' });
-                                      }
-                                    }}
-                                    disabled={updateStatusMut.isPending}
-                                    className="rounded bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                                  >
-                                    Đã giao hàng
-                                  </button>
-                                )}
-                                {o.status !== 'CANCELLED' && o.status !== 'RETURNED' && (
-                                  <button
-                                    onClick={() => {
-                                      const gomdonNote =
-                                        o.hasRecyclingPickup && o.gomdonOrderId
-                                          ? ` Vận đơn thu gom Gomdon ${o.gomdonPartnerCode ?? ''} sẽ được huỷ tự động (nếu bưu tá chưa lấy hàng).`
-                                          : '';
-                                      if (window.confirm(`Xác nhận hủy đơn ${o.code}?${gomdonNote}`)) {
-                                        updateStatusMut.mutate({ id: o.id || o.code, newStatus: 'CANCELLED' });
-                                      }
-                                    }}
-                                    disabled={updateStatusMut.isPending}
-                                    className="rounded border border-red-300 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                  >
-                                    Hủy đơn
-                                  </button>
-                                )}
-                                {updateStatusMut.isPending && (
-                                  <span className="text-xs text-neutral-500">Đang cập nhật…</span>
-                                )}
-                                {updateStatusMut.isError && (
-                                  <span className="text-xs text-red-600">
-                                    {(updateStatusMut.error as Error).message}
-                                  </span>
-                                )}
-                              </div>
+                              {/* Nút trạng thái + "Đã nhận tiền" theo allowedTransitions/canConfirmPayment của API (C-024). */}
+                              <OrderStatusActions order={o} />
                             </div>
                           </td>
                         </tr>
@@ -1096,7 +1019,6 @@ function ReturnsTab() {
 function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
   const qc = useQueryClient();
   const [note, setNote] = useState(r.adminNote ?? '');
-  const [showImages, setShowImages] = useState(false);
   const review = useMutation({
     mutationFn: ({ approve }: { approve: boolean }) =>
       reviewReturnRequest(r.id, approve, note.trim() || undefined),
@@ -1146,32 +1068,8 @@ function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
         <span className="font-medium text-neutral-800">Lý do:</span> {r.reason}
       </div>
 
-      {r.images && r.images.length > 0 && (
-        <div className="mt-2">
-          <button
-            type="button"
-            onClick={() => setShowImages(!showImages)}
-            className="text-xs font-medium text-green-700 hover:underline"
-          >
-            {showImages ? 'Ẩn ảnh minh chứng' : `Xem ${r.images.length} ảnh minh chứng`}
-          </button>
-          {showImages && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {r.images.map((img, idx) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={idx}
-                  src={img}
-                  alt={`Ảnh minh chứng ${idx + 1}`}
-                  className="h-20 w-20 cursor-pointer rounded border border-neutral-200 object-cover shadow-sm transition hover:opacity-80"
-                  onClick={() => window.open(img, '_blank')}
-                  title="Nhấp để xem ảnh lớn"
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Ảnh do khách gửi — chỉ render https/ảnh base64 raster, không href javascript:/data: (C-050). */}
+      <EvidenceImages images={r.images} />
 
       {r.status === 'REQUESTED' ? (
         <div className="mt-3 border-t border-neutral-100 pt-3">
@@ -1292,9 +1190,12 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
   // Mặc định vai trò ít quyền nhất (KHÔNG phải ADMIN) — tránh lỡ tay cấp full-quyền cho
   // SĐT chưa kiểm kỹ khi form chỉ dùng để tra cứu/đổi vai trò khác.
   const [role, setRole] = useState<UserRole>('CUSTOMER');
+  // DEALER bắt buộc kèm bậc (BE từ chối nếu thiếu — C-008): đại lý không bậc đặt CREDIT không bị chặn hạn mức.
+  const [tierId, setTierId] = useState('');
+  const needsTier = role === 'DEALER';
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const mut = useMutation({
-    mutationFn: () => setUserRole(phone.trim(), role),
+    mutationFn: () => setUserRole(phone.trim(), role, needsTier ? tierId : undefined),
     onSuccess: (r) => {
       setMsg({ ok: true, text: `Đã đổi ${r.phone ?? r.id}: ${r.previousRole} → ${r.role}` });
       setPhone('');
@@ -1326,9 +1227,20 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
             <option key={r} value={r}>{r}</option>
           ))}
         </select>
+        {needsTier && (
+          <input
+            className="rounded border border-neutral-300 px-3 py-1.5 text-sm"
+            aria-label="Bậc đại lý"
+            placeholder="Tier ID (bắt buộc, vd dealer_l3)"
+            maxLength={100}
+            value={tierId}
+            onChange={(e) => setTierId(e.target.value)}
+          />
+        )}
         <button
           className="rounded bg-green-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-          disabled={!phone.trim() || mut.isPending}
+          disabled={!phone.trim() || (needsTier && !tierId.trim()) || mut.isPending}
+          title={needsTier && !tierId.trim() ? 'Cần nhập Tier ID để cấp vai trò DEALER' : undefined}
           onClick={submit}
         >
           {mut.isPending ? 'Đang lưu…' : 'Cấp quyền'}

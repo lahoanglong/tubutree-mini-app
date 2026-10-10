@@ -1,13 +1,8 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OrderListQuery, RepurchaseDto } from './dto/orders.dto';
+import { ReturnRequestDto } from './dto/return-request.dto';
 import { OrdersService } from './orders.service';
-
-class ReturnRequestDto {
-  @IsString() @MinLength(5) @MaxLength(500) reason!: string;
-  @IsOptional() @IsArray() @IsString({ each: true }) @ArrayMaxSize(6) images?: string[];
-}
 
 @Controller('orders')
 export class OrdersController {

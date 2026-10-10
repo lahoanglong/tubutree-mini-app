@@ -107,11 +107,12 @@ describe('AdminService.listOrders — bộ lọc "Cần xử lý thu gom"', () =
       where: { refType: 'ORDER', refId: { in: ['d1', 'd2'] } },
       select: { refId: true },
     });
-    expect(res.data).toEqual([
+    expect(res.data).toMatchObject([
       { id: 'd1', type: 'DEALER', paymentStatus: 'UNPAID', dealerOnCredit: true },
       { id: 'd2', type: 'DEALER', paymentStatus: 'UNPAID', dealerOnCredit: false },
       { id: 'r1', type: 'RETAIL', paymentStatus: 'UNPAID' },
     ]);
+    expect(res.data[2]).not.toHaveProperty('dealerOnCredit');
   });
 
   it('trang không có đơn DEALER → không truy vấn sổ công nợ', async () => {

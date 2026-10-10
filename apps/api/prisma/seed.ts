@@ -83,6 +83,9 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'flashsale.default_per_user_limit', value: 5, category: 'flashsale', description: 'Giới hạn mua mặc định/user/item flash' },
   { key: 'flashsale.min_discount_pct', value: 0, category: 'flashsale', description: 'Mức giảm tối thiểu để tạo item flash (0 = tắt validate)' },
 
+  // Orders — PendingPaymentExpiryCron. createOnly: không ghi đè giá trị admin đã chỉnh.
+  { key: 'orders.pending_payment_ttl_hours', value: 24, category: 'orders', description: 'Đơn trả trước (khách lẻ/CTV) chờ thanh toán quá số giờ này thì tự huỷ (hoàn kho, coupon). Tối thiểu 1, tối đa 720; không áp đơn đại lý', createOnly: true },
+
   // Dealer
   { key: 'dealer.max_discount_pct', value: 0.45, category: 'dealer', description: 'Chiết khấu tối đa hard cap' },
   { key: 'dealer.kyc_required', value: true, category: 'dealer', description: 'Bắt buộc CCCD khi đăng ký' },

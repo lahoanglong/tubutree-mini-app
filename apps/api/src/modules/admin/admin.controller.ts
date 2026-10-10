@@ -153,6 +153,12 @@ class UpdateOrderStatusDto {
   note?: string;
 }
 
+export class ConfirmOrderPaymentDto {
+  /** Mã giao dịch ngân hàng (vd FT26270…) — lưu vào lịch sử đơn để đối soát. */
+  @IsOptional() @IsString() @MaxLength(100) bankRef?: string;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
 /**
  * Query có lọc — PHẢI khai báo trong DTO. ValidationPipe toàn cục bật forbidNonWhitelisted, nên
  * `@Query() q: PaginationQuery` kèm `@Query('status')` riêng làm MỌI request có `?status=`/`?search=`
@@ -198,10 +204,12 @@ export class GomdonMarkHandledDto {
   @IsOptional() @IsString() @MaxLength(500) note?: string;
 }
 
-class SetUserRoleDto {
+export class SetUserRoleDto {
   @IsString() phone!: string;
   @IsIn(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'])
   role!: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
+  /** Bắt buộc khi role = DEALER (kiểm ở AdminService.setUserRole — C-008). */
+  @IsOptional() @IsString() @MaxLength(100) tierId?: string;
 }
 
 /** Parse CSV "sku,giá" (phân tách , ; hoặc tab); bỏ dòng header/giá không hợp lệ. */
@@ -258,7 +266,7 @@ export class AdminController {
   // Cấp/đổi role theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi).
   @Post('users/role')
   setUserRole(@CurrentUser('sub') adminId: string, @Body() dto: SetUserRoleDto) {
-    return this.admin.setUserRole(adminId, dto.phone, dto.role);
+    return this.admin.setUserRole(adminId, dto.phone, dto.role, dto.tierId);
   }
 
   @Get('orders')
@@ -301,6 +309,16 @@ export class AdminController {
   @Get('orders/:id/status-history')
   orderStatusHistory(@Param('id') id: string) {
     return this.admin.orderStatusHistory(id);
+  }
+
+  /** "Đã nhận tiền" cho đơn chuyển khoản lẻ: UNPAID → PAID (PENDING_PAYMENT → CONFIRMED), idempotent. */
+  @Post('orders/:id/confirm-payment')
+  confirmOrderPayment(
+    @CurrentUser('sub') adminId: string,
+    @Param('id') id: string,
+    @Body() dto: ConfirmOrderPaymentDto,
+  ) {
+    return this.admin.confirmOrderPayment(adminId, id, dto);
   }
 
   @Put('orders/:id/status')

@@ -9,6 +9,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
+import { allowedNextStatuses } from '../orders/order-transition';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
@@ -16,6 +17,20 @@ import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-confi
 import { buildAdminOrderWhere, type RecyclingFilter } from './admin-order-filter';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { validateAdminConfigValue } from './admin-config-rules';
+
+/**
+ * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
+ * Đơn đại lý đi panel riêng (DealerPaymentPanel / confirmDealerOrderPayment).
+ */
+function canAdminConfirmRetailPayment(o: { type: string; paymentMethod: string; paymentStatus: string; status: string }) {
+  return (
+    o.type !== 'DEALER' &&
+    o.paymentMethod === 'BANK_TRANSFER' &&
+    o.paymentStatus === 'UNPAID' &&
+    o.status !== 'CANCELLED' &&
+    o.status !== 'RETURNED'
+  );
+}
 
 @Injectable()
 export class AdminService {
@@ -288,6 +303,7 @@ export class AdminService {
     adminId: string,
     phone: string,
     role: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN',
+    tierId?: string,
   ) {
     const normalized = phone.trim();
     const user = await this.prisma.user.findUnique({ where: { phone: normalized } });
@@ -305,9 +321,26 @@ export class AdminService {
         throw new BadRequestException('Đây là quản trị viên cuối cùng — cấp quyền cho người khác trước khi hạ.');
       }
     }
+    // DEALER không bậc → dealerContext trả tier null và đơn CREDIT bỏ qua hạn mức công nợ (C-008); cùng
+    // luật với duyệt hồ sơ đại lý: bắt buộc chọn bậc tồn tại, merge vào metadata sẵn có (giữ segments/onboardedAt).
+    let data: Prisma.UserUpdateInput = { role };
+    let dealerTierId: string | undefined;
+    if (role === 'DEALER') {
+      dealerTierId = tierId?.trim();
+      if (!dealerTierId) throw new BadRequestException('Cần chọn bậc đại lý khi cấp vai trò DEALER.');
+      const tier = await this.prisma.dealerTier.findUnique({ where: { id: dealerTierId } });
+      if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
+      data = {
+        role,
+        metadata: {
+          ...((user.metadata as Record<string, unknown> | null) ?? {}),
+          dealerTierId,
+        } as Prisma.InputJsonObject,
+      };
+    }
     const updated = await this.prisma.user.update({
       where: { id: user.id },
-      data: { role },
+      data,
       select: { id: true, phone: true, fullName: true, role: true },
     });
     // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán — trước đây KHÔNG làm
@@ -323,8 +356,11 @@ export class AdminService {
     if (revoked > 0) {
       this.logger.warn(`Admin ${adminId} đổi role user ${user.id} (${normalized}) → thu hồi ${revoked} grant xếp hạng cao hơn ${role}.`);
     }
-    this.logger.warn(`Admin ${adminId} đổi role user ${user.id} (${normalized}): ${previousRole} → ${role}`);
-    return { ok: true, ...updated, previousRole };
+    this.logger.warn(
+      `Admin ${adminId} đổi role user ${user.id} (${normalized}): ${previousRole} → ${role}` +
+        (dealerTierId ? ` (bậc ${dealerTierId})` : ''),
+    );
+    return { ok: true, ...updated, previousRole, ...(dealerTierId ? { dealerTierId } : {}) };
   }
 
   async getDashboardStats() {
@@ -409,13 +445,24 @@ export class AdminService {
     // nên màn admin không tự phân biệt được với đơn trả trước đang chờ chuyển khoản; không có cờ này thì
     // nút "Xác nhận đã nhận chuyển khoản" hiện cả trên đơn công nợ rồi bấm vào mới bị từ chối.
     const dealerIds = items.filter((o) => o.type === 'DEALER').map((o) => o.id);
-    if (dealerIds.length === 0) return paginated(items, page, limit, total);
-    const debits = await this.prisma.dealerCreditLedger.findMany({
-      where: { refType: 'ORDER', refId: { in: dealerIds } },
-      select: { refId: true },
-    });
+    const debits = dealerIds.length
+      ? await this.prisma.dealerCreditLedger.findMany({
+          where: { refType: 'ORDER', refId: { in: dealerIds } },
+          select: { refId: true },
+        })
+      : [];
     const onCredit = new Set(debits.map((d) => d.refId));
-    const data = items.map((o) => (o.type === 'DEALER' ? { ...o, dealerOnCredit: onCredit.has(o.id) } : o));
+    // allowedTransitions/canConfirmPayment: web admin chỉ hiện nút API sẽ nhận (C-024) — cùng luật với
+    // OrderStatusService.setStatus và confirmOrderPayment, không để UI tự đoán theo điều kiện cứng.
+    const data = items.map((o) => {
+      const dealerOnCredit = o.type === 'DEALER' ? onCredit.has(o.id) : undefined;
+      return {
+        ...o,
+        ...(o.type === 'DEALER' ? { dealerOnCredit } : {}),
+        allowedTransitions: allowedNextStatuses({ ...o, onCredit: dealerOnCredit === true }),
+        canConfirmPayment: canAdminConfirmRetailPayment(o),
+      };
+    });
     return paginated(data, page, limit, total);
   }
 
@@ -448,6 +495,61 @@ export class AdminService {
       where: { id: updated.id },
       include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
     });
+  }
+
+  /**
+   * Nút "Đã nhận tiền" cho đơn chuyển khoản lẻ (khách tự đặt hoặc CTV lên đơn hộ). Hệ quả PAID đi qua
+   * OrderStatusService.markPaid — cùng guard atomic và cùng hệ quả với đối soát thanh toán — nên bấm lặp
+   * hay hai admin bấm cùng lúc chỉ lật một lần; ai bấm, lúc nào, mã giao dịch nằm ở order_status_history.
+   * Đơn đại lý đi đường riêng (DealerService.confirmDealerOrderPayment) vì phải loại đơn ghi công nợ.
+   */
+  async confirmOrderPayment(adminId: string, idOrCode: string, dto: { bankRef?: string; note?: string } = {}) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
+      select: { id: true, code: true, type: true, paymentMethod: true, total: true },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (order.type === 'DEALER') {
+      throw new BadRequestException(
+        `Đơn ${order.code} là đơn đại lý — xác nhận thanh toán ở mục đơn đại lý (có kiểm tra đơn ghi công nợ).`,
+      );
+    }
+    if (order.paymentMethod !== 'BANK_TRANSFER') {
+      throw new BadRequestException(`Đơn ${order.code} thanh toán ${order.paymentMethod}, không phải chuyển khoản.`);
+    }
+
+    const bankRef = dto.bankRef?.trim();
+    const adminNote = dto.note?.trim();
+    const { outcome } = await this.orderStatus.markPaid(order.id, {
+      actorType: 'ADMIN',
+      actorId: adminId,
+      note: ['Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
+    });
+    if (outcome === 'CLOSED') {
+      throw new BadRequestException(
+        `Đơn ${order.code} đã huỷ/trả — nếu đã nhận tiền, cần hoàn tiền thủ công cho khách, không xác nhận thanh toán.`,
+      );
+    }
+    if (outcome === 'NOT_PAYABLE') {
+      throw new BadRequestException(`Đơn ${order.code} đã hoàn tiền hoặc thanh toán lỗi — không thể xác nhận.`);
+    }
+    if (outcome === 'PAID') {
+      this.logger.warn(
+        `Admin ${adminId} xác nhận đã nhận chuyển khoản đơn ${order.code} (${order.total}đ)` + (bankRef ? `, mã GD ${bankRef}` : ''),
+      );
+    }
+    const alreadyPaid = outcome === 'ALREADY_PAID';
+    return {
+      ok: true,
+      alreadyPaid,
+      message: alreadyPaid
+        ? `Đơn ${order.code} đã được ghi nhận thanh toán trước đó.`
+        : `Đã xác nhận nhận tiền đơn ${order.code}.`,
+      order: await this.prisma.order.findUniqueOrThrow({
+        where: { id: order.id },
+        include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
+      }),
+    };
   }
 
   // ── Vận đơn thu gom Gomdon (thao tác admin) ──
