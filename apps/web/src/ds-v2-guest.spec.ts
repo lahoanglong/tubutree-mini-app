@@ -14,18 +14,42 @@ const MIGRATED = [
   'components/site-header.tsx',
   'components/site-footer.tsx',
   'components/product-card.tsx',
+  'components/add-to-cart.tsx',
+  'components/copy-button.tsx',
+  'components/geo-picker.tsx',
+  'components/recycling-checkout.tsx',
+  'components/recycling-status.tsx',
+  'lib/guest-ui.ts',
+  'app/san-pham/[slug]/page.tsx',
+  'app/gio-hang/page.tsx',
+  'app/thanh-toan/page.tsx',
+  'app/thanh-toan/bank-transfer-panel.tsx',
+  'app/tai-khoan/page.tsx',
+  'app/s/[slug]/page.tsx',
+  'app/dang-nhap/page.tsx',
+  'app/dang-nhap/callback/page.tsx',
+  'app/error.tsx',
+  'app/global-error.tsx',
+  'app/not-found.tsx',
+  'app/loading.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');
 
 const UTILITIES = 'bg|text|border|ring|from|to|via|fill|stroke|divide|outline|shadow|accent|decoration|placeholder';
 const LEGACY_PALETTE = new RegExp(`\\b(?:${UTILITIES})-(?:primary|leaf|clay|sun|neutral|green|emerald|red|amber|blue|yellow|orange|rose|sky)-\\d{2,3}\\b`, 'g');
+// `white`/`black` thô của Tailwind không phải token: nền/chữ trắng là stone-0, lớp phủ tối là stone-900.
+const RAW_WHITE_BLACK = new RegExp(`\\b(?:${UTILITIES})-(?:white|black)(?![\\w-])`, 'g');
 const TINY_TEXT = /\btext-\[(\d+(?:\.\d+)?)px\]/g;
 const RAW_HEX = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g;
 
 describe.each(MIGRATED)('web khách DS v2 — %s', (file) => {
   it('không còn lớp palette v1 (primary/leaf/clay/sun/neutral/green...)', () => {
     expect(read(file).match(LEGACY_PALETTE) ?? []).toEqual([]);
+  });
+
+  it('không dùng white/black thô của Tailwind — dùng stone-0/stone-900', () => {
+    expect(read(file).match(RAW_WHITE_BLACK) ?? []).toEqual([]);
   });
 
   it('không có chữ nhỏ hơn 12px (C-116)', () => {
@@ -60,5 +84,17 @@ describe('web khách DS v2 — nền tảng', () => {
   it('tailwind.config.ts có bóng đổ theo token elevation của DS v2', () => {
     const shadows = (config.theme?.extend as { boxShadow: Record<string, string> }).boxShadow;
     expect(shadows).toMatchObject({ card: 'var(--elevation-1)', raised: 'var(--elevation-2)' });
+  });
+
+  // Trang đã chuyển không còn red/amber/green thô của Tailwind (nằm ngoài DS v2): lỗi/cảnh báo/thành công
+  // đi qua màu ngữ nghĩa theo token --color-status-*.
+  it('tailwind.config.ts có màu trạng thái danger/warning/success/info trỏ vào token --color-status-*', () => {
+    const colors = (config.theme?.extend as { colors: Record<string, Record<string, string>> }).colors;
+    for (const name of ['danger', 'warning', 'success', 'info']) {
+      expect(colors[name]).toEqual({
+        fg: `var(--color-status-${name}-fg)`,
+        bg: `var(--color-status-${name}-bg)`,
+      });
+    }
   });
 });
