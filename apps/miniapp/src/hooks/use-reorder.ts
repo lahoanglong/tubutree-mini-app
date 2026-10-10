@@ -10,7 +10,7 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 
 export interface UseReorderOptions {
-  /** Mua lại cả đơn (chi tiết đơn / thẻ đơn) → sang giỏ. Kệ Home/tab Đơn hàng/thông báo → ở lại. */
+  /** Sang giỏ sau khi thêm (kệ Mua lại, thẻ đơn, chi tiết đơn). Không bật (nhắc mua lại ở thông báo) → ở lại, snackbar có nút "Xem giỏ". */
   navigateToCart?: boolean;
 }
 

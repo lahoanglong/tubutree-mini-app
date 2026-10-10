@@ -27,9 +27,9 @@ const ITEM = {
 };
 const CART = { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 1 };
 
-function renderRail() {
+function renderRail(source: 'home_rail' | 'orders_tab' = 'home_rail') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={qc}><PurchasedRail source="home_rail" /></QueryClientProvider>);
+  return render(<QueryClientProvider client={qc}><PurchasedRail source={source} /></QueryClientProvider>);
 }
 
 describe('PurchasedRail', () => {
@@ -76,7 +76,7 @@ describe('PurchasedRail', () => {
     expect(screen.queryByRole('region', { name: 'Mua lại' })).toBeNull();
   });
 
-  it('2 chạm: "Mua lại" → sheet → "Thêm vào giỏ (1)" → addToCart(repurchase), ở lại trang', async () => {
+  it('"Mua lại" → sheet → "Thêm vào giỏ (1)" → addToCart(repurchase) rồi tự sang /cart (không bắt khách tự tìm giỏ)', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
     mocks.addToCart.mockResolvedValue(CART);
     renderRail();
@@ -84,8 +84,28 @@ describe('PurchasedRail', () => {
     fireEvent.click(region.querySelector('button.tubu-btn') as HTMLElement);
     fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (1)' }));
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1, 'repurchase'));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ action: expect.objectContaining({ text: 'Xem giỏ' }) })));
-    expect(mocks.navigate).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
+  });
+
+  it('tab Đơn hàng (source=orders_tab) cũng sang /cart sau khi thêm', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+    mocks.addToCart.mockResolvedValue(CART);
+    renderRail('orders_tab');
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    fireEvent.click(region.querySelector('button.tubu-btn') as HTMLElement);
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (1)' }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
+  });
+
+  it('không thêm được món nào (hết hàng) → ở lại trang, không sang giỏ trống', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+    mocks.addToCart.mockRejectedValue(new Error('Hết hàng'));
+    renderRail();
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    fireEvent.click(region.querySelector('button.tubu-btn') as HTMLElement);
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (1)' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(mocks.navigate).not.toHaveBeenCalledWith('/cart');
   });
 
   it('chạm thẻ → trang sản phẩm', async () => {
