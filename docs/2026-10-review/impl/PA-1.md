@@ -68,3 +68,39 @@ npx vitest run src/ds-legacy-vars-4a.spec.ts src/ds-legacy-vars-4b.spec.ts (mini
 - Hoa hồng đã APPROVED/PAID của đơn bị trả muộn (admin setStatus RETURNED sau hold) chưa bị thu hồi — có từ trước, ngoài phạm vi C-001; hold_days ≥ cửa sổ đổi trả nên đường khách thường không chạm.
 - `prisma/migrations/migration_lock.toml` hiện báo "modified" chỉ vì Prisma đổi xuống dòng (LF/CRLF), không có thay đổi nội dung — không commit.
 - Yêu cầu 5, 6 (C-028), 7 (C-002): lượt sau.
+
+## Lượt 2 — Yêu cầu 5 (đơn hộ thuộc khách cuối, CTV là người giới thiệu)
+
+**Trạng thái: BỎ (dừng ở mức an toàn tiền)** — không sửa code. Đổi `Order.userId` của đơn hộ sang khách cuối kéo theo sửa nhiều file ngoài nhóm file của gói (có file gói PA-3 đang giữ), làm dở sẽ làm hỏng luồng CTV đang chạy. Phần tiền của yêu cầu 5 đã được lượt 1 chuẩn bị sẵn: `refundEndCustomer` hoàn về `order.userId` khi `userId` ≠ CTV, nên đổi chủ đơn sau này không phải sửa lại đường hoàn tiền.
+
+### Vì sao dừng (bằng chứng)
+
+Hiện CTV dùng đơn hộ qua chính quyền "chủ đơn" (`userId = CTV`). Ghi `userId = khách cuối` khi khớp SĐT sẽ làm:
+- `ctv-order-sheet.tsx` mở `/order/:code` và `/bank-payment/:code` ngay sau khi tạo đơn → `orders.service.ts:98` (`detail`) và `bank-transfer.service.ts:21` (`getBankQr`) trả 404 cho CTV: CTV mất QR để gửi khách chuyển khoản. `zalopay.service.ts:60` cũng chặn tương tự.
+- Tab "Đơn hàng" của CTV (`orders.service.ts:71` `list` lọc `userId`) không còn thấy đơn hộ; CTV không tự huỷ được đơn hộ chưa thanh toán (đường `cancel` đi qua `detail`).
+- Thông báo trạng thái chuyển sang khách: `order-status.service.ts:155` (file gói PA-3 giữ — CẤM sửa), `pancake.processor.ts:216,358`, `zalopay.service.ts:192`. Khách nhận thông báo về một đơn họ không tự đặt — cần duyệt nội dung.
+- Hạng thành viên: `loyalty.service.ts:211` `recalcTier` cộng chi tiêu theo `order.userId` → doanh số đơn hộ chuyển từ CTV sang khách (đúng ý Q-01, nhưng hạng của CTV hiện có sẽ tụt — cần chủ dự án biết trước).
+- Thống kê CTV **không** phụ thuộc `userId`: dashboard/hoa hồng đọc `commission.affiliateUserId`, analytics gian hàng đọc `referrerUserId` (`affiliate.service.ts:812`), `analytics-aggregation.service.ts:19` gộp khách theo `endCustomerKey`. Phần này đổi được mà không gãy.
+
+### Thiết kế đề xuất (cho một gói riêng, sau khi PA-3 merge)
+
+1. **Schema (additive):** thêm `Order.placedByUserId String?` + index `(placedByUserId, createdAt)`. Backfill: `UPDATE orders SET "placedByUserId" = "userId" WHERE "placedForCustomer"`. Giữ `referrerUserId` = CTV (người hưởng hoa hồng) như hiện tại.
+2. **Tạo đơn** (`affiliate.placeOrderForCustomer`): tìm `User` theo `phone = endCustomerKey`, không bị khoá, khác CTV → `userId = khách`; không khớp → `userId = CTV` như cũ (không tạo tài khoản ma). Luôn ghi `placedByUserId = CTV`. Kiểm idempotency theo `placedByUserId` thay vì `userId`.
+3. **Quyền xem/thanh toán:** một helper dùng chung `canActOnOrder(order, actorId) = order.userId === actorId || (order.placedForCustomer && order.placedByUserId === actorId)` cho `orders.detail`, `bank-transfer.getBankQr`, `zalopay` tạo phiên. Huỷ: CTV chỉ huỷ được khi chưa PAID (đã có ở `assertCustomerCancellable`), khách cuối huỷ theo luật khách thường.
+4. **Màn CTV:** endpoint mới `GET /affiliate/assisted-orders` lọc `placedByUserId = me` (phân trang, trạng thái, tổng), miniapp trang affiliate thêm danh sách "Đơn lên hộ" đọc endpoint này thay cho tab Đơn hàng. Dashboard/hoa hồng giữ nguyên (đã đọc theo `affiliateUserId`).
+5. **Hoa hồng:** `createCommissionForOrder` / `reverseCommissionsForOrder` — khi `userId ≠ referrerUserId` đơn hộ đi nhánh giới thiệu thường; điều kiện `placedForCustomer` vẫn giữ cho trường hợp không khớp tài khoản. Chặn C-028 (SĐT trùng CTV) phải chạy TRƯỚC bước khớp tài khoản.
+6. **Thông báo:** đơn hộ gửi cho cả khách (nếu `userId` là khách) và CTV (`placedByUserId`) — sửa ở `order-status.service.ts` nên phải làm sau PA-3.
+7. **Race spec cần có:** tạo đơn hộ với SĐT khớp khách → `userId = khách`, `placedByUserId = CTV`; CTV xem được chi tiết + QR; khách huỷ đơn PAID → ví khách; CTV huỷ đơn PAID → 400; hạng CTV không cộng đơn hộ.
+
+### Lệnh kiểm chứng (lượt này, output thật)
+
+```
+cd apps/api
+DATABASE_URL=postgresql://tubu:tubu@localhost:5541/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand ctv-assisted-refund
+  PASS test/integration-race/ctv-assisted-refund.race-spec.ts
+  Tests: 10 passed, 10 total
+```
+
+### Giả định
+
+- "Không để nửa vời làm hỏng màn CTV" được ưu tiên hơn việc làm xong yêu cầu 5 trong gói này.
