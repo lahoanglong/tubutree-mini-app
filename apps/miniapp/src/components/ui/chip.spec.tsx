@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
@@ -25,6 +27,17 @@ describe('Chip', () => {
     const chip = screen.getByRole('button');
     expect(chip.className).toContain('tubu-hit-44');
     expect(chip.style.minHeight).toBe('36px');
+  });
+  it('vùng chạm >= 44px cả hai chiều cho cả hai cỡ: cao nhờ ::after 44px, rộng nhờ minWidth 44', () => {
+    const css = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');
+    expect(css).toMatch(/\.tubu-hit-44::after\s*\{[^}]*height:\s*44px/);
+    for (const size of ['sm', 'md'] as const) {
+      const { unmount } = render(<Chip size={size}>5</Chip>);
+      const chip = screen.getByRole('button');
+      expect(chip.className).toContain('tubu-hit-44');
+      expect(chip.style.minWidth).toBe('44px');
+      unmount();
+    }
   });
   it('ariaLabel đặt tên truy cập riêng (vd "Bỏ lọc Tubu")', () => {
     render(<Chip ariaLabel="Bỏ lọc Tubu" selected>Tubu</Chip>);

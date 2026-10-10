@@ -18,6 +18,8 @@ export interface ChipProps {
 
 /** Chip lọc/chọn — thay 3 định nghĩa trùng lặp (browse.tsx/feed.tsx byte-for-byte, audit A4-19).
  * Nhìn cao 36px nhưng vùng chạm 44px nhờ `.tubu-hit-44` (follow-up DS v2: "Chip under 44px").
+ * Chiều rộng tối thiểu 44px vì `.tubu-hit-44::after` chỉ giãn theo chiều dọc: chip chỉ có một ký tự
+ * ("5", "x") nếu không sẽ hẹp hơn 44px.
  * Hàng chip trong `.scroll-x` cần đệm dọc ≥ 4px để vùng chạm không bị overflow cắt.
  * Là `<button>` thật nên Tab/Enter/Space hoạt động (không còn span role=button không bàn phím). */
 export function Chip({
@@ -52,6 +54,7 @@ export function Chip({
         fontSize: 'var(--type-body-sm-size)',
         padding: size === 'md' ? '8px 14px' : '6px 10px',
         minHeight: size === 'md' ? 36 : 32,
+        minWidth: 44,
         borderRadius: 'var(--radius-pill)',
         whiteSpace: 'nowrap',
         boxSizing: 'border-box',
