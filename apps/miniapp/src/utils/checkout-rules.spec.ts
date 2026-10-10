@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { checkoutPoints, isInvoiceValid, shouldFallbackToCod, type InvoiceInfo } from './checkout-rules';
+import {
+  checkoutPoints,
+  isInvoiceValid,
+  paymentUnavailableReason,
+  pointsEarnLabel,
+  pointsUseLabel,
+  shouldFallbackToCod,
+  type InvoiceInfo,
+} from './checkout-rules';
 
 const emptyInvoice: InvoiceInfo = { taxCode: '', companyName: '', address: '', email: '' };
 const validInvoice: InvoiceInfo = {
@@ -90,5 +98,57 @@ describe('checkoutPoints', () => {
 
   it('không có điểm nào → usable 0, label null (màn hình hiện lời mời tích điểm)', () => {
     expect(checkoutPoints({ pointsBalance: 0, redeemablePoints: 0 }, 0)).toEqual({ balance: 0, usable: 0, label: null, lockNote: null });
+  });
+});
+
+describe('checkoutPoints — số ≥ 1.000 có dấu phân cách nghìn (C-080)', () => {
+  it('"Dùng được 48/65.000 điểm" thay vì "48/65000"', () => {
+    const r = checkoutPoints({ pointsBalance: 65_000, lockedPoints: 64_952, redeemablePoints: 48 }, 0);
+    expect(r.label).toBe('Dùng được 48/65.000 điểm');
+    expect(r.lockNote).toBe('64.952 điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được');
+  });
+
+  it('"Bạn đang có 1.250 điểm"', () => {
+    expect(checkoutPoints({ pointsBalance: 1250, lockedPoints: 0, redeemablePoints: 1250 }, 0).label).toBe('Bạn đang có 1.250 điểm');
+  });
+
+  it('toàn bộ đang khoá: "12.000 điểm từ đơn còn trong hạn..."', () => {
+    expect(checkoutPoints({ pointsBalance: 12_000, lockedPoints: 12_000, redeemablePoints: 0 }, 0).label).toBe(
+      '12.000 điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được',
+    );
+  });
+});
+
+describe('paymentUnavailableReason (C-080)', () => {
+  it('Ví Tubu thiếu → nói rõ vì sao mờ và cần thêm bao nhiêu', () => {
+    expect(paymentUnavailableReason('WALLET', 130_000, 798_000)).toBe('Số dư chưa đủ — cần thêm 668.000đ');
+  });
+
+  it('TubuXu thiếu → cần thêm bao nhiêu xu (1 xu = 1đ như BE kiểm)', () => {
+    expect(paymentUnavailableReason('XU', 149_000, 798_000)).toBe('Số dư chưa đủ — cần thêm 649.000 xu');
+  });
+
+  it('đủ số dư (kể cả bằng đúng tổng đơn) → null, không có lý do', () => {
+    expect(paymentUnavailableReason('WALLET', 798_000, 798_000)).toBeNull();
+    expect(paymentUnavailableReason('XU', 900_000, 798_000)).toBeNull();
+  });
+
+  it('khớp tuyệt đối với shouldFallbackToCod: có lý do ⇔ sẽ bị rơi về COD', () => {
+    for (const [bal, total] of [[0, 1], [99, 100], [100, 100], [101, 100]] as const) {
+      expect(paymentUnavailableReason('WALLET', bal, total) !== null).toBe(shouldFallbackToCod('WALLET', bal, 0, total));
+      expect(paymentUnavailableReason('XU', bal, total) !== null).toBe(shouldFallbackToCod('XU', 0, bal, total));
+    }
+  });
+});
+
+describe('pointsUseLabel / pointsEarnLabel (C-080)', () => {
+  it('điểm dùng có dấu nghìn: "Dùng 1.250 điểm — giảm 12.500đ"', () => {
+    expect(pointsUseLabel(1250, '12.500đ')).toBe('Dùng 1.250 điểm — giảm 12.500đ');
+    expect(pointsUseLabel(48, '480đ')).toBe('Dùng 48 điểm — giảm 480đ');
+  });
+
+  it('điểm sẽ tích có dấu nghìn: "+1.250 điểm Xanh khi giao thành công"', () => {
+    expect(pointsEarnLabel(1250)).toBe('+1.250 điểm Xanh khi giao thành công');
+    expect(pointsEarnLabel(35)).toBe('+35 điểm Xanh khi giao thành công');
   });
 });
