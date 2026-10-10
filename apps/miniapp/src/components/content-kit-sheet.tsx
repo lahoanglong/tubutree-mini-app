@@ -11,6 +11,22 @@ import { ErrorState } from './ui/empty-state';
 import { copyText } from '../utils/clipboard';
 
 /**
+ * `app.miniapp_base_url` chưa cấu hình thì API trả đường dẫn tương đối ('/product/..?ref=..'): dán
+ * vào Zalo/Facebook không mở được. Ghép domain web (cùng nguồn với share-sheet/affiliate).
+ */
+function absoluteLink(link: string): string {
+  if (!link.startsWith('/')) return link;
+  const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
+  return `${base}${link}`;
+}
+
+/** Bài mẫu do admin soạn tay có thể thiếu {link}: chép thiếu mã giới thiệu thì CTV mất hoa hồng. */
+function shareFallbackText(caption: string | undefined, link: string): string {
+  if (!caption) return link;
+  return caption.includes('ref=') ? caption : `${caption} ${link}`;
+}
+
+/**
  * "Bộ nội dung bán hàng" theo từng sản phẩm — CTV mở lên là copy/chia sẻ được ngay:
  * bài mẫu đã tự chèn tên CTV + link giới thiệu, USP, FAQ, video tham khảo.
  */
@@ -44,6 +60,7 @@ export function ContentKitSheet({
   };
 
   const data = q.data;
+  const link = data ? absoluteLink(data.shareLink) : '';
   const hasContent =
     data && (data.captions.length > 0 || data.usps.length > 0 || data.faqs.length > 0 || data.videoUrls.length > 0);
 
@@ -90,7 +107,7 @@ export function ContentKitSheet({
                     thumbnail: data.images[0],
                     path: data.shareLink,
                   },
-                  data.captions[0] ?? data.shareLink,
+                  shareFallbackText(data.captions[0], link),
                 );
               }}
             >
@@ -99,7 +116,7 @@ export function ContentKitSheet({
                 {vi.contentKit.shareZalo}
               </span>
             </Button>
-            <Button fullWidth variant="secondary" style={{ marginBottom: 12 }} onClick={() => copy(data.shareLink)}>
+            <Button fullWidth variant="secondary" style={{ marginBottom: 12 }} onClick={() => copy(link)}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <Copy size={16} />
                 {vi.contentKit.copyLink}

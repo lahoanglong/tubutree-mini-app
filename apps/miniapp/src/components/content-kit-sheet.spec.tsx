@@ -46,4 +46,51 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining('?ref=ABC123'));
     expect((mocks.openSnackbar.mock.calls[0]![0] as { text: string }).text).toMatch(/Chưa chia sẻ được qua Zalo/);
   });
+
+  function renderKit() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ContentKitSheet visible onClose={() => {}} productSlug="tra-xanh" />
+      </QueryClientProvider>,
+    );
+  }
+
+  it('bài mẫu soạn tay không có {link}: chép kèm liên kết giới thiệu tuyệt đối, không mất mã ref', async () => {
+    mocks.fetchContentKit.mockResolvedValue({
+      productName: 'Trà xanh', images: [], usps: [], faqs: [], videoUrls: [],
+      captions: ['Trà xanh ngon lắm, mua đi'],
+      shareLink: '/product/tra-xanh?ref=ABC123',
+    });
+    mocks.shareLink.mockRejectedValue(new Error('zalo từ chối'));
+    renderKit();
+    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ Zalo/ }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
+    expect(mocks.copyText).toHaveBeenCalledWith(
+      'Trà xanh ngon lắm, mua đi https://shop.tubutree.com/product/tra-xanh?ref=ABC123',
+    );
+  });
+
+  it('không có bài mẫu nào: chép riêng liên kết tuyệt đối', async () => {
+    mocks.fetchContentKit.mockResolvedValue({
+      productName: 'Trà xanh', images: [], usps: [], faqs: [], videoUrls: [], captions: [],
+      shareLink: '/product/tra-xanh?ref=ABC123',
+    });
+    mocks.shareLink.mockRejectedValue(new Error('zalo từ chối'));
+    renderKit();
+    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ Zalo/ }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
+    expect(mocks.copyText).toHaveBeenCalledWith('https://shop.tubutree.com/product/tra-xanh?ref=ABC123');
+  });
+
+  it('nút Sao chép liên kết cũng chép liên kết tuyệt đối khi API trả đường dẫn tương đối', async () => {
+    mocks.fetchContentKit.mockResolvedValue({
+      productName: 'Trà xanh', images: [], usps: [], faqs: [], videoUrls: [], captions: [],
+      shareLink: '/product/tra-xanh?ref=ABC123',
+    });
+    renderKit();
+    fireEvent.click(await screen.findByRole('button', { name: /Sao chép/ }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
+    expect(mocks.copyText).toHaveBeenCalledWith('https://shop.tubutree.com/product/tra-xanh?ref=ABC123');
+  });
 });
