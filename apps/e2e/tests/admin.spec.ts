@@ -1,5 +1,5 @@
 import { test, expect, type MockApi } from './support/mock-api';
-import type { DealerApp, Page } from '../../web/src/lib/admin-client';
+import type { AdminDealerTier, DealerApp, Page } from '../../web/src/lib/admin-client';
 
 /**
  * Web Admin Dashboard E2E — tab "Đại lý" (duyệt hồ sơ đại lý).
@@ -46,6 +46,15 @@ function page<T>(data: T[], p: number, limit: number, total: number): Page<T> {
   return { data, meta: { page: p, limit, total } };
 }
 
+/** Danh sách bậc đại lý cho DealerTierSelect (GET /admin/dealer-tiers → AdminDealerTier[]); mọi hồ sơ PENDING đều render select này. */
+function mockDealerTiers(api: MockApi) {
+  const tiers: AdminDealerTier[] = [
+    { id: 'dealer_l1', name: 'Đại lý cấp 1', minOrderVolume: 0, creditLimit: 0, paymentTerms: null },
+    { id: 'dealer_l2', name: 'Đại lý cấp 2', minOrderVolume: 5_000_000, creditLimit: 20_000_000, paymentTerms: 'Công nợ 15 ngày' },
+  ];
+  api.get('/admin/dealer-tiers', tiers);
+}
+
 /** Phiên admin giả: /auth/refresh (auth-context.tsx khôi phục phiên khi có cờ `tubu_web_session`) + badge giỏ hàng ở header. */
 function mockAdminSession(api: MockApi) {
   api.post('/auth/refresh', ADMIN_LOGIN);
@@ -63,6 +72,7 @@ function mockAdminSession(api: MockApi) {
 test.describe('Web Admin Dashboard E2E - Luồng Duyệt Đại Lý', () => {
   test.beforeEach(async ({ page: p, api }) => {
     mockAdminSession(api);
+    mockDealerTiers(api);
     // Refresh token thật nằm ở cookie HttpOnly do BE set — test không giả được. Thứ auth-context.tsx nhìn để
     // quyết định có gọi /auth/refresh hay không là cờ `tubu_web_session` trong localStorage; đặt TRƯỚC khi
     // script của trang chạy (addInitScript) thay vì goto → evaluate → reload.
@@ -93,10 +103,11 @@ test.describe('Web Admin Dashboard E2E - Luồng Duyệt Đại Lý', () => {
     expect(list[0]!.query.get('status')).toBe('PENDING');
     expect(list[0]!.query.get('page')).toBe('1');
 
-    // Nút Duyệt khoá tới khi nhập Tier ID (BE bắt buộc tierId khi duyệt).
+    // Nút Duyệt khoá tới khi chọn bậc đại lý trong DealerTierSelect (BE bắt buộc tierId khi duyệt).
     const approve = p.getByRole('button', { name: 'Duyệt', exact: true });
     await expect(approve).toBeDisabled();
-    await p.fill('input[placeholder*="Tier"]', 'dealer_l1');
+    await p.getByLabel('Bậc đại lý').selectOption('dealer_l1');
+    await expect(approve).toBeEnabled();
 
     // Exact match bắt buộc: tab bar có nút "Duyệt SP đối tác" chứa "Duyệt" như chuỗi con.
     const reviewCall = api.waitForCall('POST', '/admin/dealer-applications/:id/review');
