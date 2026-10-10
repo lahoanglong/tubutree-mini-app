@@ -91,6 +91,7 @@ export function ProductTile({
       className="tubu-press"
       style={{
         position: 'relative',
+        isolation: 'isolate',
         display: isLine ? 'flex' : 'block',
         gap: isLine ? 12 : 0,
         background: 'var(--color-bg-surface)',

@@ -122,6 +122,11 @@ describe('ProductTile', () => {
       expect((container.firstElementChild as HTMLElement).style.position).toBe('relative');
     });
 
+    it('vỏ thẻ tạo stacking context riêng (isolation) để z-index 1 của tim/Mua lại không nổi lên trên thanh dính của trang', () => {
+      const { container } = renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={() => {}} />);
+      expect((container.firstElementChild as HTMLElement).style.isolation).toBe('isolate');
+    });
+
     it('tim và Mua lại nổi trên lớp phủ bằng z-index; ảnh chỉ để trang trí (tên đã có ở nút tên)', () => {
       const { container } = renderTile(
         <ProductTile product={{ ...PRODUCT, thumbnail: 'https://x/a.jpg' }} variant="grid" action="rebuy" onAction={() => {}} onPress={() => {}} />,
