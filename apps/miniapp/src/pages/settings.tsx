@@ -1,52 +1,85 @@
 import { useEffect, useState } from 'react';
-import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
+import { Box, Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
 import { setStorage, getStorage } from 'zmp-sdk/apis';
+import { Button } from '../components/ui/button';
+import { ListRow } from '../components/ui/list-row';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
 import { hasOA, followOA, requestNotifyPermission, getOaPromptState, setOaPromptState } from '../services/zmp-bridge';
+import { applyFontScale } from '../utils/font-scale';
+import { fetchNotifyPrefs, legacyOptOuts, saveNotifyPrefs, type NotifyPrefs } from './settings-notify-prefs';
 
 const PREFS_KEY = 'tubu_prefs';
 
-interface Prefs {
-  notifyOrders: boolean;
-  notifyPromo: boolean;
-  notifyGarden: boolean;
-  fontScale: 'small' | 'normal' | 'large';
+type FontScale = 'small' | 'normal' | 'large';
+interface LocalPrefs {
+  fontScale: FontScale;
 }
-const DEFAULT_PREFS: Prefs = {
-  notifyOrders: true,
-  notifyPromo: true,
-  notifyGarden: true,
-  fontScale: 'normal',
-};
-import { applyFontScale } from '../utils/font-scale';
+/** Bản cũ còn lưu notifyPromo/notifyGarden trên máy; chỉ đọc để chuyển lên server một lần. */
+type StoredPrefs = Partial<LocalPrefs & NotifyPrefs>;
+
+const DEFAULT_LOCAL: LocalPrefs = { fontScale: 'normal' };
+
+async function readStored(): Promise<StoredPrefs | null> {
+  const res = await getStorage({ keys: [PREFS_KEY] });
+  const raw = (res as Record<string, unknown>)[PREFS_KEY];
+  if (typeof raw !== 'string') return null;
+  try {
+    return JSON.parse(raw) as StoredPrefs;
+  } catch {
+    return null;
+  }
+}
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { openSnackbar } = useSnackbar();
   const { logout } = useAuthStore();
-  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
+  const [local, setLocal] = useState<LocalPrefs>(DEFAULT_LOCAL);
+  const [notify, setNotify] = useState<NotifyPrefs | null>(null);
 
   useEffect(() => {
-    void getStorage({ keys: [PREFS_KEY] }).then((res) => {
-      const raw = (res as Record<string, unknown>)[PREFS_KEY];
-      if (typeof raw === 'string') {
-        try {
-          const p = { ...DEFAULT_PREFS, ...(JSON.parse(raw) as Partial<Prefs>) };
-          setPrefs(p);
-          applyFontScale(p.fontScale);
-        } catch {
-          /* ignore */
+    let alive = true;
+    void (async () => {
+      const stored = await readStored().catch(() => null);
+      const fontScale = stored?.fontScale ?? DEFAULT_LOCAL.fontScale;
+      if (alive) setLocal({ fontScale });
+      applyFontScale(fontScale);
+      try {
+        let server = await fetchNotifyPrefs();
+        const patch = legacyOptOuts(stored, server);
+        if (patch) server = await saveNotifyPrefs(patch);
+        if (stored && ('notifyPromo' in stored || 'notifyGarden' in stored)) {
+          void setStorage({ data: { [PREFS_KEY]: JSON.stringify({ fontScale }) } });
         }
+        if (alive) setNotify(server);
+      } catch {
+        if (alive) openSnackbar({ type: 'error', text: 'Chưa tải được cài đặt thông báo. Thử lại sau nhé.' });
       }
-    });
-  }, []);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [openSnackbar]);
 
-  const update = (patch: Partial<Prefs>) => {
-    const next = { ...prefs, ...patch };
-    setPrefs(next);
-    if (patch.fontScale) applyFontScale(patch.fontScale);
-    void setStorage({ data: { [PREFS_KEY]: JSON.stringify(next) } });
+  const updateFont = (fontScale: FontScale) => {
+    setLocal({ fontScale });
+    applyFontScale(fontScale);
+    void setStorage({ data: { [PREFS_KEY]: JSON.stringify({ fontScale }) } });
     haptic('light');
+  };
+
+  const toggleNotify = async (key: keyof NotifyPrefs) => {
+    if (!notify) return;
+    const before = notify;
+    setNotify({ ...before, [key]: !before[key] });
+    haptic('light');
+    try {
+      setNotify(await saveNotifyPrefs({ [key]: !before[key] }));
+    } catch {
+      setNotify(before);
+      openSnackbar({ type: 'error', text: 'Chưa lưu được cài đặt. Kiểm tra mạng rồi thử lại.' });
+    }
   };
 
   return (
@@ -54,9 +87,24 @@ export default function SettingsPage() {
 
       <Section title="Thông báo">
         {hasOA && <FollowOaRow />}
-        <Toggle label="Cập nhật đơn hàng" on={prefs.notifyOrders} onToggle={() => update({ notifyOrders: !prefs.notifyOrders })} />
-        <Toggle label="Khuyến mãi & voucher" on={prefs.notifyPromo} onToggle={() => update({ notifyPromo: !prefs.notifyPromo })} />
-        <Toggle label="Nhắc nhở Vườn Xanh" on={prefs.notifyGarden} onToggle={() => update({ notifyGarden: !prefs.notifyGarden })} last />
+        <ListRow
+          title="Cập nhật đơn hàng"
+          subtitle="Luôn bật để bạn không lỡ tin giao hàng, hoàn tiền"
+          style={{ borderBottom: '1px solid var(--neutral-100)' }}
+        />
+        <Toggle
+          label="Khuyến mãi & mã giảm giá"
+          on={notify?.notifyPromo ?? false}
+          disabled={!notify}
+          onToggle={() => void toggleNotify('notifyPromo')}
+        />
+        <Toggle
+          label="Nhắc nhở Vườn Xanh"
+          on={notify?.notifyGarden ?? false}
+          disabled={!notify}
+          onToggle={() => void toggleNotify('notifyGarden')}
+          last
+        />
       </Section>
 
       <Section title="Hiển thị · Cỡ chữ">
@@ -65,19 +113,21 @@ export default function SettingsPage() {
             <Box
               key={s}
               className="tubu-press"
-              onClick={() => update({ fontScale: s })}
+              role="radio"
+              aria-checked={local.fontScale === s}
+              onClick={() => updateFont(s)}
               style={{
                 flex: 1,
                 textAlign: 'center',
                 padding: '10px 0',
                 borderRadius: 'var(--radius-md)',
-                border: `1.5px solid ${prefs.fontScale === s ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
-                background: prefs.fontScale === s ? 'var(--primary-50)' : 'var(--neutral-0)',
+                border: `1.5px solid ${local.fontScale === s ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
+                background: local.fontScale === s ? 'var(--primary-50)' : 'var(--neutral-0)',
               }}
             >
               <Text
-                bold={prefs.fontScale === s}
-                style={{ color: prefs.fontScale === s ? 'var(--primary-700)' : 'var(--neutral-600)', fontSize: s === 'small' ? 13 : s === 'large' ? 18 : 15 }}
+                bold={local.fontScale === s}
+                style={{ color: local.fontScale === s ? 'var(--primary-700)' : 'var(--neutral-600)', fontSize: s === 'small' ? 13 : s === 'large' ? 18 : 15 }}
               >
                 A
               </Text>
@@ -96,7 +146,7 @@ export default function SettingsPage() {
       </Section>
 
       <Box p={4}>
-        <Button fullWidth variant="secondary" onClick={() => void logout()}>
+        <Button fullWidth variant="secondary" onPress={() => void logout()}>
           Đăng xuất
         </Button>
         <Text size="xSmall" style={{ color: 'var(--neutral-400)', textAlign: 'center', display: 'block', marginTop: 12 }}>
@@ -118,24 +168,57 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Toggle({ label, on, onToggle, last }: { label: string; on: boolean; onToggle: () => void; last?: boolean }) {
+/** Cả hàng là công tắc (vùng chạm >= 44px), không chỉ viên thuốc 26px bên phải. */
+function Toggle({
+  label,
+  on,
+  onToggle,
+  disabled,
+  last,
+}: {
+  label: string;
+  on: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+  last?: boolean;
+}) {
+  const press = () => {
+    if (!disabled) onToggle();
+  };
   return (
-    <Box
-      flex
-      alignItems="center"
-      justifyContent="space-between"
-      py={2}
-      style={{ borderBottom: last ? 'none' : '1px solid var(--neutral-100)' }}
+    <div
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      aria-disabled={disabled || undefined}
+      tabIndex={0}
+      className="tubu-press"
+      onClick={press}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          press();
+        }
+      }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        minHeight: 44,
+        padding: '8px 0',
+        boxSizing: 'border-box',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
+        borderBottom: last ? 'none' : '1px solid var(--neutral-100)',
+      }}
     >
       <Text size="small">{label}</Text>
-      <Box
-        role="switch"
-        aria-checked={on}
-        className="tubu-press"
-        onClick={onToggle}
+      <span
+        aria-hidden
         style={{
           width: 44,
           height: 26,
+          flexShrink: 0,
           borderRadius: 'var(--radius-full)',
           background: on ? 'var(--leaf-600)' : 'var(--neutral-200)',
           position: 'relative',
@@ -155,8 +238,8 @@ function Toggle({ label, on, onToggle, last }: { label: string; on: boolean; onT
             transition: 'left var(--dur-base) var(--ease-out)',
           }}
         />
-      </Box>
-    </Box>
+      </span>
+    </div>
   );
 }
 
@@ -202,7 +285,7 @@ function FollowOaRow() {
           Đã theo dõi ✓
         </Text>
       ) : (
-        <Button size="small" loading={busy} disabled={busy} onClick={() => void handleFollow()} style={{ background: 'var(--leaf-600)' }}>
+        <Button loading={busy} onPress={() => void handleFollow()}>
           Theo dõi
         </Button>
       )}
@@ -212,17 +295,11 @@ function FollowOaRow() {
 
 function LinkRow({ label, onClick, last }: { label: string; onClick: () => void; last?: boolean }) {
   return (
-    <Box
-      className="tubu-press"
-      flex
-      alignItems="center"
-      justifyContent="space-between"
-      py={3}
-      onClick={onClick}
+    <ListRow
+      title={label}
+      trailing="chevron"
+      onPress={onClick}
       style={{ borderBottom: last ? 'none' : '1px solid var(--neutral-100)' }}
-    >
-      <Text size="small">{label}</Text>
-      <Text style={{ color: 'var(--neutral-400)' }}>›</Text>
-    </Box>
+    />
   );
 }
