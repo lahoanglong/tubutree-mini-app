@@ -52,6 +52,14 @@ export function typeInto(el: Element | null, value: string) {
   });
 }
 
+export function selectValue(el: Element | null, value: string) {
+  if (!el) throw new Error('selectValue: không thấy phần tử');
+  act(() => {
+    (el as HTMLSelectElement).value = value;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
 export function click(el: Element | null) {
   if (!el) throw new Error('click: không thấy phần tử');
   act(() => {
