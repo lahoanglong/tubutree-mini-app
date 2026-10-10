@@ -427,8 +427,9 @@ export default function CheckoutPage() {
         </Box>
       </Box>
 
+      {/* Chỉ coi là mã gắn sẵn khi đúng là mã CTV: slug gian hàng nhãn/cửa hàng không phải mã giới thiệu và không được gửi kèm đơn. */}
       <ReferralCodeBox
-        linkedCode={sfCtx.referralCode ?? sfCtx.slug}
+        linkedCode={sfCtx.referralCode}
         appliedCode={referralApplied}
         onApplied={setReferralApplied}
       />

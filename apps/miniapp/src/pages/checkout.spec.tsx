@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   getWallet: vi.fn(),
   getLoyalty: vi.fn(),
   user: { id: 'u1', fullName: 'Long', phone: '0900000000' as string | null, walletBalance: 0, coinsBalance: 0, pointsBalance: 0 },
-  sfCtx: { slug: null as string | null, referralCode: null as string | null, kind: 'ctv' as const },
+  sfCtx: { slug: null as string | null, referralCode: null as string | null, kind: 'ctv' as 'ctv' | 'brand' },
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -103,6 +103,7 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     vi.clearAllMocks();
     sessionStorage.clear();
     mocks.sfCtx.slug = null;
+    mocks.sfCtx.kind = 'ctv';
     mocks.user.fullName = 'Long';
     mocks.user.phone = '0900000000';
     localStorage.clear();
@@ -155,6 +156,32 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     const body = await placeOrderClick();
     expect(body.referralCode).toBeUndefined();
   });
+
+  it('đang xem trang nhãn (slug nhãn, không có mã CTV) → KHÔNG hiện chip giả, vẫn nhập được mã và gửi mã đó', async () => {
+    mocks.sfCtx.slug = 'tubu-co';
+    mocks.sfCtx.kind = 'brand';
+    mocks.recordReferralTouch.mockResolvedValue({ ok: true });
+    renderPage();
+    expect(await screen.findByText('Nhập mã')).toBeInTheDocument();
+    expect(screen.queryByText('TUBU-CO')).not.toBeInTheDocument();
+    expect(screen.queryByText(/mua qua link giới thiệu/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Nhập mã'));
+    fireEvent.change(screen.getByPlaceholderText('Nhập mã giới thiệu'), { target: { value: 'ab12cd34' } });
+    fireEvent.click(screen.getByText('Áp dụng'));
+    await waitFor(() => expect(screen.getByText('AB12CD34')).toBeInTheDocument());
+    const body = await placeOrderClick();
+    expect(body.referralCode).toBe('AB12CD34');
+  });
+
+  it('slug gian hàng không phải CTV (referralCode rỗng, kind ctv) cũng không bị coi là mã giới thiệu', async () => {
+    mocks.sfCtx.slug = 'cua-hang-x';
+    mocks.sfCtx.referralCode = null;
+    renderPage();
+    expect(await screen.findByText('Nhập mã')).toBeInTheDocument();
+    expect(screen.queryByText('CUA-HANG-X')).not.toBeInTheDocument();
+    const body = await placeOrderClick();
+    expect(body.referralCode).toBeUndefined();
+  });
 });
 
 describe('CheckoutPage — đơn đầu: xin tên + SĐT Zalo để điền sẵn địa chỉ (C-065)', () => {
@@ -163,6 +190,7 @@ describe('CheckoutPage — đơn đầu: xin tên + SĐT Zalo để điền sẵ
     sessionStorage.clear();
     localStorage.clear();
     mocks.sfCtx.slug = null;
+    mocks.sfCtx.kind = 'ctv';
     mocks.sfCtx.referralCode = null;
     mocks.user.fullName = 'Khách';
     mocks.user.phone = null;
@@ -199,6 +227,7 @@ describe('CheckoutPage — Ví/TubuXu bị mờ phải nói lý do, số điểm
     sessionStorage.clear();
     localStorage.clear();
     mocks.sfCtx.slug = null;
+    mocks.sfCtx.kind = 'ctv';
     mocks.sfCtx.referralCode = null;
     mocks.user.fullName = 'Long';
     mocks.user.phone = '0900000000';
@@ -284,6 +313,7 @@ describe('CheckoutPage — vùng chạm >= 44px (C-021)', () => {
     sessionStorage.clear();
     localStorage.clear();
     mocks.sfCtx.slug = null;
+    mocks.sfCtx.kind = 'ctv';
     mocks.sfCtx.referralCode = null;
     mocks.user.fullName = 'Long';
     mocks.user.phone = '0900000000';
