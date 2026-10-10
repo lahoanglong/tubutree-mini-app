@@ -3,6 +3,19 @@ import { OrderReversalService } from './order-reversal.service';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { DealerService } from '../dealer/dealer.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+
+// Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
+// test/integration-race/wallet-ledger*.race-spec.ts. Ở đây thay bằng đúng tác động số dư của nó
+// (increment walletBalance trên tx) để các mock tx sẵn có vẫn đo được tiền vào ví.
+jest.mock('../wallet/wallet-ledger.service', () => ({
+  applyWalletDelta: jest.fn(
+    async (tx: { user: { update: (a: unknown) => Promise<unknown> } }, input: { userId: string; delta: number }) => {
+      await tx.user.update({ where: { id: input.userId }, data: { walletBalance: { increment: input.delta } } });
+      return { applied: true, balanceAfter: 0, entryId: 'wtx' };
+    },
+  ),
+}));
 
 /** DealerService giả — mặc định không có thưởng quý nào để thu hồi. */
 const noopDealer = () => ({
@@ -109,6 +122,10 @@ describe('OrderReversalService', () => {
       where: { id: 'u1' },
       data: { walletBalance: { increment: 150000 } },
     });
+    expect(applyWalletDelta).toHaveBeenLastCalledWith(
+      tx,
+      expect.objectContaining({ userId: 'u1', delta: 150000, type: 'ORDER_REFUND', refType: 'ORDER', refId: 'o1' }),
+    );
     expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
     // Tham số của câu UPDATE hoàn kho: (số lượng, số lượng, variationId).
     expect(tx.$executeRaw.mock.calls[0]!.slice(1)).toEqual([2, 2, 'v1']);

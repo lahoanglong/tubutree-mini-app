@@ -16,6 +16,13 @@ import type { CoinsService } from '../wallet/coins.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { ComboService } from '../storefront/combo.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+
+// Sổ cái thật chạy trên Postgres ở test/integration-race/wallet-ledger*.race-spec.ts.
+jest.mock('../wallet/wallet-ledger.service', () => ({
+  applyWalletDelta: jest.fn().mockResolvedValue({ applied: true, balanceAfter: 0, entryId: 'wtx' }),
+}));
+const ledger = applyWalletDelta as jest.MockedFunction<typeof applyWalletDelta>;
 
 const ADDRESS = {
   id: 'addr1', userId: 'u1', recipient: 'A', phone: '09', province: 'HN', district: 'BD',
@@ -152,15 +159,20 @@ describe('CheckoutService.placeOrder — money safety', () => {
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
-  it('WALLET hợp lệ → trừ ví ATOMIC (where gte) + tạo đơn CONFIRMED/PAID', async () => {
-    const { svc, updateMany } = build({ walletBalance: 1000, total: 100 });
+  it('WALLET hợp lệ → trừ ví qua sổ cái (1 dòng ORDER_PAY theo đơn) trong tx tạo đơn', async () => {
+    const { svc, prisma } = build({ walletBalance: 1000, total: 100 });
+    ledger.mockClear();
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never);
-    const walletCall = updateMany.mock.calls.find((c) => c[0].data.walletBalance);
-    expect(walletCall[0].where).toEqual({ id: 'u1', walletBalance: { gte: 100 } });
+    expect(ledger).toHaveBeenCalledTimes(1);
+    expect(ledger).toHaveBeenCalledWith(
+      prisma,
+      expect.objectContaining({ userId: 'u1', delta: -100, type: 'ORDER_PAY', refType: 'ORDER', refId: 'o1' }),
+    );
   });
 
-  it('WALLET race overdraft: updateMany count=0 → BadRequest (rollback)', async () => {
-    const { svc } = build({ walletBalance: 1000, total: 100, decCount: 0 });
+  it('WALLET race overdraft: sổ cái báo không đủ → BadRequest (rollback)', async () => {
+    const { svc } = build({ walletBalance: 1000, total: 100 });
+    ledger.mockRejectedValueOnce(new BadRequestException('Số dư Ví Tubu không đủ.'));
     await expect(
       svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never),
     ).rejects.toThrow('Ví Tubu không đủ');

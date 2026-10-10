@@ -19,6 +19,7 @@ import { reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, productDiscontinuedError } from '../cart/sellable';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { classifyOrderError } from '../analytics/order-error-classifier';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 
 /**
  * `JSON.stringify` sắp khoá theo thứ tự chèn — Postgres `jsonb` thì KHÔNG (tự sắp lại theo độ
@@ -318,13 +319,18 @@ export class CheckoutService {
             },
           });
         }
-        if (dto.paymentMethod === 'WALLET') {
-          // Trừ ví ATOMIC (gte) — chống overdraft khi 2 đơn WALLET chạy đồng thời.
-          const dec = await tx.user.updateMany({
-            where: { id: userId, walletBalance: { gte: computed.total } },
-            data: { walletBalance: { decrement: computed.total } },
+        if (dto.paymentMethod === 'WALLET' && computed.total > 0) {
+          // Trừ ví dưới khoá dòng user — chống overdraft khi 2 đơn WALLET chạy đồng thời; không đủ
+          // → throw, rollback toàn bộ đơn/stock/điểm.
+          await applyWalletDelta(tx, {
+            userId,
+            delta: -computed.total,
+            type: 'ORDER_PAY',
+            refType: 'ORDER',
+            refId: created.id,
+            reason: `Thanh toán đơn ${code}`,
+            insufficientMessage: 'Số dư Ví Tubu không đủ.',
           });
-          if (dec.count === 0) throw new BadRequestException('Số dư Ví Tubu không đủ.');
         } else if (dto.paymentMethod === 'XU') {
           // Trả đơn bằng TubuXu (1 xu = 1đ): trừ xu ATOMIC trong CÙNG tx — không đủ → throw
           // rollback toàn bộ đơn/stock/điểm. Ghi CoinTransaction(-total, ORDER_PAY:<code>).

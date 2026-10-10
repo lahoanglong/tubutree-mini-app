@@ -6,6 +6,7 @@ import { CouponsService } from '../coupons/coupons.service';
 import { DealerService } from '../dealer/dealer.service';
 import { releaseVariationStock } from '../catalog/variation-stock';
 import { revokeReferralRewardForOrder } from '../wallet/referral-reward';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
@@ -129,10 +130,7 @@ export class OrderReversalService {
           // WALLET/ZALOPAY/BANK_TRANSFER/VNPAY/COD đều hoàn về Ví — COD không có "kênh gốc" nào
           // khác để hoàn lại (khách trả tiền mặt, không có tài khoản/ví điện tử gốc lưu ở đây); Ví
           // Tubu là đích hoàn nhất quán duy nhất, giống mọi kênh khác trong nhánh này.
-          await tx.user.update({
-            where: { id: order.userId },
-            data: { walletBalance: { increment: order.total } },
-          });
+          await this.refundToWallet(tx, order.userId, order);
         }
       }
     }
@@ -208,6 +206,18 @@ export class OrderReversalService {
     return { moneyRefunded };
   }
 
+  private async refundToWallet(tx: Prisma.TransactionClient, userId: string, order: OrderWithItems): Promise<void> {
+    if (order.total <= 0) return;
+    await applyWalletDelta(tx, {
+      userId,
+      delta: order.total,
+      type: 'ORDER_REFUND',
+      refType: 'ORDER',
+      refId: order.id,
+      reason: `Hoàn tiền đơn ${order.code}`,
+    });
+  }
+
   /**
    * Đích hoàn tiền của đơn CTV lên hộ. Khách cuối có tài khoản (đơn đã ghi userId = khách, hoặc
    * SĐT người nhận khớp User.phone) → cộng ví khách đó; không thì để lại yêu cầu chuyển khoản tay cho
@@ -236,9 +246,7 @@ export class OrderReversalService {
     }
 
     const reason = order.status === 'DELIVERED' ? 'RETURNED' : 'CANCELLED';
-    if (customerUserId) {
-      await tx.user.update({ where: { id: customerUserId }, data: { walletBalance: { increment: order.total } } });
-    }
+    if (customerUserId) await this.refundToWallet(tx, customerUserId, order);
     await tx.orderCustomerRefund.create({
       data: {
         orderId: order.id,
