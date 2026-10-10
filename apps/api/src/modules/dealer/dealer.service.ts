@@ -54,6 +54,24 @@ interface RewardPeriod {
 
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 
+/**
+ * Trần tổng 1 đơn đại lý: Order.total/OrderItem.total và DealerCreditLedger.delta là INT4, tổng vượt
+ * 2.147.483.647 sẽ vỡ ở DB thành lỗi 500. Chặn sớm bằng 400 rõ ràng; đơn lớn hơn thì tách nhiều đơn.
+ */
+export const DEALER_ORDER_TOTAL_MAX = 2_000_000_000;
+
+/**
+ * Ngưỡng/doanh số tích luỹ lưu BigInt (có thể vượt INT4) nhưng API và phép tính dùng number:
+ * JSON.stringify không serialize được bigint, còn giá trị thực tế (≤ 1 triệu tỷ, DTO chặn) nằm
+ * trong Number.MAX_SAFE_INTEGER nên đổi không mất chính xác.
+ */
+const rewardView = <T extends { threshold: bigint }>(r: T) => ({ ...r, threshold: Number(r.threshold) });
+const claimView = <T extends { threshold: bigint; volumeAtClaim: bigint }>(c: T) => ({
+  ...c,
+  threshold: Number(c.threshold),
+  volumeAtClaim: Number(c.volumeAtClaim),
+});
+
 /** Tính phần thưởng cho 1 mức doanh số theo bậc (thuần). */
 function bonusForRevenue(revenue: number, sortedTiers: BonusTier[]) {
   const reached = [...sortedTiers].reverse().find((t) => revenue >= t.min) ?? null;
@@ -190,6 +208,12 @@ export class DealerService {
         total,
       };
     });
+
+    if (subtotal > DEALER_ORDER_TOTAL_MAX) {
+      throw new BadRequestException(
+        `Tổng đơn ${vnd(subtotal)} vượt mức tối đa ${vnd(DEALER_ORDER_TOTAL_MAX)} cho một đơn đại lý — vui lòng tách thành nhiều đơn.`,
+      );
+    }
 
     const onCredit = dto.paymentMethod === 'CREDIT';
     // Fast-fail thân thiện (không tốn generateCode khi rõ ràng vượt). Check
@@ -674,10 +698,12 @@ export class DealerService {
 
     // Reward inactive chỉ có thể liên quan tới kỳ trước nếu bị tắt (updatedAt) từ khi kỳ liền trước
     // SỚM NHẤT kết thúc — prevYear.end (= đầu năm nay) ≤ prevQuarter.end.
-    const rewards = await this.prisma.dealerReward.findMany({
-      where: { OR: [{ isActive: true }, { isActive: false, updatedAt: { gte: p.prevYear.end } }] },
-      orderBy: [{ sortOrder: 'asc' }],
-    });
+    const rewards = (
+      await this.prisma.dealerReward.findMany({
+        where: { OR: [{ isActive: true }, { isActive: false, updatedAt: { gte: p.prevYear.end } }] },
+        orderBy: [{ sortOrder: 'asc' }],
+      })
+    ).map(rewardView);
     const hasQuarterRewards = rewards.some((r) => r.period !== 'YEAR');
     const hasYearRewards = rewards.some((r) => r.period === 'YEAR');
     const EMPTY: DealerVolume = { settled: 0, settledCount: 0, pending: 0, pendingCount: 0 };
@@ -767,7 +793,8 @@ export class DealerService {
     now: Date = new Date(),
   ) {
     await this.dealerContext(userId);
-    const reward = await this.prisma.dealerReward.findUnique({ where: { id: rewardId } });
+    const rewardRow = await this.prisma.dealerReward.findUnique({ where: { id: rewardId } });
+    const reward = rewardRow && rewardView(rewardRow);
     const STOPPED = 'Phần thưởng đại lý không tồn tại hoặc đã ngừng áp dụng.';
     if (!reward) throw new NotFoundException(STOPPED);
 
@@ -859,13 +886,13 @@ export class DealerService {
         id: claim.id,
         status: claim.status,
         periodKey: claim.periodKey,
-        volumeAtClaim: claim.volumeAtClaim,
+        volumeAtClaim: Number(claim.volumeAtClaim),
         createdAt: claim.createdAt,
       },
-      reward: { id: claim.rewardId, title: claim.rewardTitle, type: claim.rewardType, threshold: claim.threshold },
+      reward: { id: claim.rewardId, title: claim.rewardTitle, type: claim.rewardType, threshold: Number(claim.threshold) },
       periodKey: period.key,
       periodLabel: period.label,
-      currentVolume: claim.volumeAtClaim,
+      currentVolume: Number(claim.volumeAtClaim),
     };
   }
 
@@ -924,7 +951,7 @@ export class DealerService {
     for (const a of apps) if (!bizOf.has(a.userId)) bizOf.set(a.userId, a.businessName);
     return paginated(
       items.map((c) => ({
-        ...c,
+        ...claimView(c),
         dealer: {
           id: c.userId,
           fullName: userOf.get(c.userId)?.fullName ?? null,
@@ -944,8 +971,9 @@ export class DealerService {
    * Chuyển trạng thái bằng updateMany có guard status → 2 admin bấm cùng lúc chỉ 1 người thắng.
    */
   async approveRewardClaim(adminId: string, id: string, note?: string) {
-    const claim = await this.prisma.dealerRewardClaim.findUnique({ where: { id } });
-    if (!claim) throw new NotFoundException('Không tìm thấy yêu cầu nhận thưởng.');
+    const claimRow = await this.prisma.dealerRewardClaim.findUnique({ where: { id } });
+    if (!claimRow) throw new NotFoundException('Không tìm thấy yêu cầu nhận thưởng.');
+    const claim = claimView(claimRow);
     if (claim.status !== 'PENDING') {
       throw new BadRequestException(`Yêu cầu đang ở trạng thái "${CLAIM_STATUS_LABEL[claim.status]}" — không thể duyệt.`);
     }
@@ -963,8 +991,8 @@ export class DealerService {
     });
     if (res.count === 0) throw new BadRequestException('Yêu cầu vừa được xử lý bởi người khác — vui lòng tải lại.');
     this.logger.log(`Admin ${adminId} duyệt yêu cầu nhận thưởng ${id} (${claim.rewardTitle} ${period.label}).`);
-    await this.notifyDealerOfClaim(claim, period, 'DEALER_REWARD_CLAIM_APPROVED');
-    return this.prisma.dealerRewardClaim.findUniqueOrThrow({ where: { id } });
+    await this.notifyDealerOfClaim(claimRow, period, 'DEALER_REWARD_CLAIM_APPROVED');
+    return claimView(await this.prisma.dealerRewardClaim.findUniqueOrThrow({ where: { id } }));
   }
 
   /** Từ chối yêu cầu PENDING → REJECTED (bắt buộc lý do, gửi kèm cho đại lý). Trạng thái cuối. */
@@ -978,7 +1006,7 @@ export class DealerService {
     const claim = await this.claimAfterTransition(id, res.count, 'từ chối');
     this.logger.log(`Admin ${adminId} từ chối yêu cầu nhận thưởng ${id}: ${why}`);
     await this.notifyDealerOfClaim(claim, null, 'DEALER_REWARD_CLAIM_REJECTED', { reason: why });
-    return claim;
+    return claimView(claim);
   }
 
   /** Xác nhận đã trao thưởng: chỉ từ APPROVED → PAID. */
@@ -990,7 +1018,7 @@ export class DealerService {
     const claim = await this.claimAfterTransition(id, res.count, 'đánh dấu đã trao');
     this.logger.log(`Admin ${adminId} xác nhận đã trao thưởng ${id} (${claim.rewardTitle}).`);
     await this.notifyDealerOfClaim(claim, null, 'DEALER_REWARD_CLAIM_PAID');
-    return claim;
+    return claimView(claim);
   }
 
   // ── Admin: xác nhận đã nhận chuyển khoản cho đơn đại lý trả trước ──

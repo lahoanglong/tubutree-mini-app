@@ -479,7 +479,7 @@ model DealerReward {
   type        DealerRewardType
   title       String
   description String?
-  threshold   Int
+  threshold   BigInt
   period      String              @default("QUARTER")
   isActive    Boolean             @default(true)
   sortOrder   Int                 @default(0)
@@ -512,8 +512,8 @@ model DealerRewardClaim {
   rewardTitle     String
   rewardType      DealerRewardType
   rewardPeriod    String // QUARTER | YEAR tại thời điểm yêu cầu
-  threshold       Int
-  volumeAtClaim   Int // doanh số ĐÃ CHỐT của kỳ lúc gửi yêu cầu
+  threshold       BigInt
+  volumeAtClaim   BigInt // doanh số ĐÃ CHỐT của kỳ lúc gửi yêu cầu
   note            String? // ghi chú của đại lý
   status          DealerRewardClaimStatus @default(PENDING)
   reviewedBy      String? // adminId duyệt/từ chối
@@ -1173,7 +1173,7 @@ model CtvMilestoneClaim {
   milestoneId String // id trong CTV_MONTHLY_MILESTONES (vd 'milestone-3m')
   monthKey    String // 'YYYY-MM' theo giờ VN
   rewardXu    Int
-  revenue     Int // doanh số đã chốt tại lúc nhận (đối soát)
+  revenue     BigInt // doanh số đã chốt tại lúc nhận (đối soát)
   createdAt   DateTime @default(now())
 
   @@unique([userId, milestoneId, monthKey])

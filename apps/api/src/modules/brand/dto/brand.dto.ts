@@ -1,9 +1,13 @@
-import { Allow, ArrayMaxSize, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { Allow, ArrayMaxSize, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 // Ảnh có thể là URL Cloudinary HOẶC data URL base64 (fallback khi chưa cấu hình Cloudinary), nên
 // trần phải rộng — đủ cho ảnh nén ~1MB nhưng chặn payload vô hạn. Mirror IMAGE_MAX của
 // storefront.controller.ts (không export sẵn nên khai lại hằng số tương đương ở đây).
 const IMAGE_MAX = 1_500_000;
+
+// Cột threshold là BigInt nhưng API trao đổi bằng number JSON: trần 1 nghìn tỷ vừa rộng hơn mọi
+// doanh số năm thực tế, vừa nằm xa dưới Number.MAX_SAFE_INTEGER nên không mất chính xác.
+export const DEALER_REWARD_THRESHOLD_MAX = 1_000_000_000_000;
 
 export class CreateBrandDto {
   @IsString() name!: string;
@@ -72,7 +76,7 @@ export class DealerRewardDto {
   @IsIn(['TOUR', 'GIFT', 'OTHER']) type!: 'TOUR' | 'GIFT' | 'OTHER';
   @IsString() title!: string;
   @IsOptional() @IsString() description?: string;
-  @IsInt() @Min(0) threshold!: number;
+  @IsInt() @Min(0) @Max(DEALER_REWARD_THRESHOLD_MAX) threshold!: number;
   @IsOptional() @IsIn(['QUARTER', 'YEAR']) period?: string;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
 }
@@ -84,7 +88,7 @@ export class ProductIdsDto {
 export class UpdateDealerRewardDto {
   @IsOptional() @IsString() title?: string;
   @IsOptional() @IsString() description?: string;
-  @IsOptional() @IsInt() @Min(0) threshold?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(DEALER_REWARD_THRESHOLD_MAX) threshold?: number;
   @IsOptional() @IsIn(['QUARTER', 'YEAR']) period?: string;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
