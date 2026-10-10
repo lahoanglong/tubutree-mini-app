@@ -51,12 +51,32 @@ describe('AnalyticsAggregationService.computeRetentionSnapshot', () => {
     );
   });
 
-  it('không có khoá nào của loại nào thì không chạy truy vấn tra cứu loại đó', async () => {
-    const { prisma, queryRawUnsafe } = fakePrisma({ day: [{ customer_key: 'u1', kind: 'USER', orders: 1n }] });
+  it('mọi khoá đều tra ở cả hai phía (đơn lên hộ và đơn thường): endCustomerKey là SĐT nội địa nên khách tự mua và CTV lên hộ là một người', async () => {
+    const { prisma, queryRawUnsafe } = fakePrisma({
+      day: [
+        { customer_key: '0911', kind: 'PHONE', orders: 1n }, // đã từng được CTV lên hộ -> khách cũ
+        { customer_key: '0922', kind: 'PROXY', orders: 1n }, // đã từng tự mua bằng tài khoản -> khách cũ
+        { customer_key: '0933', kind: 'PHONE', orders: 1n }, // mới
+      ],
+      proxyPrior: [{ customer_key: '0911' }],
+      phoneUsers: [{ id: 'u-self', customer_key: '0922' }],
+      userPrior: [{ user_id: 'u-self' }],
+    });
 
     const result = await new AnalyticsAggregationService(prisma).computeRetentionSnapshot('2026-09-26');
 
     expect(result.newBuyers).toBe(1);
+    const proxyCall = queryRawUnsafe.mock.calls.find((c) => (c[0] as string).includes('"endCustomerKey" = ANY'))!;
+    expect(proxyCall[3]).toEqual(['0911', '0922', '0933']);
+    const userCall = queryRawUnsafe.mock.calls.find((c) => (c[0] as string).includes('FROM users u'))!;
+    expect(userCall[1]).toEqual(['0911', '0922', '0933']);
+  });
+
+  it('ngày không có khoá nào thì không chạy truy vấn tra cứu', async () => {
+    const { prisma, queryRawUnsafe } = fakePrisma({});
+
+    await new AnalyticsAggregationService(prisma).computeRetentionSnapshot('2026-09-26');
+
     const sqls = queryRawUnsafe.mock.calls.map((c) => c[0] as string);
     expect(sqls.some((q) => q.includes('"endCustomerKey" = ANY'))).toBe(false);
     expect(sqls.some((q) => q.includes('FROM users u'))).toBe(false);
