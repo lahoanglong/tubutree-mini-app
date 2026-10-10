@@ -25,7 +25,9 @@ export interface ButtonProps extends AriaAttributes {
   disabled?: boolean;
   icon?: LucideIcon;
   fullWidth?: boolean;
-  /** Kiểu `() => void` để nhận cả handler trả giá trị bất kỳ; nếu trả Promise thì Button khoá bấm lại tới khi Promise xong. */
+  /** Kiểu `() => void` để nhận cả handler trả giá trị bất kỳ; nếu trả Promise thì Button khoá bấm lại tới khi Promise xong.
+   * Khoá chỉ thấy được Promise mà handler TRẢ VỀ: `() => submit()` được khoá, còn `() => { void submit(); }`
+   * trả `undefined` nên chỉ còn prop `loading` chặn bấm lại. Handler bất đồng bộ nên trả Promise (hoặc tự giữ ref khoá). */
   onPress?: () => void;
   className?: string;
   style?: CSSProperties;
