@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CopyButton } from '@/components/copy-button';
 import { getOrderStatusHistory, INVOICE_URL_MAX, issueOrderInvoice, type AdminOrder } from '@/lib/admin-client';
 import { actorLabel, canIssueInvoice, formatShippingAddress, invoiceStatusLabel, invoiceUrlError } from '@/lib/admin-order-detail';
+import { safeHttpsLink } from '@/lib/admin-pickers';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { useConfirm } from './confirm-dialog';
 import { INPUT_CLASS, Notice, ToneBadge } from './ui';
@@ -133,6 +134,7 @@ export function OrderInvoicePanel({ order }: { order: AdminOrder }) {
   const status = invoiceStatusLabel(order.invoiceStatus) ?? { label: 'Chưa xử lý', tone: 'neutral' as const };
   const closed = order.status === 'CANCELLED' || order.status === 'RETURNED';
   const issuable = canIssueInvoice(order);
+  const safeInvoiceUrl = safeHttpsLink(order.invoiceUrl);
 
   const onIssue = async () => {
     if (inFlight.current || mut.isPending) return;
@@ -183,9 +185,13 @@ export function OrderInvoicePanel({ order }: { order: AdminOrder }) {
           <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
             <dt className="text-neutral-500">Link hoá đơn:</dt>
             <dd className="min-w-0 break-all">
-              <a href={order.invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-green-700 underline">
-                {order.invoiceUrl}
-              </a>
+              {safeInvoiceUrl ? (
+                <a href={safeInvoiceUrl} target="_blank" rel="noopener noreferrer" className="text-green-700 underline">
+                  {order.invoiceUrl}
+                </a>
+              ) : (
+                <span className="text-neutral-800">{order.invoiceUrl}</span>
+              )}
             </dd>
           </div>
         )}

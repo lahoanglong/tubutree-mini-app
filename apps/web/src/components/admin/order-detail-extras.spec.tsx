@@ -126,6 +126,16 @@ describe('OrderInvoicePanel', () => {
     expect(byText(container, 'button', 'Đã xuất hoá đơn')).toBeNull();
   });
 
+  // invoiceUrl còn đến từ webhook Pancake (không kiểm giao thức) nên không tin được: chỉ https mới thành link bấm được.
+  it.each(['javascript:alert(1)', 'http://hd.example.vn/1', 'data:text/html,<script>1</script>'])(
+    'link hoá đơn không phải https (%s): hiện chữ thường, KHÔNG render thẻ <a>',
+    (invoiceUrl) => {
+      const { container } = mount(<OrderInvoicePanel order={order({ invoiceStatus: 'ISSUED', invoiceRequest: REQUEST, invoiceUrl })} />);
+      expect(container.querySelector('a')).toBeNull();
+      expect(container.textContent).toContain(invoiceUrl);
+    },
+  );
+
   it('đơn đã huỷ/trả: không cho xuất, nói rõ lý do', () => {
     const { container } = mount(<OrderInvoicePanel order={order({ status: 'CANCELLED', invoiceStatus: 'REQUESTED', invoiceRequest: REQUEST })} />);
     expect(container.textContent).toMatch(/huỷ|trả/);
