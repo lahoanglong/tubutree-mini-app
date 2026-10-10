@@ -56,6 +56,7 @@ services:
       PORT: 3001
       DATABASE_URL: postgresql://${POSTGRES_USER:-tubu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tubutree}
       REDIS_URL: redis://redis:6379
+      THROTTLE_BYPASS_TOKEN: ${THROTTLE_BYPASS_TOKEN:-}
     ports:
       - '127.0.0.1:14001:3001' # aaPanel nginx proxy_pass vào đây cho api.tubutree.com
     depends_on:
@@ -89,6 +90,8 @@ services:
       # (node fetch http://localhost:3000/) vì vậy luôn "unhealthy" dù app chạy đúng. Ép 0.0.0.0.
       HOSTNAME: '0.0.0.0'
       API_BASE_URL: http://api:3001/api
+      # Cùng giá trị với api: SSR gửi qua header x-throttle-bypass để không bị 429 theo IP máy chủ web.
+      THROTTLE_BYPASS_TOKEN: ${THROTTLE_BYPASS_TOKEN:-}
     ports:
       - '127.0.0.1:14000:3000' # aaPanel nginx proxy_pass vào đây cho app.tubutree.com
     depends_on:

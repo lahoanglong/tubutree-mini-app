@@ -44,3 +44,19 @@ describe('envSchema — Gomdon', () => {
     expect(r.success).toBe(true);
   });
 });
+
+describe('envSchema — THROTTLE_BYPASS_TOKEN', () => {
+  it('không đặt → rỗng (tắt đường miễn throttle)', () => {
+    const r = envSchema.safeParse(PROD_BASE);
+    expect(r.success && r.data.THROTTLE_BYPASS_TOKEN).toBe('');
+  });
+
+  it('token ngắn dễ đoán → không boot', () => {
+    expect(envSchema.safeParse({ ...PROD_BASE, THROTTLE_BYPASS_TOKEN: 'short' }).success).toBe(false);
+  });
+
+  it('token đủ 32 ký tự → boot', () => {
+    const r = envSchema.safeParse({ ...PROD_BASE, THROTTLE_BYPASS_TOKEN: 't'.repeat(32) });
+    expect(r.success && r.data.THROTTLE_BYPASS_TOKEN).toBe('t'.repeat(32));
+  });
+});

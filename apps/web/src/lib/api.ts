@@ -3,6 +3,46 @@
 const BASE =
   process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api';
 
+/**
+ * Mọi request SSR đi ra từ cùng một IP container web, nên nếu bị đếm như khách thì cả site chia
+ * chung một bộ đếm throttle. API miễn throttle khi header khớp THROTTLE_BYPASS_TOKEN. Chỉ gửi ở
+ * phía server: file này cũng được bundle cho client (formatVnd), và biến không có tiền tố
+ * NEXT_PUBLIC_ nên ở trình duyệt vốn đã rỗng — kiểm `window` để không bao giờ phụ thuộc vào đó.
+ */
+function serverInit(next: { revalidate: number }): RequestInit {
+  const token = typeof window === 'undefined' ? process.env.THROTTLE_BYPASS_TOKEN : undefined;
+  return token ? { next, headers: { 'x-throttle-bypass': token } } : { next };
+}
+
+/** API trả lỗi tạm thời (429/5xx) hoặc không kết nối được — khác hẳn với "không tồn tại". */
+export class ApiUnavailableError extends Error {
+  constructor(
+    readonly path: string,
+    readonly status: number | null,
+    options?: { cause?: unknown },
+  ) {
+    super(`API ${path} không sẵn sàng (${status ?? 'mất kết nối'})`, options);
+    this.name = 'ApiUnavailableError';
+  }
+}
+
+/**
+ * Lấy một tài nguyên cho trang chi tiết. Chỉ 404 mới trả null (trang gọi notFound()); lỗi
+ * khác ném ra để Next hiện error boundary và ISR giữ bản đã render, thay vì báo "không tìm
+ * thấy" cho Googlebot với một sản phẩm còn bán chỉ vì API đang 429/5xx.
+ */
+async function fetchDetail<T>(path: string, revalidate: number): Promise<T | null> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, serverInit({ revalidate }));
+  } catch (err) {
+    throw new ApiUnavailableError(path, null, { cause: err });
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) throw new ApiUnavailableError(path, res.status);
+  return (await res.json()) as T;
+}
+
 export interface ProductCard {
   id: string;
   slug: string;
@@ -48,7 +88,7 @@ interface Page<T> {
 export async function getProducts(params: Record<string, string> = {}): Promise<ProductCard[]> {
   const qs = new URLSearchParams({ limit: '30', ...params }).toString();
   try {
-    const res = await fetch(`${BASE}/products?${qs}`, { next: { revalidate: 300 } });
+    const res = await fetch(`${BASE}/products?${qs}`, serverInit({ revalidate: 300 }));
     if (!res.ok) return [];
     const json = (await res.json()) as Page<ProductCard>;
     return json.data;
@@ -58,18 +98,12 @@ export async function getProducts(params: Record<string, string> = {}): Promise<
 }
 
 export async function getProduct(slug: string): Promise<ProductDetail | null> {
-  try {
-    const res = await fetch(`${BASE}/products/${slug}`, { next: { revalidate: 300 } });
-    if (!res.ok) return null;
-    return (await res.json()) as ProductDetail;
-  } catch {
-    return null;
-  }
+  return fetchDetail<ProductDetail>(`/products/${slug}`, 300);
 }
 
 export async function getBrands(): Promise<{ brand: string; count: number }[]> {
   try {
-    const res = await fetch(`${BASE}/brands`, { next: { revalidate: 600 } });
+    const res = await fetch(`${BASE}/brands`, serverInit({ revalidate: 600 }));
     if (!res.ok) return [];
     return (await res.json()) as { brand: string; count: number }[];
   } catch {
@@ -78,19 +112,13 @@ export async function getBrands(): Promise<{ brand: string; count: number }[]> {
 }
 
 export async function getStorefront(slug: string): Promise<StorefrontDetail | null> {
-  try {
-    const res = await fetch(`${BASE}/storefront/public/${slug}`, { next: { revalidate: 300 } });
-    if (!res.ok) return null;
-    return (await res.json()) as StorefrontDetail;
-  } catch {
-    return null;
-  }
+  return fetchDetail<StorefrontDetail>(`/storefront/public/${slug}`, 300);
 }
 
 /** Danh sách nhẹ gian hàng đã đăng, dùng cho sitemap.ts. Mảng rỗng nếu API chưa chạy. */
 export async function getStorefrontList(): Promise<{ slug: string; updatedAt: string }[]> {
   try {
-    const res = await fetch(`${BASE}/storefront/public-list`, { next: { revalidate: 3600 } });
+    const res = await fetch(`${BASE}/storefront/public-list`, serverInit({ revalidate: 3600 }));
     if (!res.ok) return [];
     return (await res.json()) as { slug: string; updatedAt: string }[];
   } catch {
@@ -194,13 +222,7 @@ export interface BrandDetail {
 }
 
 export async function getBrand(slug: string): Promise<BrandDetail | null> {
-  try {
-    const res = await fetch(`${BASE}/brand/public/${slug}`, { next: { revalidate: 300 } });
-    if (!res.ok) return null;
-    return (await res.json()) as BrandDetail;
-  } catch {
-    return null;
-  }
+  return fetchDetail<BrandDetail>(`/brand/public/${slug}`, 300);
 }
 
 export function formatVnd(n: number): string {
