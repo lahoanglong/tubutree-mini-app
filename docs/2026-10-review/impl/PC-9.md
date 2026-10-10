@@ -87,3 +87,69 @@ cd apps/api && npx tsc --noEmit -p tsconfig.json                     -> exit 0
 - `community.eventRewardLabel` = "Thưởng TubuXu" (màn admin kiểm duyệt, gắn logic xu): để Đợt D gộp TubuXu theo đúng phạm vi C-074.
 - Comment trong `components/community/post-composer.tsx:56` và `schema.prisma` (comment "6 danh mục cố định") còn nhắc tên cũ, không ảnh hưởng chạy.
 - Khi deploy: chạy `prisma migrate deploy` (1 migration, additive) rồi seed để có khoá chấm công mới + danh mục mới. Cả hai idempotent.
+
+---
+
+## C-074 — Thuật ngữ Q-26 + kho mã giảm giá lên đầu /loyalty (XONG)
+
+Commit `8ee545d` (thuật ngữ) và `ab6831a` (bố cục /loyalty).
+
+**Thuật ngữ** (một chữ cho một khái niệm):
+- "Mã ưu đãi" -> "Mã giảm giá": `vi.cart.couponPlaceholder`, `voucher-sheet.tsx` (4 chỗ), `cart.tsx`, `checkout.tsx` (ô chọn mã + dòng tổng "Giảm giá voucher" -> "Mã giảm giá"), `brand-view.tsx`.
+- "voucher" hiển thị cho khách -> "mã giảm giá": `edit-profile.tsx` (quà sinh nhật), `game.tsx` (nút "Dùng mã giảm giá ngay"), nhãn sổ điểm `LOYALTY_REDEEM_VOUCHER` ("Đổi điểm lấy mã giảm giá", `services/account-api.ts`), toàn bộ /loyalty.
+- "Tubu Xu" -> "TubuXu" (một dạng duy nhất): `milestone-copy.ts` ("Đã cộng vào TubuXu"), `affiliate.tsx` (nhãn bảng bậc CTV), kèm comment/JSDoc. Chỉ đổi chữ, không đụng logic xu.
+- Backend, một chuỗi duy nhất: `apps/api/src/modules/affiliate/affiliate.service.ts:1060` thông điệp nhận thưởng mốc ("... TubuXu từ ..."); ngoài nhóm file của gói nhưng miniapp hiển thị nguyên văn `res.message` nên không đổi thì khách vẫn thấy "Tubu Xu". Chỉ một dòng, không có spec nào khẳng định chuỗi cũ.
+- "Ví Tubu", "Điểm Xanh", "giọt nước" đã đúng ở các màn còn lại; /loyalty còn chữ "hạt giống Vườn Xanh" -> "giọt nước".
+
+**Bố cục /loyalty**: khối "Mã giảm giá của tôi" (trước là "Kho voucher", khối thứ 7) nay nằm ngay dưới thẻ hạng, trước điểm danh / các hạng / đổi quà / lịch sử. Thêm trạng thái tải (Skeleton) và trạng thái lỗi kèm nút "Thử lại" (DS Button) thay cho việc lỗi tải mã bị hiển thị như "chưa có voucher". Câu trống: "Chưa có mã giảm giá khả dụng — đổi Điểm Xanh ở mục bên dưới để nhận mã." Tiêu đề khối đổi quà: "Đổi Điểm Xanh nhận mã giảm giá"; snackbar đổi quà: "... đã vào mục Mã giảm giá của tôi."
+
+**Test**
+- `i18n/terminology.spec.ts` (mới, 4 test): quét `apps/miniapp/src` (không tính spec) cấm "mã ưu đãi", "Tubu Xu", các cụm "Kho voucher / Nhận voucher / Chưa có voucher / giá voucher / Dùng voucher / lấy voucher..."; ô nhập mã nói "Nhập mã giảm giá".
+- `pages/loyalty-layout.spec.tsx` (mới, 6 test): thứ tự khối (kho mã sau thẻ hạng, trước điểm danh / các hạng / đổi quà / lịch sử), số mã + nhãn + điều kiện đơn tối thiểu + `HSD dd/MM/yyyy`, câu trống, lỗi + thử lại, không còn chữ "voucher"/"hạt giống" và có "giọt nước".
+- `services/account-api.spec.ts`: đổi kỳ vọng nhãn `LOYALTY_REDEEM_VOUCHER`; ĐỎ trước khi sửa (`1 failed | 30 passed`), XANH sau (`31 passed`).
+- `components/affiliate/milestone-copy.spec.ts`, `utils/format.spec.ts` cập nhật chữ "TubuXu".
+- e2e (chỉ cập nhật chữ, KHÔNG chạy Playwright theo quy định máy): `loyalty.miniapp.spec.ts`, `affiliate-ctv.miniapp.spec.ts`.
+- Hai spec mới `terminology` và `loyalty-layout` được dựng ở lượt trước chưa kịp commit; lượt này chỉ xác nhận XANH, trạng thái ĐỎ ban đầu của chúng không được ghi lại.
+
+**Còn lại (ghi theo yêu cầu, không sửa vì gắn logic xu hoặc ngoài nhóm file)**
+- Chữ "TubuXu" còn ở các nơi gắn logic xu: `wallet.tsx` (đổi Ví -> TubuXu), `checkout.tsx`/`vi.ts` (`paymentXu`, nhãn phương thức XU), `game.tsx:550` ("Mua bằng TubuXu"), `profile.tsx:278`, `community-events.tsx`, `community-moderation.tsx`, `storefront-builder.tsx`, `about-data.ts`, `vi.community.eventRewardLabel`. Tất cả cùng MỘT dạng viết "TubuXu"; khi Đợt D gộp TubuXu vào Điểm Xanh thì đổi hàng loạt, guard `terminology.spec.ts` giữ cho không phát sinh dạng "Tubu Xu".
+- `apps/web/src/app/gio-hang/page.tsx:267` placeholder "Nhập mã ưu đãi" (web, ngoài nhóm file): đổi thành "Nhập mã giảm giá" ở gói web.
+- Mã chủ đề thông báo `VOUCHER*` trong `notifications.tsx` chỉ là khoá kỹ thuật, tiêu đề hiện "Ưu đãi cho bạn" (giữ).
+
+---
+
+## C-083 — Định dạng số nhất quán (XONG)
+
+Commit `7906e46` (helper) và `1d57c3f` (thay chỗ dùng); phần còn lại của /loyalty nằm trong `ab6831a`.
+
+- `apps/miniapp/src/utils/format.ts`: thêm `formatNumber` (dấu phân cách nghìn vi-VN, `NaN/Infinity` -> 0), `formatDrops` (giọt nước), `formatDate`/`formatDateTime` (dd/MM/yyyy cố định, không phụ thuộc ICU của webview); `formatVnd`/`formatPoints`/`formatXu` đi qua `formatNumber` nên không còn in `NaN`.
+- Thay `toLocaleString`/số trần ở `game.tsx` (giọt nước, xu, mục tiêu cộng đồng), `i18n/vi.ts` (hàm thông điệp), `order-detail.tsx`, `loyalty.tsx`, `admin.tsx`, `ai-advisor.tsx`, `group-buy.tsx`, `notifications.tsx`, `profile.tsx`, `storefront-builder.tsx`, `account-api.ts`.
+- Test: `utils/format.spec.ts` (28 test), `pages/game-numbers.spec.tsx` ("1.250.000" / "65.000 xu", không số trần), `pages/format-guard.spec.ts` (mới: pages + i18n không được gọi `.toLocaleString(`; /loyalty, /game, /order-detail, /not-found không gọi `toLocale(Date|Time)String`). Kiểm chứng bằng grep: `grep -rn toLocaleString src/pages src/i18n` (không spec) -> 0 dòng.
+- Ngoại lệ còn lại: `utils/checkout-rules.ts:49` (`groupThousands`, ngoài `pages/`, cùng dáng vi-VN) và bản thân `format.ts`.
+
+## C-115 — Màn đơn trống nói đúng mã chào mừng (XONG)
+
+Commit `d811364`. `vi.orders.emptyBody`: "Mua đơn đầu — nhận 30k voucher" -> "Đơn đầu từ 199.000đ dùng được mã giảm giá chào mừng 30.000đ" (đúng với voucher chào mừng 30k, đơn tối thiểu 199k: mã cấp trước đơn đầu, không phải sau khi mua). Test `i18n/orders-empty-copy.spec.ts` (2 test). `grep -n 'Mua đơn đầu' src/i18n/vi.ts` -> không còn.
+
+## C-120 — Lịch sử vận chuyển bằng tiếng Việt (XONG)
+
+Commit `abca3a4`. `utils/format-shipping.ts` `shippingEventLabel`: rỗng -> `null` (trang hiện "—"); mã hãng đã biết (`delivering`, `ready_to_pick`...) -> nhãn tiếng Việt trong `vi.shippingEvent.labels`; chuỗi đã có dấu tiếng Việt (Gomdon/BestExpress) giữ nguyên; mã lạ -> "Đang cập nhật" (không in mã gốc). `order-detail.tsx` dùng cho `shippingStatus` và từng mốc `events`. Test `utils/format-shipping.spec.ts` (mới) + `pages/order-detail.spec.tsx` (đơn `status: 'delivering'` hiện nhãn tiếng Việt).
+
+## C-119 — Trang 404 không bị tiêu đề đè lên hình (XONG)
+
+Commit `820ac0d`. Nguyên nhân: emoji 72px đặt trong `Text` của ZaUI (line-height cố định ~20px) tràn xuống dòng tiêu đề. `pages/not-found.tsx` nay dùng `EmptyState art="search"` (SVG 120x96 có chiều cao cố định, tiêu đề + lời giải thích + nút DS v2 "Về trang chủ" `navigate('/', { replace: true })`), căn giữa trong khối cao 80vh. Test `pages/not-found.spec.tsx` (mới, 2 test): ĐỎ trước (`1 failed | 1 passed`: chưa có SVG, còn chữ cỡ lớn), XANH sau (`2 passed`). Chưa chụp lại `not-found__normal__390.png` (không chạy Playwright theo quy định máy) — nên chụp lại ở lượt UAT.
+
+## Kiểm chứng của mục 2/2 (lượt này)
+
+```
+cd apps/miniapp && npx vitest run <16 file: format, format-shipping, game-numbers, order-detail, i18n/*, format-guard,
+  loyalty-layout, not-found, account-api, components/affiliate/*, profile, profile-hub>   -> Test Files 16 passed, Tests 120 passed
+cd apps/miniapp && npx tsc --noEmit                                  -> exit 0
+cd apps/miniapp && npx eslint <file đã sửa>                          -> 0 lỗi mới
+  (loyalty/game/edit-profile/affiliate: 13 lỗi trước và sau, `Button` từ zmp-ui + rgba thô CÓ SẴN, đo bằng cách lint bản HEAD; not-found.tsx và các spec mới sạch)
+cd apps/api && npx jest --maxWorkers=1 src/modules/affiliate/affiliate.service  -> Tests: 91 passed, 91 total
+```
+
+**Giả định**
+- "TubuXu" là dạng viết duy nhất cho tiền tệ xu cho tới Đợt D (catalog: "còn đúng một dạng"); không đổi sang "Điểm Xanh" vì xu và Điểm Xanh là hai số dư khác nhau về logic (xu tiêu trong app, Điểm Xanh xét hạng).
+- Mã chào mừng 30.000đ / đơn từ 199.000đ lấy theo đặc tả gói; con số nằm trong chuỗi i18n, nếu cấu hình voucher chào mừng ở backend đổi thì chuỗi phải đổi theo.
