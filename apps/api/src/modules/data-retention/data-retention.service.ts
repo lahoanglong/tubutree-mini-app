@@ -89,15 +89,20 @@ export class DataRetentionService {
     const batchSize = opts.batchSize ?? BATCH_SIZE;
     const pauseMs = opts.pauseMs ?? BATCH_PAUSE_MS;
     const deadline = Date.now() + (opts.maxRunMs ?? MAX_RUN_MS);
+    const targets = Object.keys(RETENTION_POLICY) as RetentionTargetKey[];
     const deleted: Record<string, number> = {};
     let truncated = false;
 
-    for (const target of Object.keys(RETENTION_POLICY) as RetentionTargetKey[]) {
+    for (const [i, target] of targets.entries()) {
+      // Mỗi bảng chỉ được dùng phần ngân sách còn lại chia đều cho các bảng chưa chạy: bảng tồn đọng lớn
+      // (lần dọn đầu của analytics_events) không nuốt hết thời gian để các bảng sau chỉ xoá được một lô.
+      const now0 = Date.now();
+      const targetDeadline = Math.min(deadline, now0 + Math.max(0, deadline - now0) / (targets.length - i));
       try {
         const days = await this.days(target);
         const cutoff = new Date(now.getTime() - days * 86_400_000);
         for (const c of this.cleanups(target, cutoff)) {
-          const res = await this.deleteInBatches(c, batchSize, pauseMs, deadline);
+          const res = await this.deleteInBatches(c, batchSize, pauseMs, targetDeadline);
           deleted[c.table] = (deleted[c.table] ?? 0) + res.count;
           if (res.truncated) truncated = true;
         }

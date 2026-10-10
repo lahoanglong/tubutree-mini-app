@@ -124,6 +124,20 @@ describe('DataRetentionService (C-046)', () => {
     expect(prisma.$executeRaw.mock.calls.length).toBeLessThan(8);
   });
 
+  it('bảng tồn đọng vô hạn không nuốt hết ngân sách thời gian của các bảng sau', async () => {
+    const { svc, prisma } = make();
+    const perTable: Record<string, number> = {};
+    prisma.$executeRaw.mockImplementation((async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const table = (values[0] as { strings?: string[] })?.strings?.[0] ?? '';
+      perTable[table] = (perTable[table] ?? 0) + 1;
+      if (table !== '"analytics_events"' && table !== '"refresh_tokens"') return 0;
+      await new Promise((r) => setTimeout(r, 5));
+      return 3;
+    }) as never);
+    await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0, maxRunMs: 400 });
+    expect(perTable['"refresh_tokens"']).toBeGreaterThan(3);
+  });
+
   it('một bảng lỗi không chặn các bảng sau', async () => {
     const { svc, prisma } = make();
     prisma.$executeRaw.mockRejectedValueOnce(new Error('boom'));
