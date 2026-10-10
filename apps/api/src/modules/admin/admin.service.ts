@@ -425,12 +425,7 @@ export class AdminService {
     };
   }
 
-  /**
-   * Danh sách đơn cho admin. `include` (không `select`) nên trả ĐỦ cột vô hướng của Order — gồm
-   * hasRecyclingPickup/recyclingNote/gomdonStatus/gomdonPartnerCode/gomdonCancelStatus/deliveredAt mà
-   * web admin cần để hiện thu gom. `recycling='attention'` = hàng đợi "Cần xử lý thu gom"
-   * (xem admin-order-filter.ts).
-   */
+  /** undefined = giữ lọc theo quan hệ `user` (chuỗi quá ngắn cho trigram, hoặc khớp quá nhiều khách). */
   private async findSearchUserIds(search?: string): Promise<string[] | undefined> {
     const s = search?.trim();
     if (!s || s.length < ADMIN_SEARCH_MIN_TRGM_LENGTH) return undefined;
@@ -442,6 +437,12 @@ export class AdminService {
     return rows.length > ADMIN_SEARCH_USER_CAP ? undefined : rows.map((r) => r.id);
   }
 
+  /**
+   * Danh sách đơn cho admin. `include` (không `select`) nên trả ĐỦ cột vô hướng của Order — gồm
+   * hasRecyclingPickup/recyclingNote/gomdonStatus/gomdonPartnerCode/gomdonCancelStatus/deliveredAt mà
+   * web admin cần để hiện thu gom. `recycling='attention'` = hàng đợi "Cần xử lý thu gom"
+   * (xem admin-order-filter.ts).
+   */
   async listOrders(page: number, limit: number, status?: string, search?: string, recycling?: RecyclingFilter) {
     const searchUserIds = await this.findSearchUserIds(search);
     const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling, searchUserIds });
