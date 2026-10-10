@@ -63,6 +63,29 @@ export default function CartPage() {
 
   return (
     <Shell>
+      {cart && (cart.unavailableItems?.length ?? 0) > 0 && (
+        <div role="status" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900">
+          <p className="font-semibold">{cart.unavailableItems!.length} sản phẩm đã ngừng bán</p>
+          <p className="mt-0.5 text-amber-800">Không thể đặt các sản phẩm này nên đã được tách khỏi đơn của bạn.</p>
+          <ul className="mt-2 space-y-1.5">
+            {cart.unavailableItems!.map((it) => (
+              <li key={it.id} className="flex items-center justify-between gap-2">
+                <span className="line-through">
+                  {it.productName}
+                  {it.variationName ? ` · ${it.variationName}` : ''} × {it.quantity}
+                </span>
+                <button
+                  onClick={() => remove.mutate(it.id)}
+                  disabled={remove.isPending && remove.variables === it.id}
+                  className="shrink-0 rounded-full px-3 py-1 font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                >
+                  Xoá
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {cartQ.isLoading ? (
         <p className="py-10 text-center text-neutral-400">Đang tải giỏ hàng…</p>
       ) : cartQ.isError ? (

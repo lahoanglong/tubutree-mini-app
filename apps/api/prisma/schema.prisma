@@ -2195,7 +2195,8 @@ model Subscription {
   quantity      Int       @default(1)
   intervalWeeks Int // 4 / 6 / 8 / 10
   addressId     String
-  address       Address   @relation(fields: [addressId], references: [id], onDelete: Cascade)
+  // RESTRICT (C-014): xoá địa chỉ không được kéo theo xoá cứng gói định kỳ; users.deleteAddress báo lỗi rõ.
+  address       Address   @relation(fields: [addressId], references: [id], onDelete: Restrict)
   status        String    @default("ACTIVE") // ACTIVE | PAUSED | CANCELLED
   nextRunAt     DateTime
   lastOrderId   String?
@@ -2204,6 +2205,8 @@ model Subscription {
 
   @@index([status, nextRunAt])
   @@index([userId])
+  // Partial unique (userId, variationId, addressId) WHERE status IN ('ACTIVE','PAUSED') chỉ có trong
+  // migration 20261010030000_subscription_open_unique (C-057): Prisma không biểu diễn được, đừng `db push`.
   @@map("subscriptions")
 }
 

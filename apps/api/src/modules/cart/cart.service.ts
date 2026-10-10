@@ -5,6 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { AddItemDto } from './dto/cart.dto';
+import { isSellableVariation } from './sellable';
 
 @Injectable()
 export class CartService {
@@ -32,12 +33,28 @@ export class CartService {
       include: { items: { include: { variation: { include: { product: true } } } } },
     });
 
+    // Q-14: dòng SP đã ngừng bán/chưa duyệt vẫn giữ trong DB (SP mở bán lại thì tự hiện lại) nhưng
+    // không được tính tiền hay đặt — tách riêng để FE báo "đã ngừng bán" và cho khách xoá.
+    const sellable = cart.items.filter((it) => isSellableVariation(it.variation));
+    const unavailableItems = cart.items
+      .filter((it) => !isSellableVariation(it.variation))
+      .map((it) => ({
+        id: it.id,
+        variationId: it.variationId,
+        productId: it.variation.productId,
+        productName: it.variation.product.name,
+        variationName: it.variation.name,
+        slug: it.variation.product.slug,
+        thumbnail: it.variation.product.thumbnail,
+        quantity: it.quantity,
+      }));
+
     const now = new Date();
     const flashMap = await this.flashSale.resolveEffective(
-      cart.items.map((it) => it.variationId),
+      sellable.map((it) => it.variationId),
       now,
     );
-    const lines = cart.items.map((it) => {
+    const lines = sellable.map((it) => {
       const flash = flashMap.get(it.variationId);
       const standing = it.variation.salePrice ?? it.variation.retailPrice;
       const unitPrice = flash ? Math.min(flash.flashPrice, standing) : standing;
@@ -107,6 +124,7 @@ export class CartService {
       freeship,
       freeshipThreshold,
       itemCount: lines.reduce((s, l) => s + l.quantity, 0),
+      unavailableItems,
     };
   }
 
@@ -114,13 +132,13 @@ export class CartService {
     const cartId = await this.ensureCart(userId);
     const variation = await this.prisma.variation.findUnique({
       where: { id: dto.variationId },
-      include: { product: { select: { approvalStatus: true } } },
+      include: { product: { select: { isActive: true, approvalStatus: true } } },
     });
     // P0 A2-03=A5-06=A6-04 (phần còn sót ngoài catalog, xem CatalogService): SP đối tác chưa
     // duyệt/bị từ chối không còn tìm thấy qua catalog/search/related/for-you, nhưng ai đã có sẵn
     // variationId (link cũ lưu trước khi bị từ chối, đơn "lên đơn hộ"...) vẫn thêm được vào giỏ
     // nếu chỉ kiểm isActive — phải kiểm cả approvalStatus của Product cha.
-    if (!variation || !variation.isActive || variation.product.approvalStatus !== 'APPROVED') {
+    if (!variation || !isSellableVariation(variation)) {
       throw new NotFoundException('Sản phẩm không khả dụng.');
     }
 

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { randomInt } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
@@ -9,6 +9,12 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { reserveVariationStock } from '../catalog/variation-stock';
+import {
+  assertVariationsSellable,
+  isProductDiscontinuedError,
+  isSellableVariation,
+  productDiscontinuedError,
+} from '../cart/sellable';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 interface CreateSubInput {
@@ -24,6 +30,30 @@ interface CreateSubInput {
  * lịch như nhánh isActive=false/địa chỉ hỏng, chỉ báo rồi để cron thử lại chu kỳ sau.
  */
 class SubscriptionOutOfStockError extends Error {}
+
+/** Mã lỗi ổn định cho FE: đã có gói còn chạy cùng SP + địa chỉ (C-057, Q-13). */
+export const SUBSCRIPTION_DUPLICATE = 'SUBSCRIPTION_DUPLICATE';
+
+/** Trạng thái nằm trong partial unique index subscriptions_user_variation_address_open_key. */
+const OPEN_STATUSES = ['ACTIVE', 'PAUSED'];
+
+function subscriptionDuplicateError(open: { id: string; status: string }, productName: string): ConflictException {
+  const message =
+    open.status === 'PAUSED'
+      ? `Bạn đã có gói giao định kỳ "${productName}" tới địa chỉ này đang tạm dừng, hãy bật lại gói đó thay vì tạo gói mới.`
+      : `Bạn đã có gói giao định kỳ "${productName}" tới địa chỉ này, hãy sửa gói đó hoặc chọn địa chỉ khác.`;
+  return new ConflictException({
+    statusCode: 409,
+    error: 'Conflict',
+    code: SUBSCRIPTION_DUPLICATE,
+    message,
+    subscriptionId: open.id,
+  });
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === 'P2002';
+}
 
 /**
  * Subscribe & Save (Build Spec §6.14.4): đặt định kỳ 4/6/8/10 tuần.
@@ -50,35 +80,86 @@ export class SubscriptionsService {
     if (![4, 6, 8, 10].includes(dto.intervalWeeks)) {
       throw new BadRequestException('Chu kỳ chỉ nhận 4/6/8/10 tuần.');
     }
-    const variation = await this.prisma.variation.findUnique({ where: { id: dto.variationId } });
-    if (!variation || !variation.isActive) throw new BadRequestException('Sản phẩm không khả dụng.');
+    const variation = await this.prisma.variation.findUnique({
+      where: { id: dto.variationId },
+      include: { product: { select: { name: true, isActive: true, approvalStatus: true } } },
+    });
+    if (!variation) throw new BadRequestException('Sản phẩm không khả dụng.');
+    if (!isSellableVariation(variation)) throw productDiscontinuedError(variation.product.name);
     const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
     if (!address || address.userId !== userId) throw new BadRequestException('Địa chỉ không hợp lệ.');
 
-    return this.prisma.$transaction(async (tx) => {
-      const sub = await tx.subscription.create({
+    const quantity = Math.max(1, dto.quantity);
+    const key = { userId, variationId: dto.variationId, addressId: dto.addressId };
+    const asRequested = { quantity, intervalWeeks: dto.intervalWeeks };
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const open = await tx.subscription.findFirst({ where: { ...key, status: { in: OPEN_STATUSES } } });
+        if (open) return this.resolveDuplicate(open, asRequested, variation.product.name);
+        return this.insertSubscription(tx, userId, dto, quantity);
+      });
+    } catch (err) {
+      // Request song song cùng lọt qua bước đọc ở trên: partial unique index chặn kẻ đến sau (P2002).
+      if (!isUniqueViolation(err)) throw err;
+      const open = await this.prisma.subscription.findFirst({ where: { ...key, status: { in: OPEN_STATUSES } } });
+      if (!open) throw err;
+      return this.resolveDuplicate(open, asRequested, variation.product.name);
+    }
+  }
+
+  /**
+   * Đã có gói còn chạy cho cùng SP + địa chỉ (Q-13). Bấm đúp/retry gửi lại y hệt → trả lại gói đó
+   * (idempotent, FE không phải xử lý gì). Khác số lượng/chu kỳ hoặc gói đang tạm dừng → 409 để khách
+   * sửa/bật lại gói cũ thay vì âm thầm có 2 lịch giao cùng chỗ.
+   */
+  private resolveDuplicate(
+    open: { id: string; status: string; quantity: number; intervalWeeks: number },
+    req: { quantity: number; intervalWeeks: number },
+    productName: string,
+  ) {
+    if (open.status === 'ACTIVE' && open.quantity === req.quantity && open.intervalWeeks === req.intervalWeeks) {
+      return open;
+    }
+    throw subscriptionDuplicateError(open, productName);
+  }
+
+  private async insertSubscription(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    dto: CreateSubInput,
+    quantity: number,
+  ) {
+    const sub = await tx.subscription
+      .create({
         data: {
           userId,
           variationId: dto.variationId,
-          quantity: Math.max(1, dto.quantity),
+          quantity,
           intervalWeeks: dto.intervalWeeks,
           addressId: dto.addressId,
           nextRunAt: this.addWeeks(new Date(), dto.intervalWeeks),
         },
+      })
+      .catch((err: unknown) => {
+        // Địa chỉ bị xoá giữa lúc kiểm ở trên và lúc ghi gói: FK RESTRICT (C-014) báo P2003.
+        const e = err as { code?: string; meta?: { field_name?: string } };
+        if (e?.code === 'P2003' && String(e.meta?.field_name ?? '').includes('addressId')) {
+          throw new BadRequestException('Địa chỉ không hợp lệ.');
+        }
+        throw err;
       });
-      await this.analytics.record(tx, {
-        eventName: 'subscription_changed',
-        userId,
-        platform: 'miniapp',
-        props: {
-          subscriptionId: sub.id,
-          action: 'created',
-          variationId: dto.variationId,
-          intervalWeeks: dto.intervalWeeks,
-        },
-      });
-      return sub;
+    await this.analytics.record(tx, {
+      eventName: 'subscription_changed',
+      userId,
+      platform: 'miniapp',
+      props: {
+        subscriptionId: sub.id,
+        action: 'created',
+        variationId: dto.variationId,
+        intervalWeeks: dto.intervalWeeks,
+      },
     });
+    return sub;
   }
 
   async list(userId: string) {
@@ -137,19 +218,39 @@ export class SubscriptionsService {
       status === 'ACTIVE' && sub.nextRunAt < new Date()
         ? this.addWeeks(new Date(), sub.intervalWeeks)
         : sub.nextRunAt;
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.subscription.update({ where: { id }, data: { status, nextRunAt } });
-      await this.analytics.record(tx, {
-        eventName: 'subscription_changed',
-        userId,
-        platform: 'miniapp',
-        props: {
-          subscriptionId: id,
-          action: status === 'ACTIVE' ? 'resumed' : status === 'PAUSED' ? 'paused' : 'cancelled',
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.subscription.update({ where: { id }, data: { status, nextRunAt } });
+        await this.analytics.record(tx, {
+          eventName: 'subscription_changed',
+          userId,
+          platform: 'miniapp',
+          props: {
+            subscriptionId: id,
+            action: status === 'ACTIVE' ? 'resumed' : status === 'PAUSED' ? 'paused' : 'cancelled',
+          },
+        });
+        return updated;
+      });
+    } catch (err) {
+      // Bật lại gói đã huỷ trong khi khách đã tạo gói mới cùng SP + địa chỉ: partial unique chặn (P2002).
+      if (!isUniqueViolation(err)) throw err;
+      const open = await this.prisma.subscription.findFirst({
+        where: {
+          userId: sub.userId,
+          variationId: sub.variationId,
+          addressId: sub.addressId,
+          status: { in: OPEN_STATUSES },
+          id: { not: id },
         },
       });
-      return updated;
-    });
+      if (!open) throw err;
+      const variation = await this.prisma.variation.findUnique({
+        where: { id: sub.variationId },
+        select: { product: { select: { name: true } } },
+      });
+      throw subscriptionDuplicateError(open, variation?.product.name ?? 'Sản phẩm');
+    }
   }
 
   /**
@@ -211,18 +312,10 @@ export class SubscriptionsService {
   }): Promise<void> {
     const variation = await this.prisma.variation.findUnique({
       where: { id: sub.variationId },
-      include: { product: { select: { name: true, slug: true } } },
+      include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true } } },
     });
-    if (!variation || !variation.isActive) {
-      // SP ngừng bán → tạm dừng lịch + báo user.
-      await this.prisma.subscription.update({ where: { id: sub.id }, data: { status: 'PAUSED' } });
-      await this.notifications.notify(sub.userId, 'SUBSCRIPTION_PAUSED', {}).catch(() => undefined);
-      await this.analytics.recordBestEffort({
-        eventName: 'subscription_changed',
-        userId: sub.userId,
-        platform: 'system',
-        props: { subscriptionId: sub.id, action: 'order_failed', reason: 'inactive_product' },
-      });
+    if (!variation || !isSellableVariation(variation)) {
+      await this.pauseForDiscontinued(sub);
       return;
     }
     const addr = await this.prisma.address.findUnique({ where: { id: sub.addressId } });
@@ -270,6 +363,8 @@ export class SubscriptionsService {
     let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
     try {
       order = await this.prisma.$transaction(async (tx) => {
+        // SP có thể bị gỡ giữa lúc tính giá kỳ này và lúc ghi đơn — kiểm lại trong tx.
+        await assertVariationsSellable(tx, [{ variationId: variation.id, productName: variation.product.name }]);
         const stockHit = await reserveVariationStock(tx, variation.id, sub.quantity);
         if (!stockHit) {
           throw new SubscriptionOutOfStockError(
@@ -324,6 +419,10 @@ export class SubscriptionsService {
         return created;
       });
     } catch (err) {
+      if (isProductDiscontinuedError(err)) {
+        await this.pauseForDiscontinued(sub);
+        return;
+      }
       if (err instanceof SubscriptionOutOfStockError) {
         // Khác nhánh isActive/địa chỉ ở trên (pause hẳn): hết hàng báo cho khách biết kỳ này
         // không có đơn, KHÔNG pause lịch — cron sẽ tự thử lại ở chu kỳ kế (nextRunAt đã advance).
@@ -351,6 +450,20 @@ export class SubscriptionsService {
         this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`),
       );
     await this.notifications.notify(sub.userId, 'SUBSCRIPTION_ORDER', { order_code: code }).catch(() => undefined);
+  }
+
+  /** SP ngừng bán/chưa duyệt (Q-14): không sinh đơn, tạm dừng lịch + báo khách. */
+  private async pauseForDiscontinued(sub: { id: string; userId: string }): Promise<void> {
+    await this.prisma.subscription.update({ where: { id: sub.id }, data: { status: 'PAUSED' } });
+    await this.notifications
+      .notify(sub.userId, 'SUBSCRIPTION_PAUSED', { reason: 'Sản phẩm đã ngừng bán' })
+      .catch(() => undefined);
+    await this.analytics.recordBestEffort({
+      eventName: 'subscription_changed',
+      userId: sub.userId,
+      platform: 'system',
+      props: { subscriptionId: sub.id, action: 'order_failed', reason: 'inactive_product' },
+    });
   }
 
   private addWeeks(from: Date, weeks: number): Date {

@@ -8,6 +8,7 @@ import { PricingService } from '../pricing/pricing.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { reserveVariationStock } from '../catalog/variation-stock';
+import { assertVariationsSellable, isSellableVariation, productDiscontinuedError } from '../cart/sellable';
 import { CoinsService } from '../wallet/coins.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { paginated, skipTake } from '../../common/pagination';
@@ -279,16 +280,16 @@ export class AffiliateService {
     const variationIds = [...new Set(dto.items.map((i) => i.variationId))];
     const variations = await this.prisma.variation.findMany({
       where: { id: { in: variationIds } },
-      include: { product: { select: { name: true, slug: true } } },
+      include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true } } },
     });
     const vmap = new Map(variations.map((v) => [v.id, v]));
 
-    // Dựng line + validate (variation tồn tại + đang bán). unitPrice = salePrice ?? retailPrice.
+    // Dựng line + validate (variation tồn tại + đang bán + SP cha đang bán và đã duyệt).
+    // unitPrice = salePrice ?? retailPrice.
     const lines = dto.items.map((i) => {
       const v = vmap.get(i.variationId);
-      if (!v || !v.isActive) {
-        throw new BadRequestException('Sản phẩm không còn khả dụng.');
-      }
+      if (!v) throw new BadRequestException('Sản phẩm không còn khả dụng.');
+      if (!isSellableVariation(v)) throw productDiscontinuedError(v.product.name);
       const unitPrice = v.salePrice ?? v.retailPrice;
       return {
         variationId: v.id,
@@ -319,6 +320,8 @@ export class AffiliateService {
     let order: { id: string };
     try {
       order = await this.prisma.$transaction(async (tx) => {
+        // SP có thể bị gỡ giữa lúc dựng giá và lúc ghi đơn — kiểm lại trong tx.
+        await assertVariationsSellable(tx, lines);
         // Giữ chỗ tồn kho ATOMIC từng line — chống oversell; 0 dòng bị sửa → throw rollback.
         for (const line of lines) {
           const hit = await reserveVariationStock(tx, line.variationId, line.quantity);

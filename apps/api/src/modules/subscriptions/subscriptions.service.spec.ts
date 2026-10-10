@@ -23,12 +23,12 @@ function makeAnalytics() {
   } as unknown as AnalyticsEventsService;
 }
 
-function makeService(opts: { variation?: unknown; address?: unknown; create?: jest.Mock } = {}) {
+function makeService(opts: { variation?: unknown; address?: unknown; create?: jest.Mock; open?: unknown } = {}) {
   const create = opts.create ?? jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data }));
   const prisma = {
-    variation: { findUnique: jest.fn().mockResolvedValue(opts.variation ?? { id: 'v1', isActive: true }) },
+    variation: { findUnique: jest.fn().mockResolvedValue('variation' in opts ? opts.variation : { id: 'v1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }) },
     address: { findUnique: jest.fn().mockResolvedValue(opts.address ?? { id: 'a1', userId: 'u1' }) },
-    subscription: { create },
+    subscription: { create, findFirst: jest.fn().mockResolvedValue(opts.open ?? null) },
     // create() giờ chạy trong $transaction (subscription.create + event atomic) — mock chạy
     // callback với chính prisma mock (đủ subscription.create cho test).
     $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
@@ -57,9 +57,22 @@ describe('SubscriptionsService.create', () => {
     await expect(svc.create('u1', dto({ intervalWeeks: 5 }))).rejects.toThrow('4/6/8/10');
   });
 
-  it('từ chối sản phẩm ngừng bán', async () => {
-    const { svc } = makeService({ variation: { id: 'v1', isActive: false } });
+  it('từ chối sản phẩm không tồn tại', async () => {
+    const { svc } = makeService({ variation: null });
     await expect(svc.create('u1', dto())).rejects.toThrow('không khả dụng');
+  });
+
+  it('từ chối SP ngừng bán / SP cha ngừng bán / chưa duyệt / bị từ chối → PRODUCT_DISCONTINUED (C-007)', async () => {
+    for (const variation of [
+      { id: 'v1', isActive: false, product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } },
+      { id: 'v1', isActive: true, product: { name: 'P', isActive: false, approvalStatus: 'APPROVED' } },
+      { id: 'v1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'PENDING_REVIEW' } },
+      { id: 'v1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'REJECTED' } },
+    ]) {
+      const { svc, create } = makeService({ variation });
+      await expect(svc.create('u1', dto())).rejects.toMatchObject({ response: { code: 'PRODUCT_DISCONTINUED' } });
+      expect(create).not.toHaveBeenCalled();
+    }
   });
 
   it('từ chối địa chỉ của người khác', async () => {
@@ -97,6 +110,22 @@ describe('SubscriptionsService.create', () => {
       }),
     );
   });
+
+  it('gửi lại y hệt khi đã có gói ACTIVE cùng SP + địa chỉ → trả gói cũ, không tạo (C-057)', async () => {
+    const open = { id: 's0', status: 'ACTIVE', quantity: 2, intervalWeeks: 6 };
+    const { svc, create } = makeService({ open });
+    await expect(svc.create('u1', dto({ intervalWeeks: 6 }))).resolves.toBe(open);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('đã có gói cùng SP + địa chỉ nhưng khác chu kỳ → 409 SUBSCRIPTION_DUPLICATE (C-057)', async () => {
+    const { svc, create } = makeService({ open: { id: 's0', status: 'ACTIVE', quantity: 2, intervalWeeks: 4 } });
+    await expect(svc.create('u1', dto({ intervalWeeks: 6 }))).rejects.toMatchObject({
+      status: 409,
+      response: { code: 'SUBSCRIPTION_DUPLICATE', subscriptionId: 's0' },
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
 });
 
 describe('SubscriptionsService.processDue (claim chống double-order)', () => {
@@ -108,6 +137,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       tiers?: Tier[];
       stockCount?: number;
       variationInactive?: boolean;
+      discontinuedInTx?: boolean;
       addressInvalid?: boolean;
     } = {},
   ) {
@@ -127,9 +157,11 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       variation: {
         findUnique: jest.fn().mockResolvedValue(
           opts.variationInactive
-            ? { id: 'v1', isActive: false, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P' } }
-            : { id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P' } },
+            ? { id: 'v1', isActive: false, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }
+            : { id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } },
         ),
+        // Kiểm lại SP còn bán trong tx (cart/sellable.ts).
+        findMany: jest.fn().mockResolvedValue(opts.discontinuedInTx ? [] : [{ id: 'v1' }]),
       },
       $executeRaw: stockExecuteRaw,
       address: {
@@ -263,6 +295,15 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         props: expect.objectContaining({ subscriptionId: 's1', action: 'order_failed', reason: 'inactive_product' }),
       }),
     );
+  });
+
+  it('SP bị gỡ sau khi tính giá kỳ (kiểm lại trong tx) → không giữ kho, không đơn, tạm dừng lịch + báo khách (C-007)', async () => {
+    const { svc, subUpdate, orderCreate, stockExecuteRaw, notify } = makeProcess(1, { discontinuedInTx: true });
+    await svc.processDue();
+    expect(stockExecuteRaw).not.toHaveBeenCalled();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(subUpdate).toHaveBeenCalledWith({ where: { id: 's1' }, data: { status: 'PAUSED' } });
+    expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', expect.anything());
   });
 
   it('địa chỉ không hợp lệ → tạm dừng lịch + phát subscription_changed action=order_failed reason=invalid_address', async () => {
