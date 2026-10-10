@@ -7,6 +7,7 @@ import { shareLink } from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
+import { WEB_BASE_URL } from '../utils/web-base-url';
 
 type ShareParams = Parameters<typeof shareLink>[0];
 
@@ -62,13 +63,12 @@ export function ShareSheet({
 }) {
   const { openSnackbar } = useSnackbar();
   const shareWithFallback = useShareWithFallback();
-  const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://app.tubutree.com';
   const path = `/${pathPrefix}/${slug}`;
   // Mã giới thiệu PHẢI đi kèm ở CẢ 2 lối chia sẻ. Trước đây chỉ `url` (nút Sao chép link) có
   // `?ref=`, còn nút "Chia sẻ qua Zalo" gửi `path` trần → khách mở từ Zalo mua hàng thì CTV
   // KHÔNG được tính hoa hồng, mà không có dấu hiệu nào cho thấy điều đó.
   const sharePath = referralCode ? `${path}?ref=${referralCode}` : path;
-  const url = `${base}${sharePath}`;
+  const url = `${WEB_BASE_URL}${sharePath}`;
   const captions = (
     captionsProp ?? [
       `Mình tuyển vài món sống xanh đang dùng, ghé xem nha 🌿 ${url}`,

@@ -9,6 +9,7 @@ import { vi } from '../i18n/vi';
 import { Skeleton } from './ui/skeleton';
 import { ErrorState } from './ui/empty-state';
 import { copyText } from '../utils/clipboard';
+import { WEB_BASE_URL } from '../utils/web-base-url';
 
 /**
  * `app.miniapp_base_url` chưa cấu hình thì API trả đường dẫn tương đối ('/product/..?ref=..'): dán
@@ -16,8 +17,7 @@ import { copyText } from '../utils/clipboard';
  */
 function absoluteLink(link: string): string {
   if (!link.startsWith('/')) return link;
-  const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://app.tubutree.com';
-  return `${base}${link}`;
+  return `${WEB_BASE_URL}${link}`;
 }
 
 /** Bài mẫu do admin soạn tay có thể thiếu {link}: chép thiếu mã giới thiệu thì CTV mất hoa hồng. */
