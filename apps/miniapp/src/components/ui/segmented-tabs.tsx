@@ -42,6 +42,7 @@ export function SegmentedTabs({ items, value, onChange, scroll }: SegmentedTabsP
             style={{
               flex: scroll ? undefined : 1,
               minHeight: 44,
+              minWidth: 44,
               border: 'none',
               borderRadius: 'var(--radius-control)',
               background: active ? 'var(--color-bg-surface)' : 'transparent',
