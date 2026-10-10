@@ -1,5 +1,6 @@
 import { OrdersController } from './orders.controller';
 import type { OrdersService } from './orders.service';
+import { ReturnRequestDto } from './dto/return-request.dto';
 
 describe('OrdersController', () => {
   it('khai báo GET active-count TRƯỚC GET :code — Express khớp theo thứ tự khai báo, nếu sau thì "active-count" bị hiểu là mã đơn → 404', () => {
@@ -35,5 +36,10 @@ describe('OrdersController', () => {
     expect(repurchase).toHaveBeenLastCalledWith('u1', 'A', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' });
     await ctrl.repurchase('u1', 'A', undefined as never);
     expect(repurchase).toHaveBeenLastCalledWith('u1', 'A', { items: undefined, addSource: undefined });
+  });
+
+  it('POST :code/return-request validate body bằng ReturnRequestDto (ảnh minh chứng chỉ https Cloudinary / base64 raster — C-050)', () => {
+    const types = Reflect.getMetadata('design:paramtypes', OrdersController.prototype, 'requestReturn') as unknown[];
+    expect(types[2]).toBe(ReturnRequestDto);
   });
 });
