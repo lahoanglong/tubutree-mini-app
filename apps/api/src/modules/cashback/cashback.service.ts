@@ -4,7 +4,6 @@ import { CashbackStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { CoinsService } from '../wallet/coins.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CashbackProviderRegistry } from './providers/cashback-provider.registry';
 import type { NormalizedCashbackEvent } from './providers/cashback-provider.interface';
@@ -24,7 +23,6 @@ export class CashbackService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
-    private readonly coins: CoinsService,
     private readonly notifications: NotificationsService,
     private readonly registry: CashbackProviderRegistry,
   ) {}
@@ -96,14 +94,13 @@ export class CashbackService {
       where: { provider, merchantOrderId: event.merchantOrderId },
     });
 
-    let result: { becameConfirmed: boolean; confirmedUserId: string | null };
     if (existing) {
-      result = await this.applyToExisting(existing, event, status, userReward);
+      await this.applyToExisting(existing, event, status, userReward);
     } else {
       // Atomic create + cộng pending. @@unique([provider, merchantOrderId]) → sự kiện thứ 2 song
       // song ném P2002.
       try {
-        result = await this.createTransaction(click, provider, event, status, userReward);
+        await this.createTransaction(click, provider, event, status, userReward);
       } catch (err) {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
           // Kẻ thua race: KHÔNG bỏ qua sự kiện (sẽ mất credit nếu event này là CONFIRMED) — đọc
@@ -120,22 +117,13 @@ export class CashbackService {
             return { ok: false };
           }
           this.logger.warn(`Ingest trùng (${provider}, ${event.merchantOrderId}) (race) — áp dụng như update.`);
-          result = await this.applyToExisting(winner, event, status, userReward);
+          await this.applyToExisting(winner, event, status, userReward);
         } else {
           throw err;
         }
       }
     }
 
-    // Thưởng xu giới thiệu khi referee có cashback CONFIRMED (ngoài tx tài chính; idempotent qua
-    // unique index). Lỗi thưởng KHÔNG làm hỏng ingest (.catch).
-    if (result.becameConfirmed && result.confirmedUserId) {
-      await this.coins.grantReferralCoins(result.confirmedUserId).catch((err) =>
-        this.logger.error(
-          `Thưởng xu giới thiệu lỗi (referee=${result.confirmedUserId}): ${err instanceof Error ? err.message : err}`,
-        ),
-      );
-    }
     return { ok: true };
   }
 
@@ -217,17 +205,7 @@ export class CashbackService {
       status,
       raw: { adminReview: { adminId, note: note ?? null, at: new Date().toISOString() } },
     };
-    const result = await this.applyToExisting(existing, synthetic, status, existing.userReward);
-    // Đường postback thưởng xu giới thiệu khi giao dịch chuyển sang CONFIRMED (xem ingest) —
-    // duyệt tay mà bỏ bước này thì cùng một giao dịch, đi lối admin thì người giới thiệu KHÔNG
-    // nhận xu, đi lối postback thì có. Mà duyệt tay chính là lối dành cho giao dịch bị treo.
-    if (result.becameConfirmed && result.confirmedUserId) {
-      await this.coins.grantReferralCoins(result.confirmedUserId).catch((err) =>
-        this.logger.error(
-          `Thưởng xu giới thiệu lỗi (referee=${result.confirmedUserId}): ${err instanceof Error ? err.message : err}`,
-        ),
-      );
-    }
+    await this.applyToExisting(existing, synthetic, status, existing.userReward);
     this.logger.warn(
       `Admin ${adminId} đặt cashback ${existing.merchantOrderId} (${existing.provider}): ${existing.status} → ${status}${note ? ` — ${note}` : ''}`,
     );

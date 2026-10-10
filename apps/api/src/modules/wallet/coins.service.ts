@@ -2,12 +2,18 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import {
+  LEGACY_REFERRAL_CASHBACK_PREFIX,
+  lockReferee,
+  REFERRAL_ORDER2_PREFIX,
+  REFERRAL_ORDER2_REVOKE_PREFIX,
+} from './referral-reward';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
 /**
  * TubuXu (coinsBalance) — tiền tệ tiêu trong app. Bất biến coinsBalance == SUM(CoinTransaction.delta).
- * Nguồn xu: đổi từ Ví (WalletService.convertToXu) + thưởng giới thiệu. Sink: mua hàng/nước/cây.
+ * Nguồn xu: đổi từ Ví (WalletService.convertToXu) + thưởng giới thiệu (đơn thứ 2 của bạn được mời). Sink: mua hàng/nước/cây.
  */
 @Injectable()
 export class CoinsService {
@@ -37,10 +43,7 @@ export class CoinsService {
         where: { userId, refType: 'REFERRAL' },
         _sum: { delta: true },
       }),
-      // Mỗi reason REFERRAL_CASHBACK:<refereeId> = 1 bạn được mời có cashback đầu tiên.
-      this.prisma.coinTransaction.count({
-        where: { userId, reason: { startsWith: 'REFERRAL_CASHBACK:' } },
-      }),
+      this.countReferralSuccesses(userId),
       this.config.get<{ count: number; bonus: number }[]>('coins.referral_milestones', []),
     ]);
     const sortedMilestones = [...milestones].sort((a, b) => a.count - b.count);
@@ -116,23 +119,76 @@ export class CoinsService {
   }
 
   /**
-   * Thưởng xu giới thiệu khi referee có cashback CONFIRMED đầu tiên: CẢ người mời lẫn người
-   * được mời. Idempotent qua reason nhúng refereeId + partial unique index. Bỏ qua nếu
-   * referee chưa có người giới thiệu (referredById null) hoặc trỏ chính mình.
+   * Thưởng người mời khi người được mời (refereeId) có đơn thứ 2 giao thành công trong
+   * referral.window_days ngày kể từ đơn đầu (Q-05). Gọi mỗi khi một đơn của người được mời sang
+   * DELIVERED; tự xét lại từ DB nên gọi lặp/song song an toàn. Người mời là CTV thì không thưởng
+   * (CTV chỉ hưởng hoa hồng). Người được mời không nhận thêm xu — họ đã có voucher chào mừng.
    */
-  async grantReferralCoins(refereeId: string): Promise<void> {
+  async grantReferralOrderReward(refereeId: string): Promise<boolean> {
     const referee = await this.prisma.user.findUnique({
       where: { id: refereeId },
       select: { referredById: true },
     });
     const referrerId = referee?.referredById;
-    if (!referrerId || referrerId === refereeId) return;
+    if (!referrerId || referrerId === refereeId) return false;
+    const referrer = await this.prisma.user.findUnique({ where: { id: referrerId }, select: { role: true } });
+    if (!referrer || referrer.role === 'AFFILIATE') return false;
 
-    const referrerReward = await this.config.get<number>('coins.referrer_reward', 5000);
-    const refereeReward = await this.config.get<number>('coins.referee_reward', 5000);
-    await this.grantCoins(referrerId, referrerReward, `REFERRAL_CASHBACK:${refereeId}`, 'REFERRAL', refereeId);
-    await this.grantCoins(refereeId, refereeReward, `REFERRED_CASHBACK:${refereeId}`, 'REFERRAL', refereeId);
-    await this.awardReferralMilestones(referrerId);
+    const [reward, windowDays] = await Promise.all([
+      this.config.get<number>('coins.referrer_reward', 5000),
+      this.config.get<number>('referral.window_days', 30),
+    ]);
+    if (!(reward > 0)) return false;
+
+    const granted = await this.prisma.$transaction(async (tx) => {
+      await lockReferee(tx, refereeId);
+      const already = await tx.coinTransaction.findFirst({
+        where: {
+          refType: 'REFERRAL',
+          reason: { in: [`${REFERRAL_ORDER2_PREFIX}${refereeId}`, `${LEGACY_REFERRAL_CASHBACK_PREFIX}${refereeId}`] },
+        },
+        select: { id: true },
+      });
+      if (already) return false;
+      const [first, second] = await tx.order.findMany({
+        where: { userId: refereeId, status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: 2,
+        select: { id: true, createdAt: true },
+      });
+      if (!first || !second) return false;
+      if (second.createdAt.getTime() - first.createdAt.getTime() > windowDays * 864e5) return false;
+
+      const inserted = await tx.coinTransaction.createMany({
+        data: [
+          {
+            userId: referrerId,
+            delta: reward,
+            reason: `${REFERRAL_ORDER2_PREFIX}${refereeId}`,
+            refType: 'REFERRAL',
+            refId: `${first.id}:${second.id}`,
+          },
+        ],
+        skipDuplicates: true,
+      });
+      if (inserted.count === 0) return false;
+      await tx.user.update({ where: { id: referrerId }, data: { coinsBalance: { increment: reward } } });
+      return true;
+    });
+    if (granted) await this.awardReferralMilestones(referrerId);
+    return granted;
+  }
+
+  /** Số bạn giới thiệu thành công còn hiệu lực: thưởng (kể cả kiểu cũ qua cashback) trừ lần đã thu hồi. */
+  private async countReferralSuccesses(referrerId: string): Promise<number> {
+    const [legacy = 0, granted = 0, revoked = 0] = await Promise.all(
+      [LEGACY_REFERRAL_CASHBACK_PREFIX, REFERRAL_ORDER2_PREFIX, REFERRAL_ORDER2_REVOKE_PREFIX].map((prefix) =>
+        this.prisma.coinTransaction.count({
+          where: { userId: referrerId, refType: 'REFERRAL', reason: { startsWith: prefix } },
+        }),
+      ),
+    );
+    return legacy + granted - revoked;
   }
 
   /**
@@ -143,9 +199,7 @@ export class CoinsService {
   private async awardReferralMilestones(referrerId: string): Promise<void> {
     const milestones = await this.config.get<{ count: number; bonus: number }[]>('coins.referral_milestones', []);
     if (!milestones.length) return;
-    const successCount = await this.prisma.coinTransaction.count({
-      where: { userId: referrerId, reason: { startsWith: 'REFERRAL_CASHBACK:' } },
-    });
+    const successCount = await this.countReferralSuccesses(referrerId);
     for (const m of milestones) {
       if (successCount >= m.count && m.bonus > 0) {
         await this.grantCoins(referrerId, m.bonus, `REFERRAL_MILESTONE:${referrerId}:${m.count}`, 'REFERRAL', referrerId);

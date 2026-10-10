@@ -98,91 +98,126 @@ describe('CoinsService.grantCoins (idempotent)', () => {
   });
 });
 
-describe('CoinsService.grantReferralCoins', () => {
-  function refPrisma(referredById: string | null) {
-    const create = jest.fn().mockResolvedValue({ count: 1 });
+/** count() theo tiền tố reason — mô phỏng số dòng thưởng/thu hồi giới thiệu của người mời. */
+function countByPrefix(byPrefix: Record<string, number>) {
+  return jest
+    .fn()
+    .mockImplementation(async ({ where }: { where: { reason: { startsWith: string } } }) => byPrefix[where.reason.startsWith] ?? 0);
+}
+
+describe('CoinsService.grantReferralOrderReward (Q-05: thưởng người mời theo đơn thứ 2)', () => {
+  const DAY = 864e5;
+  function refPrisma(opts: {
+    referredById: string | null;
+    referrerRole?: string;
+    orders?: { id: string; createdAt: Date }[];
+    already?: unknown;
+    inserted?: number;
+    count?: jest.Mock;
+  }) {
+    const createMany = jest.fn().mockResolvedValue({ count: opts.inserted ?? 1 });
+    const userUpdate = jest.fn().mockResolvedValue({});
+    const findUnique = jest
+      .fn()
+      .mockImplementation(async ({ where }: { where: { id: string } }) =>
+        where.id === 'referee1' ? { referredById: opts.referredById } : { role: opts.referrerRole ?? 'CUSTOMER' },
+      );
     const prisma = {
-      user: { findUnique: jest.fn().mockResolvedValue({ referredById }), update: jest.fn().mockResolvedValue({}) },
-      coinTransaction: { createMany: create },
+      user: { findUnique, update: userUpdate },
+      order: { findMany: jest.fn().mockResolvedValue(opts.orders ?? []) },
+      coinTransaction: {
+        createMany,
+        findFirst: jest.fn().mockResolvedValue(opts.already ?? null),
+        count: opts.count ?? jest.fn().mockResolvedValue(0),
+      },
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $transaction: jest.fn().mockImplementation(async (cb: (t: unknown) => unknown) => cb(prisma)),
     } as unknown as PrismaService;
-    return { prisma, create };
+    return { prisma, createMany, userUpdate };
   }
+  const twoOrders = (gapDays: number) => [
+    { id: 'o1', createdAt: new Date(Date.now() - (gapDays + 1) * DAY) },
+    { id: 'o2', createdAt: new Date(Date.now() - DAY) },
+  ];
 
   it('referee không có người giới thiệu → không thưởng', async () => {
-    const { prisma, create } = refPrisma(null);
-    await new CoinsService(prisma, config).grantReferralCoins('referee1');
-    expect(create).not.toHaveBeenCalled();
-  });
-
-  it('có người giới thiệu → thưởng CẢ HAI, reason đúng', async () => {
-    const { prisma, create } = refPrisma('referrer1');
-    await new CoinsService(prisma, config).grantReferralCoins('referee1');
-    const byReason = Object.fromEntries(create.mock.calls.map((c) => [c[0].data[0].reason, c[0].data[0]]));
-    expect(byReason['REFERRAL_CASHBACK:referee1']).toMatchObject({ userId: 'referrer1', delta: 5000, refType: 'REFERRAL' });
-    expect(byReason['REFERRED_CASHBACK:referee1']).toMatchObject({ userId: 'referee1', delta: 5000, refType: 'REFERRAL' });
+    const { prisma, createMany } = refPrisma({ referredById: null, orders: twoOrders(5) });
+    expect(await new CoinsService(prisma, config).grantReferralOrderReward('referee1')).toBe(false);
+    expect(createMany).not.toHaveBeenCalled();
   });
 
   it('referredById trỏ chính mình → bỏ qua', async () => {
-    const { prisma, create } = refPrisma('referee1');
-    await new CoinsService(prisma, config).grantReferralCoins('referee1');
-    expect(create).not.toHaveBeenCalled();
+    const { prisma, createMany } = refPrisma({ referredById: 'referee1', orders: twoOrders(5) });
+    expect(await new CoinsService(prisma, config).grantReferralOrderReward('referee1')).toBe(false);
+    expect(createMany).not.toHaveBeenCalled();
   });
-});
 
-describe('CoinsService.grantReferralCoins → thưởng mốc giới thiệu', () => {
-  const milestones = [
-    { count: 3, bonus: 20000 },
-    { count: 5, bonus: 40000 },
-    { count: 10, bonus: 100000 },
-  ];
+  it('người mời là CTV → không thưởng xu (CTV chỉ hưởng hoa hồng)', async () => {
+    const { prisma, createMany } = refPrisma({ referredById: 'referrer1', referrerRole: 'AFFILIATE', orders: twoOrders(5) });
+    expect(await new CoinsService(prisma, config).grantReferralOrderReward('referee1')).toBe(false);
+    expect(createMany).not.toHaveBeenCalled();
+  });
 
-  function milestoneConfig(value: unknown) {
-    return {
-      get: jest.fn().mockImplementation(async (key: string, fb?: unknown) => (key === 'coins.referral_milestones' ? value : fb)),
+  it('mới 1 đơn giao xong → chưa thưởng', async () => {
+    const { prisma, createMany } = refPrisma({ referredById: 'referrer1', orders: twoOrders(5).slice(0, 1) });
+    expect(await new CoinsService(prisma, config).grantReferralOrderReward('referee1')).toBe(false);
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it('đơn thứ 2 cách đơn đầu > 30 ngày → không thưởng', async () => {
+    const { prisma, createMany } = refPrisma({ referredById: 'referrer1', orders: twoOrders(31) });
+    expect(await new CoinsService(prisma, config).grantReferralOrderReward('referee1')).toBe(false);
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it('đã thưởng (dòng mới hoặc kiểu cũ qua cashback) → không thưởng lại', async () => {
+    const { prisma, createMany } = refPrisma({ referredById: 'referrer1', orders: twoOrders(5), already: { id: 'x' } });
+    expect(await new CoinsService(prisma, config).grantReferralOrderReward('referee1')).toBe(false);
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it('đơn thứ 2 trong 30 ngày → chỉ người mời +5000, reason/refId đúng, người được mời không nhận xu', async () => {
+    const { prisma, createMany, userUpdate } = refPrisma({ referredById: 'referrer1', orders: twoOrders(10) });
+    expect(await new CoinsService(prisma, config).grantReferralOrderReward('referee1')).toBe(true);
+    expect(createMany).toHaveBeenCalledTimes(1);
+    expect(createMany.mock.calls[0][0]).toMatchObject({
+      skipDuplicates: true,
+      data: [{ userId: 'referrer1', delta: 5000, reason: 'REFERRAL_ORDER2:referee1', refType: 'REFERRAL', refId: 'o1:o2' }],
+    });
+    expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'referrer1' }, data: { coinsBalance: { increment: 5000 } } });
+  });
+
+  it('thua race (ON CONFLICT không ghi dòng nào) → không cộng số dư', async () => {
+    const { prisma, userUpdate } = refPrisma({ referredById: 'referrer1', orders: twoOrders(10), inserted: 0 });
+    expect(await new CoinsService(prisma, config).grantReferralOrderReward('referee1')).toBe(false);
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  describe('mốc thưởng thêm', () => {
+    const milestones = [
+      { count: 3, bonus: 20000 },
+      { count: 5, bonus: 40000 },
+    ];
+    const milestoneConfig = {
+      get: jest.fn().mockImplementation(async (key: string, fb?: unknown) => (key === 'coins.referral_milestones' ? milestones : fb)),
     } as unknown as SystemConfigService;
-  }
 
-  function refPrismaWithCount(successCount: number) {
-    const create = jest.fn().mockResolvedValue({ count: 1 });
-    const count = jest.fn().mockResolvedValue(successCount);
-    const prisma = {
-      user: { findUnique: jest.fn().mockResolvedValue({ referredById: 'referrer1' }), update: jest.fn().mockResolvedValue({}) },
-      coinTransaction: { createMany: create, count },
-      $transaction: jest.fn().mockImplementation(async (cb: (t: unknown) => unknown) => cb(prisma)),
-    } as unknown as PrismaService;
-    return { prisma, create, count };
-  }
+    it('3 thưởng còn hiệu lực (2 mới + 1 kiểu cũ) → thưởng mốc 3', async () => {
+      const count = countByPrefix({ 'REFERRAL_CASHBACK:': 1, 'REFERRAL_ORDER2:': 2 });
+      const { prisma, createMany } = refPrisma({ referredById: 'referrer1', orders: twoOrders(10), count });
+      await new CoinsService(prisma, milestoneConfig).grantReferralOrderReward('referee1');
+      const reasons = createMany.mock.calls.map((c) => c[0].data[0].reason);
+      expect(reasons).toContain('REFERRAL_MILESTONE:referrer1:3');
+      expect(reasons).not.toContain('REFERRAL_MILESTONE:referrer1:5');
+    });
 
-  it('vừa chạm mốc 3 → thưởng thêm, reason nhúng referrerId + số mốc', async () => {
-    const { prisma, create } = refPrismaWithCount(3);
-    await new CoinsService(prisma, milestoneConfig(milestones)).grantReferralCoins('referee1');
-    const byReason = Object.fromEntries(create.mock.calls.map((c) => [c[0].data[0].reason, c[0].data[0]]));
-    expect(byReason['REFERRAL_MILESTONE:referrer1:3']).toMatchObject({ userId: 'referrer1', delta: 20000, refType: 'REFERRAL' });
-  });
-
-  it('chưa chạm mốc nào (count 2) → không thưởng thêm', async () => {
-    const { prisma, create } = refPrismaWithCount(2);
-    await new CoinsService(prisma, milestoneConfig(milestones)).grantReferralCoins('referee1');
-    const reasons = create.mock.calls.map((c) => c[0].data[0].reason);
-    expect(reasons.some((r) => r.startsWith('REFERRAL_MILESTONE:'))).toBe(false);
-  });
-
-  it('vượt mọi mốc (count 15) → thử thưởng cả 3 mốc (idempotency ở grantCoins chặn lặp thực tế)', async () => {
-    const { prisma, create } = refPrismaWithCount(15);
-    await new CoinsService(prisma, milestoneConfig(milestones)).grantReferralCoins('referee1');
-    const reasons = create.mock.calls.map((c) => c[0].data[0].reason);
-    expect(reasons).toEqual(
-      expect.arrayContaining(['REFERRAL_MILESTONE:referrer1:3', 'REFERRAL_MILESTONE:referrer1:5', 'REFERRAL_MILESTONE:referrer1:10']),
-    );
-  });
-
-  it('không cấu hình mốc nào (config mặc định trả []) → không đếm, không thưởng thêm', async () => {
-    const { prisma, create, count } = refPrismaWithCount(3);
-    await new CoinsService(prisma, config).grantReferralCoins('referee1');
-    expect(count).not.toHaveBeenCalled();
-    const reasons = create.mock.calls.map((c) => c[0].data[0].reason);
-    expect(reasons.some((r) => r.startsWith('REFERRAL_MILESTONE:'))).toBe(false);
+    it('lượt đã bị thu hồi không được tính vào mốc', async () => {
+      const count = countByPrefix({ 'REFERRAL_ORDER2:': 3, 'REFERRAL_ORDER2_REVOKE:': 1 });
+      const { prisma, createMany } = refPrisma({ referredById: 'referrer1', orders: twoOrders(10), count });
+      await new CoinsService(prisma, milestoneConfig).grantReferralOrderReward('referee1');
+      const reasons = createMany.mock.calls.map((c) => c[0].data[0].reason);
+      expect(reasons.some((r) => r.startsWith('REFERRAL_MILESTONE:'))).toBe(false);
+    });
   });
 });
 
@@ -205,7 +240,7 @@ describe('CoinsService.getOverview → tiến độ mốc giới thiệu', () =>
       coinTransaction: {
         findMany: jest.fn().mockResolvedValue([]),
         aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }),
-        count: jest.fn().mockResolvedValue(successCount),
+        count: countByPrefix({ 'REFERRAL_ORDER2:': successCount }),
       },
     } as unknown as PrismaService;
   }

@@ -51,8 +51,9 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'wallet.xu_convert_multiplier', value: 1.2, category: 'wallet', description: 'Đổi Ví → TubuXu nhận thêm 20%' },
   { key: 'wallet.withdraw_min', value: 100000, category: 'wallet', description: 'Rút Ví về ngân hàng tối thiểu' },
   { key: 'wallet.withdraw_fee', value: 3000, category: 'wallet', description: 'Phí chuyển khoản ngân hàng/lần' },
-  { key: 'coins.referrer_reward', value: 5000, category: 'coins', description: 'Xu thưởng người giới thiệu (mỗi bạn có cashback đầu)' },
-  { key: 'coins.referee_reward', value: 5000, category: 'coins', description: 'Xu thưởng người được mời' },
+  { key: 'coins.referrer_reward', value: 5000, category: 'coins', description: 'Xu thưởng người giới thiệu khi bạn được mời có đơn thứ 2 giao thành công trong referral.window_days ngày (thu hồi nếu trả hàng; CTV không nhận)' },
+  { key: 'coins.referee_reward', value: 5000, category: 'coins', description: 'Không còn dùng: người được mời chỉ nhận voucher chào mừng (Q-05)' },
+  { key: 'referral.window_days', value: 30, category: 'referral', description: 'Đơn thứ 2 phải đặt trong số ngày này kể từ đơn đầu thì người mời mới được thưởng xu' },
   {
     key: 'coins.referral_milestones',
     value: [

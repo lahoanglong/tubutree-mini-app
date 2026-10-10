@@ -923,54 +923,40 @@ describe('AffiliateService.requestPayout (money safety)', () => {
   });
 });
 
-describe('AffiliateService.grantReferralReward (refer-reward 1 lần, cộng dồn hoa hồng)', () => {
-  function makePrisma(order: unknown, existingCoupon: unknown = null) {
+describe('AffiliateService.grantReferralReward (Q-05: không còn voucher REFER, chuyển sang xu đơn thứ 2)', () => {
+  function makePrisma(order: unknown) {
     const couponCreate = jest.fn().mockResolvedValue({});
     const prisma = {
       order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
-      coupon: { findUnique: jest.fn().mockResolvedValue(existingCoupon), create: couponCreate },
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: couponCreate },
     } as unknown as PrismaService;
     return { prisma, couponCreate };
   }
+  function makeCoins() {
+    const grantReferralOrderReward = jest.fn().mockResolvedValue(true);
+    return { svc: { grantReferralOrderReward } as unknown as CoinsService, grantReferralOrderReward };
+  }
 
-  it('đơn ≥200k có người giới thiệu → thưởng voucher 50k cho CẢ hai (§6.14.5)', async () => {
-    const { prisma, couponCreate } = makePrisma({ id: 'o1', userId: 'referee', referrerUserId: 'referrer', total: 250000 });
-    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).grantReferralReward('o1');
-    expect(couponCreate).toHaveBeenCalledTimes(2);
-    const data = couponCreate.mock.calls.map((c) => c[0].data);
-    const codes = data.map((d) => d.code);
-    expect(codes).toContain('REFER-REFERRER-REFEREE'); // người mời (cặp)
-    expect(codes).toContain('REFERRED-REFEREE'); // người được mời (welcome)
-    expect(data.every((d) => d.value === 50000)).toBe(true); // cả hai 50k
-    expect(data.every((d) => d.minOrder === 200000)).toBe(true); // áp đơn ≥200k
-    expect(data.map((d) => d.scopeMeta.userId)).toEqual(expect.arrayContaining(['referrer', 'referee']));
-  });
-
-  it('đơn < 200k → KHÔNG thưởng (chưa đạt ngưỡng §6.14.5)', async () => {
-    const { prisma, couponCreate } = makePrisma({ id: 'o1', userId: 'referee', referrerUserId: 'referrer', total: 150000 });
-    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).grantReferralReward('o1');
+  it('đơn lẻ giao xong → xét thưởng xu cho người mời của chủ đơn, KHÔNG tạo voucher', async () => {
+    const { prisma, couponCreate } = makePrisma({ userId: 'referee', type: 'RETAIL', placedForCustomer: false });
+    const c = makeCoins();
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, c.svc, analytics).grantReferralReward('o1');
+    expect(c.grantReferralOrderReward).toHaveBeenCalledWith('referee');
     expect(couponCreate).not.toHaveBeenCalled();
   });
 
-  it('tự giới thiệu (referrer === buyer) → không thưởng', async () => {
-    const { prisma, couponCreate } = makePrisma({ id: 'o1', userId: 'u1', referrerUserId: 'u1', total: 250000 });
-    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).grantReferralReward('o1');
-    expect(couponCreate).not.toHaveBeenCalled();
+  it('đơn CTV lên hộ khách (userId là CTV) → không xét thưởng giới thiệu', async () => {
+    const { prisma } = makePrisma({ userId: 'ctv', type: 'RETAIL', placedForCustomer: true });
+    const c = makeCoins();
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, c.svc, analytics).grantReferralReward('o1');
+    expect(c.grantReferralOrderReward).not.toHaveBeenCalled();
   });
 
-  it('không có người giới thiệu → không thưởng', async () => {
-    const { prisma, couponCreate } = makePrisma({ id: 'o1', userId: 'u1', referrerUserId: null, total: 250000 });
-    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).grantReferralReward('o1');
-    expect(couponCreate).not.toHaveBeenCalled();
-  });
-
-  it('voucher đã tồn tại (đã thưởng cặp này) → không cấp lại (idempotent)', async () => {
-    const { prisma, couponCreate } = makePrisma(
-      { id: 'o1', userId: 'referee', referrerUserId: 'referrer', total: 250000 },
-      { id: 'existing' },
-    );
-    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).grantReferralReward('o1');
-    expect(couponCreate).not.toHaveBeenCalled();
+  it('đơn đại lý → không xét thưởng giới thiệu', async () => {
+    const { prisma } = makePrisma({ userId: 'dealer', type: 'DEALER', placedForCustomer: false });
+    const c = makeCoins();
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, c.svc, analytics).grantReferralReward('o1');
+    expect(c.grantReferralOrderReward).not.toHaveBeenCalled();
   });
 });
 
