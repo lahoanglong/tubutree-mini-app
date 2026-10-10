@@ -142,7 +142,7 @@ export class OrdersService {
     // Kiểm tra sớm trên ảnh chụp (thông báo thân thiện, không mở tx vô ích). Ảnh chụp này đọc NGOÀI tx
     // nên KHÔNG được dùng để quyết định ghi — tx bên dưới khoá dòng đơn rồi kiểm tra lại trên dữ liệu thật.
     const order = await this.detail(userId, code);
-    this.assertCustomerCancellable(order);
+    this.assertCustomerCancellable(order, userId);
     // Chuyển trạng thái ATOMIC — chống hủy đồng thời (double-tap/retry) gây HOÀN VÍ 2 LẦN: chỉ request
     // THẮNG (count=1) mới hoàn điểm/ví. Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash
     // giữa chừng: nếu process chết sau khi đơn đã CANCELLED nhưng trước khi increment ví → retry bị guard
@@ -157,7 +157,7 @@ export class OrdersService {
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR UPDATE`;
       const current = await tx.order.findUnique({ where: { id: order.id }, include: { items: true } });
       if (!current || current.status === 'CANCELLED') return false; // request khác đã huỷ trước → không hoàn lần 2
-      this.assertCustomerCancellable(current);
+      this.assertCustomerCancellable(current, userId);
       const res = await tx.order.updateMany({
         where: { id: current.id, status: current.status },
         data: { status: 'CANCELLED' },
@@ -205,10 +205,27 @@ export class OrdersService {
   }
 
   /** Luật khách tự huỷ — dùng cả cho ảnh chụp (kiểm tra sớm) lẫn bản đọc lại trong tx (quyết định). */
-  private assertCustomerCancellable(order: { status: string; hasRecyclingPickup?: boolean | null; gomdonStatus?: string | null }) {
+  private assertCustomerCancellable(
+    order: {
+      status: string;
+      paymentStatus?: string | null;
+      placedForCustomer?: boolean | null;
+      referrerUserId?: string | null;
+      hasRecyclingPickup?: boolean | null;
+      gomdonStatus?: string | null;
+    },
+    actorId: string,
+  ) {
     if (order.status !== 'PENDING_PAYMENT' && order.status !== 'CONFIRMED') {
       throw new BadRequestException(
         'Đơn đã vào quy trình giao, vui lòng liên hệ Zalo OA để được hỗ trợ.',
+      );
+    }
+    // Tiền của đơn lên hộ là của khách cuối: để CTV tự huỷ sau khi khách đã trả thì CTV quyết định
+    // dòng tiền của người khác (C-001/Q-01). Chỉ admin huỷ, hoàn về khách qua OrderReversalService.
+    if (order.placedForCustomer && order.paymentStatus === 'PAID' && order.referrerUserId === actorId) {
+      throw new BadRequestException(
+        'Đơn lên hộ khách đã thanh toán, CTV không tự huỷ được. Vui lòng liên hệ Tubu để admin huỷ và hoàn tiền cho khách.',
       );
     }
     // Đơn thu gom tái chế: bưu tá Gomdon đã lấy hàng (webhook chuyển SHIPPING có thể tới trễ) → không

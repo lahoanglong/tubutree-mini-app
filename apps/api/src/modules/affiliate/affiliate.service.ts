@@ -266,6 +266,15 @@ export class AffiliateService {
     if (ctv.role !== 'AFFILIATE' && ctv.role !== 'ADMIN') {
       throw new BadRequestException('Chỉ CTV mới có thể lên đơn hộ khách.');
     }
+    // Đơn hộ được phép tự-giới-thiệu (referrer == userId) vì người nhận là khách khác; nếu người
+    // nhận chính là CTV thì đó là mua cho mình mà vẫn ăn hoa hồng, và tiền hoàn (theo SĐT người
+    // nhận) cũng chảy về CTV.
+    const ctvPhone = ctv.phone ? this.normalizeToLocalPhone(ctv.phone) : null;
+    if (ctvPhone && ctvPhone === this.normalizeToLocalPhone(dto.customer.phone)) {
+      throw new BadRequestException(
+        'Không thể lên đơn hộ với SĐT của chính bạn. Hãy đặt hàng như khách thường cho đơn của mình.',
+      );
+    }
 
     const variationIds = [...new Set(dto.items.map((i) => i.variationId))];
     const variations = await this.prisma.variation.findMany({
@@ -380,6 +389,7 @@ export class AffiliateService {
             orderSource: 'ctv_assisted',
           },
         });
+        await this.createCommissionForOrder(created.id, tx);
         return created;
       });
     } catch (err) {
@@ -400,11 +410,6 @@ export class AffiliateService {
     } catch (err) {
       this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
     }
-    // Tạo hoa hồng cho CTV (placedForCustomer cho phép self-referral). Non-fatal.
-    await this.createCommissionForOrder(order.id).catch((err) =>
-      this.logger.error(`Tạo commission lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`),
-    );
-
     return this.prisma.order.findUniqueOrThrow({
       where: { id: order.id },
       include: { items: true },
@@ -454,9 +459,15 @@ export class AffiliateService {
     };
   }
 
-  /** Tạo commission PENDING cho đơn có người giới thiệu (gọi từ checkout). */
-  async createCommissionForOrder(orderId: string): Promise<void> {
-    const order = await this.prisma.order.findUniqueOrThrow({
+  /**
+   * Tạo commission PENDING cho đơn có người giới thiệu. Caller tạo đơn truyền `tx` của chính
+   * transaction tạo đơn: hoa hồng commit/rollback cùng đơn, lỗi nổi lên thay vì đơn tồn tại mà CTV
+   * mất hoa hồng vĩnh viễn (C-002). Gọi lại / gọi song song an toàn: unique (orderId,
+   * affiliateUserId) + ON CONFLICT DO NOTHING — không dùng create rồi bắt P2002 vì trong tx của
+   * caller lỗi đó làm abort cả transaction đơn.
+   */
+  async createCommissionForOrder(orderId: string, db: Prisma.TransactionClient = this.prisma): Promise<void> {
+    const order = await db.order.findUniqueOrThrow({
       where: { id: orderId },
       include: { items: true },
     });
@@ -465,7 +476,7 @@ export class AffiliateService {
     if (!order.referrerUserId || (order.referrerUserId === order.userId && !order.placedForCustomer)) return;
 
     const variationIds = order.items.map((i) => i.variationId);
-    const variations = await this.prisma.variation.findMany({
+    const variations = await db.variation.findMany({
       where: { id: { in: variationIds } },
       select: { id: true, affiliateRate: true, product: { select: { affiliateBlocked: true } } },
     });
@@ -488,7 +499,8 @@ export class AffiliateService {
     }
     if (amount <= 0) return;
 
-    await this.prisma.commission.create({
+    await db.commission.createMany({
+      skipDuplicates: true,
       data: {
         affiliateUserId: order.referrerUserId,
         orderId: order.id,

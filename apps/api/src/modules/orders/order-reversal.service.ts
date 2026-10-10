@@ -8,6 +8,12 @@ import { releaseVariationStock } from '../catalog/variation-stock';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
+/** Cùng quy tắc với User.phone / Order.endCustomerKey: chỉ giữ số, 84xxxxxxxxx → 0xxxxxxxxx. */
+function normalizeLocalPhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, '');
+  return digits.replace(/^84(\d{9})$/, '0$1') || null;
+}
+
 /**
  * Đảo ngược tác động tài chính + tồn kho của một đơn hàng khi CANCELLED/RETURNED.
  *
@@ -98,7 +104,12 @@ export class OrderReversalService {
       });
       paidBeforeReversal = refunded.count === 1;
       moneyRefunded = refunded.count === 1;
-      if (refunded.count === 1) {
+      if (refunded.count === 1 && order.placedForCustomer) {
+        // Đơn CTV lên hộ: người trả tiền là khách cuối, không phải CTV (C-001). Caller báo "đã hoàn
+        // vào Ví" cho order.userId, nên chỉ để true khi chính người đó là ví vừa được cộng.
+        const creditedUserId = await this.refundEndCustomer(tx, order);
+        moneyRefunded = creditedUserId === order.userId;
+      } else if (refunded.count === 1) {
         if (order.paymentMethod === 'XU') {
           await tx.user.update({
             where: { id: order.userId },
@@ -182,6 +193,57 @@ export class OrderReversalService {
       }
     }
     return { moneyRefunded };
+  }
+
+  /**
+   * Đích hoàn tiền của đơn CTV lên hộ. Khách cuối có tài khoản (đơn đã ghi userId = khách, hoặc
+   * SĐT người nhận khớp User.phone) → cộng ví khách đó; không thì để lại yêu cầu chuyển khoản tay cho
+   * admin. Tài khoản trùng CTV/người giới thiệu (CTV gõ SĐT của chính mình) hoặc bị khoá không bao
+   * giờ nhận — tiền đi đường thủ công để admin xác minh người trả thật.
+   * orderId unique trên order_customer_refunds: lần gọi thứ hai cho cùng đơn ném P2002 → tx rollback,
+   * không thể hoàn 2 lần dù guard PAID→REFUNDED phía trên bị lách.
+   */
+  private async refundEndCustomer(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<string | null> {
+    const snapshot = (order.shippingAddress ?? {}) as { phone?: unknown; recipient?: unknown };
+    const phone =
+      order.endCustomerKey ?? (typeof snapshot.phone === 'string' ? normalizeLocalPhone(snapshot.phone) : null);
+    const recipientName = typeof snapshot.recipient === 'string' ? snapshot.recipient : null;
+    const ctvId = order.referrerUserId ?? order.userId;
+
+    let customerUserId: string | null = null;
+    if (order.userId !== ctvId) {
+      customerUserId = order.userId;
+    } else if (phone) {
+      const match = await tx.user.findUnique({ where: { phone }, select: { id: true } });
+      customerUserId = match?.id ?? null;
+    }
+    if (customerUserId) {
+      const customer = await tx.user.findUnique({ where: { id: customerUserId }, select: { isBlocked: true } });
+      if (!customer || customer.isBlocked || customerUserId === ctvId) customerUserId = null;
+    }
+
+    const reason = order.status === 'DELIVERED' ? 'RETURNED' : 'CANCELLED';
+    if (customerUserId) {
+      await tx.user.update({ where: { id: customerUserId }, data: { walletBalance: { increment: order.total } } });
+    }
+    await tx.orderCustomerRefund.create({
+      data: {
+        orderId: order.id,
+        orderCode: order.code,
+        amount: order.total,
+        phone,
+        recipientName,
+        customerUserId,
+        method: customerUserId ? 'WALLET' : 'MANUAL_TRANSFER',
+        status: customerUserId ? 'COMPLETED' : 'PENDING',
+        completedAt: customerUserId ? new Date() : null,
+        reason,
+      },
+    });
+    if (!customerUserId) {
+      this.logger.warn(`Đơn hộ ${order.code} cần admin chuyển khoản hoàn ${order.total}đ cho khách ${phone ?? '(không có SĐT)'}.`);
+    }
+    return customerUserId;
   }
 
   private resolveDealer(): DealerService | undefined {

@@ -27,7 +27,7 @@ function prismaWith(order: unknown, variations: unknown[], createSpy = jest.fn()
   return {
     order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
     variation: { findMany: jest.fn().mockResolvedValue(variations) },
-    commission: { create: createSpy },
+    commission: { createMany: createSpy },
   } as unknown as PrismaService;
 }
 
@@ -197,6 +197,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       stockCount?: number;
       executeRaw?: jest.Mock;
       role?: string;
+      ctvPhone?: string | null;
       storefront?: { slug: string } | null;
       shippingFee?: number;
     } = {},
@@ -208,7 +209,11 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const executeRaw = opts.executeRaw ?? jest.fn().mockResolvedValue(opts.stockCount ?? 1);
     const commissionCreate = jest.fn().mockResolvedValue({});
     const prisma = {
-      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv', role: opts.role ?? 'AFFILIATE' }) },
+      user: {
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue({ id: 'ctv', role: opts.role ?? 'AFFILIATE', phone: opts.ctvPhone === undefined ? '0911111111' : opts.ctvPhone }),
+      },
       variation: { findMany: jest.fn().mockResolvedValue(variations) },
       $executeRaw: executeRaw,
       storefront: { findFirst: jest.fn().mockResolvedValue(opts.storefront === undefined ? { slug: 'ctv-shop' } : opts.storefront) },
@@ -220,7 +225,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
           // 1) createCommissionForOrder đọc order + items; 2) trả đơn cuối cùng
           .mockResolvedValue({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 100000, items: [], code: 'TUBU1' }),
       },
-      commission: { create: commissionCreate },
+      commission: { createMany: commissionCreate },
     } as unknown as PrismaService;
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
       .fn()
@@ -299,7 +304,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
-  it('tạo hoa hồng cho CTV sau khi đặt đơn (createCommissionForOrder)', async () => {
+  it('tạo hoa hồng cho CTV trong cùng tx với đơn (createCommissionForOrder)', async () => {
     const { svc, commissionCreate, prisma } = build();
     // order fetch trong createCommissionForOrder: đơn CTV placedForCustomer + 1 item có rate.
     (prisma.order.findUniqueOrThrow as jest.Mock)
@@ -329,6 +334,28 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const { svc, orderCreate } = build({ role: 'CUSTOMER' });
     await expect(svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toThrow();
     expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  // C-028: SĐT người nhận trùng SĐT tài khoản CTV = CTV tự mua cho mình qua đường "đơn hộ" để
+  // ăn hoa hồng (và khi huỷ, đích hoàn theo SĐT cũng trỏ về chính CTV).
+  it.each([
+    ['cùng dạng 0xxxxxxxxx', '0901234567', '0901234567'],
+    ['CTV gõ +84 cho SĐT tài khoản lưu 0x', '0901234567', '+84 90 123 4567'],
+    ['tài khoản lưu dạng 84x, CTV gõ 0x', '84901234567', '090.123.4567'],
+  ])('SĐT người nhận trùng SĐT tài khoản CTV (%s) → BadRequest, KHÔNG giữ kho / tạo đơn / hoa hồng', async (_case, ctvPhone, customerPhone) => {
+    const { svc, orderCreate, executeRaw, commissionCreate } = build({ ctvPhone });
+    await expect(
+      svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, phone: customerPhone } }) as never),
+    ).rejects.toThrow('SĐT của chính bạn');
+    expect(executeRaw).not.toHaveBeenCalled();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(commissionCreate).not.toHaveBeenCalled();
+  });
+
+  it('CTV chưa có SĐT trên tài khoản → vẫn lên đơn hộ bình thường', async () => {
+    const { svc, orderCreate } = build({ ctvPhone: null });
+    await svc.placeOrderForCustomer('ctv', DTO() as never);
+    expect(orderCreate).toHaveBeenCalledTimes(1);
   });
 
   it('xếp hàng đẩy đơn sang Pancake sau khi tạo (đơn hộ phải vào pipeline giao vận như đơn thường)', async () => {
@@ -431,7 +458,14 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
   it('order_placed được ghi bằng ĐÚNG object `tx` của $transaction, không phải this.prisma ở ngoài (chứng minh atomic thật — mirror dealer-order-payment.spec.ts)', async () => {
     const txOrderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
     const txExecuteRaw = jest.fn().mockResolvedValue(1);
-    const txMarker = { order: { create: txOrderCreate }, $executeRaw: txExecuteRaw };
+    const txMarker = {
+      order: {
+        create: txOrderCreate,
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 100000, items: [] }),
+      },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      $executeRaw: txExecuteRaw,
+    };
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv', role: 'AFFILIATE' }) },
       variation: {
