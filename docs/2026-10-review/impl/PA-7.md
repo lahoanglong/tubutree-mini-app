@@ -148,3 +148,93 @@ Tests:       2 passed, 2 total
 Migration của cả gói: không có.
 Race spec thêm: `test/integration-race/vouchers-real-user.race-spec.ts`, `test/integration-race/referral-order2.race-spec.ts` (Postgres riêng `tubu_it_pa7:5547`).
 Việc còn lại: xem mục "Việc còn lại" từng phần (thu hồi mốc referral_milestones cần quyết định; màn admin cho `REFERRAL_DEBT`; `milestoneVouchers` LIMIT 1000; lời trên miniapp về chương trình giới thiệu; khoá chết `last_click_window_days`).
+
+## Review lượt 1
+
+Commit: `a61d8cb` (mốc + ngưỡng đơn + test thứ tự khoá), `148291f` (setStatus không hỏng vì lỗi thưởng), `2a1f920` (dọn kiểu trả về cashback).
+
+| # | Mức | Finding | Kết quả |
+|---|---|---|---|
+| 1 | major | Mốc `coins.referral_milestones` không bao giờ bị thu hồi | ĐÃ SỬA (xác minh đúng bằng test đỏ) |
+| 2 | minor | Bỏ ngưỡng `referral.min_order_amount` | ĐÃ SỬA |
+| 3 | minor | `grantReferralReward` sau DELIVERED không `.catch` | ĐÃ SỬA |
+| 4 | minor | Test (i) chỉ từng chạy thứ tự "thưởng trước" | ĐÃ SỬA (thêm (i2)/(i3) ép thứ tự) |
+| 5 | minor | Đã thu hồi thì cặp đó không bao giờ được thưởng lại | KHÔNG SỬA, ghi giả định |
+| 6 | minor | `REFERRAL_DEBT` không ai đọc, không trừ dần | KHÔNG SỬA code, ghi việc còn lại |
+| 7 | minor | `applyToExisting/createTransaction` trả kết quả không dùng | ĐÃ SỬA (trả `void`) |
+
+### 1. Thu hồi mốc thưởng (major) — ĐÃ SỬA
+Xác minh: đúng. Race spec (m1) trước khi sửa: 2 người được mời đạt mốc 2 (thưởng 20.000), trả đơn thứ 2 của một người → người mời còn `balance 25000` (giữ nguyên mốc), mong đợi `5000`.
+
+Sửa (`wallet/referral-reward.ts`, `wallet/coins.service.ts`):
+- `revokeReferralRewardForOrder`, sau khi ghi dòng thu hồi lượt giới thiệu, tính lại số lượt còn hiệu lực (`countReferralSuccesses`, đọc trong cùng tx) và thu hồi mọi mốc đang giữ có `count > số lượt`. Mốc được lấy từ chính các dòng đã cấp, không đọc config, nên mốc đã bị gỡ khỏi config vẫn thu hồi được.
+- Cùng cơ chế với lượt giới thiệu (`debitReferralReward` dùng chung): trừ tối đa số dư, không âm, phần thiếu ghi dòng delta 0 refType `REFERRAL_DEBT`, reason `REFERRAL_MILESTONE_DEBT:<referrer>:<count>#<đời>:<số xu thiếu>`.
+- Reason theo "đời": cấp lần đầu giữ reason cũ `REFERRAL_MILESTONE:<referrer>:<count>` (tương thích dữ liệu PROD), thu hồi `REFERRAL_MILESTONE_REVOKE:<referrer>:<count>#<n>`, đạt lại sau khi bị thu hồi thì cấp `REFERRAL_MILESTONE:<referrer>:<count>#<n>`. Mọi reason đều duy nhất, nên partial unique index `coin_transactions_referral_unique` + `ON CONFLICT DO NOTHING` chặn cấp/thu hồi trùng; không bắt P2002 trong tx.
+- Cả cấp mốc (`awardReferralMilestones`, nay chạy trong tx) lẫn thu hồi mốc đều `SELECT … FOR UPDATE` dòng `users` của người mời trước khi đếm, nên 2 lần trả hàng của 2 người được mời khác nhau, hoặc cấp mốc chạy song song thu hồi, không cùng đọc số đếm cũ.
+- Không cần migration (reason là text, index có sẵn).
+
+### 2. Ngưỡng giá trị đơn — ĐÃ SỬA
+Chỉ đơn có `total >= referral.min_order_amount` (mặc định 200.000, đúng mức của luồng REFER cũ) mới được tính là đơn đầu/đơn thứ 2. Seed thêm khoá `referral.min_order_amount` (createOnly). Chọn phương án an toàn tiền hơn; chủ dự án có thể hạ ngưỡng qua config (0 = bỏ ngưỡng).
+
+### 3. Lỗi xét thưởng sau DELIVERED — ĐÃ SỬA
+`order-status.service.ts`: `grantReferralReward(...).catch(log error)`. Đơn đã commit DELIVERED nên lỗi khoá/deadlock không còn làm `setStatus` ném lỗi và bỏ qua notify. Phần thưởng không mất hẳn: hàm tự xét lại từ DB ở lần giao đơn kế tiếp của người được mời. Nếu người được mời không có đơn giao nào sau đó thì vẫn cần đường resync (xem việc còn lại).
+
+### 4. Test thứ tự khoá — ĐÃ SỬA
+Thêm (i2) và (i3) trong `referral-order2.race-spec.ts`: một tx test giữ khoá dòng `users` của người được mời, chạy thao tác thứ nhất và đợi tới khi `pg_stat_activity` thấy nó chờ khoá (`wait_event_type='Lock'`) rồi mới chạy thao tác thứ hai, sau đó nhả khoá. Postgres trao khoá dòng cho người chờ đầu tiên, nên thứ tự là tất định.
+- (i2) trả đơn đầu giữ khoá trước → lần thưởng đọc thấy đơn đã RETURNED → người mời không có dòng xu nào (`grants = 0`).
+- (i3) thưởng giữ khoá trước → lần trả đơn đầu thu hồi đủ → đúng 2 dòng `REFERRAL_ORDER2` + `REFERRAL_ORDER2_REVOKE`, số dư 0.
+
+Hai ca này xanh ngay cả trước khi sửa (code C-003 đã đúng ở cả hai thứ tự); chúng lấp lỗ test chứ không tái hiện lỗi.
+
+### 5. Không thưởng lại sau khi đã thu hồi — KHÔNG SỬA, giả định
+Đã có dòng `REFERRAL_ORDER2:<referee>` (kể cả đã bị thu hồi) thì cặp đó không được thưởng lại, kể cả khi sau đó người được mời có cặp đơn hợp lệ mới trong cửa sổ. Lý do: chặn vòng giao/trả để cày xu; Q-05 không nói rõ. **Cần chủ dự án xác nhận.** Mốc thưởng thì khác: mốc bị thu hồi được cấp lại khi số lượt còn hiệu lực đạt lại mốc (lượt mới phải từ người được mời KHÁC, nên không cày được bằng một người).
+
+### 6. `REFERRAL_DEBT` — KHÔNG SỬA code
+Đúng là chưa có màn admin đọc dòng này và khoản nợ không được trừ dần. Chưa sửa vì: trừ nợ ở lần cộng xu kế tiếp phải sửa `grantCoins` (dùng chung cho cộng đồng, game, đổi ví...) và TubuXu sẽ được gộp vào Điểm Xanh ở Đợt D (Q-03), nên làm cùng lúc đó hợp lý hơn; giữ thưởng ở trạng thái chờ hết cửa sổ trả hàng (kiểu `hold_days` của hoa hồng) là đổi thiết kế cần chủ dự án quyết. Hiện truy được bằng SQL dưới đây, kèm log warn ở `OrderReversalService` (số xu thiếu đã gồm cả phần mốc):
+
+```sql
+SELECT "userId", reason, "refId", "createdAt" FROM coin_transactions WHERE "refType" = 'REFERRAL_DEBT' ORDER BY "createdAt" DESC;
+```
+
+### 7. Kiểu trả về cashback — ĐÃ SỬA
+`applyToExisting` / `createTransaction` trả `Promise<void>`; không nơi gọi nào dùng kết quả.
+
+### Test (đỏ → xanh)
+ĐỎ (sau khi thêm test, trước khi sửa):
+
+```
+    √ (i2) trả đơn đầu GIỮ khoá trước, lần thưởng chờ khoá → thưởng đọc thấy đơn đã trả, không cấp gì
+    √ (i3) thưởng GIỮ khoá trước, lần trả đơn đầu chờ khoá → thưởng rồi bị thu hồi đủ
+    × (k) đơn dưới referral.min_order_amount không tính là đơn đầu/đơn thứ 2
+    × (m1) đạt mốc rồi một lượt bị trả hàng → mốc bị thu hồi; trả lặp không trừ thêm
+         -   "balance": 5000,   +   "balance": 25000,
+    × (m2) mốc đã thu hồi được cấp lại đúng 1 lần khi có lượt giới thiệu mới bù vào
+    × (m3) người mời đã tiêu xu mốc → trừ phần còn lại, không âm, ghi REFERRAL_DEBT phần thiếu của mốc
+    × (m4) 2 lượt bị trả song song → mốc chỉ bị thu hồi 1 lần, số dư khớp sổ
+Tests:       5 failed, 12 passed, 17 total
+```
+
+`order-status.service.spec.ts` ca mới "xét thưởng giới thiệu lỗi → đơn vẫn giao xong, vẫn notify": `Tests: 1 failed, 50 passed`, sau sửa `51 passed`.
+Unit `coins.service.spec.ts`: thêm "mốc đang giữ → không cấp lại", "mốc đã bị thu hồi, đạt lại → cấp đời mới (#1)".
+
+XANH:
+
+```
+$ DATABASE_URL=postgresql://tubu:tubu@localhost:5547/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand referral-order2 vouchers-real-user cod-return-refund order-cancel ctv-assisted-refund p2002-in-tx affiliate.race
+Test Suites: 7 passed, 7 total
+Tests:       48 passed, 48 total
+$ npx jest --maxWorkers=1 src/modules/wallet src/modules/cashback src/modules/affiliate src/modules/orders src/modules/vouchers src/modules/integrations/pancake src/modules/admin/admin.service.spec.ts src/modules/system-config/config-seed.spec.ts
+Test Suites: 30 passed, 30 total
+Tests:       613 passed, 613 total
+```
+
+- `npx tsc --noEmit -p tsconfig.json` (apps/api): không lỗi
+- `npx eslint` các file đã sửa (referral-reward.ts, coins.service.ts(+spec), order-status.service.ts(+spec), cashback.service.ts, seed.ts, referral-order2.race-spec.ts): không lỗi
+
+Migration: không.
+
+### Việc còn lại sau review
+- Ghi chú "Mốc thưởng thêm đã trả sẽ KHÔNG bị thu hồi" ở mục C-003 phía trên đã lỗi thời: nay mốc bị thu hồi khi số lượt còn hiệu lực tụt dưới mốc.
+- Màn admin/đối soát cho `REFERRAL_DEBT` và cơ chế trừ nợ: gộp vào Đợt D (Q-03 gộp TubuXu vào Điểm Xanh), hoặc chủ dự án chọn giữ thưởng tới hết cửa sổ trả hàng.
+- Đường resync thưởng giới thiệu cho người được mời có từ 2 đơn giao mà chưa có dòng thưởng (khi lần xét lúc DELIVERED lỗi và không có đơn giao sau): chưa có cron/endpoint.
+- Chờ chủ dự án xác nhận: (a) không thưởng lại cặp đã bị thu hồi; (b) ngưỡng `referral.min_order_amount` 200.000.
