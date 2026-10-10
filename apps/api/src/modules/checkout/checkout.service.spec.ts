@@ -127,6 +127,7 @@ function build(
   const affiliate = {
     createCommissionForOrder: opts.createCommissionForOrder ?? jest.fn().mockResolvedValue(undefined),
     getActiveTouch: opts.getActiveTouch ?? jest.fn().mockResolvedValue(null),
+    notifyCommissionCreated: jest.fn().mockResolvedValue(undefined),
   } as unknown as AffiliateService;
   const coins = { spendCoins: jest.fn().mockResolvedValue(undefined) } as unknown as CoinsService;
   // config default → loyalty.earn_points_on_xu=false (đơn XU không sinh điểm).
@@ -368,6 +369,29 @@ describe('CheckoutService.placeOrder — hoa hồng CTV tạo trong tx của đ�
     const { svc, affiliate } = build({ stockCount: 1 });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     expect(affiliate.createCommissionForOrder).not.toHaveBeenCalled();
+  });
+
+  // C-029: báo CTV có đơn mới SAU commit (hoa hồng nằm trong tx của đơn nên không báo từ trong tx).
+  it('có người giới thiệu → báo CTV sau commit, sau khi hoa hồng đã tạo', async () => {
+    const { svc, affiliate } = build({ stockCount: 1, getActiveTouch: touch() });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const notify = affiliate.notifyCommissionCreated as jest.Mock;
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith('o1');
+    const create = affiliate.createCommissionForOrder as jest.Mock;
+    expect(create.mock.invocationCallOrder[0]!).toBeLessThan(notify.mock.invocationCallOrder[0]!);
+  });
+
+  it('không có người giới thiệu → không báo CTV', async () => {
+    const { svc, affiliate } = build({ stockCount: 1 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(affiliate.notifyCommissionCreated).not.toHaveBeenCalled();
+  });
+
+  it('báo CTV lỗi không làm hỏng đơn đã đặt', async () => {
+    const { svc, affiliate } = build({ stockCount: 1, getActiveTouch: touch() });
+    (affiliate.notifyCommissionCreated as jest.Mock).mockRejectedValue(new Error('zns down'));
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).resolves.toBeDefined();
   });
 });
 

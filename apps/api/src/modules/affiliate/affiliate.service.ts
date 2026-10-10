@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CommissionStatus, type PayoutStatus, type Prisma } from '@prisma/client';
 import { randomBytes, randomInt } from 'node:crypto';
@@ -12,6 +12,8 @@ import { assertVariationsSellable, isSellableVariation, productDiscontinuedError
 import { CoinsService } from '../wallet/coins.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { CTV_NOTIFICATION } from './ctv-notification-codes';
 import { paginated, skipTake } from '../../common/pagination';
 import {
   CONFIRMED_COMMISSION_STATUSES,
@@ -30,6 +32,8 @@ export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
+const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
+
 /**
  * CTV nội bộ (Build Spec §6.x, §15 affiliate.*).
  * Commission: rate theo từng variation (variation.affiliateRate). Vòng đời:
@@ -46,6 +50,8 @@ export class AffiliateService {
     private readonly pancakeOrder: PancakeOrderService,
     private readonly coins: CoinsService,
     private readonly analytics: AnalyticsEventsService,
+    // @Optional: test dựng service trực tiếp không truyền; AppModule luôn wiring (NotificationsModule là @Global).
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   async register(userId: string, termsVersion?: string) {
@@ -773,6 +779,7 @@ export class AffiliateService {
         select: { orderId: true },
       });
       const heldOrderIds = [...new Set(openReturns.map((r) => r.orderId))];
+      const approvedAt = new Date();
       const res = await this.prisma.commission.updateMany({
         where: {
           status: 'LOCKED',
@@ -783,11 +790,70 @@ export class AffiliateService {
           order: { status: 'DELIVERED' },
           ...(heldOrderIds.length > 0 ? { orderId: { notIn: heldOrderIds } } : {}),
         },
-        data: { status: 'APPROVED', approvedAt: new Date() },
+        data: { status: 'APPROVED', approvedAt },
       });
-      if (res.count > 0) this.logger.log(`Duyệt ${res.count} commission hết hold.`);
+      if (res.count > 0) {
+        this.logger.log(`Duyệt ${res.count} commission hết hold.`);
+        await this.notifyCommissionsApproved(approvedAt);
+      }
     } catch (err) {
       this.logger.error(`approveDueCommissions lỗi: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  /**
+   * Báo CTV hoa hồng vừa được duyệt (có thể rút), gộp theo người: một lượt cron có thể chốt nhiều
+   * khoản của cùng CTV, mỗi khoản một tin là spam. Lọc đúng lượt này bằng `approvedAt` trùng
+   * mốc đã ghi ở câu UPDATE (không cần thêm cột/đổi câu UPDATE đang có test). Mọi lỗi chỉ log: tiền
+   * đã chốt xong, thông báo hỏng không được làm cron báo thất bại.
+   */
+  private async notifyCommissionsApproved(approvedAt: Date): Promise<void> {
+    if (!this.notifications) return;
+    try {
+      const rows = await this.prisma.commission.findMany({
+        where: { status: 'APPROVED', approvedAt },
+        select: { affiliateUserId: true, amount: true },
+      });
+      const perUser = new Map<string, { count: number; amount: number }>();
+      for (const r of rows) {
+        const cur = perUser.get(r.affiliateUserId) ?? { count: 0, amount: 0 };
+        perUser.set(r.affiliateUserId, { count: cur.count + 1, amount: cur.amount + r.amount });
+      }
+      for (const [userId, sum] of perUser) {
+        try {
+          await this.notifications.notify(userId, CTV_NOTIFICATION.APPROVED, {
+            count: String(sum.count),
+            amount: vnd(sum.amount),
+          });
+        } catch (err) {
+          this.logger.error(`Gửi thông báo hoa hồng được duyệt cho ${userId} lỗi: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+    } catch (err) {
+      this.logger.error(`notifyCommissionsApproved lỗi: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  /**
+   * Báo CTV có đơn mới từ link/mã của mình kèm hoa hồng dự kiến. Gọi SAU KHI đơn đã commit (hoa
+   * hồng được tạo trong transaction của đơn nên không báo từ trong đó: tx rollback thì CTV nhận tin
+   * về khoản không tồn tại). Không báo đơn CTV tự lên hộ (chính họ vừa tạo) và không kèm mã đơn:
+   * đó là đơn của KHÁCH, app sẽ hiện nút "Xem đơn" dẫn tới trang CTV không có quyền xem. Không bao
+   * giờ ném lỗi — thông báo hỏng không được làm hỏng đơn vừa đặt.
+   */
+  async notifyCommissionCreated(orderId: string): Promise<void> {
+    if (!this.notifications) return;
+    try {
+      const commission = await this.prisma.commission.findFirst({
+        where: { orderId },
+        select: { affiliateUserId: true, amount: true, order: { select: { placedForCustomer: true } } },
+      });
+      if (!commission || commission.order.placedForCustomer) return;
+      await this.notifications.notify(commission.affiliateUserId, CTV_NOTIFICATION.NEW, {
+        amount: vnd(commission.amount),
+      });
+    } catch (err) {
+      this.logger.error(`Gửi thông báo hoa hồng mới cho đơn ${orderId} lỗi: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -1131,6 +1197,18 @@ export class AffiliateService {
       );
     }
     this.logger.log(`Admin ${adminId} xác nhận đã chuyển khoản lệnh rút ${id}.`);
-    return this.prisma.payout.findUniqueOrThrow({ where: { id } });
+    const payout = await this.prisma.payout.findUniqueOrThrow({ where: { id } });
+    if (this.notifications) {
+      try {
+        // Payout.amount là số tiền THỰC chuyển (đã trừ phí), đúng con số CTV sẽ thấy trong tài khoản.
+        await this.notifications.notify(payout.userId, CTV_NOTIFICATION.PAYOUT_PAID, {
+          amount: vnd(payout.amount),
+          ref: payout.bankRef ? ` (mã giao dịch ${payout.bankRef})` : '',
+        });
+      } catch (err) {
+        this.logger.error(`Gửi thông báo đã chuyển khoản lệnh rút ${id} lỗi: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+    return payout;
   }
 }
