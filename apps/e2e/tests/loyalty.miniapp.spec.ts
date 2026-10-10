@@ -185,11 +185,11 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     expect(api.callsTo('POST', '/me/loyalty/check-in')).toHaveLength(1);
   });
 
-  test('Đổi điểm lấy voucher: xác nhận → trừ điểm → voucher vào Kho, quà không đủ điểm bị khoá', async ({ page, api }) => {
+  test('Đổi điểm lấy mã giảm giá: xác nhận → trừ điểm → mã vào Mã giảm giá của tôi, quà không đủ điểm bị khoá', async ({ page, api }) => {
     mockLoyalty(api);
     await page.goto('/loyalty');
 
-    await expect(page.getByText('Đổi Điểm Nhận Voucher')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Đổi Điểm Xanh nhận mã giảm giá')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('3 ưu đãi')).toBeVisible();
     // 60 điểm < 100 → nút của quà 100k khoá.
     await expect(page.getByRole('button', { name: 'Cần 100 điểm' })).toBeDisabled();
@@ -210,9 +210,9 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     const call = await redeemed;
     expect(call.path).toBe('/me/loyalty/rewards/reward-discount-50k/redeem');
 
-    await expect(page.getByText('Đổi thành công! Mã LOYAL50K-E2E1 đã vào Kho voucher.')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Đổi thành công! Mã LOYAL50K-E2E1 đã vào mục Mã giảm giá của tôi.')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('Xác nhận đổi ưu đãi')).toHaveCount(0);
-    // Kho voucher tải lại (invalidate ['coupons']).
+    // Mã giảm giá của tôi tải lại (invalidate ['coupons']).
     await expect(page.getByText('Mã LOYAL50K-E2E1 · đơn từ 300.000đ')).toBeVisible({ timeout: 5_000 });
     // Số dư sau đổi: 60 − 50 = 10 (GET /me/loyalty tải lại).
     await expect(page.getByText('Tích điểm ×1 · 10 điểm Xanh')).toBeVisible();
@@ -224,7 +224,7 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     mockLoyalty(api, { locked: { points: 40, until: '2026-10-03T17:30:00.000Z' } });
     await page.goto('/loyalty');
 
-    await expect(page.getByText('Đổi Điểm Nhận Voucher')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Đổi Điểm Xanh nhận mã giảm giá')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('loyalty-locked-points')).toContainText(
       'Đổi quà dùng được 20 điểm: 40 điểm từ đơn mới giao sẽ dùng được sau ngày 04/10/2026 (hết hạn đổi/trả hàng).',
     );

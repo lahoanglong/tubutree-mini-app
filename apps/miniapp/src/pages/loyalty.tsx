@@ -24,10 +24,11 @@ import {
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
-import { formatVnd, formatPoints } from '../utils/format';
+import { formatVnd, formatPoints, formatNumber, formatDate } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 import { Skeleton } from '../components/ui/skeleton';
+import { Button as DsButton } from '../components/ui/button';
 import { ErrorState } from '../components/ui/empty-state';
 import { QrCode } from '../components/qr-code';
 
@@ -65,7 +66,7 @@ export default function LoyaltyPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   // Khoá đồng bộ chống chạm đúp: `disabled={mut.isPending}` chỉ có hiệu lực sau lần render kế,
   // 2 cú chạm trong cùng khung hình vẫn gọi mutate 2 lần. Đổi quà KHÔNG idempotent (mỗi lần đủ
-  // điểm = 1 voucher mới) nên phải chặn ngay tại chỗ; điểm danh thì backend đã unique theo ngày.
+  // điểm = 1 mã giảm giá mới) nên phải chặn ngay tại chỗ; điểm danh thì backend đã unique theo ngày.
   const busyRef = useRef({ checkIn: false, redeem: false });
 
   const refreshPoints = () => {
@@ -101,7 +102,7 @@ export default function LoyaltyPage() {
     onSuccess: (res) => {
       haptic('heavy');
       setConfirmReward(null);
-      openSnackbar({ text: `Đổi thành công! Mã ${res.coupon.code} đã vào Kho voucher.`, type: 'success' });
+      openSnackbar({ text: `Đổi thành công! Mã ${res.coupon.code} đã vào mục Mã giảm giá của tôi.`, type: 'success' });
       refreshPoints();
       void qc.invalidateQueries({ queryKey: ['coupons'] });
     },
@@ -211,7 +212,7 @@ export default function LoyaltyPage() {
                     />
                   </Box>
                   <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
-                    Còn <b>{next.pointsToGo.toLocaleString('vi-VN')}</b> điểm tích từ mua hàng để lên hạng {next.name}
+                    Còn <b>{formatNumber(next.pointsToGo)}</b> điểm tích từ mua hàng để lên hạng {next.name}
                   </Text>
                 </Box>
               ) : (
@@ -249,7 +250,60 @@ export default function LoyaltyPage() {
             </Box>
           </Box>
 
-          {/* Widget Điểm danh 7 ngày (Điểm Xanh) — tách riêng với điểm danh hạt giống ở Vườn Xanh */}
+          {/* Mã giảm giá của tôi — ngay dưới thẻ hạng: khách có mã mà không thấy thì mất lý do quay lại (A1-021). */}
+          <Section
+            title="Mã giảm giá của tôi"
+            action={couponsQ.data && couponsQ.data.length > 0 ? `${couponsQ.data.length} mã` : undefined}
+          >
+            {couponsQ.isLoading ? (
+              <Skeleton style={{ height: 64, borderRadius: 12 }} />
+            ) : couponsQ.isError ? (
+              <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8 }}>
+                <Text size="small" style={{ color: 'var(--neutral-600)', flex: 1 }}>
+                  Chưa tải được mã giảm giá: {getErrorMessage(couponsQ.error)}
+                </Text>
+                <DsButton variant="secondary" onPress={() => void couponsQ.refetch()}>
+                  Thử lại
+                </DsButton>
+              </Box>
+            ) : couponsQ.data && couponsQ.data.length > 0 ? (
+              <Box flex flexDirection="column" style={{ gap: 8 }}>
+                {couponsQ.data.map((c) => (
+                  <Box
+                    key={c.code}
+                    flex
+                    alignItems="center"
+                    justifyContent="space-between"
+                    p={3}
+                    style={{
+                      background: 'var(--clay-50)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px dashed var(--clay-200)',
+                    }}
+                  >
+                    <Box>
+                      <Text bold size="small" style={{ color: 'var(--clay-700)' }}>
+                        {couponLabel(c)}
+                      </Text>
+                      <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+                        Mã {c.code}
+                        {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
+                      </Text>
+                    </Box>
+                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                      HSD {formatDate(c.endAt)}
+                    </Text>
+                  </Box>
+                ))}
+              </Box>
+            ) : (
+              <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+                Chưa có mã giảm giá khả dụng — đổi Điểm Xanh ở mục bên dưới để nhận mã.
+              </Text>
+            )}
+          </Section>
+
+          {/* Widget Điểm danh 7 ngày (Điểm Xanh) — tách riêng với điểm danh giọt nước ở Vườn Xanh */}
           {checkInQ.isLoading ? (
             <Box mx={4} mb={3}>
               <Skeleton style={{ height: 120, borderRadius: 16 }} />
@@ -316,7 +370,7 @@ export default function LoyaltyPage() {
                   >
                     <Text size="xSmall" style={{ color: 'var(--neutral-500)', fontSize: 10 }}>N{r.day}</Text>
                     <Text bold size="xSmall" style={{ color: r.claimed ? 'var(--leaf-700)' : 'var(--neutral-800)', marginTop: 2 }}>
-                      +{r.points}
+                      +{formatNumber(r.points)}
                     </Text>
                     <Text style={{ fontSize: 12, marginTop: 2 }}>
                       {r.claimed ? '✓' : r.day === 7 ? '🎁' : '🌱'}
@@ -326,7 +380,7 @@ export default function LoyaltyPage() {
               </Box>
               <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8, lineHeight: '16px' }}>
                 Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính
-                vào xét hạng; hạt giống Vườn Xanh điểm danh riêng trong Vườn Cây.
+                vào xét hạng; giọt nước Vườn Xanh điểm danh riêng trong Vườn Cây.
               </Text>
             </Box>
           ) : null}
@@ -450,7 +504,7 @@ export default function LoyaltyPage() {
                       </Text>
                     </Box>
                     <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                      từ {t.minPoints.toLocaleString('vi-VN')} điểm tích luỹ · ×{t.multiplier}
+                      từ {formatNumber(t.minPoints)} điểm tích luỹ · ×{t.multiplier}
                     </Text>
                   </Box>
                 );
@@ -458,9 +512,9 @@ export default function LoyaltyPage() {
             </Box>
           </Section>
 
-          {/* Đổi Điểm Nhận Voucher (Reward Catalog) */}
+          {/* Đổi Điểm Xanh nhận mã giảm giá (Reward Catalog) */}
           <Section
-            title="Đổi Điểm Nhận Voucher"
+            title="Đổi Điểm Xanh nhận mã giảm giá"
             action={rewardsQ.data ? `${rewardsQ.data.rewards.length} ưu đãi` : undefined}
           >
             {rewardsQ.isLoading ? (
@@ -562,52 +616,6 @@ export default function LoyaltyPage() {
             )}
           </Section>
 
-          {/* Kho voucher */}
-          <Section
-            title="Kho voucher"
-            action={
-              couponsQ.data && couponsQ.data.length > 0
-                ? `${couponsQ.data.length} mã`
-                : undefined
-            }
-          >
-            {couponsQ.data && couponsQ.data.length > 0 ? (
-              <Box flex flexDirection="column" style={{ gap: 8 }}>
-                {couponsQ.data.map((c) => (
-                  <Box
-                    key={c.code}
-                    flex
-                    alignItems="center"
-                    justifyContent="space-between"
-                    p={3}
-                    style={{
-                      background: 'var(--clay-50)',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px dashed var(--clay-200)',
-                    }}
-                  >
-                    <Box>
-                      <Text bold size="small" style={{ color: 'var(--clay-700)' }}>
-                        {couponLabel(c)}
-                      </Text>
-                      <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                        Mã {c.code}
-                        {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
-                      </Text>
-                    </Box>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                      HSD {new Date(c.endAt).toLocaleDateString('vi-VN')}
-                    </Text>
-                  </Box>
-                ))}
-              </Box>
-            ) : (
-              <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-                Chưa có voucher khả dụng.
-              </Text>
-            )}
-          </Section>
-
           {/* Lịch sử điểm */}
           <Section title="Lịch sử Điểm Xanh">
             {txnQ.data && txnQ.data.length > 0 ? (
@@ -624,7 +632,7 @@ export default function LoyaltyPage() {
                     <Box>
                       <Text size="small">{pointsReasonLabel(t.reason)}</Text>
                       <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                        {new Date(t.createdAt).toLocaleDateString('vi-VN')}
+                        {formatDate(t.createdAt)}
                       </Text>
                     </Box>
                     <Text
@@ -633,7 +641,7 @@ export default function LoyaltyPage() {
                       style={{ color: t.delta >= 0 ? 'var(--leaf-600)' : 'var(--danger)' }}
                     >
                       {t.delta >= 0 ? '+' : ''}
-                      {t.delta}
+                      {formatNumber(t.delta)}
                     </Text>
                   </Box>
                 ))}
@@ -821,7 +829,7 @@ export default function LoyaltyPage() {
         </Box>
       )}
 
-      {/* Modal Xác nhận đổi voucher */}
+      {/* Modal Xác nhận đổi mã giảm giá */}
       {confirmReward && (
         <Box
           style={{
@@ -877,7 +885,7 @@ export default function LoyaltyPage() {
               <Box mt={2} pt={2} flex justifyContent="space-between" style={{ borderTop: '1px dashed var(--neutral-200)' }}>
                 <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Điểm cần trừ:</Text>
                 <Text bold size="small" style={{ color: 'var(--leaf-700)' }}>
-                  -{confirmReward.pointsCost} Xanh
+                  -{formatPoints(confirmReward.pointsCost)} Xanh
                 </Text>
               </Box>
               <Box mt={1} flex justifyContent="space-between">
@@ -889,7 +897,7 @@ export default function LoyaltyPage() {
             </Box>
 
             <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 10, lineHeight: '16px' }}>
-              Voucher sau khi đổi sẽ có hạn 30 ngày và xuất hiện ngay trong Kho voucher của bạn.
+              Mã giảm giá sau khi đổi có hạn 30 ngày và xuất hiện ngay trong mục Mã giảm giá của tôi.
             </Text>
 
             <Box mt={4} flex style={{ gap: 8 }}>
