@@ -12,12 +12,15 @@ const tx = (
   delta: number,
   createdAt: string,
   expiresAt: string | null = null,
+  reason?: string,
 ): PointExpiryTxn => ({
   id,
   delta,
   createdAt: new Date(createdAt),
   expiresAt: expiresAt ? new Date(expiresAt) : null,
+  ...(reason ? { reason } : {}),
 });
+const expired = (id: string, amount: number, createdAt: string) => tx(id, -amount, createdAt, null, 'POINTS_EXPIRED');
 
 describe('computePointExpiry (pure FIFO helper)', () => {
   const WINDOW = 7 * DAY;
@@ -124,6 +127,120 @@ describe('computePointExpiry (pure FIFO helper)', () => {
     expect(r.expiringSoon.amount).toBe(0); // a (còn hạn) đã bị tiêu hết
   });
 
+  /**
+   * Điểm hoàn khi huỷ đơn (OQ-15) và điểm đơn giao đều có hạn nhưng nằm SAU các lô không hạn (thưởng game, review,
+   * giới thiệu...) trong thứ tự FIFO. Dòng POINTS_EXPIRED mà cron ghi phải được replay vào chính lô đã hết hạn, nếu
+   * không nó ăn vào lô không hạn cũ hơn, lô hết hạn trông còn nguyên và đêm sau cron trừ lần nữa (mất điểm thật).
+   */
+  describe('POINTS_EXPIRED chỉ ăn lô đã hết hạn (lô hết hạn không phải lô cũ nhất còn tồn)', () => {
+    const PAST = '2026-06-01';
+
+    it('lô cũ hơn không hạn: sau khi cron đã trừ lô hết hạn → expiredNow = 0 (không trừ lần hai)', () => {
+      const r = computePointExpiry(
+        [
+          tx('a', 100, '2025-01-01', null),
+          tx('b', 50, '2025-06-01', PAST),
+          expired('e', 50, '2026-07-04'),
+        ],
+        NOW,
+        WINDOW,
+      );
+      expect(r.expiredNow).toBe(0);
+    });
+
+    it('lô cũ hơn có hạn dài hơn (cấu hình tháng hết hạn đã giảm): cũng không trừ lần hai', () => {
+      const r = computePointExpiry(
+        [
+          tx('a', 100, '2025-01-01', '2027-01-01'),
+          tx('b', 50, '2025-06-01', PAST),
+          expired('e', 50, '2026-07-04'),
+        ],
+        NOW,
+        WINDOW,
+      );
+      expect(r.expiredNow).toBe(0);
+    });
+
+    it('mô phỏng cron chạy 4 đêm liên tiếp: tổng trừ đúng bằng lô hết hạn, không trừ lại', () => {
+      const rows: PointExpiryTxn[] = [tx('a', 100, '2025-01-01', null), tx('b', 50, '2025-06-01', PAST)];
+      let totalExpired = 0;
+      for (let night = 0; night < 4; night++) {
+        const at = new Date(NOW.getTime() + night * DAY);
+        const { expiredNow } = computePointExpiry(rows, at, 0);
+        if (expiredNow > 0) {
+          totalExpired += expiredNow;
+          rows.push({ id: `e${night}`, delta: -expiredNow, createdAt: at, expiresAt: null, reason: 'POINTS_EXPIRED' });
+        }
+      }
+      expect(totalExpired).toBe(50);
+    });
+
+    it('điểm hoàn có hạn nằm sau lô không hạn: hết hạn đúng một lần dù cron chạy lại', () => {
+      const rows: PointExpiryTxn[] = [
+        tx('game', 80, '2026-01-01', null),
+        tx('order', 100, '2026-02-01', '2027-02-01'),
+        tx('redeem', -40, '2026-03-01'),
+        tx('refund', 40, '2026-03-02', '2027-03-02', 'ORDER_REFUND_POINTS:C1'),
+      ];
+      const at = new Date('2027-03-03T01:00:00Z');
+      const first = computePointExpiry(rows, at, 0);
+      // redeem -40 ăn lô game cũ nhất (còn 40, không hạn); lô đơn 100 và lô hoàn 40 hết hạn → 140.
+      expect(first.expiredNow).toBe(140);
+      rows.push(expired('e1', first.expiredNow, '2027-03-03T01:00:00Z'));
+      expect(computePointExpiry(rows, new Date('2027-03-04T01:00:00Z'), 0).expiredNow).toBe(0);
+    });
+
+    it('lô còn hạn không bị dòng POINTS_EXPIRED ăn: vẫn tính là sắp hết hạn trong cửa sổ nhắc', () => {
+      const soon = new Date(NOW.getTime() + 3 * DAY).toISOString();
+      const r = computePointExpiry(
+        [
+          tx('a', 30, '2025-01-01', soon),
+          tx('b', 50, '2025-06-01', PAST),
+          expired('e', 50, '2026-07-04'),
+        ],
+        NOW,
+        WINDOW,
+      );
+      expect(r.expiredNow).toBe(0);
+      expect(r.expiringSoon.amount).toBe(30);
+    });
+
+    it('POINTS_EXPIRED lớn hơn các lô hết hạn tại thời điểm đó → phần dư tiêu FIFO như cũ (không âm, không lỗi)', () => {
+      const r = computePointExpiry(
+        [
+          tx('a', 100, '2025-01-01', null),
+          tx('b', 50, '2025-06-01', PAST),
+          expired('e', 80, '2026-07-04'),
+        ],
+        NOW,
+        WINDOW,
+      );
+      expect(r.expiredNow).toBe(0);
+    });
+
+    it('lô chỉ hết hạn SAU thời điểm ghi dòng POINTS_EXPIRED thì dòng đó không ăn lô ấy', () => {
+      const r = computePointExpiry(
+        [
+          tx('b', 50, '2025-06-01', '2026-07-04T12:00:00Z'),
+          tx('c', 20, '2025-07-01', PAST),
+          expired('e', 20, '2026-07-04T00:00:00Z'),
+        ],
+        new Date('2026-07-05T00:00:00Z'),
+        0,
+      );
+      expect(r.expiredNow).toBe(50);
+    });
+
+    it('tiêu điểm thường (không phải POINTS_EXPIRED) vẫn FIFO như cũ: ăn lô cũ nhất, lô hết hạn còn nguyên', () => {
+      const r = computePointExpiry(
+        [tx('a', 100, '2025-01-01', null), tx('b', 50, '2025-06-01', PAST), tx('s', -30, '2026-01-01', null, 'ORDER_REDEEM:C9')],
+        NOW,
+        WINDOW,
+      );
+      expect(r.expiredNow).toBe(50);
+    });
+  });
+
   it('tiêu vượt số lô còn lại (bất biến vỡ) → bỏ qua phần dư, không âm', () => {
     const r = computePointExpiry(
       [tx('a', 50, '2025-01-01', '2026-01-01'), tx('b', -80, '2025-06-01')],
@@ -225,6 +342,32 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     expect(findMany.mock.calls[1][0].where).toEqual({ userId: 'u1', lot: 'STANDARD' });
     expect(txUpdateMany.mock.calls[0][0].data).toEqual({ pointsBalance: { decrement: 100 } });
     expect(txCreate.mock.calls[0][0].data).toMatchObject({ lot: 'STANDARD' });
+  });
+
+  it('đọc kèm reason của từng dòng (computePointExpiry cần nó để nhận ra POINTS_EXPIRED), cả lần đọc nhanh lẫn lần đọc trong tx', async () => {
+    const { svc, findMany, txFindMany } = setup({
+      candidates: [{ userId: 'u1' }],
+      userTxns: [tx('a', 100, '2025-01-01', '2026-01-01')],
+      updateCount: 1,
+    });
+    await svc.expirePoints();
+    expect(findMany.mock.calls[1][0].select).toMatchObject({ reason: true });
+    expect((txFindMany.mock.calls[0] as unknown as [{ select: unknown }])[0].select).toMatchObject({ reason: true });
+  });
+
+  it('lô không hạn cũ hơn + dòng POINTS_EXPIRED đã có cho lô hết hạn → không trừ lần hai (không mở tx)', async () => {
+    const { svc, $transaction, txUpdateMany } = setup({
+      candidates: [{ userId: 'u1' }],
+      userTxns: [
+        tx('a', 100, '2025-01-01', null),
+        tx('b', 50, '2025-06-01', '2026-06-01'),
+        tx('e', -50, '2026-07-04', null, 'POINTS_EXPIRED'),
+      ],
+      updateCount: 1,
+    });
+    await svc.expirePoints();
+    expect($transaction).not.toHaveBeenCalled();
+    expect(txUpdateMany).not.toHaveBeenCalled();
   });
 
   it('khoá dòng user rồi đọc lại sổ trong transaction; lượt kia đã trừ trước (sổ có POINTS_EXPIRED) → không trừ lần hai', async () => {

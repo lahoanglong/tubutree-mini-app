@@ -121,4 +121,62 @@ describe('điểm hoàn khi huỷ đơn có hạn (real Postgres)', () => {
     expect(await prisma.pointsTransaction.count({ where: { userId: user.id, reason: 'POINTS_EXPIRED' } })).toBe(0);
     expect(await balance(user.id)).toBe(100);
   });
+
+  it('hết hạn điểm hoàn (lùi expiresAt về quá khứ): cron trừ đúng 40 một lần, chạy lại không trừ đôi, số dư khớp sổ', async () => {
+    const { user, order } = await userWithSpentOrder(40);
+    await loyalty.reverseOrderPoints(order.id);
+    const row = await refundRow(order.id);
+    await prisma.pointsTransaction.update({ where: { id: row.id }, data: { expiresAt: new Date(Date.now() - DAY) } });
+
+    await expiry.expirePoints();
+    await expiry.expirePoints();
+
+    const expired = await prisma.pointsTransaction.findMany({ where: { userId: user.id, reason: 'POINTS_EXPIRED' } });
+    expect(expired.map((r) => [r.delta, r.lot])).toEqual([[-40, 'STANDARD']]);
+    expect(await balance(user.id)).toBe(60);
+  });
+
+  it('điểm hoàn đã bị tiêu một phần trước hạn: cron chỉ trừ phần còn lại của lô hoàn (FIFO), không trừ điểm còn hạn khác', async () => {
+    // Seed 100 (còn hạn dài), đã tiêu 40 → hoàn 40 (có hạn, sau đó lùi về quá khứ). Dòng tiêu sau đó ăn lô CŨ NHẤT
+    // (seed) nên lô hoàn còn nguyên 40 và là phần duy nhất bị trừ khi hết hạn.
+    const { user, order } = await userWithSpentOrder(40);
+    await loyalty.reverseOrderPoints(order.id);
+    const row = await refundRow(order.id);
+    await prisma.pointsTransaction.update({ where: { id: row.id }, data: { expiresAt: new Date(Date.now() - DAY) } });
+    await prisma.$transaction([
+      prisma.pointsTransaction.create({ data: { userId: user.id, delta: -30, lot: 'STANDARD', reason: 'IT_SPEND', refType: 'IT' } }),
+      prisma.user.update({ where: { id: user.id }, data: { pointsBalance: { decrement: 30 } } }),
+    ]);
+
+    await expiry.expirePoints();
+    await expiry.expirePoints();
+
+    const expired = await prisma.pointsTransaction.findMany({ where: { userId: user.id, reason: 'POINTS_EXPIRED' } });
+    expect(expired.map((r) => r.delta)).toEqual([-40]);
+    expect(await balance(user.id)).toBe(100 - 30 - 40);
+  });
+
+  it('lô không hạn cũ hơn (thưởng game) + điểm hoàn hết hạn: cron trừ đúng phần hoàn một lần qua 3 lần chạy, lô không hạn còn nguyên', async () => {
+    // Replay FIFO thuần ăn dòng POINTS_EXPIRED vào lô game không hạn (cũ nhất), lô hoàn trông còn nguyên và bị trừ lại mỗi đêm.
+    const user = await createUser(prisma, { pointsBalance: 100 });
+    touched.push(user.id);
+    const order = await createOrder(prisma, { userId: user.id, pointsUsed: 40 });
+    await prisma.pointsTransaction.createMany({
+      data: [
+        { userId: user.id, delta: 140, lot: 'STANDARD', reason: 'GAME_SPIN_REWARD', refType: 'GAME', createdAt: new Date(Date.now() - 60 * DAY), expiresAt: null },
+        { userId: user.id, delta: -40, lot: 'STANDARD', reason: `ORDER_REDEEM:${order.code}`, refType: 'ORDER', refId: order.id, createdAt: new Date(Date.now() - 50 * DAY) },
+      ],
+    });
+    await loyalty.reverseOrderPoints(order.id);
+    const row = await refundRow(order.id);
+    await prisma.pointsTransaction.update({ where: { id: row.id }, data: { expiresAt: new Date(Date.now() - DAY) } });
+
+    await expiry.expirePoints();
+    await expiry.expirePoints();
+    await expiry.expirePoints();
+
+    const expired = await prisma.pointsTransaction.findMany({ where: { userId: user.id, reason: 'POINTS_EXPIRED' } });
+    expect(expired.map((r) => [r.delta, r.lot])).toEqual([[-40, 'STANDARD']]);
+    expect(await balance(user.id)).toBe(100);
+  });
 });

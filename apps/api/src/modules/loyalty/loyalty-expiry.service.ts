@@ -19,6 +19,7 @@ export interface PointExpiryTxn {
   delta: number;
   expiresAt: Date | null;
   createdAt: Date;
+  reason?: string;
 }
 
 export interface PointExpiryResult {
@@ -28,14 +29,37 @@ export interface PointExpiryResult {
   expiringSoon: { amount: number; earliestExpiresAt: Date | null };
 }
 
+/** `reason` của dòng cron trừ điểm hết hạn (xem LoyaltyExpiryService.expireUser). */
+const EXPIRY_REASON = 'POINTS_EXPIRED';
+
+interface ExpiryLot {
+  remaining: number;
+  expiresAt: Date | null;
+}
+
+/** Trừ `amount` từ các lô theo thứ tự mảng; trả phần chưa trừ được. */
+function consumeFifo(lots: ExpiryLot[], amount: number): number {
+  let left = amount;
+  for (const lot of lots) {
+    if (left <= 0) break;
+    const take = Math.min(lot.remaining, left);
+    lot.remaining -= take;
+    left -= take;
+  }
+  return left;
+}
+
 /**
  * Tính điểm hết hạn theo FIFO (lô cũ tiêu trước) — HÀM THUẦN, không đụng DB, tất định.
  *
  * Bất biến: pointsBalance == SUM(delta) lô STANDARD; caller chỉ đưa vào dòng lô STANDARD (PD-3). Mỗi delta DƯƠNG là một "lô" điểm (có/không expiresAt),
- * mỗi delta ÂM (tiêu/đổi/hoàn/POINTS_EXPIRED kỳ trước) tiêu dần từ lô CŨ NHẤT.
+ * mỗi delta ÂM (tiêu/đổi/hoàn) tiêu dần từ lô CŨ NHẤT; riêng POINTS_EXPIRED kỳ trước tiêu lô đã hết hạn trước.
  *
- * Idempotent: dòng POINTS_EXPIRED âm do cron tạo, ở lần chạy sau lại được replay tiêu FIFO
- * đúng lô đã hết hạn → expiredNow về 0 → chạy lại cùng ngày KHÔNG trừ đôi.
+ * Idempotent: dòng POINTS_EXPIRED âm do cron tạo, ở lần chạy sau được replay tiêu đúng các lô đã
+ * hết hạn tại thời điểm nó được ghi (xem EXPIRY_REASON) → expiredNow về 0 → chạy lại KHÔNG trừ đôi.
+ * Replay FIFO thuần không đủ: lô hết hạn chỉ là lô CŨ NHẤT khi mọi lô cùng thời hạn; lô không hạn
+ * (thưởng game, review, giới thiệu) hay lô có hạn dài hơn nằm trước nó thì dòng POINTS_EXPIRED bị
+ * replay vào các lô đó, lô hết hạn trông còn nguyên và đêm sau cron trừ lần nữa.
  *
  * KHÔNG bao giờ "đòi lại" điểm đã tiêu: điểm đã bị delta âm tiêu thì lô giảm remaining, phần
  * đã tiêu không còn nằm trong lô hết hạn.
@@ -54,19 +78,18 @@ export function computePointExpiry(
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 
-  const lots: { remaining: number; expiresAt: Date | null }[] = [];
+  const lots: ExpiryLot[] = [];
   for (const t of sorted) {
     if (t.delta > 0) {
       lots.push({ remaining: t.delta, expiresAt: t.expiresAt });
     } else if (t.delta < 0) {
       let toConsume = -t.delta;
-      for (const lot of lots) {
-        if (toConsume <= 0) break;
-        const take = Math.min(lot.remaining, toConsume);
-        lot.remaining -= take;
-        toConsume -= take;
+      if (t.reason === EXPIRY_REASON) {
+        const expiredAtThatTime = lots.filter((l) => l.expiresAt != null && l.expiresAt.getTime() <= t.createdAt.getTime());
+        toConsume = consumeFifo(expiredAtThatTime, toConsume);
       }
       // Nếu còn dư (toConsume>0): lô đã cạn — bất biến vỡ, bỏ qua (không tạo remaining âm).
+      consumeFifo(lots, toConsume);
     }
   }
 
@@ -115,7 +138,7 @@ export class LoyaltyExpiryService {
     return db.pointsTransaction.findMany({
       where: { userId, lot: 'STANDARD' },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: { id: true, delta: true, expiresAt: true, createdAt: true },
+      select: { id: true, delta: true, expiresAt: true, createdAt: true, reason: true },
     });
   }
 
