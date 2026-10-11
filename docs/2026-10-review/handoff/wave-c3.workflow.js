@@ -44,6 +44,12 @@ const COMMON_WEB = `QUY TẮC DI CƯ DS v2 (web):
 - TDD cho di cư: guard spec apps/web/src/ds-palette-pc11.spec.ts quét file của gói tìm class palette cũ/stock (primary|leaf|clay|sun|neutral, green|red|amber|blue|yellow|orange|... -NNN) và hex/rgb thô; thêm file vào danh sách TRƯỚC khi di cư (ĐỎ), di cư, XANH, commit spec + file CÙNG MỘT commit.
 - Mỗi trang/component lớn một commit: "refactor(web): di cư <tên> sang DS v2 (C-097/Q-25)", dòng trống, rồi Co-Authored-By.`
 
+const COMMON_FEAT = `QUY TẮC TÍNH NĂNG ADMIN WEB (tiền):
+- Mẫu: apps/web/src/components/admin/payout-admin-tab.tsx (+ spec) là màn "đã chuyển khoản, xác nhận" tương tự; admin/page.tsx đăng ký tab trong mảng TABS và khối {tab === ...}; ConfirmDialog (components/admin/confirm-dialog.tsx), component UI chung components/admin/ui.tsx, lib/api.ts (cách gọi API admin). Dùng class DS v2 (stone/forest/sage/honey/terracotta + semantic status), KHÔNG class palette stock (green-/red-/neutral-...), icon lucide-react, không emoji; guard apps/web/src/ds-palette-pc11.spec.ts và static-scan web phải vẫn sạch với file mới.
+- Test TDD: viết spec vitest trước (ĐỎ), rồi cài đặt (XANH). Mỗi thao tác ghi tiền phải có: hộp xác nhận, chống bấm lặp (disable khi đang gửi), hiển thị lỗi API tiếng Việt (400 "không còn chờ chuyển khoản" -> tải lại danh sách), cập nhật danh sách sau thành công.
+- Mỗi bước một commit: "feat(web): <mô tả> (PA-1/Q-01)", dòng trống, rồi Co-Authored-By.
+- ESLint file mới/đã sửa (npx eslint <file> trong apps/web) exit 0; npx tsc --noEmit trong apps/web.`
+
 const PKGS = [
   {
     id: 'PC-10a', kind: 'mini', rm: 'opus', twoPass: false,
@@ -131,6 +137,24 @@ Màn admin có thao tác tiền/đơn (đã nhận tiền chuyển khoản, tr�
       { k: 'i5', c: 'C-097', model: 'sonnet', scope: 'app/merchant/page.tsx và app/brand/[slug]/page.tsx (hex 8 -> token) + hoàn thiện báo cáo gói (số đo trước/sau, ảnh hưởng 390px, giả định, đề xuất cho điều phối viên).' },
     ],
   },
+  {
+    id: 'PC-12', kind: 'feat', rm: 'opus', twoPass: true,
+    spec: `GÓI PC-12 — Màn admin "Hoàn tiền thủ công" cho khách cuối của đơn CTV lên hộ (Q-01, API đã có từ PA-1, chưa có UI). ĐỤNG TIỀN: review opus hai lượt.
+Bối cảnh: khi đơn CTV lên hộ bị huỷ/trả mà khách cuối không có tài khoản (hoặc tài khoản trùng CTV/bị khoá), hệ thống ghi một dòng order_customer_refunds method=MANUAL_TRANSFER, status=PENDING: Tubu đang nợ khách số tiền đó. Admin chuyển khoản tay theo SĐT rồi xác nhận để sổ khớp. Đọc docs/2026-10-review/impl/PA-1.md (mục "Admin xử lý hàng đợi"), apps/api/src/modules/orders/customer-refunds-admin.controller.ts + customer-refunds.service.ts, model OrderCustomerRefund trong apps/api/prisma/schema.prisma.
+API (đã có, KHÔNG sửa trừ khi phát hiện lỗi thật): GET /admin/customer-refunds?status=PENDING|COMPLETED&page&limit (phân trang {data,...} theo common/pagination) và POST /admin/customer-refunds/:id/mark-paid body {bankRef? (<=100), note? (<=500)}; PENDING -> COMPLETED atomic một lần, thua race trả 400.
+Yêu cầu UI (file mới components/admin/customer-refunds-tab.tsx + spec, đăng ký tab "Hoàn tiền khách" trong admin/page.tsx; chỉ sửa admin/page.tsx ở mảng TABS/kiểu Tab/khối render, tối thiểu):
+ 1. Bộ lọc trạng thái (Chờ chuyển khoản mặc định / Đã chuyển), danh sách phân trang: mã đơn (liên kết sang tab đơn nếu có cơ chế sẵn), tên + SĐT người nhận (nút sao chép SĐT), số tiền VND (formatVnd), lý do (CANCELLED -> "Đơn bị huỷ", RETURNED -> "Đơn trả hàng"), phương thức (chỉ MANUAL_TRANSFER cần hành động; WALLET là dòng vết, hiển thị trạng thái "Đã hoàn vào ví" không có nút), ngày tạo, khi COMPLETED: ngày, mã tham chiếu, ghi chú, admin xác nhận.
+ 2. Nút "Đã chuyển khoản" chỉ ở dòng MANUAL_TRANSFER + PENDING: mở ConfirmDialog có ô "Mã giao dịch ngân hàng" (tuỳ chọn, <=100) và "Ghi chú" (tuỳ chọn, <=500), nêu rõ số tiền + SĐT + tên trong hộp xác nhận; gửi POST mark-paid; chống bấm lặp; thành công thì tải lại danh sách; 400 thì hiện thông báo của API và tải lại; lỗi mạng hiện thông báo thử lại, KHÔNG đóng hộp.
+ 3. Số dòng PENDING hiển thị cạnh nhãn tab (huy hiệu) hoặc ở thẻ tổng quan nếu dễ và rẻ (không bắt buộc; không thêm endpoint mới nếu phải đổi API: đếm bằng một lần gọi limit=1 status=PENDING lấy total, hoặc bỏ).
+ 4. Trạng thái rỗng ("Không có khoản hoàn nào đang chờ"), đang tải (skeleton), lỗi tải (nút Thử lại); 390px không tràn ngang (bảng cuộn ngang trong khung riêng hoặc thẻ xếp dọc).
+ 5. Không lộ dữ liệu ngoài admin: chỉ gọi endpoint admin; không log SĐT ra console; render text thuần (không dangerouslySetInnerHTML).
+ 6. e2e: thêm apps/e2e/tests/admin-customer-refunds.spec.ts (mock API theo cách admin.spec.ts đang làm, KHÔNG chạy được ở đây, ghi "unverified"); tsc apps/e2e phải xanh (cd apps/e2e && npx tsc --noEmit -p tsconfig.json).
+Giả định tiền: chỉ ghi nhận điều admin đã chuyển; UI KHÔNG tự chuyển tiền thật, không gọi cổng thanh toán.`,
+    items: [
+      { k: 'i1', c: 'PA-1', model: 'sonnet', scope: 'Spec vitest ĐỎ rồi components/admin/customer-refunds-tab.tsx (danh sách, lọc, phân trang, trạng thái rỗng/tải/lỗi, hiển thị COMPLETED) + client API trong lib nếu cần.' },
+      { k: 'i2', c: 'PA-1', model: 'sonnet', scope: 'Nút Đã chuyển khoản + ConfirmDialog + chống bấm lặp + xử lý 400/lỗi mạng + đăng ký tab trong admin/page.tsx + huy hiệu số PENDING (nếu rẻ) + e2e spec + hoàn thiện báo cáo gói.' },
+    ],
+  },
 ]
 
 function ctx(p) {
@@ -141,7 +165,7 @@ MÃ GÓI: ${p.id}. Bạn làm việc trong git worktree CỐ ĐỊNH của gói:
 MÁY CÓ THỂ SẬP: thay đổi chưa commit sẽ MẤT. Commit NGAY khi một bước đã xanh (git add <file cụ thể>, không dùng git add -A), commit sớm, commit nhiều. Đầu mỗi lượt chạy: git status + git log --oneline ${BASE}..HEAD để biết lần trước làm tới đâu; mục đã có commit và test xanh thì chỉ xác nhận (chạy lại lệnh đo của mục) rồi trả kết quả, đừng làm lại; có thay đổi dở thì xem diff, hoàn thiện rồi commit.
 TÀI LIỆU: docs/2026-10-review/00-ROADMAP.md (mục 5 vòng C3, mục 9 = quyết định chủ dự án, BẮT BUỘC tuân theo), docs/2026-10-review/findings-catalog.md (dòng C-xxx), báo cáo gốc 04-uiux.md, 01-pm.md cùng thư mục, docs/2026-10-review/HANDOFF.md.
 MÔI TRƯỜNG (đã dựng sẵn): node_modules thật trong worktree, packages/shared-types/dist, Prisma client. KHÔNG cần Docker/Postgres cho gói này (nếu thật sự cần DB: dùng container tubu_it_main cổng 5550, DATABASE_URL=postgresql://tubu:tubu@localhost:5550/tubutree_it, KHÔNG ghi vào DB khác).
-${p.kind === 'web' ? COMMON_WEB : COMMON_MINI}
+${p.kind === 'web' ? COMMON_WEB : p.kind === 'feat' ? COMMON_FEAT : COMMON_MINI}
 QUY TRÌNH:
  - Mỗi mục: đo baseline -> viết/mở rộng guard spec thấy ĐỎ -> sửa -> XANH -> commit. Comment code chỉ giải thích "vì sao" không hiển nhiên, không kể lại thay đổi ("đổi X sang Y" cấm). Giữ phong cách code xung quanh.
  - Message commit kết thúc bằng đúng dòng: Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
@@ -182,7 +206,21 @@ PHẠM VI CỦA LƯỢT NÀY (chỉ làm phần này; các mục khác do lượ
 Trả về StructuredOutput: status (DONE/PARTIAL/SKIPPED/BLOCKED), head = git rev-parse HEAD sau commit cuối, note <= 8 dòng, tests [{cmd, result}] (lệnh đã chạy + kết quả thật, gồm lệnh đo ESLint/static-scan của từng file đã xong).`
 }
 
+function featReviewPrompt(p, round) {
+  const wt = WT(p.id)
+  return `Bạn là REVIEWER ĐỘC LẬP (lượt ${round}) cho gói ${p.id} (tính năng admin ĐỤNG TIỀN: xác nhận hoàn tiền thủ công cho khách) của đợt hardening Tubu Tree. Bạn KHÔNG nhận kết luận của người làm — tự đọc diff và code, tự chạy lại lệnh đo.
+Môi trường: mọi lệnh shell bắt đầu bằng export PATH=${NODEBIN}:$PATH; cd ${wt} && ... Worktree: ${wt} (nhánh ${BR(p.id)}). Base: ${BASE}. Xem: git -C "${wt}" log --oneline ${BASE}..HEAD ; git -C "${wt}" diff ${BASE}..HEAD -- . ':!docs/2026-10-review/impl'.
+YÊU CẦU CỦA GÓI:
+${p.spec}
+Quyết định chủ dự án: docs/2026-10-review/00-ROADMAP.md mục 9 (Q-01).
+Tìm lỗi THẬT: (a) đúng nghiệp vụ so với API thật (đọc customer-refunds-admin.controller.ts/service: kiểu trả về, phân trang, tên trường, mã lỗi); (b) an toàn tiền: nút xác nhận chỉ cho MANUAL_TRANSFER+PENDING, không thể gửi hai lần (disable + xử lý 400 race), số tiền/SĐT/tên trong hộp xác nhận là dữ liệu của ĐÚNG dòng được chọn (không lệch dòng sau khi tải lại/đổi trang/đổi bộ lọc), không đóng hộp khi lỗi mạng rồi cho tưởng đã xong, không cập nhật lạc quan sai; (c) bảo mật: chỉ gọi endpoint admin, không lộ PII ra log/URL/localStorage, không HTML thô, độ dài ô nhập khớp DTO (100/500), trim; (d) a11y/390px/DS v2 (không class palette stock, lucide, vùng chạm >=44px, label cho ô nhập, focus trap ở hộp thoại), (e) test: có assert thật cho các nhánh trên (mock không che lỗi), spec ĐỎ-trước đúng; (f) phạm vi: sửa admin/page.tsx ngoài TABS/Tab/khối render, đổi API không cần thiết, file rác.
+Chạy lại: npx vitest run các spec của gói + ds-palette-pc11.spec.ts + admin-components, npx eslint từng file mới/sửa (apps/web), npx tsc --noEmit (apps/web và apps/e2e -p tsconfig.json). KHÔNG sửa code, KHÔNG git ghi, KHÔNG chạy full suite/Playwright/dev server.
+Phân loại: blocker (sai tiền, xác nhận nhầm dòng, bấm lặp ghi hai lần, lộ PII), major (sai yêu cầu, thiếu test quan trọng, hỏng luồng lỗi), minor (còn lại). Verdict CHANGES nếu có blocker hoặc major.
+Trả về StructuredOutput: verdict, findings [{severity, file, line, issue, fix}], summary <= 8 dòng (kèm kết quả lệnh đo thật).`
+}
+
 function reviewPrompt(p, round) {
+  if (p.kind === 'feat') return featReviewPrompt(p, round)
   const wt = WT(p.id)
   const measure = p.kind === 'web'
     ? 'static-scan web (legacyPalette/neutralCls/greenRed/hex của file đổi), npx eslint từng file trong apps/web, npx vitest run các spec admin liên quan + ds-palette-pc11.spec.ts, npx tsc --noEmit trong apps/web'
@@ -215,10 +253,11 @@ Trả về StructuredOutput: status, head, note, tests.`
 }
 
 phase('Implement')
-log('Base ' + BASE + '; ' + PKGS.length + ' gói trong worktree cố định hz7-*, tối đa 3 agent cùng lúc; resume được sau sập máy')
+log('Base ' + BASE + '; ' + (args.only ? args.only.length : PKGS.length) + ' gói trong worktree cố định hz7-*, tối đa 3 agent cùng lúc; resume được sau sập máy')
 
+const SELECTED = args.only ? PKGS.filter(p => args.only.includes(p.id)) : PKGS
 const results = await pipeline(
-  PKGS,
+  SELECTED,
   async (p) => {
     const items = []
     for (let i = 0; i < p.items.length; i++) {
