@@ -54,7 +54,7 @@ export function HomeExtras() {
         {user && (
           <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 4 }}>
             {vi.home.greeting(user.fullName ?? vi.auth.greetingFallback)}
-            {user.pointsBalance != null ? ` · ${vi.home.pointsChip(pointsSummary(user).total)}` : ''}
+            {` · ${vi.home.pointsChip(pointsSummary(user).total)}`}
           </Text>
         )}
         <div style={{ marginTop: 12 }}>
