@@ -20,6 +20,7 @@ vi.mock('../services/shop-api', () => ({
   repurchaseOrder: mocks.repurchaseOrder,
   addToCart: vi.fn(),
   getPublicConfig: vi.fn().mockResolvedValue({ subscribeDiscountPct: 0.12 }),
+  getAddresses: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../services/subscriptions-api', () => ({
   getSubscriptions: mocks.getSubscriptions, setSubscriptionStatus: vi.fn(), skipSubscriptionCycle: vi.fn(),

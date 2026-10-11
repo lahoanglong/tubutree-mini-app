@@ -9,6 +9,7 @@ import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
+import { WalletLedgerService } from '../../src/modules/wallet/wallet-ledger.service';
 import {
   SubscriptionsService,
   SUBSCRIPTION_DUPLICATE,
@@ -20,6 +21,9 @@ import { barrierOnFirstCalls, createUser, randCode, summarize, warmPool } from '
  * 2 đơn COD. Nay mỗi (user, variation, địa chỉ) chỉ có tối đa 1 gói ACTIVE/PAUSED: chặn bằng partial
  * unique index trên Postgres, gửi lại cùng yêu cầu thì nhận lại đúng gói đã có.
  */
+/** Gói hẹn ngày bắt đầu sau hôm nay: không sinh đơn đầu ngay (C-015), giữ đúng phạm vi các ca dưới đây. */
+const LATER = new Date(Date.now() + 7 * 3600e3 + 3 * 864e5).toISOString().slice(0, 10);
+
 describe('Chống trùng gói giao định kỳ (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
@@ -32,6 +36,7 @@ describe('Chống trùng gói giao định kỳ (real Postgres)', () => {
         SystemConfigService,
         AnalyticsEventsService,
         SubscriptionsService,
+        WalletLedgerService,
         { provide: PricingService, useValue: {} },
         { provide: LoyaltyService, useValue: {} },
         { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
@@ -120,7 +125,7 @@ describe('Chống trùng gói giao định kỳ (real Postgres)', () => {
       const u = await createUser(prisma);
       const v = await variation();
       const addr = await address(u.id);
-      const dto = { variationId: v.id, quantity: 2, intervalWeeks: 4, addressId: addr.id };
+      const dto = { variationId: v.id, quantity: 2, intervalWeeks: 4, addressId: addr.id, startDate: LATER };
 
       // Cả 5 đều qua bước đọc địa chỉ trước khi bên nào kịp ghi: ép đúng kẽ hở kiểm-rồi-ghi.
       const barrier = barrierOnFirstCalls(prisma.address, 'findUnique', 5);
@@ -142,7 +147,7 @@ describe('Chống trùng gói giao định kỳ (real Postgres)', () => {
     const u = await createUser(prisma);
     const v = await variation();
     const addr = await address(u.id);
-    const dto = { variationId: v.id, quantity: 1, intervalWeeks: 6, addressId: addr.id };
+    const dto = { variationId: v.id, quantity: 1, intervalWeeks: 6, addressId: addr.id, startDate: LATER };
     const first = await subs.create(u.id, dto);
     const again = await subs.create(u.id, dto);
     expect(again.id).toBe(first.id);
@@ -154,8 +159,8 @@ describe('Chống trùng gói giao định kỳ (real Postgres)', () => {
     const v = await variation();
     const a1 = await address(u.id);
     const a2 = await address(u.id);
-    const s1 = await subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: a1.id });
-    const s2 = await subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: a2.id });
+    const s1 = await subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: a1.id, startDate: LATER });
+    const s2 = await subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: a2.id, startDate: LATER });
     expect(s2.id).not.toBe(s1.id);
     expect(await prisma.subscription.count({ where: { userId: u.id, status: 'ACTIVE' } })).toBe(2);
   });
@@ -164,9 +169,9 @@ describe('Chống trùng gói giao định kỳ (real Postgres)', () => {
     const u = await createUser(prisma);
     const v = await variation();
     const addr = await address(u.id);
-    const s1 = await subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id });
+    const s1 = await subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id, startDate: LATER });
     const err = await subs
-      .create(u.id, { variationId: v.id, quantity: 3, intervalWeeks: 8, addressId: addr.id })
+      .create(u.id, { variationId: v.id, quantity: 3, intervalWeeks: 8, addressId: addr.id, startDate: LATER })
       .catch((e: unknown) => e);
     const res = expectDuplicate(err, v.product.name);
     expect(res.subscriptionId).toBe(s1.id);
@@ -179,7 +184,7 @@ describe('Chống trùng gói giao định kỳ (real Postgres)', () => {
     const u = await createUser(prisma);
     const v = await variation();
     const addr = await address(u.id);
-    const dto = { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id };
+    const dto = { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id, startDate: LATER };
     const s1 = await subs.create(u.id, dto);
     await subs.setStatus(u.id, s1.id, 'PAUSED');
     const err = await subs.create(u.id, dto).catch((e: unknown) => e);
@@ -192,7 +197,7 @@ describe('Chống trùng gói giao định kỳ (real Postgres)', () => {
     const u = await createUser(prisma);
     const v = await variation();
     const addr = await address(u.id);
-    const dto = { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id };
+    const dto = { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id, startDate: LATER };
     const s1 = await subs.create(u.id, dto);
     await subs.setStatus(u.id, s1.id, 'CANCELLED');
     const s2 = await subs.create(u.id, dto);
@@ -204,7 +209,7 @@ describe('Chống trùng gói giao định kỳ (real Postgres)', () => {
     const u = await createUser(prisma);
     const v = await variation();
     const addr = await address(u.id);
-    const dto = { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id };
+    const dto = { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id, startDate: LATER };
     const old = await subs.create(u.id, dto);
     await subs.setStatus(u.id, old.id, 'CANCELLED');
     const fresh = await subs.create(u.id, dto);

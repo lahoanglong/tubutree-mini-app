@@ -867,6 +867,8 @@ model Order {
   /// Thời điểm đơn chuyển DELIVERED (OrderStatusService.setStatus) — mốc tính hạn đổi/trả. Trước đây
   /// dùng updatedAt: mọi lần ghi sau đó (webhook vận chuyển, yêu cầu hoá đơn…) kéo dài hạn đổi/trả.
   deliveredAt        DateTime?
+  /// Lúc cron ReviewInviteService nhận đơn để gửi tin mời đánh giá (claim trước khi gửi, null lại nếu gửi lỗi).
+  reviewInvitedAt    DateTime?
   items              OrderItem[]
   commissions        Commission[]
   paymentAttempts    PaymentAttempt[]
@@ -2276,6 +2278,8 @@ model Subscription {
   // RESTRICT (C-014): xoá địa chỉ không được kéo theo xoá cứng gói định kỳ; users.deleteAddress báo lỗi rõ.
   address       Address   @relation(fields: [addressId], references: [id], onDelete: Restrict)
   status        String    @default("ACTIVE") // ACTIVE | PAUSED | CANCELLED
+  // Chỉ COD | WALLET | BANK_TRANSFER (Q-13); WALLET trừ ví ngay lúc sinh đơn kỳ, thiếu số dư thì gói tạm dừng.
+  paymentMethod PaymentMethod @default(COD)
   nextRunAt     DateTime
   lastOrderId   String?
   createdAt     DateTime  @default(now())

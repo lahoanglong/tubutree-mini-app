@@ -8,6 +8,7 @@ import {
   skipSubscriptionCycle,
   type SubscriptionDTO,
 } from '../services/subscriptions-api';
+import { getAddresses } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -22,14 +23,15 @@ import { EmptyState, ErrorState } from './ui/empty-state';
 import { Icon } from './ui/icon';
 import { LineItemSkeleton } from './ui/skeleton';
 import { Text } from './ui/text';
+import { SubscriptionEditSheet } from './subscription-edit-sheet';
+import { addressText } from './subscription-options';
 
 type SubStatus = SubscriptionDTO['status'];
 const STATUS_TONE: Record<SubStatus, BadgeTone> = { ACTIVE: 'success', PAUSED: 'warning', CANCELLED: 'neutral' };
 
 /**
- * Nội dung "Đặt định kỳ" — nhúng làm tab "Định kỳ" của trang Đơn hàng (spec 4a.2). Chuyển từ
- * pages/subscriptions.tsx sang DS v2, GIỮ nguyên hành vi: tạm dừng/tiếp tục, huỷ qua sheet giữ chân
- * (tạm dừng / bỏ qua kỳ / vẫn huỷ).
+ * Nội dung "Đặt định kỳ" — nhúng làm tab "Định kỳ" của trang Đơn hàng (spec 4a.2): tạm dừng/tiếp tục,
+ * sửa số lượng/địa chỉ/cách trả (C-015), huỷ qua sheet giữ chân (tạm dừng / bỏ qua kỳ / vẫn huỷ).
  */
 export function SubscriptionsPanel() {
   const navigate = useNavigate();
@@ -43,6 +45,10 @@ export function SubscriptionsPanel() {
   // % thực tế đang áp (thang bậc) thắng % cấu hình chung khi đã có lịch.
   const subscribePct = Math.round((subs[0]?.effectiveDiscountPct ?? cfg.subscribeDiscountPct) * 100);
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+  const [editTarget, setEditTarget] = useState<string | null>(null);
+  // Nhiều gói cùng SP chỉ khác nhau ở địa chỉ, nên thẻ phải hiện địa chỉ để khách phân biệt.
+  const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: authed && subs.length > 0 });
+  const addressById = new Map((addrQ.data ?? []).map((a) => [a.id, a]));
 
   const statusMut = useMutation({
     mutationFn: ({ id, status }: { id: string; status: SubStatus }) => setSubscriptionStatus(id, status),
@@ -65,6 +71,7 @@ export function SubscriptionsPanel() {
   });
 
   const targetSub = subs.find((s) => s.id === cancelTarget) ?? null;
+  const editSub = subs.find((s) => s.id === editTarget) ?? null;
   const pending = statusMut.isPending ? statusMut.variables?.status : undefined;
   const changeFromSheet = (status: SubStatus) => {
     if (!cancelTarget) return;
@@ -97,6 +104,8 @@ export function SubscriptionsPanel() {
             key={s.id}
             sub={s}
             busy={statusMut.isPending}
+            address={s.addressId ? addressById.get(s.addressId) : undefined}
+            onEdit={() => setEditTarget(s.id)}
             onToggle={() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' })}
             onCancel={() => setCancelTarget(s.id)}
           />
@@ -111,6 +120,8 @@ export function SubscriptionsPanel() {
           onCta={() => navigate('/browse')}
         />
       )}
+
+      {editSub && <SubscriptionEditSheet key={editSub.id} sub={editSub} onClose={() => setEditTarget(null)} />}
 
       <BottomSheet
         open={cancelTarget !== null}
@@ -151,11 +162,15 @@ export function SubscriptionsPanel() {
 function SubscriptionCard({
   sub: s,
   busy,
+  address,
+  onEdit,
   onToggle,
   onCancel,
 }: {
   sub: SubscriptionDTO;
   busy: boolean;
+  address?: Parameters<typeof addressText>[0];
+  onEdit: () => void;
   onToggle: () => void;
   onCancel: () => void;
 }) {
@@ -184,6 +199,14 @@ function SubscriptionCard({
           <Text variant="caption" tone="brand" as="div">
             {vi.subscriptions.perCycle(s.intervalWeeks, formatVnd(s.unitPrice * s.quantity))}
           </Text>
+          <Text variant="caption" tone="tertiary" as="div">
+            {vi.subscriptions.payLine(vi.subscriptions.payShort[s.paymentMethod ?? 'COD'])}
+          </Text>
+          {address && (
+            <Text variant="caption" tone="tertiary" as="div" style={{ overflowWrap: 'anywhere' }}>
+              {vi.subscriptions.addressLine(addressText(address))}
+            </Text>
+          )}
         </div>
         <Badge tone={STATUS_TONE[s.status]} size="sm" style={{ alignSelf: 'flex-start' }}>
           {vi.subscriptions.statusLabel[s.status]}
@@ -197,6 +220,9 @@ function SubscriptionCard({
           : vi.subscriptions.pausedLine}
       </Text>
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <Button variant="secondary" disabled={busy} onPress={onEdit} style={{ flex: 1, minWidth: 0 }}>
+          {vi.subscriptions.edit}
+        </Button>
         <Button variant="secondary" disabled={busy} onPress={onToggle} style={{ flex: 1, minWidth: 0 }}>
           {s.status === 'ACTIVE' ? vi.subscriptions.pause : vi.subscriptions.resume}
         </Button>

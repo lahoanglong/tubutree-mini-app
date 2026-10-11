@@ -12,6 +12,7 @@ import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
+import { WalletLedgerService } from '../../src/modules/wallet/wallet-ledger.service';
 import { GomdonOrderService } from '../../src/modules/integrations/gomdon/gomdon-order.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
 import { CoinsService } from '../../src/modules/wallet/coins.service';
@@ -28,6 +29,9 @@ import { createUser, randCode, summarize, warmPool } from './helpers';
  * lý, gói định kỳ — kể cả khi SP bị gỡ ĐÚNG LÚC đơn đang được tính (giữa lúc đọc giá và lúc ghi đơn).
  * Postgres thật; chỉ stub dịch vụ ngoài (Pancake/Gomdon/thông báo) và các khối giá không liên quan.
  */
+/** Gói hẹn ngày bắt đầu sau hôm nay: không sinh đơn đầu ngay (C-015), giữ đúng phạm vi các ca dưới đây. */
+const LATER = new Date(Date.now() + 7 * 3600e3 + 3 * 864e5).toISOString().slice(0, 10);
+
 describe('SP ngừng bán không đặt được ở mọi đường (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
@@ -56,6 +60,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
         CoinsService,
         DealerService,
         SubscriptionsService,
+        WalletLedgerService,
         { provide: CouponsService, useValue: { validateAndCompute: jest.fn(), redeem: jest.fn(), release: jest.fn() } },
         { provide: PricingService, useValue: pricing },
         {
@@ -372,7 +377,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
       const v = await variation();
       await DISCONTINUE[how](v.productId);
       const err = await subs
-        .create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id })
+        .create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id, startDate: LATER })
         .catch((e) => e);
       expectDiscontinued(err);
       expect(await prisma.subscription.count({ where: { userId: u.id } })).toBe(0);
@@ -382,7 +387,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
       const u = await createUser(prisma);
       const addr = await address(u.id);
       const v = await variation();
-      const sub = await subs.create(u.id, { variationId: v.id, quantity: 2, intervalWeeks: 4, addressId: addr.id });
+      const sub = await subs.create(u.id, { variationId: v.id, quantity: 2, intervalWeeks: 4, addressId: addr.id, startDate: LATER });
       await prisma.subscription.update({ where: { id: sub.id }, data: { nextRunAt: new Date(Date.now() - 60_000) } });
       await DISCONTINUE[how](v.productId);
 
@@ -399,7 +404,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
     const u = await createUser(prisma);
     const addr = await address(u.id);
     const v = await variation();
-    const sub = await subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id });
+    const sub = await subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id, startDate: LATER });
     await prisma.subscription.update({ where: { id: sub.id }, data: { nextRunAt: new Date(Date.now() - 60_000) } });
     pricing.calcShippingFee.mockImplementationOnce(async () => {
       await prisma.product.update({ where: { id: v.productId }, data: { approvalStatus: 'REJECTED' } });
