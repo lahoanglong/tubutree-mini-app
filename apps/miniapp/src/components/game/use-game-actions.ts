@@ -133,7 +133,7 @@ export function useGameActions({
   const buyTreeM = useMutation({
     mutationFn: buyTree,
     onSuccess: (r) => {
-      openSnackbar({ text: `Đã mua 1 cây thật 🌳 (−${formatXu(r.cost)}) · mã ${r.certificateCode}`, type: 'success' });
+      openSnackbar({ text: `Đã góp 1 cây vào quỹ trồng cây 🌳 (−${formatXu(r.cost)}) · mã ${r.certificateCode}`, type: 'success' });
       refresh();
       void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
       void queryClient.invalidateQueries({ queryKey: ['coins'] });

@@ -162,6 +162,13 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
     expect(screen.getByText('Số dư 1.200.000đ')).toBeInTheDocument();
   });
 
+  it('chú thích dưới TubuXu: chỉ nói việc còn làm được (mua hàng, góp quỹ trồng cây), không còn "mua nước"/"mua cây"', async () => {
+    stubLoaded();
+    renderPage();
+    await screen.findByText('TubuXu (tiêu trong app)');
+    expect(screen.getByText('Dùng để mua hàng và góp quỹ trồng cây 🌳 trong app. Không rút được.')).toBeInTheDocument();
+  });
+
   it('lỗi tải ví KHÔNG hiện 0đ mà báo lỗi kèm Thử lại gọi lại getWallet', async () => {
     mocks.getWallet.mockRejectedValueOnce(new Error('mất mạng')).mockResolvedValue(WALLET);
     mocks.getCoins.mockResolvedValue(COINS);

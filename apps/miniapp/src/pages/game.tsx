@@ -183,7 +183,7 @@ export default function GamePage() {
           {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
           <EcoImpact eco={eco} totalSeeds={profile?.totalSeeds} forest={forest} />
 
-          {/* Mốc cộng đồng cây thật (Phase 2) — hồ giọt nước toàn cộng đồng */}
+          {/* Mốc cộng đồng góp quỹ trồng cây (Phase 2) — hồ giọt nước toàn cộng đồng */}
           {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
         </GameTabPanel>
 

@@ -22,11 +22,11 @@ export function TreeActions({
         Tưới cây (20💧)
       </Button>
       <Button fullWidth variant="secondary" icon={TreePine} disabled={buyPending} loading={buyPending} onPress={() => onBuy()}>
-        Mua cây thật
+        Góp quỹ trồng cây
         {treeXuPrice != null && ` (${formatXu(treeXuPrice)})`}
       </Button>
       <Text variant="caption" tone="tertiary" as="div" style={{ textAlign: 'center' }}>
-        Mua bằng TubuXu — đổi từ Ví trong mục Ví của tôi.
+        Góp bằng TubuXu — đổi từ Ví trong mục Ví của tôi.
       </Text>
     </div>
   );

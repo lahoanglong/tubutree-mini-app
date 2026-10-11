@@ -19,20 +19,20 @@ export function EcoImpact({
   return (
     <GameCard title="Tác động xanh của bạn" icon={Earth}>
       <div style={{ display: 'flex', gap: 8 }}>
-        <EcoStat icon={TreePine} value={formatNumber(eco?.treesPlanted)} label="Cây thật đã trồng" />
+        <EcoStat icon={TreePine} value={formatNumber(eco?.treesPlanted)} label="Cây đã góp quỹ" />
         <EcoStat icon={Wind} value={`~${formatNumber((eco?.treesPlanted ?? 0) * 21)}kg`} label="CO₂ hấp thụ/năm (ước tính)" />
         <EcoStat icon={Droplets} value={formatNumber(totalSeeds)} label="Giọt nước đã góp" />
       </div>
       {(forest?.count ?? 0) > 0 ? (
         <>
           <Text variant="caption" tone="brand" as="div" style={{ marginTop: 8 }}>
-            Cảm ơn bạn! Tubu đã cam kết góp {formatNumber(forest?.count)} cây thật vào "Rừng Xanh Lên" cùng PanNature 🌿
+            Cảm ơn bạn! Bạn đã góp {formatNumber(forest?.count)} cây vào quỹ trồng cây của Tubu 🌿
           </Text>
-          {/* Khu rừng của tôi — chứng nhận từng cây (§6.7.7) */}
+          {/* Đóng góp của tôi — mã ghi nhận từng cây (§6.7.7) */}
           <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <Text variant="caption" as="div" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
               <Icon icon={Trees} size="sm" tone="brand" />
-              Khu rừng của tôi — chứng nhận
+              Đóng góp của tôi
             </Text>
             {forest!.trees.slice(0, 5).map((t) => (
               <div
@@ -63,7 +63,7 @@ export function EcoImpact({
                 ) : (
                   <Badge tone="neutral" size="sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     <Icon icon={Sprout} size="sm" style={{ stroke: 'currentColor' }} />
-                    Đã cam kết
+                    Đã góp quỹ
                   </Badge>
                 )}
               </div>
@@ -77,7 +77,7 @@ export function EcoImpact({
         </>
       ) : (
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
-          Chăm cây ảo đến khi thu hoạch để Tubu góp 1 cây thật cho rừng Việt Nam.
+          Chăm cây ảo đến khi thu hoạch để Tubu góp 1 cây vào quỹ trồng cây.
         </Text>
       )}
     </GameCard>

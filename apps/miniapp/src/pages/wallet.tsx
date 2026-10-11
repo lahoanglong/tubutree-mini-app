@@ -210,7 +210,7 @@ export default function WalletPage() {
               </div>
             </div>
             <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
-              Dùng để mua hàng, mua nước 💧 và mua cây 🌳 trong app. Không rút được.
+              Dùng để mua hàng và góp quỹ trồng cây 🌳 trong app. Không rút được.
             </Text>
           </div>
 

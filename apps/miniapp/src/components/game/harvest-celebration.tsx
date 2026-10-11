@@ -48,7 +48,7 @@ export function HarvestCelebration({
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 56, lineHeight: 1.2 }}>🌳</div>
         <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
-          Cây ảo của bạn đã lớn — Tubu sẽ góp <b>1 cây thật</b> vào rừng "Rừng Xanh Lên" cùng PanNature 🌿
+          Cây ảo của bạn đã lớn — Tubu sẽ góp <b>1 cây</b> vào quỹ trồng cây 🌿
         </Text>
         {coupon && (
           <div
@@ -84,7 +84,7 @@ export function HarvestCelebration({
         {certificate && (
           <div style={{ marginTop: 8, padding: 12, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)' }}>
             <Text variant="caption" tone="secondary" as="div">
-              Mã chứng nhận cây thật
+              Mã đóng góp quỹ trồng cây
             </Text>
             <Text variant="body-md" tone="brand" as="div" style={{ fontWeight: 700, letterSpacing: 1 }}>
               {certificate}
