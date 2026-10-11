@@ -15,9 +15,9 @@ export function PageNav({
   noun: string;
 }) {
   const pages = Math.max(1, Math.ceil(total / limit));
-  const btn = 'min-h-[44px] rounded border border-neutral-200 px-3 text-sm text-neutral-700 disabled:opacity-40 sm:min-h-[32px]';
+  const btn = 'min-h-[44px] rounded-control border border-stone-450 bg-stone-0 px-3 text-sm text-stone-700 disabled:opacity-40 sm:min-h-[32px]';
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500">
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
       <span>
         {total} {noun}
         {pages > 1 && ` · Trang ${page}/${pages}`}

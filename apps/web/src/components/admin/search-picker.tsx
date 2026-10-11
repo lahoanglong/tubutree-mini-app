@@ -72,7 +72,7 @@ export function SearchPicker({
 
   if (value) {
     return (
-      <div className={`flex min-h-[44px] items-center justify-between gap-2 rounded border border-green-200 bg-green-50 px-2.5 py-1 text-sm sm:min-h-[36px] ${className}`}>
+      <div className={`flex min-h-[44px] items-center justify-between gap-2 rounded-control border border-forest-200 bg-forest-50 px-2.5 py-1 text-sm sm:min-h-[36px] ${className}`}>
         <span className="min-w-0 truncate" title={value.label}>
           {value.label}
         </span>
@@ -80,7 +80,7 @@ export function SearchPicker({
           type="button"
           aria-label={`Đổi lựa chọn: ${label}`}
           onClick={() => onChange(null)}
-          className="min-h-[44px] shrink-0 px-2 text-xs font-medium text-green-700 underline sm:min-h-0"
+          className="min-h-[44px] shrink-0 px-2 text-xs font-medium text-forest-700 underline sm:min-h-0"
         >
           Đổi
         </button>
@@ -105,22 +105,22 @@ export function SearchPicker({
         className={`${INPUT_CLASS} min-h-[44px] sm:min-h-[36px]`}
       />
       <div id={listId}>
-        {typed.length < PICKER_MIN_CHARS && <p className="mt-1 text-xs text-neutral-500">Gõ ít nhất {PICKER_MIN_CHARS} ký tự để tìm.</p>}
-        {waiting && <p className="mt-1 text-xs text-neutral-500">Đang tìm…</p>}
+        {typed.length < PICKER_MIN_CHARS && <p className="mt-1 text-xs text-stone-500">Gõ ít nhất {PICKER_MIN_CHARS} ký tự để tìm.</p>}
+        {waiting && <p className="mt-1 text-xs text-stone-500">Đang tìm…</p>}
         {enabled && !waiting && q.isError && (
-          <p role="alert" className="mt-1 text-xs text-red-600">
+          <p role="alert" className="mt-1 text-xs text-danger-fg">
             {(q.error as Error).message || 'Không tìm được, thử lại.'}
           </p>
         )}
         {enabled && !waiting && q.isSuccess && options.length === 0 && (
-          <p className="mt-1 text-xs text-neutral-500">Không thấy kết quả nào khớp “{debounced}”.</p>
+          <p className="mt-1 text-xs text-stone-500">Không thấy kết quả nào khớp “{debounced}”.</p>
         )}
         {options.length > 0 && !waiting && (
-          <ul role="listbox" aria-label={`Kết quả: ${label}`} className="mt-1 max-h-64 overflow-y-auto rounded border border-neutral-200 bg-white">
+          <ul role="listbox" aria-label={`Kết quả: ${label}`} className="mt-1 max-h-64 overflow-y-auto rounded-control border border-stone-200 bg-stone-0">
             {options.map((o, i) => (
               <Fragment key={o.id}>
                 {o.group && o.group !== options[i - 1]?.group && (
-                  <li role="presentation" className="bg-neutral-50 px-2.5 py-1 text-[11px] font-semibold text-neutral-600">
+                  <li role="presentation" className="bg-stone-50 px-2.5 py-1 text-[11px] font-semibold text-stone-600">
                     {o.group}
                   </li>
                 )}
@@ -133,10 +133,10 @@ export function SearchPicker({
                       onChange({ id: o.id, label: o.pickedLabel ?? o.label });
                       setText('');
                     }}
-                    className="flex min-h-[44px] w-full flex-col items-start justify-center px-2.5 py-1.5 text-left text-sm hover:bg-green-50 sm:min-h-[36px]"
+                    className="flex min-h-[44px] w-full flex-col items-start justify-center px-2.5 py-1.5 text-left text-sm hover:bg-forest-50 sm:min-h-[36px]"
                   >
                     <span>{o.label}</span>
-                    {o.detail && <span className="text-[11px] text-neutral-500">{o.detail}</span>}
+                    {o.detail && <span className="text-[11px] text-stone-500">{o.detail}</span>}
                   </button>
                 </li>
               </Fragment>
@@ -144,7 +144,7 @@ export function SearchPicker({
           </ul>
         )}
         {!waiting && (result?.more ?? 0) > 0 && (
-          <p className="mt-1 text-xs text-neutral-500">Còn {result!.more} kết quả khác — gõ cụ thể hơn để thu hẹp.</p>
+          <p className="mt-1 text-xs text-stone-500">Còn {result!.more} kết quả khác — gõ cụ thể hơn để thu hẹp.</p>
         )}
       </div>
     </div>
