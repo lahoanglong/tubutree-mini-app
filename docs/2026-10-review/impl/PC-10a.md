@@ -393,7 +393,7 @@ Xác minh trên `zmp-ui@1.11.14` thật (đọc mã, không suy đoán):
 
 Test thêm `pages/game-wheel-tabs.spec.tsx` (6 test, dùng vòng quay THẬT, `Page` giả có class `zaui-page`, timer giả):
 
-- ĐỎ trên mã cũ: "đổi sang tab Vườn trong lúc quay: hộp kết quả vẫn nhìn thấy được" và bản "Cộng đồng" (`expect(element).toBeVisible()` — `Received element is not visible: <h2>`); "đổi tab rồi đóng hộp: trang hết khoá cuộn" cũng ĐỎ (không tìm thấy nút "Tuyệt vời!" trong khối ẩn). 3 test còn lại (ở lại tab Hôm nay, quay lần hai, quay lỗi) xanh cả trước lẫn sau: đóng vai test đặc tả để chứng minh hành vi cũ giữ nguyên.
+- ĐỎ trên mã cũ: "đổi sang tab Vườn trong lúc quay: hộp kết quả vẫn nhìn thấy được" và bản "Cộng đồng" (`expect(element).toBeVisible()` — `Received element is not visible: <h2>`); "đổi tab rồi đóng hộp: trang hết khoá cuộn" cũng ĐỎ (lần chạy đầu: `getByRole('button', { name: 'Tuyệt vời!' })` không thấy nút trong khối ẩn, rồi jsdom 30 ném `TypeError ... setting 'background-color'` khi dựng thông báo lỗi; sau đó thêm assert `toBeVisible()` ở đầu test để lỗi đỏ ra thông báo rõ như hai test trên). 3 test còn lại (ở lại tab Hôm nay, quay lần hai, quay lỗi) xanh cả trước lẫn sau: đóng vai test đặc tả để chứng minh hành vi cũ giữ nguyên.
 - XANH sau sửa (6/6).
 
 Sửa (chọn "nâng lên cấp trang" như `HarvestCelebration`, không dùng portal vì app chưa có tiền lệ portal và vị trí z-index/theme của sheet trong `body` chưa kiểm được trên máy thật):

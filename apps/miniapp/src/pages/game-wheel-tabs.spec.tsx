@@ -144,6 +144,7 @@ describe('GamePage — hộp kết quả vòng quay không phụ thuộc tab đa
     await advance(1000);
     fireEvent.click(screen.getByRole('tab', { name: 'Vườn' }));
     await advance(SPIN_MS);
+    expect(screen.getByText('Chúc mừng!')).toBeVisible();
     expect(pageEl().classList.contains('disable-scrolling')).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Tuyệt vời!' }));
     await advance(500);
