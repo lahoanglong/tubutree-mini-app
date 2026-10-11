@@ -119,6 +119,18 @@ describe('Hàng điều hướng ở Cài đặt (C-078)', () => {
     fireEvent.click(row);
     expect(mocks.navigate).toHaveBeenCalledWith('/addresses');
   });
+
+  // Q-19 (C-118): chương trình Beta Tester không có tác dụng nên bỏ lối vào; nhóm Tài khoản kết thúc ở Sổ địa chỉ.
+  it('không còn hàng Beta Tester; Sổ địa chỉ là hàng cuối và không có viền dưới', async () => {
+    mocks.fetchNotifyPrefs.mockResolvedValue({ notifyPromo: true, notifyGarden: true });
+    const { container } = render(<SettingsPage />);
+    expect(container.textContent).not.toMatch(/Beta/i);
+    expect(screen.queryByRole('button', { name: /Beta/i })).toBeNull();
+    const rows = within(screen.getByRole('heading', { level: 2, name: 'Tài khoản' }).parentElement!).getAllByRole('button');
+    expect(rows.map((r) => r.textContent)).toEqual(['Chỉnh sửa hồ sơ', 'Sổ địa chỉ']);
+    expect(rows[0]!.getAttribute('style')).toMatch(/border-bottom: 1px solid/);
+    expect(rows[1]!.getAttribute('style')).not.toMatch(/border-bottom: 1px solid/);
+  });
 });
 
 describe('Cài đặt theo DS v2 (C-076, C-114)', () => {

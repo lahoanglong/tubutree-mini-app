@@ -52,7 +52,6 @@ const PostDetailPage = lazy(() => import('../pages/post-detail'));
 const AiAdvisorPage = lazy(() => import('../pages/ai-advisor'));
 const GroupBuyPage = lazy(() => import('../pages/group-buy'));
 const RefillPage = lazy(() => import('../pages/refill'));
-const BetaPage = lazy(() => import('../pages/beta'));
 const ProfilePage = lazy(() => import('../pages/profile'));
 const LoyaltyPage = lazy(() => import('../pages/loyalty'));
 const WalletPage = lazy(() => import('../pages/wallet'));
@@ -205,7 +204,6 @@ export default function MyApp() {
                     <Route path="/ai-advisor" element={<AiAdvisorPage />} />
                     <Route path="/group-buy" element={<GroupBuyPage />} />
                     <Route path="/refill" element={<RefillPage />} />
-                    <Route path="/beta" element={<BetaPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/loyalty" element={<LoyaltyPage />} />
                     <Route path="/wallet" element={<WalletPage />} />
