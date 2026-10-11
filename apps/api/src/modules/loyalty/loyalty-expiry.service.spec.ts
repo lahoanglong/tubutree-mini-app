@@ -2,6 +2,7 @@ import { computePointExpiry, LoyaltyExpiryService, type PointExpiryTxn } from '.
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import { milestoneGrantReason } from '../wallet/referral-reward';
 
 const DAY = 864e5;
 const NOW = new Date('2026-07-05T00:00:00.000Z');
@@ -342,6 +343,317 @@ describe('computePointExpiry (pure FIFO helper)', () => {
         WINDOW,
       );
       expect(r.expiredNow).toBe(30);
+    });
+  });
+
+  /**
+   * PE-5: dòng âm đảo ngược một khoản cộng cụ thể (huỷ/trả đơn, thu hồi thưởng giới thiệu) ăn lô của khoản cộng đó, như
+   * REVIEW_DELETE. Dòng âm TIÊU (dùng điểm cho đơn, đổi voucher, góp quỹ cây, quay thưởng) vẫn FIFO.
+   */
+  describe('đảo ngược một khoản cộng cụ thể ăn đúng lô gốc, phần dư mới FIFO (PE-5)', () => {
+    const PAST = '2026-06-01';
+    const ORDER = { refType: 'ORDER' };
+    const delivered = (id: string, delta: number, createdAt: string, expiresAt: string | null, orderId: string, code = 'C1') =>
+      tx(id, delta, createdAt, expiresAt, `ORDER_DELIVERED:${code}`, { ...ORDER, refId: orderId });
+    const reversed = (id: string, delta: number, createdAt: string, orderId: string, code = 'C1') =>
+      tx(id, delta, createdAt, null, `ORDER_REVERSED:${code}`, { ...ORDER, refId: orderId });
+    const refundPoints = (id: string, delta: number, createdAt: string, expiresAt: string | null, orderId: string, code = 'C1') =>
+      tx(id, delta, createdAt, expiresAt, `ORDER_REFUND_POINTS:${code}`, { ...ORDER, refId: orderId });
+
+    describe('huỷ/trả đơn: ORDER_REVERSED ăn lô ORDER_DELIVERED cùng refId', () => {
+      it('lô cũ không hạn nằm trước: thu hồi không ăn lô cũ, lô đơn hết sạch nên không còn gì hết hạn', () => {
+        const r = computePointExpiry(
+          [tx('a', 30, '2025-01-01', null), delivered('d', 20, '2025-05-01', PAST, 'o1'), reversed('v', -20, '2025-05-02', 'o1')],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(0);
+      });
+
+      it('lô cũ có hạn dài hơn lô đơn (cấu hình hạ tháng): lô đơn đã thu hồi không bị trừ lại, lô cũ còn nguyên', () => {
+        const r = computePointExpiry(
+          [tx('a', 30, '2025-01-01', '2027-01-01'), delivered('d', 20, '2025-05-01', PAST, 'o1'), reversed('v', -20, '2025-05-02', 'o1')],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(0);
+        expect(r.expiringSoon.amount).toBe(0);
+      });
+
+      it('hai đơn: đảo đơn mới ăn lô của nó, không ăn lô đơn cũ hơn (đã hết hạn nên vẫn hết hạn đúng một lần)', () => {
+        const r = computePointExpiry(
+          [
+            tx('a', 30, '2025-01-01', null),
+            delivered('d1', 20, '2025-04-01', PAST, 'o1', 'C1'),
+            delivered('d2', 10, '2025-05-01', PAST, 'o2', 'C2'),
+            reversed('v2', -10, '2025-05-02', 'o2', 'C2'),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(20);
+      });
+
+      it('thu hồi lớn hơn lô đơn: ăn hết lô đơn trước, phần dư mới FIFO sang lô cũ nhất', () => {
+        const r = computePointExpiry(
+          [
+            tx('a', 30, '2025-01-01', null),
+            delivered('d', 20, '2025-05-01', PAST, 'o1'),
+            tx('s', -15, '2025-05-02', null, 'ORDER_REDEEM:C9', { ...ORDER, refId: 'o9' }), // dòng tiêu FIFO ăn 15 của lô a
+            tx('b', 10, '2025-05-03', PAST),
+            reversed('v', -25, '2025-05-04', 'o1'), // ăn hết 20 của lô đơn, dư 5 FIFO vào lô a (còn 15 → 10)
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(10); // chỉ lô b; FIFO thuần sẽ để lại 10 của lô đơn và trả 20
+      });
+
+      it('không có lô ORDER_DELIVERED cùng refId (điểm đơn chưa cộng, hay đã gộp phiên): FIFO như cũ', () => {
+        const r = computePointExpiry([tx('a', 30, '2025-01-01', PAST), reversed('v', -20, '2025-05-02', 'o-lạ')], NOW, WINDOW);
+        expect(r.expiredNow).toBe(10);
+      });
+
+      it('dòng hoàn ORDER_REFUND_POINTS cùng refId là lô riêng: thu hồi không ăn nó dù lô đơn đã bị tiêu hết và hai dòng cùng createdAt', () => {
+        const T = '2025-06-01T00:00:00.000Z';
+        const r = computePointExpiry(
+          [
+            delivered('d', 20, '2025-01-01', PAST, 'o1'),
+            tx('s', -20, '2025-02-01', null, 'ORDER_REDEEM:C9', { ...ORDER, refId: 'o9' }), // FIFO ăn hết lô đơn
+            tx('a', 30, '2025-03-01', null),
+            refundPoints('a-refund', 40, T, PAST, 'o1'), // id nhỏ hơn: replay thấy lô hoàn trước dòng thu hồi
+            reversed('z-reversed', -20, T, 'o1'),
+          ],
+          NOW,
+          WINDOW,
+        );
+        // Lô đơn đã cạn nên 20 điểm thu hồi FIFO vào lô a; lô hoàn 40 còn nguyên và hết hạn.
+        expect(r.expiredNow).toBe(40);
+      });
+
+      it('dòng tiêu ORDER_REDEEM mang cùng refType/refId với lô ORDER_DELIVERED vẫn là dòng TIÊU: FIFO ăn lô cũ', () => {
+        const r = computePointExpiry(
+          [
+            tx('a', 30, '2025-01-01', null),
+            delivered('d', 20, '2025-05-01', PAST, 'o1'),
+            tx('s', -20, '2025-05-02', null, 'ORDER_REDEEM:C1', { ...ORDER, refId: 'o1' }),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(20); // lô đơn còn nguyên (tiêu ăn lô a) và đã hết hạn
+      });
+
+      it('dòng ORDER_REVERSED thiếu refId hoặc refType khác: không khoá, FIFO như cũ', () => {
+        const r = computePointExpiry(
+          [
+            tx('a', 30, '2025-01-01', null),
+            delivered('d', 20, '2025-05-01', PAST, 'o1'),
+            tx('v1', -5, '2025-05-02', null, 'ORDER_REVERSED:C1', { ...ORDER, refId: '' }),
+            tx('v2', -5, '2025-05-03', null, 'ORDER_REVERSED:C1'),
+            tx('v3', -5, '2025-05-04', null, 'ORDER_REVERSED:C1', { refType: 'REVIEW', refId: 'o1' }),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(20);
+      });
+    });
+
+    describe('thu hồi thưởng giới thiệu: dòng REVOKE ăn lô thưởng cùng hậu tố reason', () => {
+      const REFERRAL = { refType: 'REFERRAL' };
+      const grant = (id: string, delta: number, createdAt: string, expiresAt: string | null, refereeId: string) =>
+        tx(id, delta, createdAt, expiresAt, `REFERRAL_ORDER2:${refereeId}`, { ...REFERRAL, refId: 'o1:o2' });
+      const revoke = (id: string, delta: number, createdAt: string, refereeId: string, orderId = 'o2') =>
+        tx(id, delta, createdAt, null, `REFERRAL_ORDER2_REVOKE:${refereeId}`, { ...REFERRAL, refId: orderId });
+
+      it('refId khác nhau giữa dòng thưởng và dòng thu hồi (đơn bị trả so với "<đơn đầu>:<đơn hai>"): vẫn ăn đúng lô thưởng', () => {
+        const r = computePointExpiry(
+          [tx('a', 30, '2025-01-01', null), grant('g', 5, '2025-05-01', PAST, 'u1'), revoke('v', -5, '2025-05-02', 'u1')],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(0);
+      });
+
+      it('thu hồi của người được mời khác không ăn lô thưởng này', () => {
+        const r = computePointExpiry(
+          [
+            tx('a', 30, '2025-01-01', null),
+            grant('g1', 5, '2025-05-01', PAST, 'u1'),
+            grant('g2', 5, '2025-05-02', PAST, 'u2'),
+            revoke('v', -5, '2025-05-03', 'u2'),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(5); // chỉ lô của u1 còn lại và hết hạn
+      });
+
+      it('thu hồi thiếu (người mời đã tiêu bớt, dòng thu hồi nhỏ hơn lô thưởng): ăn phần có, lô thưởng còn dư hết hạn đúng phần dư', () => {
+        const r = computePointExpiry(
+          [tx('a', 30, '2025-01-01', null), grant('g', 5, '2025-05-01', PAST, 'u1'), revoke('v', -3, '2025-05-02', 'u1')],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(2);
+      });
+
+      it('dòng REFERRAL_DEBT (delta 0) không tạo lô và không tiêu gì', () => {
+        const r = computePointExpiry(
+          [tx('a', 30, '2025-01-01', null), grant('g', 5, '2025-05-01', PAST, 'u1'), tx('d', 0, '2025-05-02', null, 'REFERRAL_ORDER2_DEBT:u1:5', { refType: 'REFERRAL_DEBT', refId: 'o2' })],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(5);
+      });
+
+      describe('mốc thưởng thêm: thu hồi đời n chỉ ăn lô đời n', () => {
+        const milestoneGrant = (id: string, delta: number, createdAt: string, count: number, gen: number) =>
+          tx(id, delta, createdAt, PAST, milestoneGrantReason('R1', count, gen), { ...REFERRAL, refId: 'R1' });
+        const milestoneRevoke = (id: string, delta: number, createdAt: string, count: number, gen: number) =>
+          tx(id, delta, createdAt, null, `REFERRAL_MILESTONE_REVOKE:R1:${count}#${gen}`, { ...REFERRAL, refId: 'o2' });
+
+        it('đời 0 (reason thưởng không hậu tố) khớp thu hồi #0', () => {
+          const r = computePointExpiry(
+            [tx('a', 30, '2025-01-01', null), milestoneGrant('m', 10, '2025-05-01', 3, 0), milestoneRevoke('v', -10, '2025-05-02', 3, 0)],
+            NOW,
+            WINDOW,
+          );
+          expect(r.expiredNow).toBe(0);
+        });
+
+        it('đời 1 (hậu tố #1) khớp thu hồi #1; lô đời 0 đã thu hồi trước đó không bị ăn lại', () => {
+          const r = computePointExpiry(
+            [
+              tx('a', 30, '2025-01-01', null),
+              milestoneGrant('m0', 10, '2025-05-01', 3, 0),
+              milestoneRevoke('v0', -10, '2025-05-02', 3, 0),
+              milestoneGrant('m1', 12, '2025-05-03', 3, 1),
+              milestoneRevoke('v1', -12, '2025-05-04', 3, 1),
+            ],
+            NOW,
+            WINDOW,
+          );
+          expect(r.expiredNow).toBe(0);
+        });
+
+        it('thu hồi đời 1 không ăn lô đời 0 còn nguyên của cùng mốc (đời 0 chưa thu hồi → vẫn hết hạn)', () => {
+          const r = computePointExpiry(
+            [
+              tx('a', 30, '2025-01-01', null),
+              milestoneGrant('m0', 10, '2025-05-01', 3, 0),
+              milestoneGrant('m1', 12, '2025-05-03', 3, 1),
+              milestoneRevoke('v1', -12, '2025-05-04', 3, 1),
+            ],
+            NOW,
+            WINDOW,
+          );
+          expect(r.expiredNow).toBe(10);
+        });
+
+        it('mốc khác số lượt không lẫn nhau', () => {
+          const r = computePointExpiry(
+            [
+              tx('a', 30, '2025-01-01', null),
+              milestoneGrant('m3', 10, '2025-05-01', 3, 0),
+              milestoneGrant('m5', 20, '2025-05-02', 5, 0),
+              milestoneRevoke('v5', -20, '2025-05-03', 5, 0),
+            ],
+            NOW,
+            WINDOW,
+          );
+          expect(r.expiredNow).toBe(10);
+        });
+
+        it('hậu tố đời hỏng (không phải số nguyên không âm): không khoá, FIFO như cũ', () => {
+          const r = computePointExpiry(
+            [
+              tx('a', 30, '2025-01-01', null),
+              milestoneGrant('m', 10, '2025-05-01', 3, 0),
+              tx('v', -10, '2025-05-02', null, 'REFERRAL_MILESTONE_REVOKE:R1:3#x', { ...REFERRAL, refId: 'o2' }),
+            ],
+            NOW,
+            WINDOW,
+          );
+          expect(r.expiredNow).toBe(10);
+        });
+      });
+    });
+
+    describe('bất biến cũ: không có dòng đảo ngược thì kết quả y hệt replay FIFO + POINTS_EXPIRED', () => {
+      /** Bản replay trước PE-5, không có khái niệm lô gốc: FIFO thuần, riêng POINTS_EXPIRED ăn lô đã hết hạn lúc nó ghi. */
+      function plainReplay(txns: PointExpiryTxn[], now: Date) {
+        const lots: { remaining: number; expiresAt: Date | null }[] = [];
+        const eat = (from: typeof lots, amount: number) => {
+          let left = amount;
+          for (const lot of from) {
+            if (left <= 0) break;
+            const take = Math.min(lot.remaining, left);
+            lot.remaining -= take;
+            left -= take;
+          }
+          return left;
+        };
+        const sorted = [...txns].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : 1));
+        for (const t of sorted) {
+          if (t.delta > 0) lots.push({ remaining: t.delta, expiresAt: t.expiresAt });
+          else if (t.delta < 0) {
+            let rest = -t.delta;
+            if (t.reason === 'POINTS_EXPIRED') rest = eat(lots.filter((l) => l.expiresAt != null && l.expiresAt.getTime() <= t.createdAt.getTime()), rest);
+            eat(lots, rest);
+          }
+        }
+        return lots.filter((l) => l.expiresAt != null && l.expiresAt.getTime() <= now.getTime()).reduce((sum, l) => sum + l.remaining, 0);
+      }
+
+      /** PRNG xác định (mulberry32) để ca lỗi tái hiện được. */
+      function rng(seed: number) {
+        return () => {
+          seed = (seed + 0x6d2b79f5) | 0;
+          let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+          x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+          return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      it('300 sổ ngẫu nhiên: lô có/không hạn, dòng tiêu mọi loại (kể cả cùng refType/refId với lô), dòng POINTS_EXPIRED', () => {
+        const rand = rng(20260511);
+        const pick = <T,>(items: readonly T[]) => items[Math.floor(rand() * items.length)]!;
+        const day = (n: number) => new Date(Date.UTC(2025, 0, 1) + n * DAY);
+        for (let run = 0; run < 300; run++) {
+          const txns: PointExpiryTxn[] = [];
+          const lines = 3 + Math.floor(rand() * 12);
+          for (let i = 0; i < lines; i++) {
+            const createdAt = day(i * 3 + Math.floor(rand() * 2));
+            const orderId = pick(['o1', 'o2', 'o3']);
+            if (rand() < 0.55) {
+              const expiresAt = rand() < 0.3 ? null : day(i * 3 + Math.floor(rand() * 500));
+              txns.push({
+                id: `t${String(i).padStart(2, '0')}`,
+                delta: 1 + Math.floor(rand() * 30),
+                createdAt,
+                expiresAt,
+                reason: pick(['ORDER_DELIVERED:C1', 'ORDER_REFUND_POINTS:C1', 'DAILY_CHECKIN:DAY_1', 'GAME_SPIN_WIN:x', 'REFERRAL_ORDER2:u1']),
+                refType: pick(['ORDER', 'GAME', 'CHECKIN', 'REFERRAL']),
+                refId: orderId,
+              });
+            } else {
+              txns.push({
+                id: `t${String(i).padStart(2, '0')}`,
+                delta: -(1 + Math.floor(rand() * 25)),
+                createdAt,
+                expiresAt: null,
+                reason: pick(['ORDER_REDEEM:C1', 'LOYALTY_REDEEM_VOUCHER:v', 'GAME_SPIN_COST', 'GAME_BUY_TREE:T', 'POINTS_EXPIRED']),
+                refType: pick(['ORDER', 'REWARD', 'GAME', 'EXPIRE']),
+                refId: orderId,
+              });
+            }
+          }
+          const now = day(200 + Math.floor(rand() * 400));
+          expect(computePointExpiry(txns, now, 0).expiredNow).toBe(plainReplay(txns, now));
+        }
+      });
     });
   });
 

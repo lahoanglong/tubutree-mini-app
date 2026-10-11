@@ -6,6 +6,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate } from '../../common/vn-time';
+import { REFERRAL_ORDER2_PREFIX, REFERRAL_ORDER2_REVOKE_PREFIX } from '../wallet/referral-reward';
 
 const DAY = 864e5;
 const BATCH = 500; // kích thước mỗi trang candidate.
@@ -42,17 +43,90 @@ export interface PointExpiryResult {
 const EXPIRY_REASON = 'POINTS_EXPIRED';
 
 /**
- * Dòng thu hồi điểm đánh giá (ReviewsService.remove) mang `refType` này và `refId` của chính dòng thưởng gốc. Thu hồi
- * phải trừ vào lô của đánh giá đó chứ không vào lô cũ nhất, nếu không lô đánh giá (có hạn) vẫn còn nguyên trong sổ và
- * tới hạn cron trừ lại đúng số điểm đã thu hồi.
+ * Dòng âm có hai nghĩa khác nhau với sổ lô. TIÊU (dùng điểm cho đơn, đổi voucher, góp quỹ cây, quay thưởng) lấy điểm
+ * từ lô cũ nhất. ĐẢO NGƯỢC một khoản cộng cụ thể (thu hồi điểm đã thưởng) phải lấy đúng lô của khoản cộng đó; nếu
+ * để FIFO ăn lô cũ nhất thì lô gốc (có hạn) vẫn còn nguyên trong sổ, tới hạn cron trừ lại đúng số điểm đã thu hồi và
+ * khách mất điểm hai lần khi còn lô cũ hơn (không hạn, hoặc hết hạn muộn hơn).
+ *
+ * Mỗi quy tắc dưới đây ghép một dòng cộng với dòng thu hồi nó bằng cùng một khoá. Dòng cộng không có khoá, hoặc dòng
+ * âm có khoá nhưng không còn lô cùng khoá, thì đi FIFO như dòng tiêu. Dòng âm không khớp quy tắc nào luôn là dòng tiêu.
+ * Khớp theo refType và refId khi sổ cho phép; khi cùng refId có nhiều lô dương hay khi dòng thu hồi mang refId khác
+ * dòng thưởng thì khớp thêm theo tiền tố reason, vốn đã là hợp đồng của sổ (partial unique index theo reason).
  */
-const REVIEW_REF_TYPE = 'REVIEW';
+interface ReversalRule {
+  /** Khoá lô mà dòng DƯƠNG này tạo ra; null nếu dòng này không thể bị thu hồi theo quy tắc. */
+  lotKey(t: PointExpiryTxn): string | null;
+  /** Khoá lô gốc mà dòng ÂM này thu hồi; null nếu dòng âm này là dòng tiêu. */
+  reversedLotKey(t: PointExpiryTxn): string | null;
+}
+
+const startsWith = (value: string | undefined, prefix: string): value is string => typeof value === 'string' && value.startsWith(prefix);
+
+/**
+ * Huỷ/trả đơn (LoyaltyService.reverseOrderPoints): ORDER_REVERSED:<mã> thu hồi điểm ORDER_DELIVERED:<mã> của cùng đơn
+ * (cùng refType ORDER và refId = id đơn). Một đơn còn có dòng hoàn ORDER_REFUND_POINTS (dương) và dòng tiêu
+ * ORDER_REDEEM (âm) mang cùng refId, nên chỉ ORDER_DELIVERED mới là lô gốc: dòng hoàn là khoản cộng mới có hạn riêng.
+ */
+const ORDER_RULE: ReversalRule = {
+  lotKey: (t) => (t.refType === 'ORDER' && t.refId && startsWith(t.reason, 'ORDER_DELIVERED:') ? `ORDER:${t.refId}` : null),
+  reversedLotKey: (t) => (t.refType === 'ORDER' && t.refId && startsWith(t.reason, 'ORDER_REVERSED:') ? `ORDER:${t.refId}` : null),
+};
+
+/** Xoá đánh giá (ReviewsService.remove): mọi dòng refType REVIEW mang refId = id đánh giá thuộc cùng một cặp. */
+const REVIEW_RULE: ReversalRule = {
+  lotKey: (t) => (t.refType === 'REVIEW' && t.refId ? `REVIEW:${t.refId}` : null),
+  reversedLotKey: (t) => (t.refType === 'REVIEW' && t.refId ? `REVIEW:${t.refId}` : null),
+};
+
+/**
+ * Thu hồi thưởng đơn thứ hai của người được mời (revokeReferralRewardForOrder): dòng thưởng mang refId "<đơn đầu>:<đơn
+ * hai>" còn dòng thu hồi mang refId của đơn bị trả, nên không ghép theo refId được. Hai dòng chung hậu tố reason
+ * `<id người được mời>`: REFERRAL_ORDER2:<id> và REFERRAL_ORDER2_REVOKE:<id>.
+ */
+const REFERRAL_ORDER2_RULE: ReversalRule = {
+  lotKey: (t) => (t.refType === 'REFERRAL' && startsWith(t.reason, REFERRAL_ORDER2_PREFIX) ? `REFERRAL_ORDER2:${t.reason.slice(REFERRAL_ORDER2_PREFIX.length)}` : null),
+  reversedLotKey: (t) =>
+    t.refType === 'REFERRAL' && startsWith(t.reason, REFERRAL_ORDER2_REVOKE_PREFIX)
+      ? `REFERRAL_ORDER2:${t.reason.slice(REFERRAL_ORDER2_REVOKE_PREFIX.length)}`
+      : null,
+};
+
+/**
+ * Mốc thưởng thêm của người mời: thưởng REFERRAL_MILESTONE:<người mời>:<mốc>[#<đời>] (đời 0 không có hậu tố), thu hồi
+ * REFERRAL_MILESTONE_REVOKE:<người mời>:<mốc>#<đời> (luôn có hậu tố). Cùng một mốc có thể đạt lại ở đời sau nên khoá
+ * gồm cả đời; thu hồi đời n chỉ ăn lô của đời n. Tiền tố khớp referral-reward.ts (MILESTONE_PREFIX, MILESTONE_REVOKE_PREFIX).
+ */
+const MILESTONE_PREFIX = 'REFERRAL_MILESTONE:';
+const MILESTONE_REVOKE_PREFIX = 'REFERRAL_MILESTONE_REVOKE:';
+
+function milestoneKey(rest: string): string | null {
+  const [mark, generation, ...extra] = rest.split('#');
+  const gen = generation === undefined || generation === '' ? 0 : Number(generation);
+  if (!mark || extra.length > 0 || !Number.isInteger(gen) || gen < 0) return null;
+  return `REFERRAL_MILESTONE:${mark}#${gen}`;
+}
+
+const REFERRAL_MILESTONE_RULE: ReversalRule = {
+  lotKey: (t) => (t.refType === 'REFERRAL' && startsWith(t.reason, MILESTONE_PREFIX) ? milestoneKey(t.reason.slice(MILESTONE_PREFIX.length)) : null),
+  reversedLotKey: (t) =>
+    t.refType === 'REFERRAL' && startsWith(t.reason, MILESTONE_REVOKE_PREFIX) ? milestoneKey(t.reason.slice(MILESTONE_REVOKE_PREFIX.length)) : null,
+};
+
+const REVERSAL_RULES: readonly ReversalRule[] = [ORDER_RULE, REVIEW_RULE, REFERRAL_ORDER2_RULE, REFERRAL_MILESTONE_RULE];
+
+function firstKey(t: PointExpiryTxn, pick: (rule: ReversalRule) => (t: PointExpiryTxn) => string | null): string | null {
+  for (const rule of REVERSAL_RULES) {
+    const key = pick(rule)(t);
+    if (key) return key;
+  }
+  return null;
+}
 
 interface ExpiryLot {
   remaining: number;
   expiresAt: Date | null;
-  /** Khoá `refId` của dòng thưởng đánh giá đã tạo lô; null với mọi lô khác. */
-  reviewRef: string | null;
+  /** Khoá cặp của khoản cộng đã tạo lô (xem ReversalRule); null nếu khoản cộng không thể bị thu hồi. */
+  key: string | null;
 }
 
 /** Trừ `amount` từ các lô theo thứ tự mảng; trả phần chưa trừ được. */
@@ -72,7 +146,8 @@ function consumeFifo(lots: ExpiryLot[], amount: number): number {
  *
  * Bất biến: pointsBalance == SUM(delta) lô STANDARD; caller chỉ đưa vào dòng lô STANDARD (PD-3). Mỗi delta DƯƠNG là một "lô" điểm (có/không expiresAt),
  * mỗi delta ÂM (tiêu/đổi/hoàn) tiêu dần từ lô CŨ NHẤT; riêng POINTS_EXPIRED kỳ trước tiêu lô đã hết hạn trước,
- * và dòng thu hồi điểm đánh giá (refType REVIEW) tiêu lô của đúng đánh giá đó trước (xem REVIEW_REF_TYPE).
+ * và dòng âm đảo ngược một khoản cộng cụ thể (huỷ/trả đơn, xoá đánh giá, thu hồi thưởng giới thiệu) tiêu lô của đúng
+ * khoản cộng đó trước, phần dư mới FIFO (xem ReversalRule).
  *
  * Idempotent: dòng POINTS_EXPIRED âm do cron tạo, ở lần chạy sau được replay tiêu đúng các lô đã
  * hết hạn tại thời điểm nó được ghi (xem EXPIRY_REASON) → expiredNow về 0 → chạy lại KHÔNG trừ đôi.
@@ -99,16 +174,16 @@ export function computePointExpiry(
 
   const lots: ExpiryLot[] = [];
   for (const t of sorted) {
-    const reviewRef = t.refType === REVIEW_REF_TYPE && t.refId ? t.refId : null;
     if (t.delta > 0) {
-      lots.push({ remaining: t.delta, expiresAt: t.expiresAt, reviewRef });
+      lots.push({ remaining: t.delta, expiresAt: t.expiresAt, key: firstKey(t, (rule) => rule.lotKey) });
     } else if (t.delta < 0) {
       let toConsume = -t.delta;
       if (t.reason === EXPIRY_REASON) {
         const expiredAtThatTime = lots.filter((l) => l.expiresAt != null && l.expiresAt.getTime() <= t.createdAt.getTime());
         toConsume = consumeFifo(expiredAtThatTime, toConsume);
-      } else if (reviewRef) {
-        toConsume = consumeFifo(lots.filter((l) => l.reviewRef === reviewRef), toConsume);
+      } else {
+        const reversed = firstKey(t, (rule) => rule.reversedLotKey);
+        if (reversed) toConsume = consumeFifo(lots.filter((l) => l.key === reversed), toConsume);
       }
       // Nếu còn dư (toConsume>0): lô đã cạn — bất biến vỡ, bỏ qua (không tạo remaining âm).
       consumeFifo(lots, toConsume);
