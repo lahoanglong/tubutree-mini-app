@@ -25,6 +25,7 @@ const MIGRATED = [
   'components/admin/dealer-payment-panel.tsx',
   'components/admin/payout-admin-tab.tsx',
   'components/admin/dealer-claims-tab.tsx',
+  'components/admin/order-detail-extras.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');

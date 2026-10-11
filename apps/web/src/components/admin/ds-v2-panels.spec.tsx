@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { DealerClaimsTab, ClaimRow } from './dealer-claims-tab';
-import { byText, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
-import type { AdminDealerRewardClaim } from '@/lib/admin-client';
+import { OrderInvoicePanel, OrderStatusHistory } from './order-detail-extras';
+import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import type { AdminDealerRewardClaim, AdminOrder } from '@/lib/admin-client';
 
 // C-097 (Q-25/Q-29): các khối admin còn lại chuyển sang token DS v2 và nút chạm được ở 390px. Chỉ kiểm phần trình
 // bày; hành vi nghiệp vụ của từng khối đã có spec riêng.
@@ -72,5 +73,45 @@ describe('ClaimRow / DealerClaimsTab — DS v2', () => {
     expect(selected).toHaveLength(1);
     expect(selected[0]!.className).toContain('bg-forest-600');
     expect(api.calls[0]!.url).toContain('status=PENDING');
+  });
+});
+
+const order = (over: Partial<AdminOrder> = {}): AdminOrder => ({
+  id: 'o1',
+  code: 'TB-500',
+  status: 'DELIVERED',
+  total: 300_000,
+  paymentMethod: 'COD',
+  createdAt: '2026-10-01T00:00:00.000Z',
+  ...over,
+});
+
+describe('order-detail-extras — DS v2', () => {
+  it('lịch sử trạng thái: nút mở dùng icon chevron (không ký tự ▲▼), lỗi tô danger-fg, "Thử lại" cao 44px', async () => {
+    const bad = mockFetch({ '/status-history': { status: 500, body: { message: 'Lỗi máy chủ' } } });
+    vi.stubGlobal('fetch', vi.fn(bad.fn));
+    const { container } = mount(<OrderStatusHistory order={order()} />);
+    const toggle = byText(container, 'button', 'Lịch sử trạng thái')!;
+    expect(toggle.textContent).not.toMatch(/[▲▼]/);
+    expect(toggle.querySelector('svg')).not.toBeNull();
+    click(toggle);
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.className).toContain('text-danger-fg');
+    expect(byText(container, 'button', 'Thử lại')?.className).toContain('min-h-[44px]');
+  });
+
+  it('hoá đơn VAT: ô link và nút "Đã xuất hoá đơn" cao 44px, nút chính forest', () => {
+    const { container } = mount(
+      <OrderInvoicePanel
+        order={order({
+          invoiceStatus: 'REQUESTED',
+          invoiceRequest: { taxCode: '0312345678', companyName: 'Công ty ABC', address: '1 Lê Lợi', email: 'a@b.vn' },
+        })}
+      />,
+    );
+    expect(container.querySelector('input[type="url"]')?.className).toContain('min-h-[44px]');
+    const btn = byText(container, 'button', 'Đã xuất hoá đơn');
+    expect(btn?.className).toContain('min-h-[44px]');
+    expect(btn?.className).toContain('bg-forest-600');
   });
 });
