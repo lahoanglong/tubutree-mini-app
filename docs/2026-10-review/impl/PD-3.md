@@ -252,7 +252,7 @@ Không sửa spec vì số đo chưa có; chỗ ghi số là bảng dưới (đi
 
 Kiểm cả bảng `users` của DB test chung không khả thi. Đo thật trên `tubu_it_pd3`: 18 user lệch hai bất biến, toàn do fixture của các spec khác đặt số dư thẳng (vd `pointsBalance 115` không có dòng sổ, `pointsConvertedBalance 6` không có dòng CONVERTED), không liên quan PD-3. Một ca assert "cả bảng rỗng" sẽ đỏ vĩnh viễn hoặc phải loại trừ tay.
 
-Đã làm: ca mới trong `pd3-points-lots.race-spec.ts` kiểm `findPointsLotDrift` trên MỌI user có dòng `XU_MIGRATION` (user spec tự tạo và dữ liệu spec khác để lại, gồm dòng đã gộp sang user khác; 5 chủ dòng còn lại ở DB test đều khớp). Phạm vi và lý do ghi ở đầu spec. Kiểm cả bảng nằm ở `pd3-xu-migration.race-spec.ts` (`invariants()` trên schema nháp sạch, sau B và sau hoàn tác) và ở `scripts/reconcile-points.ts` chạy trên dữ liệu thật (mục "Trước deploy").
+Đã làm: ca mới trong `pd3-points-lots.race-spec.ts` kiểm `findPointsLotDrift` trên MỌI user có dòng `XU_MIGRATION` (user spec tự tạo và dữ liệu spec khác để lại, gồm dòng đã gộp sang user khác; 4 chủ dòng còn lại ở DB test lúc đo đều khớp). Phạm vi và lý do ghi ở đầu spec. Kiểm cả bảng nằm ở `pd3-xu-migration.race-spec.ts` (`invariants()` trên schema nháp sạch, sau B và sau hoàn tác) và ở `scripts/reconcile-points.ts` chạy trên dữ liệu thật (mục "Trước deploy").
 
 ### 6. Cron hết hạn chạy đồng thời (minor, có sẵn từ trước PD-3)
 
