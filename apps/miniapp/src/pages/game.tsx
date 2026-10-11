@@ -36,10 +36,8 @@ import { haptic } from '../utils/haptic';
 import { getErrorMessage } from '../services/api';
 import { vi } from '../i18n/vi';
 import { MessagesSquare, Recycle } from 'lucide-react';
-import { copyText } from '../utils/clipboard';
 import { formatDrops, formatNumber, formatXu } from '../utils/format';
-import { isSameVNDay, rarityColor, rarityLabel } from '../components/game/game-utils';
-import { GameCard } from '../components/game/game-card';
+import { isSameVNDay } from '../components/game/game-utils';
 import { GardenHero } from '../components/game/garden-hero';
 import { GameLinkRow } from '../components/game/game-link-row';
 import { SeasonBanner } from '../components/game/season-banner';
@@ -56,6 +54,9 @@ import { EcoImpact } from '../components/game/eco-impact';
 import { LuckyWheelCard } from '../components/game/lucky-wheel-card';
 import { QuizCard, type QuizReveal } from '../components/game/quiz-card';
 import { MissionsCard } from '../components/game/missions-card';
+import { SeasonLeaderboard } from '../components/game/season-leaderboard';
+import { WeeklyLeaderboard } from '../components/game/weekly-leaderboard';
+import { HarvestCelebration } from '../components/game/harvest-celebration';
 
 export default function GamePage() {
   const status = useAuthStore((s) => s.status);
@@ -412,165 +413,22 @@ export default function GamePage() {
         onClaim={(code) => claimMissionM.mutate(code)}
       />
 
-      {seasonBoard && seasonBoard.length > 0 && (
-        <GameCard title="💧 Top góp nước mùa này">
-          {seasonBoard.map((r) => (
-            <Box key={r.rank} flex justifyContent="space-between" style={{ padding: '4px 0', borderTop: r.rank > 1 ? '1px solid var(--neutral-100)' : 'none' }}>
-              <Text size="small">
-                {r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : `#${r.rank}`} {r.nickname}
-              </Text>
-              <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                {formatDrops(r.drops)}
-              </Text>
-            </Box>
-          ))}
-        </GameCard>
-      )}
+      {seasonBoard && seasonBoard.length > 0 && <SeasonLeaderboard rows={seasonBoard} />}
 
-      <GameCard title="🏆 Bảng xếp hạng tuần">
-        {board && board.length > 0 ? (
-          <>
-            {/* Podium top 3 */}
-            <Box flex alignItems="flex-end" justifyContent="center" style={{ gap: 8, marginBottom: 12 }}>
-              {[board[1], board[0], board[2]].map((r, idx) => {
-                if (!r) return <Box key={idx} style={{ flex: 1 }} />;
-                const isFirst = r.rank === 1;
-                const h = isFirst ? 64 : r.rank === 2 ? 48 : 38;
-                const medal = r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : '🥉';
-                return (
-                  <Box key={r.rank} style={{ flex: 1, textAlign: 'center' }}>
-                    <Text style={{ fontSize: isFirst ? 28 : 22 }}>{medal}</Text>
-                    <Text size="xSmall" bold style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {r.nickname}
-                    </Text>
-                    <Box
-                      style={{
-                        height: h,
-                        borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
-                        background: isFirst ? 'var(--primary-600)' : 'var(--leaf-400)',
-                        marginTop: 4,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'var(--neutral-0)',
-                        fontSize: 11,
-                        fontWeight: 700,
-                      }}
-                    >
-                      🌳{r.treesPlanted}
-                    </Box>
-                  </Box>
-                );
-              })}
-            </Box>
-            {/* Hạng 4+ */}
-            {board.slice(3).map((r) => (
-              <Box key={r.rank} flex justifyContent="space-between" style={{ padding: '4px 0', borderTop: '1px solid var(--neutral-100)' }}>
-                <Text size="small">
-                  #{r.rank} {r.nickname}
-                </Text>
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                  🔥{r.streak} · 🌳{r.treesPlanted}
-                </Text>
-              </Box>
-            ))}
-          </>
-        ) : (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            Chưa có dữ liệu xếp hạng.
-          </Text>
-        )}
-      </GameCard>
+      <WeeklyLeaderboard board={board} />
 
       {/* Harvest celebration */}
       {harvested && (
-        <Box
-          onClick={() => setHarvested(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }}
-        >
-          <Box
-            onClick={(e) => e.stopPropagation()}
-            p={5}
-            style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-xl)', textAlign: 'center', maxWidth: 320, width: '100%' }}
-          >
-            <Text style={{ fontSize: 64 }}>🌳</Text>
-            <Text bold size="large" style={{ marginTop: 8 }}>
-              Thu hoạch thành công!
-            </Text>
-            <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
-              Cây ảo của bạn đã lớn — Tubu sẽ góp <b>1 cây thật</b> vào rừng "Rừng Xanh Lên" cùng PanNature 🌿
-            </Text>
-            {harvestCoupon && (
-              <Box
-                className="tubu-press"
-                mt={3}
-                p={3}
-                onClick={() => {
-                  void copyText(harvestCoupon).then((ok) =>
-                    openSnackbar(
-                      ok
-                        ? { text: 'Đã sao chép mã giảm giá', type: 'success' }
-                        : { text: `Không sao chép được — mã của bạn: ${harvestCoupon}`, type: 'info', duration: 4000 },
-                    ),
-                  );
-                }}
-                style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--leaf-600)' }}
-              >
-                <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                  Quà thu hoạch — mã giảm giá (chạm để sao chép)
-                </Text>
-                <Text bold style={{ color: 'var(--leaf-700)', letterSpacing: 1 }}>
-                  {harvestCoupon}
-                </Text>
-              </Box>
-            )}
-            {harvestCert && (
-              <Box mt={2} p={3} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)' }}>
-                <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                  Mã chứng nhận cây thật
-                </Text>
-                <Text bold style={{ color: 'var(--leaf-700)', letterSpacing: 1 }}>
-                  {harvestCert}
-                </Text>
-              </Box>
-            )}
-            {harvestSpecies && (
-              <Box mt={3} p={3} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', border: `1px solid ${rarityColor(harvestSpecies.rarity)}` }}>
-                <Text size="xSmall" style={{ color: rarityColor(harvestSpecies.rarity), fontWeight: 700 }}>
-                  {rarityLabel(harvestSpecies.rarity)} · Sưu tập mới!
-                </Text>
-                <Text bold style={{ marginTop: 2 }}>
-                  {harvestSpecies.emoji} {harvestSpecies.name}
-                </Text>
-                {harvestSpecies.ecoFact && (
-                  <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
-                    💡 {harvestSpecies.ecoFact}
-                  </Text>
-                )}
-              </Box>
-            )}
-            {harvestCoupon && (
-              <Button
-                fullWidth
-                variant="secondary"
-                onClick={() => {
-                  setHarvested(false);
-                  navigate('/browse');
-                }}
-                style={{ marginTop: 12 }}
-              >
-                Dùng mã giảm giá ngay
-              </Button>
-            )}
-            <Button
-              fullWidth
-              onClick={() => setHarvested(false)}
-              style={{ marginTop: harvestCoupon ? 8 : 20, background: 'var(--leaf-600)' }}
-            >
-              Tuyệt vời!
-            </Button>
-          </Box>
-        </Box>
+        <HarvestCelebration
+          coupon={harvestCoupon}
+          certificate={harvestCert}
+          species={harvestSpecies}
+          onClose={() => setHarvested(false)}
+          onUseCoupon={() => {
+            setHarvested(false);
+            navigate('/browse');
+          }}
+        />
       )}
     </Page>
   );
