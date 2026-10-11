@@ -177,3 +177,117 @@ Cách chạy migration B/hoàn tác trong race spec: đọc chính file `.sql` c
 - Trước deploy: chạy truy vấn 3.3 (a)–(e) trên bản sao PROD; nếu (b) khác 0 thì đối soát trước, nếu không migration B dừng deploy. Ghi số (a) vào báo cáo này.
 - Quyết định khi gặp user đã quy đổi mà lại có xu mới (chỉ xảy ra nếu B chạy hơn một lần trên cùng DB, ví dụ staging): migration không tự quy đổi lần hai, cần quy đổi tay hoặc huỷ số xu đó.
 - SQL hoàn tác chỉ dùng khi chưa có đơn tiêu điểm quy đổi; sau đó chỉ sửa tiến.
+
+## Review A1 (reviewer độc lập, lượt 1)
+
+Trạng thái: **XONG**. Sáu finding: 1 major (đúng, đã sửa), 4 minor đã sửa hoặc xử lý, 1 minor không đo được trong phạm vi lượt (thành cổng deploy). Mỗi sửa một commit riêng `address review A1`. Test đỏ được thấy trước khi sửa; output thật bên dưới.
+
+| # | Mức | Finding | Kết luận | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | major | Hoàn tác chỉ chặn khi `orders.pointsUsedConverted > 0`; gộp phiên khách, hoàn đơn xu cũ, thu hồi giới thiệu đưa điểm vào/ra lô quy đổi mà hoàn tác không thấy | ĐÚNG, đã sửa | f781e758, a7ea0676 |
+| 2 | minor | Không có quy trình triển khai lại sau hoàn tác | ĐÚNG, đã ghi (chọn phương án "chỉ sửa tiến") | f781e758 |
+| 3 | minor | `(coinsBalance + 999)` tràn INTEGER khi số dư > 2.147.482.648 | ĐÚNG, đã sửa migration B; phần hoàn tác chỉ ép kiểu cho chắc | bc00be31 |
+| 4 | minor | Chi phí làm tròn trên số dư thật chưa đo | KHÔNG sửa được ở đây (cấm PROD); thành cổng deploy, xem dưới | báo cáo này |
+| 5 | minor | T5 chưa kiểm bất biến trên dữ liệu có sẵn / cả bảng | MỘT PHẦN: kiểm mọi user có dòng `XU_MIGRATION`; cả bảng không khả thi trên DB test chung, ghi lý do | d4eab0cb |
+| 6 | minor | `expireUser` tính `expiredNow` ngoài transaction, hai lượt đồng thời cùng trừ | ĐÚNG (có sẵn từ trước PD-3), đã sửa vì rẻ và an toàn | 317090bd |
+
+### 1. Hoàn tác: dòng cộng vào lô quy đổi ngoài dòng quy đổi gốc (major)
+
+Xác minh bằng mã: `mergeGuestInto` chuyển `points_transactions.userId` của dòng `XU_MIGRATION` sang target (refId vẫn là id khách) và cộng `pointsConvertedBalance` cho target; bảng chụp vẫn gắn với khách (số dư 0 sau gộp). Hoàn tác tính `LEAST(pointsGranted, pointsConvertedBalance)` theo từng dòng bảng chụp: khách nhận 0 xu, target giữ điểm thừa mà code cũ không đọc. Hoàn đơn xu cũ (`ORDER_REFUND_XU`, L3) và dòng cộng khác vào lô quy đổi cho cùng hậu quả. Phép tính của reviewer đúng.
+
+Test đỏ (đúng SQL cũ, lấy từ `git show HEAD`, đặt tạm vào file rồi khôi phục bản mới):
+
+```
+✕ T21 (review A1): hoàn tác TỪ CHỐI khi lô quy đổi của một khách đã được gộp phiên sang user khác
+    expect(received).rejects.toThrow()
+    Received promise resolved instead of rejected
+✕ T21 (review A1): hoàn tác TỪ CHỐI khi lô quy đổi nhận điểm không qua quy đổi (hoàn đơn xu cũ)
+    Received promise resolved instead of rejected
+```
+
+Sửa (`apps/api/prisma/manual/pd3_xu_to_points_rollback.sql`): sau chốt `pointsUsedConverted` thêm chốt thứ hai, dừng bằng `RAISE EXCEPTION` khi tồn tại dòng `lot = 'CONVERTED' AND delta > 0` mà không phải dòng quy đổi gốc (`refType = 'XU_MIGRATION' AND refId = userId`). Khoá thêm `points_transactions`. Chọn phương án "từ chối" của reviewer, không phải "hoàn tác theo cả `pointsConvertedBalance`": phương án sau trả xu cho điểm không xuất phát từ xu và làm tròn thêm cho khách, trái nguyên tắc an toàn tiền; từ chối buộc người vận hành sửa tiến có kiểm soát. Khác đề xuất của reviewer ở một chỗ: chỉ tính dòng CỘNG. Dòng TRỪ (góp quỹ trồng cây, thu hồi thưởng giới thiệu, spec 3.5 và T21 ca "lô tiêu một phần") vẫn được hoàn tác một phần; nếu chặn cả dòng trừ thì ca T21 hiện có không còn đúng.
+
+Ca T21 mới, cả hai đều kiểm hoàn tác không ghi gì (số dư mọi user và số dòng `XU_MIGRATION_ROLLBACK` không đổi):
+- khách `u1001` (1.001 xu = 2 điểm) gộp sang `u999`: dòng điểm và dòng xu chuyển, số dư chuyển, bất biến vẫn đúng, hoàn tác từ chối;
+- `u1000` nhận `ORDER_REFUND_XU` +5 vào lô CONVERTED: hoàn tác từ chối.
+
+Xanh: `pd3-xu-migration  Tests: 11 passed, 11 total`.
+
+Hệ quả vận hành: nếu trong cửa sổ giữa deploy và hoàn tác có khách có xu được gộp phiên, hoàn tác bị chặn và chỉ còn sửa tiến. Đầu file SQL có truy vấn liệt kê các dòng gây chặn.
+
+### 2. Triển khai lại sau hoàn tác (minor)
+
+Đúng: B vẫn nằm trong `_prisma_migrations`, PK `xu_points_conversions` chặn quy đổi lần hai, `users_coins_frozen` bị gỡ không tự trở lại, và code mới không đọc `coinsBalance` nên số xu đã trả lại sẽ mồ côi. Chọn phương án thứ hai của reviewer: ghi vào đầu file hoàn tác rằng hoàn tác là MỘT CHIỀU (chỉ sửa tiến, không chạy lại B), kèm hướng cho lần triển khai lại: cần migration quy đổi MỚI (user có `XU_MIGRATION_ROLLBACK` và `coinsBalance > 0`, id dòng sổ và refType riêng) rồi thêm lại `users_coins_frozen`, làm qua review riêng. Không viết sẵn script triển khai lại: không có test thật nào chứng minh được trước khi có tình huống cụ thể, và sai ở đây là sai tiền trả trước.
+
+### 3. Tràn INTEGER ở migration B (minor)
+
+Đúng. `(u."coinsBalance" + 999)` là INTEGER + INTEGER. Test đỏ (số dư 2.147.483.647):
+
+```
+Raw query failed. Code: `22003`. Message: `ERROR: integer out of range`
+Tests:       1 failed, 10 passed, 11 total
+```
+
+Sửa (`20261012110000_pd3_xu_to_points/migration.sql`): `u."coinsBalance"::bigint + 999` ở cả `pointsGranted` và `roundingVnd`. Kết quả tối đa 2.147.484 điểm và làm tròn 353đ vẫn vừa cột INTEGER. Ca mới: số dư 2.147.483.647 quy đổi ra 2.147.484 điểm, `roundingVnd` 353, bất biến đủ; hoàn tác trả đủ 2.147.483.647 xu. Xanh: `Tests: 11 passed, 11 total`.
+
+Về phần hoàn tác (`pts_back * 1000`): reviewer nói "cùng lỗi". Thực tế chưa tràn: nhánh `ELSE` của `CASE` chỉ chạy khi `pts_back < pointsGranted ≤ 2.147.484`, tức `pts_back ≤ 2.147.483` và `× 1000 = 2.147.483.000` còn vừa. Vẫn ép `bigint` ở đó cho khỏi phụ thuộc thứ tự `CASE`; comment trong file nói đúng điều này, không nói là đang tràn.
+
+Migration B đã sửa tại chỗ (không thêm migration mới) vì chưa deploy ở đâu ngoài DB test. DB `tubu_it_pd3` đã áp bản B cũ nên checksum trong `_prisma_migrations` lệch bản mới; `prisma migrate deploy` không kiểm checksum (chạy lại: `No pending migrations to apply`), `prisma migrate dev` thì sẽ báo. Người khác dùng `migrate dev` trên DB đã áp B cũ phải dựng lại DB đó.
+
+### 4. Chi phí làm tròn trên số dư thật (minor, KHÔNG sửa được ở đây)
+
+Đúng là chưa đo: lượt này cấm đụng PROD, DB dev chỉ cho 0 user có xu (reviewer đã chạy). Thành **cổng deploy** bắt buộc cho điều phối viên:
+
+1. Chạy spec mục 3.3 (a) và (b) trên bản sao PROD. Điều kiện qua cổng: (b) cả hai số bằng 0 (nếu không migration B dừng deploy); (a) `rounding_cost_vnd` và `users_with_xu` đã ghi vào báo cáo này và chủ dự án thấy chấp nhận được (trần lý thuyết 999đ × `users_with_xu`). Thêm `max("coinsBalance")` để thấy có user sát trần INTEGER hay không.
+2. Chạy lại truy vấn "sau migration B" (spec 3.3) ngay sau deploy và đối chiếu `sum("pointsGranted")`, `sum("roundingVnd")`, `sum("coinsBefore")` với kết quả (a).
+
+Không sửa spec vì số đo chưa có; chỗ ghi số là bảng dưới (điền khi có).
+
+| Truy vấn | Kết quả trên bản sao PROD | Ngày / người chạy |
+| --- | --- | --- |
+| 3.3 (a) users_with_xu / total_xu / rounding_cost_vnd / max_points_one_user | (chưa đo) | |
+| 3.3 (b) negative_users / coin_drift_users | (chưa đo) | |
+
+### 5. T5 trên dữ liệu có sẵn (minor)
+
+Kiểm cả bảng `users` của DB test chung không khả thi. Đo thật trên `tubu_it_pd3`: 18 user lệch hai bất biến, toàn do fixture của các spec khác đặt số dư thẳng (vd `pointsBalance 115` không có dòng sổ, `pointsConvertedBalance 6` không có dòng CONVERTED), không liên quan PD-3. Một ca assert "cả bảng rỗng" sẽ đỏ vĩnh viễn hoặc phải loại trừ tay.
+
+Đã làm: ca mới trong `pd3-points-lots.race-spec.ts` kiểm `findPointsLotDrift` trên MỌI user có dòng `XU_MIGRATION` (user spec tự tạo và dữ liệu spec khác để lại, gồm dòng đã gộp sang user khác; 5 chủ dòng còn lại ở DB test đều khớp). Phạm vi và lý do ghi ở đầu spec. Kiểm cả bảng nằm ở `pd3-xu-migration.race-spec.ts` (`invariants()` trên schema nháp sạch, sau B và sau hoàn tác) và ở `scripts/reconcile-points.ts` chạy trên dữ liệu thật (mục "Trước deploy").
+
+### 6. Cron hết hạn chạy đồng thời (minor, có sẵn từ trước PD-3)
+
+Đúng. `expireUser` đọc sổ và tính `expiredNow` ngoài transaction; guard `gte` chỉ chặn số dư âm. Test đỏ (6 lượt `expireUser` song song cho user có 30 điểm hết hạn + 100 điểm còn hạn; kỳ vọng tổng trừ 30):
+
+```
+✕ T7: nhiều lượt hết hạn chạy ĐỒNG THỜI cho một user ... chỉ trừ một lần
+Expected: 30
+Received: 120
+Tests:       1 failed, 4 passed, 5 total
+```
+
+Khách mất 90 điểm chưa hết hạn. Sửa (`loyalty-expiry.service.ts`): bước đọc nhanh không khoá giữ nguyên (phần lớn ứng viên đã xử lý từ các đêm trước, khoá hết mỗi đêm là phí); khi thật sự phải trừ thì trong transaction `SELECT ... FOR UPDATE` dòng user, đọc lại sổ lô STANDARD rồi mới tính `expiredNow`, nên lượt đến sau thấy dòng `POINTS_EXPIRED` của lượt trước và trừ 0. Xanh: `pd3-points-lots  Tests: 6 passed, 6 total` (chạy 3 lần liên tiếp đều xanh); unit `loyalty-expiry.service.spec.ts` thêm ca "đọc lại sau khoá thấy lượt kia đã trừ" và mock transaction có khoá + đọc lại: `Tests: 19 passed, 19 total`.
+
+### Chạy lại cuối lượt
+
+```
+partial-unique-indexes  Tests: 5 passed, 5 total
+pd3-xu-migration        Tests: 11 passed, 11 total
+pd3-points-lots         Tests: 6 passed, 6 total
+auth-merge-guest        Tests: 11 passed, 11 total
+account-deletion        Tests: 13 passed, 13 total
+loyalty.race            Tests: 5 passed, 5 total
+npx jest src/modules/loyalty src/modules/auth src/modules/users --maxWorkers=1   Test Suites: 14 passed; Tests: 244 passed
+npx tsc --noEmit -p tsconfig.json   exit 0
+npx eslint <file đã sửa>            exit 0
+prisma migrate diff ... --exit-code: No difference detected. | check-partial-indexes: mong đợi 20, có trong DB 20.
+```
+
+### Khác spec (thêm cho A1)
+
+- SQL hoàn tác (spec 3.5) có thêm chốt dừng khi có dòng cộng vào lô CONVERTED ngoài dòng quy đổi gốc, và khoá `points_transactions`. Spec 3.5 chỉ nêu điều kiện "chưa có đơn tiêu điểm quy đổi".
+- Migration B ép `bigint` ở phép làm tròn lên (spec 3.2 viết INTEGER).
+
+### Việc cần chủ dự án (thêm cho A1)
+
+- OQ-16 (mới, dùng đề xuất mặc định): hoàn tác xu bị chặn khi đã có phiên khách gộp hoặc dòng cộng khác vào lô quy đổi; khi đó chỉ sửa tiến. Báo nếu muốn có đường hoàn tác cho trường hợp gộp phiên (cần thiết kế riêng, trả xu cho chủ hiện tại của dòng quy đổi).
+- Cổng deploy mục 4 ở trên: số đo 3.3 (a), (b) trên bản sao PROD trước khi deploy.
