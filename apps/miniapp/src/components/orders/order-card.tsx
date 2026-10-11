@@ -53,7 +53,8 @@ export function OrderCard({ order: o, onOpen, onReorder }: OrderCardProps) {
           onClick={onOpen}
           style={{ ...STRETCHED_LINK_RESET, ...stretchedLinkHit44(16) }}
         >
-          <Text variant="label" style={{ letterSpacing: 0.4 }}>
+          {/* block: hộp dòng của nút không còn dùng chiều cao chữ của chính nút, nên hộp nút đúng 44px. */}
+          <Text variant="label" as="span" style={{ display: 'block', letterSpacing: 0.4 }}>
             {o.code}
           </Text>
         </button>
