@@ -18,6 +18,7 @@ import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { loadPointExpiryTxns, lotRemaining, orderLotKey } from './loyalty-expiry.service';
 
 /**
  * Loyalty core (Build Spec §6.6). Phase 1 dùng cho vòng đời đơn:
@@ -121,13 +122,22 @@ export class LoyaltyService {
   }
 
   /**
-   * Hoàn ngược khi hủy/trả: trừ điểm đã tích, hoàn lại điểm đã tiêu (lô STANDARD; lô CONVERTED xem OrderReversalService).
+   * Hoàn ngược khi hủy/trả: thu hồi điểm đã tích (tối đa phần còn lại của lô), hoàn lại điểm đã tiêu (lô STANDARD; lô CONVERTED xem OrderReversalService).
    *
    * RACE: 2 caller song song (orders.cancel + webhook RETURNED) trước đây cùng
    * findFirst NGOÀI tx → cùng thấy chưa reverse → cùng cộng/trừ → DOUBLE.
    * Fix: di chuyển ALL check + write VÀO 1 transaction; relies on
    * unique partial index (reason, refId) để insert thứ 2 P2002 → bail idempotent.
    * Migration 20260623000000_loyalty_reverse_unique tạo unique index.
+   *
+   * Khoá dòng user (FOR UPDATE) là việc đầu tiên trong tx, cùng quy ước redeemReward/checkout/cron hết hạn: cron khoá
+   * dòng này rồi tính lại sổ trong tx, nên đọc sổ khi chưa có khoá thì cron commit giữa chừng, trừ lô đơn (POINTS_EXPIRED)
+   * rồi ta trừ lần hai (ORDER_REVERSED). Hai caller song song nay xếp hàng ở khoá, kẻ sau thấy dòng của kẻ trước.
+   *
+   * Điểm đơn thu hồi tối đa phần còn lại của lô ORDER_DELIVERED theo sổ lô (lotRemaining) và không quá số dư: lô đã hết
+   * hạn và cron đã trừ thì không trừ lần hai (admin đặt loyalty.point_expire_months ngắn hơn cửa sổ trả hàng), điểm đã
+   * tiêu thì không đòi lại, và số dư không bao giờ âm. Dòng ORDER_REVERSED luôn được ghi (delta 0 nếu không còn gì để
+   * thu hồi): nó là dấu "đã xử lý" của idempotency và của lockedOrderPoints.
    */
   async reverseOrderPoints(orderId: string): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
@@ -140,7 +150,11 @@ export class LoyaltyService {
     const refundExpiresAt = usedStandard > 0 ? await this.pointsExpiresAt(new Date()) : null;
     try {
       await this.prisma.$transaction(async (tx) => {
-        // Re-check trong tx để giảm xác suất chạy ops vô ích; unique index là guard cứng.
+        const lockedUser =
+          order.pointsEarned > 0 || usedStandard > 0
+            ? await tx.$queryRaw<{ pointsBalance: number }[]>`SELECT "pointsBalance" FROM "users" WHERE "id" = ${order.userId} FOR UPDATE`
+            : [];
+        // Re-check trong tx (sau khoá) để giảm xác suất chạy ops vô ích; unique index là guard cứng.
         const reversed = await tx.pointsTransaction.findFirst({
           where: {
             userId: order.userId,
@@ -165,21 +179,31 @@ export class LoyaltyService {
           : false;
 
         if (wasCredited) {
-          // create() trước user.update — nếu duplicate caller chạy đồng thời, P2002
+          const balance = Math.max(0, lockedUser[0]?.pointsBalance ?? 0);
+          const remaining = lotRemaining(await loadPointExpiryTxns(tx, order.userId), orderLotKey(order.id));
+          const take = Math.min(order.pointsEarned, remaining ?? order.pointsEarned, balance);
+          // create() trước user.updateMany — nếu duplicate caller chạy đồng thời, P2002
           // bay ra TRƯỚC khi balance bị decrement lần 2 (xem catch ngoài tx).
           await tx.pointsTransaction.create({
             data: {
               userId: order.userId,
-              delta: -order.pointsEarned,
+              delta: take > 0 ? -take : 0,
               reason: `ORDER_REVERSED:${order.code}`,
               refType: 'ORDER',
               refId: order.id,
             },
           });
-          await tx.user.update({
-            where: { id: order.userId },
-            data: { pointsBalance: { decrement: order.pointsEarned } },
-          });
+          if (take > 0) {
+            // Số dư đã đọc sau FOR UPDATE nên không thể thiếu; ném để rollback thay vì để sổ lệch.
+            const dec = await tx.user.updateMany({
+              where: { id: order.userId, pointsBalance: { gte: take } },
+              data: { pointsBalance: { decrement: take } },
+            });
+            if (dec.count !== 1) throw new Error(`reverseOrderPoints ${order.code}: số dư đổi giữa chừng`);
+          }
+          if (take < order.pointsEarned) {
+            this.logger.log(`reverseOrderPoints order=${order.code}: thu hồi ${take}/${order.pointsEarned} điểm, phần còn lại của lô đã hết hạn hoặc đã tiêu`);
+          }
         }
         if (usedStandard > 0) {
           await tx.pointsTransaction.create({
@@ -315,8 +339,8 @@ export class LoyaltyService {
 
   /**
    * "Điểm xét hạng" 12 tháng — WHITELIST: chỉ điểm tích từ đơn online ĐÃ GIAO (dòng
-   * `ORDER_DELIVERED:<code>`, creditOrderPoints) có trong cửa sổ, TRỪ dòng `ORDER_REVERSED:<code>`
-   * của CHÍNH các đơn đó (reverseOrderPoints — cùng refId = order.id) khi đơn bị trả/huỷ.
+   * `ORDER_DELIVERED:<code>`, creditOrderPoints) có trong cửa sổ, LOẠI các đơn đã có dòng `ORDER_REVERSED:<code>`
+   * (reverseOrderPoints — cùng refId = order.id) khi đơn bị trả/huỷ.
    *
    * Hạng là hạng theo CHI TIÊU: seed đặt minPoints đúng bằng minSpending / loyalty.vnd_per_point
    * (500 điểm ↔ 5 triệu, 2.000 ↔ 20 triệu, 5.000 ↔ 50 triệu), nên điểm chỉ là thước đo thay cho
@@ -345,12 +369,15 @@ export class LoyaltyService {
     const earned = delivered.reduce((s, r) => s + r.delta, 0);
     const orderIds = [...new Set(delivered.map((r) => r.refId).filter((id): id is string => !!id))];
     if (orderIds.length === 0) return earned;
-    const reversed = await this.prisma.pointsTransaction.aggregate({
+    const reversed = await this.prisma.pointsTransaction.findMany({
       where: { userId, reason: { startsWith: TIER_REVERSED_PREFIX }, refId: { in: orderIds } },
-      _sum: { delta: true },
+      select: { refId: true },
     });
-    // Dòng ORDER_REVERSED ghi delta ÂM (= -pointsEarned) → cộng vào là trừ đi.
-    return Math.max(0, earned + (reversed._sum.delta ?? 0));
+    // Đơn đã có dòng ORDER_REVERSED thì bỏ NGUYÊN điểm giao của nó, không trừ theo delta của dòng thu hồi: reverseOrderPoints
+    // chỉ thu hồi phần còn lại của lô (điểm đã hết hạn hay đã tiêu thì delta nhỏ hơn, có khi 0) nhưng đơn đã trả thì
+    // chi tiêu của nó không còn thuộc hạng.
+    const reversedOrders = new Set(reversed.map((r) => r.refId));
+    return delivered.reduce((sum, r) => (r.refId && reversedOrders.has(r.refId) ? sum : sum + r.delta), 0);
   }
 
   /**

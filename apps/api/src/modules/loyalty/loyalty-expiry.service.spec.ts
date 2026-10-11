@@ -1,4 +1,12 @@
-import { computePointExpiry, LoyaltyExpiryService, type PointExpiryTxn } from './loyalty-expiry.service';
+import {
+  computePointExpiry,
+  loadPointExpiryTxns,
+  LoyaltyExpiryService,
+  lotRemaining,
+  orderLotKey,
+  reviewLotKey,
+  type PointExpiryTxn,
+} from './loyalty-expiry.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
@@ -704,6 +712,90 @@ describe('computePointExpiry (pure FIFO helper)', () => {
       WINDOW,
     );
     expect(r.expiredNow).toBe(0);
+  });
+});
+
+/**
+ * PF-3: điểm còn lại của MỘT lô theo sổ (replay y hệt computePointExpiry). reverseOrderPoints và ReviewsService.remove
+ * dùng nó để chỉ thu hồi phần còn lại: lô đã hết hạn và bị cron trừ, hay đã tiêu, thì không thu hồi lần hai.
+ */
+describe('lotRemaining (điểm còn lại của một lô theo sổ)', () => {
+  const ORDER = { refType: 'ORDER' };
+  const delivered = (id: string, delta: number, createdAt: string, expiresAt: string | null, orderId: string) =>
+    tx(id, delta, createdAt, expiresAt, 'ORDER_DELIVERED:C1', { ...ORDER, refId: orderId });
+  const reversed = (id: string, delta: number, createdAt: string, orderId: string) =>
+    tx(id, delta, createdAt, null, 'ORDER_REVERSED:C1', { ...ORDER, refId: orderId });
+  const key = orderLotKey('o1');
+
+  it('lô chưa ai đụng → còn nguyên', () => {
+    expect(lotRemaining([tx('a', 30, '2025-01-01'), delivered('d', 20, '2026-06-01', '2027-06-01', 'o1')], key)).toBe(20);
+  });
+
+  it('cron đã trừ POINTS_EXPIRED cho lô đã hết hạn → còn 0 (không còn gì để thu hồi)', () => {
+    const r = lotRemaining(
+      [tx('a', 30, '2025-01-01'), delivered('d', 20, '2025-05-01', '2026-05-01', 'o1'), expired('x', 20, '2026-05-02')],
+      key,
+    );
+    expect(r).toBe(0);
+  });
+
+  it('lô đã hết hạn nhưng cron chưa chạy → còn nguyên (thu hồi lúc này thì cron đêm sau không trừ nữa)', () => {
+    expect(lotRemaining([delivered('d', 20, '2025-05-01', '2026-05-01', 'o1')], key)).toBe(20);
+  });
+
+  it('điểm đã tiêu ăn lô cũ trước (FIFO) rồi mới tới lô đơn: còn phần dư của lô đơn', () => {
+    const r = lotRemaining([tx('a', 30, '2025-01-01'), delivered('d', 20, '2026-06-01', null, 'o1'), tx('s', -40, '2026-06-10')], key);
+    expect(r).toBe(10);
+  });
+
+  it('tiêu hết cả lô → 0', () => {
+    expect(lotRemaining([delivered('d', 20, '2026-06-01', null, 'o1'), tx('s', -20, '2026-06-10')], key)).toBe(0);
+  });
+
+  it('dòng thu hồi đã ghi ăn đúng lô này', () => {
+    expect(lotRemaining([tx('a', 30, '2025-01-01'), delivered('d', 20, '2026-06-01', null, 'o1'), reversed('v', -12, '2026-06-05', 'o1')], key)).toBe(8);
+  });
+
+  it('chỉ tính đúng khoá: lô của đơn khác không lẫn vào', () => {
+    const txns = [delivered('d1', 20, '2026-06-01', null, 'o1'), delivered('d2', 50, '2026-06-02', null, 'o2')];
+    expect(lotRemaining(txns, orderLotKey('o1'))).toBe(20);
+    expect(lotRemaining(txns, orderLotKey('o2'))).toBe(50);
+  });
+
+  it('không có lô nào mang khoá (dòng cộng cũ thiếu refType/refId, hay đơn chưa giao) → null để caller không thu hẹp', () => {
+    expect(lotRemaining([tx('d', 20, '2026-06-01', null, 'ORDER_DELIVERED:C1')], key)).toBeNull();
+    expect(lotRemaining([], key)).toBeNull();
+    expect(lotRemaining([tx('a', 30, '2025-01-01')], key)).toBeNull();
+  });
+
+  it('đánh giá: khoá theo id đánh giá, dòng REVIEW_DELETE đã ghi ăn đúng lô', () => {
+    const txns = [tx('a', 30, '2025-01-01'), review('r1', 5, '2026-06-01', '2027-06-01', 'rv1'), review('r2', -2, '2026-06-02', null, 'rv1')];
+    expect(lotRemaining(txns, reviewLotKey('rv1'))).toBe(3);
+  });
+
+  it('không đổi thứ tự đầu vào của caller (hàm thuần)', () => {
+    const txns = [delivered('d', 20, '2026-06-01', null, 'o1'), tx('a', 30, '2025-01-01')];
+    const before = txns.map((t) => t.id);
+    lotRemaining(txns, key);
+    expect(txns.map((t) => t.id)).toEqual(before);
+  });
+
+  it('khớp computePointExpiry: lô còn lại ở trạng thái hết hạn chính là phần expiredNow của lô đó', () => {
+    const txns = [tx('a', 30, '2025-01-01'), delivered('d', 20, '2025-05-01', '2026-05-01', 'o1'), tx('s', -35, '2025-06-01')];
+    expect(lotRemaining(txns, key)).toBe(15);
+    expect(computePointExpiry(txns, NOW, 0).expiredNow).toBe(15);
+  });
+});
+
+describe('loadPointExpiryTxns', () => {
+  it('chỉ lô STANDARD của đúng user, theo createdAt rồi id, kèm reason/refType/refId', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await loadPointExpiryTxns({ pointsTransaction: { findMany } } as never, 'u1');
+    expect(findMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', lot: 'STANDARD' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true, delta: true, expiresAt: true, createdAt: true, reason: true, refType: true, refId: true },
+    });
   });
 });
 

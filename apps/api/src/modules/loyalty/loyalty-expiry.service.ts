@@ -65,6 +65,10 @@ interface ReversalRule {
   reversedLotKey(t: PointExpiryTxn): string | null;
 }
 
+/** Khoá lô của điểm đơn giao (ORDER_DELIVERED) và của điểm thưởng đánh giá; luật ghép nằm ở ORDER_RULE, REVIEW_RULE. */
+export const orderLotKey = (orderId: string): string => `ORDER:${orderId}`;
+export const reviewLotKey = (reviewId: string): string => `REVIEW:${reviewId}`;
+
 const startsWith = (value: string | undefined, prefix: string): value is string => typeof value === 'string' && value.startsWith(prefix);
 
 /**
@@ -73,14 +77,14 @@ const startsWith = (value: string | undefined, prefix: string): value is string 
  * ORDER_REDEEM (âm) mang cùng refId, nên chỉ ORDER_DELIVERED mới là lô gốc: dòng hoàn là khoản cộng mới có hạn riêng.
  */
 const ORDER_RULE: ReversalRule = {
-  lotKey: (t) => (t.refType === 'ORDER' && t.refId && startsWith(t.reason, 'ORDER_DELIVERED:') ? `ORDER:${t.refId}` : null),
-  reversedLotKey: (t) => (t.refType === 'ORDER' && t.refId && startsWith(t.reason, 'ORDER_REVERSED:') ? `ORDER:${t.refId}` : null),
+  lotKey: (t) => (t.refType === 'ORDER' && t.refId && startsWith(t.reason, 'ORDER_DELIVERED:') ? orderLotKey(t.refId) : null),
+  reversedLotKey: (t) => (t.refType === 'ORDER' && t.refId && startsWith(t.reason, 'ORDER_REVERSED:') ? orderLotKey(t.refId) : null),
 };
 
 /** Xoá đánh giá (ReviewsService.remove): mọi dòng refType REVIEW mang refId = id đánh giá thuộc cùng một cặp. */
 const REVIEW_RULE: ReversalRule = {
-  lotKey: (t) => (t.refType === 'REVIEW' && t.refId ? `REVIEW:${t.refId}` : null),
-  reversedLotKey: (t) => (t.refType === 'REVIEW' && t.refId ? `REVIEW:${t.refId}` : null),
+  lotKey: (t) => (t.refType === 'REVIEW' && t.refId ? reviewLotKey(t.refId) : null),
+  reversedLotKey: (t) => (t.refType === 'REVIEW' && t.refId ? reviewLotKey(t.refId) : null),
 };
 
 /**
@@ -145,29 +149,10 @@ function consumeFifo(lots: ExpiryLot[], amount: number): number {
 }
 
 /**
- * Tính điểm hết hạn theo FIFO (lô cũ tiêu trước) — HÀM THUẦN, không đụng DB, tất định.
- *
- * Bất biến: pointsBalance == SUM(delta) lô STANDARD; caller chỉ đưa vào dòng lô STANDARD (PD-3). Mỗi delta DƯƠNG là một "lô" điểm (có/không expiresAt),
- * mỗi delta ÂM (tiêu/đổi/hoàn) tiêu dần từ lô CŨ NHẤT; riêng POINTS_EXPIRED kỳ trước tiêu lô đã hết hạn trước,
- * và dòng âm đảo ngược một khoản cộng cụ thể (huỷ/trả đơn, xoá đánh giá, thu hồi thưởng giới thiệu) tiêu lô của đúng
- * khoản cộng đó trước, phần dư mới FIFO (xem ReversalRule).
- *
- * Idempotent: dòng POINTS_EXPIRED âm do cron tạo, ở lần chạy sau được replay tiêu đúng các lô đã
- * hết hạn tại thời điểm nó được ghi (xem EXPIRY_REASON) → expiredNow về 0 → chạy lại KHÔNG trừ đôi.
- * Replay FIFO thuần không đủ: lô hết hạn chỉ là lô CŨ NHẤT khi mọi lô cùng thời hạn; lô không hạn
- * (thưởng game, review, giới thiệu) hay lô có hạn dài hơn nằm trước nó thì dòng POINTS_EXPIRED bị
- * replay vào các lô đó, lô hết hạn trông còn nguyên và đêm sau cron trừ lần nữa.
- *
- * KHÔNG bao giờ "đòi lại" điểm đã tiêu: điểm đã bị delta âm tiêu thì lô giảm remaining, phần
- * đã tiêu không còn nằm trong lô hết hạn.
- *
- * @param reminderWindowMs độ dài cửa sổ "sắp hết hạn" tính từ now (ms).
+ * Replay sổ lô STANDARD (HÀM THUẦN, tất định): mỗi delta DƯƠNG là một lô, mỗi delta ÂM tiêu dần từ các lô theo luật
+ * của computePointExpiry. Trả các lô theo thứ tự tạo, kèm phần còn lại sau mọi dòng âm.
  */
-export function computePointExpiry(
-  txns: PointExpiryTxn[],
-  now: Date,
-  reminderWindowMs: number,
-): PointExpiryResult {
+function replayLots(txns: PointExpiryTxn[]): ExpiryLot[] {
   // Tất định: sort createdAt asc, tiebreak id asc (không phụ thuộc thứ tự đầu vào).
   const sorted = [...txns].sort((a, b) => {
     const t = a.createdAt.getTime() - b.createdAt.getTime();
@@ -192,6 +177,44 @@ export function computePointExpiry(
       consumeFifo(lots, toConsume);
     }
   }
+  return lots;
+}
+
+/**
+ * Điểm còn lại của lô mang khoá `key` (orderLotKey, reviewLotKey) sau khi replay toàn bộ sổ: đã trừ phần cron hết hạn,
+ * phần tiêu và các dòng thu hồi đã ghi. null nếu sổ không có lô nào mang khoá đó (dòng cộng cũ thiếu refType/refId):
+ * caller không có căn cứ để thu hẹp số điểm thu hồi.
+ */
+export function lotRemaining(txns: PointExpiryTxn[], key: string): number | null {
+  const matching = replayLots(txns).filter((l) => l.key === key);
+  return matching.length === 0 ? null : matching.reduce((sum, l) => sum + l.remaining, 0);
+}
+
+/**
+ * Tính điểm hết hạn theo FIFO (lô cũ tiêu trước) — HÀM THUẦN, không đụng DB, tất định.
+ *
+ * Bất biến: pointsBalance == SUM(delta) lô STANDARD; caller chỉ đưa vào dòng lô STANDARD (PD-3). Mỗi delta DƯƠNG là một "lô" điểm (có/không expiresAt),
+ * mỗi delta ÂM (tiêu/đổi/hoàn) tiêu dần từ lô CŨ NHẤT; riêng POINTS_EXPIRED kỳ trước tiêu lô đã hết hạn trước,
+ * và dòng âm đảo ngược một khoản cộng cụ thể (huỷ/trả đơn, xoá đánh giá, thu hồi thưởng giới thiệu) tiêu lô của đúng
+ * khoản cộng đó trước, phần dư mới FIFO (xem ReversalRule).
+ *
+ * Idempotent: dòng POINTS_EXPIRED âm do cron tạo, ở lần chạy sau được replay tiêu đúng các lô đã
+ * hết hạn tại thời điểm nó được ghi (xem EXPIRY_REASON) → expiredNow về 0 → chạy lại KHÔNG trừ đôi.
+ * Replay FIFO thuần không đủ: lô hết hạn chỉ là lô CŨ NHẤT khi mọi lô cùng thời hạn; lô không hạn
+ * (thưởng game, review, giới thiệu) hay lô có hạn dài hơn nằm trước nó thì dòng POINTS_EXPIRED bị
+ * replay vào các lô đó, lô hết hạn trông còn nguyên và đêm sau cron trừ lần nữa.
+ *
+ * KHÔNG bao giờ "đòi lại" điểm đã tiêu: điểm đã bị delta âm tiêu thì lô giảm remaining, phần
+ * đã tiêu không còn nằm trong lô hết hạn.
+ *
+ * @param reminderWindowMs độ dài cửa sổ "sắp hết hạn" tính từ now (ms).
+ */
+export function computePointExpiry(
+  txns: PointExpiryTxn[],
+  now: Date,
+  reminderWindowMs: number,
+): PointExpiryResult {
+  const lots = replayLots(txns);
 
   const nowMs = now.getTime();
   const windowEnd = nowMs + reminderWindowMs;
@@ -213,6 +236,22 @@ export function computePointExpiry(
 }
 
 /**
+ * Sổ lô STANDARD của một user để đưa vào computePointExpiry / lotRemaining. Chỉ lô STANDARD (PD-3): dòng lô CONVERTED
+ * (quy từ xu, không hạn) mà lọt vào FIFO thì dòng tiêu điểm thường ăn nhầm lô quy đổi cũ hơn, lô thường đã tiêu trông
+ * "còn nguyên" và cron trừ quá tay; ngược lại dòng tiêu lô quy đổi ăn lô thường cũ và cron trừ thiếu.
+ */
+export function loadPointExpiryTxns(
+  db: Pick<Prisma.TransactionClient, 'pointsTransaction'>,
+  userId: string,
+): Promise<PointExpiryTxn[]> {
+  return db.pointsTransaction.findMany({
+    where: { userId, lot: 'STANDARD' },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, delta: true, expiresAt: true, createdAt: true, reason: true, refType: true, refId: true },
+  });
+}
+
+/**
  * Trừ điểm Xanh hết hạn theo FIFO + nhắc điểm sắp hết hạn (bổ sung vào loyalty §6.6).
  * KHÔNG thay đổi cách cộng/tiêu điểm ở nơi khác — chỉ THÊM 2 cron.
  */
@@ -226,20 +265,11 @@ export class LoyaltyExpiryService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  /**
-   * Chỉ lô STANDARD (PD-3). Dòng lô CONVERTED (quy từ xu, không hạn) mà lọt vào FIFO thì dòng tiêu điểm
-   * thường ăn nhầm lô quy đổi cũ hơn, lô thường đã tiêu trông "còn nguyên" và cron trừ quá tay; ngược
-   * lại dòng tiêu lô quy đổi ăn lô thường cũ và cron trừ thiếu.
-   */
   private loadTxns(
     userId: string,
     db: Pick<Prisma.TransactionClient, 'pointsTransaction'> = this.prisma,
   ): Promise<PointExpiryTxn[]> {
-    return db.pointsTransaction.findMany({
-      where: { userId, lot: 'STANDARD' },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: { id: true, delta: true, expiresAt: true, createdAt: true, reason: true, refType: true, refId: true },
-    });
+    return loadPointExpiryTxns(db, userId);
   }
 
   /**
