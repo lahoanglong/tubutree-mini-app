@@ -14,6 +14,14 @@ const mocks = vi.hoisted(() => ({
   order: null as unknown,
   orderCalls: [] as string[],
   qr: { paymentStatus: 'UNPAID' as string, calls: 0 },
+  support: { hotline: '0899 149 229', email: 'tubutree@gmail.com' } as Record<string, string> | Error,
+}));
+vi.mock('@/lib/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api')>()),
+  getPublicSupport: async () => {
+    if (mocks.support instanceof Error) throw mocks.support;
+    return mocks.support;
+  },
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('next/navigation', () => ({ useParams: () => mocks.params }));
@@ -76,10 +84,39 @@ beforeEach(() => {
   mocks.order = structuredClone(ORDER);
   mocks.orderCalls = [];
   mocks.qr = { paymentStatus: 'UNPAID', calls: 0 };
+  mocks.support = { hotline: '0899 149 229', email: 'tubutree@gmail.com' };
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
+});
+
+describe('/tai-khoan/don-hang/[code] — lời liên hệ hủy/đổi đơn (Q-17)', () => {
+  const contact = (c: HTMLElement) => Array.from(c.querySelectorAll('p')).find((p) => (p.textContent ?? '').includes('Cần hủy hoặc đổi đơn'))?.textContent ?? '';
+
+  it('chưa có Zalo OA: ghi thẳng hotline và email, không nhắc Zalo OA', async () => {
+    const { container } = await mount();
+    const t = contact(container);
+    expect(t).toContain('0899 149 229');
+    expect(t).toContain('tubutree@gmail.com');
+    expect(t).not.toContain('Zalo OA');
+  });
+
+  it('admin đã cấu hình Zalo OA: nhắc đúng tên OA bên cạnh hotline', async () => {
+    mocks.support = { hotline: '1900 1234', email: 'cskh@tubutree.com', zaloOaName: 'Tubu Tree Official' };
+    const { container } = await mount();
+    const t = contact(container);
+    expect(t).toContain('1900 1234');
+    expect(t).toContain('Zalo OA Tubu Tree Official');
+  });
+
+  it('đọc cấu hình lỗi: vẫn hiện hotline/email mặc định, không nhắc Zalo OA', async () => {
+    mocks.support = new Error('boom');
+    const { container } = await mount();
+    const t = contact(container);
+    expect(t).toContain('0899 149 229');
+    expect(t).not.toContain('Zalo OA');
+  });
 });
 
 describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại', () => {

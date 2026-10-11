@@ -229,6 +229,8 @@ export async function getBrand(slug: string): Promise<BrandDetail | null> {
 export interface SupportContact {
   hotline: string;
   email: string;
+  /** Chỉ có khi admin đã cấu hình tên Zalo OA; chưa có OA thì không có trường (Q-17: ẩn). */
+  zaloOaName?: string;
 }
 
 /** Khớp giá trị mặc định của API (system-config.controller: support.hotline / support.email). */
@@ -243,10 +245,12 @@ export async function getPublicSupport(): Promise<SupportContact> {
   try {
     const res = await fetch(`${BASE}/config/public`, serverInit({ revalidate: 3600 }));
     if (!res.ok) return DEFAULT_SUPPORT;
-    const json = (await res.json()) as { support?: { hotline?: string | null; email?: string | null } };
+    const json = (await res.json()) as { support?: { hotline?: string | null; email?: string | null; zaloOaName?: string | null } };
+    const zaloOaName = json.support?.zaloOaName?.trim();
     return {
       hotline: json.support?.hotline?.trim() || DEFAULT_SUPPORT.hotline,
       email: json.support?.email?.trim() || DEFAULT_SUPPORT.email,
+      ...(zaloOaName ? { zaloOaName } : {}),
     };
   } catch {
     return DEFAULT_SUPPORT;

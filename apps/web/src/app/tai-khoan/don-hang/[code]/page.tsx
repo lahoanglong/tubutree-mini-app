@@ -7,6 +7,7 @@ import { Leaf, ExternalLink } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { ApiError } from '@/lib/client-api';
+import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
 import { fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
 import {
   addressLine,
@@ -33,6 +34,9 @@ export default function OrderDetailPage() {
     // 404 là câu trả lời dứt khoát (đơn không tồn tại/của người khác): thử lại chỉ làm khách chờ thêm.
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
   });
+  // Lỗi/đang tải thì rơi về hotline mặc định: kênh liên hệ không được biến mất vì API cấu hình chậm.
+  const supportQ = useQuery({ queryKey: ['public-support'], queryFn: getPublicSupport, staleTime: 5 * 60_000 });
+  const support = supportQ.data ?? DEFAULT_SUPPORT;
   const refreshOrder = useCallback(() => {
     void qc.invalidateQueries({ queryKey: ['order', code] });
     void qc.invalidateQueries({ queryKey: ['orders'] });
@@ -162,7 +166,8 @@ export default function OrderDetailPage() {
       )}
 
       <p className="mt-6 text-sm text-stone-600">
-        Cần hủy hoặc đổi đơn? Liên hệ hotline ở chân trang hoặc nhắn Zalo OA Tubu Tree để được hỗ trợ.
+        Cần hủy hoặc đổi đơn? Gọi hotline {support.hotline} hoặc email {support.email}
+        {support.zaloOaName ? `, hoặc nhắn Zalo OA ${support.zaloOaName}` : ''} để được hỗ trợ.
       </p>
     </Shell>
   );
