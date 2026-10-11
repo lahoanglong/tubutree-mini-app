@@ -1,4 +1,4 @@
-import { Check, Droplets, Earth, Sprout, TreePine, Trees, Wind, type LucideIcon } from 'lucide-react';
+import { Check, Droplets, Earth, Sprout, TreePine, Trees, type LucideIcon } from 'lucide-react';
 import type { Forest, GameProfile } from '../../services/game-api';
 import { formatNumber } from '../../utils/format';
 import { Badge } from '../ui/badge';
@@ -6,7 +6,7 @@ import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
 import { GameCard } from './game-card';
 
-// Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted). 🌿 trong lời cảm ơn là lời chúc (nội dung).
+// Tác động xanh (§6.7.7). Không quy đổi khí thải cho phần cây khách góp: chưa có cây nào được trồng thật. 🌿 trong lời cảm ơn là lời chúc (nội dung).
 export function EcoImpact({
   eco,
   totalSeeds,
@@ -20,7 +20,6 @@ export function EcoImpact({
     <GameCard title="Tác động xanh của bạn" icon={Earth}>
       <div style={{ display: 'flex', gap: 8 }}>
         <EcoStat icon={TreePine} value={formatNumber(eco?.treesPlanted)} label="Cây đã góp quỹ" />
-        <EcoStat icon={Wind} value={`~${formatNumber((eco?.treesPlanted ?? 0) * 21)}kg`} label="CO₂ hấp thụ/năm (ước tính)" />
         <EcoStat icon={Droplets} value={formatNumber(totalSeeds)} label="Giọt nước đã góp" />
       </div>
       {(forest?.count ?? 0) > 0 ? (

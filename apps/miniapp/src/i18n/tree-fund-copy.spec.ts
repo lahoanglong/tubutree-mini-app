@@ -32,6 +32,10 @@ describe('quỹ trồng cây (C-010, Q-16) — không hứa cây thật', () => 
     expect(offenders(/\bmua (1 )?cây\b(?! (?:cảnh|giống))/iu)).toEqual([]);
   });
 
+  it('không gán số CO₂ hấp thụ cho phần cây khách đã góp (chưa có cây nào được trồng)', () => {
+    expect(offenders(/CO₂|CO2|hấp thụ/iu)).toEqual([]);
+  });
+
   it('không hứa "chứng nhận" cho từng cây', () => {
     expect(offenders(/Mã chứng nhận|Khu rừng của tôi — chứng nhận/u)).toEqual([]);
   });

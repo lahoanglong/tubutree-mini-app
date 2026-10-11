@@ -841,10 +841,10 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
     expect(screen.queryByText('Tặng nước cho bạn bè')).not.toBeInTheDocument();
   });
 
-  it('tác động xanh: ước tính CO₂ = cây góp quỹ × 21kg, giọt nước đã góp; chưa góp cây nào thì hiện lời mời', async () => {
+  it('tác động xanh: số cây góp quỹ, giọt nước đã góp, không gán số CO₂ cho cây của khách; chưa góp cây nào thì hiện lời mời', async () => {
     const { container } = renderPage();
     expect(await screen.findByText('Tác động xanh của bạn')).toBeInTheDocument();
-    expect(container.textContent).toContain('~63kg');
+    expect(container.textContent).not.toMatch(/CO₂|kg/);
     expect(screen.getByText('Cây đã góp quỹ')).toBeInTheDocument();
     expect(screen.getByText('Giọt nước đã góp')).toBeInTheDocument();
     expect(screen.getByText('Chăm cây ảo đến khi thu hoạch để Tubu góp 1 cây vào quỹ trồng cây.')).toBeInTheDocument();
