@@ -5,7 +5,7 @@
   "apiBase": "http://localhost:3201/api",
   "notes": [
     "Use hostname \"localhost\" (not 127.0.0.1): zmp-sdk storage and the web refresh cookie both depend on it.",
-    "Miniapp routes come from apps/miniapp/src/components/app.tsx (41 paths + \"*\" catch-all = 42 <Route>s; /order/:code is listed twice here for the ctv variant).",
+    "Miniapp routes come from apps/miniapp/src/components/app.tsx (40 paths + \"*\" catch-all = 41 <Route>s; /order/:code is listed twice here for the ctv variant).",
     "Web routes come from apps/web/src/app/** (page.tsx files + robots/sitemap + not-found).",
     "Query variants: /admin?tab=<tab> for every admin tab, /admin?tab=orders&recycling=attention|all."
   ],
@@ -333,21 +333,6 @@
       ],
       "examples": [
         "/refill"
-      ]
-    },
-    {
-      "pattern": "/beta",
-      "personas": [
-        "new_customer",
-        "active_customer",
-        "ctv",
-        "dealer",
-        "brand_owner",
-        "staff",
-        "admin"
-      ],
-      "examples": [
-        "/beta"
       ]
     },
     {
