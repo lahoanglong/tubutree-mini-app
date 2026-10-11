@@ -131,7 +131,6 @@ describe('PD-3 hoàn điểm theo lô khi huỷ đơn (real Postgres)', () => {
       loyalty.reverseOrderPoints(order.id),
     ]);
     const s = summarize(results);
-    // eslint-disable-next-line no-console
     console.log('[T10] fulfilled=%d rejected=%d errors=%j', s.fulfilled.length, s.rejected.length, [...new Set(s.errors)]);
     // reverseOrderPoints nuốt P2002 của lần thua; cancel thua thấy CANCELLED rồi trả detail.
     expect(s.rejected).toHaveLength(0);
@@ -213,7 +212,6 @@ describe('PD-3 hoàn điểm theo lô khi huỷ đơn (real Postgres)', () => {
       prisma.$transaction((tx) => reversal.reverseFinancials(tx, snap)),
     ]);
     const s = summarize(results);
-    // eslint-disable-next-line no-console
     console.log('[T11] fulfilled=%d rejected=%d errors=%j', s.fulfilled.length, s.rejected.length, [...new Set(s.errors)]);
     expect(s.rejected).toHaveLength(0);
     const refundedNow = [results[1], results[3], results[4]].filter(
