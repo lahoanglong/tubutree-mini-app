@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -9,11 +9,19 @@ const mocks = vi.hoisted(() => ({
   saveNotifyPrefs: vi.fn(),
   stored: undefined as string | undefined,
   setStorage: vi.fn(),
+  applyFontScale: vi.fn(),
+  logout: vi.fn(),
+  hasOA: false,
+  getOaPromptState: vi.fn(),
+  followOA: vi.fn(),
+  requestNotifyPermission: vi.fn(),
+  setOaPromptState: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/settings', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('zmp-sdk/apis', () => ({
@@ -21,19 +29,21 @@ vi.mock('zmp-sdk/apis', () => ({
   setStorage: mocks.setStorage,
 }));
 vi.mock('./settings-notify-prefs', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./settings-notify-prefs')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   fetchNotifyPrefs: mocks.fetchNotifyPrefs,
   saveNotifyPrefs: mocks.saveNotifyPrefs,
 }));
-vi.mock('../store/auth', () => ({ useAuthStore: () => ({ logout: vi.fn() }) }));
+vi.mock('../store/auth', () => ({ useAuthStore: () => ({ logout: mocks.logout }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
-vi.mock('../utils/font-scale', () => ({ applyFontScale: vi.fn() }));
+vi.mock('../utils/font-scale', () => ({ applyFontScale: mocks.applyFontScale }));
 vi.mock('../services/zmp-bridge', () => ({
-  hasOA: false,
-  followOA: vi.fn(),
-  requestNotifyPermission: vi.fn(),
-  getOaPromptState: vi.fn(),
-  setOaPromptState: vi.fn(),
+  get hasOA() {
+    return mocks.hasOA;
+  },
+  followOA: mocks.followOA,
+  requestNotifyPermission: mocks.requestNotifyPermission,
+  getOaPromptState: mocks.getOaPromptState,
+  setOaPromptState: mocks.setOaPromptState,
 }));
 
 import SettingsPage from './settings';
@@ -108,5 +118,77 @@ describe('Hàng điều hướng ở Cài đặt (C-078)', () => {
     expect(container.textContent).not.toContain('›');
     fireEvent.click(row);
     expect(mocks.navigate).toHaveBeenCalledWith('/addresses');
+  });
+});
+
+describe('Cài đặt theo DS v2 (C-076, C-114)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.stored = undefined;
+    mocks.hasOA = false;
+    mocks.fetchNotifyPrefs.mockResolvedValue({ notifyPromo: true, notifyGarden: true });
+    mocks.getOaPromptState.mockResolvedValue({ followed: false, promptSeen: false });
+    mocks.followOA.mockResolvedValue(true);
+    mocks.requestNotifyPermission.mockResolvedValue(true);
+    mocks.setOaPromptState.mockResolvedValue(undefined);
+  });
+
+  it('có đúng một h1 "Cài đặt" và mỗi nhóm là h2', async () => {
+    render(<SettingsPage />);
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'true'));
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Cài đặt']);
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Thông báo',
+      'Hiển thị · Cỡ chữ',
+      'Tài khoản',
+    ]);
+  });
+
+  it('cỡ chữ là nhóm radio cao >= 44px; chọn Lớn thì áp dụng và lưu trên máy', async () => {
+    render(<SettingsPage />);
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'true'));
+    const group = screen.getByRole('radiogroup', { name: 'Cỡ chữ' });
+    const radios = within(group).getAllByRole('radio');
+    expect(radios.map((r) => r.textContent)).toEqual(['ANhỏ', 'AVừa', 'ALớn']);
+    expect(radios.map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false']);
+    radios.forEach((r) => expect(parseInt(r.style.minHeight, 10)).toBeGreaterThanOrEqual(44));
+    fireEvent.click(radios[2]!);
+    expect(mocks.applyFontScale).toHaveBeenCalledWith('large');
+    expect(mocks.setStorage).toHaveBeenCalledWith({ data: { tubu_prefs: JSON.stringify({ fontScale: 'large' }) } });
+    expect(radios.map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false', 'true']);
+  });
+
+  it('cỡ chữ chọn được bằng bàn phím (Enter)', async () => {
+    render(<SettingsPage />);
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'true'));
+    const small = within(screen.getByRole('radiogroup', { name: 'Cỡ chữ' })).getAllByRole('radio')[0]!;
+    expect(small).toHaveAttribute('tabindex', '0');
+    fireEvent.keyDown(small, { key: 'Enter' });
+    expect(mocks.applyFontScale).toHaveBeenCalledWith('small');
+  });
+
+  it('công tắc bật/tắt được bằng bàn phím (Space)', async () => {
+    render(<SettingsPage />);
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.keyDown(promoSwitch(), { key: ' ' });
+    await waitFor(() => expect(mocks.saveNotifyPrefs).toHaveBeenCalledWith({ notifyPromo: false }));
+  });
+
+  it('hàng Chỉnh sửa hồ sơ, Sổ địa chỉ điều hướng; Đăng xuất gọi logout', async () => {
+    render(<SettingsPage />);
+    fireEvent.click(screen.getByRole('button', { name: /Chỉnh sửa hồ sơ/ }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/edit-profile');
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất' }));
+    expect(mocks.logout).toHaveBeenCalled();
+  });
+
+  it('có OA: hàng Theo dõi Zalo OA hiện nút Theo dõi, bấm xong báo "Đã theo dõi" bằng icon, không ký tự ✓', async () => {
+    mocks.hasOA = true;
+    const { container } = render(<SettingsPage />);
+    const follow = await screen.findByRole('button', { name: 'Theo dõi' });
+    fireEvent.click(follow);
+    expect(await screen.findByText('Đã theo dõi')).toBeInTheDocument();
+    expect(mocks.setOaPromptState).toHaveBeenCalledWith({ followed: true, promptSeen: true });
+    expect(container.textContent).not.toContain('✓');
   });
 });

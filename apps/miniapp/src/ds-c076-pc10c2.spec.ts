@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
  */
 const FILES = [
   'src/pages/profile.tsx',
+  'src/pages/settings.tsx',
 ];
 
 /** Khung trang và hook điều hướng/thông báo: được phép ở mọi trang. */

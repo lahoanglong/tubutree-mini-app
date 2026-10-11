@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Box, Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
+import { Check } from 'lucide-react';
+import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { setStorage, getStorage } from 'zmp-sdk/apis';
 import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Icon } from '../components/ui/icon';
 import { ListRow } from '../components/ui/list-row';
+import { PageHeader } from '../components/ui/page-header';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
+import { Text } from '../components/ui/text';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
 import { hasOA, followOA, requestNotifyPermission, getOaPromptState, setOaPromptState } from '../services/zmp-bridge';
@@ -88,14 +94,15 @@ export default function SettingsPage() {
   };
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title="Cài đặt" />
 
       <Section title="Thông báo">
         {hasOA && <FollowOaRow />}
         <ListRow
           title="Cập nhật đơn hàng"
           subtitle="Luôn bật để bạn không lỡ tin giao hàng, hoàn tiền"
-          style={{ borderBottom: '1px solid var(--neutral-100)' }}
+          style={{ borderBottom: '1px solid var(--color-border-subtle)' }}
         />
         <Toggle
           label="Khuyến mãi & mã giảm giá"
@@ -113,35 +120,42 @@ export default function SettingsPage() {
       </Section>
 
       <Section title="Hiển thị · Cỡ chữ">
-        <Box flex style={{ gap: 8 }}>
-          {(['small', 'normal', 'large'] as const).map((s) => (
-            <Box
-              key={s}
-              className="tubu-press"
-              role="radio"
-              aria-checked={local.fontScale === s}
-              onClick={() => updateFont(s)}
-              style={{
-                flex: 1,
-                textAlign: 'center',
-                padding: '10px 0',
-                borderRadius: 'var(--radius-md)',
-                border: `1.5px solid ${local.fontScale === s ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
-                background: local.fontScale === s ? 'var(--primary-50)' : 'var(--neutral-0)',
-              }}
-            >
-              <Text
-                bold={local.fontScale === s}
-                style={{ color: local.fontScale === s ? 'var(--primary-700)' : 'var(--neutral-600)', fontSize: s === 'small' ? 13 : s === 'large' ? 18 : 15 }}
+        <div role="radiogroup" aria-label="Cỡ chữ" style={{ display: 'flex', gap: 8 }}>
+          {(['small', 'normal', 'large'] as const).map((s) => {
+            const active = local.fontScale === s;
+            return (
+              <div
+                key={s}
+                role="radio"
+                aria-checked={active}
+                {...rowKeyboardProps()}
+                className="tubu-press"
+                onClick={() => updateFont(s)}
+                style={{
+                  flex: 1,
+                  minHeight: 44,
+                  boxSizing: 'border-box',
+                  textAlign: 'center',
+                  padding: '10px 0',
+                  borderRadius: 'var(--radius-control)',
+                  border: `1.5px solid ${active ? 'var(--color-border-selected)' : 'var(--color-border-subtle)'}`,
+                  background: active ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
+                }}
               >
-                A
-              </Text>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                {s === 'small' ? 'Nhỏ' : s === 'large' ? 'Lớn' : 'Vừa'}
-              </Text>
-            </Box>
-          ))}
-        </Box>
+                <Text
+                  as="div"
+                  tone={active ? 'brand' : 'secondary'}
+                  style={{ fontWeight: active ? 700 : 400, fontSize: s === 'small' ? 13 : s === 'large' ? 18 : 15 }}
+                >
+                  A
+                </Text>
+                <Text variant="caption" tone="tertiary" as="div">
+                  {s === 'small' ? 'Nhỏ' : s === 'large' ? 'Lớn' : 'Vừa'}
+                </Text>
+              </div>
+            );
+          })}
+        </div>
       </Section>
 
       <Section title="Tài khoản">
@@ -150,26 +164,28 @@ export default function SettingsPage() {
         <LinkRow label="Beta Tester — trải nghiệm sớm" onClick={() => navigate('/beta')} last />
       </Section>
 
-      <Box p={4}>
+      <div style={{ padding: 16 }}>
         <Button fullWidth variant="secondary" onPress={() => void logout()}>
           Đăng xuất
         </Button>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', textAlign: 'center', display: 'block', marginTop: 12 }}>
+        <Text variant="caption" tone="tertiary" as="div" style={{ textAlign: 'center', marginTop: 12 }}>
           Tubu Tree · phiên bản 1.0.0
         </Text>
-      </Box>
+      </div>
     </Page>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <Box mx={4} mt={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-      <Text bold style={{ marginBottom: 8 }}>
-        {title}
-      </Text>
-      {children}
-    </Box>
+    <div style={{ margin: '12px 16px 0' }}>
+      <Card padding={16}>
+        <Text as="h2" style={{ fontWeight: 700, marginBottom: 8 }}>
+          {title}
+        </Text>
+        {children}
+      </Card>
+    </div>
   );
 }
 
@@ -214,20 +230,21 @@ function Toggle({
         boxSizing: 'border-box',
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.6 : 1,
-        borderBottom: last ? 'none' : '1px solid var(--neutral-100)',
+        borderBottom: last ? 'none' : '1px solid var(--color-border-subtle)',
       }}
     >
-      <Text size="small">{label}</Text>
+      <Text variant="body-sm">{label}</Text>
       <span
         aria-hidden
         style={{
           width: 44,
           height: 26,
           flexShrink: 0,
-          borderRadius: 'var(--radius-full)',
-          background: on ? 'var(--leaf-600)' : 'var(--neutral-200)',
+          borderRadius: 'var(--radius-pill)',
+          // Trạng thái tắt dùng border-strong: thanh trượt phải đạt 3:1 với nền thẻ (WCAG 1.4.11), border-subtle gần như tàng hình.
+          background: on ? 'var(--color-action-primary-bg)' : 'var(--color-border-strong)',
           position: 'relative',
-          transition: 'background var(--dur-base) var(--ease-out)',
+          transition: 'background var(--motion-enter)',
         }}
       >
         <span
@@ -238,9 +255,9 @@ function Toggle({
             width: 20,
             height: 20,
             borderRadius: '50%',
-            background: 'var(--neutral-0)',
-            boxShadow: 'var(--shadow-sm)',
-            transition: 'left var(--dur-base) var(--ease-out)',
+            background: 'var(--color-bg-surface)',
+            boxShadow: 'var(--elevation-1)',
+            transition: 'left var(--motion-enter)',
           }}
         />
       </span>
@@ -277,24 +294,31 @@ function FollowOaRow() {
   if (!ready) return null; // tránh nháy sai trạng thái trước khi đọc xong cờ trên máy
 
   return (
-    <Box
-      flex
-      alignItems="center"
-      justifyContent="space-between"
-      py={2}
-      style={{ borderBottom: '1px solid var(--neutral-100)' }}
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        minHeight: 44,
+        padding: '8px 0',
+        boxSizing: 'border-box',
+        borderBottom: '1px solid var(--color-border-subtle)',
+      }}
     >
-      <Text size="small">Theo dõi Zalo OA</Text>
+      <Text variant="body-sm">Theo dõi Zalo OA</Text>
       {followed ? (
-        <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-          Đã theo dõi ✓
-        </Text>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <Icon icon={Check} size="sm" tone="brand" />
+          <Text variant="caption" tone="brand">
+            Đã theo dõi
+          </Text>
+        </span>
       ) : (
         <Button loading={busy} onPress={() => void handleFollow()}>
           Theo dõi
         </Button>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -304,7 +328,7 @@ function LinkRow({ label, onClick, last }: { label: string; onClick: () => void;
       title={label}
       trailing="chevron"
       onPress={onClick}
-      style={{ borderBottom: last ? 'none' : '1px solid var(--neutral-100)' }}
+      style={{ borderBottom: last ? 'none' : '1px solid var(--color-border-subtle)' }}
     />
   );
 }
