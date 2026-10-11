@@ -2,13 +2,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import AdminPage from './page';
-import { flush, render, type Rendered } from '@/test-utils/dom';
+import { flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 
 const mocks = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } as { role: string } | null, status: 'authenticated', initialized: true },
   recycling: 0,
   claims: 0,
   payouts: 0,
+  orders: [] as unknown[],
+  setUserRole: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -81,6 +83,13 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       })),
       meta: { total: 3, page: 1, limit: 20 },
     }),
+    listUsers: async () => ({
+      data: [
+        { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
+      ],
+      meta: { total: 45, page: 1, limit: 20 },
+    }),
+    setUserRole: (...args: unknown[]) => mocks.setUserRole(...args),
     listDealerTiers: async () => [{ id: 't1', name: 'Bạc', minOrderVolume: 0, creditLimit: 0, paymentTerms: null }],
   };
 });
@@ -99,6 +108,7 @@ beforeEach(() => {
   mocks.claims = 0;
   mocks.payouts = 0;
   mocks.orders = [];
+  mocks.setUserRole.mockReset();
   window.history.replaceState(null, '', '/admin');
 });
 afterEach(() => {
@@ -325,5 +335,83 @@ describe('admin/page — tab Đổi / Trả', () => {
     const head = badge(container, 'Chờ duyệt').parentElement!;
     expect(head.className).toContain('flex-wrap');
     expect(container.textContent).toContain('Ghi chú admin: Đã kiểm tra');
+  });
+});
+
+describe('admin/page — tab Người dùng', () => {
+  const openUsers = async () => {
+    window.history.replaceState(null, '', '/admin?tab=users');
+    return mount();
+  };
+
+  it('bảng người dùng: ô dữ liệu có đệm ngang như ô tiêu đề, bảng cuộn ngang trong khung riêng', async () => {
+    const { container } = await openUsers();
+    const table = container.querySelector('table')!;
+    expect(table.parentElement!.className).toContain('overflow-x-auto');
+    const cells = [...table.querySelectorAll('tbody td')];
+    expect(cells.map((c) => c.textContent)).toEqual(['Nguyễn An', '0944444444', 'CUSTOMER', '12', new Date('2026-09-01T00:00:00.000Z').toLocaleDateString('vi-VN')]);
+    for (const c of cells) expect(c.className).toContain('px-3');
+  });
+
+  it('nút Xuất CSV người dùng dùng icon lucide (không emoji) và giữ nhãn', async () => {
+    const { container } = await openUsers();
+    const btn = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Xuất CSV người dùng'))!;
+    expect(btn.textContent?.trim()).toBe('Xuất CSV người dùng');
+    expect(btn.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(btn.className).toContain('min-h-[44px]');
+  });
+
+  it('phân trang: Tổng số, nhãn Trang trước/sau giữ nguyên, nút cao 44px, thanh xuống dòng được', async () => {
+    const { container } = await openUsers();
+    const next = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Trang sau →')!;
+    const prev = [...container.querySelectorAll('button')].find((b) => b.textContent === '← Trang trước')!;
+    expect(prev.disabled).toBe(true);
+    expect(next.className).toContain('min-h-[44px]');
+    expect(next.parentElement!.parentElement!.className).toContain('flex-wrap');
+    expect(container.textContent).toContain('Tổng số: 45 người dùng');
+  });
+
+  it('form cấp quyền: nút Cấp quyền khoá khi chưa có SĐT; thành công báo màu success, lỗi báo màu danger', async () => {
+    const { container } = await openUsers();
+    const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
+    expect(grant.disabled).toBe(true);
+    expect(grant.className).toContain('bg-forest-600');
+    expect(grant.className).toContain('min-h-[44px]');
+    const phone = container.querySelector('input[placeholder^="SĐT"]') as HTMLInputElement;
+    expect(phone.className).toContain('border-stone-450');
+    typeInto(phone, '0955555555');
+    expect(grant.disabled).toBe(false);
+
+    mocks.setUserRole.mockResolvedValueOnce({ id: 'u9', phone: '0955555555', previousRole: 'CUSTOMER', role: 'CUSTOMER' });
+    act(() => grant.click());
+    await flush();
+    const ok = [...container.querySelectorAll('p')].find((p) => p.textContent?.startsWith('Đã đổi'))!;
+    expect(ok.className).toContain('text-success-fg');
+
+    typeInto(phone, '0966666666');
+    mocks.setUserRole.mockRejectedValueOnce(new Error('Không tìm thấy SĐT'));
+    act(() => grant.click());
+    await flush();
+    const bad = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Không tìm thấy SĐT')!;
+    expect(bad.className).toContain('text-danger-fg');
+    expect(mocks.setUserRole).toHaveBeenCalledTimes(2);
+  });
+
+  it('cấp quyền ADMIN vẫn phải qua hộp xác nhận: chưa xác nhận thì không gọi API', async () => {
+    const { container } = await openUsers();
+    const roleSelect = container.querySelector('select[class*="min-h-[44px]"]') as HTMLSelectElement;
+    expect([...roleSelect.options].map((o) => o.value)).toEqual(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN']);
+    selectValue(roleSelect, 'ADMIN');
+    typeInto(container.querySelector('input[placeholder^="SĐT"]'), '0977777777');
+    const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
+    act(() => grant.click());
+    await flush();
+    const dialog = document.body.querySelector('[role="dialog"], [role="alertdialog"]');
+    expect(dialog?.textContent).toContain('Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT 0977777777?');
+    expect(mocks.setUserRole).not.toHaveBeenCalled();
+    const cancel = [...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Huỷ')!;
+    act(() => cancel.click());
+    await flush();
+    expect(mocks.setUserRole).not.toHaveBeenCalled();
   });
 });

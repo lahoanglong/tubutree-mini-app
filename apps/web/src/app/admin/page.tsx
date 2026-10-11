@@ -1065,44 +1065,45 @@ function UsersTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-neutral-900">Quản lý người dùng & phân quyền</h2>
+        <h2 className="font-display text-base font-semibold text-stone-900">Quản lý người dùng & phân quyền</h2>
         <button
           type="button"
           onClick={() => exportUsersToCsv(q.data?.data ?? [])}
           disabled={!q.data || q.data.data.length === 0}
-          className="flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+          className={`${BTN_SECONDARY} flex items-center gap-1.5`}
           title="Xuất danh sách người dùng ra file CSV"
         >
-          ⬇ Xuất CSV người dùng
+          <Download aria-hidden="true" className="h-4 w-4 shrink-0" />
+          Xuất CSV người dùng
         </button>
       </div>
       <GrantRoleForm onDone={() => q.refetch()} />
       {q.isError ? (
-        <p className="text-sm text-red-600">Không tải được danh sách người dùng.</p>
+        <p className="text-sm text-danger-fg">Không tải được danh sách người dùng.</p>
       ) : (
         <>
           <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày']}>
             {q.data?.data.map((u) => (
-              <tr key={u.id} className="border-t border-neutral-100">
-                <td className="py-2 font-medium">{u.fullName ?? '—'}</td>
-                <td>{u.phone ?? '—'}</td>
-                <td>{u.role}</td>
-                <td>{u.pointsBalance}</td>
-                <td className="text-neutral-400">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
+              <tr key={u.id} className="border-t border-stone-100">
+                <td className="px-3 py-2 font-medium">{u.fullName ?? '—'}</td>
+                <td className="px-3 py-2">{u.phone ?? '—'}</td>
+                <td className="px-3 py-2">{u.role}</td>
+                <td className="px-3 py-2">{u.pointsBalance}</td>
+                <td className="px-3 py-2 text-stone-500">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
               </tr>
             ))}
           </Table>
 
           {q.data && totalPages > 1 && (
-            <div className="flex items-center justify-between px-2 pt-2 text-sm text-neutral-600">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-2 text-sm text-stone-600">
               <div>
-                Tổng số: <span className="font-semibold text-neutral-900">{q.data.meta.total}</span> người dùng
+                Tổng số: <span className="font-semibold text-stone-900">{q.data.meta.total}</span> người dùng
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="rounded border border-neutral-200 px-3 py-1 text-xs font-medium hover:bg-neutral-50 disabled:opacity-40"
+                  className={BTN_SMALL}
                 >
                   ← Trang trước
                 </button>
@@ -1112,7 +1113,7 @@ function UsersTab() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className="rounded border border-neutral-200 px-3 py-1 text-xs font-medium hover:bg-neutral-50 disabled:opacity-40"
+                  className={BTN_SMALL}
                 >
                   Trang sau →
                 </button>
@@ -1159,17 +1160,17 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
     mut.mutate();
   };
   return (
-    <div className="rounded-lg border border-neutral-200 p-4">
-      <h3 className="mb-2 text-sm font-semibold">Cấp / đổi vai trò theo SĐT</h3>
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
+      <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Cấp / đổi vai trò theo SĐT</h3>
       <div className="flex flex-wrap items-center gap-2">
         <input
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm"
+          className={`${FIELD_CLASS} ${TOUCH_H} w-full sm:w-auto`}
           placeholder="SĐT (user đã mở Mini App)"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
         />
         <select
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm"
+          className={`${FIELD_CLASS} ${TOUCH_H}`}
           value={role}
           onChange={(e) => setRole(e.target.value as UserRole)}
         >
@@ -1179,7 +1180,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
         </select>
         {needsTier && <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />}
         <button
-          className="rounded bg-green-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          className={BTN_PRIMARY}
           disabled={!phone.trim() || (needsTier && !tierId.trim()) || mut.isPending}
           title={needsTier && !tierId.trim() ? 'Cần chọn bậc đại lý để cấp vai trò DEALER' : undefined}
           onClick={submit}
@@ -1188,7 +1189,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
         </button>
       </div>
       {msg && (
-        <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>
+        <p className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>
       )}
       {dialog}
     </div>
