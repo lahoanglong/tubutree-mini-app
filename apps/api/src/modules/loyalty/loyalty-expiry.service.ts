@@ -30,7 +30,7 @@ export interface PointExpiryResult {
 /**
  * Tính điểm hết hạn theo FIFO (lô cũ tiêu trước) — HÀM THUẦN, không đụng DB, tất định.
  *
- * Bất biến: pointsBalance == SUM(delta). Mỗi delta DƯƠNG là một "lô" điểm (có/không expiresAt),
+ * Bất biến: pointsBalance == SUM(delta) lô STANDARD; caller chỉ đưa vào dòng lô STANDARD (PD-3). Mỗi delta DƯƠNG là một "lô" điểm (có/không expiresAt),
  * mỗi delta ÂM (tiêu/đổi/hoàn/POINTS_EXPIRED kỳ trước) tiêu dần từ lô CŨ NHẤT.
  *
  * Idempotent: dòng POINTS_EXPIRED âm do cron tạo, ở lần chạy sau lại được replay tiêu FIFO
@@ -102,9 +102,14 @@ export class LoyaltyExpiryService {
     private readonly notifications: NotificationsService,
   ) {}
 
+  /**
+   * Chỉ lô STANDARD (PD-3). Dòng lô CONVERTED (quy từ xu, không hạn) mà lọt vào FIFO thì dòng tiêu điểm
+   * thường ăn nhầm lô quy đổi cũ hơn, lô thường đã tiêu trông "còn nguyên" và cron trừ quá tay; ngược
+   * lại dòng tiêu lô quy đổi ăn lô thường cũ và cron trừ thiếu.
+   */
   private loadTxns(userId: string): Promise<PointExpiryTxn[]> {
     return this.prisma.pointsTransaction.findMany({
-      where: { userId },
+      where: { userId, lot: 'STANDARD' },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: { id: true, delta: true, expiresAt: true, createdAt: true },
     });
@@ -137,6 +142,7 @@ export class LoyaltyExpiryService {
       for (let page = 0; page < MAX_PAGES; page++) {
         const candidates = await this.prisma.pointsTransaction.findMany({
           where: {
+            lot: 'STANDARD',
             delta: { gt: 0 },
             expiresAt: { lte: now },
             ...(cursor ? { userId: { gt: cursor } } : {}),
@@ -181,7 +187,7 @@ export class LoyaltyExpiryService {
       });
       if (res.count === 0) return false;
       await tx.pointsTransaction.create({
-        data: { userId, delta: -expiredNow, reason: 'POINTS_EXPIRED', refType: 'EXPIRE' },
+        data: { userId, delta: -expiredNow, reason: 'POINTS_EXPIRED', refType: 'EXPIRE', lot: 'STANDARD' },
       });
       return true;
     });
@@ -219,6 +225,7 @@ export class LoyaltyExpiryService {
       for (let page = 0; page < MAX_PAGES; page++) {
         const candidates = await this.prisma.pointsTransaction.findMany({
           where: {
+            lot: 'STANDARD',
             delta: { gt: 0 },
             expiresAt: { gt: now, lte: windowEnd },
             ...(cursor ? { userId: { gt: cursor } } : {}),

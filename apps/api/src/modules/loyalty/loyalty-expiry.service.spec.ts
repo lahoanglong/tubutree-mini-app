@@ -198,6 +198,23 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     expect(txCreate).not.toHaveBeenCalled();
   });
 
+  it('PD-3 (T7): ứng viên và sổ FIFO chỉ lấy lô STANDARD; dòng POINTS_EXPIRED ghi lô STANDARD', async () => {
+    // Lô CONVERTED (quy từ xu) lọt vào FIFO thì dòng tiêu điểm thường ăn nhầm lô quy đổi cũ hơn, lô
+    // thường trông "còn nguyên" và cron trừ quá tay (spec PD-3 mục 2.2).
+    const { svc, findMany, txUpdateMany, txCreate } = setup({
+      candidates: [{ userId: 'u1' }],
+      userTxns: [tx('a', 100, '2025-01-01', '2026-01-01')],
+      updateCount: 1,
+    });
+    await svc.expirePoints();
+
+    expect(findMany).toHaveBeenCalledTimes(2);
+    expect(findMany.mock.calls[0][0].where).toMatchObject({ lot: 'STANDARD', delta: { gt: 0 } });
+    expect(findMany.mock.calls[1][0].where).toEqual({ userId: 'u1', lot: 'STANDARD' });
+    expect(txUpdateMany.mock.calls[0][0].data).toEqual({ pointsBalance: { decrement: 100 } });
+    expect(txCreate.mock.calls[0][0].data).toMatchObject({ lot: 'STANDARD' });
+  });
+
   it('expiredNow=0 → không mở transaction', async () => {
     const { svc, $transaction } = setup({
       candidates: [{ userId: 'u1' }],
@@ -255,6 +272,18 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
     });
     await svc.remindExpiringPoints();
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('PD-3: nhắc sắp hết hạn chỉ xét lô STANDARD (lô quy đổi không bao giờ hết hạn)', async () => {
+    const soon = new Date(Date.now() + 3 * DAY);
+    const { svc, findMany } = setup({
+      candidates: [{ userId: 'u1' }],
+      userTxns: [tx('a', 40, '2025-08-01', soon.toISOString())],
+      recentLog: null,
+    });
+    await svc.remindExpiringPoints();
+    expect(findMany.mock.calls[0][0].where).toMatchObject({ lot: 'STANDARD' });
+    expect(findMany.mock.calls[1][0].where).toEqual({ userId: 'u1', lot: 'STANDARD' });
   });
 
   it('không có điểm nào trong cửa sổ (amount=0) → không notify', async () => {
