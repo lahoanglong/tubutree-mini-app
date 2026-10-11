@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   payouts: 0,
   orders: [] as unknown[],
   setUserRole: vi.fn(),
+  createCoupon: vi.fn(),
+  config: [] as unknown[],
+  configFails: false,
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -90,6 +93,11 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       meta: { total: 45, page: 1, limit: 20 },
     }),
     setUserRole: (...args: unknown[]) => mocks.setUserRole(...args),
+    createCoupon: (...args: unknown[]) => mocks.createCoupon(...args),
+    getConfig: async () => {
+      if (mocks.configFails) throw new Error('boom');
+      return mocks.config;
+    },
     listDealerTiers: async () => [{ id: 't1', name: 'Bạc', minOrderVolume: 0, creditLimit: 0, paymentTerms: null }],
   };
 });
@@ -109,6 +117,9 @@ beforeEach(() => {
   mocks.payouts = 0;
   mocks.orders = [];
   mocks.setUserRole.mockReset();
+  mocks.createCoupon.mockReset();
+  mocks.config = [];
+  mocks.configFails = false;
   window.history.replaceState(null, '', '/admin');
 });
 afterEach(() => {
@@ -413,5 +424,72 @@ describe('admin/page — tab Người dùng', () => {
     act(() => cancel.click());
     await flush();
     expect(mocks.setUserRole).not.toHaveBeenCalled();
+  });
+});
+
+describe('admin/page — tab Cấu hình', () => {
+  const openConfig = async () => {
+    window.history.replaceState(null, '', '/admin?tab=config');
+    return mount();
+  };
+
+  it('khối "Tất cả tham số" dùng tiêu đề Fraunces, chữ phụ stone-500 và liệt kê từng khoá cấu hình', async () => {
+    mocks.config = [{ key: 'shipping.freeThreshold', value: 500000, description: 'Ngưỡng miễn phí vận chuyển', category: 'shipping' }];
+    const { container } = await openConfig();
+    const h3 = [...container.querySelectorAll('h3')].find((h) => h.textContent === 'Tất cả tham số (JSON)')!;
+    expect(h3.className).toContain('font-display');
+    expect(h3.nextElementSibling!.className).toContain('text-stone-500');
+    expect(container.textContent).toContain('shipping.freeThreshold');
+  });
+
+  it('lỗi tải cấu hình báo bằng màu danger và không dựng các thẻ cấu hình', async () => {
+    mocks.configFails = true;
+    const { container } = await openConfig();
+    const err = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Không tải được danh sách cấu hình.')!;
+    expect(err.className).toContain('text-danger-fg');
+    expect(container.querySelector('h3')).toBeNull();
+  });
+});
+
+describe('admin/page — tab Voucher', () => {
+  const openCoupons = async () => {
+    window.history.replaceState(null, '', '/admin?tab=coupons');
+    return mount();
+  };
+
+  it('ô nhập cao 44px ở điện thoại với viền đủ tương phản, co được trong hàng flex để không tràn ngang', async () => {
+    const { container } = await openCoupons();
+    const inputs = [...container.querySelectorAll('input, select')];
+    expect(inputs).toHaveLength(9);
+    for (const el of inputs) {
+      expect(el.className).toContain('min-h-[44px]');
+      expect(el.className).toContain('border-stone-450');
+      expect(el.className).toContain('min-w-0');
+    }
+  });
+
+  it('Tạo voucher khoá tới khi có mã, gửi đúng dữ liệu; thành công báo success, lỗi báo danger', async () => {
+    const { container } = await openCoupons();
+    const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo voucher')!;
+    expect(create.disabled).toBe(true);
+    expect(create.className).toContain('bg-forest-600');
+    expect(create.className).toContain('min-h-[44px]');
+    typeInto(container.querySelector('input[placeholder^="Mã"]'), 'WELCOME30');
+    expect(create.disabled).toBe(false);
+
+    mocks.createCoupon.mockResolvedValueOnce({});
+    act(() => create.click());
+    await flush();
+    expect(mocks.createCoupon).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'WELCOME30', type: 'PERCENT', value: 10, perUserLimit: 1, scope: 'PUBLIC' }),
+    );
+    const ok = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Đã tạo voucher!')!;
+    expect(ok.className).toContain('text-success-fg');
+
+    mocks.createCoupon.mockRejectedValueOnce(new Error('Mã đã tồn tại'));
+    act(() => create.click());
+    await flush();
+    const bad = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Mã đã tồn tại')!;
+    expect(bad.className).toContain('text-danger-fg');
   });
 });

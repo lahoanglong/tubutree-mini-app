@@ -96,7 +96,7 @@ import { ReviewsTab } from '@/components/admin/reviews-tab';
 import type { PickedItem } from '@/components/admin/search-picker';
 import { SubscriptionsTab } from '@/components/admin/subscriptions-tab';
 import { UserPicker } from '@/components/admin/user-picker';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, FIELD_CLASS, TOUCH_H } from '@/components/admin/ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, TOUCH_H } from '@/components/admin/ui';
 import { AnalyticsTab } from './analytics-tab';
 import {
   exportOrdersToCsv,
@@ -1199,14 +1199,14 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
 function ConfigTab() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-config'], queryFn: () => getConfig() });
-  if (q.isError) return <p className="text-sm text-red-600">Không tải được danh sách cấu hình.</p>;
+  if (q.isError) return <p className="text-sm text-danger-fg">Không tải được danh sách cấu hình.</p>;
   return (
     <div className="space-y-4">
       <GomdonConfigCard rows={q.data} />
       <LoyaltyConfigCard rows={q.data} />
       <div>
-        <h3 className="text-sm font-semibold text-neutral-900">Tất cả tham số (JSON)</h3>
-        <p className="mt-0.5 text-xs text-neutral-500">
+        <h3 className="font-display text-sm font-semibold text-stone-900">Tất cả tham số (JSON)</h3>
+        <p className="mt-0.5 text-xs text-stone-500">
           Giá trị có tên chứa password/secret/token luôn hiện dạng ••••••••; giữ nguyên chuỗi đó khi lưu thì giá trị thật không đổi.
         </p>
         <div className="mt-2 space-y-2">
@@ -1264,17 +1264,17 @@ function CouponsTab() {
     onSuccess: () => setMsg('Đã tạo voucher!'),
     onError: (e) => setMsg(e instanceof Error ? e.message : 'Lỗi'),
   });
-  const field = 'w-full rounded border border-neutral-200 px-3 py-2 text-sm';
+  const field = `${INPUT_CLASS} ${TOUCH_H}`;
   return (
     <div className="max-w-md space-y-2">
       <input placeholder="Mã (vd WELCOME30)" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} className={field} />
       <div className="flex gap-2">
-        <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className="rounded border border-neutral-200 px-2 py-2 text-sm">
+        <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={`${FIELD_CLASS} ${TOUCH_H}`}>
           <option value="PERCENT">% giảm</option>
           <option value="AMOUNT">Giảm tiền</option>
           <option value="FREESHIP">Freeship</option>
         </select>
-        <input type="number" placeholder="Giá trị" value={f.value} onChange={(e) => setF({ ...f, value: Number(e.target.value) })} className="w-28 rounded border border-neutral-200 px-3 py-2 text-sm" />
+        <input type="number" placeholder="Giá trị" value={f.value} onChange={(e) => setF({ ...f, value: Number(e.target.value) })} className={`${FIELD_CLASS} ${TOUCH_H} w-28`} />
       </div>
       <div className="flex gap-2">
         <input type="number" placeholder="Đơn tối thiểu (đ)" value={f.minOrder} onChange={(e) => setF({ ...f, minOrder: e.target.value })} className={field} />
@@ -1284,15 +1284,15 @@ function CouponsTab() {
         <input type="number" placeholder="Tổng lượt dùng" value={f.usageLimit} onChange={(e) => setF({ ...f, usageLimit: e.target.value })} className={field} />
         <input type="number" placeholder="Lượt / khách" value={f.perUserLimit} onChange={(e) => setF({ ...f, perUserLimit: e.target.value })} className={field} />
       </div>
-      <p className="text-xs text-neutral-400">
+      <p className="text-xs text-stone-500">
         Bỏ trống = không giới hạn. Mã % nên đặt &quot;Giảm tối đa&quot; để đơn lớn không bị giảm quá tay.
       </p>
       <div className="flex gap-2">
         <input type="date" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
         <input type="date" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
       </div>
-      <button onClick={() => create.mutate()} disabled={!f.code} className="w-full rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300">Tạo voucher</button>
-      {msg && <p className="text-sm text-green-700">{msg}</p>}
+      <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo voucher</button>
+      {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
   );
 }
