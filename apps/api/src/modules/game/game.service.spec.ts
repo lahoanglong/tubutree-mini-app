@@ -24,6 +24,15 @@ function makeConfig(overrides: Record<string, unknown> = {}): SystemConfigServic
   } as unknown as SystemConfigService;
 }
 
+/** Hạn cố định do stub `pointsExpiresAt` trả; test kiểm đúng giá trị này được ghi vào dòng sổ. */
+const REWARD_EXPIRES_AT = new Date('2027-10-11T00:00:00.000Z');
+
+/** LoyaltyService chỉ với `pointsExpiresAt` — helper hạn dùng chung của điểm danh, điểm hoàn, POS (PE-3). */
+function loyaltyWithExpiry() {
+  const pointsExpiresAt = jest.fn(async (_from: Date) => REWARD_EXPIRES_AT);
+  return { loyalty: { pointsExpiresAt } as unknown as LoyaltyService, pointsExpiresAt };
+}
+
 /** Prisma stub linh hoạt — chỉ những bảng GameService dùng. */
 function makePrisma(over: Record<string, unknown> = {}) {
   const base = {
@@ -99,7 +108,7 @@ describe('GameService.spin', () => {
     const prisma = makePrisma();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
     jest.spyOn(Math, 'random').mockReturnValue(0.1); // r = 0.1*100 = 10 → giải 'a' (weight 70)
-    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }), analytics);
+    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
     const r = await svc.spin('u1');
     expect(r.prize.id).toBe('a');
     // cost trừ atomic qua updateMany (where gte cost), thưởng POINTS qua creditPoints ($transaction)
@@ -110,11 +119,73 @@ describe('GameService.spin', () => {
     (Math.random as jest.Mock).mockRestore();
   });
 
+  // PE-3 (OQ-1): thưởng điểm của vòng quay là Điểm Xanh thường, hết hạn như mọi điểm thưởng khác.
+  describe('thưởng POINTS có hạn (PE-3)', () => {
+    const spinService = (prisma: PrismaService, loyalty?: LoyaltyService) =>
+      new GameService(
+        prisma,
+        makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }),
+        analytics,
+        undefined,
+        undefined,
+        undefined,
+        loyalty,
+      );
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('dòng GAME_SPIN_WIN mang expiresAt do pointsExpiresAt trả; số điểm, reason, refType không đổi; dòng phí quay không có hạn', async () => {
+      const prisma = makePrisma();
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
+      jest.spyOn(Math, 'random').mockReturnValue(0.1); // giải 'a' (POINTS 5)
+      const { loyalty, pointsExpiresAt } = loyaltyWithExpiry();
+      await spinService(prisma, loyalty).spin('u1');
+
+      const rows = (prisma.pointsTransaction.create as jest.Mock).mock.calls.map((c) => c[0].data);
+      expect(rows).toEqual([
+        { userId: 'u1', delta: -10, reason: 'GAME_SPIN_COST', refType: 'GAME' },
+        { userId: 'u1', delta: 5, reason: 'GAME_SPIN_WIN:a', refType: 'GAME', expiresAt: REWARD_EXPIRES_AT },
+      ]);
+      expect(pointsExpiresAt).toHaveBeenCalledTimes(1);
+      expect(pointsExpiresAt.mock.calls[0]![0]).toBeInstanceOf(Date);
+      expect((prisma.user.update as jest.Mock).mock.calls[0][0]).toEqual({ where: { id: 'u1' }, data: { pointsBalance: { increment: 5 } } });
+    });
+
+    it('hạn được tính NGOÀI transaction (trước khi mở tx), không giữ kết nối tx trong lúc đọc cấu hình', async () => {
+      const prisma = makePrisma();
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
+      jest.spyOn(Math, 'random').mockReturnValue(0.1);
+      const { loyalty, pointsExpiresAt } = loyaltyWithExpiry();
+      await spinService(prisma, loyalty).spin('u1');
+      expect(pointsExpiresAt.mock.invocationCallOrder[0]!).toBeLessThan((prisma.$transaction as jest.Mock).mock.invocationCallOrder[0]!);
+    });
+
+    it('trúng giải không phải POINTS → không đọc cấu hình hạn và không ghi dòng thưởng', async () => {
+      const prisma = makePrisma();
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
+      jest.spyOn(Math, 'random').mockReturnValue(0.9); // giải 'b' (NONE)
+      const { loyalty, pointsExpiresAt } = loyaltyWithExpiry();
+      await spinService(prisma, loyalty).spin('u1');
+      expect(pointsExpiresAt).not.toHaveBeenCalled();
+      expect((prisma.pointsTransaction.create as jest.Mock).mock.calls.map((c) => c[0].data.reason)).toEqual(['GAME_SPIN_COST']);
+    });
+
+    it('trúng POINTS mà thiếu LoyaltyService → ném lỗi TRƯỚC khi mở tx/trừ điểm (không để lọt điểm không hạn)', async () => {
+      const prisma = makePrisma();
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
+      jest.spyOn(Math, 'random').mockReturnValue(0.1);
+      await expect(spinService(prisma).spin('u1')).rejects.toThrow(/LoyaltyService/);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.user.updateMany).not.toHaveBeenCalled();
+      expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+    });
+  });
+
   it('race âm điểm: updateMany count=0 (điểm đã bị trừ) → ném lỗi, không quay', async () => {
     const prisma = makePrisma();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
     (prisma.user.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
-    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }), analytics);
+    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
     await expect(svc.spin('u1')).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.gameSpin.create).not.toHaveBeenCalled();
   });
@@ -129,6 +200,10 @@ describe('GameService.spin', () => {
       prisma,
       makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES, 'game.spin_buy_daily_limit': 5 }),
       analytics,
+      undefined,
+      undefined,
+      undefined,
+      loyaltyWithExpiry().loyalty,
     );
     await expect(svc.spin('u1')).rejects.toThrow('lượt');
     expect(prisma.gameSpin.create).not.toHaveBeenCalled();
@@ -140,7 +215,7 @@ describe('GameService.spin', () => {
     const prisma = makePrisma();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 100 });
     (prisma.gameSpin.count as jest.Mock).mockResolvedValueOnce(4).mockResolvedValueOnce(5);
-    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }), analytics);
+    const svc = new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
     await expect(svc.spin('u1')).resolves.toBeDefined();
     await expect(svc.spin('u1')).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.gameSpin.create).toHaveBeenCalledTimes(1);
@@ -153,6 +228,10 @@ describe('GameService.spin', () => {
       prisma,
       makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES, 'game.spin_buy_daily_limit': 5 }),
       analytics,
+      undefined,
+      undefined,
+      undefined,
+      loyaltyWithExpiry().loyalty,
     );
     await svc.spin('u1');
     const dec = (prisma.user.updateMany as jest.Mock).mock.invocationCallOrder[0]!;
@@ -189,6 +268,10 @@ describe('GameService.spin', () => {
       prisma,
       makeConfig({ 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES }),
       spy as unknown as AnalyticsEventsService,
+      undefined,
+      undefined,
+      undefined,
+      loyaltyWithExpiry().loyalty,
     );
     await svc.spin('u1');
     expect(tx).not.toBe(prisma); // tx RIÊNG, không phải cùng instance với prisma top-level
@@ -910,7 +993,7 @@ describe('GameService.claimMission', () => {
       pointsTransaction: { create: pointsCreate },
       user: { count: jest.fn().mockResolvedValue(0), update: userUpdate },
     });
-    const svc = new GameService(prisma, makeConfig(), analytics);
+    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
     const res = await svc.claimMission('u1', 'FIRST_ORDER');
 
     expect(res).toEqual({ claimed: true, rewardPoints: 20, couponCode: null });
@@ -918,8 +1001,60 @@ describe('GameService.claimMission', () => {
       data: { userId: 'u1', missionId: 'm2', cycleKey: '0', progress: 1, goal: 1, completedAt: expect.any(Date) },
     });
     expect(pointsCreate).toHaveBeenCalledTimes(1);
-    expect(pointsCreate).toHaveBeenCalledWith({ data: { userId: 'u1', delta: 20, reason: 'MISSION:FIRST_ORDER:0', refType: 'GAME' } });
+    expect(pointsCreate).toHaveBeenCalledWith({
+      data: { userId: 'u1', delta: 20, reason: 'MISSION:FIRST_ORDER:0', refType: 'GAME', expiresAt: REWARD_EXPIRES_AT },
+    });
     expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsBalance: { increment: 20 } } });
+  });
+
+  // PE-3 (OQ-1): thưởng nhiệm vụ là Điểm Xanh thường, hết hạn theo loyalty.point_expire_months.
+  describe('thưởng nhiệm vụ có hạn (PE-3)', () => {
+    const missionService = (prisma: PrismaService, loyalty?: LoyaltyService) =>
+      new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, loyalty);
+
+    it('dòng MISSION:<mã>:<chu kỳ> mang expiresAt do pointsExpiresAt trả; số điểm, reason, refType không đổi', async () => {
+      const pointsCreate = jest.fn().mockResolvedValue({});
+      const prisma = missionsPrisma({
+        missionProgress: { create: jest.fn().mockResolvedValue({ id: 'mp1' }) },
+        pointsTransaction: { create: pointsCreate },
+        user: { count: jest.fn().mockResolvedValue(0), update: jest.fn().mockResolvedValue({}) },
+      });
+      const { loyalty, pointsExpiresAt } = loyaltyWithExpiry();
+      const res = await missionService(prisma, loyalty).claimMission('u1', 'FIRST_ORDER');
+      expect(res).toEqual({ claimed: true, rewardPoints: 20, couponCode: null });
+      expect(pointsCreate).toHaveBeenCalledTimes(1);
+      expect(pointsCreate).toHaveBeenCalledWith({
+        data: { userId: 'u1', delta: 20, reason: 'MISSION:FIRST_ORDER:0', refType: 'GAME', expiresAt: REWARD_EXPIRES_AT },
+      });
+      expect(pointsExpiresAt).toHaveBeenCalledTimes(1);
+    });
+
+    it('hạn được tính NGOÀI transaction, trước khi mở tx', async () => {
+      const prisma = missionsPrisma({
+        missionProgress: { create: jest.fn().mockResolvedValue({ id: 'mp1' }) },
+        pointsTransaction: { create: jest.fn().mockResolvedValue({}) },
+        user: { count: jest.fn().mockResolvedValue(0), update: jest.fn().mockResolvedValue({}) },
+      });
+      const { loyalty, pointsExpiresAt } = loyaltyWithExpiry();
+      await missionService(prisma, loyalty).claimMission('u1', 'FIRST_ORDER');
+      expect(pointsExpiresAt.mock.invocationCallOrder[0]!).toBeLessThan((prisma.$transaction as jest.Mock).mock.invocationCallOrder[0]!);
+    });
+
+    it('chưa đủ điều kiện → không đọc cấu hình hạn, không mở tx', async () => {
+      const prisma = missionsPrisma({ order: { count: jest.fn().mockResolvedValue(0) } });
+      const { loyalty, pointsExpiresAt } = loyaltyWithExpiry();
+      await expect(missionService(prisma, loyalty).claimMission('u1', 'FIRST_ORDER')).rejects.toBeInstanceOf(BadRequestException);
+      expect(pointsExpiresAt).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('thiếu LoyaltyService → ném lỗi TRƯỚC khi mở tx/ghi claim (không để lọt điểm không hạn)', async () => {
+      const missionProgressCreate = jest.fn();
+      const prisma = missionsPrisma({ missionProgress: { create: missionProgressCreate } });
+      await expect(missionService(prisma).claimMission('u1', 'FIRST_ORDER')).rejects.toThrow(/LoyaltyService/);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(missionProgressCreate).not.toHaveBeenCalled();
+    });
   });
 
   it('đã nhận rồi (unique userId+missionId+cycleKey → P2002) → BadRequest "đã nhận", KHÔNG cộng thêm điểm', async () => {
@@ -930,7 +1065,7 @@ describe('GameService.claimMission', () => {
       missionProgress: { create: missionProgressCreate },
       pointsTransaction: { create: pointsCreate },
     });
-    const svc = new GameService(prisma, makeConfig(), analytics);
+    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
 
     await expect(svc.claimMission('u1', 'FIRST_ORDER')).rejects.toThrow(/đã nhận/i);
     expect(pointsCreate).not.toHaveBeenCalled();
@@ -988,7 +1123,7 @@ describe('GameService.claimMission', () => {
     };
 
     const prisma = missionsPrisma({ $transaction });
-    const svc = new GameService(prisma, makeConfig(), analytics);
+    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
 
     const results = await Promise.allSettled([svc.claimMission('u1', 'FIRST_ORDER'), svc.claimMission('u1', 'FIRST_ORDER')]);
     const ok = results.filter((r) => r.status === 'fulfilled');
@@ -1008,7 +1143,7 @@ describe('GameService.claimMission', () => {
       gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 7 }) },
       missionProgress: { create: missionProgressCreate },
     });
-    const svc = new GameService(prisma, makeConfig(), analytics);
+    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
     await svc.claimMission('u1', 'CHECKIN_7');
     expect(missionProgressCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ cycleKey: '1' }) }),
