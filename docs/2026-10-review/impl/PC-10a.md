@@ -293,3 +293,79 @@ Không còn emoji làm icon chức năng trong 29 file của gói: icon trên n�
 3. `apps/e2e/tests/loyalty.miniapp.spec.ts` cần đổi selector `.tubu-pop` (đã nêu ở mục 1/4); không có kịch bản e2e nào chạm `/game`, vòng quay hay badge hạng.
 4. Đồng nhất sắc chữ "Chuyên gia" cạnh badge hạng khi di cư `post-card.tsx`/`post-detail.tsx` (xem Giả định 4).
 5. Nếu thiết kế muốn giữ nút quay màu cam đất như cũ: cần thêm biến thể `accent` vào `components/ui/button.tsx` (ngoài nhóm file của gói), không nên ghi đè `style` ở trang.
+
+## Review lượt 1
+
+Reviewer độc lập (opus) trả 1 blocker, 2 major, 4 minor. Mỗi blocker/major được xác minh lại trên mã thật trước khi sửa; cả ba đều ĐÚNG. Test ĐỎ chạy trước khi sửa, XANH sau khi sửa.
+
+| # | Mức | Finding | Kết quả | Commit |
+|---|---|---|---|---|
+| 1 | blocker | `loyalty.tsx`: "Đổi ngay" trong hộp xác nhận đọc `sheetReward` (giá trị được giữ lại cho hoạt ảnh đóng) nên vẫn gọi API khi hộp đang đóng | ĐÃ SỬA | `945f982` |
+| 2 | major | `apps/e2e/tests/loyalty.miniapp.spec.ts`: 3 kịch bản chọn hộp bằng `.tubu-pop` (không còn sau di cư) | ĐÃ SỬA (chưa chạy Playwright: unverified) | `6216ec2` |
+| 3 | major | `game.tsx`: thanh tab nội bộ `sticky; top: 0` nằm dưới status bar/capsule Zalo | ĐÃ SỬA | `81e27a9` |
+| 4 | minor | `harvest-celebration.tsx`: ô mã `role="button"` không có phím Enter/Space | ĐÃ SỬA | `3510b5d` |
+| 5 | minor | guard emoji bỏ sót ⭐ ⬆ ⬇ ↩ | ĐÃ SỬA | `e8505d5` |
+| 6 | minor | `missions-card.tsx`: thanh tiến độ mất màu theo trạng thái đạt | KHÔNG SỬA (chủ ý, ghi nhận) | không |
+| 7 | minor | `PageHeader` `back="auto"` dựng thêm `BackButton` trong khi `components/app.tsx` đã dựng sẵn | KHÔNG SỬA (ngoài gói, ghi nhận) | không |
+
+### 1. Blocker: đổi quà khi hộp xác nhận đang đóng — ĐÚNG
+
+Xác minh: `BottomSheet` (`unmountOnClose`) giữ nội dung và footer trong DOM 200ms sau khi `open` về false (`ANIMATION_DURATION = 200` trong `zmp-ui/esm/components/sheet/utils/constants.js`; `Sheet` chỉ gỡ ở `afterClose`). Trong khoảng đó `redeemMut.isPending` đã false và `busyRef.redeem` đã reset ở `onSettled`, còn nút đọc `sheetReward = useLastNonNull(confirmReward)` vẫn khác null. Bản cũ (`Modal` ZaUI) unmount ngay nên không có hai đường này.
+
+Test thêm trong `loyalty-behavior.spec.tsx` (ĐỎ trên mã cũ, XANH sau sửa; `confirm.isConnected` được assert để test không đúng giả khi nút đã gỡ):
+
+- "bấm Huỷ rồi chạm ngay Đổi ngay trong hộp đang đóng: không đổi quà": cũ ĐỎ `expected "spy" to not be called at all, but actually been called 1 times ["r-ok"]`.
+- "đổi thành công rồi chạm lại Đổi ngay trong hộp đang đóng: vẫn chỉ gọi API 1 lần": cũ ĐỎ `expected "spy" to be called 1 times, but got 2 times`.
+
+Sửa: nút "Đổi ngay" gọi `doRedeem(confirmReward.id)` theo `confirmReward` (state sống), cả "Huỷ" và "Đổi ngay" thêm `disabled` khi `confirmReward === null`; `sheetReward` chỉ còn dùng để vẽ nội dung. Số 22/22 test của spec xanh (20 cũ + 2 mới), các test cũ chạm đúp/Huỷ/đổi lỗi không đổi.
+
+Cùng kiểu rủi ro ở các hộp khác của gói được rà: hộp thẻ thành viên, chúc mừng lên hạng, kết quả vòng quay, thu hoạch chỉ có nút đóng/điều hướng/chép (idempotent), không gọi API tiền/điểm, nên không cần khoá thêm.
+
+### 2. Major: selector e2e `.tubu-pop` — ĐÚNG
+
+Xác minh: `grep tubu-pop apps/e2e/tests/loyalty.miniapp.spec.ts` có 3 chỗ (dòng 204, 255, 272); sau di cư cả ba hộp là `BottomSheet`, class `.tubu-pop` chỉ còn ở `tokens.css` và `checkout/order-success.tsx`. Chữ `'-50 Xanh'` đã lệch từ trước gói (bản cũ vẽ `-{formatPoints()} Xanh` = "-50 điểm Xanh").
+
+Sửa tối thiểu trong file ngoài nhóm file của gói (lý do: chính gói làm hỏng ba kịch bản, đúng mẫu `returns-reversal.miniapp.spec.ts` đã dùng): đổi `page.locator('.tubu-pop')` thành `page.locator('.zaui-sheet')` (cùng `filter({ hasText })`), và `'-50 Xanh'` thành `'-50 điểm Xanh'`. Kiểm bằng jsdom (probe tạm, đã xoá): mở hộp xác nhận thì có đúng 1 `.zaui-sheet` chứa "Xác nhận đổi ưu đãi" và "-500 điểm Xanh", gồm các nút đóng, "Huỷ", "Đổi ngay" nên `modal.getByRole('button', { name: 'Đổi ngay' })` chỉ khớp một nút. `npx tsc --noEmit` trong `apps/e2e` exit 0. CHƯA chạy Playwright (quy định máy): unverified, điều phối viên chạy khi làm T1-T5.
+
+### 3. Major: thanh tab dính dưới status bar — ĐÚNG
+
+Xác minh: `game.tsx` không dùng `className="page"` (quy tắc `.page { padding-top: var(--safe-top) }` trong `tokens.css`), chỉ `PageHeader` đệm `safe-top` và khối đó cuộn đi, nên `top: 0` dính sát mép màn hình. Test thêm trong `game-layout.spec.tsx`: "thanh tab dính đầu trang chừa safe-top, không dính mép 0" (ĐỎ `expected '0px' to contain 'var(--safe-top)'`, XANH sau sửa). Sửa: `top: 'var(--safe-top)'`. Phần lọt giữa mép 0 và safe-top là vùng status bar, nội dung cuộn dưới đó giống mọi trang immersive khác của app. Kiểm bằng mắt ở 390x844 và trên Zalo thật vẫn là unverified, cần làm ở bước T.
+
+### 4. Minor: ô mã giảm giá bàn phím — ĐÃ SỬA
+
+Dùng `rowKeyboardProps()` có sẵn (`components/ui/row-keyboard.ts`: `tabIndex 0` + Enter/Space gọi lại `click()`), giữ nguyên DOM và handler chép. Test "ô mã giảm giá là nút bàn phím được: Enter và Space chép mã như chạm" trong `game-behavior.spec.tsx` ĐỎ (`expected "spy" to be called 1 times, but got 0 times`) rồi XANH; phím khác (`a`) không chép.
+
+### 5. Minor: guard emoji — ĐÃ SỬA
+
+`EMOJI` thành hợp của hai dải cũ (giữ ✓ ✗ vì chúng không thuộc `Extended_Pictographic`), `\p{Extended_Pictographic}` và khối `U+2B00-2BFF`. Không dùng cả dải mũi tên `U+2190-21FF` như gợi ý vì sẽ bắt dấu "→" làm dấu câu trong lời văn (`game.tsx`, `loyalty.tsx` đang có); ⬆ ⬇ ↩ vẫn bị bắt qua `Extended_Pictographic`. Thêm ca tự kiểm (`⭐ ⬆ ↩` bị bắt, `→ · ×` không). Quét 29 file của gói bằng bộ so khớp mới: chỉ thêm `⭐` ở `wheel.tsx` (ô minh hoạ trên bánh xe, là nội dung), nên đã thêm vào `ALLOWED_EMOJI` của file đó. Trước khi thêm vào danh sách cho phép: ĐỎ `expected [ '⭐' ] to deeply equal []`; sau: 132/132 xanh.
+
+### 6. Minor: màu thanh tiến độ nhiệm vụ — KHÔNG SỬA
+
+`components/ui/progress-bar.tsx` chỉ có `tone: 'brand' | 'flash'`; `flash` là terracotta của flash sale, không hợp nghĩa "đã đạt", và `components/ui/**` ngoài nhóm file của gói. Chấp nhận đổi trình bày có chủ đích: thanh tiến độ nhiệm vụ một màu; trạng thái "đã đạt, chờ nhận thưởng" vẫn thể hiện bằng số `progress/goal` đầy và nút "Nhận thưởng" hiện đúng điều kiện `canClaim` (không đổi). Đề xuất cho điều phối viên: thêm `tone="success"` vào `ProgressBar` nếu thiết kế muốn giữ tín hiệu màu.
+
+### 7. Minor: hai nút "Quay lại" — XÁC NHẬN, NGOÀI GÓI
+
+Xác minh: `components/app.tsx:242` dựng `<BackButton />` toàn cục và `PageHeader` (`back="auto"` mặc định, `page-header.tsx:33`) dựng thêm một cái; `/loyalty` bị trùng, `/game` không (đã `back={false}`). Không đổi `back={false}` ở `loyalty.tsx` vì khi đó `PageHeader` bỏ khoảng chừa 48px và nút nổi toàn cục đè lên tiêu đề. Cùng mẫu ở cart/checkout/orders; thuộc đợt sửa `PageHeader`/`BackButton` (chỉ giữ một nguồn), ghi nhận cho điều phối viên.
+
+### Lệnh kiểm chứng sau sửa (output thật)
+
+```
+$ npx eslint (29 file của gói + 7 spec)           exit 0, không output
+$ npx tsc --noEmit  (apps/miniapp)                exit 0
+$ npx tsc --noEmit  (apps/e2e)                    exit 0
+$ node scripts/check-undefined-css-vars.mjs       OK — every var(--x) reference is defined.
+$ static-scan (legacy hex emoji file)
+0 0 5 apps/miniapp/src/components/community/rank-badge.tsx
+0 0 8 apps/miniapp/src/components/wheel.tsx
+0 0 1 apps/miniapp/src/pages/game.tsx
+0 0 8 apps/miniapp/src/pages/loyalty.tsx
+$ npx vitest run <16 spec liên quan>
+ Test Files  16 passed (16)
+      Tests  385 passed (385)
+```
+
+(Trước lượt review: 380; thêm 5 = 2 loyalty + 1 game-layout + 1 game-behavior + 1 guard tự kiểm.)
+
+### Việc còn lại
+
+- Bước T (điều phối viên): chạy Playwright `loyalty.miniapp.spec.ts` để xác nhận selector `.zaui-sheet`; kiểm bằng mắt ở 390x844 và trên Zalo thanh tab dính dưới safe-top, hai màn đầu trang Vườn Xanh.
