@@ -130,7 +130,7 @@ export class AdminService {
     // hoàn ví dựa trên paymentStatus cũ (PAID) trong khi DB đã REFUNDED → DOUBLE refund.
     const orderForReturn = await this.prisma.order.findUniqueOrThrow({
       where: { id: req.orderId },
-      select: { id: true, userId: true, code: true },
+      select: { id: true, userId: true, code: true, paymentMethod: true },
     });
     // A6-06 (phần thông báo, docs/audit-2026-09/06-web.md): trước đây LUÔN gửi "Tiền đã hoàn vào
     // Ví Tubu" bất kể reverseFinancials có thực sự chi tiền hay không (vd đơn chưa từng thanh toán
@@ -183,8 +183,10 @@ export class AdminService {
     await this.affiliate.reverseCommissionsForOrder(orderForReturn.id);
     // KHÔNG được báo "đã hoàn tiền" nếu thực tế không có khoản hoàn nào được chi (xem comment ở
     // trên) — dùng template trung tính, chỉ xác nhận đã duyệt trả hàng.
+    // Đơn XU cũ được hoàn bằng Điểm Xanh, không vào Ví, nên mẫu "Tiền đã hoàn vào Ví Tubu" sẽ sai (PD-3).
+    const saysWalletRefund = moneyRefunded && orderForReturn.paymentMethod !== 'XU';
     await this.notifications
-      .notify(orderForReturn.userId, moneyRefunded ? 'RETURN_APPROVED' : 'RETURN_APPROVED_NO_REFUND', {
+      .notify(orderForReturn.userId, saysWalletRefund ? 'RETURN_APPROVED' : 'RETURN_APPROVED_NO_REFUND', {
         order_code: orderForReturn.code,
       })
       .catch(() => undefined);

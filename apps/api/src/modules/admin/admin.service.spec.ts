@@ -277,7 +277,8 @@ function makeReturnPrisma(opts: {
   const userUpdate = jest.fn().mockResolvedValue({});
   /** Hoàn kho đi bằng SQL thô — xem catalog/variation-stock.ts. */
   const stockExecuteRaw = jest.fn().mockResolvedValue(1);
-  const coinCreate = jest.fn().mockResolvedValue({});
+  /** Hoàn đơn XU cũ ghi sổ Điểm Xanh qua applyPointsDelta(skipDuplicates) (PD-3). */
+  const pointsInsert = jest.fn().mockResolvedValue([{ id: 'ptx1' }]);
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       returnRequest: { updateMany: returnUpdateMany },
@@ -289,7 +290,7 @@ function makeReturnPrisma(opts: {
       },
       user: { update: userUpdate },
       $executeRaw: stockExecuteRaw,
-      coinTransaction: { create: coinCreate },
+      pointsTransaction: { createManyAndReturn: pointsInsert },
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     }),
   );
@@ -301,7 +302,7 @@ function makeReturnPrisma(opts: {
     user: { findMany: jest.fn().mockResolvedValue([]) },
     $transaction,
   } as unknown as PrismaService;
-  return { prisma, returnUpdateMany, orderUpdate, userUpdate, stockExecuteRaw, coinCreate, $transaction };
+  return { prisma, returnUpdateMany, orderUpdate, userUpdate, stockExecuteRaw, pointsInsert, $transaction };
 }
 
 describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', () => {
@@ -439,31 +440,36 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     });
   });
 
-  it('APPROVE với XU PAID → hoàn coinsBalance + CoinTransaction, KHÔNG hoàn ví', async () => {
-    const { prisma, userUpdate, coinCreate } = makeReturnPrisma({
+  it('APPROVE với đơn XU cũ PAID → hoàn ceil(total/1000) Điểm Xanh lô CONVERTED, KHÔNG hoàn ví, KHÔNG cộng xu (PD-3)', async () => {
+    const { prisma, userUpdate, pointsInsert } = makeReturnPrisma({
       order: {
         id: 'o1',
         code: 'TUBU1',
         userId: 'u1',
-        total: 120000,
+        total: 120500,
         paymentMethod: 'XU',
         paymentStatus: 'PAID',
         items: [{ variationId: 'v1', quantity: 1 }],
       },
     });
     await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
-    expect(userUpdate).toHaveBeenCalledWith({
-      where: { id: 'u1' },
-      data: { coinsBalance: { increment: 120000 } },
-    });
-    expect(userUpdate).not.toHaveBeenCalledWith(
-      expect.objectContaining({ data: { walletBalance: { increment: 120000 } } }),
-    );
-    expect(coinCreate).toHaveBeenCalledWith(
+    expect(pointsInsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ userId: 'u1', delta: 120000, reason: 'ORDER_REFUND:TUBU1', refType: 'ORDER' }),
+        data: [expect.objectContaining({ userId: 'u1', delta: 121, lot: 'CONVERTED', reason: 'ORDER_REFUND_XU:TUBU1', refType: 'ORDER', expiresAt: null })],
+        skipDuplicates: true,
       }),
     );
+    expect(userUpdate).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { pointsConvertedBalance: { increment: 121 } },
+    });
+    for (const [arg] of userUpdate.mock.calls) {
+      expect(arg.data).not.toHaveProperty('walletBalance');
+      expect(arg.data).not.toHaveProperty('coinsBalance');
+    }
+    // Mẫu RETURN_APPROVED nói "Tiền đã hoàn vào Ví Tubu" — sai với đơn XU (điểm vào Điểm Xanh, không vào Ví).
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_NO_REFUND', { order_code: 'TUBU1' });
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'RETURN_APPROVED', expect.anything());
   });
 
   it('hoàn tiền flip paymentStatus PAID→REFUNDED (nhất quán cancel, không để RETURNED còn PAID)', async () => {
@@ -476,15 +482,15 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     );
   });
 
-  it('paymentStatus flip THUA race (count=0, đã refund nơi khác) → KHÔNG hoàn xu lần 2, KHÔNG báo "đã hoàn tiền" (A6-06)', async () => {
-    const { prisma, orderUpdate, userUpdate, coinCreate } = makeReturnPrisma({
+  it('paymentStatus flip THUA race (count=0, đã refund nơi khác) → KHÔNG hoàn điểm lần 2, KHÔNG báo "đã hoàn tiền" (A6-06)', async () => {
+    const { prisma, orderUpdate, userUpdate, pointsInsert } = makeReturnPrisma({
       order: { id: 'o1', code: 'TUBU1', userId: 'u1', total: 120000, paymentMethod: 'XU', paymentStatus: 'PAID', items: [{ variationId: 'v1', quantity: 1 }] },
     });
     // status flip count=1 (thắng), paymentStatus flip count=0 (đã REFUNDED bởi path khác).
     orderUpdate.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
     await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
     expect(userUpdate).not.toHaveBeenCalled();
-    expect(coinCreate).not.toHaveBeenCalled();
+    expect(pointsInsert).not.toHaveBeenCalled();
     // Không có khoản hoàn nào thực sự được chi → KHÔNG được nói "đã hoàn tiền" cho khách.
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_NO_REFUND', { order_code: 'TUBU1' });
     expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'RETURN_APPROVED', expect.anything());
