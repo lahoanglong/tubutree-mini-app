@@ -1,11 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, GoneException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
-import { CoinsService } from '../wallet/coins.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
 import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
 import { startOfVnDay } from '../../common/vn-time';
@@ -37,7 +36,7 @@ interface EcoImpact {
 /**
  * Vườn Xanh 2.0 — Lô đất / mở rộng vườn (§6.7 "lô đất").
  * Hệ thống ADDITIVE: lô nhà (slot 0) vẫn là cây trong GameProfile (không đụng tới),
- * user mở thêm lô phụ bằng 💧 hoặc TubuXu — mỗi lô là 1 cây độc lập tưới & thu hoạch.
+ * user mở thêm lô phụ bằng 💧 — mỗi lô là 1 cây độc lập tưới & thu hoạch.
  * Thu hoạch lô phụ tái dùng sưu tập loài (Phase 3) + góp hồ cộng đồng (Phase 2).
  */
 @Injectable()
@@ -47,18 +46,16 @@ export class GameGardenService {
     private readonly config: SystemConfigService,
     @Optional() private readonly community?: GameCommunityService,
     @Optional() private readonly collection?: GameCollectionService,
-    @Optional() private readonly coins?: CoinsService,
     @Optional() private readonly feed?: CommunityFeedService,
   ) {}
 
   // ── Đọc vườn (lô nhà + lô phụ) ─────────────────────
   async getGarden(userId: string) {
-    const [profile, plots, maxPlots, seedBase, xuBase, wiltDays, deathDays] = await Promise.all([
+    const [profile, plots, maxPlots, seedBase, wiltDays, deathDays] = await Promise.all([
       this.prisma.gameProfile.findUnique({ where: { userId } }),
       this.prisma.gardenPlot.findMany({ where: { userId }, orderBy: { slot: 'asc' } }),
       this.config.get<number>('game.max_plots', 5),
       this.config.get<number>('game.plot_unlock_seed_base', 100),
-      this.config.get<number>('game.plot_unlock_xu_base', 200),
       this.config.get<number>('game.wilt_days', 3),
       this.config.get<number>('game.death_days', 7),
     ]);
@@ -94,18 +91,22 @@ export class GameGardenService {
     const nextUnlock =
       nextSlot > maxPlots - 1
         ? null
-        : { slot: nextSlot, seedCost: seedBase * nextSlot, xuCost: xuBase * nextSlot };
+        : { slot: nextSlot, seedCost: seedBase * nextSlot };
 
     return { plots: [home, ...extras], maxPlots, nextUnlock };
   }
 
   // ── Mở lô phụ kế tiếp ──────────────────────────────
   async unlockPlot(userId: string, currency: UnlockCurrency) {
-    const [count, maxPlots, seedBase, xuBase, plotTarget] = await Promise.all([
+    // PD-3 (spec 6.3, OQ-4): xu đã gộp vào Điểm Xanh; 200 xu/lô quy ra 0,2 điểm không biểu diễn được và
+    // giọt nước đã là tiền game. Giữ giá trị 'XU' ở DTO để client cũ nhận 410 đọc được, không phải 400.
+    if (currency === 'XU') {
+      throw new GoneException('Mở lô đất bằng xu đã ngừng. Hãy dùng giọt nước để mở lô mới.');
+    }
+    const [count, maxPlots, seedBase, plotTarget] = await Promise.all([
       this.prisma.gardenPlot.count({ where: { userId } }),
       this.config.get<number>('game.max_plots', 5),
       this.config.get<number>('game.plot_unlock_seed_base', 100),
-      this.config.get<number>('game.plot_unlock_xu_base', 200),
       this.config.get<number>('game.plot_target', 600),
     ]);
 
@@ -115,19 +116,13 @@ export class GameGardenService {
     }
 
     const created = await this.prisma.$transaction(async (tx) => {
-      if (currency === 'XU') {
-        if (!this.coins) throw new BadRequestException('Mở lô bằng TubuXu chưa khả dụng.');
-        const cost = xuBase * slot;
-        await this.coins.spendCoins(userId, cost, `GARDEN_UNLOCK_PLOT:${slot}`, 'GAME', undefined, tx);
-      } else {
-        const cost = seedBase * slot;
-        // Trừ nước ATOMIC (guard gte) — chống mở lô khi không đủ / hai lệnh song song.
-        const dec = await tx.gameProfile.updateMany({
-          where: { userId, totalSeeds: { gte: cost } },
-          data: { totalSeeds: { decrement: cost } },
-        });
-        if (dec.count === 0) throw new BadRequestException(`Cần ${cost}💧 để mở lô đất này.`);
-      }
+      const cost = seedBase * slot;
+      // Trừ nước ATOMIC (guard gte) — chống mở lô khi không đủ / hai lệnh song song.
+      const dec = await tx.gameProfile.updateMany({
+        where: { userId, totalSeeds: { gte: cost } },
+        data: { totalSeeds: { decrement: cost } },
+      });
+      if (dec.count === 0) throw new BadRequestException(`Cần ${cost}💧 để mở lô đất này.`);
       return tx.gardenPlot.create({
         data: { userId, slot, treeType: DEFAULT_TREE_TYPE, target: plotTarget },
       });

@@ -15,6 +15,7 @@ import { SeasonPassService } from './season-pass.service';
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
 class BuySeedsDto { @IsInt() @Min(1) seeds!: number; }
+// 'XU' vẫn nhận ở DTO để GameGardenService trả 410 (PD-3: mở lô bằng xu đã ngừng) thay vì 400.
 class UnlockPlotDto { @IsIn(['SEEDS', 'XU']) currency!: 'SEEDS' | 'XU'; }
 class SeasonPassClaimDto {
   @IsInt() @Min(0) tier!: number;

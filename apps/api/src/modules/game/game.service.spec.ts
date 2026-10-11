@@ -391,7 +391,7 @@ describe('GameService.waterTree — auto-post Community Feed (§6.14.12)', () =>
       profile({ totalSeeds: 100, ecoImpact: { progress: 590, target: 600, treeType: 't', treesPlanted: 0 } }),
     );
     const feed = { createAchievementPost: jest.fn().mockResolvedValue({}) };
-    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, feed as never);
+    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, feed as never);
     await svc.waterTree('u1', 20);
     expect(feed.createAchievementPost).toHaveBeenCalledWith('u1', 'HARVEST', expect.any(String), expect.any(Object));
   });
@@ -402,7 +402,7 @@ describe('GameService.waterTree — auto-post Community Feed (§6.14.12)', () =>
       profile({ totalSeeds: 100, ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 0 } }),
     );
     const feed = { createAchievementPost: jest.fn() };
-    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, feed as never);
+    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, feed as never);
     await svc.waterTree('u1', 20);
     expect(feed.createAchievementPost).not.toHaveBeenCalled();
   });
@@ -413,7 +413,7 @@ describe('GameService.waterTree — auto-post Community Feed (§6.14.12)', () =>
       profile({ totalSeeds: 100, ecoImpact: { progress: 590, target: 600, treeType: 't', treesPlanted: 0 } }),
     );
     const feed = { createAchievementPost: jest.fn().mockRejectedValue(new Error('feed down')) };
-    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, feed as never);
+    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, feed as never);
     const r = await svc.waterTree('u1', 20);
     expect(r.harvested).toBe(true);
   });
@@ -532,45 +532,96 @@ describe('GameService.waterTree — cây chết mất tiến trình (§6.7.3)', 
   });
 });
 
-describe('GameService.buySeeds / buyTree (xu: mua nước đã ngừng, góp quỹ trồng cây)', () => {
-  // $transaction chạy callback để spendCoins + cập nhật chạy thật.
-  function buyPrisma(over: Record<string, unknown> = {}) {
-    const prisma = makePrisma(over) as unknown as Record<string, unknown>;
-    (prisma as { $transaction: jest.Mock }).$transaction = jest
-      .fn()
-      .mockImplementation(async (cb: (t: unknown) => unknown) => cb(prisma));
-    return prisma as unknown as PrismaService;
+describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ trồng cây bằng Điểm Xanh)', () => {
+  /**
+   * Sổ điểm giả theo lô: updateMany có guard gte trên đúng cột, create ghi dòng sổ — đủ để kiểm
+   * applyPointsDelta (points-ledger.ts) trừ đúng lô mà không cần Postgres (race thật ở T6/pd3 race spec).
+   */
+  function buyPrisma(balances: { pointsBalance: number; pointsConvertedBalance: number }) {
+    const state = { ...balances };
+    const entries: Record<string, unknown>[] = [];
+    const prisma = makePrisma({
+      user: {
+        findUniqueOrThrow: jest.fn(async () => ({ id: 'u1', ...state })),
+        updateMany: jest.fn(async ({ where, data }: any) => {
+          const col = 'pointsConvertedBalance' in where ? 'pointsConvertedBalance' : 'pointsBalance';
+          if (!(state[col as keyof typeof state] >= where[col].gte)) return { count: 0 };
+          state[col as keyof typeof state] -= data[col].decrement;
+          return { count: 1 };
+        }),
+      },
+      pointsTransaction: {
+        create: jest.fn(async ({ data }: any) => {
+          entries.push(data);
+          return { id: `ptx${entries.length}` };
+        }),
+      },
+      $queryRaw: jest.fn(async () => [{ pointsBalance: state.pointsBalance, pointsConvertedBalance: state.pointsConvertedBalance }]),
+    });
+    return { prisma, state, entries };
   }
-  const coinsStub = () => ({ spendCoins: jest.fn().mockResolvedValue(undefined) });
 
   // C-009 (Q-02): 500đ Ví → 600 xu → 600💧 → coupon thu hoạch 30k. Chủ dự án chốt bỏ hẳn mua nước
   // bằng xu; route vẫn giữ để client cũ nhận lỗi rõ thay vì 404.
-  it('mua nước bằng xu đã ngừng → GoneException rõ ràng, KHÔNG trừ xu, KHÔNG cộng giọt', async () => {
-    const prisma = buyPrisma();
-    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({ totalSeeds: 100 }));
-    const coins = coinsStub();
-    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, coins as never);
+  it('mua nước đã ngừng → GoneException rõ ràng, không nhắc "xu", KHÔNG cộng giọt', async () => {
+    const { prisma } = buyPrisma({ pointsBalance: 0, pointsConvertedBalance: 0 });
+    const svc = new GameService(prisma, makeConfig(), analytics);
     await expect(svc.buySeeds('u1', 50)).rejects.toBeInstanceOf(GoneException);
-    await expect(svc.buySeeds('u1', 50)).rejects.toThrow('ngừng');
-    expect(coins.spendCoins).not.toHaveBeenCalled();
+    const err = await svc.buySeeds('u1', 50).catch((e: unknown) => e as Error);
+    expect(err.message).toMatch(/ngừng/);
+    expect(err.message).not.toMatch(/\bxu\b/i);
     expect(prisma.gameProfile.updateMany).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('góp quỹ trồng cây: không nối được ví xu → báo nói "quỹ trồng cây", không nhắc "mua cây"', async () => {
-    const svc = new GameService(buyPrisma(), makeConfig(), analytics);
-    await expect(svc.buyTree('u1')).rejects.toThrow('Tính năng góp quỹ trồng cây chưa khả dụng.');
+  it('PD-3: góp quỹ = game.tree_points_price (mặc định 50) Điểm Xanh, đủ lô STANDARD → chỉ trừ STANDARD', async () => {
+    const { prisma, state, entries } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 100 });
+    const svc = new GameService(prisma, makeConfig(), analytics);
+    const r = await svc.buyTree('u1');
+    expect(r).toMatchObject({ cost: 50, pointsUsed: 50, pointsUsedConverted: 0 });
+    expect(r.certificateCode).toMatch(/^TUBU-/);
+    expect(state).toEqual({ pointsBalance: 30, pointsConvertedBalance: 100 });
+    expect(entries).toEqual([
+      expect.objectContaining({ delta: -50, lot: 'STANDARD', reason: `GAME_BUY_TREE:${r.certificateCode}`, refType: 'GAME' }),
+    ]);
+    expect((prisma.plantedTree.create as jest.Mock).mock.calls[0][0].data.certificateCode).toBe(r.certificateCode);
   });
 
-  it('góp quỹ trồng cây: trừ xu (tree_xu_price) + tạo PlantedTree có mã ghi nhận', async () => {
-    const prisma = buyPrisma();
-    const coins = coinsStub();
-    const svc = new GameService(prisma, makeConfig({ 'game.tree_xu_price': 50000 }), analytics, undefined, undefined, coins as never);
+  it('PD-3 (OQ-5): STANDARD thiếu → tiêu hết STANDARD rồi phần còn lại từ lô quy đổi, 2 dòng sổ đúng lô', async () => {
+    const { prisma, state, entries } = buyPrisma({ pointsBalance: 20, pointsConvertedBalance: 100 });
+    const svc = new GameService(prisma, makeConfig({ 'game.tree_points_price': 50 }), analytics);
     const r = await svc.buyTree('u1');
-    expect(r.cost).toBe(50000);
-    expect(r.certificateCode).toMatch(/^TUBU-/);
-    expect(coins.spendCoins).toHaveBeenCalledWith('u1', 50000, expect.stringMatching(/^GAME_BUY_TREE:TUBU-/), 'GAME', undefined, prisma);
-    expect((prisma.plantedTree.create as jest.Mock).mock.calls[0][0].data.certificateCode).toBe(r.certificateCode);
+    expect(r).toMatchObject({ cost: 50, pointsUsed: 50, pointsUsedConverted: 30 });
+    expect(state).toEqual({ pointsBalance: 0, pointsConvertedBalance: 70 });
+    expect(entries.map((e) => [e.lot, e.delta])).toEqual([
+      ['STANDARD', -20],
+      ['CONVERTED', -30],
+    ]);
+  });
+
+  it('PD-3: tổng hai lô không đủ → 400, không trừ gì, không tạo PlantedTree', async () => {
+    const { prisma, state, entries } = buyPrisma({ pointsBalance: 20, pointsConvertedBalance: 29 });
+    const svc = new GameService(prisma, makeConfig(), analytics);
+    await expect(svc.buyTree('u1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(state).toEqual({ pointsBalance: 20, pointsConvertedBalance: 29 });
+    expect(entries).toHaveLength(0);
+    expect(prisma.plantedTree.create).not.toHaveBeenCalled();
+  });
+
+  it('PD-3: khoá dòng user (FOR UPDATE) trước khi chia lô', async () => {
+    const { prisma } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 0 });
+    await new GameService(prisma, makeConfig(), analytics).buyTree('u1');
+    const raw = (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw;
+    expect((raw.mock.calls[0][0] as string[]).join('?')).toMatch(/FROM "users"[\s\S]*FOR UPDATE/);
+  });
+
+  it('PD-3: getProfile trả treePointsPrice, bỏ xuPerSeed/treeXuPrice', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile());
+    const r = (await new GameService(prisma, makeConfig({ 'game.tree_points_price': 50 }), analytics).getProfile('u1')) as Record<string, unknown>;
+    expect(r.treePointsPrice).toBe(50);
+    expect(r).not.toHaveProperty('xuPerSeed');
+    expect(r).not.toHaveProperty('treeXuPrice');
   });
 });
 
