@@ -36,6 +36,10 @@ const MIGRATED = [
   'components/admin/subscriptions-tab.tsx',
   'components/admin/cashback-tab.tsx',
   'lib/admin-pickers.ts',
+  'app/admin/analytics-tab.tsx',
+  'components/geo-picker.tsx',
+  'components/admin/user-picker.tsx',
+  'components/admin/product-picker.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');
