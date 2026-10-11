@@ -76,3 +76,26 @@ describe('GameSeasonService.getSeasonLeaderboard', () => {
     expect(r[2]?.nickname).toBe('Bạn Tubu'); // tên null → mặc định
   });
 });
+
+// C-040: đặc tả che tên bản chép tay `maskName` (cùng công thức ở game, game-gift, game-season).
+// Khác bản `maskFullName` ở merchant: chỉ tách theo dấu cách ' ' (tab/nbsp không tách) và tên
+// toàn khoảng trắng ra "***" thay vì tên mặc định.
+const MASK_NAME_CASES: [string, string | null, string][] = [
+  ['null -> mặc định', null, 'Bạn Tubu'],
+  ['rỗng -> mặc định', '', 'Bạn Tubu'],
+  ['chỉ khoảng trắng -> "***"', '   ', '***'],
+  ['một từ', 'Long', 'Long***'],
+  ['nhiều từ -> từ cuối', 'Lã Hoàng Long', 'Long***'],
+  ['thừa khoảng trắng đầu/cuối', '  Nguyễn An  ', 'An***'],
+  ['hai dấu cách liền nhau', 'Lã  Long', 'Long***'],
+  ['tab giữa tên -> không tách', 'Lã\tLong', 'Lã\tLong***'],
+  ['nbsp giữa tên -> không tách', 'Lã\u00a0Long', 'Lã\u00a0Long***'],
+];
+
+describe('GameSeasonService — che tên BXH (đặc tả maskName, C-040)', () => {
+  it.each(MASK_NAME_CASES)('%s', async (_label, fullName, expected) => {
+    const { svc } = setup({ contribs: [{ drops: 1, user: { fullName } }] });
+    const r = await svc.getSeasonLeaderboard();
+    expect(r[0]?.nickname).toBe(expected);
+  });
+});
