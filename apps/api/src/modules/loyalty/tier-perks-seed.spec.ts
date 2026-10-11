@@ -35,7 +35,7 @@ const freeshipOverrides = CONFIGS.find((c) => c.key === 'shipping.tier_freeship_
 /** Mỗi dạng quyền lợi hợp lệ gắn với cơ chế thật trong mã; trả về lý do sai (rỗng = có cơ chế). */
 function mechanismProblem(tier: Tier, perk: string): string {
   let m: RegExpExecArray | null;
-  if ((m = /^Tích điểm ([\d.]+)x$/.exec(perk))) {
+  if ((m = /^Tích Điểm Xanh x([\d.]+)$/.exec(perk))) {
     // LoyaltyService.getMultiplier / calcPointsEarned đọc MembershipTier.pointMultiplier
     return Number(tier.pointMultiplier) === Number(m[1]) ? '' : 'hệ số tích điểm lệch pointMultiplier';
   }
@@ -71,10 +71,10 @@ describe('quyền lợi hạng trong seed (C-010, Q-16)', () => {
 
   it('danh sách quyền lợi chốt cho từng hạng', () => {
     expect(Object.fromEntries(TIERS.map((t) => [t.id, t.perks]))).toEqual({
-      MAM_XANH: ['Tích điểm 1x'],
-      LOC_BIEC: ['Tích điểm 1.2x', 'Freeship đơn ≥ 99k', 'Mã giảm giá sinh nhật 50k'],
-      DAI_THU: ['Tích điểm 1.5x', 'Freeship toàn shop', 'Mã giảm giá sinh nhật 150k'],
-      CO_THU: ['Tích điểm 2x', 'Freeship + giảm 5% mọi đơn', 'Mã giảm giá sinh nhật 300k'],
+      MAM_XANH: ['Tích Điểm Xanh x1'],
+      LOC_BIEC: ['Tích Điểm Xanh x1.2', 'Freeship đơn ≥ 99k', 'Mã giảm giá sinh nhật 50k'],
+      DAI_THU: ['Tích Điểm Xanh x1.5', 'Freeship toàn shop', 'Mã giảm giá sinh nhật 150k'],
+      CO_THU: ['Tích Điểm Xanh x2', 'Freeship + giảm 5% mọi đơn', 'Mã giảm giá sinh nhật 300k'],
     });
   });
 });
@@ -96,6 +96,8 @@ describe('câu chữ "cây thật/PanNature" trong seed (C-010, Q-16)', () => {
     expect(lines).toEqual([]);
   });
 });
+
+const toPointsXanh = (perk: string) => perk.replace(/^Tích điểm ([\d.]+)x$/, 'Tích Điểm Xanh x$1');
 
 describe('migration cập nhật chữ + quyền lợi hạng đã có trên PROD (C-010)', () => {
   const dir = readdirSync(join(PRISMA_DIR, 'migrations')).find((d) => d.endsWith('_pd1_tree_fund_wording_tier_perks'));
@@ -126,7 +128,8 @@ describe('migration cập nhật chữ + quyền lợi hạng đã có trên PRO
     expect(parsed.map((p) => p.name).sort()).toEqual(['Cổ Thụ', 'Đại Thụ', 'Lộc Biếc'].sort());
     for (const p of parsed) {
       const tier = TIERS.find((t) => t.name === p.name)!;
-      expect(p.next).toEqual(tier.perks);
+      // Chữ "Tích điểm Nx" của migration này được migration _pd1_review_wording đổi tiếp sang "Tích Điểm Xanh xN".
+      expect(p.next.map(toPointsXanh)).toEqual(tier.perks);
       expect(p.prev).not.toEqual(p.next);
     }
     const prevOf = Object.fromEntries(parsed.map((p) => [p.name, p.prev]));
@@ -147,5 +150,64 @@ describe('migration cập nhật chữ + quyền lợi hạng đã có trên PRO
     const cfg = statements.find((s) => s.includes('"system_configs"'))!;
     expect(cfg).toContain(`"description" = 'Giá mua 1 cây thật bằng xu'`);
     expect(cfg).toContain(`SET "description" = '${CONFIGS.find((c) => c.key === 'game.tree_xu_price')!.description}'`);
+  });
+});
+
+describe('migration _pd1_review_wording: "Điểm Xanh" cho quyền lợi tích điểm + mốc cộng đồng không hứa địa điểm (C-010, Q-26)', () => {
+  const dir = readdirSync(join(PRISMA_DIR, 'migrations')).find((d) => d.endsWith('_pd1_review_wording'));
+  const sql = dir ? readFileSync(join(PRISMA_DIR, 'migrations', dir, 'migration.sql'), 'utf-8') : '';
+  const code = sql.replace(/^\s*--.*$/gm, '');
+  const statements = code.split(';').map((s) => s.trim()).filter(Boolean);
+  const firstDir = readdirSync(join(PRISMA_DIR, 'migrations')).find((d) => d.endsWith('_pd1_tree_fund_wording_tier_perks'))!;
+  const firstSql = readFileSync(join(PRISMA_DIR, 'migrations', firstDir, 'migration.sql'), 'utf-8');
+
+  it('đứng sau migration _pd1_tree_fund_wording_tier_perks (chuỗi UPDATE khớp được kết quả của migration trước)', () => {
+    expect(dir).toBeDefined();
+    const names = readdirSync(join(PRISMA_DIR, 'migrations')).sort();
+    expect(names.indexOf(dir!)).toBeGreaterThan(names.indexOf(firstDir));
+  });
+
+  it('chỉ UPDATE có WHERE, không xoá/bỏ dữ liệu hay cấu trúc', () => {
+    expect(code).not.toMatch(/\b(DELETE|DROP|TRUNCATE|ALTER|INSERT)\b/i);
+    expect(statements).toHaveLength(5);
+    for (const s of statements) {
+      expect(s).toMatch(/^UPDATE\b/);
+      expect(s).toMatch(/\bWHERE\b/);
+    }
+  });
+
+  it('quyền lợi hạng: bốn hạng, mảng cũ = kết quả migration trước (hoặc seed cũ), mảng mới = seed', () => {
+    const perkUpdates = statements.filter((s) => s.includes('"membership_tiers"'));
+    expect(perkUpdates).toHaveLength(4);
+    const parsed = perkUpdates.map((s) => {
+      const m = /SET "perks" = '(\[.*?\])'::jsonb\s+WHERE "name" = '([^']+)'\s+AND "perks" = '(\[.*?\])'::jsonb$/s.exec(s);
+      expect(m).not.toBeNull();
+      return { name: m![2]!, next: JSON.parse(m![1]!) as string[], prev: JSON.parse(m![3]!) as string[] };
+    });
+    for (const p of parsed) {
+      const tier = TIERS.find((t) => t.name === p.name)!;
+      expect(p.next).toEqual(tier.perks);
+      expect(p.prev.map(toPointsXanh)).toEqual(p.next);
+      expect(p.prev).not.toEqual(p.next);
+      // Hạng đã được migration trước đổi mảng: mảng cũ ở đây phải đúng là mảng mới của migration đó.
+      if (firstSql.includes(`WHERE "name" = '${p.name}'`)) expect(firstSql).toContain(`SET "perks" = '${JSON.stringify(p.prev)}'::jsonb`);
+    }
+    expect(parsed.map((p) => p.name).sort()).toEqual(TIERS.map((t) => t.name).sort());
+  });
+
+  const goalSeed = /id: 'cg-cangio-2026',\s+title: '([^']+)',\s+region: '([^']+)'/.exec(seedSrc);
+
+  it('seed mốc cộng đồng không nêu địa điểm trồng hay "phủ xanh" (không có quy trình trồng thật)', () => {
+    expect(goalSeed).not.toBeNull();
+    expect(`${goalSeed![1]} ${goalSeed![2]}`).not.toMatch(/Cần Giờ|phủ xanh|rừng/i);
+  });
+
+  it('mốc cộng đồng: chỉ đổi khi id + tên + vùng còn đúng bản seed cũ, đặt đúng chữ của seed', () => {
+    const goal = statements.find((s) => s.includes('"community_goals"'))!;
+    expect(goal).toContain(`"id" = 'cg-cangio-2026'`);
+    expect(goal).toContain(`"title" = 'Cùng Tubu phủ xanh Cần Giờ'`);
+    expect(goal).toContain(`"region" = 'Rừng ngập mặn Cần Giờ, TP.HCM'`);
+    expect(goal).toContain(`SET "title" = '${goalSeed![1]}'`);
+    expect(goal).toContain(`"region" = '${goalSeed![2]}'`);
   });
 });
