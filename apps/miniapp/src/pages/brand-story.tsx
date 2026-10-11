@@ -1,90 +1,98 @@
 import { useState } from 'react';
-import { Box, Page, Text, Sheet, Button, useNavigate } from 'zmp-ui';
+import { Page, useNavigate } from 'zmp-ui';
+import { MapPin } from 'lucide-react';
 import { haptic } from '../utils/haptic';
 import { BRAND_ORIGINS, type BrandOrigin } from '../utils/brand-origins';
 import { brandBrowsePath } from '../utils/brands';
+import { vi } from '../i18n/vi';
+import { PageHeader } from '../components/ui/page-header';
+import { BottomSheet } from '../components/ui/bottom-sheet';
+import { Button } from '../components/ui/button';
+import { Icon } from '../components/ui/icon';
+import { Text, Heading } from '../components/ui/text';
+import '../css/brand-theme.css';
 
 export default function BrandStoryPage() {
   const [selected, setSelected] = useState<BrandOrigin | null>(null);
+  const pick = (loc: BrandOrigin) => {
+    haptic('light');
+    setSelected(loc);
+  };
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 32 }}>
-      <Box p={4} pb={2}>
-        <Text style={{ color: 'var(--neutral-700)', lineHeight: 1.5 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 32 }}>
+      <PageHeader title={vi.home.brandStoryTitle} />
+      <div style={{ padding: '16px 16px 8px' }}>
+        <Text tone="secondary" as="p" style={{ lineHeight: 1.5 }}>
           Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Chạm mốc trên bản đồ gỗ 3D để khám phá xuất xứ 🌿
         </Text>
-      </Box>
+      </div>
 
       {/* Bản đồ Gỗ 3D Đa khối Tỉnh thành Việt Nam có đèn LED hắt sáng + Hoàng Sa & Trường Sa */}
-      <IngredientMap
-        onPick={(loc) => {
-          haptic('light');
-          setSelected(loc);
-        }}
-      />
+      <IngredientMap onPick={pick} />
 
-      <Box px={4} pt={4} pb={2}>
-        <Text size="small" bold style={{ color: 'var(--neutral-700)' }}>
-          8 Thương hiệu & Tỉnh thành xuất xứ
-        </Text>
-      </Box>
+      <div style={{ padding: '16px 16px 8px' }}>
+        <Heading variant="title-sm" as="h2">
+          {BRAND_ORIGINS.length} Thương hiệu & Tỉnh thành xuất xứ
+        </Heading>
+      </div>
 
-      <Box px={4} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, paddingBottom: 24 }}>
+      <div style={{ padding: '0 16px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         {BRAND_ORIGINS.map((loc) => (
-          <Box
+          <button
             key={loc.id}
+            type="button"
             className="tubu-press"
-            onClick={() => {
-              haptic('light');
-              setSelected(loc);
-            }}
+            onClick={() => pick(loc)}
             style={{
-              borderRadius: 'var(--radius-lg)',
+              border: 'none',
+              font: 'inherit',
+              textAlign: 'left',
+              cursor: 'pointer',
+              borderRadius: 'var(--radius-card)',
               overflow: 'hidden',
-              boxShadow: 'var(--shadow-sm)',
+              boxShadow: 'var(--elevation-1)',
               minHeight: 135,
               background: loc.gradient,
-              color: 'var(--neutral-0)',
               padding: 14,
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
             }}
           >
-            <Text style={{ fontSize: 34 }}>{loc.emoji}</Text>
-            <Box>
-              <Text bold style={{ color: 'var(--neutral-0)' }}>
-                {loc.brand}
+            <span aria-hidden style={{ fontSize: 34, lineHeight: 1.2 }}>{loc.emoji}</span>
+            <span style={{ display: 'block' }}>
+              <Text tone="inverse" style={{ display: 'block', fontWeight: 700 }}>{loc.brand}</Text>
+              <Text variant="caption" tone="inverse" style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: 0.92 }}>
+                <Icon icon={MapPin} size="sm" tone="inverse" />
+                {loc.province}
               </Text>
-              <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.92)' }}>
-                📍 {loc.province}
-              </Text>
-            </Box>
-          </Box>
+            </span>
+          </button>
         ))}
-      </Box>
+      </div>
 
-      <Sheet visible={selected != null} onClose={() => setSelected(null)} autoHeight>
+      <BottomSheet open={selected != null} onClose={() => setSelected(null)} title={selected?.brand}>
         {selected && (
-          <Box style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-            <Box style={{ background: selected.gradient, padding: 24, color: 'var(--neutral-0)', textAlign: 'center' }}>
-              <Text style={{ fontSize: 56 }}>{selected.emoji}</Text>
-              <Text bold size="xLarge" style={{ color: 'var(--neutral-0)', marginTop: 4 }}>
-                {selected.brand}
+          <>
+            <div style={{ background: selected.gradient, borderRadius: 'var(--radius-card)', padding: 24, textAlign: 'center' }}>
+              <span aria-hidden style={{ display: 'block', fontSize: 56, lineHeight: 1.2 }}>{selected.emoji}</span>
+              <Text
+                variant="body-sm"
+                tone="inverse"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 4, opacity: 0.92 }}
+              >
+                <Icon icon={MapPin} size="sm" tone="inverse" />
+                {selected.province} · {selected.ingredient}
               </Text>
-              <Text size="small" style={{ color: 'rgba(255,255,255,0.92)' }}>
-                📍 {selected.province} · {selected.ingredient}
-              </Text>
-            </Box>
-            <Box p={4}>
-              <Text style={{ color: 'var(--neutral-800)', lineHeight: 1.6 }}>
-                {selected.story}
-              </Text>
-              <BrowseButton brand={selected.brand} catalogBrand={selected.catalogBrand} onGo={() => setSelected(null)} />
-            </Box>
-          </Box>
+            </div>
+            <Text as="p" style={{ lineHeight: 1.6, marginTop: 16 }}>
+              {selected.story}
+            </Text>
+            <BrowseButton brand={selected.brand} catalogBrand={selected.catalogBrand} onGo={() => setSelected(null)} />
+          </>
         )}
-      </Sheet>
+      </BottomSheet>
     </Page>
   );
 }
@@ -92,22 +100,23 @@ export default function BrandStoryPage() {
 /** Bản đồ Gỗ 3D Đa khối Tỉnh/Thành Việt Nam có đèn LED hắt sáng + 8 Pin Thương hiệu + Hoàng Sa & Trường Sa */
 function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
   return (
-    <Box px={4}>
-      <Box
+    <div style={{ padding: '0 16px' }}>
+      <div
         style={{
           position: 'relative',
           width: '100%',
           maxWidth: 370,
           margin: '0 auto',
           aspectRatio: '3 / 4.6',
-          background: 'var(--neutral-200)',
-          borderRadius: 'var(--radius-xl)',
-          border: '1px solid #d4ceb8',
+          background: 'var(--color-brandmap-frame-bg)',
+          borderRadius: 'var(--radius-sheet)',
+          border: '1px solid var(--color-brandmap-frame-border)',
           overflow: 'hidden',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+          boxShadow: 'var(--elevation-2)',
         }}
       >
         <svg
+          role="img"
           viewBox="0 0 450 700"
           aria-label="Bản đồ Gỗ 3D Việt Nam với đầy đủ tỉnh thành và Hoàng Sa, Trường Sa"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
@@ -115,12 +124,12 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
           <defs>
             {/* Đèn LED Vàng hắt sáng phía sau viền Bản đồ Việt Nam */}
             <filter id="led-backlight" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="0" stdDeviation="7" floodColor="#ffd54f" floodOpacity="0.85" />
+              <feDropShadow dx="0" dy="0" stdDeviation="7" floodColor="var(--color-brandmap-led)" floodOpacity="0.85" />
             </filter>
 
             {/* Bóng đổ 3D khối gỗ nổi */}
             <filter id="wood-3d" x="-10%" y="-10%" width="120%" height="120%">
-              <feDropShadow dx="2.5" dy="3.5" stdDeviation="2" floodColor="#211003" floodOpacity="0.45" />
+              <feDropShadow dx="2.5" dy="3.5" stdDeviation="2" floodColor="var(--color-brandmap-ink)" floodOpacity="0.45" />
             </filter>
           </defs>
 
@@ -142,7 +151,7 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
               C 230 115, 235 70, 205 45 Z
             "
             fill="none"
-            stroke="#ffca28"
+            stroke="var(--color-brandmap-led-edge)"
             strokeWidth="10"
             filter="url(#led-backlight)"
             opacity="0.9"
@@ -150,9 +159,9 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
 
           {/* Quốc kỳ Việt Nam & Chữ nổi VIỆT NAM ở góc trên bên phải */}
           <g id="vietnam-flag" transform="translate(325, 42)">
-            <rect x="0" y="0" width="38" height="26" fill="#da251d" rx="2" filter="url(#wood-3d)" />
-            <polygon points="19,6 22,14 30,14 23,19 26,26 19,22 12,26 15,19 8,14 16,14" fill="#ffff00" />
-            <text x="19" y="44" fontSize="13" fontWeight="800" fill="#4a2c20" textAnchor="middle" letterSpacing="1.5">
+            <rect x="0" y="0" width="38" height="26" fill="var(--color-brandmap-flag)" rx="2" filter="url(#wood-3d)" />
+            <polygon points="19,6 22,14 30,14 23,19 26,26 19,22 12,26 15,19 8,14 16,14" fill="var(--color-brandmap-star)" />
+            <text x="19" y="44" fontSize="13" fontWeight="800" fill="var(--color-brandmap-title)" textAnchor="middle" letterSpacing="1.5">
               VIỆT NAM
             </text>
           </g>
@@ -163,7 +172,7 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
             y="410"
             fontSize="15"
             fontWeight="800"
-            fill="#7a5c3a"
+            fill="var(--color-brandmap-sea)"
             opacity="0.6"
             letterSpacing="3"
             transform="rotate(-55 290 410)"
@@ -178,134 +187,134 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
           {/* 1. Mảnh Tây Bắc (Lai Châu, Điện Biên, Lào Cai) */}
           <path
             d="M 125 35 L 75 60 L 95 95 L 138 78 Z"
-            fill="#5d4037"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-700)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1"
             filter="url(#wood-3d)"
           />
-          <text x="98" y="65" fontSize="7" fontWeight="700" fill="#d7ccc8">Lai Châu</text>
+          <text x="98" y="65" fontSize="7" fontWeight="700" fill="var(--color-brandmap-wood-100)">Lai Châu</text>
 
           {/* 2. Mảnh Đông Bắc (Hà Giang, Cao Bằng, Lạng Sơn) */}
           <path
             d="M 138 78 L 125 35 L 175 35 L 215 55 L 195 92 Z"
-            fill="#8d6e63"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-400)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1"
             filter="url(#wood-3d)"
           />
-          <text x="162" y="52" fontSize="7" fontWeight="700" fill="#ffffff">Hà Giang</text>
-          <text x="182" y="76" fontSize="7" fontWeight="700" fill="#ffffff">Lạng Sơn</text>
+          <text x="162" y="52" fontSize="7" fontWeight="700" fill="var(--color-text-inverse)">Hà Giang</text>
+          <text x="182" y="76" fontSize="7" fontWeight="700" fill="var(--color-text-inverse)">Lạng Sơn</text>
 
           {/* 3. Mảnh Sơn La & Phú Thọ */}
           <path
             d="M 95 95 L 138 78 L 160 115 L 120 128 Z"
-            fill="#a1887f"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-300)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1"
             filter="url(#wood-3d)"
           />
-          <text x="118" y="108" fontSize="7" fontWeight="700" fill="#3e2723">Sơn La</text>
+          <text x="118" y="108" fontSize="7" fontWeight="700" fill="var(--color-brandmap-wood-900)">Sơn La</text>
 
           {/* 4. Mảnh Hà Nội & ĐB Sông Hồng */}
           <path
             d="M 160 115 L 195 92 L 225 110 L 180 142 Z"
-            fill="#c19a6b"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-tan)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1.2"
             filter="url(#wood-3d)"
           />
-          <circle cx="185" cy="118" r="2.5" fill="#da251d" />
-          <text x="185" y="128" fontSize="8" fontWeight="800" fill="#211003" textAnchor="middle">Hà Nội</text>
+          <circle cx="185" cy="118" r="2.5" fill="var(--color-brandmap-flag)" />
+          <text x="185" y="128" fontSize="8" fontWeight="800" fill="var(--color-brandmap-ink)" textAnchor="middle">Hà Nội</text>
 
           {/* 5. Mảnh Thanh Hóa */}
           <path
             d="M 120 128 L 180 142 L 165 178 L 125 158 Z"
-            fill="#3e2723"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-900)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1"
             filter="url(#wood-3d)"
           />
-          <text x="150" y="152" fontSize="7.5" fontWeight="700" fill="#d7ccc8" textAnchor="middle">Thanh Hóa</text>
+          <text x="150" y="152" fontSize="7.5" fontWeight="700" fill="var(--color-brandmap-wood-100)" textAnchor="middle">Thanh Hóa</text>
 
           {/* 6. Mảnh Nghệ An & Hà Tĩnh */}
           <path
             d="M 125 158 L 165 178 L 192 195 L 145 215 Z"
-            fill="#8d6e63"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-400)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1"
             filter="url(#wood-3d)"
           />
-          <text x="155" y="186" fontSize="7.5" fontWeight="700" fill="#ffffff" textAnchor="middle">Nghệ An</text>
+          <text x="155" y="186" fontSize="7.5" fontWeight="700" fill="var(--color-text-inverse)" textAnchor="middle">Nghệ An</text>
 
           {/* 7. Mảnh Quảng Bình & Thừa Thiên Huế */}
           <path
             d="M 145 215 L 192 195 L 215 240 L 175 252 Z"
-            fill="#5d4037"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-700)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1"
             filter="url(#wood-3d)"
           />
-          <text x="178" y="234" fontSize="7.5" fontWeight="700" fill="#d7ccc8" textAnchor="middle">TP. Huế</text>
+          <text x="178" y="234" fontSize="7.5" fontWeight="700" fill="var(--color-brandmap-wood-100)" textAnchor="middle">TP. Huế</text>
 
           {/* 8. Mảnh Quảng Nam & TP. Đà Nẵng */}
           <path
             d="M 175 252 L 215 240 L 255 275 L 208 290 Z"
-            fill="#a1887f"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-300)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1"
             filter="url(#wood-3d)"
           />
-          <text x="218" y="268" fontSize="7.5" fontWeight="700" fill="#211003" textAnchor="middle">Quảng Nam</text>
+          <text x="218" y="268" fontSize="7.5" fontWeight="700" fill="var(--color-brandmap-ink)" textAnchor="middle">Quảng Nam</text>
 
           {/* 9. Mảnh Gia Lai & Kon Tum */}
           <path
             d="M 208 290 L 255 275 L 240 338 L 195 320 Z"
-            fill="#6d4c41"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-600)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1"
             filter="url(#wood-3d)"
           />
-          <text x="222" y="310" fontSize="7.5" fontWeight="700" fill="#ffffff" textAnchor="middle">Gia Lai</text>
+          <text x="222" y="310" fontSize="7.5" fontWeight="700" fill="var(--color-text-inverse)" textAnchor="middle">Gia Lai</text>
 
           {/* 10. Mảnh Đắk Lắk */}
           <path
             d="M 195 320 L 240 338 L 268 382 L 212 375 Z"
-            fill="#8d6e63"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-400)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1"
             filter="url(#wood-3d)"
           />
-          <text x="232" y="354" fontSize="8" fontWeight="800" fill="#ffffff" textAnchor="middle">Đắk Lắk</text>
+          <text x="232" y="354" fontSize="8" fontWeight="800" fill="var(--color-text-inverse)" textAnchor="middle">Đắk Lắk</text>
 
           {/* 11. Mảnh Khánh Hòa (Nha Trang) & Bình Thuận */}
           <path
             d="M 268 382 L 295 370 L 285 435 L 248 420 Z"
-            fill="#3e2723"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-900)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1"
             filter="url(#wood-3d)"
           />
-          <text x="272" y="405" fontSize="7" fontWeight="700" fill="#d7ccc8" textAnchor="middle">Khánh Hòa</text>
+          <text x="272" y="405" fontSize="7" fontWeight="700" fill="var(--color-brandmap-wood-100)" textAnchor="middle">Khánh Hòa</text>
 
           {/* 12. Mảnh Lâm Đồng (Đà Lạt / Cầu Đất) */}
           <path
             d="M 212 375 L 268 382 L 248 420 L 205 410 Z"
-            fill="#4e342e"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-800)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1"
             filter="url(#wood-3d)"
           />
-          <text x="235" y="396" fontSize="7.5" fontWeight="700" fill="#ffd54f" textAnchor="middle">Lâm Đồng</text>
+          <text x="235" y="396" fontSize="7.5" fontWeight="700" fill="var(--color-brandmap-led)" textAnchor="middle">Lâm Đồng</text>
 
           {/* 13. Mảnh Đông Nam Bộ (Tây Ninh, Đồng Nai, TP.HCM) */}
           <path
             d="M 205 410 L 248 420 L 225 470 L 175 440 Z"
-            fill="#5d4037"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-700)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1"
             filter="url(#wood-3d)"
           />
-          <text x="208" y="442" fontSize="8" fontWeight="800" fill="#ffffff" textAnchor="middle">TP.HCM</text>
+          <text x="208" y="442" fontSize="8" fontWeight="800" fill="var(--color-text-inverse)" textAnchor="middle">TP.HCM</text>
 
           {/* 14. Mảnh Bến Tre, Trà Vinh & ĐBSCL */}
           <path
@@ -320,15 +329,15 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
               L 215 570
               L 245 500 Z
             "
-            fill="#8d6e63"
-            stroke="#211003"
+            fill="var(--color-brandmap-wood-400)"
+            stroke="var(--color-brandmap-ink)"
             strokeWidth="1.2"
             filter="url(#wood-3d)"
           />
-          <text x="185" y="495" fontSize="7" fontWeight="700" fill="#ffffff" textAnchor="middle">Bến Tre</text>
-          <text x="168" y="525" fontSize="7" fontWeight="700" fill="#ffffff" textAnchor="middle">Trà Vinh</text>
-          <text x="145" y="555" fontSize="7" fontWeight="700" fill="#ffffff" textAnchor="middle">Cần Thơ</text>
-          <text x="135" y="610" fontSize="7.5" fontWeight="800" fill="#ffd54f" textAnchor="middle">Cà Mau</text>
+          <text x="185" y="495" fontSize="7" fontWeight="700" fill="var(--color-text-inverse)" textAnchor="middle">Bến Tre</text>
+          <text x="168" y="525" fontSize="7" fontWeight="700" fill="var(--color-text-inverse)" textAnchor="middle">Trà Vinh</text>
+          <text x="145" y="555" fontSize="7" fontWeight="700" fill="var(--color-text-inverse)" textAnchor="middle">Cần Thơ</text>
+          <text x="135" y="610" fontSize="7.5" fontWeight="800" fill="var(--color-brandmap-led)" textAnchor="middle">Cà Mau</text>
 
           {/* ══════════════════════════════════════════════════════════════ */}
           {/* 🇻🇳 CỤM QUẦN ĐẢO HÀNG SA & TRƯỜNG SA 3D WOODEN PIECES */}
@@ -336,32 +345,32 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
 
           {/* 🇻🇳 Quần đảo Hoàng Sa */}
           <g id="hoang-sa" transform="translate(330, 275)">
-            <path d="M 5 18 L 18 4 L 32 14 L 45 6 L 55 22 Z" fill="#8d6e63" stroke="#211003" strokeWidth="1" filter="url(#wood-3d)" />
-            <circle cx="18" cy="12" r="2.5" fill="#da251d" />
-            <circle cx="32" cy="10" r="2" fill="#da251d" />
-            <rect x="-4" y="26" width="62" height="18" rx="3" fill="#3e2723" stroke="#ffd54f" strokeWidth="1" filter="url(#wood-3d)" />
-            <text x="27" y="38" fontSize="9" fontWeight="800" fill="#ffd54f" textAnchor="middle">
+            <path d="M 5 18 L 18 4 L 32 14 L 45 6 L 55 22 Z" fill="var(--color-brandmap-wood-400)" stroke="var(--color-brandmap-ink)" strokeWidth="1" filter="url(#wood-3d)" />
+            <circle cx="18" cy="12" r="2.5" fill="var(--color-brandmap-flag)" />
+            <circle cx="32" cy="10" r="2" fill="var(--color-brandmap-flag)" />
+            <rect x="-4" y="26" width="62" height="18" rx="3" fill="var(--color-brandmap-wood-900)" stroke="var(--color-brandmap-led)" strokeWidth="1" filter="url(#wood-3d)" />
+            <text x="27" y="38" fontSize="9" fontWeight="800" fill="var(--color-brandmap-led)" textAnchor="middle">
               Hoàng Sa
             </text>
           </g>
 
           {/* 🇻🇳 Quần đảo Trường Sa */}
           <g id="truong-sa" transform="translate(335, 495)">
-            <path d="M 5 22 L 20 6 L 35 16 L 48 8 L 58 24 Z" fill="#8d6e63" stroke="#211003" strokeWidth="1" filter="url(#wood-3d)" />
-            <circle cx="15" cy="14" r="2.5" fill="#da251d" />
-            <circle cx="30" cy="11" r="2" fill="#da251d" />
-            <circle cx="42" cy="15" r="2" fill="#da251d" />
-            <rect x="-4" y="28" width="64" height="18" rx="3" fill="#3e2723" stroke="#ffd54f" strokeWidth="1" filter="url(#wood-3d)" />
-            <text x="28" y="40" fontSize="9" fontWeight="800" fill="#ffd54f" textAnchor="middle">
+            <path d="M 5 22 L 20 6 L 35 16 L 48 8 L 58 24 Z" fill="var(--color-brandmap-wood-400)" stroke="var(--color-brandmap-ink)" strokeWidth="1" filter="url(#wood-3d)" />
+            <circle cx="15" cy="14" r="2.5" fill="var(--color-brandmap-flag)" />
+            <circle cx="30" cy="11" r="2" fill="var(--color-brandmap-flag)" />
+            <circle cx="42" cy="15" r="2" fill="var(--color-brandmap-flag)" />
+            <rect x="-4" y="28" width="64" height="18" rx="3" fill="var(--color-brandmap-wood-900)" stroke="var(--color-brandmap-led)" strokeWidth="1" filter="url(#wood-3d)" />
+            <text x="28" y="40" fontSize="9" fontWeight="800" fill="var(--color-brandmap-led)" textAnchor="middle">
               Trường Sa
             </text>
           </g>
 
           {/* 🏝️ Đảo Phú Quốc & Côn Đảo */}
           <g id="phu-quoc" transform="translate(48, 565)">
-            <ellipse cx="16" cy="14" rx="10" ry="16" fill="#6d4c41" stroke="#211003" strokeWidth="1" filter="url(#wood-3d)" />
-            <rect x="-8" y="32" width="48" height="16" rx="3" fill="#3e2723" stroke="#d7ccc8" strokeWidth="0.8" />
-            <text x="16" y="43" fontSize="8" fontWeight="700" fill="#ffffff" textAnchor="middle">
+            <ellipse cx="16" cy="14" rx="10" ry="16" fill="var(--color-brandmap-wood-600)" stroke="var(--color-brandmap-ink)" strokeWidth="1" filter="url(#wood-3d)" />
+            <rect x="-8" y="32" width="48" height="16" rx="3" fill="var(--color-brandmap-wood-900)" stroke="var(--color-brandmap-wood-100)" strokeWidth="0.8" />
+            <text x="16" y="43" fontSize="8" fontWeight="700" fill="var(--color-text-inverse)" textAnchor="middle">
               Phú Quốc
             </text>
           </g>
@@ -369,9 +378,9 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
 
         {/* 8 Interactive Floating Sleek Brand Pins Overlaid on the 3D Map */}
         {BRAND_ORIGINS.map((loc) => (
-          <Box
+          <button
             key={loc.id}
-            role="button"
+            type="button"
             aria-label={`${loc.brand} — ${loc.province}`}
             className="tubu-press"
             onClick={() => onPick(loc)}
@@ -385,9 +394,16 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
               alignItems: 'center',
               gap: 2,
               zIndex: 4,
+              minWidth: 44,
+              minHeight: 44,
+              padding: 0,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
             }}
           >
-            <Box
+            <span
+              aria-hidden
               className="tubu-pulse"
               style={{
                 width: 32,
@@ -397,32 +413,32 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
                 display: 'grid',
                 placeItems: 'center',
                 fontSize: 15,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
-                border: '2px solid var(--neutral-0)',
+                boxShadow: 'var(--elevation-2)',
+                border: '2px solid var(--color-bg-surface)',
               }}
             >
               {loc.emoji}
-            </Box>
+            </span>
             <Text
-              size="xSmall"
-              bold
+              variant="caption"
               style={{
-                background: '#3e2723',
-                color: '#ffd54f',
+                background: 'var(--color-brandmap-wood-900)',
+                color: 'var(--color-brandmap-led)',
                 padding: '2px 7px',
-                borderRadius: 'var(--radius-full)',
+                borderRadius: 'var(--radius-pill)',
                 fontSize: 9.5,
+                fontWeight: 700,
                 whiteSpace: 'nowrap',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
-                border: '1px solid #8d6e63',
+                boxShadow: 'var(--elevation-1)',
+                border: '1px solid var(--color-brandmap-wood-400)',
               }}
             >
               {loc.brand}
             </Text>
-          </Box>
+          </button>
         ))}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -432,11 +448,11 @@ function BrowseButton({ brand, catalogBrand, onGo }: { brand: string; catalogBra
   return (
     <Button
       fullWidth
-      onClick={() => {
+      onPress={() => {
         onGo();
         navigate(brandBrowsePath(catalogBrand));
       }}
-      style={{ marginTop: 16, background: 'var(--leaf-600)' }}
+      style={{ marginTop: 16 }}
     >
       Khám phá sản phẩm {brand}
     </Button>

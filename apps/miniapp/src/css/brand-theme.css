@@ -32,4 +32,23 @@
   --color-brand-cobote-to: #5d4037;
   --color-brand-sokfram-from: #42a5f5;
   --color-brand-sokfram-to: #1565c0;
+
+  /* Bản đồ gỗ 3D ở pages/brand-story.tsx: khung, đèn LED hắt sáng và các mảnh tỉnh (thang gỗ nâu). */
+  --color-brandmap-frame-bg: var(--stone-200);
+  --color-brandmap-frame-border: #d4ceb8;
+  --color-brandmap-led: #ffd54f;
+  --color-brandmap-led-edge: #ffca28;
+  --color-brandmap-ink: #211003;
+  --color-brandmap-flag: #da251d;
+  --color-brandmap-star: #ffff00;
+  --color-brandmap-title: #4a2c20;
+  --color-brandmap-sea: #7a5c3a;
+  --color-brandmap-wood-100: #d7ccc8;
+  --color-brandmap-wood-300: #a1887f;
+  --color-brandmap-wood-400: #8d6e63;
+  --color-brandmap-wood-tan: #c19a6b;
+  --color-brandmap-wood-600: #6d4c41;
+  --color-brandmap-wood-700: #5d4037;
+  --color-brandmap-wood-800: #4e342e;
+  --color-brandmap-wood-900: #3e2723;
 }

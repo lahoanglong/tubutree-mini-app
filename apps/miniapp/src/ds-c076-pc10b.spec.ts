@@ -22,6 +22,9 @@ const FILES_PC10B = [
   'src/components/share-sheet.tsx',
   'src/components/content-kit-sheet.tsx',
   'src/pages/storefront-builder.tsx',
+  'src/pages/brand-story.tsx',
+  'src/utils/brands.ts',
+  'src/utils/brand-origins.ts',
 ];
 
 /** Chỉ kiểm icon chức năng: file lớn của gói khác, còn Box/Text ZaUI nên chưa vào FILES_PC10B. */
@@ -35,6 +38,7 @@ const PAGES_WITH_PAGE_HEADER = [
   'src/pages/affiliate.tsx',
   'src/pages/dealer.tsx',
   'src/pages/storefront-builder.tsx',
+  'src/pages/brand-story.tsx',
 ];
 
 // Giữ đồng bộ với scripts/uiux/static-scan.mjs (LEGACY) và ds-legacy-vars-4b.spec.ts.
