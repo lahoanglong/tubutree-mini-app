@@ -56,7 +56,9 @@ services:
       PORT: 3001
       # Cron/Date local theo giờ VN (cron còn có timeZone riêng, xem apps/api/src/common/cron-tz.ts).
       TZ: Asia/Ho_Chi_Minh
-      DATABASE_URL: postgresql://${POSTGRES_USER:-tubu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tubutree}
+      # Một instance API; pool mặc định của Prisma theo số CPU nên dễ cạn khi tải bùng nổ (P2028). 20 kết nối nằm
+      # xa dưới max_connections=100 của Postgres, pool_timeout dài hơn để request xếp hàng thay vì lỗi 500.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tubu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tubutree}?connection_limit=20&pool_timeout=30
       REDIS_URL: redis://redis:6379
       THROTTLE_BYPASS_TOKEN: ${THROTTLE_BYPASS_TOKEN:-}
     ports:
