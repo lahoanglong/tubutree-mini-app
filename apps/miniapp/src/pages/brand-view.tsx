@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getPublicBrand, getBrandShareToEarn,
@@ -13,13 +13,18 @@ import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { ShareSheet } from '../components/share-sheet';
 import { getDealerMe } from '../services/dealer-api';
-import { BadgePercent, Sparkles, Store } from 'lucide-react';
+import { BadgePercent, Check, Leaf, Plus, Share2, Sparkles, Store } from 'lucide-react';
 import { copyText } from '../utils/clipboard';
 import { StorePageShell } from '../components/store-page-shell';
 import { Text, Heading } from '../components/ui/text';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { ProductTile } from '../components/ui/product-tile';
+import { Icon } from '../components/ui/icon';
+import { PageHeader } from '../components/ui/page-header';
+
+/** Tiêu đề khi chưa có tên nhãn (đang tải/lỗi); tải xong thì tên nhãn là h1 của StorePageShell. */
+const PAGE_TITLE = 'Nhãn hàng';
 
 export default function BrandViewPage() {
   const { slug = '' } = useParams<{ slug: string }>();
@@ -70,19 +75,21 @@ export default function BrandViewPage() {
 
   if (q.isLoading) {
     return (
-      <Page className="page">
-        <Box p={4}>
-          <Skeleton style={{ height: 180, borderRadius: 16 }} />
-        </Box>
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title={PAGE_TITLE} />
+        <div style={{ padding: 16 }}>
+          <Skeleton style={{ height: 180, borderRadius: 'var(--radius-card)' }} />
+        </div>
       </Page>
     );
   }
   if (q.isError || !b) {
     return (
-      <Page className="page">
-        <Box p={6}>
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title={PAGE_TITLE} />
+        <div style={{ padding: 24 }}>
           <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
-        </Box>
+        </div>
       </Page>
     );
   }
@@ -93,15 +100,19 @@ export default function BrandViewPage() {
         coverUrl={b.coverUrl}
         coverHeight={96}
         avatarUrl={b.logoUrl}
-        avatarFallback={<span style={{ fontSize: 28 }}>🌿</span>}
+        avatarFallback={<Icon icon={Leaf} size="lg" tone="inverse" />}
         avatarSize={64}
         title={b.name}
         badges={
           b.isVerified ? (
             // Pill đặc (không phải soft-tone chuẩn của Badge) để giữ đúng trọng lượng thị giác
             // "đã xác minh" như bản cũ (leaf-600 đặc/chữ trắng), chỉ đổi sang token ngữ nghĩa DS v2.
-            <Badge tone="success" style={{ background: 'var(--color-action-primary-bg)', color: 'var(--color-text-inverse)' }}>
-              ✓ Chính hãng
+            <Badge
+              tone="success"
+              style={{ background: 'var(--color-action-primary-bg)', color: 'var(--color-text-inverse)', display: 'inline-flex', alignItems: 'center', gap: 2 }}
+            >
+              <Icon icon={Check} size="sm" tone="inverse" />
+              Chính hãng
             </Badge>
           ) : undefined
         }
@@ -110,74 +121,82 @@ export default function BrandViewPage() {
             <Button
               variant="secondary"
               style={{ flex: 1 }}
+              icon={followQ.data?.following ? Check : Plus}
               loading={followMut.isPending}
               onPress={() => followMut.mutate()}
             >
-              {followQ.data?.following ? '✓ Đang theo dõi' : '+ Theo dõi'}
+              {followQ.data?.following ? 'Đang theo dõi' : 'Theo dõi'}
             </Button>
-            <Button style={{ flex: 1 }} onPress={() => setShareOpen(true)}>
-              ↗ Chia sẻ
+            <Button style={{ flex: 1 }} icon={Share2} onPress={() => setShareOpen(true)}>
+              Chia sẻ
             </Button>
           </div>
         }
       >
-        <Box px={4}>
+        <div style={{ padding: '0 16px' }}>
           {b.tagline && <Text variant="body-sm" tone="secondary">{b.tagline}</Text>}
           {b.followerCount > 0 && (
             <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>{b.followerCount} người theo dõi</Text>
           )}
-        </Box>
+        </div>
 
         {eligible && ste?.eligible && (
-          <Box mt={3} px={4}>
-            <Box
+          <div style={{ marginTop: 12, padding: '0 16px' }}>
+            <button
+              type="button"
               className="tubu-press"
               onClick={() => setShareOpen(true)}
-              style={{ background: 'var(--color-action-secondary-bg)', border: '1px solid var(--color-action-secondary-border)', borderRadius: 'var(--radius-card)', padding: 12 }}
+              style={{
+                display: 'block', width: '100%', minHeight: 44, textAlign: 'left', font: 'inherit', cursor: 'pointer',
+                background: 'var(--color-action-secondary-bg)', border: '1px solid var(--color-action-secondary-border)',
+                borderRadius: 'var(--radius-card)', padding: 12,
+              }}
             >
-              <Box flex alignItems="center" style={{ gap: 6 }}>
-                <BadgePercent size={18} color="var(--color-action-secondary-fg)" />
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <BadgePercent size={18} color="var(--color-action-secondary-fg)" aria-hidden />
                 <Text variant="body-sm" style={{ fontWeight: 700, color: 'var(--color-action-secondary-fg)' }}>
                   Chia sẻ nhãn này — nhận tới {ste.maxAffiliateRate}% hoa hồng
                 </Text>
-              </Box>
-              <Text variant="caption" style={{ color: 'var(--color-text-brand)', marginTop: 2 }} as="div">
+              </span>
+              <Text variant="caption" style={{ color: 'var(--color-text-brand)', marginTop: 2 }} as="span">
                 Bấm để lấy link + caption gắn mã giới thiệu của bạn.
               </Text>
-            </Box>
-          </Box>
+            </button>
+          </div>
         )}
 
         {b.certifications.length > 0 && (
-          <Box mt={4} px={4}>
+          <div style={{ marginTop: 16, padding: '0 16px' }}>
             <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Chứng nhận</Heading>
-            <Box className="scroll-x" style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
+            <div className="scroll-x" style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
               {b.certifications.map((c) => (
-                <Badge key={c.code} tone="success">🌿 {c.label}</Badge>
+                <Badge key={c.code} tone="success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Icon icon={Leaf} size="sm" tone="brand" />
+                  {c.label}
+                </Badge>
               ))}
-            </Box>
-          </Box>
+            </div>
+          </div>
         )}
 
         {b.promotions.length > 0 && (
-          <Box mt={4} px={4}>
-            <Box flex alignItems="center" style={{ gap: 6, marginBottom: 8 }}>
-              <Sparkles size={16} color="var(--color-promo-fg)" />
+          <div style={{ marginTop: 16, padding: '0 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+              <Sparkles size={16} color="var(--color-promo-fg)" aria-hidden />
               <Heading variant="title-sm" as="h2">Khuyến mãi</Heading>
-            </Box>
+            </div>
             {b.promotions.map((p) => (
-              <Box
+              <div
                 key={p.id}
-                mb={2}
-                style={{ background: 'var(--color-promo-bg)', border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-card)', padding: 12, borderColor: p.themeColor ?? undefined }}
+                style={{ marginBottom: 8, background: 'var(--color-promo-bg)', border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-card)', padding: 12, borderColor: p.themeColor ?? undefined }}
               >
                 <Text variant="body-sm" style={{ fontWeight: 700, color: 'var(--color-promo-fg)' }}>{p.title}</Text>
                 {p.subtitle && <Text variant="caption" tone="secondary" as="div">{p.subtitle}</Text>}
                 {/* Có mã mà không hiện thì banner chỉ là lời quảng cáo: khách đọc xong không
                     biết làm gì tiếp. Chạm để chép, dán ở bước thanh toán. */}
                 {p.couponCode && (
-                  <Box
-                    role="button"
+                  <button
+                    type="button"
                     aria-label={`Sao chép mã ${p.couponCode}`}
                     className="tubu-press"
                     onClick={() => {
@@ -196,7 +215,9 @@ export default function BrandViewPage() {
                       gap: 6,
                       marginTop: 8,
                       padding: '6px 12px',
-                      minHeight: 36,
+                      minHeight: 44,
+                      font: 'inherit',
+                      cursor: 'pointer',
                       borderRadius: 'var(--radius-control)',
                       border: '1px dashed var(--color-promo-fg)',
                       background: 'var(--color-bg-surface)',
@@ -206,17 +227,17 @@ export default function BrandViewPage() {
                       {p.couponCode}
                     </Text>
                     <Text variant="caption" tone="tertiary">chạm để chép</Text>
-                  </Box>
+                  </button>
                 )}
-              </Box>
+              </div>
             ))}
-          </Box>
+          </div>
         )}
 
         {b.products.length > 0 && (
-          <Box mt={4} px={4}>
+          <div style={{ marginTop: 16, padding: '0 16px' }}>
             <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Sản phẩm</Heading>
-            <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {b.products.map((p) => (
                 <ProductTile
                   key={p.id}
@@ -228,36 +249,36 @@ export default function BrandViewPage() {
                   onPress={() => navigate(`/product/${p.slug}`)}
                 />
               ))}
-            </Box>
-          </Box>
+            </div>
+          </div>
         )}
 
         {b.dealerRewards.length > 0 && (
-          <Box mt={4} px={4}>
-            <Box flex alignItems="center" style={{ gap: 6, marginBottom: 8 }}>
-              <Store size={16} color="var(--color-text-brand)" />
+          <div style={{ marginTop: 16, padding: '0 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+              <Store size={16} color="var(--color-text-brand)" aria-hidden />
               <Heading variant="title-sm" as="h2">Chương trình đại lý</Heading>
-            </Box>
+            </div>
             {b.dealerRewards.map((d) => (
-              <Box key={d.id} mb={2} style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
+              <div key={d.id} style={{ marginBottom: 8, background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
                 <Text variant="body-sm" style={{ fontWeight: 700 }} as="div">{d.title}</Text>
                 {d.description && <Text variant="caption" tone="secondary" as="div">{d.description}</Text>}
                 <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
                   Đạt doanh số {formatVnd(d.threshold)} / {d.period === 'YEAR' ? 'năm' : 'quý'}
                 </Text>
-              </Box>
+              </div>
             ))}
             <Button variant="secondary" onPress={() => navigate('/dealer')}>
               {alreadyDealer ? 'Vào kênh đại lý' : dealerQ.data?.status === 'PENDING' ? 'Xem hồ sơ đại lý' : 'Đăng ký đại lý'}
             </Button>
-          </Box>
+          </div>
         )}
 
         {b.story && (
-          <Box mt={4} px={4}>
+          <div style={{ marginTop: 16, padding: '0 16px' }}>
             <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Câu chuyện thương hiệu</Heading>
             <Text variant="body-sm" tone="secondary" as="div" style={{ whiteSpace: 'pre-line' }}>{b.story}</Text>
-          </Box>
+          </div>
         )}
       </StorePageShell>
 

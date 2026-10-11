@@ -24,6 +24,7 @@ const FILES_PC10B = [
   'src/pages/storefront-builder.tsx',
   'src/pages/brand-story.tsx',
   'src/pages/brand-owner.tsx',
+  'src/pages/brand-view.tsx',
   'src/utils/brands.ts',
   'src/utils/brand-origins.ts',
 ];
@@ -32,7 +33,7 @@ const FILES_PC10B = [
 const FILES_GLYPH_ONLY = ['src/pages/product-detail.tsx'];
 
 /** Còn Sheet/Input vì components/ui chưa có bản thay; Page/hook điều hướng và snackbar là của runtime. */
-const ZAUI_ALLOWED = new Set(['Page', 'Sheet', 'Input', 'useSnackbar', 'useNavigate', 'useLocation']);
+const ZAUI_ALLOWED = new Set(['Page', 'Sheet', 'Input', 'useSnackbar', 'useNavigate', 'useLocation', 'useParams']);
 
 /** Mỗi TRANG phải có đúng một h1: PageHeader (h1 thật) ở mọi nhánh render. */
 const PAGES_WITH_PAGE_HEADER = [
@@ -41,6 +42,7 @@ const PAGES_WITH_PAGE_HEADER = [
   'src/pages/storefront-builder.tsx',
   'src/pages/brand-story.tsx',
   'src/pages/brand-owner.tsx',
+  'src/pages/brand-view.tsx',
 ];
 
 // Giữ đồng bộ với scripts/uiux/static-scan.mjs (LEGACY) và ds-legacy-vars-4b.spec.ts.
