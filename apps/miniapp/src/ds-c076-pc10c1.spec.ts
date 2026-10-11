@@ -22,13 +22,14 @@ const FILES = [
   'src/pages/community-events.tsx',
   'src/pages/community-moderation.tsx',
   'src/pages/refill.tsx',
+  'src/pages/ai-advisor.tsx',
 ];
 
 /** Trang (không phải component con) phải có đúng một tiêu đề trang — PageHeader hoặc <h1> riêng (C-114). */
 const PAGE_FILES = FILES.filter((f) => f.startsWith('src/pages/'));
 
-/** Chỉ những thứ DS chưa có bản thay mới được lấy từ ZaUI: khung trang, ô nhập, avatar, snackbar, điều hướng. */
-const ZAUI_ALLOWED = new Set(['Page', 'Input', 'Avatar', 'useSnackbar', 'useNavigate', 'useLocation', 'useParams']);
+/** Chỉ những thứ DS chưa có bản thay mới được lấy từ ZaUI: khung trang, ô nhập, avatar, vòng quay, snackbar, điều hướng. */
+const ZAUI_ALLOWED = new Set(['Page', 'Input', 'Avatar', 'Spinner', 'useSnackbar', 'useNavigate', 'useLocation', 'useParams']);
 
 // Kết thúc bằng [,)] để bắt cả dạng có fallback `var(--danger, #f00)`.
 const LEGACY = new RegExp(
