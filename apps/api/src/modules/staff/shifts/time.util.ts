@@ -1,10 +1,5 @@
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
-/** 'YYYY-MM-DD' theo giờ VN (UTC+7). */
-export function vnDateKey(d: Date): string {
-  return new Date(d.getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);
-}
-
 /** 00:00 VN của Thứ 2 tuần chứa d, trả Date (thời điểm UTC tương ứng). */
 export function weekStartVN(d: Date): Date {
   const vn = new Date(d.getTime() + VN_OFFSET_MS);

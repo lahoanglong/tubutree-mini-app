@@ -1,4 +1,5 @@
-import { vnDateKey, weekStartVN, addDays, rangesOverlap, overlapMinutes } from './time.util';
+import { vnDateKey } from '../../../common/vn-time';
+import { weekStartVN, addDays, rangesOverlap, overlapMinutes } from './time.util';
 
 describe('time.util', () => {
   it('vnDateKey theo giờ VN (UTC+7)', () => {

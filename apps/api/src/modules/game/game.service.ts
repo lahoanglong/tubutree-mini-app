@@ -619,10 +619,6 @@ export class GameService {
     return `${last}***`;
   }
 
-  private dayKey(d: Date): string {
-    const utc7 = new Date(d.getTime() + 7 * 3600 * 1000);
-    return utc7.toISOString().slice(0, 10);
-  }
   private startOfDay(d: Date): Date {
     const utc7 = new Date(d.getTime() + 7 * 3600 * 1000);
     utc7.setUTCHours(0, 0, 0, 0);

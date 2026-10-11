@@ -4,6 +4,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { SeasonPassService } from './season-pass.service';
 import { DEFAULT_TREE_TYPE } from './game.constants';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { vnDateKey } from '../../common/vn-time';
 
 const DAY = 864e5;
 
@@ -16,13 +17,9 @@ export class GameEconomyService {
     private readonly analytics: AnalyticsEventsService,
   ) {}
 
-  private dayKey(d: Date): string {
-    return new Date(d.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10);
-  }
-
   /** UTC+7 start-of-today as a Date (for idempotent DB writes) */
   private startOfDay(d: Date): Date {
-    const key = this.dayKey(d); // "YYYY-MM-DD" in UTC+7
+    const key = vnDateKey(d); // "YYYY-MM-DD" in UTC+7
     // Parse as UTC midnight then subtract the +7h offset to get the true UTC instant
     return new Date(Date.parse(key) - 7 * 3600 * 1000);
   }
@@ -38,14 +35,14 @@ export class GameEconomyService {
 
   async checkIn(userId: string) {
     const p = await this.ensure(userId);
-    const today = this.dayKey(new Date());
-    if (p.lastCheckInAt && this.dayKey(p.lastCheckInAt) === today) {
+    const today = vnDateKey();
+    if (p.lastCheckInAt && vnDateKey(p.lastCheckInAt) === today) {
       throw new BadRequestException('Hôm nay bạn đã điểm danh rồi 🌿');
     }
 
     // Compute exact day gap using UTC+7 dayKey strings to avoid DST drift
     const gapDays = p.lastCheckInAt
-      ? Math.round((Date.parse(today) - Date.parse(this.dayKey(p.lastCheckInAt))) / DAY)
+      ? Math.round((Date.parse(today) - Date.parse(vnDateKey(p.lastCheckInAt))) / DAY)
       : null;
 
     // gapDays === 1 → consecutive (yesterday)
@@ -140,7 +137,7 @@ export class GameEconomyService {
 
   async collectDew(userId: string) {
     const p = await this.ensure(userId);
-    if (p.lastDewAt && this.dayKey(p.lastDewAt) === this.dayKey(new Date())) {
+    if (p.lastDewAt && vnDateKey(p.lastDewAt) === vnDateKey()) {
       throw new BadRequestException('Hôm nay bạn đã hứng giọt sương rồi 🌿');
     }
     const dew = await this.config.get<number>('game.dew_seeds', 15);

@@ -24,7 +24,7 @@ import {
 } from '../orders/pending-payment-expiry.cron';
 import { CRON_TZ } from '../../common/cron-tz';
 import { generateUniqueOrderCode } from '../../common/order-code';
-import { formatVnDate } from '../../common/vn-time';
+import { formatVnDate, vnDateKey } from '../../common/vn-time';
 
 /** Phương thức trả cho gói định kỳ (Q-13). Cổng ZaloPay/VNPAY cần khách thao tác mỗi kỳ nên không nhận. */
 export const SUBSCRIPTION_PAYMENT_METHODS = ['COD', 'WALLET', 'BANK_TRANSFER'] as const;
@@ -764,20 +764,15 @@ export class SubscriptionsService {
     const invalid = () => new BadRequestException('Ngày bắt đầu giao không hợp lệ.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw invalid();
     const at = new Date(`${startDate}T00:00:00+07:00`);
-    if (Number.isNaN(at.getTime()) || this.vnDateOf(at) !== startDate) throw invalid();
-    const today = this.vnDateOf(new Date());
+    if (Number.isNaN(at.getTime()) || vnDateKey(at) !== startDate) throw invalid();
+    const today = vnDateKey();
     if (startDate < today) throw new BadRequestException('Ngày bắt đầu giao đã qua, vui lòng chọn lại.');
     if (startDate === today) return null;
-    const last = this.vnDateOf(new Date(Date.now() + MAX_START_DAYS_AHEAD * 864e5));
+    const last = vnDateKey(new Date(Date.now() + MAX_START_DAYS_AHEAD * 864e5));
     if (startDate > last) {
       throw new BadRequestException(`Chỉ chọn ngày bắt đầu giao trong vòng ${MAX_START_DAYS_AHEAD} ngày tới.`);
     }
     return at;
-  }
-
-  /** YYYY-MM-DD theo giờ Việt Nam (UTC+7, không đổi giờ mùa hè). */
-  private vnDateOf(d: Date): string {
-    return new Date(d.getTime() + 7 * 3600e3).toISOString().slice(0, 10);
   }
 
   private async pendingPaymentTtlHours(): Promise<number> {
