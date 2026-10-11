@@ -1,11 +1,19 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ navigate: vi.fn(), openSnackbar: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  openSnackbar: vi.fn(),
+  copyText: vi.fn(),
+  login: vi.fn(),
+  restore: vi.fn(),
+  authStatus: 'authenticated' as 'authenticated' | 'idle' | 'error' | 'loading',
+  notifications: [] as { status: string }[],
+}));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   Avatar: () => <span />,
   useNavigate: () => mocks.navigate,
@@ -13,22 +21,23 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../services/account-api', () => ({
   getLoyalty: vi.fn().mockResolvedValue({ pointsBalance: 120, tier: { name: 'Mầm Xanh' } }),
-  getNotifications: vi.fn().mockResolvedValue([]),
+  getNotifications: vi.fn(async () => mocks.notifications),
   getWallet: vi.fn().mockResolvedValue({ walletBalance: 50000, coinsBalance: 1500 }),
   getCoupons: vi.fn().mockResolvedValue([{ code: 'A' }, { code: 'B' }]),
 }));
 vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: vi.fn().mockResolvedValue(null) }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: vi.fn().mockResolvedValue({ isDealer: false, status: null }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../store/auth', () => {
-  const state = {
-    status: 'authenticated',
+  const state = () => ({
+    status: mocks.authStatus,
     error: null,
     user: { fullName: 'Lan', role: 'CUSTOMER', referralCode: 'LAN1', pointsBalance: 100, walletBalance: 40000, avatarUrl: null },
     logout: vi.fn(),
-    restore: vi.fn(),
-  };
-  const useAuthStore = Object.assign(() => state, { getState: () => ({ ...state, login: vi.fn() }) });
+    restore: mocks.restore,
+  });
+  const useAuthStore = Object.assign(() => state(), { getState: () => ({ ...state(), login: mocks.login }) });
   return { useAuthStore };
 });
 
@@ -40,7 +49,11 @@ function renderPage() {
 }
 
 describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.notifications = [];
+  });
 
   it('có đủ Điểm Xanh, Ví Tubu, TubuXu, Mã giảm giá', async () => {
     renderPage();
@@ -56,5 +69,64 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     fireEvent.click(await screen.findByText('Câu chuyện thương hiệu'));
     expect(mocks.navigate).toHaveBeenCalledWith('/brand-story', undefined);
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
+  });
+});
+
+describe('Hub Cá nhân theo DS v2 (C-076, C-114)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.notifications = [];
+    mocks.copyText.mockResolvedValue(true);
+  });
+
+  it('có đúng một h1 "Cá nhân" và các nhóm menu là h2', async () => {
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Cá nhân']);
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['MUA SẮM', 'TÀI SẢN', 'HỢP TÁC', 'KHÁC']);
+  });
+
+  it('chưa đăng nhập vẫn có đúng một h1 và nút Đăng nhập ngay gọi login', async () => {
+    mocks.authStatus = 'idle';
+    renderPage();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByText('Đã đăng xuất')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập ngay' }));
+    expect(mocks.login).toHaveBeenCalled();
+  });
+
+  it('lỗi đăng nhập: có nút Thử lại gọi restore', async () => {
+    mocks.authStatus = 'error';
+    renderPage();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    expect(mocks.restore).toHaveBeenCalled();
+  });
+
+  it('hàng hồ sơ và ô mã giới thiệu là nút thật (bàn phím + đọc màn hình)', async () => {
+    renderPage();
+    const edit = await screen.findByRole('button', { name: /Sửa hồ sơ/ });
+    fireEvent.click(edit);
+    expect(mocks.navigate).toHaveBeenCalledWith('/edit-profile');
+    fireEvent.click(screen.getByRole('button', { name: /Mã giới thiệu: LAN1/ }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('LAN1'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã giới thiệu', type: 'success' }));
+  });
+
+  it('mục menu là hàng cao >= 44px; mục Thông báo hiện số chưa đọc', async () => {
+    mocks.notifications = [{ status: 'UNREAD' }, { status: 'UNREAD' }, { status: 'READ' }];
+    renderPage();
+    const row = await screen.findByRole('button', { name: /Thông báo/ });
+    expect(row.style.minHeight).toBe('44px');
+    await waitFor(() => expect(row).toHaveTextContent('2'));
+    fireEvent.click(row);
+    expect(mocks.navigate).toHaveBeenCalledWith('/notifications', undefined);
+  });
+
+  it('mục Ví Tubu mang state.from để nút quay lại về hub', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /^Ví Tubu$/ }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/wallet', { state: { from: '/profile' } });
   });
 });

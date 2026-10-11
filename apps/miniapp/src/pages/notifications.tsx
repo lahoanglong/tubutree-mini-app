@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Box, Page, Text, useNavigate } from 'zmp-ui';
+import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
@@ -21,6 +21,12 @@ import { fetchPurchasedItems } from '../services/shop-api';
 import { trackReorderReminderCta } from '../services/buy-flow-events';
 import { formatDateTime } from '../utils/format';
 import { Button as DsButton } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Icon } from '../components/ui/icon';
+import { IconButton } from '../components/ui/icon-button';
+import { PageHeader } from '../components/ui/page-header';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
+import { Heading, Text } from '../components/ui/text';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
 import { pickReminderItem, reorderReminderAction } from '../components/reorder/reorder-reminder';
@@ -218,64 +224,68 @@ export default function NotificationsPage() {
   };
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title="Thông báo" />
 
       {notifQ.isLoading ? (
-        <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <LineItemSkeleton />
           <LineItemSkeleton />
-        </Box>
+        </div>
       ) : notifQ.isError ? (
         <ErrorState message={getErrorMessage(notifQ.error)} onRetry={() => void notifQ.refetch()} />
       ) : notifQ.data && notifQ.data.length > 0 ? (
-        <Box p={4} flex flexDirection="column" style={{ gap: 8 }}>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {notifQ.data.map((n) => {
             const m = notificationMeta(n.templateCode);
             const unread = n.status !== 'READ';
             return (
-              <Box
+              <div
                 key={n.id}
+                role="button"
+                {...rowKeyboardProps()}
                 className="tubu-press"
-                flex
-                p={3}
                 onClick={() => onTap(n)}
                 style={{
+                  display: 'flex',
                   gap: 12,
-                  background: unread ? 'var(--primary-50)' : 'var(--neutral-0)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: `1px solid ${unread ? 'var(--primary-200)' : 'var(--neutral-200)'}`,
-                  boxShadow: 'var(--shadow-card)',
+                  padding: 12,
+                  background: unread ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
+                  borderRadius: 'var(--radius-card)',
+                  border: `1px solid ${unread ? 'var(--color-action-secondary-border)' : 'var(--color-border-subtle)'}`,
+                  boxShadow: 'var(--elevation-1)',
                   cursor: 'pointer',
                 }}
               >
-                <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                  <m.Icon size={20} color="var(--leaf-700)" strokeWidth={1.9} />
-                </Box>
-                <Box style={{ flex: 1 }}>
-                  <Box flex alignItems="center" style={{ gap: 6 }}>
-                    <Text size="small" bold>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                  <Icon icon={m.Icon} tone="brand" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Text variant="body-sm" style={{ fontWeight: 600 }}>
                       {m.title}
                     </Text>
                     {unread && (
                       <span
+                        role="img"
                         aria-label="chưa đọc"
-                        style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary-600)' }}
+                        style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-action-primary-bg)' }}
                       />
                     )}
-                  </Box>
+                  </div>
                   {n.payload.body && (
-                    <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
+                    <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>
                       {n.payload.body}
                     </Text>
                   )}
-                  <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+                  <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
                     {relativeTime(n.sentAt)}
                   </Text>
-                </Box>
-              </Box>
+                </div>
+              </div>
             );
           })}
-        </Box>
+        </div>
       ) : (
         <EmptyState
           art="leaf"
@@ -286,7 +296,10 @@ export default function NotificationsPage() {
 
       {/* ── Detail View Overlay ── */}
       {selectedNotif && (
-        <Box
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Chi tiết thông báo"
           style={{
             position: 'fixed',
             top: 0,
@@ -294,117 +307,90 @@ export default function NotificationsPage() {
             right: 0,
             bottom: 0,
             zIndex: 500,
-            background: 'var(--neutral-50)',
+            background: 'var(--color-bg-canvas)',
             overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
           }}
         >
           {/* Top Bar with Left Back Button */}
-          <Box
-            flex
-            alignItems="center"
+          <div
             style={{
-              padding: 'calc(var(--safe-top) + 12px) 16px 12px 16px',
-              background: 'var(--neutral-0)',
-              borderBottom: '1px solid var(--neutral-100)',
-              gap: 12,
+              display: 'flex',
+              alignItems: 'center',
+              padding: 'calc(var(--safe-top) + 4px) 16px 4px 4px',
+              background: 'var(--color-bg-surface)',
+              borderBottom: '1px solid var(--color-border-subtle)',
+              gap: 4,
             }}
           >
-            <button
-              type="button"
-              aria-label="Quay lại"
-              className="tubu-press"
-              onClick={handleCloseDetail}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: '50%',
-                border: 'none',
-                background: 'var(--neutral-100)',
-                display: 'grid',
-                placeItems: 'center',
-                padding: 0,
-                cursor: 'pointer',
-                flex: '0 0 auto',
-              }}
-            >
-              <ChevronLeft size={22} color="var(--neutral-800)" strokeWidth={2.2} />
-            </button>
-            <Text bold size="normal" style={{ color: 'var(--neutral-900)' }}>
+            <IconButton icon={ChevronLeft} label="Quay lại" onPress={handleCloseDetail} />
+            <Heading variant="title-md" as="h2">
               Chi tiết thông báo
-            </Text>
-          </Box>
+            </Heading>
+          </div>
 
           {/* Detail Content */}
-          <Box p={4} style={{ flex: 1 }}>
+          <div style={{ padding: 16, flex: 1 }}>
             {(() => {
               const m = notificationMeta(selectedNotif.templateCode);
               const bodyText = selectedNotif.payload.body || '';
               const action = notificationAction(selectedNotif.templateCode, selectedNotif.payload.data);
 
               return (
-                <Box
-                  p={4}
-                  style={{
-                    background: 'var(--neutral-0)',
-                    borderRadius: 'var(--radius-lg)',
-                    boxShadow: 'var(--shadow-sm)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 16,
-                  }}
-                >
-                  <Box flex alignItems="center" style={{ gap: 12 }}>
-                    <Box style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                      <m.Icon size={24} color="var(--leaf-700)" strokeWidth={2} />
-                    </Box>
-                    <Box style={{ flex: 1 }}>
-                      <Text bold size="normal" style={{ color: 'var(--neutral-900)' }}>
-                        {m.title}
-                      </Text>
-                      <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
-                        {formatDateTime(selectedNotif.sentAt)} ({relativeTime(selectedNotif.sentAt)})
-                      </Text>
-                    </Box>
-                  </Box>
+                <Card padding={16}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                        <Icon icon={m.Icon} size="lg" tone="brand" />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>
+                          {m.title}
+                        </Text>
+                        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
+                          {formatDateTime(selectedNotif.sentAt)} ({relativeTime(selectedNotif.sentAt)})
+                        </Text>
+                      </div>
+                    </div>
 
-                  <div style={{ height: 1, background: 'var(--neutral-100)' }} />
+                    <div style={{ height: 1, background: 'var(--color-border-subtle)' }} />
 
-                  <Text size="small" style={{ color: 'var(--neutral-700)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
-                    {bodyText}
-                  </Text>
+                    <Text variant="body-sm" as="div" style={{ lineHeight: 1.6, whiteSpace: 'pre-line' }}>
+                      {bodyText}
+                    </Text>
 
-                  {action?.kind === 'reorder' && (
-                    <DsButton
-                      fullWidth
-                      size="lg"
-                      loading={reminderBusy}
-                      onPress={() => void openReorderReminder(selectedNotif)}
-                      style={{ marginTop: 8 }}
-                    >
-                      {action.label}
-                    </DsButton>
-                  )}
-                  {action?.kind === 'link' && (
-                    <DsButton
-                      fullWidth
-                      size="lg"
-                      onPress={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        navigate(action.to);
-                      }}
-                      style={{ marginTop: 8 }}
-                    >
-                      {action.label}
-                    </DsButton>
-                  )}
-                </Box>
+                    {action?.kind === 'reorder' && (
+                      <DsButton
+                        fullWidth
+                        size="lg"
+                        loading={reminderBusy}
+                        onPress={() => void openReorderReminder(selectedNotif)}
+                        style={{ marginTop: 8 }}
+                      >
+                        {action.label}
+                      </DsButton>
+                    )}
+                    {action?.kind === 'link' && (
+                      <DsButton
+                        fullWidth
+                        size="lg"
+                        onPress={() => {
+                          haptic('light');
+                          setSelectedNotif(null);
+                          navigate(action.to);
+                        }}
+                        style={{ marginTop: 8 }}
+                      >
+                        {action.label}
+                      </DsButton>
+                    )}
+                  </div>
+                </Card>
               );
             })()}
-          </Box>
-        </Box>
+          </div>
+        </div>
       )}
 
       {/* Nhắc mua lại → sheet mua lại 1 SP (addSource=reorder_notification). */}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Page, Text, Button, Input, Avatar, useSnackbar, useNavigate } from 'zmp-ui';
-import { Camera, Loader2 } from 'lucide-react';
+import { Avatar, Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
+import { Camera, Gift, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getMe, updateMe } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
@@ -8,8 +8,13 @@ import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
 import { readAndCompressImage, uploadToCloudinary } from '../components/image-upload';
 import { AvatarCropModal } from '../components/avatar-crop-modal';
-import { Skeleton } from '../components/ui/skeleton';
+import { Button } from '../components/ui/button';
 import { ErrorState } from '../components/ui/empty-state';
+import { Field } from '../components/ui/form';
+import { Icon } from '../components/ui/icon';
+import { PageHeader } from '../components/ui/page-header';
+import { Skeleton } from '../components/ui/skeleton';
+import { Text } from '../components/ui/text';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -72,7 +77,7 @@ export default function EditProfilePage() {
     setAvatarUrl(croppedUrl);
     setCropModalVisible(false);
     setRawImageForCrop(null);
-    openSnackbar({ text: 'Đã cắt và chọn ảnh đại diện 🌿', type: 'success', position: 'top' });
+    openSnackbar({ text: 'Đã cắt và chọn ảnh đại diện', type: 'success', position: 'top' });
     setUploadingAvatar(true);
     try {
       const blob = await (await fetch(croppedUrl)).blob();
@@ -121,133 +126,141 @@ export default function EditProfilePage() {
       }
       // Làm mới cache ['me'] để email/dob/avatar mới đồng bộ ở nơi khác.
       void qc.invalidateQueries({ queryKey: ['me'] });
-      openSnackbar({ text: 'Đã cập nhật hồ sơ 🌿', type: 'success', position: 'top' });
+      openSnackbar({ text: 'Đã cập nhật hồ sơ', type: 'success', position: 'top' });
       navigate(-1);
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error', position: 'top' }),
   });
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title="Sửa hồ sơ" />
       {meQ.isLoading ? (
-        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-          <Skeleton style={{ height: 100 }} />
-          <Skeleton style={{ height: 56 }} />
-          <Skeleton style={{ height: 56 }} />
-          <Skeleton style={{ height: 56 }} />
-        </Box>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Skeleton height={100} />
+          <Skeleton height={56} />
+          <Skeleton height={56} />
+          <Skeleton height={56} />
+        </div>
       ) : meQ.isError ? (
         <ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
       ) : (
-        <Box p={4} flex flexDirection="column" style={{ gap: 16 }}>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Avatar Upload Section */}
-          <Box flex flexDirection="column" alignItems="center" style={{ paddingTop: 8, paddingBottom: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0' }}>
             <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleAvatarFile} />
-            <Box
+            <button
+              type="button"
               className="tubu-press"
               onClick={handlePickAvatar}
               style={{
-                position: 'relative',
-                cursor: 'pointer',
-                display: 'inline-block',
+                minHeight: 44,
+                padding: 0,
+                border: 'none',
+                background: 'transparent',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
               }}
             >
-              <Avatar
-                size={88}
-                src={avatarUrl ?? undefined}
-                style={{
-                  border: '3px solid var(--neutral-0)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                  background: 'var(--leaf-100)',
-                }}
-              />
-              <Box
-                style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  right: 0,
-                  width: 28,
-                  height: 28,
-                  borderRadius: '50%',
-                  background: 'var(--leaf-600)',
-                  color: 'var(--neutral-0)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '2px solid var(--neutral-0)',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-                }}
-              >
-                <Camera size={15} />
-              </Box>
-            </Box>
-            <Text
-              size="xSmall"
-              bold
-              onClick={handlePickAvatar}
-              style={{ color: 'var(--leaf-700)', marginTop: 8, cursor: 'pointer' }}
-            >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                {uploadingAvatar ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
-                {uploadingAvatar ? 'Đang xử lý ảnh…' : 'Chạm để chọn & cắt ảnh đại diện'}
+              <span style={{ position: 'relative', display: 'inline-block' }}>
+                <Avatar
+                  size={88}
+                  src={avatarUrl ?? undefined}
+                  style={{
+                    border: '3px solid var(--color-bg-surface)',
+                    boxShadow: 'var(--elevation-2)',
+                    background: 'var(--color-bg-subtle)',
+                  }}
+                />
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    right: 0,
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    background: 'var(--color-action-primary-bg)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid var(--color-bg-surface)',
+                    boxShadow: 'var(--elevation-1)',
+                  }}
+                >
+                  <Icon icon={Camera} size="sm" tone="inverse" />
+                </span>
               </span>
-            </Text>
-          </Box>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
+                {uploadingAvatar ? (
+                  <Icon icon={Loader2} size="sm" tone="brand" className="animate-spin" />
+                ) : (
+                  <Icon icon={Camera} size="sm" tone="brand" />
+                )}
+                <Text variant="caption" tone="brand" style={{ fontWeight: 600 }}>
+                  {uploadingAvatar ? 'Đang xử lý ảnh…' : 'Chạm để chọn & cắt ảnh đại diện'}
+                </Text>
+              </span>
+            </button>
+          </div>
 
-          <Input label="Họ và tên" value={fullName} onChange={(e) => setFullName(e.target.value)} maxLength={120} />
+          <Field label="Họ và tên">
+            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} maxLength={120} />
+          </Field>
 
-          <Box>
+          <Field label="Email" error={emailInvalid ? 'Email không hợp lệ' : undefined}>
             <Input
-              label="Email"
               type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onBlur={() => setTouched(true)}
               status={emailInvalid ? 'error' : undefined}
             />
-            {emailInvalid && (
-              <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 2 }}>
-                ⚠ Email không hợp lệ
-              </Text>
-            )}
-          </Box>
+          </Field>
 
-          <Box>
-            <Text size="xSmall" bold style={{ marginBottom: 4 }}>
-              Ngày sinh
-            </Text>
-            <input
-              type="date"
-              value={dob}
-              onChange={(e) => setDob(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--neutral-200)',
-                fontFamily: 'inherit',
-                fontSize: 14,
-                background: 'var(--neutral-0)',
-              }}
-            />
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-              🎁 Nhận mã giảm giá quà tặng vào tháng sinh nhật.
-            </Text>
-          </Box>
+          <div>
+            <Field label="Ngày sinh">
+              <input
+                type="date"
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  minHeight: 44,
+                  padding: 12,
+                  borderRadius: 'var(--radius-control)',
+                  border: '1px solid var(--color-border-default)',
+                  fontFamily: 'inherit',
+                  fontSize: 'var(--type-body-sm-size)',
+                  background: 'var(--color-bg-surface)',
+                  color: 'var(--color-text-primary)',
+                }}
+              />
+            </Field>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              <Icon icon={Gift} size="sm" tone="muted" />
+              <Text variant="caption" tone="tertiary">
+                Nhận mã giảm giá quà tặng vào tháng sinh nhật.
+              </Text>
+            </div>
+          </div>
 
           <Button
             fullWidth
             loading={save.isPending}
-            disabled={emailInvalid || uploadingAvatar || save.isPending}
-            onClick={() => {
+            disabled={emailInvalid || uploadingAvatar}
+            onPress={() => {
               setTouched(true);
               if (!(email.trim() !== '' && !EMAIL.test(email.trim()))) save.mutate();
             }}
-            style={{ background: 'var(--primary-600)', marginTop: 4 }}
+            style={{ marginTop: 4 }}
           >
             Lưu thay đổi
           </Button>
-        </Box>
+        </div>
       )}
 
       {/* Circular Avatar Crop Modal */}

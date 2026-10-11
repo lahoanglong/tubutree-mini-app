@@ -24,6 +24,12 @@ describe('NotFoundPage — tiêu đề không đè lên hình minh hoạ (C-119)
     expect(oversizedText).toHaveLength(0);
   });
 
+  it('trang có đúng một h1 cho trình đọc màn hình (C-114)', () => {
+    render(<NotFoundPage />);
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Không tìm thấy trang');
+  });
+
   it('có tiêu đề, lời giải thích và nút về trang chủ (thay thế lịch sử)', () => {
     render(<NotFoundPage />);
     expect(screen.getByText('Trang này lạc vào vườn rồi')).toBeInTheDocument();
