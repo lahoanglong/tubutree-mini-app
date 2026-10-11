@@ -396,6 +396,31 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       expect(screen.getByRole('button', { name: 'Giỏ hàng' })).toBeInTheDocument();
     });
 
+    it('đã có q trong URL, khách xoá chữ trong ô rồi chạm chip sắp xếp → ô tìm trả về q đang lọc (không để ô trống trong khi lưới vẫn là kết quả của q)', async () => {
+      renderAt('/browse?q=nuoc');
+      await listPainted();
+      const input = screen.getByRole('searchbox');
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: '' } });
+      expect(screen.getByRole('group', { name: 'Sắp xếp' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Bán chạy' }));
+      await waitFor(() => expect(loc()).toBe('/browse?q=nuoc&sort=best_seller'));
+      expect(screen.getByRole('searchbox')).toHaveValue('nuoc');
+      expect(screen.queryByRole('button', { name: 'Hủy' })).toBeNull();
+    });
+
+    it('cùng tình huống với chip lọc đang bật: gỡ chip thoát chế độ gõ và ô tìm trả về q đang lọc', async () => {
+      renderAt('/browse?q=nuoc&brand=Tubu');
+      await listPainted();
+      const input = screen.getByRole('searchbox');
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: '' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Bỏ lọc Tubu' }));
+      await waitFor(() => expect(loc()).toBe('/browse?q=nuoc'));
+      expect(screen.getByRole('searchbox')).toHaveValue('nuoc');
+      expect(screen.queryByRole('button', { name: 'Hủy' })).toBeNull();
+    });
+
     it('có lịch sử + ô trống → vẫn hiện lịch sử (thay nội dung)', async () => {
       localStorage.setItem('tubu_recent_searches', JSON.stringify(['nước rửa']));
       renderAt('/browse');

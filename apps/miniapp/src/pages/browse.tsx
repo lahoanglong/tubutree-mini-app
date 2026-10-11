@@ -112,6 +112,11 @@ export default function BrowsePage() {
     setEditing(false);
     inputRef.current?.blur();
   };
+  // Xong việc với ô tìm mà không gửi gì (chạm chip, "Hủy"): trả ô về `q` đang lọc, không để ô trống/dở dang trong khi lưới vẫn là kết quả của `q`.
+  const leaveSearchField = () => {
+    stopEditing();
+    setDraft(state.q);
+  };
   const commit = (term: string) => {
     const t = term.trim();
     stopEditing();
@@ -165,10 +170,7 @@ export default function BrowsePage() {
         {editing ? (
           <Button
             variant="ghost"
-            onPress={() => {
-              stopEditing();
-              setDraft(state.q);
-            }}
+            onPress={leaveSearchField}
             style={{ minWidth: 0, padding: '0 8px' }}
           >
             {vi.common.cancel}
@@ -208,7 +210,7 @@ export default function BrowsePage() {
             value={state.sort}
             onChange={(sort) => {
               // Chip chỉ hiện khi KHÔNG có gợi ý (ô trống, chưa có lịch sử): chạm chip là xong việc với ô tìm, không để "Hủy" kẹt thay giỏ.
-              stopEditing();
+              leaveSearchField();
               update({ sort });
             }}
           />
@@ -219,7 +221,10 @@ export default function BrowsePage() {
             filterCount={activeFilterCount(state)}
             filtersIgnored={firstPage?.filtersIgnored ?? false}
             onOpenFilters={() => setFiltersOpen(true)}
-            onPatch={update}
+            onPatch={(patch) => {
+              leaveSearchField();
+              update(patch);
+            }}
           />
           <div style={{ padding: '0 16px 24px' }}>
             {products.isLoading ? (
