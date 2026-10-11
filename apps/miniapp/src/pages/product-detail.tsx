@@ -26,7 +26,7 @@ import { trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { QuantitySelector } from '../components/ui/quantity-selector';
-import { brandAccent, brandBrowsePath } from '../utils/brands';
+import { brandAccent, brandBrowseLabel, brandBrowsePath } from '../utils/brands';
 import { formatVnd, formatSold } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
@@ -295,6 +295,7 @@ export default function ProductDetailPage() {
           <button
             type="button"
             className="tubu-press"
+            aria-label={brandBrowseLabel(p.brand)}
             onClick={() => navigate(brandBrowsePath(p.brand))}
             style={{
               display: 'flex', alignItems: 'center', gap: 6, minHeight: 44, padding: 0,

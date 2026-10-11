@@ -76,13 +76,13 @@ describe('ProductDetailPage — tên nhãn là liên kết (C-079)', () => {
 
   it('bấm tên nhãn mở danh sách lọc theo đúng tên catalog của sản phẩm', async () => {
     renderPdp();
-    fireEvent.click(await screen.findByRole('button', { name: 'Le Plateau Coffee' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem sản phẩm nhãn Le Plateau Coffee' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/browse?brand=Le%20Plateau%20Coffee');
   });
 
   it('vùng chạm của tên nhãn cao ít nhất 44px', async () => {
     renderPdp();
-    const btn = await screen.findByRole('button', { name: 'Le Plateau Coffee' });
+    const btn = await screen.findByRole('button', { name: 'Xem sản phẩm nhãn Le Plateau Coffee' });
     expect(parseInt(btn.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
   });
 

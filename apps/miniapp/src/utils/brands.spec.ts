@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { brandAccent, brandBrowsePath } from './brands';
+import { brandAccent, brandBrowseLabel, brandBrowsePath } from './brands';
 import { BRAND_ORIGINS } from './brand-origins';
 
 /** Tên nhãn đúng như cột `products.brand` của catalog: API `/products?brand=` so khớp CHÍNH XÁC chuỗi này. */
@@ -24,6 +24,16 @@ describe('brandBrowsePath (C-079)', () => {
 
   it('cắt khoảng trắng hai đầu (API so khớp chính xác)', () => {
     expect(brandBrowsePath('  Sokfram ')).toBe('/browse?brand=Sokfram');
+  });
+});
+
+describe('brandBrowseLabel (C-079)', () => {
+  it('nói rõ nút mở danh sách sản phẩm của nhãn, không chỉ đọc tên nhãn', () => {
+    expect(brandBrowseLabel('Le Plateau Coffee')).toBe('Xem sản phẩm nhãn Le Plateau Coffee');
+  });
+
+  it('cắt khoảng trắng hai đầu như brandBrowsePath', () => {
+    expect(brandBrowseLabel('  Sokfram ')).toBe('Xem sản phẩm nhãn Sokfram');
   });
 });
 
