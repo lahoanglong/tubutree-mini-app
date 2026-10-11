@@ -24,11 +24,9 @@ const LOYALTY: LoyaltyOverview = {
 
 const WALLET: WalletSummary = {
   walletBalance: 0,
-  coinsBalance: 0,
   cashbackPending: 0,
   commissionApproved: 0,
   commissionPending: 0,
-  xuConvertMultiplier: 1,
   withdrawMin: 50000,
   withdrawFee: 0,
 };
