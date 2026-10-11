@@ -255,7 +255,7 @@ export class GameService {
             eco.progress -= eco.target;
             eco.treesPlanted += 1;
             harvestCount += 1;
-            // Cây thật + chứng nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn/ngày.
+            // Khoản góp quỹ trồng cây + mã ghi nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn/ngày.
             certificateCode = await this.plantTree(userId, eco.treeType, tx);
             if (couponsToday < dailyCap) {
               couponCode = await this.grantCoupon(userId, harvestAmount, tx, harvestMinOrder);
@@ -341,7 +341,7 @@ export class GameService {
     };
   }
 
-  /** Tạo bản ghi cây thật đã cam kết + mã chứng nhận. Trả mã. */
+  /** Tạo bản ghi góp quỹ trồng cây (PLEDGED) + mã ghi nhận. Trả mã. */
   private async plantTree(userId: string, treeType: string, tx?: Prisma.TransactionClient): Promise<string> {
     const certificateCode = `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
     const db = tx ?? this.prisma;
@@ -359,9 +359,9 @@ export class GameService {
     throw new GoneException('Tính năng mua giọt nước bằng xu đã ngừng. Hãy điểm danh, làm quiz hoặc nhận sương sớm để có thêm nước.');
   }
 
-  /** Mua 1 cây THẬT (PlantedTree, cam kết trồng qua PanNature) bằng TubuXu. */
+  /** Góp 1 cây vào quỹ trồng cây (PlantedTree ghi nhận khoản góp, không hứa cây cụ thể) bằng TubuXu. */
   async buyTree(userId: string) {
-    if (!this.coins) throw new BadRequestException('Tính năng mua cây chưa khả dụng.');
+    if (!this.coins) throw new BadRequestException('Tính năng góp quỹ trồng cây chưa khả dụng.');
     const price = await this.config.get<number>('game.tree_xu_price', 50000);
     const certificateCode = `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
     await this.prisma.$transaction(async (tx) => {
@@ -371,7 +371,7 @@ export class GameService {
     return { certificateCode, treeType: DEFAULT_TREE_TYPE, cost: price };
   }
 
-  /** "Khu rừng của tôi" — danh sách cây thật đã cam kết + chứng nhận (§6.7.7). */
+  /** Danh sách cây tôi đã góp vào quỹ trồng cây + mã ghi nhận (§6.7.7). */
   async getForest(userId: string) {
     const trees = await this.prisma.plantedTree.findMany({
       where: { userId },

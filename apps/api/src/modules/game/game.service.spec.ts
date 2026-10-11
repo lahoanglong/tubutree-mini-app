@@ -532,7 +532,7 @@ describe('GameService.waterTree — cây chết mất tiến trình (§6.7.3)', 
   });
 });
 
-describe('GameService.buySeeds / buyTree (mua bằng TubuXu)', () => {
+describe('GameService.buySeeds / buyTree (xu: mua nước đã ngừng, góp quỹ trồng cây)', () => {
   // $transaction chạy callback để spendCoins + cập nhật chạy thật.
   function buyPrisma(over: Record<string, unknown> = {}) {
     const prisma = makePrisma(over) as unknown as Record<string, unknown>;
@@ -557,7 +557,12 @@ describe('GameService.buySeeds / buyTree (mua bằng TubuXu)', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('mua cây thật: trừ xu (tree_xu_price) + tạo PlantedTree có chứng nhận', async () => {
+  it('góp quỹ trồng cây: không nối được ví xu → báo nói "quỹ trồng cây", không nhắc "mua cây"', async () => {
+    const svc = new GameService(buyPrisma(), makeConfig(), analytics);
+    await expect(svc.buyTree('u1')).rejects.toThrow('Tính năng góp quỹ trồng cây chưa khả dụng.');
+  });
+
+  it('góp quỹ trồng cây: trừ xu (tree_xu_price) + tạo PlantedTree có mã ghi nhận', async () => {
     const prisma = buyPrisma();
     const coins = coinsStub();
     const svc = new GameService(prisma, makeConfig({ 'game.tree_xu_price': 50000 }), analytics, undefined, undefined, coins as never);
