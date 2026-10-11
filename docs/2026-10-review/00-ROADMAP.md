@@ -178,3 +178,7 @@ Việc của chủ dự án còn lại: trỏ DNS Cloudflare, báo số vCPU c�
 ### Chốt OQ-15b (2026-10-11)
 
 Điểm hoàn khi huỷ đơn (`ORDER_REFUND_POINTS`) nhận hạn mới `now + loyalty.point_expire_months`, không kế thừa hạn của lô gốc. Chủ dự án chốt giữ như vậy. Lý do: mỗi vòng lặp cần tạo một đơn thật và huỷ, trần dùng điểm 20%/đơn giới hạn lợi ích. Nếu sau này thấy lạm dụng, làm gói riêng cho dòng hoàn kế thừa `min(hạn gốc, now + N tháng)` kèm review opus (phương án 2 trong `impl/PE-1a.md`, OQ-15b).
+
+### Cần chủ dự án xác nhận: hạn của điểm vòng quay, nhiệm vụ, đánh giá (PE-3)
+
+Gói PE-3 cho điểm thưởng vòng quay (`GAME_SPIN_WIN`), nhiệm vụ (`MISSION`) và đánh giá (`REVIEW`) hết hạn sau `loyalty.point_expire_months` tháng như các điểm thưởng thường khác. Trước đó ba nguồn này ghi `expiresAt` rỗng nên không bao giờ hết hạn, khác với FAQ trong miniapp ("điểm có hạn 12 tháng"). OQ-1 chỉ liệt kê rõ "nhiệm vụ"; vòng quay và đánh giá do điều phối viên suy ra từ nguyên tắc "Điểm Xanh thường có hạn". Chủ dự án chưa xác nhận hai nguồn này. Hoàn tác được bằng cách revert hai commit `e5dd7b10` (game) và `386e1255` (reviews); chưa có dữ liệu thật nên không cần backfill.
