@@ -21,6 +21,7 @@ const FILES = [
   'src/pages/community-leaderboard.tsx',
   'src/pages/community-events.tsx',
   'src/pages/community-moderation.tsx',
+  'src/pages/refill.tsx',
 ];
 
 /** Trang (không phải component con) phải có đúng một tiêu đề trang — PageHeader hoặc <h1> riêng (C-114). */
