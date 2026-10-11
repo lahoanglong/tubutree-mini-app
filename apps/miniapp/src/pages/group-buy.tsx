@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Sprout, Users } from 'lucide-react';
 import { listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
 import { getErrorMessage } from '../services/api';
+import { formatVnd } from '../utils/format';
 import { useAuthStore } from '../store/auth';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { LineItemSkeleton } from '../components/ui/skeleton';
@@ -116,8 +117,8 @@ function GroupCard({
         <Box style={{ flex: 1, minWidth: 0 }}>
           <Text size="small" bold style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.product.name}</Text>
           <Box flex alignItems="center" style={{ gap: 6 }}>
-            <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>{g.unitPrice.toLocaleString('vi-VN')}đ</Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', textDecoration: 'line-through' }}>{g.basePrice.toLocaleString('vi-VN')}đ</Text>
+            <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>{formatVnd(g.unitPrice)}</Text>
+            <Text size="xSmall" style={{ color: 'var(--neutral-400)', textDecoration: 'line-through' }}>{formatVnd(g.basePrice)}</Text>
             <Text size="xSmall" bold style={{ color: 'var(--clay-700)' }}>−{g.discountPct}%</Text>
           </Box>
           <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>

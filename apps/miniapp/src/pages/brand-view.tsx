@@ -186,7 +186,7 @@ export default function BrandViewPage() {
                         openSnackbar(
                           ok
                             ? { text: `Đã chép mã ${code} — dán ở bước thanh toán`, type: 'success', duration: 2600 }
-                            : { text: `Mã ưu đãi: ${code}`, type: 'info', duration: 3000 },
+                            : { text: `Mã giảm giá: ${code}`, type: 'info', duration: 3000 },
                         ),
                       );
                     }}

@@ -3,11 +3,11 @@ import { test, expect, makeUser, mockSession, reply, type MockApi } from './supp
 import { CTV_MILESTONES, MILESTONE_3M, mockAffiliateDashboard } from './support/affiliate-mocks';
 
 /**
- * Zalo Mini App E2E — Dashboard CTV: bậc doanh số + thưởng mốc Tubu Xu
+ * Zalo Mini App E2E — Dashboard CTV: bậc doanh số + thưởng mốc TubuXu
  * (apps/miniapp/src/pages/affiliate.tsx; route affiliate.controller.ts: GET /affiliate/tiers,
  * GET /affiliate/milestones, POST /affiliate/milestones/:id/claim body { month }).
  *
- * Bậc chỉ là danh hiệu (không hứa "+X% hoa hồng"); thưởng thật là Tubu Xu khi đạt mốc doanh số ĐÃ
+ * Bậc chỉ là danh hiệu (không hứa "+X% hoa hồng"); thưởng thật là TubuXu khi đạt mốc doanh số ĐÃ
  * CHỐT. Mock có trạng thái: nhận xong thì GET /affiliate/milestones trả claimed:true như backend.
  */
 
@@ -36,14 +36,14 @@ function mockCtv(api: MockApi, previous: CtvMilestonesResponse['previousMonth'] 
     claimed.add(key);
     return {
       success: true,
-      message: `Chúc mừng bạn đã nhận 50.000 Tubu Xu từ ${MILESTONE_3M.title}!`,
+      message: `Chúc mừng bạn đã nhận 50.000 TubuXu từ ${MILESTONE_3M.title}!`,
       rewardXu: MILESTONE_3M.rewardXu,
       monthKey: month,
     };
   });
 }
 
-test.describe('Dashboard CTV — bậc doanh số & thưởng mốc Tubu Xu', () => {
+test.describe('Dashboard CTV — bậc doanh số & thưởng mốc TubuXu', () => {
   test('Bậc CTV theo doanh số đã chốt + bảng 5 bậc kèm thưởng mốc xu (không hứa % bonus)', async ({ page, api }) => {
     mockCtv(api);
     await page.goto('/affiliate');
@@ -52,7 +52,7 @@ test.describe('Dashboard CTV — bậc doanh số & thưởng mốc Tubu Xu', ()
     await expect(page.getByText('Bậc theo doanh số đã chốt tháng này')).toBeVisible();
     await expect(page.getByText('doanh số đã chốt để lên bậc Bạc', { exact: false })).toBeVisible();
 
-    await page.getByText('Bảng 5 bậc CTV & thưởng mốc Tubu Xu').click();
+    await page.getByText('Bảng 5 bậc CTV & thưởng mốc TubuXu').click();
     await expect(page.getByText('Đồng (Hiện tại)')).toBeVisible();
     await expect(page.getByText('Bậc khởi đầu')).toBeVisible();
     await expect(page.getByText('Thưởng mốc +50.000 xu')).toBeVisible();
@@ -80,9 +80,9 @@ test.describe('Dashboard CTV — bậc doanh số & thưởng mốc Tubu Xu', ()
     expect(call.path).toBe('/affiliate/milestones/milestone-3m/claim');
     expect(call.body).toEqual({ month: '2026-09' });
 
-    await expect(page.getByText('Chúc mừng bạn đã nhận 50.000 Tubu Xu', { exact: false })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Chúc mừng bạn đã nhận 50.000 TubuXu', { exact: false })).toBeVisible({ timeout: 5_000 });
     await expect(page.getByRole('button', { name: 'Đã nhận ✓' })).toBeDisabled({ timeout: 5_000 });
-    await expect(page.getByText('Đã cộng vào ví Tubu Xu')).toBeVisible();
+    await expect(page.getByText('Đã cộng vào TubuXu')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Nhận thưởng' })).toHaveCount(0);
     expect(api.callsTo('POST', '/affiliate/milestones/:id/claim')).toHaveLength(1);
   });

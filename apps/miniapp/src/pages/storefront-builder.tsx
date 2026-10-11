@@ -9,7 +9,7 @@ import {
   type StorefrontEdit, type PickerProduct, type StorefrontCategory,
 } from '../services/storefront-api';
 import { getErrorMessage } from '../services/api';
-import { formatVnd } from '../utils/format';
+import { formatVnd, formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { Skeleton } from '../components/ui/skeleton';
@@ -614,7 +614,7 @@ function QuestSection() {
     mutationFn: (code: string) => claimQuest(code),
     onSuccess: (r) => {
       haptic('medium');
-      openSnackbar({ text: `+${r.rewardXu.toLocaleString('vi-VN')} TubuXu 🎉`, type: 'success' });
+      openSnackbar({ text: `+${formatNumber(r.rewardXu)} TubuXu 🎉`, type: 'success' });
       void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -633,7 +633,7 @@ function QuestSection() {
         <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>{data.level}/{data.levelMax}</Text>
       </Box>
       <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginBottom: 10 }}>
-        Đã nhận {data.totalEarnedXu.toLocaleString('vi-VN')} TubuXu
+        Đã nhận {formatNumber(data.totalEarnedXu)} TubuXu
       </Text>
       {data.quests.map((q) => {
         // Guard chia-0: goal=0 (nhiệm vụ đã đạt sẵn) → 0/0=NaN hoặc x/0=Infinity → width lỗi. Đạt ngay = 100%.
@@ -656,7 +656,7 @@ function QuestSection() {
                 loading={claimMut.isPending && claimMut.variables === q.code} disabled={claimMut.isPending}
                 onClick={() => claimMut.mutate(q.code)}
               >
-                +{q.rewardXu.toLocaleString('vi-VN')} xu
+                +{formatNumber(q.rewardXu)} xu
               </Button>
             ) : (
               <Text size="xSmall" style={{ color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>{q.progress}/{q.goal}</Text>

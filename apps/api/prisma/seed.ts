@@ -8,6 +8,11 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { seedGameQuiz } from './seed-game-quiz';
 import { configSeedUpsertArgs, type ConfigSeed } from '../src/modules/system-config/config-seed';
+import {
+  COMMUNITY_CATEGORIES,
+  communityCategoryUpsertArgs,
+  retireCommunityCategoriesArgs,
+} from '../src/modules/feed/community-categories-seed';
 
 const prisma = new PrismaClient();
 
@@ -235,6 +240,10 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   // ghi "→ auto checkout" khiến admin tưởng đang bật chống gian lận.
   { key: 'attendance.heartbeat_stale_min', value: 10, category: 'attendance', description: 'Ngưỡng coi heartbeat là cũ (hiện CHƯA dùng để tự checkout)' },
   { key: 'attendance.enforce_ip', value: true, category: 'attendance', description: 'Bật kiểm IP (tắt nếu chưa có IP tĩnh)' },
+  // C-056: GPS nhảy một nhịp không được tự chấm ra. createOnly: admin chỉnh theo độ ổn định GPS thực tế
+  // của văn phòng, deploy lại không được reset.
+  { key: 'attendance.out_of_range_max_count', value: 3, category: 'attendance', description: 'Tự checkout (OUT_OF_RANGE) sau X heartbeat ngoài vùng LIÊN TIẾP (miniapp gửi 3 phút/nhịp; tối thiểu 1)', createOnly: true },
+  { key: 'attendance.out_of_range_max_min', value: 15, category: 'attendance', description: 'Hoặc tự checkout khi chuỗi ngoài vùng kéo dài quá X phút (heartbeat thưa vì app bị cất đi)', createOnly: true },
   // Job dọn log theo lô (data-retention.service.ts, C-046/Q-21). createOnly: admin chỉnh rồi thì seed không reset.
   { key: 'retention.analytics_events_days', value: 395, category: 'retention', description: 'Giữ analytics_events thô bao nhiêu ngày (13 tháng; sàn 90)', createOnly: true },
   { key: 'retention.notification_logs_days', value: 180, category: 'retention', description: 'Giữ notification_logs bao nhiêu ngày (sàn 30)', createOnly: true },
@@ -898,20 +907,14 @@ async function main() {
     },
   });
 
-  // Cộng đồng Vườn Tubu Pha 1a — 6 danh mục Q&A cố định.
+  // Cộng đồng Vườn Tubu — danh mục Q&A theo ngành hàng thật (C-073). Danh mục cây cảnh của bản đầu chỉ bị ẩn,
+  // không xoá: bài đã đăng giữ nguyên chỗ (xem community-categories-seed.ts).
   console.log('🌱 Seeding Community Categories...');
-  const COMMUNITY_CATEGORIES = [
-    { slug: 'cham-soc', name: 'Chăm sóc cây', icon: '🌱', order: 1 },
-    { slug: 'sau-benh', name: 'Sâu bệnh', icon: '🐛', order: 2 },
-    { slug: 'phoi-canh', name: 'Phối cảnh / décor', icon: '🪴', order: 3 },
-    { slug: 'khoe-vuon', name: 'Khoe vườn', icon: '🌿', order: 4 },
-    { slug: 'hoi-mua-gi', name: 'Hỏi mua gì', icon: '🛒', order: 5 },
-    { slug: 'meo-hay', name: 'Mẹo hay', icon: '💡', order: 6 },
-  ];
   for (const c of COMMUNITY_CATEGORIES) {
-    await prisma.communityCategory.upsert({ where: { slug: c.slug }, update: { name: c.name, icon: c.icon, order: c.order }, create: c });
+    await prisma.communityCategory.upsert(communityCategoryUpsertArgs(c));
   }
-  console.log(`Seeded ${COMMUNITY_CATEGORIES.length} community categories`);
+  const retired = await prisma.communityCategory.updateMany(retireCommunityCategoriesArgs());
+  console.log(`Seeded ${COMMUNITY_CATEGORIES.length} community categories (${retired.count} danh mục cũ đã ẩn)`);
 
   console.log('✅ Seed done.');
 }

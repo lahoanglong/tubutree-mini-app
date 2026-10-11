@@ -1057,7 +1057,7 @@ export class AffiliateService {
 
         return {
           success: true,
-          message: `Chúc mừng bạn đã nhận ${milestone.rewardXu.toLocaleString('vi-VN')} Tubu Xu từ ${milestone.title}!`,
+          message: `Chúc mừng bạn đã nhận ${milestone.rewardXu.toLocaleString('vi-VN')} TubuXu từ ${milestone.title}!`,
           rewardXu: milestone.rewardXu,
           monthKey: month.key,
         };

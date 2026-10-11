@@ -35,3 +35,11 @@ describe('Hub Cá nhân gọn lại (C-086, Q-15)', () => {
     expect(new Set(targets).size).toBe(targets.length);
   });
 });
+
+describe('Lối vào Cộng đồng nói về hàng đang bán (C-073)', () => {
+  it('mô tả không còn "chăm cây / khoe vườn"', () => {
+    const entry = MENU.flatMap((s) => s.items).find((i) => i.to === '/feed');
+    expect(entry?.hint).toBeTruthy();
+    expect(entry?.hint).not.toMatch(/chăm cây|khoe vườn|cây cảnh/i);
+  });
+});

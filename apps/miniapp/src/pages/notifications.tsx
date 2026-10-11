@@ -19,6 +19,7 @@ import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { fetchPurchasedItems } from '../services/shop-api';
 import { trackReorderReminderCta } from '../services/buy-flow-events';
+import { formatDateTime } from '../utils/format';
 import { Button as DsButton } from '../components/ui/button';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
@@ -363,7 +364,7 @@ export default function NotificationsPage() {
                         {m.title}
                       </Text>
                       <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
-                        {new Date(selectedNotif.sentAt).toLocaleString('vi-VN')} ({relativeTime(selectedNotif.sentAt)})
+                        {formatDateTime(selectedNotif.sentAt)} ({relativeTime(selectedNotif.sentAt)})
                       </Text>
                     </Box>
                   </Box>

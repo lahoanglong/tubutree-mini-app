@@ -3,6 +3,8 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
+import { formatDrops, formatNumber, formatXu } from '../utils/format';
+
 export const vi = {
   common: {
     retry: 'Thử lại',
@@ -36,7 +38,7 @@ export const vi = {
   home: {
     tagline: 'Sống xanh An Lành',
     greeting: (name: string) => `Chào ${name} 🌿`,
-    pointsChip: (n: number) => `${n} điểm Xanh`,
+    pointsChip: (n: number) => `${formatNumber(n)} điểm Xanh`,
     searchPlaceholder: 'Bạn đang tìm gì hôm nay?',
     featured: 'Tubu chọn cho bạn',
     forYou: 'Dành cho bạn',
@@ -131,7 +133,7 @@ export const vi = {
     discount: 'Giảm giá',
     checkout: (n: number) => `Thanh toán (${n})`,
     removed: 'Đã bỏ khỏi giỏ',
-    couponPlaceholder: 'Nhập mã ưu đãi',
+    couponPlaceholder: 'Nhập mã giảm giá',
     couponApply: 'Áp dụng',
     couponApplied: (code: string) => `Đã áp mã ${code}`,
     couponRemove: 'Bỏ mã',
@@ -175,7 +177,7 @@ export const vi = {
     summary: 'Tóm tắt đơn hàng',
     shippingFee: 'Phí vận chuyển',
     total: 'Tổng cộng',
-    pointsEarn: (n: number) => `+${n} điểm Xanh khi giao thành công`,
+    pointsEarn: (n: number) => `+${formatNumber(n)} điểm Xanh khi giao thành công`,
     placeOrder: 'Đặt hàng',
     placeOrderWith: (total: string) => `Đặt hàng · ${total}`,
     placing: 'Đang gửi đơn...',
@@ -191,8 +193,8 @@ export const vi = {
     copyFailed: (code: string) => `Không sao chép được — mã đơn: ${code}`,
     total: 'Tổng thanh toán',
     pointsLabel: 'Điểm Xanh sẽ nhận',
-    pointsValue: (n: number) => `+${n} điểm`,
-    pointsComing: (n: number) => `${n} điểm Xanh sẽ về tay khi đơn giao thành công`,
+    pointsValue: (n: number) => `+${formatNumber(n)} điểm`,
+    pointsComing: (n: number) => `${formatNumber(n)} điểm Xanh sẽ về tay khi đơn giao thành công`,
     etaLabel: 'Giao dự kiến',
     nextTitle: 'Tiếp theo',
     steps: [
@@ -210,7 +212,7 @@ export const vi = {
   orders: {
     title: 'Đơn hàng của tôi',
     emptyHeading: 'Bạn chưa có đơn nào',
-    emptyBody: 'Mua đơn đầu — nhận 30k voucher',
+    emptyBody: 'Đơn đầu từ 199.000đ dùng được mã giảm giá chào mừng 30.000đ',
     emptyCta: 'Bắt đầu mua',
     tabAll: 'Tất cả',
     tabTitle: 'Đơn hàng',
@@ -283,6 +285,52 @@ export const vi = {
     CANCELLED: 'Đã hủy',
   } as Record<string, string>,
 
+  /**
+   * Trạng thái vận đơn của hãng vận chuyển (Pancake ghi nguyên `partner_status` vào lịch sử đơn).
+   * Khoá đã chuẩn hoá: chữ thường, phân cách bằng "_" — xem utils/format-shipping.ts.
+   */
+  shippingEvent: {
+    unknown: 'Đang cập nhật',
+    labels: {
+      pending: 'Chờ lấy hàng',
+      created: 'Đã tạo vận đơn',
+      new: 'Đã tạo vận đơn',
+      ready_to_pick: 'Chờ lấy hàng',
+      waiting_pickup: 'Chờ lấy hàng',
+      picking: 'Đang lấy hàng',
+      picking_up: 'Đang lấy hàng',
+      picked: 'Đã lấy hàng',
+      picked_up: 'Đã lấy hàng',
+      storing: 'Hàng đang ở kho trung chuyển',
+      sorting: 'Hàng đang ở kho trung chuyển',
+      in_warehouse: 'Hàng đang ở kho trung chuyển',
+      transporting: 'Đang vận chuyển',
+      in_transit: 'Đang vận chuyển',
+      shipping: 'Đang vận chuyển',
+      delivering: 'Đang giao hàng',
+      out_for_delivery: 'Đang giao hàng',
+      delivered: 'Giao hàng thành công',
+      delivery_success: 'Giao hàng thành công',
+      completed: 'Giao hàng thành công',
+      delivery_fail: 'Giao không thành công',
+      delivery_failed: 'Giao không thành công',
+      failed: 'Giao không thành công',
+      waiting_to_return: 'Đang hoàn hàng',
+      return: 'Đang hoàn hàng',
+      returning: 'Đang hoàn hàng',
+      return_transporting: 'Đang hoàn hàng',
+      returned: 'Đã hoàn hàng',
+      return_success: 'Đã hoàn hàng',
+      cancel: 'Đã hủy vận đơn',
+      cancelled: 'Đã hủy vận đơn',
+      canceled: 'Đã hủy vận đơn',
+      lost: 'Thất lạc kiện hàng',
+      damage: 'Kiện hàng bị hư hỏng',
+      damaged: 'Kiện hàng bị hư hỏng',
+      exception: 'Có sự cố vận chuyển',
+    } as Record<string, string>,
+  },
+
   paymentMethod: {
     COD: 'Khi nhận hàng (COD)',
     ZALOPAY: 'ZaloPay',
@@ -321,7 +369,7 @@ export const vi = {
       price_asc: 'Giá tăng',
       price_desc: 'Giá giảm',
     },
-    resultCount: (n: number) => `${n.toLocaleString('vi-VN')} sản phẩm`,
+    resultCount: (n: number) => `${formatNumber(n)} sản phẩm`,
     filterButton: 'Bộ lọc',
     filterButtonCount: (n: number) => `Bộ lọc (${n})`,
     activeFilters: 'Đang lọc',
@@ -343,7 +391,7 @@ export const vi = {
       rating: 'Đánh giá',
       rating4: 'Từ 4★ trở lên',
       reset: 'Xoá bộ lọc',
-      apply: (n: number) => `Xem ${n.toLocaleString('vi-VN')} sản phẩm`,
+      apply: (n: number) => `Xem ${formatNumber(n)} sản phẩm`,
       applyLoading: 'Xem kết quả',
       applyFallback: 'Áp dụng',
     },
@@ -498,19 +546,19 @@ export const vi = {
 
   community: {
     title: 'Cộng đồng Vườn Tubu',
-    subtitle: 'Hỏi đáp chăm cây, khoe vườn, cổ vũ nhau 🌿',
+    subtitle: 'Hỏi đáp cách dùng, chia sẻ trải nghiệm, cổ vũ nhau 🌿',
     tabAll: 'Tất cả',
     sortNew: 'Mới nhất',
     sortPopular: 'Nổi bật',
     compose: 'Đăng bài',
     kindQuestion: 'Hỏi đáp',
-    kindShowcase: 'Khoe vườn',
+    kindShowcase: 'Trải nghiệm',
     kindTip: 'Mẹo hay',
     kindHarvest: '🌳 Thu hoạch',
     kindSpecies: '📒 Sưu tập loài',
     kindMilestone: '🌍 Mốc cộng đồng',
     kindManual: '📝 Chia sẻ',
-    titlePlaceholder: 'Tiêu đề câu hỏi (vd: Lá cây lưỡi hổ bị vàng?)',
+    titlePlaceholder: 'Tiêu đề câu hỏi (vd: Nước rửa chén sinh học dùng được cho bình sữa không?)',
     bodyPlaceholder: 'Chia sẻ chi tiết…',
     pickCategory: 'Chọn danh mục',
     addPhotos: 'Thêm ảnh',
@@ -527,8 +575,8 @@ export const vi = {
     comment: 'Bình luận',
     commentPlaceholder: 'Viết trả lời…',
     send: 'Gửi',
-    buyThis: 'Mua cây này',
-    viewSolution: 'Xem giải pháp',
+    buyThis: 'Mua sản phẩm này',
+    viewSolution: 'Xem sản phẩm gợi ý',
     emptyHeading: 'Chưa có bài viết nào',
     emptyBody: 'Hãy là người đầu tiên chia sẻ hoặc đặt câu hỏi!',
     hasBestAnswer: 'Đã có câu trả lời hay',
@@ -563,7 +611,7 @@ export const vi = {
     noResult: 'Không tìm thấy bài phù hợp',
     clearTag: 'Bỏ lọc thẻ',
     tags: 'Thẻ (hashtag)',
-    tagsPlaceholder: 'vd: sen đá, tưới nước (cách nhau dấu phẩy)',
+    tagsPlaceholder: 'vd: da nhạy cảm, đồ cho bé (cách nhau dấu phẩy)',
     targetPost: 'Bài viết',
     targetComment: 'Bình luận',
     pin: 'Ghim',
@@ -601,15 +649,15 @@ export const vi = {
 
   game: {
     streakRepair: {
-      title: (n: number) => `🔥 Bạn vừa mất chuỗi ${n} ngày`,
+      title: (n: number) => `🔥 Bạn vừa mất chuỗi ${formatNumber(n)} ngày`,
       body: 'Hồi sinh ngay để giữ lại thành tích trước khi hết hạn.',
-      cta: (cost: number) => `Hồi sinh (${cost} 💧)`,
+      cta: (cost: number) => `Hồi sinh (${formatDrops(cost)})`,
       ok: 'Đã hồi sinh chuỗi! 🌿',
     },
     seasonPass: {
       title: '🎟️ Chặng Mùa (Season Pass)',
       subtitle: (title: string) => `Điểm danh mỗi ngày để lên bậc mùa "${title}"`,
-      xp: (n: number) => `${n} XP`,
+      xp: (n: number) => `${formatNumber(n)} XP`,
       tier: (n: number) => `Bậc ${n}`,
       free: 'Miễn phí',
       premium: 'Premium',
@@ -618,12 +666,12 @@ export const vi = {
       locked: '🔒 Chưa mở',
       premiumHint: '🔒 Cần đăng ký định kỳ để mở phần thưởng Premium.',
       reward: (r: { type: 'SEEDS' | 'XU'; amount: number }) =>
-        r.type === 'SEEDS' ? `${r.amount} 💧` : `${r.amount.toLocaleString('vi-VN')} xu`,
+        r.type === 'SEEDS' ? formatDrops(r.amount) : formatXu(r.amount),
       claimOk: 'Đã nhận thưởng chặng mùa! 🎉',
     },
     missions: {
       claim: 'Nhận thưởng',
-      claimOk: (points: number) => `Đã nhận +${points} Điểm Xanh! 🌿`,
+      claimOk: (points: number) => `Đã nhận +${formatNumber(points)} Điểm Xanh! 🌿`,
     },
   },
 

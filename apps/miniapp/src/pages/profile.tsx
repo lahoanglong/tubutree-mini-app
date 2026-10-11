@@ -9,7 +9,7 @@ import { getCoupons, getLoyalty, getNotifications, getWallet } from '../services
 import { Button } from '../components/ui/button';
 import { getOwnedBrand } from '../services/brand-owner-api';
 import { getDealerMe } from '../services/dealer-api';
-import { formatVnd, formatPoints } from '../utils/format';
+import { formatVnd, formatPoints, formatXu } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 
@@ -29,7 +29,7 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
       { Icon: Sparkles, label: 'Trợ lý AI 24/7', to: '/ai-advisor', hint: 'Tư vấn sản phẩm' },
       { Icon: Heart, label: 'Sản phẩm yêu thích', to: '/wishlist' },
       { Icon: MapPin, label: 'Sổ địa chỉ', to: '/addresses' },
-      { Icon: MessagesSquare, label: 'Cộng đồng hỏi đáp', to: '/feed', hint: 'Hỏi chăm cây · khoe vườn' },
+      { Icon: MessagesSquare, label: 'Cộng đồng hỏi đáp', to: '/feed', hint: 'Hỏi cách dùng · chia sẻ trải nghiệm' },
     ],
   },
   {
@@ -276,7 +276,7 @@ export default function ProfilePage() {
         />
         <Stat
           label="TubuXu"
-          value={walletQ.data ? `${walletQ.data.coinsBalance.toLocaleString('vi-VN')} xu` : '—'}
+          value={walletQ.data ? formatXu(walletQ.data.coinsBalance) : '—'}
           onClick={() => navigate('/wallet', { state: { from: '/profile' } })}
         />
         <Stat

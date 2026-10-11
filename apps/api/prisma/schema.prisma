@@ -119,6 +119,8 @@ model AttendanceSession {
   checkinLng      Float
   checkinIp       String
   lastHeartbeatAt DateTime            @default(now())
+  outOfRangeCount Int                 @default(0) // số heartbeat ngoài vùng LIÊN TIẾP; heartbeat hợp lệ reset về 0 (C-056)
+  outOfRangeSince DateTime? // nhịp ngoài vùng đầu tiên của chuỗi hiện tại; null = đang trong vùng
   closeReason     SessionCloseReason?
   isLate          Boolean             @default(false) // phiên đầu ca & trễ > grace (Phase D quy tiền)
   createdAt       DateTime            @default(now())

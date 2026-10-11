@@ -205,7 +205,7 @@ function Dashboard() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [ctvOrdering, setCtvOrdering] = useState(false);
 
-  // Thưởng mốc cộng Tubu Xu (coinsBalance) — làm mới số dư xu ở Ví (['coins'] + ['wallet'] vì
+  // Thưởng mốc cộng TubuXu (coinsBalance) — làm mới số dư xu ở Ví (['coins'] + ['wallet'] vì
   // GET /me/wallet cũng trả coinsBalance). `month` = tháng của mốc (tháng này hoặc tháng trước).
   const claimMilestoneMut = useMutation({
     mutationFn: (v: { id: string; month: string }) => claimCtvMilestone(v.id, v.month),
@@ -409,7 +409,7 @@ function Dashboard() {
             }}
           >
             <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
-              Bảng 5 bậc CTV & thưởng mốc Tubu Xu
+              Bảng 5 bậc CTV & thưởng mốc TubuXu
             </Text>
             {showAllTiers ? <ChevronUp size={16} color="var(--primary-700)" /> : <ChevronDown size={16} color="var(--primary-700)" />}
           </Box>
@@ -453,7 +453,7 @@ function Dashboard() {
         </Box>
       )}
 
-      {/* Thưởng mốc doanh số tháng — thưởng bằng Tubu Xu (tiêu trong app, không rút được) */}
+      {/* Thưởng mốc doanh số tháng — thưởng bằng TubuXu (tiêu trong app, không rút được) */}
       {milestonesQ.data && milestonesQ.data.milestones.length > 0 && (
         <Box mx={4} mb={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }}>
           <Box flex alignItems="center" justifyContent="space-between" mb={2}>

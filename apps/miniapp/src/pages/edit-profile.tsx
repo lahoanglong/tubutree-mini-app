@@ -231,7 +231,7 @@ export default function EditProfilePage() {
               }}
             />
             <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-              🎁 Nhận voucher quà tặng vào tháng sinh nhật.
+              🎁 Nhận mã giảm giá quà tặng vào tháng sinh nhật.
             </Text>
           </Box>
 

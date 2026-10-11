@@ -8,7 +8,16 @@ import { useAuthStore } from '../store/auth';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { MultiImageUpload } from '../components/image-upload';
-import { formatVnd, addressLine, isRecyclingPickedUp, recyclingPickupView, type RecyclingTone } from '../utils/format';
+import {
+  formatVnd,
+  formatPoints,
+  formatDateTime,
+  addressLine,
+  isRecyclingPickedUp,
+  recyclingPickupView,
+  type RecyclingTone,
+} from '../utils/format';
+import { shippingEventLabel } from '../utils/format-shipping';
 import { STATUS_COLOR, TIMELINE_STEPS, timelineIndex, isReorderable } from '../utils/order-status';
 import {
   openOAChat,
@@ -209,7 +218,7 @@ export default function OrderDetailPage() {
       {/* ── Status hero ── */}
       <Box p={4} style={{ background: color.bg }}>
         <Text size="xSmall" style={{ color: color.fg, opacity: 0.8 }}>
-          {new Date(o.createdAt).toLocaleString('vi-VN')}
+          {formatDateTime(o.createdAt)}
         </Text>
         <Text.Title size="small" style={{ color: color.fg }}>
           {vi.orderStatus[o.status] ?? o.status}
@@ -305,7 +314,7 @@ export default function OrderDetailPage() {
         {/* BE gộp voucher + combo + điểm vào cùng cột `discount`; nếu không tách dòng này thì
             khách tiêu điểm Xanh xong không thấy điểm mình đi đâu (checkout có tách, chi tiết đơn thì không). */}
         {o.pointsUsed > 0 && (
-          <KeyValueRow label={vi.orders.pointsUsed} value={`${o.pointsUsed.toLocaleString('vi-VN')} điểm`} />
+          <KeyValueRow label={vi.orders.pointsUsed} value={formatPoints(o.pointsUsed)} />
         )}
         <KeyValueRow
           label={vi.checkout.shippingFee}
@@ -337,7 +346,7 @@ export default function OrderDetailPage() {
               )}
               {o.shippingStatus && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
-                  {o.shippingStatus}
+                  {shippingEventLabel(o.shippingStatus)}
                 </Text>
               )}
             </Box>
@@ -405,11 +414,11 @@ export default function OrderDetailPage() {
                           fontWeight: i === 0 ? 600 : 400,
                         }}
                       >
-                        {ev.status ?? '—'}
+                        {shippingEventLabel(ev.status) ?? '—'}
                       </Text>
                       {ev.at && (
                         <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                          {new Date(ev.at).toLocaleString('vi-VN')}
+                          {formatDateTime(ev.at)}
                         </Text>
                       )}
                     </Box>
