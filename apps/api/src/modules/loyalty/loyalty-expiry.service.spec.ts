@@ -582,6 +582,30 @@ describe('computePointExpiry (pure FIFO helper)', () => {
       });
     });
 
+    describe('sổ đã ghi trước PE-5 (hồi tố): khách đã bị trừ hai lần không bị trừ thêm lần nào nữa', () => {
+      it('lô cũ không hạn, đơn giao rồi trả, POINTS_EXPIRED -20 đã ghi nhầm: replay mới không còn lô hết hạn, phần dư đi FIFO vào lô cũ', () => {
+        const ledger = [
+          tx('a', 30, '2025-01-01', null),
+          delivered('d', 20, '2025-05-01', PAST, 'o1'),
+          reversed('v', -20, '2025-05-02', 'o1'),
+          tx('e', -20, '2026-06-02', null, 'POINTS_EXPIRED'), // bản cũ ghi dòng này vì lô đơn trông còn nguyên
+        ];
+        expect(computePointExpiry(ledger, NOW, WINDOW).expiredNow).toBe(0);
+        expect(computePointExpiry(ledger, new Date(NOW.getTime() + 400 * DAY), WINDOW).expiredNow).toBe(0);
+      });
+
+      it('lô cũ có hạn dài: dòng POINTS_EXPIRED đã ghi nhầm ăn lô cũ, tới hạn lô cũ chỉ hết hạn phần còn lại (tổng vẫn khớp số dư sổ)', () => {
+        const ledger = [
+          tx('a', 30, '2025-01-01', '2027-01-01'),
+          delivered('d', 20, '2025-05-01', PAST, 'o1'),
+          reversed('v', -20, '2025-05-02', 'o1'),
+          tx('e', -20, '2026-06-02', null, 'POINTS_EXPIRED'),
+        ];
+        expect(computePointExpiry(ledger, NOW, WINDOW).expiredNow).toBe(0);
+        expect(computePointExpiry(ledger, new Date('2027-02-01'), WINDOW).expiredNow).toBe(10); // 30 + 20 - 20 - 20 = 10 còn lại ở lô cũ
+      });
+    });
+
     describe('bất biến cũ: không có dòng đảo ngược thì kết quả y hệt replay FIFO + POINTS_EXPIRED', () => {
       /** Bản replay trước PE-5, không có khái niệm lô gốc: FIFO thuần, riêng POINTS_EXPIRED ăn lô đã hết hạn lúc nó ghi. */
       function plainReplay(txns: PointExpiryTxn[], now: Date) {
