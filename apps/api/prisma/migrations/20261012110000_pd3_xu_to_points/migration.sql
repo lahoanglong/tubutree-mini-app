@@ -51,12 +51,14 @@ BEGIN
   -- Chỉ những user chụp ở lần chạy này mới được cộng điểm bên dưới. Bản nháp spec cộng cho mọi user có
   -- coinsBalance = coinsBefore: user đã quy đổi ở lần trước, sau đó được cộng xu mới đúng bằng số cũ,
   -- sẽ bị cộng pointsGranted lần hai mà không có dòng sổ nào.
+  -- ::bigint: coinsBalance + 999 tràn INTEGER khi số dư > 2.147.482.648 và migration dừng bằng lỗi "integer
+  -- out of range" khó hiểu; kết quả (≤ 2.147.484 điểm, làm tròn ≤ 999) vẫn vừa các cột INTEGER.
   WITH ins AS (
     INSERT INTO "xu_points_conversions"
       ("userId", "coinsBefore", "pointsBefore", "convertedBefore", "pointsGranted", "roundingVnd", "pointsTxId", "coinTxId")
     SELECT u."id", u."coinsBalance", u."pointsBalance", u."pointsConvertedBalance",
-           (u."coinsBalance" + 999) / 1000,
-           ((u."coinsBalance" + 999) / 1000) * 1000 - u."coinsBalance",
+           (u."coinsBalance"::bigint + 999) / 1000,
+           ((u."coinsBalance"::bigint + 999) / 1000) * 1000 - u."coinsBalance",
            'ptx_xu2pts_' || u."id", 'ctx_xu2pts_' || u."id"
       FROM "users" u
      WHERE u."coinsBalance" > 0

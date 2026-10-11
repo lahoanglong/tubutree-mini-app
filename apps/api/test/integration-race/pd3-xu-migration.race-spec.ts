@@ -282,4 +282,21 @@ describe('PD-3 migration B quy đổi xu → Điểm Xanh (real Postgres)', () =
     await exec(`INSERT INTO ${SCHEMA}.orders ("id", "pointsUsedConverted") VALUES ('o_spent', 3)`);
     await expect(runRollback()).rejects.toThrow(/1 đơn đã tiêu điểm quy đổi/);
   });
+
+  it('số dư xu sát trần INTEGER (2.147.483.647) quy đổi và hoàn tác được, không tràn số', async () => {
+    await exec(`DELETE FROM ${SCHEMA}.orders WHERE "id" = 'o_spent'`);
+    await seedUser('ubig', 2_147_483_647);
+
+    await runB();
+
+    expect(await user('ubig')).toMatchObject({ coinsBalance: 0, pointsConvertedBalance: 2_147_484 });
+    const [snap] = await q<{ roundingVnd: number }>(`SELECT "roundingVnd" FROM ${SCHEMA}.xu_points_conversions WHERE "userId" = 'ubig'`);
+    expect(snap!.roundingVnd).toBe(353);
+    expect(await invariants()).toEqual({ converted_drift: 0, standard_drift: 0, coin_drift: 0 });
+
+    await runRollback();
+
+    expect(await user('ubig')).toMatchObject({ coinsBalance: 2_147_483_647, pointsConvertedBalance: 0 });
+    expect(await invariants()).toEqual({ converted_drift: 0, standard_drift: 0, coin_drift: 0 });
+  });
 });
