@@ -1,20 +1,9 @@
 import 'reflect-metadata';
-import { RequestMethod } from '@nestjs/common';
-import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { AuthController } from '../modules/auth/auth.controller';
-import { AdminController } from '../modules/admin/admin.controller';
-import { BrandAdminController } from '../modules/brand/brand-admin.controller';
-import { BrandController } from '../modules/brand/brand.controller';
-import { CommunityFeedController } from '../modules/feed/community-feed.controller';
-import { HealthController } from '../modules/health/health.controller';
-import { PancakeController } from '../modules/integrations/pancake/pancake.controller';
-import { PaymentController } from '../modules/integrations/payment/payment.controller';
-import { LoyaltyController } from '../modules/loyalty/loyalty.controller';
-import { OrdersController } from '../modules/orders/orders.controller';
-import { ReviewsController } from '../modules/reviews/reviews.controller';
-import { AdminAttendanceController } from '../modules/staff/attendance/admin-attendance.controller';
-import { AdminPayrollController } from '../modules/staff/payroll/admin-payroll.controller';
-import { StorefrontController } from '../modules/storefront/storefront.controller';
+import { AppModule } from '../app.module';
+import { collectControllers, routesOf, type Ctor } from './route-graph';
+
+// ConfigModule.forRoot của AppModule chạy validate ngay lúc import; spec này chỉ cần đồ thị module, không cần biến môi trường thật.
+jest.mock('../config/env.validation', () => ({ validateEnv: (config: Record<string, unknown>) => config }));
 
 /**
  * Sổ endpoint của C-098 (gỡ endpoint không FE nào gọi). Hai bảng:
@@ -52,50 +41,13 @@ const KEPT_WITHOUT_FE: ReadonlyArray<readonly [route: string, why: string]> = [
   ['DELETE /reviews/:id', 'chưa có nút xoá đánh giá ở FE; xoá hoàn điểm đã thưởng nên xoá rồi viết lại vẫn đúng một lần thưởng (review-edit.race-spec, Q-30)'],
 ];
 
-function joinPath(...parts: string[]): string {
-  const joined = parts.filter(Boolean).join('/').replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
-  return `/${joined}`;
-}
-
-function routesOf(controller: new (...args: never[]) => unknown): string[] {
-  const prefix = (Reflect.getMetadata(PATH_METADATA, controller) as string | string[] | undefined) ?? '';
-  const prefixes = Array.isArray(prefix) ? prefix : [prefix];
-  const proto = controller.prototype as Record<string, unknown>;
-  const out: string[] = [];
-  for (const name of Object.getOwnPropertyNames(proto)) {
-    const handler = proto[name];
-    if (typeof handler !== 'function') continue;
-    const method = Reflect.getMetadata(METHOD_METADATA, handler) as RequestMethod | undefined;
-    if (method === undefined) continue;
-    const path = Reflect.getMetadata(PATH_METADATA, handler) as string | string[];
-    for (const pre of prefixes) {
-      for (const p of Array.isArray(path) ? path : [path]) out.push(`${RequestMethod[method]} ${joinPath(pre, p)}`);
-    }
-  }
-  return out;
-}
-
-const ROUTES = new Set(
-  [
-    AdminController,
-    AdminAttendanceController,
-    AdminPayrollController,
-    AuthController,
-    BrandAdminController,
-    BrandController,
-    CommunityFeedController,
-    HealthController,
-    LoyaltyController,
-    OrdersController,
-    PancakeController,
-    PaymentController,
-    ReviewsController,
-    StorefrontController,
-  ].flatMap((c) => routesOf(c as never)),
-);
+// Dựng từ đồ thị AppModule, không phải danh sách controller viết tay: với danh sách tay, một route đã gỡ mà được đăng ký lại
+// ở controller nằm ngoài danh sách sẽ không bao giờ làm mục REMOVED đỏ. beta-removed.spec.ts bổ sung bằng lời gọi HTTP thật.
+const ROUTES = new Set(collectControllers(AppModule as unknown as Ctor).flatMap(routesOf));
 
 describe('Sổ endpoint C-098', () => {
   it('dựng được bảng route từ metadata của controller', () => {
+    expect(ROUTES.size).toBeGreaterThan(100);
     expect(ROUTES.has('GET /orders')).toBe(true);
     expect(ROUTES.has('POST /orders/:code/cancel')).toBe(true);
     expect(ROUTES.has('POST /admin/orders/:id/issue-invoice')).toBe(true);
