@@ -39,6 +39,8 @@ const mocks = vi.hoisted(() => ({
   createQuickReply: vi.fn(),
   updateQuickReply: vi.fn(),
   deleteQuickReply: vi.fn(),
+  kit: null as unknown,
+  saveContentKit: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -150,6 +152,9 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     createQuickReply: (...args: unknown[]) => mocks.createQuickReply(...args),
     updateQuickReply: (...args: unknown[]) => mocks.updateQuickReply(...args),
     deleteQuickReply: (...args: unknown[]) => mocks.deleteQuickReply(...args),
+    searchAdminProducts: async () => [{ id: 'p1', name: 'Dừa sáp', brand: 'Bến Tre', isActive: true, variations: [] }],
+    getContentKit: async () => mocks.kit,
+    saveContentKit: (...args: unknown[]) => mocks.saveContentKit(...args),
   };
 });
 
@@ -178,7 +183,9 @@ beforeEach(() => {
   mocks.flashSales = [];
   mocks.faqs = [];
   mocks.quickReplies = [];
+  mocks.kit = null;
   for (const fn of [
+    mocks.saveContentKit,
     mocks.createQuickReply, mocks.updateQuickReply, mocks.deleteQuickReply,
     mocks.createFaq, mocks.updateFaq, mocks.deleteFaq,
     mocks.createFlashSale, mocks.updateFlashSale, mocks.addFlashSaleItem, mocks.deleteFlashSaleItem,
@@ -1062,5 +1069,81 @@ describe('admin/page — tab CSKH mẫu tin nhanh', () => {
       isGreeting: true,
     });
     expect(para(container, 'Trùng từ khoá').className).toContain('text-danger-fg');
+  });
+});
+
+describe('admin/page — tab Content Kit CTV', () => {
+  const openKit = async () => {
+    window.history.replaceState(null, '', '/admin?tab=contentKit');
+    return mount();
+  };
+  const pickAndLoad = async (container: HTMLElement) => {
+    typeInto(container.querySelector('input[type="search"]'), 'dừa');
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 320));
+    });
+    await flush();
+    click(container.querySelector('button[role="option"]'));
+    click(btn(container, 'Tải'));
+    await flush();
+  };
+
+  it('thẻ chọn sản phẩm: tiêu đề font-display, ghi chú stone-500 vẫn có {ten_ctv}/{link}, nút Tải khoá tới khi chọn', async () => {
+    const { container } = await openKit();
+    expect(container.querySelector('h3')!.className).toContain('font-display');
+    const hint = container.querySelector('p')!;
+    expect(hint.className).toContain('text-stone-500');
+    expect([...hint.querySelectorAll('code')].map((c) => c.textContent)).toEqual(['{ten_ctv}', '{link}']);
+    const load = btn(container, 'Tải');
+    expect(load.disabled).toBe(true);
+    expect(load.className).toContain('bg-forest-600');
+    expect(load.className).toContain('min-h-[44px]');
+  });
+
+  it('trình soạn: ô nhập viền đủ tương phản, placeholder mẫu giữ nguyên (kể cả 🌿), Lưu gửi đúng dữ liệu', async () => {
+    mocks.kit = {
+      id: 'k1',
+      productId: 'p1',
+      captions: ['Caption 1'],
+      usps: ['USP 1', 'USP 2'],
+      faqs: [{ q: 'Bảo quản?', a: 'Nơi khô ráo' }],
+      videoUrls: [],
+      updatedAt: '',
+    };
+    const { container } = await openKit();
+    await pickAndLoad(container);
+    expect(container.textContent).toContain('Sản phẩm: p1');
+    const areas = [...container.querySelectorAll('textarea')];
+    expect(areas).toHaveLength(3);
+    for (const a of areas) expect(a.className).toContain('border-stone-450');
+    expect(areas[0]!.placeholder).toBe('Mình đang dùng sản phẩm này, ưng lắm! Mua qua {link} nhé {ten_ctv} \u{1F33F}');
+
+    const faqInputs = container.querySelectorAll('input[placeholder="Câu hỏi"], input[placeholder="Câu trả lời"]');
+    expect(faqInputs).toHaveLength(2);
+    for (const el of faqInputs) expect(el.className).toContain('min-h-[44px]');
+    const del = btn(container, 'Xoá');
+    expect(del.className).toContain('text-danger-fg');
+    expect(del.className).toContain('min-h-[44px]');
+    const add = btn(container, '+ Thêm FAQ');
+    expect(add.className).toContain('text-forest-700');
+
+    typeInto(areas[2]!, 'https://v.test/1\n\n https://v.test/2 ');
+    const save = btn(container, 'Lưu Content Kit');
+    expect(save.className).toContain('bg-forest-600');
+    mocks.saveContentKit.mockResolvedValueOnce({});
+    click(save);
+    await flush();
+    expect(mocks.saveContentKit).toHaveBeenCalledWith('p1', {
+      captions: ['Caption 1'],
+      usps: ['USP 1', 'USP 2'],
+      videoUrls: ['https://v.test/1', 'https://v.test/2'],
+      faqs: [{ q: 'Bảo quản?', a: 'Nơi khô ráo' }],
+    });
+    expect(para(container, 'Đã lưu Content Kit!').className).toContain('text-success-fg');
+
+    mocks.saveContentKit.mockRejectedValueOnce(new Error('Quá dài'));
+    click(save);
+    await flush();
+    expect(para(container, 'Quá dài').className).toContain('text-danger-fg');
   });
 });

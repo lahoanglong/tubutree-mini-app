@@ -2086,6 +2086,9 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
 }
 
 // ── Content Kit CTV (bài mẫu/USP/FAQ/media per-sản phẩm) ──
+// Emoji trong caption mẫu là nội dung CTV sẽ đăng, không phải biểu tượng giao diện: viết bằng mã escape để bánh cóc emoji chỉ bắt icon.
+const CAPTION_PLACEHOLDER = 'Mình đang dùng sản phẩm này, ưng lắm! Mua qua {link} nhé {ten_ctv} \u{1F33F}';
+
 function ContentKitTab() {
   const [pickedProduct, setPickedProduct] = useState<PickedItem | null>(null);
   const [loadedId, setLoadedId] = useState<string | null>(null);
@@ -2097,9 +2100,9 @@ function ContentKitTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-neutral-100 bg-white p-4">
-        <h3 className="mb-2 text-sm font-semibold">Soạn Content Kit theo sản phẩm</h3>
-        <p className="mb-2 text-xs text-neutral-400">
+      <div className={CARD_CLASS}>
+        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Soạn Content Kit theo sản phẩm</h3>
+        <p className="mb-2 text-xs text-stone-500">
           Chọn sản phẩm bằng cách gõ tên (không cần dấu) hoặc SKU. Trong caption dùng{' '}
           <code>{'{ten_ctv}'}</code> và <code>{'{link}'}</code> — hệ thống sẽ tự chèn tên CTV + link giới thiệu khi CTV xem.
         </p>
@@ -2108,15 +2111,15 @@ function ContentKitTab() {
           <button
             onClick={() => pickedProduct && setLoadedId(pickedProduct.id)}
             disabled={!pickedProduct}
-            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             Tải
           </button>
         </div>
       </div>
 
-      {loadedId && q.isLoading && <p className="text-sm text-neutral-400">Đang tải…</p>}
-      {loadedId && q.isError && <p className="text-sm text-red-600">{(q.error as Error).message}</p>}
+      {loadedId && q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {loadedId && q.isError && <p className="text-sm text-danger-fg">{(q.error as Error).message}</p>}
       {loadedId && q.isSuccess && (
         <ContentKitEditor key={loadedId} productId={loadedId} initial={q.data} />
       )}
@@ -2157,39 +2160,40 @@ function ContentKitEditor({
 
   const setFaq = (i: number, patch: Partial<ContentKitFaq>) =>
     setFaqs((fs) => fs.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+  const field = `${FIELD_CLASS} ${TOUCH_H} grow basis-40`;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
-      <div className="mb-2 text-sm font-medium">Sản phẩm: {productId}</div>
+    <div className={CARD_CLASS}>
+      <div className="mb-2 break-all text-sm font-medium text-stone-900">Sản phẩm: {productId}</div>
 
-      <label className="mb-1 block text-xs font-medium text-neutral-500">Bài mẫu (mỗi dòng 1 caption)</label>
+      <label className="mb-1 block text-xs font-medium text-stone-600">Bài mẫu (mỗi dòng 1 caption)</label>
       <textarea
         value={captions}
         onChange={(e) => setCaptions(e.target.value)}
         rows={5}
-        placeholder={'Mình đang dùng sản phẩm này, ưng lắm! Mua qua {link} nhé {ten_ctv} 🌿'}
-        className="mb-3 w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+        placeholder={CAPTION_PLACEHOLDER}
+        className={`mb-3 ${INPUT_CLASS}`}
       />
 
-      <label className="mb-1 block text-xs font-medium text-neutral-500">USP / điểm bán hàng (mỗi dòng 1 ý)</label>
+      <label className="mb-1 block text-xs font-medium text-stone-600">USP / điểm bán hàng (mỗi dòng 1 ý)</label>
       <textarea
         value={usps}
         onChange={(e) => setUsps(e.target.value)}
         rows={3}
         placeholder={'Nguyên liệu tự nhiên 100%'}
-        className="mb-3 w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+        className={`mb-3 ${INPUT_CLASS}`}
       />
 
-      <label className="mb-1 block text-xs font-medium text-neutral-500">Video URL (mỗi dòng 1 link)</label>
+      <label className="mb-1 block text-xs font-medium text-stone-600">Video URL (mỗi dòng 1 link)</label>
       <textarea
         value={videoUrls}
         onChange={(e) => setVideoUrls(e.target.value)}
         rows={2}
         placeholder={'https://...'}
-        className="mb-3 w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+        className={`mb-3 ${INPUT_CLASS}`}
       />
 
-      <div className="mb-1 text-xs font-medium text-neutral-500">FAQ (câu hỏi thường gặp)</div>
+      <div className="mb-1 text-xs font-medium text-stone-600">FAQ (câu hỏi thường gặp)</div>
       <div className="space-y-1">
         {faqs.map((f, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
@@ -2197,15 +2201,15 @@ function ContentKitEditor({
               placeholder="Câu hỏi"
               value={f.q}
               onChange={(e) => setFaq(i, { q: e.target.value })}
-              className="flex-1 rounded border border-neutral-200 px-2 py-1"
+              className={field}
             />
             <input
               placeholder="Câu trả lời"
               value={f.a}
               onChange={(e) => setFaq(i, { a: e.target.value })}
-              className="flex-1 rounded border border-neutral-200 px-2 py-1"
+              className={field}
             />
-            <button onClick={() => setFaqs((fs) => fs.filter((_, idx) => idx !== i))} className="text-xs text-red-600">
+            <button onClick={() => setFaqs((fs) => fs.filter((_, idx) => idx !== i))} className={`${BTN_LINK_DANGER} text-xs`}>
               Xoá
             </button>
           </div>
@@ -2213,7 +2217,7 @@ function ContentKitEditor({
       </div>
       <button
         onClick={() => setFaqs((fs) => [...fs, { q: '', a: '' }])}
-        className="mt-1 text-sm text-green-700 underline"
+        className={`${BTN_LINK} mt-1 text-sm`}
       >
         + Thêm FAQ
       </button>
@@ -2222,11 +2226,11 @@ function ContentKitEditor({
         <button
           onClick={() => { setMsg(null); save.mutate(); }}
           disabled={save.isPending}
-          className="rounded bg-green-600 px-4 py-1.5 text-sm text-white disabled:bg-neutral-300"
+          className={BTN_PRIMARY}
         >
           {save.isPending ? 'Đang lưu…' : 'Lưu Content Kit'}
         </button>
-        {msg && <span className={`ml-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
+        {msg && <span className={`ml-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</span>}
       </div>
     </div>
   );
