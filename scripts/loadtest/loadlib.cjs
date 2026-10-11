@@ -17,11 +17,19 @@ const fakeIp = (n) => `10.${(n >> 16) & 255}.${(n >> 8) & 255}.${n & 255}`;
 
 function apiProc() {
   try {
-    const out = execSync(
-      `powershell -NoProfile -Command "$p=(Get-NetTCPConnection -LocalPort 3301 -State Listen).OwningProcess; $q=Get-Process -Id $p; ($q.CPU).ToString([cultureinfo]::InvariantCulture)+' '+[int]($q.WorkingSet64/1MB)"`,
-      { encoding: 'utf8', timeout: 15000 },
-    ).trim().split(' ');
-    return { cpuSec: parseFloat(out[0]), rssMB: parseInt(out[1], 10) };
+    if (process.platform === 'win32') {
+      const out = execSync(
+        `powershell -NoProfile -Command "$p=(Get-NetTCPConnection -LocalPort 3301 -State Listen).OwningProcess; $q=Get-Process -Id $p; ($q.CPU).ToString([cultureinfo]::InvariantCulture)+' '+[int]($q.WorkingSet64/1MB)"`,
+        { encoding: 'utf8', timeout: 15000 },
+      ).trim().split(' ');
+      return { cpuSec: parseFloat(out[0]), rssMB: parseInt(out[1], 10) };
+    }
+    // macOS/Linux: cputime của tiến trình đang nghe cổng 3301 (user+sys, định dạng [dd-]hh:mm:ss.cc).
+    const pid = execSync('lsof -ti tcp:3301 -sTCP:LISTEN | head -1', { encoding: 'utf8', timeout: 15000 }).trim();
+    const [cpu, rss] = execSync(`ps -o cputime=,rss= -p ${pid}`, { encoding: 'utf8', timeout: 15000 }).trim().split(/\s+/);
+    const m = /^(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)$/.exec(cpu);
+    const cpuSec = m ? (+(m[1] || 0)) * 86400 + (+(m[2] || 0)) * 3600 + (+m[3]) * 60 + parseFloat(m[4]) : NaN;
+    return { cpuSec, rssMB: Math.round(parseInt(rss, 10) / 1024) };
   } catch {
     return { cpuSec: NaN, rssMB: NaN };
   }
@@ -129,7 +137,7 @@ async function runStage({ sameIp = false, name, concurrency, seconds, iterations
     errPct: +((errors / Math.max(1, total)) * 100).toFixed(2), throttledPct: +((throttled / Math.max(1, total)) * 100).toFixed(2),
     expectedRejected: expectedRej, statusCount,
     flowP50: +pct(flows, 50).toFixed(1), flowP95: +pct(flows, 95).toFixed(1), flows: flows.length,
-    apiCpuCores: +(((p1.cpuSec - p0.cpuSec) / wall) || 0).toFixed(2), apiRssMB: p1.rssMB,
+    apiCpuCores: +(((p1.cpuSec - p0.cpuSec) / wall) || 0).toFixed(2), apiCpuMsPerReq: +(((p1.cpuSec - p0.cpuSec) * 1000 / Math.max(1, total)) || 0).toFixed(3), apiRssMB: p1.rssMB,
     docker: dockerSnap, perLabel, errSamples,
   };
 }

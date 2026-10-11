@@ -122,7 +122,7 @@ S.events = async () => ({
   vuInit: (vu) => ({ token: tokenFor('perf_u_' + (10001 + vu)) }),
   iter: async (x) => {
     const events = Array.from({ length: 10 }, () => ({
-      eventId: crypto.randomUUID(), eventName: pick(['screen_view', 'product_view', 'add_to_cart', 'search']), occurredAt: new Date().toISOString(),
+      eventId: crypto.randomUUID(), eventName: pick(['screen_viewed', 'product_viewed', 'search_performed', 'filter_applied']), occurredAt: new Date().toISOString(),
       platform: 'miniapp', sessionId: 's' + x.vu, props: { screen: 'home', n: x.i },
     }));
     await x.req('POST', '/events', { token: x.state.token, body: { events }, label: 'POST /events (10 sự kiện)', headers: { 'X-Device-Id': 'perf-dev-' + x.vu + '-' + x.i } });
@@ -134,7 +134,7 @@ function summarizeRuns(runs) {
   const m = (k) => +median(runs.map((r) => r[k])).toFixed(1);
   return {
     runs: runs.length, concurrency: runs[0].concurrency, rps: m('rps'), p50: m('p50'), p95: m('p95'), p99: m('p99'),
-    errPct: m('errPct'), throttledPct: m('throttledPct'), flowP95: m('flowP95'), apiCpuCores: m('apiCpuCores'), apiRssMB: m('apiRssMB'),
+    errPct: m('errPct'), throttledPct: m('throttledPct'), flowP95: m('flowP95'), apiCpuCores: m('apiCpuCores'), apiRssMB: m('apiRssMB'), apiCpuMsPerReq: +median(runs.map((r) => r.apiCpuMsPerReq)).toFixed(3),
   };
 }
 
