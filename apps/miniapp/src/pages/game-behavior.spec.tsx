@@ -112,6 +112,11 @@ function renderPage() {
   return { ...view, qc, invalidated };
 }
 
+/** Chuyển tab của trang Vườn Xanh. Khối ở tab khác vẫn được dựng nhưng ẩn, nên truy vấn theo role phải mở tab trước. */
+async function openTab(name: 'Hôm nay' | 'Vườn' | 'Cộng đồng') {
+  fireEvent.click(await screen.findByRole('tab', { name }));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.status = 'authenticated';
@@ -214,10 +219,11 @@ describe('GamePage — vườn và lối tắt', () => {
 
   it('lối tắt: Bảng tin cộng đồng → /feed, Đổi vỏ chai → /refill', async () => {
     renderPage();
-    fireEvent.click(await screen.findByText('Bảng tin cộng đồng'));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/feed');
-    fireEvent.click(screen.getByText('Đổi vỏ chai lấy nước'));
+    fireEvent.click(await screen.findByText('Đổi vỏ chai lấy nước'));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/refill');
+    await openTab('Cộng đồng');
+    fireEvent.click(screen.getByText('Bảng tin cộng đồng'));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/feed');
   });
 
   it('banner mùa chỉ hiện khi có mùa, kèm chủ đề/vùng và loài nổi bật', async () => {
@@ -530,6 +536,7 @@ describe('GamePage — lô đất', () => {
 
   it('chưa tải được garden: không có khối lô đất', async () => {
     renderPage();
+    await openTab('Vườn');
     await screen.findByText('Sồi');
     expect(screen.queryByText(/Lô đất của bạn/)).not.toBeInTheDocument();
   });
@@ -537,6 +544,7 @@ describe('GamePage — lô đất', () => {
   it('chỉ liệt kê lô không phải lô nhà; chưa có lô thì có lời gợi ý', async () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME], maxPlots: 3, nextUnlock: NEXT });
     renderPage();
+    await openTab('Vườn');
     expect(await screen.findByText('Lô đất của bạn (1/3)')).toBeInTheDocument();
     expect(screen.getByText(/Mở thêm lô đất để trồng nhiều cây cùng lúc/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Tưới' })).not.toBeInTheDocument();
@@ -545,6 +553,7 @@ describe('GamePage — lô đất', () => {
   it('mỗi lô có nút Tưới gọi waterPlot(id, 20) đúng lô; báo tiến độ lô; hiện tình trạng héo/chết', async () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT_A, PLOT_B], maxPlots: 4, nextUnlock: NEXT });
     const { container, invalidated } = renderPage();
+    await openTab('Vườn');
     expect(await screen.findByText('Lô 2 · Mận')).toBeInTheDocument();
     expect(screen.getByText('Lô 3 · Xoài')).toBeInTheDocument();
     expect(screen.queryByText('Lô 1 · Sồi')).not.toBeInTheDocument();
@@ -563,6 +572,7 @@ describe('GamePage — lô đất', () => {
     mocks.api.waterPlot.mockReturnValue(gate.promise);
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT_A, PLOT_B], maxPlots: 4, nextUnlock: NEXT });
     renderPage();
+    await openTab('Vườn');
     await screen.findByText('Lô 2 · Mận');
     const [first, second] = screen.getAllByRole('button', { name: 'Tưới' });
     fireEvent.click(first!);
@@ -575,6 +585,7 @@ describe('GamePage — lô đất', () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT_A], maxPlots: 4, nextUnlock: NEXT });
     mocks.api.waterPlot.mockResolvedValue({ progress: 20, target: 20, harvested: true, treesPlanted: 1, revivedFromDead: false, reward: { coupon: 'LO-5' } });
     renderPage();
+    await openTab('Vườn');
     fireEvent.click(await screen.findByRole('button', { name: 'Tưới' }));
     expect(await screen.findByText('Thu hoạch thành công!')).toBeInTheDocument();
     expect(screen.getByText('LO-5')).toBeInTheDocument();
@@ -585,6 +596,7 @@ describe('GamePage — lô đất', () => {
     mocks.api.unlockPlot.mockReturnValue(gate.promise);
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME], maxPlots: 3, nextUnlock: NEXT });
     const { invalidated } = renderPage();
+    await openTab('Vườn');
     const seeds = await screen.findByRole('button', { name: 'Mở lô (1.200💧)' });
     const xu = screen.getByRole('button', { name: 'Mở lô (65.000 xu)' });
     expect(seeds).toBeEnabled();
@@ -606,6 +618,7 @@ describe('GamePage — lô đất', () => {
   it('mở lô bằng giọt nước gọi unlockPlot("SEEDS")', async () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME], maxPlots: 3, nextUnlock: NEXT });
     renderPage();
+    await openTab('Vườn');
     fireEvent.click(await screen.findByRole('button', { name: 'Mở lô (1.200💧)' }));
     await waitFor(() => expect(mocks.api.unlockPlot).toHaveBeenCalledWith('SEEDS'));
   });
@@ -613,6 +626,7 @@ describe('GamePage — lô đất', () => {
   it('đã đủ lô: không còn nút mở, hiện thông báo tối đa', async () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT_A], maxPlots: 2, nextUnlock: null });
     renderPage();
+    await openTab('Vườn');
     expect(await screen.findByText(/Bạn đã mở tối đa số lô đất/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Mở lô/ })).not.toBeInTheDocument();
   });
@@ -627,6 +641,7 @@ describe('GamePage — Chặng Mùa (Season Pass)', () => {
   it('không có mùa đang chạy hoặc không có bậc: ẩn khối', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 0, premiumEligible: false, tiers: [] });
     renderPage();
+    await openTab('Cộng đồng');
     await screen.findByText('Sồi');
     expect(screen.queryByText(viText.game.seasonPass.title)).not.toBeInTheDocument();
   });
@@ -634,6 +649,7 @@ describe('GamePage — Chặng Mùa (Season Pass)', () => {
   it('hiện tiêu đề, XP hiện có / mốc cuối, gợi ý Premium khi chưa đủ điều kiện', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: tiers() });
     const { container } = renderPage();
+    await openTab('Cộng đồng');
     expect(await screen.findByText(viText.game.seasonPass.title)).toBeInTheDocument();
     expect(screen.getByText(viText.game.seasonPass.subtitle('Xuân'))).toBeInTheDocument();
     expect(screen.getByText('150 XP')).toBeInTheDocument();
@@ -646,6 +662,7 @@ describe('GamePage — Chặng Mùa (Season Pass)', () => {
   it('bậc đã mở + chưa đủ điều kiện Premium: nhánh miễn phí nhận được, Premium và bậc khoá đều tắt', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: tiers() });
     renderPage();
+    await openTab('Cộng đồng');
     await screen.findByText(viText.game.seasonPass.title);
     expect(screen.getByRole('button', { name: viText.game.seasonPass.claim })).toBeEnabled();
     const locked = screen.getAllByRole('button', { name: viText.game.seasonPass.locked });
@@ -657,6 +674,7 @@ describe('GamePage — Chặng Mùa (Season Pass)', () => {
   it('nhận nhánh miễn phí: gọi claimSeasonPass(tier, "free") một lần, báo + haptic, làm mới mùa/hồ sơ/ví', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: tiers() });
     const { invalidated } = renderPage();
+    await openTab('Cộng đồng');
     const btn = await screen.findByRole('button', { name: viText.game.seasonPass.claim });
     fireEvent.click(btn);
     await waitFor(() =>
@@ -675,6 +693,7 @@ describe('GamePage — Chặng Mùa (Season Pass)', () => {
   it('đủ điều kiện Premium: nhánh Premium nhận được qua claimSeasonPass(tier, "premium")', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: true, tiers: tiers() });
     renderPage();
+    await openTab('Cộng đồng');
     await screen.findByText(viText.game.seasonPass.title);
     expect(screen.queryByText(viText.game.seasonPass.premiumHint)).not.toBeInTheDocument();
     const claims = screen.getAllByRole('button', { name: viText.game.seasonPass.claim });
@@ -686,6 +705,7 @@ describe('GamePage — Chặng Mùa (Season Pass)', () => {
   it('phần đã nhận hiện "✓ Đã nhận" thay cho nút', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: true, tiers: tiers({ claimedFree: true }) });
     renderPage();
+    await openTab('Cộng đồng');
     await screen.findByText(viText.game.seasonPass.title);
     expect(screen.getByText(viText.game.seasonPass.claimed)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: viText.game.seasonPass.claim })).toHaveLength(1);
@@ -737,6 +757,7 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
     ]);
     mocks.api.giftWater.mockReturnValue(gate.promise);
     renderPage();
+    await openTab('Cộng đồng');
     expect(await screen.findByText('Lan')).toBeInTheDocument();
     const gifts = screen.getAllByRole('button', { name: 'Tặng 💧' });
     expect(gifts).toHaveLength(2);

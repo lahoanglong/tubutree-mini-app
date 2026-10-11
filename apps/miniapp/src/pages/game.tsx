@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import type { HarvestSpecies } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
 import { ErrorState } from '../components/ui/empty-state';
+import { PageHeader } from '../components/ui/page-header';
+import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { getErrorMessage } from '../services/api';
 import { MessagesSquare, Recycle } from 'lucide-react';
 import { GameLoginGate, GameSkeleton } from '../components/game/game-states';
@@ -25,6 +27,7 @@ import { MissionsCard } from '../components/game/missions-card';
 import { SeasonLeaderboard } from '../components/game/season-leaderboard';
 import { WeeklyLeaderboard } from '../components/game/weekly-leaderboard';
 import { HarvestCelebration } from '../components/game/harvest-celebration';
+import { GAME_TABS, GameTabPanel, type GameTabKey } from '../components/game/game-tabs';
 import { useGameData } from '../components/game/use-game-data';
 import { useGameActions, type HarvestReward } from '../components/game/use-game-actions';
 
@@ -43,6 +46,7 @@ export default function GamePage() {
   const currentQuiz = quiz?.find((q) => !answeredIds.has(q.id));
   // Reveal "Bạn có biết…" sau khi trả lời, trước khi sang câu kế.
   const [reveal, setReveal] = useState<QuizReveal | null>(null);
+  const [tab, setTab] = useState<GameTabKey>('today');
   const [harvested, setHarvested] = useState(false);
   const [harvestCoupon, setHarvestCoupon] = useState<string | null>(null);
   const [harvestCert, setHarvestCert] = useState<string | null>(null);
@@ -64,156 +68,157 @@ export default function GamePage() {
   };
 
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
-  if (status === 'loading' || (authed && isLoading)) {
-    return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <GameSkeleton />
-      </Page>
-    );
-  }
+  const shell = (children: ReactNode) => (
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(76px + var(--safe-bottom))' }}>
+      <PageHeader title="Vườn Xanh" back={false} />
+      {children}
+    </Page>
+  );
+  if (status === 'loading' || (authed && isLoading)) return shell(<GameSkeleton />);
 
   // Chỉ hiện cổng đăng nhập khi đã chắc chắn user chưa đăng nhập (status settled, không authenticated)
   // — trước đây gộp chung với nhánh loading khiến user đã logout/login lỗi bị kẹt mãi ở skeleton.
-  if (!authed) {
-    return (
-      <Page className="page">
-        <GameLoginGate onLogin={() => void login()} />
-      </Page>
-    );
-  }
+  if (!authed) return shell(<GameLoginGate onLogin={() => void login()} />);
 
   // Profile là dữ liệu chủ đạo của trang (streak/xu/eco-impact) — lỗi thì phải báo rõ,
   // không để rơi xuống render với optional-chaining trông như "mất hết tiến độ".
-  if (isError) {
-    return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <ErrorState message={getErrorMessage(profileError)} onRetry={() => void refetch()} />
-      </Page>
-    );
-  }
+  if (isError) return shell(<ErrorState message={getErrorMessage(profileError)} onRetry={() => void refetch()} />);
 
   const eco = profile?.ecoImpact;
 
-  return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 80 }}>
+  return shell(
+    <>
+      <div style={{ padding: '12px 16px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <GardenHero eco={eco} totalSeeds={profile?.totalSeeds} streakDays={profile?.streakDays} />
 
-      <GardenHero eco={eco} totalSeeds={profile?.totalSeeds} streakDays={profile?.streakDays} />
+        {/* Điều hướng nội bộ: giữ thanh tab trong tầm tay khi cuộn hết khối dài của "Hôm nay". */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'var(--color-bg-canvas)', padding: '4px 0' }}>
+          <SegmentedTabs items={GAME_TABS.map((t) => ({ key: t.key, label: t.label }))} value={tab} onChange={(key) => setTab(key as GameTabKey)} />
+        </div>
 
-      {/* Bảng tin cộng đồng (§6.14.12) */}
-      <GameLinkRow
-        icon={MessagesSquare}
-        title="Bảng tin cộng đồng"
-        hint="Khoe thành tích xanh & cổ vũ nhau trồng cây"
-        onClick={() => navigate('/feed')}
-      />
+        {/* Hôm nay: hành động chính của ngày nằm trong hai màn hình đầu (tưới, điểm danh, nhiệm vụ). */}
+        <GameTabPanel tab="today" active={tab === 'today'}>
+          <TreeHealthAlert health={profile?.treeHealth} />
 
-      {/* Đổi vỏ chai lấy nước (§6.14.6) */}
-      <GameLinkRow
-        icon={Recycle}
-        title="Đổi vỏ chai lấy nước"
-        hint="Mang vỏ rỗng đến cửa hàng → nhận 💧 tưới vườn"
-        onClick={() => navigate('/refill')}
-      />
+          {/* Hồi sinh chuỗi vừa mất (§streak-repair) — chỉ hiện trong cửa sổ hồi sinh */}
+          {profile?.streakRepairable && (
+            <StreakRepair
+              brokenStreakDays={profile.brokenStreakDays}
+              cost={profile.streakRepairCost}
+              pending={repairM.isPending}
+              onRepair={() => repairM.mutate()}
+            />
+          )}
 
-      {/* Banner mùa/sự kiện (Phase 4) */}
-      {season && <SeasonBanner season={season} />}
+          <TreeActions
+            treeXuPrice={profile?.treeXuPrice}
+            waterPending={waterM.isPending}
+            onWater={() => waterM.mutate()}
+            buyPending={buyTreeM.isPending}
+            onBuy={() => buyTreeM.mutate()}
+          />
 
-      {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
-      <CheckInStreak
-        profile={profile}
-        onCheckIn={() => checkInM.mutate()}
-        checkInPending={checkInM.isPending}
-        onBuyFreeze={() => freezeM.mutate()}
-        freezePending={freezeM.isPending}
-        onCollectDew={() => dewM.mutate()}
-        dewPending={dewM.isPending}
-      />
+          {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
+          <CheckInStreak
+            profile={profile}
+            onCheckIn={() => checkInM.mutate()}
+            checkInPending={checkInM.isPending}
+            onBuyFreeze={() => freezeM.mutate()}
+            freezePending={freezeM.isPending}
+            onCollectDew={() => dewM.mutate()}
+            dewPending={dewM.isPending}
+          />
 
-      {/* Hồi sinh chuỗi vừa mất (§streak-repair) — chỉ hiện trong cửa sổ hồi sinh */}
-      {profile?.streakRepairable && (
-        <StreakRepair
-          brokenStreakDays={profile.brokenStreakDays}
-          cost={profile.streakRepairCost}
-          pending={repairM.isPending}
-          onRepair={() => repairM.mutate()}
-        />
-      )}
+          <MissionsCard
+            missions={missions}
+            streakDays={profile?.streakDays}
+            claimPending={claimMissionM.isPending}
+            claimVariables={claimMissionM.variables}
+            onClaim={(code) => claimMissionM.mutate(code)}
+          />
 
-      <TreeHealthAlert health={profile?.treeHealth} />
+          <QuizCard
+            quiz={quiz}
+            currentQuiz={currentQuiz}
+            answeredCount={answeredIds.size}
+            reveal={reveal}
+            pending={answerM.isPending}
+            onAnswer={(id, choice) => answerM.mutate({ id, choice })}
+            onNext={nextQuiz}
+          />
 
-      <TreeActions
-        treeXuPrice={profile?.treeXuPrice}
-        waterPending={waterM.isPending}
-        onWater={() => waterM.mutate()}
-        buyPending={buyTreeM.isPending}
-        onBuy={() => buyTreeM.mutate()}
-      />
+          <LuckyWheelCard cost={10} onSpin={handleSpin} />
 
-      {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
-      {garden && (
-        <GardenPlots
-          garden={garden}
-          waterPlotPending={waterPlotM.isPending}
-          waterPlotVariables={waterPlotM.variables}
-          onWaterPlot={(plotId) => waterPlotM.mutate(plotId)}
-          unlockPending={unlockM.isPending}
-          unlockVariables={unlockM.variables}
-          onUnlock={(currency) => unlockM.mutate(currency)}
-        />
-      )}
+          {/* Đổi vỏ chai lấy nước (§6.14.6) */}
+          <GameLinkRow
+            icon={Recycle}
+            title="Đổi vỏ chai lấy nước"
+            hint="Mang vỏ rỗng đến cửa hàng → nhận 💧 tưới vườn"
+            onClick={() => navigate('/refill')}
+          />
+        </GameTabPanel>
 
-      {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
-      {seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
-        <SeasonPass
-          pass={seasonPass}
-          claimPending={claimPassM.isPending}
-          claimVariables={claimPassM.variables}
-          onClaim={(tier, track) => claimPassM.mutate({ tier, track })}
-        />
-      )}
+        <GameTabPanel tab="garden" active={tab === 'garden'}>
+          {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
+          {garden && (
+            <GardenPlots
+              garden={garden}
+              waterPlotPending={waterPlotM.isPending}
+              waterPlotVariables={waterPlotM.variables}
+              onWaterPlot={(plotId) => waterPlotM.mutate(plotId)}
+              unlockPending={unlockM.isPending}
+              unlockVariables={unlockM.variables}
+              onUnlock={(currency) => unlockM.mutate(currency)}
+            />
+          )}
 
-      {/* Mốc cộng đồng cây thật (Phase 2) — hồ giọt nước toàn cộng đồng */}
-      {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
+          {/* Sổ tay loài cây (Phase 3) — sưu tập khi thu hoạch */}
+          {codex && codex.length > 0 && <SpeciesCodex codex={codex} />}
 
-      {/* Sổ tay loài cây (Phase 3) — sưu tập khi thu hoạch */}
-      {codex && codex.length > 0 && <SpeciesCodex codex={codex} />}
+          {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
+          <EcoImpact eco={eco} totalSeeds={profile?.totalSeeds} forest={forest} />
 
-      {/* Tặng nước bạn bè (social) */}
-      {friends && friends.length > 0 && (
-        <FriendGifts
-          friends={friends}
-          giftPending={giftM.isPending}
-          giftVariables={giftM.variables}
-          onGift={(recipientId) => giftM.mutate(recipientId)}
-        />
-      )}
+          {/* Mốc cộng đồng cây thật (Phase 2) — hồ giọt nước toàn cộng đồng */}
+          {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
+        </GameTabPanel>
 
-      {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
-      <EcoImpact eco={eco} totalSeeds={profile?.totalSeeds} forest={forest} />
+        <GameTabPanel tab="community" active={tab === 'community'}>
+          {/* Banner mùa/sự kiện (Phase 4) */}
+          {season && <SeasonBanner season={season} />}
 
-      <LuckyWheelCard cost={10} onSpin={handleSpin} />
+          {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
+          {seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
+            <SeasonPass
+              pass={seasonPass}
+              claimPending={claimPassM.isPending}
+              claimVariables={claimPassM.variables}
+              onClaim={(tier, track) => claimPassM.mutate({ tier, track })}
+            />
+          )}
 
-      <QuizCard
-        quiz={quiz}
-        currentQuiz={currentQuiz}
-        answeredCount={answeredIds.size}
-        reveal={reveal}
-        pending={answerM.isPending}
-        onAnswer={(id, choice) => answerM.mutate({ id, choice })}
-        onNext={nextQuiz}
-      />
+          {/* Tặng nước bạn bè (social) */}
+          {friends && friends.length > 0 && (
+            <FriendGifts
+              friends={friends}
+              giftPending={giftM.isPending}
+              giftVariables={giftM.variables}
+              onGift={(recipientId) => giftM.mutate(recipientId)}
+            />
+          )}
 
-      <MissionsCard
-        missions={missions}
-        streakDays={profile?.streakDays}
-        claimPending={claimMissionM.isPending}
-        claimVariables={claimMissionM.variables}
-        onClaim={(code) => claimMissionM.mutate(code)}
-      />
+          <WeeklyLeaderboard board={board} />
 
-      {seasonBoard && seasonBoard.length > 0 && <SeasonLeaderboard rows={seasonBoard} />}
+          {seasonBoard && seasonBoard.length > 0 && <SeasonLeaderboard rows={seasonBoard} />}
 
-      <WeeklyLeaderboard board={board} />
+          {/* Bảng tin cộng đồng (§6.14.12) */}
+          <GameLinkRow
+            icon={MessagesSquare}
+            title="Bảng tin cộng đồng"
+            hint="Khoe thành tích xanh & cổ vũ nhau trồng cây"
+            onClick={() => navigate('/feed')}
+          />
+        </GameTabPanel>
+      </div>
 
       {/* Harvest celebration */}
       <HarvestCelebration
@@ -227,6 +232,6 @@ export default function GamePage() {
           navigate('/browse');
         }}
       />
-    </Page>
+    </>,
   );
 }

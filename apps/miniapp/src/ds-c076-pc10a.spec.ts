@@ -7,11 +7,13 @@ import { fileURLToPath } from 'node:url';
  * legacy của css/tokens.css, không màu thô (hex/rgb), không import ZaUI ngoài khung trang, và emoji
  * chỉ còn khi là NỘI DUNG (hạng, lời chúc, chuỗi ngày), không làm icon chức năng.
  *
- * Danh sách chỉ gồm file của gói đã sạch hôm nay; mỗi lượt di cư thêm file của mình vào đây TRƯỚC
- * khi sửa (đỏ → di cư → xanh). Bộ so khớp copy từ ds-legacy-vars-4b.spec.ts (cùng họ alias) và
+ * Danh sách chỉ gồm file của gói đã sạch hôm nay (loyalty, trang game và components/game/**; wheel.tsx
+ * và rank-badge.tsx do lượt khác); mỗi lượt di cư thêm file của mình vào đây TRƯỚC khi sửa (đỏ → di cư → xanh). Bộ so khớp copy từ ds-legacy-vars-4b.spec.ts (cùng họ alias) và
  * từ scripts/uiux/static-scan.mjs (hex/rgb) để guard và số đo static-scan không lệch nhau.
  */
 const GAME_FILES = [
+  'src/pages/game.tsx',
+  'src/components/game/game-tabs.tsx',
   'src/components/game/game-card.tsx',
   'src/components/game/game-link-row.tsx',
   'src/components/game/game-states.tsx',
@@ -39,10 +41,12 @@ const GAME_FILES = [
 ];
 const FILES_PC10A = ['src/pages/loyalty.tsx', ...GAME_FILES];
 
-/** Cho phép giữ emoji theo file: chỉ nội dung hạng/lời chúc/chuỗi ngày. */
+/** Cho phép giữ emoji theo file: chỉ nội dung hạng/game/lời chúc, không làm icon chức năng. */
 const ALLOWED_EMOJI: Record<string, string[]> = {
   'src/pages/loyalty.tsx': ['🌱', '🌿', '🌳', '🌲', '🎉', '🔥'],
-  // Giai đoạn cây, đơn vị giọt nước 💧, chuỗi ngày 🔥 và 🌳 "cây thật" là nội dung game.
+  'src/pages/game.tsx': ['💧'],
+  // Game: giai đoạn cây 🌱🌿🌳, đơn vị giọt nước 💧, chuỗi ngày 🔥, huy chương, phần thưởng 🎁, nhãn phân loại quiz
+  // và lời chúc trong thông báo là NỘI DUNG; nút, tiêu đề khối, trạng thái và hàng lối tắt dùng Icon Lucide.
   'src/components/game/garden-hero.tsx': ['🌱', '🌿', '🌳', '💧', '🔥'],
   'src/components/game/game-utils.ts': ['🌳', '💧', '🌍', '🌬', '🐾', '♻', '⚡', '🌿', '🌟', '💎', '🍃'],
   'src/components/game/checkin-streak.tsx': ['💧', '🎁'],
