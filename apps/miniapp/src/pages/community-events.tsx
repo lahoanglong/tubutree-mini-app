@@ -22,6 +22,7 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Heading, Text } from '../components/ui/text';
 import PostCard from '../components/community/post-card';
 import PostComposer from '../components/community/post-composer';
+import { formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 
 /** "10/07/2026" — đủ dùng cho hạn sự kiện, không cần giờ phút. */
@@ -53,11 +54,11 @@ function EventMeta({ event, rewardPrefix }: { event: CommunityEvent; rewardPrefi
       <Text variant="caption" tone="tertiary">
         {vi.community.eventEnds}: {formatEventDate(event.endAt)}
       </Text>
-      {event.rewardXu > 0 && (
+      {event.rewardPoints > 0 && (
         <Text variant="caption" tone="brand" style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           {rewardPrefix}
           <Icon icon={Gift} size="sm" tone="brand" />
-          {event.rewardXu} TubuXu
+          {formatPoints(event.rewardPoints)}
         </Text>
       )}
       {isEventEnded(event) && (

@@ -87,7 +87,7 @@ const EVENT = (id: string): CommunityEvent => ({
   coverUrl: null,
   startAt: new Date(Date.now() - 24 * HOUR).toISOString(),
   endAt: new Date(Date.now() + 48 * HOUR).toISOString(),
-  rewardXu: 50,
+  rewardPoints: 5,
   status: 'ACTIVE',
   winnerUserId: null,
   createdAt: new Date(Date.now() - 48 * HOUR).toISOString(),
@@ -282,7 +282,7 @@ describe('CommunityModerationPage — sự kiện', () => {
   it('liệt kê sự kiện kèm hạn và thưởng', async () => {
     await openEventsTab();
     expect(screen.getByText('Mô tả e1')).toBeInTheDocument();
-    expect(screen.getByText(/Kết thúc: .* ·.*50 TubuXu/)).toBeInTheDocument();
+    expect(screen.getByText(/Kết thúc: .* ·.*5 điểm/)).toBeInTheDocument();
   });
 
   it('nút Tạo sự kiện chỉ mở khi có tên, ngày bắt đầu, ngày kết thúc', async () => {
@@ -304,7 +304,7 @@ describe('CommunityModerationPage — sự kiện', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ảnh bìa sự kiện' }));
     fireEvent.change(dateInputs()[0]!, { target: { value: '2026-10-12T09:00' } });
     fireEvent.change(dateInputs()[1]!, { target: { value: '2026-10-20T21:00' } });
-    fireEvent.change(screen.getByPlaceholderText('Thưởng TubuXu'), { target: { value: '120' } });
+    fireEvent.change(screen.getByPlaceholderText('Thưởng Điểm Xanh'), { target: { value: '120' } });
     fireEvent.click(screen.getByRole('button', { name: 'Tạo sự kiện' }));
     await waitFor(() =>
       expect(mocks.createEvent).toHaveBeenCalledWith({
@@ -313,12 +313,12 @@ describe('CommunityModerationPage — sự kiện', () => {
         coverUrl: 'https://img.test/cover.jpg',
         startAt: new Date('2026-10-12T09:00').toISOString(),
         endAt: new Date('2026-10-20T21:00').toISOString(),
-        rewardXu: 120,
+        rewardPoints: 120,
       }),
     );
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tạo sự kiện 🎉', type: 'success' }));
     await waitFor(() => expect((screen.getByPlaceholderText('Tên sự kiện') as HTMLInputElement).value).toBe(''));
-    expect((screen.getByPlaceholderText('Thưởng TubuXu') as HTMLInputElement).value).toBe('0');
+    expect((screen.getByPlaceholderText('Thưởng Điểm Xanh') as HTMLInputElement).value).toBe('0');
     expect(dateInputs()[0]!.value).toBe('');
     await waitFor(() => expect(mocks.listEvents).toHaveBeenCalledTimes(2));
   });
@@ -328,9 +328,9 @@ describe('CommunityModerationPage — sự kiện', () => {
     fireEvent.change(screen.getByPlaceholderText('Tên sự kiện'), { target: { value: 'A' } });
     fireEvent.change(dateInputs()[0]!, { target: { value: '2026-10-12T09:00' } });
     fireEvent.change(dateInputs()[1]!, { target: { value: '2026-10-20T21:00' } });
-    fireEvent.change(screen.getByPlaceholderText('Thưởng TubuXu'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('Thưởng Điểm Xanh'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Tạo sự kiện' }));
-    await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledWith(expect.objectContaining({ rewardXu: 0 })));
+    await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledWith(expect.objectContaining({ rewardPoints: 0 })));
   });
 
   it('tạo lỗi: báo lỗi và giữ nguyên nội dung đã nhập', async () => {
@@ -423,7 +423,8 @@ describe('CommunityModerationPage — tiêu đề, tab, vùng chạm, nhãn (C-0
     await screen.findByText('Sự kiện e1');
     expect(screen.getByRole('textbox', { name: 'Tên sự kiện' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Mô tả sự kiện (không bắt buộc)' })).toBeInTheDocument();
-    expect(screen.getByRole('spinbutton', { name: 'Thưởng TubuXu' })).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: 'Thưởng Điểm Xanh' })).toBeInTheDocument();
+    expect(screen.getByText('1 điểm = 1.000đ, tối đa 1.000 điểm')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Nhập userId người thắng' })).toBeInTheDocument();
     const start = screen.getByLabelText('Bắt đầu') as HTMLInputElement;
     const end = screen.getByLabelText('Kết thúc') as HTMLInputElement;

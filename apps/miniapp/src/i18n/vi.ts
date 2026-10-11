@@ -673,6 +673,7 @@ export const vi = {
     eventDescPlaceholder: 'Mô tả sự kiện (không bắt buộc)',
     eventCoverLabel: 'Ảnh bìa sự kiện',
     eventRewardLabel: 'Thưởng Điểm Xanh',
+    eventRewardHint: '1 điểm = 1.000đ, tối đa 1.000 điểm',
     createEvent: 'Tạo sự kiện',
     eventCreated: 'Đã tạo sự kiện 🎉',
     closeEvent: 'Đóng',

@@ -31,6 +31,7 @@ import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Heading, Text } from '../components/ui/text';
+import { formatPoints } from '../utils/format';
 import { timeAgo } from '../utils/time-ago';
 import { vi } from '../i18n/vi';
 import { KIND_LABEL } from '../components/community/post-card';
@@ -310,7 +311,7 @@ function EventsSection() {
   const [coverUrl, setCoverUrl] = useState('');
   const [startAt, setStartAt] = useState('');
   const [endAt, setEndAt] = useState('');
-  const [rewardXu, setRewardXu] = useState('0');
+  const [rewardPoints, setRewardPoints] = useState('0');
 
   const createM = useMutation({
     mutationFn: (dto: CreateEventInput) => createEvent(dto),
@@ -321,7 +322,7 @@ function EventsSection() {
       setCoverUrl('');
       setStartAt('');
       setEndAt('');
-      setRewardXu('0');
+      setRewardPoints('0');
       invalidate();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -338,7 +339,7 @@ function EventsSection() {
       coverUrl: coverUrl || undefined,
       startAt: new Date(startAt).toISOString(),
       endAt: new Date(endAt).toISOString(),
-      rewardXu: Number(rewardXu) || 0,
+      rewardPoints: Number(rewardPoints) || 0,
     });
   };
 
@@ -383,9 +384,10 @@ function EventsSection() {
             type="number"
             aria-label={vi.community.eventRewardLabel}
             placeholder={vi.community.eventRewardLabel}
-            value={rewardXu}
-            onChange={(e) => setRewardXu(e.target.value)}
+            value={rewardPoints}
+            onChange={(e) => setRewardPoints(e.target.value)}
           />
+          <Text variant="caption" tone="tertiary" as="div">{vi.community.eventRewardHint}</Text>
           <Button fullWidth loading={createM.isPending} disabled={!filled} onPress={submitCreate}>
             {vi.community.createEvent}
           </Button>
@@ -441,7 +443,7 @@ function AdminEventCard({ event, onDone }: { event: CommunityEvent; onDone: () =
       <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
         {vi.community.eventEnds}: {new Date(event.endAt).toLocaleDateString('vi-VN')} ·
         <Icon icon={Gift} size="sm" tone="muted" />
-        {event.rewardXu} TubuXu
+        {formatPoints(event.rewardPoints)}
       </Text>
       <div style={{ ...ACTION_ROW_STYLE, alignItems: 'center' }}>
         <Input

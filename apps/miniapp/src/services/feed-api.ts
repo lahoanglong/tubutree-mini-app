@@ -76,7 +76,7 @@ export interface CreatePostInput {
   eventId?: string;
 }
 
-// Sự kiện cộng đồng (Pha 4 Task 4) — thử thách có hạn + thưởng TubuXu cho người thắng.
+// Sự kiện cộng đồng (Pha 4 Task 4) — thử thách có hạn + thưởng Điểm Xanh cho người thắng (1 điểm = 1.000đ).
 export interface CommunityEvent {
   id: string;
   title: string;
@@ -84,7 +84,7 @@ export interface CommunityEvent {
   coverUrl: string | null;
   startAt: string;
   endAt: string;
-  rewardXu: number;
+  rewardPoints: number;
   status: string;
   winnerUserId: string | null;
   createdAt: string;
@@ -95,7 +95,8 @@ export interface CreateEventInput {
   coverUrl?: string;
   startAt: string;
   endAt: string;
-  rewardXu?: number;
+  /** Điểm Xanh, 0..1.000 (máy chủ từ chối số lớn hơn — tránh nhập nhầm theo đơn vị xu cũ). */
+  rewardPoints?: number;
 }
 
 export const getCategories = () =>
