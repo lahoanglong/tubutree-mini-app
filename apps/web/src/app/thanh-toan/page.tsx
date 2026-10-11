@@ -283,8 +283,11 @@ export default function CheckoutPage() {
                 onChange={(e) => setUsePoints(e.target.checked)}
                 className="h-4 w-4 accent-forest-600"
               />
+              {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
               <span className="text-forest-800">
-                Dùng {usablePoints.toLocaleString('vi-VN')} Điểm Xanh
+                {usePoints && quote
+                  ? `Dùng ${quote.pointsUsed.toLocaleString('vi-VN')} Điểm Xanh — giảm ${formatVnd(quote.pointsDiscount)}`
+                  : `Bạn có ${usablePoints.toLocaleString('vi-VN')} Điểm Xanh`}
               </span>
             </label>
           )}
