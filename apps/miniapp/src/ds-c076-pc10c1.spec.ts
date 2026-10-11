@@ -19,6 +19,7 @@ const FILES = [
   'src/pages/post-detail.tsx',
   'src/pages/group-buy.tsx',
   'src/pages/community-leaderboard.tsx',
+  'src/pages/community-events.tsx',
 ];
 
 /** Trang (không phải component con) phải có đúng một tiêu đề trang — PageHeader hoặc <h1> riêng (C-114). */
