@@ -35,3 +35,31 @@ SELECT count(*) AS rows, COALESCE(sum(delta), 0) AS total_xu FROM "coin_transact
 \echo '--- (f) Tỉ giá điểm: không có dòng (dùng mặc định 1000) hoặc value = 1000; khác thì migration B dừng'
 SELECT (SELECT count(*) FROM "system_configs" WHERE "key" = 'loyalty.vnd_per_point_redeem') AS rate_rows,
        (SELECT "value" FROM "system_configs" WHERE "key" = 'loyalty.vnd_per_point_redeem')  AS rate_value;
+
+-- (g)-(j) Dữ liệu config mà migration 20261012120000 (đổi khoá config) có thể gặp. Migration đó đã tự bỏ
+-- qua giá trị xấu (không dừng), nhưng bỏ qua nghĩa là khoá *_points mới thiếu và code dùng mặc định trong mã:
+-- cần biết trước để admin sửa tay. Dùng jsonb_typeof/regex trước mọi phép ép kiểu để chính truy vấn đo không nổ.
+
+\echo '--- (g) loyalty.vnd_per_point_redeem: kỳ vọng 0 dòng, hoặc value_type = number và value = 1000 (chuỗi "1000" là SAI)'
+SELECT jsonb_typeof("value") AS value_type, "value"
+  FROM "system_configs" WHERE "key" = 'loyalty.vnd_per_point_redeem';
+
+\echo '--- (h) coins.referral_milestones: kỳ vọng 0 dòng (mỗi dòng = một phần tử bị migration bỏ qua: count/bonus không phải số nguyên trong INTEGER)'
+SELECT m AS bad_milestone
+  FROM "system_configs" c, jsonb_array_elements(CASE WHEN jsonb_typeof(c."value") = 'array' THEN c."value" ELSE '[]'::jsonb END) m
+ WHERE c."key" = 'coins.referral_milestones'
+   AND NOT (jsonb_typeof(m) = 'object'
+            AND jsonb_typeof(m->'count') = 'number' AND (m->>'count') ~ '^-?[0-9]+$' AND abs((m->>'count')::numeric) <= 2147483647
+            AND jsonb_typeof(m->'bonus') = 'number' AND (m->>'bonus') ~ '^-?[0-9]+$' AND abs((m->>'bonus')::numeric) <= 2147483647);
+SELECT jsonb_typeof("value") AS milestones_type FROM "system_configs" WHERE "key" = 'coins.referral_milestones'; -- kỳ vọng 0 dòng hoặc array
+
+\echo '--- (i) seasonpass.tiers: kỳ vọng 0 dòng (mỗi dòng = phần tử không phải object, migration giữ nguyên)'
+SELECT t AS non_object_tier
+  FROM "system_configs" s, jsonb_array_elements(CASE WHEN jsonb_typeof(s."value") = 'array' THEN s."value" ELSE '[]'::jsonb END) t
+ WHERE s."key" = 'seasonpass.tiers' AND jsonb_typeof(t) <> 'object';
+SELECT jsonb_typeof("value") AS tiers_type FROM "system_configs" WHERE "key" = 'seasonpass.tiers'; -- kỳ vọng 0 dòng hoặc array
+
+\echo '--- (j) Kiểu của các khoá xu cũ: kỳ vọng number (hoặc không có dòng); string/null/object nghĩa là migration KHÔNG chép sang *_points'
+SELECT "key", jsonb_typeof("value") AS value_type, "value"
+  FROM "system_configs" WHERE "key" IN ('game.tree_xu_price', 'coins.referrer_reward')
+ ORDER BY "key";

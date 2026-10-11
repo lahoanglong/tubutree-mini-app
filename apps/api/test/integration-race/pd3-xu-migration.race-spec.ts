@@ -76,7 +76,7 @@ describe('PD-3 migration B quy đổi xu → Điểm Xanh (real Postgres)', () =
   beforeAll(async () => {
     await exec(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);
     await exec(`CREATE SCHEMA ${SCHEMA}`);
-    for (const t of ['users', 'points_transactions', 'coin_transactions', 'system_configs']) {
+    for (const t of ['users', 'points_transactions', 'coin_transactions', 'system_configs', 'notification_logs']) {
       await exec(`CREATE TABLE ${SCHEMA}.${t} (LIKE public.${t} INCLUDING ALL)`);
     }
     // Schema nháp dựng trạng thái TRƯỚC migration C (deploy thật: B chạy trước C): LIKE ... INCLUDING ALL
@@ -284,8 +284,22 @@ describe('PD-3 migration B quy đổi xu → Điểm Xanh (real Postgres)', () =
                 VALUES ('u123456_spend', 'u123456', -100, 'GAME_BUY_TREE:IT', 'GAME', 'CONVERTED')`);
     await exec(`UPDATE ${SCHEMA}.users SET "pointsConvertedBalance" = "pointsConvertedBalance" - 100 WHERE "id" = 'u123456'`);
 
+    // Thông báo XU_CONVERTED do migration 20261012160000 chèn (id nlog_xu2pts_<userId>): code cũ vẫn hiển thị
+    // chúng nên hoàn tác phải xoá, nhưng KHÔNG đụng dòng khác (thông báo khác của cùng user, dòng cùng mẫu do
+    // người khác gửi với id khác).
+    const nlog = (id: string, userId: string, code: string) =>
+      exec(`INSERT INTO ${SCHEMA}.notification_logs ("id", "userId", "templateCode", "channel", "payload", "status")
+            VALUES ('${id}', '${userId}', '${code}', 'INAPP', '{}'::jsonb, 'SENT')`);
+    for (const id of ['u1', 'u1000', 'u123456']) await nlog(`nlog_xu2pts_${id}`, id, 'XU_CONVERTED');
+    await nlog('keep_other_tpl', 'u1000', 'ORDER_SHIPPED');
+    await nlog('keep_manual_xu', 'u1000', 'XU_CONVERTED');
+
     await runRollback();
     await runRollback();
+
+    expect(
+      await q<{ id: string }>(`SELECT "id" FROM ${SCHEMA}.notification_logs ORDER BY "id"`),
+    ).toEqual([{ id: 'keep_manual_xu' }, { id: 'keep_other_tpl' }]);
 
     const coins: Record<string, number> = {};
     const converted: Record<string, number> = {};
