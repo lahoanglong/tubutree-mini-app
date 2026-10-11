@@ -1,19 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
+import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  UserPlus,
-  ShieldCheck,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-  Check,
-  X,
-  Clock,
-  Plus,
-  MessagesSquare,
-  Download,
-} from 'lucide-react';
+import { UserPlus, ShieldCheck, Check, X, Clock, Plus, MessagesSquare, Download } from 'lucide-react';
 import { listStaff, grantStaff, revokeStaff, type StaffRole } from '../services/staff-api';
 import {
   adminGetShifts,
@@ -39,10 +27,21 @@ import { adminEditSession } from '../services/attendance-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
-import { Skeleton } from '../components/ui/skeleton';
+import { Badge, type BadgeTone } from '../components/ui/badge';
+import { BottomSheet } from '../components/ui/bottom-sheet';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { Field } from '../components/ui/form';
+import { KeyValueRow } from '../components/ui/key-value-row';
+import { PageHeader } from '../components/ui/page-header';
+import { SearchField } from '../components/ui/search-field';
+import { SegmentedTabs } from '../components/ui/segmented-tabs';
+import { Skeleton } from '../components/ui/skeleton';
+import { Heading, Text } from '../components/ui/text';
 import { TimeInput } from '../components/ui/time-input';
 import { ImageUpload } from '../components/image-upload';
+import { PeriodNav } from '../components/period-nav';
 import { formatVnd, formatDateTime } from '../utils/format';
 import {
   mondayKeyOf,
@@ -70,12 +69,11 @@ export default function AdminPage() {
   const role = useAuthStore((s) => s.user?.role);
   if (role !== 'ADMIN') {
     return (
-      <Page className="page">
-        <Box p={6} style={{ textAlign: 'center' }}>
-          <Text style={{ color: 'var(--neutral-600)' }}>
-            Chỉ quản trị viên mới truy cập được trang này.
-          </Text>
-        </Box>
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title="Quản trị nhân sự" />
+        <div style={{ padding: 24, textAlign: 'center' }}>
+          <Text tone="secondary">Chỉ quản trị viên mới truy cập được trang này.</Text>
+        </div>
       </Page>
     );
   }
@@ -84,45 +82,50 @@ export default function AdminPage() {
 
 type Tab = 'staff' | 'shifts' | 'payroll' | 'refill';
 
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'staff', label: 'Nhân sự' },
+  { key: 'shifts', label: 'Duyệt ca' },
+  { key: 'payroll', label: 'Lương' },
+  { key: 'refill', label: 'Duyệt đổi vỏ' },
+];
+
+const SECTION_STYLE = { padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 } as const;
+
 function AdminHub() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('staff');
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
-      <Box p={4} flex style={{ gap: 8, flexWrap: 'wrap' }}>
-        <Button size="small" variant={tab === 'staff' ? undefined : 'secondary'} onClick={() => setTab('staff')}>
-          Nhân sự
-        </Button>
-        <Button size="small" variant={tab === 'shifts' ? undefined : 'secondary'} onClick={() => setTab('shifts')}>
-          Duyệt ca
-        </Button>
-        <Button size="small" variant={tab === 'payroll' ? undefined : 'secondary'} onClick={() => setTab('payroll')}>
-          Lương
-        </Button>
-        <Button size="small" variant={tab === 'refill' ? undefined : 'secondary'} onClick={() => setTab('refill')}>
-          Duyệt đổi vỏ
-        </Button>
-        <Button
-          size="small"
-          variant="secondary"
-          prefixIcon={<MessagesSquare size={16} />}
-          onClick={() => navigate('/admin/community')}
-        >
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
+      <PageHeader title="Quản trị nhân sự" />
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ alignSelf: 'stretch' }}>
+          <SegmentedTabs scroll items={TABS} value={tab} onChange={(key) => setTab(key as Tab)} />
+        </div>
+        <Button variant="secondary" icon={MessagesSquare} onPress={() => navigate('/admin/community')}>
           {vi.community.moderation}
         </Button>
-      </Box>
-      {tab === 'staff' ? (
-        <StaffSection />
-      ) : tab === 'shifts' ? (
-        <ShiftsSection />
-      ) : tab === 'payroll' ? (
-        <PayrollSection />
-      ) : (
-        <RefillAdminSection />
-      )}
+      </div>
+      <div role="tabpanel" aria-label={TABS.find((x) => x.key === tab)?.label}>
+        {tab === 'staff' ? (
+          <StaffSection />
+        ) : tab === 'shifts' ? (
+          <ShiftsSection />
+        ) : tab === 'payroll' ? (
+          <PayrollSection />
+        ) : (
+          <RefillAdminSection />
+        )}
+      </div>
     </Page>
   );
 }
+
+const SHIFT_STATUS: Record<AdminShift['status'], { label: string; tone: BadgeTone }> = {
+  PENDING: { label: 'Chờ duyệt', tone: 'warning' },
+  APPROVED: { label: 'Đã duyệt', tone: 'success' },
+  REJECTED: { label: 'Từ chối', tone: 'danger' },
+  CANCELLED: { label: 'Đã huỷ', tone: 'neutral' },
+};
 
 const PAY_STATUS: Record<PayrollStatus, string> = { OPEN: 'Đang tính', FINALIZED: 'Đã chốt', PAID: 'Đã trả' };
 const fmtHM = (min: number) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
@@ -180,104 +183,170 @@ function PayrollSection() {
   });
 
   return (
-    <Box px={4} pb={4} flex flexDirection="column" style={{ gap: 12 }}>
-      <Box flex alignItems="center" justifyContent="space-between" style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: '8px 12px' }}>
-        <Button size="small" variant="tertiary" onClick={() => setYm(shiftYearMonth(ym.year, ym.month, -1))}>
-          <ChevronLeft size={18} />
-        </Button>
-        <Text size="small" bold>Tháng {ym.month}/{ym.year}</Text>
-        <Button size="small" variant="tertiary" onClick={() => setYm(shiftYearMonth(ym.year, ym.month, 1))}>
-          <ChevronRight size={18} />
-        </Button>
-      </Box>
+    <div style={SECTION_STYLE}>
+      <Heading variant="title-md" as="h2">
+        Lương
+      </Heading>
+      <PeriodNav
+        label={`Tháng ${ym.month}/${ym.year}`}
+        prevLabel="Tháng trước"
+        nextLabel="Tháng sau"
+        onPrev={() => setYm(shiftYearMonth(ym.year, ym.month, -1))}
+        onNext={() => setYm(shiftYearMonth(ym.year, ym.month, 1))}
+      />
 
-      {payQ.isLoading && <Skeleton style={{ height: 120, borderRadius: 12 }} />}
+      {payQ.isLoading && <Skeleton height={120} radius="var(--radius-card)" />}
       {payQ.isError && <ErrorState message={getErrorMessage(payQ.error)} onRetry={() => void payQ.refetch()} />}
 
-      {payQ.data?.map((row) => (
-        <Box key={row.staff.id} style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
-          <Box flex justifyContent="space-between" alignItems="center">
-            <Box style={{ flex: 1, minWidth: 0 }}>
-              <Text bold>{row.staff.fullName ?? row.staff.phone ?? 'NV'}</Text>
-              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                {fmtHM(row.month.totalMinutes)} · {formatVnd(row.profile?.hourlyRate ?? 0)}/h · {PAY_STATUS[row.month.status]}
-              </Text>
-            </Box>
-            <Box style={{ textAlign: 'right' }}>
-              <Text bold style={{ color: 'var(--leaf-700)' }}>{formatVnd(row.month.net)}</Text>
-              {row.month.totalFines > 0 && <Text size="xSmall" style={{ color: 'var(--danger)' }}>−{formatVnd(row.month.totalFines)}</Text>}
-            </Box>
-          </Box>
-          <Box flex style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            <Button size="small" variant="secondary" onClick={() => setDetailRow(row)}>Xem giờ</Button>
-            <Button size="small" variant="secondary" onClick={() => { setRateRow(row); setRateVal(String(row.profile?.hourlyRate ?? 0)); }}>Đơn giá</Button>
-            {(row.qrImageUrl || row.profile?.qrImageUrl) && (
-              <Button size="small" variant="secondary" onClick={() => setQrRow(row)}>QR chuyển</Button>
-            )}
-            {row.month.status === 'OPEN' && (
-              <Button size="small" variant="secondary" loading={finalizeM.isPending} disabled={finalizeM.isPending} onClick={() => finalizeM.mutate(row)}>Chốt</Button>
-            )}
-            {row.month.status !== 'PAID' && (
-              <Button size="small" onClick={() => { setPayRow(row); setProof(''); setNote(''); }}>Đã chuyển</Button>
-            )}
-            {/* Chốt/đã trả xong mà phát hiện sai giờ thì trước đây hết cách sửa trong app. */}
-            {row.month.status !== 'OPEN' && (
+      {payQ.data?.map((row) => {
+        const name = row.staff.fullName ?? row.staff.phone ?? 'NV';
+        // Chỉ dòng đang chạy có spinner; dòng khác khoá để không chốt/mở lại hai nhân viên cùng lúc.
+        const finalizing = finalizeM.isPending && finalizeM.variables?.staff.id === row.staff.id;
+        const reopening = reopenM.isPending && reopenM.variables?.staff.id === row.staff.id;
+        return (
+          <Card key={row.staff.id}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Heading variant="title-sm" as="h3">
+                  {name}
+                </Heading>
+                <Text variant="caption" tone="secondary" as="div">
+                  {fmtHM(row.month.totalMinutes)} · {formatVnd(row.profile?.hourlyRate ?? 0)}/h · {PAY_STATUS[row.month.status]}
+                </Text>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <Text as="div" tone="brand" style={{ fontWeight: 700 }}>
+                  {formatVnd(row.month.net)}
+                </Text>
+                {row.month.totalFines > 0 && (
+                  <Text variant="caption" tone="danger" as="div">
+                    −{formatVnd(row.month.totalFines)}
+                  </Text>
+                )}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              <Button variant="secondary" aria-label={`Xem giờ · ${name}`} onPress={() => setDetailRow(row)}>
+                Xem giờ
+              </Button>
               <Button
-                size="small"
-                variant="tertiary"
-                loading={reopenM.isPending}
-                disabled={reopenM.isPending}
-                onClick={() => {
-                  if (!window.confirm(`Mở lại bảng lương T${ym.month}/${ym.year} của ${row.staff.fullName ?? 'NV'}? Cần chốt lại sau khi sửa.`)) return;
-                  reopenM.mutate(row);
+                variant="secondary"
+                aria-label={`Đơn giá · ${name}`}
+                onPress={() => {
+                  setRateRow(row);
+                  setRateVal(String(row.profile?.hourlyRate ?? 0));
                 }}
               >
-                Mở lại
+                Đơn giá
               </Button>
-            )}
-          </Box>
-        </Box>
-      ))}
+              {(row.qrImageUrl || row.profile?.qrImageUrl) && (
+                <Button variant="secondary" aria-label={`QR chuyển · ${name}`} onPress={() => setQrRow(row)}>
+                  QR chuyển
+                </Button>
+              )}
+              {row.month.status === 'OPEN' && (
+                <Button
+                  variant="secondary"
+                  aria-label={`Chốt · ${name}`}
+                  loading={finalizing}
+                  disabled={finalizeM.isPending && !finalizing}
+                  onPress={() => finalizeM.mutate(row)}
+                >
+                  Chốt
+                </Button>
+              )}
+              {row.month.status !== 'PAID' && (
+                <Button
+                  aria-label={`Đã chuyển · ${name}`}
+                  onPress={() => {
+                    setPayRow(row);
+                    setProof('');
+                    setNote('');
+                  }}
+                >
+                  Đã chuyển
+                </Button>
+              )}
+              {/* Chốt/đã trả xong mà phát hiện sai giờ thì trước đây hết cách sửa trong app. */}
+              {row.month.status !== 'OPEN' && (
+                <Button
+                  variant="ghost"
+                  aria-label={`Mở lại · ${name}`}
+                  loading={reopening}
+                  disabled={reopenM.isPending && !reopening}
+                  onPress={() => {
+                    if (!window.confirm(`Mở lại bảng lương T${ym.month}/${ym.year} của ${row.staff.fullName ?? 'NV'}? Cần chốt lại sau khi sửa.`)) return;
+                    reopenM.mutate(row);
+                  }}
+                >
+                  Mở lại
+                </Button>
+              )}
+            </div>
+          </Card>
+        );
+      })}
       {payQ.data && payQ.data.length === 0 && <EmptyState art="box" heading="Chưa có nhân sự" />}
 
       {/* Sheet QR */}
-      <Sheet visible={!!qrRow} onClose={() => setQrRow(null)} autoHeight>
-        <Box p={4} flex flexDirection="column" alignItems="center" style={{ gap: 10 }}>
-          <Text.Title size="small">Chuyển lương {qrRow?.staff.fullName ?? ''}</Text.Title>
-          <Text bold style={{ color: 'var(--leaf-700)', fontSize: 22 }}>{formatVnd(qrRow?.month.net ?? 0)}</Text>
+      <BottomSheet open={!!qrRow} onClose={() => setQrRow(null)} title={`Chuyển lương ${qrRow?.staff.fullName ?? ''}`}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <Text variant="price-xl" tone="brand">
+            {formatVnd(qrRow?.month.net ?? 0)}
+          </Text>
           {qrRow && (qrRow.qrImageUrl || qrRow.profile?.qrImageUrl) && (
             <img src={(qrRow.qrImageUrl ?? qrRow.profile?.qrImageUrl) as string} alt="QR" style={{ maxWidth: 260, width: '100%' }} />
           )}
           {qrRow?.profile?.bankAccountNo && (
-            <Text size="small">{qrRow.profile.bankAccountName} · {qrRow.profile.bankAccountNo}</Text>
+            <Text variant="body-sm">
+              {qrRow.profile.bankAccountName} · {qrRow.profile.bankAccountNo}
+            </Text>
           )}
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Quét chuyển khoản rồi bấm "Đã chuyển" để tải ảnh xác nhận.</Text>
-        </Box>
-      </Sheet>
+          <Text variant="caption" tone="secondary" as="div">
+            Quét chuyển khoản rồi bấm "Đã chuyển" để tải ảnh xác nhận.
+          </Text>
+        </div>
+      </BottomSheet>
 
       {/* Sheet đơn giá */}
-      <Sheet visible={!!rateRow} onClose={() => setRateRow(null)} autoHeight>
-        <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
-          <Text.Title size="small">Đơn giá giờ · {rateRow?.staff.fullName ?? ''}</Text.Title>
-          <Input type="number" label="Đơn giá (VND/giờ)" value={rateVal} onChange={(e) => setRateVal(e.target.value)} />
-          <Button fullWidth loading={rateM.isPending} disabled={!/^\d+$/.test(rateVal) || rateM.isPending} onClick={() => rateM.mutate()}>Lưu đơn giá</Button>
-        </Box>
-      </Sheet>
+      <BottomSheet
+        open={!!rateRow}
+        onClose={() => setRateRow(null)}
+        title={`Đơn giá giờ · ${rateRow?.staff.fullName ?? ''}`}
+        footer={
+          <Button fullWidth loading={rateM.isPending} disabled={!/^\d+$/.test(rateVal)} onPress={() => rateM.mutate()}>
+            Lưu đơn giá
+          </Button>
+        }
+      >
+        <Field label="Đơn giá (VND/giờ)">
+          <Input type="number" value={rateVal} onChange={(e) => setRateVal(e.target.value)} />
+        </Field>
+      </BottomSheet>
 
       {/* Sheet đã chuyển */}
-      <Sheet visible={!!payRow} onClose={() => setPayRow(null)} autoHeight>
-        <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
-          <Text.Title size="small">Xác nhận đã chuyển · {payRow?.staff.fullName ?? ''}</Text.Title>
-          <Text size="small">Số tiền: <b>{formatVnd(payRow?.month.net ?? 0)}</b></Text>
+      <BottomSheet
+        open={!!payRow}
+        onClose={() => setPayRow(null)}
+        title={`Xác nhận đã chuyển · ${payRow?.staff.fullName ?? ''}`}
+        footer={
+          <Button fullWidth loading={paidM.isPending} disabled={!proof} onPress={() => paidM.mutate()}>
+            Đánh dấu đã trả
+          </Button>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <KeyValueRow label="Số tiền" value={formatVnd(payRow?.month.net ?? 0)} emphasis />
           <ImageUpload label="Ảnh xác nhận chuyển khoản *" value={proof} onChange={setProof} />
-          <Input label="Ghi chú (tuỳ chọn)" value={note} onChange={(e) => setNote(e.target.value)} />
-          <Button fullWidth loading={paidM.isPending} disabled={!proof || paidM.isPending} onClick={() => paidM.mutate()}>Đánh dấu đã trả</Button>
-        </Box>
-      </Sheet>
+          <Field label="Ghi chú (tuỳ chọn)">
+            <Input value={note} onChange={(e) => setNote(e.target.value)} />
+          </Field>
+        </div>
+      </BottomSheet>
 
       {/* Sheet xem giờ + sửa phiên */}
       <DetailSheet row={detailRow} year={ym.year} month={ym.month} onClose={() => setDetailRow(null)} onChanged={invalidate} />
-    </Box>
+    </div>
   );
 }
 
@@ -330,33 +399,34 @@ function DetailSheet({
   });
 
   return (
-    <Sheet visible={!!row} onClose={onClose} autoHeight>
-      <Box p={4} flex flexDirection="column" style={{ gap: 10, maxHeight: '70vh', overflowY: 'auto' }}>
-        <Text.Title size="small">Giờ công · {row?.staff.fullName ?? ''} · T{month}/{year}</Text.Title>
-        {detailQ.isLoading && <Skeleton style={{ height: 100, borderRadius: 10 }} />}
+    <BottomSheet open={!!row} onClose={onClose} title={`Giờ công · ${row?.staff.fullName ?? ''} · T${month}/${year}`}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '60vh', overflowY: 'auto' }}>
+        {detailQ.isLoading && <Skeleton height={100} radius="var(--radius-card)" />}
         {detailQ.data && (
           <>
-            <Text size="small">
-              Tổng: <b>{fmtHM(detailQ.data.month.totalMinutes)}</b> · Thực nhận <b>{formatVnd(detailQ.data.month.net)}</b>
+            <Text variant="body-sm" as="div">
+              Tổng: <strong>{fmtHM(detailQ.data.month.totalMinutes)}</strong> · Thực nhận <strong>{formatVnd(detailQ.data.month.net)}</strong>
             </Text>
             {detailQ.data.days.map((d) => {
               const dayKey = d.workDate.slice(0, 10);
               const sess = detailQ.data!.sessions.filter((s) => vnDateKey(new Date(s.checkinAt)) === dayKey);
               return (
-                <Box key={d.id} style={{ borderTop: '1px solid var(--neutral-100)', paddingTop: 6 }}>
-                  <Box flex justifyContent="space-between">
-                    <Text size="small" bold>{dowLabel(dayKey)} {shortDayLabel(dayKey)} · {fmtHM(d.workedMinutes)}</Text>
-                    <Text size="small">{formatVnd(d.net)}</Text>
-                  </Box>
+                <div key={d.id} style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <Text variant="body-sm" style={{ fontWeight: 700 }}>
+                      {dowLabel(dayKey)} {shortDayLabel(dayKey)} · {fmtHM(d.workedMinutes)}
+                    </Text>
+                    <Text variant="body-sm">{formatVnd(d.net)}</Text>
+                  </div>
                   {sess.map((s) => (
-                    <Box key={s.id} flex justifyContent="space-between" alignItems="center" style={{ paddingLeft: 8, marginTop: 2 }}>
-                      <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+                    <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingLeft: 8, marginTop: 2 }}>
+                      <Text variant="caption" tone="secondary">
                         {isoToVnHHMM(s.checkinAt)} → {s.checkoutAt ? isoToVnHHMM(s.checkoutAt) : 'đang mở'}{s.isLate ? ' · trễ' : ''}
                       </Text>
                       <Button
-                        size="small"
-                        variant="tertiary"
-                        onClick={() => {
+                        variant="ghost"
+                        aria-label={`Sửa giờ phiên ${isoToVnHHMM(s.checkinAt)}`}
+                        onPress={() => {
                           setEditId(s.id);
                           setCi(isoToVnHHMM(s.checkinAt));
                           setCo(s.checkoutAt ? isoToVnHHMM(s.checkoutAt) : isoToVnHHMM(s.checkinAt));
@@ -364,47 +434,58 @@ function DetailSheet({
                       >
                         Sửa giờ
                       </Button>
-                    </Box>
+                    </div>
                   ))}
-                  {sess.length === 0 && <Text size="xSmall" style={{ color: 'var(--neutral-400)', paddingLeft: 8 }}>Không có phiên.</Text>}
+                  {sess.length === 0 && (
+                    <Text variant="caption" tone="tertiary" as="div" style={{ paddingLeft: 8 }}>
+                      Không có phiên.
+                    </Text>
+                  )}
 
                   {editId && sess.some((s) => s.id === editId) && (
-                    <Box style={{ paddingLeft: 8, marginTop: 6 }} flex flexDirection="column">
-                      <Box flex style={{ gap: 8 }}>
-                        <TimeInput value={ci} onChange={setCi} style={{ flex: 1 }} />
-                        <TimeInput value={co} onChange={setCo} style={{ flex: 1 }} />
-                      </Box>
+                    <div style={{ paddingLeft: 8, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ flex: 1 }}>
+                          <Field label="Giờ vào">
+                            <TimeInput value={ci} onChange={setCi} />
+                          </Field>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <Field label="Giờ ra">
+                            <TimeInput value={co} onChange={setCo} />
+                          </Field>
+                        </div>
+                      </div>
                       {/* co === ci là phiên chưa checkout (ô giờ ra khởi tạo bằng giờ vào) —
                           lưu lúc đó là ghi một khoảng 0 phút hoặc, nếu suy sang hôm sau, cả 24
                           tiếng. Bắt quản lý nhập giờ ra thật trước. */}
                       {co === ci && (
-                        <Text size="xxxxSmall" style={{ color: 'var(--warning)', marginTop: 4 }}>
+                        <Text variant="caption" tone="warning" as="div">
                           Nhập giờ ra khác giờ vào để lưu.
                         </Text>
                       )}
-                      <Button
-                        size="small"
-                        style={{ marginTop: 6 }}
-                        loading={editM.isPending}
-                        disabled={editM.isPending || co === ci}
-                        onClick={() => editM.mutate(dayKey)}
-                      >
+                      <Button loading={editM.isPending} disabled={co === ci} onPress={() => editM.mutate(dayKey)}>
                         Lưu giờ
                       </Button>
-                    </Box>
+                    </div>
                   )}
-                </Box>
+                </div>
               );
             })}
-            {detailQ.data.days.length === 0 && <Text size="small" style={{ color: 'var(--neutral-500)' }}>Chưa có công tháng này.</Text>}
+            {detailQ.data.days.length === 0 && (
+              <Text variant="body-sm" tone="secondary" as="div">
+                Chưa có công tháng này.
+              </Text>
+            )}
           </>
         )}
-      </Box>
-    </Sheet>
+      </div>
+    </BottomSheet>
   );
 }
 
 const PHONE_RE = /^0\d{8,10}$/;
+const TIME_RE = /^\d{1,2}:\d{2}$/;
 
 function StaffSection() {
   const qc = useQueryClient();
@@ -447,58 +528,57 @@ function StaffSection() {
   };
 
   return (
-    <Box px={4} pb={4} flex flexDirection="column" style={{ gap: 12 }}>
-      <Box flex justifyContent="space-between" alignItems="center">
-        <Text.Title size="small">Nhân sự</Text.Title>
-        <Button size="small" prefixIcon={<UserPlus size={16} />} onClick={() => setSheetOpen(true)}>
+    <div style={SECTION_STYLE}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <Heading variant="title-md" as="h2">
+          Nhân sự
+        </Heading>
+        <Button icon={UserPlus} onPress={() => setSheetOpen(true)}>
           Thêm
         </Button>
-      </Box>
+      </div>
 
-      {staffQ.isLoading && <Skeleton style={{ height: 80, borderRadius: 12 }} />}
+      {staffQ.isLoading && <Skeleton height={80} radius="var(--radius-card)" />}
       {staffQ.isError && <ErrorState message={getErrorMessage(staffQ.error)} onRetry={() => void staffQ.refetch()} />}
 
       {staffQ.data && (
         <>
           {staffQ.data.members.map((m) => (
-            <Box
-              key={m.id}
-              flex
-              justifyContent="space-between"
-              alignItems="center"
-              style={{ padding: 12, background: 'var(--neutral-0)', borderRadius: 12, gap: 8 }}
-            >
-              <Box style={{ flex: 1, minWidth: 0 }}>
-                <Text bold>{m.fullName ?? 'Chưa có tên'}</Text>
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                  {m.phone ?? '—'} · {m.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
-                </Text>
-              </Box>
-              {m.phone && (
-                <Button
-                  size="small"
-                  variant="tertiary"
-                  prefixIcon={<Trash2 size={15} />}
-                  style={{ color: 'var(--danger)' }}
-                  disabled={revokeM.isPending}
-                  onClick={() => {
-                    // Thao tác một chạm, không hoàn tác được từ trong app: hạ quyền nhầm một
-                    // quản trị viên thì chỉ người còn quyền mới cấp lại được. Cấp quyền ADMIN
-                    // đã hỏi lại (dòng ~398) — thu hồi thì chưa.
-                    if (
-                      !window.confirm(
-                        `Thu hồi quyền của ${m.fullName ?? m.phone}? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.`,
-                      )
-                    ) {
-                      return;
-                    }
-                    revokeM.mutate(m.phone as string);
-                  }}
-                >
-                  Thu hồi
-                </Button>
-              )}
-            </Box>
+            <Card key={m.id}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text as="div" style={{ fontWeight: 700 }}>
+                    {m.fullName ?? 'Chưa có tên'}
+                  </Text>
+                  <Text variant="caption" tone="secondary" as="div">
+                    {m.phone ?? '—'} · {m.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
+                  </Text>
+                </div>
+                {m.phone && (
+                  <Button
+                    variant="ghost"
+                    aria-label={`Thu hồi · ${m.fullName ?? m.phone}`}
+                    style={{ color: 'var(--color-text-danger)' }}
+                    disabled={revokeM.isPending}
+                    onPress={() => {
+                      // Thao tác một chạm, không hoàn tác được từ trong app: hạ quyền nhầm một
+                      // quản trị viên thì chỉ người còn quyền mới cấp lại được. Cấp quyền ADMIN
+                      // đã hỏi lại ở submitGrant — thu hồi thì chưa.
+                      if (
+                        !window.confirm(
+                          `Thu hồi quyền của ${m.fullName ?? m.phone}? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.`,
+                        )
+                      ) {
+                        return;
+                      }
+                      revokeM.mutate(m.phone as string);
+                    }}
+                  >
+                    Thu hồi
+                  </Button>
+                )}
+              </div>
+            </Card>
           ))}
 
           {staffQ.data.members.length === 0 && (
@@ -507,68 +587,68 @@ function StaffSection() {
 
           {staffQ.data.pendingInvites.length > 0 && (
             <>
-              <Text bold style={{ marginTop: 8 }}>
+              <Heading variant="title-sm" as="h3" style={{ marginTop: 8 }}>
                 Chờ mở app
-              </Text>
+              </Heading>
               {staffQ.data.pendingInvites.map((p) => (
-                <Box
-                  key={p.phone}
-                  flex
-                  justifyContent="space-between"
-                  alignItems="center"
-                  style={{ padding: 12, background: 'var(--neutral-100)', borderRadius: 12, gap: 8 }}
-                >
-                  <Text size="small">
-                    {p.phone} · {p.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
-                  </Text>
-                  <Button size="small" variant="tertiary" disabled={revokeM.isPending} onClick={() => revokeM.mutate(p.phone)}>
-                    Huỷ
-                  </Button>
-                </Box>
+                <Card key={p.phone} variant="flat">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <Text variant="body-sm">
+                      {p.phone} · {p.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
+                    </Text>
+                    <Button
+                      variant="ghost"
+                      aria-label={`Huỷ lời mời · ${p.phone}`}
+                      disabled={revokeM.isPending}
+                      onPress={() => revokeM.mutate(p.phone)}
+                    >
+                      Huỷ
+                    </Button>
+                  </div>
+                </Card>
               ))}
             </>
           )}
         </>
       )}
 
-      <Sheet visible={sheetOpen} onClose={() => setSheetOpen(false)} autoHeight>
-        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-          <Text.Title size="small">Thêm nhân sự theo SĐT</Text.Title>
-          <Input
-            type="number"
-            placeholder="Số điện thoại (VD 09xxxxxxxx)"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-          <Box flex style={{ gap: 8 }}>
+      <BottomSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title="Thêm nhân sự theo SĐT"
+        footer={
+          <Button fullWidth loading={grantM.isPending} disabled={!PHONE_RE.test(phone.trim())} onPress={submitGrant}>
+            Lưu quyền
+          </Button>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Field label="Số điện thoại">
+            <Input type="number" placeholder="Số điện thoại (VD 09xxxxxxxx)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </Field>
+          <div role="group" aria-label="Vai trò" style={{ display: 'flex', gap: 8 }}>
             <Button
-              variant={role === 'STAFF' ? undefined : 'secondary'}
-              prefixIcon={<UserPlus size={16} />}
+              variant={role === 'STAFF' ? 'primary' : 'secondary'}
+              aria-pressed={role === 'STAFF'}
+              icon={UserPlus}
               style={{ flex: 1 }}
-              onClick={() => setRole('STAFF')}
+              onPress={() => setRole('STAFF')}
             >
               Nhân viên
             </Button>
             <Button
-              variant={role === 'ADMIN' ? undefined : 'secondary'}
-              prefixIcon={<ShieldCheck size={16} />}
+              variant={role === 'ADMIN' ? 'primary' : 'secondary'}
+              aria-pressed={role === 'ADMIN'}
+              icon={ShieldCheck}
               style={{ flex: 1 }}
-              onClick={() => setRole('ADMIN')}
+              onPress={() => setRole('ADMIN')}
             >
               Quản trị
             </Button>
-          </Box>
-          <Button
-            fullWidth
-            loading={grantM.isPending}
-            disabled={!PHONE_RE.test(phone.trim()) || grantM.isPending}
-            onClick={submitGrant}
-          >
-            Lưu quyền
-          </Button>
-        </Box>
-      </Sheet>
-    </Box>
+          </div>
+        </div>
+      </BottomSheet>
+    </div>
   );
 }
 
@@ -646,125 +726,112 @@ function ShiftsSection() {
   };
 
   return (
-    <Box px={4} pb={4} flex flexDirection="column" style={{ gap: 12 }}>
-      <Box flex justifyContent="space-between" alignItems="center">
-        <Text.Title size="small">Duyệt ca</Text.Title>
-        <Button size="small" variant="secondary" prefixIcon={<Clock size={15} />} onClick={() => setTplOpen(true)}>
+    <div style={SECTION_STYLE}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <Heading variant="title-md" as="h2">
+          Duyệt ca
+        </Heading>
+        <Button variant="secondary" icon={Clock} onPress={() => setTplOpen(true)}>
           Ca chuẩn
         </Button>
-      </Box>
+      </div>
 
-      <Box
-        flex
-        alignItems="center"
-        justifyContent="space-between"
-        style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: '8px 12px' }}
-      >
-        <Button size="small" variant="tertiary" onClick={() => setMondayKey(addDaysKey(mondayKey, -7))}>
-          <ChevronLeft size={18} />
-        </Button>
-        <Text size="small" bold>
-          {shortDayLabel(mondayKey)} – {shortDayLabel(addDaysKey(mondayKey, 6))}
-        </Text>
-        <Button size="small" variant="tertiary" onClick={() => setMondayKey(addDaysKey(mondayKey, 7))}>
-          <ChevronRight size={18} />
-        </Button>
-      </Box>
+      <PeriodNav
+        label={`${shortDayLabel(mondayKey)} – ${shortDayLabel(addDaysKey(mondayKey, 6))}`}
+        prevLabel="Tuần trước"
+        nextLabel="Tuần sau"
+        onPrev={() => setMondayKey(addDaysKey(mondayKey, -7))}
+        onNext={() => setMondayKey(addDaysKey(mondayKey, 7))}
+      />
 
       {pendingIds.length > 0 && (
-        <Button size="small" loading={bulkM.isPending} disabled={bulkM.isPending} onClick={() => bulkM.mutate()}>
+        <Button loading={bulkM.isPending} onPress={() => bulkM.mutate()}>
           Duyệt tất cả ({pendingIds.length})
         </Button>
       )}
 
-      {shiftsQ.isLoading && <Skeleton style={{ height: 120, borderRadius: 12 }} />}
+      {shiftsQ.isLoading && <Skeleton height={120} radius="var(--radius-card)" />}
       {shiftsQ.isError && <ErrorState message={getErrorMessage(shiftsQ.error)} onRetry={() => void shiftsQ.refetch()} />}
       {shiftsQ.data && grouped.length === 0 && (
         <EmptyState art="box" heading="Không có ca nào trong tuần này" />
       )}
 
       {grouped.map((g) => (
-        <Box key={g.name} style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
-          <Text bold style={{ marginBottom: 6 }}>
+        <Card key={g.name}>
+          <Heading variant="title-sm" as="h3" style={{ marginBottom: 6 }}>
             {g.name}
-          </Text>
+          </Heading>
           {g.shifts.map((s) => {
             const start = isoToVnHHMM(s.approvedStart ?? s.startAt);
             const end = isoToVnHHMM(s.approvedEnd ?? s.endAt);
+            const st = SHIFT_STATUS[s.status];
+            const dayName = `${dowLabel(s.workDate.slice(0, 10))} ${shortDayLabel(s.workDate.slice(0, 10))}`;
+            const approving = approveM.isPending && approveM.variables?.id === s.id;
             return (
-              <Box
+              <div
                 key={s.id}
-                flex
-                alignItems="center"
-                justifyContent="space-between"
-                style={{ padding: '8px 0', borderTop: '1px solid var(--neutral-100)', gap: 8 }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  padding: '8px 0',
+                  borderTop: '1px solid var(--color-border-subtle)',
+                }}
               >
-                <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text size="small">
-                    {dowLabel(s.workDate.slice(0, 10))} {shortDayLabel(s.workDate.slice(0, 10))} · {start}–{end}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text variant="body-sm" as="div">
+                    {dayName} · {start}–{end}
                   </Text>
-                  <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                    {s.status === 'PENDING'
-                      ? 'Chờ duyệt'
-                      : s.status === 'APPROVED'
-                        ? 'Đã duyệt'
-                        : s.status === 'REJECTED'
-                          ? 'Từ chối'
-                          : 'Đã huỷ'}
-                  </Text>
-                </Box>
+                  <div style={{ marginTop: 2 }}>
+                    <Badge tone={st.tone} size="sm">
+                      {st.label}
+                    </Badge>
+                  </div>
+                </div>
                 {s.status === 'PENDING' && (
-                  <Box flex style={{ gap: 4 }}>
-                    <Button size="small" variant="tertiary" onClick={() => openAdjust(s)}>
-                      <Clock size={15} />
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    <Button variant="ghost" icon={Clock} aria-label={`Chỉnh giờ ${g.name} ${dayName}`} onPress={() => openAdjust(s)}>
+                      Chỉnh giờ
                     </Button>
                     <Button
-                      size="small"
-                      variant="tertiary"
-                      style={{ color: 'var(--leaf-700)' }}
-                      onClick={() => approveM.mutate({ id: s.id })}
+                      variant="ghost"
+                      icon={Check}
+                      aria-label={`Duyệt ca ${g.name} ${dayName}`}
+                      loading={approving}
+                      onPress={() => approveM.mutate({ id: s.id })}
                     >
-                      <Check size={16} />
+                      Duyệt
                     </Button>
                     <Button
-                      size="small"
-                      variant="tertiary"
-                      style={{ color: 'var(--danger)' }}
-                      onClick={() => setRejectId(s.id)}
+                      variant="ghost"
+                      icon={X}
+                      aria-label={`Từ chối ca ${g.name} ${dayName}`}
+                      style={{ color: 'var(--color-text-danger)' }}
+                      onPress={() => setRejectId(s.id)}
                     >
-                      <X size={16} />
+                      Từ chối
                     </Button>
-                  </Box>
+                  </div>
                 )}
-              </Box>
+              </div>
             );
           })}
-        </Box>
+        </Card>
       ))}
 
       {/* Sheet chỉnh giờ + duyệt */}
-      <Sheet visible={!!adjust} onClose={() => setAdjust(null)} autoHeight>
-        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-          <Text.Title size="small">Chỉnh giờ & duyệt</Text.Title>
-          <Box flex style={{ gap: 8 }}>
-            <Box style={{ flex: 1 }}>
-              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                Bắt đầu
-              </Text>
-              <Input type="text" value={adjStart} onChange={(e) => setAdjStart(e.target.value)} />
-            </Box>
-            <Box style={{ flex: 1 }}>
-              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                Kết thúc
-              </Text>
-              <Input type="text" value={adjEnd} onChange={(e) => setAdjEnd(e.target.value)} />
-            </Box>
-          </Box>
+      <BottomSheet
+        open={!!adjust}
+        onClose={() => setAdjust(null)}
+        title="Chỉnh giờ & duyệt"
+        footer={
           <Button
             fullWidth
             loading={approveM.isPending}
-            disabled={!/^\d{1,2}:\d{2}$/.test(adjStart) || !/^\d{1,2}:\d{2}$/.test(adjEnd) || approveM.isPending}
-            onClick={() =>
+            disabled={!TIME_RE.test(adjStart) || !TIME_RE.test(adjEnd)}
+            onPress={() =>
               adjust &&
               approveM.mutate({
                 id: adjust.id,
@@ -775,27 +842,45 @@ function ShiftsSection() {
           >
             Duyệt với giờ đã chỉnh
           </Button>
-        </Box>
-      </Sheet>
+        }
+      >
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <Field label="Bắt đầu">
+              <Input type="text" value={adjStart} onChange={(e) => setAdjStart(e.target.value)} />
+            </Field>
+          </div>
+          <div style={{ flex: 1 }}>
+            <Field label="Kết thúc">
+              <Input type="text" value={adjEnd} onChange={(e) => setAdjEnd(e.target.value)} />
+            </Field>
+          </div>
+        </div>
+      </BottomSheet>
 
       {/* Sheet từ chối */}
-      <Sheet visible={!!rejectId} onClose={() => setRejectId(null)} autoHeight>
-        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-          <Text.Title size="small">Từ chối ca</Text.Title>
-          <Input.TextArea placeholder="Lý do" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+      <BottomSheet
+        open={!!rejectId}
+        onClose={() => setRejectId(null)}
+        title="Từ chối ca"
+        footer={
           <Button
             fullWidth
             loading={rejectM.isPending}
-            disabled={rejectReason.trim().length === 0 || rejectM.isPending}
-            onClick={() => rejectId && rejectM.mutate({ id: rejectId, reason: rejectReason.trim() })}
+            disabled={rejectReason.trim().length === 0}
+            onPress={() => rejectId && rejectM.mutate({ id: rejectId, reason: rejectReason.trim() })}
           >
             Xác nhận từ chối
           </Button>
-        </Box>
-      </Sheet>
+        }
+      >
+        <Field label="Lý do">
+          <Input.TextArea placeholder="Lý do" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+        </Field>
+      </BottomSheet>
 
       <TemplateSheet visible={tplOpen} onClose={() => setTplOpen(false)} />
-    </Box>
+    </div>
   );
 }
 
@@ -827,38 +912,58 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
   });
 
   return (
-    <Sheet visible={visible} onClose={onClose} autoHeight>
-      <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-        <Text.Title size="small">Ca chuẩn</Text.Title>
+    <BottomSheet
+      open={visible}
+      onClose={onClose}
+      title="Ca chuẩn"
+      footer={
+        <Button
+          fullWidth
+          icon={Plus}
+          loading={addM.isPending}
+          disabled={!name.trim() || !TIME_RE.test(start) || !TIME_RE.test(end)}
+          onPress={() => addM.mutate()}
+        >
+          Thêm ca chuẩn
+        </Button>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {(tplQ.data ?? []).map((t) => (
-          <Box key={t.id} flex justifyContent="space-between" alignItems="center">
-            <Text size="small">
+          <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <Text variant="body-sm">
               {t.name} · {minToHHMM(t.startMin)}–{minToHHMM(t.endMin)}
             </Text>
-            <Button size="small" variant="tertiary" style={{ color: 'var(--danger)' }} disabled={delM.isPending} onClick={() => delM.mutate(t.id)}>
-              <Trash2 size={15} />
+            <Button
+              variant="ghost"
+              aria-label={`Xoá ca chuẩn ${t.name}`}
+              style={{ color: 'var(--color-text-danger)' }}
+              disabled={delM.isPending}
+              onPress={() => delM.mutate(t.id)}
+            >
+              Xoá
             </Button>
-          </Box>
+          </div>
         ))}
-        <Box style={{ borderTop: '1px solid var(--neutral-100)', paddingTop: 10 }}>
-          <Input placeholder="Tên ca (VD Ca sáng)" value={name} onChange={(e) => setName(e.target.value)} />
-          <Box flex style={{ gap: 8, marginTop: 8 }}>
-            <Input type="text" value={start} onChange={(e) => setStart(e.target.value)} style={{ flex: 1 }} />
-            <Input type="text" value={end} onChange={(e) => setEnd(e.target.value)} style={{ flex: 1 }} />
-          </Box>
-          <Button
-            fullWidth
-            style={{ marginTop: 10 }}
-            prefixIcon={<Plus size={15} />}
-            loading={addM.isPending}
-            disabled={!name.trim() || !/^\d{1,2}:\d{2}$/.test(start) || !/^\d{1,2}:\d{2}$/.test(end) || addM.isPending}
-            onClick={() => addM.mutate()}
-          >
-            Thêm ca chuẩn
-          </Button>
-        </Box>
-      </Box>
-    </Sheet>
+        <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Field label="Tên ca">
+            <Input placeholder="Tên ca (VD Ca sáng)" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <Field label="Bắt đầu">
+                <Input type="text" value={start} onChange={(e) => setStart(e.target.value)} />
+              </Field>
+            </div>
+            <div style={{ flex: 1 }}>
+              <Field label="Kết thúc">
+                <Input type="text" value={end} onChange={(e) => setEnd(e.target.value)} />
+              </Field>
+            </div>
+          </div>
+        </div>
+      </div>
+    </BottomSheet>
   );
 }
 
@@ -933,22 +1038,26 @@ function RefillAdminSection() {
   };
 
   return (
-    <Box px={4} pb={4} flex flexDirection="column" style={{ gap: 12 }}>
-      <Box flex justifyContent="space-between" alignItems="center">
-        <Text.Title size="small">Duyệt đổi vỏ chai ({filteredItems.length})</Text.Title>
-        <Button size="small" variant="secondary" onClick={exportCsv}>
-          <Download size={14} /> Xuất CSV
+    <div style={SECTION_STYLE}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <Heading variant="title-md" as="h2">
+          Duyệt đổi vỏ chai ({filteredItems.length})
+        </Heading>
+        <Button variant="secondary" icon={Download} onPress={exportCsv}>
+          Xuất CSV
         </Button>
-      </Box>
+      </div>
 
-      <Input
-        placeholder="Tìm theo tên hoặc SĐT..."
+      <SearchField
         value={filterText}
-        onChange={(e) => setFilterText(e.target.value)}
-        clearable
+        onChange={setFilterText}
+        onSubmit={() => undefined}
+        label="Tìm theo tên hoặc SĐT"
+        clearLabel="Xoá từ khoá tìm"
+        placeholder="Tìm theo tên hoặc SĐT..."
       />
 
-      {pendingQ.isLoading && <Skeleton style={{ height: 100, borderRadius: 12 }} />}
+      {pendingQ.isLoading && <Skeleton height={100} radius="var(--radius-card)" />}
       {pendingQ.isError && <ErrorState message={getErrorMessage(pendingQ.error)} onRetry={() => void pendingQ.refetch()} />}
 
       {pendingQ.data && filteredItems.length === 0 && (
@@ -958,40 +1067,49 @@ function RefillAdminSection() {
         />
       )}
 
-      {filteredItems.map((r: PendingRefillItem) => (
-        <Box key={r.id} style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
-          <Box flex justifyContent="space-between" alignItems="center">
-            <Box style={{ flex: 1, minWidth: 0 }}>
-              <Text bold>{r.user.fullName ?? r.user.phone ?? 'Khách hàng'}</Text>
-              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                {r.user.phone ?? '—'} · Đổi <b>{r.quantity} vỏ</b> (+{r.seedsAwarded})
-              </Text>
-            </Box>
-            <Box flex style={{ gap: 6 }}>
-              <Button
-                size="small"
-                variant="tertiary"
-                style={{ color: 'var(--leaf-700)' }}
-                loading={approveM.isPending}
-                disabled={approveM.isPending || rejectM.isPending}
-                onClick={() => approveM.mutate(r.id)}
-              >
-                <Check size={16} /> Duyệt
-              </Button>
-              <Button
-                size="small"
-                variant="tertiary"
-                style={{ color: 'var(--danger)' }}
-                loading={rejectM.isPending}
-                disabled={approveM.isPending || rejectM.isPending}
-                onClick={() => rejectM.mutate(r.id)}
-              >
-                <X size={16} /> Từ chối
-              </Button>
-            </Box>
-          </Box>
-        </Box>
-      ))}
-    </Box>
+      {filteredItems.map((r: PendingRefillItem) => {
+        const name = r.user.fullName ?? r.user.phone ?? 'Khách hàng';
+        // Chỉ yêu cầu đang xử lý có spinner; mọi nút còn lại khoá để không duyệt và từ chối chồng nhau.
+        const approving = approveM.isPending && approveM.variables === r.id;
+        const rejecting = rejectM.isPending && rejectM.variables === r.id;
+        return (
+          <Card key={r.id}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text as="div" style={{ fontWeight: 700 }}>
+                  {name}
+                </Text>
+                <Text variant="caption" tone="secondary" as="div">
+                  {r.user.phone ?? '—'} · Đổi <strong>{r.quantity} vỏ</strong> (+{r.seedsAwarded})
+                </Text>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Button
+                  variant="ghost"
+                  icon={Check}
+                  aria-label={`Duyệt · ${name}`}
+                  loading={approving}
+                  disabled={rejectM.isPending || (approveM.isPending && !approving)}
+                  onPress={() => approveM.mutate(r.id)}
+                >
+                  Duyệt
+                </Button>
+                <Button
+                  variant="ghost"
+                  icon={X}
+                  aria-label={`Từ chối · ${name}`}
+                  style={{ color: 'var(--color-text-danger)' }}
+                  loading={rejecting}
+                  disabled={approveM.isPending || (rejectM.isPending && !rejecting)}
+                  onPress={() => rejectM.mutate(r.id)}
+                >
+                  Từ chối
+                </Button>
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
   );
 }
