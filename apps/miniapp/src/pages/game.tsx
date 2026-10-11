@@ -216,18 +216,17 @@ export default function GamePage() {
       <WeeklyLeaderboard board={board} />
 
       {/* Harvest celebration */}
-      {harvested && (
-        <HarvestCelebration
-          coupon={harvestCoupon}
-          certificate={harvestCert}
-          species={harvestSpecies}
-          onClose={() => setHarvested(false)}
-          onUseCoupon={() => {
-            setHarvested(false);
-            navigate('/browse');
-          }}
-        />
-      )}
+      <HarvestCelebration
+        open={harvested}
+        coupon={harvestCoupon}
+        certificate={harvestCert}
+        species={harvestSpecies}
+        onClose={() => setHarvested(false)}
+        onUseCoupon={() => {
+          setHarvested(false);
+          navigate('/browse');
+        }}
+      />
     </Page>
   );
 }

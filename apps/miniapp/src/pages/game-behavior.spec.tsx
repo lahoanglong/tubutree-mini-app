@@ -466,7 +466,7 @@ describe('GamePage — tưới cây, thu hoạch, mua cây thật', () => {
     expect(screen.getByText('CERT-77')).toBeInTheDocument();
     expect(screen.getByText('💎 Hiếm · Sưu tập mới!')).toBeInTheDocument();
     expect(screen.getByText('🌲 Lim xanh')).toBeInTheDocument();
-    expect(screen.getByText('💡 Gỗ lim rất bền.')).toBeInTheDocument();
+    expect(screen.getByText('Gỗ lim rất bền.')).toBeInTheDocument();
     expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('Đã tưới') }));
   });
 
@@ -840,7 +840,7 @@ describe('GamePage — quiz Sống Xanh', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cây' }));
     expect(await screen.findByText('Chính xác! +20💧')).toBeInTheDocument();
     expect(mocks.api.answerQuiz).toHaveBeenCalledWith('q1', 1);
-    expect(screen.getByText('💡 Bạn có biết: Cây quang hợp.')).toBeInTheDocument();
+    expect(screen.getByText('Bạn có biết: Cây quang hợp.')).toBeInTheDocument();
     for (const name of ['Đá', 'Cây', 'Gạch', 'Sắt']) expect(screen.getByRole('button', { name })).toBeDisabled();
     const keys = invalidated();
     expect(keys).toContainEqual(['game', 'profile']);
@@ -939,13 +939,13 @@ describe('GamePage — nhiệm vụ', () => {
     expect(keys).not.toContainEqual(['loyalty']);
   });
 
-  it('đã nhận: có dấu ✓ ở tên và không còn nút; chưa đạt: hiện tiến độ và không có nút', async () => {
+  it('đã nhận: có dấu tích ở tên và không còn nút; chưa đạt: hiện tiến độ và không có nút', async () => {
     mocks.api.getMissions.mockResolvedValue([
       mission({ code: 'A', title: 'Đã xong', progress: 3, goal: 3, completed: true, claimed: true }),
       mission({ code: 'B', title: 'Đang làm', progress: 1, goal: 3 }),
     ]);
     renderPage();
-    expect(await screen.findByText('✓ Đã xong')).toBeInTheDocument();
+    expect(await screen.findByText('Đã xong')).toBeInTheDocument();
     expect(screen.getByText('Đang làm')).toBeInTheDocument();
     expect(screen.getByText('1/3')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: viText.game.missions.claim })).not.toBeInTheDocument();
@@ -983,7 +983,7 @@ describe('GamePage — bảng xếp hạng', () => {
       { rank: 4, nickname: 'Quân', drops: 700 },
     ]);
     renderPage();
-    expect(await screen.findByText('💧 Top góp nước mùa này')).toBeInTheDocument();
+    expect(await screen.findByText('Top góp nước mùa này')).toBeInTheDocument();
     expect(screen.getByText('🥇 Lan')).toBeInTheDocument();
     expect(screen.getByText('🥈 Minh')).toBeInTheDocument();
     expect(screen.getByText('🥉 Hà')).toBeInTheDocument();
@@ -994,7 +994,7 @@ describe('GamePage — bảng xếp hạng', () => {
   it('không có dữ liệu mùa: ẩn khối', async () => {
     renderPage();
     await screen.findByText('Sồi');
-    expect(screen.queryByText('💧 Top góp nước mùa này')).not.toBeInTheDocument();
+    expect(screen.queryByText('Top góp nước mùa này')).not.toBeInTheDocument();
   });
 
   it('bảng xếp hạng tuần trống: hiện "Chưa có dữ liệu xếp hạng."', async () => {

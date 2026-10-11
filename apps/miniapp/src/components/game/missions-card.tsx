@@ -1,7 +1,12 @@
-import { Box, Text, Button } from 'zmp-ui';
+import { Check, Target } from 'lucide-react';
 import type { MissionItem } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { formatNumber } from '../../utils/format';
+import { Button } from '../ui/button';
+import { Icon } from '../ui/icon';
+import { ProgressBar } from '../ui/progress-bar';
+import { SR_ONLY } from '../ui/sr-only';
+import { Text } from '../ui/text';
 import { GameCard } from './game-card';
 
 export function MissionsCard({
@@ -18,9 +23,9 @@ export function MissionsCard({
   onClaim: (code: string) => void;
 }) {
   return (
-    <GameCard title="🎯 Nhiệm vụ">
+    <GameCard title="Nhiệm vụ" icon={Target}>
       {missions && missions.length > 0 ? (
-        missions.map((m: MissionItem) => {
+        missions.map((m: MissionItem, idx) => {
           const defaultGoal = { CHECKIN_7: 7, REVIEW_3: 3, INVITE_3: 3, FIRST_ORDER: 1 }[m.code] ?? 1;
           // BE Mission.goal mặc định = 1 (schema @default(1)) — "> 1" từng loại bỏ nhầm mọi
           // mission cấu hình goal=1 hợp lệ và âm thầm thay bằng default cứng của FE.
@@ -35,51 +40,48 @@ export function MissionsCard({
           // rõ: ✓ chỉ khi đã claimed (thưởng THẬT đã vào Điểm Xanh); đạt điều kiện nhưng chưa
           // nhận thì hiện nút "Nhận thưởng" (mirror pattern claim của Season Pass).
           const canClaim = isDone && !m.claimed;
+          const claiming = claimPending && claimVariables === m.code;
 
           return (
-            <Box key={m.code} style={{ padding: '8px 0', borderBottom: '1px solid var(--neutral-100)' }}>
-              <Box flex alignItems="center" justifyContent="space-between">
-                <Text size="small" bold={!m.claimed} style={{ color: m.claimed ? 'var(--neutral-400)' : 'var(--neutral-900)' }}>
-                  {m.claimed ? '✓ ' : ''}{m.title}
+            <div
+              key={m.code}
+              style={{ padding: '12px 0', borderTop: idx > 0 ? '1px solid var(--color-border-subtle)' : 'none' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <Text
+                  variant="body-sm"
+                  tone={m.claimed ? 'tertiary' : 'primary'}
+                  style={{ fontWeight: m.claimed ? 400 : 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                >
+                  {m.claimed && <Icon icon={Check} size="sm" tone="brand" />}
+                  {m.title}
+                  {m.claimed && <span style={SR_ONLY}> (đã nhận thưởng)</span>}
                 </Text>
-                <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+                <Text variant="caption" tone="brand" style={{ whiteSpace: 'nowrap' }}>
                   +{formatNumber(m.rewardPoints)} Điểm Xanh
                 </Text>
-              </Box>
+              </div>
               {m.description && (
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                <Text variant="caption" tone="tertiary" as="div">
                   {m.description}
                 </Text>
               )}
-              <Box style={{ height: 6, background: 'var(--neutral-100)', borderRadius: 99, marginTop: 4, overflow: 'hidden' }}>
-                <Box
-                  style={{
-                    width: `${Math.min(100, Math.round((progress / Math.max(1, goal)) * 100))}%`,
-                    height: '100%',
-                    background: isDone ? 'var(--leaf-600)' : 'var(--primary-600)',
-                  }}
-                />
-              </Box>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+              <div style={{ marginTop: 8 }}>
+                <ProgressBar value={Math.round((progress / Math.max(1, goal)) * 100)} max={100} />
+              </div>
+              <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
                 {progress}/{goal}
               </Text>
               {canClaim && (
-                <Button
-                  fullWidth
-                  size="small"
-                  loading={claimPending && claimVariables === m.code}
-                  disabled={claimPending && claimVariables === m.code}
-                  onClick={() => onClaim(m.code)}
-                  style={{ marginTop: 6, background: 'var(--leaf-600)' }}
-                >
+                <Button fullWidth loading={claiming} disabled={claiming} onPress={() => onClaim(m.code)} style={{ marginTop: 8 }}>
                   {vi.game.missions.claim}
                 </Button>
               )}
-            </Box>
+            </div>
           );
         })
       ) : (
-        <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+        <Text variant="body-sm" tone="tertiary" as="div">
           Chưa có nhiệm vụ.
         </Text>
       )}

@@ -31,6 +31,11 @@ const GAME_FILES = [
   'src/components/game/friend-gifts.tsx',
   'src/components/game/eco-impact.tsx',
   'src/components/game/lucky-wheel-card.tsx',
+  'src/components/game/quiz-card.tsx',
+  'src/components/game/missions-card.tsx',
+  'src/components/game/season-leaderboard.tsx',
+  'src/components/game/weekly-leaderboard.tsx',
+  'src/components/game/harvest-celebration.tsx',
 ];
 const FILES_PC10A = ['src/pages/loyalty.tsx', ...GAME_FILES];
 
@@ -48,6 +53,10 @@ const ALLOWED_EMOJI: Record<string, string[]> = {
   'src/components/game/species-codex.tsx': ['❔'],
   'src/components/game/friend-gifts.tsx': ['💧', '🌿'],
   'src/components/game/eco-impact.tsx': ['🌿'],
+  'src/components/game/quiz-card.tsx': ['🌿', '🎉'],
+  'src/components/game/season-leaderboard.tsx': ['🥇', '🥈', '🥉'],
+  'src/components/game/weekly-leaderboard.tsx': ['🥇', '🥈', '🥉', '🌳', '🔥'],
+  'src/components/game/harvest-celebration.tsx': ['🌳', '🌿'],
 };
 
 /** Trang chỉ được lấy khung/điều hướng/snackbar từ zmp-ui; Box/Text/Button... dùng components/ui. */

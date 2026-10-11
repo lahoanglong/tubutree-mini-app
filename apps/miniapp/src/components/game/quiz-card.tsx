@@ -1,11 +1,15 @@
-import { Box, Text, Button } from 'zmp-ui';
+import { Brain, Lightbulb } from 'lucide-react';
 import type { AnswerResult, QuizItem } from '../../services/game-api';
 import { formatDrops } from '../../utils/format';
+import { Button } from '../ui/button';
+import { Icon } from '../ui/icon';
+import { Text } from '../ui/text';
 import { GameCard } from './game-card';
 import { categoryLabel, difficultyLabel } from './game-utils';
 
 export type QuizReveal = AnswerResult & { quizId: string; choice: number };
 
+// 🎉 và 🌿 trong lời nhắn kết quả là lời chúc (nội dung game); nhãn phân loại dùng emoji của game-utils.
 export function QuizCard({
   quiz,
   currentQuiz,
@@ -24,18 +28,18 @@ export function QuizCard({
   onNext: () => void;
 }) {
   return (
-    <GameCard title="🧠 Quiz Sống Xanh hôm nay">
+    <GameCard title="Quiz Sống Xanh hôm nay" icon={Brain}>
       {currentQuiz ? (
         <>
-          <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 6 }}>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+            <Text variant="caption" tone="tertiary">
               {categoryLabel(currentQuiz.category)} · {difficultyLabel(currentQuiz.difficulty)}
               {quiz && quiz.length > 1 ? ` · Câu ${answeredCount + 1}/${quiz.length}` : ''}
             </Text>
-            <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
+            <Text variant="caption" tone="brand" style={{ fontWeight: 600 }}>
               +{formatDrops(currentQuiz.waterReward)}
             </Text>
-          </Box>
+          </div>
           <QuizBlock
             q={currentQuiz}
             reveal={reveal && reveal.quizId === currentQuiz.id ? reveal : null}
@@ -43,30 +47,32 @@ export function QuizCard({
             pending={pending}
           />
           {reveal && reveal.quizId === currentQuiz.id && (
-            <Box
-              mt={3}
-              p={3}
+            <div
+              role="status"
               style={{
-                background: reveal.isCorrect ? 'var(--leaf-50)' : 'var(--warning-bg)',
-                borderRadius: 'var(--radius-md)',
+                marginTop: 12,
+                padding: 12,
+                background: reveal.isCorrect ? 'var(--color-bg-subtle)' : 'var(--color-status-warning-bg)',
+                borderRadius: 'var(--radius-control)',
               }}
             >
-              <Text size="small" bold style={{ color: reveal.isCorrect ? 'var(--leaf-700)' : 'var(--warning)' }}>
+              <Text variant="body-sm" tone={reveal.isCorrect ? 'brand' : 'warning'} as="div" style={{ fontWeight: 600 }}>
                 {reveal.isCorrect ? `Chính xác! +${formatDrops(reveal.waterEarned)}` : 'Chưa đúng — cùng học nhé 🌿'}
               </Text>
               {reveal.explanation && (
-                <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
-                  💡 Bạn có biết: {reveal.explanation}
+                <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4, display: 'flex', gap: 6 }}>
+                  <Icon icon={Lightbulb} size="sm" tone="muted" style={{ flexShrink: 0, marginTop: 2 }} />
+                  <span>Bạn có biết: {reveal.explanation}</span>
                 </Text>
               )}
-              <Button fullWidth size="small" onClick={onNext} style={{ marginTop: 10, background: 'var(--leaf-600)' }}>
+              <Button fullWidth onPress={onNext} style={{ marginTop: 10 }}>
                 {answeredCount + 1 >= (quiz?.length ?? 1) ? 'Hoàn thành' : 'Câu tiếp theo'}
               </Button>
-            </Box>
+            </div>
           )}
         </>
       ) : (
-        <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+        <Text variant="body-sm" tone="tertiary" as="div">
           Bạn đã hoàn thành quiz hôm nay 🎉
         </Text>
       )}
@@ -86,38 +92,36 @@ function QuizBlock({
   pending: boolean;
 }) {
   return (
-    <Box>
-      <Text size="small" style={{ marginBottom: 8 }}>
+    <div>
+      <Text variant="body-sm" as="div" style={{ marginBottom: 8 }}>
         {q.question}
       </Text>
-      <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {q.options.map((opt, i) => {
           // Sau khi reveal: tô xanh đáp án đúng, tô đỏ lựa chọn sai của user.
-          let bg: string | undefined;
-          let color: string | undefined;
+          let tone: { background: string; color: string } | undefined;
           if (reveal) {
             if (i === reveal.correct) {
-              bg = 'var(--leaf-600)';
-              color = 'var(--neutral-0)';
+              tone = { background: 'var(--color-action-primary-bg)', color: 'var(--color-action-primary-fg)' };
             } else if (i === reveal.choice) {
-              bg = 'var(--danger-bg)';
-              color = 'var(--danger)';
+              tone = { background: 'var(--color-status-danger-bg)', color: 'var(--color-status-danger-fg)' };
             }
           }
           return (
             <Button
               key={i}
-              size="small"
+              fullWidth
               variant="secondary"
               disabled={pending || !!reveal}
-              onClick={() => onAnswer(i)}
-              style={bg ? { background: bg, color } : undefined}
+              onPress={() => onAnswer(i)}
+              // Đáp án dài phải xuống dòng thay vì bị cắt "…": ZaUI đặt height cố định + nowrap.
+              style={{ height: 'auto', whiteSpace: 'normal', padding: '8px 12px', ...tone }}
             >
               {opt}
             </Button>
           );
         })}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

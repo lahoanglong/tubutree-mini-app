@@ -1,16 +1,24 @@
-import { Box, Text, Button, useSnackbar } from 'zmp-ui';
+import { Lightbulb } from 'lucide-react';
+import { useSnackbar } from 'zmp-ui';
 import type { HarvestSpecies } from '../../services/game-api';
 import { copyText } from '../../utils/clipboard';
+import { BottomSheet } from '../ui/bottom-sheet';
+import { Button } from '../ui/button';
+import { Icon } from '../ui/icon';
+import { Text } from '../ui/text';
 import { rarityColor, rarityLabel } from './game-utils';
 
-// Harvest celebration
+// Harvest celebration. 🌳 lớn, 🌿 ở lời chúc và emoji loài là nội dung ăn mừng của game.
+// Luôn dựng sẵn và điều khiển bằng `open`: BottomSheet cần còn mounted để chạy hoạt ảnh đóng.
 export function HarvestCelebration({
+  open,
   coupon,
   certificate,
   species,
   onClose,
   onUseCoupon,
 }: {
+  open: boolean;
   coupon: string | null;
   certificate: string | null;
   species: HarvestSpecies | null;
@@ -19,27 +27,33 @@ export function HarvestCelebration({
 }) {
   const { openSnackbar } = useSnackbar();
   return (
-    <Box
-      onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }}
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      title="Thu hoạch thành công!"
+      footer={
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {coupon && (
+            <Button fullWidth variant="secondary" onPress={onUseCoupon}>
+              Dùng mã giảm giá ngay
+            </Button>
+          )}
+          <Button fullWidth onPress={onClose}>
+            Tuyệt vời!
+          </Button>
+        </div>
+      }
     >
-      <Box
-        onClick={(e) => e.stopPropagation()}
-        p={5}
-        style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-xl)', textAlign: 'center', maxWidth: 320, width: '100%' }}
-      >
-        <Text style={{ fontSize: 64 }}>🌳</Text>
-        <Text bold size="large" style={{ marginTop: 8 }}>
-          Thu hoạch thành công!
-        </Text>
-        <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 56, lineHeight: 1.2 }}>🌳</div>
+        <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
           Cây ảo của bạn đã lớn — Tubu sẽ góp <b>1 cây thật</b> vào rừng "Rừng Xanh Lên" cùng PanNature 🌿
         </Text>
         {coupon && (
-          <Box
+          <div
+            role="button"
+            tabIndex={0}
             className="tubu-press"
-            mt={3}
-            p={3}
             onClick={() => {
               void copyText(coupon).then((ok) =>
                 openSnackbar(
@@ -49,59 +63,58 @@ export function HarvestCelebration({
                 ),
               );
             }}
-            style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--leaf-600)' }}
+            style={{
+              marginTop: 12,
+              padding: 12,
+              background: 'var(--color-bg-subtle)',
+              borderRadius: 'var(--radius-control)',
+              border: '1px dashed var(--color-border-selected)',
+              cursor: 'pointer',
+            }}
           >
-            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+            <Text variant="caption" tone="secondary" as="div">
               Quà thu hoạch — mã giảm giá (chạm để sao chép)
             </Text>
-            <Text bold style={{ color: 'var(--leaf-700)', letterSpacing: 1 }}>
+            <Text variant="body-md" tone="brand" as="div" style={{ fontWeight: 700, letterSpacing: 1 }}>
               {coupon}
             </Text>
-          </Box>
+          </div>
         )}
         {certificate && (
-          <Box mt={2} p={3} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)' }}>
-            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+          <div style={{ marginTop: 8, padding: 12, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)' }}>
+            <Text variant="caption" tone="secondary" as="div">
               Mã chứng nhận cây thật
             </Text>
-            <Text bold style={{ color: 'var(--leaf-700)', letterSpacing: 1 }}>
+            <Text variant="body-md" tone="brand" as="div" style={{ fontWeight: 700, letterSpacing: 1 }}>
               {certificate}
             </Text>
-          </Box>
+          </div>
         )}
         {species && (
-          <Box mt={3} p={3} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', border: `1px solid ${rarityColor(species.rarity)}` }}>
-            <Text size="xSmall" style={{ color: rarityColor(species.rarity), fontWeight: 700 }}>
+          <div
+            style={{
+              marginTop: 12,
+              padding: 12,
+              background: 'var(--color-bg-subtle)',
+              borderRadius: 'var(--radius-control)',
+              border: `1px solid ${rarityColor(species.rarity)}`,
+            }}
+          >
+            <Text variant="caption" as="div" style={{ color: rarityColor(species.rarity), fontWeight: 700 }}>
               {rarityLabel(species.rarity)} · Sưu tập mới!
             </Text>
-            <Text bold style={{ marginTop: 2 }}>
+            <Text variant="body-md" as="div" style={{ fontWeight: 700, marginTop: 2 }}>
               {species.emoji} {species.name}
             </Text>
             {species.ecoFact && (
-              <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
-                💡 {species.ecoFact}
+              <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4, display: 'flex', gap: 6, justifyContent: 'center' }}>
+                <Icon icon={Lightbulb} size="sm" tone="muted" style={{ flexShrink: 0, marginTop: 2 }} />
+                <span>{species.ecoFact}</span>
               </Text>
             )}
-          </Box>
+          </div>
         )}
-        {coupon && (
-          <Button
-            fullWidth
-            variant="secondary"
-            onClick={onUseCoupon}
-            style={{ marginTop: 12 }}
-          >
-            Dùng mã giảm giá ngay
-          </Button>
-        )}
-        <Button
-          fullWidth
-          onClick={onClose}
-          style={{ marginTop: coupon ? 8 : 20, background: 'var(--leaf-600)' }}
-        >
-          Tuyệt vời!
-        </Button>
-      </Box>
-    </Box>
+      </div>
+    </BottomSheet>
   );
 }

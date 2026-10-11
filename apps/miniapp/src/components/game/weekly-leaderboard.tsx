@@ -1,59 +1,74 @@
-import { Box, Text } from 'zmp-ui';
+import { Trophy } from 'lucide-react';
 import type { LeaderRow } from '../../services/game-api';
+import { Text } from '../ui/text';
 import { GameCard } from './game-card';
 
+// Huy chương, 🌳 (cây đã trồng) và 🔥 (chuỗi ngày) là số liệu xếp hạng của game.
 export function WeeklyLeaderboard({ board }: { board: LeaderRow[] | undefined }) {
   return (
-    <GameCard title="🏆 Bảng xếp hạng tuần">
+    <GameCard title="Bảng xếp hạng tuần" icon={Trophy}>
       {board && board.length > 0 ? (
         <>
           {/* Podium top 3 */}
-          <Box flex alignItems="flex-end" justifyContent="center" style={{ gap: 8, marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
             {[board[1], board[0], board[2]].map((r, idx) => {
-              if (!r) return <Box key={idx} style={{ flex: 1 }} />;
+              if (!r) return <div key={idx} style={{ flex: 1 }} />;
               const isFirst = r.rank === 1;
-              const h = isFirst ? 64 : r.rank === 2 ? 48 : 38;
+              const h = isFirst ? 64 : r.rank === 2 ? 48 : 40;
               const medal = r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : '🥉';
               return (
-                <Box key={r.rank} style={{ flex: 1, textAlign: 'center' }}>
-                  <Text style={{ fontSize: isFirst ? 28 : 22 }}>{medal}</Text>
-                  <Text size="xSmall" bold style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div key={r.rank} style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+                  <div style={{ fontSize: isFirst ? 28 : 22, lineHeight: 1.2 }}>{medal}</div>
+                  <Text
+                    variant="label"
+                    as="div"
+                    style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  >
                     {r.nickname}
                   </Text>
-                  <Box
+                  <div
                     style={{
                       height: h,
-                      borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
-                      background: isFirst ? 'var(--primary-600)' : 'var(--leaf-400)',
+                      borderRadius: 'var(--radius-control) var(--radius-control) 0 0',
+                      background: isFirst ? 'var(--forest-600)' : 'var(--forest-500)',
                       marginTop: 4,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: 'var(--neutral-0)',
-                      fontSize: 11,
+                      color: 'var(--color-text-inverse)',
+                      fontSize: 'var(--type-label-size)',
                       fontWeight: 700,
                     }}
                   >
                     🌳{r.treesPlanted}
-                  </Box>
-                </Box>
+                  </div>
+                </div>
               );
             })}
-          </Box>
+          </div>
           {/* Hạng 4+ */}
           {board.slice(3).map((r) => (
-            <Box key={r.rank} flex justifyContent="space-between" style={{ padding: '4px 0', borderTop: '1px solid var(--neutral-100)' }}>
-              <Text size="small">
+            <div
+              key={r.rank}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 8,
+                padding: '6px 0',
+                borderTop: '1px solid var(--color-border-subtle)',
+              }}
+            >
+              <Text variant="body-sm">
                 #{r.rank} {r.nickname}
               </Text>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+              <Text variant="caption" tone="tertiary">
                 🔥{r.streak} · 🌳{r.treesPlanted}
               </Text>
-            </Box>
+            </div>
           ))}
         </>
       ) : (
-        <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+        <Text variant="body-sm" tone="tertiary" as="div">
           Chưa có dữ liệu xếp hạng.
         </Text>
       )}
