@@ -1,1266 +1,244 @@
-import { useState } from 'react';
-import { Box, Page, Text, Button, useSnackbar, useNavigate } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  getGameProfile,
-  checkIn,
-  collectDew,
-  buyStreakFreeze,
-  repairStreak,
-  spin,
-  getTodayQuiz,
-  answerQuiz,
-  waterTree,
-  buyTree,
-  getLeaderboard,
-  getMissions,
-  claimMission,
-  getForest,
-  getCommunity,
-  getCollection,
-  getSeason,
-  getSeasonLeaderboard,
-  getFriends,
-  giftWater,
-  getGarden,
-  unlockPlot,
-  waterPlot,
-  fetchSeasonPass,
-  claimSeasonPass,
-  type MissionItem,
-  type AnswerResult,
-  type HarvestSpecies,
-  type CodexEntry,
-  type SeasonPassTier,
-} from '../services/game-api';
+import { useState, type ReactNode } from 'react';
+import { Page, useNavigate } from 'zmp-ui';
+import type { HarvestSpecies } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
-import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
-import { WheelOfFortune } from '../components/wheel';
-import { haptic } from '../utils/haptic';
+import { PageHeader } from '../components/ui/page-header';
+import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { getErrorMessage } from '../services/api';
-import { vi } from '../i18n/vi';
-import { ChevronRight, MessagesSquare, Recycle } from 'lucide-react';
-import { copyText } from '../utils/clipboard';
-import { formatDrops, formatNumber, formatXu } from '../utils/format';
-
-// Cùng ngày theo giờ VN (UTC+7) — khớp dayKey backend, để khoá nút đã dùng trong ngày.
-function isSameVNDay(iso: string | null): boolean {
-  if (!iso) return false;
-  const key = (d: Date) => new Date(d.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10);
-  return key(new Date(iso)) === key(new Date());
-}
+import { MessagesSquare, Recycle } from 'lucide-react';
+import { GameLoginGate, GameSkeleton } from '../components/game/game-states';
+import { GardenHero } from '../components/game/garden-hero';
+import { GameLinkRow } from '../components/game/game-link-row';
+import { SeasonBanner } from '../components/game/season-banner';
+import { TreeHealthAlert } from '../components/game/tree-health-alert';
+import { CheckInStreak } from '../components/game/checkin-streak';
+import { StreakRepair } from '../components/game/streak-repair';
+import { TreeActions } from '../components/game/tree-actions';
+import { GardenPlots } from '../components/game/garden-plots';
+import { SeasonPass } from '../components/game/season-pass';
+import { CommunityGoal } from '../components/game/community-goal';
+import { SpeciesCodex } from '../components/game/species-codex';
+import { FriendGifts } from '../components/game/friend-gifts';
+import { EcoImpact } from '../components/game/eco-impact';
+import { LuckyWheelCard } from '../components/game/lucky-wheel-card';
+import { QuizCard, type QuizReveal } from '../components/game/quiz-card';
+import { MissionsCard } from '../components/game/missions-card';
+import { SeasonLeaderboard } from '../components/game/season-leaderboard';
+import { WeeklyLeaderboard } from '../components/game/weekly-leaderboard';
+import { HarvestCelebration } from '../components/game/harvest-celebration';
+import { WheelPrizeSheet } from '../components/game/wheel-prize-sheet';
+import { GAME_TABS, GameTabPanel, type GameTabKey } from '../components/game/game-tabs';
+import { useGameData } from '../components/game/use-game-data';
+import { useWheelPrize } from '../components/game/use-wheel-prize';
+import { useGameActions, type HarvestReward } from '../components/game/use-game-actions';
 
 export default function GamePage() {
   const status = useAuthStore((s) => s.status);
   const login = useAuthStore((s) => s.login);
-  const { openSnackbar } = useSnackbar();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const authed = status === 'authenticated';
 
-  const { data: profile, isLoading, isError, error: profileError, refetch } = useQuery({
-    queryKey: ['game', 'profile'],
-    queryFn: getGameProfile,
-    enabled: authed,
-  });
-  const { data: quiz } = useQuery({ queryKey: ['game', 'quiz'], queryFn: getTodayQuiz, enabled: authed });
-  const { data: board } = useQuery({ queryKey: ['game', 'board'], queryFn: getLeaderboard });
-  const { data: missions } = useQuery({ queryKey: ['game', 'missions'], queryFn: getMissions, enabled: authed });
-  const { data: forest } = useQuery({ queryKey: ['game', 'forest'], queryFn: getForest, enabled: authed });
-  const { data: community } = useQuery({ queryKey: ['game', 'community'], queryFn: getCommunity, enabled: authed });
-  const { data: codex } = useQuery({ queryKey: ['game', 'collection'], queryFn: getCollection, enabled: authed });
-  const { data: season } = useQuery({ queryKey: ['game', 'season'], queryFn: getSeason });
-  const { data: seasonBoard } = useQuery({ queryKey: ['game', 'seasonBoard'], queryFn: getSeasonLeaderboard });
-  const { data: friends } = useQuery({ queryKey: ['game', 'friends'], queryFn: getFriends, enabled: authed });
-  const { data: garden } = useQuery({ queryKey: ['game', 'garden'], queryFn: getGarden, enabled: authed });
-  const { data: seasonPass } = useQuery({ queryKey: ['game', 'seasonPass'], queryFn: fetchSeasonPass, enabled: authed });
+  const { profileQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } =
+    useGameData(authed);
+  const { data: profile, isLoading, isError, error: profileError, refetch } = profileQ;
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
   const currentQuiz = quiz?.find((q) => !answeredIds.has(q.id));
   // Reveal "Bạn có biết…" sau khi trả lời, trước khi sang câu kế.
-  const [reveal, setReveal] = useState<(AnswerResult & { quizId: string; choice: number }) | null>(null);
+  const [reveal, setReveal] = useState<QuizReveal | null>(null);
+  const [tab, setTab] = useState<GameTabKey>('today');
   const [harvested, setHarvested] = useState(false);
   const [harvestCoupon, setHarvestCoupon] = useState<string | null>(null);
   const [harvestCert, setHarvestCert] = useState<string | null>(null);
   const [harvestSpecies, setHarvestSpecies] = useState<HarvestSpecies | null>(null);
 
-  const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
-  const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
-
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['game'] });
-    void queryClient.invalidateQueries({ queryKey: ['me'] });
-    // Điểm Xanh/xu vừa đổi → màn Thanh toán đọc số dư từ ['loyalty']/['coins'], phải làm mới
-    // cùng lúc, nếu không khách vừa tiêu xong sang checkout vẫn thấy số cũ.
-    void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
-    void queryClient.invalidateQueries({ queryKey: ['coins'] });
-  };
-
-  const checkInM = useMutation({
-    mutationFn: checkIn,
-    onSuccess: (r) => {
-      const parts = [`+${formatDrops(r.seedsEarned)}`];
-      if (r.streakFrozeUsed) parts.push('🧊 đã dùng vé giữ lửa');
-      if (r.bonusNote) parts.push(r.bonusNote);
-      openSnackbar({ text: parts.join(' · '), type: 'success' });
-      refresh();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const dewM = useMutation({
-    mutationFn: collectDew,
-    onSuccess: (r) => {
-      openSnackbar({ text: `Hứng được +${formatDrops(r.seedsEarned)} từ giọt sương sáng 💦`, type: 'success' });
-      refresh();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const freezeM = useMutation({
-    mutationFn: buyStreakFreeze,
-    onSuccess: (r) => {
-      openSnackbar({ text: `Đã mua vé giữ lửa 🧊 (còn ${r.streakFreezes} vé)`, type: 'success' });
-      refresh();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const repairM = useMutation({
-    mutationFn: repairStreak,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
-      haptic('medium');
-      openSnackbar({ text: vi.game.streakRepair.ok, type: 'success' });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const giftM = useMutation({
-    mutationFn: (recipientId: string) => giftWater(recipientId),
-    onSuccess: (r) => {
-      openSnackbar({ text: `Đã tặng ${formatDrops(r.amount)} cho bạn 🎁`, type: 'success' });
-      refresh();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const handleSpin = async () => {
-    try {
-      const r = await spin();
-      refresh();
-      return r;
-    } catch (e) {
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      throw e;
-    }
-  };
-  const waterM = useMutation({
-    mutationFn: () => waterTree(20),
-    onSuccess: (r) => {
-      if (r.harvested) {
-        setHarvestCoupon(r.reward?.coupon ?? null);
-        setHarvestCert(r.reward?.certificate ?? null);
-        setHarvestSpecies(r.reward?.species ?? null);
+  const { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM } =
+    useGameActions({
+      onHarvest: (reward: HarvestReward | undefined) => {
+        setHarvestCoupon(reward?.coupon ?? null);
+        setHarvestCert(reward?.certificate ?? null);
+        setHarvestSpecies(reward?.species ?? null);
         setHarvested(true); // mở modal celebration
-      } else {
-        openSnackbar({ text: `Đã tưới · ${formatNumber(r.progress)}/${formatDrops(r.target)}`, type: 'success' });
-      }
-      refresh();
-      void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const buyTreeM = useMutation({
-    mutationFn: buyTree,
-    onSuccess: (r) => {
-      openSnackbar({ text: `Đã mua 1 cây thật 🌳 (−${formatXu(r.cost)}) · mã ${r.certificateCode}`, type: 'success' });
-      refresh();
-      void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
-      void queryClient.invalidateQueries({ queryKey: ['coins'] });
-      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const onPlotHarvest = (r: { harvested: boolean; progress: number; target: number; reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies } }) => {
-    if (r.harvested) {
-      setHarvestCoupon(r.reward?.coupon ?? null);
-      setHarvestCert(r.reward?.certificate ?? null);
-      setHarvestSpecies(r.reward?.species ?? null);
-      setHarvested(true);
-    } else {
-      openSnackbar({ text: `Đã tưới lô · ${formatNumber(r.progress)}/${formatDrops(r.target)}`, type: 'success' });
-    }
-    refresh();
-    void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
-  };
-  const unlockM = useMutation({
-    mutationFn: (currency: 'SEEDS' | 'XU') => unlockPlot(currency),
-    onSuccess: () => {
-      openSnackbar({ text: 'Đã mở lô đất mới 🪴', type: 'success' });
-      refresh();
-      void queryClient.invalidateQueries({ queryKey: ['coins'] });
-      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const waterPlotM = useMutation({
-    mutationFn: (plotId: string) => waterPlot(plotId, 20),
-    onSuccess: onPlotHarvest,
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const claimPassM = useMutation({
-    mutationFn: ({ tier, track }: { tier: number; track: 'free' | 'premium' }) => claimSeasonPass(tier, track),
-    onSuccess: () => {
-      haptic('medium');
-      openSnackbar({ text: vi.game.seasonPass.claimOk, type: 'success' });
-      void queryClient.invalidateQueries({ queryKey: ['game', 'seasonPass'] });
-      void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
-      void queryClient.invalidateQueries({ queryKey: ['coins'] });
-      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const claimMissionM = useMutation({
-    mutationFn: (code: string) => claimMission(code),
-    onSuccess: (r) => {
-      haptic('medium');
-      openSnackbar({ text: vi.game.missions.claimOk(r.rewardPoints), type: 'success' });
-      void queryClient.invalidateQueries({ queryKey: ['game', 'missions'] });
-      void queryClient.invalidateQueries({ queryKey: ['me'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const answerM = useMutation({
-    mutationFn: ({ id, choice }: { id: string; choice: number }) => answerQuiz(id, choice),
-    onSuccess: (r, vars) => {
-      // Hiện reveal "Bạn có biết…"; chỉ sang câu kế khi user bấm "Câu tiếp theo".
-      setReveal({ ...r, quizId: vars.id, choice: vars.choice });
-      void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
-      void queryClient.invalidateQueries({ queryKey: ['me'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+      },
+      onAnswered: (r, vars) => setReveal({ ...r, quizId: vars.id, choice: vars.choice }),
+    });
+  const wheelPrize = useWheelPrize();
   const nextQuiz = () => {
     if (reveal) setAnsweredIds((prev) => new Set(prev).add(reveal.quizId));
     setReveal(null);
   };
 
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
-  if (status === 'loading' || (authed && isLoading)) {
-    return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-          <Skeleton style={{ height: 180, borderRadius: 'var(--radius-lg)' }} />
-          <Skeleton style={{ height: 56, borderRadius: 'var(--radius-lg)' }} />
-          <Skeleton style={{ height: 56, borderRadius: 'var(--radius-lg)' }} />
-          <Skeleton style={{ height: 140, borderRadius: 'var(--radius-lg)' }} />
-        </Box>
-      </Page>
-    );
-  }
+  const shell = (children: ReactNode) => (
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(76px + var(--safe-bottom))' }}>
+      <PageHeader title="Vườn Xanh" back={false} />
+      {children}
+    </Page>
+  );
+  if (status === 'loading' || (authed && isLoading)) return shell(<GameSkeleton />);
 
   // Chỉ hiện cổng đăng nhập khi đã chắc chắn user chưa đăng nhập (status settled, không authenticated)
   // — trước đây gộp chung với nhánh loading khiến user đã logout/login lỗi bị kẹt mãi ở skeleton.
-  if (!authed) {
-    return (
-      <Page className="page">
-        <Box style={{ textAlign: 'center', padding: 48 }}>
-          <Text style={{ fontSize: 48 }}>🌱</Text>
-          <Text style={{ marginTop: 8 }}>{vi.community.loginToView}</Text>
-          <Button style={{ marginTop: 12, background: 'var(--leaf-600)' }} onClick={() => void login()}>
-            {vi.auth.loginCta}
-          </Button>
-        </Box>
-      </Page>
-    );
-  }
+  if (!authed) return shell(<GameLoginGate onLogin={() => void login()} />);
 
   // Profile là dữ liệu chủ đạo của trang (streak/xu/eco-impact) — lỗi thì phải báo rõ,
   // không để rơi xuống render với optional-chaining trông như "mất hết tiến độ".
-  if (isError) {
-    return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <ErrorState message={getErrorMessage(profileError)} onRetry={() => void refetch()} />
-      </Page>
-    );
-  }
+  if (isError) return shell(<ErrorState message={getErrorMessage(profileError)} onRetry={() => void refetch()} />);
 
   const eco = profile?.ecoImpact;
-  const pct = eco && eco.target > 0 ? Math.min(100, Math.round((eco.progress / eco.target) * 100)) : 0;
 
-  return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 80 }}>
+  return shell(
+    <>
+      <div style={{ padding: '12px 16px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <GardenHero eco={eco} totalSeeds={profile?.totalSeeds} streakDays={profile?.streakDays} />
 
-      {/* Garden */}
-      <Box
-        p={5}
-        style={{
-          background: 'linear-gradient(160deg, var(--leaf-600), var(--leaf-700))',
-          color: 'white',
-          textAlign: 'center',
-          borderRadius: '0 0 var(--radius-xl) var(--radius-xl)',
-          boxShadow: 'var(--shadow-md)',
-        }}
-      >
-        <Text style={{ fontSize: 72 }} className="tubu-sway">{pct >= 100 ? '🌳' : pct > 50 ? '🌿' : '🌱'}</Text>
-        <Text style={{ color: 'white', fontFamily: 'var(--font-display)', fontSize: 19 }} bold>
-          {eco?.treeType ?? 'Vườn của bạn'}
-        </Text>
-        <Box style={{ background: 'rgba(255,255,255,0.3)', borderRadius: 99, height: 8, margin: '10px 24px' }}>
-          <Box style={{ width: `${pct}%`, height: 8, background: 'white', borderRadius: 99, transition: 'width var(--dur-slow) var(--ease-out)' }} />
-        </Box>
-        <Text size="xSmall" style={{ color: 'white' }}>
-          {formatNumber(eco?.progress)}/{formatDrops(eco?.target)} · 💧 {formatNumber(profile?.totalSeeds)} · 🔥 {formatNumber(profile?.streakDays)} ngày · 🌳 thật: {formatNumber(eco?.treesPlanted)}
-        </Text>
-      </Box>
+        {/* Điều hướng nội bộ: giữ thanh tab trong tầm tay khi cuộn hết khối dài của "Hôm nay".
+            top = safe-top vì app immersive: dính mép 0 thì tab "Cộng đồng" nằm dưới status bar/capsule Zalo. */}
+        <div style={{ position: 'sticky', top: 'var(--safe-top)', zIndex: 5, background: 'var(--color-bg-canvas)', padding: '4px 0' }}>
+          <SegmentedTabs items={GAME_TABS.map((t) => ({ key: t.key, label: t.label }))} value={tab} onChange={(key) => setTab(key as GameTabKey)} />
+        </div>
 
-      {/* Bảng tin cộng đồng (§6.14.12) */}
-      <Box
-        className="tubu-press"
-        mx={3}
-        mt={2}
-        p={3}
-        onClick={() => navigate('/feed')}
-        style={{
-          background: 'var(--neutral-0)',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--leaf-100)',
-          boxShadow: 'var(--shadow-card)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <Box flex alignItems="center" style={{ gap: 8 }}>
-          <Box
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              background: 'var(--leaf-50)',
-              display: 'grid',
-              placeItems: 'center',
-            }}
-          >
-            <MessagesSquare size={18} color="var(--leaf-600)" />
-          </Box>
-          <Box>
-            <Text size="small" bold>Bảng tin cộng đồng</Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-              Khoe thành tích xanh & cổ vũ nhau trồng cây
-            </Text>
-          </Box>
-        </Box>
-        <ChevronRight size={18} color="var(--leaf-700)" />
-      </Box>
+        {/* Hôm nay: hành động chính của ngày nằm trong hai màn hình đầu (tưới, điểm danh, nhiệm vụ). */}
+        <GameTabPanel tab="today" active={tab === 'today'}>
+          <TreeHealthAlert health={profile?.treeHealth} />
 
-      {/* Đổi vỏ chai lấy nước (§6.14.6) */}
-      <Box
-        className="tubu-press"
-        mx={3}
-        mt={2}
-        p={3}
-        onClick={() => navigate('/refill')}
-        style={{
-          background: 'var(--neutral-0)',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--leaf-100)',
-          boxShadow: 'var(--shadow-card)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <Box flex alignItems="center" style={{ gap: 8 }}>
-          <Box
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              background: 'var(--leaf-50)',
-              display: 'grid',
-              placeItems: 'center',
-            }}
-          >
-            <Recycle size={18} color="var(--leaf-600)" />
-          </Box>
-          <Box>
-            <Text size="small" bold>Đổi vỏ chai lấy nước</Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-              Mang vỏ rỗng đến cửa hàng → nhận 💧 tưới vườn
-            </Text>
-          </Box>
-        </Box>
-        <ChevronRight size={18} color="var(--leaf-700)" />
-      </Box>
-
-      {/* Banner mùa/sự kiện (Phase 4) */}
-      {season && (
-        <Box mx={3} mt={2} p={3} style={{ background: 'linear-gradient(120deg, var(--leaf-50), var(--primary-50))', borderRadius: 'var(--radius-lg)', border: '1px solid var(--leaf-400)' }}>
-          <Box flex alignItems="center" justifyContent="space-between">
-            <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
-              🍃 {season.name}
-            </Text>
-            <Text style={{ fontSize: 18 }}>
-              {season.featuredSpecies.map((s) => s.emoji).join(' ')}
-            </Text>
-          </Box>
-          {(season.theme || season.region) && (
-            <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-              {[season.theme, season.region].filter(Boolean).join(' · ')}
-            </Text>
-          )}
-          {season.featuredSpecies.length > 0 && (
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
-              Loài nổi bật mùa này: {season.featuredSpecies.map((s) => s.name).join(', ')}
-            </Text>
-          )}
-        </Box>
-      )}
-
-      {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
-      <Box p={3} style={{ background: 'var(--neutral-0)' }}>
-        <Box flex alignItems="center" justifyContent="space-between" mb={2}>
-          <Text size="small" bold>
-            🔥 Điểm danh chuỗi {profile?.streakDays ?? 0} ngày
-          </Text>
-          <Button
-            size="small"
-            disabled={checkedInToday || checkInM.isPending}
-            loading={checkInM.isPending}
-            onClick={() => checkInM.mutate()}
-            style={{ background: 'var(--leaf-600)' }}
-          >
-            {checkedInToday ? '✅ Đã điểm danh' : 'Điểm danh'}
-          </Button>
-        </Box>
-        <Box flex style={{ gap: 6 }}>
-          {Array.from({ length: 7 }, (_, i) => {
-            const day = i + 1;
-            const done = (profile?.streakDays ?? 0) % 7 === 0 && (profile?.streakDays ?? 0) > 0 ? true : day <= ((profile?.streakDays ?? 0) % 7);
-            const bonus = day === 3 || day === 7;
-            return (
-              <Box key={i} style={{ flex: 1, textAlign: 'center' }}>
-                <Box
-                  style={{
-                    height: 32,
-                    borderRadius: 'var(--radius-md)',
-                    background: done ? 'var(--leaf-600)' : 'var(--neutral-100)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: done ? 'var(--neutral-0)' : 'var(--neutral-400)',
-                    fontSize: 13,
-                  }}
-                >
-                  {done ? '💧' : bonus ? '🎁' : day}
-                </Box>
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                  N{day}
-                </Text>
-              </Box>
-            );
-          })}
-        </Box>
-
-        {/* Vé giữ lửa (streak-freeze) + giọt sương sáng (dew) */}
-        <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8, marginTop: 12 }}>
-          <Box flex alignItems="center" style={{ gap: 6 }}>
-            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-              🧊 Vé giữ lửa: <b>{profile?.streakFreezes ?? 0}</b>
-            </Text>
-            <Button
-              size="small"
-              variant="tertiary"
-              disabled={freezeM.isPending}
-              loading={freezeM.isPending}
-              onClick={() => freezeM.mutate()}
-              style={{ color: 'var(--leaf-700)' }}
-            >
-              Mua ({formatDrops(profile?.streakFreezeCost ?? 80)})
-            </Button>
-          </Box>
-          <Button
-            size="small"
-            variant="secondary"
-            disabled={dewCollectedToday || dewM.isPending}
-            loading={dewM.isPending}
-            onClick={() => dewM.mutate()}
-          >
-            {dewCollectedToday ? '💦 Đã hứng sương' : '💦 Hứng giọt sương'}
-          </Button>
-        </Box>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-          Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng 💧 mỗi ngày.
-        </Text>
-      </Box>
-
-      {/* Hồi sinh chuỗi vừa mất (§streak-repair) — chỉ hiện trong cửa sổ hồi sinh */}
-      {profile?.streakRepairable && (
-        <Box
-          mx={3}
-          mt={2}
-          p={3}
-          style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--clay-500)' }}
-        >
-          <Text size="small" bold style={{ color: 'var(--clay-700)' }}>
-            {vi.game.streakRepair.title(profile.brokenStreakDays ?? 0)}
-          </Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 2 }}>
-            {vi.game.streakRepair.body}
-          </Text>
-          <Button
-            fullWidth
-            size="small"
-            loading={repairM.isPending}
-            disabled={repairM.isPending}
-            onClick={() => repairM.mutate()}
-            style={{ marginTop: 10, background: 'var(--clay-500)' }}
-          >
-            {vi.game.streakRepair.cta(profile.streakRepairCost ?? 0)}
-          </Button>
-        </Box>
-      )}
-
-      {/* Cảnh báo héo/chết (§6.7.3) */}
-      {profile?.treeHealth === 'WILTED' && (
-        <Box mx={3} mt={2} p={3} style={{ background: 'var(--warning-bg)', borderRadius: 'var(--radius-md)' }}>
-          <Text size="xSmall" style={{ color: 'var(--warning)' }}>
-            🥀 Cây đang héo vì lâu chưa tưới — tưới ngay để hồi phục nhé!
-          </Text>
-        </Box>
-      )}
-      {profile?.treeHealth === 'DEAD' && (
-        <Box mx={3} mt={2} p={3} style={{ background: 'var(--danger-bg)', borderRadius: 'var(--radius-md)' }}>
-          <Text size="xSmall" style={{ color: 'var(--danger)' }}>
-            🍂 Cây đã héo úa do quá 7 ngày không tưới. Tưới lại sẽ trồng cây mới từ đầu.
-          </Text>
-        </Box>
-      )}
-
-      <Box p={3}>
-        <Button fullWidth disabled={waterM.isPending} loading={waterM.isPending} variant="secondary" onClick={() => waterM.mutate()}>
-          🚿 Tưới cây (20💧)
-        </Button>
-        <Box flex style={{ gap: 8, marginTop: 8 }}>
-          <Button style={{ flex: 1 }} size="small" disabled={buyTreeM.isPending} loading={buyTreeM.isPending} onClick={() => buyTreeM.mutate()}>
-            🌳 Mua cây thật
-            {profile?.treeXuPrice != null && ` (${formatXu(profile.treeXuPrice)})`}
-          </Button>
-        </Box>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, textAlign: 'center' }}>
-          Mua bằng TubuXu — đổi từ Ví trong mục Ví của tôi.
-        </Text>
-      </Box>
-
-      {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
-      {garden && (
-        <Card title={`🪴 Lô đất của bạn (${garden.plots.length}/${garden.maxPlots})`}>
-          {garden.plots.filter((p) => !p.isHome).length === 0 && (
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-              Mở thêm lô đất để trồng nhiều cây cùng lúc — mỗi lô thu hoạch cho coupon, cây thật & loài sưu tập riêng.
-            </Text>
-          )}
-          {garden.plots
-            .filter((p) => !p.isHome)
-            .map((p) => {
-              const ppct = p.target > 0 ? Math.min(100, Math.round((p.progress / p.target) * 100)) : 0;
-              const stageEmoji = ppct >= 100 ? '🌳' : ppct > 50 ? '🌿' : '🌱';
-              return (
-                <Box key={p.id} p={2} mt={1} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)' }}>
-                  <Box flex alignItems="center" justifyContent="space-between">
-                    <Box flex alignItems="center" style={{ gap: 8 }}>
-                      <Text style={{ fontSize: 26, filter: p.treeHealth === 'DEAD' ? 'grayscale(1)' : 'none' }}>{stageEmoji}</Text>
-                      <Box>
-                        <Text size="small" bold>Lô {p.slot} · {p.treeType}</Text>
-                        <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                          {formatNumber(p.progress)}/{formatDrops(p.target)} · 🌳 {formatNumber(p.treesPlanted)}
-                          {p.treeHealth === 'WILTED' ? ' · 🥀 héo' : p.treeHealth === 'DEAD' ? ' · 🍂 chết' : ''}
-                        </Text>
-                      </Box>
-                    </Box>
-                    <Button
-                      size="small"
-                      variant="secondary"
-                      disabled={waterPlotM.isPending && waterPlotM.variables === p.id}
-                      loading={waterPlotM.isPending && waterPlotM.variables === p.id}
-                      onClick={() => p.id && waterPlotM.mutate(p.id)}
-                    >
-                      🚿 Tưới
-                    </Button>
-                  </Box>
-                  <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 6, marginTop: 6, overflow: 'hidden' }}>
-                    <Box style={{ width: `${ppct}%`, height: 6, background: 'var(--leaf-600)', borderRadius: 99, transition: 'width var(--dur-slow) var(--ease-out)' }} />
-                  </Box>
-                </Box>
-              );
-            })}
-          {garden.nextUnlock ? (
-            <Box flex style={{ gap: 8, marginTop: 10 }}>
-              <Button
-                style={{ flex: 1 }}
-                size="small"
-                disabled={unlockM.isPending}
-                loading={unlockM.isPending && unlockM.variables === 'SEEDS'}
-                onClick={() => unlockM.mutate('SEEDS')}
-              >
-                🔓 Mở lô ({formatDrops(garden.nextUnlock.seedCost)})
-              </Button>
-              <Button
-                style={{ flex: 1 }}
-                size="small"
-                variant="secondary"
-                disabled={unlockM.isPending}
-                loading={unlockM.isPending && unlockM.variables === 'XU'}
-                onClick={() => unlockM.mutate('XU')}
-              >
-                🔓 Mở lô ({formatXu(garden.nextUnlock.xuCost)})
-              </Button>
-            </Box>
-          ) : (
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
-              Bạn đã mở tối đa số lô đất 🌳
-            </Text>
-          )}
-        </Card>
-      )}
-
-      {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
-      {seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
-        <Card title={vi.game.seasonPass.title}>
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-            {vi.game.seasonPass.subtitle(seasonPass.seasonTitle ?? '')}
-          </Text>
-          {(() => {
-            const xp = seasonPass.xp ?? 0;
-            const maxXp = seasonPass.tiers![seasonPass.tiers!.length - 1]?.xpRequired ?? 1;
-            const ppct = maxXp > 0 ? Math.min(100, Math.round((xp / maxXp) * 100)) : 0;
-            return (
-              <>
-                <Box flex justifyContent="space-between" style={{ margin: '10px 0 4px' }}>
-                  <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                    {vi.game.seasonPass.xp(xp)}
-                  </Text>
-                  <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                    {vi.game.seasonPass.xp(maxXp)}
-                  </Text>
-                </Box>
-                <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 8, overflow: 'hidden' }}>
-                  <Box style={{ width: `${ppct}%`, height: 8, background: 'linear-gradient(90deg, var(--leaf-400), var(--leaf-600))', borderRadius: 99, transition: 'width var(--dur-slow) var(--ease-out)' }} />
-                </Box>
-              </>
-            );
-          })()}
-
-          {!seasonPass.premiumEligible && (
-            <Text size="xSmall" style={{ color: 'var(--clay-700)', marginTop: 8 }}>
-              {vi.game.seasonPass.premiumHint}
-            </Text>
-          )}
-
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-            {seasonPass.tiers.map((t: SeasonPassTier) => {
-              const busy = (track: 'free' | 'premium') =>
-                claimPassM.isPending && claimPassM.variables?.tier === t.tier && claimPassM.variables?.track === track;
-              return (
-                <Box
-                  key={t.tier}
-                  p={2}
-                  style={{
-                    background: t.unlocked ? 'var(--leaf-50)' : 'var(--neutral-100)',
-                    borderRadius: 'var(--radius-md)',
-                    opacity: t.unlocked ? 1 : 0.7,
-                  }}
-                >
-                  <Box flex alignItems="center" justifyContent="space-between" mb={1}>
-                    <Text size="xSmall" bold>
-                      {vi.game.seasonPass.tier(t.tier + 1)}
-                    </Text>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                      {vi.game.seasonPass.xp(t.xpRequired)}
-                    </Text>
-                  </Box>
-                  <Box flex style={{ gap: 8 }}>
-                    {/* Nhánh miễn phí */}
-                    <Box style={{ flex: 1, textAlign: 'center' }}>
-                      <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                        {vi.game.seasonPass.free}
-                      </Text>
-                      <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                        {vi.game.seasonPass.reward(t.free)}
-                      </Text>
-                      {t.claimedFree ? (
-                        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                          {vi.game.seasonPass.claimed}
-                        </Text>
-                      ) : (
-                        <Button
-                          size="small"
-                          fullWidth
-                          disabled={!t.unlocked || busy('free')}
-                          loading={busy('free')}
-                          onClick={() => claimPassM.mutate({ tier: t.tier, track: 'free' })}
-                          style={{ marginTop: 2, background: 'var(--leaf-600)' }}
-                        >
-                          {t.unlocked ? vi.game.seasonPass.claim : vi.game.seasonPass.locked}
-                        </Button>
-                      )}
-                    </Box>
-                    {/* Nhánh premium */}
-                    <Box style={{ flex: 1, textAlign: 'center' }}>
-                      <Text size="xSmall" style={{ color: 'var(--sun-700)' }}>
-                        ⭐ {vi.game.seasonPass.premium}
-                      </Text>
-                      <Text size="xSmall" bold style={{ color: 'var(--sun-700)' }}>
-                        {vi.game.seasonPass.reward(t.premium)}
-                      </Text>
-                      {t.claimedPremium ? (
-                        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                          {vi.game.seasonPass.claimed}
-                        </Text>
-                      ) : (
-                        <Button
-                          size="small"
-                          fullWidth
-                          variant="secondary"
-                          disabled={!t.unlocked || !seasonPass.premiumEligible || busy('premium')}
-                          loading={busy('premium')}
-                          onClick={() => claimPassM.mutate({ tier: t.tier, track: 'premium' })}
-                          style={{ marginTop: 2 }}
-                        >
-                          {!t.unlocked
-                            ? vi.game.seasonPass.locked
-                            : !seasonPass.premiumEligible
-                              ? vi.game.seasonPass.locked
-                              : vi.game.seasonPass.claim}
-                        </Button>
-                      )}
-                    </Box>
-                  </Box>
-                </Box>
-              );
-            })}
-          </Box>
-        </Card>
-      )}
-
-      {/* Mốc cộng đồng cây thật (Phase 2) — hồ giọt nước toàn cộng đồng */}
-      {community?.goal && (
-        <Card title="🌍 Mục tiêu cộng đồng">
-          <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
-            {community.goal.title}
-          </Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-            📍 {community.goal.region} · mục tiêu {community.goal.treesToPlant} cây thật
-          </Text>
-          <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 12, margin: '10px 0 6px', overflow: 'hidden' }}>
-            <Box
-              style={{
-                width: `${community.pct}%`,
-                height: 12,
-                background: 'linear-gradient(90deg, var(--leaf-400), var(--leaf-600))',
-                borderRadius: 99,
-                transition: 'width var(--dur-slow) var(--ease-out)',
-              }}
+          {/* Hồi sinh chuỗi vừa mất (§streak-repair) — chỉ hiện trong cửa sổ hồi sinh */}
+          {profile?.streakRepairable && (
+            <StreakRepair
+              brokenStreakDays={profile.brokenStreakDays}
+              cost={profile.streakRepairCost}
+              pending={repairM.isPending}
+              onRepair={() => repairM.mutate()}
             />
-          </Box>
-          <Box flex justifyContent="space-between">
-            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-              {formatNumber(community.goal.currentDrops)}/{formatDrops(community.goal.targetDrops)} ({community.pct}%)
-            </Text>
-            <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-              Bạn đã góp {formatDrops(community.myDrops)}
-            </Text>
-          </Box>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6 }}>
-            Mỗi lần thu hoạch cây ảo, toàn bộ 💧 đã tưới sẽ góp vào hồ chung. Đủ mốc, Tubu trồng cây thật cùng PanNature 🌿
-          </Text>
-        </Card>
-      )}
+          )}
 
-      {/* Sổ tay loài cây (Phase 3) — sưu tập khi thu hoạch */}
-      {codex && codex.length > 0 && (
-        <Card title={`📒 Sổ tay loài cây (${codex.filter((c) => c.owned).length}/${codex.length})`}>
-          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-            {codex.map((c: CodexEntry) => (
-              <Box
-                key={c.id}
-                p={2}
-                style={{
-                  textAlign: 'center',
-                  background: c.owned ? 'var(--leaf-50)' : 'var(--neutral-100)',
-                  borderRadius: 'var(--radius-md)',
-                  border: c.owned ? `1px solid ${rarityColor(c.rarity)}` : '1px solid transparent',
-                  opacity: c.owned ? 1 : 0.55,
-                }}
-              >
-                <Text style={{ fontSize: 26, filter: c.owned ? 'none' : 'grayscale(1)' }}>
-                  {c.owned ? c.emoji : '❔'}
-                </Text>
-                <Text size="xSmall" bold style={{ color: c.owned ? 'var(--neutral-900)' : 'var(--neutral-400)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {c.owned ? c.name : '???'}
-                </Text>
-                {c.owned && c.count > 1 && (
-                  <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>×{c.count}</Text>
-                )}
-              </Box>
-            ))}
-          </Box>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
-            Thu hoạch cây để sưu tập đủ loài cây Việt Nam — loài hiếm khó gặp hơn!
-          </Text>
-        </Card>
-      )}
+          <TreeActions
+            treeXuPrice={profile?.treeXuPrice}
+            waterPending={waterM.isPending}
+            onWater={() => waterM.mutate()}
+            buyPending={buyTreeM.isPending}
+            onBuy={() => buyTreeM.mutate()}
+          />
 
-      {/* Tặng nước bạn bè (social) */}
-      {friends && friends.length > 0 && (
-        <Card title="🎁 Tặng nước cho bạn bè">
-          {friends.map((f) => (
-            <Box key={f.id} flex alignItems="center" justifyContent="space-between" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
-              <Text size="small">🌿 {f.nickname}</Text>
-              <Button
-                size="small"
-                variant="secondary"
-                disabled={f.giftedToday || (giftM.isPending && giftM.variables === f.id)}
-                loading={giftM.isPending && giftM.variables === f.id}
-                onClick={() => giftM.mutate(f.id)}
-              >
-                {f.giftedToday ? 'Đã tặng hôm nay' : 'Tặng 💧'}
-              </Button>
-            </Box>
-          ))}
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
-            Tặng nước cho bạn bè (người bạn mời hoặc người mời bạn) — mỗi người 1 lần/ngày 🌿
-          </Text>
-        </Card>
-      )}
+          {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
+          <CheckInStreak
+            profile={profile}
+            onCheckIn={() => checkInM.mutate()}
+            checkInPending={checkInM.isPending}
+            onBuyFreeze={() => freezeM.mutate()}
+            freezePending={freezeM.isPending}
+            onCollectDew={() => dewM.mutate()}
+            dewPending={dewM.isPending}
+          />
 
-      {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
-      <Card title="🌍 Tác động xanh của bạn">
-        <Box flex style={{ gap: 10 }}>
-          <EcoStat icon="🌳" value={formatNumber(eco?.treesPlanted)} label="Cây thật đã trồng" />
-          <EcoStat icon="💨" value={`~${formatNumber((eco?.treesPlanted ?? 0) * 21)}kg`} label="CO₂ hấp thụ/năm (ước tính)" />
-          <EcoStat icon="💧" value={formatNumber(profile?.totalSeeds)} label="Giọt nước đã góp" />
-        </Box>
-        {(forest?.count ?? 0) > 0 ? (
-          <>
-            <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 8 }}>
-              Cảm ơn bạn! Tubu đã cam kết góp {formatNumber(forest?.count)} cây thật vào "Rừng Xanh Lên" cùng PanNature 🌿
-            </Text>
-            {/* Khu rừng của tôi — chứng nhận từng cây (§6.7.7) */}
-            <Box mt={3} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <Text size="xSmall" bold>🌲 Khu rừng của tôi — chứng nhận</Text>
-              {forest!.trees.slice(0, 5).map((t) => (
-                <Box
-                  key={t.certificateCode}
-                  flex
-                  alignItems="center"
-                  justifyContent="space-between"
-                  p={2}
-                  style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-sm)' }}
-                >
-                  <Box>
-                    <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', letterSpacing: 0.5 }}>
-                      {t.certificateCode}
-                    </Text>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{t.treeType}</Text>
-                  </Box>
-                  <Text size="xSmall" style={{ color: t.status === 'PLANTED' ? 'var(--leaf-700)' : 'var(--neutral-500)' }}>
-                    {t.status === 'PLANTED' ? '✅ Đã trồng' : '🌱 Đã cam kết'}
-                  </Text>
-                </Box>
-              ))}
-              {forest!.count > 5 && (
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>…và {formatNumber(forest!.count - 5)} cây khác</Text>
-              )}
-            </Box>
-          </>
-        ) : (
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
-            Chăm cây ảo đến khi thu hoạch để Tubu góp 1 cây thật cho rừng Việt Nam.
-          </Text>
-        )}
-      </Card>
+          <MissionsCard
+            missions={missions}
+            streakDays={profile?.streakDays}
+            claimPending={claimMissionM.isPending}
+            claimVariables={claimMissionM.variables}
+            onClaim={(code) => claimMissionM.mutate(code)}
+          />
 
-      <Card title="🎡 Vòng quay may mắn">
-        <WheelOfFortune cost={10} onSpin={handleSpin} />
-      </Card>
+          <QuizCard
+            quiz={quiz}
+            currentQuiz={currentQuiz}
+            answeredCount={answeredIds.size}
+            reveal={reveal}
+            pending={answerM.isPending}
+            onAnswer={(id, choice) => answerM.mutate({ id, choice })}
+            onNext={nextQuiz}
+          />
 
-      <Card title="🧠 Quiz Sống Xanh hôm nay">
-        {currentQuiz ? (
-          <>
-            <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 6 }}>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                {categoryLabel(currentQuiz.category)} · {difficultyLabel(currentQuiz.difficulty)}
-                {quiz && quiz.length > 1 ? ` · Câu ${answeredIds.size + 1}/${quiz.length}` : ''}
-              </Text>
-              <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                +{formatDrops(currentQuiz.waterReward)}
-              </Text>
-            </Box>
-            <QuizBlock
-              q={currentQuiz}
-              reveal={reveal && reveal.quizId === currentQuiz.id ? reveal : null}
-              onAnswer={(choice) => answerM.mutate({ id: currentQuiz.id, choice })}
-              pending={answerM.isPending}
+          <LuckyWheelCard cost={10} onSpin={handleSpin} onResult={wheelPrize.onResult} />
+
+          {/* Đổi vỏ chai lấy nước (§6.14.6) */}
+          <GameLinkRow
+            icon={Recycle}
+            title="Đổi vỏ chai lấy nước"
+            hint="Mang vỏ rỗng đến cửa hàng → nhận 💧 tưới vườn"
+            onClick={() => navigate('/refill')}
+          />
+        </GameTabPanel>
+
+        <GameTabPanel tab="garden" active={tab === 'garden'}>
+          {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
+          {garden && (
+            <GardenPlots
+              garden={garden}
+              waterPlotPending={waterPlotM.isPending}
+              waterPlotVariables={waterPlotM.variables}
+              onWaterPlot={(plotId) => waterPlotM.mutate(plotId)}
+              unlockPending={unlockM.isPending}
+              unlockVariables={unlockM.variables}
+              onUnlock={(currency) => unlockM.mutate(currency)}
             />
-            {reveal && reveal.quizId === currentQuiz.id && (
-              <Box
-                mt={3}
-                p={3}
-                style={{
-                  background: reveal.isCorrect ? 'var(--leaf-50)' : 'var(--warning-bg)',
-                  borderRadius: 'var(--radius-md)',
-                }}
-              >
-                <Text size="small" bold style={{ color: reveal.isCorrect ? 'var(--leaf-700)' : 'var(--warning)' }}>
-                  {reveal.isCorrect ? `Chính xác! +${formatDrops(reveal.waterEarned)}` : 'Chưa đúng — cùng học nhé 🌿'}
-                </Text>
-                {reveal.explanation && (
-                  <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
-                    💡 Bạn có biết: {reveal.explanation}
-                  </Text>
-                )}
-                <Button fullWidth size="small" onClick={nextQuiz} style={{ marginTop: 10, background: 'var(--leaf-600)' }}>
-                  {answeredIds.size + 1 >= (quiz?.length ?? 1) ? 'Hoàn thành' : 'Câu tiếp theo'}
-                </Button>
-              </Box>
-            )}
-          </>
-        ) : (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            Bạn đã hoàn thành quiz hôm nay 🎉
-          </Text>
-        )}
-      </Card>
+          )}
 
-      <Card title="🎯 Nhiệm vụ">
-        {missions && missions.length > 0 ? (
-          missions.map((m: MissionItem) => {
-            const defaultGoal = { CHECKIN_7: 7, REVIEW_3: 3, INVITE_3: 3, FIRST_ORDER: 1 }[m.code] ?? 1;
-            // BE Mission.goal mặc định = 1 (schema @default(1)) — "> 1" từng loại bỏ nhầm mọi
-            // mission cấu hình goal=1 hợp lệ và âm thầm thay bằng default cứng của FE.
-            const goal = m.goal && m.goal > 0 ? m.goal : defaultGoal;
-            const rawProgress = m.code === 'CHECKIN_7'
-              ? Math.min(goal, profile?.streakDays ?? m.progress ?? 0)
-              : (m.progress ?? 0);
-            const progress = Math.min(goal, rawProgress);
-            const isDone = m.completed || progress >= goal;
-            // A1-02: trước đây "đạt điều kiện" (isDone) và "đã nhận thưởng" bị coi là một — thẻ
-            // hiện ✓ và +Nđ ngay khi đạt điều kiện nhưng KHÔNG có đường cộng thưởng nào. Giờ tách
-            // rõ: ✓ chỉ khi đã claimed (thưởng THẬT đã vào Điểm Xanh); đạt điều kiện nhưng chưa
-            // nhận thì hiện nút "Nhận thưởng" (mirror pattern claim của Season Pass).
-            const canClaim = isDone && !m.claimed;
+          {/* Sổ tay loài cây (Phase 3) — sưu tập khi thu hoạch */}
+          {codex && codex.length > 0 && <SpeciesCodex codex={codex} />}
 
-            return (
-              <Box key={m.code} style={{ padding: '8px 0', borderBottom: '1px solid var(--neutral-100)' }}>
-                <Box flex alignItems="center" justifyContent="space-between">
-                  <Text size="small" bold={!m.claimed} style={{ color: m.claimed ? 'var(--neutral-400)' : 'var(--neutral-900)' }}>
-                    {m.claimed ? '✓ ' : ''}{m.title}
-                  </Text>
-                  <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-                    +{formatNumber(m.rewardPoints)} Điểm Xanh
-                  </Text>
-                </Box>
-                {m.description && (
-                  <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                    {m.description}
-                  </Text>
-                )}
-                <Box style={{ height: 6, background: 'var(--neutral-100)', borderRadius: 99, marginTop: 4, overflow: 'hidden' }}>
-                  <Box
-                    style={{
-                      width: `${Math.min(100, Math.round((progress / Math.max(1, goal)) * 100))}%`,
-                      height: '100%',
-                      background: isDone ? 'var(--leaf-600)' : 'var(--primary-600)',
-                    }}
-                  />
-                </Box>
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
-                  {progress}/{goal}
-                </Text>
-                {canClaim && (
-                  <Button
-                    fullWidth
-                    size="small"
-                    loading={claimMissionM.isPending && claimMissionM.variables === m.code}
-                    disabled={claimMissionM.isPending && claimMissionM.variables === m.code}
-                    onClick={() => claimMissionM.mutate(m.code)}
-                    style={{ marginTop: 6, background: 'var(--leaf-600)' }}
-                  >
-                    {vi.game.missions.claim}
-                  </Button>
-                )}
-              </Box>
-            );
-          })
-        ) : (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            Chưa có nhiệm vụ.
-          </Text>
-        )}
-      </Card>
+          {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
+          <EcoImpact eco={eco} totalSeeds={profile?.totalSeeds} forest={forest} />
 
-      {seasonBoard && seasonBoard.length > 0 && (
-        <Card title="💧 Top góp nước mùa này">
-          {seasonBoard.map((r) => (
-            <Box key={r.rank} flex justifyContent="space-between" style={{ padding: '4px 0', borderTop: r.rank > 1 ? '1px solid var(--neutral-100)' : 'none' }}>
-              <Text size="small">
-                {r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : `#${r.rank}`} {r.nickname}
-              </Text>
-              <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                {formatDrops(r.drops)}
-              </Text>
-            </Box>
-          ))}
-        </Card>
-      )}
+          {/* Mốc cộng đồng cây thật (Phase 2) — hồ giọt nước toàn cộng đồng */}
+          {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
+        </GameTabPanel>
 
-      <Card title="🏆 Bảng xếp hạng tuần">
-        {board && board.length > 0 ? (
-          <>
-            {/* Podium top 3 */}
-            <Box flex alignItems="flex-end" justifyContent="center" style={{ gap: 8, marginBottom: 12 }}>
-              {[board[1], board[0], board[2]].map((r, idx) => {
-                if (!r) return <Box key={idx} style={{ flex: 1 }} />;
-                const isFirst = r.rank === 1;
-                const h = isFirst ? 64 : r.rank === 2 ? 48 : 38;
-                const medal = r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : '🥉';
-                return (
-                  <Box key={r.rank} style={{ flex: 1, textAlign: 'center' }}>
-                    <Text style={{ fontSize: isFirst ? 28 : 22 }}>{medal}</Text>
-                    <Text size="xSmall" bold style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {r.nickname}
-                    </Text>
-                    <Box
-                      style={{
-                        height: h,
-                        borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
-                        background: isFirst ? 'var(--primary-600)' : 'var(--leaf-400)',
-                        marginTop: 4,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'var(--neutral-0)',
-                        fontSize: 11,
-                        fontWeight: 700,
-                      }}
-                    >
-                      🌳{r.treesPlanted}
-                    </Box>
-                  </Box>
-                );
-              })}
-            </Box>
-            {/* Hạng 4+ */}
-            {board.slice(3).map((r) => (
-              <Box key={r.rank} flex justifyContent="space-between" style={{ padding: '4px 0', borderTop: '1px solid var(--neutral-100)' }}>
-                <Text size="small">
-                  #{r.rank} {r.nickname}
-                </Text>
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                  🔥{r.streak} · 🌳{r.treesPlanted}
-                </Text>
-              </Box>
-            ))}
-          </>
-        ) : (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            Chưa có dữ liệu xếp hạng.
-          </Text>
-        )}
-      </Card>
+        <GameTabPanel tab="community" active={tab === 'community'}>
+          {/* Banner mùa/sự kiện (Phase 4) */}
+          {season && <SeasonBanner season={season} />}
+
+          {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
+          {seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
+            <SeasonPass
+              pass={seasonPass}
+              claimPending={claimPassM.isPending}
+              claimVariables={claimPassM.variables}
+              onClaim={(tier, track) => claimPassM.mutate({ tier, track })}
+            />
+          )}
+
+          {/* Tặng nước bạn bè (social) */}
+          {friends && friends.length > 0 && (
+            <FriendGifts
+              friends={friends}
+              giftPending={giftM.isPending}
+              giftVariables={giftM.variables}
+              onGift={(recipientId) => giftM.mutate(recipientId)}
+            />
+          )}
+
+          <WeeklyLeaderboard board={board} />
+
+          {seasonBoard && seasonBoard.length > 0 && <SeasonLeaderboard rows={seasonBoard} />}
+
+          {/* Bảng tin cộng đồng (§6.14.12) */}
+          <GameLinkRow
+            icon={MessagesSquare}
+            title="Bảng tin cộng đồng"
+            hint="Khoe thành tích xanh & cổ vũ nhau trồng cây"
+            onClick={() => navigate('/feed')}
+          />
+        </GameTabPanel>
+      </div>
+
+      {/* Hộp kết quả vòng quay: ngoài khối tab để vẫn hiện khi người chơi đã đổi tab trong lúc quay. */}
+      <WheelPrizeSheet {...wheelPrize.sheet} />
 
       {/* Harvest celebration */}
-      {harvested && (
-        <Box
-          onClick={() => setHarvested(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }}
-        >
-          <Box
-            onClick={(e) => e.stopPropagation()}
-            p={5}
-            style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-xl)', textAlign: 'center', maxWidth: 320, width: '100%' }}
-          >
-            <Text style={{ fontSize: 64 }}>🌳</Text>
-            <Text bold size="large" style={{ marginTop: 8 }}>
-              Thu hoạch thành công!
-            </Text>
-            <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
-              Cây ảo của bạn đã lớn — Tubu sẽ góp <b>1 cây thật</b> vào rừng "Rừng Xanh Lên" cùng PanNature 🌿
-            </Text>
-            {harvestCoupon && (
-              <Box
-                className="tubu-press"
-                mt={3}
-                p={3}
-                onClick={() => {
-                  void copyText(harvestCoupon).then((ok) =>
-                    openSnackbar(
-                      ok
-                        ? { text: 'Đã sao chép mã giảm giá', type: 'success' }
-                        : { text: `Không sao chép được — mã của bạn: ${harvestCoupon}`, type: 'info', duration: 4000 },
-                    ),
-                  );
-                }}
-                style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--leaf-600)' }}
-              >
-                <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                  Quà thu hoạch — mã giảm giá (chạm để sao chép)
-                </Text>
-                <Text bold style={{ color: 'var(--leaf-700)', letterSpacing: 1 }}>
-                  {harvestCoupon}
-                </Text>
-              </Box>
-            )}
-            {harvestCert && (
-              <Box mt={2} p={3} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)' }}>
-                <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                  Mã chứng nhận cây thật
-                </Text>
-                <Text bold style={{ color: 'var(--leaf-700)', letterSpacing: 1 }}>
-                  {harvestCert}
-                </Text>
-              </Box>
-            )}
-            {harvestSpecies && (
-              <Box mt={3} p={3} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', border: `1px solid ${rarityColor(harvestSpecies.rarity)}` }}>
-                <Text size="xSmall" style={{ color: rarityColor(harvestSpecies.rarity), fontWeight: 700 }}>
-                  {rarityLabel(harvestSpecies.rarity)} · Sưu tập mới!
-                </Text>
-                <Text bold style={{ marginTop: 2 }}>
-                  {harvestSpecies.emoji} {harvestSpecies.name}
-                </Text>
-                {harvestSpecies.ecoFact && (
-                  <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
-                    💡 {harvestSpecies.ecoFact}
-                  </Text>
-                )}
-              </Box>
-            )}
-            {harvestCoupon && (
-              <Button
-                fullWidth
-                variant="secondary"
-                onClick={() => {
-                  setHarvested(false);
-                  navigate('/browse');
-                }}
-                style={{ marginTop: 12 }}
-              >
-                Dùng mã giảm giá ngay
-              </Button>
-            )}
-            <Button
-              fullWidth
-              onClick={() => setHarvested(false)}
-              style={{ marginTop: harvestCoupon ? 8 : 20, background: 'var(--leaf-600)' }}
-            >
-              Tuyệt vời!
-            </Button>
-          </Box>
-        </Box>
-      )}
-    </Page>
+      <HarvestCelebration
+        open={harvested}
+        coupon={harvestCoupon}
+        certificate={harvestCert}
+        species={harvestSpecies}
+        onClose={() => setHarvested(false)}
+        onUseCoupon={() => {
+          setHarvested(false);
+          navigate('/browse');
+        }}
+      />
+    </>,
   );
-}
-
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
-      <Text bold size="small" style={{ marginBottom: 8 }}>
-        {title}
-      </Text>
-      {children}
-    </Box>
-  );
-}
-
-function EcoStat({ icon, value, label }: { icon: string; value: string; label: string }) {
-  return (
-    <Box
-      p={2}
-      style={{ flex: 1, background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', textAlign: 'center' }}
-    >
-      <Text style={{ fontSize: 20 }}>{icon}</Text>
-      <Text bold size="small" style={{ color: 'var(--leaf-700)' }}>
-        {value}
-      </Text>
-      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-        {label}
-      </Text>
-    </Box>
-  );
-}
-
-function QuizBlock({
-  q,
-  reveal,
-  onAnswer,
-  pending,
-}: {
-  q: { question: string; options: string[] };
-  reveal: (AnswerResult & { choice: number }) | null;
-  onAnswer: (choice: number) => void;
-  pending: boolean;
-}) {
-  return (
-    <Box>
-      <Text size="small" style={{ marginBottom: 8 }}>
-        {q.question}
-      </Text>
-      <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        {q.options.map((opt, i) => {
-          // Sau khi reveal: tô xanh đáp án đúng, tô đỏ lựa chọn sai của user.
-          let bg: string | undefined;
-          let color: string | undefined;
-          if (reveal) {
-            if (i === reveal.correct) {
-              bg = 'var(--leaf-600)';
-              color = 'var(--neutral-0)';
-            } else if (i === reveal.choice) {
-              bg = 'var(--danger-bg)';
-              color = 'var(--danger)';
-            }
-          }
-          return (
-            <Button
-              key={i}
-              size="small"
-              variant="secondary"
-              disabled={pending || !!reveal}
-              onClick={() => onAnswer(i)}
-              style={bg ? { background: bg, color } : undefined}
-            >
-              {opt}
-            </Button>
-          );
-        })}
-      </Box>
-    </Box>
-  );
-}
-
-function categoryLabel(cat: string): string {
-  const map: Record<string, string> = {
-    cay: '🌳 Cây cối',
-    nuoc: '💧 Nước',
-    dat: '🌍 Đất',
-    khong_khi: '🌬️ Không khí',
-    dong_vat: '🐾 Động vật',
-    tai_che: '♻️ Tái chế',
-    nang_luong: '⚡ Năng lượng',
-    nature: '🌿 Thiên nhiên',
-  };
-  return map[cat] ?? '🌿 Thiên nhiên';
-}
-
-function difficultyLabel(d: number): string {
-  return d >= 3 ? 'Khó' : d === 2 ? 'Vừa' : 'Dễ';
-}
-
-function rarityColor(r: 'COMMON' | 'RARE' | 'LEGENDARY'): string {
-  return r === 'LEGENDARY' ? 'var(--sun-700)' : r === 'RARE' ? 'var(--leaf-600)' : 'var(--neutral-400)';
-}
-
-function rarityLabel(r: 'COMMON' | 'RARE' | 'LEGENDARY'): string {
-  return r === 'LEGENDARY' ? '🌟 Huyền thoại' : r === 'RARE' ? '💎 Hiếm' : '🍃 Thường';
 }

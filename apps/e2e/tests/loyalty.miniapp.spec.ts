@@ -201,8 +201,9 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
       .last();
     await card50k.getByRole('button', { name: 'Đổi ngay' }).click();
 
-    const modal = page.locator('.tubu-pop').filter({ hasText: 'Xác nhận đổi ưu đãi' });
-    await expect(modal.getByText('-50 Xanh')).toBeVisible();
+    // Gốc .zaui-sheet có kích thước 0 (nội dung định vị fixed) nên Playwright coi là "hidden": chỉ assert trên nội dung bên trong.
+    const modal = page.locator('.zaui-sheet').filter({ hasText: 'Xác nhận đổi ưu đãi' });
+    await expect(modal.getByText('-50 điểm Xanh')).toBeVisible();
     await expect(modal.getByText('10 điểm Xanh')).toBeVisible();
 
     const redeemed = api.waitForCall('POST', '/me/loyalty/rewards/:id/redeem');
@@ -252,7 +253,7 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     await page.goto('/loyalty');
 
     await page.getByText('Thẻ thành viên số (mã QR)').click({ timeout: 15_000 });
-    const modal = page.locator('.tubu-pop').filter({ hasText: 'Thẻ Thành Viên Tubu' });
+    const modal = page.locator('.zaui-sheet').filter({ hasText: 'Thẻ Thành Viên Tubu' });
     await expect(modal.getByText(MEMBER_CODE, { exact: true })).toBeVisible({ timeout: 5_000 });
     // QrCode (components/qr-code.tsx) vẽ ảnh PNG từ memberCode — không còn barcode giả.
     await expect(modal.getByRole('img', { name: 'QR' })).toHaveAttribute('src', /^data:image\/png;base64,/);
@@ -269,7 +270,7 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     await page.goto('/loyalty');
 
     await page.getByText('Thẻ thành viên số (mã QR)').click({ timeout: 15_000 });
-    const modal = page.locator('.tubu-pop').filter({ hasText: 'Thẻ Thành Viên Tubu' });
+    const modal = page.locator('.zaui-sheet').filter({ hasText: 'Thẻ Thành Viên Tubu' });
     await expect(modal.getByText('Đưa mã QR này cho thu ngân', { exact: false })).toBeVisible({ timeout: 5_000 });
   });
 });

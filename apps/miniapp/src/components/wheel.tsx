@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
-import { Box, Text, Button } from 'zmp-ui';
 import type { SpinResult } from '../services/game-api';
 import { haptic } from '../utils/haptic';
+import { Button } from './ui/button';
+import { Text } from './ui/text';
 
 /** 8 ô hiển thị (nhãn minh họa) — phần thưởng THẬT lấy từ backend spin(). */
 const SLOTS = ['🌿', '🎁', '💧', '⭐', '🪴', '🏷️', '💚', '🍀'];
@@ -11,20 +12,22 @@ const SPIN_MS = 3600;
 export function WheelOfFortune({
   cost,
   onSpin,
+  onResult,
 }: {
   cost: number;
   onSpin: () => Promise<SpinResult>;
+  /** `null` = vừa bắt đầu lượt quay mới; có `prize` = kết quả thật của backend. Hộp kết quả do cấp trang dựng (xem WheelPrizeSheet). */
+  onResult: (prize: SpinResult['prize'] | null) => void;
 }) {
   const [rotation, setRotation] = useState(0);
   const [spinning, setSpinning] = useState(false);
-  const [prize, setPrize] = useState<SpinResult['prize'] | null>(null);
   const lockRef = useRef(false);
 
   const handleSpin = async () => {
     if (lockRef.current) return;
     lockRef.current = true;
     setSpinning(true);
-    setPrize(null);
+    onResult(null);
     haptic('medium');
 
     // Quay tối thiểu 5 vòng + dừng ở 1 ô ngẫu nhiên (chỉ là hiệu ứng).
@@ -38,7 +41,7 @@ export function WheelOfFortune({
         new Promise((r) => setTimeout(r, SPIN_MS)),
       ]);
       haptic('medium');
-      setPrize(result.prize);
+      onResult(result.prize);
     } catch {
       /* lỗi đã hiển thị qua snackbar ở caller */
     } finally {
@@ -48,10 +51,10 @@ export function WheelOfFortune({
   };
 
   return (
-    <Box flex flexDirection="column" alignItems="center" style={{ gap: 16 }}>
-      <Box style={{ position: 'relative', width: 240, height: 240 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+      <div style={{ position: 'relative', width: 240, height: 240 }}>
         {/* Kim chỉ */}
-        <Box
+        <div
           aria-hidden
           style={{
             position: 'absolute',
@@ -62,26 +65,26 @@ export function WheelOfFortune({
             height: 0,
             borderLeft: '12px solid transparent',
             borderRight: '12px solid transparent',
-            borderTop: '20px solid var(--primary-700)',
+            borderTop: '20px solid var(--color-action-primary-bg-pressed)',
             zIndex: 2,
-            filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.2))',
           }}
         />
         {/* Bánh xe */}
         <div
+          aria-hidden
           style={{
             width: 240,
             height: 240,
             borderRadius: '50%',
-            border: '6px solid var(--primary-600)',
-            boxShadow: 'var(--shadow-md)',
+            border: '6px solid var(--color-action-primary-bg)',
+            boxShadow: 'var(--elevation-2)',
             transform: `rotate(${rotation}deg)`,
             transition: spinning
               ? `transform ${SPIN_MS}ms cubic-bezier(0.16, 1, 0.3, 1)`
               : 'none',
             background: `conic-gradient(${SLOTS.map(
               (_, i) =>
-                `${i % 2 === 0 ? 'var(--leaf-100)' : 'var(--primary-50)'} ${i * SEG}deg ${
+                `${i % 2 === 0 ? 'var(--sage-100)' : 'var(--forest-50)'} ${i * SEG}deg ${
                   (i + 1) * SEG
                 }deg`,
             ).join(', ')})`,
@@ -107,7 +110,8 @@ export function WheelOfFortune({
           ))}
         </div>
         {/* Trục giữa */}
-        <Box
+        <div
+          aria-hidden
           style={{
             position: 'absolute',
             top: '50%',
@@ -116,76 +120,29 @@ export function WheelOfFortune({
             width: 44,
             height: 44,
             borderRadius: '50%',
-            background: 'var(--primary-600)',
+            background: 'var(--color-action-primary-bg)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: 'var(--shadow-sm)',
+            boxShadow: 'var(--elevation-1)',
             zIndex: 2,
           }}
         >
-          <Text bold style={{ color: 'var(--neutral-0)', fontSize: 11 }}>
+          <Text variant="label" tone="inverse">
             QUAY
           </Text>
-        </Box>
-      </Box>
+        </div>
+      </div>
 
       <Button
-        loading={spinning} disabled={spinning}
-        onClick={() => void handleSpin()}
-        style={{ background: 'var(--clay-500)', minWidth: 200 }}
+        size="lg"
+        loading={spinning}
+        disabled={spinning}
+        onPress={() => void handleSpin()}
+        style={{ minWidth: 200 }}
       >
         {spinning ? 'Đang quay...' : `Quay ngay (${cost} Điểm Xanh)`}
       </Button>
-
-      {/* Modal kết quả */}
-      {prize && (
-        <Box
-          onClick={() => setPrize(null)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: 24,
-          }}
-        >
-          <Box
-            onClick={(e) => e.stopPropagation()}
-            p={5}
-            style={{
-              background: 'var(--neutral-0)',
-              borderRadius: 'var(--radius-xl)',
-              textAlign: 'center',
-              maxWidth: 320,
-              width: '100%',
-            }}
-          >
-            <Text style={{ fontSize: 56 }}>🎉</Text>
-            <Text bold size="large" style={{ marginTop: 8 }}>
-              Chúc mừng!
-            </Text>
-            <Text style={{ color: 'var(--leaf-700)', fontWeight: 600, marginTop: 4 }}>
-              {prize.name}
-            </Text>
-            {prize.rewardType === 'POINTS' && prize.value > 0 && (
-              <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
-                +{prize.value} Điểm Xanh đã vào tài khoản
-              </Text>
-            )}
-            <Button
-              fullWidth
-              onClick={() => setPrize(null)}
-              style={{ marginTop: 20, background: 'var(--primary-600)' }}
-            >
-              Tuyệt vời!
-            </Button>
-          </Box>
-        </Box>
-      )}
-    </Box>
+    </div>
   );
 }

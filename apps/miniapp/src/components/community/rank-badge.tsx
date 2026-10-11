@@ -1,5 +1,5 @@
-import { Text } from 'zmp-ui';
 import { vi } from '../../i18n/vi';
+import { Text } from '../ui/text';
 
 // Emoji + tên hạng theo authorLevel (1..4) trả về từ BE (FeedItem/FeedComment/LeaderboardEntry).
 const LEVEL_EMOJI: Record<number, string> = { 1: '🌱', 2: '🌿', 3: '🌳', 4: '🏆' };
@@ -29,7 +29,7 @@ export function levelName(level: number): string {
 export function RankBadge({ level }: { level: number }) {
   if (level <= 1) return null;
   return (
-    <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
+    <Text variant="caption" tone="brand" style={{ fontWeight: 600 }}>
       {levelEmoji(level)} {levelName(level)}
     </Text>
   );

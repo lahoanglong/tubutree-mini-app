@@ -17,6 +17,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/loyalty', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../store/auth', () => {
@@ -169,5 +170,31 @@ describe('LoyaltyPage — thuật ngữ Q-26 và số có dấu nghìn (C-074, C
     expect(screen.getByText('Cần 5.000 điểm')).toBeInTheDocument();
     expect(screen.getByText('+1.250')).toBeInTheDocument();
     expect(screen.getByText('-2.500')).toBeInTheDocument();
+  });
+});
+
+describe('LoyaltyPage — một <h1> mỗi trang (C-114)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getLoyalty.mockResolvedValue(LOYALTY);
+    mocks.getCoupons.mockResolvedValue([COUPON]);
+    mocks.getPointsTransactions.mockResolvedValue([]);
+    mocks.getLoyaltyRewards.mockResolvedValue(REWARDS);
+    mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
+    mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: false });
+  });
+
+  it('đúng một h1 nói tên trang, nằm trước thẻ hạng', async () => {
+    renderPage();
+    const h1 = await screen.findByRole('heading', { level: 1 });
+    expect(h1).toHaveTextContent('Hạng thành viên & Điểm Xanh');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(before(h1, await screen.findByText('Tích điểm ×1', { exact: false }))).toBe(true);
+  });
+
+  it('đang tải vẫn có h1 (tiêu đề không chờ dữ liệu)', () => {
+    mocks.getLoyalty.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 });
