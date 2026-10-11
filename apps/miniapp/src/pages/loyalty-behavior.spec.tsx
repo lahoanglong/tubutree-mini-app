@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -209,6 +209,37 @@ describe('LoyaltyPage — đổi Điểm Xanh nhận mã giảm giá', () => {
     expect(mocks.redeemLoyaltyReward).toHaveBeenCalledWith('r-ok');
     await waitFor(() => expect(screen.queryByText('Xác nhận đổi ưu đãi')).not.toBeInTheDocument());
     await waitFor(() => expect(mocks.getLoyaltyRewards).toHaveBeenCalledTimes(2));
+  });
+
+  // BottomSheet (ZaUI Sheet unmountOnClose) giữ nút trong DOM và bấm được thêm ~200ms sau khi đóng:
+  // hành động phải đọc state đang sống, không đọc phần nội dung được giữ lại cho hoạt ảnh.
+  it('bấm "Huỷ" rồi chạm ngay "Đổi ngay" trong hộp đang đóng: không đổi quà', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đổi ngay' }));
+    await screen.findByText('Xác nhận đổi ưu đãi');
+    const confirm = screen.getAllByRole('button', { name: 'Đổi ngay' }).at(-1)!;
+    fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
+    expect(confirm.isConnected).toBe(true);
+    fireEvent.click(confirm);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    expect(mocks.redeemLoyaltyReward).not.toHaveBeenCalled();
+  });
+
+  it('đổi thành công rồi chạm lại "Đổi ngay" trong hộp đang đóng: vẫn chỉ gọi API 1 lần', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đổi ngay' }));
+    await screen.findByText('Xác nhận đổi ưu đãi');
+    const confirm = screen.getAllByRole('button', { name: 'Đổi ngay' }).at(-1)!;
+    fireEvent.click(confirm);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+    expect(confirm.isConnected).toBe(true);
+    fireEvent.click(confirm);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(1);
   });
 
   it('đổi lỗi: báo lỗi, vẫn tải lại điểm', async () => {

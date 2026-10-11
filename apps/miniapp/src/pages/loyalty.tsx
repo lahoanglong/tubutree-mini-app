@@ -197,6 +197,7 @@ export default function LoyaltyPage() {
     }
   }, [data?.tier, curMin]);
 
+  // sheetReward chỉ để vẽ nội dung lúc sheet trượt xuống; hành động đọc confirmReward (state sống).
   const sheetReward = useLastNonNull(confirmReward);
   const sheetCelebrate = useLastNonNull(celebrate);
 
@@ -727,15 +728,20 @@ export default function LoyaltyPage() {
         title="Xác nhận đổi ưu đãi"
         footer={
           <div style={{ display: 'flex', gap: 8 }}>
-            <Button fullWidth variant="secondary" disabled={redeemMut.isPending} onPress={() => setConfirmReward(null)}>
+            <Button
+              fullWidth
+              variant="secondary"
+              disabled={redeemMut.isPending || confirmReward === null}
+              onPress={() => setConfirmReward(null)}
+            >
               Huỷ
             </Button>
             <Button
               fullWidth
-              disabled={redeemMut.isPending}
+              disabled={redeemMut.isPending || confirmReward === null}
               loading={redeemMut.isPending}
               onPress={() => {
-                if (sheetReward) doRedeem(sheetReward.id);
+                if (confirmReward) doRedeem(confirmReward.id);
               }}
             >
               Đổi ngay
