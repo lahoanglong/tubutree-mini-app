@@ -12,10 +12,10 @@ Lý do bàn giao: máy cũ hay crash. Mọi tiến độ đã nằm trong git; w
 | Đợt B (PB-1..PB-6, data/perf/cron/Home) | XONG, đã merge, đã deploy PROD (`cb92dc8`) |
 | Vòng C1 (PC-1,3,4,5,8) | XONG, đã merge (`ee97986`), CHƯA deploy |
 | Vòng C2 (PC-2,6,7,9) | XONG, review APPROVE, đã merge (HEAD `4b53388`), CHƯA deploy |
-| Vòng C3 (PC-10a/b/c, PC-11, C-076, UI hoàn tiền thủ công, cấu hình liên hệ) | CHƯA LÀM |
-| Đợt D (PD-1, PD-2, PD-3) | CHƯA LÀM |
-| Giai đoạn 4 (T1–T5) | CHƯA LÀM |
-| Giai đoạn 5 (`99-release-readiness.md`) | CHƯA LÀM |
+| Vòng C3 (PC-10a/b/c, PC-11, C-076, UI hoàn tiền thủ công, cấu hình liên hệ) | XONG, đã merge, CHƯA deploy |
+| Đợt D (PD-1, PD-2, PD-3) | XONG, đã merge, CHƯA deploy |
+| Giai đoạn 4 (T1–T5) | XONG; T5 review đã sửa và merge (HEAD `c46fe6a6`) |
+| Giai đoạn 5 (`99-release-readiness.md`) | XONG. Kết luận: kỹ thuật đạt, PROD NO-GO tới khi chủ dự án qua 5 cổng trong báo cáo |
 
 PROD (VPS Vietnix `chodeli-vps` 14.225.207.177, `/opt/tubutree`) đang chạy `cb92dc8` = Đợt A+B. Miniapp CHƯA lên Zalo. Không deploy Đợt C/D khi chưa có lệnh rõ của chủ dự án.
 
