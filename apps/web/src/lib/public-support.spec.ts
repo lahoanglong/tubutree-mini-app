@@ -39,4 +39,11 @@ describe('getPublicSupport', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
     await expect(getPublicSupport()).resolves.toEqual(DEFAULT_SUPPORT);
   });
+
+  it('đọc zaloOaName khi admin đã cấu hình; để trống/không có thì không có trường này', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { support: { hotline: null, email: null, zaloOaName: ' Tubu Tree ' } })));
+    await expect(getPublicSupport()).resolves.toMatchObject({ zaloOaName: 'Tubu Tree' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { support: { zaloOaName: '  ' } })));
+    expect((await getPublicSupport()).zaloOaName).toBeUndefined();
+  });
 });

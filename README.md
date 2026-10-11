@@ -39,7 +39,7 @@ pnpm --filter @tubutree/miniapp dev  # chạy mini app (cần zmp-cli login)
 
 ## Tiến độ tổng quan (cập nhật 2026-09-05, verify trực tiếp trên code)
 
-> **Backend: 38 module** (catalog, checkout, orders, loyalty, game/Vườn Xanh, affiliate, cashback (provider-agnostic), dealer B2B, flash-sale, groupbuy, subscriptions, storefront CTV, brand, staff (RBAC/ca làm/chấm công/lương), academy, content-kit, cskh (quick-reply/auto-reply Zalo OA), community feed, refill, wishlist, reviews, ai-advisor, notifications, vouchers, wallet, beta, faq, lifecycle, v.v.) — **typecheck sạch, 85/85 test suite · 1183/1183 unit test PASS** (verify trực tiếp).
+> **Backend: 38 module** (catalog, checkout, orders, loyalty, game/Vườn Xanh, affiliate, cashback (provider-agnostic), dealer B2B, flash-sale, groupbuy, subscriptions, storefront CTV, brand, staff (RBAC/ca làm/chấm công/lương), academy, content-kit, cskh (quick-reply/auto-reply Zalo OA), community feed, refill, wishlist, reviews, ai-advisor, notifications, vouchers, wallet, beta (chỉ còn API; trang Beta Tester trên Mini App đã bỏ), faq, lifecycle, v.v.) — **typecheck sạch, 85/85 test suite · 1183/1183 unit test PASS** (verify trực tiếp).
 > **Miniapp (36 trang): typecheck sạch, 6/6 test file · 36/36 unit test PASS** (Vitest).
 > **Web (Next.js 14): typecheck sạch, 1/1 test file · 9/9 unit test PASS** (Vitest).
 > **Tổng monorepo: 1228/1228 unit test PASS**, 0 lỗi lint/typecheck trên toàn bộ workspace.
@@ -49,9 +49,9 @@ pnpm --filter @tubutree/miniapp dev  # chạy mini app (cần zmp-cli login)
 
 ### Việc còn tồn đọng (thực tế, không phải backlog cũ)
 
-1. **Ngoài-code — chờ cấp/duyệt:** key **ZaloPay**, **Zalo OA + Template ID ZNS** (lead time ~7–14 ngày), **Accesstrade** — xem `docs/GO-LIVE-KEYS.md`. Thiếu key thì hệ thống tự fallback an toàn (COD/Ví/TubuXu vẫn chạy đủ), không sập.
+1. **Ngoài-code — chờ cấp/duyệt:** key **ZaloPay**, **Zalo OA + Template ID ZNS** (lead time ~7–14 ngày), **Accesstrade** — xem `docs/GO-LIVE-KEYS.md`. Thiếu key thì hệ thống tự fallback an toàn (COD/Ví vẫn chạy đủ; Điểm Xanh là một khoản trừ tiền chứ không phải phương thức thanh toán, TubuXu đã gộp vào Điểm Xanh), không sập.
 2. **`zmp deploy`** lên Zalo Mini App Studio — cần phiên đăng nhập Zalo dev thủ công, xem `DEPLOY_ZALO.md`.
-3. **Tích hợp PanNature** (trồng cây thật khi đủ mốc cộng đồng) — chưa có đầu mối.
+3. **Quy trình góp quỹ trồng cây** (khoản góp từ Vườn Xanh hiện chỉ là bản ghi nội bộ, chưa có đối tác trồng cây và không hứa một cây cụ thể với khách) — chưa có đầu mối.
 4. **Gap tính năng tăng trưởng còn mở** (nghiên cứu `docs/2026-07-05-growth-features-research-roadmap.md`): live commerce/video ngắn, cổng thanh toán VNPAY — **chưa có trong code**, là hướng mở rộng chứ không phải nợ kỹ thuật. (CSKH quick-reply/auto-reply Zalo OA + Chat AI `ai-advisor` thì **đã có** — module `cskh`; webhook cần đăng ký quyền gửi tin CSKH trên Zalo OA, xem `docs/GO-LIVE-KEYS.md` mục 5, việc ngoài-code không bắt buộc go-live.)
    - "Quỹ/CLB gây quỹ qua cashback" (mô hình WeShare/FlipGive) từng được đề xuất cùng đợt
      nghiên cứu trên nhưng **đã bị quyết định chủ động bỏ** ngay trong ngày đề xuất — xem
