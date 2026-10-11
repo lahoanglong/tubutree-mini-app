@@ -836,3 +836,208 @@ Không chạy toàn bộ vitest, không chạy Playwright, không chạy API jes
   - FAQ: hai câu đã đổi. Trên PROD nếu admin đã nhập FAQ riêng (`GET /faqs`), bản dự phòng này không hiện: cần kiểm tay câu "Tôi thanh toán bằng cách nào?" và "Điểm Xanh là gì" trong trang admin.
   - Nhãn đơn/sổ cũ: "Điểm Xanh (xu cũ)", "Xu cũ (đã gộp Điểm Xanh)", "Chuyển từ xu cũ sang Điểm Xanh", "Đổi sang xu cũ (nay là Điểm Xanh)".
 - Chưa có ảnh chụp hub Cá nhân, Ví, thanh toán: cần xem bằng mắt trên máy thật hoặc trình mô phỏng trước khi phát hành.
+
+## Lượt L5 — Dọn chữ, seed, mẫu tin, e2e mock, chạy lại T1-T21 (spec mục 9)
+
+Nhánh `hz9/PD-3`. DB test riêng `tubu_it_pd3` cổng 5583. Không chạm PROD, không gọi dịch vụ ngoài, không chạy Playwright (chỉ `playwright test --list`), không chạy dev server.
+
+Trạng thái lượt: **XONG phần mã và kiểm chứng trên Postgres thật**. T20 (e2e) chỉ kiểm được kiểu và việc nạp spec, CHƯA chạy trên trình duyệt: **unverified**.
+
+### Các mục
+
+| Mục (spec mục 9, L5) | Trạng thái | Ghi chú | Commit |
+|---|---|---|---|
+| Migration UPDATE mẫu tin `CASHBACK_PAID`, `COMMUNITY_BEST_ANSWER` | XONG (làm ở review B1) | `WHERE "bodyTemplate" = <bản seed cũ>`: giữ bản admin đã sửa; chạy lại `UPDATE 0`. Kiểm lại trên DB mẫu ở dưới. | d14ccabc (migration `20261012150000`) |
+| Mẫu mới `XU_CONVERTED` + thông báo trong app cho từng khách đã quy đổi (OQ-10) | XONG | Migration `20261012160000_pd3_xu_converted_notice`: `INSERT ... ON CONFLICT DO NOTHING` mẫu; một dòng `notification_logs` cho mỗi user ở `xu_points_conversions` (id cố định `nlog_xu2pts_<userId>` + `NOT EXISTS` theo `(userId, templateCode)`): chạy lại không báo hai lần. Seed có cùng lời (`createOnly`). Race spec 4 ca. | 39732c49 |
+| Seed, chú thích API còn nhắc "xu" | XONG | `seed.ts` (mô tả khoá config, mẫu tin) và 12 file API: chỉ đổi chú thích và mô tả, không đổi hành vi. Quét lại bên dưới. | e8c77032 |
+| e2e mock `apps/e2e/tests/**` bỏ `coinsBalance`/TubuXu | XONG, UNVERIFIED | 8 file: `checkout-mocks.ts`, `mock-api.ts`, `affiliate-mocks.ts`, `features/mock-api-routing/affiliate-ctv.miniapp.spec.ts` bỏ `coinsBalance`, đổi sang `pointsConvertedBalance`, thưởng CTV sang điểm. | 6451040a |
+| T20: checkout dùng điểm quy đổi, đơn 0đ, Ví không còn nút đổi | XONG, UNVERIFIED | `checkout.miniapp.spec.ts` +3 ca (ba phương thức không có xu; gộp hai lô và dòng "trong đó N điểm không hết hạn"; `pointsToUse` = thường + quy đổi; đơn 0đ ẩn chọn phương thức và gửi COD, không gọi `/payments/bank-qr`). `wallet.miniapp.spec.ts` mới 2 ca (không thẻ/nút/mẹo xu, không gọi `/me/coins` và `/wallet/convert-xu`; Điểm Xanh là tổng hai lô; mời bạn đọc `/me/referral`). | 6451040a |
+| Chạy lại T1-T21, quét chữ 7.2, truy vấn 3.3 trên DB mẫu, hoàn tác T21 trên DB mẫu | XONG | Bên dưới. | (báo cáo này) |
+| Bảng OQ-1..15 và chi phí làm tròn đo trên dữ liệu mẫu | XONG | Bên dưới. | (báo cáo này) |
+
+### Migration (L5)
+
+`20261012160000_pd3_xu_converted_notice` (mới ở L5). Chỉ INSERT, không UPDATE/DELETE dữ liệu cũ, chạy lại được. Cùng với `20261012150000_pd3_review_b1_xu_wording_templates` (UPDATE có điều kiện), đủ yêu cầu "migration UPDATE idempotent mẫu tin" của L5.
+
+Danh sách đủ 7 migration PD-3, theo thứ tự áp: `20261012100000_pd3_points_lot_schema`, `20261012110000_pd3_xu_to_points`, `20261012120000_pd3_points_config_keys`, `20261012130000_pd3_freeze_coins`, `20261012140000_pd3_review_b1_return_templates`, `20261012150000_pd3_review_b1_xu_wording_templates`, `20261012160000_pd3_xu_converted_notice`. Migration A là `CREATE TYPE` thường như mọi migration Prisma (Prisma chỉ áp một lần; chạy tay lần hai báo `type "PointsLot" already exists`). Sáu migration còn lại chạy lại không đổi dữ liệu (kiểm dưới).
+
+### DB mẫu: áp cả chuỗi migration lên dữ liệu có sẵn (truy vấn 3.3)
+
+Cách làm: schema tạm `pd3_l5` trong chính `tubutree_it` (không tạo DB khác; đã `DROP SCHEMA` sau khi xong). `prisma migrate deploy` THẬT: 125 migration trước PD-3 (bản chép ở scratchpad, chỉ đổi `gin_trgm_ops` thành `public.gin_trgm_ops` vì extension nằm ở schema public; file trong repo không đổi), nạp dữ liệu mẫu bằng SQL, rồi deploy 7 migration PD-3 (đã `diff -r` giống hệt file trong repo). Cách này khác schema nháp `LIKE public.*` của race spec ở chỗ chạy ĐÚNG đường `migrate deploy` và đủ 7 migration cùng lúc.
+
+Dữ liệu mẫu (10 user): số dư xu 0 (sổ +500 -500), 1, 999 (sổ 1200 -201), 1000, 1001, 123456, 3000 kèm 50 điểm thường, 5000 do `REFERRAL_ORDER2` trong 30 ngày, 1000 do `CONVERT_FROM_WALLET`, và một user chỉ có 700 điểm thường. Thêm 3 đơn XU còn huỷ/trả được (CONFIRMED 250.000đ, PACKED 123.456đ, DELIVERED 50.000đ) và 1 đơn XU đã huỷ; 2 sự kiện cộng đồng (`rewardXu` 1500 và 0); khoá config cũ (`coins.referrer_reward` ĐÃ SỬA thành 7000, mốc giới thiệu, `game.tree_xu_price`, `seasonpass.tiers` có `XU` 5000 và 12001); mẫu `CASHBACK_PAID` đúng bản seed cũ và `COMMUNITY_BEST_ANSWER` do "admin đã sửa" (còn chữ TubuXu).
+
+Trước migration (truy vấn 3.3 a-e):
+
+```
+(a) users_with_xu 8 | total_xu 135457 | total_points 138 | rounding_cost_vnd 2543 | max_points_one_user 124
+(b) negative_users 0 | coin_drift_users 0
+(c) points_drift_users 0
+(d) CONFIRMED/PAID 1 đơn 250000 xu -> 250 điểm | PACKED/PAID 1 đơn 123456 -> 124 | DELIVERED/PAID 1 đơn 50000 -> 50
+(e) 1 dòng REFERRAL_ORDER2 trong 30 ngày, tổng 5000 xu
+```
+
+`prisma migrate deploy`: `Applying migration` cho đủ 7 thư mục, `All migrations have been successfully applied`.
+
+Sau migration:
+
+```
+snapshots 8 | points 138 | rounding_vnd 2543 | xu 135457          (khớp (a) từng con số)
+coins_nonzero 0 | conv_drift 0 | std_drift 0 | coin_drift 0 | orders_converted_used 0
+l5_u1 1 xu -> 1 điểm (làm tròn 999đ) | l5_u999 -> 1 (1đ) | l5_u1000 -> 1 (0đ) | l5_u1001 -> 2 (999đ)
+l5_u123456 -> 124 (544đ) | l5_upts 3000 -> 3, giữ 50 điểm thường | l5_uref 5000 -> 5 | l5_ucv 1000 -> 1
+l5_u0 và l5_pstd: không có dòng quy đổi
+referral.referrer_reward_points 7        (từ coins.referrer_reward = 7000 do admin sửa: CEIL giữ thiết lập)
+referral.milestones_points [{count:3,bonusPoints:20},{count:5,bonusPoints:40},{count:10,bonusPoints:100}]
+game.tree_points_price 50
+seasonpass.tiers premium XU 5000 -> POINTS 5, XU 12001 -> POINTS 13; phần SEEDS giữ nguyên
+community_events: rewardXu 1500 -> rewardPoints 2; 0 -> 0
+CASHBACK_PAID        : "Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu" (đã đổi, bản seed cũ)
+COMMUNITY_BEST_ANSWER: giữ NGUYÊN bản admin đã sửa (còn chữ TubuXu)
+XU_CONVERTED         : "{{xu}} xu cũ của bạn đã thành {{points}} Điểm Xanh không hết hạn, dùng trả tới 100% giá trị hàng."
+notification_logs XU_CONVERTED: 8 dòng, mỗi user có xu một dòng, vd "123.456 xu cũ của bạn đã thành 124 Điểm Xanh không hết hạn, ..."
+CHECK có mặt: users_coins_frozen, users_points_converted_nonneg, points_transactions_converted_no_expiry
+npx tsx scripts/reconcile-points.ts (DRY-RUN, schema mẫu): Lô STANDARD 0 user lệch | Lô CONVERTED 0 user lệch
+```
+
+Chạy lại tay 6 migration (trừ A) trên cùng DB mẫu: cả 6 chạy xong không lỗi; ảnh chụp trước/sau giống hệt (băm số dư mọi user, số dòng `points_transactions` 10, `coin_transactions` 19, `xu_points_conversions` 8, băm `system_configs`, băm `notification_templates`, `notification_logs` 8): `IDEMPOTENT: snapshot identical`.
+
+Hoàn tác T21 trên DB mẫu (`prisma/manual/pd3_xu_to_points_rollback.sql`, chạy 2 lần):
+
+```
+l5_u1 1 | l5_u999 999 | l5_u1000 1000 | l5_u1001 1001 | l5_u123456 123456 | l5_ucv 1000 | l5_upts 3000 | l5_uref 5000  (đúng coinsBefore)
+coin_drift 0 | conv_drift 0 | dòng XU_MIGRATION_ROLLBACK 8 ở mỗi sổ (lần hai không nhân đôi) | tổng xu sau hoàn tác 135457 = tổng trước
+```
+
+### Chi phí làm tròn lên (đo trên DỮ LIỆU MẪU, không phải PROD)
+
+| Phép đo | Kết quả trên dữ liệu mẫu | Ghi chú |
+|---|---|---|
+| Quy đổi số dư xu (3.3 a) | 8 user có xu, 135.457 xu thành 138 điểm = 138.000đ, làm tròn lên 2.543đ, tối đa 999đ/user (user 1 xu và 1.001 xu) | Dữ liệu mẫu cố ý chọn sát cạnh (1, 999, 1001) nên số này CAO hơn thực tế dự kiến. 4 trong 8 user có số dư là bội của 1.000 nên làm tròn 0đ. |
+| Hoàn đơn XU cũ nếu huỷ hết (3.3 d) | 3 đơn, 423.456đ hoàn 424 điểm = 424.000đ, thêm 544đ | Chỉ đơn 123.456đ làm tròn (544đ); đơn 250.000đ và 50.000đ tròn. |
+| Trần lý thuyết | 999đ x số user có xu, cộng 999đ x số đơn XU còn huỷ/trả được | Số thật cần chạy 3.3 (a), (d) trên BẢN SAO PROD: vẫn là cổng deploy (A1 mục 4, B1 mục 5), xem bảng "Việc cần chủ dự án". |
+
+### Quét chữ (spec 7.2) và grep ghi xu
+
+```
+$ rg -n -P "(?i)(tubu ?xu|(?<![\p{L}_])xu(?![\p{L}_]))" apps/miniapp/src apps/web/src -g '!*.spec.*' | grep -v "xu cũ"
+apps/web/src/lib/export-csv.ts:38:  XU: 'Xu cũ (đã gộp Điểm Xanh)',
+```
+
+Dòng còn lại là khoá enum `XU` của đơn cũ, giá trị là "xu cũ". Miniapp và web không còn chữ nào khác; `coinsBalance`, `formatXu`, `getCoins`, `convertToXu`, `rewardXu` không còn trong miniapp, web, shared-types, e2e (chỉ còn trong hai spec guard T19 làm chuỗi cấm).
+
+```
+$ rg -n "grantCoins|spendCoins|coinsBalance" apps/api/src apps/api/prisma/seed.ts -g '!*.spec.ts'
+(rỗng)
+$ rg -n "'coins\.referrer_reward'|'coins\.referral_milestones'|'community\.post_reward'|... (9 khoá xu cũ)" apps/api/src -g '!*.spec.ts'
+chỉ ở apps/api/src/modules/system-config/dead-config-keys.ts
+```
+
+Chữ "xu" còn trong mã API (ngoài spec) chỉ là: tên enum `XU`, hàm `legacyXuToPoints`/`refundLegacyXuAsPoints`, chú thích kỹ thuật giải thích đơn vị cũ, mô tả khoá DEAD, và hai lời 410 dành cho client cũ (`POST /wallet/convert-xu`, `GET /me/coins`, mở lô vườn bằng xu): xem "Khác spec".
+
+### Chạy lại T1-T21 (HEAD trước commit báo cáo: e8c77032)
+
+Race: mỗi file một lần, `DATABASE_URL=postgresql://tubu:tubu@localhost:5583/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand <file>`.
+
+| T | Ca kiểm | Lệnh / file | Kết quả thật |
+|---|---|---|---|
+| T1, T2, T3, T17, T21 (+ CHECK, tràn INTEGER) | Quy đổi, chạy lại, dữ liệu lệch/âm RAISE, khoá xu, hoàn tác | race `pd3-xu-migration` | Tests: 15 passed, 15 total |
+| T4 | 20 partial unique index; DB trống chạy hết | race `partial-unique-indexes`; `check-partial-indexes.ts`; `migrate diff --exit-code`; `migrate deploy` 125 migration lên schema trống rồi 7 PD-3 | 5 passed; "mong đợi 20, có trong DB 20"; "No difference detected." (exit 0); deploy thành công |
+| T5, T7 | Bất biến hai lô; cron hết hạn không chạm lô quy đổi, không trừ đôi | race `pd3-points-lots`; jest `loyalty-expiry.service.spec` | 6 passed; 19 passed |
+| T6 | Checkout song song hai lô, chồng quay/voucher/quỹ cây | race `pd3-checkout-points` | 3 passed |
+| T8, T9 | Không trần 20% cho lô quy đổi; thứ tự STANDARD rồi CONVERTED; khoá | jest `pricing.service.spec`; `checkout.service.spec` | 20 passed; 74 passed |
+| T10, T11 | Huỷ hoàn đúng lô; đơn XU cũ hoàn `ceil(total/1000)`; huỷ 5 lần song song | race `pd3-order-reversal`; `order-cancel` | 8 passed; 2 passed |
+| T12 | Hạng không tính điểm quy đổi | jest `loyalty.service.spec` | 37 passed |
+| T13 | Giới thiệu: không thưởng lại, thu hồi đúng lô, song song | race `referral-order2` | 27 passed |
+| T14 | Nhiệm vụ, hay nhất, sự kiện: không cấp lại, song song | race `pd3-reward-sources` | 6 passed |
+| T15 | Gộp khách có lô quy đổi và QUEST trùng | race `auth-merge-guest` | 11 passed |
+| T16 | Chặn lỗi đơn vị (quét khoá, RANGES, `grant` > 2.000, JSON cũ, `XU` Season Pass, `set` 5000) | jest `points-unit-guard.spec` + `dead-config-keys.spec` | 33 passed |
+| T18 | 410 convert-xu, `/me/coins`, mở lô XU; checkout XU 400; đơn 0đ COD | jest `wallet.controller.spec` + `game-garden.service.spec` + `checkout.dto.spec` (+ `checkout.service.spec` ở T8) | 45 passed |
+| T19 | FE: hub 3 ô, quét chữ xu, checkout không có XU | miniapp vitest 25 file spec đã đổi từ 10c634c6; guard (src/i18n, ds-no-legacy-aliases, hit-target-guard, button-guard); web vitest 5 file | Test Files 25 passed, Tests 476 passed; 8 files, 76 passed; 5 files, 38 passed |
+| T20 | e2e mock (xem trên) | `apps/e2e: npx tsc --noEmit`; `npx playwright test --list` 5 file | tsc exit 0; "Total: 15 tests in 5 files". CHƯA chạy trên trình duyệt: **unverified** |
+
+Race và jest khác chạy lại cùng lượt:
+
+```
+race: account-deletion 13 | loyalty 5 | wallet-ledger-flows 8 | pd3-points-config-keys 9 | pd3-xu-converted-notice 4   (đều passed, 0 failed)
+apps/api: npx jest src/modules/{checkout,pricing,loyalty,wallet,game,orders,system-config,notifications,feed,storefront,affiliate,auth,users,admin} --maxWorkers=1
+          Test Suites: 72 passed, 72 total; Tests: 1675 passed, 1675 total
+apps/api: npx jest notification-templates-seed.spec --maxWorkers=1   23 passed
+apps/api: npx tsc --noEmit -p tsconfig.json     exit 0
+apps/e2e: npx tsc --noEmit -p tsconfig.json     exit 0
+apps/miniapp: npx tsc --noEmit                  exit 0
+apps/web: npx tsc --noEmit                      exit 0
+apps/api: npx eslint <21 file .ts đổi từ 1550be1f>   exit 0 (apps/e2e không có ESLint)
+apps/api: prisma migrate deploy (tubu_it_pd3)   No pending migrations to apply (132 migration)
+apps/api: prisma migrate diff --from-url ... --to-schema-datamodel prisma/schema.prisma --exit-code   No difference detected. (exit 0)
+apps/api: npx tsx prisma/check-partial-indexes.ts   Partial unique index: mong đợi 20, có trong DB 20.
+```
+
+Không chạy toàn bộ jest/vitest, không chạy Playwright, không chạy dev server (theo lệnh).
+
+### Khác spec (chọn phương án an toàn tiền hơn hoặc dễ hiểu hơn cho khách)
+
+- Spec 7.2 chỉ nói "mẫu tin mới XU_CONVERTED". Migration làm thêm: ghi sẵn một thông báo trong app cho từng khách đã quy đổi (OQ-10 nói "gửi thông báo"). Thông báo là bản ghi `notification_logs` kênh INAPP (không push, không gọi dịch vụ ngoài). Lời tin dựng từ mẫu hiện có trong DB (nếu admin sửa mẫu trước khi chạy thì lời theo bản đã sửa). Số xu có dấu chấm ngăn nghìn.
+- Hoàn tác (`pd3_xu_to_points_rollback.sql`) KHÔNG rút thông báo đã ghi: sau hoàn tác khách vẫn thấy "xu cũ của bạn đã thành N Điểm Xanh" dù xu đã trả lại. Chỉ ảnh hưởng chữ; cần xoá tay `notification_logs` mã `XU_CONVERTED` khi hoàn tác.
+- Ba lời 410 cho client cũ vẫn nhắc "xu" ("Xu đã gộp vào Điểm Xanh...", "Đổi Ví sang xu đã ngừng...", "Mở lô đất bằng xu đã ngừng..."). Miniapp mới không còn gọi ba route đó, nên khách không thấy; giữ chữ "xu" để client cũ hiểu vì sao bị chặn. Không có "TubuXu" trong ba lời này (spec test kiểm). Nếu chủ dự án muốn tuyệt đối không còn chữ "xu", đổi ba chuỗi (mất khả năng giải thích cho client cũ).
+- `COMMUNITY_BEST_ANSWER` mà admin đã sửa trên PROD vẫn giữ nguyên (còn chữ TubuXu nếu admin để lại): migration cố ý không đè. Cần kiểm tay trên PROD (xem bảng dưới).
+- Lời báo khi huỷ đơn (`ORDER_CANCELLED`: "Đơn {{order_code}} đã bị hủy.") không nhắc hoàn điểm nên không có gì để tách theo lô; mục "lời báo đã hoàn N Điểm Xanh khi huỷ chưa tách theo lô" ghi ở L3 không còn là việc phải làm. Lời báo khi duyệt trả hàng đã đúng từ review B1.
+- Spec L5 nhắc "full jest API". Lệnh điều phối cấm chạy full suite: chạy 72 suite thuộc 14 module PD-3 đụng tới (1.675 ca), không chạy phần còn lại.
+
+### Giả định
+
+- Dùng đúng mặc định của spec cho OQ-1..15; không OQ nào bị đổi ở L5.
+- Số liệu "chi phí làm tròn" ở trên là của dữ liệu mẫu tự dựng, chỉ chứng minh công thức và đường migration, không ước lượng số dư thật.
+- `playwright test --list` đủ để chứng minh 5 file e2e biên dịch và nạp được; không chứng minh selector đúng với giao diện thật.
+
+### Việc còn lại
+
+- Điều phối viên chạy Playwright miniapp (5 file: `checkout`, `wallet`, `affiliate-ctv`, `features`, `mock-api-routing`) trước khi gộp. Ca mới T20 (3 ca checkout, 2 ca Ví) và ca đã sửa mock CTV chưa từng được chạy.
+- Ảnh chụp màn hub Cá nhân, Ví, thanh toán, trang Điểm Xanh, Vườn Xanh (L4 chưa có, L5 không có dev server).
+- Cổng deploy đo số thật trên bản sao PROD (bảng dưới).
+
+### Việc cần chủ dự án
+
+Bảng 1. Câu hỏi mở OQ-1..16. Mã đã dùng ĐÚNG đề xuất mặc định của spec (chủ dự án chưa duyệt). Đổi mức nào cũng chỉ là sửa config hoặc hằng số, trừ khi ghi khác.
+
+| Mã | Mặc định đang chạy trong mã | Hệ quả tiền | Đổi thế nào nếu không duyệt |
+|---|---|---|---|
+| OQ-1 | Thưởng mới (giới thiệu, mốc CTV, cộng đồng, nhiệm vụ, Season Pass) là Điểm Xanh thường: hết hạn theo `loyalty.point_expire_months` (12 tháng), trần 20%/đơn. | Mốc CTV 80 triệu = 2.000 điểm (2 triệu đồng) trước trả được 100% đơn, nay chỉ tới 20%/đơn và hết hạn: CTV nhận giá trị dùng được thấp hơn. | Cấp vào lô quy đổi cần đổi `RewardPointsService.grant` sang lô CONVERTED và chấp nhận chi phí cao hơn cho Tubu. |
+| OQ-2 | Điểm (cả lô quy đổi) chỉ trừ vào giá trị hàng, không trừ phí ship; phần lẻ dưới 1.000đ khách tự trả. | Khách có xu trước trả được 100% tổng đơn gồm ship, nay tự trả ship và tối đa 999đ lẻ mỗi đơn. | Cho lô quy đổi trừ cả phí ship: sửa `redeemBase` trong `PricingService.resolvePointsRedemptionByLot`. |
+| OQ-3 | Lô quy đổi không dùng cho vòng quay, đổi mã giảm giá catalog, mở lô vườn. | Ngăn biến tiền trả trước thành phần thưởng game; khách ít lối tiêu hơn. | Cho phép: cần sửa guard ở từng nơi (hiện nằm ở việc cột `pointsBalance` chỉ là lô thường). |
+| OQ-4 | Bỏ mở lô vườn bằng xu (chỉ còn giọt nước), mở bằng xu trả 410. | Không còn sink xu trong game ngoài góp quỹ. | Mở lô bằng điểm cần giá mới (200 xu = 0,2 điểm không biểu diễn được). |
+| OQ-5 | Góp quỹ trồng cây = 50 Điểm Xanh (`game.tree_points_price`), tiêu lô thường trước, thiếu thì lô quy đổi. Giao diện có ghi chú. | Mỗi lượt Tubu cam kết 50.000đ vào quỹ; nguồn có thể là điểm thưởng miễn phí. Khách có thể dùng điểm quy đổi (tiền đã trả trước) vào quỹ. | Chỉ lô thường: bỏ nhánh CONVERTED trong `game.service.ts` (khách ít điểm thường sẽ không góp được). |
+| OQ-6 | Cộng đồng: đăng bài 1 điểm (tối đa 1/ngày), trả lời 0, hay nhất 1 điểm (tối đa 3/ngày). Migration chỉ đổi trần ngày khi còn đúng mặc định cũ. | Trần ngày 4.000đ, gần mức cũ 4.100đ (3x200 + 10x100 + 5x500 xu). | Sửa khoá `community.*_reward_points` và `community.daily_*_cap` trong trang admin. |
+| OQ-7 | Nhiệm vụ gian hàng 2/2/2/1/5 điểm (1.500 xu làm tròn lên 2). | Tổng 12.000đ/CTV thay vì 11.500đ. | Hằng số trong `storefront-quest.service.ts`. |
+| OQ-8 | Đơn XU cũ huỷ/trả hoàn `ceil(total/1000)` điểm lô quy đổi, không về Ví. | Khách lời tối đa 999đ/đơn. Dữ liệu mẫu: 3 đơn 423.456đ hoàn 424 điểm, lời 544đ. | Hoàn về Ví làm xu thành tiền rút được: trái Q-03a. |
+| OQ-9 | Thu hồi thưởng giới thiệu đã cấp bằng xu thì trừ lô quy đổi `ceil(xu/1000)`, không âm, thiếu ghi `REFERRAL_DEBT` (delta 0). | Mỗi lần tối đa 5 điểm (thưởng đơn 2) hoặc 100 điểm (mốc 10 người): tối đa 100.000đ/người mời; phần đó đã trộn vào lô quy đổi nên không tách lại. Dòng `REFERRAL_DEBT` chưa có quy trình thu. | Không thu hồi thưởng xu cũ (Tubu chịu): bỏ nhánh `legacy` trong `referral-reward.ts`. |
+| OQ-10 | Gửi thông báo trong app cho người có xu về việc quy đổi (mẫu `XU_CONVERTED`, migration `20261012160000`). | Không tốn tiền; giảm khiếu nại. | Bỏ INSERT thứ hai trong migration trước khi deploy nếu không muốn gửi. |
+| OQ-11 | `loyalty.vnd_per_point_redeem` khoá cứng 1.000 (RANGES 1000-1000). | Đổi tỉ giá sau gộp làm lô quy đổi (tiền trả trước) mất hoặc tăng giá trị. | Mở khoá RANGES và viết lại công thức `(s, c)`. |
+| OQ-12 | "Ví trả một phần đơn" (Q-03 phương án 1) KHÔNG làm; Ví chỉ trả toàn bộ đơn. | Không đổi tiền trong PD-3. | Cần gói riêng sau PD-3. |
+| OQ-13 | Migration B dừng deploy (RAISE) nếu sổ xu lệch hoặc số dư âm. | Bảo vệ tiền trả trước; đổi lại có thể trễ deploy. | Chạy 3.3 (b) trên bản sao PROD trước deploy để không bị dừng giữa chừng. |
+| OQ-14 | Xoá tài khoản bị chặn khi còn điểm quy đổi > 0 (`CONVERTED_POINTS`). | Khách muốn xoá phải tiêu hết. | Quyết cho bỏ điểm hoặc quy ra tiền (trái Q-03a). |
+| OQ-15 | Có sẵn từ trước, KHÔNG đổi: điểm thường hoàn khi huỷ đơn (`ORDER_REFUND_POINTS`) ghi `expiresAt NULL` nên không bao giờ hết hạn. | Rò nhỏ có sẵn. | Ngoài phạm vi PD-3. |
+| OQ-16 (thêm ở A1) | Hoàn tác xu bị chặn khi đã có phiên khách gộp hoặc dòng cộng khác vào lô quy đổi; khi đó chỉ sửa tiến. | Hoàn tác tự động có thể trả xu sai chủ hoặc kẹt điểm của khách. | Cần thiết kế riêng nếu muốn có đường hoàn tác cho trường hợp gộp phiên. |
+
+Bảng 2. Việc làm tay trước và sau deploy.
+
+| Việc | Ai | Trạng thái |
+|---|---|---|
+| `pg_dump` PROD; chạy truy vấn 3.3 (a)-(e) trên BẢN SAO PROD; ghi số vào bảng dưới. Nếu (b) khác 0 phải đối soát tay trước (migration B sẽ dừng). | Điều phối viên / chủ dự án | Chưa làm (cấm đụng PROD ở lượt này) |
+| Chạy Playwright miniapp 5 file e2e đã sửa; xem ảnh hub Cá nhân, Ví, thanh toán, trang Điểm Xanh, Vườn Xanh | Điều phối viên | Chưa làm |
+| Reviewer Opus đọc lời báo khách mới/đổi trước khi merge (quy tắc "customer messages"): `XU_CONVERTED`, `RETURN_APPROVED_POINTS`, `RETURN_APPROVED_WALLET_POINTS`, `CASHBACK_PAID`, `COMMUNITY_BEST_ANSWER`, cùng các câu mới trong Ví, thanh toán, Vườn Xanh, trang Điểm Xanh, FAQ (liệt kê ở mục "Việc cần chủ dự án" của L4) | Chủ dự án / reviewer | Chưa làm |
+| Trên PROD kiểm tay các mẫu tin admin đã sửa (`COMMUNITY_BEST_ANSWER`, `CASHBACK_PAID`, `RETURN_APPROVED*`) và FAQ riêng (`GET /faqs`: "Tôi thanh toán bằng cách nào?", "Điểm Xanh là gì"): migration không đè bản admin đã sửa, nên còn chữ TubuXu thì phải sửa tay | Chủ dự án | Chưa làm |
+| Deploy MỘT LẦN cả nhánh: BE (migrate A, config, B, C) cùng web và miniapp; không deploy API L3 mà thiếu FE L4 | Điều phối viên | Chưa làm |
+| Sau deploy: chạy lại truy vấn "sau migration B" (spec 3.3), đối chiếu `sum("pointsGranted")`, `sum("roundingVnd")`, `sum("coinsBefore")` với kết quả (a) | Điều phối viên | Chưa làm |
+| Quyết xử lý dòng `REFERRAL_DEBT` (bỏ qua hay trừ vào lần thưởng sau) và phần STANDARD hoàn sau commit (B1 mục 1, "Giới hạn") | Chủ dự án | Chưa quyết |
+| Trần cứng `POINTS_GRANT_HARD_MAX` 2.000: nâng mốc CTV thì nâng cùng lúc | Chủ dự án | Ghi nhận |
+
+Bảng 3. Chi phí làm tròn lên: ô đo trên bản sao PROD (cổng deploy).
+
+| Truy vấn | Dữ liệu mẫu (L5, không phải PROD) | Kết quả trên bản sao PROD | Ngày / người chạy |
+|---|---|---|---|
+| 3.3 (a) users_with_xu / total_xu / total_points / rounding_cost_vnd / max_points_one_user | 8 / 135.457 / 138 / 2.543đ / 124 | (chưa đo) | |
+| 3.3 (b) negative_users / coin_drift_users | 0 / 0 | (chưa đo) | |
+| 3.3 (c) points_drift_users | 0 | (chưa đo) | |
+| 3.3 (d) đơn XU còn huỷ/trả được: số đơn / tổng xu / điểm hoàn nếu huỷ hết | 3 / 423.456 / 424 (lời 544đ) | (chưa đo) | |
+| 3.3 (e) thưởng giới thiệu xu còn thu hồi được (30 ngày): số dòng / tổng xu | 1 / 5.000 | (chưa đo) | |
