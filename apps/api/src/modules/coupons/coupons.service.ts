@@ -165,7 +165,7 @@ export class CouponsService {
 
   /**
    * Hoàn coupon khi đơn bị hủy/hoàn trước khi hoàn tất — đối xứng với redeem(). Trước đây
-   * không có hàm này: hủy/trả đơn hoàn ví/xu/điểm/hoa hồng/stock đầy đủ nhưng CouponRedemption
+   * không có hàm này: hủy/trả đơn hoàn ví/điểm/hoa hồng/stock đầy đủ nhưng CouponRedemption
    * + usedCount vẫn còn nguyên → voucher usageLimit=1 (birthday/welcome/referral...) bị đốt
    * vĩnh viễn cho một đơn chưa từng thực sự hoàn tất (P1, docs/2026-09-08-review-progress.md).
    * Idempotent: không có redemption nào bị xóa (đã release trước đó, hoặc đơn không thực sự

@@ -214,7 +214,7 @@ export class OrderStatusService {
       await this.enqueueGomdonCancel(order);
     }
 
-    // Điểm Xanh chỉ được cộng khi đơn có pointsEarned > 0 (đơn trả bằng xu, đơn CTV lên hộ thì không): lời tin
+    // Điểm Xanh chỉ được cộng khi đơn có pointsEarned > 0 (đơn XU cũ, đơn CTV lên hộ thì không): lời tin
     // ORDER_DELIVERED chỉ nhắc điểm khi thật sự có, qua {{points_note}}.
     const notifyData: Record<string, string> = { order_code: order.code };
     if (targetStatus === 'DELIVERED' && order.pointsEarned > 0) {

@@ -18,7 +18,7 @@ const XU_PER_POINT = 1000;
 /**
  * Đảo ngược tác động tài chính + tồn kho của một đơn hàng khi CANCELLED/RETURNED.
  *
- * Trước đây khối "hoàn ví/xu + restock + release flash quota" bị chép tay 2 lần
+ * Trước đây khối "hoàn ví/điểm + restock + release flash quota" bị chép tay 2 lần
  * (orders.service.cancel, admin.service.reviewReturn) và HOÀN TOÀN THIẾU ở 3 nơi
  * khác cũng có thể đưa đơn về CANCELLED/RETURNED: admin.updateOrderStatus (generic),
  * merchant.updateMerchantOrderStatus, và pancake.processor (webhook hủy đơn từ POS).

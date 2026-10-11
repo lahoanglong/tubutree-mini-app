@@ -138,9 +138,9 @@ export class GameGardenService {
     const deathDays = await this.config.get<number>('game.death_days', 7);
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
     const harvestMinOrder = await harvestCouponMinOrder(this.config, harvestAmount);
-    // Trần cứng số coupon thu hoạch/ngày — mirror waterTree() ở game.service.ts (P0-1): xu mua
-    // nước rẻ hơn nhiều giá trị coupon thu hoạch, không có trần thì vòng mua-nước→tưới→thu-hoạch
-    // in coupon vô hạn ở LÔ PHỤ cũng như lô nhà.
+    // Trần cứng số coupon thu hoạch/ngày — mirror waterTree() ở game.service.ts (P0-1): nước rẻ hơn
+    // nhiều giá trị coupon thu hoạch, không có trần thì vòng kiếm-nước→tưới→thu-hoạch in coupon vô hạn
+    // ở LÔ PHỤ cũng như lô nhà.
     const dailyCap = await this.config.get<number>('game.harvest_coupon_daily_cap', 3);
     const dayStart = startOfVnDay();
 

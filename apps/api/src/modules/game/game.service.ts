@@ -187,11 +187,11 @@ export class GameService {
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
     const harvestMinOrder = await harvestCouponMinOrder(this.config, harvestAmount);
     const deathDays = await this.config.get<number>('game.death_days', 7);
-    // Trần cứng số coupon thu hoạch/ngày — ĐỘC LẬP với giá xu/giọt nước trong config.
-    // Xu mua nước (mặc định 1 xu/giọt ≈ 0,83đ quy đổi) rẻ hơn nhiều lần giá trị coupon
-    // (mặc định 30.000đ): không có trần thì vòng mua-nước→tưới→thu-hoạch in coupon vô hạn
-    // (P0-1, docs/2026-09-08-review-progress.md). Đặt trần bằng CODE thay vì chỉ dựa vào
-    // admin cấu hình đúng giá — admin sửa nhầm config không được vô tình tắt lưới an toàn.
+    // Trần cứng số coupon thu hoạch/ngày — ĐỘC LẬP với giá giọt nước trong config.
+    // Nước rẻ hơn nhiều lần giá trị coupon (mặc định 30.000đ): không có trần thì vòng
+    // kiếm-nước→tưới→thu-hoạch in coupon vô hạn (P0-1, docs/2026-09-08-review-progress.md; lúc đó nước
+    // còn mua được bằng xu, nay đã ngừng). Đặt trần bằng CODE thay vì chỉ dựa vào admin cấu hình đúng
+    // giá — admin sửa nhầm config không được vô tình tắt lưới an toàn.
     const dailyCap = await this.config.get<number>('game.harvest_coupon_daily_cap', 3);
     const dayStart = startOfVnDay();
 
@@ -286,8 +286,8 @@ export class GameService {
       );
     } catch (err) {
       // P2034 = Postgres serialization failure (2 request song song đụng trần coupon/tồn kho
-      // nước) — KHÔNG nuốt lỗi như rewardWithDailyCap (đó là bonus best-effort, còn ở đây nước/
-      // xu là tài nguyên thật): báo lỗi rõ để client thử lại, giao dịch đã tự rollback nguyên vẹn.
+      // nước) — KHÔNG nuốt lỗi như rewardWithDailyCap (đó là bonus best-effort, còn ở đây nước
+      // là tài nguyên thật): báo lỗi rõ để client thử lại, giao dịch đã tự rollback nguyên vẹn.
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
         throw new BadRequestException('Hệ thống đang bận, vui lòng thử tưới lại.');
       }

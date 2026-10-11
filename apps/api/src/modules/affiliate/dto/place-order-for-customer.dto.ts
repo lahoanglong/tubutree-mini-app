@@ -41,7 +41,7 @@ export class CtvOrderCustomerDto {
 
 /**
  * CTV lên đơn hộ khách (Build Spec affiliate.*). Chỉ COD / chuyển khoản — đơn hộ
- * KHÔNG dùng Ví/Xu của CTV, KHÔNG coupon/điểm (đơn reseller đơn giản).
+ * KHÔNG dùng Ví/Điểm Xanh của CTV, KHÔNG coupon/điểm (đơn reseller đơn giản).
  */
 export class PlaceOrderForCustomerDto {
   @IsArray()

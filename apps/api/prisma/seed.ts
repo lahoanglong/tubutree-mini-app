@@ -62,7 +62,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'cashback.click_rate_limit_seconds', value: 30, category: 'cashback', description: '1 click/merchant/user/30s' },
   { key: 'cashback.reconcile_lookback_days', value: 45, category: 'cashback', description: 'Reconcile cron kéo giao dịch từ provider trong N ngày gần nhất (phủ hold window + biên)' },
 
-  // TubuXu (tiền tệ tiêu trong app) — Ví đổi sang xu ×1.2; rút Ví min 100k, phí 3k.
+  // Rút Ví về ngân hàng: tối thiểu 100k, phí 3k (xu đã gộp vào Điểm Xanh, Ví không còn đổi sang xu).
   { key: 'wallet.withdraw_min', value: 100000, category: 'wallet', description: 'Rút Ví về ngân hàng tối thiểu' },
   { key: 'wallet.withdraw_fee', value: 3000, category: 'wallet', description: 'Phí chuyển khoản ngân hàng/lần' },
   // PD-3: thưởng giới thiệu bằng Điểm Xanh (khoá xu coins.* đã chết). createOnly: migration
@@ -128,7 +128,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'game.daily_login_seeds', value: 10, category: 'game', description: '💧 khi mở app/check-in' },
   { key: 'game.tank_capacity', value: 500, category: 'game', description: 'Sức chứa bình nước (💧)' },
   { key: 'game.tree_default_target', value: 600, category: 'game', description: '💧 cần để thu hoạch cây mặc định' },
-  { key: 'game.harvest_coupon_daily_cap', value: 3, category: 'game', description: 'Trần số coupon thu hoạch/ngày/user — chống farm xu→coupon (P0-1)' },
+  { key: 'game.harvest_coupon_daily_cap', value: 3, category: 'game', description: 'Trần số coupon thu hoạch/ngày/user — chống farm nước→coupon (P0-1)' },
   { key: 'game.harvest_coupon_min_order', value: 199000, category: 'game', description: 'Đơn tối thiểu (đ) để dùng coupon thu hoạch (lô nhà + lô phụ); không bao giờ thấp hơn giá trị coupon', createOnly: true },
   { key: 'game.dew_seeds', value: 15, category: 'game', description: '💧 giọt sương sáng/ngày' },
   { key: 'game.streak_freeze_cost', value: 80, category: 'game', description: '💧 mua 1 vé giữ lửa (streak-freeze)' },
@@ -666,7 +666,7 @@ const NOTIFICATION_TEMPLATES = [
   // NotificationsService chỉ gửi ZNS khi có mã mẫu, nên hiện khách nhận bản INAPP.
   { id: 'nt-confirmed', code: 'ORDER_CONFIRMED', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đã được xác nhận. Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
   { id: 'nt-shipping', code: 'ORDER_SHIPPING', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đang được giao đến bạn.' },
-  // {{points_note}} do OrderStatusService điền khi đơn thật sự có tích điểm (đơn trả bằng xu thì rỗng).
+  // {{points_note}} do OrderStatusService điền khi đơn thật sự có tích điểm (đơn không tích điểm thì rỗng).
   { id: 'nt-delivered', code: 'ORDER_DELIVERED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã giao thành công.{{points_note}} Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
   { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị hủy.' },
   { id: 'nt-invoice', code: 'INVOICE_ISSUED', channel: 'INAPP', bodyTemplate: 'Hóa đơn VAT cho đơn {{order_code}} đã được phát hành.' },

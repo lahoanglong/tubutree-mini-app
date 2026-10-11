@@ -191,7 +191,7 @@ export class CommunityFeedService {
    *     liên tục (+rep_answer mỗi lần) là lên top bảng xếp hạng trong vài phút.
    *  2. IDEMPOTENT: unique (userId, reason, refId) → retry/gọi lại cùng nguồn không cộng 2 lần.
    *  3. ĐẢO ĐƯỢC: xoá bài phải trừ lại đúng số đã cộng (xem reverseReputationForPost).
-   * Đếm-rồi-quyết nằm TRONG transaction Serializable — cùng pattern với trần thưởng xu ở
+   * Đếm-rồi-quyết nằm TRONG transaction Serializable — cùng pattern với trần thưởng Điểm Xanh ở
    * `CommunityRewardService.rewardWithDailyCap` — để 2 request dồn dập không cùng lọt trần.
    */
   async bumpReputation(userId: string, amount: number, reason: string, refId: string): Promise<void> {
@@ -596,7 +596,7 @@ export class CommunityFeedService {
   async rejectPost(postId: string) {
     const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
-    // Endpoint này nhận cả bài ĐÃ PUBLISHED (đã cộng điểm + xu), nên phải đảo điểm y như
+    // Endpoint này nhận cả bài ĐÃ PUBLISHED (đã cộng điểm uy tín + Điểm Xanh thưởng), nên phải đảo điểm y như
     // deletePost — nếu không, kiểm duyệt gỡ bài vi phạm mà tác giả vẫn giữ nguyên hạng.
     await this.reverseReputationForPost(post.userId, postId);
     await this.revokeTrust(post.userId);
@@ -679,8 +679,8 @@ export class CommunityFeedService {
     const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true, status: true, title: true } });
     // Chỉ bài ĐÃ DUYỆT mới bình luận được. Bài PENDING không hiện trên bảng tin nhưng trước
     // đây vẫn nhận bình luận nếu biết id — hai tài khoản của cùng một người hỏi–đáp trên bài
-    // vô hình đó để rút xu (100 xu/bình luận, 500 xu/câu trả lời hay nhất) mà không ai kiểm
-    // duyệt được. Xu tiêu thẳng được ở thanh toán nên đây là mất hàng thật.
+    // vô hình đó để rút Điểm Xanh thưởng (bình luận, câu trả lời hay nhất) mà không ai kiểm
+    // duyệt được. Điểm Xanh tiêu thẳng được ở thanh toán nên đây là mất hàng thật.
     if (!post || post.status !== 'PUBLISHED') throw new NotFoundException('Bài viết không tồn tại.');
     const comment = await this.prisma.feedComment.create({ data: { userId, postId, body: text } });
     // Task 9: addComment luôn TẠO mới (không có nhánh xoá/toggle-off) — phát ngay sau khi ghi thành công.
@@ -727,7 +727,7 @@ export class CommunityFeedService {
     if (!post || post.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
     if (post.status === 'PENDING' && post.userId !== viewerId) throw new NotFoundException('Bài viết không tồn tại.');
     // Phân trang: trước đây cắt cứng ở 50 bình luận và không có đường xem tiếp — câu hỏi hot 80
-    // câu trả lời thì 30 người đã được cộng xu/uy tín nhưng không ai đọc được nội dung của họ,
+    // câu trả lời thì 30 người đã được cộng điểm thưởng/uy tín nhưng không ai đọc được nội dung của họ,
     // trong khi con số đếm vẫn nói 80. `id` là cuid (tăng dần theo thời gian tạo) nên đủ ổn định
     // làm khoá cursor cho thứ tự thời gian.
     const limit = Math.min(Math.max(take, 1), 100);
@@ -768,7 +768,7 @@ export class CommunityFeedService {
       where: { id: postId },
       select: { id: true, userId: true, kind: true, bestCommentId: true, status: true },
     });
-    // Cùng lý do với addComment: thưởng 500 xu chỉ được chi cho nội dung đã qua kiểm duyệt.
+    // Cùng lý do với addComment: thưởng Điểm Xanh cho câu trả lời hay nhất chỉ được chi cho nội dung đã qua kiểm duyệt.
     if (!post || post.status !== 'PUBLISHED') throw new NotFoundException('Bài viết không tồn tại.');
     if (post.kind !== 'QUESTION') throw new BadRequestException('Chỉ câu hỏi mới có câu trả lời hay nhất.');
     if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Chỉ chủ bài mới chọn được.');
