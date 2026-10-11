@@ -866,6 +866,33 @@ export const markPayoutPaid = (id: string, bankRef?: string, note?: string) =>
     },
   });
 
+// ── Hoàn tiền khách cuối của đơn CTV lên hộ (PA-1 / Q-01): hàng đợi chuyển khoản tay ──
+export type AdminCustomerRefundStatus = 'PENDING' | 'COMPLETED';
+export type AdminCustomerRefundMethod = 'WALLET' | 'MANUAL_TRANSFER';
+/** Khớp model OrderCustomerRefund (BE trả nguyên dòng, không che SĐT). `reason` là trạng thái đơn gây ra lần hoàn. */
+export interface AdminCustomerRefund {
+  id: string;
+  orderId: string;
+  orderCode: string;
+  amount: number;
+  phone: string | null;
+  recipientName: string | null;
+  customerUserId: string | null;
+  method: AdminCustomerRefundMethod;
+  status: AdminCustomerRefundStatus;
+  reason: string;
+  completedAt: string | null;
+  /** adminId xác nhận đã chuyển khoản; BE không kèm tên admin. */
+  completedBy: string | null;
+  bankRef: string | null;
+  adminNote: string | null;
+  createdAt: string;
+}
+export const listCustomerRefunds = (status?: AdminCustomerRefundStatus, page = 1, limit = 20) =>
+  apiFetch<Page<AdminCustomerRefund>>(
+    `/admin/customer-refunds?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`,
+  );
+
 // ── Tích điểm tại quầy (POS) ──
 export interface PosMember {
   id: string;

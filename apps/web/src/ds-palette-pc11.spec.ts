@@ -40,6 +40,7 @@ const MIGRATED = [
   'components/admin/reviews-tab.tsx',
   'components/admin/subscriptions-tab.tsx',
   'components/admin/cashback-tab.tsx',
+  'components/admin/customer-refunds-tab.tsx',
   'lib/admin-pickers.ts',
   'app/admin/analytics-tab.tsx',
   'components/geo-picker.tsx',
