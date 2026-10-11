@@ -263,6 +263,17 @@ describe('LoyaltyPage — hai lô Điểm Xanh sau khi gộp xu (PD-3)', () => {
     expect(screen.getByText('trong đó 30 điểm không hết hạn')).toBeInTheDocument();
   });
 
+  it('hộp xác nhận đổi mã giảm giá: "Điểm còn lại" là tổng hai lô sau khi trừ, khớp con số ở đầu trang', async () => {
+    // 600 thường + 100 quy đổi, đổi ưu đãi 500 điểm (chỉ trừ lô thường) → còn 200 điểm Xanh, không phải 100.
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, pointsBalance: 600, pointsConvertedBalance: 100, pointsTotal: 700 });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đổi ngay' }));
+    await screen.findByText('Xác nhận đổi ưu đãi');
+    expect(screen.getByText('-500 điểm Xanh')).toBeInTheDocument();
+    expect(screen.getByText('200 điểm Xanh')).toBeInTheDocument();
+    expect(screen.queryByText('100 điểm Xanh')).toBeNull();
+  });
+
   it('thẻ thành viên số cũng hiện tổng hai lô', async () => {
     mocks.getLoyalty.mockResolvedValue(WITH_CONVERTED);
     renderPage();

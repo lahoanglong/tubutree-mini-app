@@ -777,7 +777,7 @@ export default function LoyaltyPage() {
                 <KeyValueRow label="Điểm cần trừ:" value={`-${formatPoints(sheetReward.pointsCost)} Xanh`} />
                 <KeyValueRow
                   label="Điểm còn lại:"
-                  value={`${formatPoints((data?.pointsBalance ?? 0) - sheetReward.pointsCost)} Xanh`}
+                  value={`${formatPoints((lots?.total ?? 0) - sheetReward.pointsCost)} Xanh`}
                 />
               </div>
             </div>
