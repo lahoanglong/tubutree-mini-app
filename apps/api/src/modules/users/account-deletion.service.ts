@@ -11,6 +11,7 @@ export type DeletionBlockerCode =
   | 'PRIVILEGED_ROLE'
   | 'WALLET_BALANCE'
   | 'COINS_BALANCE'
+  | 'CONVERTED_POINTS'
   | 'CASHBACK_PENDING'
   | 'ORDER_IN_PROGRESS'
   | 'PAYOUT_PENDING'
@@ -29,7 +30,14 @@ export type DeletionListStatus = 'PENDING' | 'RESOLVED' | 'ALL';
 
 type Db = Prisma.TransactionClient;
 
-type BlockerUser = { id: string; role: string; walletBalance: number; coinsBalance: number; cashbackPending: number };
+type BlockerUser = {
+  id: string;
+  role: string;
+  walletBalance: number;
+  coinsBalance: number;
+  pointsConvertedBalance: number;
+  cashbackPending: number;
+};
 
 const OPEN_ORDER_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] as const;
 
@@ -67,6 +75,7 @@ export class AccountDeletionService {
         role: true,
         walletBalance: true,
         coinsBalance: true,
+        pointsConvertedBalance: true,
         cashbackPending: true,
         createdAt: true,
       },
@@ -195,7 +204,13 @@ export class AccountDeletionService {
       }
       if (user.walletBalance > 0) add('WALLET_BALANCE', `Ví Tubu còn ${vnd(user.walletBalance)}, khách cần rút hết trước`);
       if (user.walletBalance < 0) add('WALLET_BALANCE', `Ví Tubu đang âm ${vnd(-user.walletBalance)}, cần đối soát trước`);
+      // Sau PD-3 coinsBalance luôn 0 (đã quy sang Điểm Xanh); giữ chặn tới khi xu bị khoá ở DB.
       if (user.coinsBalance > 0) add('COINS_BALANCE', `còn ${user.coinsBalance} xu chưa dùng`);
+      // Q-03a: lô quy đổi là tiền trả trước nhưng không quy ra tiền được, nên không có cách tất toán
+      // nào khác ngoài để khách tiêu hết (OQ-14).
+      if (user.pointsConvertedBalance > 0) {
+        add('CONVERTED_POINTS', `còn ${user.pointsConvertedBalance} Điểm Xanh không hết hạn chưa dùng`);
+      }
       if (user.cashbackPending > 0 || n(cashbackN) > 0) add('CASHBACK_PENDING', 'còn khoản hoàn tiền mua sắm đang chờ');
       if (n(orderN) > 0) add('ORDER_IN_PROGRESS', `còn ${n(orderN)} đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao)`);
       if (n(payoutN) > 0) add('PAYOUT_PENDING', `còn ${n(payoutN)} yêu cầu rút tiền chờ xử lý`);
