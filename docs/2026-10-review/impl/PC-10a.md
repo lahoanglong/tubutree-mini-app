@@ -369,3 +369,81 @@ $ npx vitest run <16 spec liên quan>
 ### Việc còn lại
 
 - Bước T (điều phối viên): chạy Playwright `loyalty.miniapp.spec.ts` để xác nhận selector `.zaui-sheet`; kiểm bằng mắt ở 390x844 và trên Zalo thanh tab dính dưới safe-top, hai màn đầu trang Vườn Xanh.
+
+## Review lượt 2
+
+Reviewer độc lập (opus) trả 1 major và 4 minor. Major được xác minh lại trên mã thật trước khi sửa: ĐÚNG. Test ĐỎ chạy trước khi sửa, XANH sau khi sửa.
+
+| # | Mức | Finding | Kết quả | Commit |
+|---|---|---|---|---|
+| 1 | major | Hộp kết quả vòng quay nằm trong tab "Hôm nay" (display:none khi sang tab khác) | ĐÃ SỬA | `1a1112f5` |
+| 2 | minor | `ProgressBar` nhiệm vụ mất phân biệt màu đạt/chưa đạt | KHÔNG SỬA (nhắc lại lượt 1 mục 6) | không |
+| 3 | minor | `SegmentedTabs` thiếu `id`/`aria-controls` nối với `tabpanel`, không có phím mũi tên | KHÔNG SỬA (ngoài gói, đề xuất DS) | không |
+| 4 | minor | Danh sách `GAME_FILES` của guard viết tay | ĐÃ SỬA | `1a1112f5` |
+| 5 | minor | e2e `loyalty.miniapp.spec.ts` chưa chạy Playwright | KHÔNG CHẠY ĐƯỢC (quy định máy), vẫn unverified | không |
+
+### 1. Major: hộp kết quả vòng quay trong tab ẩn — ĐÚNG
+
+Xác minh trên `zmp-ui@1.11.14` thật (đọc mã, không suy đoán):
+
+- `esm/components/sheet/sheet.js` dựng `<div class="zaui-sheet">` ngay tại chỗ (Mask + ModalWrapper + Content), không có `createPortal` trong `esm/components/sheet` và `esm/common/modal-wrapper` (`grep createPortal` trong `esm/` chỉ khớp `components/portal`, không được Sheet dùng).
+- `esm/common/modal-wrapper/index.js` bật `document.querySelector('.zaui-page').classList.add('disable-scrolling')` khi `visible` và chỉ gỡ khi `visible` về false; CSS `.zaui-page.disable-scrolling{overflow:hidden}`.
+- Lượt quay mất `SPIN_MS = 3600` ms; hộp mở lúc quay xong. Từ lúc có tab (C-082), `LuckyWheelCard` nằm trong `GameTabPanel tab="today"` (`display:none` khi không chọn), nên đổi sang "Vườn"/"Cộng đồng" giữa chừng thì hộp mở trong khối ẩn: phần thưởng không thấy, trang kẹt khoá cuộn tới khi quay lại tab Hôm nay. Hồi quy do C-082 gây ra; lời gọi `spin()` không đổi.
+- Rà các khối tab khác: `components/game` chỉ có `harvest-celebration.tsx` (đã ở cấp trang) dùng `BottomSheet`; không khối nào khác mở hộp bất đồng bộ trong tab.
+
+Test thêm `pages/game-wheel-tabs.spec.tsx` (6 test, dùng vòng quay THẬT, `Page` giả có class `zaui-page`, timer giả):
+
+- ĐỎ trên mã cũ: "đổi sang tab Vườn trong lúc quay: hộp kết quả vẫn nhìn thấy được" và bản "Cộng đồng" (`expect(element).toBeVisible()` — `Received element is not visible: <h2>`); "đổi tab rồi đóng hộp: trang hết khoá cuộn" cũng ĐỎ (không tìm thấy nút "Tuyệt vời!" trong khối ẩn). 3 test còn lại (ở lại tab Hôm nay, quay lần hai, quay lỗi) xanh cả trước lẫn sau: đóng vai test đặc tả để chứng minh hành vi cũ giữ nguyên.
+- XANH sau sửa (6/6).
+
+Sửa (chọn "nâng lên cấp trang" như `HarvestCelebration`, không dùng portal vì app chưa có tiền lệ portal và vị trí z-index/theme của sheet trong `body` chưa kiểm được trên máy thật):
+
+- `components/game/wheel-prize-sheet.tsx` (mới): `WheelPrizeSheet({ prize, open, onClose })`, nội dung hộp y nguyên bản cũ (🎉, tên quà, dòng "+N Điểm Xanh đã vào tài khoản" chỉ khi `POINTS` và `value > 0`).
+- `components/game/use-wheel-prize.ts` (mới): giữ `prize` + `open`; `onResult(null)` đóng kết quả cũ (tương đương `setResultOpen(false)` đầu mỗi lượt quay), `onResult(prize)` mở kết quả mới.
+- `components/wheel.tsx`: bỏ `BottomSheet`, thêm prop bắt buộc `onResult`; điều kiện khoá nút, `lockRef`, `SPIN_MS`, `haptic`, `Promise.all([onSpin(), timer])` giữ nguyên.
+- `components/game/lucky-wheel-card.tsx` chuyển tiếp `onResult`; `pages/game.tsx` gọi `useWheelPrize()` và dựng `<WheelPrizeSheet>` cạnh `HarvestCelebration`, ngoài các `GameTabPanel`. `game.tsx` 244 dòng (guard ≤ 400 vẫn xanh).
+- `components/wheel.spec.tsx`: 14 test cũ giữ nguyên chữ, chỉ đổi tên component dựng thành harness nối `Wheel` + `useWheelPrize` + `WheelPrizeSheet` đúng như trang; thêm 2 test hợp đồng `onResult` (bắt đầu quay: `null`; đủ 3,6 giây và backend xong: `prize` đúng một lần; lỗi: chỉ `null`). 16/16 xanh.
+- Guard `ds-c076-pc10a.spec.ts`: file mới tự vào guard (xem mục 4); 🎉 chuyển danh sách cho phép từ `wheel.tsx` sang `wheel-prize-sheet.tsx`. Trước khi thêm cho phép: ĐỎ `expected [ '🎉' ] to deeply equal []` trên `wheel-prize-sheet.tsx`; sau: xanh.
+
+Không đổi: lời gọi `spin()`, số Điểm Xanh hiển thị, điều kiện khoá nút quay, không thêm lại mua giọt nước bằng xu (Q-02).
+
+### 2. Minor: màu thanh tiến độ nhiệm vụ — KHÔNG SỬA
+
+Đã kiểm lại `components/ui/progress-bar.tsx`: `tone?: 'brand' | 'flash'`, không có tone "đạt"; `flash` là terracotta của flash sale, sai nghĩa. `components/ui/**` ngoài nhóm file của gói. Chấp nhận như đã ghi ở Review lượt 1 mục 6 (`canClaim`, số `progress/goal` và nút "Nhận thưởng" không đổi). Đề xuất cho điều phối viên: thêm `tone="success"` vào `ProgressBar`, sau đó `missions-card.tsx` truyền theo `isDone` (một dòng).
+
+### 3. Minor: a11y tab/tabpanel — KHÔNG SỬA (ngoài gói)
+
+`components/ui/segmented-tabs.tsx` dựng `role="tab"` không có `id`, không `aria-controls`, không xử lý phím mũi tên; `GameTabPanel` chỉ có `aria-label` (và ẩn bằng `hidden` + `display:none`). Nối `aria-controls`/`aria-labelledby` cần `SegmentedTabs` sinh `id` cho tab, nên là việc của gói DS. Tab vẫn là `button` thật cao 44px nên dùng được bằng bàn phím (Tab/Enter/Space) và trình đọc màn hình đọc được "tab, đã chọn". Đề xuất cho điều phối viên: `SegmentedTabs` nhận `idPrefix`, sinh `id="${idPrefix}-tab-${key}"` + `aria-controls="${idPrefix}-panel-${key}"` và roving tabindex + phím mũi tên; sau đó `GameTabPanel` thêm `id="${idPrefix}-panel-${tab}"` + `aria-labelledby`.
+
+### 4. Minor: danh sách guard viết tay — ĐÃ SỬA
+
+`ds-c076-pc10a.spec.ts`: `GAME_FILES` = hợp của danh sách ghim (`PINNED_GAME_FILES`, giữ `src/pages/game.tsx`) và `readdirSync('src/components/game')` (file `.ts/.tsx`, bỏ spec). File mới thêm vào thư mục tự bị guard legacy/hex/zmp-ui/emoji; chính hai file mới của mục 1 là ca chứng minh (ĐỎ ngay khi tạo, chưa phải sửa danh sách). Thêm test tự kiểm "danh sách guard khớp thư mục" (mọi file trong thư mục đều có trong guard, không file ghim nào đã biến mất).
+
+### 5. Minor: e2e `loyalty.miniapp.spec.ts` — UNVERIFIED
+
+Quy định máy cấm Playwright trong gói. Đã kiểm lại tĩnh: dòng 205, 256, 273 dùng `.zaui-sheet` (đúng cấu trúc của `BottomSheet`/ZaUI Sheet), chuỗi `'-50 điểm Xanh'` khớp `formatPoints`; không kịch bản e2e nào chạm `/game`, vòng quay hay hộp kết quả (grep `Quay ngay|Chúc mừng|vòng quay|/game` trong `apps/e2e/tests` chỉ khớp một thông báo CTV không liên quan), nên mục 1 của lượt này không ảnh hưởng e2e. Việc còn lại cho điều phối viên ở bước T: `npx playwright test loyalty.miniapp.spec.ts` (một job nặng) và ghi kết quả vào đây.
+
+### Lệnh kiểm chứng sau sửa (output thật)
+
+```
+$ npx eslint src/pages/game.tsx src/pages/game-wheel-tabs.spec.tsx src/components/wheel.tsx src/components/wheel.spec.tsx \
+    src/components/game src/ds-c076-pc10a.spec.ts                      exit 0, không output
+$ npx tsc --noEmit  (apps/miniapp)                                     exit 0
+$ node scripts/check-undefined-css-vars.mjs                            OK — every var(--x) reference is defined.
+$ static-scan (legacy hex emoji file)
+0 0 0 apps/miniapp/src/components/game/lucky-wheel-card.tsx
+0 0 0 apps/miniapp/src/components/game/use-wheel-prize.ts
+0 0 1 apps/miniapp/src/components/game/wheel-prize-sheet.tsx
+0 0 7 apps/miniapp/src/components/wheel.tsx
+0 0 1 apps/miniapp/src/pages/game.tsx
+$ npx vitest run <16 spec liên quan của lượt 1> src/pages/game-wheel-tabs.spec.tsx
+ Test Files  17 passed (17)
+      Tests  402 passed (402)
+```
+
+(Lượt 1: 385 test, 16 file. Thêm 17 = 6 `game-wheel-tabs` + 2 hợp đồng `onResult` ở `wheel.spec` + 1 tự kiểm danh sách + 8 ca guard cho hai file mới.) `components/game/` giờ có 27 file (25 + `wheel-prize-sheet.tsx`, `use-wheel-prize.ts`); `wheel.tsx` còn 7 emoji nội dung (bánh xe).
+
+### Việc còn lại
+
+- Bước T (điều phối viên): Playwright `loyalty.miniapp.spec.ts`; xem bằng mắt trên Zalo: bấm "Quay ngay", sang tab Vườn trước khi hết 3,6 giây, hộp "Chúc mừng!" phải hiện trên tab Vườn và đóng được.
+- Hộp kết quả vòng quay và hộp thu hoạch cùng là `BottomSheet` ở cấp trang; nếu cả hai cùng mở (thu hoạch xảy ra khi tưới, không xảy ra khi đang quay vì nút tưới nằm sau lớp phủ của hộp) thì chồng nhau, chưa có kịch bản thực tế.
