@@ -575,3 +575,141 @@ pending-payment-expiry 8, subscription-cycle-payment 15  — tất cả passed, 
 - Duyệt lời báo khách khi admin duyệt trả đơn XU cũ: hiện dùng mẫu trung tính "Yêu cầu đổi/trả đơn … đã được duyệt." Theo luật làm việc, lời báo khách cần reviewer Opus xem trước khi merge.
 - Mẫu `CASHBACK_PAID` đang quảng cáo đổi Ví sang TubuXu, tính năng đã ngừng. Cần sửa nội dung trên DB PROD, vì seed không ghi đè mẫu đã có.
 - Toàn bộ lượt L3 đụng tiền trả trước của khách: cần review đối kháng (reviewer) trước khi merge.
+
+## Review B1 (reviewer độc lập, lượt 2 trên nhánh L1-L3)
+
+Trạng thái: **XONG phần mã**, còn ba việc không thuộc phạm vi lượt này (L4/L5, số đo PROD, ba câu hỏi mở) ghi ở "Việc cần chủ dự án". Sáu finding: 1 major (đúng, đã sửa), 2 minor đã sửa, 1 minor sửa một phần, 2 minor không sửa được ở đây. Mỗi sửa một commit `address review B1`. Test đỏ thấy trước khi sửa; output thật bên dưới.
+
+| # | Mức | Finding | Kết luận | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | major | Hoàn lô CONVERTED nằm ở `reverseOrderPoints` chạy sau commit huỷ; ném lỗi thì khách mất điểm quy đổi vĩnh viễn | ĐÚNG, đã sửa: hoàn trong tx của `reverseFinancials` | 614b2376, 670db884 (chú thích) |
+| 2 | minor | Báo khách sai khi duyệt trả: (a) đơn 0đ báo "đã hoàn vào Ví"; (b) đơn XU cũ nhận mẫu "không hoàn gì" thay vì "đã hoàn N Điểm Xanh" | ĐÚNG cả hai, đã sửa | 72e642fb |
+| 3 | minor | RANGES khoá `*_points` nhận số lẻ (2.5) nhưng `RewardPointsService.grant` ném 500 | ĐÚNG, đã sửa (thêm `integer`) | b8dc809a |
+| 4 | minor | AuthUser còn `coinsBalance`; mẫu `CASHBACK_PAID` mời đổi sang TubuXu; FE/e2e chưa đổi | MỘT PHẦN: mẫu tin đã sửa (cả `COMMUNITY_BEST_ANSWER`); `coinsBalance` và FE KHÔNG sửa (thuộc L4/L5, xem dưới) | d14ccabc |
+| 5 | minor | Q-03a: chi phí làm tròn chưa đo trên số dư thật | KHÔNG sửa được ở đây (cấm PROD); vẫn là cổng deploy | báo cáo này |
+| 6 | minor | Q-03 "Ví trả một phần" chưa có; OQ-1..15 chưa duyệt, đáng chú ý OQ-5, OQ-9, OQ-12 | KHÔNG phải việc của mã; chuyển sang "Việc cần chủ dự án" | báo cáo này |
+
+### 1. Hoàn lô CONVERTED sau commit (major)
+
+Xác minh bằng mã: cả ba nơi huỷ/trả (`orders.service.ts` `cancel`, `order-status.service.ts` `setStatus`, `admin.service.ts` `reviewReturn`) chạy `reverseFinancials` trong tx lật trạng thái, rồi gọi `loyalty.reverseOrderPoints` SAU commit. Phần CONVERTED (tiền trả trước) khi đó nằm ở `reverseOrderPoints`. Ném lỗi ở đó thì đơn đã `CANCELLED`/`RETURNED`; `cancel` lần hai bị `assertCustomerCancellable` chặn, `setStatus` lần hai ra nhánh `!won`/no-op, và không có endpoint resync nào (chú thích cũ ở `order-status.service.ts` nói có là sai). `points-reconcile` không bắt được vì sổ vẫn khớp số dư. Reviewer đúng, và đây là thụt lùi so với trước PD-3 (xu hoàn trong tx).
+
+Test đỏ trước khi sửa (race, Postgres thật, giả lập `reverseOrderPoints` ném sau khi tx huỷ commit; user có 500 STANDARD + 300 CONVERTED, đơn tiêu 30 + 120):
+
+```
+✕ B1: reverseOrderPoints ném lỗi sau khi tx huỷ commit → lô CONVERTED đã hoàn, retry chỉ hoàn STANDARD
+    expect(mid.pointsConvertedBalance).toBe(300)
+    Expected: 300
+    Received: 180
+Tests:       1 failed, 7 passed, 8 total
+```
+
+Khách mất 120 điểm (120.000đ). Unit đỏ: `order-reversal.service.spec.ts` 3 failed (hoàn CONVERTED trong tx), `loyalty.service.spec.ts` 4 failed (đã bỏ khỏi `reverseOrderPoints`, kiểm "đã đảo chưa" không còn `ORDER_REFUND_CONVERTED`).
+
+Sửa:
+- `OrderReversalService.refundConvertedPoints` (trong `reverseFinancials`, cùng tx): `applyPointsDelta` lô CONVERTED, reason `ORDER_REFUND_CONVERTED:<code>`, `skipDuplicates: true`. Số điểm = `min(pointsUsed, pointsUsedConverted)`. Một lần nhờ guard lật trạng thái của caller, lớp hai là index `points_transactions_converted_refund_unique`. Chạy với mọi kênh thanh toán, kể cả COD huỷ chưa giao (không có tiền để hoàn nhưng điểm vẫn phải hoàn).
+- `LoyaltyService.reverseOrderPoints`: bỏ nhánh CONVERTED và bỏ `ORDER_REFUND_CONVERTED` khỏi danh sách `reason in` của kiểm "đã đảo chưa". Nếu giữ, dòng do tx huỷ ghi trước sẽ làm bước này thoát sớm và bỏ qua hoàn STANDARD cùng đảo `pointsEarned` (test khoá: đơn đã giao tiêu hai lô vẫn đảo `pointsEarned` và hoàn STANDARD).
+- Chọn phương án sửa chính của reviewer (hoàn trong tx), không chọn phương án đối soát/cron: không để cửa sổ lỗi.
+
+Xanh: `pd3-order-reversal  Tests: 8 passed, 8 total` (T10 hai lô, T10 đồng thời 2 huỷ + 3 `reverseOrderPoints`, hai ca B1 mới, T11 ×3). Ca B1 thứ hai (đơn chỉ lô CONVERTED, `reverseOrderPoints` ném lỗi rồi gọi lại) kiểm số dư đúng ngay sau commit huỷ và đúng một dòng hoàn sau khi gọi lại.
+
+Giới hạn, KHÔNG sửa: phần STANDARD (`ORDER_REFUND_POINTS`) và đảo `pointsEarned` vẫn nằm ở `reverseOrderPoints` sau commit, đúng như trước PD-3. Đó là điểm thưởng/tích luỹ, không phải tiền trả trước, và nằm ngoài finding. Cùng cửa sổ lỗi vẫn có thể làm khách mất tối đa phần điểm thường khi `reverseOrderPoints` ném lỗi. Nếu chủ dự án muốn đóng luôn, cần một gói riêng (đưa cả hai vào tx hoặc thêm đối soát).
+
+### 2. Báo khách sai khi duyệt trả hàng (minor)
+
+Xác minh bằng mã: (a) đơn COD tổng 0đ đã giao rồi trả: `isCodCollected` đúng, guard `UNPAID→REFUNDED` thắng (`count = 1`), nhưng `refundToWallet` thoát sớm vì `total <= 0`, trong khi `moneyRefunded = true`; khách nhận "Tiền đã hoàn vào Ví Tubu". (b) đơn XU cũ rơi vào `RETURN_APPROVED_NO_REFUND` do chốt `paymentMethod !== 'XU'` ở admin; không nói đã hoàn bao nhiêu Điểm Xanh. Cả hai đúng.
+
+Test đỏ: `order-reversal.service.spec.ts` 10 failed (kết quả mới `{ moneyRefunded, pointsRefunded }`, đơn 0đ, đơn lên hộ 0đ, đơn XU cũ); `admin.service.spec.ts` 4 failed (mẫu tin theo Ví và điểm).
+
+Sửa:
+- `reverseFinancials` trả `{ moneyRefunded, pointsRefunded }`. `moneyRefunded` chỉ true khi Ví thực sự được cộng > 0đ (`refundToWallet` trả boolean; nhánh lên hộ thêm `&& total > 0`). Đơn XU cũ: `moneyRefunded = false`, `pointsRefunded = ceil(total/1000)`. Khác spec 6.2 (xem "Khác spec"). `pointsRefunded` còn gồm lô CONVERTED hoàn trong tx; trả 0 khi dòng đã có (không báo hoàn điểm đã hoàn từ trước).
+- `admin.reviewReturn`: tổng điểm báo khách = `pointsRefunded` + phần STANDARD (`pointsUsed - min(pointsUsed, pointsUsedConverted)`, do `reverseOrderPoints` hoàn ngay sau). Chọn mẫu theo (Ví, điểm): Ví và điểm → `RETURN_APPROVED_WALLET_POINTS`; chỉ Ví → `RETURN_APPROVED`; chỉ điểm → `RETURN_APPROVED_POINTS`; không gì → `RETURN_APPROVED_NO_REFUND`.
+- Hai mẫu mới, lời tin đúng thuật ngữ Q-26, cả seed (`createOnly`) lẫn migration (prod không chạy seed):
+  - `RETURN_APPROVED_POINTS`: "Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Đã hoàn {{points}} Điểm Xanh vào tài khoản của bạn 🌿"
+  - `RETURN_APPROVED_WALLET_POINTS`: "Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu và {{points}} Điểm Xanh đã hoàn vào tài khoản của bạn 🌿"
+- Hệ quả hành vi: đơn thường (trả Ví) từng tiêu điểm thường nay nhận mẫu "Ví và N Điểm Xanh" thay vì chỉ "Ví". Chỉ thêm thông tin đúng, không đổi số tiền.
+- Lệch nhỏ: nếu `reverseOrderPoints` bỏ qua phần STANDARD vì đã đảo từ trước (chỉ khi xử lý lặp), số điểm báo vẫn tính phần STANDARD. Không xảy ra ở đường duyệt trả lần đầu.
+
+Xanh: `admin.service.spec.ts` và `order-reversal.service.spec.ts` xanh; `notification-templates-seed.spec.ts` thêm hai mẫu vào kiểm "prod (chỉ chạy migration) có đúng lời tin như seed" và hai ca render. Ghi thật: ca kiểm mẫu mới viết cùng lúc với dòng seed nên không có lần chạy đỏ riêng; dạng lỗi nếu thiếu seed là `TypeError` khi tra mẫu theo mã.
+
+### 3. Khoá `*_points` nhận số lẻ (minor)
+
+Xác minh: `RewardPointsService.grant` từ chối `!Number.isInteger(points)` bằng 500; RANGES chỉ kiểm `min`/`max`/số hữu hạn nên 2.5 nằm trong 0–100 và qua được; `config.get` đọc thẳng. Thưởng giới thiệu rơi vào catch ở `order-status` (log, không cấp); thưởng cộng đồng bị tắt âm thầm; góp quỹ cây báo chưa khả dụng. Đúng. Phát hiện thêm: `game.spin_buy_cost_points` cùng loại (trừ vào cột INTEGER), cũng thêm.
+
+Test đỏ (`points-unit-guard.spec.ts`, 6 khoá × số lẻ): `Tests: 6 failed, 20 passed, 26 total`. Sửa: `RANGES` thêm `integer?: true` cho 6 khoá (`referral.referrer_reward_points`, ba khoá `community.*_reward_points`, `game.tree_points_price`, `game.spin_buy_cost_points`), `assertInRange` từ chối số lẻ kèm lời "phải là số nguyên". Xanh: `src/modules/system-config  Tests: 84 passed, 84 total`.
+
+### 4. `coinsBalance` ở AuthUser, mẫu `CASHBACK_PAID`, FE chưa đổi (minor, một phần)
+
+Đúng cả ba: `auth.service.ts:628` còn trả `coinsBalance` (luôn 0 do `users_coins_frozen`); `CASHBACK_PAID` mời "Đổi sang TubuXu" (đã 410); miniapp/web/e2e chưa đổi. Nhánh này không deploy riêng được (đã ghi từ L3).
+
+Đã sửa (rẻ và an toàn, theo spec mục 5 và 7.2): lời hai mẫu còn nhắc TubuXu.
+- `CASHBACK_PAID`: bỏ câu "Đổi sang TubuXu để nhận thêm 20% nhé!".
+- `COMMUNITY_BEST_ANSWER`: "Bạn nhận thêm TubuXu thưởng." thành "Bạn nhận thêm Điểm Xanh thưởng." (thưởng đã là Điểm Xanh từ L2).
+- Seed đổi lời; migration `20261012150000_pd3_review_b1_xu_wording_templates` là UPDATE có điều kiện `WHERE "bodyTemplate" = <bản cũ>` để giữ bản admin đã sửa.
+- Test đỏ: `notification-templates-seed.spec.ts` 3 failed (không mẫu nào được nhắc xu; prod chỉ-migration có đúng lời seed ×2). Xanh: `Tests: 55 passed` cho `src/modules/notifications`.
+- Chạy migration trên DB test có hàng mẫu: bản seed cũ được đổi lời; hàng admin đã sửa ("Admin đã sửa: chúc mừng bạn nhận TubuXu") giữ nguyên; chạy lại thủ công bằng psql: `UPDATE 0` / `UPDATE 0`.
+
+KHÔNG sửa ở đây: bỏ `coinsBalance` khỏi AuthUser và shared-types. Miniapp còn đọc (`checkout.tsx:128` `user?.coinsBalance`, `profile.tsx:281`, `wallet.tsx:208`, `account-api.ts`), web admin còn đọc (`account-deletion-panel.tsx:26,146`). Bỏ ở API mà FE chưa đổi là làm sai kiểu chứ không an toàn hơn. Thuộc L4 (FE) và L5 (e2e); các file FE ngoài nhóm của lượt này và bị PD-1 sửa chung (spec đầu file).
+
+### 5. Chi phí làm tròn trên số dư thật (minor, KHÔNG sửa được ở đây)
+
+Cùng kết luận với A1 mục 4. Số "6 user, 2.543đ" của reviewer là số trên DB mẫu của chính spec (mục "Kiểm chứng SQL"), không phải số dư thật. Cấm PROD nên không đo được; không ghi số sai vào spec. Bảng điền số ở A1 mục 4 vẫn là cổng deploy. Truy vấn để chạy trên BẢN SAO PROD (chỉ đọc), lấy từ spec 3.3:
+
+```sql
+SELECT count(*) AS users_with_xu, COALESCE(sum("coinsBalance"),0) AS total_xu,
+       COALESCE(sum(("coinsBalance"+999)/1000),0) AS total_points,
+       COALESCE(sum(("coinsBalance"+999)/1000)*1000 - sum("coinsBalance"),0) AS rounding_cost_vnd,
+       COALESCE(max("coinsBalance"),0) AS max_xu_one_user
+  FROM "users" WHERE "coinsBalance" > 0;
+SELECT count(*) AS negative_users FROM "users" WHERE "coinsBalance" < 0;
+SELECT count(*) AS coin_drift_users FROM "users" u
+ WHERE u."coinsBalance" <> COALESCE((SELECT sum(delta) FROM "coin_transactions" c WHERE c."userId" = u."id"), 0);
+SELECT status, "paymentStatus", count(*), sum(total) AS total_xu, sum((total+999)/1000) AS refund_points_if_all_reversed
+  FROM "orders" WHERE "paymentMethod" = 'XU' AND status NOT IN ('CANCELLED','RETURNED') GROUP BY 1, 2;
+```
+
+### 6. Ví trả một phần, OQ-1..15 chưa duyệt (minor, không phải việc của mã)
+
+Đúng về sự thật: `checkout.service.ts` vẫn bắt `walletBalance >= total` (Ví chỉ trả TOÀN BỘ đơn), spec đã dời "Ví trả một phần" sang OQ-12. Mã dùng đúng mặc định của spec cho mọi OQ; không đổi gì ở lượt này. Ba câu cần chủ dự án xác nhận rõ trước khi gộp nhánh (xem dưới).
+
+### Chạy lại cuối lượt (HEAD)
+
+```
+npx jest src/modules/{checkout,pricing,loyalty,orders,game,wallet,system-config,auth,users,cashback,notifications} --maxWorkers=1   Test Suites: 55 passed; Tests: 1053 passed
+npx jest src/modules/{admin,affiliate,integrations,storefront,feed} --maxWorkers=1                                              Test Suites: 44 passed; Tests: 991 passed
+npx tsc --noEmit -p tsconfig.json                                                                                               exit 0
+npx tsc -p <scratch>/tsconfig.pd3-race.json (src + test/integration-race, types jest)                                           exit 0
+npx eslint <file .ts đã sửa>                                                                                                    0 lỗi
+prisma migrate deploy trên tubu_it_pd3 (2 migration mới)                                                                        All migrations have been successfully applied
+prisma migrate diff ... --exit-code                                                                                             No difference detected. (exit 0)
+check-partial-indexes.ts                                                                                                        mong đợi 20, có trong DB 20
+Race, mỗi file chạy riêng (--runInBand): pd3-order-reversal 8, pd3-checkout-points 3, pd3-points-lots 6, pd3-xu-migration 15,
+order-cancel 2, cod-return-refund 3, admin-confirm-payment 4, pancake-paid-status 4, pending-payment-expiry 8, dealer-bonus 4,
+loyalty 5, sellable-product 27, wallet-ledger-flows 8, ctv-assisted-refund 10, auth-merge-guest 11 — tất cả passed, 0 failed
+```
+
+### Migration (thêm cho B1)
+
+Cả hai chỉ thêm / UPDATE có điều kiện, chạy lại được, không DROP/DELETE:
+- `20261012140000_pd3_review_b1_return_templates`: `INSERT ... ON CONFLICT DO NOTHING` hai mẫu `RETURN_APPROVED_POINTS`, `RETURN_APPROVED_WALLET_POINTS`. Chạy lại: `INSERT 0 0`.
+- `20261012150000_pd3_review_b1_xu_wording_templates`: UPDATE `CASHBACK_PAID`, `COMMUNITY_BEST_ANSWER` chỉ khi lời còn đúng bản cũ. Không đổi schema, không ảnh hưởng `check-partial-indexes`.
+
+### Khác spec (thêm cho B1, chọn phương án an toàn tiền hơn)
+
+- Spec 2.5 để `reverseOrderPoints` hoàn lô CONVERTED; nay hoàn ở `reverseFinancials` trong tx huỷ (spec 6.2 đã để đơn XU cũ ở đó). Lý do: finding 1. Index và reason `ORDER_REFUND_CONVERTED` không đổi.
+- Spec 6.2 nói `moneyRefunded` của đơn XU cũ vẫn true. Nay false, kèm `pointsRefunded`. Lý do: tên và chỗ dùng của cờ là "tiền vào Ví"; câu báo khách chọn theo `pointsRefunded`.
+- `reverseFinancials` đổi kiểu trả về thành `{ moneyRefunded, pointsRefunded }` (chỉ `admin.reviewReturn` đọc kết quả).
+- File ngoài nhóm đã sửa, tối thiểu: `admin.service(.spec).ts`, `notification-templates-seed.spec.ts`, `prisma/seed.ts` (mẫu tin), `order-status.service.ts` (chỉ chú thích).
+
+### Việc còn lại
+
+- L4 (FE) và L5 (e2e, `coinsBalance` ở AuthUser/shared-types, mẫu `XU_CONVERTED` theo OQ-10), bắt buộc trước deploy.
+- Phần STANDARD hoàn sau commit (mục 1, "Giới hạn"): quyết định có đóng hay không.
+
+### Việc cần chủ dự án (thêm cho B1)
+
+- Duyệt rõ ba mặc định mà reviewer nêu, trước khi gộp nhánh:
+  - OQ-12: "Ví trả một phần đơn" KHÔNG có trong PD-3; Ví chỉ trả toàn bộ đơn. Q-03 phương án 1 cần một gói riêng.
+  - OQ-5: góp quỹ trồng cây 50 Điểm Xanh được lấy lô quy đổi khi lô thường thiếu. Đó là tiền khách đã trả trước; giao diện phải nói rõ (L4).
+  - OQ-9: thu hồi thưởng giới thiệu đã cấp bằng xu thì trừ lô quy đổi `ceil(xu/1000)`: mỗi lần ≤ 5 điểm (thưởng đơn 2) hoặc ≤ 100 điểm (mốc 10 người), nghĩa là ≤ 100.000đ mỗi người mời, và phần đó đã trộn vào lô quy đổi ở migration B nên không tách lại được. Phương án khác: không thu hồi thưởng xu cũ (Tubu chịu).
+- Lời báo khách mới/đổi cần reviewer Opus xem trước khi merge (quy tắc "customer messages"): `RETURN_APPROVED_POINTS`, `RETURN_APPROVED_WALLET_POINTS`, `CASHBACK_PAID`, `COMMUNITY_BEST_ANSWER`. Trên PROD, nếu admin đã sửa lời một mẫu thì migration giữ nguyên bản đó (chỉ đổi khi còn đúng bản seed cũ): cần kiểm tay.
+- Cổng deploy đo số thật (mục 5) vẫn mở.
