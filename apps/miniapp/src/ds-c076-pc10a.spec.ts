@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url';
  * legacy của css/tokens.css, không màu thô (hex/rgb), không import ZaUI ngoài khung trang, và emoji
  * chỉ còn khi là NỘI DUNG (hạng, lời chúc, chuỗi ngày), không làm icon chức năng.
  *
- * Danh sách chỉ gồm file của gói đã sạch hôm nay (loyalty, trang game và components/game/**; wheel.tsx
- * và rank-badge.tsx do lượt khác); mỗi lượt di cư thêm file của mình vào đây TRƯỚC khi sửa (đỏ → di cư → xanh). Bộ so khớp copy từ ds-legacy-vars-4b.spec.ts (cùng họ alias) và
- * từ scripts/uiux/static-scan.mjs (hex/rgb) để guard và số đo static-scan không lệch nhau.
+ * Danh sách gồm toàn bộ file của gói PC-10a (loyalty, trang game, components/game/**, vòng quay, badge hạng);
+ * file di cư sau thêm vào đây TRƯỚC khi sửa (đỏ → di cư → xanh). Bộ so khớp copy từ ds-legacy-vars-4b.spec.ts
+ * (cùng họ alias) và từ scripts/uiux/static-scan.mjs (hex/rgb) để guard và số đo static-scan không lệch nhau.
  */
 const GAME_FILES = [
   'src/pages/game.tsx',
@@ -39,7 +39,7 @@ const GAME_FILES = [
   'src/components/game/weekly-leaderboard.tsx',
   'src/components/game/harvest-celebration.tsx',
 ];
-const FILES_PC10A = ['src/pages/loyalty.tsx', ...GAME_FILES, 'src/components/wheel.tsx'];
+const FILES_PC10A = ['src/pages/loyalty.tsx', ...GAME_FILES, 'src/components/wheel.tsx', 'src/components/community/rank-badge.tsx'];
 
 /** Cho phép giữ emoji theo file: chỉ nội dung hạng/game/lời chúc, không làm icon chức năng. */
 const ALLOWED_EMOJI: Record<string, string[]> = {
@@ -63,6 +63,8 @@ const ALLOWED_EMOJI: Record<string, string[]> = {
   'src/components/game/harvest-celebration.tsx': ['🌳', '🌿'],
   // Vòng quay: 8 ô minh họa trên bánh xe và 🎉 trong hộp chúc mừng là nội dung trình bày; kết quả thật do backend trả về.
   'src/components/wheel.tsx': ['🌿', '🎁', '💧', '🪴', '🏷', '💚', '🍀', '🎉'],
+  // Badge hạng cộng đồng: emoji theo hạng 1..4 là nội dung của hạng.
+  'src/components/community/rank-badge.tsx': ['🌱', '🌿', '🌳', '🏆'],
 };
 
 /** Trang chỉ được lấy khung/điều hướng/snackbar từ zmp-ui; Box/Text/Button... dùng components/ui. */
@@ -152,7 +154,7 @@ describe('PC-10a — không màu thô (hex/rgb)', () => {
 });
 
 describe('PC-10a — chỉ lấy khung trang từ zmp-ui', () => {
-  it.each(FILES_PC10A.filter((f) => f.startsWith('src/pages/') || f.startsWith('src/components/game/') || f === 'src/components/wheel.tsx'))('%s', (file) => {
+  it.each(FILES_PC10A.filter((f) => f.startsWith('src/pages/') || f.startsWith('src/components/game/') || f === 'src/components/wheel.tsx' || f === 'src/components/community/rank-badge.tsx'))('%s', (file) => {
     expect(zmpUiImports(read(file)).filter((name) => !ZMP_UI_ALLOWED.has(name))).toEqual([]);
   });
 });
