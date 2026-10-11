@@ -21,6 +21,7 @@ const FILES_PC10C3 = [
   'src/components/wishlist-heart.tsx',
   'src/components/pull-to-refresh.tsx',
   'src/components/ui/time-input.tsx',
+  'src/components/ui/quantity-selector.tsx',
 ];
 
 const LEGACY = new RegExp(
