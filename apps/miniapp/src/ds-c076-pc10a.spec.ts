@@ -39,7 +39,7 @@ const GAME_FILES = [
   'src/components/game/weekly-leaderboard.tsx',
   'src/components/game/harvest-celebration.tsx',
 ];
-const FILES_PC10A = ['src/pages/loyalty.tsx', ...GAME_FILES];
+const FILES_PC10A = ['src/pages/loyalty.tsx', ...GAME_FILES, 'src/components/wheel.tsx'];
 
 /** Cho phép giữ emoji theo file: chỉ nội dung hạng/game/lời chúc, không làm icon chức năng. */
 const ALLOWED_EMOJI: Record<string, string[]> = {
@@ -61,6 +61,8 @@ const ALLOWED_EMOJI: Record<string, string[]> = {
   'src/components/game/season-leaderboard.tsx': ['🥇', '🥈', '🥉'],
   'src/components/game/weekly-leaderboard.tsx': ['🥇', '🥈', '🥉', '🌳', '🔥'],
   'src/components/game/harvest-celebration.tsx': ['🌳', '🌿'],
+  // Vòng quay: 8 ô minh họa trên bánh xe và 🎉 trong hộp chúc mừng là nội dung trình bày; kết quả thật do backend trả về.
+  'src/components/wheel.tsx': ['🌿', '🎁', '💧', '🪴', '🏷', '💚', '🍀', '🎉'],
 };
 
 /** Trang chỉ được lấy khung/điều hướng/snackbar từ zmp-ui; Box/Text/Button... dùng components/ui. */
@@ -150,7 +152,7 @@ describe('PC-10a — không màu thô (hex/rgb)', () => {
 });
 
 describe('PC-10a — chỉ lấy khung trang từ zmp-ui', () => {
-  it.each(FILES_PC10A.filter((f) => f.startsWith('src/pages/') || f.startsWith('src/components/game/')))('%s', (file) => {
+  it.each(FILES_PC10A.filter((f) => f.startsWith('src/pages/') || f.startsWith('src/components/game/') || f === 'src/components/wheel.tsx'))('%s', (file) => {
     expect(zmpUiImports(read(file)).filter((name) => !ZMP_UI_ALLOWED.has(name))).toEqual([]);
   });
 });
