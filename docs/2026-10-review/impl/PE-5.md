@@ -1,6 +1,6 @@
 # PE-5: Dòng thu hồi ăn đúng lô gốc khi cron hết hạn điểm
 
-Nhánh `hz15/PE-5`, base `a7415605`. Chỉ đụng `apps/api` (loyalty, một hàm của wallet, test). Không migration, không sửa checkout, order-reversal, `schema.prisma`. Không push, không deploy, không ghi DB dùng chung (Postgres throwaway cổng 5596, đã xoá).
+Nhánh `hz15/PE-5`, base `a7415605`. Chỉ đụng `apps/api` (loyalty, một hàm của wallet và hai hằng tiền tố export thêm ở `wallet/referral-reward.ts` sau review, test). Không migration, không sửa checkout, order-reversal, `schema.prisma`. Không push, không deploy, không ghi DB dùng chung (Postgres throwaway cổng 5596, đã xoá).
 
 Commit: `1beb214c` (mục 1), `a745d9b1` (mục 2), `0800003f` (siết test mục 1 sau khi chạy đột biến), commit kế tiếp ghim hai ca hồi tố của mục 3 và báo cáo này. Mục 3 không đổi mã.
 
@@ -41,7 +41,7 @@ Không tồn tại: dòng trừ điểm khi xoá bài cộng đồng (`community
 Quyết định thiết kế:
 
 - Đơn khớp theo `refType` ORDER và `refId`, nhưng thêm điều kiện reason `ORDER_DELIVERED:` ở lô và `ORDER_REVERSED:` ở dòng thu hồi. Lý do (PE-3 đã nêu): cùng `refId` một đơn còn có `ORDER_REFUND_POINTS` (dương, lô mới có hạn riêng) và `ORDER_REDEEM` (âm, dòng tiêu). Khớp chỉ theo refType+refId thì `ORDER_REVERSED` có thể ăn nhầm lô hoàn khi lô đơn đã cạn, và `ORDER_REDEEM` bị coi là thu hồi. Tiền tố reason đã là hợp đồng của sổ (partial unique index `reason LIKE 'ORDER_DELIVERED:%'`, `lockedOrderPoints` dùng đúng hai tiền tố này). Đánh giá giữ khớp theo refType+refId thuần như PE-3.
-- Thưởng giới thiệu không khớp được theo refId (dòng thưởng mang "<đơn đầu>:<đơn hai>", dòng thu hồi mang id đơn bị trả, mốc thưởng thêm mang id người mời), nên khớp theo hậu tố reason: `REFERRAL_ORDER2:<id>` với `REFERRAL_ORDER2_REVOKE:<id>`; mốc có thêm số lượt và đời (đời 0 không có hậu tố ở dòng thưởng, dòng thu hồi luôn có `#<đời>`). Không sửa `wallet/referral-reward.ts` (ngoài nhóm file); hai tiền tố ORDER2 import từ đó, hai tiền tố mốc khai báo lại ở loyalty (không export được).
+- Thưởng giới thiệu không khớp được theo refId (dòng thưởng mang "<đơn đầu>:<đơn hai>", dòng thu hồi mang id đơn bị trả, mốc thưởng thêm mang id người mời), nên khớp theo hậu tố reason: `REFERRAL_ORDER2:<id>` với `REFERRAL_ORDER2_REVOKE:<id>`; mốc có thêm số lượt và đời (đời 0 không có hậu tố ở dòng thưởng, dòng thu hồi luôn có `#<đời>`). Bốn tiền tố (hai ORDER2, hai mốc) import từ `wallet/referral-reward.ts`; hai tiền tố mốc ban đầu khai báo lại ở loyalty vì chưa export, sau review đã export và import (xem mục Sau review).
 - Khoá bao gồm tên quy tắc nên các quy tắc không ăn chéo nhau. Reason hỏng (đời không phải số) thì không có khoá và đi FIFO như trước, không bao giờ tệ hơn hành vi cũ.
 
 ### Test
@@ -143,7 +143,7 @@ Chạy trong `apps/api` của worktree, PATH node 22, Postgres `tubu_it_pe5` c�
 |---|---|---|
 | `npx tsc --noEmit -p tsconfig.json` | 0 | sạch |
 | `npx eslint --max-warnings=0` 7 file đã sửa hoặc thêm | 0 | sạch |
-| `npx jest src/modules/loyalty src/modules/reviews src/modules/orders src/modules/wallet` | 0 | 26 suite, 624 test xanh |
+| `npx jest src/modules/loyalty src/modules/reviews src/modules/orders src/modules/wallet` | 0 | 26 suite, 625 test xanh (sau review) |
 | `DATABASE_URL=...5596/tubutree_it npx jest -c test/integration-race/jest.config.js --runInBand loyalty-refund-expiry pe3-reward-expiry pd3-order-reversal pd3-points-lots order-cancel cod-return-refund loyalty.race pe5-reversal-expiry referral-order2 pd3-reward-sources review-edit` | 0 | 11 suite, 106 test xanh |
 | lặp 3 lần `pe5-reversal-expiry` | 0, 0, 0 | 12/12 mỗi lần |
 
@@ -159,9 +159,39 @@ Lượt đỏ trước khi sửa (cùng lệnh, chỉ `pe5-reversal-expiry`): 8 
 
 ## Rủi ro còn lại
 
-1. Hồi tố: xem mục 3. Khách đã mất hai lần trước deploy không được hoàn tự động.
+1. Hồi tố: xem mục 3. Khách đã mất hai lần trước deploy không được hoàn tự động; khách có lô cũ có hạn đã qua (mục 3.4) bị trừ phần chênh ngay lượt cron đầu sau deploy, không có nhắc trước.
 2. `reverseOrderPoints` vẫn trừ `pointsEarned` dù lô `ORDER_DELIVERED` đã hết hạn và cron đã trừ, và không khoá dòng user trước khi quyết (khác `ReviewsService.remove` từ PE-3). Đơn bị trả/huỷ quá 12 tháng sau lúc giao (admin xử lý trả hàng muộn) mất điểm hai lần và `pointsBalance` có thể âm (decrement không guard). Có từ trước, replay mới không làm nó tệ hơn (dòng thu hồi ăn phần dư của lô khác như bản cũ). Đề xuất gói riêng làm giống `rewardExpired` của đánh giá: khoá user, bỏ thu hồi khi lô gốc đã hết hạn. Đây là đổi hành vi tiền nên không làm lẫn vào đây.
-3. Ghép thưởng giới thiệu dựa vào tiền tố reason của `wallet/referral-reward.ts`; hai tiền tố mốc khai báo lại ở loyalty. Đổi tên tiền tố ở một phía thì cơ chế rơi về FIFO (hành vi cũ, lỗi cũ quay lại, không sai số dư). Race `pe5-reversal-expiry` dùng hàm thu hồi và cấp thưởng thật nên sẽ đỏ khi hai phía lệch.
+3. Ghép thưởng giới thiệu dựa vào tiền tố reason của `wallet/referral-reward.ts`. Cả bốn tiền tố nay import từ đó (hai tiền tố mốc đã hết khai báo lại sau review), nên đổi tên tiền tố là đổi cả hai phía. Còn lại: nếu ai đó đổi định dạng reason (không chỉ tiền tố) mà không đổi `milestoneKey`/hậu tố ORDER2 thì cơ chế rơi về FIFO (lỗi cũ quay lại, không sai số dư); race `pe5-reversal-expiry` dùng hàm thu hồi và cấp thưởng thật nên sẽ đỏ.
 4. Cấu hình `loyalty.point_expire_months` trong (0, 1) cho 0 tháng (hết hạn ngay) ở mọi nguồn; khoá vẫn không có biên trong `SystemConfigService.RANGES`. Đề xuất thêm biên 1 đến 120 (file ngoài nhóm của gói).
-5. `loyalty-expiry.service.ts` nay import hằng số từ `wallet/referral-reward.ts` (file chỉ import kiểu từ Prisma, không có vòng phụ thuộc); gói loyalty phụ thuộc thêm một file wallet.
+5. `loyalty-expiry.service.ts` nay import bốn hằng số từ `wallet/referral-reward.ts` (file chỉ import kiểu từ Prisma, không có vòng phụ thuộc); gói loyalty phụ thuộc thêm một file wallet.
 6. Gói đụng điểm (tiền trả trước) nên cần review opus hai lượt. Chỗ nên nhìn kỹ: bảng `REVERSAL_RULES` (nhất là điều kiện reason của quy tắc đơn), cách `milestoneKey` đọc đời, và phân loại "đảo ngược hay tiêu" ở bảng kiểm kê.
+
+## Sau review
+
+Review độc lập cho hai finding minor, không có blocker hay major. Cả hai đã kiểm trên mã trước khi sửa và cả hai đúng.
+
+### Finding 1: mục 3 bỏ sót tác động hồi tố bị trừ sớm (đúng, đã ghi)
+
+Chạy `computePointExpiry` bản `a7415605` (chép ra file tạm, đã xoá) cạnh bản HEAD trên sổ của reviewer: tại 2026-06-01 bản cũ 0, bản mới 20; tại 2026-12-02 cả hai 20. Cron chọn ứng viên theo "có lô dương đã tới hạn" (`expirePoints`), lô cũ đã hết hạn nên user vào danh sách, `expireUser` tính 20 và số dư 20 qua guard `gte`, nên lượt 1 giờ sáng đầu tiên sau deploy trừ 20. Nhắc `POINTS_EXPIRING` chỉ xét hạn trong tương lai nên không nhắc. Đây là hành vi đúng của replay mới (phần thu hồi thuộc lô gốc, lô cũ đã hết hạn thật), không phải lỗi mã, nên không có test đỏ; thay vào đó ghim bằng một ca unit xanh ("lô cũ có hạn đã qua, hết hạn trước lô đơn") và ghi vào mục 3.
+
+Thêm điều reviewer chưa nêu: ca thu hồi ăn hết lô cũ (không để lại phần nào cho cron cũ) không có dòng `POINTS_EXPIRED` nào, nên một SQL lọc theo "đã có `POINTS_EXPIRED`" như (3) sẽ bỏ sót. SQL (4) mới không đòi `POINTS_EXPIRED`. Chạy trên năm sổ dựng tay ở DB throwaway rồi dọn sạch: gắn cờ đúng hai ca bị trừ sớm (có và không có `POINTS_EXPIRED`) và không gắn ba ca đối chứng; `computePointExpiry` cũ so mới tại `now()` cho 0 so 20 ở hai ca đầu, bằng nhau ở ba ca sau. SQL (4) là danh sách ứng viên; số điểm từng người phải đo bằng chạy hai bản `computePointExpiry`, chưa có script cho việc này trong repo (chưa làm, cần chạy trên dữ liệu thật mới có ý nghĩa).
+
+Commit: `e89088c7`.
+
+### Finding 2: hai tiền tố mốc khai báo lại (đúng, đã sửa vì rẻ và an toàn)
+
+`referral-reward.ts` khai báo `MILESTONE_PREFIX`, `MILESTONE_REVOKE_PREFIX` không export, `loyalty-expiry.service.ts` khai báo lại cùng giá trị. Đã export hai hằng và import vào loyalty, xoá hai bản sao; không đổi giá trị chuỗi nên không đổi hành vi, không có test đỏ (refactor). Việc này vượt "chỉ một hàm wallet" ghi lúc đầu, nhưng chỉ thêm từ khoá `export` vào hai hằng cục bộ của file đã được loyalty import từ trước.
+
+Commit: `dd5c89d2`.
+
+### Lệnh kiểm sau review (cùng môi trường, Postgres `tubu_it_pe5` cổng 5596 vừa dựng lại, `prisma migrate deploy` xong)
+
+| Lệnh | Exit | Kết quả |
+|---|---|---|
+| `npx tsc --noEmit -p tsconfig.json` | 0 | sạch |
+| `npx eslint --max-warnings=0` loyalty-expiry.service.ts, loyalty-expiry.service.spec.ts, wallet/referral-reward.ts | 0 | sạch |
+| `npx jest src/modules/loyalty src/modules/reviews src/modules/orders src/modules/wallet` | 0 | 26 suite, 625 test xanh (thêm 1 ca unit) |
+| `DATABASE_URL=...5596/tubutree_it npx jest -c test/integration-race/jest.config.js --runInBand` 11 spec như bảng trên | 0 | 11 suite, 106 test xanh |
+
+Chưa verify thêm: SQL (4) trên dữ liệu thật; không chạy Playwright và full suite (điều phối viên chạy).
+
