@@ -36,6 +36,7 @@ import { ProgressBar } from '../components/ui/progress-bar';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Heading, Text } from '../components/ui/text';
+import { ChoiceCard } from '../components/affiliate/choice-card';
 import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
 import {
   milestoneStatusText,
@@ -907,17 +908,17 @@ function WithdrawForm({
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <MethodChip
+        <ChoiceCard
           active={method === 'WALLET_BALANCE'}
           title="Ví Tubu"
           sub="Quy đổi 1:1, nhận ngay"
-          onClick={() => setMethod('WALLET_BALANCE')}
+          onPress={() => setMethod('WALLET_BALANCE')}
         />
-        <MethodChip
+        <ChoiceCard
           active={method === 'BANK'}
           title="Ngân hàng"
           sub={cfgLoaded ? `Tối thiểu ${formatVndShort(minBank)}` : 'Đang tải mốc tối thiểu…'}
-          onClick={() => setMethod('BANK')}
+          onPress={() => setMethod('BANK')}
         />
       </div>
 
@@ -963,45 +964,6 @@ function WithdrawForm({
           : `Rút ${formatVnd(amountNum)}`}
       </Button>
     </div>
-  );
-}
-
-function MethodChip({
-  active,
-  title,
-  sub,
-  onClick,
-}: {
-  active: boolean;
-  title: string;
-  sub: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      className="tubu-press"
-      onClick={onClick}
-      style={{
-        flex: 1,
-        minHeight: 44,
-        padding: 12,
-        textAlign: 'left',
-        fontFamily: 'inherit',
-        cursor: 'pointer',
-        borderRadius: 'var(--radius-control)',
-        border: `1.5px solid ${active ? 'var(--color-border-selected)' : 'var(--color-border-subtle)'}`,
-        background: active ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
-      }}
-    >
-      <Text variant="body-sm" tone={active ? 'brand' : 'primary'} as="div" style={BOLD}>
-        {title}
-      </Text>
-      <Text variant="caption" tone="tertiary" as="div">
-        {sub}
-      </Text>
-    </button>
   );
 }
 
