@@ -1,4 +1,4 @@
-import type { LoyaltyOverview } from '../../miniapp/src/services/account-api';
+import type { LoyaltyOverview, WalletSummary } from '../../miniapp/src/services/account-api';
 import type { OwnedBrand } from '../../miniapp/src/services/brand-owner-api';
 import type { DealerMe } from '../../miniapp/src/services/dealer-api';
 import type { QuestList, StorefrontEdit, StorefrontStats } from '../../miniapp/src/services/storefront-api';
@@ -22,11 +22,25 @@ const LOYALTY: LoyaltyOverview = {
   ],
 };
 
+const WALLET: WalletSummary = {
+  walletBalance: 0,
+  coinsBalance: 0,
+  cashbackPending: 0,
+  commissionApproved: 0,
+  commissionPending: 0,
+  xuConvertMultiplier: 1,
+  withdrawMin: 50000,
+  withdrawFee: 0,
+};
+
 const NOT_DEALER: DealerMe = { isDealer: false, status: 'NONE', tier: null, currentDebt: 0 };
 
 function mockProfile(api: MockApi): void {
   api.get('/me/loyalty', LOYALTY);
   api.get('/me/notifications', []);
+  // Thanh số dư của hub Cá nhân (C-086) đọc ví và mã giảm giá.
+  api.get('/me/wallet', WALLET);
+  api.get('/me/coupons', []);
   api.get('/dealer/me', NOT_DEALER);
 }
 
