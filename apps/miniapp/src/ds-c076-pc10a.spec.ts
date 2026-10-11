@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
  * file di cư sau thêm vào đây TRƯỚC khi sửa (đỏ → di cư → xanh). Bộ so khớp copy từ ds-legacy-vars-4b.spec.ts
  * (cùng họ alias) và từ scripts/uiux/static-scan.mjs (hex/rgb) để guard và số đo static-scan không lệch nhau.
  */
-const GAME_FILES = [
+const PINNED_GAME_FILES = [
   'src/pages/game.tsx',
   'src/components/game/game-tabs.tsx',
   'src/components/game/game-card.tsx',
@@ -39,6 +39,12 @@ const GAME_FILES = [
   'src/components/game/weekly-leaderboard.tsx',
   'src/components/game/harvest-celebration.tsx',
 ];
+// Hợp danh sách ghim ở trên với thư mục thật: file mới thêm vào components/game/ tự vào guard, khỏi phải nhớ sửa tay.
+const GAME_DIR = 'src/components/game/';
+const gameDirFiles = readdirSync(fileURLToPath(new URL(`../${GAME_DIR}`, import.meta.url)))
+  .filter((f) => /\.(ts|tsx)$/.test(f) && !/\.spec\.tsx?$/.test(f))
+  .map((f) => GAME_DIR + f);
+const GAME_FILES = [...new Set([...PINNED_GAME_FILES, ...gameDirFiles])].sort();
 const FILES_PC10A = ['src/pages/loyalty.tsx', ...GAME_FILES, 'src/components/wheel.tsx', 'src/components/community/rank-badge.tsx'];
 
 /** Cho phép giữ emoji theo file: chỉ nội dung hạng/game/lời chúc, không làm icon chức năng. */
@@ -62,7 +68,8 @@ const ALLOWED_EMOJI: Record<string, string[]> = {
   'src/components/game/weekly-leaderboard.tsx': ['🥇', '🥈', '🥉', '🌳', '🔥'],
   'src/components/game/harvest-celebration.tsx': ['🌳', '🌿'],
   // Vòng quay: 8 ô minh họa trên bánh xe và 🎉 trong hộp chúc mừng là nội dung trình bày; kết quả thật do backend trả về.
-  'src/components/wheel.tsx': ['🌿', '🎁', '💧', '⭐', '🪴', '🏷', '💚', '🍀', '🎉'],
+  'src/components/wheel.tsx': ['🌿', '🎁', '💧', '⭐', '🪴', '🏷', '💚', '🍀'],
+  'src/components/game/wheel-prize-sheet.tsx': ['🎉'],
   // Badge hạng cộng đồng: emoji theo hạng 1..4 là nội dung của hạng.
   'src/components/community/rank-badge.tsx': ['🌱', '🌿', '🌳', '🏆'],
 };
@@ -144,6 +151,13 @@ describe('PC-10a — bộ so khớp tự kiểm', () => {
   it('nhận ra emoji ngoài hai dải cũ (⭐ ⬆ ↩) nhưng không bắt mũi tên chữ → và dấu · ×', () => {
     expect(emojiIn('a ⭐ b ⬆ c ↩')).toEqual(['⭐', '⬆', '↩']);
     expect(emojiIn('Hôm nay → mai · ×2')).toEqual([]);
+  });
+});
+
+describe('PC-10a — danh sách file guard khớp thư mục', () => {
+  it('mọi file .ts/.tsx trong components/game đều bị guard, không có file ghim nào đã biến mất', () => {
+    expect(GAME_FILES).toEqual(expect.arrayContaining(gameDirFiles));
+    expect(gameDirFiles).toEqual(expect.arrayContaining(PINNED_GAME_FILES.filter((f) => f.startsWith(GAME_DIR))));
   });
 });
 

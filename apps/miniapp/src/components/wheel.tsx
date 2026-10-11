@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import type { SpinResult } from '../services/game-api';
 import { haptic } from '../utils/haptic';
-import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { Text } from './ui/text';
 
@@ -13,22 +12,22 @@ const SPIN_MS = 3600;
 export function WheelOfFortune({
   cost,
   onSpin,
+  onResult,
 }: {
   cost: number;
   onSpin: () => Promise<SpinResult>;
+  /** `null` = vừa bắt đầu lượt quay mới; có `prize` = kết quả thật của backend. Hộp kết quả do cấp trang dựng (xem WheelPrizeSheet). */
+  onResult: (prize: SpinResult['prize'] | null) => void;
 }) {
   const [rotation, setRotation] = useState(0);
   const [spinning, setSpinning] = useState(false);
-  // `prize` giữ nội dung và `resultOpen` điều khiển hiện/ẩn: BottomSheet cần còn nội dung trong lúc chạy hoạt ảnh đóng.
-  const [prize, setPrize] = useState<SpinResult['prize'] | null>(null);
-  const [resultOpen, setResultOpen] = useState(false);
   const lockRef = useRef(false);
 
   const handleSpin = async () => {
     if (lockRef.current) return;
     lockRef.current = true;
     setSpinning(true);
-    setResultOpen(false);
+    onResult(null);
     haptic('medium');
 
     // Quay tối thiểu 5 vòng + dừng ở 1 ô ngẫu nhiên (chỉ là hiệu ứng).
@@ -42,8 +41,7 @@ export function WheelOfFortune({
         new Promise((r) => setTimeout(r, SPIN_MS)),
       ]);
       haptic('medium');
-      setPrize(result.prize);
-      setResultOpen(true);
+      onResult(result.prize);
     } catch {
       /* lỗi đã hiển thị qua snackbar ở caller */
     } finally {
@@ -145,31 +143,6 @@ export function WheelOfFortune({
       >
         {spinning ? 'Đang quay...' : `Quay ngay (${cost} Điểm Xanh)`}
       </Button>
-
-      <BottomSheet
-        open={resultOpen}
-        onClose={() => setResultOpen(false)}
-        title="Chúc mừng!"
-        footer={
-          <Button fullWidth onPress={() => setResultOpen(false)}>
-            Tuyệt vời!
-          </Button>
-        }
-      >
-        {prize && (
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 56, lineHeight: 1.2 }}>🎉</div>
-            <Text variant="body-md" tone="brand" as="div" style={{ fontWeight: 600, marginTop: 4 }}>
-              {prize.name}
-            </Text>
-            {prize.rewardType === 'POINTS' && prize.value > 0 && (
-              <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
-                +{prize.value} Điểm Xanh đã vào tài khoản
-              </Text>
-            )}
-          </div>
-        )}
-      </BottomSheet>
     </div>
   );
 }

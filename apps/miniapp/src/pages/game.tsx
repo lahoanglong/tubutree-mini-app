@@ -27,8 +27,10 @@ import { MissionsCard } from '../components/game/missions-card';
 import { SeasonLeaderboard } from '../components/game/season-leaderboard';
 import { WeeklyLeaderboard } from '../components/game/weekly-leaderboard';
 import { HarvestCelebration } from '../components/game/harvest-celebration';
+import { WheelPrizeSheet } from '../components/game/wheel-prize-sheet';
 import { GAME_TABS, GameTabPanel, type GameTabKey } from '../components/game/game-tabs';
 import { useGameData } from '../components/game/use-game-data';
+import { useWheelPrize } from '../components/game/use-wheel-prize';
 import { useGameActions, type HarvestReward } from '../components/game/use-game-actions';
 
 export default function GamePage() {
@@ -62,6 +64,7 @@ export default function GamePage() {
       },
       onAnswered: (r, vars) => setReveal({ ...r, quizId: vars.id, choice: vars.choice }),
     });
+  const wheelPrize = useWheelPrize();
   const nextQuiz = () => {
     if (reveal) setAnsweredIds((prev) => new Set(prev).add(reveal.quizId));
     setReveal(null);
@@ -148,7 +151,7 @@ export default function GamePage() {
             onNext={nextQuiz}
           />
 
-          <LuckyWheelCard cost={10} onSpin={handleSpin} />
+          <LuckyWheelCard cost={10} onSpin={handleSpin} onResult={wheelPrize.onResult} />
 
           {/* Đổi vỏ chai lấy nước (§6.14.6) */}
           <GameLinkRow
@@ -220,6 +223,9 @@ export default function GamePage() {
           />
         </GameTabPanel>
       </div>
+
+      {/* Hộp kết quả vòng quay: ngoài khối tab để vẫn hiện khi người chơi đã đổi tab trong lúc quay. */}
+      <WheelPrizeSheet {...wheelPrize.sheet} />
 
       {/* Harvest celebration */}
       <HarvestCelebration

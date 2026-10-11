@@ -1,6 +1,8 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SpinResult } from '../services/game-api';
+import { useWheelPrize } from './game/use-wheel-prize';
+import { WheelPrizeSheet } from './game/wheel-prize-sheet';
 
 /**
  * Đặc tả hành vi vòng quay may mắn (C-076, PC-10a): nút quay khoá đúng lúc, kết quả chỉ hiện khi CẢ
@@ -11,7 +13,18 @@ import type { SpinResult } from '../services/game-api';
 const mocks = vi.hoisted(() => ({ haptic: vi.fn() }));
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 
-import { WheelOfFortune } from './wheel';
+import { WheelOfFortune as Wheel } from './wheel';
+
+/** Vòng quay + hộp kết quả nối đúng như trang Vườn Xanh (hộp do cấp trang dựng, không còn nằm trong vòng quay). */
+function WheelOfFortune({ cost, onSpin }: { cost: number; onSpin: () => Promise<SpinResult> }) {
+  const { onResult, sheet } = useWheelPrize();
+  return (
+    <>
+      <Wheel cost={cost} onSpin={onSpin} onResult={onResult} />
+      <WheelPrizeSheet {...sheet} />
+    </>
+  );
+}
 
 const SPIN_MS = 3600;
 const POINTS_PRIZE: SpinResult = { prize: { id: 'p1', name: 'Thưởng 50 Điểm Xanh', rewardType: 'POINTS', value: 50 } };
@@ -166,6 +179,30 @@ describe('WheelOfFortune — hộp kết quả', () => {
     await advance(0);
     expect(onSpin).toHaveBeenCalledTimes(2);
     await advance(SPIN_MS);
+  });
+});
+
+describe('WheelOfFortune — báo kết quả cho cấp trang', () => {
+  it('bắt đầu quay: onResult(null); đủ 3,6 giây và backend đã trả về: onResult(prize) đúng một lần', async () => {
+    const onResult = vi.fn();
+    render(<Wheel cost={20} onSpin={vi.fn().mockResolvedValue(POINTS_PRIZE)} onResult={onResult} />);
+    fireEvent.click(spinButton());
+    await advance(0);
+    expect(onResult).toHaveBeenCalledTimes(1);
+    expect(onResult).toHaveBeenLastCalledWith(null);
+    await advance(SPIN_MS - 100);
+    expect(onResult).toHaveBeenCalledTimes(1);
+    await advance(200);
+    expect(onResult).toHaveBeenCalledTimes(2);
+    expect(onResult).toHaveBeenLastCalledWith(POINTS_PRIZE.prize);
+  });
+
+  it('onSpin lỗi: chỉ có onResult(null) lúc bắt đầu, không bao giờ có prize', async () => {
+    const onResult = vi.fn();
+    render(<Wheel cost={20} onSpin={vi.fn().mockRejectedValue(new Error('Không đủ Điểm Xanh'))} onResult={onResult} />);
+    fireEvent.click(spinButton());
+    await advance(SPIN_MS);
+    expect(onResult.mock.calls).toEqual([[null]]);
   });
 });
 
