@@ -162,3 +162,60 @@ npx tsc --noEmit -p tsconfig.json -> exit 0;  npx eslint <file đã sửa> -> 0
 - Mốc cộng đồng "Cùng Tubu phủ xanh Cần Giờ" (tiêu đề, vùng, `treesToPlant`) nằm trong DB và do admin sửa; tiêu đề/vùng cụ thể có thể làm khách hiểu là sẽ trồng đúng tại Cần Giờ. Nếu chưa có đối tác thực hiện, nên đổi tên mốc ở trang quản trị thành tên chung hơn.
 - Khi có hợp đồng đối tác trồng cây + ngân sách: mới đưa lại chữ "trồng cây thật" và tên đối tác; lúc đó cần luồng đánh dấu `PLANTED` + báo cáo cho khách.
 - Muốn có lại perk "Ưu tiên hotline", "Beta tester", quà sinh nhật/hộp quà/sample: phải dựng quy trình trước (hàng đợi CSKH theo hạng, gắn hạng với chương trình beta, quy trình gửi quà), rồi mới thêm lại vào `TIERS` (test `tier-perks-seed.spec.ts` sẽ buộc khai báo cơ chế).
+
+## Mục 5-7/8 — C-096 /merchant, C-118 /beta, C-069 ui/primitives.tsx (Q-19)
+
+| Mục | Trạng thái | Commit |
+| --- | --- | --- |
+| C-096 web khách và miniapp không còn lối vào `/merchant`; trang giữ nguyên, noindex + Disallow | XONG (rà soát, mã đã sạch từ PC-7; thêm guard khoá lại) | 6eb2d07f |
+| C-118 xoá trang Beta Tester khỏi miniapp | XONG | d05785c1 |
+| C-069 xoá `components/ui/primitives.tsx` + spec | XONG | ee5ba135 |
+
+### C-096 `/merchant` (Q-19)
+Rà toàn `apps/web/src` ngoài `app/merchant`, `app/admin`, `components/admin`: header, footer, hero/trang chủ, `sitemap.ts`, `robots.ts`, trang tài khoản, trang đăng nhập + callback, `not-found.tsx`, `middleware.ts`, `lib/*`. Không có link, chuỗi đường dẫn hay chữ "Kênh Đối Tác" nào dẫn khách vào `/merchant` (PC-7 đã gỡ). Miniapp: không có route/navigate/webview tới `/merchant`; chỉ có API `/cashback/merchants` (sàn cashback, không liên quan).
+Đã có sẵn, giữ nguyên: `app/merchant/layout.tsx` có `robots: { index: false, follow: false }`; `PRIVATE_PATHS` trong `lib/site.ts` chứa `/merchant` nên `robots.ts` ra `Disallow: /merchant` và `/merchant/`; `sitemap.ts` chỉ liệt kê trang chủ, sản phẩm, gian hàng `/s/*`. Trang `/merchant` và API `merchant` không đổi, đối tác vẫn vào bằng URL.
+Không có mã nào phải sửa nên không có bước ĐỎ; test là test đặc tả (xanh trên bản cũ). Đã chứng minh guard có tác dụng: tạm chèn file `lib/zz-tmp-probe.ts` chứa `'/merchant/doanh-thu'` và `'Kênh Đối Tác'` thì 2 ca ĐỎ kê đúng file đó, rồi xoá file.
+Test thêm:
+- `apps/web/src/merchant-no-guest-entry.spec.ts` (6 ca): quét mã nguồn khách (trừ khu của đối tác/quản trị, `merchant-client.ts`, `site.ts`, `robots.ts`) không có chuỗi `'/merchant`, không có "Kênh Đối Tác"/"Cổng đối tác"; `sitemap()` không có `/merchant`, `/admin`; `robots()` chặn `/merchant` và `/merchant/`; metadata layout merchant noindex+nofollow.
+- `apps/miniapp/src/no-merchant-web-entry.spec.ts` (3 ca): miniapp không có `/merchant` hay chữ mời đối tác (`/cashback/merchants` không bị tính).
+
+### C-118 `/beta` (Q-19)
+- Xoá `pages/beta.tsx` (không có spec riêng), `services/beta-api.ts` (client chỉ trang beta dùng), route `/beta` và `lazy` import trong `components/app.tsx` (đường dẫn `/beta` giờ rơi vào trang 404 `*`), hàng "Beta Tester — trải nghiệm sớm" trong `pages/settings.tsx` (hàng "Sổ địa chỉ" thành hàng cuối, đặt `last` để bỏ viền dưới).
+- `scripts/uiux/routes.mjs`: bỏ `r('beta', '/beta')` (ngoài nhóm file của gói, giữ tối thiểu: harness chụp màn hình sẽ chụp trang 404 nếu còn).
+- Không có i18n key riêng cho beta (chữ nằm thẳng trong trang), không có e2e nào nhắc beta (`grep -rni beta apps/e2e` rỗng), không có link beta từ thông báo API.
+- API `apps/api/src/modules/beta/*`, bảng `BetaTester`/`BetaFeedback`, `scripts/audit/*` (seed persona, `routes.json`) giữ nguyên (PD-2 xử lý endpoint).
+Test (ĐỎ trước khi sửa, XANH sau):
+- `apps/miniapp/src/beta-removed.spec.ts` (4 ca, mới): không còn `pages/beta.tsx`, `services/beta-api.ts`; không route/import beta; không điều hướng hay gọi `/beta`; không còn chữ "Beta Tester". ĐỎ 4/4 trước.
+- `pages/settings.spec.tsx`: thêm ca nhóm Tài khoản chỉ có "Chỉnh sửa hồ sơ", "Sổ địa chỉ", không chữ Beta, hàng cuối không viền dưới. ĐỎ trước.
+
+### C-069 `ui/primitives.tsx`
+Bằng chứng 0 import: `grep -rn "primitives" apps scripts packages` (ts, tsx, mjs, json, css) chỉ ra `primitives.spec.tsx` (import chính nó) và 3 chú thích nhắc tên file ở `list-row.tsx`, `list-row.spec.tsx`, `button-guard.spec.ts`; không có barrel `index.ts` trong `components/ui`; không ai import `Txt/Btn/Stack/Row` từ nơi khác.
+- Xoá `primitives.tsx` (157 dòng) và `primitives.spec.tsx` (52 dòng).
+- Sửa 3 chú thích trỏ tới file đã xoá (không đổi hành vi).
+- Test `components/ui/primitives-removed.spec.ts` (2 ca, mới): file không còn, không ai import `.../primitives`. ĐỎ trước (ca 2 kê đúng `primitives.spec.tsx` là importer duy nhất).
+- Alias legacy (`--neutral-*`, `--primary-*`, `--leaf-*`, `--danger`...) mà primitives dùng cũng biến mất theo; `beta.tsx` cũng dùng `--neutral-*`/`--leaf-*`/`--radius-lg`. Mục 8 (dọn khối alias trong `tokens.css`) còn lại cho lượt khác.
+
+### Lệnh kiểm chứng
+```
+cd apps/web
+npx vitest run src/merchant-no-guest-entry.spec.ts src/lib/site.spec.ts src/components/site-header.spec.tsx src/components/site-footer.spec.tsx src/components/hide-on-portals.spec.tsx src/app/merchant/layout.spec.tsx
+  Test Files  6 passed (6) | Tests  27 passed (27)
+npx tsc --noEmit -> exit 0;  npx eslint src/merchant-no-guest-entry.spec.ts -> 0
+cd apps/miniapp
+npx vitest run src/no-merchant-web-entry.spec.ts src/beta-removed.spec.ts src/components/ui/primitives-removed.spec.ts src/pages/settings.spec.tsx src/pages/settings-legacy-sync.spec.tsx src/components/ui
+  Test Files  35 passed (35) | Tests  232 passed (232)
+npx vitest run src/ds-c076-pc10a.spec.ts ... src/ds-legacy-vars-4b.spec.ts src/index-html.spec.ts -> 9 files, 547 tests passed
+npx tsc --noEmit -> exit 0;  npx eslint src -> 0 lỗi, 0 cảnh báo
+```
+
+### Giả định
+- Q-19 "ghi rõ chỉ xem": trang `/merchant` đã nói "bạn chỉ xem, không tự chuyển trạng thái tại đây được" ở khu đơn hàng (`page.tsx:1201`), không thêm banner mới vì roadmap chỉ yêu cầu bỏ lối vào, noindex và Disallow.
+- `scripts/uiux/generated/miniapp-endpoints.json` (file sinh ra) còn 4 endpoint `/beta/*` cũ; chạy lại `node scripts/uiux/extract-endpoints.mjs miniapp` khi cần làm mới, không ảnh hưởng chạy thật. `scripts/uiux/scorecard.mjs` (điểm audit lịch sử) và `scripts/audit/routes.json` giữ nguyên.
+- Tài liệu lịch sử (`docs/2026-10-review/*`, `docs/audit-2026-09/*`) nhắc `primitives.tsx` giữ nguyên vì là báo cáo tại thời điểm viết.
+
+### Việc còn lại
+- Mục 8 (xoá khối "LEGACY v1 → v2 ALIAS" trong `tokens.css` + guard `ds-no-legacy-aliases.spec.ts`) do lượt khác làm; hai mục 6-7 đã gỡ 2 file dùng alias legacy.
+- PD-2: gỡ/đóng endpoint API `/beta/*` và module `beta`.
+
+### Việc cần chủ dự án
+- Không có quyết định mới. Nếu sau này muốn đối tác vào `/merchant` dễ hơn (đăng nhập riêng, link trong email mời), cần chốt hướng marketplace (Q-19 phương án 2) trước.
