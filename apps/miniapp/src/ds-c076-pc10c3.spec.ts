@@ -18,6 +18,7 @@ const FILES_PC10C3 = [
   'src/components/checkout/voucher-sheet.tsx',
   'src/components/qr-code.tsx',
   'src/components/subscribe-sheet.tsx',
+  'src/components/wishlist-heart.tsx',
 ];
 
 const LEGACY = new RegExp(

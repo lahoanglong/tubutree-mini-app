@@ -83,15 +83,21 @@ export function WishlistHeart({
           alignItems: 'center',
           justifyContent: 'center',
           ...(floating
-            ? { width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.9)', boxShadow: 'var(--shadow-sm)' }
+            ? {
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: 'color-mix(in srgb, var(--color-bg-surface) 90%, transparent)',
+                boxShadow: 'var(--elevation-1)',
+              }
             : {}),
         }}
       >
         <Heart
           size={size}
           strokeWidth={1.9}
-          color={liked ? 'var(--danger)' : 'var(--neutral-600)'}
-          fill={liked ? 'var(--danger)' : 'none'}
+          color={liked ? 'var(--color-text-danger)' : 'var(--color-text-secondary)'}
+          fill={liked ? 'var(--color-text-danger)' : 'none'}
         />
       </span>
     </button>
