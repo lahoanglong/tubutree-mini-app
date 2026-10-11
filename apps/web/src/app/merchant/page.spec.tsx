@@ -7,6 +7,11 @@ const mocks = vi.hoisted(() => ({
   auth: { user: { role: 'DEALER' } as { role: string } | null, status: 'authenticated', initialized: true },
   store: null as unknown,
   updateStore: vi.fn(),
+  getProducts: vi.fn(),
+  createProduct: vi.fn(),
+  removeResell: vi.fn(),
+  listOrders: vi.fn(),
+  setOrderStatus: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -14,12 +19,12 @@ vi.mock('@/lib/merchant-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/merchant-client')>()),
   getMerchantStore: async () => mocks.store,
   updateMerchantStore: (dto: unknown) => mocks.updateStore(dto),
-  getMerchantProducts: async () => ({
-    ownProducts: [],
-    resellProducts: [],
-    meta: { page: 1, limit: 20, ownTotal: 4, resellTotal: 2 },
-  }),
+  getMerchantProducts: (page: number) => mocks.getProducts(page),
+  createMerchantProduct: (dto: unknown) => mocks.createProduct(dto),
+  removeResellProduct: (id: string) => mocks.removeResell(id),
   countMerchantOrders: async () => 3,
+  listMerchantOrders: (status: string | undefined, page: number) => mocks.listOrders(status, page),
+  updateMerchantOrderStatus: (id: string, status: string) => mocks.setOrderStatus(id, status),
 }));
 
 const STORE = {
@@ -45,6 +50,31 @@ const STORE = {
   isPublished: true,
 };
 
+const PRODUCT = (id: string, approvalStatus: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  name: `SP ${id}`,
+  slug: `sp-${id}`,
+  description: 'Mô tả',
+  shortDesc: 'Mô tả ngắn',
+  basePrice: 120000,
+  images: [],
+  approvalStatus,
+  variations: [{ id: `v${id}`, sku: id, name: 'Mặc định', retailPrice: 120000, stock: 7 }],
+  createdAt: '2026-10-01T03:00:00.000Z',
+  ...extra,
+});
+const ORDER = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  code: `TT${id}`,
+  status,
+  total: 250000,
+  createdAt: '2026-10-01T03:00:00.000Z',
+  user: { fullName: 'Lan Anh', phone: '0900000001' },
+  shippingAddress: { recipient: 'Lan', phone: '0900000002', street: '1 Lê Lợi', ward: 'Bến Nghé', district: 'Quận 1', province: 'TP.HCM' },
+  items: [{ id: `i${id}`, productName: 'Dầu gội', variationName: '500ml', quantity: 2, unitPrice: 125000, backorderedQty: 1 }],
+  ...extra,
+});
+
 let ui: Rendered | undefined;
 const mount = async () => {
   ui = render(<MerchantPage />);
@@ -62,8 +92,21 @@ beforeEach(() => {
   mocks.auth = { user: { role: 'DEALER' }, status: 'authenticated', initialized: true };
   mocks.store = { ...STORE };
   mocks.updateStore = vi.fn(async () => ({}));
+  mocks.getProducts = vi.fn(async () => ({
+    ownProducts: [PRODUCT('a', 'APPROVED'), PRODUCT('b', 'REJECTED', { rejectReason: 'Thiếu chứng nhận' }), PRODUCT('c', 'PENDING_REVIEW')],
+    resellProducts: [PRODUCT('r1', 'APPROVED')],
+    meta: { page: 1, limit: 20, ownTotal: 4, resellTotal: 2 },
+  }));
+  mocks.createProduct = vi.fn(async () => ({}));
+  mocks.removeResell = vi.fn(async () => ({}));
+  mocks.listOrders = vi.fn(async () => ({
+    data: [ORDER('1', 'CONFIRMED'), ORDER('2', 'PACKED'), ORDER('3', 'SHIPPING'), ORDER('4', 'DELIVERED')],
+    meta: { page: 1, limit: 20, total: 4 },
+  }));
+  mocks.setOrderStatus = vi.fn(async () => ({}));
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   ui?.unmount();
   ui = undefined;
 });
@@ -227,5 +270,195 @@ describe('cổng đối tác — tab Kho hàng & Giao nhận', () => {
       warehouseWard: 'Tân Hưng',
       warehousePhone: '0912345678',
     });
+  });
+});
+
+describe('cổng đối tác — tab Quản lý sản phẩm', () => {
+  it('hai nút danh sách xuống dòng được ở 390px, cao 44px, tô forest khi chọn và báo aria-pressed', async () => {
+    const root = await mount();
+    await openTab('Quản Lý Sản Phẩm');
+    const own = byText(root, 'button', 'Sản phẩm do tôi đăng')!;
+    const resell = byText(root, 'button', 'Sản phẩm Tubu Tree bán lại')!;
+    expect(own.parentElement!.className).toContain('flex-wrap');
+    expect(own.className).toContain('min-h-[44px]');
+    expect(own.className).toContain('bg-forest-600');
+    expect(own.getAttribute('aria-pressed')).toBe('true');
+    expect(resell.getAttribute('aria-pressed')).toBe('false');
+    expect(resell.className).toContain('border-stone-450');
+    click(resell);
+    expect(resell.getAttribute('aria-pressed')).toBe('true');
+    expect(root.textContent).toContain('SP r1');
+  });
+
+  it('huy hiệu kiểm duyệt theo token success / danger / warning, bảng cuộn ngang trong khung riêng', async () => {
+    const root = await mount();
+    await openTab('Quản Lý Sản Phẩm');
+    expect(byText(root, 'span', 'Đã duyệt')!.className).toContain('bg-success-bg');
+    const rejected = byText(root, 'span', 'Từ chối: Thiếu chứng nhận')!;
+    expect(rejected.className).toContain('bg-danger-bg');
+    expect(rejected.getAttribute('title')).toBe('Thiếu chứng nhận');
+    expect(byText(root, 'span', 'Chờ Admin duyệt')!.className).toContain('bg-warning-bg');
+    const frame = root.querySelector('table')!.parentElement!;
+    expect(frame.className).toContain('overflow-x-auto');
+    expect(frame.className).toContain('rounded-card');
+    expect(root.querySelector('td.text-forest-700')!.textContent).toContain('120.000');
+  });
+
+  it('Gỡ khỏi shop: hỏi xác nhận, từ chối thì không gọi API, đồng ý gọi đúng sản phẩm; lỗi hiện thông báo danger', async () => {
+    const root = await mount();
+    await openTab('Quản Lý Sản Phẩm');
+    click(byText(root, 'button', 'Sản phẩm Tubu Tree bán lại'));
+    const remove = byText(root, 'button', 'Gỡ khỏi shop')!;
+    expect(remove.className).toContain('min-h-[44px]');
+    expect(remove.className).toContain('text-danger-fg');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    click(remove);
+    expect(confirm).toHaveBeenCalledWith('Gỡ sản phẩm SP r1 khỏi gian hàng?');
+    expect(mocks.removeResell).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    mocks.removeResell = vi.fn(async () => {
+      throw new Error('Không có quyền');
+    });
+    click(remove);
+    await flush();
+    expect(mocks.removeResell).toHaveBeenCalledWith('r1');
+    const alert = root.querySelector('[role="alert"]')!;
+    expect(alert.textContent).toContain('Không có quyền');
+    expect(alert.className).toContain('bg-danger-bg');
+  });
+
+  it('thanh phân trang: nút Trước/Sau cao 44px và chuyển trang gọi đúng số trang', async () => {
+    mocks.getProducts = vi.fn(async (page: number) => ({
+      ownProducts: [PRODUCT('a', 'APPROVED')],
+      resellProducts: [],
+      meta: { page, limit: 20, ownTotal: 45, resellTotal: 0 },
+    }));
+    const root = await mount();
+    await openTab('Quản Lý Sản Phẩm');
+    expect(root.textContent).toContain('Hiển thị 1–1/45');
+    const prev = byText(root, 'button', 'Trang trước')!;
+    const next = byText(root, 'button', 'Trang sau')!;
+    expect(prev.className).toContain('min-h-[44px]');
+    expect((prev as HTMLButtonElement).disabled).toBe(true);
+    click(next);
+    await flush();
+    expect(mocks.getProducts).toHaveBeenLastCalledWith(2);
+  });
+
+  it('Đăng sản phẩm mới: hộp thoại theo token (nền stone-900/40, rounded-sheet), nút Đóng có tên và cao 44px, gửi đúng dữ liệu', async () => {
+    const root = await mount();
+    await openTab('Quản Lý Sản Phẩm');
+    click(byText(root, 'button', 'Đăng sản phẩm mới'));
+    const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    expect(overlay.className).toContain('bg-stone-900/40');
+    expect(overlay.firstElementChild!.className).toContain('rounded-sheet');
+    const close = root.querySelector<HTMLButtonElement>('button[aria-label="Đóng"]')!;
+    expect(close.className).toContain('h-11');
+    typeInto(inputByLabel(overlay, 'Tên sản phẩm'), '  Nước rửa chén  ');
+    typeInto(inputByLabel(overlay, 'Nội dung mô tả chi tiết'), 'Chiết xuất bồ hòn');
+    typeInto(inputByLabel(overlay, 'URL hình ảnh'), ' https://img/x.png ');
+    const submit = byText(overlay, 'button', 'Gửi kiểm duyệt')!;
+    expect(submit.className).toContain('min-h-[44px]');
+    click(submit);
+    await flush();
+    expect(mocks.createProduct).toHaveBeenCalledWith({
+      name: 'Nước rửa chén',
+      description: 'Chiết xuất bồ hòn',
+      shortDesc: undefined,
+      basePrice: 100000,
+      stock: 50,
+      images: ['https://img/x.png'],
+      certifications: ['Thuần chay', 'Hữu cơ', 'Không thử nghiệm trên động vật'],
+    });
+    expect(root.querySelector('.fixed.inset-0')).toBeNull();
+  });
+
+  it('Đăng sản phẩm mới: lỗi từ API hiện thông báo danger và hộp thoại vẫn mở; Hủy đóng hộp thoại', async () => {
+    mocks.createProduct = vi.fn(async () => {
+      throw new Error('Giá không hợp lệ');
+    });
+    const root = await mount();
+    await openTab('Quản Lý Sản Phẩm');
+    click(byText(root, 'button', 'Đăng sản phẩm mới'));
+    const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    typeInto(inputByLabel(overlay, 'Tên sản phẩm'), 'SP');
+    typeInto(inputByLabel(overlay, 'Nội dung mô tả chi tiết'), 'Mô tả');
+    click(byText(overlay, 'button', 'Gửi kiểm duyệt'));
+    await flush();
+    const err = overlay.querySelector('[role="alert"]')!;
+    expect(err.textContent).toContain('Giá không hợp lệ');
+    expect(err.className).toContain('text-danger-fg');
+    click(byText(overlay, 'button', 'Hủy'));
+    expect(root.querySelector('.fixed.inset-0')).toBeNull();
+  });
+});
+
+describe('cổng đối tác — tab Đơn hàng thuộc kho', () => {
+  it('đối tác không phải ADMIN: ghi chú thông tin theo token info, không có nút chuyển trạng thái', async () => {
+    const root = await mount();
+    await openTab('Đơn Hàng Thuộc Kho');
+    const notice = Array.from(root.querySelectorAll('div')).find((d) => d.children.length === 0 && d.textContent?.includes('Đơn do kho Tubu Tree xử lý'))!;
+    expect(notice.className).toContain('bg-info-bg');
+    expect(root.textContent).toContain('Do kho Tubu xử lý');
+    expect(byText(root, 'button', 'Đã đóng gói')).toBeNull();
+    expect(byText(root, 'button', 'Bắt đầu giao')).toBeNull();
+    expect(byText(root, 'button', 'Đã giao')).toBeNull();
+  });
+
+  it('địa chỉ giao, huy hiệu trạng thái và chip Đặt trước giữ nội dung, dùng token DS v2', async () => {
+    const root = await mount();
+    await openTab('Đơn Hàng Thuộc Kho');
+    expect(root.textContent).toContain('Lan · 0900000002');
+    expect(root.textContent).toContain('1 Lê Lợi, Bến Nghé, Quận 1, TP.HCM');
+    expect(byText(root, 'span', 'Đặt trước 1')!.className).toContain('bg-warning-bg');
+    const frame = root.querySelector('table')!.parentElement!;
+    expect(frame.className).toContain('overflow-x-auto');
+  });
+
+  it('bộ lọc trạng thái có tên truy cập, cao 44px và gọi lại danh sách ở trang 1 theo trạng thái chọn', async () => {
+    const root = await mount();
+    await openTab('Đơn Hàng Thuộc Kho');
+    const select = root.querySelector<HTMLSelectElement>('select[aria-label="Lọc theo trạng thái đơn"]')!;
+    expect(select.className).toContain('min-h-[44px]');
+    selectValue(select, 'CONFIRMED');
+    await flush();
+    expect(mocks.listOrders).toHaveBeenLastCalledWith('CONFIRMED', 1);
+  });
+
+  it('ADMIN: mỗi trạng thái có đúng một nút chuyển bước, cao 44px, gọi đúng trạng thái kế tiếp', async () => {
+    mocks.auth = { user: { role: 'ADMIN' }, status: 'authenticated', initialized: true };
+    const root = await mount();
+    await openTab('Đơn Hàng Thuộc Kho');
+    const packed = byText(root, 'button', 'Đã đóng gói')!;
+    const shipping = byText(root, 'button', 'Bắt đầu giao')!;
+    const delivered = byText(root, 'button', 'Đã giao')!;
+    for (const b of [packed, shipping, delivered]) expect(b.className).toContain('min-h-[44px]');
+    expect(packed.className).toContain('bg-sage-700');
+    expect(shipping.className).toContain('bg-forest-800');
+    expect(delivered.className).toContain('bg-forest-600');
+    click(packed);
+    await flush();
+    expect(mocks.setOrderStatus).toHaveBeenLastCalledWith('1', 'PACKED');
+    click(shipping);
+    await flush();
+    expect(mocks.setOrderStatus).toHaveBeenLastCalledWith('2', 'SHIPPING');
+    click(delivered);
+    await flush();
+    expect(mocks.setOrderStatus).toHaveBeenLastCalledWith('3', 'DELIVERED');
+    expect(root.textContent).not.toContain('Do kho Tubu xử lý');
+  });
+
+  it('ADMIN: lỗi khi chuyển trạng thái hiện thông báo danger (role alert)', async () => {
+    mocks.auth = { user: { role: 'ADMIN' }, status: 'authenticated', initialized: true };
+    mocks.setOrderStatus = vi.fn(async () => {
+      throw new Error('Đơn đã bị huỷ');
+    });
+    const root = await mount();
+    await openTab('Đơn Hàng Thuộc Kho');
+    click(byText(root, 'button', 'Đã đóng gói'));
+    await flush();
+    const alert = root.querySelector('[role="alert"]')!;
+    expect(alert.textContent).toContain('Đơn đã bị huỷ');
+    expect(alert.className).toContain('bg-danger-bg');
   });
 });

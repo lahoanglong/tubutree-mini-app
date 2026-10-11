@@ -44,7 +44,7 @@ import {
 } from '@/lib/merchant-client';
 import { pageRange } from '@/lib/admin-client';
 import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
-import { BTN_PRIMARY, INPUT_CLASS, TOUCH_H } from '@/components/admin/ui';
+import { BTN_LINK_DANGER, BTN_PRIMARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, TOUCH_H } from '@/components/admin/ui';
 import { DEFAULT_THEME_COLOR, THEME_COLORS } from './theme-colors';
 
 const POPULAR_BANKS = [
@@ -62,6 +62,14 @@ const POPULAR_BANKS = [
 
 // Nhãn đứng riêng một dòng phía trên (không bọc `label`), nên ô nhập tự chừa khoảng cách và cao 44px khi chạm.
 const MERCHANT_INPUT = `mt-1 ${INPUT_CLASS} ${TOUCH_H}`;
+
+const subTabClass = (active: boolean) =>
+  `rounded-control px-3 py-1.5 text-xs font-medium ${TOUCH_H} ${
+    active ? 'bg-forest-600 text-stone-0' : 'border border-stone-450 bg-stone-0 text-stone-700'
+  }`;
+
+// Nút chuyển trạng thái đơn (chỉ ADMIN thấy): cùng họ nút hành động của order-status-actions bên admin.
+const ORDER_ACTION = `${TOUCH_H} rounded-control px-2.5 py-1 text-xs font-medium text-stone-0 disabled:opacity-50`;
 
 type MerchantTab = 'store' | 'banking' | 'warehouse' | 'products' | 'orders';
 
@@ -817,20 +825,18 @@ function ProductsTab({ store }: { store: MerchantStore }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setSubTab('own')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-              subTab === 'own' ? 'bg-green-600 text-white' : 'border border-neutral-200 bg-white text-neutral-700'
-            }`}
+            aria-pressed={subTab === 'own'}
+            className={subTabClass(subTab === 'own')}
           >
             Sản phẩm do tôi đăng ({q.data?.meta?.ownTotal ?? 0})
           </button>
           <button
             onClick={() => setSubTab('resell')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-              subTab === 'resell' ? 'bg-green-600 text-white' : 'border border-neutral-200 bg-white text-neutral-700'
-            }`}
+            aria-pressed={subTab === 'resell'}
+            className={subTabClass(subTab === 'resell')}
           >
             Sản phẩm Tubu Tree bán lại ({q.data?.meta?.resellTotal ?? 0})
           </button>
@@ -839,27 +845,27 @@ function ProductsTab({ store }: { store: MerchantStore }) {
         {subTab === 'own' && (
           <button
             onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-leaf-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-leaf-700"
+            className={`inline-flex items-center gap-1.5 rounded-control bg-forest-600 px-3.5 py-1.5 text-xs font-semibold text-stone-0 hover:bg-forest-700 ${TOUCH_H}`}
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Đăng sản phẩm mới</span>
           </button>
         )}
       </div>
 
       {removeError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div role="alert" className="rounded-control border border-danger-fg bg-danger-bg px-3 py-2 text-sm text-danger-fg">
           {removeError}
         </div>
       )}
 
-      {q.isLoading && <p className="text-sm text-neutral-500">Đang tải danh sách sản phẩm…</p>}
-      {q.isError && <p className="text-sm text-red-600">Không tải được danh sách sản phẩm.</p>}
+      {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách sản phẩm…</p>}
+      {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách sản phẩm.</p>}
 
       {subTab === 'own' && q.data && (
-        <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0 shadow-card">
           <table className="w-full text-left text-sm">
-            <thead className="bg-neutral-50 text-xs text-neutral-500">
+            <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
                 <th className="px-3 py-2 font-medium">Sản phẩm</th>
                 <th className="px-3 py-2 font-medium">Giá bán</th>
@@ -868,10 +874,10 @@ function ProductsTab({ store }: { store: MerchantStore }) {
                 <th className="px-3 py-2 font-medium">Ngày đăng</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100">
+            <tbody className="divide-y divide-stone-100">
               {q.data.ownProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-xs text-neutral-400">
+                  <td colSpan={5} className="py-8 text-center text-xs text-stone-500">
                     Bạn chưa đăng sản phẩm riêng nào. Bấm &quot;Đăng sản phẩm mới&quot; để bắt đầu.
                   </td>
                 </tr>
@@ -879,29 +885,29 @@ function ProductsTab({ store }: { store: MerchantStore }) {
                 q.data.ownProducts.map((p) => {
                   const badge =
                     p.approvalStatus === 'APPROVED' ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-leaf-100 px-2 py-0.5 text-xs font-semibold text-leaf-800">
-                        <CheckCircle2 className="h-3 w-3 text-leaf-600" /> Đã duyệt (Đang hiển thị)
+                      <span className="inline-flex items-center gap-1 rounded bg-success-bg px-2 py-0.5 text-xs font-semibold text-success-fg">
+                        <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Đã duyệt (Đang hiển thị)
                       </span>
                     ) : p.approvalStatus === 'REJECTED' ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800" title={p.rejectReason ?? ''}>
-                        <AlertCircle className="h-3 w-3 text-red-600" /> Từ chối: {p.rejectReason}
+                      <span className="inline-flex items-center gap-1 rounded bg-danger-bg px-2 py-0.5 text-xs font-semibold text-danger-fg" title={p.rejectReason ?? ''}>
+                        <AlertCircle className="h-3 w-3" aria-hidden="true" /> Từ chối: {p.rejectReason}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                        <Clock className="h-3 w-3 text-amber-600" /> Chờ Admin duyệt
+                      <span className="inline-flex items-center gap-1 rounded bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-fg">
+                        <Clock className="h-3 w-3" aria-hidden="true" /> Chờ Admin duyệt
                       </span>
                     );
 
                   return (
-                    <tr key={p.id} className="hover:bg-neutral-50/50">
+                    <tr key={p.id} className="hover:bg-stone-50/50">
                       <td className="px-3 py-2.5">
-                        <div className="font-semibold text-neutral-900">{p.name}</div>
-                        {p.shortDesc && <div className="text-xs text-neutral-500 line-clamp-1">{p.shortDesc}</div>}
+                        <div className="font-semibold text-stone-900">{p.name}</div>
+                        {p.shortDesc && <div className="line-clamp-1 text-xs text-stone-500">{p.shortDesc}</div>}
                       </td>
-                      <td className="px-3 py-2.5 font-semibold text-leaf-700">{formatVnd(p.basePrice)}</td>
-                      <td className="px-3 py-2.5 text-xs text-neutral-600">{p.variations?.[0]?.stock ?? '—'}</td>
+                      <td className="px-3 py-2.5 font-semibold text-forest-700">{formatVnd(p.basePrice)}</td>
+                      <td className="px-3 py-2.5 text-xs text-stone-600">{p.variations?.[0]?.stock ?? '—'}</td>
                       <td className="px-3 py-2.5">{badge}</td>
-                      <td className="px-3 py-2.5 text-xs text-neutral-400">
+                      <td className="px-3 py-2.5 text-xs text-stone-500">
                         {new Date(p.createdAt).toLocaleDateString('vi-VN')}
                       </td>
                     </tr>
@@ -914,19 +920,19 @@ function ProductsTab({ store }: { store: MerchantStore }) {
       )}
 
       {subTab === 'resell' && q.data && (
-        <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0 shadow-card">
           <table className="w-full text-left text-sm">
-            <thead className="bg-neutral-50 text-xs text-neutral-500">
+            <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
                 <th className="px-3 py-2 font-medium">Sản phẩm Tubu Tree</th>
                 <th className="px-3 py-2 font-medium">Giá bán</th>
                 <th className="px-3 py-2 font-medium text-right">Thao tác</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100">
+            <tbody className="divide-y divide-stone-100">
               {q.data.resellProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="py-8 text-center text-xs text-neutral-400">
+                  <td colSpan={3} className="py-8 text-center text-xs text-stone-500">
                     Bạn chưa chọn bán lại sản phẩm Tubu Tree nào trên gian hàng.
                   </td>
                 </tr>
@@ -934,9 +940,9 @@ function ProductsTab({ store }: { store: MerchantStore }) {
                 q.data.resellProducts.map((p) => (
                   <tr key={p.id}>
                     <td className="px-3 py-2.5">
-                      <div className="font-semibold text-neutral-900">{p.name}</div>
+                      <div className="font-semibold text-stone-900">{p.name}</div>
                     </td>
-                    <td className="px-3 py-2.5 font-semibold text-leaf-700">{formatVnd(p.basePrice)}</td>
+                    <td className="px-3 py-2.5 font-semibold text-forest-700">{formatVnd(p.basePrice)}</td>
                     <td className="px-3 py-2.5 text-right">
                       <button
                         onClick={() => {
@@ -945,9 +951,9 @@ function ProductsTab({ store }: { store: MerchantStore }) {
                           }
                         }}
                         disabled={removeMut.isPending}
-                        className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline disabled:opacity-50"
+                        className={`${BTN_LINK_DANGER} gap-1 text-xs`}
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Trash2 className="h-3 w-3" aria-hidden="true" />
                         <span>{removeMut.isPending ? 'Đang gỡ…' : 'Gỡ khỏi shop'}</span>
                       </button>
                     </td>
@@ -1014,112 +1020,120 @@ function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuc
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-          <h3 className="font-bold text-neutral-900">Đăng sản phẩm mới lên gian hàng</h3>
-          <button onClick={onClose} className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600">
-            <X className="h-4 w-4" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-sheet bg-stone-0 p-5 shadow-raised sm:p-6">
+        <div className="flex items-center justify-between gap-2 border-b border-stone-200 pb-3">
+          <h3 className="font-display font-semibold text-stone-900">Đăng sản phẩm mới lên gian hàng</h3>
+          <button
+            onClick={onClose}
+            aria-label="Đóng"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-stone-500 hover:bg-stone-100 hover:text-stone-700"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
-        <div className="mt-3 flex items-start gap-2 rounded-lg bg-blue-50 p-3 text-xs text-blue-800">
-          <Info className="h-4 w-4 shrink-0 text-blue-600 mt-0.5" />
+        <div className="mt-3 flex items-start gap-2 rounded-control bg-info-bg p-3 text-xs text-info-fg">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>Sản phẩm sẽ được gửi đến Admin Tubu Tree kiểm duyệt tiêu chuẩn xanh trong 24h trước khi hiển thị công khai.</span>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           <div>
-            <label className="block text-xs font-medium text-neutral-700">Tên sản phẩm *</label>
+            <label className="block text-xs font-medium text-stone-700">Tên sản phẩm *</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
               placeholder="Nước rửa chén bồ hòn sinh học 500ml..."
-              className="mt-1 w-full rounded border border-neutral-200 px-3 py-1.5 text-sm"
+              className={MERCHANT_INPUT}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs font-medium text-neutral-700">Giá bán (VNĐ) *</label>
+              <label className="block text-xs font-medium text-stone-700">Giá bán (VNĐ) *</label>
               <input
                 type="number"
                 value={basePrice}
                 onChange={(e) => setBasePrice(Number(e.target.value))}
                 required
                 min={1000}
-                className="mt-1 w-full rounded border border-neutral-200 px-3 py-1.5 text-sm font-semibold"
+                className={`${MERCHANT_INPUT} font-semibold`}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-neutral-700">Số lượng tồn kho ban đầu *</label>
+              <label className="block text-xs font-medium text-stone-700">Số lượng tồn kho ban đầu *</label>
               <input
                 type="number"
                 value={stock}
                 onChange={(e) => setStock(Number(e.target.value))}
                 required
                 min={1}
-                className="mt-1 w-full rounded border border-neutral-200 px-3 py-1.5 text-sm"
+                className={MERCHANT_INPUT}
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-neutral-700">Mô tả ngắn</label>
+            <label className="block text-xs font-medium text-stone-700">Mô tả ngắn</label>
             <input
               value={shortDesc}
               onChange={(e) => setShortDesc(e.target.value)}
               placeholder="Chiết xuất bồ hòn tự nhiên, an toàn cho da nhạy cảm..."
-              className="mt-1 w-full rounded border border-neutral-200 px-3 py-1.5 text-sm"
+              className={MERCHANT_INPUT}
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-neutral-700">Nội dung mô tả chi tiết *</label>
+            <label className="block text-xs font-medium text-stone-700">Nội dung mô tả chi tiết *</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               required
               rows={3}
               placeholder="Công dụng, thành phần, hướng dẫn sử dụng, hạn sử dụng..."
-              className="mt-1 w-full rounded border border-neutral-200 px-3 py-1.5 text-sm"
+              className={MERCHANT_INPUT}
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-neutral-700">Tiêu chuẩn / Chứng nhận xanh (phân cách bằng dấu phẩy)</label>
+            <label className="block text-xs font-medium text-stone-700">Tiêu chuẩn / Chứng nhận xanh (phân cách bằng dấu phẩy)</label>
             <input
               value={certifications}
               onChange={(e) => setCertifications(e.target.value)}
-              className="mt-1 w-full rounded border border-neutral-200 px-3 py-1.5 text-sm"
+              className={MERCHANT_INPUT}
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-neutral-700">URL hình ảnh sản phẩm</label>
+            <label className="block text-xs font-medium text-stone-700">URL hình ảnh sản phẩm</label>
             <input
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
               placeholder="https://..."
-              className="mt-1 w-full rounded border border-neutral-200 px-3 py-1.5 text-sm"
+              className={MERCHANT_INPUT}
             />
           </div>
 
-          {msg && <p className="text-xs text-red-600">{msg}</p>}
+          {msg && (
+            <p role="alert" className="text-xs text-danger-fg">
+              {msg}
+            </p>
+          )}
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-neutral-100">
+          <div className="flex justify-end gap-2 border-t border-stone-200 pt-3">
             <button
               type="button"
               onClick={onClose}
-              className="rounded border border-neutral-200 px-4 py-1.5 text-xs font-medium text-neutral-700"
+              className={`${TOUCH_H} rounded-control border border-stone-450 bg-stone-0 px-4 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50`}
             >
               Hủy
             </button>
             <button
               type="submit"
               disabled={mut.isPending}
-              className="rounded bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:bg-neutral-300"
+              className={`${TOUCH_H} rounded-control bg-forest-600 px-4 py-1.5 text-xs font-semibold text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500`}
             >
               {mut.isPending ? 'Đang gửi…' : 'Gửi kiểm duyệt'}
             </button>
@@ -1176,23 +1190,24 @@ function OrdersTab({ store }: { store: MerchantStore }) {
   return (
     <div className="space-y-4">
       {updateError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div role="alert" className="rounded-control border border-danger-fg bg-danger-bg px-3 py-2 text-sm text-danger-fg">
           {updateError}
         </div>
       )}
       {!isAdmin && (
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-800">
+        <div className="rounded-control border border-info-fg bg-info-bg px-3 py-2 text-xs text-info-fg">
           Đơn do kho Tubu Tree xử lý giao nhận nên hệ thống ẩn bớt tên/SĐT đầy đủ và địa chỉ chi
           tiết của khách, chỉ hiện khu vực (Phường/Quận/Tỉnh). Trạng thái đơn cũng do kho Tubu tự
           cập nhật — bạn chỉ xem, không tự chuyển trạng thái tại đây được.
         </div>
       )}
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-neutral-900">Đơn Hàng Xuất Phát Từ Kho Của Bạn</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-display font-semibold text-stone-900">Đơn Hàng Xuất Phát Từ Kho Của Bạn</h3>
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="rounded border border-neutral-200 bg-white px-3 py-1.5 text-xs"
+          aria-label="Lọc theo trạng thái đơn"
+          className={`${FIELD_CLASS} ${TOUCH_H} text-xs`}
         >
           <option value="">Tất cả trạng thái</option>
           <option value="CONFIRMED">Chờ đóng gói (Đã xác nhận)</option>
@@ -1202,13 +1217,13 @@ function OrdersTab({ store }: { store: MerchantStore }) {
         </select>
       </div>
 
-      {q.isLoading && <p className="text-sm text-neutral-500">Đang tải đơn hàng…</p>}
-      {q.isError && <p className="text-sm text-red-600">Không tải được danh sách đơn hàng.</p>}
+      {q.isLoading && <p className="text-sm text-stone-500">Đang tải đơn hàng…</p>}
+      {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách đơn hàng.</p>}
 
       {q.data && (
-        <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0 shadow-card">
           <table className="w-full text-left text-sm">
-            <thead className="bg-neutral-50 text-xs text-neutral-500">
+            <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
                 <th className="px-3 py-2.5 font-medium">Mã đơn</th>
                 <th className="px-3 py-2.5 font-medium">Khách hàng</th>
@@ -1217,20 +1232,20 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                 <th className="px-3 py-2.5 font-medium text-right">Cập nhật đơn</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100">
+            <tbody className="divide-y divide-stone-100">
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-xs text-neutral-400">
+                  <td colSpan={5} className="py-8 text-center text-xs text-stone-500">
                     {status ? 'Không có đơn nào ở trạng thái này.' : 'Chưa có đơn hàng nào phát sinh cho kho của bạn.'}
                   </td>
                 </tr>
               ) : (
                 orders.map((o) => (
-                  <tr key={o.id} className="hover:bg-neutral-50/50">
-                    <td className="px-3 py-3 font-semibold text-neutral-900">{o.code}</td>
+                  <tr key={o.id} className="hover:bg-stone-50/50">
+                    <td className="px-3 py-3 font-semibold text-stone-900">{o.code}</td>
                     <td className="px-3 py-3">
-                      <div className="font-medium text-neutral-900">{o.user?.fullName ?? 'Khách mua'}</div>
-                      <div className="text-xs text-neutral-500">{o.user?.phone}</div>
+                      <div className="font-medium text-stone-900">{o.user?.fullName ?? 'Khách mua'}</div>
+                      <div className="text-xs text-stone-500">{o.user?.phone}</div>
                       {/* Địa chỉ giao: BE vẫn trả `shippingAddress` trong đơn, nhưng bảng này
                           chỉ hiện tên + SĐT → đối tác mở tab để ĐÓNG GÓI mà không có địa chỉ
                           ghi vận đơn, phải hỏi lại Tubu từng đơn.
@@ -1238,7 +1253,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                           A6-36) — chỉ còn ward/district/province, nên dòng "recipient · phone"
                           chỉ hiện khi còn ít nhất 1 trong 2 (tránh hiện trơ " · "). */}
                       {o.shippingAddress && (
-                        <div className="mt-1 text-xs text-neutral-600">
+                        <div className="mt-1 text-xs text-stone-600">
                           {(o.shippingAddress.recipient || o.shippingAddress.phone) && (
                             <div>
                               {[o.shippingAddress.recipient, o.shippingAddress.phone].filter(Boolean).join(' · ')}
@@ -1260,10 +1275,10 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                     <td className="px-3 py-3">
                       <div className="space-y-1">
                         {o.items?.map((it) => (
-                          <div key={it.id} className="text-xs text-neutral-700">
+                          <div key={it.id} className="text-xs text-stone-700">
                             • {it.productName}{it.variationName ? ` (${it.variationName})` : ''} <span className="font-semibold">x{it.quantity}</span> ({formatVnd(it.unitPrice)})
                             {!!it.backorderedQty && (
-                              <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                              <span className="ml-1.5 rounded-full bg-warning-bg px-1.5 py-0.5 text-[10px] font-semibold text-warning-fg">
                                 Đặt trước {it.backorderedQty}
                               </span>
                             )}
@@ -1272,7 +1287,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-700">
+                      <span className="rounded bg-stone-100 px-2 py-0.5 text-xs font-semibold text-stone-700">
                         {ORDER_STATUS_LABELS[o.status] ?? o.status}
                       </span>
                     </td>
@@ -1283,7 +1298,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                             <button
                               onClick={() => updateMut.mutate({ id: o.id, newStatus: 'PACKED' })}
                               disabled={updateMut.isPending}
-                              className="rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                              className={`${ORDER_ACTION} bg-sage-700 hover:brightness-90`}
                             >
                               Đã đóng gói
                             </button>
@@ -1292,7 +1307,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                             <button
                               onClick={() => updateMut.mutate({ id: o.id, newStatus: 'SHIPPING' })}
                               disabled={updateMut.isPending}
-                              className="rounded bg-purple-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+                              className={`${ORDER_ACTION} bg-forest-800 hover:brightness-90`}
                             >
                               Bắt đầu giao
                             </button>
@@ -1301,7 +1316,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                             <button
                               onClick={() => updateMut.mutate({ id: o.id, newStatus: 'DELIVERED' })}
                               disabled={updateMut.isPending}
-                              className="rounded bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                              className={`${ORDER_ACTION} bg-forest-600 hover:bg-forest-700`}
                             >
                               Đã giao
                             </button>
@@ -1310,7 +1325,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                       ) : (
                         // P0 A5-03=A6-02: BE đã chặn hẳn self-transition cho DEALER/AFFILIATE (403) —
                         // ẩn nút thay vì để đối tác bấm rồi nhận lỗi.
-                        <span className="text-xs italic text-neutral-400">Do kho Tubu xử lý</span>
+                        <span className="text-xs italic text-stone-500">Do kho Tubu xử lý</span>
                       )}
                     </td>
                   </tr>
@@ -1351,7 +1366,7 @@ function Pager({
   if (total === 0) return null;
   const r = pageRange(meta, total, shown);
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500">
+    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
       <span>{r.label}</span>
       {r.totalPages > 1 && (
         <div className="flex items-center gap-2">
@@ -1359,7 +1374,7 @@ function Pager({
             type="button"
             onClick={() => onPage(meta.page - 1)}
             disabled={!r.hasPrev || busy}
-            className="rounded border border-neutral-200 bg-white px-2.5 py-1 font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+            className={BTN_SMALL}
           >
             ← Trang trước
           </button>
@@ -1370,7 +1385,7 @@ function Pager({
             type="button"
             onClick={() => onPage(meta.page + 1)}
             disabled={!r.hasNext || busy}
-            className="rounded border border-neutral-200 bg-white px-2.5 py-1 font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+            className={BTN_SMALL}
           >
             Trang sau →
           </button>
