@@ -667,6 +667,13 @@ Tắt ghi xu trước khi migrate:
 
 Trước deploy (điều phối viên/chủ dự án): `pg_dump` PROD; chạy 3.3 (a)–(e) trên bản sao PROD; nếu (b) ≠ 0 thì đối soát trước; ghi số (a) vào báo cáo.
 
+Khi migration dừng giữa chừng:
+- `apps/api/Dockerfile:39` chạy `prisma migrate deploy && node dist/main.js` với `restart: unless-stopped`. Một migration fail thì `migrate deploy` thoát lỗi, container restart và lặp lại: CẢ image mới lẫn image cũ (cùng lệnh khởi động) crash-loop với P3009 (có migration failed chưa resolve) cho tới khi người vận hành xử lý.
+- Tìm migration lỗi: `SELECT migration_name, finished_at, logs FROM _prisma_migrations WHERE finished_at IS NULL;`. Đánh dấu: `pnpm exec prisma migrate resolve --rolled-back <tên migration lỗi>`.
+- Thứ tự cần nhớ: migration B (quy đổi xu) đã COMMIT trước khi migration khoá config (`20261012120000`) lỗi; `migrate resolve --rolled-back` chỉ đánh dấu migration lỗi để chạy lại được, KHÔNG hoàn tác B. Sau khi sửa dữ liệu (hoặc sửa migration) thì deploy lại. Muốn hoàn tác dữ liệu B phải dùng SQL 3.5 theo đúng điều kiện ở trên.
+- Khuyến nghị: chạy migration như một bước RIÊNG trước `up -d`: `docker compose -f docker-compose.vietnix.yml run --rm --no-deps api pnpm exec prisma migrate deploy`. Lỗi thì dừng tại đó, container cũ vẫn chạy (chưa bị thay), không crash-loop. Chỉ `up -d` khi bước này thành công.
+- Migration khoá config đã tự bỏ qua giá trị xấu (không dừng); chạy `apps/api/prisma/manual/pd3_measure_before_deploy.sql` mục (g)-(j) trên bản sao PROD để biết trước giá trị nào bị bỏ qua.
+
 Hoàn tác:
 - Trước khi có đơn tiêu điểm quy đổi: dựng lại image API trước PD-3 (KHÔNG chạy `migrate deploy` của bản cũ thì cột mới vẫn còn, code cũ bỏ qua) + chạy SQL 3.5. Web/miniapp quay bản cũ.
 - Sau khi đã có đơn tiêu điểm quy đổi: chỉ sửa tiến (hotfix BE), không hoàn tác dữ liệu.
