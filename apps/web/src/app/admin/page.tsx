@@ -501,13 +501,13 @@ function DashboardTab({
           </div>
         </div>
 
-        {/* Sản phẩm & Cây xanh */}
+        {/* Sản phẩm & Quỹ trồng cây */}
         <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
-          <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Sản phẩm & Rừng Xanh</div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Sản phẩm & Quỹ trồng cây</div>
           <div className="mt-2 text-2xl font-bold text-stone-900">{stats.totalProducts} <span className="text-xs font-normal text-stone-500">sản phẩm</span></div>
           <div className="mt-1 flex items-center gap-1 text-xs font-medium text-forest-700">
             <TreePine aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-            {stats.plantedTreesCount} cây thật góp PanNature
+            {stats.plantedTreesCount} cây góp quỹ trồng cây
           </div>
         </div>
       </div>
