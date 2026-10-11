@@ -25,6 +25,7 @@ import { useSearchState } from '../hooks/use-search-state';
 import { useSuggest } from '../hooks/use-suggest';
 import { vi } from '../i18n/vi';
 import { clearRecentSearches, pushRecentSearch, readRecentSearches } from '../utils/recent-searches';
+import { uniqueById } from '../utils/unique-by-id';
 import { forgetTrackedSearch, shouldTrackSearch } from '../utils/search-tracking';
 import {
   CLEAR_SEARCH_PATCH, activeFilterChips, activeFilterCount, changedFilterTypes, isBrowseRoot, toCatalogQuery, type FilterDraft,
@@ -82,7 +83,7 @@ export default function BrowsePage() {
     getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
   });
   const firstPage = products.data?.pages[0];
-  const list = products.data?.pages.flatMap((pg) => pg.data) ?? [];
+  const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
 
   // `search_performed` (quy tắc ở utils/search-tracking): mỗi khoá tìm ghi một lần. Trang Browse bị gỡ khi mở
   // PDP và mount lại khi Back với trang 1 còn trong cache — đó KHÔNG phải lượt tìm mới. Mở mới bằng PUSH

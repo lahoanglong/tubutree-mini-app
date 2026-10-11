@@ -315,6 +315,26 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     });
   });
 
+  describe('"Xem thêm" khi danh sách đổi giữa hai lần tải (phân trang theo số trang)', () => {
+    it('sản phẩm cuối trang 1 lặp lại ở đầu trang 2 (bán chạy xếp lại, hàng mới về) → lưới chỉ hiện một lần, không cảnh báo key trùng', async () => {
+      mocks.fetchCatalog.mockImplementation(async (q: { page: number }) =>
+        q.page === 1
+          ? { data: [card('p1', 'Nước rửa chén'), card('p2', 'Xà phòng')], meta: { page: 1, limit: 30, total: 32 } }
+          : { data: [card('p2', 'Xà phòng'), card('p3', 'Bột giặt')], meta: { page: 2, limit: 30, total: 32 } },
+      );
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        renderAt('/browse?q=nuoc');
+        fireEvent.click(await screen.findByRole('button', { name: 'Xem thêm' }));
+        expect(await screen.findByRole('button', { name: 'Bột giặt' })).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: 'Xà phòng' })).toHaveLength(1);
+        expect(errors.mock.calls.filter((c) => /same key|unique "key"/.test(String(c[0])))).toEqual([]);
+      } finally {
+        errors.mockRestore();
+      }
+    });
+  });
+
   describe('search_performed — một quy tắc: mỗi khoá tìm (q + sắp xếp + lọc) ghi một lần', () => {
     it('Back từ trang sản phẩm (Browse unmount rồi mount lại với cache cũ, cùng URL) KHÔNG ghi thêm; mở lại cùng từ khoá bằng PUSH thì ghi', async () => {
       renderWithPdp('/browse?q=nuoc');
