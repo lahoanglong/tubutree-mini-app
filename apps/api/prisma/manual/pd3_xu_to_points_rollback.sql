@@ -4,26 +4,49 @@
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f prisma/manual/pd3_xu_to_points_rollback.sql
 --
 -- Chỉ dùng khi ĐỦ hai điều kiện (spec PD-3 mục 3.5, 10):
---   1. Chưa có đơn nào tiêu điểm quy đổi: SELECT count(*) FROM orders WHERE "pointsUsedConverted" > 0  = 0
---      (khối bên dưới tự kiểm và dừng nếu sai). Sau khi khách đã tiêu lô quy đổi thì chỉ sửa tiến.
+--   1. Lô quy đổi chưa bị đổi ngoài ba kiểu "chỉ trừ bớt" (khối bên dưới tự kiểm và dừng nếu sai):
+--        a. không đơn nào tiêu điểm quy đổi: SELECT count(*) FROM orders WHERE "pointsUsedConverted" > 0 = 0;
+--        b. không dòng CỘNG nào vào lô CONVERTED ngoài dòng quy đổi gốc (refType XU_MIGRATION, refId = userId).
+--           Dòng cộng khác = gộp phiên khách (dòng quy đổi của khách sang user khác, refId ≠ userId), hoàn
+--           đơn xu cũ (ORDER_REFUND_XU), hoàn đơn đã tiêu điểm quy đổi, thưởng mới ghi vào lô quy đổi. Hoàn
+--           tác theo bảng chụp không biết trả xu cho chủ mới của dòng đó và để điểm thừa kẹt trong
+--           pointsConvertedBalance (code cũ không đọc cột này) nên khách mất giá trị trả trước;
+--        c. dòng TRỪ lô quy đổi không qua đơn (góp quỹ trồng cây, thu hồi thưởng giới thiệu) thì được phép:
+--           trả LEAST(coinsBefore, số điểm còn lại × 1000).
 --   2. Đã dựng lại image API trước PD-3 (code cũ không biết lô; KHÔNG chạy migrate deploy của bản cũ).
 --
--- Lô còn nguyên → trả đúng coinsBefore (khách không giữ phần làm tròn). Lô đã tiêu một phần → trả
--- LEAST(coinsBefore, số điểm còn lại × 1000). Chạy lại = không làm gì (mỗi user có tối đa một dòng
--- XU_MIGRATION_ROLLBACK ở mỗi sổ). Không xoá bảng chụp, không xoá dòng sổ nào; cột/enum mới để nguyên.
+-- Lô còn nguyên → trả đúng coinsBefore (khách không giữ phần làm tròn). Chạy lại = không làm gì (mỗi user có
+-- tối đa một dòng XU_MIGRATION_ROLLBACK ở mỗi sổ). Không xoá bảng chụp, không xoá dòng sổ nào; cột/enum mới
+-- để nguyên.
+--
+-- MỘT CHIỀU: sau khi chạy, chỉ được sửa tiến; KHÔNG chạy lại migration B. Migration B vẫn nằm trong
+-- _prisma_migrations, bảng chụp xu_points_conversions (PK userId) chặn quy đổi lần hai, và ràng buộc
+-- users_coins_frozen vừa bị gỡ không tự trở lại. Nếu về sau triển khai lại PD-3 trên cùng DB, code mới không
+-- đọc coinsBalance nên số xu đã trả lại sẽ mồ côi. Muốn triển khai lại cần migration quy đổi MỚI (không dùng
+-- lại B): chọn user có dòng XU_MIGRATION_ROLLBACK và coinsBalance > 0, id dòng sổ và refType riêng
+-- (không đụng khoá *_xu_migration_key), rồi thêm lại users_coins_frozen. Làm qua review riêng.
 
 ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "users_coins_frozen";
 
 DO $$
 DECLARE
   spent_orders INTEGER;
+  extra_credits INTEGER;
 BEGIN
   LOCK TABLE "users" IN SHARE ROW EXCLUSIVE MODE;
   LOCK TABLE "coin_transactions" IN SHARE ROW EXCLUSIVE MODE;
+  LOCK TABLE "points_transactions" IN SHARE ROW EXCLUSIVE MODE;
 
   SELECT count(*) INTO spent_orders FROM "orders" WHERE "pointsUsedConverted" > 0;
   IF spent_orders > 0 THEN
     RAISE EXCEPTION 'PD-3 rollback: % đơn đã tiêu điểm quy đổi; không hoàn tác dữ liệu, chỉ sửa tiến', spent_orders;
+  END IF;
+
+  SELECT count(*) INTO extra_credits FROM "points_transactions" p
+   WHERE p."lot" = 'CONVERTED' AND p."delta" > 0
+     AND NOT (p."refType" = 'XU_MIGRATION' AND p."refId" = p."userId");
+  IF extra_credits > 0 THEN
+    RAISE EXCEPTION 'PD-3 rollback: % dòng cộng vào lô quy đổi không phải dòng quy đổi gốc (gộp phiên khách, hoàn đơn xu cũ, ...); hoàn tác sẽ bỏ sót xu hoặc kẹt điểm của khách, chỉ sửa tiến', extra_credits;
   END IF;
 
   CREATE TEMP TABLE _pd3_rb ON COMMIT DROP AS
@@ -38,16 +61,19 @@ BEGIN
          NULL, 'CONVERTED', CURRENT_TIMESTAMP
     FROM _pd3_rb WHERE pts_back > 0;
 
+  -- bigint cho pts_back × 1000: nhánh ELSE chỉ chạy khi pts_back < pointsGranted nên hiện vừa INTEGER,
+  -- ép kiểu để không phụ thuộc vào thứ tự CASE.
   INSERT INTO "coin_transactions" ("id", "userId", "delta", "reason", "refType", "refId", "createdAt")
   SELECT 'ctx_xu2pts_rb_' || "userId", "userId",
-         CASE WHEN pts_back = "pointsGranted" THEN "coinsBefore" ELSE LEAST("coinsBefore", pts_back * 1000) END,
+         CASE WHEN pts_back = "pointsGranted" THEN "coinsBefore" ELSE LEAST("coinsBefore"::bigint, pts_back::bigint * 1000)::integer END,
          'XU_TO_POINTS_ROLLBACK', 'XU_MIGRATION_ROLLBACK', "userId", CURRENT_TIMESTAMP
     FROM _pd3_rb WHERE pts_back > 0;
 
   UPDATE "users" u
      SET "pointsConvertedBalance" = u."pointsConvertedBalance" - r.pts_back,
          "coinsBalance" = u."coinsBalance" +
-           CASE WHEN r.pts_back = r."pointsGranted" THEN r."coinsBefore" ELSE LEAST(r."coinsBefore", r.pts_back * 1000) END
+           CASE WHEN r.pts_back = r."pointsGranted" THEN r."coinsBefore"
+                ELSE LEAST(r."coinsBefore"::bigint, r.pts_back::bigint * 1000)::integer END
     FROM _pd3_rb r
    WHERE u."id" = r."userId" AND r.pts_back > 0;
 END $$;

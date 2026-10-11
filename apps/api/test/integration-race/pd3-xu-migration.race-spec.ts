@@ -205,6 +205,48 @@ describe('PD-3 migration B quy đổi xu → Điểm Xanh (real Postgres)', () =
     );
   });
 
+  /** Ảnh chụp cái mà hoàn tác có thể đổi: số dư hai ví và số dòng hoàn tác ở hai sổ. */
+  async function rollbackFootprint() {
+    const users = await q<U>(`SELECT "id", "coinsBalance", "pointsBalance", "pointsConvertedBalance" FROM ${SCHEMA}.users ORDER BY "id"`);
+    const [rows] = await q<{ p: number; c: number }>(`
+      SELECT (SELECT count(*)::int FROM ${SCHEMA}.points_transactions WHERE "refType" = 'XU_MIGRATION_ROLLBACK') AS p,
+             (SELECT count(*)::int FROM ${SCHEMA}.coin_transactions WHERE "refType" = 'XU_MIGRATION_ROLLBACK') AS c`);
+    return { users, rows };
+  }
+
+  it('T21 (review A1): hoàn tác TỪ CHỐI khi lô quy đổi của một khách đã được gộp phiên sang user khác', async () => {
+    // mergeGuestInto chuyển dòng sổ + số dư của khách sang target, refId vẫn là id khách. Hoàn tác theo bảng
+    // chụp sẽ thấy khách số dư 0 (không trả xu) và target giữ điểm thừa mà code cũ không đọc được.
+    const moveGuest = async (guest: string, from: string, to: string, pts: number) => {
+      await exec(`UPDATE ${SCHEMA}.points_transactions SET "userId" = '${to}' WHERE "id" = 'ptx_xu2pts_${guest}'`);
+      await exec(`UPDATE ${SCHEMA}.coin_transactions SET "userId" = '${to}' WHERE "id" IN ('seed_c_${guest}_0', 'ctx_xu2pts_${guest}')`);
+      await exec(`UPDATE ${SCHEMA}.users SET "pointsConvertedBalance" = "pointsConvertedBalance" - ${pts} WHERE "id" = '${from}'`);
+      await exec(`UPDATE ${SCHEMA}.users SET "pointsConvertedBalance" = "pointsConvertedBalance" + ${pts} WHERE "id" = '${to}'`);
+    };
+    await moveGuest('u1001', 'u1001', 'u999', 2);
+    expect(await invariants()).toEqual({ converted_drift: 0, standard_drift: 0, coin_drift: 0 });
+    const before = await rollbackFootprint();
+
+    await expect(runRollback()).rejects.toThrow(/dòng cộng vào lô quy đổi không phải dòng quy đổi gốc/);
+    expect(await rollbackFootprint()).toEqual(before);
+
+    await moveGuest('u1001', 'u999', 'u1001', 2); // bỏ gộp để các ca sau dùng dữ liệu sạch
+  });
+
+  it('T21 (review A1): hoàn tác TỪ CHỐI khi lô quy đổi nhận điểm không qua quy đổi (hoàn đơn xu cũ)', async () => {
+    await exec(`INSERT INTO ${SCHEMA}.points_transactions ("id", "userId", "delta", "reason", "refType", "refId", "lot")
+                VALUES ('it_refund_xu', 'u1000', 5, 'ORDER_REFUND_XU:IT', 'ORDER', 'o_legacy_xu', 'CONVERTED')`);
+    await exec(`UPDATE ${SCHEMA}.users SET "pointsConvertedBalance" = "pointsConvertedBalance" + 5 WHERE "id" = 'u1000'`);
+    const before = await rollbackFootprint();
+
+    await expect(runRollback()).rejects.toThrow(/dòng cộng vào lô quy đổi không phải dòng quy đổi gốc/);
+    expect(await rollbackFootprint()).toEqual(before);
+
+    await exec(`DELETE FROM ${SCHEMA}.points_transactions WHERE "id" = 'it_refund_xu'`);
+    await exec(`UPDATE ${SCHEMA}.users SET "pointsConvertedBalance" = "pointsConvertedBalance" - 5 WHERE "id" = 'u1000'`);
+    expect(await invariants()).toEqual({ converted_drift: 0, standard_drift: 0, coin_drift: 0 });
+  });
+
   it('T21: hoàn tác trả đúng coinsBefore khi lô còn nguyên, lô đã tiêu một phần trả phần còn lại; chạy 2 lần không nhân đôi', async () => {
     // u123456 đã tiêu 100/124 điểm quy đổi (dòng tiêu lô CONVERTED, không qua đơn).
     await exec(`INSERT INTO ${SCHEMA}.points_transactions ("id", "userId", "delta", "reason", "refType", "lot")
