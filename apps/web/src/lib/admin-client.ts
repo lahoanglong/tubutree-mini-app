@@ -892,6 +892,15 @@ export const listCustomerRefunds = (status?: AdminCustomerRefundStatus, page = 1
   apiFetch<Page<AdminCustomerRefund>>(
     `/admin/customer-refunds?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`,
   );
+/** Chỉ ghi sổ việc admin ĐÃ chuyển khoản tay (BE: PENDING -> COMPLETED một lần, thua race trả 400); không chuyển tiền. */
+export const markCustomerRefundPaid = (id: string, input: { bankRef?: string; note?: string } = {}) =>
+  apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/mark-paid`, {
+    method: 'POST',
+    body: {
+      ...(input.bankRef?.trim() ? { bankRef: input.bankRef.trim() } : {}),
+      ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+    },
+  });
 
 // ── Tích điểm tại quầy (POS) ──
 export interface PosMember {

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { listCustomerRefunds, type AdminCustomerRefund, type AdminCustomerRefundStatus } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import {
+  CUSTOMER_REFUNDS_QUERY_KEY,
   CUSTOMER_REFUND_EMPTY,
   CUSTOMER_REFUND_FILTERS,
   customerRefundView,
@@ -13,9 +14,9 @@ import {
 } from '@/lib/customer-refunds-admin';
 import type { Tone } from '@/lib/recycling';
 import { CopyButton } from '@/components/copy-button';
-import { BTN_SECONDARY, BTN_SMALL, Notice, ToneBadge, chipClass } from './ui';
+import { BTN_LINK, BTN_SECONDARY, BTN_SMALL, BTN_WARNING, Notice, ToneBadge, chipClass } from './ui';
+import { CustomerRefundPaidDialog, type MarkPaidOutcome } from './customer-refund-paid-dialog';
 
-export const CUSTOMER_REFUNDS_QUERY_KEY = 'admin-customer-refunds';
 const PAGE_SIZE = 20;
 
 const VIEW_TONE: Record<CustomerRefundView, Tone> = { PENDING: 'warning', COMPLETED: 'success', WALLET: 'info' };
@@ -35,6 +36,10 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleString('vi-VN');
 export function CustomerRefundsTab() {
   const [filter, setFilter] = useState<AdminCustomerRefundStatus>('PENDING');
   const [page, setPage] = useState(1);
+  const [target, setTarget] = useState<AdminCustomerRefund | null>(null);
+  const [flash, setFlash] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  // Dòng vừa ghi xong: BE đã COMPLETED nhưng danh sách chưa tải lại xong, ẩn nút để không mở hộp lần hai.
+  const [recorded, setRecorded] = useState<ReadonlySet<string>>(() => new Set());
   const q = useQuery({
     queryKey: [CUSTOMER_REFUNDS_QUERY_KEY, filter, page],
     queryFn: () => listCustomerRefunds(filter, page, PAGE_SIZE),
@@ -49,6 +54,19 @@ export function CustomerRefundsTab() {
   }, [outOfRange, totalPages]);
 
   const rows = outOfRange ? [] : (q.data?.data ?? []);
+
+  const onDone = (r: AdminCustomerRefund, outcome: MarkPaidOutcome) => {
+    setTarget(null);
+    if (outcome.kind === 'paid') {
+      setRecorded((prev) => new Set(prev).add(r.id));
+      setFlash({
+        tone: 'success',
+        text: `Đã ghi nhận chuyển khoản ${formatVnd(r.amount)} cho ${r.recipientName || r.phone || 'khách'} (đơn ${r.orderCode}).`,
+      });
+    } else {
+      setFlash({ tone: 'danger', text: outcome.message });
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -76,6 +94,17 @@ export function CustomerRefundsTab() {
         Khách chưa có tài khoản nhận tiền: chuyển khoản tay theo SĐT dưới đây. Màn này chỉ ghi sổ, không tự chuyển tiền.
       </p>
 
+      {flash && (
+        <Notice tone={flash.tone} role={flash.tone === 'danger' ? 'alert' : 'status'}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="min-w-0 break-words">{flash.text}</span>
+            <button type="button" className={`${BTN_LINK} text-xs`} onClick={() => setFlash(null)}>
+              Đóng
+            </button>
+          </div>
+        </Notice>
+      )}
+
       {q.isLoading && (
         <div role="status" aria-busy="true" aria-label="Đang tải danh sách hoàn tiền" className="space-y-2">
           {[0, 1, 2].map((i) => (
@@ -96,7 +125,15 @@ export function CustomerRefundsTab() {
 
       <div className="space-y-2">
         {rows.map((r) => (
-          <CustomerRefundRow key={r.id} refund={r} />
+          <CustomerRefundRow
+            key={r.id}
+            refund={r}
+            recorded={recorded.has(r.id)}
+            onMarkPaid={() => {
+              setFlash(null);
+              setTarget(r);
+            }}
+          />
         ))}
         {q.data && !outOfRange && rows.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
@@ -135,11 +172,23 @@ export function CustomerRefundsTab() {
           )}
         </div>
       )}
+
+      {target && (
+        <CustomerRefundPaidDialog refund={target} onClose={() => setTarget(null)} onDone={(outcome) => onDone(target, outcome)} />
+      )}
     </div>
   );
 }
 
-export function CustomerRefundRow({ refund: r }: { refund: AdminCustomerRefund }) {
+export function CustomerRefundRow({
+  refund: r,
+  recorded = false,
+  onMarkPaid,
+}: {
+  refund: AdminCustomerRefund;
+  recorded?: boolean;
+  onMarkPaid: () => void;
+}) {
   const view = customerRefundView(r);
   const manual = r.method === 'MANUAL_TRANSFER';
 
@@ -183,6 +232,18 @@ export function CustomerRefundRow({ refund: r }: { refund: AdminCustomerRefund }
         </div>
         <div>Phương thức: {manual ? 'Chuyển khoản thủ công' : 'Ví Tubu'}</div>
       </div>
+
+      {view === 'PENDING' && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-3">
+          {recorded ? (
+            <span className="text-xs text-stone-500">Đã ghi nhận, đang cập nhật danh sách…</span>
+          ) : (
+            <button type="button" className={BTN_WARNING} onClick={onMarkPaid}>
+              Đã chuyển khoản
+            </button>
+          )}
+        </div>
+      )}
 
       {r.status === 'COMPLETED' && (
         <div className="mt-2 space-y-0.5 border-t border-stone-200 pt-2 text-xs text-stone-500">
