@@ -15,6 +15,11 @@ const DAY = 864e5;
  * PD-3 Điểm Xanh hai lô trên Postgres thật (spec mục 2; T5, T7): mỗi lô một cột số dư, một sổ chung có
  * cột `lot`. Bất biến: pointsBalance == SUM(delta) lô STANDARD, pointsConvertedBalance == SUM(delta)
  * lô CONVERTED, kiểm sau mọi ca bằng findPointsLotDrift (cùng truy vấn với scripts/reconcile-points.ts).
+ *
+ * Phạm vi kiểm: user ca này chạm + mọi user đã có dòng quy đổi XU_MIGRATION. KHÔNG kiểm cả bảng users của
+ * DB test chung: các spec khác dựng user có số dư đặt thẳng, không kèm dòng sổ, nên cả bảng luôn "lệch".
+ * Kiểm cả bảng nằm ở pd3-xu-migration.race-spec.ts (invariants() trên schema nháp sạch) và ở
+ * scripts/reconcile-points.ts chạy trên dữ liệu thật.
  */
 describe('PD-3 Điểm Xanh hai lô (real Postgres)', () => {
   let moduleRef: TestingModule;
@@ -99,6 +104,26 @@ describe('PD-3 Điểm Xanh hai lô (real Postgres)', () => {
     const after2 = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(after2.pointsConvertedBalance).toBe(reward.pointsCost * 3);
     expect(after2.pointsBalance).toBe(after.pointsBalance);
+  });
+
+  it('T5: mọi user đã có dòng quy đổi XU_MIGRATION (kể cả dữ liệu spec khác để lại, dòng đã gộp sang user khác) khớp hai bất biến', async () => {
+    const user = await newUser();
+    await prisma.$transaction((tx) =>
+      applyPointsDelta(tx, {
+        userId: user.id,
+        delta: 3,
+        lot: 'CONVERTED',
+        reason: 'XU_TO_POINTS:3000',
+        refType: 'XU_MIGRATION',
+        refId: user.id,
+      }),
+    );
+
+    const owners = (
+      await prisma.pointsTransaction.findMany({ where: { refType: 'XU_MIGRATION' }, select: { userId: true }, distinct: ['userId'] })
+    ).map((r) => r.userId);
+    expect(owners).toContain(user.id);
+    expect(await findPointsLotDrift(prisma, owners)).toEqual([]);
   });
 
   it('T5: 10 lệnh trừ lô CONVERTED song song, đủ cho 2 → đúng 2 thành công, không âm, lô thường không đổi', async () => {
