@@ -13,7 +13,7 @@ import {
   type StorefrontEdit, type PickerProduct, type StorefrontCategory,
 } from '../services/storefront-api';
 import { getErrorMessage } from '../services/api';
-import { formatVnd, formatNumber } from '../utils/format';
+import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { DEFAULT_STOREFRONT_THEME_COLOR, STOREFRONT_THEME_COLORS } from '../utils/storefront-theme';
@@ -603,7 +603,7 @@ function StatsSection() {
   );
 }
 
-/** Section "Hành trình gian hàng" — chuỗi nhiệm vụ early-win thưởng TubuXu. */
+/** Section "Hành trình gian hàng" — chuỗi nhiệm vụ early-win thưởng Điểm Xanh. */
 function QuestSection() {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
@@ -612,7 +612,7 @@ function QuestSection() {
     mutationFn: (code: string) => claimQuest(code),
     onSuccess: (r) => {
       haptic('medium');
-      openSnackbar({ text: `+${formatNumber(r.rewardXu)} TubuXu 🎉`, type: 'success' });
+      openSnackbar({ text: `+${formatPoints(r.rewardPoints)} 🎉`, type: 'success' });
       void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -631,7 +631,7 @@ function QuestSection() {
         <Text variant="caption" tone="tertiary">{data.level}/{data.levelMax}</Text>
       </div>
       <Text variant="caption" tone="brand" as="div" style={{ marginBottom: 10 }}>
-        Đã nhận {formatNumber(data.totalEarnedXu)} TubuXu
+        Đã nhận {formatPoints(data.totalEarnedPoints)}
       </Text>
       {data.quests.map((q) => {
         // Guard chia-0: goal=0 (nhiệm vụ đã đạt sẵn) → 0/0=NaN hoặc x/0=Infinity → width lỗi. Đạt ngay = 100%.
@@ -654,7 +654,7 @@ function QuestSection() {
                   disabled={claimMut.isPending && claimMut.variables !== q.code}
                   onPress={() => claimMut.mutate(q.code)}
                 >
-                  +{formatNumber(q.rewardXu)} xu
+                  +{formatPoints(q.rewardPoints)}
                 </Button>
               ) : (
                 <Text variant="caption" tone="tertiary" style={{ whiteSpace: 'nowrap' }}>{q.progress}/{q.goal}</Text>

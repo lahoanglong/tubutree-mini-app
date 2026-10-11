@@ -62,11 +62,11 @@ const storefront = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const quests = {
-  level: 1, levelMax: 5, totalEarnedXu: 500,
+  level: 1, levelMax: 5, totalEarnedPoints: 4,
   quests: [
-    { code: 'Q1', title: 'Thêm 3 sản phẩm', hint: 'Thêm vào bộ sưu tập', goal: 3, progress: 3, done: true, claimed: false, rewardXu: 1500 },
-    { code: 'Q2', title: 'Đăng gian hàng', hint: 'Bấm Lưu & Đăng', goal: 1, progress: 0, done: false, claimed: false, rewardXu: 500 },
-    { code: 'Q3', title: 'Viết hồ sơ', hint: '', goal: 1, progress: 1, done: true, claimed: true, rewardXu: 2000 },
+    { code: 'Q1', title: 'Thêm 3 sản phẩm', hint: 'Thêm vào bộ sưu tập', goal: 3, progress: 3, done: true, claimed: false, rewardPoints: 2 },
+    { code: 'Q2', title: 'Đăng gian hàng', hint: 'Bấm Lưu & Đăng', goal: 1, progress: 0, done: false, claimed: false, rewardPoints: 2 },
+    { code: 'Q3', title: 'Viết hồ sơ', hint: '', goal: 1, progress: 1, done: true, claimed: true, rewardPoints: 2 },
   ],
 };
 const stats = {
@@ -102,7 +102,7 @@ beforeEach(() => {
     mocks.updateStorefront, mocks.publishStorefront, mocks.createCollection, mocks.updateCollection,
     mocks.deleteCollection, mocks.addItem, mocks.updateItem, mocks.removeItem, mocks.claimQuest,
   ]) fn.mockResolvedValue({});
-  mocks.claimQuest.mockResolvedValue({ claimed: true, code: 'Q1', rewardXu: 1500, coinsBalance: 2000 });
+  mocks.claimQuest.mockResolvedValue({ claimed: true, code: 'Q1', rewardPoints: 2, pointsBalance: 12 });
 });
 
 describe('Trang gian hàng CTV — cấu trúc trang (C-114)', () => {
@@ -447,23 +447,23 @@ describe('Thống kê và Hành trình gian hàng', () => {
     expect(await screen.findByText(/Chưa có đơn nào qua gian hàng/)).toBeInTheDocument();
   });
 
-  it('nhiệm vụ: cấp độ, tổng xu, tiến độ; nhiệm vụ đã nhận không còn ký tự ✓', async () => {
+  it('nhiệm vụ: cấp độ, tổng điểm, tiến độ; nhiệm vụ đã nhận không còn ký tự ✓', async () => {
     renderPage();
     expect(await screen.findByText('Hành trình gian hàng')).toBeInTheDocument();
     expect(screen.getByText('1/5')).toBeInTheDocument();
-    expect(screen.getByText('Đã nhận 500 TubuXu')).toBeInTheDocument();
+    expect(screen.getByText('Đã nhận 4 điểm')).toBeInTheDocument();
     expect(screen.getByText('0/1')).toBeInTheDocument();
     expect(screen.getByText('Viết hồ sơ')).toBeInTheDocument();
     expect(screen.getByText('Đã nhận')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/[✓✔]/);
   });
 
-  it('nhiệm vụ đã đạt: nút nhận thưởng gọi claimQuest và báo số xu', async () => {
+  it('nhiệm vụ đã đạt: nút nhận thưởng gọi claimQuest và báo số Điểm Xanh', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /\+1\.500 xu/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /\+2 điểm/ }));
     await waitFor(() => expect(mocks.claimQuest).toHaveBeenCalledWith('Q1'));
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+1.500 TubuXu 🎉', type: 'success' }),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+2 điểm 🎉', type: 'success' }),
     );
   });
 
@@ -472,13 +472,13 @@ describe('Thống kê và Hành trình gian hàng', () => {
       ...quests,
       quests: [
         quests.quests[0],
-        { code: 'Q4', title: 'Chia sẻ link', hint: '', goal: 1, progress: 1, done: true, claimed: false, rewardXu: 700 },
+        { code: 'Q4', title: 'Chia sẻ link', hint: '', goal: 1, progress: 1, done: true, claimed: false, rewardPoints: 5 },
       ],
     });
     mocks.claimQuest.mockReturnValue(new Promise(() => {}));
     renderPage();
-    const first = await screen.findByRole('button', { name: /\+1\.500 xu/ });
-    const second = screen.getByRole('button', { name: /\+700 xu/ });
+    const first = await screen.findByRole('button', { name: /\+2 điểm/ });
+    const second = screen.getByRole('button', { name: /\+5 điểm/ });
     fireEvent.click(first);
     await waitFor(() => expect(first).toHaveAttribute('aria-busy', 'true'));
     expect(second).toBeDisabled();
@@ -489,6 +489,6 @@ describe('Thống kê và Hành trình gian hàng', () => {
   it('nhiệm vụ chưa đạt không có nút nhận', async () => {
     renderPage();
     await screen.findByText('Hành trình gian hàng');
-    expect(screen.getAllByRole('button', { name: /xu$/ })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /điểm$/ })).toHaveLength(1);
   });
 });
