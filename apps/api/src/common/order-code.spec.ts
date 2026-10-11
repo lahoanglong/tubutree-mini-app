@@ -1,28 +1,21 @@
 import { randomInt } from 'node:crypto';
-import { AffiliateService } from '../modules/affiliate/affiliate.service';
-import { CheckoutService } from '../modules/checkout/checkout.service';
-import { DealerService } from '../modules/dealer/dealer.service';
-import { SubscriptionsService } from '../modules/subscriptions/subscriptions.service';
+import { generateUniqueOrderCode } from './order-code';
 
 jest.mock('node:crypto', () => ({ ...jest.requireActual('node:crypto'), randomInt: jest.fn() }));
 
 type Prisma = { order: { findUnique: jest.Mock } };
 type Generator = (prisma: Prisma) => Promise<string>;
 
-/** Gọi đúng hàm sinh mã của từng nơi (bản chép tay cũ), không qua constructor/DI. */
-const legacy = (proto: object, method: string): Generator => (prisma) =>
-  (proto as Record<string, (this: unknown) => Promise<string>>)[method]!.call({ prisma });
-
 const GENERATORS: Record<string, { gen: Generator; prefix: string; randomMax: number }> = {
-  'checkout (TUBU)': { gen: legacy(CheckoutService.prototype, 'generateCode'), prefix: 'TUBU', randomMax: 100000 },
+  'checkout (TUBU)': { gen: (p) => generateUniqueOrderCode(p as never, 'RETAIL'), prefix: 'TUBU', randomMax: 100000 },
   'affiliate (TUBU, đơn lên hộ)': {
-    gen: legacy(AffiliateService.prototype, 'generateOrderCode'),
+    gen: (p) => generateUniqueOrderCode(p as never, 'RETAIL'),
     prefix: 'TUBU',
     randomMax: 100000,
   },
-  'dealer (DLR)': { gen: legacy(DealerService.prototype, 'generateCode'), prefix: 'DLR', randomMax: 1000 },
+  'dealer (DLR)': { gen: (p) => generateUniqueOrderCode(p as never, 'DEALER'), prefix: 'DLR', randomMax: 1000 },
   'subscriptions (TUBUSUB)': {
-    gen: legacy(SubscriptionsService.prototype, 'generateCode'),
+    gen: (p) => generateUniqueOrderCode(p as never, 'SUBSCRIPTION'),
     prefix: 'TUBUSUB',
     randomMax: 1000,
   },

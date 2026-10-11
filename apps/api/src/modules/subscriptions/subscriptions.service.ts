@@ -1,6 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { randomInt } from 'node:crypto';
 import type { Order, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -24,6 +23,7 @@ import {
   PENDING_PAYMENT_TTL_KEY,
 } from '../orders/pending-payment-expiry.cron';
 import { CRON_TZ } from '../../common/cron-tz';
+import { generateUniqueOrderCode } from '../../common/order-code';
 import { formatVnDate } from '../../common/vn-time';
 
 /** Phương thức trả cho gói định kỳ (Q-13). Cổng ZaloPay/VNPAY cần khách thao tác mỗi kỳ nên không nhận. */
@@ -166,7 +166,7 @@ export class SubscriptionsService {
     // Giao ngay: gói + đơn đầu cùng một transaction — đơn đầu không đặt được (hết hàng, ví thiếu)
     // thì không để lại gói nào, khách thấy lỗi và chọn lại thay vì có gói "chạy" mà không có hàng.
     const startNow = firstRunAt === null;
-    const code = startNow ? await this.generateCode() : null;
+    const code = startNow ? await generateUniqueOrderCode(this.prisma, 'SUBSCRIPTION') : null;
     let placed: PlacedCycleOrder | null = null;
     let created: Awaited<ReturnType<typeof this.insertSubscription>>;
     try {
@@ -510,7 +510,7 @@ export class SubscriptionsService {
    * claim đã ghi; bật lại lịch giữ nguyên ngày đó nên tin tạm dừng nói rõ kỳ này không giao và ngày kỳ kế tiếp.
    */
   private async runCycle(sub: { id: string; userId: string }, cycleAt: Date, nextRunAt: Date): Promise<boolean> {
-    const code = await this.generateCode();
+    const code = await generateUniqueOrderCode(this.prisma, 'SUBSCRIPTION');
     let placed: PlacedCycleOrder | null;
     const missed = ` (kỳ này không giao, kỳ kế tiếp ngày ${formatVnDate(nextRunAt)})`;
     try {
@@ -788,14 +788,5 @@ export class SubscriptionsService {
 
   private addWeeks(from: Date, weeks: number): Date {
     return new Date(from.getTime() + weeks * 7 * 864e5);
-  }
-
-  private async generateCode(): Promise<string> {
-    for (let i = 0; i < 6; i++) {
-      const code = `TUBUSUB${Date.now().toString().slice(-7)}${String(randomInt(0, 1000)).padStart(3, '0')}`;
-      const exists = await this.prisma.order.findUnique({ where: { code } });
-      if (!exists) return code;
-    }
-    return `TUBUSUB${Date.now()}`;
   }
 }

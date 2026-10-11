@@ -195,6 +195,14 @@ describe('CheckoutService.placeOrder — money safety', () => {
     );
   });
 
+  it('mã đơn có dạng TUBU<yyyymmdd><5 số> và đã được kiểm không trùng', async () => {
+    const { svc, orderCreate, prisma } = build({ walletBalance: 1000, total: 100 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never);
+    const code = orderCreate.mock.calls[0][0].data.code as string;
+    expect(code).toMatch(/^TUBU\d{8}\d{5}$/);
+    expect(prisma.order.findUnique).toHaveBeenCalledWith({ where: { code } });
+  });
+
   it('đơn XU KHÔNG sinh điểm Xanh (pointsEarned=0) — chống vòng khuếch đại ×1.2', async () => {
     const { svc, orderCreate } = build({ coinsBalance: 1000, total: 100 });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'XU' } as never);

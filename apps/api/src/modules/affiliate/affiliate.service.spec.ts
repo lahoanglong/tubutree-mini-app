@@ -425,6 +425,14 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(commissionCreate).not.toHaveBeenCalled();
   });
 
+  it('mã đơn lên hộ có dạng TUBU<yyyymmdd><5 số> như đơn checkout', async () => {
+    const { svc, orderCreate, prisma } = build();
+    await svc.placeOrderForCustomer('ctv', DTO() as never);
+    const code = orderCreate.mock.calls[0][0].data.code as string;
+    expect(code).toMatch(/^TUBU\d{8}\d{5}$/);
+    expect(prisma.order.findUnique).toHaveBeenCalledWith({ where: { code } });
+  });
+
   it('idempotency-key mới (chưa có đơn nào) → tạo đơn bình thường + ghi idempotencyKey', async () => {
     const { svc, orderCreate } = build();
     await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-2');

@@ -1,5 +1,4 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { randomInt } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { DealerRewardClaim, DealerRewardClaimStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -14,6 +13,7 @@ import {
   productDiscontinuedError,
   SELLABLE_VARIATION_WHERE,
 } from '../cart/sellable';
+import { generateUniqueOrderCode } from '../../common/order-code';
 import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
@@ -223,7 +223,7 @@ export class DealerService {
     }
 
     const onCredit = dto.paymentMethod === 'CREDIT';
-    // Fast-fail thân thiện (không tốn generateCode khi rõ ràng vượt). Check
+    // Fast-fail thân thiện (không tốn lượt sinh mã đơn khi rõ ràng vượt). Check
     // QUYẾT ĐỊNH nằm trong transaction Serializable bên dưới để chống TOCTOU.
     // Đại lý chưa có tier = hạn mức 0 (không phải "không giới hạn"): admin có thể cấp role DEALER
     // mà chưa gán tier, trước đây nhánh `&& tier` bỏ qua hẳn kiểm tra và đặt được CREDIT vô hạn.
@@ -239,7 +239,7 @@ export class DealerService {
       if ((pre._sum.delta ?? 0) + subtotal > creditLimit) throw overLimitError();
     }
 
-    const code = await this.generateCode();
+    const code = await generateUniqueOrderCode(this.prisma, 'DEALER');
     let order: Awaited<ReturnType<typeof this.prisma.order.create>> & { hasBackorder: boolean };
     try {
       order = await this.prisma.$transaction(
@@ -1501,14 +1501,5 @@ export class DealerService {
     const rules = (tier?.discountRules as { default?: number } | undefined) ?? {};
     const discountPct = Math.min(rules.default ?? 0.2, maxDiscount);
     return { discountPct, tier };
-  }
-
-  private async generateCode(): Promise<string> {
-    for (let i = 0; i < 6; i++) {
-      const code = `DLR${Date.now().toString().slice(-8)}${String(randomInt(0, 1000)).padStart(3, '0')}`;
-      const exists = await this.prisma.order.findUnique({ where: { code } });
-      if (!exists) return code;
-    }
-    return `DLR${Date.now()}`;
   }
 }
