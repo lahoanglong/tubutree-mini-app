@@ -132,6 +132,13 @@ export class LoyaltyService {
    */
   async reverseOrderPoints(orderId: string): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    // PD-3 (spec 2.5): chỉ phần STANDARD (đơn trước PD-3 có pointsUsedConverted = 0 → hoàn hết như cũ). Phần
+    // CONVERTED là tiền trả trước, hoàn trong tx huỷ ở OrderReversalService.refundConvertedPoints (review B1).
+    const usedConverted = Math.min(order.pointsUsed, order.pointsUsedConverted);
+    const usedStandard = order.pointsUsed - usedConverted;
+    // Điểm hoàn là điểm thường nên có hạn như mọi điểm thưởng khác (OQ-15). Đọc cấu hình NGOÀI tx: không giữ
+    // kết nối tx trong lúc chờ SystemConfigService.
+    const refundExpiresAt = usedStandard > 0 ? await this.pointsExpiresAt(new Date()) : null;
     try {
       await this.prisma.$transaction(async (tx) => {
         // Re-check trong tx để giảm xác suất chạy ops vô ích; unique index là guard cứng.
@@ -175,10 +182,6 @@ export class LoyaltyService {
             data: { pointsBalance: { decrement: order.pointsEarned } },
           });
         }
-        // PD-3 (spec 2.5): chỉ phần STANDARD (đơn trước PD-3 có pointsUsedConverted = 0 → hoàn hết như cũ). Phần
-        // CONVERTED là tiền trả trước, hoàn trong tx huỷ ở OrderReversalService.refundConvertedPoints (review B1).
-        const usedConverted = Math.min(order.pointsUsed, order.pointsUsedConverted);
-        const usedStandard = order.pointsUsed - usedConverted;
         if (usedStandard > 0) {
           await tx.pointsTransaction.create({
             data: {
@@ -188,6 +191,7 @@ export class LoyaltyService {
               reason: `ORDER_REFUND_POINTS:${order.code}`,
               refType: 'ORDER',
               refId: order.id,
+              expiresAt: refundExpiresAt,
             },
           });
           await tx.user.update({

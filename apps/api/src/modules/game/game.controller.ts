@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
 import { IsIn, IsInt, Min } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -69,7 +69,9 @@ export class GameController {
   buySeeds(@CurrentUser('sub') userId: string, @Body() dto: BuySeedsDto) { return this.game.buySeeds(userId, dto.seeds); }
 
   @Post('tree/buy')
-  buyTree(@CurrentUser('sub') userId: string) { return this.game.buyTree(userId); }
+  buyTree(@CurrentUser('sub') userId: string, @Headers('idempotency-key') idempotencyKey?: string) {
+    return this.game.buyTree(userId, idempotencyKey);
+  }
 
   @Get('missions')
   missions(@CurrentUser('sub') userId: string) { return this.game.getMissions(userId); }
