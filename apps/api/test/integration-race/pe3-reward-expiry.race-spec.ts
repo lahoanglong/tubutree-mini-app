@@ -306,6 +306,81 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
     });
   });
 
+  /**
+   * Dòng REVIEW_DELETE âm mà replay FIFO ăn vào lô CŨ NHẤT thì lô đánh giá (nay có hạn) vẫn còn nguyên trong sổ, tới hạn
+   * cron trừ thêm chính 5 đến 15 điểm đã thu hồi: khách mất điểm hai lần. Thu hồi phải ăn đúng lô đánh giá của nó.
+   */
+  describe('xoá đánh giá KHI ĐIỂM CÒN HẠN rồi qua hạn: cron không trừ lại điểm đã thu hồi', () => {
+    const reviewDeleteRows = (userId: string) => prisma.pointsTransaction.findMany({ where: { userId, reason: { startsWith: 'REVIEW_DELETE:' } } });
+
+    it('lô cũ không hạn 30: tạo rồi xoá đánh giá còn hạn, qua hạn, cron hai lần → còn 30, không có POINTS_EXPIRED', async () => {
+      const { user, product } = await player();
+      await legacyUnlimited(user.id, 30);
+      const review = await reviews.create(user.id, product.slug, { rating: 5 });
+      await reviews.remove(user.id, 'USER', review.id);
+      expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS]);
+      expect(await balance(user.id)).toBe(30);
+
+      await ageLedger(user.id, 13);
+      await expiry.expirePoints();
+      await expiry.expirePoints();
+
+      expect(await expiredRows(user.id)).toHaveLength(0);
+      expect(await balance(user.id)).toBe(30);
+      expect(await standardSum(user.id)).toBe(30);
+    });
+
+    it('admin hạ loyalty.point_expire_months 12 → 3: đánh giá hạn 3 tháng nằm sau lô cũ hạn 12 tháng, xoá rồi qua 4 tháng → lô cũ còn nguyên', async () => {
+      const config = moduleRef.get(SystemConfigService);
+      const { user, product } = await player();
+      await game.claimMission(user.id, 'FIRST_ORDER'); // +20, hạn 12 tháng
+      await ageLedger(user.id, 1);
+      await config.set('loyalty.point_expire_months', 3, 'it-pe3');
+      let review;
+      try {
+        review = await reviews.create(user.id, product.slug, { rating: 5 }); // +5, hạn 3 tháng: sớm hơn lô nhiệm vụ cũ hơn
+      } finally {
+        await config.set('loyalty.point_expire_months', 12, 'it-pe3');
+      }
+      await reviews.remove(user.id, 'USER', review.id);
+      expect(await balance(user.id)).toBe(MISSION_POINTS);
+
+      await ageLedger(user.id, 4); // đánh giá quá hạn 1 tháng; nhiệm vụ còn 7 tháng
+      for (let night = 0; night < 3; night++) await expiry.expirePoints();
+
+      expect(await expiredRows(user.id)).toHaveLength(0);
+      expect(await balance(user.id)).toBe(MISSION_POINTS);
+    });
+
+    it('hai đánh giá: xoá cái MỚI hơn thì thu hồi ăn lô của nó, không ăn lô đánh giá cũ hơn (hai lô hết hạn lệch nhau)', async () => {
+      const first = await player();
+      const second = await prisma.product.create({
+        data: { pancakeId: `it-pe3-p2-${randCode(6)}`, brand: 'IT', slug: `it-pe3-b-${randCode(6).toLowerCase()}`, name: 'SP PE3 B', description: 'IT', basePrice: 100_000 },
+      });
+      const variation = await prisma.variation.create({
+        data: { pancakeId: `it-pe3-v2-${randCode(6)}`, productId: second.id, sku: `PE3B-${randCode(6)}`, name: 'Chai', attributes: {}, retailPrice: 100_000, salePrice: 100_000, stock: 9 },
+      });
+      await createOrder(prisma, {
+        userId: first.user.id,
+        status: 'DELIVERED',
+        items: { create: [{ variationId: variation.id, productName: 'SP IT', variationName: 'Chai', unitPrice: 100_000, quantity: 1, total: 100_000 }] },
+      });
+      await legacyUnlimited(first.user.id, 30);
+      await reviews.create(first.user.id, first.product.slug, { rating: 5 }); // +5, hạn T+12
+      await ageLedger(first.user.id, 1);
+      const newer = await reviews.create(first.user.id, second.slug, { rating: 5 }); // +5, hạn T+12 tính từ lúc sau, muộn hơn 1 tháng
+      await reviews.remove(first.user.id, 'USER', newer.id);
+      expect(await balance(first.user.id)).toBe(35);
+
+      await ageLedger(first.user.id, 13); // cả hai lô đánh giá đã quá hạn nếu còn nằm trong sổ
+      for (let night = 0; night < 3; night++) await expiry.expirePoints();
+
+      expect((await expiredRows(first.user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS]); // chỉ lô đánh giá còn lại (cũ hơn)
+      expect(await balance(first.user.id)).toBe(30);
+      expect(await standardSum(first.user.id)).toBe(30);
+    });
+  });
+
   describe('cron hết hạn với nhiều lô có hạn khác nhau trộn với lô không hạn cũ', () => {
     it('nhận thưởng → cron sau hạn → trừ đúng một lần; chạy lại không trừ lần hai; số dư khớp sổ', async () => {
       const { user } = await player();

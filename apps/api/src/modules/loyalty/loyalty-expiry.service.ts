@@ -20,6 +20,8 @@ export interface PointExpiryTxn {
   expiresAt: Date | null;
   createdAt: Date;
   reason?: string;
+  refType?: string | null;
+  refId?: string | null;
 }
 
 export interface PointExpiryResult {
@@ -39,9 +41,18 @@ export interface PointExpiryResult {
  */
 const EXPIRY_REASON = 'POINTS_EXPIRED';
 
+/**
+ * Dòng thu hồi điểm đánh giá (ReviewsService.remove) mang `refType` này và `refId` của chính dòng thưởng gốc. Thu hồi
+ * phải trừ vào lô của đánh giá đó chứ không vào lô cũ nhất, nếu không lô đánh giá (có hạn) vẫn còn nguyên trong sổ và
+ * tới hạn cron trừ lại đúng số điểm đã thu hồi.
+ */
+const REVIEW_REF_TYPE = 'REVIEW';
+
 interface ExpiryLot {
   remaining: number;
   expiresAt: Date | null;
+  /** Khoá `refId` của dòng thưởng đánh giá đã tạo lô; null với mọi lô khác. */
+  reviewRef: string | null;
 }
 
 /** Trừ `amount` từ các lô theo thứ tự mảng; trả phần chưa trừ được. */
@@ -60,7 +71,8 @@ function consumeFifo(lots: ExpiryLot[], amount: number): number {
  * Tính điểm hết hạn theo FIFO (lô cũ tiêu trước) — HÀM THUẦN, không đụng DB, tất định.
  *
  * Bất biến: pointsBalance == SUM(delta) lô STANDARD; caller chỉ đưa vào dòng lô STANDARD (PD-3). Mỗi delta DƯƠNG là một "lô" điểm (có/không expiresAt),
- * mỗi delta ÂM (tiêu/đổi/hoàn) tiêu dần từ lô CŨ NHẤT; riêng POINTS_EXPIRED kỳ trước tiêu lô đã hết hạn trước.
+ * mỗi delta ÂM (tiêu/đổi/hoàn) tiêu dần từ lô CŨ NHẤT; riêng POINTS_EXPIRED kỳ trước tiêu lô đã hết hạn trước,
+ * và dòng thu hồi điểm đánh giá (refType REVIEW) tiêu lô của đúng đánh giá đó trước (xem REVIEW_REF_TYPE).
  *
  * Idempotent: dòng POINTS_EXPIRED âm do cron tạo, ở lần chạy sau được replay tiêu đúng các lô đã
  * hết hạn tại thời điểm nó được ghi (xem EXPIRY_REASON) → expiredNow về 0 → chạy lại KHÔNG trừ đôi.
@@ -87,13 +99,16 @@ export function computePointExpiry(
 
   const lots: ExpiryLot[] = [];
   for (const t of sorted) {
+    const reviewRef = t.refType === REVIEW_REF_TYPE && t.refId ? t.refId : null;
     if (t.delta > 0) {
-      lots.push({ remaining: t.delta, expiresAt: t.expiresAt });
+      lots.push({ remaining: t.delta, expiresAt: t.expiresAt, reviewRef });
     } else if (t.delta < 0) {
       let toConsume = -t.delta;
       if (t.reason === EXPIRY_REASON) {
         const expiredAtThatTime = lots.filter((l) => l.expiresAt != null && l.expiresAt.getTime() <= t.createdAt.getTime());
         toConsume = consumeFifo(expiredAtThatTime, toConsume);
+      } else if (reviewRef) {
+        toConsume = consumeFifo(lots.filter((l) => l.reviewRef === reviewRef), toConsume);
       }
       // Nếu còn dư (toConsume>0): lô đã cạn — bất biến vỡ, bỏ qua (không tạo remaining âm).
       consumeFifo(lots, toConsume);
@@ -145,7 +160,7 @@ export class LoyaltyExpiryService {
     return db.pointsTransaction.findMany({
       where: { userId, lot: 'STANDARD' },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: { id: true, delta: true, expiresAt: true, createdAt: true, reason: true },
+      select: { id: true, delta: true, expiresAt: true, createdAt: true, reason: true, refType: true, refId: true },
     });
   }
 
