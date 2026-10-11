@@ -7,6 +7,7 @@ import {
   openShareSheet,
   openWebview,
   openChat,
+  openPhone,
   followOA as zmpFollowOA,
   requestSendNotification as zmpRequestSendNotification,
   getStorage,
@@ -105,6 +106,16 @@ export async function requestZaloLocation(): Promise<{ token: string } | null> {
 export async function getZaloUserInfo() {
   const { userInfo } = await getUserInfo({ autoRequestPermission: true });
   return userInfo;
+}
+
+/** Mở màn hình gọi điện; ngoài Zalo (trình duyệt) openPhone không chạy nên rơi về tel:. */
+export async function callPhone(phone: string) {
+  const number = phone.replace(/[^\d+]/g, '');
+  try {
+    await openPhone({ phoneNumber: number });
+  } catch {
+    window.location.href = `tel:${number}`;
+  }
 }
 
 /** Mở URL ngoài (deeplink sàn cashback) trong webview Zalo. */

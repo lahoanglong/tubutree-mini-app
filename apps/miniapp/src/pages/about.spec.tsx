@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   requestAccountDeletion: vi.fn(),
   logout: vi.fn(),
   openSnackbar: vi.fn(),
+  callPhone: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -21,7 +22,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/api', () => ({ api: { get: mocks.apiGet }, getErrorMessage: () => 'lỗi' }));
 vi.mock('../services/shop-api', () => ({ getPublicConfig: mocks.getPublicConfig }));
 vi.mock('../services/account-api', () => ({ requestAccountDeletion: mocks.requestAccountDeletion }));
-vi.mock('../services/zmp-bridge', () => ({ hasOA: false, openOAChat: vi.fn() }));
+vi.mock('../services/zmp-bridge', () => ({ hasOA: false, openOAChat: vi.fn(), callPhone: mocks.callPhone }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ logout: mocks.logout }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -104,6 +105,31 @@ describe('Liên hệ hỗ trợ (Q-17)', () => {
     renderPage();
     await screen.findByText('tubutree@gmail.com');
     expect(screen.queryByText('Hotline')).toBeNull();
+  });
+});
+
+describe('Liên hệ hỗ trợ khi /config/public lỗi và gọi hotline', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.apiGet.mockResolvedValue({ data: [] });
+  });
+
+  it('/config/public lỗi → vẫn hiện hotline và email mặc định Q-17', async () => {
+    mocks.getPublicConfig.mockRejectedValue(new Error('429'));
+    renderPage();
+    expect(await screen.findByText('Hỗ trợ khách hàng')).toBeInTheDocument();
+    expect(screen.getByText('0899 149 229')).toBeInTheDocument();
+    expect(screen.getByText('tubutree@gmail.com')).toBeInTheDocument();
+    expect(screen.queryByText('Zalo OA')).toBeNull();
+  });
+
+  it('chạm dòng Hotline mở cuộc gọi, vùng chạm >= 44px', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT });
+    renderPage();
+    const btn = await screen.findByRole('button', { name: /Hotline/ });
+    expect(btn.style.minHeight).toBe('44px');
+    fireEvent.click(btn);
+    expect(mocks.callPhone).toHaveBeenCalledWith('0899 149 229');
   });
 });
 
