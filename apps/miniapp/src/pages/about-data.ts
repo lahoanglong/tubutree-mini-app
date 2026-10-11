@@ -30,7 +30,7 @@ export const FALLBACK_FAQ: FaqItem[] = [
   {
     cat: 'Điểm & Vườn',
     q: 'Điểm Xanh là gì và dùng thế nào?',
-    a: '10.000đ chi tiêu trên đơn đã giao = 1 Điểm Xanh. 1 Điểm Xanh đổi 1.000đ khi thanh toán, tối đa 20% giá trị đơn. Điểm có hạn 12 tháng. Điểm quy đổi từ xu cũ thì không hết hạn và trừ được tới 100% giá trị hàng khi thanh toán, nhưng không dùng để đổi voucher.',
+    a: '10.000đ chi tiêu trên đơn đã giao = 1 Điểm Xanh. 1 Điểm Xanh đổi 1.000đ khi thanh toán, tối đa 20% giá trị đơn. Điểm có hạn 12 tháng. Điểm quy đổi từ xu cũ thì không hết hạn và trừ được tới 100% giá trị hàng khi thanh toán, nhưng không dùng để đổi mã giảm giá.',
   },
   {
     cat: 'Mua sắm',

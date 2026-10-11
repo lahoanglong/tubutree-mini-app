@@ -43,10 +43,10 @@ describe('FALLBACK_FAQ sau khi gộp TubuXu vào Điểm Xanh (PD-3)', () => {
     expect(a).not.toMatch(/xu/i);
   });
 
-  it('câu Điểm Xanh nói rõ điểm quy đổi từ xu cũ không hết hạn và không đổi được voucher', () => {
+  it('câu Điểm Xanh nói rõ điểm quy đổi từ xu cũ không hết hạn và không đổi được mã giảm giá', () => {
     const a = answer(/Điểm Xanh là gì/);
     expect(a).toContain('xu cũ');
     expect(a).toMatch(/không hết hạn/);
-    expect(a).toMatch(/voucher/);
+    expect(a).toMatch(/không dùng để đổi mã giảm giá/);
   });
 });
