@@ -221,8 +221,9 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     expect(sel.bs).toBe('solid');
     expect(uns.bs).toBe('solid');
     expect(parseFloat(sel.bw)).toBeGreaterThan(0);
-    expect(sel.bc).toBe(await resolveToken(page, '--forest-600'));
-    expect(sel.bg).toBe(await resolveToken(page, '--forest-50'));
+    // Thẻ đã di cư sang token ngữ nghĩa DS v2 (C-076): border-selected = forest-600, bg-subtle = sage-50.
+    expect(sel.bc).toBe(await resolveToken(page, '--color-border-selected'));
+    expect(sel.bg).toBe(await resolveToken(page, '--color-bg-subtle'));
     expect(uns.bg).toBe(await resolveToken(page, '--stone-0'));
     expect(sel.bc).not.toBe(uns.bc);
     expect(sel.bg).not.toBe(uns.bg);
