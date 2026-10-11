@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { DealerClaimsTab, ClaimRow } from './dealer-claims-tab';
 import { OrderInvoicePanel, OrderStatusHistory } from './order-detail-extras';
+import { RecyclingBadge, RecyclingPanel } from './recycling-panel';
 import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 import type { AdminDealerRewardClaim, AdminOrder } from '@/lib/admin-client';
 
@@ -113,5 +114,37 @@ describe('order-detail-extras — DS v2', () => {
     const btn = byText(container, 'button', 'Đã xuất hoá đơn');
     expect(btn?.className).toContain('min-h-[44px]');
     expect(btn?.className).toContain('bg-forest-600');
+  });
+});
+
+describe('RecyclingPanel — DS v2', () => {
+  const recyclingOrder = (over: Partial<AdminOrder> = {}) =>
+    order({ hasRecyclingPickup: true, status: 'CONFIRMED', gomdonStatus: 'FAILED', ...over });
+
+  it('nút tạo lại/huỷ vận đơn, ô ghi chú và "Đã xử lý tay" cao 44px; ô tích xác nhận có nhãn chạm 44px', () => {
+    const { container } = mount(<RecyclingPanel order={recyclingOrder()} />);
+    for (const label of ['Tạo lại vận đơn Gomdon', 'Đã xử lý tay']) {
+      expect(byText(container, 'button', label)?.className).toContain('min-h-[44px]');
+    }
+    expect(container.querySelector('input[aria-label="Ghi chú đã xử lý tay"]')?.className).toContain('min-h-[44px]');
+    expect(container.querySelector('label')?.className).toContain('min-h-[44px]');
+    expect(container.querySelector('input[type="checkbox"]')?.className).toContain('accent-forest-600');
+    expect(byText(container, 'button', 'Tạo lại vận đơn Gomdon')?.className).toContain('bg-forest-600');
+  });
+
+  it('"Huỷ vận đơn Gomdon" viền danger, cao 44px', () => {
+    const { container } = mount(
+      <RecyclingPanel order={recyclingOrder({ gomdonStatus: '1', gomdonOrderId: 'g1', gomdonPartnerCode: 'BE1' })} />,
+    );
+    const btn = byText(container, 'button', 'Huỷ vận đơn Gomdon');
+    expect(btn?.className).toContain('border-danger-fg');
+    expect(btn?.className).toContain('min-h-[44px]');
+  });
+
+  it('huy hiệu danh sách: "cần xử lý" tông danger, bình thường tông success', () => {
+    const a = mount(<RecyclingBadge order={recyclingOrder()} />);
+    expect(a.container.querySelector('span')?.className).toContain('bg-danger-bg');
+    const b = mount(<RecyclingBadge order={recyclingOrder({ gomdonStatus: '1', gomdonOrderId: 'g1' })} />);
+    expect(b.container.querySelector('span')?.className).toContain('bg-success-bg');
   });
 });

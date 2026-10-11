@@ -17,7 +17,7 @@ import {
   gomdonStatusLabel,
   needsRecyclingAttention,
 } from '@/lib/recycling';
-import { Notice, ToneBadge } from './ui';
+import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge } from './ui';
 import { useConfirm } from './confirm-dialog';
 
 /** Badge ở dòng danh sách đơn: có thu gom / cần xử lý thu gom. */
@@ -101,53 +101,53 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
   const cancelLabel = gomdonCancelLabel(order.gomdonCancelStatus);
 
   return (
-    <section aria-label="Thu gom vật liệu tái chế" className="rounded border border-green-200 bg-white p-3">
+    <section aria-label="Thu gom vật liệu tái chế" className="rounded-card border border-forest-200 bg-stone-0 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Recycle className="h-4 w-4 text-green-700" aria-hidden />
-        <span className="text-xs font-semibold uppercase text-neutral-600">Thu gom vật liệu tái chế (Gomdon)</span>
+        <Recycle className="h-4 w-4 text-forest-700" aria-hidden />
+        <span className="text-xs font-semibold uppercase text-stone-600">Thu gom vật liệu tái chế (Gomdon)</span>
         <ToneBadge tone={status.tone}>{status.label}</ToneBadge>
         {cancelLabel && <ToneBadge tone={cancelLabel.tone}>{cancelLabel.label}</ToneBadge>}
       </div>
 
       <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
-        <div className="flex items-center gap-2">
-          <dt className="text-neutral-500">Mã vận đơn BestExpress:</dt>
-          <dd className="flex items-center gap-1.5 font-mono font-semibold text-neutral-800">
+        <div className="flex flex-wrap items-center gap-2">
+          <dt className="text-stone-500">Mã vận đơn BestExpress:</dt>
+          <dd className="flex items-center gap-1.5 font-mono font-semibold text-stone-800">
             {order.gomdonPartnerCode ?? '—'}
             {order.gomdonPartnerCode && <CopyButton text={order.gomdonPartnerCode} label="Chép" />}
           </dd>
         </div>
         {fmtTime(order.gomdonStatusAt) && (
           <div className="flex gap-2">
-            <dt className="text-neutral-500">Gomdon cập nhật:</dt>
-            <dd className="text-neutral-700">{fmtTime(order.gomdonStatusAt)}</dd>
+            <dt className="text-stone-500">Gomdon cập nhật:</dt>
+            <dd className="text-stone-700">{fmtTime(order.gomdonStatusAt)}</dd>
           </div>
         )}
         {fmtTime(order.deliveredAt) && (
           <div className="flex gap-2">
-            <dt className="text-neutral-500">Đã giao lúc:</dt>
-            <dd className="text-neutral-700">{fmtTime(order.deliveredAt)}</dd>
+            <dt className="text-stone-500">Đã giao lúc:</dt>
+            <dd className="text-stone-700">{fmtTime(order.deliveredAt)}</dd>
           </div>
         )}
         <div className="flex gap-2 sm:col-span-2">
-          <dt className="shrink-0 text-neutral-500">Khách gửi kèm:</dt>
-          <dd className="text-neutral-800">{order.recyclingNote?.trim() || <span className="text-neutral-400">(không ghi chú)</span>}</dd>
+          <dt className="shrink-0 text-stone-500">Khách gửi kèm:</dt>
+          <dd className="text-stone-800">{order.recyclingNote?.trim() || <span className="text-stone-500">(không ghi chú)</span>}</dd>
         </div>
       </dl>
 
       {(status.hint || cancelLabel?.hint) && (
-        <p className="mt-2 text-xs text-neutral-600">{cancelLabel?.hint ?? status.hint}</p>
+        <p className="mt-2 text-xs text-stone-600">{cancelLabel?.hint ?? status.hint}</p>
       )}
 
       {(actions.canRetry || actions.canCancel || actions.canMarkHandled) && (
-        <div className="mt-3 space-y-2 border-t border-neutral-100 pt-2">
+        <div className="mt-3 space-y-2 border-t border-stone-200 pt-2">
           {actions.canRetry && (
             <div className="space-y-2">
               {actions.retryWarning && <Notice tone="warning">{actions.retryWarning}</Notice>}
-              <label className="flex cursor-pointer items-start gap-2 text-xs text-neutral-800">
+              <label className="flex min-h-[44px] cursor-pointer items-start gap-2 text-xs text-stone-800 sm:min-h-0">
                 <input
                   type="checkbox"
-                  className="mt-0.5"
+                  className="mt-0.5 h-4 w-4 accent-forest-600"
                   checked={confirmed}
                   onChange={(e) => setConfirmed(e.target.checked)}
                   disabled={busy}
@@ -169,7 +169,7 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
                   retry.mutate();
                 }}
                 disabled={!confirmed || busy}
-                className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:bg-neutral-300"
+                className={BTN_XS_PRIMARY}
               >
                 {retry.isPending ? 'Đang xếp hàng…' : 'Tạo lại vận đơn Gomdon'}
               </button>
@@ -194,7 +194,7 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
                   cancel.mutate();
                 }}
                 disabled={busy}
-                className="rounded border border-red-300 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                className={BTN_XS_DANGER}
               >
                 {cancel.isPending ? 'Đang huỷ…' : 'Huỷ vận đơn Gomdon'}
               </button>
@@ -210,13 +210,13 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
                 value={handledNote}
                 onChange={(e) => setHandledNote(e.target.value)}
                 disabled={busy}
-                className="min-w-0 flex-1 rounded border border-neutral-300 px-2 py-1 text-xs"
+                className={`${FIELD_XS} grow basis-40`}
               />
               <button
                 type="button"
                 onClick={onMarkHandled}
                 disabled={busy}
-                className="rounded border border-neutral-300 px-3 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                className={BTN_XS_SECONDARY}
               >
                 {markHandled.isPending ? 'Đang lưu…' : 'Đã xử lý tay'}
               </button>
@@ -226,7 +226,7 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
       )}
 
       {msg && (
-        <p role={msg.ok ? 'status' : 'alert'} className={`mt-2 text-xs ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>
+        <p role={msg.ok ? 'status' : 'alert'} className={`mt-2 text-xs ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
           {msg.text}
         </p>
       )}

@@ -81,3 +81,8 @@ export const BTN_WARNING = `${TOUCH_H} rounded-control bg-warning-fg px-3 py-1 t
 // Chip lọc trạng thái (hàng tab bấm được): 44px khi chạm trên điện thoại, 32px từ `sm`.
 export const chipClass = (active: boolean) =>
   `min-h-[44px] rounded-full px-3 py-1 text-xs font-medium sm:min-h-[32px] ${active ? 'bg-forest-600 text-stone-0' : 'bg-stone-100 text-stone-700'}`;
+
+// Nút `text-xs` trong khối xử lý của hàng đơn mở rộng (cùng họ BTN_WARNING).
+export const BTN_XS_PRIMARY = `${TOUCH_H} rounded-control bg-forest-600 px-3 py-1 text-xs font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500`;
+export const BTN_XS_DANGER = `${TOUCH_H} rounded-control border border-danger-fg px-3 py-1 text-xs font-medium text-danger-fg hover:bg-danger-bg disabled:opacity-50`;
+export const BTN_XS_SECONDARY = `${TOUCH_H} rounded-control border border-stone-450 bg-stone-0 px-3 py-1 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50`;
