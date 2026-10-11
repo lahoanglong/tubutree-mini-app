@@ -916,7 +916,7 @@ function ReturnsTab() {
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="rounded border border-neutral-200 px-2.5 py-1 text-sm"
+          className={`${FIELD_CLASS} ${TOUCH_H}`}
         >
           {['REQUESTED', 'APPROVED', 'REJECTED', ''].map((s) => (
             <option key={s} value={s}>
@@ -930,20 +930,20 @@ function ReturnsTab() {
             </option>
           ))}
         </select>
-        <span className="text-xs text-neutral-500">
+        <span className="text-xs text-stone-500">
           Chỉ đơn lỗi NSX trong 7 ngày. Duyệt = hoàn tiền đúng kênh + restock + reverse điểm/hoa hồng.
         </span>
       </div>
       {q.data && (
-        <p className="mt-2 text-xs text-neutral-500">
+        <p className="mt-2 text-xs text-stone-500">
           {view.label} yêu cầu{pending ? ' · cũ nhất trước' : ''}
         </p>
       )}
       <QueueMoreNotice pending={pending} view={view} noun="yêu cầu" />
 
       <div className="mt-3 space-y-3">
-        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách yêu cầu đổi/trả.</p>}
-        {q.isLoading && <p className="text-sm text-neutral-500">Đang tải danh sách yêu cầu…</p>}
+        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách yêu cầu đổi/trả.</p>}
+        {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách yêu cầu…</p>}
         {view.items.map((r) => <ReturnRow key={r.id} item={r} />)}
         {q.data && view.items.length === 0 && <Empty>Không có yêu cầu đổi/trả nào.</Empty>}
       </div>
@@ -971,78 +971,78 @@ function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
 
   const statusBadge =
     r.status === 'APPROVED' ? (
-      <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800">
+      <span className="rounded bg-success-bg px-2 py-0.5 text-xs font-semibold text-success-fg">
         Đã duyệt (Hoàn tiền)
       </span>
     ) : r.status === 'REJECTED' ? (
-      <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+      <span className="rounded bg-danger-bg px-2 py-0.5 text-xs font-semibold text-danger-fg">
         Đã từ chối
       </span>
     ) : (
-      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+      <span className="rounded bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-fg">
         Chờ duyệt
       </span>
     );
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-neutral-900">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-stone-900">
               Đơn: {r.order?.code ?? r.orderId}
             </span>
             {statusBadge}
           </div>
-          <div className="mt-0.5 text-sm text-neutral-600">
-            Khách: <span className="font-medium text-neutral-800">{r.user?.fullName ?? 'Khách hàng'}</span>
+          <div className="mt-0.5 text-sm text-stone-600">
+            Khách: <span className="font-medium text-stone-800">{r.user?.fullName ?? 'Khách hàng'}</span>
             {r.user?.phone ? ` · SĐT: ${r.user.phone}` : ''}
             {r.order ? ` · Tổng đơn: ${formatVnd(r.order.total)} (${r.order.paymentMethod})` : ''}
           </div>
         </div>
-        <span className="text-xs text-neutral-400">
+        <span className="text-xs text-stone-500">
           {new Date(r.createdAt).toLocaleString('vi-VN')}
         </span>
       </div>
 
-      <div className="mt-2.5 rounded bg-neutral-50 p-2.5 text-sm text-neutral-700">
-        <span className="font-medium text-neutral-800">Lý do:</span> {r.reason}
+      <div className="mt-2.5 break-words rounded-control bg-stone-50 p-2.5 text-sm text-stone-700">
+        <span className="font-medium text-stone-800">Lý do:</span> {r.reason}
       </div>
 
       {/* Ảnh do khách gửi — chỉ render https/ảnh base64 raster, không href javascript:/data: (C-050). */}
       <EvidenceImages images={r.images} />
 
       {r.status === 'REQUESTED' ? (
-        <div className="mt-3 border-t border-neutral-100 pt-3">
+        <div className="mt-3 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap items-center gap-2">
             <input
               placeholder="Ghi chú duyệt / lý do từ chối (tuỳ chọn)"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="min-w-[240px] flex-1 rounded border border-neutral-200 px-2.5 py-1.5 text-sm"
+              className={`${FIELD_CLASS} ${TOUCH_H} grow basis-full sm:basis-60`}
             />
             <button
               onClick={() => review.mutate({ approve: true })}
               disabled={review.isPending}
-              className="rounded bg-green-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:bg-neutral-300"
+              className={BTN_PRIMARY}
             >
               {review.isPending ? 'Đang duyệt…' : 'Duyệt hoàn tiền'}
             </button>
             <button
               onClick={() => review.mutate({ approve: false })}
               disabled={review.isPending}
-              className="rounded border border-red-300 px-3.5 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className={BTN_DANGER_OUTLINE}
             >
               Từ chối
             </button>
           </div>
           {review.isError && (
-            <p className="mt-1 text-xs text-red-600">{(review.error as Error).message}</p>
+            <p className="mt-1 text-xs text-danger-fg">{(review.error as Error).message}</p>
           )}
         </div>
       ) : (
-        <div className="mt-3 border-t border-neutral-100 pt-2 text-xs text-neutral-500">
-          {r.adminNote && <div>Ghi chú admin: <span className="font-medium text-neutral-700">{r.adminNote}</span></div>}
+        <div className="mt-3 border-t border-stone-200 pt-2 text-xs text-stone-500">
+          {r.adminNote && <div>Ghi chú admin: <span className="font-medium text-stone-700">{r.adminNote}</span></div>}
           {r.reviewedAt && (
             <div>Xử lý lúc: {new Date(r.reviewedAt).toLocaleString('vi-VN')}</div>
           )}

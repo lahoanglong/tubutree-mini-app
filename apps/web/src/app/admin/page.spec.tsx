@@ -63,6 +63,24 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       ],
       meta: { total: 45, page: 1, limit: 20 },
     }),
+    listReturnRequests: async () => ({
+      data: ['REQUESTED', 'APPROVED', 'REJECTED'].map((status, i) => ({
+        id: `r${i}`,
+        orderId: `o${i}`,
+        userId: 'u',
+        reason: 'Hàng lỗi nhà sản xuất',
+        images: [],
+        status,
+        refundMethod: 'ORIGINAL',
+        adminNote: status === 'REQUESTED' ? null : 'Đã kiểm tra',
+        reviewedBy: null,
+        reviewedAt: status === 'REQUESTED' ? null : '2026-10-03T00:00:00.000Z',
+        createdAt: `2026-10-0${i + 1}T00:00:00.000Z`,
+        order: { id: `o${i}`, code: `TT20${i}`, total: 90000, status: 'DELIVERED', paymentMethod: 'COD' },
+        user: { id: 'u', fullName: 'Mai', phone: '0933333333' },
+      })),
+      meta: { total: 3, page: 1, limit: 20 },
+    }),
     listDealerTiers: async () => [{ id: 't1', name: 'Bạc', minOrderVolume: 0, creditLimit: 0, paymentTerms: null }],
   };
 });
@@ -272,5 +290,40 @@ describe('admin/page — tab Đại lý', () => {
     const card = [...container.querySelectorAll('div')].find((d) => d.textContent?.startsWith('Cửa hàng Xanh') && d.className.includes('rounded-card'))!;
     expect(card.querySelector('span.break-words')!.textContent).toBe('Cửa hàng Xanh');
     expect(card.querySelector('img')!.className).toContain('border-stone-200');
+  });
+});
+
+describe('admin/page — tab Đổi / Trả', () => {
+  const openReturns = async () => {
+    window.history.replaceState(null, '', '/admin?tab=returns');
+    return mount();
+  };
+  const badge = (root: HTMLElement, text: string) => [...root.querySelectorAll('span')].find((x) => x.textContent?.trim() === text)!;
+
+  it('huy hiệu trạng thái yêu cầu theo token: chờ = cảnh báo, đã duyệt = thành công, từ chối = nguy hiểm', async () => {
+    const { container } = await openReturns();
+    expect(badge(container, 'Chờ duyệt').className).toContain('bg-warning-bg');
+    expect(badge(container, 'Đã duyệt (Hoàn tiền)').className).toContain('bg-success-bg');
+    expect(badge(container, 'Đã từ chối').className).toContain('bg-danger-bg');
+  });
+
+  it('yêu cầu chờ duyệt: Duyệt hoàn tiền tô forest, Từ chối viền danger, ô ghi chú và cả hai nút cao 44px', async () => {
+    const { container } = await openReturns();
+    const approve = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Duyệt hoàn tiền')!;
+    const reject = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Từ chối')!;
+    expect(approve.className).toContain('bg-forest-600');
+    expect(approve.className).toContain('min-h-[44px]');
+    expect(reject.className).toContain('border-danger-fg');
+    expect(reject.className).toContain('min-h-[44px]');
+    const note = container.querySelector('input[placeholder^="Ghi chú duyệt"]')!;
+    expect(note.className).toContain('min-h-[44px]');
+    expect(note.className).toContain('border-stone-450');
+  });
+
+  it('dòng tiêu đề và huy hiệu xuống dòng được ở 390px; yêu cầu đã xử lý hiện ghi chú admin', async () => {
+    const { container } = await openReturns();
+    const head = badge(container, 'Chờ duyệt').parentElement!;
+    expect(head.className).toContain('flex-wrap');
+    expect(container.textContent).toContain('Ghi chú admin: Đã kiểm tra');
   });
 });
