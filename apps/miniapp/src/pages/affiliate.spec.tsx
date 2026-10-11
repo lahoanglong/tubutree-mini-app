@@ -166,6 +166,24 @@ describe('Dashboard CTV — lối tắt Lên đơn hộ ở đầu trang (C-064)
   });
 });
 
+describe('Dashboard CTV — nút mở bảng 5 bậc báo trạng thái mở/đóng', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+  });
+
+  it('aria-expanded đổi theo lần chạm, vùng chạm cao 44px', async () => {
+    renderPage();
+    const toggle = await screen.findByRole('button', { name: /Bảng 5 bậc CTV/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(parseInt(toggle.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
 describe('Trang CTV — đúng một h1 ở mọi trạng thái (C-114)', () => {
   const h1s = () => screen.queryAllByRole('heading', { level: 1 });
 

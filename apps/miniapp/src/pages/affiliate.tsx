@@ -30,7 +30,6 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Checkbox } from '../components/ui/form';
 import { Icon } from '../components/ui/icon';
-import { ListRow } from '../components/ui/list-row';
 import { PageHeader } from '../components/ui/page-header';
 import { ProgressBar } from '../components/ui/progress-bar';
 import { Skeleton } from '../components/ui/skeleton';
@@ -419,15 +418,38 @@ function Dashboard() {
           )}
 
           {/* Toggle mở rộng danh sách 5 bậc CTV */}
-          <ListRow
-            title="Bảng 5 bậc CTV & thưởng mốc TubuXu"
-            trailing={<Icon icon={showAllTiers ? ChevronUp : ChevronDown} size="sm" tone="brand" />}
-            onPress={() => {
+          {/* ListRow của DS không nhận aria-expanded nên dùng <button> thật để trình đọc màn hình biết đang mở hay đóng. */}
+          <button
+            type="button"
+            className="tubu-press"
+            aria-expanded={showAllTiers}
+            onClick={() => {
               haptic('light');
               setShowAllTiers(!showAllTiers);
             }}
-            style={{ marginTop: 12, borderTop: '1px solid var(--color-border-subtle)' }}
-          />
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              width: '100%',
+              minHeight: 44,
+              boxSizing: 'border-box',
+              padding: '12px 0',
+              marginTop: 12,
+              background: 'none',
+              border: 'none',
+              borderTop: '1px solid var(--color-border-subtle)',
+              font: 'inherit',
+              textAlign: 'left',
+              cursor: 'pointer',
+            }}
+          >
+            <Text variant="body-sm" style={{ fontWeight: 600 }}>
+              Bảng 5 bậc CTV & thưởng mốc TubuXu
+            </Text>
+            <Icon icon={showAllTiers ? ChevronUp : ChevronDown} size="sm" tone="brand" />
+          </button>
 
           {showAllTiers && ctvTiersQ.data && (
             <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
