@@ -15,6 +15,7 @@ const FILES_PC10C3 = [
   'src/components/onboarding.tsx',
   'src/components/product-card.tsx',
   'src/components/flash-sale.tsx',
+  'src/components/checkout/voucher-sheet.tsx',
 ];
 
 const LEGACY = new RegExp(
