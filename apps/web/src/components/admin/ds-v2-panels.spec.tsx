@@ -5,6 +5,7 @@ import { OrderInvoicePanel, OrderStatusHistory } from './order-detail-extras';
 import { RecyclingBadge, RecyclingPanel } from './recycling-panel';
 import { PosCreditsTab } from './pos-credits-tab';
 import { PosScreen } from './pos-screen';
+import { AccountDeletionPanel, type AdminDeletionRequest } from './account-deletion-panel';
 import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminDealerRewardClaim, AdminOrder } from '@/lib/admin-client';
 
@@ -210,5 +211,46 @@ describe('PosScreen — DS v2 (màn thu ngân, chạm trên điện thoại)', (
     expect(byText(container, 'button', 'Tích điểm')?.className).toContain('min-h-[44px]');
     expect(container.querySelector('[aria-label="Thành viên"]')?.className).toContain('bg-forest-50');
     expect(container.querySelector('h2')?.className).toContain('font-display');
+  });
+});
+
+describe('AccountDeletionPanel — DS v2', () => {
+  const deletion = (over: Partial<AdminDeletionRequest> = {}): AdminDeletionRequest => ({
+    id: 'r1',
+    userId: 'u1',
+    reason: 'Không dùng nữa',
+    status: 'PENDING',
+    adminNote: null,
+    reviewedBy: null,
+    reviewedAt: null,
+    createdAt: '2026-10-01T03:00:00.000Z',
+    user: { id: 'u1', fullName: 'Nguyễn Văn A', phone: '0912345678', role: 'CUSTOMER', walletBalance: 0, coinsBalance: 0, cashbackPending: 0, createdAt: '2026-01-01T00:00:00.000Z' },
+    blockers: [],
+    ...over,
+  });
+
+  it('chip lọc 44px (đang chọn nền forest); nút "Xử lý (ẩn danh)" tông danger đặc, cao 44px', async () => {
+    const api = mockFetch({ '/admin/account-deletion-requests': { body: [deletion()] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<AccountDeletionPanel />);
+    await flush();
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]')) as HTMLElement[];
+    expect(tabs).toHaveLength(3);
+    for (const t of tabs) expect(t.className).toContain('min-h-[44px]');
+    expect(tabs.find((t) => t.getAttribute('aria-selected') === 'true')?.className).toContain('bg-forest-600');
+    const run = byText(container, 'button', 'Xử lý (ẩn danh)');
+    expect(run?.className).toContain('bg-danger-fg');
+    expect(run?.className).toContain('min-h-11');
+  });
+
+  it('lý do chặn nằm trong khối tông warning và khoá nút xử lý', async () => {
+    const api = mockFetch({
+      '/admin/account-deletion-requests': { body: [deletion({ blockers: [{ code: 'WALLET_BALANCE', message: 'Ví còn tiền' }] })] },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<AccountDeletionPanel />);
+    await flush();
+    expect(byText(container, 'li', 'Ví còn tiền')?.closest('div')?.className).toContain('bg-warning-bg');
+    expect((byText(container, 'button', 'Xử lý (ẩn danh)') as HTMLButtonElement).disabled).toBe(true);
   });
 });

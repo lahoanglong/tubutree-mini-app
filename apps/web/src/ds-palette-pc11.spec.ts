@@ -30,6 +30,7 @@ const MIGRATED = [
   'components/admin/pos-credits-tab.tsx',
   'components/admin/pos-screen.tsx',
   'app/admin/pos/page.tsx',
+  'components/admin/account-deletion-panel.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');
