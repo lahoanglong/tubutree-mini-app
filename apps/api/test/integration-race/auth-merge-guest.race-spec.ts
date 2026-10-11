@@ -330,7 +330,7 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     expect(await prisma.loyaltyCheckIn.count({ where: { userId: other.guest.id } })).toBe(0);
   });
 
-  /** Ngày giờ VN lệch `offset` ngày so với hôm nay — cùng quy tắc với LoyaltyService.getVnDayKey. */
+  /** Ngày giờ VN lệch `offset` ngày so với hôm nay — cùng quy tắc với common/vn-time vnDateKey. */
   const vnDay = (offset: number) =>
     new Date(Date.now() + 7 * 3_600_000 + offset * 86_400_000).toISOString().slice(0, 10);
 

@@ -1680,22 +1680,6 @@ describe('CommunityFeedService.listEvents', () => {
   });
 });
 
-describe('CommunityFeedService.getEvent', () => {
-  it('sự kiện tồn tại → trả về', async () => {
-    const prisma = makePrisma();
-    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', title: 'Thi khoe vườn' });
-    const r = await makeSvc(prisma).getEvent('ev1');
-    expect(r).toMatchObject({ id: 'ev1', title: 'Thi khoe vườn' });
-    expect(prisma.communityEvent.findUnique).toHaveBeenCalledWith({ where: { id: 'ev1' } });
-  });
-
-  it('không tồn tại → NotFound', async () => {
-    const prisma = makePrisma();
-    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue(null);
-    await expect(makeSvc(prisma).getEvent('evX')).rejects.toBeInstanceOf(NotFoundException);
-  });
-});
-
 describe('CommunityFeedService.createEvent (admin)', () => {
   it('tạo sự kiện mới từ dto', async () => {
     const prisma = makePrisma();

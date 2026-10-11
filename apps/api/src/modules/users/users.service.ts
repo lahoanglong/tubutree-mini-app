@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { notifyAdmins } from '../../common/notify-admins';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
@@ -168,8 +169,8 @@ export class UsersService {
 
   /**
    * A1-03 (audit 2026-09): nút "Gửi yêu cầu xoá tài khoản" trước đây chỉ hiện snackbar giả, không
-   * gọi API nào. Ở đây chỉ ghi nhận YÊU CẦU + báo admin qua NotificationsService (mirror
-   * notifyAdminsOfCreditReport, dealer.service.ts); việc ẩn danh thật do admin bấm "Xử lý" ở web admin
+   * gọi API nào. Ở đây chỉ ghi nhận YÊU CẦU + báo admin qua NotificationsService
+   * (common/notify-admins); việc ẩn danh thật do admin bấm "Xử lý" ở web admin
    * (AccountDeletionService.process, C-016) sau khi CSKH liên hệ khách. Idempotent-ish: đã có
    * yêu cầu PENDING thì trả lại chính yêu cầu đó, không tạo dòng mới (khách bấm nhiều lần không
    * tạo hàng đợi vô hạn cho CSKH).
@@ -192,45 +193,20 @@ export class UsersService {
       data: { userId, reason: reason?.trim() || null },
     });
 
-    await this.notifyAdminsOfDeletionRequest(user, request.id).catch((e) =>
-      this.logger.warn(`Báo admin yêu cầu xoá tài khoản ${userId} lỗi: ${(e as Error).message}`),
-    );
+    await notifyAdmins(
+      { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+      {
+        template: 'ACCOUNT_DELETION_REQUESTED',
+        subject: `yêu cầu xoá tài khoản ${user.id} (request ${request.id})`,
+        data: () => ({ user: user.fullName || user.phone || user.id, phone: user.phone ?? '' }),
+      },
+    ).catch((e) => this.logger.warn(`Báo admin yêu cầu xoá tài khoản ${userId} lỗi: ${(e as Error).message}`));
 
     return {
       alreadyRequested: false,
       createdAt: request.createdAt,
       message: 'Yêu cầu đã được ghi nhận. CSKH sẽ liên hệ xử lý trong vòng 3 ngày làm việc — tài khoản CHƯA bị xoá.',
     };
-  }
-
-  /** Báo mọi tài khoản ADMIN có yêu cầu xoá tài khoản mới cần xử lý — mirror
-   * DealerService.notifyAdminsOfCreditReport (cùng kiểu: query ADMIN, Promise.allSettled, log warn
-   * không throw — thiếu thông báo không được chặn việc ghi nhận yêu cầu của khách). */
-  private async notifyAdminsOfDeletionRequest(
-    user: { id: string; fullName: string | null; phone: string | null },
-    requestId: string,
-  ) {
-    if (!this.notifications) {
-      this.logger.warn(`NotificationsService chưa wiring — không báo được admin yêu cầu xoá tài khoản ${user.id} (request ${requestId}).`);
-      return;
-    }
-    const admins = await this.prisma.user.findMany({
-      where: { role: 'ADMIN', isBlocked: false },
-      select: { id: true },
-      take: 20,
-    });
-    if (admins.length === 0) {
-      this.logger.warn(`Không có tài khoản ADMIN nào để báo yêu cầu xoá tài khoản ${user.id}.`);
-      return;
-    }
-    const data = { user: user.fullName || user.phone || user.id, phone: user.phone ?? '' };
-    const results = await Promise.allSettled(
-      admins.map((a) => this.notifications!.notify(a.id, 'ACCOUNT_DELETION_REQUESTED', data)),
-    );
-    const failed = results.filter((r) => r.status === 'rejected').length;
-    if (failed > 0) {
-      this.logger.warn(`Báo admin yêu cầu xoá tài khoản ${user.id}: lỗi ${failed}/${admins.length}.`);
-    }
   }
 
   private serialize(user: {

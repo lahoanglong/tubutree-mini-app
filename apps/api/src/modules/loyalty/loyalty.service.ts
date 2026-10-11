@@ -10,6 +10,8 @@ import {
 import { randomBytes } from 'node:crypto';
 import { MembershipTier, PosPointCredit, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { parseVnPhoneStrict } from '../../common/phone';
+import { vnDateKey } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible } from '../coupons/coupon-scope';
 import { decideTier } from './tier-policy';
@@ -657,11 +659,6 @@ export class LoyaltyService {
 
   // ───────────────────────── Điểm danh hằng ngày ─────────────────────────
 
-  /** Ngày theo giờ Việt Nam (UTC+7, không có DST) dạng 'YYYY-MM-DD'. */
-  private getVnDayKey(d: Date): string {
-    return new Date(d.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10);
-  }
-
   /** Hạn dùng cho điểm mới cộng — cùng quy tắc loyalty.point_expire_months như creditOrderPoints. */
   private async pointsExpiresAt(from: Date): Promise<Date> {
     const raw = await this.config.get<number>('loyalty.point_expire_months', 12);
@@ -708,7 +705,7 @@ export class LoyaltyService {
     last: { dayKey: string; cycleDay: number; streakDays: number } | null,
     now: Date,
   ): { cycleDay: number; streakDays: number } {
-    const yesterday = this.getVnDayKey(new Date(now.getTime() - DAY_MS));
+    const yesterday = vnDateKey(new Date(now.getTime() - DAY_MS));
     if (last && last.dayKey === yesterday) {
       return { cycleDay: (last.cycleDay % 7) + 1, streakDays: last.streakDays + 1 };
     }
@@ -722,7 +719,7 @@ export class LoyaltyService {
   /** Trạng thái điểm danh chuỗi 7 ngày (chỉ ĐỌC; không đụng game_profiles). */
   async getDailyCheckInStatus(userId: string) {
     const now = new Date();
-    const today = this.getVnDayKey(now);
+    const today = vnDateKey(now);
     const [table, last] = await Promise.all([this.getCheckInPointsTable(), this.lastCheckIn(userId)]);
     const checkedInToday = last?.dayKey === today;
 
@@ -765,7 +762,7 @@ export class LoyaltyService {
    */
   async dailyCheckIn(userId: string) {
     const now = new Date();
-    const today = this.getVnDayKey(now);
+    const today = vnDateKey(now);
     const last = await this.lastCheckIn(userId);
     if (last?.dayKey === today) {
       throw new BadRequestException(CHECKIN_ALREADY_MESSAGE);
@@ -984,7 +981,7 @@ export class LoyaltyService {
     }
 
     const now = new Date();
-    const dayKey = this.getVnDayKey(now);
+    const dayKey = vnDateKey(now);
     const expiresAt = await this.pointsExpiresAt(now);
     const note = dto.note?.trim() || null;
 
@@ -1202,15 +1199,6 @@ function maskPhone(phone: string | null | undefined): string | null {
   return phone ? `${phone.slice(0, 3)}****${phone.slice(-3)}` : null;
 }
 
-/** SĐT VN chuẩn hoá về 0xxxxxxxxx (cùng quy tắc zalo.service.ts normalizePhone); không phải SĐT → null. */
-function normalizeVnPhone(s: string): string | null {
-  const m = /^\+?(\d+)$/.exec(s);
-  if (!m) return null;
-  let digits = m[1]!;
-  if (digits.startsWith('84') && digits.length === 11) digits = `0${digits.slice(2)}`;
-  return /^0\d{9}$/.test(digits) ? digits : null;
-}
-
 /**
  * Tách chuỗi quét/gõ thành các ứng viên khớp CHÍNH XÁC. Bỏ khoảng trắng/gạch/chấm, viết hoa.
  * Ứng viên mã: chính chuỗi đó và phần sau tiền tố "TUBU" — mỗi ứng viên phải ≥ MIN_MEMBER_CODE_LEN.
@@ -1218,7 +1206,7 @@ function normalizeVnPhone(s: string): string | null {
  */
 export function parseMemberCode(raw: string): { phone: string | null; codes: string[] } {
   const s = (raw ?? '').toUpperCase().replace(/[\s.-]/g, '');
-  const phone = normalizeVnPhone(s);
+  const phone = parseVnPhoneStrict(s);
   const codes = new Set<string>();
   if (/^[A-Z0-9]+$/.test(s)) {
     if (s.length >= MIN_MEMBER_CODE_LEN) codes.add(s);

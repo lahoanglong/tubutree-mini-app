@@ -21,6 +21,7 @@ import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.servic
 import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { SubscriptionsService } from '../../src/modules/subscriptions/subscriptions.service';
 import { PRODUCT_DISCONTINUED } from '../../src/modules/cart/sellable';
+import * as orderCode from '../../src/common/order-code';
 import { createUser, randCode, summarize, warmPool } from './helpers';
 
 /**
@@ -353,12 +354,11 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
   it('đại lý: SP bị gỡ giữa lúc tính giá và lúc ghi đơn → kiểm lại trong tx chặn', async () => {
     const d = await createUser(prisma, { role: 'DEALER' });
     const v = await variation();
-    // generateCode chạy sau khi dựng dòng/giá, trước transaction ghi đơn.
-    const proto = Object.getPrototypeOf(dealer) as { generateCode: () => Promise<string> };
-    const original = proto.generateCode;
-    jest.spyOn(proto, 'generateCode').mockImplementationOnce(async function (this: unknown) {
+    // Sinh mã đơn chạy sau khi dựng dòng/giá, trước transaction ghi đơn.
+    const original = orderCode.generateUniqueOrderCode;
+    jest.spyOn(orderCode, 'generateUniqueOrderCode').mockImplementationOnce(async (...args) => {
       await prisma.product.update({ where: { id: v.productId }, data: { approvalStatus: 'REJECTED' } });
-      return original.call(this);
+      return original(...args);
     });
     const err = await dealer
       .placeOrder(d.id, { items: [{ variationId: v.id, quantity: 1 }], paymentMethod: 'BANK_TRANSFER' } as never)

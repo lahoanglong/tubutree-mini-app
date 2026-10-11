@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
+import { maskFullName } from '../../common/mask-name';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { normalizeSubdomain, normalizeCustomDomain, assertIdentifierAvailable } from '../storefront/identifier-validation';
 
@@ -41,16 +42,6 @@ function maskPhoneNumber(phone: string | null | undefined): string | null {
   if (!phone) return null;
   if (phone.length <= 6) return '***';
   return `${phone.slice(0, 3)}****${phone.slice(-3)}`;
-}
-
-/**
- * Cùng công thức che tên với `maskName` ở game.service.ts/game-gift.service.ts/game-season.service.ts
- * (chỉ giữ từ cuối — trong tiếng Việt là "tên gọi" — phần còn lại thay bằng "***").
- */
-function maskFullName(name: string | null | undefined): string {
-  if (!name || !name.trim()) return 'Khách Tubu';
-  const parts = name.trim().split(/\s+/);
-  return `${parts[parts.length - 1]}***`;
 }
 
 type MaskableShippingAddress = {

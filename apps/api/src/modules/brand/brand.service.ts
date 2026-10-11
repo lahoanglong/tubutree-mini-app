@@ -503,10 +503,6 @@ export class BrandService {
     return this.prisma.brand.update({ where: { id: brand.id }, data });
   }
 
-  listOwnedPromotions(userId: string) {
-    return this.assertOwnedBrand(userId).then((b) => this.listPromotions(b.id));
-  }
-
   async createOwnedPromotion(
     userId: string,
     dto: { title: string; subtitle?: string; themeColor?: string; couponCode?: string; startAt: string; endAt: string; sortOrder?: number },

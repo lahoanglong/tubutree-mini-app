@@ -4,6 +4,7 @@ import { LoyaltyService } from './loyalty.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { vnDateKey } from '../../common/vn-time';
 
 function makeConfig(): SystemConfigService {
   return { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
@@ -545,7 +546,7 @@ describe('LoyaltyService.dailyCheckIn — Task 9 analytics (engagement_action)',
       $transaction: jest.fn(),
     } as unknown as PrismaService;
     const svc = new LoyaltyService(prisma, makeConfig(), analytics as unknown as AnalyticsEventsService);
-    const today = (svc as unknown as { getVnDayKey(d: Date): string }).getVnDayKey(new Date());
+    const today = vnDateKey();
     (prisma.loyaltyCheckIn.findFirst as jest.Mock).mockResolvedValue({ dayKey: today });
 
     await expect(svc.dailyCheckIn('u1')).rejects.toBeInstanceOf(BadRequestException);

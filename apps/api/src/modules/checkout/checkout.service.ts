@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { randomInt } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { generateUniqueOrderCode } from '../../common/order-code';
 import { CartService } from '../cart/cart.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { PricingService } from '../pricing/pricing.service';
@@ -205,7 +205,7 @@ export class CheckoutService {
     const pointsEarned =
       dto.paymentMethod === 'XU' && !earnPointsOnXu ? 0 : computed.pointsEarned;
     const orderSource = storefrontSlug ? 'ctv_assisted' : dto.itemIds?.length ? 'buy_now' : 'checkout';
-    const code = await this.generateCode();
+    const code = await generateUniqueOrderCode(this.prisma, 'RETAIL');
 
     let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
     try {
@@ -638,19 +638,6 @@ export class CheckoutService {
         pointsEarned,
       },
     };
-  }
-
-  private async generateCode(): Promise<string> {
-    for (let i = 0; i < 6; i++) {
-      const d = new Date();
-      const ymd = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(
-        d.getUTCDate(),
-      ).padStart(2, '0')}`;
-      const code = `TUBU${ymd}${String(randomInt(0, 100000)).padStart(5, '0')}`;
-      const exists = await this.prisma.order.findUnique({ where: { code } });
-      if (!exists) return code;
-    }
-    return `TUBU${Date.now()}`;
   }
 
   private addressSnapshot(a: {

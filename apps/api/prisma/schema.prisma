@@ -217,7 +217,9 @@ model PayrollMonth {
 model User {
   id                String          @id @default(cuid())
   zaloId            String?         @unique // openId từ Zalo
+  /// @deprecated Không nơi nào ghi giá trị; chỉ account-deletion.service gán null (C-108).
   zaloAccessToken   String? // mã hóa
+  /// @deprecated Không nơi nào ghi giá trị; chỉ account-deletion.service gán null (C-108).
   zaloRefreshToken  String? // mã hóa
   phone             String?         @unique
   email             String?
@@ -238,6 +240,7 @@ model User {
   // Đồng ý nhận tin khuyến mãi / nhắc Vườn Xanh: NotificationsService.notify bỏ qua tin thuộc nhóm đã tắt.
   notifyPromo       Boolean         @default(true)
   notifyGarden      Boolean         @default(true)
+  /// @deprecated Không nơi nào ghi hoặc đọc (C-108).
   pancakeCustomerId String?         @unique
   metadata          Json?
   createdAt         DateTime        @default(now())
@@ -321,6 +324,7 @@ model MembershipTier {
   /// cho mọi hạng, xem vouchers.service.ts birthdayVouchers()).
   birthdayVoucherAmount Int?
   perks                 Json
+  /// @deprecated Không nơi nào ghi hoặc đọc (C-108).
   badgeImageUrl         String?
   sortOrder             Int     @default(0)
   users                 User[]
@@ -844,12 +848,13 @@ model Order {
   // Đơn CTV "lên đơn hộ khách": userId==referrerUserId (CTV) nhưng VẪN được hưởng hoa hồng
   // (cho phép self-referral có kiểm soát — xem affiliate.createCommissionForOrder).
   placedForCustomer  Boolean          @default(false)
+  /// @deprecated Không nơi nào ghi hoặc đọc, luôn 0 (C-108); hoa hồng CTV nằm ở bảng commissions.
   commission         Int              @default(0)
   source             String? // checkout | buy_now | ctv_assisted | subscription | dealer
   platform           String? // miniapp | web — null cho đơn cũ trước migration này
   paidAt             DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
   subscriptionId     String? // gắn khi đơn tạo từ subscriptions.service (cron chạy kỳ)
-  endCustomerKey     String? // hash SĐT người nhận — CHỈ set khi placedForCustomer = true
+  endCustomerKey     String? // SĐT người nhận dạng nội địa 0xxxxxxxxx (lưu rõ, KHÔNG hash) — CHỈ set khi placedForCustomer = true
   couponCode         String?
   note               String?
   // Thu gom vật liệu tái chế (Gomdon đơn đổi hàng)
@@ -1132,6 +1137,7 @@ model AffiliateLink {
   @@map("affiliate_links")
 }
 
+/// @deprecated Chỉ ghi, không đọc (C-108): AffiliateService.trackClick ghi mỗi lượt bấm, không nơi nào đọc lại.
 model AffiliateClick {
   id               String   @id @default(cuid())
   shortCode        String
@@ -1140,6 +1146,7 @@ model AffiliateClick {
   userAgent        String?
   referrer         String?
   clickedAt        DateTime @default(now())
+  /// @deprecated Không nơi nào ghi hoặc đọc (C-108, A7-24).
   convertedOrderId String?
 
   @@index([shortCode])
@@ -1697,6 +1704,8 @@ enum BetaStatus {
   LEFT
 }
 
+/// @deprecated Chỉ ghi, không đọc (C-108): beta.service ghi góp ý của khách beta nhưng không API hay màn admin nào đọc lại.
+/// Có dữ liệu khách nên KHÔNG DROP; cần chủ dự án quyết: làm màn admin đọc, hoặc bỏ tính năng.
 model BetaFeedback {
   id        String   @id @default(cuid())
   userId    String
@@ -2438,6 +2447,7 @@ model RetentionDailySnapshot {
   ordersCount          Int
   ordersPerBuyerMtd    Decimal
   dauProxyRefreshToken Int
+  /// @deprecated Luôn ghi null (analytics-aggregation.service), không nơi nào đọc giá trị (C-108); chưa có nguồn DAU theo event.
   dauEventBased        Int?
   /// NS-1 của cohort "đơn đầu tiên rơi vào ngày VN (date − 30 ngày)": số khách trong cohort và số khách có đơn thứ 2
   /// trong 30 ngày kể từ đơn đầu. NULL = dòng tính trước khi có NS-1 (chưa backfill).
@@ -2448,6 +2458,7 @@ model RetentionDailySnapshot {
   @@map("retention_daily_snapshot")
 }
 
+/// @deprecated Chưa từng được ghi hay đọc (C-108): chỉ có TODO ở analytics-aggregation.service.ts. KHÔNG DROP khi chưa quyết định bỏ hẳn.
 model CohortRepeatSnapshot {
   id                      String   @id @default(cuid())
   cohortMonth             DateTime
@@ -2465,6 +2476,7 @@ model CohortRepeatSnapshot {
   @@map("cohort_repeat_snapshot")
 }
 
+/// @deprecated Chưa từng được ghi hay đọc (C-108): chỉ có TODO ở analytics-aggregation.service.ts. KHÔNG DROP khi chưa quyết định bỏ hẳn.
 model FunnelDailySnapshot {
   id          String   @id @default(cuid())
   date        DateTime

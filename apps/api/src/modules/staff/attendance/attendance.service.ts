@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { verifyPresence, type AttnConfig, type VerifyReason } from './verify';
-import { vnDateKey } from '../shifts/time.util';
+import { vnDateKey } from '../../../common/vn-time';
 
 const REASON_MSG: Record<VerifyReason, string> = {
   NOT_CONFIGURED: 'Chưa cấu hình chấm công, vui lòng liên hệ quản trị.',

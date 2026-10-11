@@ -2,6 +2,8 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { vnDateKey } from '../../common/vn-time';
+import { maskName } from '../../common/mask-name';
 
 /**
  * Vườn Xanh 2.0 (social) — tặng nước cho bạn bè trong mạng giới thiệu.
@@ -16,16 +18,6 @@ export class GameGiftService {
     private readonly config: SystemConfigService,
     private readonly notifications: NotificationsService,
   ) {}
-
-  private dayKey(d: Date): string {
-    return new Date(d.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10);
-  }
-
-  private maskName(name: string | null): string {
-    if (!name) return 'Bạn Tubu';
-    const parts = name.trim().split(' ');
-    return `${parts[parts.length - 1] ?? 'Tubu'}***`;
-  }
 
   private async friendIds(userId: string): Promise<Set<string>> {
     const me = await this.prisma.user.findUnique({
@@ -64,7 +56,7 @@ export class GameGiftService {
       });
       if (referrer?.id) list.push(referrer);
     }
-    const dayKey = this.dayKey(new Date());
+    const dayKey = vnDateKey();
     const giftsToday = await this.prisma.waterGift.findMany({
       where: { senderId: userId, dayKey },
       select: { recipientId: true },
@@ -72,7 +64,7 @@ export class GameGiftService {
     const gifted = new Set(giftsToday.map((g) => g.recipientId));
     return list.map((u) => ({
       id: u.id,
-      nickname: this.maskName(u.fullName),
+      nickname: maskName(u.fullName),
       giftedToday: gifted.has(u.id),
     }));
   }
@@ -86,7 +78,7 @@ export class GameGiftService {
       throw new BadRequestException('Chỉ tặng nước cho bạn bè (người bạn mời hoặc người mời bạn).');
     }
     const amount = await this.config.get<number>('game.gift_water_amount', 10);
-    const dayKey = this.dayKey(new Date());
+    const dayKey = vnDateKey();
 
     // Chống tặng 2 lần/ngày/người: tạo bản ghi unique trước.
     try {

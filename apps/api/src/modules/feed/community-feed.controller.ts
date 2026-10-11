@@ -102,11 +102,6 @@ export class CommunityFeedController {
     return this.feed.listEvents();
   }
 
-  @Get('events/:id')
-  getEvent(@Param('id') id: string) {
-    return this.feed.getEvent(id);
-  }
-
   @Get('events/:id/posts')
   eventPosts(
     @CurrentUser('sub') userId: string,

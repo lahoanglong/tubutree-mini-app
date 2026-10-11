@@ -23,6 +23,11 @@ export function startOfVnMonth(d: Date = new Date()): Date {
   return new Date(Date.UTC(year, month - 1, 1) - VN_OFFSET_MS);
 }
 
+/** 'YYYY-MM-DD' theo giờ VN. */
+export function vnDateKey(d: Date = new Date()): string {
+  return new Date(d.getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);
+}
+
 /** 'YYYY-MM' theo giờ VN. */
 export function vnMonthKey(d: Date = new Date()): string {
   return new Date(d.getTime() + VN_OFFSET_MS).toISOString().slice(0, 7);

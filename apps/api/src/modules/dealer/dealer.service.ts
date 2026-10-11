@@ -1,5 +1,4 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { randomInt } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { DealerRewardClaim, DealerRewardClaimStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -14,6 +13,8 @@ import {
   productDiscontinuedError,
   SELLABLE_VARIATION_WHERE,
 } from '../cart/sellable';
+import { generateUniqueOrderCode } from '../../common/order-code';
+import { notifyAdmins } from '../../common/notify-admins';
 import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
@@ -223,7 +224,7 @@ export class DealerService {
     }
 
     const onCredit = dto.paymentMethod === 'CREDIT';
-    // Fast-fail thân thiện (không tốn generateCode khi rõ ràng vượt). Check
+    // Fast-fail thân thiện (không tốn lượt sinh mã đơn khi rõ ràng vượt). Check
     // QUYẾT ĐỊNH nằm trong transaction Serializable bên dưới để chống TOCTOU.
     // Đại lý chưa có tier = hạn mức 0 (không phải "không giới hạn"): admin có thể cấp role DEALER
     // mà chưa gán tier, trước đây nhánh `&& tier` bỏ qua hẳn kiểm tra và đặt được CREDIT vô hạn.
@@ -239,7 +240,7 @@ export class DealerService {
       if ((pre._sum.delta ?? 0) + subtotal > creditLimit) throw overLimitError();
     }
 
-    const code = await this.generateCode();
+    const code = await generateUniqueOrderCode(this.prisma, 'DEALER');
     let order: Awaited<ReturnType<typeof this.prisma.order.create>> & { hasBackorder: boolean };
     try {
       order = await this.prisma.$transaction(
@@ -368,40 +369,28 @@ export class DealerService {
     if (amount > balance) {
       throw new BadRequestException(`Số tiền báo (${vnd(amount)}) vượt dư nợ hiện tại của bạn (${vnd(balance)}).`);
     }
-    await this.notifyAdminsOfCreditReport(userId, amount, note).catch((e) =>
-      this.logger.warn(`Báo admin đại lý ${userId} đã chuyển khoản lỗi: ${(e as Error).message}`),
-    );
+    await notifyAdmins(
+      { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+      {
+        template: 'DEALER_CREDIT_PAYMENT_REPORTED',
+        subject: `đại lý ${userId} đã chuyển khoản`,
+        data: async () => ({
+          dealer: await this.dealerLabel(userId),
+          amount: amount.toLocaleString('vi-VN'),
+          note: note?.trim() ?? '',
+        }),
+      },
+    ).catch((e) => this.logger.warn(`Báo admin đại lý ${userId} đã chuyển khoản lỗi: ${(e as Error).message}`));
     return {
       ok: true,
       message: `Đã báo cho quản trị viên là bạn đã chuyển khoản ${vnd(amount)}. Sổ công nợ sẽ CHỈ cập nhật sau khi admin xác nhận đã nhận được tiền.`,
     };
   }
 
-  /** Báo mọi tài khoản ADMIN đại lý vừa báo đã chuyển khoản (thông báo in-app/ZNS theo template
-   * DEALER_CREDIT_PAYMENT_REPORTED) — mirror notifyAdminsOfClaim. */
-  private async notifyAdminsOfCreditReport(userId: string, amount: number, note?: string) {
-    if (!this.notifications) {
-      this.logger.warn(`NotificationsService chưa wiring — không báo được admin đại lý ${userId} báo đã chuyển khoản.`);
-      return;
-    }
-    const [admins, dealer] = await Promise.all([
-      this.prisma.user.findMany({ where: { role: 'ADMIN', isBlocked: false }, select: { id: true }, take: 20 }),
-      this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true, phone: true } }),
-    ]);
-    if (admins.length === 0) {
-      this.logger.warn(`Không có tài khoản ADMIN nào để báo đại lý ${userId} đã chuyển khoản.`);
-      return;
-    }
-    const data = {
-      dealer: dealer?.fullName || dealer?.phone || userId,
-      amount: amount.toLocaleString('vi-VN'),
-      note: note?.trim() ?? '',
-    };
-    const results = await Promise.allSettled(
-      admins.map((a) => this.notifications!.notify(a.id, 'DEALER_CREDIT_PAYMENT_REPORTED', data)),
-    );
-    const failed = results.filter((r) => r.status === 'rejected').length;
-    if (failed > 0) this.logger.warn(`Báo admin đại lý ${userId} đã chuyển khoản: lỗi ${failed}/${admins.length}.`);
+  /** Tên hiển thị của đại lý trong thông báo cho admin: tên, không có thì SĐT, không có nữa thì mã. */
+  private async dealerLabel(userId: string): Promise<string> {
+    const dealer = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true, phone: true } });
+    return dealer?.fullName || dealer?.phone || userId;
   }
 
   /**
@@ -875,9 +864,19 @@ export class DealerService {
       `Đại lý ${userId} yêu cầu nhận thưởng "${reward.title}" ${period.label} (doanh số đã chốt ${vnd(vol.settled)}) — claim ${claim.id}.`,
     );
     // Non-fatal: yêu cầu đã lưu, admin vẫn thấy ở danh sách chờ duyệt dù gửi thông báo lỗi.
-    await this.notifyAdminsOfClaim(claim, period).catch((e) =>
-      this.logger.warn(`Báo admin yêu cầu nhận thưởng ${claim.id} lỗi: ${(e as Error).message}`),
-    );
+    await notifyAdmins(
+      { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+      {
+        template: 'DEALER_REWARD_CLAIM_NEW',
+        subject: `yêu cầu nhận thưởng ${claim.id}`,
+        data: async () => ({
+          dealer: await this.dealerLabel(claim.userId),
+          reward: claim.rewardTitle,
+          period: period.label,
+          volume: claim.volumeAtClaim.toLocaleString('vi-VN'),
+        }),
+      },
+    ).catch((e) => this.logger.warn(`Báo admin yêu cầu nhận thưởng ${claim.id} lỗi: ${(e as Error).message}`));
     return this.claimResponse(claim, period, false);
   }
 
@@ -901,33 +900,6 @@ export class DealerService {
       periodLabel: period.label,
       currentVolume: Number(claim.volumeAtClaim),
     };
-  }
-
-  /** Báo mọi tài khoản ADMIN (thông báo in-app/ZNS theo template DEALER_REWARD_CLAIM_NEW). */
-  private async notifyAdminsOfClaim(claim: DealerRewardClaim, period: RewardPeriod) {
-    if (!this.notifications) {
-      this.logger.warn(`NotificationsService chưa wiring — không báo được admin về yêu cầu nhận thưởng ${claim.id}.`);
-      return;
-    }
-    const [admins, dealer] = await Promise.all([
-      this.prisma.user.findMany({ where: { role: 'ADMIN', isBlocked: false }, select: { id: true }, take: 20 }),
-      this.prisma.user.findUnique({ where: { id: claim.userId }, select: { fullName: true, phone: true } }),
-    ]);
-    if (admins.length === 0) {
-      this.logger.warn(`Không có tài khoản ADMIN nào để báo yêu cầu nhận thưởng ${claim.id}.`);
-      return;
-    }
-    const data = {
-      dealer: dealer?.fullName || dealer?.phone || claim.userId,
-      reward: claim.rewardTitle,
-      period: period.label,
-      volume: claim.volumeAtClaim.toLocaleString('vi-VN'),
-    };
-    const results = await Promise.allSettled(
-      admins.map((a) => this.notifications!.notify(a.id, 'DEALER_REWARD_CLAIM_NEW', data)),
-    );
-    const failed = results.filter((r) => r.status === 'rejected').length;
-    if (failed > 0) this.logger.warn(`Báo admin yêu cầu nhận thưởng ${claim.id}: lỗi ${failed}/${admins.length}.`);
   }
 
   // ── Admin: xử lý yêu cầu nhận thưởng mốc đại lý ──
@@ -1501,14 +1473,5 @@ export class DealerService {
     const rules = (tier?.discountRules as { default?: number } | undefined) ?? {};
     const discountPct = Math.min(rules.default ?? 0.2, maxDiscount);
     return { discountPct, tier };
-  }
-
-  private async generateCode(): Promise<string> {
-    for (let i = 0; i < 6; i++) {
-      const code = `DLR${Date.now().toString().slice(-8)}${String(randomInt(0, 1000)).padStart(3, '0')}`;
-      const exists = await this.prisma.order.findUnique({ where: { code } });
-      if (!exists) return code;
-    }
-    return `DLR${Date.now()}`;
   }
 }

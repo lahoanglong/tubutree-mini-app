@@ -14,10 +14,22 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** Mã nguồn chạy thật (bỏ spec, bỏ chính danh sách khoá chết, bỏ comment) để dò "có code nào đọc khoá này không". */
+/**
+ * File chỉ MÔ TẢ khoá (biên giá trị, luật ghi, che giá trị, danh sách chết), không đọc giá trị để chạy
+ * nghiệp vụ: có tên khoá ở đây không chứng tỏ khoá còn dùng (vd `cashback.merchant_tubu_share` nằm trong
+ * RANGES nhưng không code nào đọc).
+ */
+const KEY_DESCRIPTOR_FILES = [
+  'system-config/dead-config-keys.ts',
+  'system-config/system-config.service.ts',
+  'admin/admin-config-rules.ts',
+  'admin/config-redaction.ts',
+];
+
+/** Mã nguồn chạy thật (bỏ spec, bỏ file chỉ mô tả khoá, bỏ comment) để dò "có code nào đọc khoá này không". */
 function runtimeSource(): string {
   return walk(SRC_ROOT)
-    .filter((p) => !p.endsWith('dead-config-keys.ts'))
+    .filter((p) => !KEY_DESCRIPTOR_FILES.some((f) => p.endsWith(`/modules/${f}`)))
     .map((p) => readFileSync(p, 'utf-8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''))
     .join('\n');
 }
@@ -68,6 +80,19 @@ describe('khoá config chết (C-054)', () => {
       expect(row).toBeDefined();
       expect(row!.value).toBeNull();
     }
+  });
+
+  it('cửa sổ ghi nhận giới thiệu CTV chỉ đọc một khoá: affiliate.attribution_days (C-099, Q-31)', () => {
+    const windowKeys = [...new Set([...source.matchAll(/['"`](affiliate\.[a-z_]*(?:attribution|click_window)[a-z_]*)['"`]/g)].map((m) => m[1]))];
+    expect(windowKeys).toEqual(['affiliate.attribution_days']);
+    expect(isDeadConfigKey('affiliate.last_click_window_days')).toBe(true);
+    expect(isDeadConfigKey('affiliate.attribution_days')).toBe(false);
+    expect(seededConfigs().map((r) => r.key)).toEqual(expect.arrayContaining(['affiliate.attribution_days']));
+  });
+
+  it('khoá chỉ có trong bảng biên giá trị, không code nào đọc, bị đánh dấu chết (cashback.merchant_tubu_share)', () => {
+    expect(isDeadConfigKey('cashback.merchant_tubu_share')).toBe(true);
+    expect(deadConfigKeyReason('cashback.merchant_tubu_share')).toContain('cashback.merchant_user_share');
   });
 
   it('deadConfigKeyReason trả lý do cho khoá chết, null cho khoá còn dùng', () => {

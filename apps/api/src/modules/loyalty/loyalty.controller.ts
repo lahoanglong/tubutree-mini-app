@@ -1,22 +1,13 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { IsInt, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from './loyalty.service';
 import { PosCreditDto, PosCreditListQuery, ScanMemberDto } from './dto/loyalty-staff.dto';
 
-class RedeemPreviewDto {
-  @IsInt() @Min(1) points!: number;
-}
-
 @Controller()
 export class LoyaltyController {
-  constructor(
-    private readonly loyalty: LoyaltyService,
-    private readonly config: SystemConfigService,
-  ) {}
+  constructor(private readonly loyalty: LoyaltyService) {}
 
   @Get('me/loyalty')
   overview(@CurrentUser('sub') userId: string) {
@@ -31,20 +22,6 @@ export class LoyaltyController {
   @Get('me/coupons')
   coupons(@CurrentUser('sub') userId: string) {
     return this.loyalty.getAvailableCoupons(userId);
-  }
-
-  /**
-   * Xem trước giá trị quy đổi điểm (việc trừ điểm thực tế diễn ra ở checkout
-   * qua field pointsToUse — tránh tạo voucher rời rạc).
-   */
-  @Post('me/redeem-points')
-  async redeemPreview(@Body() dto: RedeemPreviewDto) {
-    const vndPerPoint = await this.config.get<number>('loyalty.vnd_per_point_redeem', 1000);
-    return {
-      points: dto.points,
-      value: dto.points * vndPerPoint,
-      note: 'Áp điểm khi thanh toán bằng trường pointsToUse, tối đa 20% giá trị đơn.',
-    };
   }
 
   /** Danh mục quà/voucher có thể đổi bằng Điểm Xanh. */

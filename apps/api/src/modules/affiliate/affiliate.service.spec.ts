@@ -425,6 +425,14 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(commissionCreate).not.toHaveBeenCalled();
   });
 
+  it('mã đơn lên hộ có dạng TUBU<yyyymmdd><5 số> như đơn checkout', async () => {
+    const { svc, orderCreate, prisma } = build();
+    await svc.placeOrderForCustomer('ctv', DTO() as never);
+    const code = orderCreate.mock.calls[0][0].data.code as string;
+    expect(code).toMatch(/^TUBU\d{8}\d{5}$/);
+    expect(prisma.order.findUnique).toHaveBeenCalledWith({ where: { code } });
+  });
+
   it('idempotency-key mới (chưa có đơn nào) → tạo đơn bình thường + ghi idempotencyKey', async () => {
     const { svc, orderCreate } = build();
     await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-2');
@@ -444,9 +452,8 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const data = orderCreate.mock.calls[0][0].data;
     expect(data.source).toBe('ctv_assisted');
     expect(data.platform).toBe('miniapp');
-    // Cùng kiểu chuẩn hoá 84→0xxxxxxxxx mà User.phone luôn lưu (zalo.service.ts normalizePhone /
-    // loyalty.service.ts normalizeVnPhone), KHÔNG PHẢI hash — SĐT không có mã +84 cũng phải qua
-    // được (chỉ strip ký tự không phải số ở đây).
+    // Cùng kiểu chuẩn hoá 84→0xxxxxxxxx mà User.phone luôn lưu (common/phone.ts toLocalPhone),
+    // KHÔNG PHẢI hash — SĐT không có mã +84 cũng phải qua được (chỉ strip ký tự không phải số ở đây).
     expect(data.endCustomerKey).toBe('0901234567');
 
     expect(analyticsLocal.record).toHaveBeenCalledTimes(1);

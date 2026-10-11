@@ -51,10 +51,6 @@ export class BrandController {
   ownedSales(@CurrentUser('sub') uid: string, @Query() q: BrandSalesQueryDto) {
     return this.svc.getOwnedSales(uid, q.period);
   }
-  @Get('owner/me/promotions')
-  ownedPromos(@CurrentUser('sub') uid: string) {
-    return this.svc.listOwnedPromotions(uid);
-  }
   @Post('owner/me/promotions')
   addOwnedPromo(@CurrentUser('sub') uid: string, @Body() dto: PromotionDto) {
     return this.svc.createOwnedPromotion(uid, dto);

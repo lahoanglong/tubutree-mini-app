@@ -35,16 +35,6 @@ export class OrdersController {
     return this.orders.repurchase(userId, code, { items: dto?.items, addSource: dto?.addSource });
   }
 
-  @Post(':code/issue-invoice')
-  issueInvoice(@CurrentUser('sub') userId: string, @Param('code') code: string) {
-    return this.orders.issueInvoice(userId, code);
-  }
-
-  @Post(':code/track')
-  track(@CurrentUser('sub') userId: string, @Param('code') code: string) {
-    return this.orders.track(userId, code);
-  }
-
   @Post(':code/return-request')
   requestReturn(
     @CurrentUser('sub') userId: string,

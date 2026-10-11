@@ -17,6 +17,7 @@ export const DEAD_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'affiliate.last_click_window_days': 'Cửa sổ ghi nhận giới thiệu là "affiliate.attribution_days".',
   'affiliate.kyc_required_above': 'Chưa có luồng xác minh KYC đọc khoá này.',
   'affiliate.tubu_wallet_multiplier': 'Rút hoa hồng về Ví Tubu quy đổi 1:1; Ví đổi sang TubuXu dùng "wallet.xu_convert_multiplier".',
+  'cashback.merchant_tubu_share': 'Phần Tubu giữ là phần còn lại của hoa hồng sau "cashback.merchant_user_share" (mặc định 70%), không có khoá riêng.',
   'cashback.min_withdraw_bank': 'Rút Ví về ngân hàng dùng "wallet.withdraw_min".',
   'cashback.tubu_wallet_multiplier': 'Hoàn tiền sàn ngoài vào Ví Tubu quy đổi 1:1; Ví đổi sang TubuXu dùng "wallet.xu_convert_multiplier".',
   'coins.referee_reward': 'Người được mời chỉ nhận mã giảm giá chào mừng; xu chỉ thưởng cho người mời (coins.referrer_reward).',

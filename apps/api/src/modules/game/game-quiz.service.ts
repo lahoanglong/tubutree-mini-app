@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { DEFAULT_TREE_TYPE } from './game.constants';
+import { vnDateKey } from '../../common/vn-time';
 
 @Injectable()
 export class GameQuizService {
@@ -15,10 +16,6 @@ export class GameQuizService {
     const utc7 = new Date(d.getTime() + 7 * 3600 * 1000);
     utc7.setUTCHours(0, 0, 0, 0);
     return new Date(utc7.getTime() - 7 * 3600 * 1000);
-  }
-
-  private dayKey(d: Date): string {
-    return new Date(d.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10);
   }
 
   // User mới đăng nhập nhưng chưa vào Vườn Xanh → chưa có gameProfile.
@@ -81,7 +78,7 @@ export class GameQuizService {
     // "chưa trả lời hôm nay" trước khi request đầu commit → cả 2 cùng được cộng waterReward.
     try {
       await this.prisma.gameQuizAttempt.create({
-        data: { userId, quizId, isCorrect, dayKey: this.dayKey(new Date()) },
+        data: { userId, quizId, isCorrect, dayKey: vnDateKey() },
       });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {

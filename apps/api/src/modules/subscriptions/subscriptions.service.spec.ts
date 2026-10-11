@@ -280,6 +280,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     expect(data.source).toBe('subscription');
     expect(data.platform).toBe('system');
     expect(data.subscriptionId).toBe('s1');
+    expect(data.code).toMatch(/^TUBUSUB\d{10}$/);
   });
 
   it('instance khác đã claim (count=0) → KHÔNG tạo đơn trùng', async () => {

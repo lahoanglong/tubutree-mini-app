@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ReviewsService } from './reviews.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -25,6 +25,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     review: {
       findFirst: jest.fn().mockResolvedValue(null), // chưa review
       create: jest.fn().mockResolvedValue({ id: 'r1' }),
+      update: jest.fn().mockResolvedValue({ id: 'old', rating: 3 }),
       aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4.5 }, _count: 2 }),
     },
     pointsTransaction: { create: jest.fn() },
@@ -56,23 +57,142 @@ describe('ReviewsService.create', () => {
     );
   });
 
-  it('đã đánh giá sản phẩm này rồi → BadRequest (chống farm điểm)', async () => {
-    const prisma = makePrisma({
-      review: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'old' }),
-        create: jest.fn(),
-        aggregate: jest.fn(),
-      },
+  // Q-30 / C-110: một đánh giá cho mỗi (người, sản phẩm); gọi tạo lại (mua lại) thì SỬA đánh giá cũ,
+  // thưởng Điểm Xanh chỉ ở lần tạo đầu.
+  describe('đã có đánh giá (Q-30: mua lại thì sửa, không thưởng lại)', () => {
+    const existing = { id: 'old', userId: 'u1', productId: 'p1', orderId: 'o0', rating: 5, pointsEarned: 15, isVisible: false };
+    const withExisting = () =>
+      makePrisma({
+        review: {
+          findFirst: jest.fn().mockResolvedValue(existing),
+          create: jest.fn(),
+          update: jest.fn().mockResolvedValue({ ...existing, rating: 2, comment: 'đổi ý' }),
+          aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 2 }, _count: 1 }),
+        },
+      });
+    type P = {
+      review: { create: jest.Mock; update: jest.Mock };
+      pointsTransaction: { create: jest.Mock };
+      user: { update: jest.Mock };
+      product: { update: jest.Mock };
+    };
+
+    it('sửa sao, nội dung, ảnh, video của đánh giá cũ; không tạo mới', async () => {
+      const prisma = withExisting();
+      const out = await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', {
+        rating: 2,
+        comment: 'đổi ý',
+        images: ['x.jpg'],
+        videoUrl: 'https://res.cloudinary.com/x/video/upload/v1/rv2.mp4',
+      } as never);
+      const p = prisma as unknown as P;
+      expect(p.review.create).not.toHaveBeenCalled();
+      expect(p.review.update).toHaveBeenCalledTimes(1);
+      expect(p.review.update.mock.calls[0][0]).toEqual({
+        where: { userId_productId: { userId: 'u1', productId: 'p1' } },
+        data: {
+          rating: 2,
+          comment: 'đổi ý',
+          images: ['x.jpg'],
+          videoUrl: 'https://res.cloudinary.com/x/video/upload/v1/rv2.mp4',
+        },
+      });
+      expect(out).toMatchObject({ id: 'old', updated: true });
     });
-    await expect(new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never)).rejects.toThrow(
-      'đã đánh giá',
-    );
-    expect((prisma as unknown as { review: { create: jest.Mock } }).review.create).not.toHaveBeenCalled();
+
+    it('sửa không đổi điểm: không ghi pointsTransaction, không cộng pointsBalance, không đụng pointsEarned', async () => {
+      const prisma = withExisting();
+      await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', { rating: 4, images: ['a.jpg', 'b.jpg'] } as never);
+      const p = prisma as unknown as P;
+      expect(p.pointsTransaction.create).not.toHaveBeenCalled();
+      expect(p.user.update).not.toHaveBeenCalled();
+      expect(Object.keys(p.review.update.mock.calls[0][0].data)).not.toContain('pointsEarned');
+    });
+
+    it('sửa không bỏ ẩn đánh giá mà admin đã ẩn (không có isVisible trong data) và tính lại sao trung bình', async () => {
+      const prisma = withExisting();
+      await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', { rating: 4 } as never);
+      const p = prisma as unknown as P;
+      expect(Object.keys(p.review.update.mock.calls[0][0].data)).not.toContain('isVisible');
+      expect(p.product.update.mock.calls[0][0].data).toEqual({ ratingAvg: 2, reviewCount: 1 });
+    });
+
+    it('bỏ trống nội dung/ảnh/video khi sửa → xoá các trường đó (thay thế toàn bộ như lúc tạo)', async () => {
+      const prisma = withExisting();
+      await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', { rating: 4 } as never);
+      const p = prisma as unknown as P;
+      expect(p.review.update.mock.calls[0][0].data).toEqual({ rating: 4, comment: null, images: [], videoUrl: null });
+    });
+
+    it('ghi engagement_action review_updated CÙNG tx, pointsEarned = 0', async () => {
+      const prisma = withExisting();
+      const spy = { record: jest.fn().mockResolvedValue(undefined), recordBestEffort: jest.fn() };
+      await new ReviewsService(prisma, spy as unknown as AnalyticsEventsService).create('u1', 'tinh-dau', { rating: 4 } as never);
+      expect(spy.record).toHaveBeenCalledTimes(1);
+      expect(spy.record).toHaveBeenCalledWith(prisma, {
+        eventName: 'engagement_action',
+        userId: 'u1',
+        platform: 'miniapp',
+        props: { action: 'review_updated', productSlug: 'tinh-dau', pointsEarned: 0 },
+      });
+    });
+
+    it('luật điều kiện giữ nguyên: đã có đánh giá nhưng không còn đơn DELIVERED → BadRequest, không sửa', async () => {
+      const prisma = makePrisma({
+        order: { findFirst: jest.fn().mockResolvedValue(null) },
+        review: { findFirst: jest.fn().mockResolvedValue(existing), update: jest.fn(), create: jest.fn() },
+      });
+      await expect(new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect((prisma as unknown as P).review.update).not.toHaveBeenCalled();
+    });
+
+    it('đánh giá bị xoá đúng lúc đang sửa (P2025) → đọc lại, chưa còn thì tạo mới như lần đầu (thưởng lại vì lần xoá đã hoàn điểm)', async () => {
+      const gone = Object.assign(new Error('not found'), { code: 'P2025' });
+      const prisma = makePrisma({
+        review: {
+          findFirst: jest.fn().mockResolvedValueOnce(existing).mockResolvedValue(null),
+          create: jest.fn().mockResolvedValue({ id: 'r-new' }),
+          update: jest.fn().mockRejectedValue(gone),
+          aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 5 }, _count: 1 }),
+        },
+      });
+      const out = await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never);
+      const p = prisma as unknown as P;
+      expect(out).toMatchObject({ id: 'r-new', updated: false });
+      expect(p.pointsTransaction.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('thua đồng thời liên tục (3 lần) → ConflictException, không treo vô hạn', async () => {
+      const gone = Object.assign(new Error('not found'), { code: 'P2025' });
+      const prisma = makePrisma({
+        review: {
+          findFirst: jest.fn().mockResolvedValue(existing),
+          create: jest.fn(),
+          update: jest.fn().mockRejectedValue(gone),
+          aggregate: jest.fn(),
+        },
+      });
+      await expect(new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect((prisma as unknown as P).review.update).toHaveBeenCalledTimes(3);
+    });
+
+    it('chỉ chủ đánh giá sửa được: tìm và ghi luôn theo userId của người gọi', async () => {
+      const prisma = withExisting();
+      await new ReviewsService(prisma, analytics).create('u2', 'tinh-dau', dto as never);
+      const p = prisma as unknown as P & { review: { findFirst: jest.Mock } };
+      expect(p.review.findFirst).toHaveBeenCalledWith({ where: { userId: 'u2', productId: 'p1' } });
+      expect(p.review.update.mock.calls[0][0].where).toEqual({ userId_productId: { userId: 'u2', productId: 'p1' } });
+    });
   });
 
-  it('hợp lệ không ảnh → +5 điểm, recompute rating denormalized', async () => {
+  it('hợp lệ không ảnh → +5 điểm, recompute rating denormalized, đánh dấu updated=false', async () => {
     const prisma = makePrisma();
-    await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never);
+    const out = await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never);
+    expect(out).toMatchObject({ id: 'r1', updated: false });
     const p = prisma as unknown as {
       pointsTransaction: { create: jest.Mock };
       product: { update: jest.Mock };
@@ -103,14 +223,33 @@ describe('ReviewsService.create', () => {
     expect(p.review.create.mock.calls[0][0].data.videoUrl).toBe('https://res.cloudinary.com/x/video/upload/v1/rv.mp4');
   });
 
-  it('race P2002 khi tạo → dịch sang BadRequest', async () => {
+  it('race P2002 khi tạo (request kia tạo trước) → không lỗi, chuyển sang sửa đánh giá vừa có, không thưởng lần hai', async () => {
+    const created = { id: 'r-first', userId: 'u1', productId: 'p1', pointsEarned: 5 };
+    const prisma = makePrisma({
+      review: {
+        // lần đọc đầu: chưa có; sau khi tạo đồng thời thua cuộc: đã có
+        findFirst: jest.fn().mockResolvedValueOnce(null).mockResolvedValue(created),
+        create: jest.fn().mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' })),
+        update: jest.fn().mockResolvedValue({ ...created, rating: 5 }),
+        aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 5 }, _count: 1 }),
+      },
+    });
+    const out = await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never);
+    const p = prisma as unknown as {
+      review: { update: jest.Mock };
+      pointsTransaction: { create: jest.Mock };
+      user: { update: jest.Mock };
+    };
+    expect(out).toMatchObject({ id: 'r-first', updated: true });
+    expect(p.review.update).toHaveBeenCalledTimes(1);
+    expect(p.pointsTransaction.create).not.toHaveBeenCalled();
+    expect(p.user.update).not.toHaveBeenCalled();
+  });
+
+  it('lỗi khác P2002 khi tạo → ném nguyên lỗi (không nuốt)', async () => {
     const prisma = makePrisma();
-    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
-      .fn()
-      .mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' }));
-    await expect(new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn().mockRejectedValue(new Error('db down'));
+    await expect(new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never)).rejects.toThrow('db down');
   });
 
   /**
@@ -265,7 +404,7 @@ describe('ReviewsService.canReview', () => {
   it('đã có đơn DELIVERED chứa sản phẩm, chưa đánh giá → được đánh giá', async () => {
     const prisma = makePrisma();
     const r = await new ReviewsService(prisma, analytics).canReview('u1', 'tinh-dau');
-    expect(r).toEqual({ canReview: true, reason: null });
+    expect(r).toEqual({ canReview: true, reason: null, myReview: null });
   });
 
   it('chưa từng mua → không được, kèm lý do để FE hiện đúng thông điệp', async () => {
@@ -274,10 +413,38 @@ describe('ReviewsService.canReview', () => {
     expect(r).toEqual({ canReview: false, reason: 'NOT_PURCHASED' });
   });
 
-  it('đã đánh giá rồi → không được, lý do khác (mỗi SP 1 lần)', async () => {
-    const prisma = makePrisma({ review: { findFirst: jest.fn().mockResolvedValue({ id: 'r0' }) } });
+  it('đã đánh giá rồi (Q-30) → vẫn được, kèm đánh giá hiện có để FE điền sẵn form "Sửa đánh giá của bạn"', async () => {
+    const prisma = makePrisma({
+      review: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'r0',
+          userId: 'u1',
+          productId: 'p1',
+          orderId: 'o0',
+          rating: 4,
+          comment: 'ổn',
+          images: ['a.jpg'],
+          videoUrl: null,
+          pointsEarned: 10,
+          isVisible: true,
+        }),
+      },
+    });
     const r = await new ReviewsService(prisma, analytics).canReview('u1', 'tinh-dau');
-    expect(r).toEqual({ canReview: false, reason: 'ALREADY_REVIEWED' });
+    expect(r).toEqual({
+      canReview: true,
+      reason: null,
+      myReview: { id: 'r0', rating: 4, comment: 'ổn', images: ['a.jpg'], videoUrl: null },
+    });
+  });
+
+  it('đã đánh giá nhưng không còn đơn DELIVERED → không được sửa (NOT_PURCHASED như hiện hành)', async () => {
+    const prisma = makePrisma({
+      order: { findFirst: jest.fn().mockResolvedValue(null) },
+      review: { findFirst: jest.fn().mockResolvedValue({ id: 'r0' }) },
+    });
+    const r = await new ReviewsService(prisma, analytics).canReview('u1', 'tinh-dau');
+    expect(r).toEqual({ canReview: false, reason: 'NOT_PURCHASED' });
   });
 
   it('sản phẩm không tồn tại → NotFound (không lộ thành "chưa mua")', async () => {

@@ -113,3 +113,26 @@ describe('GameGiftService.getFriends', () => {
     expect(f1.giftedToday).toBe(true);
   });
 });
+
+// C-040: đặc tả che tên bản chép tay `maskName` (cùng công thức ở game, game-gift, game-season).
+// Khác bản `maskFullName` ở merchant: chỉ tách theo dấu cách ' ' (tab/nbsp không tách) và tên
+// toàn khoảng trắng ra "***" thay vì tên mặc định.
+const MASK_NAME_CASES: [string, string | null, string][] = [
+  ['null -> mặc định', null, 'Bạn Tubu'],
+  ['rỗng -> mặc định', '', 'Bạn Tubu'],
+  ['chỉ khoảng trắng -> "***"', '   ', '***'],
+  ['một từ', 'Long', 'Long***'],
+  ['nhiều từ -> từ cuối', 'Lã Hoàng Long', 'Long***'],
+  ['thừa khoảng trắng đầu/cuối', '  Nguyễn An  ', 'An***'],
+  ['hai dấu cách liền nhau', 'Lã  Long', 'Long***'],
+  ['tab giữa tên -> không tách', 'Lã\tLong', 'Lã\tLong***'],
+  ['nbsp giữa tên -> không tách', 'Lã\u00a0Long', 'Lã\u00a0Long***'],
+];
+
+describe('GameGiftService.getFriends — che tên (đặc tả maskName, C-040)', () => {
+  it.each(MASK_NAME_CASES)('%s', async (_label, fullName, expected) => {
+    const { svc } = setup({ me: { referredById: null }, referees: [{ id: 'friend1', fullName }] });
+    const friends = await svc.getFriends('u1');
+    expect(friends.find((f) => f.id === 'friend1')?.nickname).toBe(expected);
+  });
+});
