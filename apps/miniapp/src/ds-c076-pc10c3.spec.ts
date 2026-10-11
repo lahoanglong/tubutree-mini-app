@@ -23,6 +23,7 @@ const FILES_PC10C3 = [
   'src/components/ui/time-input.tsx',
   'src/components/ui/quantity-selector.tsx',
   'src/components/error-boundary.tsx',
+  'src/components/geo-picker.tsx',
 ];
 
 const LEGACY = new RegExp(
@@ -43,8 +44,11 @@ const RAW_COLOR = /(?<![&\w-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4}
 // Emoji + ký hiệu dingbat/misc (★ ✓ ⚠ ♻...). Rộng hơn static-scan một chút (thêm khối 1F000-1F2FF, có cờ quốc gia).
 const EMOJI = /[\u{1F000}-\u{1FAFF}☀-➿⭐⭕]/u;
 
-/** Từ zmp-ui chỉ còn lấy hook, Input (chưa có bản DS) và Avatar; layout/nút/sheet dùng components/ui. */
-const ZAUI_ALLOWED = new Set(['Page', 'Avatar', 'Input', 'useNavigate', 'useLocation', 'useSnackbar']);
+/**
+ * Từ zmp-ui chỉ còn lấy hook, Input/Select (chưa có bản DS: Select cho chọn địa giới) và Avatar;
+ * layout/nút/sheet/chữ dùng components/ui.
+ */
+const ZAUI_ALLOWED = new Set(['Page', 'Avatar', 'Input', 'Select', 'useNavigate', 'useLocation', 'useSnackbar']);
 
 const MINIAPP_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const read = (file: string) => readFileSync(MINIAPP_ROOT + file, 'utf8');
