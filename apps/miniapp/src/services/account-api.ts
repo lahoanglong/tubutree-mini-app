@@ -1,11 +1,21 @@
 import { api } from './api';
 import { takeMeBlock } from './home-feed';
 import type { AddressDTO } from './shop-api';
-import { formatNumber } from '../utils/format';
+import { formatNumber, formatPoints } from '../utils/format';
 
 /** Loyalty overview (§6.6) — hạng hiện tại, tiến độ lên hạng kế. */
 export interface LoyaltyOverview {
+  /** Điểm Xanh lô thường (có hạn, trần % khi dùng ở thanh toán). Tổng khách thấy: xem `pointsSummary`. */
   pointsBalance: number;
+  /**
+   * Điểm Xanh lô quy đổi từ xu cũ: không hết hạn, dùng ở thanh toán tới 100% giá trị hàng, không đổi quà,
+   * không rút ra tiền. Optional: API cũ chưa trả (coi như 0).
+   */
+  pointsConvertedBalance?: number;
+  /** pointsBalance + pointsConvertedBalance (BE tính sẵn; FE tự cộng bằng `pointsSummary`). */
+  pointsTotal?: number;
+  /** redeemablePoints + pointsConvertedBalance: trần điểm đề nghị dùng ở thanh toán. */
+  redeemableTotal?: number;
   /**
    * Điểm XÉT HẠNG 12 tháng — CHỈ điểm tích từ đơn online đã giao, trừ phần của đơn bị trả/huỷ
    * (không gồm điểm danh, tích tại quầy, hoàn điểm đã dùng, Vườn Xanh, đánh giá, season pass).
@@ -34,6 +44,8 @@ export interface PointsTxn {
   reason: string;
   refType: string | null;
   expiresAt: string | null;
+  /** Lô của dòng sổ; dòng cũ/API cũ không có → lô thường. */
+  lot?: 'STANDARD' | 'CONVERTED';
   createdAt: string;
 }
 
@@ -48,11 +60,9 @@ export interface CouponDTO {
 
 export interface WalletSummary {
   walletBalance: number;
-  coinsBalance: number;
   cashbackPending: number;
   commissionApproved: number;
   commissionPending: number;
-  xuConvertMultiplier: number;
   withdrawMin: number;
   withdrawFee: number;
 }
@@ -73,27 +83,18 @@ export interface WalletTxnPage {
   meta: { page: number; limit: number; total: number };
 }
 
-export interface CoinTxn {
-  id: string;
-  delta: number;
-  reason: string;
-  refType: string | null;
-  createdAt: string;
-}
-
 export interface ReferralMilestone {
   count: number;
-  bonus: number;
+  bonusPoints: number;
 }
 
-export interface CoinsOverview {
-  coinsBalance: number;
+/** GET /me/referral — thống kê giới thiệu bạn bè, thưởng bằng Điểm Xanh. */
+export interface ReferralOverview {
   referralCode: string;
-  referralEarned: number;
-  referralSuccessCount: number;
-  referralMilestones?: ReferralMilestone[];
-  nextMilestone?: ReferralMilestone | null;
-  transactions: CoinTxn[];
+  successCount: number;
+  earnedPoints: number;
+  milestones: ReferralMilestone[];
+  nextMilestone: ReferralMilestone | null;
 }
 
 export interface BankInfo {
@@ -201,6 +202,7 @@ export interface MemberCardResponse {
   posCreditEnabled: boolean;
 }
 
+export const getReferral = () => api.get<ReferralOverview>('/me/referral').then((r) => r.data);
 export const getLoyalty = () => api.get<LoyaltyOverview>('/me/loyalty').then((r) => r.data);
 export const getPointsTransactions = () =>
   api.get<PointsTxn[]>('/me/points/transactions').then((r) => r.data);
@@ -225,10 +227,38 @@ export function pointsReasonLabel(reason: string): string {
   if (reason.startsWith('ORDER_REDEEM')) return 'Dùng điểm khi thanh toán';
   if (reason.startsWith('ORDER_REVERSED')) return 'Hoàn ngược điểm (hủy/trả)';
   if (reason.startsWith('ORDER_REFUND_POINTS')) return 'Hoàn lại điểm đã dùng';
+  if (reason.startsWith('ORDER_REFUND_CONVERTED') || reason.startsWith('ORDER_REFUND_XU')) return 'Hoàn điểm đơn huỷ/trả';
   if (reason.startsWith('POINTS_EXPIRED')) return 'Điểm hết hạn';
+  if (reason.startsWith('XU_TO_POINTS')) return 'Chuyển từ xu cũ sang Điểm Xanh';
+  if (reason.startsWith('REFERRAL')) {
+    return reason.includes('REVOKE') ? 'Thu hồi thưởng giới thiệu' : 'Thưởng giới thiệu bạn bè';
+  }
+  if (reason.startsWith('COMMUNITY')) return 'Thưởng cộng đồng';
+  if (reason.startsWith('STOREFRONT_QUEST')) return 'Thưởng nhiệm vụ gian hàng';
+  if (reason.startsWith('CTV_MILESTONE')) return 'Thưởng mốc doanh số CTV';
+  if (reason.startsWith('GAME_BUY_TREE')) return 'Góp quỹ trồng cây';
   if (reason.startsWith('GAME') || reason.startsWith('SEASONPASS')) return 'Phần thưởng Vườn Xanh';
   if (reason.startsWith('REVIEW')) return 'Đánh giá sản phẩm';
   return 'Điều chỉnh Điểm Xanh';
+}
+
+/**
+ * Điểm Xanh khách thấy: MỘT con số = lô thường + lô quy đổi. Hai lô chỉ tách ra khi cần nói rõ phần nào
+ * không hết hạn / dùng được ở đâu. Số âm hoặc rác → 0 để không bao giờ hiện "NaN điểm".
+ */
+export function pointsSummary(
+  ov: Pick<LoyaltyOverview, 'pointsBalance' | 'pointsConvertedBalance'>,
+): { standard: number; converted: number; total: number } {
+  const clamp = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
+  const standard = clamp(ov.pointsBalance);
+  const converted = clamp(ov.pointsConvertedBalance);
+  return { standard, converted, total: standard + converted };
+}
+
+/** "trong đó 1.250 điểm không hết hạn" — null khi khách không có điểm quy đổi. */
+export function convertedPointsNote(converted: number | null | undefined): string | null {
+  const n = Number(converted ?? 0);
+  return n > 0 ? `trong đó ${formatPoints(n)} không hết hạn` : null;
 }
 
 /** dd/mm/yyyy theo giờ Việt Nam (UTC+7) — cùng quy ước với thông báo lỗi của backend. */
@@ -306,18 +336,6 @@ export const withdraw = (amount: number, bankInfo: BankInfo, idempotencyKey: str
     .post<{ ok: boolean; payoutId: string; status: string; withdrawn: number; fee: number; net: number }>(
       '/wallet/withdraw',
       { amount, bankInfo },
-      { headers: { 'Idempotency-Key': idempotencyKey } },
-    )
-    .then((r) => r.data);
-
-// TubuXu
-export const getCoins = () => api.get<CoinsOverview>('/me/coins').then((r) => r.data);
-/** Doi Vi -> xu kem Idempotency-Key: doi 1 chieu (xu khong rut duoc) nen double-tap khong duoc doi 2 lan. */
-export const convertToXu = (amount: number, idempotencyKey: string) =>
-  api
-    .post<{ spent: number; received: number; multiplier: number }>(
-      '/wallet/convert-xu',
-      { amount },
       { headers: { 'Idempotency-Key': idempotencyKey } },
     )
     .then((r) => r.data);

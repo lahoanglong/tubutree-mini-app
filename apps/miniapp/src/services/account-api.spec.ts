@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   checkInView,
   lockedPointsNote,
+  convertedPointsNote,
   memberCardHint,
   pointsReasonLabel,
+  pointsSummary,
   rewardButtonLabel,
   tierProgressPercent,
   type CheckInStatusResponse,
@@ -31,6 +33,20 @@ describe('pointsReasonLabel', () => {
     ['GAME_SPIN_WIN:p1', 'Phần thưởng Vườn Xanh'],
     ['SEASONPASS:s1:3:FREE', 'Phần thưởng Vườn Xanh'],
     ['REVIEW:ca-phe', 'Đánh giá sản phẩm'],
+    // PD-3: xu đã gộp vào Điểm Xanh — mọi dòng sổ mới của lô quy đổi và nguồn thưởng cũ đều có nhãn riêng.
+    ['XU_TO_POINTS:123456', 'Chuyển từ xu cũ sang Điểm Xanh'],
+    ['ORDER_REDEEM_CONVERTED:TB123', 'Dùng điểm khi thanh toán'],
+    ['ORDER_REFUND_CONVERTED:TB123', 'Hoàn điểm đơn huỷ/trả'],
+    ['ORDER_REFUND_XU:TB123', 'Hoàn điểm đơn huỷ/trả'],
+    ['REFERRAL_ORDER2:u1', 'Thưởng giới thiệu bạn bè'],
+    ['REFERRAL_MILESTONE:u1:3', 'Thưởng giới thiệu bạn bè'],
+    ['REFERRAL_ORDER2_REVOKE:u1', 'Thu hồi thưởng giới thiệu'],
+    ['REFERRAL_MILESTONE_REVOKE:u1:3#1', 'Thu hồi thưởng giới thiệu'],
+    ['COMMUNITY_POST:p1', 'Thưởng cộng đồng'],
+    ['COMMUNITY_EVENT_WIN:e1:u1', 'Thưởng cộng đồng'],
+    ['STOREFRONT_QUEST:PROFILE', 'Thưởng nhiệm vụ gian hàng'],
+    ['CTV_MILESTONE:m1:2026-10', 'Thưởng mốc doanh số CTV'],
+    ['GAME_BUY_TREE:TUBU-ABC', 'Góp quỹ trồng cây'],
   ])('%s → %s', (reason, label) => {
     expect(pointsReasonLabel(reason)).toBe(label);
   });
@@ -184,5 +200,25 @@ describe('rewardButtonLabel', () => {
   });
   it('số dư đủ nhưng điểm đang khoá (đơn mới giao) → không nói "Cần X điểm" sai sự thật', () => {
     expect(rewardButtonLabel(r, { pointsBalance: 100, redeemablePoints: 40 })).toBe('Chờ mở khoá điểm');
+  });
+});
+
+describe('pointsSummary / convertedPointsNote (PD-3: hai lô Điểm Xanh, khách chỉ thấy một số)', () => {
+  it('tổng = lô thường + lô quy đổi; tách riêng phần không hết hạn', () => {
+    expect(pointsSummary({ pointsBalance: 120, pointsConvertedBalance: 40 })).toEqual({ standard: 120, converted: 40, total: 160 });
+  });
+
+  it('API chưa trả lô quy đổi → coi như 0 (không NaN)', () => {
+    expect(pointsSummary({ pointsBalance: 120 })).toEqual({ standard: 120, converted: 0, total: 120 });
+  });
+
+  it('số âm/rác bị kẹp 0', () => {
+    expect(pointsSummary({ pointsBalance: -5, pointsConvertedBalance: -1 })).toEqual({ standard: 0, converted: 0, total: 0 });
+  });
+
+  it('ghi chú phần không hết hạn có dấu nghìn; không có điểm quy đổi thì không hiện gì', () => {
+    expect(convertedPointsNote(1_250)).toBe('trong đó 1.250 điểm không hết hạn');
+    expect(convertedPointsNote(0)).toBeNull();
+    expect(convertedPointsNote(undefined)).toBeNull();
   });
 });
