@@ -16,8 +16,9 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 import { BRAND_ORIGINS } from '../utils/brand-origins';
 import BrandStoryPage from './brand-story';
 
-// Ghim trên bản đồ: nút có nhãn "<nhãn> — <tỉnh>", cùng mở sheet với ô lưới bên dưới.
-const tile = (brand: string) => screen.getByRole('button', { name: new RegExp(`^${brand} — `) });
+// Ghim trên bản đồ: nút có aria-label "<nhãn> — <tỉnh>", cùng mở sheet với ô lưới bên dưới. Ghim aria-hidden (xem
+// test target-size bên dưới) nên getByRole không thấy, tìm bằng aria-label.
+const tile = (brand: string) => screen.getByLabelText(new RegExp(`^${brand} — `));
 
 describe('BrandStoryPage — Hành trình nguyên liệu dẫn đúng danh sách (C-079)', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -109,5 +110,36 @@ describe('BrandStoryPage — cấu trúc và vùng chạm (C-076, C-114)', () =>
   it('bản đồ có nhãn cho trình đọc màn hình', () => {
     render(<BrandStoryPage />);
     expect(screen.getByRole('img', { name: /Bản đồ Gỗ 3D Việt Nam/ })).toBeTruthy();
+  });
+});
+
+describe('BrandStoryPage — ghim bản đồ và vùng chạm (axe target-size, WCAG 2.5.8)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('8 ghim chỉ là lối tắt bằng hình trùng với 8 ô lưới: ẩn khỏi trình đọc màn hình và khỏi thứ tự Tab, vẫn chạm được', () => {
+    render(<BrandStoryPage />);
+    for (const o of BRAND_ORIGINS) {
+      const pin = tile(o.brand);
+      expect(pin).toHaveAttribute('aria-hidden', 'true');
+      expect(pin.tabIndex).toBe(-1);
+      expect(minHeightOf(pin)).toBeGreaterThanOrEqual(44);
+    }
+    fireEvent.click(tile('Hector'));
+    expect(within(screen.getByTestId('sheet')).getByRole('heading', { level: 2, name: 'Hector' })).toBeTruthy();
+  });
+
+  it('người dùng trình đọc màn hình/bàn phím vẫn có đủ 8 nhãn qua ô lưới: nút Tab tới được, tên có nhãn và tỉnh, bấm mở sheet', () => {
+    render(<BrandStoryPage />);
+    const accessible = screen.getAllByRole('button');
+    for (const o of BRAND_ORIGINS) {
+      const grid = accessible.find((b) => !b.hasAttribute('aria-label') && (b.textContent ?? '').includes(o.brand));
+      expect(grid, `ô lưới ${o.brand}`).toBeDefined();
+      expect(grid!.textContent).toContain(o.province);
+      expect(grid!.tabIndex).toBe(0);
+    }
+    fireEvent.click(accessible.find((b) => !b.hasAttribute('aria-label') && (b.textContent ?? '').includes('Cobote'))!);
+    expect(within(screen.getByTestId('sheet')).getByRole('heading', { level: 2, name: 'Cobote' })).toBeTruthy();
+    // Không còn ghim nào trong cây truy cập: mọi nút có aria-label dạng "<nhãn> — <tỉnh>" đều bị ẩn.
+    expect(accessible.filter((b) => / — /.test(b.getAttribute('aria-label') ?? ''))).toEqual([]);
   });
 });
