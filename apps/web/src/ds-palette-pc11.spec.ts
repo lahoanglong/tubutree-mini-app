@@ -17,6 +17,8 @@ const MIGRATED = [
   'components/admin/invoice-filter-chips.tsx',
   'components/admin/evidence-images.tsx',
   'components/admin/ns1-card.tsx',
+  'components/admin/loyalty-config-card.tsx',
+  'components/admin/gomdon-config-card.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');

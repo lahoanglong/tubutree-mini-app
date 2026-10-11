@@ -21,8 +21,8 @@ const NO_CONFIG: Record<string, unknown> = Object.freeze({}) as Record<string, u
 function StatusDot({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs">
-      <span className={`h-2 w-2 rounded-full ${ok ? 'bg-green-500' : 'bg-red-500'}`} aria-hidden />
-      <span className={ok ? 'text-neutral-700' : 'text-red-700'}>
+      <span className={`h-2 w-2 rounded-full ${ok ? 'bg-success-fg' : 'bg-danger-fg'}`} aria-hidden />
+      <span className={ok ? 'text-stone-700' : 'text-danger-fg'}>
         {label}: {ok ? 'đã đặt' : 'chưa đặt'}
       </span>
     </span>
@@ -85,16 +85,17 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
   const toggleOnButNotLive = toggle && st && !st.recyclingEnabled;
 
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
+    <section className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Recycle className="h-4 w-4 text-green-700" aria-hidden />
-          <h3 className="text-sm font-semibold text-neutral-900">Thu gom vật liệu tái chế (Gomdon)</h3>
+          <Recycle className="h-4 w-4 text-forest-700" aria-hidden />
+          <h3 className="font-display text-sm font-semibold text-stone-900">Thu gom vật liệu tái chế (Gomdon)</h3>
         </div>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm sm:min-h-0">
           <input
             type="checkbox"
             role="switch"
+            className="accent-forest-600"
             aria-checked={toggle}
             checked={toggle}
             disabled={saveToggle.isPending || !rows}
@@ -108,7 +109,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       </div>
 
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-        {statusQ.isError && <span className="text-xs text-red-600">Không tải được tình trạng tích hợp.</span>}
+        {statusQ.isError && <span className="text-xs text-danger-fg">Không tải được tình trạng tích hợp.</span>}
         {st && (
           <>
             <StatusDot ok={st.baseUrlSet} label="Base URL" />
@@ -116,7 +117,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
             <StatusDot ok={st.webhookSecretSet} label="Webhook secret" />
             <span className="text-xs">
               Khách{' '}
-              <b className={st.recyclingEnabled ? 'text-green-700' : 'text-neutral-600'}>
+              <b className={st.recyclingEnabled ? 'text-success-fg' : 'text-stone-600'}>
                 {st.recyclingEnabled ? 'ĐANG thấy' : 'KHÔNG thấy'}
               </b>{' '}
               lựa chọn thu gom
@@ -150,7 +151,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
           saveWarehouse.mutate();
         }}
       >
-        <div className="text-xs font-semibold uppercase text-neutral-500">Kho lấy hàng (người gửi trên vận đơn)</div>
+        <div className="text-xs font-semibold uppercase text-stone-500">Kho lấy hàng (người gửi trên vận đơn)</div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {(Object.keys(WAREHOUSE_LABEL) as (keyof WarehouseForm)[]).map((f) => (
             <Field key={f} label={WAREHOUSE_LABEL[f]}>
@@ -176,14 +177,14 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
         <button
           type="submit"
           disabled={saveWarehouse.isPending || !rows}
-          className="rounded bg-green-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:bg-neutral-300"
+          className="min-h-[44px] rounded-control bg-forest-600 px-4 py-1.5 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500 sm:min-h-[36px]"
         >
           {saveWarehouse.isPending ? 'Đang lưu…' : 'Lưu kho & cân nặng'}
         </button>
       </form>
 
       {msg && (
-        <p role={msg.ok ? 'status' : 'alert'} className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>
+        <p role={msg.ok ? 'status' : 'alert'} className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
           {msg.text}
         </p>
       )}
