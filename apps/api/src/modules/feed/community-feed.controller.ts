@@ -34,13 +34,15 @@ class ReportDto {
 class PinDto {
   @IsOptional() @IsBoolean() pinned?: boolean;
 }
-class CreateEventDto {
+export class CreateEventDto {
   @IsString() @MaxLength(160) title!: string;
   @IsOptional() @IsString() @MaxLength(2000) description?: string;
   @IsOptional() @IsString() coverUrl?: string;
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
-  @IsOptional() @IsInt() @Min(0) @Max(1000000) rewardXu?: number;
+  // Điểm Xanh (1 điểm = 1.000đ). Trần 1.000 điểm = 1.000.000đ như trần xu cũ; gửi rewardXu sẽ bị
+  // ValidationPipe (forbidNonWhitelisted) từ chối thay vì âm thầm hiểu nhầm đơn vị.
+  @IsOptional() @IsInt() @Min(0) @Max(1000) rewardPoints?: number;
 }
 class PickWinnerDto {
   @IsString() userId!: string;
@@ -121,7 +123,7 @@ export class CommunityFeedController {
       coverUrl: dto.coverUrl,
       startAt: new Date(dto.startAt),
       endAt: new Date(dto.endAt),
-      rewardXu: dto.rewardXu,
+      rewardPoints: dto.rewardPoints,
     } as CreateEventInput);
   }
 

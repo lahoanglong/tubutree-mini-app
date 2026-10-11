@@ -138,7 +138,8 @@ export interface CreateEventInput {
   coverUrl?: string;
   startAt: Date;
   endAt: Date;
-  rewardXu?: number;
+  /** Điểm Xanh thưởng người thắng (PD-3; cột rewardXu cũ chỉ còn cho sự kiện tạo trước gộp). */
+  rewardPoints?: number;
 }
 
 const FEED_INCLUDE = {
@@ -474,7 +475,7 @@ export class CommunityFeedService {
       }
       // App đã khoá nút nộp bài sau hạn, nhưng BE thì không: chỉ cần admin chưa bấm đóng sự
       // kiện là gọi thẳng API (hoặc dùng bản app cũ) vẫn nộp được bài muộn, và bài đó đủ tư
-      // cách được chọn trúng giải kèm rewardXu.
+      // cách được chọn trúng giải kèm rewardPoints.
       const now = new Date();
       if (event.startAt > now || event.endAt < now) {
         throw new BadRequestException('Sự kiện chưa mở hoặc đã hết hạn nộp bài.');
@@ -1101,7 +1102,7 @@ export class CommunityFeedService {
   }
 
   /**
-   * Chọn người thắng sự kiện (admin) — đóng sự kiện + thưởng TubuXu. Thưởng NON-FATAL:
+   * Chọn người thắng sự kiện (admin) — đóng sự kiện + thưởng Điểm Xanh. Thưởng NON-FATAL:
    * lỗi thưởng (vd trùng idempotency) không chặn việc chốt người thắng.
    *
    * Money-critical: CHỈ chốt được khi sự kiện còn OPEN. Vì reason thưởng nhúng userId
@@ -1114,7 +1115,7 @@ export class CommunityFeedService {
   async pickWinner(eventId: string, userId: string) {
     const event = await this.prisma.communityEvent.findUnique({
       where: { id: eventId },
-      select: { id: true, status: true, rewardXu: true },
+      select: { id: true, status: true, rewardPoints: true },
     });
     if (!event) throw new NotFoundException('Sự kiện không tồn tại.');
     if (event.status !== 'OPEN') throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
@@ -1126,7 +1127,7 @@ export class CommunityFeedService {
     });
     if (count !== 1) throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
     try {
-      await this.reward.rewardEventWinner(userId, eventId, event.rewardXu);
+      await this.reward.rewardEventWinner(userId, eventId, event.rewardPoints);
     } catch (err) {
       this.logger.warn(`rewardEventWinner failed for event ${eventId}/user ${userId}: ${(err as Error).message}`);
     }
