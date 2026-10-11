@@ -6,6 +6,9 @@ import { RecyclingBadge, RecyclingPanel } from './recycling-panel';
 import { PosCreditsTab } from './pos-credits-tab';
 import { PosScreen } from './pos-screen';
 import { AccountDeletionPanel, type AdminDeletionRequest } from './account-deletion-panel';
+import { ReviewsTab, ReviewStars } from './reviews-tab';
+import { SubscriptionsTab } from './subscriptions-tab';
+import { CashbackTab } from './cashback-tab';
 import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminDealerRewardClaim, AdminOrder } from '@/lib/admin-client';
 
@@ -252,5 +255,90 @@ describe('AccountDeletionPanel — DS v2', () => {
     await flush();
     expect(byText(container, 'li', 'Ví còn tiền')?.closest('div')?.className).toContain('bg-warning-bg');
     expect((byText(container, 'button', 'Xử lý (ẩn danh)') as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe('ReviewsTab / SubscriptionsTab / CashbackTab — DS v2', () => {
+  const REVIEW = {
+    id: 'r1',
+    rating: 4,
+    comment: 'Dùng tốt',
+    images: [],
+    videoUrl: 'https://cdn.example.com/v.mp4',
+    isVisible: true,
+    isVerified: true,
+    createdAt: '2026-10-01T03:00:00.000Z',
+    user: { id: 'u1', fullName: 'Nguyễn An', phone: '0900000001' },
+    product: { id: 'p1', name: 'Nước rửa chén Lá Sả', slug: 'nuoc-rua-chen' },
+  };
+  const page = <T,>(data: T[]) => ({ data, meta: { page: 1, limit: 20, total: data.length } });
+
+  it('ReviewStars vẽ đủ 5 icon, số sao đầy theo điểm (kẹp 0..5), không dùng ký tự ★☆', () => {
+    const { container } = mount(
+      <>
+        <ReviewStars rating={4} />
+        <ReviewStars rating={9} />
+        <ReviewStars rating={0} />
+      </>,
+    );
+    const groups = Array.from(container.querySelectorAll('[role="img"]'));
+    expect(groups.map((g) => g.querySelectorAll('svg').length)).toEqual([5, 5, 5]);
+    expect(groups.map((g) => g.querySelectorAll('svg.fill-current').length)).toEqual([4, 5, 0]);
+    expect(container.textContent).not.toMatch(/[★☆]/);
+    expect(groups[0]!.getAttribute('aria-label')).toBe('4 sao');
+  });
+
+  it('đánh giá: chip lọc/ô chọn sao/nút ẩn/liên kết video đều 44px; nút "Ẩn đánh giá" viền danger', async () => {
+    const api = mockFetch({ '/admin/reviews': { body: page([REVIEW]) } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<ReviewsTab />);
+    await flush();
+    for (const t of Array.from(container.querySelectorAll('[role="tab"]'))) expect(t.className).toContain('min-h-[44px]');
+    expect(container.querySelector('select')?.className).toContain('min-h-[44px]');
+    const hide = byText(container, 'button', 'Ẩn đánh giá');
+    expect(hide?.className).toContain('border-danger-fg');
+    expect(hide?.className).toContain('min-h-[44px]');
+    expect(container.querySelector('a[href="https://cdn.example.com/v.mp4"]')?.className).toContain('min-h-[44px]');
+  });
+
+  it('gói định kỳ: chip trạng thái 44px, chip đang chọn nền forest', async () => {
+    const api = mockFetch({ '/admin/subscriptions': { body: page([]) } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]')) as HTMLElement[];
+    expect(tabs).toHaveLength(4);
+    for (const t of tabs) expect(t.className).toContain('min-h-[44px]');
+    expect(tabs.filter((t) => t.getAttribute('aria-selected') === 'true')[0]!.className).toContain('bg-forest-600');
+  });
+
+  it('hoàn tiền sàn ngoài: "Duyệt hoàn tiền" forest, "Từ chối" viền danger, chip lọc đang chọn forest, tất cả 44px', async () => {
+    const TXN = {
+      id: 't1',
+      userId: 'u1',
+      provider: 'accesstrade',
+      merchantOrderId: 'SP-9001',
+      orderAmount: 500_000,
+      commission: 25_000,
+      userReward: 12_000,
+      status: 'PENDING',
+      confirmedAt: null,
+      paidAt: null,
+      user: { id: 'u1', fullName: 'Nguyễn An', phone: '0900000001' },
+      merchant: { name: 'Shopee', slug: 'shopee' },
+    };
+    const api = mockFetch({ '/admin/cashback': { body: [TXN] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<CashbackTab />);
+    await flush();
+    const approve = byText(container, 'button', 'Duyệt hoàn tiền')!;
+    const reject = byText(container, 'button', 'Từ chối')!;
+    expect(approve.className).toContain('bg-forest-600');
+    expect(approve.className).toContain('min-h-[44px]');
+    expect(reject.className).toContain('border-danger-fg');
+    expect(reject.className).toContain('min-h-[44px]');
+    const pending = byText(container, 'button', 'PENDING')!;
+    expect(pending.className).toContain('bg-forest-600');
+    expect(pending.className).toContain('min-h-[44px]');
   });
 });

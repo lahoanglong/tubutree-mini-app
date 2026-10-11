@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listCashbackTxns, reviewCashbackTxn, type AdminCashbackTxn } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
+import { BTN_XS_DANGER, BTN_XS_PRIMARY } from './ui';
 
 /**
  * Duyệt tay hoàn tiền sàn ngoài. Trước đây trạng thái chỉ đổi qua postback của sàn, mà cron đối
@@ -62,27 +63,27 @@ export function CashbackTab() {
           <button
             key={s || 'all'}
             onClick={() => setFilter(s)}
-            className={`min-h-[44px] rounded px-3 py-1 text-sm ${filter === s ? 'bg-green-600 text-white' : 'bg-neutral-100'}`}
+            className={`min-h-[44px] rounded-control px-3 py-1 text-sm ${filter === s ? 'bg-forest-600 text-stone-0' : 'bg-stone-100 text-stone-700'}`}
           >
             {s || 'Tất cả'}
           </button>
         ))}
       </div>
-      {err && <p className="mb-2 text-sm text-red-600">{err}</p>}
-      {q.isLoading && <p className="text-sm text-neutral-500">Đang tải…</p>}
-      {q.isError && <p className="text-sm text-red-600">Không tải được danh sách.</p>}
+      {err && <p className="mb-2 text-sm text-danger-fg">{err}</p>}
+      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách.</p>}
       <div className="space-y-2">
         {q.data?.map((t) => (
-          <div key={t.id} className="rounded-lg border border-neutral-100 bg-white p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">{label(t)}</span>
-              <span className="text-xs text-neutral-500">{t.status}</span>
+          <div key={t.id} className="rounded-card border border-stone-200 bg-stone-0 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0 break-words text-sm font-medium">{label(t)}</span>
+              <span className="text-xs text-stone-500">{t.status}</span>
             </div>
-            <div className="mt-1 text-xs text-neutral-500">
+            <div className="mt-1 text-xs text-stone-500">
               Khách: {t.user?.fullName ?? 'Khách hàng'}
               {t.user?.phone ? ` · ${t.user.phone}` : ''}
             </div>
-            <div className="mt-1 text-xs text-neutral-600">
+            <div className="mt-1 text-xs text-stone-600">
               Đơn {formatVnd(t.orderAmount)} · hoa hồng {formatVnd(t.commission)} · khách nhận{' '}
               <b>{formatVnd(t.userReward)}</b>
             </div>
@@ -92,7 +93,7 @@ export function CashbackTab() {
                   <button
                     onClick={() => void approve(t)}
                     disabled={review.isPending}
-                    className="min-h-[44px] rounded bg-green-600 px-3 py-1 text-xs font-medium text-white disabled:bg-neutral-300"
+                    className={BTN_XS_PRIMARY}
                   >
                     Duyệt hoàn tiền
                   </button>
@@ -101,7 +102,7 @@ export function CashbackTab() {
                   <button
                     onClick={() => void reject(t)}
                     disabled={review.isPending}
-                    className="min-h-[44px] rounded border border-red-200 px-3 py-1 text-xs font-medium text-red-600 disabled:opacity-50"
+                    className={BTN_XS_DANGER}
                   >
                     Từ chối
                   </button>
@@ -110,7 +111,7 @@ export function CashbackTab() {
             )}
           </div>
         ))}
-        {q.data?.length === 0 && <p className="text-sm text-neutral-500">Không có giao dịch nào.</p>}
+        {q.data?.length === 0 && <p className="text-sm text-stone-500">Không có giao dịch nào.</p>}
       </div>
       {dialog}
     </div>
