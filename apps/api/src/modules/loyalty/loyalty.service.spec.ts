@@ -294,11 +294,11 @@ describe('LoyaltyService.reverseOrderPoints chỉ trừ pointsEarned khi đã DE
 });
 
 /**
- * PD-3 (spec 2.5, T10 mức unit): đơn tiêu cả hai lô hoàn về ĐÚNG lô. Phần STANDARD giữ dòng
- * ORDER_REFUND_POINTS cũ; phần CONVERTED (orders.pointsUsedConverted) ghi ORDER_REFUND_CONVERTED lô
- * CONVERTED, không hạn, cộng pointsConvertedBalance.
+ * PD-3 (spec 2.5, T10 mức unit) + review B1: phần STANDARD giữ dòng ORDER_REFUND_POINTS cũ. Phần CONVERTED
+ * (tiền trả trước) KHÔNG hoàn ở đây nữa: reverseOrderPoints chạy sau khi tx huỷ đã commit, nên nếu ném lỗi thì
+ * khách mất điểm vĩnh viễn. OrderReversalService.reverseFinancials hoàn nó trong tx huỷ (order-reversal.service.spec.ts).
  */
-describe('LoyaltyService.reverseOrderPoints hoàn đúng lô (PD-3)', () => {
+describe('LoyaltyService.reverseOrderPoints chỉ hoàn phần STANDARD (PD-3, review B1)', () => {
   function makePrisma(order: unknown, reversed: unknown = null) {
     const txFindFirst = jest.fn().mockResolvedValueOnce(reversed).mockResolvedValueOnce(null);
     const create = jest.fn().mockResolvedValue({ id: 'ptx' });
@@ -312,38 +312,53 @@ describe('LoyaltyService.reverseOrderPoints hoàn đúng lô (PD-3)', () => {
     return { prisma, create, update, txFindFirst };
   }
 
-  it('đơn tiêu 30 STANDARD + 120 CONVERTED → ORDER_REFUND_POINTS +30 (STANDARD) và ORDER_REFUND_CONVERTED +120 (CONVERTED, không hạn)', async () => {
+  it('đơn tiêu 30 STANDARD + 120 CONVERTED → chỉ ORDER_REFUND_POINTS +30 (STANDARD); lô CONVERTED do reverseFinancials hoàn', async () => {
     const { prisma, create, update } = makePrisma({
       id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 0, pointsUsed: 150, pointsUsedConverted: 120,
     });
     await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
     expect(create.mock.calls.map((c) => c[0].data)).toEqual([
       expect.objectContaining({ reason: 'ORDER_REFUND_POINTS:C1', delta: 30, lot: 'STANDARD', refType: 'ORDER', refId: 'o1' }),
-      expect.objectContaining({ reason: 'ORDER_REFUND_CONVERTED:C1', delta: 120, lot: 'CONVERTED', refType: 'ORDER', refId: 'o1', expiresAt: null }),
     ]);
-    expect(update.mock.calls.map((c) => c[0].data)).toEqual([
-      { pointsBalance: { increment: 30 } },
-      { pointsConvertedBalance: { increment: 120 } },
-    ]);
+    expect(update.mock.calls.map((c) => c[0].data)).toEqual([{ pointsBalance: { increment: 30 } }]);
   });
 
-  it('đơn chỉ tiêu lô CONVERTED → chỉ ORDER_REFUND_CONVERTED, không cộng lô STANDARD', async () => {
+  it('đơn chỉ tiêu lô CONVERTED → không ghi gì (đã hoàn trong tx huỷ), không cộng lô nào', async () => {
     const { prisma, create, update } = makePrisma({
       id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 0, pointsUsed: 50, pointsUsedConverted: 50,
     });
     await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
-    expect(create.mock.calls.map((c) => c[0].data.reason)).toEqual(['ORDER_REFUND_CONVERTED:C1']);
-    expect(update.mock.calls.map((c) => c[0].data)).toEqual([{ pointsConvertedBalance: { increment: 50 } }]);
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
-  it('kiểm "đã đảo chưa" gồm cả ORDER_REFUND_CONVERTED (đơn chỉ dùng lô quy đổi gọi lại không hoàn lần 2)', async () => {
-    const { prisma, create, txFindFirst } = makePrisma(
-      { id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 0, pointsUsed: 50, pointsUsedConverted: 50 },
-      { id: 'already' },
-    );
+  it('kiểm "đã đảo chưa" KHÔNG gồm ORDER_REFUND_CONVERTED (dòng đó do tx huỷ ghi trước, sẽ làm bỏ qua hoàn STANDARD và đảo pointsEarned)', async () => {
+    const { prisma, txFindFirst } = makePrisma({
+      id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 0, pointsUsed: 150, pointsUsedConverted: 120,
+    });
     await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
-    expect(create).not.toHaveBeenCalled();
-    expect(txFindFirst.mock.calls[0]![0].where.reason.in).toContain('ORDER_REFUND_CONVERTED:C1');
+    const reasons: string[] = txFindFirst.mock.calls[0]![0].where.reason.in;
+    expect(reasons).toEqual(['ORDER_REVERSED:C1', 'ORDER_REFUND_POINTS:C1']);
+  });
+
+  it('đơn đã DELIVERED + tiêu cả hai lô, tx huỷ đã hoàn CONVERTED → vẫn đảo pointsEarned và hoàn phần STANDARD', async () => {
+    const txFindFirst = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'credited' });
+    const create = jest.fn().mockResolvedValue({ id: 'ptx' });
+    const update = jest.fn();
+    const tx = { pointsTransaction: { findFirst: txFindFirst, create }, user: { update } };
+    const prisma = {
+      order: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 150, pointsUsedConverted: 120,
+        }),
+      },
+      $transaction: jest.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx)),
+    } as unknown as PrismaService;
+    await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
+    expect(create.mock.calls.map((c) => [c[0].data.reason, c[0].data.delta])).toEqual([
+      ['ORDER_REVERSED:C1', -50],
+      ['ORDER_REFUND_POINTS:C1', 30],
+    ]);
   });
 });
 

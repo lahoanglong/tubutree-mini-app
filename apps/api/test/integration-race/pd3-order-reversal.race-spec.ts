@@ -146,6 +146,48 @@ describe('PD-3 hoàn điểm theo lô khi huỷ đơn (real Postgres)', () => {
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('CANCELLED');
   });
 
+  // Review B1: lô CONVERTED là tiền trả trước, phải hoàn TRONG tx huỷ (reverseFinancials). reverseOrderPoints chạy
+  // sau commit và có thể ném (đứt DB, SIGTERM); lần huỷ lại bị guard trạng thái chặn nên không có đường thử lại.
+  it('B1: reverseOrderPoints ném lỗi sau khi tx huỷ commit → lô CONVERTED đã hoàn, retry chỉ hoàn STANDARD (không hoàn lô quy đổi lần 2)', async () => {
+    const user = await userWithLots(500, 300);
+    const order = await orderSpendingBothLots(user.id, 30, 120);
+
+    const spy = jest.spyOn(loyalty, 'reverseOrderPoints').mockRejectedValueOnce(new Error('connection reset'));
+    await expect(orders.cancel(user.id, order.code)).rejects.toThrow('connection reset');
+    spy.mockRestore();
+
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('CANCELLED');
+    const mid = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(mid.pointsConvertedBalance).toBe(300);
+    expect(mid.pointsBalance).toBe(470);
+
+    await loyalty.reverseOrderPoints(order.id);
+    await loyalty.reverseOrderPoints(order.id);
+
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(after.pointsBalance).toBe(500);
+    expect(after.pointsConvertedBalance).toBe(300);
+    expect((await refundRows(order.id)).map((r) => [r.reason.split(':')[0], r.lot, r.delta])).toEqual([
+      ['ORDER_REFUND_CONVERTED', 'CONVERTED', 120],
+      ['ORDER_REFUND_POINTS', 'STANDARD', 30],
+    ]);
+  });
+
+  it('B1: đơn chỉ tiêu lô CONVERTED, reverseOrderPoints ném lỗi → vẫn đã hoàn đủ; gọi lại không hoàn thêm', async () => {
+    const user = await userWithLots(0, 200);
+    const order = await orderSpendingBothLots(user.id, 0, 200);
+
+    const spy = jest.spyOn(loyalty, 'reverseOrderPoints').mockRejectedValueOnce(new Error('pool timeout'));
+    await expect(orders.cancel(user.id, order.code)).rejects.toThrow('pool timeout');
+    spy.mockRestore();
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).pointsConvertedBalance).toBe(200);
+    await loyalty.reverseOrderPoints(order.id);
+
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(after.pointsConvertedBalance).toBe(200);
+    expect(await refundRows(order.id)).toHaveLength(1);
+  });
+
   it('T10: đơn cũ trước PD-3 (pointsUsedConverted = 0) → hoàn toàn bộ về STANDARD như trước', async () => {
     const user = await userWithLots(200, 50);
     const order = await createOrder(prisma, { userId: user.id, pointsUsed: 40 });

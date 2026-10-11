@@ -126,6 +126,11 @@ export class OrderReversalService {
       }
     }
 
+    // Điểm Xanh lô quy đổi đã tiêu cho đơn này là TIỀN TRẢ TRƯỚC (Q-03a) nên hoàn trong CÙNG tx với lần lật trạng
+    // thái, như xu/Ví trước PD-3. Để ở LoyaltyService.reverseOrderPoints (chạy sau commit) thì nó ném lỗi
+    // (đứt DB, SIGTERM lúc deploy) là đơn đã CANCELLED mà khách mất điểm vĩnh viễn: không có đường thử lại.
+    await this.refundConvertedPoints(tx, order);
+
     // Hoàn stock + release quota flash-sale — không có guard idempotency riêng ở đây vì
     // caller (status flip atomic) đảm bảo hàm này chỉ chạy đúng 1 lần cho mỗi đơn.
     // Dòng đặt trước: ĐỌC LẠI backorderedQty dưới khoá dòng. Ảnh chụp `order.items` của caller có
@@ -216,6 +221,29 @@ export class OrderReversalService {
     });
     if (!res.applied) {
       this.logger.warn(`Đơn XU ${order.code} đã có dòng ORDER_REFUND_XU, bỏ qua hoàn lần 2.`);
+    }
+  }
+
+  /**
+   * Hoàn phần Điểm Xanh lô CONVERTED mà đơn đã tiêu (`orders.pointsUsedConverted`) về đúng lô, không hết hạn.
+   * Một lần: caller đã lật trạng thái đơn bằng guard atomic; `points_transactions_converted_refund_unique`
+   * (reason `ORDER_REFUND_CONVERTED:<code>`) là lớp hai, dòng đã có thì skipDuplicates không cộng.
+   * Chặn trên bằng pointsUsed phòng dữ liệu lệch (không hoàn nhiều hơn tổng đã tiêu).
+   */
+  private async refundConvertedPoints(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<void> {
+    const points = Math.min(order.pointsUsed, order.pointsUsedConverted);
+    if (!(points > 0)) return;
+    const res = await applyPointsDelta(tx, {
+      userId: order.userId,
+      delta: points,
+      lot: 'CONVERTED',
+      reason: `ORDER_REFUND_CONVERTED:${order.code}`,
+      refType: 'ORDER',
+      refId: order.id,
+      skipDuplicates: true,
+    });
+    if (!res.applied) {
+      this.logger.warn(`Đơn ${order.code} đã có dòng ORDER_REFUND_CONVERTED, bỏ qua hoàn lô quy đổi lần 2.`);
     }
   }
 

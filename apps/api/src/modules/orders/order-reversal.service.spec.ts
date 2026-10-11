@@ -171,6 +171,72 @@ describe('OrderReversalService', () => {
     expect(result).toEqual({ moneyRefunded: true });
   });
 
+  // Review B1: phần điểm lô CONVERTED (tiền trả trước) hoàn TRONG tx huỷ, cùng commit với việc lật trạng thái đơn.
+  describe('hoàn lô CONVERTED trong tx huỷ (review B1)', () => {
+    const convertedRow = (delta: number) => ({
+      data: [
+        {
+          userId: 'u1', delta, lot: 'CONVERTED', reason: 'ORDER_REFUND_CONVERTED:TUBU1',
+          refType: 'ORDER', refId: 'o1', expiresAt: null,
+        },
+      ],
+      skipDuplicates: true,
+      select: { id: true },
+    });
+
+    it('đơn WALLET đã tiêu 120/150 điểm lô quy đổi → hoàn Ví như cũ VÀ +120 CONVERTED trong cùng tx', async () => {
+      const order = makeOrder({ paymentMethod: 'WALLET', paymentStatus: 'PAID', pointsUsed: 150, pointsUsedConverted: 120 });
+      const tx = makeTx(order);
+      await service.reverseFinancials(tx as never, order);
+      expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalledTimes(1);
+      expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalledWith(convertedRow(120));
+      expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsConvertedBalance: { increment: 120 } } });
+    });
+
+    it('đơn COD huỷ khi chưa giao (không có tiền để hoàn) vẫn hoàn lô CONVERTED', async () => {
+      const order = makeOrder({
+        paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'CONFIRMED', pointsUsed: 50, pointsUsedConverted: 50,
+      });
+      const tx = makeTx(order);
+      (applyWalletDelta as jest.Mock).mockClear();
+      await service.reverseFinancials(tx as never, order);
+      expect(applyWalletDelta).not.toHaveBeenCalled();
+      expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalledWith(convertedRow(50));
+      expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsConvertedBalance: { increment: 50 } } });
+    });
+
+    it('pointsUsedConverted lớn hơn pointsUsed (dữ liệu lệch) → hoàn tối đa pointsUsed, không tạo điểm ra từ không khí', async () => {
+      const order = makeOrder({ paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'CONFIRMED', pointsUsed: 30, pointsUsedConverted: 80 });
+      const tx = makeTx(order);
+      await service.reverseFinancials(tx as never, order);
+      expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalledWith(convertedRow(30));
+    });
+
+    it('dòng ORDER_REFUND_CONVERTED đã có (khoá converted_refund_unique) → không cộng lần 2', async () => {
+      const order = makeOrder({ pointsUsed: 150, pointsUsedConverted: 120 });
+      const tx = makeTx(order);
+      tx.pointsTransaction.createManyAndReturn.mockResolvedValue([]);
+      await service.reverseFinancials(tx as never, order);
+      expect(tx.user.update).toHaveBeenCalledTimes(1); // chỉ phần hoàn Ví
+      expect(tx.user.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: { pointsConvertedBalance: expect.anything() } }));
+    });
+
+    it('đơn không dùng điểm quy đổi → không ghi dòng CONVERTED nào', async () => {
+      const order = makeOrder({ pointsUsed: 40, pointsUsedConverted: 0 });
+      const tx = makeTx(order);
+      await service.reverseFinancials(tx as never, order);
+      expect(tx.pointsTransaction.createManyAndReturn).not.toHaveBeenCalled();
+    });
+
+    it('đơn XU cũ (pointsUsedConverted = 0 vì trả bằng xu) chỉ hoàn ORDER_REFUND_XU, không thêm ORDER_REFUND_CONVERTED', async () => {
+      const order = makeOrder({ paymentMethod: 'XU', paymentStatus: 'PAID', total: 150000 });
+      const tx = makeTx(order);
+      await service.reverseFinancials(tx as never, order);
+      expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalledTimes(1);
+      expect(tx.pointsTransaction.createManyAndReturn.mock.calls[0]![0].data[0].reason).toBe('ORDER_REFUND_XU:TUBU1');
+    });
+  });
+
   it('đơn XU cũ: dòng ORDER_REFUND_XU đã có (khoá converted_refund_unique) → không cộng lần 2', async () => {
     const order = makeOrder({ paymentMethod: 'XU', paymentStatus: 'PAID' });
     const tx = makeTx(order);

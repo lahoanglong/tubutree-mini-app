@@ -122,7 +122,7 @@ export class LoyaltyService {
   }
 
   /**
-   * Hoàn ngược khi hủy/trả: trừ điểm đã tích, hoàn lại điểm đã tiêu.
+   * Hoàn ngược khi hủy/trả: trừ điểm đã tích, hoàn lại điểm đã tiêu (lô STANDARD; lô CONVERTED xem OrderReversalService).
    *
    * RACE: 2 caller song song (orders.cancel + webhook RETURNED) trước đây cùng
    * findFirst NGOÀI tx → cùng thấy chưa reverse → cùng cộng/trừ → DOUBLE.
@@ -139,9 +139,9 @@ export class LoyaltyService {
           where: {
             userId: order.userId,
             refId: order.id,
-            reason: {
-              in: [`ORDER_REVERSED:${order.code}`, `ORDER_REFUND_POINTS:${order.code}`, `ORDER_REFUND_CONVERTED:${order.code}`],
-            },
+            // Không gồm ORDER_REFUND_CONVERTED: dòng đó do tx huỷ (OrderReversalService) ghi TRƯỚC khi hàm này
+            // chạy, nên liệt kê nó sẽ làm bỏ qua hoàn STANDARD và đảo pointsEarned.
+            reason: { in: [`ORDER_REVERSED:${order.code}`, `ORDER_REFUND_POINTS:${order.code}`] },
           },
           select: { id: true },
         });
@@ -175,7 +175,8 @@ export class LoyaltyService {
             data: { pointsBalance: { decrement: order.pointsEarned } },
           });
         }
-        // PD-3 (spec 2.5): hoàn về ĐÚNG lô đã tiêu. Đơn trước PD-3 có pointsUsedConverted = 0 → như cũ.
+        // PD-3 (spec 2.5): chỉ phần STANDARD (đơn trước PD-3 có pointsUsedConverted = 0 → hoàn hết như cũ). Phần
+        // CONVERTED là tiền trả trước, hoàn trong tx huỷ ở OrderReversalService.refundConvertedPoints (review B1).
         const usedConverted = Math.min(order.pointsUsed, order.pointsUsedConverted);
         const usedStandard = order.pointsUsed - usedConverted;
         if (usedStandard > 0) {
@@ -192,25 +193,6 @@ export class LoyaltyService {
           await tx.user.update({
             where: { id: order.userId },
             data: { pointsBalance: { increment: usedStandard } },
-          });
-        }
-        if (usedConverted > 0) {
-          // Lô quy đổi không hết hạn. Trùng khoá (points_transactions_converted_refund_unique) → P2002,
-          // bắt ở dưới như dòng STANDARD.
-          await tx.pointsTransaction.create({
-            data: {
-              userId: order.userId,
-              delta: usedConverted,
-              lot: 'CONVERTED',
-              reason: `ORDER_REFUND_CONVERTED:${order.code}`,
-              refType: 'ORDER',
-              refId: order.id,
-              expiresAt: null,
-            },
-          });
-          await tx.user.update({
-            where: { id: order.userId },
-            data: { pointsConvertedBalance: { increment: usedConverted } },
           });
         }
       });
