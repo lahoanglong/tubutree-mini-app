@@ -25,11 +25,6 @@ export function canWithdraw(
   );
 }
 
-/** Điều kiện được phép đổi Ví → TubuXu: số dương, không vượt số dư ví. */
-export function canConvertToXu(amount: number, wallet: WalletBalance | undefined): boolean {
-  return wallet != null && amount > 0 && amount <= wallet.walletBalance;
-}
-
 const WALLET_TX_LABELS: Record<string, string> = {
   OPENING: 'Số dư đầu kỳ',
   ORDER_PAY: 'Thanh toán đơn hàng',
@@ -38,7 +33,7 @@ const WALLET_TX_LABELS: Record<string, string> = {
   CASHBACK: 'Hoàn tiền sàn ngoài',
   WITHDRAW: 'Rút về ngân hàng',
   WITHDRAW_REFUND: 'Hoàn lệnh rút bị từ chối',
-  XU_CONVERT: 'Đổi sang TubuXu',
+  XU_CONVERT: 'Đổi sang xu cũ (nay là Điểm Xanh)',
   MERGE_IN: 'Chuyển từ phiên mua khách',
   MERGE_OUT: 'Chuyển sang tài khoản chính',
   ADJUST: 'Điều chỉnh',

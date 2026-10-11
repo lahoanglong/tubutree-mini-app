@@ -7,11 +7,10 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
   getWallet: vi.fn(),
-  getCoins: vi.fn(),
+  getReferral: vi.fn(),
   getLoyalty: vi.fn(),
   getWalletTransactions: vi.fn(),
   withdraw: vi.fn(),
-  convertToXu: vi.fn(),
   shareLink: vi.fn(),
   features: { cashback: false },
 }));
@@ -29,11 +28,10 @@ vi.mock('react-router-dom', async (importOriginal) => ({
 }));
 vi.mock('../services/account-api', () => ({
   getWallet: mocks.getWallet,
-  getCoins: mocks.getCoins,
+  getReferral: mocks.getReferral,
   getLoyalty: mocks.getLoyalty,
   getWalletTransactions: mocks.getWalletTransactions,
   withdraw: mocks.withdraw,
-  convertToXu: mocks.convertToXu,
 }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink }));
 vi.mock('../utils/features', () => ({
@@ -54,22 +52,20 @@ import WalletPage from './wallet';
 
 const WALLET = {
   walletBalance: 1_250_000,
-  coinsBalance: 80_000,
   cashbackPending: 45_000,
   commissionApproved: 520_000,
   commissionPending: 30_000,
-  xuConvertMultiplier: 1.2,
   withdrawMin: 100_000,
   withdrawFee: 3_000,
 };
-const COINS = {
-  coinsBalance: 80_000,
+const REFERRAL = {
   referralCode: 'TUBU1234',
-  referralSuccessCount: 2,
-  referralEarned: 20_000,
-  nextMilestone: { count: 5, bonus: 50_000 },
+  successCount: 2,
+  earnedPoints: 20,
+  milestones: [{ count: 5, bonusPoints: 50 }],
+  nextMilestone: { count: 5, bonusPoints: 50 },
 };
-const LOYALTY = { pointsBalance: 48_000, tier: { name: 'Bạc' } };
+const LOYALTY = { pointsBalance: 48_000, pointsConvertedBalance: 2_000, tier: { name: 'Bạc' } };
 const TXN_PAGE_1 = {
   data: [
     { id: 't1', delta: 50_000, balanceAfter: 1_250_000, type: 'CASHBACK', reason: null, orderId: null, createdAt: '2026-10-05T07:04:00' },
@@ -93,7 +89,7 @@ function renderPage() {
 
 function stubLoaded(wallet: object = WALLET) {
   mocks.getWallet.mockResolvedValue(wallet);
-  mocks.getCoins.mockResolvedValue(COINS);
+  mocks.getReferral.mockResolvedValue(REFERRAL);
   mocks.getLoyalty.mockResolvedValue(LOYALTY);
   mocks.getWalletTransactions.mockImplementation((page: number) => Promise.resolve(page === 1 ? TXN_PAGE_1 : TXN_PAGE_2));
 }
@@ -117,7 +113,7 @@ beforeEach(() => {
 describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2)', () => {
   it('có đúng một h1 ở mọi trạng thái: đang tải, lỗi, đã tải (C-114)', async () => {
     mocks.getWallet.mockReturnValue(new Promise(() => {}));
-    mocks.getCoins.mockReturnValue(new Promise(() => {}));
+    mocks.getReferral.mockReturnValue(new Promise(() => {}));
     mocks.getLoyalty.mockReturnValue(new Promise(() => {}));
     const loading = renderPage();
     expect(loading.container.querySelectorAll('h1')).toHaveLength(1);
@@ -126,7 +122,7 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
 
     vi.clearAllMocks();
     mocks.getWallet.mockRejectedValue(new Error('boom'));
-    mocks.getCoins.mockResolvedValue(COINS);
+    mocks.getReferral.mockResolvedValue(REFERRAL);
     mocks.getLoyalty.mockResolvedValue(LOYALTY);
     const failed = renderPage();
     await screen.findByRole('button', { name: 'Thử lại' });
@@ -140,13 +136,13 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
     expect(loaded.container.querySelectorAll('h1')).toHaveLength(1);
   });
 
-  it('hiện số dư Ví, TubuXu, Điểm Xanh, ba nguồn tiền chờ và sao kê đúng số liệu', async () => {
+  it('hiện số dư Ví, Điểm Xanh (tổng hai lô), ba nguồn tiền chờ và sao kê đúng số liệu', async () => {
     stubLoaded();
     renderPage();
     expect(await screen.findByText('Ví Tubu (số dư khả dụng)')).toBeInTheDocument();
     expect(screen.getAllByText('1.250.000đ').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('TubuXu (tiêu trong app)')).toBeInTheDocument();
     expect(screen.getByText('Điểm Xanh (đổi giảm giá)')).toBeInTheDocument();
+    expect(screen.getByText('50.000 điểm')).toBeInTheDocument();
     expect(screen.getByText('Bạc')).toBeInTheDocument();
     expect(screen.getByText('Hoa hồng chờ duyệt')).toBeInTheDocument();
     expect(screen.getByText('30.000đ')).toBeInTheDocument();
@@ -154,7 +150,8 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
     expect(screen.getByText('520.000đ')).toBeInTheDocument();
     expect(screen.getByText('Hoàn tiền đã duyệt, chờ về Ví')).toBeInTheDocument();
     expect(screen.getByText('45.000đ')).toBeInTheDocument();
-    expect(screen.getByText('Mời thêm 3 bạn để nhận 50.000 xu')).toBeInTheDocument();
+    expect(screen.getByText('Mời thêm 3 bạn để nhận 50 điểm')).toBeInTheDocument();
+    expect(screen.getByText('20 điểm')).toBeInTheDocument();
     expect(screen.getByText('TUBU1234')).toBeInTheDocument();
     expect(await screen.findByText('Hoàn tiền sàn ngoài')).toBeInTheDocument();
     expect(screen.getByText('+50.000đ')).toBeInTheDocument();
@@ -162,16 +159,28 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
     expect(screen.getByText('Số dư 1.200.000đ')).toBeInTheDocument();
   });
 
-  it('chú thích dưới TubuXu: chỉ nói việc còn làm được (mua hàng, góp quỹ trồng cây), không còn "mua nước"/"mua cây"', async () => {
+  it('Điểm Xanh có phần quy đổi: nói rõ phần không hết hạn dùng ở đâu, không ra tiền (PD-3)', async () => {
     stubLoaded();
     renderPage();
-    await screen.findByText('TubuXu (tiêu trong app)');
-    expect(screen.getByText('Dùng để mua hàng và góp quỹ trồng cây 🌳 trong app. Không rút được.')).toBeInTheDocument();
+    expect(await screen.findByText('trong đó 2.000 điểm không hết hạn')).toBeInTheDocument();
+    expect(
+      screen.getByText('Điểm không hết hạn dùng trả đơn hàng tới 100% giá trị hàng và góp quỹ trồng cây. Không rút ra tiền.'),
+    ).toBeInTheDocument();
+  });
+
+  it('không có điểm quy đổi: không hiện dòng "không hết hạn"', async () => {
+    mocks.getWallet.mockResolvedValue(WALLET);
+    mocks.getReferral.mockResolvedValue(REFERRAL);
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 48_000, tier: { name: 'Bạc' } });
+    mocks.getWalletTransactions.mockResolvedValue(TXN_PAGE_1);
+    renderPage();
+    expect(await screen.findByText('48.000 điểm')).toBeInTheDocument();
+    expect(screen.queryByText(/không hết hạn/)).toBeNull();
   });
 
   it('lỗi tải ví KHÔNG hiện 0đ mà báo lỗi kèm Thử lại gọi lại getWallet', async () => {
     mocks.getWallet.mockRejectedValueOnce(new Error('mất mạng')).mockResolvedValue(WALLET);
-    mocks.getCoins.mockResolvedValue(COINS);
+    mocks.getReferral.mockResolvedValue(REFERRAL);
     mocks.getLoyalty.mockResolvedValue(LOYALTY);
     mocks.getWalletTransactions.mockResolvedValue(TXN_PAGE_1);
     renderPage();
@@ -294,42 +303,50 @@ describe('WalletPage — rút tiền', () => {
   });
 });
 
-describe('WalletPage — đổi Ví sang TubuXu', () => {
-  it('nhập số tiền → hiện số xu ước tính, gửi đúng số tiền + key rồi báo thành công', async () => {
-    stubLoaded();
-    mocks.convertToXu.mockResolvedValue({ spent: 100_000, received: 120_000, multiplier: 1.2 });
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đổi TubuXu' }));
-    expect(await screen.findByText('Đổi Ví → TubuXu')).toBeInTheDocument();
-    const go = screen.getByRole('button', { name: 'Đổi ngay' });
-    expect(go).toBeDisabled();
-    fireEvent.change(inputOf(/Số tiền muốn đổi/), { target: { value: '100000' } });
-    expect(screen.getByText(/Nhận ≈/).textContent).toContain('120.000 xu');
-    expect(go).toBeEnabled();
-    fireEvent.click(go);
-    await waitFor(() => expect(mocks.convertToXu).toHaveBeenCalledTimes(1));
-    expect(mocks.convertToXu.mock.calls[0]![0]).toBe(100_000);
-    expect(mocks.convertToXu.mock.calls[0]![1]).toMatch(/^key-/);
-    await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đổi 100.000đ → 120.000 xu 🎉', type: 'success' }),
-    );
-  });
-
-  it('số tiền vượt số dư → nút Đổi ngay vẫn khoá', async () => {
+describe('WalletPage — xu đã gộp vào Điểm Xanh, không còn đường vào TubuXu (Q-26, PD-3)', () => {
+  it('không còn nút/sheet đổi Ví sang xu, thẻ TubuXu hay mẹo ×1.2', async () => {
     stubLoaded();
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đổi TubuXu' }));
-    await screen.findByText('Đổi Ví → TubuXu');
-    fireEvent.change(inputOf(/Số tiền muốn đổi/), { target: { value: '9999999' } });
-    expect(screen.getByRole('button', { name: 'Đổi ngay' })).toBeDisabled();
+    await screen.findByText('Ví Tubu (số dư khả dụng)');
+    expect(screen.queryByRole('button', { name: /Đổi/ })).toBeNull();
+    expect(screen.queryByText(/TubuXu/)).toBeNull();
+    expect(screen.queryByText(/×1[.,]2/)).toBeNull();
+    expect(document.body.textContent ?? '').not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])/iu);
   });
 
-  it('ví 0đ → báo chưa có số dư và khoá ô nhập', async () => {
-    stubLoaded({ ...WALLET, walletBalance: 0 });
+  it('thống kê giới thiệu đọc từ /me/referral (/me/coins đã 410, mock không còn getCoins)', async () => {
+    stubLoaded();
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đổi TubuXu' }));
-    expect(await screen.findByText(/chưa có số dư khả dụng trong Ví Tubu/)).toBeInTheDocument();
-    expect(inputOf(/Số tiền muốn đổi/)).toBeDisabled();
+    await screen.findByText('Ví Tubu (số dư khả dụng)');
+    expect(mocks.getReferral).toHaveBeenCalledTimes(1);
+  });
+
+  it('mẹo dưới ví nói đúng việc Ví làm được: trả cả đơn hàng, miễn phí, thay vì rút có phí', async () => {
+    stubLoaded();
+    renderPage();
+    const tip = await screen.findByText(/Mẹo:/);
+    expect(tip.textContent).toMatch(/trả đơn hàng/);
+    expect(tip.textContent).toMatch(/3\.000đ/);
+  });
+
+  it('lời mời bạn: thưởng là Điểm Xanh, chia sẻ không hứa "cả hai nhận xu"', async () => {
+    stubLoaded();
+    mocks.shareLink.mockResolvedValue(undefined);
+    renderPage();
+    expect(await screen.findByText('Mời bạn — nhận Điểm Xanh')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Chia sẻ' }));
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
+    const arg = mocks.shareLink.mock.calls[0]![0] as { description: string };
+    expect(arg.description).toContain('TUBU1234');
+    expect(arg.description).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])|TubuXu/iu);
+  });
+
+  it('chưa tải được thống kê giới thiệu: ví vẫn hiện, chỉ ẩn khối mời bạn', async () => {
+    stubLoaded();
+    mocks.getReferral.mockRejectedValue(new Error('lỗi'));
+    renderPage();
+    expect(await screen.findByText('Ví Tubu (số dư khả dụng)')).toBeInTheDocument();
+    expect(screen.queryByText('Mời bạn — nhận Điểm Xanh')).toBeNull();
   });
 });
 
@@ -344,10 +361,10 @@ describe('WalletPage — vùng chạm >= 44px, nhãn form và biểu tượng (C
     }
   });
 
-  it('hai nút hành động trên thẻ Ví cao tối thiểu 44px', async () => {
+  it('nút Rút và nút Chia sẻ cao tối thiểu 44px', async () => {
     stubLoaded();
     renderPage();
-    for (const name of ['Đổi TubuXu', 'Rút ngân hàng', 'Chia sẻ']) {
+    for (const name of ['Rút ngân hàng', 'Chia sẻ']) {
       const btn = await screen.findByRole('button', { name });
       expect(Number.parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
     }
@@ -363,14 +380,11 @@ describe('WalletPage — vùng chạm >= 44px, nhãn form và biểu tượng (C
     expect(within(row!).getByText('Bạc')).toBeInTheDocument();
   });
 
-  it('cảnh báo trong sheet rút/đổi không dùng emoji làm biểu tượng (⚠️ 🌱 thay bằng Icon)', async () => {
+  it('cảnh báo trong sheet rút không dùng emoji làm biểu tượng (⚠️ thay bằng Icon)', async () => {
     stubLoaded({ ...WALLET, walletBalance: 0 });
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
     expect((await screen.findByText(/chưa đủ mốc tối thiểu/)).textContent).not.toMatch(/⚠/);
-    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Đổi TubuXu' }));
-    expect((await screen.findByText(/chưa có số dư khả dụng/)).textContent).not.toMatch(/🌱/);
   });
 });
 
@@ -402,27 +416,16 @@ describe('WalletPage — ẩn lối vào Hoàn tiền sàn ngoài (C-086, Q-15)'
     expect(await screen.findByText('Hoàn tiền sàn ngoài')).toBeInTheDocument();
   });
 
-  it('sheet đổi TubuXu khi ví 0đ không gợi ý kiếm tiền từ hoàn tiền sàn ngoài', async () => {
-    stubLoaded({ ...WALLET, walletBalance: 0 });
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đổi TubuXu' }));
-    const hint = await screen.findByText(/chưa có số dư khả dụng trong Ví Tubu/);
-    expect(hint.textContent).not.toMatch(/sàn ngoài/i);
-    expect(hint.textContent).toMatch(/hoa hồng/);
-  });
-
   describe('khi bật cờ CASHBACK_ENABLED', () => {
     beforeEach(() => {
       mocks.features.cashback = true;
     });
 
-    it('chú thích và gợi ý nhắc lại hoàn tiền sàn ngoài; thẻ chờ về Ví hiện cả khi 0đ', async () => {
+    it('chú thích nhắc lại hoàn tiền sàn ngoài; thẻ chờ về Ví hiện cả khi 0đ', async () => {
       stubLoaded({ ...WALLET, cashbackPending: 0, walletBalance: 0 });
       renderPage();
       expect((await screen.findByText(/Tiền thật từ hoa hồng/)).textContent).toMatch(/hoàn tiền sàn ngoài/);
       expect(screen.getByText('Hoàn tiền đã duyệt, chờ về Ví')).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'Đổi TubuXu' }));
-      expect((await screen.findByText(/chưa có số dư khả dụng trong Ví Tubu/)).textContent).toMatch(/Hoàn tiền sàn ngoài/);
     });
   });
 });
