@@ -23,6 +23,7 @@ const FILES = [
   'src/pages/community-moderation.tsx',
   'src/pages/refill.tsx',
   'src/pages/ai-advisor.tsx',
+  'src/pages/academy.tsx',
 ];
 
 /** Trang (không phải component con) phải có đúng một tiêu đề trang — PageHeader hoặc <h1> riêng (C-114). */
