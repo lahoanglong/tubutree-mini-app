@@ -249,9 +249,9 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
     await expectBlocked(request.id, user.id, /Ví Tubu còn 50\.000đ/);
   });
 
-  it('chặn khi còn xu hoặc hoàn tiền đang chờ', async () => {
-    const a = await customerWithRequest({ coinsBalance: 1200 });
-    await expectBlocked(a.request.id, a.user.id, /xu/);
+  // PD-3: xu đã quy sang Điểm Xanh và bị khoá ở DB (users_coins_frozen) nên không còn chặn theo xu;
+  // phần tiền trả trước nằm ở lô quy đổi (ca CONVERTED_POINTS bên dưới).
+  it('chặn khi còn hoàn tiền đang chờ', async () => {
     const b = await customerWithRequest({ cashbackPending: 3000 });
     await expectBlocked(b.request.id, b.user.id, /hoàn tiền/i);
   });

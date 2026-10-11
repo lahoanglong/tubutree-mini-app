@@ -511,7 +511,9 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
       const targetRow = fixture.state.users.get('target1')!;
       expect(targetRow.pointsBalance).toBe(150); // 50+100
       expect(targetRow.walletBalance).toBe(6000); // 1000+5000
-      expect(targetRow.coinsBalance).toBe(25); // 5+20
+      // PD-3 (migration C users_coins_frozen): gộp không ghi cột xu nữa. Số xu trong fixture chỉ để chứng
+      // minh code không chuyển/cộng xu; trên DB thật mọi coinsBalance = 0.
+      expect(targetRow.coinsBalance).toBe(5);
       expect(targetRow.cashbackPending).toBe(200); // 200+0
 
       // Khách bị khoá lại: zaloId đổi (giải phóng guest_dev1), số dư về 0, refresh token thu hồi.

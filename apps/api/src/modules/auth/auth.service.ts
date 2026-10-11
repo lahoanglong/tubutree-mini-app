@@ -274,10 +274,9 @@ export class AuthService {
           pointsBalance: number;
           pointsConvertedBalance: number;
           walletBalance: number;
-          coinsBalance: number;
           cashbackPending: number;
         }[]
-      >`SELECT "zaloId", "pointsBalance", "pointsConvertedBalance", "walletBalance", "coinsBalance", "cashbackPending"
+      >`SELECT "zaloId", "pointsBalance", "pointsConvertedBalance", "walletBalance", "cashbackPending"
           FROM "users" WHERE "id" = ${guest.id} FOR UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${target.id} FOR UPDATE`;
       const g = lockedGuest[0];
@@ -453,7 +452,7 @@ export class AuthService {
           pointsBalance: { increment: g.pointsBalance },
           // Dòng sổ lô CONVERTED đã theo pointsTransaction.updateMany ở bước 5, nên số dư lô đi cùng.
           pointsConvertedBalance: { increment: g.pointsConvertedBalance },
-          coinsBalance: { increment: g.coinsBalance },
+          // Xu đã quy sang Điểm Xanh và bị khoá ở DB (users_coins_frozen): không chuyển cột xu.
           cashbackPending: { increment: g.cashbackPending },
           ...(!target.zaloId ? { zaloId: info.zaloId } : {}),
           ...(info.name && !target.fullName ? { fullName: info.name, avatarUrl: info.avatar ?? target.avatarUrl } : {}),
@@ -471,7 +470,6 @@ export class AuthService {
           zaloId: `${guest.zaloId}_merged_${Date.now()}`,
           pointsBalance: 0,
           pointsConvertedBalance: 0,
-          coinsBalance: 0,
           cashbackPending: 0,
         },
       });
