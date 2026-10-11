@@ -13,7 +13,7 @@ export default function PosPage() {
     return (
       <Center>
         Cần đăng nhập tài khoản nhân viên.{' '}
-        <Link href="/dang-nhap" className="font-semibold text-green-700 underline">
+        <Link href="/dang-nhap" className="inline-flex min-h-[44px] items-center font-semibold text-forest-700 underline">
           Đăng nhập
         </Link>
       </Center>
@@ -22,16 +22,16 @@ export default function PosPage() {
     return <Center>Chỉ nhân viên hoặc quản trị viên mới dùng được màn thu ngân.</Center>;
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6">
+    <main className="mx-auto max-w-2xl px-4 py-6 text-stone-900">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-bold">Thu ngân · Tích Điểm Xanh tại quầy</h1>
+        <h1 className="font-display text-xl font-bold">Thu ngân · Tích Điểm Xanh tại quầy</h1>
         {user.role === 'ADMIN' && (
-          <Link href="/admin?tab=posCredits" className="text-sm font-medium text-green-700 underline">
+          <Link href="/admin?tab=posCredits" className="inline-flex min-h-[44px] items-center text-sm font-medium text-forest-700 underline">
             Sổ tích điểm tại quầy →
           </Link>
         )}
       </div>
-      <p className="mt-1 text-sm text-neutral-500">Đăng nhập: {user.fullName ?? 'Nhân viên'} · mọi lượt tích điểm được ghi sổ theo tài khoản này.</p>
+      <p className="mt-1 text-sm text-stone-500">Đăng nhập: {user.fullName ?? 'Nhân viên'} · mọi lượt tích điểm được ghi sổ theo tài khoản này.</p>
       <div className="mt-4">
         <PosScreen />
       </div>
@@ -40,5 +40,5 @@ export default function PosPage() {
 }
 
 function Center({ children }: { children: React.ReactNode }) {
-  return <main className="mx-auto max-w-3xl px-4 py-20 text-center text-neutral-600">{children}</main>;
+  return <main className="mx-auto max-w-3xl px-4 py-20 text-center text-stone-600">{children}</main>;
 }

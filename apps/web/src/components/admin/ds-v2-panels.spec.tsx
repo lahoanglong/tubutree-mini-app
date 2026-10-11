@@ -3,7 +3,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { DealerClaimsTab, ClaimRow } from './dealer-claims-tab';
 import { OrderInvoicePanel, OrderStatusHistory } from './order-detail-extras';
 import { RecyclingBadge, RecyclingPanel } from './recycling-panel';
-import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import { PosCreditsTab } from './pos-credits-tab';
+import { PosScreen } from './pos-screen';
+import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminDealerRewardClaim, AdminOrder } from '@/lib/admin-client';
 
 // C-097 (Q-25/Q-29): các khối admin còn lại chuyển sang token DS v2 và nút chạm được ở 390px. Chỉ kiểm phần trình
@@ -146,5 +148,67 @@ describe('RecyclingPanel — DS v2', () => {
     expect(a.container.querySelector('span')?.className).toContain('bg-danger-bg');
     const b = mount(<RecyclingBadge order={recyclingOrder({ gomdonStatus: '1', gomdonOrderId: 'g1' })} />);
     expect(b.container.querySelector('span')?.className).toContain('bg-success-bg');
+  });
+});
+
+describe('PosCreditsTab — DS v2', () => {
+  const CREDIT = {
+    id: 'c1',
+    receiptId: 'HD-001',
+    orderTotal: 250_000,
+    points: 25,
+    multiplier: 2,
+    note: null,
+    dayKey: '2026-10-10',
+    createdAt: '2026-10-10T03:00:00.000Z',
+    staff: { id: 'staff1', name: 'Thu Hà', phone: '0900000002' },
+    member: { id: 'mem1', name: 'Nguyễn An', phone: '0900000001', memberCode: 'TB-AN01' },
+  };
+
+  it('liên kết "Mở màn thu ngân" cao 44px; nút lọc theo người trong bảng cao 44px; điểm tô forest', async () => {
+    const api = mockFetch({ '/admin/loyalty/pos-credits': { body: [CREDIT] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PosCreditsTab />);
+    await flush();
+    const link = container.querySelector('a[href="/admin/pos"]');
+    expect(link?.className).toContain('min-h-[44px]');
+    expect(byText(container, 'button', 'Nguyễn An')?.className).toContain('min-h-[44px]');
+    expect(byText(container, 'button', 'Thu Hà')?.className).toContain('min-h-[44px]');
+    expect(byText(container, 'button', 'Xoá lọc')?.className).toContain('min-h-[44px]');
+    expect(container.querySelector('td.text-forest-700')?.textContent).toContain('+25');
+    expect(container.querySelector('.overflow-x-auto')).not.toBeNull();
+  });
+
+  it('lỗi tải tô danger-fg', async () => {
+    const api = mockFetch({ '/admin/loyalty/pos-credits': { status: 500, body: { message: 'Lỗi máy chủ' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PosCreditsTab />);
+    await flush();
+    expect(container.querySelector('p.text-danger-fg')?.textContent).toContain('Lỗi máy chủ');
+  });
+});
+
+describe('PosScreen — DS v2 (màn thu ngân, chạm trên điện thoại)', () => {
+  const member = { id: 'm1', memberCode: 'TUBUABCD1234', name: 'Trần B', phone: '090****567', tier: 'Mầm Xanh', pointsBalance: 120 };
+
+  it('ô mã thành viên và nút "Tra cứu" cao 44px; sau khi tra: ô nhập, nút "Tích điểm" 44px, thẻ thành viên theo forest', async () => {
+    const api = mockFetch({
+      '/me/loyalty/member-card': { body: { posCreditEnabled: true } },
+      '/loyalty/staff/scan-member': { body: { member } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PosScreen />);
+    await flush();
+    expect(container.querySelector('input[aria-label="Mã thành viên"]')?.className).toContain('min-h-[44px]');
+    typeInto(container.querySelector('input[aria-label="Mã thành viên"]'), 'TUBUABCD1234');
+    expect(byText(container, 'button', 'Tra cứu')?.className).toContain('min-h-[44px]');
+    click(byText(container, 'button', 'Tra cứu'));
+    await flush();
+    for (const label of ['Tổng tiền hoá đơn', 'Mã hoá đơn POS', 'Ghi chú']) {
+      expect(container.querySelector(`input[aria-label="${label}"]`)?.className).toContain('min-h-[44px]');
+    }
+    expect(byText(container, 'button', 'Tích điểm')?.className).toContain('min-h-[44px]');
+    expect(container.querySelector('[aria-label="Thành viên"]')?.className).toContain('bg-forest-50');
+    expect(container.querySelector('h2')?.className).toContain('font-display');
   });
 });
