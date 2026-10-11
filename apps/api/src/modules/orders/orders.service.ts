@@ -299,27 +299,6 @@ export class OrdersService {
     return { ...cart, cart, results };
   }
 
-  async issueInvoice(userId: string, code: string) {
-    const order = await this.detail(userId, code);
-    if (!order.invoiceRequest) {
-      throw new BadRequestException('Đơn này chưa có yêu cầu xuất hóa đơn VAT.');
-    }
-    // Guard theo invoiceStatus hiện tại — trước đây set 'REQUESTED' vô điều kiện nên double-tap,
-    // hoặc gọi lại sau khi webhook ISSUED (pancake.processor.ts onInvoiceIssued) đã phát hành
-    // hóa đơn thật, sẽ âm thầm lật ngược invoiceStatus đã ISSUED về REQUESTED.
-    if (order.invoiceStatus === 'ISSUED') {
-      throw new BadRequestException('Hóa đơn đã được phát hành.');
-    }
-    if (order.invoiceStatus === 'REQUESTED') {
-      return { ok: true, message: 'Yêu cầu phát hành hóa đơn đang được xử lý.' };
-    }
-    await this.prisma.order.update({
-      where: { id: order.id },
-      data: { invoiceStatus: 'REQUESTED' },
-    });
-    return { ok: true, message: 'Đã gửi yêu cầu phát hành hóa đơn.' };
-  }
-
   /** Yêu cầu đổi/trả (§6.4): chỉ đơn DELIVERED, trong window (config returns.window_days=7),
    * chỉ-lỗi-NSX (user nêu lý do + ảnh). Admin duyệt sau (AdminService.reviewReturn). */
   async requestReturn(userId: string, code: string, dto: { reason: string; images?: string[] }) {
@@ -365,18 +344,6 @@ export class OrdersService {
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
-  }
-
-  /** Force refetch trạng thái từ Pancake (Phase 1: trả trạng thái hiện tại; bổ sung poll khi có key). */
-  async track(userId: string, code: string) {
-    const order = await this.detail(userId, code);
-    return {
-      code: order.code,
-      status: order.status,
-      shippingStatus: order.shippingStatus,
-      shippingCode: order.shippingCode,
-      shippingHistory: order.shippingHistory ?? [],
-    };
   }
 
   /** Fallback cho đơn chưa có deliveredAt: lần lật DELIVERED cuối trong sổ lịch sử trạng thái. */
