@@ -82,7 +82,7 @@ Web admin (`app/admin/page.tsx`): thẻ "Sản phẩm & Rừng Xanh / N cây th�
 API (`game.service.ts`): lời báo lỗi "Tính năng mua cây chưa khả dụng." thành "Tính năng góp quỹ trồng cây chưa khả dụng."; chú thích ở `game.service.ts`, `game-garden.service.ts`, `game-community.service.ts`. `game-community.service.ts` không trả chữ nào cho FE (tiêu đề/vùng mốc lấy từ DB), chỉ có chú thích.
 Dữ liệu DB (seed + migration, mục dưới): câu quiz q6, mô tả khoá `game.tree_xu_price`.
 
-Giữ nguyên: tên biến/hàm (`buyTree`, `plantTree`, `PlantedTree`, `treesPlanted`, `certificateCode`...), route `POST /game/tree/buy`, bảng, cột, `schema.prisma`, `dead-config-keys.ts` (nhãn admin báo khoá `eco.real_tree_*` không có luồng đọc: đúng sự thật), số CO₂ ước tính (21 kg/cây) ở thẻ Tác động xanh.
+Giữ nguyên: tên biến/hàm (`buyTree`, `plantTree`, `PlantedTree`, `treesPlanted`, `certificateCode`...), route `POST /game/tree/buy`, bảng, cột, `schema.prisma`, `dead-config-keys.ts` (nhãn admin báo khoá `eco.real_tree_*` không có luồng đọc: đúng sự thật). Ô "CO₂ hấp thụ/năm" ở thẻ Tác động xanh đã bỏ sau review lượt 1.
 
 ### Quyền lợi hạng: bằng chứng cơ chế từng perk (seed `TIERS[].perks`, cột `membership_tiers.perks` kiểu JSONB)
 | Perk cũ | Cơ chế trong mã | Kết luận |
@@ -290,7 +290,7 @@ npx tsc --noEmit -> exit 0
 | 7 | C-069 `ui/primitives.tsx` | XONG | ee5ba135 |
 | 8 | Dọn alias legacy + guard toàn `src` | XONG | d6a8f160 |
 
-Không có mục BỎ hay MỘT PHẦN. Migration duy nhất: `20261011090000_pd1_tree_fund_wording_tier_perks` (chỉ UPDATE có WHERE khớp nội dung cũ, áp thử lên Postgres tạm 2 lần: lần 1 mỗi câu `UPDATE 1`, lần 2 `UPDATE 0`).
+Không có mục BỎ hay MỘT PHẦN. Migration: `20261011090000_pd1_tree_fund_wording_tier_perks` (chỉ UPDATE có WHERE khớp nội dung cũ, áp thử lên Postgres tạm 2 lần: lần 1 mỗi câu `UPDATE 1`, lần 2 `UPDATE 0`) và `20261011110000_pd1_review_wording` (thêm ở review lượt 1, xem mục Review lượt 1).
 
 ### Bảng bằng chứng perk hạng (chi tiết ở Mục 2-3/4)
 Giữ (có cơ chế trong mã): tích điểm hệ số (`pointMultiplier`), freeship theo hạng (`shipping.tier_freeship_overrides`), giảm 5% (`discountPct` ở `checkout.service.ts`), mã giảm giá sinh nhật (`birthdayVoucherAmount`, cron `birthdayVouchers`). Bỏ (không có mã nào): "+ 1 sample", "+ hộp quà", "Ưu tiên hotline", "Beta tester", "Quà sinh nhật cá nhân hóa". Test `tier-perks-seed.spec.ts` buộc mọi perk trong seed phải khớp một cơ chế thật.
@@ -301,7 +301,7 @@ Grep cuối (`cây thật|cay that|PanNature|Rừng Xanh Lên|mua cây`, loại 
 
 ### Giả định (gộp)
 - Ẩn = ngừng gọi API và ngừng dựng lối vào ở miniapp, giữ mã ngủ sau cờ (`SEASON_PASS_ENABLED`, `CASHBACK_ENABLED` trong `utils/features.ts`), giữ route, bảng, endpoint để bật lại.
-- "Cây thật" thành "góp quỹ trồng cây" ở mọi chữ hướng khách; tên biến, route, bảng, cột giữ nguyên; số CO₂ ước tính giữ nguyên.
+- "Cây thật" thành "góp quỹ trồng cây" ở mọi chữ hướng khách; tên biến, route, bảng, cột giữ nguyên; ô số CO₂ ước tính đã bỏ sau review lượt 1.
 - Perk ghép giữ phần có cơ chế, cắt phần không có; "Voucher sinh nhật" thành "Mã giảm giá sinh nhật" theo Q-26.
 - Khoản cashback đã duyệt chờ về Ví vẫn hiển thị ở Ví dù lối vào đã ẩn (không giấu tiền của khách).
 - Q-19 `/merchant`: không thêm banner "chỉ xem"; chỉ bỏ lối vào, noindex, Disallow (đã có).
@@ -314,6 +314,72 @@ Grep cuối (`cây thật|cay that|PanNature|Rừng Xanh Lên|mua cây`, loại 
 - Chưa chạy Playwright/e2e và dev server (quy ước gói); e2e không nhắc beta, cashback, Season Pass, "cây thật" nên không phải đổi selector (`grep -rniE "season|cashback|hoàn tiền sàn|beta|cây thật|pannature" apps/e2e/tests` chỉ ra `cashbackPending`/`cashbackHoldDays` là dữ liệu mock API trong `support/checkout-mocks.ts`, không phải selector hay chữ hiển thị).
 
 ### Việc cần chủ dự án
-- Áp migration `20261011090000_pd1_tree_fund_wording_tier_perks` lên PROD bằng `prisma migrate deploy` khi phát hành (chỉ 5 dòng đổi chữ: 3 hạng, 1 câu quiz, 1 mô tả cấu hình); kiểm bằng `select name, perks from membership_tiers`.
-- Mốc cộng đồng "Cùng Tubu phủ xanh Cần Giờ" (tiêu đề, vùng, `treesToPlant`) nằm trong DB do admin sửa; nếu chưa có đối tác thực hiện nên đổi tên chung hơn ở trang quản trị.
+- Áp hai migration `20261011090000_pd1_tree_fund_wording_tier_perks` và `20261011110000_pd1_review_wording` lên PROD bằng `prisma migrate deploy` khi phát hành (chỉ đổi chữ: 4 hạng, 1 câu quiz, 1 mô tả cấu hình, 1 mốc cộng đồng); kiểm bằng `select name, perks from membership_tiers` và `select title, region from community_goals`.
+- Mốc cộng đồng seed đã đổi sang "Cùng Tubu góp quỹ trồng cây" / "Cộng đồng Tubu" (migration `20261011110000_pd1_review_wording`, chỉ khớp khi admin chưa sửa tay). Mốc nào admin đã tự đặt tên một địa điểm cụ thể thì cần admin tự rà.
 - Bật lại khi có điều kiện: `SEASON_PASS_ENABLED` (khi có công cụ tạo mùa), `CASHBACK_ENABLED` (khi có key AccessTrade và đo được tác động lên đơn), chữ "trồng cây thật" + tên đối tác (khi có hợp đồng và ngân sách, kèm luồng `PLANTED` + báo cáo cho khách), perk hạng đã bỏ (khi dựng xong quy trình thật).
+
+## Review lượt 1
+
+Reviewer độc lập đưa 4 phát hiện (1 major, 3 minor). Đã xác minh từng điểm trên mã.
+
+| # | Mức | Phát hiện | Kết luận | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | major | `eco-impact.tsx` còn ô `~${treesPlanted*21}kg CO₂ hấp thụ/năm` ngay cạnh "Cây đã góp quỹ" | ĐÚNG, đã sửa | fee8f36e |
+| 2 | minor | Seed mốc cộng đồng còn "phủ xanh Cần Giờ" + vùng "Rừng ngập mặn Cần Giờ, TP.HCM" | ĐÚNG, đã sửa | a880da16 |
+| 3 | minor | `scripts/uiux/generated/miniapp-endpoints.json` còn 4 chỗ trỏ `beta-api.ts` đã xoá | KHÔNG SỬA, ghi nhận file cũ (lý do dưới) | không |
+| 4 | minor | Perk còn "Tích điểm 1.2x/1.5x/2x", Q-26 chuẩn là "Điểm Xanh" | ĐÚNG, đã sửa | a880da16 |
+
+### 1. CO₂ gán cho cây khách đã góp (major) — XONG
+Xác minh: ô số liệu là `treesPlanted * 21` kg, nhãn "CO₂ hấp thụ/năm (ước tính)" đặt cạnh "Cây đã góp quỹ N". Khách góp 3 cây thấy "~63kg", nghĩa là cây của mình đang hấp thụ CO₂, trong khi `PlantedTree` vẫn `PLEDGED` và chưa có luồng trồng thật. Đây đúng là lời hứa cây cụ thể mà Q-16 gỡ; test `game-behavior.spec.tsx` còn khoá "~63kg".
+Cách sửa: bỏ ô CO₂ (cùng import `Wind`), thẻ Tác động xanh còn hai ô "Cây đã góp quỹ" và "Giọt nước đã góp". Không thay bằng câu "mỗi cây hấp thụ ~21kg" vì vẫn là tuyên bố môi trường không có nguồn.
+Test (đỏ rồi xanh):
+- `i18n/tree-fund-copy.spec.ts`: ca mới "không gán số CO₂ hấp thụ cho phần cây khách đã góp" quét `src/**/*.{ts,tsx}` (trừ spec) tìm `CO₂|CO2|hấp thụ`. ĐỎ: kê `components/game/eco-impact.tsx`; XANH sau khi bỏ ô.
+- `pages/game-behavior.spec.tsx`: thay `toContain('~63kg')` bằng `not.toMatch(/CO₂|kg/)`. ĐỎ trước khi sửa mã (textContent có "~63kgCO₂ hấp thụ/năm"), XANH sau.
+
+### 2. Mốc cộng đồng seed nêu địa điểm (minor) — XONG
+Xác minh: `community-goal.tsx` in `goal.title` và `{goal.region} · mục tiêu góp quỹ trồng N cây`; seed `cg-cangio-2026` đặt title "Cùng Tubu phủ xanh Cần Giờ", region "Rừng ngập mặn Cần Giờ, TP.HCM", nên khách đọc ra cam kết trồng tại một địa điểm có tên mà chưa có quy trình. Dữ liệu nằm trong DB, migration trước không đụng tới.
+Cách sửa: seed đổi thành title "Cùng Tubu góp quỹ trồng cây", region "Cộng đồng Tubu" (cột `region` NOT NULL nên không đặt rỗng); migration mới `UPDATE community_goals ... WHERE id='cg-cangio-2026' AND title=<cũ> AND region=<cũ>`. `treesToPlant`, `targetDrops` không đổi. Mốc admin đã đổi tay thì không khớp WHERE nên giữ nguyên.
+Giữ nguyên: mùa `se-2026-he-cangio` ("Mùa Hè Xanh — Phủ xanh Cần Giờ") và vùng của loài cây ở sổ tay: Season Pass đã ẩn khỏi miniapp (C-044), vùng loài cây là kiến thức về loài, không phải cam kết trồng.
+
+### 4. Perk dùng "Điểm Xanh" (minor) — XONG
+Xác minh: `Điểm Xanh` là thuật ngữ đang dùng khắp miniapp (ví dụ `wheel.tsx`, `reviews-section.tsx`, `account-api.ts`); perk còn "Tích điểm Nx" lệch Q-26. Làm vì rẻ và nằm đúng nhóm file seed + migration.
+Cách sửa: seed và migration đổi cả bốn hạng thành "Tích Điểm Xanh x1", "x1.2", "x1.5", "x2" (hệ số vẫn đọc từ `pointMultiplier`). `loyalty.tsx` in nguyên mảng `perks` từ API nên không phải sửa UI.
+Test (đỏ rồi xanh): `loyalty/tier-perks-seed.spec.ts` đổi regex cơ chế `Tích Điểm Xanh x([\d.]+)` và danh sách perk chốt, thêm 5 ca cho migration mới (chỉ UPDATE có WHERE, mảng cũ = kết quả migration trước, mảng mới = seed, mốc cộng đồng). ĐỎ 8 ca trước khi sửa seed + viết migration; XANH 15/15 sau.
+
+### Migration `20261011110000_pd1_review_wording`
+5 câu UPDATE (không INSERT/DELETE/DROP/ALTER), mỗi câu có WHERE khớp đúng kết quả của migration trước: 4 hạng (`membership_tiers.perks`, so sánh JSONB theo tên hạng) và 1 mốc cộng đồng. Đứng sau `20261011090000_pd1_tree_fund_wording_tier_perks` nên chuỗi cũ khớp trên PROD.
+Kiểm bằng Postgres thật (container `tubu_it_main`, cổng 5550, DB tạm `pd1_scratch_r1` đã xoá, không đụng `tubutree_it`): `prisma migrate deploy` áp đủ migration; chèn trạng thái sau migration trước (Cổ Thụ có thêm perk do admin gõ tay, thêm một mốc admin tự đặt tên) rồi chạy `migration.sql`:
+```
+lần 1: UPDATE 1 / UPDATE 1 / UPDATE 1 / UPDATE 0 (Cổ Thụ sửa tay, giữ nguyên) / UPDATE 1 (mốc cg-cangio-2026)
+lần 2: UPDATE 0 x5 (idempotent)
+ Mầm Xanh | ["Tích Điểm Xanh x1"]
+ Lộc Biếc | ["Tích Điểm Xanh x1.2", "Freeship đơn ≥ 99k", "Mã giảm giá sinh nhật 50k"]
+ cg-cangio-2026 | Cùng Tubu góp quỹ trồng cây | Cộng đồng Tubu
+ cg-admin-edit  | Mốc admin đặt | Rừng ngập mặn Cần Giờ, TP.HCM   (giữ nguyên)
+```
+
+### 3. `miniapp-endpoints.json` cũ (minor) — KHÔNG SỬA
+Xác minh: đúng, còn 4 tham chiếu `beta-api.ts`. Đã thử `node scripts/uiux/extract-endpoints.mjs miniapp`: diff 1.427 dòng (+1.122/-305) vì file chưa được sinh lại từ lúc audit, gồm cả số dòng dịch chuyển của mọi gói PC đã xong, không riêng PD-1. Không bước CI nào đọc file này (chỉ harness chụp màn hình `scripts/uiux`), và PD-2 cũng sửa `/beta/*` nên dễ xung đột khi gộp. Đã đưa file về nguyên trạng và ghi nhận ở "Việc còn lại": nên sinh lại một lần sau khi gộp PD-2.
+
+### Lệnh kiểm chứng (review lượt 1)
+```
+cd apps/miniapp
+npx vitest run src/i18n src/pages/game-behavior.spec.tsx src/pages/game-numbers.spec.tsx src/pages/game-layout.spec.tsx src/pages/game-wheel-tabs.spec.tsx src/ds-no-legacy-aliases.spec.ts
+  Test Files 9 passed (9) | Tests 149 passed (149)
+npx tsc --noEmit -> exit 0;  npx eslint <file đã sửa> -> 0 lỗi, 0 cảnh báo
+cd apps/api
+npx jest src/modules/loyalty/tier-perks-seed.spec.ts src/modules/game --maxWorkers=1
+  Test Suites: 11 passed, 11 total | Tests: 170 passed, 170 total
+npx tsc --noEmit -p tsconfig.json -> exit 0;  npx eslint src/modules/loyalty/tier-perks-seed.spec.ts -> 0 lỗi
+```
+
+### Giả định
+- Vùng mốc cộng đồng đặt "Cộng đồng Tubu" (trung tính, không địa điểm) vì cột `region` bắt buộc có giá trị; chủ dự án đổi lại được ở tab quản trị khi có đối tác trồng thật.
+- Bỏ ô CO₂ thay vì viết lại, vì mọi cách diễn đạt số kg gần ô "cây đã góp" đều dễ bị đọc thành cây của khách.
+
+### Việc còn lại
+- Sinh lại `scripts/uiux/generated/miniapp-endpoints.json` sau khi gộp PD-2 (`node scripts/uiux/extract-endpoints.mjs miniapp`).
+- Ghi chú ở `apps/api/prisma/schema.prisma` (`CommunityGoal.region` ví dụ "Rừng phòng hộ Cần Giờ") là chú thích, ngoài nhóm file của gói, giữ nguyên.
+
+### Việc cần chủ dự án
+- Không có quyết định mới. Nhắc áp thêm migration `20261011110000_pd1_review_wording` cùng migration trước khi phát hành.
