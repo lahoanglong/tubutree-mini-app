@@ -19,6 +19,12 @@ const FILES = [
   'src/pages/notifications.tsx',
 ];
 
+/**
+ * C-113: trang đã di cư ở gói khác (order-detail: PC-3) hoặc đang ngoài lô này (bank-payment): gói chỉ gỡ
+ * emoji làm icon, không đụng ZaUI/bố cục, nên chỉ kiểm emoji + legacy + hex/rgb thô.
+ */
+const EMOJI_ONLY_FILES = ['src/pages/bank-payment.tsx'];
+
 /** Khung trang và hook điều hướng/thông báo: được phép ở mọi trang. */
 const ZMP_UI_BASE = ['Page', 'useNavigate', 'useLocation', 'useParams', 'useSnackbar'];
 /** Thêm theo từng file khi DS v2 chưa có bản thay (ghi lý do ở báo cáo PC-10c2). */
@@ -45,6 +51,8 @@ const LEGACY = new RegExp(
 const HEX = /(?<![&\w-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b(?!\w)/;
 const RGB = /\brgba?\(\s*\d/;
 const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿]/u;
+// Biểu tượng chữ ngoài dải của static-scan (⌛ ⏳ ⭐): vẫn là icon vẽ bằng ký tự.
+const EMOJI_SYMBOL = /[\u231A\u231B\u23E9-\u23FF\u2B50]/u;
 
 const MINIAPP_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const read = (file: string) => readFileSync(MINIAPP_ROOT + file, 'utf8');
@@ -82,6 +90,8 @@ describe('PC-10c2 — bộ so khớp tự kiểm', () => {
     expect(EMOJI.test('Đã cập nhật hồ sơ 🌿')).toBe(true);
     expect(EMOJI.test('Đã theo dõi ✓')).toBe(true);
     expect(EMOJI.test('Đã cập nhật hồ sơ')).toBe(false);
+    expect(EMOJI_SYMBOL.test('⏳ Chờ')).toBe(true);
+    expect(EMOJI_SYMBOL.test('Chờ xác nhận')).toBe(false);
   });
 
   it('bộ đọc import zmp-ui hiểu nhiều dòng, alias và import kiểu', () => {
@@ -92,13 +102,13 @@ describe('PC-10c2 — bộ so khớp tự kiểm', () => {
 });
 
 describe('PC-10c2 — không biến CSS legacy', () => {
-  it.each(FILES)('%s', (file) => {
+  it.each([...FILES, ...EMOJI_ONLY_FILES])('%s', (file) => {
     expect(hits(read(file), LEGACY)).toEqual([]);
   });
 });
 
 describe('PC-10c2 — không hex/rgb thô', () => {
-  it.each(FILES)('%s', (file) => {
+  it.each([...FILES, ...EMOJI_ONLY_FILES])('%s', (file) => {
     expect([...hits(read(file), HEX), ...hits(read(file), RGB)]).toEqual([]);
   });
 });
@@ -106,6 +116,12 @@ describe('PC-10c2 — không hex/rgb thô', () => {
 describe('PC-10c2 — không emoji làm icon', () => {
   it.each(FILES.filter((f) => !EMOJI_CONTENT_OK.includes(f)))('%s', (file) => {
     expect(hits(read(file), EMOJI)).toEqual([]);
+  });
+});
+
+describe('PC-10c2 — C-113 gỡ emoji làm icon ở trang đã/ngoài lô', () => {
+  it.each(EMOJI_ONLY_FILES)('%s', (file) => {
+    expect([...hits(read(file), EMOJI), ...hits(read(file), EMOJI_SYMBOL)]).toEqual([]);
   });
 });
 
