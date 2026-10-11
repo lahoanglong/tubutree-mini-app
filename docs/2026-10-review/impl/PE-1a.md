@@ -2,7 +2,7 @@
 
 Nhánh `hz13/PE-1a`, tách từ `hardening/2026-10` @ `6739ca0a`. Chỉ đụng API (`apps/api`), không có migration, không sửa checkout, order-reversal, wallet.
 
-Commit: `ece07c7c` (Mục 1), `87407fcd` (Mục 2), `657a9696` (sửa cron hết hạn, phát hiện khi làm Mục 2), `35a40164` (test controller).
+Commit: `ece07c7c` (Mục 1), `87407fcd` (Mục 2), `657a9696` (sửa cron hết hạn, phát hiện khi làm Mục 2), `35a40164` (test controller), `0a64a1ce` (sau review: giả định `createdAt` của dòng `POINTS_EXPIRED`).
 
 ## Mục 1 (OQ-5): Idempotency-Key cho `POST /game/tree/buy`
 
@@ -71,3 +71,43 @@ Chạy trong `apps/api` của worktree, PATH node 22. Postgres throwaway `tubu_i
 - Thứ tự replay của cron dựa trên `createdAt`, không đổi so với trước. `createdAt` do client Prisma gán bằng giờ máy ứng dụng lúc INSERT (không phải lúc bắt đầu transaction; đã đo trên Postgres thật: transaction mở 12:26:26.311, INSERT 12:26:27.766, `createdAt` 12:26:27.767), nên luôn không sớm hơn `now` mà cron chụp lúc bắt đầu. Quy tắc "POINTS_EXPIRED chỉ ăn lô có `expiresAt <= createdAt`" dựa vào điều này; đã ghi chú cạnh `EXPIRY_REASON` và có test giữ.
 - Điểm game/review không hạn (danh sách ở trên) là quyết định nghiệp vụ còn mở.
 - Gói đụng điểm (tiền trả trước) nên cần review opus hai lượt; hai chỗ nên nhìn kỹ: thứ tự "khoá dòng user rồi tra mã" trong `buyTree`, và quy tắc replay `POINTS_EXPIRED` trong `computePointExpiry`.
+
+## Sau review
+Review độc lập cho ba finding, cả ba mức minor. Mỗi cái đã đối chiếu với mã trước khi quyết; cả ba đều đúng về sự thật, một cái sửa, hai cái không sửa trong gói này.
+
+### 1. Điểm hoàn khởi động lại đồng hồ hạn: đúng, không sửa, chuyển thành câu hỏi mở cho chủ dự án
+Đã kiểm: `reverseOrderPoints` gọi `pointsExpiresAt(new Date())` (`loyalty.service.ts`), không liên quan tới hạn của các lô mà dòng `ORDER_REDEEM` đã ăn. Race spec đã có sẵn cho thấy rõ: lô seed hết hạn sau 300 ngày, dòng hoàn nhận hạn khoảng 12 tháng. Nửa còn lại của finding cũng đúng: `checkout.service.ts` tiêu điểm theo `pointsBalance` (guard `gte`), không xét hạn của từng lô, nên điểm đã quá hạn mà cron 01:00 chưa trừ vẫn dùng được, huỷ đơn thì nhận lại với hạn mới. Chưa đo được tần suất huỷ đơn có thể lặp lại trong thực tế (giới hạn huỷ của khách không nằm trong gói này), nên mức khai thác thực tế là unverified.
+
+Lý do không sửa: đề bài của gói quy định đúng hành vi này (tái dùng `pointsExpiresAt`, 12 tháng như điểm thường), và đổi sang "kế thừa hạn gốc" là đổi luật nghiệp vụ ngoài mục tiêu gói, lại đụng tới tiền trả trước của khách (điểm). Trước gói này dòng hoàn không bao giờ hết hạn nên hiện trạng đã chặt hơn.
+
+Câu hỏi mở cho chủ dự án (OQ-15b), ba lựa chọn:
+- Giữ như hiện tại: mỗi vòng đặt rồi huỷ đơn gia hạn thêm tối đa 12 tháng cho phần điểm đã tiêu. Đơn giản, không thêm code.
+- Dòng hoàn kế thừa hạn của lô bị ăn: replay FIFO tới dòng `ORDER_REDEEM:<mã>`, lấy hạn sớm nhất trong các lô nó ăn, hoàn với `min(hạn gốc, bây giờ + N tháng)`. Hạn gốc đã qua thì dòng hoàn đã hết hạn ngay và cron đêm đó trừ lại (đúng luật hạn). Chặt nhất nhưng cần thêm logic replay và test, nên làm thành gói riêng, kèm review opus vì đụng điểm.
+- Giữ hạn mới nhưng chặn vòng lặp ở chỗ khác (giới hạn số lần huỷ đơn dùng điểm trong kỳ): nằm ngoài loyalty, cần PM quyết.
+
+### 2. Câu sai về `createdAt` trong báo cáo: đúng, đã sửa (commit `0a64a1ce`)
+Đã đo lại trên Postgres thật (probe ngoài repo, đã xoá): transaction mở 12:26:26.311, giờ máy ứng dụng ngay trước INSERT 12:26:27.766, `createdAt` ghi ra 12:26:27.767. Vậy `createdAt` là giờ máy ứng dụng lúc INSERT (client Prisma gán, dù cột DB có `DEFAULT CURRENT_TIMESTAMP`), không phải lúc bắt đầu transaction. Đã sửa câu đó ở mục "Rủi ro còn lại".
+
+Giả định mà quy tắc replay `POINTS_EXPIRED` dựa vào là `createdAt >= now` của lượt cron. Đã làm ba việc: ghi chú cạnh `EXPIRY_REASON` (nói đúng lý do và hậu quả nếu đặt sớm hơn), dùng hằng số `EXPIRY_REASON` ở chỗ tạo dòng cùng một dòng nhắc không đặt `createdAt` tay, và hai test giữ giả định: unit kiểm dữ liệu tạo ra không có `createdAt`, race kiểm `createdAt` của dòng thật không sớm hơn lúc cron bắt đầu. Test này không đỏ trước khi sửa vì hành vi vốn đúng; để chứng minh nó có tác dụng, đã thử đột biến đặt `createdAt = now - 60 giây` trong cron: unit mới đỏ, race mới đỏ, và 3 ca cron cũ trong `loyalty-refund-expiry` cũng đỏ (cron trừ lần hai quay lại), rồi khôi phục. Chiều ngược lại (`createdAt` muộn hơn `now` vài giây tới vài phút khi cron chạy dài) theo lập luận không làm sai tổng điểm trừ vì mọi lô liên quan đều đã hết hạn ở đêm kế tiếp; đây là lập luận, chưa có test.
+
+### 3. Miniapp chưa gửi `Idempotency-Key`: đúng, không sửa trong gói này, chuyển thành việc FE
+Đã kiểm: grep `apps/miniapp/src` không có nơi nào gửi header này cho góp quỹ cây (`buyTreeM = useMutation({ mutationFn: buyTree })` trong `use-game-actions.ts`, `onBuy={() => buyTreeM.mutate()}` trong `pages/game.tsx`); chỉ `dealer.tsx` dùng `newIdempotencyKey()`. Nên OQ-5 mới đóng ở phía API; ngoài đời bấm đôi vẫn ra hai lượt cho tới khi FE gửi key. Báo cáo gốc đã nêu điều này.
+
+Lý do không sửa: gói PE-1a chỉ đụng `apps/api` (ghi ngay từ đầu), còn FE đi qua chuẩn `tubu-ds`, vitest miniapp và nằm đúng các file mà gói `busyRef` trang Vườn và sửa cảnh báo `key` trùng (mục C của roadmap) cũng sẽ sửa, nên gộp vào đây dễ xung đột khi hợp nhánh. Đề xuất cho gói FE:
+- `buyTree(key)` gửi header `Idempotency-Key` (8 đến 128 ký tự `[A-Za-z0-9_-]`; `newIdempotencyKey()` sinh UUID hoặc `idk-…` đều hợp lệ).
+- Giữ key trong `useRef`, sinh lúc bắt đầu một lượt góp và dùng lại khi bấm lại hoặc retry. Thiếu điểm (400) thì giữ key: API chỉ "chiếm chỗ" khi lượt góp đã thành công.
+- Phải sinh key MỚI sau khi góp thành công. Quên bước này thì lượt góp sau dùng lại key cũ, API trả lại kết quả lượt đầu và không trồng thêm cây, khách bị báo thành công mà không góp.
+- Gặp 400 "Idempotency-Key này không dùng được" (mã suy ra đã thuộc người khác, hiếm) thì sinh key mới và thử một lần.
+
+### Lệnh kiểm sau review
+Chạy trong `apps/api` của worktree, PATH node 22, Postgres throwaway `tubu_it_pe1a_fix` cổng 5592 (DB `tubutree_it`, 132 migration), đã `docker rm -f -v` sau khi xong.
+
+| Lệnh | Exit | Kết quả |
+|---|---|---|
+| `npx tsc --noEmit -p tsconfig.json` | 0 | sạch |
+| `npx eslint --max-warnings=0` 3 file đã sửa (`loyalty-expiry.service.ts`, `.spec.ts`, `loyalty-refund-expiry.race-spec.ts`) | 0 | sạch |
+| `npx jest src/modules/loyalty src/modules/game` | 0 | 20 suite, 422 test xanh (trước review 421) |
+| `DATABASE_URL=...5592/tubutree_it npx jest -c test/integration-race/jest.config.js --runInBand game-tree-idempotency loyalty-refund-expiry pd3-order-reversal pd3-points-lots pd3-tree-lock pd3-checkout-points game-spin-limit pd3-reward-sources loyalty.race` | 0 | 9 suite, 55 test xanh (trước review 54) |
+| đột biến `createdAt = now - 60 giây` trong cron (đã khôi phục) | không ghi | unit mới đỏ, race mới đỏ cùng 3 ca cron cũ đỏ (4/8 ca race, 1/30 ca unit) |
+
+Chưa verify: không chạy Playwright, full suite, các spec race ngoài 9 suite trên; không đo mức khai thác thực tế của kẽ hở ở finding 1.
