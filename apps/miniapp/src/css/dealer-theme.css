@@ -1,6 +1,6 @@
 /* Nhận diện B2B của kênh đại lý (pages/dealer.tsx). Dealer chưa có thiết kế riêng trong DS v2 nên
  * giữ bộ màu navy cũ; đây là nơi DUY NHẤT được giữ hex, trang chỉ tham chiếu bằng tên token.
- * Tên --color-dealer-* tách khỏi họ alias --dealer-* của css/tokens.css (cái đó sẽ bị xoá cùng khối legacy). */
+ * Dùng tên --color-dealer-*; họ --dealer-* của DS v1 đã xoá khỏi css/tokens.css và bị ds-no-legacy-aliases.spec.ts chặn. */
 :root {
   --color-dealer-ink: #1f2a44;
   --color-dealer-ink-soft: #2e3b5e;

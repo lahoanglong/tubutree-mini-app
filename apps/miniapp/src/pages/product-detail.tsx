@@ -870,7 +870,7 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
                 width: i === index ? 16 : 6,
                 height: 6,
                 borderRadius: 'var(--radius-pill)',
-                background: i === index ? 'var(--color-action-primary-bg)' : 'rgba(255,255,255,0.85)',
+                background: i === index ? 'var(--color-action-primary-bg)' : 'var(--color-media-dot-idle)',
                 transition: 'width var(--dur-base) var(--ease-out)',
                 boxShadow: 'var(--elevation-1)',
               }}
