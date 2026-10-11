@@ -1,12 +1,10 @@
 import { Box, Text, Button } from 'zmp-ui';
+import type { GameProfile } from '../../services/game-api';
 import { formatDrops } from '../../utils/format';
+import { isSameVNDay } from './game-utils';
 
 export function CheckInStreak({
-  streakDays,
-  streakFreezes,
-  streakFreezeCost,
-  checkedInToday,
-  dewCollectedToday,
+  profile,
   onCheckIn,
   checkInPending,
   onBuyFreeze,
@@ -14,11 +12,7 @@ export function CheckInStreak({
   onCollectDew,
   dewPending,
 }: {
-  streakDays: number | undefined;
-  streakFreezes: number | undefined;
-  streakFreezeCost: number | undefined;
-  checkedInToday: boolean;
-  dewCollectedToday: boolean;
+  profile: GameProfile | undefined;
   onCheckIn: () => void;
   checkInPending: boolean;
   onBuyFreeze: () => void;
@@ -26,6 +20,9 @@ export function CheckInStreak({
   onCollectDew: () => void;
   dewPending: boolean;
 }) {
+  const streakDays = profile?.streakDays;
+  const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
+  const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
   return (
     <Box p={3} style={{ background: 'var(--neutral-0)' }}>
       <Box flex alignItems="center" justifyContent="space-between" mb={2}>
@@ -75,7 +72,7 @@ export function CheckInStreak({
       <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8, marginTop: 12 }}>
         <Box flex alignItems="center" style={{ gap: 6 }}>
           <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-            🧊 Vé giữ lửa: <b>{streakFreezes ?? 0}</b>
+            🧊 Vé giữ lửa: <b>{profile?.streakFreezes ?? 0}</b>
           </Text>
           <Button
             size="small"
@@ -85,7 +82,7 @@ export function CheckInStreak({
             onClick={() => onBuyFreeze()}
             style={{ color: 'var(--leaf-700)' }}
           >
-            Mua ({formatDrops(streakFreezeCost ?? 80)})
+            Mua ({formatDrops(profile?.streakFreezeCost ?? 80)})
           </Button>
         </Box>
         <Button

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, useSnackbar, useNavigate } from 'zmp-ui';
+import { Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getGameProfile,
@@ -30,14 +30,13 @@ import {
   type HarvestSpecies,
 } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
-import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
 import { getErrorMessage } from '../services/api';
 import { vi } from '../i18n/vi';
 import { MessagesSquare, Recycle } from 'lucide-react';
 import { formatDrops, formatNumber, formatXu } from '../utils/format';
-import { isSameVNDay } from '../components/game/game-utils';
+import { GameLoginGate, GameSkeleton } from '../components/game/game-states';
 import { GardenHero } from '../components/game/garden-hero';
 import { GameLinkRow } from '../components/game/game-link-row';
 import { SeasonBanner } from '../components/game/season-banner';
@@ -92,9 +91,6 @@ export default function GamePage() {
   const [harvestCoupon, setHarvestCoupon] = useState<string | null>(null);
   const [harvestCert, setHarvestCert] = useState<string | null>(null);
   const [harvestSpecies, setHarvestSpecies] = useState<HarvestSpecies | null>(null);
-
-  const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
-  const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['game'] });
@@ -254,12 +250,7 @@ export default function GamePage() {
   if (status === 'loading' || (authed && isLoading)) {
     return (
       <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-          <Skeleton style={{ height: 180, borderRadius: 'var(--radius-lg)' }} />
-          <Skeleton style={{ height: 56, borderRadius: 'var(--radius-lg)' }} />
-          <Skeleton style={{ height: 56, borderRadius: 'var(--radius-lg)' }} />
-          <Skeleton style={{ height: 140, borderRadius: 'var(--radius-lg)' }} />
-        </Box>
+        <GameSkeleton />
       </Page>
     );
   }
@@ -269,13 +260,7 @@ export default function GamePage() {
   if (!authed) {
     return (
       <Page className="page">
-        <Box style={{ textAlign: 'center', padding: 48 }}>
-          <Text style={{ fontSize: 48 }}>🌱</Text>
-          <Text style={{ marginTop: 8 }}>{vi.community.loginToView}</Text>
-          <Button style={{ marginTop: 12, background: 'var(--leaf-600)' }} onClick={() => void login()}>
-            {vi.auth.loginCta}
-          </Button>
-        </Box>
+        <GameLoginGate onLogin={() => void login()} />
       </Page>
     );
   }
@@ -318,11 +303,7 @@ export default function GamePage() {
 
       {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
       <CheckInStreak
-        streakDays={profile?.streakDays}
-        streakFreezes={profile?.streakFreezes}
-        streakFreezeCost={profile?.streakFreezeCost}
-        checkedInToday={checkedInToday}
-        dewCollectedToday={dewCollectedToday}
+        profile={profile}
         onCheckIn={() => checkInM.mutate()}
         checkInPending={checkInM.isPending}
         onBuyFreeze={() => freezeM.mutate()}
