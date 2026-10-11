@@ -1114,7 +1114,7 @@ Tests: 4 failed, 4 total
  - 4 lượt góp song song (100 tự do + 60 khoá): Expected length 2, Received length 3
 ```
 
-Sửa (`game.service.ts`): sau `FOR UPDATE` dòng user, đọc `loyalty.lockedOrderPoints(userId, now, tx)`; phần thường = `min(giá, max(0, pointsBalance − locked))`, phần còn lại lấy từ lô quy đổi; thiếu thì 400 kèm lý do khoá (`lockedPointsMessage`). `LoyaltyService` (module toàn cục) thêm vào constructor dạng `@Optional()` như các dịch vụ khác của `GameService` để 40 chỗ test dựng ít tham số không vỡ, NHƯNG `buyTree` ném lỗi lập trình nếu thiếu (không âm thầm bỏ qua khoá trên đường tiền).
+Sửa (`game.service.ts`): sau `FOR UPDATE` dòng user, đọc `loyalty.lockedOrderPoints(userId, now, tx)`; phần thường = `min(giá, max(0, pointsBalance − locked))`, phần còn lại lấy từ lô quy đổi; thiếu thì 400 kèm lý do khoá (`lockedPointsMessage`). `LoyaltyService` (module toàn cục) thêm vào constructor dạng `@Optional()` như các dịch vụ khác của `GameService` để 49 chỗ test dựng ít tham số không vỡ, NHƯNG `buyTree` ném lỗi lập trình nếu thiếu (không âm thầm bỏ qua khoá trên đường tiền).
 
 Xanh: race `pd3-tree-lock Tests: 4 passed`; `pd3-checkout-points Tests: 3 passed` (T6 góp quỹ ×6 vẫn đúng 4 lượt); `game-spin-limit Tests: 2 passed`; `jest src/modules/game src/modules/users`: `Test Suites: 12 passed, Tests: 224 passed`. Unit `game.service.spec.ts` thêm 3 ca (khoá + chia lô, toàn bộ khoá không quy đổi → 400 có lý do, thiếu LoyaltyService → ném lỗi). Ghi thật: ba ca unit viết sau khi sửa, đỏ/xanh chỉ có ở race spec.
 
