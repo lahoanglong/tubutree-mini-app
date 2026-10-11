@@ -10,6 +10,7 @@ import {
 import { randomBytes } from 'node:crypto';
 import { MembershipTier, PosPointCredit, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { parseVnPhoneStrict } from '../../common/phone';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible } from '../coupons/coupon-scope';
 import { decideTier } from './tier-policy';
@@ -1202,15 +1203,6 @@ function maskPhone(phone: string | null | undefined): string | null {
   return phone ? `${phone.slice(0, 3)}****${phone.slice(-3)}` : null;
 }
 
-/** SĐT VN chuẩn hoá về 0xxxxxxxxx (cùng quy tắc zalo.service.ts normalizePhone); không phải SĐT → null. */
-function normalizeVnPhone(s: string): string | null {
-  const m = /^\+?(\d+)$/.exec(s);
-  if (!m) return null;
-  let digits = m[1]!;
-  if (digits.startsWith('84') && digits.length === 11) digits = `0${digits.slice(2)}`;
-  return /^0\d{9}$/.test(digits) ? digits : null;
-}
-
 /**
  * Tách chuỗi quét/gõ thành các ứng viên khớp CHÍNH XÁC. Bỏ khoảng trắng/gạch/chấm, viết hoa.
  * Ứng viên mã: chính chuỗi đó và phần sau tiền tố "TUBU" — mỗi ứng viên phải ≥ MIN_MEMBER_CODE_LEN.
@@ -1218,7 +1210,7 @@ function normalizeVnPhone(s: string): string | null {
  */
 export function parseMemberCode(raw: string): { phone: string | null; codes: string[] } {
   const s = (raw ?? '').toUpperCase().replace(/[\s.-]/g, '');
-  const phone = normalizeVnPhone(s);
+  const phone = parseVnPhoneStrict(s);
   const codes = new Set<string>();
   if (/^[A-Z0-9]+$/.test(s)) {
     if (s.length >= MIN_MEMBER_CODE_LEN) codes.add(s);

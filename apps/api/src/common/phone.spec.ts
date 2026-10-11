@@ -1,20 +1,20 @@
-import { ZaloService } from '../modules/auth/zalo.service';
-import { AffiliateService } from '../modules/affiliate/affiliate.service';
 import { parseMemberCode } from '../modules/loyalty/loyalty.service';
 import { OrderReversalService } from '../modules/orders/order-reversal.service';
+import { normalizeZaloPhone, parseVnPhoneStrict, toLocalPhone } from './phone';
 
 type Out = string | null;
 
 /**
- * Bốn nơi chép tay quy tắc "SĐT về dạng nội địa 0xxxxxxxxx", nhưng chỉ 3 hành vi khác nhau:
- *  - zalo (zalo.service normalizePhone): số Zalo trả về — bỏ mọi ký tự không phải số, thêm 0 đầu nếu thiếu, bắt buộc 0 + 9 số.
- *  - strict (loyalty normalizeVnPhone, qua parseMemberCode): chuỗi gõ/quét ở quầy — chỉ nhận +?<số>, KHÔNG tự thêm 0 đầu.
- *  - loose (affiliate normalizeToLocalPhone và order-reversal normalizeLocalPhone, hai bản giống hệt):
- *    khoá gộp khách — chỉ bỏ ký tự không phải số và đổi 84+9 số thành 0+9 số, KHÔNG kiểm độ dài.
+ * Bốn nơi từng chép tay quy tắc "SĐT về dạng nội địa 0xxxxxxxxx", nhưng chỉ có 3 hành vi khác nhau
+ * (bảng ROWS bên dưới được đo trên bản chép tay cũ trước khi gom):
+ *  - zalo: số Zalo trả về, bỏ mọi ký tự không phải số, thêm 0 đầu nếu thiếu, bắt buộc 0 + 9 số.
+ *  - strict (loyalty/parseMemberCode): chuỗi gõ/quét ở quầy, chỉ nhận +?<số>, KHÔNG tự thêm 0 đầu.
+ *  - loose (affiliate và order-reversal, hai bản giống hệt): khoá gộp khách, chỉ bỏ ký tự không phải số
+ *    và đổi 84+9 số thành 0+9 số, KHÔNG kiểm độ dài.
  */
-const zalo = (raw: string): Out =>
-  (ZaloService.prototype as unknown as { normalizePhone(r?: string): Out }).normalizePhone.call({}, raw);
+const zalo = (raw: string): Out => normalizeZaloPhone(raw);
 
+/** Qua parseMemberCode nên khoảng trắng/gạch/chấm đã bị bỏ trước khi chuẩn hoá (đúng đường chạy thật ở quầy). */
 const strict = (raw: string): Out => {
   try {
     return parseMemberCode(raw).phone;
@@ -23,9 +23,9 @@ const strict = (raw: string): Out => {
   }
 };
 
-const looseAffiliate = (raw: string): Out =>
-  (AffiliateService.prototype as unknown as { normalizeToLocalPhone(r: string): Out }).normalizeToLocalPhone.call({}, raw);
+const looseAffiliate = (raw: string): Out => toLocalPhone(raw);
 
+/** Đường hoàn tiền đơn hộ: SĐT lấy từ snapshot địa chỉ khi đơn không có endCustomerKey. */
 const looseReversal = async (raw: string): Promise<Out> => {
   const create = jest.fn().mockResolvedValue({});
   const tx = { user: { findUnique: jest.fn().mockResolvedValue(null) }, orderCustomerRefund: { create } };
@@ -71,10 +71,9 @@ describe('chuẩn hoá SĐT (đặc tả hành vi từng nơi)', () => {
     expect(zalo(raw)).toBe(expected);
   });
 
-  it('zalo: không có số → null', () => {
-    expect(
-      (ZaloService.prototype as unknown as { normalizePhone(r?: string): Out }).normalizePhone.call({}, undefined),
-    ).toBeNull();
+  it('zalo: thiếu số (undefined/null) → null', () => {
+    expect(normalizeZaloPhone(undefined)).toBeNull();
+    expect(normalizeZaloPhone(null)).toBeNull();
   });
 
   it.each(ROWS)('strict (loyalty/parseMemberCode): %j → %j', (raw, _zalo, expected) => {
@@ -87,5 +86,19 @@ describe('chuẩn hoá SĐT (đặc tả hành vi từng nơi)', () => {
 
   it.each(ROWS)('loose (order-reversal, hoàn tiền đơn hộ): %j → %j', async (raw, _zalo, _strict, expected) => {
     expect(await looseReversal(raw)).toBe(expected);
+  });
+
+  // parseMemberCode bỏ khoảng trắng/gạch/chấm trước khi gọi, nên hàm strict trần phải tự từ chối chúng.
+  it.each([
+    ['0912345678', '0912345678'],
+    ['+84912345678', '0912345678'],
+    ['84912345678', '0912345678'],
+    ['912345678', null],
+    ['0912 345 678', null],
+    ['090-123-4567', null],
+    ['', null],
+    ['84123', null],
+  ])('parseVnPhoneStrict trần: %j → %j', (raw, expected) => {
+    expect(parseVnPhoneStrict(raw)).toBe(expected);
   });
 });

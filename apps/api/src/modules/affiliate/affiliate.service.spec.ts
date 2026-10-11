@@ -452,9 +452,8 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const data = orderCreate.mock.calls[0][0].data;
     expect(data.source).toBe('ctv_assisted');
     expect(data.platform).toBe('miniapp');
-    // Cùng kiểu chuẩn hoá 84→0xxxxxxxxx mà User.phone luôn lưu (zalo.service.ts normalizePhone /
-    // loyalty.service.ts normalizeVnPhone), KHÔNG PHẢI hash — SĐT không có mã +84 cũng phải qua
-    // được (chỉ strip ký tự không phải số ở đây).
+    // Cùng kiểu chuẩn hoá 84→0xxxxxxxxx mà User.phone luôn lưu (common/phone.ts toLocalPhone),
+    // KHÔNG PHẢI hash — SĐT không có mã +84 cũng phải qua được (chỉ strip ký tự không phải số ở đây).
     expect(data.endCustomerKey).toBe('0901234567');
 
     expect(analyticsLocal.record).toHaveBeenCalledTimes(1);

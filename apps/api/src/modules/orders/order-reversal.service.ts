@@ -7,14 +7,9 @@ import { DealerService } from '../dealer/dealer.service';
 import { releaseVariationStock } from '../catalog/variation-stock';
 import { revokeReferralRewardForOrder } from '../wallet/referral-reward';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { toLocalPhone } from '../../common/phone';
 
 type OrderWithItems = Order & { items: OrderItem[] };
-
-/** Cùng quy tắc với User.phone / Order.endCustomerKey: chỉ giữ số, 84xxxxxxxxx → 0xxxxxxxxx. */
-function normalizeLocalPhone(raw: string): string | null {
-  const digits = raw.replace(/\D/g, '');
-  return digits.replace(/^84(\d{9})$/, '0$1') || null;
-}
 
 /**
  * Đảo ngược tác động tài chính + tồn kho của một đơn hàng khi CANCELLED/RETURNED.
@@ -229,7 +224,7 @@ export class OrderReversalService {
   private async refundEndCustomer(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<string | null> {
     const snapshot = (order.shippingAddress ?? {}) as { phone?: unknown; recipient?: unknown };
     const phone =
-      order.endCustomerKey ?? (typeof snapshot.phone === 'string' ? normalizeLocalPhone(snapshot.phone) : null);
+      order.endCustomerKey ?? (typeof snapshot.phone === 'string' ? toLocalPhone(snapshot.phone) : null);
     const recipientName = typeof snapshot.recipient === 'string' ? snapshot.recipient : null;
     const ctvId = order.referrerUserId ?? order.userId;
 
