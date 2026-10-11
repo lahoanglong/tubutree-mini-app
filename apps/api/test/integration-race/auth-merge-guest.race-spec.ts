@@ -9,9 +9,12 @@ import type { RbacService } from '../../src/modules/staff/rbac/rbac.service';
 import type { Env } from '../../src/config/env.validation';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
+import { findPointsLotDrift } from '../../src/modules/loyalty/points-reconcile';
 import { barrierOnFirstCalls, createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
-type Balances = Partial<Record<'pointsBalance' | 'walletBalance' | 'coinsBalance' | 'cashbackPending', number>>;
+type Balances = Partial<
+  Record<'pointsBalance' | 'pointsConvertedBalance' | 'walletBalance' | 'coinsBalance' | 'cashbackPending', number>
+>;
 
 /**
  * Gộp phiên khách vào tài khoản Zalo có sẵn (ensurePhoneForCurrentUser → mergeGuestInto) trên
@@ -428,10 +431,42 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     expect(await prisma.gardenPlot.count({ where: { userId: other.guest.id } })).toBe(1);
   });
 
+  it('PD-3 (T15): merge moves the converted Điểm Xanh lot and its ledger; duplicate QUEST points row is re-keyed, not a unique violation', async () => {
+    const { guest, target } = await guestAndTarget({}, {});
+    const lotRow = (userId: string, delta: number, lot: 'STANDARD' | 'CONVERTED', reason: string, refType: string, refId?: string) =>
+      prisma.$transaction(async (tx) => {
+        await tx.pointsTransaction.create({ data: { userId, delta, lot, reason, refType, refId } });
+        await tx.user.update({
+          where: { id: userId },
+          data: lot === 'CONVERTED' ? { pointsConvertedBalance: { increment: delta } } : { pointsBalance: { increment: delta } },
+        });
+      });
+    await lotRow(guest.id, 7, 'CONVERTED', 'XU_TO_POINTS:7000', 'XU_MIGRATION', guest.id);
+    await lotRow(target.id, 2, 'CONVERTED', 'XU_TO_POINTS:1500', 'XU_MIGRATION', target.id);
+    // Cùng một nhiệm vụ ở cả hai bên đụng partial unique (userId, reason) WHERE refType='QUEST' của sổ điểm.
+    await lotRow(guest.id, 2, 'STANDARD', 'STOREFRONT_QUEST:FIRST', 'QUEST', 'sf');
+    await lotRow(target.id, 2, 'STANDARD', 'STOREFRONT_QUEST:FIRST', 'QUEST', 'sf');
+
+    zaloIdForNextCall = target.zaloId!;
+    const res = await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
+    expect(res.user.id).toBe(target.id);
+
+    const t = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
+    const g = await prisma.user.findUniqueOrThrow({ where: { id: guest.id } });
+    expect([t.pointsBalance, t.pointsConvertedBalance]).toEqual([4, 9]);
+    expect([g.pointsBalance, g.pointsConvertedBalance]).toEqual([0, 0]);
+    const rows = await prisma.pointsTransaction.findMany({ where: { userId: { in: [guest.id, target.id] } } });
+    expect(rows.every((r) => r.userId === target.id)).toBe(true);
+    expect(rows.filter((r) => r.refType === 'QUEST').map((r) => r.reason).sort()).toEqual(
+      ['STOREFRONT_QUEST:FIRST', `MERGED:${guest.id}:STOREFRONT_QUEST:FIRST`].sort(),
+    );
+    expect(await findPointsLotDrift(prisma, [guest.id, target.id])).toEqual([]);
+  });
+
   it('merge: two concurrent ensurePhone calls for one guest credit the guest balance to the target exactly once', async () => {
     const { guest, target } = await guestAndTarget(
-      { pointsBalance: 50, coinsBalance: 10, walletBalance: 30_000, cashbackPending: 2_000 },
-      { pointsBalance: 1, coinsBalance: 1, walletBalance: 1, cashbackPending: 1 },
+      { pointsBalance: 50, pointsConvertedBalance: 6, coinsBalance: 10, walletBalance: 30_000, cashbackPending: 2_000 },
+      { pointsBalance: 1, pointsConvertedBalance: 1, coinsBalance: 1, walletBalance: 1, cashbackPending: 1 },
     );
     zaloIdForNextCall = target.zaloId!;
 
@@ -448,7 +483,11 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     expect(s.fulfilled).toHaveLength(2);
     for (const r of s.fulfilled) expect(r.value.user.id).toBe(target.id);
     const t = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
-    expect([t.pointsBalance, t.coinsBalance, t.walletBalance, t.cashbackPending]).toEqual([51, 11, 30_001, 2_001]);
+    expect([t.pointsBalance, t.pointsConvertedBalance, t.coinsBalance, t.walletBalance, t.cashbackPending]).toEqual([
+      51, 7, 11, 30_001, 2_001,
+    ]);
+    const g = await prisma.user.findUniqueOrThrow({ where: { id: guest.id } });
+    expect(g.pointsConvertedBalance).toBe(0);
   });
 
   it('merge: two guest devices upgrading to the same new Zalo account at once -> loser merges into winner, no 500', async () => {

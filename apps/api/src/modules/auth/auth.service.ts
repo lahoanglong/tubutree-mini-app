@@ -269,8 +269,15 @@ export class AuthService {
       // chiều được). Khoá target còn xếp hàng hai khách khác nhau cùng gộp vào một target để
       // bước kiểm trùng bên dưới thấy dòng của lần gộp trước.
       const lockedGuest = await tx.$queryRaw<
-        { zaloId: string | null; pointsBalance: number; walletBalance: number; coinsBalance: number; cashbackPending: number }[]
-      >`SELECT "zaloId", "pointsBalance", "walletBalance", "coinsBalance", "cashbackPending"
+        {
+          zaloId: string | null;
+          pointsBalance: number;
+          pointsConvertedBalance: number;
+          walletBalance: number;
+          coinsBalance: number;
+          cashbackPending: number;
+        }[]
+      >`SELECT "zaloId", "pointsBalance", "pointsConvertedBalance", "walletBalance", "coinsBalance", "cashbackPending"
           FROM "users" WHERE "id" = ${guest.id} FOR UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${target.id} FOR UPDATE`;
       const g = lockedGuest[0];
@@ -348,6 +355,12 @@ export class AuthService {
         UPDATE "coin_transactions" g SET "reason" = ${mergedPrefix}::text || g."reason"
          WHERE g."userId" = ${gid} AND g."refType" = 'QUEST'
            AND EXISTS (SELECT 1 FROM "coin_transactions" t
+                        WHERE t."userId" = ${tid} AND t."refType" = 'QUEST' AND t."reason" = g."reason")`;
+      // PD-3: sổ điểm cũng có partial unique (userId, reason) WHERE refType='QUEST'.
+      await tx.$executeRaw`
+        UPDATE "points_transactions" g SET "reason" = ${mergedPrefix}::text || g."reason"
+         WHERE g."userId" = ${gid} AND g."refType" = 'QUEST'
+           AND EXISTS (SELECT 1 FROM "points_transactions" t
                         WHERE t."userId" = ${tid} AND t."refType" = 'QUEST' AND t."reason" = g."reason")`;
       await tx.pointsTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.coinTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
@@ -438,6 +451,8 @@ export class AuthService {
         where: { id: tid },
         data: {
           pointsBalance: { increment: g.pointsBalance },
+          // Dòng sổ lô CONVERTED đã theo pointsTransaction.updateMany ở bước 5, nên số dư lô đi cùng.
+          pointsConvertedBalance: { increment: g.pointsConvertedBalance },
           coinsBalance: { increment: g.coinsBalance },
           cashbackPending: { increment: g.cashbackPending },
           ...(!target.zaloId ? { zaloId: info.zaloId } : {}),
@@ -455,6 +470,7 @@ export class AuthService {
         data: {
           zaloId: `${guest.zaloId}_merged_${Date.now()}`,
           pointsBalance: 0,
+          pointsConvertedBalance: 0,
           coinsBalance: 0,
           cashbackPending: 0,
         },
