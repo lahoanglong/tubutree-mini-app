@@ -27,21 +27,18 @@ import {
   waterPlot,
   fetchSeasonPass,
   claimSeasonPass,
-  type MissionItem,
-  type AnswerResult,
   type HarvestSpecies,
 } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
-import { WheelOfFortune } from '../components/wheel';
 import { haptic } from '../utils/haptic';
 import { getErrorMessage } from '../services/api';
 import { vi } from '../i18n/vi';
 import { MessagesSquare, Recycle } from 'lucide-react';
 import { copyText } from '../utils/clipboard';
 import { formatDrops, formatNumber, formatXu } from '../utils/format';
-import { categoryLabel, difficultyLabel, isSameVNDay, rarityColor, rarityLabel } from '../components/game/game-utils';
+import { isSameVNDay, rarityColor, rarityLabel } from '../components/game/game-utils';
 import { GameCard } from '../components/game/game-card';
 import { GardenHero } from '../components/game/garden-hero';
 import { GameLinkRow } from '../components/game/game-link-row';
@@ -54,6 +51,11 @@ import { GardenPlots } from '../components/game/garden-plots';
 import { SeasonPass } from '../components/game/season-pass';
 import { CommunityGoal } from '../components/game/community-goal';
 import { SpeciesCodex } from '../components/game/species-codex';
+import { FriendGifts } from '../components/game/friend-gifts';
+import { EcoImpact } from '../components/game/eco-impact';
+import { LuckyWheelCard } from '../components/game/lucky-wheel-card';
+import { QuizCard, type QuizReveal } from '../components/game/quiz-card';
+import { MissionsCard } from '../components/game/missions-card';
 
 export default function GamePage() {
   const status = useAuthStore((s) => s.status);
@@ -84,7 +86,7 @@ export default function GamePage() {
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
   const currentQuiz = quiz?.find((q) => !answeredIds.has(q.id));
   // Reveal "Bạn có biết…" sau khi trả lời, trước khi sang câu kế.
-  const [reveal, setReveal] = useState<(AnswerResult & { quizId: string; choice: number }) | null>(null);
+  const [reveal, setReveal] = useState<QuizReveal | null>(null);
   const [harvested, setHarvested] = useState(false);
   const [harvestCoupon, setHarvestCoupon] = useState<string | null>(null);
   const [harvestCert, setHarvestCert] = useState<string | null>(null);
@@ -379,192 +381,36 @@ export default function GamePage() {
 
       {/* Tặng nước bạn bè (social) */}
       {friends && friends.length > 0 && (
-        <GameCard title="🎁 Tặng nước cho bạn bè">
-          {friends.map((f) => (
-            <Box key={f.id} flex alignItems="center" justifyContent="space-between" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
-              <Text size="small">🌿 {f.nickname}</Text>
-              <Button
-                size="small"
-                variant="secondary"
-                disabled={f.giftedToday || (giftM.isPending && giftM.variables === f.id)}
-                loading={giftM.isPending && giftM.variables === f.id}
-                onClick={() => giftM.mutate(f.id)}
-              >
-                {f.giftedToday ? 'Đã tặng hôm nay' : 'Tặng 💧'}
-              </Button>
-            </Box>
-          ))}
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
-            Tặng nước cho bạn bè (người bạn mời hoặc người mời bạn) — mỗi người 1 lần/ngày 🌿
-          </Text>
-        </GameCard>
+        <FriendGifts
+          friends={friends}
+          giftPending={giftM.isPending}
+          giftVariables={giftM.variables}
+          onGift={(recipientId) => giftM.mutate(recipientId)}
+        />
       )}
 
       {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
-      <GameCard title="🌍 Tác động xanh của bạn">
-        <Box flex style={{ gap: 10 }}>
-          <EcoStat icon="🌳" value={formatNumber(eco?.treesPlanted)} label="Cây thật đã trồng" />
-          <EcoStat icon="💨" value={`~${formatNumber((eco?.treesPlanted ?? 0) * 21)}kg`} label="CO₂ hấp thụ/năm (ước tính)" />
-          <EcoStat icon="💧" value={formatNumber(profile?.totalSeeds)} label="Giọt nước đã góp" />
-        </Box>
-        {(forest?.count ?? 0) > 0 ? (
-          <>
-            <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginTop: 8 }}>
-              Cảm ơn bạn! Tubu đã cam kết góp {formatNumber(forest?.count)} cây thật vào "Rừng Xanh Lên" cùng PanNature 🌿
-            </Text>
-            {/* Khu rừng của tôi — chứng nhận từng cây (§6.7.7) */}
-            <Box mt={3} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <Text size="xSmall" bold>🌲 Khu rừng của tôi — chứng nhận</Text>
-              {forest!.trees.slice(0, 5).map((t) => (
-                <Box
-                  key={t.certificateCode}
-                  flex
-                  alignItems="center"
-                  justifyContent="space-between"
-                  p={2}
-                  style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-sm)' }}
-                >
-                  <Box>
-                    <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', letterSpacing: 0.5 }}>
-                      {t.certificateCode}
-                    </Text>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{t.treeType}</Text>
-                  </Box>
-                  <Text size="xSmall" style={{ color: t.status === 'PLANTED' ? 'var(--leaf-700)' : 'var(--neutral-500)' }}>
-                    {t.status === 'PLANTED' ? '✅ Đã trồng' : '🌱 Đã cam kết'}
-                  </Text>
-                </Box>
-              ))}
-              {forest!.count > 5 && (
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>…và {formatNumber(forest!.count - 5)} cây khác</Text>
-              )}
-            </Box>
-          </>
-        ) : (
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
-            Chăm cây ảo đến khi thu hoạch để Tubu góp 1 cây thật cho rừng Việt Nam.
-          </Text>
-        )}
-      </GameCard>
+      <EcoImpact eco={eco} totalSeeds={profile?.totalSeeds} forest={forest} />
 
-      <GameCard title="🎡 Vòng quay may mắn">
-        <WheelOfFortune cost={10} onSpin={handleSpin} />
-      </GameCard>
+      <LuckyWheelCard cost={10} onSpin={handleSpin} />
 
-      <GameCard title="🧠 Quiz Sống Xanh hôm nay">
-        {currentQuiz ? (
-          <>
-            <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 6 }}>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                {categoryLabel(currentQuiz.category)} · {difficultyLabel(currentQuiz.difficulty)}
-                {quiz && quiz.length > 1 ? ` · Câu ${answeredIds.size + 1}/${quiz.length}` : ''}
-              </Text>
-              <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                +{formatDrops(currentQuiz.waterReward)}
-              </Text>
-            </Box>
-            <QuizBlock
-              q={currentQuiz}
-              reveal={reveal && reveal.quizId === currentQuiz.id ? reveal : null}
-              onAnswer={(choice) => answerM.mutate({ id: currentQuiz.id, choice })}
-              pending={answerM.isPending}
-            />
-            {reveal && reveal.quizId === currentQuiz.id && (
-              <Box
-                mt={3}
-                p={3}
-                style={{
-                  background: reveal.isCorrect ? 'var(--leaf-50)' : 'var(--warning-bg)',
-                  borderRadius: 'var(--radius-md)',
-                }}
-              >
-                <Text size="small" bold style={{ color: reveal.isCorrect ? 'var(--leaf-700)' : 'var(--warning)' }}>
-                  {reveal.isCorrect ? `Chính xác! +${formatDrops(reveal.waterEarned)}` : 'Chưa đúng — cùng học nhé 🌿'}
-                </Text>
-                {reveal.explanation && (
-                  <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
-                    💡 Bạn có biết: {reveal.explanation}
-                  </Text>
-                )}
-                <Button fullWidth size="small" onClick={nextQuiz} style={{ marginTop: 10, background: 'var(--leaf-600)' }}>
-                  {answeredIds.size + 1 >= (quiz?.length ?? 1) ? 'Hoàn thành' : 'Câu tiếp theo'}
-                </Button>
-              </Box>
-            )}
-          </>
-        ) : (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            Bạn đã hoàn thành quiz hôm nay 🎉
-          </Text>
-        )}
-      </GameCard>
+      <QuizCard
+        quiz={quiz}
+        currentQuiz={currentQuiz}
+        answeredCount={answeredIds.size}
+        reveal={reveal}
+        pending={answerM.isPending}
+        onAnswer={(id, choice) => answerM.mutate({ id, choice })}
+        onNext={nextQuiz}
+      />
 
-      <GameCard title="🎯 Nhiệm vụ">
-        {missions && missions.length > 0 ? (
-          missions.map((m: MissionItem) => {
-            const defaultGoal = { CHECKIN_7: 7, REVIEW_3: 3, INVITE_3: 3, FIRST_ORDER: 1 }[m.code] ?? 1;
-            // BE Mission.goal mặc định = 1 (schema @default(1)) — "> 1" từng loại bỏ nhầm mọi
-            // mission cấu hình goal=1 hợp lệ và âm thầm thay bằng default cứng của FE.
-            const goal = m.goal && m.goal > 0 ? m.goal : defaultGoal;
-            const rawProgress = m.code === 'CHECKIN_7'
-              ? Math.min(goal, profile?.streakDays ?? m.progress ?? 0)
-              : (m.progress ?? 0);
-            const progress = Math.min(goal, rawProgress);
-            const isDone = m.completed || progress >= goal;
-            // A1-02: trước đây "đạt điều kiện" (isDone) và "đã nhận thưởng" bị coi là một — thẻ
-            // hiện ✓ và +Nđ ngay khi đạt điều kiện nhưng KHÔNG có đường cộng thưởng nào. Giờ tách
-            // rõ: ✓ chỉ khi đã claimed (thưởng THẬT đã vào Điểm Xanh); đạt điều kiện nhưng chưa
-            // nhận thì hiện nút "Nhận thưởng" (mirror pattern claim của Season Pass).
-            const canClaim = isDone && !m.claimed;
-
-            return (
-              <Box key={m.code} style={{ padding: '8px 0', borderBottom: '1px solid var(--neutral-100)' }}>
-                <Box flex alignItems="center" justifyContent="space-between">
-                  <Text size="small" bold={!m.claimed} style={{ color: m.claimed ? 'var(--neutral-400)' : 'var(--neutral-900)' }}>
-                    {m.claimed ? '✓ ' : ''}{m.title}
-                  </Text>
-                  <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-                    +{formatNumber(m.rewardPoints)} Điểm Xanh
-                  </Text>
-                </Box>
-                {m.description && (
-                  <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                    {m.description}
-                  </Text>
-                )}
-                <Box style={{ height: 6, background: 'var(--neutral-100)', borderRadius: 99, marginTop: 4, overflow: 'hidden' }}>
-                  <Box
-                    style={{
-                      width: `${Math.min(100, Math.round((progress / Math.max(1, goal)) * 100))}%`,
-                      height: '100%',
-                      background: isDone ? 'var(--leaf-600)' : 'var(--primary-600)',
-                    }}
-                  />
-                </Box>
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
-                  {progress}/{goal}
-                </Text>
-                {canClaim && (
-                  <Button
-                    fullWidth
-                    size="small"
-                    loading={claimMissionM.isPending && claimMissionM.variables === m.code}
-                    disabled={claimMissionM.isPending && claimMissionM.variables === m.code}
-                    onClick={() => claimMissionM.mutate(m.code)}
-                    style={{ marginTop: 6, background: 'var(--leaf-600)' }}
-                  >
-                    {vi.game.missions.claim}
-                  </Button>
-                )}
-              </Box>
-            );
-          })
-        ) : (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            Chưa có nhiệm vụ.
-          </Text>
-        )}
-      </GameCard>
+      <MissionsCard
+        missions={missions}
+        streakDays={profile?.streakDays}
+        claimPending={claimMissionM.isPending}
+        claimVariables={claimMissionM.variables}
+        onClaim={(code) => claimMissionM.mutate(code)}
+      />
 
       {seasonBoard && seasonBoard.length > 0 && (
         <GameCard title="💧 Top góp nước mùa này">
@@ -727,70 +573,5 @@ export default function GamePage() {
         </Box>
       )}
     </Page>
-  );
-}
-
-function EcoStat({ icon, value, label }: { icon: string; value: string; label: string }) {
-  return (
-    <Box
-      p={2}
-      style={{ flex: 1, background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', textAlign: 'center' }}
-    >
-      <Text style={{ fontSize: 20 }}>{icon}</Text>
-      <Text bold size="small" style={{ color: 'var(--leaf-700)' }}>
-        {value}
-      </Text>
-      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-        {label}
-      </Text>
-    </Box>
-  );
-}
-
-function QuizBlock({
-  q,
-  reveal,
-  onAnswer,
-  pending,
-}: {
-  q: { question: string; options: string[] };
-  reveal: (AnswerResult & { choice: number }) | null;
-  onAnswer: (choice: number) => void;
-  pending: boolean;
-}) {
-  return (
-    <Box>
-      <Text size="small" style={{ marginBottom: 8 }}>
-        {q.question}
-      </Text>
-      <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        {q.options.map((opt, i) => {
-          // Sau khi reveal: tô xanh đáp án đúng, tô đỏ lựa chọn sai của user.
-          let bg: string | undefined;
-          let color: string | undefined;
-          if (reveal) {
-            if (i === reveal.correct) {
-              bg = 'var(--leaf-600)';
-              color = 'var(--neutral-0)';
-            } else if (i === reveal.choice) {
-              bg = 'var(--danger-bg)';
-              color = 'var(--danger)';
-            }
-          }
-          return (
-            <Button
-              key={i}
-              size="small"
-              variant="secondary"
-              disabled={pending || !!reveal}
-              onClick={() => onAnswer(i)}
-              style={bg ? { background: bg, color } : undefined}
-            >
-              {opt}
-            </Button>
-          );
-        })}
-      </Box>
-    </Box>
   );
 }
