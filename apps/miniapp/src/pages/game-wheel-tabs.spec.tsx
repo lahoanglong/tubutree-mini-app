@@ -85,7 +85,7 @@ beforeEach(() => {
     lastDewAt: null,
     lastCheckInAt: null,
     streakFreezeCost: 80,
-    treeXuPrice: 65_000,
+    treePointsPrice: 50,
     streakRepairable: false,
     ecoImpact: { progress: 10, target: 50, treeType: 'Sồi', treesPlanted: 3 },
   });

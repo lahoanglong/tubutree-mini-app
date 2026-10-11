@@ -34,7 +34,7 @@ export interface CtvMilestoneItem {
   id: string;
   title: string;
   threshold: number;
-  rewardXu: number;
+  rewardPoints: number;
   description: string;
   achieved: boolean;
   claimed: boolean;
@@ -59,8 +59,8 @@ export interface CtvMilestonesResponse {
 export interface CtvTiersResponse {
   revenue: number;
   tier: AffiliateTier;
-  /** milestoneRewardXu: thưởng mốc TubuXu cùng ngưỡng bậc (null với bậc khởi đầu). */
-  allTiers: { name: string; emoji: string; min: number; milestoneRewardXu: number | null }[];
+  /** milestoneRewardPoints: thưởng mốc Điểm Xanh cùng ngưỡng bậc (null với bậc khởi đầu). */
+  allTiers: { name: string; emoji: string; min: number; milestoneRewardPoints: number | null }[];
 }
 
 export interface AffiliateLink {
@@ -88,10 +88,10 @@ export interface Commission {
 export const getAffiliateMe = () => api.get<AffiliateMe>('/affiliate/me').then((r) => r.data);
 export const getCtvTiers = () => api.get<CtvTiersResponse>('/affiliate/tiers').then((r) => r.data);
 export const getCtvMilestones = () => api.get<CtvMilestonesResponse>('/affiliate/milestones').then((r) => r.data);
-/** Nhận thưởng mốc → cộng TubuXu. `month` ('YYYY-MM') bỏ trống = tháng này; chỉ nhận tháng này/tháng trước. */
+/** Nhận thưởng mốc → cộng Điểm Xanh. `month` ('YYYY-MM') bỏ trống = tháng này; chỉ nhận tháng này/tháng trước. */
 export const claimCtvMilestone = (milestoneId: string, month?: string) =>
   api
-    .post<{ success: boolean; message: string; rewardXu: number; monthKey: string }>(
+    .post<{ success: boolean; message: string; rewardPoints: number; monthKey: string }>(
       `/affiliate/milestones/${encodeURIComponent(milestoneId)}/claim`,
       month ? { month } : {},
     )

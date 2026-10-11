@@ -20,9 +20,9 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/account-api', () => ({
-  getLoyalty: vi.fn().mockResolvedValue({ pointsBalance: 120, tier: { name: 'Mầm Xanh' } }),
+  getLoyalty: vi.fn().mockResolvedValue({ pointsBalance: 120, pointsConvertedBalance: 30, tier: { name: 'Mầm Xanh' } }),
   getNotifications: vi.fn(async () => mocks.notifications),
-  getWallet: vi.fn().mockResolvedValue({ walletBalance: 50000, coinsBalance: 1500 }),
+  getWallet: vi.fn().mockResolvedValue({ walletBalance: 50000 }),
   getCoupons: vi.fn().mockResolvedValue([{ code: 'A' }, { code: 'B' }]),
 }));
 vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: vi.fn().mockResolvedValue(null) }));
@@ -55,12 +55,15 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     mocks.notifications = [];
   });
 
-  it('có đủ Điểm Xanh, Ví Tubu, TubuXu, Mã giảm giá', async () => {
+  it('có đúng ba số dư: Điểm Xanh (tổng hai lô), Ví Tubu, Mã giảm giá — không còn ô xu (C-047, PD-3)', async () => {
     renderPage();
-    expect(await screen.findByRole('button', { name: /^TubuXu: 1\.500 xu$/ })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /^Mã giảm giá: 2 mã$/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Điểm Xanh:/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Ví Tubu:/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Điểm Xanh: 150 điểm$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Ví Tubu: 50\.000đ$/ })).toBeInTheDocument();
+    const balances = screen.getAllByRole('button').filter((b) => /^[^:]+: .+/.test(b.getAttribute('aria-label') ?? ''));
+    expect(balances.map((b) => (b.getAttribute('aria-label') ?? '').split(':')[0])).toEqual(['Điểm Xanh', 'Ví Tubu', 'Mã giảm giá']);
+    expect(screen.queryByText(/TubuXu/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /(?<![\p{L}_])xu(?![\p{L}_])/iu })).toBeNull();
   });
 
   it('không còn mục Hoàn tiền sàn ngoài; bấm mục menu điều hướng thật, không báo "đang hoàn thiện"', async () => {

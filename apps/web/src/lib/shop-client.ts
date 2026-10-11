@@ -50,6 +50,10 @@ export interface CheckoutQuote {
   /** Điểm DÙNG ĐƯỢC ở checkout = số dư − điểm đơn còn có thể bị trả (backend kẹp theo số này). API cũ chưa trả. */
   redeemablePoints?: number;
   lockedPoints?: number;
+  /** Lô quy đổi từ xu cũ (không hết hạn): phần của `pointsUsed` trừ vào lô này, số dư, và số được đề nghị dùng. */
+  pointsUsedConverted?: number;
+  pointsConvertedBalance?: number;
+  redeemableConvertedPoints?: number;
 }
 export interface OrderDTO {
   code: string;
@@ -122,6 +126,8 @@ export const placeOrder = (
     addressId: string;
     paymentMethod: string;
     pointsToUse?: number;
+    /** Khách đã thấy đơn 0đ (FE ẩn chọn phương thức): BE từ chối nếu lúc đặt tổng > 0. */
+    quotedZeroTotal?: boolean;
     note?: string;
     storefrontSlug?: string;
     referralCode?: string;

@@ -25,8 +25,8 @@ describe('thuật ngữ Q-26 — một chữ cho một khái niệm', () => {
     expect(offenders(/mã ưu đãi/i)).toEqual([]);
   });
 
-  it('TubuXu chỉ còn một dạng viết (không "Tubu Xu" có dấu cách)', () => {
-    expect(offenders(/Tubu Xu/)).toEqual([]);
+  it('TubuXu đã gộp vào Điểm Xanh: không còn "TubuXu"/"Tubu Xu" ở bất kỳ dạng viết nào (T19, PD-3)', () => {
+    expect(offenders(/Tubu ?Xu(?![\p{L}_])/iu)).toEqual([]);
   });
 
   it('không còn "voucher" trong câu chữ hiển thị cho khách', () => {

@@ -249,11 +249,17 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
     await expectBlocked(request.id, user.id, /Ví Tubu còn 50\.000đ/);
   });
 
-  it('chặn khi còn xu hoặc hoàn tiền đang chờ', async () => {
-    const a = await customerWithRequest({ coinsBalance: 1200 });
-    await expectBlocked(a.request.id, a.user.id, /xu/);
+  // PD-3: xu đã quy sang Điểm Xanh và bị khoá ở DB (users_coins_frozen) nên không còn chặn theo xu;
+  // phần tiền trả trước nằm ở lô quy đổi (ca CONVERTED_POINTS bên dưới).
+  it('chặn khi còn hoàn tiền đang chờ', async () => {
     const b = await customerWithRequest({ cashbackPending: 3000 });
     await expectBlocked(b.request.id, b.user.id, /hoàn tiền/i);
+  });
+
+  it('PD-3: chặn khi còn Điểm Xanh quy đổi (không hết hạn, không quy ra tiền) chưa dùng', async () => {
+    const { user, request } = await customerWithRequest({ pointsConvertedBalance: 3 });
+    const body = await expectBlocked(request.id, user.id, /còn 3 Điểm Xanh không hết hạn chưa dùng/);
+    expect(body.blockers.map((b) => b.code)).toEqual(['CONVERTED_POINTS']);
   });
 
   it('chặn khi còn đơn đang xử lý/đang giao', async () => {
@@ -320,11 +326,12 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
   });
 
   it('danh sách cho admin: kèm thông tin khách và lý do đang bị chặn', async () => {
-    const { request } = await customerWithRequest({ walletBalance: 20_000 });
+    const { request } = await customerWithRequest({ walletBalance: 20_000, pointsConvertedBalance: 4 });
     const list = await svc.list('PENDING');
     const row = list.find((r) => r.id === request.id);
     expect(row).toBeDefined();
     expect(row!.user?.fullName).toBe('Nguyễn Văn Thật');
-    expect(row!.blockers.map((b) => b.code)).toContain('WALLET_BALANCE');
+    expect(row!.user?.pointsConvertedBalance).toBe(4);
+    expect(row!.blockers.map((b) => b.code)).toEqual(expect.arrayContaining(['WALLET_BALANCE', 'CONVERTED_POINTS']));
   });
 });

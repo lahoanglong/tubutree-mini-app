@@ -87,10 +87,10 @@ export const pickerProducts = (search?: string) =>
   api.get('/storefront/me/products', { params: { search } }).then((r) => r.data as PickerProduct[]);
 
 export interface StorefrontQuest {
-  code: string; title: string; hint: string; goal: number; rewardXu: number;
+  code: string; title: string; hint: string; goal: number; rewardPoints: number;
   progress: number; done: boolean; claimed: boolean;
 }
-export interface QuestList { quests: StorefrontQuest[]; totalEarnedXu: number; level: number; levelMax: number; }
+export interface QuestList { quests: StorefrontQuest[]; totalEarnedPoints: number; level: number; levelMax: number; }
 
 export interface StorefrontProductStat { productSlug: string; productName: string; qty: number; revenue: number }
 export interface StorefrontStats {
@@ -101,4 +101,4 @@ export const getStorefrontStats = () => api.get('/storefront/me/stats').then((r)
 
 export const getQuests = () => api.get('/storefront/me/quests').then((r) => r.data as QuestList);
 export const claimQuest = (code: string) =>
-  api.post(`/storefront/me/quests/${code}/claim`).then((r) => r.data as { claimed: boolean; code: string; rewardXu: number; coinsBalance: number });
+  api.post(`/storefront/me/quests/${code}/claim`).then((r) => r.data as { claimed: boolean; code: string; rewardPoints: number; pointsBalance: number });

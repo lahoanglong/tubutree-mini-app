@@ -46,7 +46,7 @@ function mockProfile(api: MockApi): void {
 
 test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', () => {
   test('Gian hàng Nhãn hàng (Brand Owner Flow)', async ({ page, api }, testInfo) => {
-    // walletBalance/pointsBalance/coinsBalance/referralCode bắt buộc (AuthUser, shared-types) —
+    // walletBalance/pointsBalance/pointsConvertedBalance/referralCode bắt buộc (AuthUser, shared-types) —
     // thiếu walletBalance làm ProfilePage crash ở formatVnd(user.walletBalance).
     mockSession(api, makeUser({ id: 'brand-1', role: 'ADMIN', fullName: 'Brand Owner 1', referralCode: 'BRAND1' }));
     mockProfile(api);
@@ -103,7 +103,7 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
       isPublished: false,
       collections: [],
     };
-    const quests: QuestList = { quests: [], totalEarnedXu: 0, level: 0, levelMax: 5 };
+    const quests: QuestList = { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 };
     api.get('/storefront/me', storefront);
     api.get('/storefront/me/quests', quests);
     api.get('/storefront/me/products', []);

@@ -307,5 +307,17 @@ describe('CSV export utility', () => {
     expect(csv).toContain('AFFILIATE');
     expect(csv).toContain('120');
   });
+
+  it('generateUsersCsvString: Điểm tích lũy là tổng hai lô, thêm cột điểm không hết hạn (PD-3)', async () => {
+    const { generateUsersCsvString } = await import('./export-csv');
+    const csv = generateUsersCsvString([
+      { id: 'user-2', fullName: 'Lê C', phone: null, role: 'CUSTOMER', pointsBalance: 5, pointsConvertedBalance: 30, createdAt: '2026-08-15T08:30:00Z' },
+    ]);
+    const [header, row] = csv.split('\r\n');
+    const cols = header!.split(',');
+    const cells = row!.split(',');
+    expect(cells[cols.indexOf('Điểm tích lũy')]).toBe('35');
+    expect(cells[cols.indexOf('Trong đó không hết hạn')]).toBe('30');
+  });
 });
 

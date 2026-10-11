@@ -12,8 +12,6 @@ import type { NotificationsService } from '../notifications/notifications.servic
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
-import type { CoinsService } from '../wallet/coins.service';
-import type { SystemConfigService } from '../system-config/system-config.service';
 import type { ComboService } from '../storefront/combo.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
@@ -36,7 +34,6 @@ const CART = {
 function build(
   opts: {
     walletBalance?: number;
-    coinsBalance?: number;
     total?: number;
     pointsUsed?: number;
     decCount?: number;
@@ -50,6 +47,10 @@ function build(
     flashSale?: { consumeQuota: jest.Mock; resolveEffective: jest.Mock }; // override FlashSaleService
     gomdon?: unknown;
     pointsBalance?: number;
+    /** PD-3: số dư lô CONVERTED (xu cũ quy đổi). */
+    pointsConvertedBalance?: number;
+    /** PD-3: phần lô CONVERTED mà pricing chia cho đơn (mặc định 0). */
+    pointsUsedConverted?: number;
     /** Điểm Xanh còn có thể bị đảo (LoyaltyService.lockedOrderPoints) — mặc định 0. */
     locked?: number;
     /** P0 A3-05: hạng của user đặt đơn (mặc định null = chưa có hạng, giữ hành vi cũ). */
@@ -68,7 +69,7 @@ function build(
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(null), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }), create: orderCreate },
     user: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, coinsBalance: opts.coinsBalance ?? 1000, pointsBalance: opts.pointsBalance ?? 1000, tierId: opts.tierId ?? null }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, pointsBalance: opts.pointsBalance ?? 1000, pointsConvertedBalance: opts.pointsConvertedBalance ?? 0, tierId: opts.tierId ?? null }),
       findUnique: jest.fn().mockResolvedValue(null),
       updateMany,
     },
@@ -79,7 +80,7 @@ function build(
     // SELECT … FOR UPDATE khoá dòng users trước khi trừ điểm (xem placeOrder).
     $queryRaw: jest.fn().mockResolvedValue([{ id: 'u1' }]),
     address: { findUnique: jest.fn().mockResolvedValue(ADDRESS) },
-    pointsTransaction: { create: jest.fn() },
+    pointsTransaction: { create: jest.fn().mockResolvedValue({ id: 'ptx' }) },
     // Kiểm lại SP còn bán trong tx (cart/sellable.ts) — mặc định mọi variation đều còn bán.
     variation: {
       findMany: jest.fn().mockImplementation(({ where }: { where: { id: { in: string[] } } }) =>
@@ -100,7 +101,13 @@ function build(
   const pricing =
     opts.pricing ??
     ({
-      resolvePointsRedemption: jest.fn().mockResolvedValue({ pointsUsed: opts.pointsUsed ?? 0, discount: 0 }),
+      // opts.pointsUsed = phần lô STANDARD (giữ nghĩa cũ), opts.pointsUsedConverted = phần lô CONVERTED.
+      resolvePointsRedemptionByLot: jest.fn().mockResolvedValue({
+        pointsUsed: (opts.pointsUsed ?? 0) + (opts.pointsUsedConverted ?? 0),
+        pointsUsedStandard: opts.pointsUsed ?? 0,
+        pointsUsedConverted: opts.pointsUsedConverted ?? 0,
+        discount: 0,
+      }),
       calcShippingFee: jest.fn().mockResolvedValue(0),
       calcPointsEarned: jest.fn().mockResolvedValue(10),
       // P0 A3-05: mock cứng vẫn cần triển khai calcTierDiscount thật (không phải jest.fn() rỗng) —
@@ -129,9 +136,6 @@ function build(
     getActiveTouch: opts.getActiveTouch ?? jest.fn().mockResolvedValue(null),
     notifyCommissionCreated: jest.fn().mockResolvedValue(undefined),
   } as unknown as AffiliateService;
-  const coins = { spendCoins: jest.fn().mockResolvedValue(undefined) } as unknown as CoinsService;
-  // config default → loyalty.earn_points_on_xu=false (đơn XU không sinh điểm).
-  const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
   // combo mặc định: không giảm (override qua opts.combo cho test combo).
   const combo = (opts.combo ?? { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) }) as unknown as ComboService;
   // flash-sale mặc định: consumeQuota no-op OK (override qua opts.flashSale cho test flash).
@@ -147,8 +151,8 @@ function build(
     recordBestEffort: jest.fn().mockResolvedValue(undefined),
   } as unknown as AnalyticsEventsService;
 
-  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, coins, config, combo, flashSale, analytics);
-  return { svc, prisma, updateMany, orderCreate, executeRaw, total, coins, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics, affiliate, notifications };
+  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, combo, flashSale, analytics);
+  return { svc, prisma, updateMany, orderCreate, executeRaw, total, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics, affiliate, notifications };
 }
 
 describe('CheckoutService.placeOrder — money safety', () => {
@@ -179,20 +183,15 @@ describe('CheckoutService.placeOrder — money safety', () => {
     ).rejects.toThrow('Ví Tubu không đủ');
   });
 
-  it('XU số dư không đủ (check sớm) → BadRequest, không tạo đơn', async () => {
-    const { svc, orderCreate } = build({ coinsBalance: 50, total: 100 });
+  it('PD-3 (T18): XU lọt qua DTO (gọi service trực tiếp) → BadRequest, không tạo đơn, không ghi điểm/ví', async () => {
+    const { svc, orderCreate, updateMany } = build({ total: 100 });
+    ledger.mockClear();
     await expect(
       svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'XU' } as never),
-    ).rejects.toThrow('TubuXu không đủ');
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(orderCreate).not.toHaveBeenCalled();
-  });
-
-  it('XU hợp lệ → spendCoins(total) trong tx với reason ORDER_PAY + tạo đơn PAID', async () => {
-    const { svc, coins, prisma } = build({ coinsBalance: 1000, total: 100 });
-    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'XU' } as never);
-    expect(coins.spendCoins).toHaveBeenCalledWith(
-      'u1', 100, expect.stringMatching(/^ORDER_PAY:/), 'ORDER', 'o1', prisma,
-    );
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(ledger).not.toHaveBeenCalled();
   });
 
   it('mã đơn có dạng TUBU<yyyymmdd><5 số> và đã được kiểm không trùng', async () => {
@@ -201,12 +200,6 @@ describe('CheckoutService.placeOrder — money safety', () => {
     const code = orderCreate.mock.calls[0][0].data.code as string;
     expect(code).toMatch(/^TUBU\d{8}\d{5}$/);
     expect(prisma.order.findUnique).toHaveBeenCalledWith({ where: { code } });
-  });
-
-  it('đơn XU KHÔNG sinh điểm Xanh (pointsEarned=0) — chống vòng khuếch đại ×1.2', async () => {
-    const { svc, orderCreate } = build({ coinsBalance: 1000, total: 100 });
-    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'XU' } as never);
-    expect(orderCreate.mock.calls[0][0].data.pointsEarned).toBe(0);
   });
 
   it('đơn WALLET/COD VẪN sinh điểm bình thường (pointsEarned từ pricing)', async () => {
@@ -531,21 +524,21 @@ describe('CheckoutService — chỉ tiêu Điểm Xanh DÙNG ĐƯỢC (cùng lu�
   it('quote: kẹp điểm theo số dùng được (số dư − phần khoá) và trả redeemablePoints/lockedPoints cho FE', async () => {
     const { svc, pricing } = build({ pointsBalance: 1000, locked: 600 });
     const q = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 1000 } as never);
-    expect(pricing.resolvePointsRedemption).toHaveBeenCalledWith(1000, 400, expect.any(Number));
+    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(1000, 400, 0, expect.any(Number));
     expect(q).toMatchObject({ pointsBalance: 1000, lockedPoints: 600, redeemablePoints: 400 });
   });
 
   it('quote: phần khoá ≥ số dư (điểm đã tiêu trước đó) → redeemablePoints = 0, không âm; không tiêu điểm nào', async () => {
     const { svc, pricing } = build({ pointsBalance: 100, locked: 250 });
     const q = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 100 } as never);
-    expect(pricing.resolvePointsRedemption).toHaveBeenCalledWith(100, 0, expect.any(Number));
+    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(100, 0, 0, expect.any(Number));
     expect(q.redeemablePoints).toBe(0);
   });
 
   it('placeOrder: kẹp theo số dùng được như quote (không tin pointsToUse client gửi)', async () => {
     const { svc, pricing } = build({ pointsBalance: 1000, locked: 600, pointsUsed: 400 });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 1000 } as never);
-    expect(pricing.resolvePointsRedemption).toHaveBeenCalledWith(1000, 400, expect.any(Number));
+    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(1000, 400, 0, expect.any(Number));
   });
 
   it('placeOrder: khoá dòng user (FOR UPDATE) rồi tính phần khoá TRONG tx, guard pointsBalance ≥ dùng + khoá', async () => {
@@ -613,16 +606,16 @@ describe('CheckoutService — chỉ tiêu Điểm Xanh DÙNG ĐƯỢC (cùng lu�
     let open!: () => void;
     const gate = new Promise<void>((r) => (open = r));
     (prisma.user.findUniqueOrThrow as jest.Mock).mockImplementation(async () => {
-      const snap = { id: 'u1', walletBalance: 0, coinsBalance: 0, pointsBalance: state.pointsBalance, tierId: null };
+      const snap = { id: 'u1', walletBalance: 0, pointsBalance: state.pointsBalance, pointsConvertedBalance: 0, tierId: null };
       reads += 1;
       if (reads === 2) open();
       await gate;
       return snap;
     });
     (prisma.user.findUnique as jest.Mock).mockImplementation(async () => ({ pointsBalance: state.pointsBalance }));
-    (pricing.resolvePointsRedemption as jest.Mock).mockImplementation(async (want: number, usable: number) => {
+    (pricing.resolvePointsRedemptionByLot as jest.Mock).mockImplementation(async (want: number, usable: number) => {
       const used = Math.max(0, Math.min(want, usable));
-      return { pointsUsed: used, discount: used };
+      return { pointsUsed: used, pointsUsedStandard: used, pointsUsedConverted: 0, discount: used };
     });
     (loyalty.lockedOrderPoints as jest.Mock).mockImplementation(async () => {
       await tick();
@@ -1066,5 +1059,156 @@ describe('CheckoutService — SP ngừng bán (C-007, Q-14)', () => {
     ).rejects.toMatchObject({ response: { code: 'PRODUCT_DISCONTINUED' } });
     expect(executeRaw).not.toHaveBeenCalled();
     expect(orderCreate).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * PD-3 (spec 2.3, 6.1): điểm quy đổi từ xu (lô CONVERTED) tiêu qua `pointsToUse`, không trần 20%.
+ * Trừ lô nào ghi dòng sổ đúng lô đó; đơn ghi `pointsUsedConverted` để huỷ/trả hoàn đúng lô.
+ */
+describe('CheckoutService — PD-3 tiêu Điểm Xanh hai lô, bỏ XU, đơn 0đ', () => {
+  const PD3_CONFIG = {
+    'shipping.free_threshold': 200000,
+    'shipping.flat_fee_below_threshold': 19000,
+    'loyalty.vnd_per_point': 10000,
+    'loyalty.vnd_per_point_redeem': 1000,
+    'loyalty.max_redeem_pct': 0.2,
+  };
+  function realPricing(): PricingService {
+    const values = PD3_CONFIG as Record<string, unknown>;
+    const config = { get: async <T>(k: string, fb?: T): Promise<T> => (k in values ? (values[k] as T) : (fb as T)) };
+    return new PricingService(config as never);
+  }
+  const CART_500K = {
+    items: [{ variationId: 'v1', productId: 'p1', productName: 'P', variationName: 'V', unitPrice: 500000, quantity: 1, total: 500000 }],
+    subtotal: 500000, discount: 0, freeship: false, couponCode: null,
+  };
+  const CART_150K = {
+    items: [{ variationId: 'v1', productId: 'p1', productName: 'P', variationName: 'V', unitPrice: 150000, quantity: 1, total: 150000 }],
+    subtotal: 150000, discount: 0, freeship: false, couponCode: null,
+  };
+
+  it('T8 quote: đơn 500.000đ, STANDARD 1.000, CONVERTED 1.000, dùng 1.000 → s 100, c 400, total = phí ship', async () => {
+    const { svc } = build({ cartData: CART_500K, pointsBalance: 1000, pointsConvertedBalance: 1000, pricing: realPricing() });
+    const q = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 1000 } as never);
+    expect(q).toMatchObject({
+      pointsUsed: 500,
+      pointsUsedConverted: 400,
+      pointsDiscount: 500000,
+      total: 0, // 500k ≥ ngưỡng freeship 200k
+      pointsBalance: 1000,
+      pointsConvertedBalance: 1000,
+      redeemablePoints: 1000,
+      redeemableConvertedPoints: 1000,
+    });
+  });
+
+  it('T8/T9 placeOrder: trừ STANDARD s (guard s + khoá) và CONVERTED c (guard pointsConvertedBalance ≥ c), hai dòng sổ đúng lô, đơn ghi pointsUsedConverted', async () => {
+    const { svc, prisma, updateMany, orderCreate } = build({
+      cartData: CART_150K, pointsBalance: 1000, pointsConvertedBalance: 1000, locked: 50, pricing: realPricing(),
+    });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 1000 } as never);
+    // redeemBase 150.000 → s = 30 (trần 20%), c = 120; total = 0 + ship 19.000.
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data).toMatchObject({ pointsUsed: 150, pointsUsedConverted: 120, total: 19000, discount: 150000 });
+    expect(updateMany.mock.calls.map((c) => c[0])).toEqual([
+      { where: { id: 'u1', pointsBalance: { gte: 30 + 50 } }, data: { pointsBalance: { decrement: 30 } } },
+      { where: { id: 'u1', pointsConvertedBalance: { gte: 120 } }, data: { pointsConvertedBalance: { decrement: 120 } } },
+    ]);
+    const entries = (prisma.pointsTransaction.create as jest.Mock).mock.calls.map((c) => c[0].data);
+    expect(entries).toEqual([
+      expect.objectContaining({ delta: -30, lot: 'STANDARD', reason: expect.stringMatching(/^ORDER_REDEEM:TUBU/), refType: 'ORDER', refId: 'o1' }),
+      expect.objectContaining({ delta: -120, lot: 'CONVERTED', reason: expect.stringMatching(/^ORDER_REDEEM_CONVERTED:TUBU/), refType: 'ORDER', refId: 'o1', expiresAt: null }),
+    ]);
+  });
+
+  it('T9: khách chỉ có lô CONVERTED → giảm được 100% giá trị hàng, không đụng lô STANDARD', async () => {
+    const { svc, updateMany, orderCreate } = build({
+      cartData: CART_150K, pointsBalance: 0, pointsConvertedBalance: 500, pricing: realPricing(),
+    });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 500 } as never);
+    expect(orderCreate.mock.calls[0][0].data).toMatchObject({ pointsUsed: 150, pointsUsedConverted: 150, total: 19000 });
+    expect(updateMany.mock.calls.map((c) => c[0].data)).toEqual([{ pointsConvertedBalance: { decrement: 150 } }]);
+  });
+
+  it('T9: STANDARD đang khoá (lockedOrderPoints) không được tiêu; phần còn lại lấy từ CONVERTED', async () => {
+    const { svc, orderCreate } = build({
+      cartData: CART_150K, pointsBalance: 100, locked: 100, pointsConvertedBalance: 500, pricing: realPricing(),
+    });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 40 } as never);
+    expect(orderCreate.mock.calls[0][0].data).toMatchObject({ pointsUsed: 40, pointsUsedConverted: 40 });
+  });
+
+  it('lô CONVERTED bị tiêu mất giữa báo giá và đặt đơn → 400 "tải lại trang thanh toán", không ghi dòng CONVERTED', async () => {
+    const { svc, prisma, updateMany } = build({ pointsUsed: 0, pointsUsedConverted: 50 });
+    updateMany.mockResolvedValue({ count: 0 });
+    const err = await svc
+      .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 50 } as never)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toMatch(/tải lại trang thanh toán/);
+    expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+  });
+
+  it('chỉ dùng lô CONVERTED vẫn khoá dòng user trước khi trừ', async () => {
+    const { svc, prisma } = build({ pointsUsed: 0, pointsUsedConverted: 10 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 10 } as never);
+    expect((prisma.$queryRaw as unknown as jest.Mock).mock.calls).toHaveLength(1);
+  });
+
+  describe('T18: đơn tổng 0đ (điểm phủ hết hàng + freeship) → ép COD, CONFIRMED, không thu tiền', () => {
+    it.each(['BANK_TRANSFER', 'ZALOPAY', 'WALLET', 'COD'])('%s → COD CONFIRMED UNPAID, không trừ ví, không treo PENDING_PAYMENT', async (method) => {
+      const { svc, orderCreate } = build({ cartData: CART_500K, pointsBalance: 0, pointsConvertedBalance: 1000, pricing: realPricing() });
+      ledger.mockClear();
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: method, pointsToUse: 1000 } as never);
+      expect(orderCreate.mock.calls[0][0].data).toMatchObject({
+        total: 0, paymentMethod: 'COD', status: 'CONFIRMED', paymentStatus: 'UNPAID', paidAt: null,
+      });
+      expect(ledger).not.toHaveBeenCalled();
+    });
+
+    it('review C2: FE đã báo khách thấy đơn 0đ (quotedZeroTotal) mà lúc đặt tổng > 0 → 400 tải lại, KHÔNG tạo đơn COD khách không chọn', async () => {
+      // FE ẩn chọn phương thức và gửi COD vì báo giá 0đ; lô quy đổi vừa bị tiêu bớt nên hiện chỉ giảm được 10.000đ.
+      const { svc, orderCreate } = build({ cartData: CART_150K, pointsBalance: 0, pointsConvertedBalance: 10, pricing: realPricing() });
+      const err = await svc
+        .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 150, quotedZeroTotal: true } as never)
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toMatch(/tải lại trang thanh toán/);
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('review C2: quotedZeroTotal mà tổng vẫn 0đ → tạo đơn COD bình thường', async () => {
+      const { svc, orderCreate } = build({ cartData: CART_500K, pointsBalance: 0, pointsConvertedBalance: 1000, pricing: realPricing() });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 1000, quotedZeroTotal: true } as never);
+      expect(orderCreate.mock.calls[0][0].data).toMatchObject({ total: 0, paymentMethod: 'COD', status: 'CONFIRMED' });
+    });
+
+    it('review C2: khách CHỌN COD cho đơn > 0đ (không có cờ) → vẫn tạo đơn COD như cũ', async () => {
+      const { svc, orderCreate } = build({ cartData: CART_150K, pointsBalance: 0, pointsConvertedBalance: 10, pricing: realPricing() });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 10 } as never);
+      expect(orderCreate.mock.calls[0][0].data).toMatchObject({ paymentMethod: 'COD', status: 'CONFIRMED' });
+      expect(orderCreate.mock.calls[0][0].data.total).toBeGreaterThan(0);
+    });
+
+    it('đơn > 0đ giữ phương thức khách chọn (BANK_TRANSFER → PENDING_PAYMENT)', async () => {
+      const { svc, orderCreate } = build({ cartData: CART_150K, pointsBalance: 0, pointsConvertedBalance: 10, pricing: realPricing() });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'BANK_TRANSFER', pointsToUse: 10 } as never);
+      expect(orderCreate.mock.calls[0][0].data).toMatchObject({ paymentMethod: 'BANK_TRANSFER', status: 'PENDING_PAYMENT' });
+    });
+
+    it('gửi lại cùng Idempotency-Key sau khi đơn 0đ đã bị ép COD → trả đơn cũ, không báo "thông tin khác"', async () => {
+      const { svc, prisma, orderCreate } = build();
+      (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+        id: 'existing', userId: 'u1', paymentMethod: 'COD', total: 0,
+        shippingAddress: {
+          recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
+          provinceCode: '1', districtCode: '2', wardCode: '3',
+        },
+      });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'BANK_TRANSFER' } as never, 'key-0d');
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect(prisma.order.findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 'existing' }, include: { items: true } });
+    });
   });
 });

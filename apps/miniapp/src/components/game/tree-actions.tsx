@@ -1,16 +1,16 @@
 import { ShowerHead, TreePine } from 'lucide-react';
-import { formatXu } from '../../utils/format';
+import { formatPoints } from '../../utils/format';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
 
 export function TreeActions({
-  treeXuPrice,
+  treePointsPrice,
   waterPending,
   onWater,
   buyPending,
   onBuy,
 }: {
-  treeXuPrice: number | undefined;
+  treePointsPrice: number | undefined;
   waterPending: boolean;
   onWater: () => void;
   buyPending: boolean;
@@ -23,10 +23,10 @@ export function TreeActions({
       </Button>
       <Button fullWidth variant="secondary" icon={TreePine} disabled={buyPending} loading={buyPending} onPress={() => onBuy()}>
         Góp quỹ trồng cây
-        {treeXuPrice != null && ` (${formatXu(treeXuPrice)})`}
+        {treePointsPrice != null && ` (${formatPoints(treePointsPrice)})`}
       </Button>
       <Text variant="caption" tone="tertiary" as="div" style={{ textAlign: 'center' }}>
-        Góp bằng TubuXu — đổi từ Ví trong mục Ví của tôi.
+        Góp bằng Điểm Xanh — dùng điểm thường trước, thiếu mới dùng điểm không hết hạn.
       </Text>
     </div>
   );

@@ -9,7 +9,7 @@ import { PancakeOrderService } from '../integrations/pancake/pancake-order.servi
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, isSellableVariation, productDiscontinuedError } from '../cart/sellable';
-import { CoinsService } from '../wallet/coins.service';
+import { RewardPointsService } from '../wallet/reward-points.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -50,7 +50,7 @@ export class AffiliateService {
     private readonly config: SystemConfigService,
     private readonly pricing: PricingService,
     private readonly pancakeOrder: PancakeOrderService,
-    private readonly coins: CoinsService,
+    private readonly rewards: RewardPointsService,
     private readonly analytics: AnalyticsEventsService,
     // @Optional: test dựng service trực tiếp không truyền; AppModule luôn wiring (NotificationsModule là @Global).
     @Optional() private readonly notifications?: NotificationsService,
@@ -530,7 +530,7 @@ export class AffiliateService {
 
   /**
    * Đơn DELIVERED → xét thưởng giới thiệu cho người mời của chủ đơn (Q-05: một chương trình duy
-   * nhất, thưởng xu khi người được mời có đơn thứ 2 trong cửa sổ). Không còn voucher REFER/REFERRED
+   * nhất, thưởng Điểm Xanh khi người được mời có đơn thứ 2 trong cửa sổ). Không còn voucher REFER/REFERRED
    * 50k+50k: voucher đó cộng thêm cho CTV ngoài hoa hồng và không bị thu hồi khi đơn bị trả. Voucher
    * đã cấp trước đây giữ nguyên.
    */
@@ -540,7 +540,7 @@ export class AffiliateService {
       select: { userId: true, type: true, placedForCustomer: true },
     });
     if (order.type !== 'RETAIL' || order.placedForCustomer) return;
-    await this.coins.grantReferralOrderReward(order.userId);
+    await this.rewards.grantReferralOrderReward(order.userId);
   }
 
   /** Đơn hoàn/hủy trong cửa sổ → reject commission. */
@@ -575,7 +575,7 @@ export class AffiliateService {
     // total), bất kể SystemConfig còn seed giá trị gì cho key này. Key này vẫn tồn tại/được đọc bởi
     // `system-config` (public config — ngoài phạm vi sửa của bản vá này) và miniapp đã ngừng hiển
     // thị "×hệ số" (affiliate.tsx); nếu tương lai thật sự cần một khoản "bonus" khi đổi hoa hồng
-    // sang Ví, khoản đó PHẢI trả bằng TubuXu (không rút được), KHÔNG BAO GIỜ cộng thẳng vào
+    // sang Ví, khoản đó PHẢI trả bằng Điểm Xanh (không rút được), KHÔNG BAO GIỜ cộng thẳng vào
     // walletBalance bằng hệ số nhân > 1.
 
     // Chuẩn hoá '' / khoảng trắng → undefined (mirror wallet.withdraw / checkout.placeOrder /
@@ -930,7 +930,7 @@ export class AffiliateService {
     return {
       revenue,
       tier: this.monthlyTier(revenue),
-      // Mỗi bậc kèm thưởng mốc TubuXu cùng ngưỡng — phần thưởng THẬT của bậc.
+      // Mỗi bậc kèm thưởng mốc Điểm Xanh cùng ngưỡng — phần thưởng THẬT của bậc.
       allTiers: tiersWithRewards(),
     };
   }
@@ -989,14 +989,13 @@ export class AffiliateService {
   }
 
   /**
-   * Nhận thưởng mốc doanh số tháng → cộng TubuXu (coinsBalance, KHÔNG rút được).
+   * Nhận thưởng mốc doanh số tháng → cộng Điểm Xanh lô STANDARD (KHÔNG rút được, PD-3).
    * MONEY-CRITICAL:
    *  - Điều kiện đọc doanh số ĐÃ CHỐT trong CÙNG tx (không đếm đơn còn huỷ/trả được).
    *  - Idempotent dưới đồng thời: insert ctv_milestone_claims (unique userId+milestoneId+monthKey)
-   *    TRƯỚC khi cấp xu; request thua ăn P2002 → rollback cả tx → không cộng 2 lần.
-   *  - Cấp xu qua CoinsService.grantCoins(tx) — CoinTransaction + coinsBalance cùng tx (giữ bất
-   *    biến coinsBalance == SUM(delta)). Trước đây ghi CoinTransaction nhưng lại cộng walletBalance
-   *    (tiền rút được) → lệch cả 2 sổ và biến "xu" thành tiền mặt rút về ngân hàng.
+   *    TRƯỚC khi cấp điểm; request thua ăn P2002 → rollback cả tx → không cộng 2 lần.
+   *  - Cấp qua RewardPointsService.grant(tx) — dòng sổ điểm + pointsBalance cùng tx (giữ bất biến
+   *    pointsBalance == SUM(delta) lô STANDARD). Không bao giờ cộng walletBalance (tiền rút được).
    *  - `monthKey` chỉ nhận tháng này hoặc tháng trước (VN).
    */
   async claimMilestone(userId: string, milestoneId: string, monthKey?: string, now: Date = new Date()) {
@@ -1022,23 +1021,30 @@ export class AffiliateService {
           );
         }
 
-        // Insert claim TRƯỚC khi cấp xu: grantCoins nuốt P2002 của chính nó (trả void) nên không
+        // Insert claim TRƯỚC khi cấp điểm: grant nuốt trùng khoá của chính nó (trả false) nên không
         // thể làm khoá idempotency ở đây — khoá thật là unique của ctv_milestone_claims.
         const claim = await tx.ctvMilestoneClaim.create({
-          data: { userId, milestoneId: milestone.id, monthKey: month.key, rewardXu: milestone.rewardXu, revenue },
+          data: {
+            userId,
+            milestoneId: milestone.id,
+            monthKey: month.key,
+            rewardXu: 0,
+            rewardPoints: milestone.rewardPoints,
+            revenue,
+          },
         });
-        await this.coins.grantCoins(userId, milestone.rewardXu, reason, 'AFFILIATE_MILESTONE', claim.id, tx);
+        await this.rewards.grant(userId, milestone.rewardPoints, reason, 'AFFILIATE_MILESTONE', claim.id, tx);
 
         return {
           success: true,
-          message: `Chúc mừng bạn đã nhận ${milestone.rewardXu.toLocaleString('vi-VN')} TubuXu từ ${milestone.title}!`,
-          rewardXu: milestone.rewardXu,
+          message: `Chúc mừng bạn đã nhận ${milestone.rewardPoints.toLocaleString('vi-VN')} Điểm Xanh từ ${milestone.title}!`,
+          rewardPoints: milestone.rewardPoints,
           monthKey: month.key,
         };
       });
     } catch (err) {
       // Unique (userId, milestoneId, monthKey): đã nhận trước đó HOẶC thua race double-tap —
-      // tx đã rollback, xu KHÔNG bị cộng lần 2.
+      // tx đã rollback, điểm KHÔNG bị cộng lần 2.
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
         throw new BadRequestException('Bạn đã nhận thưởng mốc này rồi.');
       }

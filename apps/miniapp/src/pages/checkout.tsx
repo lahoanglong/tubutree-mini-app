@@ -15,16 +15,17 @@ import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
-import { formatVnd, formatXu, recyclingCheckoutFields, recyclingMaxKg } from '../utils/format';
+import { formatVnd, recyclingCheckoutFields, recyclingMaxKg } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { newIdempotencyKey } from '../utils/idempotency';
 import {
   checkoutPoints,
   isInvoiceValid,
-  paymentUnavailableReason,
   pointsEarnLabel,
   pointsUseLabel,
   shouldFallbackToCod,
+  walletUnavailableReason,
+  zeroTotalNote,
 } from '../utils/checkout-rules';
 import {
   clearCheckoutSelection,
@@ -119,16 +120,16 @@ export default function CheckoutPage() {
   const itemIdsKey = itemIds ? itemIds.join(',') : '';
 
   // Số dư PHẢI đọc từ query (được invalidate sau mọi thao tác tiền), KHÔNG từ auth store —
-  // store chỉ được nạp lại lúc mở app và sau khi đặt đơn, nên khách vừa đổi Ví→xu hoặc vừa
-  // tiêu xu trong Vườn Xanh sẽ thấy số cũ: hoặc không chọn được cách trả tiền mình vừa nạp,
+  // store chỉ được nạp lại lúc mở app và sau khi đặt đơn, nên khách vừa nhận tiền vào Ví hoặc vừa
+  // tiêu Điểm Xanh trong Vườn Xanh sẽ thấy số cũ: hoặc không chọn được cách trả tiền mình vừa nạp,
   // hoặc chọn được rồi bị BE từ chối "số dư không đủ" sau khi chờ spinner.
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const walletBalanceLive = walletQ.data?.walletBalance ?? user?.walletBalance ?? 0;
-  const coinsBalanceLive = walletQ.data?.coinsBalance ?? user?.coinsBalance ?? 0;
-  // Điểm DÙNG ĐƯỢC (redeemablePoints), không phải số dư: điểm đơn vừa giao còn trong hạn đổi/trả hoặc
-  // đang chờ xử lý đổi/trả chưa tiêu được — backend kẹp báo giá + đặt đơn đúng theo số này.
-  const points = checkoutPoints(loyaltyQ.data, user?.pointsBalance ?? 0);
+  // Điểm DÙNG ĐƯỢC, không phải số dư: điểm thường của đơn vừa giao còn trong hạn đổi/trả hoặc đang chờ xử
+  // lý đổi/trả chưa tiêu được; điểm quy đổi (không hết hạn) luôn dùng được. Backend chia hai lô + kẹp theo
+  // đúng số này khi báo giá và đặt đơn.
+  const points = checkoutPoints(loyaltyQ.data, user?.pointsBalance ?? 0, user?.pointsConvertedBalance ?? 0);
 
   const pointsToUse = usePoints ? points.usable : 0;
   const quote = useQuery({
@@ -139,13 +140,18 @@ export default function CheckoutPage() {
 
   const invoiceValid = isInvoiceValid(wantInvoice, invoice);
 
-  // Đang chọn Ví/TubuXu mà tổng đơn vượt số dư → tự trả về COD, tránh đặt fail.
+  // Đơn 0đ: BE ép COD + xác nhận luôn (không thu tiền). Gửi đúng phương thức đó và không mở màn QR chuyển
+  // khoản cho khoản 0đ dù khách đã lỡ chọn chuyển khoản trước khi dùng điểm.
+  const zeroNote = quote.data ? zeroTotalNote(quote.data) : null;
+  const paymentToSend = zeroNote ? 'COD' : payment;
+
+  // Đang chọn Ví mà tổng đơn vượt số dư → tự trả về COD, tránh đặt fail.
   useEffect(() => {
     if (!quote.data) return;
-    if (shouldFallbackToCod(payment, walletBalanceLive, coinsBalanceLive, quote.data.total)) {
+    if (shouldFallbackToCod(payment, walletBalanceLive, quote.data.total)) {
       setPayment('COD');
     }
-  }, [payment, quote.data, walletBalanceLive, coinsBalanceLive]);
+  }, [payment, quote.data, walletBalanceLive]);
 
   // Phát 'checkout_started' đúng 1 LẦN cho lần quote thành công đầu tiên (không phát lại mỗi
   // khi quote refetch — vd đổi địa chỉ/mã giảm giá làm quote chạy lại nhiều lần trong 1 phiên).
@@ -173,8 +179,11 @@ export default function CheckoutPage() {
       placeOrder(
         {
           addressId: addressId!,
-          paymentMethod: payment,
+          paymentMethod: paymentToSend,
           pointsToUse,
+          // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
+          // tạo đơn COD có tiền phải trả mà khách không chọn.
+          ...(zeroNote ? { quotedZeroTotal: true } : {}),
           note: note.trim() || undefined,
           // Chỉ gửi khi bật + chọn (body mặc định y hệt bản cũ — xem recyclingCheckoutFields).
           ...recyclingCheckoutFields(recyclingEnabled, hasRecyclingPickup, recyclingNote),
@@ -207,7 +216,6 @@ export default function CheckoutPage() {
       // Thanh toán WALLET trừ walletBalance và sử dụng điểm cộng/trừ pointsBalance ở BE;
       // staleTime=60s global → wallet/profile sẽ stale 60s nếu không invalidate → user thấy số cũ.
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
-      void queryClient.invalidateQueries({ queryKey: ['coins'] });
       // Điểm Xanh đọc từ ['loyalty'] (nguồn số dư dùng ở chính màn này) — đơn vừa tiêu/tích điểm.
       void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
       void queryClient.invalidateQueries({ queryKey: ['me'] });
@@ -216,7 +224,7 @@ export default function CheckoutPage() {
       idempotencyKey.current = newIdempotencyKey(); // đơn sau là đơn mới
       clearCheckoutSelection(); // lựa chọn của đơn vừa đặt không được dính sang đơn sau
       // Chuyển khoản: sang màn VietQR để khách quét trả ngay (Pancake đối soát → tự xác nhận).
-      if (payment === 'BANK_TRANSFER') {
+      if (paymentToSend === 'BANK_TRANSFER') {
         navigate(`/bank-payment/${o.code}`, { replace: true });
         return;
       }
@@ -289,17 +297,14 @@ export default function CheckoutPage() {
   // bug audit A4-01/A4-02/A4-04 mà lần migrate này phải sửa), không thêm được lớp bảo vệ nào mới.
   const canPlace = !!addressId && quote.isSuccess && !!invoiceValid;
 
-  const coinsBalance = coinsBalanceLive;
   // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
-  const walletReason = quote.isSuccess ? paymentUnavailableReason('WALLET', walletBalance, total) : null;
-  const xuReason = quote.isSuccess ? paymentUnavailableReason('XU', coinsBalance, total) : null;
+  const walletReason = quote.isSuccess ? walletUnavailableReason(walletBalance, total) : null;
   const paymentMethods = [
     { value: 'COD', label: vi.checkout.paymentCod, hint: null },
     // ZALOPAY tạm ẨN: chưa nối cổng thanh toán thật → nếu hiện, bấm đặt sẽ ra "thành công"
     // mà KHÔNG thu tiền (như COD) → đơn treo/sai đối soát. Mở lại khi tích hợp Payment API Zalo.
     { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank, hint: null },
     { value: 'WALLET', label: vi.checkout.paymentWallet(formatVnd(walletBalance)), hint: walletReason },
-    { value: 'XU', label: vi.checkout.paymentXu(formatXu(coinsBalance)), hint: xuReason },
   ].map((m) => ({ ...m, disabled: m.hint !== null }));
 
   const shownItems = itemIds
@@ -440,7 +445,12 @@ export default function CheckoutPage() {
         <Text bold size="small" style={{ marginBottom: 8 }}>
           {vi.checkout.payment}
         </Text>
-        {paymentMethods.map((m) => (
+        {zeroNote && (
+          <Text size="small" style={{ color: 'var(--color-text-secondary)', minHeight: 44, display: 'block' }}>
+            {zeroNote}
+          </Text>
+        )}
+        {!zeroNote && paymentMethods.map((m) => (
           <Box
             key={m.value}
             role="radio"
@@ -510,6 +520,11 @@ export default function CheckoutPage() {
                   ? pointsUseLabel(quote.data.pointsUsed, formatVnd(quote.data.pointsDiscount))
                   : (points.label ?? vi.checkout.pointsNone)}
               </Text>
+              {points.convertedNote && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                  {points.convertedNote}
+                </Text>
+              )}
               {points.lockNote && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                   {points.lockNote}
@@ -590,7 +605,7 @@ export default function CheckoutPage() {
                   Chúng tôi sẽ thu gom lại các vật liệu tái chế được đóng gói gọn gàng như bọc nilong, hoặc quần áo cũ, pin, vỏ sữa làm sạch -&gt; giúp bảo vệ môi trường. Số kg thu gom tối đa bằng số kg của đơn hàng (~{maxRecycleKg} kg).
                 </Text>
               </Box>
-              {payment !== 'COD' && payment !== 'WALLET' && payment !== 'XU' && (
+              {paymentToSend !== 'COD' && paymentToSend !== 'WALLET' && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', lineHeight: '18px' }}>
                   Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.
                 </Text>
@@ -728,10 +743,7 @@ export default function CheckoutPage() {
               tone={quote.data.shippingFee === 0 ? 'success' : 'primary'}
             />
             <KeyValueRow label={vi.checkout.total} value={formatVnd(quote.data.total)} emphasis />
-            {/* Đơn trả bằng TubuXu KHÔNG tích điểm (checkout.service.ts đặt pointsEarned=0 khi
-                paymentMethod='XU'), nhưng /checkout/quote không nhận paymentMethod nên vẫn trả
-                số điểm mặc định → nếu hiện nguyên, khách chọn XU sẽ được hứa điểm rồi không có. */}
-            {payment !== 'XU' && quote.data.pointsEarned > 0 && (
+            {quote.data.pointsEarned > 0 && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
                 <Sprout size={13} color="var(--color-text-success)" aria-hidden />
                 <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
@@ -864,7 +876,7 @@ export default function CheckoutPage() {
             emphasis
           />
 
-          {payment !== 'XU' && (quote.data?.pointsEarned ?? 0) > 0 && (
+          {(quote.data?.pointsEarned ?? 0) > 0 && (
             <Box flex alignItems="center" justifyContent="flex-end" style={{ gap: 4, marginTop: 6 }}>
               <Sprout size={13} color="var(--color-text-success)" aria-hidden />
               <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>

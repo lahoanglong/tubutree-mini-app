@@ -65,6 +65,52 @@ describe('PricingService', () => {
     });
   });
 
+  // PD-3 (spec 2.3): lô STANDARD chịu trần max_redeem_pct, lô CONVERTED (xu cũ) trả tới 100% giá trị hàng.
+  describe('resolvePointsRedemptionByLot (PD-3, T8/T9)', () => {
+    it('T8: đơn 500.000đ, STANDARD 1.000, CONVERTED 1.000, dùng 1.000 → s = 100, c = 400, giảm đủ 500.000đ', async () => {
+      const r = await svc.resolvePointsRedemptionByLot(1000, 1000, 1000, 500000);
+      expect(r).toEqual({ pointsUsed: 500, pointsUsedStandard: 100, pointsUsedConverted: 400, discount: 500000 });
+    });
+
+    it('T8: phần lẻ dưới 1.000đ không trả bằng điểm (redeemBase 123.456đ → s + c = 123)', async () => {
+      const r = await svc.resolvePointsRedemptionByLot(1000, 1000, 1000, 123456);
+      expect(r.pointsUsedStandard).toBe(24); // floor(floor(123.456 × 0,2) / 1.000)
+      expect(r.pointsUsedConverted).toBe(123 - 24);
+      expect(r.discount).toBe(123000);
+      expect(r.discount).toBeLessThanOrEqual(123456);
+    });
+
+    it('T9: STANDARD tiêu tới trần trước rồi mới tới CONVERTED', async () => {
+      const r = await svc.resolvePointsRedemptionByLot(30, 1000, 1000, 100000);
+      expect(r).toMatchObject({ pointsUsedStandard: 20, pointsUsedConverted: 10, pointsUsed: 30, discount: 30000 });
+    });
+
+    it('T9: dùng ít hơn trần STANDARD → không đụng CONVERTED', async () => {
+      const r = await svc.resolvePointsRedemptionByLot(15, 1000, 1000, 100000);
+      expect(r).toMatchObject({ pointsUsedStandard: 15, pointsUsedConverted: 0 });
+    });
+
+    it('T9: STANDARD dùng được = 0 (đang khoá) → chỉ CONVERTED, vẫn giảm được 100% giá trị hàng', async () => {
+      const r = await svc.resolvePointsRedemptionByLot(1000, 0, 1000, 250000);
+      expect(r).toEqual({ pointsUsed: 250, pointsUsedStandard: 0, pointsUsedConverted: 250, discount: 250000 });
+    });
+
+    it('kẹp theo số dư CONVERTED, không bao giờ âm', async () => {
+      const r = await svc.resolvePointsRedemptionByLot(1000, 5, 7, 1000000);
+      expect(r).toMatchObject({ pointsUsedStandard: 5, pointsUsedConverted: 7, pointsUsed: 12 });
+      const z = await svc.resolvePointsRedemptionByLot(0, 5, 7, 1000000);
+      expect(z).toEqual({ pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 });
+      const neg = await svc.resolvePointsRedemptionByLot(10, -3, -4, 1000000);
+      expect(neg).toEqual({ pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 });
+    });
+
+    it('giá trị hàng 0 hoặc tỉ giá lỗi → không giảm', async () => {
+      expect((await svc.resolvePointsRedemptionByLot(10, 10, 10, 0)).pointsUsed).toBe(0);
+      const bad = new PricingService(makeConfig({ ...DEFAULTS, 'loyalty.vnd_per_point_redeem': 0 }));
+      expect((await bad.resolvePointsRedemptionByLot(10, 10, 10, 100000)).pointsUsed).toBe(0);
+    });
+  });
+
   // P0 A3-05: MembershipTier.discountPct đã có sẵn trong DB (seed.ts: CO_THU=0.05) nhưng chưa từng
   // được pricing/checkout đọc — hạng "Cổ Thụ" hứa "giảm 5% mọi đơn" nhưng thực tế nhận giá giống hệt
   // Mầm Xanh. calcTierDiscount là hàm thuần CheckoutService.compute() dùng để áp phần trăm này.

@@ -3,14 +3,15 @@ import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page, Input, useSnackbar } from 'zmp-ui';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowRightLeft, CheckCircle2, ChevronRight, Clock, Coins, Gift, History, Landmark, Leaf, ShoppingBag, Sprout, type LucideIcon } from 'lucide-react';
-import { getWallet, getWalletTransactions, withdraw, getCoins, convertToXu, getLoyalty, type BankInfo } from '../services/account-api';
+import { AlertTriangle, CheckCircle2, ChevronRight, Clock, Gift, History, Landmark, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
+import { getWallet, getWalletTransactions, withdraw, getReferral, getLoyalty, type BankInfo } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
 import { useAuthStore } from '../store/auth';
 import { newIdempotencyKey } from '../utils/idempotency';
-import { canWithdraw as canWithdrawRule, canConvertToXu, walletTxLabel, formatWalletTxTime } from '../utils/wallet-rules';
-import { formatVnd, formatPoints, formatXu } from '../utils/format';
+import { canWithdraw as canWithdrawRule, walletTxLabel, formatWalletTxTime } from '../utils/wallet-rules';
+import { formatVnd, formatPoints } from '../utils/format';
+import { convertedPointsNote, pointsSummary } from '../utils/points-lots';
 import { CASHBACK_ENABLED } from '../utils/features';
 import { Badge } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -41,18 +42,16 @@ export default function WalletPage() {
   // error vĩnh viễn dù login thành công ~200ms sau → màn Ví "trắng". Chờ authenticated rồi mới fetch.
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
-  const coinsQ = useQuery({ queryKey: ['coins'], queryFn: getCoins, enabled: authed });
+  // Thống kê giới thiệu là phần phụ: lỗi chỉ làm ẩn khối mời bạn, không chặn cả màn Ví.
+  const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed });
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
 
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [convertOpen, setConvertOpen] = useState(false);
   const [amount, setAmount] = useState('');
-  const [convertAmount, setConvertAmount] = useState('');
   const [bank, setBank] = useState<BankInfo>({ bankName: '', accountNumber: '', accountName: '' });
 
   const refreshAll = () => {
     void qc.invalidateQueries({ queryKey: ['wallet'] });
-    void qc.invalidateQueries({ queryKey: ['coins'] });
   };
 
   // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lệnh rút (double-tap/timeout) →
@@ -69,60 +68,38 @@ export default function WalletPage() {
     },
     // Lỗi (kể cả server đã tạo giao dịch thật, hoặc BE báo key đã dùng với số tiền khác) →
     // regenerate key TRƯỚC khi cho phép bấm lại, để lần thử tiếp theo (số tiền có thể đã sửa)
-    // dùng key MỚI thay vì lặp lại đúng lệnh cũ (mirror convertMut bên dưới).
+    // dùng key MỚI thay vì lặp lại đúng lệnh cũ.
     onError: (e) => {
       withdrawKey.current = newIdempotencyKey();
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
   });
 
-  // Cung ly do voi withdrawKey: giu nguyen key qua cac lan retry cua CUNG 1 lenh doi,
-  // regenerate sau khi doi thanh cong (lenh sau la lenh moi).
-  const convertKey = useRef(newIdempotencyKey());
-  const convertMut = useMutation({
-    mutationFn: () => convertToXu(Number(convertAmount), convertKey.current),
-    onSuccess: (r) => {
-      openSnackbar({ text: `Đã đổi ${formatVnd(r.spent)} → ${formatXu(r.received)} 🎉`, type: 'success' });
-      convertKey.current = newIdempotencyKey();
-      setConvertOpen(false);
-      setConvertAmount('');
-      refreshAll();
-    },
-    // Lỗi mạng/timeout: server CÓ THỂ đã tạo giao dịch thật dù FE nhận lỗi. Nếu user sửa số tiền
-    // rồi bấm lại mà vẫn dùng key CŨ, BE sẽ coi là replay của lệnh trước (idempotency) → trả/ghép
-    // sai số tiền. Regenerate key ngay khi lỗi để lần bấm tiếp theo luôn là lệnh MỚI.
-    onError: (e) => {
-      convertKey.current = newIdempotencyKey();
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
-    },
-  });
-
   const w = walletQ.data;
-  const coins = coinsQ.data;
+  const referral = referralQ.data;
   const loyalty = loyaltyQ.data;
   const amountNum = Number(amount) || 0;
-  const convertNum = Number(convertAmount) || 0;
   const fee = w?.withdrawFee ?? 3000;
   const min = w?.withdrawMin ?? 100000;
-  const multiplier = w?.xuConvertMultiplier ?? 1.2;
 
   const canWithdraw = canWithdrawRule(amountNum, w, min, bank);
-  const canConvert = canConvertToXu(convertNum, w);
 
   const shareReferral = async () => {
-    if (!coins) return;
+    if (!referral) return;
     try {
       await shareLink({
         title: 'Tubu Tree — Trồng cây, nhận quà 🌳',
-        description: `Dùng mã ${coins.referralCode} vào Tubu Tree, cả hai cùng nhận TubuXu khi bạn hoàn tiền đơn đầu!`,
-        path: `/?ref=${coins.referralCode}`,
+        description: `Dùng mã ${referral.referralCode} khi mua hàng ở Tubu Tree nhé!`,
+        path: `/?ref=${referral.referralCode}`,
       });
     } catch {
-      openSnackbar({ text: `Mã giới thiệu của bạn: ${coins.referralCode}`, type: 'info' });
+      openSnackbar({ text: `Mã giới thiệu của bạn: ${referral.referralCode}`, type: 'info' });
     }
   };
 
   const balance = w?.walletBalance ?? 0;
+  const points = loyalty ? pointsSummary(loyalty) : null;
+  const convertedNote = convertedPointsNote(points?.converted);
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
@@ -161,13 +138,10 @@ export default function WalletPage() {
                 {formatVnd(w.walletBalance)}
               </Text>
               <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-                <Button variant="secondary" icon={ArrowRightLeft} style={{ flex: 1, padding: '0 8px' }} onPress={() => setConvertOpen(true)}>
-                  Đổi TubuXu
-                </Button>
                 <Button
                   variant="secondary"
                   icon={Landmark}
-                  style={{ flex: 1, padding: '0 8px' }}
+                  fullWidth
                   onPress={() => {
                     // Mỗi lần MỞ Sheet = 1 lệnh rút mới → key mới (double-tap trong cùng phiên giữ
                     // nguyên key = idempotent; mở lại với số khác = key khác, không bị BE trả payout cũ).
@@ -180,37 +154,7 @@ export default function WalletPage() {
               </div>
             </div>
             <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
-              Tiền thật từ hoa hồng{CASHBACK_ENABLED ? ' & hoàn tiền sàn ngoài' : ''} — rút về ngân hàng hoặc đổi sang TubuXu (×{multiplier}).
-            </Text>
-          </div>
-
-          {/* TubuXu */}
-          <div style={{ padding: '0 16px 8px' }}>
-            <div
-              style={{
-                padding: 16,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                background: 'linear-gradient(135deg, var(--clay-500), var(--clay-700))',
-                borderRadius: 'var(--radius-card)',
-                boxShadow: 'var(--elevation-1)',
-              }}
-            >
-              <IconBubble solid>
-                <Icon icon={Coins} size="lg" tone="inverse" />
-              </IconBubble>
-              <div style={{ flex: 1 }}>
-                <Text variant="body-sm" tone="inverse" as="div">
-                  TubuXu (tiêu trong app)
-                </Text>
-                <Text variant="price-xl" tone="inverse" as="div">
-                  {formatXu(coins?.coinsBalance ?? w.coinsBalance)}
-                </Text>
-              </div>
-            </div>
-            <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
-              Dùng để mua hàng và góp quỹ trồng cây 🌳 trong app. Không rút được.
+              Tiền thật từ hoa hồng{CASHBACK_ENABLED ? ' & hoàn tiền sàn ngoài' : ''} — rút về ngân hàng hoặc trả đơn hàng.
             </Text>
           </div>
 
@@ -231,8 +175,13 @@ export default function WalletPage() {
                   Điểm Xanh (đổi giảm giá)
                 </Text>
                 <Text variant="price-xl" as="div">
-                  {formatPoints(loyalty?.pointsBalance ?? 0)}
+                  {formatPoints(points?.total ?? 0)}
                 </Text>
+                {convertedNote && (
+                  <Text variant="caption" tone="secondary" as="div">
+                    {convertedNote}
+                  </Text>
+                )}
               </div>
               {loyalty?.tier && (
                 <Badge tone="brand" style={{ flex: '0 0 auto' }}>
@@ -244,34 +193,39 @@ export default function WalletPage() {
             <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
               Tích từ mỗi đơn đã giao — đổi giảm giá cho đơn sau &amp; lên hạng thành viên.
             </Text>
+            {convertedNote && (
+              <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2, paddingLeft: 4 }}>
+                Điểm không hết hạn dùng trả đơn hàng tới 100% giá trị hàng và góp quỹ trồng cây. Không rút ra tiền.
+              </Text>
+            )}
           </div>
 
           {/* Giới thiệu bạn bè */}
-          {coins && (
+          {referral && (
             <div style={{ padding: '0 16px 8px' }}>
               <div style={{ ...CARD, padding: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <Icon icon={Gift} size="md" tone="brand" />
-                  <Text variant="body-lg" style={{ fontWeight: 600 }}>Mời bạn — cả hai nhận TubuXu</Text>
+                  <Text variant="body-lg" style={{ fontWeight: 600 }}>Mời bạn — nhận Điểm Xanh</Text>
                 </div>
                 <Text variant="caption" tone="secondary" as="div">
-                  Bạn bè vào app bằng mã của bạn và hoàn tiền đơn đầu tiên → cả hai cùng được thưởng xu.
+                  Bạn bè vào app bằng mã của bạn và có đơn hàng thứ hai giao thành công → bạn nhận Điểm Xanh thưởng.
                 </Text>
                 <div style={{ display: 'flex', gap: 16, marginTop: 12, marginBottom: 12 }}>
                   <div>
-                    <Text variant="price-lg" tone="brand" as="div">{coins.referralSuccessCount}</Text>
+                    <Text variant="price-lg" tone="brand" as="div">{referral.successCount}</Text>
                     <Text variant="caption" tone="tertiary" as="div">bạn thành công</Text>
                   </div>
                   <div>
-                    <Text variant="price-lg" as="div" style={{ color: 'var(--color-promo-fg)' }}>{formatXu(coins.referralEarned)}</Text>
+                    <Text variant="price-lg" as="div" style={{ color: 'var(--color-promo-fg)' }}>{formatPoints(referral.earnedPoints)}</Text>
                     <Text variant="caption" tone="tertiary" as="div">đã nhận từ giới thiệu</Text>
                   </div>
                 </div>
-                {coins.nextMilestone && (
+                {referral.nextMilestone && (
                   <Text variant="caption" tone="brand" as="div" style={{ marginBottom: 12 }}>
                     {vi.wallet.referralMilestoneProgress(
-                      coins.nextMilestone.count - coins.referralSuccessCount,
-                      formatXu(coins.nextMilestone.bonus),
+                      referral.nextMilestone.count - referral.successCount,
+                      formatPoints(referral.nextMilestone.bonusPoints),
                     )}
                   </Text>
                 )}
@@ -287,7 +241,7 @@ export default function WalletPage() {
                       borderRadius: 'var(--radius-control)',
                     }}
                   >
-                    <Text variant="body-lg" style={{ fontWeight: 600, letterSpacing: 1.5 }}>{coins.referralCode}</Text>
+                    <Text variant="body-lg" style={{ fontWeight: 600, letterSpacing: 1.5 }}>{referral.referralCode}</Text>
                   </div>
                   <Button onPress={() => void shareReferral()}>Chia sẻ</Button>
                 </div>
@@ -328,56 +282,16 @@ export default function WalletPage() {
               borderRadius: 'var(--radius-card)',
             }}
           >
-            <Icon icon={Coins} size="md" style={{ flex: '0 0 auto', color: 'var(--color-promo-fg)' }} />
+            <Icon icon={Wallet} size="md" style={{ flex: '0 0 auto', color: 'var(--color-promo-fg)' }} />
             <Text variant="caption" as="div" style={{ color: 'var(--color-promo-fg)' }}>
-              Mẹo: đổi tiền Ví sang <b>TubuXu (×{multiplier})</b> để được thêm{' '}
-              {Math.round((multiplier - 1) * 100)}% giá trị mua sắm — và <b>miễn phí</b>, thay vì rút về
-              ngân hàng (phí chuyển khoản {formatVnd(fee)}/lần).
+              Mẹo: dùng Ví Tubu để <b>trả đơn hàng</b> — <b>miễn phí</b>, thay vì rút về ngân hàng (phí chuyển
+              khoản {formatVnd(fee)}/lần).
             </Text>
           </div>
 
           <WalletHistory enabled={authed} />
         </>
       ) : null}
-
-      {/* Sheet đổi Ví → TubuXu */}
-      <BottomSheet
-        open={convertOpen}
-        onClose={() => {
-          setConvertOpen(false);
-          setConvertAmount('');
-        }}
-        title="Đổi Ví → TubuXu"
-        description={`Nhận thêm ${Math.round((multiplier - 1) * 100)}% giá trị quy đổi — hoàn toàn miễn phí.`}
-        footer={
-          <Button fullWidth disabled={!canConvert || convertMut.isPending} onPress={() => convertMut.mutate()}>
-            {convertMut.isPending ? 'Đang đổi...' : 'Đổi ngay'}
-          </Button>
-        }
-      >
-        {balance <= 0 && (
-          <Notice icon={Sprout}>
-            Bạn chưa có số dư khả dụng trong Ví Tubu (0đ). Hãy tích lũy hoa hồng từ Đơn hàng/CTV{CASHBACK_ENABLED ? ' hoặc Hoàn tiền sàn ngoài' : ''} để đổi sang TubuXu (×{multiplier})!
-          </Notice>
-        )}
-
-        <Field label={`Số tiền muốn đổi (Khả dụng: ${formatVnd(balance)})`}>
-          <Input
-            type="number"
-            placeholder="VD: 100.000"
-            value={convertAmount}
-            disabled={balance <= 0}
-            onChange={(e) => setConvertAmount(e.target.value)}
-          />
-        </Field>
-        {convertNum > 0 && (
-          <div style={{ marginTop: 8, padding: 12, background: 'var(--color-promo-bg)', borderRadius: 'var(--radius-control)' }}>
-            <Text variant="body-sm" as="div" style={{ color: 'var(--color-promo-fg)' }}>
-              Nhận ≈ <b>{formatXu(Math.floor(convertNum * multiplier))}</b>
-            </Text>
-          </div>
-        )}
-      </BottomSheet>
 
       {/* Sheet rút tiền */}
       <BottomSheet
@@ -432,15 +346,15 @@ export default function WalletPage() {
   );
 }
 
-/** Ô tròn chứa biểu tượng ở đầu thẻ số dư; `solid` dùng trên nền thẻ màu (đất sét), mặc định trên thẻ trắng. */
-function IconBubble({ children, solid }: { children: ReactNode; solid?: boolean }) {
+/** Ô tròn chứa biểu tượng ở đầu thẻ số dư. */
+function IconBubble({ children }: { children: ReactNode }) {
   return (
     <div
       style={{
         width: 44,
         height: 44,
         borderRadius: '50%',
-        background: solid ? 'var(--color-promo-solid-bg)' : 'var(--color-bg-subtle)',
+        background: 'var(--color-bg-subtle)',
         display: 'grid',
         placeItems: 'center',
         flex: '0 0 auto',
@@ -451,7 +365,7 @@ function IconBubble({ children, solid }: { children: ReactNode; solid?: boolean 
   );
 }
 
-/** Khung cảnh báo trong sheet — biểu tượng + chữ cùng màu khuyến mãi/đất sét, thay emoji ⚠️ 🌱 cũ. */
+/** Khung cảnh báo trong sheet — biểu tượng + chữ cùng màu khuyến mãi/đất sét, thay emoji ⚠️ cũ. */
 function Notice({ icon, children }: { icon: LucideIcon; children: ReactNode }) {
   return (
     <div
@@ -476,7 +390,7 @@ function Notice({ icon, children }: { icon: LucideIcon; children: ReactNode }) {
 
 /** Sao kê Ví Tubu từ sổ cái: mỗi biến động một dòng kèm số dư sau giao dịch. */
 function WalletHistory({ enabled }: { enabled: boolean }) {
-  // Khoá con của ['wallet'] → refreshAll() sau rút/đổi xu làm mới luôn sao kê.
+  // Khoá con của ['wallet'] → refreshAll() sau khi rút tiền làm mới luôn sao kê.
   const q = useInfiniteQuery({
     queryKey: ['wallet', 'transactions'],
     queryFn: ({ pageParam }) => getWalletTransactions(pageParam),

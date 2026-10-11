@@ -122,7 +122,7 @@ export class LoyaltyService {
   }
 
   /**
-   * Hoàn ngược khi hủy/trả: trừ điểm đã tích, hoàn lại điểm đã tiêu.
+   * Hoàn ngược khi hủy/trả: trừ điểm đã tích, hoàn lại điểm đã tiêu (lô STANDARD; lô CONVERTED xem OrderReversalService).
    *
    * RACE: 2 caller song song (orders.cancel + webhook RETURNED) trước đây cùng
    * findFirst NGOÀI tx → cùng thấy chưa reverse → cùng cộng/trừ → DOUBLE.
@@ -139,6 +139,8 @@ export class LoyaltyService {
           where: {
             userId: order.userId,
             refId: order.id,
+            // Không gồm ORDER_REFUND_CONVERTED: dòng đó do tx huỷ (OrderReversalService) ghi TRƯỚC khi hàm này
+            // chạy, nên liệt kê nó sẽ làm bỏ qua hoàn STANDARD và đảo pointsEarned.
             reason: { in: [`ORDER_REVERSED:${order.code}`, `ORDER_REFUND_POINTS:${order.code}`] },
           },
           select: { id: true },
@@ -173,11 +175,16 @@ export class LoyaltyService {
             data: { pointsBalance: { decrement: order.pointsEarned } },
           });
         }
-        if (order.pointsUsed > 0) {
+        // PD-3 (spec 2.5): chỉ phần STANDARD (đơn trước PD-3 có pointsUsedConverted = 0 → hoàn hết như cũ). Phần
+        // CONVERTED là tiền trả trước, hoàn trong tx huỷ ở OrderReversalService.refundConvertedPoints (review B1).
+        const usedConverted = Math.min(order.pointsUsed, order.pointsUsedConverted);
+        const usedStandard = order.pointsUsed - usedConverted;
+        if (usedStandard > 0) {
           await tx.pointsTransaction.create({
             data: {
               userId: order.userId,
-              delta: order.pointsUsed,
+              delta: usedStandard,
+              lot: 'STANDARD',
               reason: `ORDER_REFUND_POINTS:${order.code}`,
               refType: 'ORDER',
               refId: order.id,
@@ -185,7 +192,7 @@ export class LoyaltyService {
           });
           await tx.user.update({
             where: { id: order.userId },
-            data: { pointsBalance: { increment: order.pointsUsed } },
+            data: { pointsBalance: { increment: usedStandard } },
           });
         }
       });
@@ -217,9 +224,10 @@ export class LoyaltyService {
 
     const since = new Date();
     since.setMonth(since.getMonth() - 12);
-    // Đơn trả bằng TubuXu (tín dụng tự-fund) KHÔNG tính vào chi tiêu lên hạng (mặc định) — nhất quán
-    // với việc đơn XU không sinh điểm (checkout). Tránh khuếch đại: đổi Ví→xu ×1.2 rồi tiêu để lên
-    // hạng rẻ tiền. Lật cùng config loyalty.earn_points_on_xu=true thì XU lại được tính cả điểm lẫn hạng.
+    // Đơn XU cũ (tạo trước khi xu gộp vào Điểm Xanh, trả bằng tín dụng tự-fund) KHÔNG tính vào chi tiêu lên hạng
+    // (mặc định) — nhất quán với việc đơn XU không sinh điểm. Đơn mới không còn đường XU: điểm quy đổi từ xu
+    // đã trừ vào orders.total nên phần đó tự không tính hạng (spec PD-3 2.6). Lật config
+    // loyalty.earn_points_on_xu=true thì đơn XU cũ lại được tính vào hạng.
     const earnOnXu = (await this.config.get<boolean>('loyalty.earn_points_on_xu', false)) === true;
     const spentAgg = await this.prisma.order.aggregate({
       where: {
@@ -445,9 +453,15 @@ export class LoyaltyService {
     since.setMonth(since.getMonth() - 12);
     const tierPoints = await this.tierPoints(userId, since);
     const lock = await this.lockedOrderPoints(userId, new Date());
+    const redeemablePoints = Math.max(0, user.pointsBalance - lock.locked);
 
     return {
+      /** Lô STANDARD (có hạn, trần % khi tiêu). */
       pointsBalance: user.pointsBalance,
+      /** PD-3: lô quy đổi từ xu (không hết hạn, tiêu tới 100% giá trị hàng, chỉ ở checkout/góp quỹ). */
+      pointsConvertedBalance: user.pointsConvertedBalance,
+      /** Số Điểm Xanh khách nhìn thấy = tổng hai lô. */
+      pointsTotal: user.pointsBalance + user.pointsConvertedBalance,
       tierPoints,
       // Phần Điểm Xanh chưa đổi quà được vì đơn còn có thể bị trả hàng (xem lockedOrderPoints).
       lockedPoints: lock.locked,
@@ -455,7 +469,8 @@ export class LoyaltyService {
       lockedReturnPoints: lock.lockedReturn,
       /** Mốc muộn nhất phần khoá theo cửa sổ đổi/trả được mở (null nếu không có). */
       lockedUntil: lock.lockedUntil?.toISOString() ?? null,
-      redeemablePoints: Math.max(0, user.pointsBalance - lock.locked),
+      redeemablePoints,
+      redeemableTotal: redeemablePoints + user.pointsConvertedBalance,
       tier: current
         ? {
             id: current.id,
@@ -896,21 +911,28 @@ export class LoyaltyService {
     return found[0]!;
   }
 
-  private memberSummary(member: {
-    id: string;
-    referralCode: string;
-    fullName: string | null;
-    phone: string | null;
-    pointsBalance: number;
-    tier?: { name: string } | null;
-  }) {
+  private memberSummary(
+    member: {
+      id: string;
+      referralCode: string;
+      fullName: string | null;
+      phone: string | null;
+      pointsBalance: number;
+      pointsConvertedBalance?: number;
+      tier?: { name: string } | null;
+    },
+    pointsBalance = member.pointsBalance,
+  ) {
+    const pointsConvertedBalance = member.pointsConvertedBalance ?? 0;
     return {
       id: member.id,
       memberCode: memberCodeOf(member.referralCode),
       name: member.fullName ?? 'Thành viên Tubu',
       phone: maskPhone(member.phone),
       tier: member.tier?.name ?? 'Mầm Xanh',
-      pointsBalance: member.pointsBalance,
+      pointsBalance,
+      pointsConvertedBalance,
+      pointsTotal: pointsBalance + pointsConvertedBalance,
     };
   }
 
@@ -1123,7 +1145,7 @@ export class LoyaltyService {
   ) {
     return {
       replayed,
-      member: { ...this.memberSummary(member), pointsBalance },
+      member: this.memberSummary(member, pointsBalance),
       posTransaction: {
         receiptId: credit.receiptId,
         orderTotal: credit.orderTotal,

@@ -70,6 +70,8 @@ function makeService(
   const userUpdate = spies.userUpdate ?? jest.fn().mockResolvedValue({});
   const executeRaw = spies.executeRaw ?? jest.fn().mockResolvedValue(1);
   const coinCreate = spies.coinCreate ?? jest.fn().mockResolvedValue({});
+  /** PD-3: hoàn đơn XU cũ ghi Điểm Xanh lô quy đổi (INSERT ... ON CONFLICT DO NOTHING). */
+  const pointsInsert = jest.fn().mockResolvedValue([{ id: 'ptx' }]);
   /** SELECT … FOR UPDATE khoá dòng đơn trong tx. */
   const lockRow = jest.fn().mockResolvedValue([{ id: row.id }]);
   /** Đọc lại đơn TRONG tx (sau khoá) — trả dòng DB hiện tại, không phải ảnh chụp. */
@@ -84,6 +86,7 @@ function makeService(
       user: { update: userUpdate },
       $executeRaw: executeRaw,
       coinTransaction: { create: coinCreate },
+      pointsTransaction: { createManyAndReturn: pointsInsert },
     }),
   );
   const prisma = {
@@ -99,6 +102,7 @@ function makeService(
     userUpdate,
     executeRaw,
     coinCreate,
+    pointsInsert,
     $transaction,
     row,
     lockRow,
@@ -194,26 +198,26 @@ describe('OrdersService.cancel', () => {
     expect(userUpdate).not.toHaveBeenCalled();
   });
 
-  it('hoàn XU (coinsBalance + CoinTransaction) khi đơn trả bằng XU + PAID — KHÔNG hoàn ví', async () => {
-    const { svc, userUpdate, coinCreate } = makeService({
+  it('PD-3: đơn XU cũ + PAID huỷ → hoàn ceil(total/1000) Điểm Xanh lô quy đổi — KHÔNG hoàn ví, KHÔNG cộng xu', async () => {
+    const { svc, userUpdate, coinCreate, pointsInsert } = makeService({
       ...baseOrder,
       paymentMethod: 'XU',
       paymentStatus: 'PAID',
     });
     await svc.cancel('u1', 'TUBU1');
-    // Hoàn vào coinsBalance, KHÔNG phải walletBalance (xu không rút được → tránh leak giá trị).
+    // Xu không ra tiền (Q-03a): không vào walletBalance; xu đã khoá (users_coins_frozen): không vào coinsBalance.
     expect(userUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { coinsBalance: { increment: 300000 } } }),
+      expect.objectContaining({ data: { pointsConvertedBalance: { increment: 300 } } }),
     );
     expect(userUpdate).not.toHaveBeenCalledWith(
       expect.objectContaining({ data: { walletBalance: { increment: 300000 } } }),
     );
-    // Ghi sổ cái xu (+total) giữ bất biến coinsBalance == Σdelta.
-    expect(coinCreate).toHaveBeenCalledWith(
+    expect(pointsInsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ userId: 'u1', delta: 300000, reason: 'ORDER_REFUND:TUBU1', refType: 'ORDER' }),
+        data: [expect.objectContaining({ userId: 'u1', delta: 300, lot: 'CONVERTED', reason: 'ORDER_REFUND_XU:TUBU1', refType: 'ORDER' })],
       }),
     );
+    expect(coinCreate).not.toHaveBeenCalled();
   });
 
   it('hủy XU race THUA (count=0) → KHÔNG hoàn xu, KHÔNG ghi sổ cái', async () => {

@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import { PriceTag, Money, Points, Xu } from './price-tag';
+import * as priceTag from './price-tag';
+import { PriceTag, Money, Points } from './price-tag';
 
 describe('PriceTag', () => {
   it('renders the formatted VND price, no compare-at shown when not on sale', () => {
@@ -22,7 +23,7 @@ describe('PriceTag', () => {
   });
 });
 
-describe('Money/Points/Xu', () => {
+describe('Money/Points', () => {
   it('Money renders a formatted amount', () => {
     render(<Money amount={100000} />);
     expect(screen.getByText('100.000đ')).toBeInTheDocument();
@@ -31,8 +32,7 @@ describe('Money/Points/Xu', () => {
     render(<Points value={250} />);
     expect(screen.getByText(/250.*điểm/)).toBeInTheDocument();
   });
-  it('Xu renders with the xu unit', () => {
-    render(<Xu value={500} />);
-    expect(screen.getByText(/500.*xu/)).toBeInTheDocument();
+  it('không còn component Xu (xu đã gộp vào Điểm Xanh)', () => {
+    expect('Xu' in priceTag).toBe(false);
   });
 });

@@ -13,7 +13,7 @@ import {
   type StorefrontEdit, type PickerProduct, type StorefrontCategory,
 } from '../services/storefront-api';
 import { getErrorMessage } from '../services/api';
-import { formatVnd, formatNumber } from '../utils/format';
+import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { DEFAULT_STOREFRONT_THEME_COLOR, STOREFRONT_THEME_COLORS } from '../utils/storefront-theme';
@@ -200,7 +200,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const [contentKitSlug, setContentKitSlug] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  // Nhiệm vụ "Viết lý do cho 3 sản phẩm" (1.500 xu) đọc StorefrontItem.note, nhưng builder
+  // Nhiệm vụ "Viết lý do cho 3 sản phẩm" đọc StorefrontItem.note, nhưng builder
   // chưa từng có ô nhập note — CTV không thể hoàn thành dù thanh tiến trình vẫn hiện (P0-5).
   const [notingItem, setNotingItem] = useState<{ id: string; note: string } | null>(null);
 
@@ -304,7 +304,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       </div>
 
       {/* Hồ sơ gian hàng — đúng thứ khách nhìn thấy đầu tiên, và là điều kiện của nhiệm vụ
-          "Hoàn thiện hồ sơ gian hàng" (2.000 xu). */}
+          "Hoàn thiện hồ sơ gian hàng". */}
       <div
         role="button"
         aria-label={vi.storefront.editProfile}
@@ -603,7 +603,7 @@ function StatsSection() {
   );
 }
 
-/** Section "Hành trình gian hàng" — chuỗi nhiệm vụ early-win thưởng TubuXu. */
+/** Section "Hành trình gian hàng" — chuỗi nhiệm vụ early-win thưởng Điểm Xanh. */
 function QuestSection() {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
@@ -612,7 +612,7 @@ function QuestSection() {
     mutationFn: (code: string) => claimQuest(code),
     onSuccess: (r) => {
       haptic('medium');
-      openSnackbar({ text: `+${formatNumber(r.rewardXu)} TubuXu 🎉`, type: 'success' });
+      openSnackbar({ text: `+${formatPoints(r.rewardPoints)} 🎉`, type: 'success' });
       void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -631,7 +631,7 @@ function QuestSection() {
         <Text variant="caption" tone="tertiary">{data.level}/{data.levelMax}</Text>
       </div>
       <Text variant="caption" tone="brand" as="div" style={{ marginBottom: 10 }}>
-        Đã nhận {formatNumber(data.totalEarnedXu)} TubuXu
+        Đã nhận {formatPoints(data.totalEarnedPoints)}
       </Text>
       {data.quests.map((q) => {
         // Guard chia-0: goal=0 (nhiệm vụ đã đạt sẵn) → 0/0=NaN hoặc x/0=Infinity → width lỗi. Đạt ngay = 100%.
@@ -654,7 +654,7 @@ function QuestSection() {
                   disabled={claimMut.isPending && claimMut.variables !== q.code}
                   onPress={() => claimMut.mutate(q.code)}
                 >
-                  +{formatNumber(q.rewardXu)} xu
+                  +{formatPoints(q.rewardPoints)}
                 </Button>
               ) : (
                 <Text variant="caption" tone="tertiary" style={{ whiteSpace: 'nowrap' }}>{q.progress}/{q.goal}</Text>
@@ -720,7 +720,7 @@ function PickerSheet({ collectionId, onAdded, onClose }: { collectionId: string;
 
 /**
  * Hồ sơ gian hàng: ảnh đại diện, ảnh bìa, lời nhắn. Ba trường này quyết định nhiệm vụ
- * "Hoàn thiện hồ sơ gian hàng" (2.000 xu) nhưng trước đây không có màn nào nhập được.
+ * "Hoàn thiện hồ sơ gian hàng" nhưng trước đây không có màn nào nhập được.
  */
 function ProfileSheet({
   sf,

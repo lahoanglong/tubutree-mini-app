@@ -158,8 +158,9 @@ export class AuthService {
    *    vừa xác nhận → "nâng cấp" NGAY dòng khách hiện tại (đổi zaloId/tên/avatar, giữ nguyên
    *    id) — giỏ/địa chỉ/điểm/đơn tự động đúng vì vẫn cùng 1 id, không cần gộp, không rủi ro.
    *  - Phiên hiện tại là KHÁCH nhưng zaloId (hoặc SĐT) đó đã thuộc một user THẬT khác có từ
-   *    trước → gộp dữ liệu giá trị/rủi ro cao nhất của khách (giỏ, sổ địa chỉ, số dư điểm/ví/
-   *    xu/cashback + sổ giao dịch, lịch sử đơn) vào user đó rồi trả token của user đó.
+   *    trước → gộp dữ liệu giá trị/rủi ro cao nhất của khách (giỏ, sổ địa chỉ, số dư điểm (cả lô
+   *    quy đổi không hết hạn)/ví/
+   *    cashback + sổ giao dịch, lịch sử đơn) vào user đó rồi trả token của user đó.
    *  - Phiên hiện tại KHÔNG PHẢI khách (đã là Zalo thật) nhưng Zalo trên máy giờ lại là một
    *    danh tính KHÁC — gộp 2 tài khoản THẬT với nhau là quyết định nghiệp vụ lớn (số dư ví
    *    thật, đơn hàng của CẢ HAI bên); không tự quyết trong bản vá khẩn cấp này. An toàn hơn
@@ -240,7 +241,7 @@ export class AuthService {
 
   /**
    * Gộp guest → target (target đã tồn tại từ trước, khác dòng với guest): giỏ hàng, sổ địa chỉ,
-   * đơn + yêu cầu đổi trả, gói định kỳ, lệnh rút, số dư điểm/ví/xu/cashback + sổ giao dịch, lượt
+   * đơn + yêu cầu đổi trả, gói định kỳ, lệnh rút, số dư điểm (cả lô quy đổi)/ví/cashback + sổ giao dịch, lượt
    * dùng coupon, suất flash sale, điểm danh, đánh giá, yêu thích/nhắc/theo dõi thương hiệu và (khi
    * target chưa chơi) dữ liệu game.
    *
@@ -269,8 +270,14 @@ export class AuthService {
       // chiều được). Khoá target còn xếp hàng hai khách khác nhau cùng gộp vào một target để
       // bước kiểm trùng bên dưới thấy dòng của lần gộp trước.
       const lockedGuest = await tx.$queryRaw<
-        { zaloId: string | null; pointsBalance: number; walletBalance: number; coinsBalance: number; cashbackPending: number }[]
-      >`SELECT "zaloId", "pointsBalance", "walletBalance", "coinsBalance", "cashbackPending"
+        {
+          zaloId: string | null;
+          pointsBalance: number;
+          pointsConvertedBalance: number;
+          walletBalance: number;
+          cashbackPending: number;
+        }[]
+      >`SELECT "zaloId", "pointsBalance", "pointsConvertedBalance", "walletBalance", "cashbackPending"
           FROM "users" WHERE "id" = ${guest.id} FOR UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${target.id} FOR UPDATE`;
       const g = lockedGuest[0];
@@ -331,7 +338,7 @@ export class AuthService {
           RETURNING g."dayKey"`
       ).map((r) => r.dayKey);
 
-      // 5) Sổ điểm/xu. Partial unique theo userId: điểm danh (userId, refId=ngày) WHERE
+      // 5) Sổ điểm và sổ xu cũ (chỉ còn lịch sử, xu đã quy sang Điểm Xanh). Partial unique theo userId: điểm danh (userId, refId=ngày) WHERE
       //    refType='CHECKIN' và nhiệm vụ (userId, reason) WHERE refType='QUEST'. Dòng sổ CHECKIN
       //    chỉ giữ khoá ngày khi dòng điểm danh cùng ngày đã sang target ở bước 4; ngày ở lại khách
       //    thì dòng sổ đổi khoá thành MERGED:<guestId>:<ngày>. Nếu không, target có dòng sổ ngày D
@@ -348,6 +355,12 @@ export class AuthService {
         UPDATE "coin_transactions" g SET "reason" = ${mergedPrefix}::text || g."reason"
          WHERE g."userId" = ${gid} AND g."refType" = 'QUEST'
            AND EXISTS (SELECT 1 FROM "coin_transactions" t
+                        WHERE t."userId" = ${tid} AND t."refType" = 'QUEST' AND t."reason" = g."reason")`;
+      // PD-3: sổ điểm cũng có partial unique (userId, reason) WHERE refType='QUEST'.
+      await tx.$executeRaw`
+        UPDATE "points_transactions" g SET "reason" = ${mergedPrefix}::text || g."reason"
+         WHERE g."userId" = ${gid} AND g."refType" = 'QUEST'
+           AND EXISTS (SELECT 1 FROM "points_transactions" t
                         WHERE t."userId" = ${tid} AND t."refType" = 'QUEST' AND t."reason" = g."reason")`;
       await tx.pointsTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.coinTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
@@ -438,7 +451,9 @@ export class AuthService {
         where: { id: tid },
         data: {
           pointsBalance: { increment: g.pointsBalance },
-          coinsBalance: { increment: g.coinsBalance },
+          // Dòng sổ lô CONVERTED đã theo pointsTransaction.updateMany ở bước 5, nên số dư lô đi cùng.
+          pointsConvertedBalance: { increment: g.pointsConvertedBalance },
+          // Xu đã quy sang Điểm Xanh và bị khoá ở DB (users_coins_frozen): không chuyển cột xu.
           cashbackPending: { increment: g.cashbackPending },
           ...(!target.zaloId ? { zaloId: info.zaloId } : {}),
           ...(info.name && !target.fullName ? { fullName: info.name, avatarUrl: info.avatar ?? target.avatarUrl } : {}),
@@ -455,7 +470,7 @@ export class AuthService {
         data: {
           zaloId: `${guest.zaloId}_merged_${Date.now()}`,
           pointsBalance: 0,
-          coinsBalance: 0,
+          pointsConvertedBalance: 0,
           cashbackPending: 0,
         },
       });
@@ -610,8 +625,8 @@ export class AuthService {
       tierId: user.tierId,
       referralCode: user.referralCode,
       pointsBalance: user.pointsBalance,
+      pointsConvertedBalance: user.pointsConvertedBalance,
       walletBalance: user.walletBalance,
-      coinsBalance: user.coinsBalance,
     };
   }
 

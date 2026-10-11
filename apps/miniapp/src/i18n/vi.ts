@@ -3,7 +3,7 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
-import { formatDrops, formatNumber, formatXu } from '../utils/format';
+import { formatDrops, formatNumber, formatPoints } from '../utils/format';
 
 export const vi = {
   common: {
@@ -206,7 +206,6 @@ export const vi = {
     paymentZalopay: 'ZaloPay',
     paymentBank: 'Chuyển khoản ngân hàng',
     paymentWallet: (balance: string) => `Ví Tubu (${balance})`,
-    paymentXu: (balance: string) => `TubuXu (${balance})`,
     points: 'Điểm Xanh',
     pointsUse: (n: number, value: string) => `Dùng ${n} điểm — giảm ${value}`,
     pointsAvailable: (n: number) => `Bạn đang có ${n} điểm`,
@@ -374,7 +373,7 @@ export const vi = {
     COD: 'Khi nhận hàng (COD)',
     ZALOPAY: 'ZaloPay',
     VNPAY: 'VNPay',
-    XU: 'TubuXu',
+    XU: 'Điểm Xanh (xu cũ)',
     BANK_TRANSFER: 'Chuyển khoản',
     WALLET: 'Ví Tubu',
   } as Record<string, string>,
@@ -673,7 +672,8 @@ export const vi = {
     eventTitlePlaceholder: 'Tên sự kiện',
     eventDescPlaceholder: 'Mô tả sự kiện (không bắt buộc)',
     eventCoverLabel: 'Ảnh bìa sự kiện',
-    eventRewardLabel: 'Thưởng TubuXu',
+    eventRewardLabel: 'Thưởng Điểm Xanh',
+    eventRewardHint: '1 điểm = 1.000đ, tối đa 1.000 điểm',
     createEvent: 'Tạo sự kiện',
     eventCreated: 'Đã tạo sự kiện 🎉',
     closeEvent: 'Đóng',
@@ -704,8 +704,8 @@ export const vi = {
       claimed: '✓ Đã nhận',
       locked: '🔒 Chưa mở',
       premiumHint: '🔒 Cần đăng ký định kỳ để mở phần thưởng Premium.',
-      reward: (r: { type: 'SEEDS' | 'XU'; amount: number }) =>
-        r.type === 'SEEDS' ? formatDrops(r.amount) : formatXu(r.amount),
+      reward: (r: { type: 'SEEDS' | 'POINTS'; amount: number }) =>
+        r.type === 'SEEDS' ? formatDrops(r.amount) : formatPoints(r.amount),
       claimOk: 'Đã nhận thưởng chặng mùa! 🎉',
     },
     missions: {

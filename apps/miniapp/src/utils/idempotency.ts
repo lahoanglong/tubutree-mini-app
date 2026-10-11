@@ -13,7 +13,7 @@ export function newIdempotencyKey(): string {
  * ID ngẫu nhiên mạnh cho định danh thiết bị (đăng nhập khách).
  *
  * `deviceId` là thứ DUY NHẤT xác thực tài khoản khách ở `/auth/guest` — đoán được nó là đăng
- * nhập được vào giỏ hàng/đơn/điểm/xu của khách khác. `Date.now()+Math.random()` chỉ cho vài
+ * nhập được vào giỏ hàng/đơn/điểm của khách khác. `Date.now()+Math.random()` chỉ cho vài
  * chục bit entropy và Math.random KHÔNG phải nguồn mật mã (đoán trước được state), nên ở đây
  * bắt buộc dùng crypto. Thứ tự ưu tiên: randomUUID → getRandomValues → (WebView quá cũ) mới
  * đành quay lại Math.random, nhưng trộn thêm nhiều nguồn để không tệ hơn bản cũ.

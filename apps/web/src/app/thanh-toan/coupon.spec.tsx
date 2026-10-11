@@ -16,6 +16,10 @@ const state = vi.hoisted(() => ({
   quoteError: null as Error | null,
   /** Giữ placeOrder đang bay để quan sát trạng thái "đang đặt hàng". */
   placeGate: null as Promise<void> | null,
+  /** Body mà trang gửi cho placeOrder. */
+  placedBodies: [] as Record<string, unknown>[],
+  /** Báo giá 0đ (điểm quy đổi phủ hết hàng + freeship). */
+  zeroQuote: false,
   coupons: [] as unknown[],
   /** Giữ phản hồi của applyCoupon/checkoutQuote cho tới khi test cho chạy, để quan sát trạng thái "đang tính". */
   gate: null as Promise<void> | null,
@@ -59,13 +63,20 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     state.quoteCalls += 1;
     if (state.quoteError) throw state.quoteError;
     if (state.couponCode) await state.gate;
+    if (state.zeroQuote) {
+      return {
+        subtotal: SUBTOTAL, discount: 0, pointsUsed: 300, pointsUsedConverted: 300, pointsDiscount: SUBTOTAL, shippingFee: 0,
+        total: 0, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0, pointsConvertedBalance: 300, redeemableConvertedPoints: 300,
+      };
+    }
     return {
       subtotal: SUBTOTAL, discount: discountOf(), pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000,
       total: SUBTOTAL - discountOf() + 30000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0,
     };
   },
   getPublicConfig: async () => ({ recyclingEnabled: false }),
-  placeOrder: async () => {
+  placeOrder: async (body: Record<string, unknown>) => {
+    state.placedBodies.push(body);
     await state.placeGate;
     return { code: 'TT0001', total: SUBTOTAL - discountOf() + 30000 };
   },
@@ -93,6 +104,8 @@ beforeEach(() => {
   state.applyError = null;
   state.quoteError = null;
   state.placeGate = null;
+  state.placedBodies = [];
+  state.zeroQuote = false;
   state.coupons = [COUPON];
   state.gate = null;
 });
@@ -236,6 +249,22 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     expect(btn(container, 'WELCOME30')!.disabled).toBe(true);
     release();
     await flush(4);
+  });
+
+  it('review C2: đơn 0đ gửi COD kèm quotedZeroTotal (BE từ chối nếu lúc đặt không còn 0đ); đơn có tiền không gửi cờ', async () => {
+    const paid = await mount();
+    click(btn(paid.container, 'Đặt hàng')!);
+    await flush(6);
+    expect(state.placedBodies).toHaveLength(1);
+    expect(state.placedBodies[0]).not.toHaveProperty('quotedZeroTotal');
+
+    state.zeroQuote = true;
+    state.placedBodies = [];
+    const free = await mount();
+    expect(free.container.textContent).toContain('Đơn đã được trả đủ bằng Điểm Xanh');
+    click(btn(free.container, 'Đặt hàng')!);
+    await flush(6);
+    expect(state.placedBodies[0]).toMatchObject({ paymentMethod: 'COD', quotedZeroTotal: true });
   });
 
   it('truy cập: một h1, mọi điều khiển có tên, vùng chạm 44px', async () => {

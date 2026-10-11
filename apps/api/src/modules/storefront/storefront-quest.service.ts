@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CoinsService } from '../wallet/coins.service';
+import { RewardPointsService } from '../wallet/reward-points.service';
 
 interface QuestStats {
   itemsTotal: number;
@@ -15,7 +15,8 @@ export interface QuestDef {
   title: string;
   hint: string;
   goal: number;
-  rewardXu: number;
+  /** Điểm Xanh (PD-3; trước đây 2.000/2.000/1.500/1.000/5.000 xu, quy 1.000:1 làm tròn lên). */
+  rewardPoints: number;
   /** Tiến trình hiện tại (0..goal). */
   measure: (s: QuestStats) => number;
 }
@@ -27,7 +28,7 @@ export const QUESTS: QuestDef[] = [
     title: 'Hoàn thiện hồ sơ gian hàng',
     hint: 'Thêm ảnh đại diện, ảnh bìa và lời nhắn cá nhân.',
     goal: 1,
-    rewardXu: 2000,
+    rewardPoints: 2,
     measure: (s) => (s.profileComplete ? 1 : 0),
   },
   {
@@ -35,7 +36,7 @@ export const QUESTS: QuestDef[] = [
     title: 'Thêm 5 sản phẩm',
     hint: 'Chọn 5 món bạn tâm đắc từ catalog.',
     goal: 5,
-    rewardXu: 2000,
+    rewardPoints: 2,
     measure: (s) => Math.min(s.itemsTotal, 5),
   },
   {
@@ -43,7 +44,7 @@ export const QUESTS: QuestDef[] = [
     title: 'Viết lý do cho 3 sản phẩm',
     hint: '“Vì sao mình giới thiệu” giúp khách tin hơn.',
     goal: 3,
-    rewardXu: 1500,
+    rewardPoints: 2,
     measure: (s) => Math.min(s.itemsWithNote, 3),
   },
   {
@@ -51,7 +52,7 @@ export const QUESTS: QuestDef[] = [
     title: 'Đăng gian hàng',
     hint: 'Bấm Lưu & Đăng để khách xem được.',
     goal: 1,
-    rewardXu: 1000,
+    rewardPoints: 1,
     measure: (s) => (s.isPublished ? 1 : 0),
   },
   {
@@ -59,7 +60,7 @@ export const QUESTS: QuestDef[] = [
     title: 'Đơn hàng đầu tiên',
     hint: 'Chia sẻ link — khi có đơn từ gian hàng bạn nhận thưởng!',
     goal: 1,
-    rewardXu: 5000,
+    rewardPoints: 5,
     measure: (s) => (s.firstOrder ? 1 : 0),
   },
 ];
@@ -68,7 +69,7 @@ export const QUESTS: QuestDef[] = [
 export class StorefrontQuestService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly coins: CoinsService,
+    private readonly rewards: RewardPointsService,
   ) {}
 
   private async stats(userId: string): Promise<{ sfId: string; stats: QuestStats }> {
@@ -93,21 +94,24 @@ export class StorefrontQuestService {
 
   async listQuests(userId: string) {
     const { stats } = await this.stats(userId);
-    const claimedTxns = await this.prisma.coinTransaction.findMany({
-      where: { userId, refType: 'QUEST' },
-      select: { reason: true },
-    });
-    const claimedSet = new Set(claimedTxns.map((t) => t.reason));
-    let totalEarnedXu = 0;
+    // Nhiệm vụ đã nhận bằng xu trước PD-3 nằm ở sổ xu cũ; chỉ đọc sổ điểm thì CTV thấy "chưa nhận"
+    // và bấm nhận được lần hai.
+    const where = { userId, refType: 'QUEST' };
+    const [coinClaims, pointsClaims] = await Promise.all([
+      this.prisma.coinTransaction.findMany({ where, select: { reason: true } }),
+      this.prisma.pointsTransaction.findMany({ where, select: { reason: true } }),
+    ]);
+    const claimedSet = new Set([...coinClaims, ...pointsClaims].map((t) => t.reason));
+    let totalEarnedPoints = 0;
     const quests = QUESTS.map((q) => {
       const progress = q.measure(stats);
       const done = progress >= q.goal;
       const claimed = claimedSet.has(`STOREFRONT_QUEST:${q.code}`);
-      if (claimed) totalEarnedXu += q.rewardXu;
-      return { code: q.code, title: q.title, hint: q.hint, goal: q.goal, rewardXu: q.rewardXu, progress, done, claimed };
+      if (claimed) totalEarnedPoints += q.rewardPoints;
+      return { code: q.code, title: q.title, hint: q.hint, goal: q.goal, rewardPoints: q.rewardPoints, progress, done, claimed };
     });
     const level = quests.filter((q) => q.claimed).length;
-    return { quests, totalEarnedXu, level, levelMax: QUESTS.length };
+    return { quests, totalEarnedPoints, level, levelMax: QUESTS.length };
   }
 
   async claimQuest(userId: string, code: string) {
@@ -115,9 +119,10 @@ export class StorefrontQuestService {
     if (!def) throw new BadRequestException('Nhiệm vụ không tồn tại.');
     const { sfId, stats } = await this.stats(userId);
     if (def.measure(stats) < def.goal) throw new BadRequestException('Bạn chưa hoàn thành nhiệm vụ này.');
-    // grantCoins idempotent qua partial unique index (userId, reason) WHERE refType='QUEST'.
-    await this.coins.grantCoins(userId, def.rewardXu, `STOREFRONT_QUEST:${code}`, 'QUEST', sfId);
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { coinsBalance: true } });
-    return { claimed: true, code, rewardXu: def.rewardXu, coinsBalance: user.coinsBalance };
+    // grant idempotent qua partial unique index (userId, reason) WHERE refType='QUEST' ở sổ điểm, và
+    // kiểm dòng QUEST cùng (userId, reason) ở sổ xu cũ: false = đã nhận trước đó, không cấp thêm.
+    const granted = await this.rewards.grant(userId, def.rewardPoints, `STOREFRONT_QUEST:${code}`, 'QUEST', sfId);
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { pointsBalance: true } });
+    return { claimed: true, alreadyClaimed: !granted, code, rewardPoints: def.rewardPoints, pointsBalance: user.pointsBalance };
   }
 }

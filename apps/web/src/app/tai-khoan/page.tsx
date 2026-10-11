@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { fetchOrders, formatVnd } from '@/lib/shop-client';
 import { canPayAgain, orderDetailHref, orderStatusLabel, orderStatusTone } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
+import { pointsSummary } from '@/lib/checkout-points';
 import { RecyclingStatus } from '@/components/recycling-status';
 
 export default function AccountPage() {
@@ -33,6 +34,9 @@ export default function AccountPage() {
     );
   }
 
+  // Điểm Xanh = lô thường + lô quy đổi (tiền trả trước, không hết hạn): cùng một con số với Mini App.
+  const points = pointsSummary(user);
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
       <Link href="/" className={ui.backLink}>
@@ -45,8 +49,9 @@ export default function AccountPage() {
         <div className="mt-1 text-sm text-forest-100">Mã giới thiệu: {user.referralCode}</div>
         <div className="mt-3 flex gap-6">
           <div>
-            <div className="text-xl font-bold">{user.pointsBalance}</div>
+            <div className="text-xl font-bold">{points.total.toLocaleString('vi-VN')}</div>
             <div className="text-xs text-forest-100">Điểm Xanh</div>
+            {points.convertedNote && <div className="text-xs text-forest-100">{points.convertedNote}</div>}
           </div>
           <div>
             <div className="text-xl font-bold">{formatVnd(user.walletBalance)}</div>

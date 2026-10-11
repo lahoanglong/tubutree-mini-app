@@ -18,6 +18,10 @@ import { reminderFallbackPath } from '../components/reorder/reorder-reminder';
  * trong danh sách) rơi về nhãn chung "Thông báo".
  */
 describe('notificationMeta', () => {
+  it('XU_CONVERTED (báo xu đã thành Điểm Xanh) → nhóm Điểm Xanh', () => {
+    expect(notificationMeta('XU_CONVERTED').title).toBe('Điểm Xanh');
+  });
+
   it.each([
     'DEALER_BONUS_PAID',
     'DEALER_REWARD_CLAIM_NEW',
@@ -113,6 +117,7 @@ describe('notificationAction — nút theo loại tin, không dò nội dung (C-
     ['VOUCHER_EXPIRING', '/loyalty'],
     ['BIRTHDAY_VOUCHER', '/loyalty'],
     ['POINTS_EXPIRING', '/loyalty'],
+    ['XU_CONVERTED', '/loyalty'],
     ['CASHBACK_PAID', '/wallet'],
     ['SUBSCRIPTION_PAUSED', '/subscriptions'],
     ['STOREFRONT_TRENDING_PRODUCTS', '/storefront'],

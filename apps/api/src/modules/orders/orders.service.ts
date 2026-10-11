@@ -174,7 +174,7 @@ export class OrdersService {
           actorId: userId,
         },
       });
-      // Hoàn ví/xu + restock + release flash quota — logic dùng chung với admin.reviewReturn/
+      // Hoàn ví/Điểm Xanh + restock + release flash quota — logic dùng chung với admin.reviewReturn/
       // OrderStatusService (xem order-reversal.service.ts), tránh chép tay lệch nhau (P0-4
       // trong docs/2026-09-08-review-progress.md). Hoàn tiền quyết bằng guard PAID→REFUNDED
       // trong reverseFinancials (DB quyết, không phải paymentStatus của bản đọc).

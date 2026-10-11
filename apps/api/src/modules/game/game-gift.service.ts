@@ -99,7 +99,7 @@ export class GameGiftService {
 
     // Cộng tank người nhận ATOMIC (upsert increment) + clamp cap guarded — chống lost-update khi
     // 2 người tặng cùng lúc / người nhận đồng thời tự cộng nước qua spin/checkin/quiz (pattern cũ
-    // đọc-rồi-ghi-tuyệt-đối sẽ đè mất phần cộng của thao tác kia dù bên gửi đã bị trừ xu thật).
+    // đọc-rồi-ghi-tuyệt-đối sẽ đè mất phần cộng của thao tác kia dù bên gửi đã bị trừ nước thật).
     const cap = await this.config.get<number>('game.tank_capacity', 500);
     const upserted = await this.prisma.gameProfile.upsert({
       where: { userId: recipientId },

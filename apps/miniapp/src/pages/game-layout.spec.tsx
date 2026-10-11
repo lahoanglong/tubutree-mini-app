@@ -78,7 +78,7 @@ import { vi as viText } from '../i18n/vi';
 const GARDEN = {
   plots: [{ id: 'pa', slot: 2, isHome: false, treeType: 'Mận', speciesId: 's1', progress: 5, target: 20, treeStage: 1, treesPlanted: 1, treeHealth: 'HEALTHY' }],
   maxPlots: 3,
-  nextUnlock: { slot: 3, seedCost: 1_200, xuCost: 65_000 },
+  nextUnlock: { slot: 3, seedCost: 1_200 },
 };
 
 function renderPage() {
@@ -105,7 +105,7 @@ beforeEach(() => {
     lastDewAt: null,
     lastCheckInAt: null,
     streakFreezeCost: 80,
-    treeXuPrice: 65_000,
+    treePointsPrice: 50,
     streakRepairable: false,
     ecoImpact: { progress: 10, target: 50, treeType: 'Sồi', treesPlanted: 3 },
   });

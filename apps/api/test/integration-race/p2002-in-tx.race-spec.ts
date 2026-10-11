@@ -2,7 +2,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
-import { CoinsService } from '../../src/modules/wallet/coins.service';
+import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
@@ -15,18 +15,18 @@ import { createOrder, createUser, randCode, summarize, warmPool } from './helper
 describe('P2002 inside interactive transactions (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
-  let coins: CoinsService;
+  let rewards: RewardPointsService;
   let coupons: CouponsService;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule],
-      providers: [SystemConfigService, CoinsService, CouponsService],
+      providers: [SystemConfigService, RewardPointsService, CouponsService],
     }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
-    coins = moduleRef.get(CoinsService);
+    rewards = moduleRef.get(RewardPointsService);
     coupons = moduleRef.get(CouponsService);
   });
 
@@ -49,22 +49,23 @@ describe('P2002 inside interactive transactions (real Postgres)', () => {
     });
   }
 
-  describe('CoinsService.grantCoins', () => {
+  describe('RewardPointsService.grant (PD-3, thay CoinsService.grantCoins)', () => {
+    const pointsRows = (userId: string, reason: string) => prisma.pointsTransaction.count({ where: { userId, reason } });
+
     it('grant trùng reason trong tx của caller → tx vẫn dùng được, chỉ cộng 1 lần', async () => {
       const user = await createUser(prisma);
       const reason = `COMMUNITY_POST:${randCode(8)}`;
-      await coins.grantCoins(user.id, 200, reason, 'COMMUNITY', 'p1');
+      await rewards.grant(user.id, 2, reason, 'COMMUNITY', 'p1');
 
       await prisma.$transaction(async (tx) => {
-        await coins.grantCoins(user.id, 200, reason, 'COMMUNITY', 'p1', tx);
-        await tx.user.update({ where: { id: user.id }, data: { pointsBalance: { increment: 1 } } });
+        expect(await rewards.grant(user.id, 2, reason, 'COMMUNITY', 'p1', tx)).toBe(false);
+        await tx.user.update({ where: { id: user.id }, data: { walletBalance: { increment: 1 } } });
       });
 
       const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
-      const rows = await prisma.coinTransaction.count({ where: { userId: user.id, reason } });
-      expect(rows).toBe(1);
-      expect(after.coinsBalance).toBe(200);
-      expect(after.pointsBalance).toBe(1);
+      expect(await pointsRows(user.id, reason)).toBe(1);
+      expect(after.pointsBalance).toBe(2);
+      expect(after.walletBalance).toBe(1);
     });
 
     it('10 grant trùng song song trong tx Serializable của caller → không 500, cộng đúng 1 lần', async () => {
@@ -76,8 +77,8 @@ describe('P2002 inside interactive transactions (real Postgres)', () => {
           prisma
             .$transaction(
               async (tx) => {
-                await coins.grantCoins(user.id, 150, reason, 'COMMUNITY', 'a1', tx);
-                await tx.user.update({ where: { id: user.id }, data: { pointsBalance: { increment: 1 } } });
+                await rewards.grant(user.id, 1, reason, 'COMMUNITY', 'a1', tx);
+                await tx.user.update({ where: { id: user.id }, data: { walletBalance: { increment: 1 } } });
               },
               { isolationLevel: 'Serializable' },
             )
@@ -91,38 +92,36 @@ describe('P2002 inside interactive transactions (real Postgres)', () => {
       );
       const s = summarize(results);
       const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
-      const rows = await prisma.coinTransaction.count({ where: { userId: user.id, reason } });
       console.log('[grant-tx] fulfilled=%d errors=%j', s.fulfilled.length, [...new Set(s.errors)]);
 
       expect(s.rejected).toHaveLength(0);
-      expect(rows).toBe(1);
-      expect(after.coinsBalance).toBe(150);
+      expect(await pointsRows(user.id, reason)).toBe(1);
+      expect(after.pointsBalance).toBe(1);
     });
 
     it('10 grant trùng song song không truyền tx → không lỗi, cộng đúng 1 lần', async () => {
       const user = await createUser(prisma);
-      const reason = `REFERRAL_CASHBACK:${randCode(8)}`;
+      const reason = `REFERRAL_ORDER2:${randCode(8)}`;
       const results = await Promise.allSettled(
-        Array.from({ length: 10 }, () => coins.grantCoins(user.id, 5000, reason, 'REFERRAL', 'r1')),
+        Array.from({ length: 10 }, () => rewards.grant(user.id, 5, reason, 'REFERRAL', 'o1:o2')),
       );
       const s = summarize(results);
       const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
-      const rows = await prisma.coinTransaction.count({ where: { userId: user.id, reason } });
       console.log('[grant] fulfilled=%d errors=%j', s.fulfilled.length, [...new Set(s.errors)]);
 
       expect(s.rejected).toHaveLength(0);
-      expect(rows).toBe(1);
-      expect(after.coinsBalance).toBe(5000);
+      expect(s.fulfilled.filter((r) => r.value === true)).toHaveLength(1);
+      expect(await pointsRows(user.id, reason)).toBe(1);
+      expect(after.pointsBalance).toBe(5);
     });
 
     it('reason ngoài các index idempotent vẫn cộng mỗi lần gọi', async () => {
       const user = await createUser(prisma);
-      await coins.grantCoins(user.id, 100, 'ADMIN_ADJUST', 'ADMIN');
-      await coins.grantCoins(user.id, 100, 'ADMIN_ADJUST', 'ADMIN');
+      await rewards.grant(user.id, 1, 'ADMIN_ADJUST', 'ADMIN');
+      await rewards.grant(user.id, 1, 'ADMIN_ADJUST', 'ADMIN');
       const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
-      const rows = await prisma.coinTransaction.count({ where: { userId: user.id } });
-      expect(rows).toBe(2);
-      expect(after.coinsBalance).toBe(200);
+      expect(await prisma.pointsTransaction.count({ where: { userId: user.id } })).toBe(2);
+      expect(after.pointsBalance).toBe(2);
     });
   });
 

@@ -53,7 +53,7 @@ function loginResponse(id: string, zaloId?: string): LoginResponse {
       referralCode: 'REF1',
       pointsBalance: 0,
       walletBalance: 0,
-      coinsBalance: 0,
+      pointsConvertedBalance: 0,
     } as AuthUser,
   };
 }

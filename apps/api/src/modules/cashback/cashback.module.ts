@@ -8,7 +8,7 @@ import { AccessTradeProvider } from './providers/access-trade.provider';
 import { CASHBACK_PROVIDERS } from './providers/cashback-provider.interface';
 
 @Module({
-  imports: [WalletModule], // CoinsService — thưởng xu giới thiệu khi cashback CONFIRMED
+  imports: [WalletModule],
   controllers: [CashbackController, CashbackAdminController],
   providers: [
     CashbackService,

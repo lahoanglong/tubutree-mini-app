@@ -5,7 +5,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
-import { CoinsService } from '../wallet/coins.service';
+import { applyPointsDelta } from '../loyalty/points-ledger';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
 import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -38,10 +39,10 @@ export class GameService {
     @Optional() private readonly community?: GameCommunityService,
     // Optional: sổ tay loài Phase 3. Thu hoạch → sưu tập 1 loài.
     @Optional() private readonly collection?: GameCollectionService,
-    // Optional: ví TubuXu — mua nước/cây bằng xu. Tests dựng GameService không cần coins thì bỏ qua.
-    @Optional() private readonly coins?: CoinsService,
     // Optional: bảng tin cộng đồng §6.14.12 — auto-post thành tích khi thu hoạch.
     @Optional() private readonly feed?: CommunityFeedService,
+    // Optional như các dịch vụ trên để test dựng GameService ít tham số; riêng buyTree BẮT BUỘC có (xem đó).
+    @Optional() private readonly loyalty?: LoyaltyService,
   ) {}
 
   // ── Profile ────────────────────────────────────────
@@ -64,12 +65,11 @@ export class GameService {
     const streakRepairCost = await this.config.get<number>('game.streak_repair_cost', 150);
     const windowH = await this.config.get<number>('game.streak_repair_window_hours', 48);
     const cooldownD = await this.config.get<number>('game.streak_repair_cooldown_days', 30);
-    // Giá các món tiêu xu — FE trước đây chép cứng (80💧 đóng băng chuỗi, 1 xu/giọt, 50.000 xu
-    // một cây): admin đổi config thì nhãn trên nút vẫn hiện giá cũ, bấm xong mới biết trừ khác.
-    const [streakFreezeCost, xuPerSeed, treeXuPrice, tankCapacity] = await Promise.all([
+    // Giá các món — FE trước đây chép cứng (80💧 đóng băng chuỗi, giá góp quỹ trồng cây): admin đổi
+    // config thì nhãn trên nút vẫn hiện giá cũ, bấm xong mới biết trừ khác.
+    const [streakFreezeCost, treePointsPrice, tankCapacity] = await Promise.all([
       this.config.get<number>('game.streak_freeze_cost', 80),
-      this.config.get<number>('game.xu_per_seed', 1),
-      this.config.get<number>('game.tree_xu_price', 50000),
+      this.config.get<number>('game.tree_points_price', 50),
       this.config.get<number>('game.tank_capacity', 500),
     ]);
     const streakRepairable =
@@ -84,8 +84,7 @@ export class GameService {
       streakRepairCost,
       streakRepairable,
       streakFreezeCost,
-      xuPerSeed,
-      treeXuPrice,
+      treePointsPrice,
       tankCapacity,
     };
   }
@@ -191,11 +190,11 @@ export class GameService {
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
     const harvestMinOrder = await harvestCouponMinOrder(this.config, harvestAmount);
     const deathDays = await this.config.get<number>('game.death_days', 7);
-    // Trần cứng số coupon thu hoạch/ngày — ĐỘC LẬP với giá xu/giọt nước trong config.
-    // Xu mua nước (mặc định 1 xu/giọt ≈ 0,83đ quy đổi) rẻ hơn nhiều lần giá trị coupon
-    // (mặc định 30.000đ): không có trần thì vòng mua-nước→tưới→thu-hoạch in coupon vô hạn
-    // (P0-1, docs/2026-09-08-review-progress.md). Đặt trần bằng CODE thay vì chỉ dựa vào
-    // admin cấu hình đúng giá — admin sửa nhầm config không được vô tình tắt lưới an toàn.
+    // Trần cứng số coupon thu hoạch/ngày — ĐỘC LẬP với giá giọt nước trong config.
+    // Nước rẻ hơn nhiều lần giá trị coupon (mặc định 30.000đ): không có trần thì vòng
+    // kiếm-nước→tưới→thu-hoạch in coupon vô hạn (P0-1, docs/2026-09-08-review-progress.md; lúc đó nước
+    // còn mua được bằng xu, nay đã ngừng). Đặt trần bằng CODE thay vì chỉ dựa vào admin cấu hình đúng
+    // giá — admin sửa nhầm config không được vô tình tắt lưới an toàn.
     const dailyCap = await this.config.get<number>('game.harvest_coupon_daily_cap', 3);
     const dayStart = startOfVnDay();
 
@@ -290,8 +289,8 @@ export class GameService {
       );
     } catch (err) {
       // P2034 = Postgres serialization failure (2 request song song đụng trần coupon/tồn kho
-      // nước) — KHÔNG nuốt lỗi như rewardWithDailyCap (đó là bonus best-effort, còn ở đây nước/
-      // xu là tài nguyên thật): báo lỗi rõ để client thử lại, giao dịch đã tự rollback nguyên vẹn.
+      // nước) — KHÔNG nuốt lỗi như rewardWithDailyCap (đó là bonus best-effort, còn ở đây nước
+      // là tài nguyên thật): báo lỗi rõ để client thử lại, giao dịch đã tự rollback nguyên vẹn.
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
         throw new BadRequestException('Hệ thống đang bận, vui lòng thử tưới lại.');
       }
@@ -350,26 +349,60 @@ export class GameService {
     return certificateCode;
   }
 
-  // ── Mua bằng TubuXu (sink tiêu xu) ─────────────────
+  // ── Mua nước / góp quỹ trồng cây ─────────────────
   /**
    * Đã ngừng (C-009, quyết định Q-02): xu mua nước rẻ hơn rất nhiều so với coupon thu hoạch nên
    * Ví → xu → 💧 → coupon thành vòng in tiền. Route vẫn giữ để bản miniapp cũ nhận lỗi đọc được
    * thay vì 404.
    */
   async buySeeds(_userId: string, _seeds: number): Promise<never> {
-    throw new GoneException('Tính năng mua giọt nước bằng xu đã ngừng. Hãy điểm danh, làm quiz hoặc nhận sương sớm để có thêm nước.');
+    throw new GoneException('Tính năng mua giọt nước đã ngừng. Hãy điểm danh, làm quiz hoặc nhận sương sớm để có thêm nước.');
   }
 
-  /** Góp 1 cây vào quỹ trồng cây (PlantedTree ghi nhận khoản góp, không hứa cây cụ thể) bằng TubuXu. */
+  /**
+   * Góp 1 cây vào quỹ trồng cây (PlantedTree ghi nhận khoản góp, không hứa cây cụ thể) bằng Điểm Xanh
+   * (PD-3, OQ-5): tiêu lô STANDARD trước (lô có hạn), thiếu thì lấy lô quy đổi. Không sinh giá trị ngược
+   * lại nên lô quy đổi không thể đổi ra thứ đáng hơn số điểm đã bỏ.
+   * Lô STANDARD chỉ tiêu phần DÙNG ĐƯỢC (số dư − lockedOrderPoints, cùng luật checkout/đổi voucher): điểm đơn
+   * vừa giao còn trong hạn đổi/trả mà bị tiêu ở đây thì trả đơn sẽ đẩy số dư thường xuống âm.
+   */
   async buyTree(userId: string) {
-    if (!this.coins) throw new BadRequestException('Tính năng góp quỹ trồng cây chưa khả dụng.');
-    const price = await this.config.get<number>('game.tree_xu_price', 50000);
+    if (!this.loyalty) throw new Error('GameService.buyTree cần LoyaltyService để đọc điểm đang khoá');
+    const loyalty = this.loyalty;
+    const price = await this.config.get<number>('game.tree_points_price', 50);
+    if (!Number.isSafeInteger(price) || price <= 0) {
+      throw new BadRequestException('Tính năng góp quỹ trồng cây chưa khả dụng.');
+    }
     const certificateCode = `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
-    await this.prisma.$transaction(async (tx) => {
-      await this.coins!.spendCoins(userId, price, `GAME_BUY_TREE:${certificateCode}`, 'GAME', undefined, tx);
+    const reason = `GAME_BUY_TREE:${certificateCode}`;
+    const notEnough = `Cần ${price} Điểm Xanh để góp quỹ trồng cây.`;
+    const usedConverted = await this.prisma.$transaction(async (tx) => {
+      // Khoá dòng user rồi mới chia lô: hai lượt góp song song không cùng đọc một số dư.
+      const [bal] = await tx.$queryRaw<{ pointsBalance: number; pointsConvertedBalance: number }[]>`
+        SELECT "pointsBalance", "pointsConvertedBalance" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx);
+      const std = Math.min(price, Math.max(0, (bal?.pointsBalance ?? 0) - lock.locked));
+      const conv = price - std;
+      if (conv > Math.max(0, bal?.pointsConvertedBalance ?? 0)) {
+        throw new BadRequestException(
+          lock.locked > 0 ? `${notEnough} Một phần điểm chưa dùng được: ${loyalty.lockedPointsMessage(lock)}.` : notEnough,
+        );
+      }
+      for (const [lot, amount] of [['STANDARD', std], ['CONVERTED', conv]] as const) {
+        if (amount <= 0) continue;
+        const r = await applyPointsDelta(tx, { userId, delta: -amount, lot, reason, refType: 'GAME' });
+        if (!r.applied) throw new BadRequestException(notEnough);
+      }
       await tx.plantedTree.create({ data: { userId, treeType: DEFAULT_TREE_TYPE, certificateCode } });
+      return conv;
     });
-    return { certificateCode, treeType: DEFAULT_TREE_TYPE, cost: price };
+    return {
+      certificateCode,
+      treeType: DEFAULT_TREE_TYPE,
+      cost: price,
+      pointsUsed: price,
+      pointsUsedConverted: usedConverted,
+    };
   }
 
   /** Danh sách cây tôi đã góp vào quỹ trồng cây + mã ghi nhận (§6.7.7). */

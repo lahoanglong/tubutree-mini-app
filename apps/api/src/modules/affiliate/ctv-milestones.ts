@@ -13,7 +13,8 @@
  *
  * Bậc chỉ là DANH HIỆU theo doanh số — KHÔNG có "+X% bonus hoa hồng": chưa có luồng nào trả
  * khoản đó (không cộng lúc tạo commission, không có cron quyết toán) nên không được hứa trên UI.
- * Phần thưởng thật duy nhất của bậc là thưởng mốc TubuXu cùng ngưỡng bên dưới.
+ * Phần thưởng thật duy nhất của bậc là thưởng mốc Điểm Xanh cùng ngưỡng bên dưới (PD-3: 1.000 xu cũ =
+ * 1 điểm; điểm thưởng là lô STANDARD có hạn, chịu trần đổi điểm mỗi đơn).
  */
 
 /** Chênh lệch giờ VN (UTC+7) — mirror DealerService.VN_OFFSET / staff time.util. */
@@ -69,7 +70,8 @@ export interface CtvMilestone {
   id: string;
   title: string;
   threshold: number;
-  rewardXu: number;
+  /** Điểm Xanh (1 điểm = 1.000đ khi đổi). Trước PD-3 là xu: 50.000 / 200.000 / 600.000 / 2.000.000. */
+  rewardPoints: number;
   description: string;
 }
 
@@ -78,28 +80,28 @@ export const CTV_MONTHLY_MILESTONES: CtvMilestone[] = [
     id: 'milestone-3m',
     title: 'Mốc Khởi Động 3 Triệu',
     threshold: 3_000_000,
-    rewardXu: 50_000,
+    rewardPoints: 50,
     description: 'Đạt 3.000.000đ doanh số đã chốt trong tháng',
   },
   {
     id: 'milestone-10m',
     title: 'Mốc Tăng Tốc 10 Triệu',
     threshold: 10_000_000,
-    rewardXu: 200_000,
+    rewardPoints: 200,
     description: 'Đạt 10.000.000đ doanh số đã chốt trong tháng',
   },
   {
     id: 'milestone-30m',
     title: 'Mốc Bứt Phá 30 Triệu',
     threshold: 30_000_000,
-    rewardXu: 600_000,
+    rewardPoints: 600,
     description: 'Đạt 30.000.000đ doanh số đã chốt trong tháng',
   },
   {
     id: 'milestone-80m',
     title: 'Mốc Đỉnh Cao 80 Triệu',
     threshold: 80_000_000,
-    rewardXu: 2_000_000,
+    rewardPoints: 2_000,
     description: 'Đạt 80.000.000đ doanh số đã chốt trong tháng',
   },
 ];
@@ -119,11 +121,11 @@ export function tierForRevenue(revenue: number) {
   };
 }
 
-/** Bảng 5 bậc kèm thưởng mốc xu cùng ngưỡng (null nếu bậc không có mốc, vd Tân binh). */
+/** Bảng 5 bậc kèm thưởng mốc Điểm Xanh cùng ngưỡng (null nếu bậc không có mốc, vd Tân binh). */
 export function tiersWithRewards() {
   return CTV_TIERS.map((t) => ({
     ...t,
-    milestoneRewardXu: CTV_MONTHLY_MILESTONES.find((m) => m.threshold === t.min)?.rewardXu ?? null,
+    milestoneRewardPoints: CTV_MONTHLY_MILESTONES.find((m) => m.threshold === t.min)?.rewardPoints ?? null,
   }));
 }
 

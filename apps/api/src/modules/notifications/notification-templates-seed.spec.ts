@@ -81,6 +81,17 @@ describe('seed mẫu thông báo', () => {
     expect(used.filter((c) => !byCode.has(c))).toEqual([]);
   });
 
+  it('PD-3 Q-26: không mẫu tin nào nhắc TubuXu hay đổi sang xu (tính năng đã gộp vào Điểm Xanh, đổi Ví → xu trả 410)', () => {
+    // Chỉ cụm "xu cũ" được phép (nói về số dư đã quy đổi), cùng luật với guard chữ ở miniapp/web. Tên biến {{xu}}
+    // là dữ liệu điền vào, không phải chữ khách đọc.
+    const withoutLegacy = (body: string) => body.replace(/\{\{\w+\}\}/gu, '').replace(/xu cũ/giu, '');
+    expect(templates.filter((t) => /tubu ?xu|(?<![\p{L}_])xu(?![\p{L}_])/iu.test(withoutLegacy(t.bodyTemplate))).map((t) => t.code)).toEqual([]);
+  });
+
+  it('PD-3 OQ-10: "xu cũ" chỉ xuất hiện ở mẫu báo quy đổi XU_CONVERTED', () => {
+    expect(templates.filter((t) => /xu cũ/iu.test(t.bodyTemplate)).map((t) => t.code)).toEqual(['XU_CONVERTED']);
+  });
+
   it('id và code không trùng nhau (upsert theo id, code là unique ở DB)', () => {
     expect(new Set(templates.map((t) => t.id)).size).toBe(templates.length);
     expect(byCode.size).toBe(templates.length);
@@ -110,7 +121,19 @@ describe('seed mẫu thông báo', () => {
 
   describe('mẫu tin gói định kỳ + đơn thứ 2 (C-015, C-017): migration và seed nói cùng một câu', () => {
     const MIGRATIONS_DIR = join(__dirname, '../../../prisma/migrations');
-    const CODES = ['SUBSCRIPTION_PAUSED', 'SUBSCRIPTION_ORDER_AWAITING_PAYMENT', 'SECOND_ORDER_VOUCHER', 'REVIEW_REQUEST'];
+    const CODES = [
+      'SUBSCRIPTION_PAUSED',
+      'SUBSCRIPTION_ORDER_AWAITING_PAYMENT',
+      'SECOND_ORDER_VOUCHER',
+      'REVIEW_REQUEST',
+      'RETURN_APPROVED_POINTS',
+      'RETURN_APPROVED_WALLET_POINTS',
+      // PD-3 Q-26: hai mẫu từng nhắc TubuXu; prod chỉ đổi được qua migration UPDATE có điều kiện.
+      'CASHBACK_PAID',
+      'COMMUNITY_BEST_ANSWER',
+      // PD-3 OQ-10: mẫu báo khách xu đã thành Điểm Xanh (migration chèn cùng lời với seed).
+      'XU_CONVERTED',
+    ];
 
     /** Lời tin của từng mã sau khi áp lần lượt mọi migration (INSERT rồi UPDATE theo thứ tự thư mục). */
     function bodiesAfterMigrations(): Map<string, string> {
@@ -165,6 +188,30 @@ describe('seed mẫu thông báo', () => {
       const { svc, bodyOf } = makeSvc('ORDER_DELIVERED');
       await svc.notify('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1', points_note: ' Bạn được cộng 12 Điểm Xanh.' });
       expect(bodyOf()).toBe('Đơn TUBU1 đã giao thành công. Bạn được cộng 12 Điểm Xanh. Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿');
+    });
+
+    it('RETURN_APPROVED_POINTS: nói đã hoàn bao nhiêu Điểm Xanh và KHÔNG nhắc Ví (xu cũ / điểm quy đổi không ra tiền)', async () => {
+      const { svc, bodyOf } = makeSvc('RETURN_APPROVED_POINTS');
+      await svc.notify('u1', 'RETURN_APPROVED_POINTS', { order_code: 'TUBU1', points: '121' });
+      expect(bodyOf()).toBe('Yêu cầu đổi/trả đơn TUBU1 đã được duyệt. Đã hoàn 121 Điểm Xanh vào tài khoản của bạn 🌿');
+      expect(bodyOf()).not.toContain('Ví');
+    });
+
+    it('RETURN_APPROVED_WALLET_POINTS: nêu cả tiền vào Ví Tubu lẫn số Điểm Xanh', async () => {
+      const { svc, bodyOf } = makeSvc('RETURN_APPROVED_WALLET_POINTS');
+      await svc.notify('u1', 'RETURN_APPROVED_WALLET_POINTS', { order_code: 'TUBU1', points: '150' });
+      expect(bodyOf()).toBe(
+        'Yêu cầu đổi/trả đơn TUBU1 đã được duyệt. Tiền đã hoàn vào Ví Tubu và 150 Điểm Xanh đã hoàn vào tài khoản của bạn 🌿',
+      );
+      expect(bodyOf()).not.toContain('{{');
+    });
+
+    it('XU_CONVERTED: nêu số xu cũ và số Điểm Xanh nhận được, nói rõ không hết hạn và dùng tới 100% giá trị hàng', async () => {
+      const { svc, bodyOf } = makeSvc('XU_CONVERTED');
+      await svc.notify('u1', 'XU_CONVERTED', { xu: '123.456', points: '124' });
+      expect(bodyOf()).toBe('123.456 xu cũ của bạn đã thành 124 Điểm Xanh không hết hạn, dùng trả tới 100% giá trị hàng.');
+      expect(bodyOf()).not.toContain('{{');
+      expect(bodyOf()).not.toMatch(/tubu ?xu/i);
     });
 
     it('WELCOME_VOUCHER: nói rõ đơn tối thiểu và dùng thuật ngữ "mã giảm giá" (Q-26)', async () => {

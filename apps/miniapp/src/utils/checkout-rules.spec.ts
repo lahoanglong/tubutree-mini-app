@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   checkoutPoints,
   isInvoiceValid,
-  paymentUnavailableReason,
+  walletUnavailableReason,
   pointsEarnLabel,
   pointsUseLabel,
   shouldFallbackToCod,
+  zeroTotalNote,
   type InvoiceInfo,
 } from './checkout-rules';
 
@@ -39,20 +40,20 @@ describe('isInvoiceValid', () => {
 
 describe('shouldFallbackToCod', () => {
   it('WALLET không đủ số dư trả tổng đơn → true', () => {
-    expect(shouldFallbackToCod('WALLET', 50_000, 0, 100_000)).toBe(true);
+    expect(shouldFallbackToCod('WALLET', 50_000, 100_000)).toBe(true);
   });
 
   it('WALLET đủ số dư → false', () => {
-    expect(shouldFallbackToCod('WALLET', 200_000, 0, 100_000)).toBe(false);
-  });
-
-  it('XU không đủ số dư trả tổng đơn → true', () => {
-    expect(shouldFallbackToCod('XU', 0, 50_000, 100_000)).toBe(true);
+    expect(shouldFallbackToCod('WALLET', 200_000, 100_000)).toBe(false);
   });
 
   it('COD hoặc BANK_TRANSFER không bao giờ tự fallback (không dùng số dư)', () => {
-    expect(shouldFallbackToCod('COD', 0, 0, 100_000)).toBe(false);
-    expect(shouldFallbackToCod('BANK_TRANSFER', 0, 0, 100_000)).toBe(false);
+    expect(shouldFallbackToCod('COD', 0, 100_000)).toBe(false);
+    expect(shouldFallbackToCod('BANK_TRANSFER', 0, 100_000)).toBe(false);
+  });
+
+  it('XU không còn là phương thức thanh toán (PD-3): không có nhánh riêng, không tự rơi về COD', () => {
+    expect(shouldFallbackToCod('XU', 0, 100_000)).toBe(false);
   });
 });
 
@@ -66,6 +67,8 @@ describe('checkoutPoints', () => {
       usable: 200,
       label: 'Dùng được 200/500 điểm',
       lockNote: '300 điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được',
+      convertedNote: null,
+      converted: 0,
     });
   });
 
@@ -75,6 +78,8 @@ describe('checkoutPoints', () => {
       usable: 120,
       label: 'Bạn đang có 120 điểm',
       lockNote: null,
+      convertedNote: null,
+      converted: 0,
     });
   });
 
@@ -84,6 +89,8 @@ describe('checkoutPoints', () => {
       usable: 0,
       label: '80 điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được',
       lockNote: null,
+      convertedNote: null,
+      converted: 0,
     });
   });
 
@@ -97,7 +104,53 @@ describe('checkoutPoints', () => {
   });
 
   it('không có điểm nào → usable 0, label null (màn hình hiện lời mời tích điểm)', () => {
-    expect(checkoutPoints({ pointsBalance: 0, redeemablePoints: 0 }, 0)).toEqual({ balance: 0, usable: 0, label: null, lockNote: null });
+    expect(checkoutPoints({ pointsBalance: 0, redeemablePoints: 0 }, 0)).toEqual({
+      balance: 0,
+      usable: 0,
+      label: null,
+      lockNote: null,
+      convertedNote: null,
+      converted: 0,
+    });
+  });
+});
+
+// PD-3: Điểm Xanh có hai lô. Lô quy đổi từ xu cũ không hết hạn, không bị khoá theo đơn còn đổi/trả và được
+// trả tới 100% giá trị hàng ở thanh toán, nên khách thấy MỘT con số nhưng phải được nói rõ phần không hết hạn.
+describe('checkoutPoints — điểm quy đổi không hết hạn (PD-3)', () => {
+  it('chỉ có lô quy đổi → dùng được hết, kèm ghi chú không hết hạn và trả tới 100% giá trị hàng', () => {
+    const r = checkoutPoints({ pointsBalance: 0, pointsConvertedBalance: 1_000, lockedPoints: 0, redeemablePoints: 0 }, 0);
+    expect(r).toEqual({
+      balance: 1_000,
+      converted: 1_000,
+      usable: 1_000,
+      label: 'Bạn đang có 1.000 điểm',
+      lockNote: null,
+      convertedNote: 'trong đó 1.000 điểm không hết hạn, trả tới 100% giá trị hàng',
+    });
+  });
+
+  it('lô thường bị khoá một phần: lô quy đổi vẫn dùng được (không bị khoá), tổng và phần khoá tách đúng', () => {
+    const r = checkoutPoints({ pointsBalance: 500, pointsConvertedBalance: 100, lockedPoints: 300, redeemablePoints: 200 }, 0);
+    expect(r.balance).toBe(600);
+    expect(r.usable).toBe(300);
+    expect(r.label).toBe('Dùng được 300/600 điểm');
+    expect(r.lockNote).toBe('300 điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được');
+    expect(r.convertedNote).toBe('trong đó 100 điểm không hết hạn, trả tới 100% giá trị hàng');
+  });
+
+  it('toàn bộ lô thường đang khoá nhưng còn lô quy đổi → usable = lô quy đổi, công tắc dùng điểm bật được', () => {
+    const r = checkoutPoints({ pointsBalance: 80, pointsConvertedBalance: 20, lockedPoints: 80, redeemablePoints: 0 }, 0);
+    expect(r.usable).toBe(20);
+    expect(r.label).toBe('Dùng được 20/100 điểm');
+  });
+
+  it('chưa tải overview → lấy lô thường và lô quy đổi từ hồ sơ đăng nhập', () => {
+    expect(checkoutPoints(undefined, 70, 30)).toMatchObject({ balance: 100, converted: 30, usable: 100 });
+  });
+
+  it('API cũ chưa trả lô quy đổi → như trước, không ghi chú', () => {
+    expect(checkoutPoints({ pointsBalance: 120, redeemablePoints: 120 }, 0).convertedNote).toBeNull();
   });
 });
 
@@ -119,25 +172,34 @@ describe('checkoutPoints — số ≥ 1.000 có dấu phân cách nghìn (C-080)
   });
 });
 
-describe('paymentUnavailableReason (C-080)', () => {
+describe('walletUnavailableReason (C-080)', () => {
   it('Ví Tubu thiếu → nói rõ vì sao mờ và cần thêm bao nhiêu', () => {
-    expect(paymentUnavailableReason('WALLET', 130_000, 798_000)).toBe('Số dư chưa đủ — cần thêm 668.000đ');
-  });
-
-  it('TubuXu thiếu → cần thêm bao nhiêu xu (1 xu = 1đ như BE kiểm)', () => {
-    expect(paymentUnavailableReason('XU', 149_000, 798_000)).toBe('Số dư chưa đủ — cần thêm 649.000 xu');
+    expect(walletUnavailableReason(130_000, 798_000)).toBe('Số dư chưa đủ — cần thêm 668.000đ');
   });
 
   it('đủ số dư (kể cả bằng đúng tổng đơn) → null, không có lý do', () => {
-    expect(paymentUnavailableReason('WALLET', 798_000, 798_000)).toBeNull();
-    expect(paymentUnavailableReason('XU', 900_000, 798_000)).toBeNull();
+    expect(walletUnavailableReason(798_000, 798_000)).toBeNull();
+    expect(walletUnavailableReason(900_000, 798_000)).toBeNull();
   });
 
   it('khớp tuyệt đối với shouldFallbackToCod: có lý do ⇔ sẽ bị rơi về COD', () => {
     for (const [bal, total] of [[0, 1], [99, 100], [100, 100], [101, 100]] as const) {
-      expect(paymentUnavailableReason('WALLET', bal, total) !== null).toBe(shouldFallbackToCod('WALLET', bal, 0, total));
-      expect(paymentUnavailableReason('XU', bal, total) !== null).toBe(shouldFallbackToCod('XU', 0, bal, total));
+      expect(walletUnavailableReason(bal, total) !== null).toBe(shouldFallbackToCod('WALLET', bal, total));
     }
+  });
+});
+
+describe('zeroTotalNote — đơn 0đ (PD-3)', () => {
+  it('tổng còn lại > 0 → không có ghi chú (khách vẫn chọn cách thanh toán)', () => {
+    expect(zeroTotalNote({ total: 20_000, pointsDiscount: 0 })).toBeNull();
+  });
+
+  it('điểm phủ hết giá trị hàng và phí ship = 0 → "Đơn đã được trả đủ bằng Điểm Xanh"', () => {
+    expect(zeroTotalNote({ total: 0, pointsDiscount: 50_000 })).toBe('Đơn đã được trả đủ bằng Điểm Xanh. Bạn không cần thanh toán thêm.');
+  });
+
+  it('0đ nhờ mã giảm giá (không dùng điểm) → không nói sai là trả bằng Điểm Xanh', () => {
+    expect(zeroTotalNote({ total: 0, pointsDiscount: 0 })).toBe('Đơn không còn số tiền cần thanh toán.');
   });
 });
 

@@ -7,7 +7,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { PricingService } from '../pricing/pricing.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
-import type { CoinsService } from '../wallet/coins.service';
+import type { RewardPointsService } from '../wallet/reward-points.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 
@@ -21,7 +21,7 @@ function build(prismaParts: Record<string, unknown>, withNotifications = true) {
     config,
     noop as PricingService,
     noop as PancakeOrderService,
-    noop as CoinsService,
+    noop as RewardPointsService,
     noop as AnalyticsEventsService,
     withNotifications ? ({ notify } as unknown as NotificationsService) : undefined,
   );

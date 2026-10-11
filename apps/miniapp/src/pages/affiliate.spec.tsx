@@ -53,7 +53,14 @@ vi.mock('../hooks/use-public-config', () => ({
 }));
 
 import AffiliatePage from './affiliate';
-import { getAffiliateDashboard, getCommissions, requestPayout } from '../services/affiliate-api';
+import {
+  claimCtvMilestone,
+  getAffiliateDashboard,
+  getCommissions,
+  getCtvMilestones,
+  getCtvTiers,
+  requestPayout,
+} from '../services/affiliate-api';
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -312,5 +319,58 @@ describe('Dashboard CTV — rút hoa hồng', () => {
     expect(requestPayout).toHaveBeenCalledWith(200000, 'BANK', {
       bankName: 'Vietcombank', accountNumber: '0123456789', accountName: 'NGUYEN VAN A',
     });
+  });
+});
+
+describe('Dashboard CTV — thưởng mốc là Điểm Xanh (PD-3)', () => {
+  const milestone = {
+    id: 'M2', title: 'Mốc 10 triệu', threshold: 10_000_000, rewardPoints: 200, description: 'Doanh số đã chốt 10 triệu',
+    achieved: true, claimed: false, canClaim: true, progressPct: 100,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+    vi.mocked(getCtvMilestones).mockResolvedValue({
+      monthKey: '2026-10', currentRevenue: 12_000_000, pendingRevenue: 0, holdDays: 20,
+      milestones: [milestone, { ...milestone, id: 'M1', title: 'Mốc 3 triệu', rewardPoints: 50, claimed: true, canClaim: false }],
+      previousMonth: null,
+    });
+    vi.mocked(getCtvTiers).mockResolvedValue({
+      revenue: 12_000_000,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+      allTiers: [
+        { name: 'Hạt Giống', emoji: '🌱', min: 0, milestoneRewardPoints: null },
+        { name: 'Chồi Non', emoji: '🌿', min: 10_000_000, milestoneRewardPoints: 200 },
+      ],
+    } as Awaited<ReturnType<typeof getCtvTiers>>);
+  });
+
+  it('mỗi mốc hiện thưởng bằng điểm, mốc đã nhận ghi "Đã cộng vào Điểm Xanh", không còn chữ xu', async () => {
+    renderPage();
+    expect(await screen.findByText('+200 điểm')).toBeInTheDocument();
+    expect(screen.getByText('+50 điểm')).toBeInTheDocument();
+    expect(screen.getByText('Đã cộng vào Điểm Xanh')).toBeInTheDocument();
+    expect(screen.queryByText(/xu\b/i)).toBeNull();
+  });
+
+  it('bảng 5 bậc đọc milestoneRewardPoints', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Bảng 5 bậc CTV & thưởng mốc Điểm Xanh/ }));
+    expect(await screen.findByText('Thưởng mốc +200 điểm')).toBeInTheDocument();
+    expect(screen.getByText('Bậc khởi đầu')).toBeInTheDocument();
+  });
+
+  it('nhận thưởng mốc: gọi API đúng mốc/tháng và làm mới Điểm Xanh (không còn làm mới xu)', async () => {
+    vi.mocked(claimCtvMilestone).mockResolvedValue({
+      success: true, message: 'Chúc mừng bạn đã nhận 200 Điểm Xanh', rewardPoints: 200, monthKey: '2026-10',
+    });
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhận thưởng' }));
+    await waitFor(() => expect(claimCtvMilestone).toHaveBeenCalledWith('M2', '2026-10'));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['loyalty'] }));
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['coins'] });
+    invalidate.mockRestore();
   });
 });

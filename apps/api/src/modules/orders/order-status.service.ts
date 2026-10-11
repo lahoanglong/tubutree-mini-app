@@ -192,8 +192,9 @@ export class OrderStatusService {
 
     // Side-effect điểm/hoa hồng — idempotent qua unique index riêng, an toàn để NGOÀI tx
     // (nếu crash giữa chừng, retry sẽ thấy status đã bằng targetStatus → bail ở no-op phía
-    // trên NHƯNG side-effect chưa chạy — đây là đánh đổi đã biết, các hàm credit/reverse
-    // đều tự kiểm tra lại nên gọi lại qua endpoint admin "resync" là an toàn nếu cần).
+    // trên NHƯNG side-effect chưa chạy — đây là đánh đổi đã biết; các hàm credit/reverse tự kiểm tra
+    // lại nên gọi lại là an toàn, nhưng hiện CHƯA có endpoint resync nào để gọi). Vì vậy phần tiền trả
+    // trước (Điểm Xanh lô quy đổi) KHÔNG nằm ở đây mà hoàn trong tx ở reverseFinancials.
     if (targetStatus === 'DELIVERED') {
       await this.loyalty.creditOrderPoints(order.id);
       await this.affiliate.lockCommissionsForOrder(order.id);
@@ -213,7 +214,7 @@ export class OrderStatusService {
       await this.enqueueGomdonCancel(order);
     }
 
-    // Điểm Xanh chỉ được cộng khi đơn có pointsEarned > 0 (đơn trả bằng xu, đơn CTV lên hộ thì không): lời tin
+    // Điểm Xanh chỉ được cộng khi đơn có pointsEarned > 0 (đơn XU cũ, đơn CTV lên hộ thì không): lời tin
     // ORDER_DELIVERED chỉ nhắc điểm khi thật sự có, qua {{points_note}}.
     const notifyData: Record<string, string> = { order_code: order.code };
     if (targetStatus === 'DELIVERED' && order.pointsEarned > 0) {

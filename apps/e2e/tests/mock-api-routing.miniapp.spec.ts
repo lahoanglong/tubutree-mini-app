@@ -25,7 +25,7 @@ function fakeRoute(path: string): { route: Route; fulfilled: { status: number; b
 }
 
 const USER: AuthUser = {
-  id: 'u1', fullName: 'Khách', role: 'CUSTOMER', referralCode: 'R1', pointsBalance: 0, walletBalance: 0, coinsBalance: 0,
+  id: 'u1', fullName: 'Khách', role: 'CUSTOMER', referralCode: 'R1', pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0,
 };
 
 async function send(api: MockApi, path: string) {

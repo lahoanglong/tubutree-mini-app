@@ -31,7 +31,7 @@ const req = (over: Partial<AdminDeletionRequest> = {}): AdminDeletionRequest => 
     phone: '0912345678',
     role: 'CUSTOMER',
     walletBalance: 0,
-    coinsBalance: 0,
+    pointsConvertedBalance: 0,
     cashbackPending: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
   },
@@ -50,6 +50,18 @@ describe('AccountDeletionPanel (C-016)', () => {
     expect(container.textContent).toContain('Nguyễn Văn A');
     expect(container.textContent).toContain('0912345678');
     expect(container.textContent).toContain('Không dùng nữa');
+  });
+
+  it('yêu cầu chờ xử lý hiện số Điểm Xanh không hết hạn của khách, không còn "xu"', async () => {
+    const base = req();
+    const api = mockFetch({
+      '/admin/account-deletion-requests': { body: [req({ user: { ...base.user!, pointsConvertedBalance: 1250 } })] },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<AccountDeletionPanel />);
+    await flush();
+    expect(container.textContent).toContain('1.250 Điểm Xanh không hết hạn');
+    expect(container.textContent).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])/iu);
   });
 
   it('còn lý do chặn → hiện lý do, nút Xử lý bị khoá', async () => {

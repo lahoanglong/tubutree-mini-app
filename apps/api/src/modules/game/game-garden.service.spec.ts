@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, GoneException, NotFoundException } from '@nestjs/common';
 import { GameGardenService } from './game-garden.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -70,7 +70,7 @@ describe('GameGardenService.getGarden', () => {
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(homeProfile());
     const svc = new GameGardenService(
       prisma,
-      makeConfig({ 'game.max_plots': 5, 'game.plot_unlock_seed_base': 100, 'game.plot_unlock_xu_base': 200 }),
+      makeConfig({ 'game.max_plots': 5, 'game.plot_unlock_seed_base': 100 }),
     );
     const r = await svc.getGarden('u1');
     expect(r.plots).toHaveLength(1);
@@ -78,7 +78,8 @@ describe('GameGardenService.getGarden', () => {
     expect(r.plots[0]!.slot).toBe(0);
     expect(r.plots[0]!.progress).toBe(100);
     expect(r.maxPlots).toBe(5);
-    expect(r.nextUnlock).toEqual({ slot: 1, seedCost: 100, xuCost: 200 });
+    // PD-3 (spec 6.3): bỏ mở lô bằng xu, nextUnlock không còn xuCost.
+    expect(r.nextUnlock).toEqual({ slot: 1, seedCost: 100 });
   });
 
   it('có 1 lô phụ → 2 lô; nextUnlock slot 2 đắt hơn (giá × slot)', async () => {
@@ -87,13 +88,13 @@ describe('GameGardenService.getGarden', () => {
     (prisma.gardenPlot.findMany as jest.Mock).mockResolvedValue([plotRow({ id: 'p1', slot: 1, progress: 50 })]);
     const svc = new GameGardenService(
       prisma,
-      makeConfig({ 'game.max_plots': 5, 'game.plot_unlock_seed_base': 100, 'game.plot_unlock_xu_base': 200 }),
+      makeConfig({ 'game.max_plots': 5, 'game.plot_unlock_seed_base': 100 }),
     );
     const r = await svc.getGarden('u1');
     expect(r.plots).toHaveLength(2);
     expect(r.plots[1]!.id).toBe('p1');
     expect(r.plots[1]!.isHome).toBe(false);
-    expect(r.nextUnlock).toEqual({ slot: 2, seedCost: 200, xuCost: 400 });
+    expect(r.nextUnlock).toEqual({ slot: 2, seedCost: 200 });
   });
 
   it('đã đạt số lô tối đa → nextUnlock null', async () => {
@@ -141,21 +142,17 @@ describe('GameGardenService.unlockPlot', () => {
     expect((prisma.gardenPlot.create as jest.Mock).mock.calls[0][0].data.slot).toBe(1);
   });
 
-  it('XU → spendCoins giá xu + tạo lô (không trừ nước)', async () => {
+  it('PD-3 (T18): XU → 410 Gone, không trừ gì, không tạo lô, không mở transaction', async () => {
     const prisma = makePrisma();
-    (prisma.gardenPlot.count as jest.Mock).mockResolvedValue(1); // đã có 1 lô → slot 2
-    const coins = { spendCoins: jest.fn().mockResolvedValue(undefined) };
-    const svc = new GameGardenService(
-      prisma,
-      makeConfig({ 'game.plot_unlock_xu_base': 200, 'game.max_plots': 5 }),
-      undefined,
-      undefined,
-      coins as never,
-    );
-    const r = await svc.unlockPlot('u1', 'XU');
-    expect(r.slot).toBe(2);
-    expect(coins.spendCoins).toHaveBeenCalledWith('u1', 400, expect.stringContaining('GARDEN'), 'GAME', undefined, expect.anything());
+    (prisma.gardenPlot.count as jest.Mock).mockResolvedValue(1);
+    const svc = new GameGardenService(prisma, makeConfig({ 'game.max_plots': 5 }));
+    const err = await svc.unlockPlot('u1', 'XU').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GoneException);
+    expect((err as Error).message).toMatch(/giọt nước/);
+    expect((err as Error).message).not.toMatch(/TubuXu/);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.gameProfile.updateMany).not.toHaveBeenCalled();
+    expect(prisma.gardenPlot.create).not.toHaveBeenCalled();
   });
 
   it('đã đạt max lô → throw, không trừ gì', async () => {
@@ -274,7 +271,7 @@ describe('GameGardenService.waterPlot', () => {
     const prisma = makePrisma();
     (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 590, target: 600 }));
     const feed = { createAchievementPost: jest.fn().mockRejectedValue(new Error('down')) };
-    const svc = new GameGardenService(prisma, makeConfig(), undefined, undefined, undefined, feed as never);
+    const svc = new GameGardenService(prisma, makeConfig(), undefined, undefined, feed as never);
     const r = await svc.waterPlot('u1', 'p1', 20);
     expect(feed.createAchievementPost).toHaveBeenCalledWith('u1', 'HARVEST', expect.any(String), expect.any(Object));
     expect(r.harvested).toBe(true);

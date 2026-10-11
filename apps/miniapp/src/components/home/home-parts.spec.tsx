@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   haptic: vi.fn(),
   fetchBrands: vi.fn(),
-  user: null as null | { fullName: string; pointsBalance: number },
+  user: null as null | { fullName: string; pointsBalance: number; pointsConvertedBalance?: number },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
 vi.mock('../../services/shop-api', () => ({ fetchBrands: mocks.fetchBrands, fetchActiveFlashSales: vi.fn().mockResolvedValue([]), getCart: vi.fn() }));
@@ -163,6 +163,18 @@ describe('HomeExtras', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tìm sản phẩm' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/browse?focus=search');
     expect(screen.getByText(/Chào Lan/)).toHaveTextContent('60 điểm Xanh');
+  });
+
+  it('PD-3: lời chào hiện tổng Điểm Xanh hai lô, khớp hub Cá nhân và trang Điểm Xanh', () => {
+    mocks.user = { fullName: 'Lan', pointsBalance: 60, pointsConvertedBalance: 40 };
+    wrap(<HomeExtras />);
+    expect(screen.getByText(/Chào Lan/)).toHaveTextContent('100 điểm Xanh');
+  });
+
+  it('PD-3: khách chỉ có điểm quy đổi (lô thường 0) vẫn thấy đúng số, không "0 điểm Xanh"', () => {
+    mocks.user = { fullName: 'Lan', pointsBalance: 0, pointsConvertedBalance: 1200 };
+    wrap(<HomeExtras />);
+    expect(screen.getByText(/Chào Lan/)).toHaveTextContent('1.200 điểm Xanh');
   });
 
   it('khách chưa đăng nhập → hero không có lời chào', () => {

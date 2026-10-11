@@ -5,6 +5,7 @@ import { fetchBrands } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
 import { vi } from '../../i18n/vi';
 import { haptic } from '../../utils/haptic';
+import { pointsSummary } from '../../utils/points-lots';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Chip } from '../ui/chip';
@@ -53,7 +54,7 @@ export function HomeExtras() {
         {user && (
           <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 4 }}>
             {vi.home.greeting(user.fullName ?? vi.auth.greetingFallback)}
-            {user.pointsBalance != null ? ` · ${vi.home.pointsChip(user.pointsBalance)}` : ''}
+            {` · ${vi.home.pointsChip(pointsSummary(user).total)}`}
           </Text>
         )}
         <div style={{ marginTop: 12 }}>

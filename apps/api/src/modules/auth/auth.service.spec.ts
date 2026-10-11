@@ -511,7 +511,9 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
       const targetRow = fixture.state.users.get('target1')!;
       expect(targetRow.pointsBalance).toBe(150); // 50+100
       expect(targetRow.walletBalance).toBe(6000); // 1000+5000
-      expect(targetRow.coinsBalance).toBe(25); // 5+20
+      // PD-3 (migration C users_coins_frozen): gộp không ghi cột xu nữa. Số xu trong fixture chỉ để chứng
+      // minh code không chuyển/cộng xu; trên DB thật mọi coinsBalance = 0.
+      expect(targetRow.coinsBalance).toBe(5);
       expect(targetRow.cashbackPending).toBe(200); // 200+0
 
       // Khách bị khoá lại: zaloId đổi (giải phóng guest_dev1), số dư về 0, refresh token thu hồi.
@@ -654,5 +656,20 @@ describe('AuthService — chặn user bị khoá (isBlocked) lấy token', () =>
     await expect(svc.loginWithZaloMiniApp('code', 'at')).rejects.toThrow('bị khoá');
     expect(update).not.toHaveBeenCalled();
     expect((prisma.refreshToken.create as jest.Mock)).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService.toAuthUser — hồ sơ trả về client sau PD-3', () => {
+  it('trả hai lô Điểm Xanh (thường + quy đổi) và không còn trường xu', () => {
+    const { svc } = makeService();
+    const out = svc.toAuthUser({
+      ...USER,
+      pointsBalance: 120,
+      pointsConvertedBalance: 40,
+      walletBalance: 5_000,
+      coinsBalance: 0,
+    } as never);
+    expect(out).toMatchObject({ pointsBalance: 120, pointsConvertedBalance: 40, walletBalance: 5_000 });
+    expect(out).not.toHaveProperty('coinsBalance');
   });
 });

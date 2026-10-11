@@ -20,7 +20,7 @@ import {
 import { haptic } from '../../utils/haptic';
 import { getErrorMessage } from '../../services/api';
 import { vi } from '../../i18n/vi';
-import { formatDrops, formatNumber, formatXu } from '../../utils/format';
+import { formatDrops, formatNumber, formatPoints } from '../../utils/format';
 
 export interface HarvestReward {
   coupon?: string;
@@ -38,7 +38,7 @@ interface WateringResult {
 /**
  * Mọi lệnh ghi của trang Vườn Xanh. Trạng thái giao diện (hộp thu hoạch, đáp án quiz) ở lại trang và
  * đi vào qua callback, để việc ẩn/hiện khối theo tab không làm mất nó. Mỗi mutation giữ nguyên danh sách
- * khoá cần làm mới: số dư Điểm Xanh/xu đọc ở màn Thanh toán, nên thiếu khoá là hiện số cũ.
+ * khoá cần làm mới: số dư Điểm Xanh đọc ở màn Thanh toán, nên thiếu khoá là hiện số cũ.
  */
 export function useGameActions({
   onHarvest,
@@ -53,10 +53,9 @@ export function useGameActions({
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['game'] });
     void queryClient.invalidateQueries({ queryKey: ['me'] });
-    // Điểm Xanh/xu vừa đổi → màn Thanh toán đọc số dư từ ['loyalty']/['coins'], phải làm mới
-    // cùng lúc, nếu không khách vừa tiêu xong sang checkout vẫn thấy số cũ.
+    // Điểm Xanh vừa đổi → màn Thanh toán đọc số dư từ ['loyalty'], phải làm mới cùng lúc, nếu không
+    // khách vừa tiêu xong sang checkout vẫn thấy số cũ.
     void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
-    void queryClient.invalidateQueries({ queryKey: ['coins'] });
   };
   const onError = (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' });
 
@@ -133,21 +132,17 @@ export function useGameActions({
   const buyTreeM = useMutation({
     mutationFn: buyTree,
     onSuccess: (r) => {
-      openSnackbar({ text: `Đã góp 1 cây vào quỹ trồng cây 🌳 (−${formatXu(r.cost)}) · mã ${r.certificateCode}`, type: 'success' });
+      openSnackbar({ text: `Đã góp 1 cây vào quỹ trồng cây 🌳 (−${formatPoints(r.cost)}) · mã ${r.certificateCode}`, type: 'success' });
       refresh();
       void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
-      void queryClient.invalidateQueries({ queryKey: ['coins'] });
-      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
     },
     onError,
   });
   const unlockM = useMutation({
-    mutationFn: (currency: 'SEEDS' | 'XU') => unlockPlot(currency),
+    mutationFn: () => unlockPlot(),
     onSuccess: () => {
       openSnackbar({ text: 'Đã mở lô đất mới 🪴', type: 'success' });
       refresh();
-      void queryClient.invalidateQueries({ queryKey: ['coins'] });
-      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
     },
     onError,
   });
@@ -163,8 +158,8 @@ export function useGameActions({
       openSnackbar({ text: vi.game.seasonPass.claimOk, type: 'success' });
       void queryClient.invalidateQueries({ queryKey: ['game', 'seasonPass'] });
       void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
-      void queryClient.invalidateQueries({ queryKey: ['coins'] });
-      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      // Thưởng bậc có thể là Điểm Xanh.
+      void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
     },
     onError,
   });

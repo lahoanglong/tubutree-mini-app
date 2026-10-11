@@ -22,7 +22,7 @@ import {
 import { getErrorMessage } from '../services/api';
 import { useShareWithFallback } from '../components/share-sheet';
 import { useAuthStore } from '../store/auth';
-import { formatVnd, formatVndShort, formatXu } from '../utils/format';
+import { formatPoints, formatVnd, formatVndShort } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -237,16 +237,15 @@ function Dashboard() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [ctvOrdering, setCtvOrdering] = useState(false);
 
-  // Thưởng mốc cộng TubuXu (coinsBalance) — làm mới số dư xu ở Ví (['coins'] + ['wallet'] vì
-  // GET /me/wallet cũng trả coinsBalance). `month` = tháng của mốc (tháng này hoặc tháng trước).
+  // Thưởng mốc cộng Điểm Xanh (lô thường) — làm mới số dư điểm ở hub/Ví/Điểm Xanh (['loyalty']).
+  // `month` = tháng của mốc (tháng này hoặc tháng trước).
   const claimMilestoneMut = useMutation({
     mutationFn: (v: { id: string; month: string }) => claimCtvMilestone(v.id, v.month),
     onSuccess: (res) => {
       haptic('heavy');
       openSnackbar({ text: res.message || 'Đã nhận thưởng mốc thành công!', type: 'success' });
       void qc.invalidateQueries({ queryKey: ['affiliate-milestones'] });
-      void qc.invalidateQueries({ queryKey: ['coins'] });
-      void qc.invalidateQueries({ queryKey: ['wallet'] });
+      void qc.invalidateQueries({ queryKey: ['loyalty'] });
     },
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
@@ -276,7 +275,7 @@ function Dashboard() {
           </Text>
         </div>
         <Text variant="body-sm" tone="brand" style={{ ...BOLD, marginLeft: 8 }}>
-          +{formatXu(m.rewardXu)}
+          +{formatPoints(m.rewardPoints)}
         </Text>
       </div>
 
@@ -446,7 +445,7 @@ function Dashboard() {
             }}
           >
             <Text variant="body-sm" style={{ fontWeight: 600 }}>
-              Bảng 5 bậc CTV & thưởng mốc TubuXu
+              Bảng 5 bậc CTV & thưởng mốc Điểm Xanh
             </Text>
             <Icon icon={showAllTiers ? ChevronUp : ChevronDown} size="sm" tone="brand" />
           </button>
@@ -494,7 +493,7 @@ function Dashboard() {
         </Card>
       )}
 
-      {/* Thưởng mốc doanh số tháng — thưởng bằng TubuXu (tiêu trong app, không rút được) */}
+      {/* Thưởng mốc doanh số tháng — thưởng bằng Điểm Xanh (tiêu trong app, không rút được) */}
       {milestonesQ.data && milestonesQ.data.milestones.length > 0 && (
         <Card padding={16} style={BLOCK_GAP}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>

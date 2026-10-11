@@ -4,7 +4,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { PricingService } from '../pricing/pricing.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
-import type { CoinsService } from '../wallet/coins.service';
+import type { RewardPointsService } from '../wallet/reward-points.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 
@@ -27,7 +27,7 @@ const pricing = { calcShippingFee: jest.fn().mockResolvedValue(0) } as unknown a
 // Không dùng ở đa số test (chỉ placeOrderForCustomer gọi) — no-op mặc định.
 const pancakeOrder = { enqueuePush: jest.fn().mockResolvedValue(undefined) } as unknown as PancakeOrderService;
 // Chỉ claimMilestone dùng (affiliate-tier.spec.ts) — no-op ở đây.
-const coins = { grantCoins: jest.fn().mockResolvedValue(undefined) } as unknown as CoinsService;
+const coins = { grant: jest.fn().mockResolvedValue(true) } as unknown as RewardPointsService;
 // Tham số bắt buộc thứ 6 (Task 10) — hầu hết test ở file này KHÔNG đụng recordTouch/
 // placeOrderForCustomer nên chỉ cần no-op để type-check; các test thật của
 // referral_touched/order_placed tự dựng analytics mock RIÊNG (không dùng chung biến này) để
@@ -978,7 +978,7 @@ describe('AffiliateService.grantReferralReward (Q-05: không còn voucher REFER,
   }
   function makeCoins() {
     const grantReferralOrderReward = jest.fn().mockResolvedValue(true);
-    return { svc: { grantReferralOrderReward } as unknown as CoinsService, grantReferralOrderReward };
+    return { svc: { grantReferralOrderReward } as unknown as RewardPointsService, grantReferralOrderReward };
   }
 
   it('đơn lẻ giao xong → xét thưởng xu cho người mời của chủ đơn, KHÔNG tạo voucher', async () => {

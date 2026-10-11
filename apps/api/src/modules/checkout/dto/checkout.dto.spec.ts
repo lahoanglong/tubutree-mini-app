@@ -25,7 +25,7 @@ describe('InvoiceRequestDto', () => {
 });
 
 // P1-2 (docs/2026-09-08-review-progress.md): checkout.service chỉ có settlement path thật cho
-// COD/BANK_TRANSFER/WALLET/XU/ZALOPAY — VNPAY được DTO chấp nhận nhưng KHÔNG có service/
+// COD/BANK_TRANSFER/WALLET/ZALOPAY — VNPAY được DTO chấp nhận nhưng KHÔNG có service/
 // controller/webhook nào xử lý. Đơn VNPAY vẫn trừ kho + đứng PENDING_PAYMENT vĩnh viễn (không
 // cron nào hết hạn PENDING_PAYMENT) → lặp POST place-order với paymentMethod:VNPAY là cách rẻ
 // tiền để khóa chết tồn kho. DTO phải từ chối phương thức chưa có nơi xử lý.
@@ -37,7 +37,14 @@ describe('PlaceOrderDto.paymentMethod — chỉ chấp nhận phương thức c�
     expect(keys).toContain('isIn');
   });
 
-  it.each(['COD', 'BANK_TRANSFER', 'WALLET', 'XU', 'ZALOPAY'])('%s (đã có xử lý thật) → hợp lệ', async (method) => {
+  // PD-3 (Q-03, T18): TubuXu đã gộp vào Điểm Xanh; điểm quy đổi tiêu qua pointsToUse, không còn là
+  // phương thức thanh toán. Giá trị XU chỉ còn trong enum cho đơn cũ.
+  it('XU (đã gộp vào Điểm Xanh) → DTO từ chối, client gửi nhận 400', async () => {
+    const keys = await errorsFor(PlaceOrderDto, { ...base, paymentMethod: 'XU' });
+    expect(keys).toContain('isIn');
+  });
+
+  it.each(['COD', 'BANK_TRANSFER', 'WALLET', 'ZALOPAY'])('%s (đã có xử lý thật) → hợp lệ', async (method) => {
     const keys = await errorsFor(PlaceOrderDto, { ...base, paymentMethod: method });
     expect(keys).not.toContain('isIn');
   });

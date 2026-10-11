@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { canWithdraw, canConvertToXu, walletTxLabel, formatWalletTxTime, type WithdrawBankInfo } from './wallet-rules';
+import * as walletRules from './wallet-rules';
+import { canWithdraw, walletTxLabel, formatWalletTxTime, type WithdrawBankInfo } from './wallet-rules';
 
 const validBank: WithdrawBankInfo = {
   bankName: 'Vietcombank',
@@ -32,18 +33,9 @@ describe('canWithdraw', () => {
   });
 });
 
-describe('canConvertToXu', () => {
-  it('số 0 hoặc âm → false', () => {
-    expect(canConvertToXu(0, { walletBalance: 1_000_000 })).toBe(false);
-    expect(canConvertToXu(-1, { walletBalance: 1_000_000 })).toBe(false);
-  });
-
-  it('vượt số dư ví → false', () => {
-    expect(canConvertToXu(200_000, { walletBalance: 100_000 })).toBe(false);
-  });
-
-  it('hợp lệ → true', () => {
-    expect(canConvertToXu(100_000, { walletBalance: 100_000 })).toBe(true);
+describe('đổi Ví sang xu đã ngừng (PD-3)', () => {
+  it('không còn quy tắc đổi Ví → xu', () => {
+    expect(walletRules).not.toHaveProperty('canConvertToXu');
   });
 });
 
@@ -54,7 +46,8 @@ describe('walletTxLabel (sao kê Ví)', () => {
     expect(walletTxLabel('ORDER_REFUND')).toBe('Hoàn tiền đơn hàng');
     expect(walletTxLabel('WITHDRAW')).toBe('Rút về ngân hàng');
     expect(walletTxLabel('WITHDRAW_REFUND')).toBe('Hoàn lệnh rút bị từ chối');
-    expect(walletTxLabel('XU_CONVERT')).toBe('Đổi sang TubuXu');
+    // Dòng sao kê cũ của lần đổi Ví → xu trước khi xu gộp vào Điểm Xanh.
+    expect(walletTxLabel('XU_CONVERT')).toBe('Đổi sang xu cũ (nay là Điểm Xanh)');
   });
 
   it('loại mới BE thêm sau mà FE chưa biết → nhãn chung, không vỡ màn', () => {

@@ -1,154 +1,170 @@
 import { CommunityRewardService } from './community-reward.service';
 
 function deps(over: Record<string, unknown> = {}) {
-  const coins = { grantCoins: jest.fn().mockResolvedValue(undefined) };
-  const config = { get: jest.fn().mockResolvedValue(0) };
-  const prisma: any = { coinTransaction: { count: jest.fn().mockResolvedValue(0) } };
+  const rewards = { grant: jest.fn().mockResolvedValue(true) };
+  const config = { get: jest.fn().mockImplementation(async (_k: string, f: unknown) => f) };
+  // PD-3: trần/ngày đếm cả sổ xu cũ (thưởng trong ngày deploy) lẫn sổ điểm.
+  const prisma: any = {
+    coinTransaction: { count: jest.fn().mockResolvedValue(0) },
+    pointsTransaction: { count: jest.fn().mockResolvedValue(0) },
+  };
   // rewardPost/rewardAnswer chạy đếm-rồi-cấp TRONG $transaction(async tx => ..., {isolationLevel})
-  // — tx nhận CHÍNH prisma mock này nên tx.coinTransaction.count dùng chung mock ở trên.
+  // — tx nhận CHÍNH prisma mock này nên tx.*.count dùng chung mock ở trên.
   prisma.$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
-  return { coins, config, prisma, ...over } as any;
+  return { rewards, config, prisma, ...over } as any;
 }
 function make(d: ReturnType<typeof deps>) {
-  return new CommunityRewardService(d.prisma, d.coins, d.config);
+  return new CommunityRewardService(d.prisma, d.rewards, d.config);
 }
+const keys = (d: ReturnType<typeof deps>) => d.config.get.mock.calls.map((c: unknown[]) => c[0]);
 
 describe('CommunityRewardService.rewardPost', () => {
-  it('thưởng post_reward với reason COMMUNITY_POST + refType COMMUNITY khi chưa chạm trần', async () => {
+  it('mặc định 1 Điểm Xanh (community.post_reward_points), reason COMMUNITY_POST + refType COMMUNITY', async () => {
     const d = deps();
-    d.config.get.mockImplementation(async (k: string, f: number) => (k === 'community.post_reward' ? 200 : f));
     await make(d).rewardPost('u1', 'p1');
-    expect(d.coins.grantCoins).toHaveBeenCalledWith('u1', 200, 'COMMUNITY_POST:p1', 'COMMUNITY', 'p1', d.prisma);
+    expect(d.rewards.grant).toHaveBeenCalledWith('u1', 1, 'COMMUNITY_POST:p1', 'COMMUNITY', 'p1', d.prisma);
+    expect(keys(d)).toContain('community.post_reward_points');
   });
 
-  it('chạm trần ngày → KHÔNG thưởng', async () => {
+  it('KHÔNG đọc khoá xu cũ community.post_reward (DB còn 200 xu)', async () => {
     const d = deps();
-    d.config.get.mockImplementation(async (k: string, f: number) =>
-      k === 'community.post_reward' ? 200 : k === 'community.daily_post_reward_cap' ? 3 : f,
-    );
-    d.prisma.coinTransaction.count.mockResolvedValue(3);
+    d.config.get.mockImplementation(async (k: string, f: unknown) => (k === 'community.post_reward' ? 200 : f));
     await make(d).rewardPost('u1', 'p1');
-    expect(d.coins.grantCoins).not.toHaveBeenCalled();
+    expect(d.rewards.grant.mock.calls[0][1]).toBe(1);
+    expect(keys(d)).not.toContain('community.post_reward');
+  });
+
+  it('trần mặc định 1 bài/ngày (OQ-6): đã có 1 dòng hôm nay ở sổ xu cũ → KHÔNG thưởng', async () => {
+    const d = deps();
+    d.prisma.coinTransaction.count.mockResolvedValue(1);
+    await make(d).rewardPost('u1', 'p1');
+    expect(d.rewards.grant).not.toHaveBeenCalled();
+  });
+
+  it('trần ngày đếm HỢP hai sổ: 1 xu + 1 điểm = 2 ≥ trần 2 → KHÔNG thưởng', async () => {
+    const d = deps();
+    d.config.get.mockImplementation(async (k: string, f: unknown) => (k === 'community.daily_post_reward_cap' ? 2 : f));
+    d.prisma.coinTransaction.count.mockResolvedValue(1);
+    d.prisma.pointsTransaction.count.mockResolvedValue(1);
+    await make(d).rewardPost('u1', 'p1');
+    expect(d.rewards.grant).not.toHaveBeenCalled();
   });
 
   it('race P2034 (2 bài đăng dồn dập đụng Serializable) → nuốt lỗi, KHÔNG throw (best-effort)', async () => {
     const d = deps();
-    d.config.get.mockImplementation(async (k: string, f: number) => (k === 'community.post_reward' ? 200 : f));
     d.prisma.$transaction = jest.fn().mockRejectedValue({ code: 'P2034', message: 'serialization failure' });
     await expect(make(d).rewardPost('u1', 'p1')).resolves.toBeUndefined();
   });
 
   it('lỗi khác P2034 → vẫn throw (không nuốt lỗi bất kỳ)', async () => {
     const d = deps();
-    d.config.get.mockImplementation(async (k: string, f: number) => (k === 'community.post_reward' ? 200 : f));
     d.prisma.$transaction = jest.fn().mockRejectedValue(new Error('db down'));
     await expect(make(d).rewardPost('u1', 'p1')).rejects.toThrow('db down');
+  });
+
+  it('cấu hình 0 / không phải số nguyên dương → tắt thưởng, không gọi grant', async () => {
+    for (const v of [0, -1, 1.5, '2']) {
+      const d = deps();
+      d.config.get.mockImplementation(async (k: string, f: unknown) => (k === 'community.post_reward_points' ? v : f));
+      await make(d).rewardPost('u1', 'p1');
+      expect(d.rewards.grant).not.toHaveBeenCalled();
+    }
   });
 });
 
 describe('CommunityRewardService.rewardAnswer', () => {
-  it('trả lời bài của người khác → thưởng answer_reward', async () => {
+  it('mặc định 0 điểm (0,1 điểm không biểu diễn được) → không thưởng', async () => {
     const d = deps();
-    d.config.get.mockImplementation(async (k: string, f: number) => (k === 'community.answer_reward' ? 100 : f));
     await make(d).rewardAnswer('answerer', 'author', 'c1');
-    expect(d.coins.grantCoins).toHaveBeenCalledWith('answerer', 100, 'COMMUNITY_ANSWER:c1', 'COMMUNITY', 'c1', d.prisma);
+    expect(d.rewards.grant).not.toHaveBeenCalled();
+    expect(keys(d)).toContain('community.answer_reward_points');
+  });
+
+  it('admin bật community.answer_reward_points = 1 → thưởng reason COMMUNITY_ANSWER', async () => {
+    const d = deps();
+    d.config.get.mockImplementation(async (k: string, f: unknown) => (k === 'community.answer_reward_points' ? 1 : f));
+    await make(d).rewardAnswer('answerer', 'author', 'c1');
+    expect(d.rewards.grant).toHaveBeenCalledWith('answerer', 1, 'COMMUNITY_ANSWER:c1', 'COMMUNITY', 'c1', d.prisma);
   });
 
   it('tự trả lời bài của mình → KHÔNG thưởng', async () => {
     const d = deps();
+    d.config.get.mockImplementation(async (k: string, f: unknown) => (k === 'community.answer_reward_points' ? 1 : f));
     await make(d).rewardAnswer('same', 'same', 'c1');
-    expect(d.coins.grantCoins).not.toHaveBeenCalled();
+    expect(d.rewards.grant).not.toHaveBeenCalled();
   });
 
   it('chạm trần trả lời/ngày → KHÔNG thưởng', async () => {
     const d = deps();
-    d.config.get.mockImplementation(async (k: string, f: number) =>
-      k === 'community.answer_reward' ? 100 : k === 'community.daily_answer_reward_cap' ? 10 : f);
-    d.prisma.coinTransaction.count.mockResolvedValue(10);
+    d.config.get.mockImplementation(async (k: string, f: unknown) =>
+      k === 'community.answer_reward_points' ? 1 : k === 'community.daily_answer_reward_cap' ? 10 : f);
+    d.prisma.pointsTransaction.count.mockResolvedValue(10);
     await make(d).rewardAnswer('answerer', 'author', 'c1');
-    expect(d.coins.grantCoins).not.toHaveBeenCalled();
+    expect(d.rewards.grant).not.toHaveBeenCalled();
   });
 });
 
 describe('CommunityRewardService.rewardEventWinner', () => {
-  it('amount > 0 → thưởng qua grantCoins reason COMMUNITY_EVENT_WIN:<eventId>:<userId>, refType COMMUNITY', async () => {
+  it('điểm > 0 → thưởng qua grant reason COMMUNITY_EVENT_WIN:<eventId>:<userId>, refType COMMUNITY', async () => {
     const d = deps();
-    await make(d).rewardEventWinner('u1', 'ev1', 1000);
-    expect(d.coins.grantCoins).toHaveBeenCalledWith('u1', 1000, 'COMMUNITY_EVENT_WIN:ev1:u1', 'COMMUNITY', 'ev1');
+    await make(d).rewardEventWinner('u1', 'ev1', 5);
+    expect(d.rewards.grant).toHaveBeenCalledWith('u1', 5, 'COMMUNITY_EVENT_WIN:ev1:u1', 'COMMUNITY', 'ev1');
   });
 
-  it('amount <= 0 → KHÔNG thưởng', async () => {
+  it('điểm <= 0 → KHÔNG thưởng', async () => {
     const d = deps();
     await make(d).rewardEventWinner('u1', 'ev1', 0);
-    expect(d.coins.grantCoins).not.toHaveBeenCalled();
-  });
-
-  it('amount âm → KHÔNG thưởng', async () => {
-    const d = deps();
     await make(d).rewardEventWinner('u1', 'ev1', -100);
-    expect(d.coins.grantCoins).not.toHaveBeenCalled();
+    expect(d.rewards.grant).not.toHaveBeenCalled();
   });
 });
 
 describe('CommunityRewardService.rewardBestAnswer', () => {
-  it('best-answer của người khác → thưởng best_answer_reward, reason khoá theo POST (không theo comment)', async () => {
+  it('mặc định 1 điểm (community.best_answer_reward_points), reason khoá theo POST (không theo comment)', async () => {
     const d = deps();
-    d.config.get.mockImplementation(async (k: string, f: number) => (k === 'community.best_answer_reward' ? 500 : f));
     await make(d).rewardBestAnswer('answerer', 'author', 'p1');
-    // tham số cuối là tx — best-answer giờ cũng đếm-rồi-cấp trong transaction như rewardPost/rewardAnswer.
-    expect(d.coins.grantCoins).toHaveBeenCalledWith('answerer', 500, 'COMMUNITY_BEST:p1', 'COMMUNITY', 'p1', d.prisma);
+    // tham số cuối là tx — best-answer cũng đếm-rồi-cấp trong transaction như rewardPost/rewardAnswer.
+    expect(d.rewards.grant).toHaveBeenCalledWith('answerer', 1, 'COMMUNITY_BEST:p1', 'COMMUNITY', 'p1', d.prisma);
+    expect(keys(d)).not.toContain('community.best_answer_reward');
   });
 
   it('best-answer trỏ chính chủ bài → KHÔNG thưởng', async () => {
     const d = deps();
     await make(d).rewardBestAnswer('same', 'same', 'p1');
-    expect(d.coins.grantCoins).not.toHaveBeenCalled();
+    expect(d.rewards.grant).not.toHaveBeenCalled();
   });
 
-  it('đổi best-answer sang comment khác CÙNG bài → reason KHÔNG đổi (chặn farm xu bằng đổi best-answer liên tục)', async () => {
+  it('đổi best-answer sang comment khác CÙNG bài → reason KHÔNG đổi (chặn farm bằng đổi best-answer liên tục)', async () => {
     const d = deps();
-    d.config.get.mockImplementation(async (k: string, f: number) => (k === 'community.best_answer_reward' ? 500 : f));
-    // Lần 1: chọn c1 làm best (câu trả lời của alt1).
     await make(d).rewardBestAnswer('alt1', 'author', 'p1');
-    // Lần 2: chủ bài đổi ý, chọn c2 làm best (câu trả lời của alt2) — cùng postId.
     await make(d).rewardBestAnswer('alt2', 'author', 'p1');
-    const reasons = d.coins.grantCoins.mock.calls.map((c: unknown[]) => c[2]);
+    const reasons = d.rewards.grant.mock.calls.map((c: unknown[]) => c[2]);
+    // 2 reason giống hệt nhau → RewardPointsService.grant (partial unique index reason WHERE
+    // refType='COMMUNITY' ở sổ điểm + kiểm dòng cùng reason ở sổ xu cũ) chặn lần cấp thứ 2.
     expect(reasons).toEqual(['COMMUNITY_BEST:p1', 'COMMUNITY_BEST:p1']);
-    // 2 reason giống hệt nhau → CoinsService.grantCoins (partial unique index reason
-    // WHERE refType='COMMUNITY') sẽ chặn lần cấp thứ 2 bằng P2002 idempotent-skip.
   });
 
-  // P1-2 (docs/2026-09-08-review-progress.md): idempotency theo postId CHỈ chặn farm trên
-  // CÙNG 1 bài. Tài khoản A đăng 200 QUESTION (đăng bài không giới hạn, chỉ xu-thưởng-đăng bị
-  // trần 3/ngày) rồi chọn best-answer cho B ở cả 200 bài → B nhận 200×500 = 100.000 xu, mỗi
-  // lần một reason khác nhau nên unique index không bao giờ chạm. Phải có trần NGÀY như 2
-  // reward anh em (rewardPost/rewardAnswer đều đã đi qua rewardWithDailyCap).
-  it('chạm trần best-answer/ngày → KHÔNG thưởng (chặn farm qua nhiều bài khác nhau)', async () => {
+  // P1-2 (docs/2026-09-08-review-progress.md): idempotency theo postId CHỈ chặn farm trên CÙNG 1 bài.
+  // Phải có trần NGÀY như 2 reward anh em (rewardPost/rewardAnswer đều đã đi qua rewardWithDailyCap).
+  it('trần mặc định 3/ngày (OQ-6): đã 3 lần hôm nay → KHÔNG thưởng (chặn farm qua nhiều bài khác nhau)', async () => {
     const d = deps();
-    d.config.get.mockImplementation(async (k: string, f: number) =>
-      k === 'community.best_answer_reward' ? 500 : k === 'community.daily_best_answer_cap' ? 5 : f,
-    );
-    d.prisma.coinTransaction.count.mockResolvedValue(5);
+    d.prisma.pointsTransaction.count.mockResolvedValue(2);
+    d.prisma.coinTransaction.count.mockResolvedValue(1);
     await make(d).rewardBestAnswer('answerer', 'author', 'p1');
-    expect(d.coins.grantCoins).not.toHaveBeenCalled();
+    expect(d.rewards.grant).not.toHaveBeenCalled();
   });
 
-  it('đếm trần best-answer theo reason COMMUNITY_BEST của HÔM NAY, trong transaction Serializable', async () => {
+  it('đếm trần best-answer theo reason COMMUNITY_BEST của HÔM NAY ở cả hai sổ, trong transaction Serializable', async () => {
     const d = deps();
-    d.config.get.mockImplementation(async (k: string, f: number) =>
-      k === 'community.best_answer_reward' ? 500 : k === 'community.daily_best_answer_cap' ? 5 : f,
-    );
     await make(d).rewardBestAnswer('answerer', 'author', 'p1');
-    expect(d.prisma.coinTransaction.count).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          userId: 'answerer',
-          refType: 'COMMUNITY',
-          reason: { startsWith: 'COMMUNITY_BEST:' },
+    for (const m of [d.prisma.coinTransaction.count, d.prisma.pointsTransaction.count]) {
+      expect(m).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ userId: 'answerer', refType: 'COMMUNITY', reason: { startsWith: 'COMMUNITY_BEST:' } }),
         }),
-      }),
-    );
-    expect(d.prisma.$transaction).toHaveBeenCalled();
+      );
+    }
+    expect(d.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'Serializable' });
   });
 });
 
@@ -156,14 +172,13 @@ describe('CommunityRewardService.rewardBestAnswer', () => {
 describe('CommunityRewardService — đầu ngày theo giờ VN (C-026)', () => {
   it('01:30 ngày 10/3 giờ VN → đếm từ 2026-03-09T17:00Z', async () => {
     const d = deps();
-    d.config.get.mockImplementation(async (k: string, f: number) => (k === 'community.post_reward' ? 200 : f));
     jest.useFakeTimers().setSystemTime(new Date('2026-03-09T18:30:00Z'));
     try {
       await make(d).rewardPost('u1', 'p1');
     } finally {
       jest.useRealTimers();
     }
-    const where = d.prisma.coinTransaction.count.mock.calls[0][0].where;
+    const where = d.prisma.pointsTransaction.count.mock.calls[0][0].where;
     expect(where.createdAt.gte.toISOString()).toBe('2026-03-09T17:00:00.000Z');
   });
 });

@@ -1,5 +1,13 @@
-import { test, expect } from './support/mock-api';
-import { BANK_QR, CHECKOUT_ADDRESS, mockCheckout, ORDER_CODE_BANK, ORDER_CODE_COD } from './support/checkout-mocks';
+import { test, expect, makeUser, mockSession } from './support/mock-api';
+import {
+  BANK_QR,
+  CHECKOUT_ADDRESS,
+  CHECKOUT_LOYALTY,
+  CHECKOUT_QUOTE,
+  mockCheckout,
+  ORDER_CODE_BANK,
+  ORDER_CODE_COD,
+} from './support/checkout-mocks';
 
 /**
  * Zalo Mini App E2E - Luồng Đặt hàng & Thanh toán (Checkout Lifecycle)
@@ -7,7 +15,9 @@ import { BANK_QR, CHECKOUT_ADDRESS, mockCheckout, ORDER_CODE_BANK, ORDER_CODE_CO
  * Kiểm tra:
  * 1. Màn hình Thanh toán:
  *    - Tải địa chỉ giao hàng, danh sách sản phẩm, báo giá (POST /checkout/quote)
- *    - Số dư Ví / TubuXu đọc từ GET /me/wallet (không phải từ user đăng nhập)
+ *    - Số dư Ví đọc từ GET /me/wallet (không phải từ user đăng nhập); chỉ còn 3 phương thức (COD, chuyển
+ *      khoản, Ví Tubu), không còn TubuXu (PD-3: xu đã gộp vào Điểm Xanh)
+ *    - Điểm Xanh = lô thường + lô quy đổi (không hết hạn) đọc từ GET /me/loyalty, gửi một số pointsToUse
  * 2. Đặt hàng:
  *    - COD → màn OrderSuccess với mã đơn; body gửi đúng addressId/paymentMethod + Idempotency-Key
  *    - BANK_TRANSFER → chuyển sang /bank-payment/:code (VietQR)
@@ -28,12 +38,69 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await expect(page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ })).toBeEnabled();
     await expect(page.getByText('149.000đ').first()).toBeVisible();
 
-    // Số dư lấy từ GET /me/wallet (350.000đ / 80.000 xu), KHÔNG phải số trong user (200.000đ).
+    // Số dư lấy từ GET /me/wallet (350.000đ), KHÔNG phải số trong user (200.000đ).
     await expect(page.getByRole('radio', { name: 'Ví Tubu (350.000đ)' })).toBeVisible();
-    await expect(page.getByRole('radio', { name: 'TubuXu (80.000 xu)' })).toBeVisible();
+    // PD-3: không còn phương thức TubuXu; còn COD, chuyển khoản, Ví Tubu (radio địa chỉ không tính).
+    await expect(page.getByRole('radio', { name: /(?<![\p{L}])xu(?![\p{L}])/iu })).toHaveCount(0);
+    await expect(page.getByRole('radio', { name: /Thanh toán khi nhận hàng|Chuyển khoản ngân hàng|Ví Tubu/ })).toHaveCount(3);
 
     // Tính năng thu gom tắt (recyclingEnabled=false) → không hiện lựa chọn.
     await expect(page.locator('#checkout-recycling')).toHaveCount(0);
+  });
+
+  test('Điểm Xanh: gộp lô thường + lô quy đổi thành một số dùng được, ghi rõ phần không hết hạn', async ({ page }) => {
+    await page.goto('/checkout');
+    await expect(page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ })).toBeEnabled({ timeout: 15_000 });
+
+    // 50 điểm thường + 50 điểm quy đổi = 100 điểm đề nghị dùng; phần quy đổi nói rõ không hết hạn.
+    await expect(page.getByText('Bạn đang có 100 điểm')).toBeVisible();
+    await expect(page.getByText('trong đó 50 điểm không hết hạn, trả tới 100% giá trị hàng')).toBeVisible();
+  });
+
+  test('Bật dùng Điểm Xanh: báo giá và đặt đơn gửi MỘT số pointsToUse = thường + quy đổi (BE tự chia lô)', async ({ page, api }) => {
+    // BE chia hai lô: thường chịu trần 20% giá trị hàng (130.000đ → 26 điểm), quy đổi không trần (50 điểm).
+    api.post('/checkout/quote', ({ call }) => {
+      const wanted = ((call.body ?? {}) as { pointsToUse?: number }).pointsToUse ?? 0;
+      if (wanted <= 0) return CHECKOUT_QUOTE;
+      return { ...CHECKOUT_QUOTE, pointsUsed: 76, pointsUsedConverted: 50, pointsDiscount: 76000, total: 73000 };
+    });
+    await page.goto('/checkout');
+    await expect(page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ })).toBeEnabled({ timeout: 15_000 });
+
+    const quoted = api.waitForCall('POST', '/checkout/quote');
+    await page.locator('[role="checkbox"]').filter({ hasText: 'trong đó 50 điểm không hết hạn' }).click();
+    expect((await quoted).body).toMatchObject({ addressId: CHECKOUT_ADDRESS.id, pointsToUse: 100 });
+
+    await expect(page.getByText('Dùng 76 điểm — giảm 76.000đ')).toBeVisible({ timeout: 10_000 });
+    const placeBtn = page.getByRole('button', { name: /Đặt hàng · 73\.000đ/ });
+    await expect(placeBtn).toBeEnabled();
+
+    const placed = api.waitForCall('POST', '/checkout/place-order');
+    await placeBtn.click();
+    expect((await placed).body).toMatchObject({ addressId: CHECKOUT_ADDRESS.id, paymentMethod: 'COD', pointsToUse: 100 });
+  });
+
+  test('Đơn 0đ do điểm phủ hết: ẩn chọn phương thức, ghi rõ đã trả đủ bằng Điểm Xanh, gửi COD', async ({ page, api }) => {
+    // Khách có nhiều điểm quy đổi; freeship nên điểm phủ nốt phần hàng còn lại → tổng 0đ.
+    mockSession(api, makeUser({ id: 'user-checkout', fullName: 'Nguyễn Văn A', pointsBalance: 50, pointsConvertedBalance: 200, walletBalance: 200000 }));
+    api.get('/me/loyalty', { ...CHECKOUT_LOYALTY, pointsConvertedBalance: 200 });
+    api.post('/checkout/quote', ({ call }) => {
+      const wanted = ((call.body ?? {}) as { pointsToUse?: number }).pointsToUse ?? 0;
+      if (wanted <= 0) return CHECKOUT_QUOTE;
+      return { ...CHECKOUT_QUOTE, pointsUsed: 130, pointsUsedConverted: 104, pointsDiscount: 130000, shippingFee: 0, total: 0 };
+    });
+    await page.goto('/checkout');
+    await expect(page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ })).toBeEnabled({ timeout: 15_000 });
+
+    await page.locator('[role="checkbox"]').filter({ hasText: 'trong đó 200 điểm không hết hạn' }).click();
+    await expect(page.getByText('Đơn đã được trả đủ bằng Điểm Xanh. Bạn không cần thanh toán thêm.')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('radio', { name: /Thanh toán khi nhận hàng|Chuyển khoản ngân hàng|Ví Tubu/ })).toHaveCount(0);
+
+    const placed = api.waitForCall('POST', '/checkout/place-order');
+    await page.getByRole('button', { name: /Đặt hàng · 0đ/ }).click();
+    const call = await placed;
+    expect(call.body).toMatchObject({ paymentMethod: 'COD', pointsToUse: 250 });
+    expect(api.callsTo('GET', '/payments/bank-qr/:code')).toHaveLength(0);
   });
 
   test('Đặt hàng thành công với COD: Chuyển sang màn hình xác nhận đơn', async ({ page, api }) => {

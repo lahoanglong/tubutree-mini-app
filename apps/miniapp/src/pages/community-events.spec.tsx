@@ -60,7 +60,7 @@ const EVENT = (id: string, over: Partial<CommunityEvent> = {}): CommunityEvent =
   coverUrl: null,
   startAt: new Date(Date.now() - 2 * DAY).toISOString(),
   endAt: new Date(Date.now() + 5 * DAY).toISOString(),
-  rewardXu: 50,
+  rewardPoints: 5,
   status: 'ACTIVE',
   winnerUserId: null,
   createdAt: new Date(Date.now() - 3 * DAY).toISOString(),
@@ -89,7 +89,7 @@ beforeEach(() => {
   mocks.auth.status = 'authenticated';
   mocks.composerProps.current = null;
   mocks.getCategories.mockResolvedValue([{ id: 'c1', slug: 'bep', name: 'Nhà bếp', icon: null }]);
-  mocks.listEvents.mockResolvedValue([EVENT('e1'), EVENT('e2', { rewardXu: 0 })]);
+  mocks.listEvents.mockResolvedValue([EVENT('e1'), EVENT('e2', { rewardPoints: 0 })]);
   mocks.eventPosts.mockResolvedValue({ posts: [POST('p1'), POST('p2')], nextCursor: null });
 });
 
@@ -115,8 +115,8 @@ describe('CommunityEventsPage — danh sách sự kiện', () => {
     expect(await screen.findByText('Sự kiện e1')).toBeInTheDocument();
     expect(screen.getByText('Mô tả e1')).toBeInTheDocument();
     expect(screen.getAllByText(`Kết thúc: ${fmt(EVENT('e1').endAt)}`, { exact: false })).toHaveLength(2);
-    expect(screen.getAllByText(/TubuXu/)).toHaveLength(1);
-    expect(screen.getByText(/50 TubuXu/)).toBeInTheDocument();
+    expect(screen.getAllByText(/điểm/)).toHaveLength(1);
+    expect(screen.getByText(/5 điểm/)).toBeInTheDocument();
   });
 
   it('sự kiện đã qua hạn có nhãn "Đã kết thúc"', async () => {
@@ -152,7 +152,7 @@ describe('CommunityEventsPage — chi tiết sự kiện', () => {
   it('hiện thưởng, bài dự thi; bấm bài mở /feed/:id', async () => {
     renderPage();
     await openEvent('Sự kiện e1');
-    expect(screen.getByText(/Thưởng:.*50 TubuXu/)).toBeInTheDocument();
+    expect(screen.getByText(/Thưởng:.*5 điểm/)).toBeInTheDocument();
     expect(screen.getByText('Bài dự thi')).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Bài p1' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/feed/p1');

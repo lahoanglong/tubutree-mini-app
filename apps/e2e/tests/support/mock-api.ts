@@ -353,8 +353,8 @@ export function makeUser(over: Partial<AuthUser> & Pick<AuthUser, 'id'>): AuthUs
     phone: '0901234567',
     referralCode: 'E2EREF',
     pointsBalance: 0,
+    pointsConvertedBalance: 0,
     walletBalance: 0,
-    coinsBalance: 0,
     ...over,
   };
 }

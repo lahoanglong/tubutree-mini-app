@@ -1,6 +1,6 @@
 import { LockOpen, ShowerHead, Sprout } from 'lucide-react';
 import type { Garden } from '../../services/game-api';
-import { formatDrops, formatNumber, formatXu } from '../../utils/format';
+import { formatDrops, formatNumber } from '../../utils/format';
 import { Button } from '../ui/button';
 import { ProgressBar } from '../ui/progress-bar';
 import { Text } from '../ui/text';
@@ -14,7 +14,6 @@ export function GardenPlots({
   waterPlotVariables,
   onWaterPlot,
   unlockPending,
-  unlockVariables,
   onUnlock,
 }: {
   garden: Garden;
@@ -22,8 +21,7 @@ export function GardenPlots({
   waterPlotVariables: string | undefined;
   onWaterPlot: (plotId: string) => void;
   unlockPending: boolean;
-  unlockVariables: 'SEEDS' | 'XU' | undefined;
-  onUnlock: (currency: 'SEEDS' | 'XU') => void;
+  onUnlock: () => void;
 }) {
   const extraPlots = garden.plots.filter((p) => !p.isHome);
   return (
@@ -66,24 +64,8 @@ export function GardenPlots({
       </div>
       {garden.nextUnlock ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-          <Button
-            fullWidth
-            icon={LockOpen}
-            disabled={unlockPending}
-            loading={unlockPending && unlockVariables === 'SEEDS'}
-            onPress={() => onUnlock('SEEDS')}
-          >
+          <Button fullWidth icon={LockOpen} disabled={unlockPending} loading={unlockPending} onPress={() => onUnlock()}>
             Mở lô ({formatDrops(garden.nextUnlock.seedCost)})
-          </Button>
-          <Button
-            fullWidth
-            variant="secondary"
-            icon={LockOpen}
-            disabled={unlockPending}
-            loading={unlockPending && unlockVariables === 'XU'}
-            onPress={() => onUnlock('XU')}
-          >
-            Mở lô ({formatXu(garden.nextUnlock.xuCost)})
           </Button>
         </div>
       ) : (

@@ -19,7 +19,10 @@ export interface AdminUser {
   fullName: string | null;
   phone: string | null;
   role: string;
+  /** Điểm Xanh lô thường (có hạn). Tổng khách thấy = pointsBalance + pointsConvertedBalance. */
   pointsBalance: number;
+  /** Lô quy đổi từ xu cũ (không hết hạn). API cũ chưa trả → coi như 0. */
+  pointsConvertedBalance?: number;
   createdAt: string;
 }
 /** Khớp model OrderItem của API (snapshot tên SP/biến thể + đơn giá lúc mua). */
@@ -911,6 +914,8 @@ export interface PosMember {
   phone: string | null;
   tier: string;
   pointsBalance: number;
+  /** Lô quy đổi từ xu cũ (không hết hạn). API cũ chưa trả → coi như 0. */
+  pointsConvertedBalance?: number;
 }
 export interface PosCreditResult {
   /** true = hoá đơn này đã được tích trước đó — trả lại kết quả cũ, KHÔNG cộng thêm. */
