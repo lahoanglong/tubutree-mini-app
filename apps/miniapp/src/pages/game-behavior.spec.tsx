@@ -91,7 +91,7 @@ const PROFILE = {
   lastDewAt: null as string | null,
   lastCheckInAt: null as string | null,
   streakFreezeCost: 80,
-  treeXuPrice: 65_000,
+  treePointsPrice: 50,
   streakRepairable: false,
   ecoImpact: { progress: 10, target: 50, treeType: 'Sồi', treesPlanted: 3 },
 };
@@ -149,7 +149,7 @@ beforeEach(() => {
   a.spin.mockResolvedValue({ prize: { id: 'p1', name: 'Mã 10K', rewardType: 'COUPON', value: 10_000 } });
   a.answerQuiz.mockResolvedValue({ isCorrect: true, correct: 1, waterEarned: 20, explanation: 'Cây quang hợp.' });
   a.waterTree.mockResolvedValue({ progress: 30, target: 50, harvested: false, treesPlanted: 3 });
-  a.buyTree.mockResolvedValue({ certificateCode: 'TUBU-9', treeType: 'Sồi', cost: 65_000 });
+  a.buyTree.mockResolvedValue({ certificateCode: 'TUBU-9', treeType: 'Sồi', cost: 50, pointsUsed: 50, pointsUsedConverted: 0 });
   a.claimMission.mockResolvedValue({ claimed: true, rewardPoints: 50, couponCode: null });
   a.unlockPlot.mockResolvedValue({});
   a.waterPlot.mockResolvedValue({ progress: 5, target: 20, harvested: false, treesPlanted: 0, revivedFromDead: false });
@@ -280,7 +280,8 @@ describe('GamePage — điểm danh chuỗi (Vườn)', () => {
     expect(keys).toContainEqual(['game']);
     expect(keys).toContainEqual(['me']);
     expect(keys).toContainEqual(['loyalty']);
-    expect(keys).toContainEqual(['coins']);
+    // /me/coins đã 410: không còn khoá nào để làm mới.
+    expect(keys).not.toContainEqual(['coins']);
   });
 
   it('đã điểm danh hôm nay: nút "Đã điểm danh" tắt, bấm không gọi API', async () => {
@@ -529,22 +530,29 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
     expect(mocks.copyText).toHaveBeenCalledTimes(2);
   });
 
-  it('góp quỹ trồng cây: nút kèm giá xu, gọi API 1 lần, báo mã đóng góp, làm mới quỹ + ví', async () => {
+  it('góp quỹ trồng cây: nút kèm giá Điểm Xanh, gọi API 1 lần, báo mã đóng góp, làm mới quỹ + số dư điểm', async () => {
     const { invalidated } = renderPage();
-    const btn = await screen.findByRole('button', { name: /Góp quỹ trồng cây \(65\.000 xu\)/ });
+    const btn = await screen.findByRole('button', { name: /Góp quỹ trồng cây \(50 điểm\)/ });
     fireEvent.click(btn);
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã góp 1 cây vào quỹ trồng cây 🌳 (−65.000 xu) · mã TUBU-9', type: 'success' }),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã góp 1 cây vào quỹ trồng cây 🌳 (−50 điểm) · mã TUBU-9', type: 'success' }),
     );
     expect(mocks.api.buyTree).toHaveBeenCalledTimes(1);
     const keys = invalidated();
     expect(keys).toContainEqual(['game', 'forest']);
-    expect(keys).toContainEqual(['coins']);
-    expect(keys).toContainEqual(['wallet']);
+    expect(keys).toContainEqual(['loyalty']);
+    expect(keys).not.toContainEqual(['coins']);
+  });
+
+  it('chú thích dưới nút góp quỹ nói rõ điểm không hết hạn chỉ bị dùng khi điểm thường không đủ (PD-3, OQ-5)', async () => {
+    renderPage();
+    expect(
+      await screen.findByText('Góp bằng Điểm Xanh — dùng điểm thường trước, thiếu mới dùng điểm không hết hạn.'),
+    ).toBeInTheDocument();
   });
 
   it('hồ sơ không có giá cây: nút "Góp quỹ trồng cây" không kèm giá', async () => {
-    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, treeXuPrice: undefined });
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, treePointsPrice: undefined });
     renderPage();
     const btn = await screen.findByRole('button', { name: /Góp quỹ trồng cây/ });
     expect(btn).toHaveTextContent(/^Góp quỹ trồng cây$/);
@@ -555,7 +563,7 @@ describe('GamePage — lô đất', () => {
   const HOME = { id: null, slot: 1, isHome: true, treeType: 'Sồi', speciesId: null, progress: 10, target: 50, treeStage: 1, treesPlanted: 3, treeHealth: 'HEALTHY' };
   const PLOT_A = { id: 'pa', slot: 2, isHome: false, treeType: 'Mận', speciesId: 's1', progress: 5, target: 20, treeStage: 1, treesPlanted: 1, treeHealth: 'WILTED' };
   const PLOT_B = { id: 'pb', slot: 3, isHome: false, treeType: 'Xoài', speciesId: 's2', progress: 20, target: 20, treeStage: 3, treesPlanted: 0, treeHealth: 'DEAD' };
-  const NEXT = { slot: 4, seedCost: 1_200, xuCost: 65_000 };
+  const NEXT = { slot: 4, seedCost: 1_200 };
 
   it('chưa tải được garden: không có khối lô đất', async () => {
     renderPage();
@@ -614,36 +622,27 @@ describe('GamePage — lô đất', () => {
     expect(screen.getByText('LO-5')).toBeInTheDocument();
   });
 
-  it('mở lô: hai nút giá giọt nước/xu gọi unlockPlot đúng loại tiền, cùng khoá khi đang gửi, làm mới ví', async () => {
+  it('mở lô: chỉ còn nút giá giọt nước (xu đã gộp vào Điểm Xanh), gọi unlockPlot một lần, khoá khi đang gửi', async () => {
     const gate = pending<unknown>();
     mocks.api.unlockPlot.mockReturnValue(gate.promise);
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME], maxPlots: 3, nextUnlock: NEXT });
     const { invalidated } = renderPage();
     await openTab('Vườn');
     const seeds = await screen.findByRole('button', { name: 'Mở lô (1.200💧)' });
-    const xu = screen.getByRole('button', { name: 'Mở lô (65.000 xu)' });
+    expect(screen.getAllByRole('button', { name: /Mở lô/ })).toHaveLength(1);
     expect(seeds).toBeEnabled();
-    expect(xu).toBeEnabled();
-    fireEvent.click(xu);
+    fireEvent.click(seeds);
     await waitFor(() => expect(seeds).toBeDisabled());
-    expect(xu).toBeDisabled();
+    fireEvent.click(seeds);
     expect(mocks.api.unlockPlot).toHaveBeenCalledTimes(1);
-    expect(mocks.api.unlockPlot).toHaveBeenCalledWith('XU');
+    expect(mocks.api.unlockPlot).toHaveBeenCalledWith();
     await act(async () => {
       gate.resolve({});
     });
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã mở lô đất mới 🪴', type: 'success' }));
     const keys = invalidated();
-    expect(keys).toContainEqual(['coins']);
-    expect(keys).toContainEqual(['wallet']);
-  });
-
-  it('mở lô bằng giọt nước gọi unlockPlot("SEEDS")', async () => {
-    mocks.api.getGarden.mockResolvedValue({ plots: [HOME], maxPlots: 3, nextUnlock: NEXT });
-    renderPage();
-    await openTab('Vườn');
-    fireEvent.click(await screen.findByRole('button', { name: 'Mở lô (1.200💧)' }));
-    await waitFor(() => expect(mocks.api.unlockPlot).toHaveBeenCalledWith('SEEDS'));
+    expect(keys).toContainEqual(['game']);
+    expect(keys).not.toContainEqual(['coins']);
   });
 
   it('đã đủ lô: không còn nút mở, hiện thông báo tối đa', async () => {
@@ -728,7 +727,7 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
     for (const b of locked) expect(b).toBeDisabled();
   });
 
-  it('nhận nhánh miễn phí: gọi claimSeasonPass(tier, "free") một lần, báo + haptic, làm mới mùa/hồ sơ/ví', async () => {
+  it('nhận nhánh miễn phí: gọi claimSeasonPass(tier, "free") một lần, báo + haptic, làm mới mùa/hồ sơ/Điểm Xanh', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: tiers() });
     const { invalidated } = renderPage();
     await openTab('Cộng đồng');
@@ -743,8 +742,8 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
     const keys = invalidated();
     expect(keys).toContainEqual(['game', 'seasonPass']);
     expect(keys).toContainEqual(['game', 'profile']);
-    expect(keys).toContainEqual(['coins']);
-    expect(keys).toContainEqual(['wallet']);
+    expect(keys).toContainEqual(['loyalty']);
+    expect(keys).not.toContainEqual(['coins']);
   });
 
   it('đủ điều kiện Premium: nhánh Premium nhận được qua claimSeasonPass(tier, "premium")', async () => {
@@ -885,7 +884,8 @@ describe('GamePage — vòng quay may mắn', () => {
     expect(result).toEqual({ prize: { id: 'p1', name: 'Mã 10K', rewardType: 'COUPON', value: 10_000 } });
     const keys = invalidated();
     expect(keys).toContainEqual(['game']);
-    expect(keys).toContainEqual(['coins']);
+    expect(keys).toContainEqual(['loyalty']);
+    expect(keys).not.toContainEqual(['coins']);
   });
 
   it('quay lỗi: báo lỗi và ném lại để vòng quay tự xử lý, không làm mới cache', async () => {

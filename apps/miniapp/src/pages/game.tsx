@@ -84,7 +84,7 @@ export default function GamePage() {
   // — trước đây gộp chung với nhánh loading khiến user đã logout/login lỗi bị kẹt mãi ở skeleton.
   if (!authed) return shell(<GameLoginGate onLogin={() => void login()} />);
 
-  // Profile là dữ liệu chủ đạo của trang (streak/xu/eco-impact) — lỗi thì phải báo rõ,
+  // Profile là dữ liệu chủ đạo của trang (streak/giọt nước/eco-impact) — lỗi thì phải báo rõ,
   // không để rơi xuống render với optional-chaining trông như "mất hết tiến độ".
   if (isError) return shell(<ErrorState message={getErrorMessage(profileError)} onRetry={() => void refetch()} />);
 
@@ -116,7 +116,7 @@ export default function GamePage() {
           )}
 
           <TreeActions
-            treeXuPrice={profile?.treeXuPrice}
+            treePointsPrice={profile?.treePointsPrice}
             waterPending={waterM.isPending}
             onWater={() => waterM.mutate()}
             buyPending={buyTreeM.isPending}
@@ -172,8 +172,7 @@ export default function GamePage() {
               waterPlotVariables={waterPlotM.variables}
               onWaterPlot={(plotId) => waterPlotM.mutate(plotId)}
               unlockPending={unlockM.isPending}
-              unlockVariables={unlockM.variables}
-              onUnlock={(currency) => unlockM.mutate(currency)}
+              onUnlock={() => unlockM.mutate()}
             />
           )}
 

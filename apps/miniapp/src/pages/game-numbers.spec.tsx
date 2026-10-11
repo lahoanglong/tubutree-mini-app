@@ -27,7 +27,7 @@ vi.mock('../services/game-api', () => {
       lastDewAt: null,
       lastCheckInAt: null,
       streakFreezeCost: 1_500,
-      treeXuPrice: 65_000,
+      treePointsPrice: 50,
       ecoImpact: { progress: 12_000, target: 50_000, treeType: 'Sồi', treesPlanted: 3 },
     }),
     getTodayQuiz: resolved([]),
@@ -46,7 +46,7 @@ vi.mock('../services/game-api', () => {
     getGarden: resolved({
       plots: [],
       maxPlots: 3,
-      nextUnlock: { slot: 2, seedCost: 1_200, xuCost: 65_000 },
+      nextUnlock: { slot: 2, seedCost: 1_200 },
     }),
     fetchSeasonPass: resolved({ active: false }),
     checkIn: vi.fn(),
@@ -77,7 +77,7 @@ function renderPage() {
 }
 
 describe('GamePage — số hiển thị có dấu phân cách nghìn (C-083)', () => {
-  it('giọt nước, xu và mục tiêu cộng đồng đều theo kiểu "1.250.000" / "65.000 xu", không có số trần', async () => {
+  it('giọt nước và mục tiêu cộng đồng theo kiểu "1.250.000", giá góp quỹ là Điểm Xanh, không có số trần', async () => {
     const { container } = renderPage();
     expect(await screen.findByText(/Góp quỹ trồng cây/)).toBeInTheDocument();
     await screen.findByText(/Rừng Tubu/);
@@ -85,12 +85,12 @@ describe('GamePage — số hiển thị có dấu phân cách nghìn (C-083)', 
     const text = container.textContent ?? '';
 
     expect(text).toContain('Mua (1.500💧)');
-    expect(text).toContain('(65.000 xu)');
+    expect(text).toContain('Góp quỹ trồng cây (50 điểm)');
     expect(text).toContain('1.250.000/5.000.000💧');
     expect(text).toContain('Bạn đã góp 89.000💧');
     expect(text).toContain('12.000/50.000💧 · 💧 1.250.000');
     expect(text).toContain('Mở lô (1.200💧)');
-    expect(text).toContain('Mở lô (65.000 xu)');
+    expect(text).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])/iu);
     expect(text).toContain('1.250.000💧');
     expect(text).not.toMatch(/(^|[^\d.])\d{4,}(?![\d.])/);
   });
