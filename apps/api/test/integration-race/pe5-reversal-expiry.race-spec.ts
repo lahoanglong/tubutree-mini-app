@@ -8,7 +8,7 @@ import { LoyaltyExpiryService } from '../../src/modules/loyalty/loyalty-expiry.s
 import { findPointsLotDrift } from '../../src/modules/loyalty/points-reconcile';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { milestoneGrantReason, revokeReferralRewardForOrder } from '../../src/modules/wallet/referral-reward';
-import { createOrder, createUser, setConfig, warmPool } from './helpers';
+import { createOrder, createUser, randCode, setConfig, warmPool } from './helpers';
 
 const DAY = 864e5;
 
@@ -304,6 +304,45 @@ describe('dòng thu hồi ăn đúng lô gốc khi cron hết hạn chạy (real
 
       expect((await expiredRows(referrer.id)).map((r) => r.delta)).toEqual([-15]);
       expect(await balance(referrer.id)).toBe(30);
+    });
+  });
+
+  /**
+   * loyalty.point_expire_months không có biên trong SystemConfigService, nên admin đặt được 0 hay số âm. Mọi nguồn cộng
+   * điểm thường phải rơi về 12 tháng như nhau; điểm đơn giao trước đây tự tính tháng nên hết hạn ngay và cron đêm sau
+   * trừ lại chính điểm khách vừa nhận.
+   */
+  describe('loyalty.point_expire_months hỏng (0, âm): điểm đơn giao và thưởng đều có hạn 12 tháng', () => {
+    const MONTHS_KEY = 'loyalty.point_expire_months';
+
+    it.each([[0], [-3]])('cấu hình %i: ORDER_DELIVERED và thưởng cộng đồng có hạn ≈ bây giờ + 12 tháng, cron không trừ gì', async (bad) => {
+      const user = await customer();
+      await config.set(MONTHS_KEY, bad, 'it-pe5');
+      const before = new Date();
+      try {
+        const order = await deliveredOrder(user.id, 20);
+        await rewards.grant(user.id, 5, `COMMUNITY_POST:it-pe5-${randCode(6)}`, 'COMMUNITY', null);
+        expect(order.id).toBeTruthy();
+      } finally {
+        await config.set(MONTHS_KEY, 12, 'it-pe5');
+      }
+      const after = new Date();
+
+      const rows = await prisma.pointsTransaction.findMany({ where: { userId: user.id, delta: { gt: 0 } } });
+      expect(rows).toHaveLength(2);
+      const lo = new Date(before);
+      lo.setMonth(lo.getMonth() + 12);
+      const hi = new Date(after);
+      hi.setMonth(hi.getMonth() + 12);
+      for (const row of rows) {
+        expect(row.expiresAt).toBeInstanceOf(Date);
+        expect(row.expiresAt!.getTime()).toBeGreaterThanOrEqual(lo.getTime());
+        expect(row.expiresAt!.getTime()).toBeLessThanOrEqual(hi.getTime());
+      }
+
+      await runCron();
+      expect(await expiredRows(user.id)).toHaveLength(0);
+      expect(await balance(user.id)).toBe(25);
     });
   });
 });

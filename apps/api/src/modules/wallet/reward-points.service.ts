@@ -2,6 +2,7 @@ import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
+import { DEFAULT_POINT_EXPIRE_MONTHS, pointsExpiryFrom } from '../loyalty/points-expiry-date';
 import { SystemConfigService } from '../system-config/system-config.service';
 import {
   countReferralSuccesses,
@@ -134,11 +135,8 @@ export class RewardPointsService {
 
   /** Hạn cho điểm thưởng mới — cùng quy tắc loyalty.point_expire_months như điểm danh / điểm đơn. */
   private async expiresAt(): Promise<Date> {
-    const raw = await this.config.get<number>('loyalty.point_expire_months', 12);
-    const months = typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 12;
-    const d = new Date();
-    d.setMonth(d.getMonth() + months);
-    return d;
+    const months = await this.config.get<number>('loyalty.point_expire_months', DEFAULT_POINT_EXPIRE_MONTHS);
+    return pointsExpiryFrom(new Date(), months);
   }
 
   private async referralMilestones(): Promise<ReferralMilestone[]> {
