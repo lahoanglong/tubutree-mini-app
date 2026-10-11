@@ -408,7 +408,8 @@ export function MultiImageUpload({
             <div style={{ width: '100%', height: '100%', overflow: 'hidden', borderRadius: 'var(--radius-control)' }}>
               <img src={url} alt={`upload-${idx}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
-            {/* Vùng chạm 44px bọc vòng tròn 20px nhìn thấy; vòng nằm đúng chỗ cũ (cách góc 3px). */}
+            {/* Vùng chạm 44px nằm gọn trong ô 72px (ô kế tiếp cách 10px, lấn ra là chạm nhầm ảnh bên cạnh);
+                vòng 20px nhìn thấy vẫn cách góc 3px. */}
             <button
               type="button"
               aria-label="Xóa ảnh"
@@ -418,8 +419,8 @@ export function MultiImageUpload({
               }}
               style={{
                 position: 'absolute',
-                top: -12,
-                right: -12,
+                top: 0,
+                right: 0,
                 width: 44,
                 height: 44,
                 padding: 0,
@@ -431,8 +432,8 @@ export function MultiImageUpload({
               <span
                 style={{
                   position: 'absolute',
-                  top: 15,
-                  right: 15,
+                  top: 3,
+                  right: 3,
                   width: 20,
                   height: 20,
                   borderRadius: '50%',
