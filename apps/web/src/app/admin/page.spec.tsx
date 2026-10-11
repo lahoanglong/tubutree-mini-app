@@ -31,6 +31,10 @@ const mocks = vi.hoisted(() => ({
   updateFlashSale: vi.fn(),
   addFlashSaleItem: vi.fn(),
   deleteFlashSaleItem: vi.fn(),
+  faqs: [] as unknown[],
+  createFaq: vi.fn(),
+  updateFaq: vi.fn(),
+  deleteFaq: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -134,6 +138,10 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     updateFlashSale: (...args: unknown[]) => mocks.updateFlashSale(...args),
     addFlashSaleItem: (...args: unknown[]) => mocks.addFlashSaleItem(...args),
     deleteFlashSaleItem: (...args: unknown[]) => mocks.deleteFlashSaleItem(...args),
+    listFaqs: async () => mocks.faqs,
+    createFaq: (...args: unknown[]) => mocks.createFaq(...args),
+    updateFaq: (...args: unknown[]) => mocks.updateFaq(...args),
+    deleteFaq: (...args: unknown[]) => mocks.deleteFaq(...args),
   };
 });
 
@@ -160,7 +168,9 @@ beforeEach(() => {
   mocks.promotions = [];
   mocks.rewards = [];
   mocks.flashSales = [];
+  mocks.faqs = [];
   for (const fn of [
+    mocks.createFaq, mocks.updateFaq, mocks.deleteFaq,
     mocks.createFlashSale, mocks.updateFlashSale, mocks.addFlashSaleItem, mocks.deleteFlashSaleItem,
     mocks.createBrand, mocks.updateBrand, mocks.verifyBrand, mocks.detachBrandProducts,
     mocks.createPromotion, mocks.deletePromotion, mocks.createDealerReward, mocks.deleteDealerReward,
@@ -857,5 +867,88 @@ describe('admin/page — tab Flash Sale', () => {
     }
     const hint = para(container, 'Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.');
     expect(hint.className).toContain('text-stone-500');
+  });
+});
+
+describe('admin/page — tab Câu hỏi thường gặp', () => {
+  const FAQ = { id: 'f1', category: 'Vận chuyển', question: 'Ship bao lâu?', answer: '2-3 ngày', sortOrder: 2, isActive: true };
+  const openFaqs = async () => {
+    window.history.replaceState(null, '', '/admin?tab=faqs');
+    return mount();
+  };
+
+  it('form thêm: tiêu đề font-display, ghi chú stone-500, ô nhập 44px, khoá tới khi có câu hỏi + trả lời, gửi đúng dữ liệu', async () => {
+    const { container } = await openFaqs();
+    expect(container.querySelector('h3')!.className).toContain('font-display');
+    expect(para(container, 'Nội dung này cũng được nạp vào ngữ cảnh của AI tư vấn để trả lời nhất quán.').className).toContain('text-stone-500');
+    const fields = [...container.querySelectorAll('input')];
+    expect(fields).toHaveLength(3);
+    for (const el of fields) {
+      expect(el.className).toContain('min-h-[44px]');
+      expect(el.className).toContain('border-stone-450');
+    }
+    const add = btn(container, 'Thêm câu hỏi');
+    expect(add.className).toContain('bg-forest-600');
+    expect(add.disabled).toBe(true);
+    typeInto(container.querySelector('input[placeholder="Câu hỏi"]'), ' Đổi trả thế nào? ');
+    expect(add.disabled).toBe(true);
+    typeInto(container.querySelector('textarea'), '7 ngày');
+    expect(add.disabled).toBe(false);
+    mocks.createFaq.mockResolvedValueOnce({});
+    click(add);
+    await flush();
+    expect(mocks.createFaq).toHaveBeenCalledWith({ category: undefined, question: 'Đổi trả thế nào?', answer: '7 ngày', sortOrder: 0 });
+    expect(para(container, 'Đã thêm câu hỏi thường gặp!').className).toContain('text-success-fg');
+
+    typeInto(container.querySelector('input[placeholder="Câu hỏi"]'), 'Q');
+    typeInto(container.querySelector('textarea'), 'A');
+    mocks.createFaq.mockRejectedValueOnce(new Error('Trùng câu hỏi'));
+    click(add);
+    await flush();
+    expect(para(container, 'Trùng câu hỏi').className).toContain('text-danger-fg');
+  });
+
+  it('hàng câu hỏi: chip nhóm trung tính, huy hiệu hiện/ẩn theo tông, ba nút chữ 44px gọi đúng API', async () => {
+    mocks.faqs = [FAQ];
+    const { container } = await openFaqs();
+    const chip = para(container, 'Vận chuyển');
+    expect(chip.className).toContain('bg-stone-100');
+    expect(para(container, 'Đang hiện').className).toContain('bg-success-bg');
+    expect(para(container, 'thứ tự 2').className).toContain('text-stone-500');
+
+    const edit = btn(container, 'Sửa');
+    const hide = btn(container, 'Ẩn');
+    const del = btn(container, 'Xoá');
+    for (const b of [edit, hide, del]) expect(b.className).toContain('min-h-[44px]');
+    expect(edit.className).toContain('text-forest-700');
+    expect(hide.className).toContain('text-stone-600');
+    expect(del.className).toContain('text-danger-fg');
+
+    mocks.updateFaq.mockResolvedValue({});
+    click(hide);
+    await flush();
+    expect(mocks.updateFaq).toHaveBeenCalledWith('f1', { isActive: false });
+    mocks.deleteFaq.mockResolvedValue({ ok: true });
+    click(del);
+    await flush();
+    expect(mocks.deleteFaq).toHaveBeenCalledWith('f1');
+  });
+
+  it('form sửa: mở bằng Sửa, ô nhập 44px, Lưu gửi đúng dữ liệu, lỗi báo danger', async () => {
+    mocks.faqs = [FAQ];
+    const { container } = await openFaqs();
+    click(btn(container, 'Sửa'));
+    expect(btn(container, 'Đóng')).toBeTruthy();
+    const q = container.querySelector('input[value="Ship bao lâu?"]') as HTMLInputElement;
+    expect(q.className).toContain('min-h-[44px]');
+    expect(container.querySelector('textarea')!.className).toContain('border-stone-450');
+    typeInto(q, 'Ship mấy ngày?');
+    const save = btn(container, 'Lưu');
+    expect(save.className).toContain('bg-forest-600');
+    mocks.updateFaq.mockRejectedValueOnce(new Error('Lỗi lưu'));
+    click(save);
+    await flush();
+    expect(mocks.updateFaq).toHaveBeenCalledWith('f1', { category: 'Vận chuyển', question: 'Ship mấy ngày?', answer: '2-3 ngày', sortOrder: 2 });
+    expect(para(container, 'Lỗi lưu').className).toContain('text-danger-fg');
   });
 });
