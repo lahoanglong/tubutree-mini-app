@@ -45,6 +45,24 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       data: [],
       meta: { total: 60, page: 1, limit: 20 },
     }),
+    listDealerApps: async () => ({
+      data: [
+        {
+          id: 'd1',
+          businessName: 'Cửa hàng Xanh',
+          ownerName: 'Lan',
+          phone: '0911111111',
+          address: '1 Lê Lợi',
+          taxCode: null,
+          cccdFrontUrl: 'https://img.test/f.jpg',
+          cccdBackUrl: '',
+          status: 'PENDING',
+          createdAt: '2026-10-01T00:00:00.000Z',
+        },
+      ],
+      meta: { total: 45, page: 1, limit: 20 },
+    }),
+    listDealerTiers: async () => [{ id: 't1', name: 'Bạc', minOrderVolume: 0, creditLimit: 0, paymentTerms: null }],
   };
 });
 
@@ -104,5 +122,41 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     const pos = [...container.querySelectorAll('a')].find((a) => a.getAttribute('href') === '/admin/pos')!;
     expect(pos.textContent).toContain('Màn thu ngân');
     expect(pos.className).toContain('min-h-[44px]');
+  });
+});
+
+describe('admin/page — tab Đại lý', () => {
+  const openDealers = async () => {
+    window.history.replaceState(null, '', '/admin?tab=dealers');
+    return mount();
+  };
+
+  it('hồ sơ chờ duyệt: Duyệt (tô forest) bị khoá tới khi chọn bậc, Từ chối viền danger, cả hai cao 44px', async () => {
+    const { container } = await openDealers();
+    const approve = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Duyệt')!;
+    const reject = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Từ chối')!;
+    expect(approve.disabled).toBe(true);
+    expect(approve.title).toBe('Cần chọn bậc đại lý để duyệt');
+    expect(approve.className).toContain('bg-forest-600');
+    expect(approve.className).toContain('min-h-[44px]');
+    expect(reject.disabled).toBe(false);
+    expect(reject.className).toContain('border-danger-fg');
+    expect(reject.className).toContain('min-h-[44px]');
+  });
+
+  it('còn trang chưa tải: thông báo cảnh báo theo token và nút Tải thêm cao 44px', async () => {
+    const { container } = await openDealers();
+    const notice = [...container.querySelectorAll('p')].find((p) => p.textContent?.includes('mới hơn chưa tải'))!;
+    expect(notice.textContent).toContain('Còn 44 hồ sơ mới hơn chưa tải');
+    expect(notice.className).toContain('bg-warning-bg');
+    const more = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tải thêm')!;
+    expect(more.className).toContain('min-h-[44px]');
+  });
+
+  it('thẻ hồ sơ: tên/địa chỉ dài ngắt dòng, ảnh CCCD có viền token', async () => {
+    const { container } = await openDealers();
+    const card = [...container.querySelectorAll('div')].find((d) => d.textContent?.startsWith('Cửa hàng Xanh') && d.className.includes('rounded-card'))!;
+    expect(card.querySelector('span.break-words')!.textContent).toBe('Cửa hàng Xanh');
+    expect(card.querySelector('img')!.className).toContain('border-stone-200');
   });
 });

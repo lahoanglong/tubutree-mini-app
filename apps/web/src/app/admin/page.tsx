@@ -95,6 +95,7 @@ import { ReviewsTab } from '@/components/admin/reviews-tab';
 import type { PickedItem } from '@/components/admin/search-picker';
 import { SubscriptionsTab } from '@/components/admin/subscriptions-tab';
 import { UserPicker } from '@/components/admin/user-picker';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, TOUCH_H } from '@/components/admin/ui';
 import { AnalyticsTab } from './analytics-tab';
 import {
   exportOrdersToCsv,
@@ -280,21 +281,21 @@ function DealersTab() {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded border border-neutral-200 px-2 py-1 text-sm">
+        <select value={filter} onChange={(e) => setFilter(e.target.value)} className={`${FIELD_CLASS} ${TOUCH_H}`}>
           {['PENDING', 'APPROVED', 'REJECTED', ''].map((s) => (
             <option key={s} value={s}>{s || 'Tất cả'}</option>
           ))}
         </select>
         {q.data && (
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-stone-500">
             {view.label} hồ sơ{pending ? ' · cũ nhất trước' : ''}
           </span>
         )}
       </div>
       <QueueMoreNotice pending={pending} view={view} noun="hồ sơ" />
       <div className="mt-3 space-y-3">
-        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách hồ sơ đại lý.</p>}
-        {q.isLoading && <p className="text-sm text-neutral-500">Đang tải danh sách hồ sơ…</p>}
+        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách hồ sơ đại lý.</p>}
+        {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách hồ sơ…</p>}
         {view.items.map((a) => <DealerRow key={a.id} app={a} />)}
         {q.data && view.items.length === 0 && <Empty>Không có hồ sơ.</Empty>}
       </div>
@@ -315,7 +316,7 @@ function DealersTab() {
 function QueueMoreNotice({ pending, view, noun }: { pending: boolean; view: { total: number; items: unknown[]; hasMore: boolean }; noun: string }) {
   if (!pending || !view.hasMore) return null;
   return (
-    <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+    <p className="mt-2 rounded-control border border-warning-fg bg-warning-bg px-3 py-2 text-xs text-warning-fg">
       Còn {view.total - view.items.length} {noun} mới hơn chưa tải — bấm &quot;Tải thêm&quot; để xem tiếp.
     </p>
   );
@@ -325,13 +326,8 @@ function LoadMoreButton({ hasMore, loading, error, onClick }: { hasMore: boolean
   if (!hasMore) return null;
   return (
     <div className="mt-3 text-center">
-      {error && <p className="mb-1 text-xs text-red-600">Không tải thêm được, thử lại.</p>}
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={loading}
-        className="rounded border border-neutral-300 bg-white px-4 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
-      >
+      {error && <p className="mb-1 text-xs text-danger-fg">Không tải thêm được, thử lại.</p>}
+      <button type="button" onClick={onClick} disabled={loading} className={BTN_SECONDARY}>
         {loading ? 'Đang tải…' : 'Tải thêm'}
       </button>
     </div>
@@ -348,18 +344,18 @@ function DealerRow({ app: a }: { app: DealerApp }) {
   });
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
-      <div className="flex justify-between">
-        <span className="font-medium">{a.businessName}</span>
-        <span className="text-xs text-neutral-400">{a.status}</span>
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
+      <div className="flex justify-between gap-2">
+        <span className="min-w-0 break-words font-medium text-stone-900">{a.businessName}</span>
+        <span className="shrink-0 text-xs text-stone-500">{a.status}</span>
       </div>
-      <div className="text-sm text-neutral-600">{a.ownerName} · {a.phone}</div>
-      <div className="text-sm text-neutral-600">{a.address}</div>
+      <div className="break-words text-sm text-stone-600">{a.ownerName} · {a.phone}</div>
+      <div className="break-words text-sm text-stone-600">{a.address}</div>
       <div className="mt-2 flex gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {a.cccdFrontUrl && <img src={a.cccdFrontUrl} alt="CCCD trước" className="h-16 rounded border" />}
+        {a.cccdFrontUrl && <img src={a.cccdFrontUrl} alt="CCCD trước" className="h-16 rounded-control border border-stone-200" />}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {a.cccdBackUrl && <img src={a.cccdBackUrl} alt="CCCD sau" className="h-16 rounded border" />}
+        {a.cccdBackUrl && <img src={a.cccdBackUrl} alt="CCCD sau" className="h-16 rounded-control border border-stone-200" />}
       </div>
       {a.status === 'PENDING' && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -368,14 +364,14 @@ function DealerRow({ app: a }: { app: DealerApp }) {
             onClick={() => review.mutate(true)}
             disabled={review.isPending || !tierId.trim()}
             title={!tierId.trim() ? 'Cần chọn bậc đại lý để duyệt' : undefined}
-            className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             Duyệt
           </button>
-          <button onClick={() => review.mutate(false)} disabled={review.isPending} className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600">Từ chối</button>
+          <button onClick={() => review.mutate(false)} disabled={review.isPending} className={BTN_DANGER_OUTLINE}>Từ chối</button>
         </div>
       )}
-      {review.isError && <p className="mt-1 text-xs text-red-600">{(review.error as Error).message}</p>}
+      {review.isError && <p className="mt-1 text-xs text-danger-fg">{(review.error as Error).message}</p>}
     </div>
   );
 }
