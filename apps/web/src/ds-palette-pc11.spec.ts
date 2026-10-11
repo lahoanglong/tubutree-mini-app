@@ -53,9 +53,11 @@ const LEGACY_PALETTE = new RegExp(
 );
 // `white`/`black` thô của Tailwind không phải token: nền/chữ trắng là stone-0, lớp phủ tối là stone-900.
 const RAW_WHITE_BLACK = new RegExp(`\\b(?:${UTILITIES})-(?:white|black)(?![\\w-])`, 'g');
-const RAW_COLOR = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b|\b(?:rgba?|hsla?)\(/g;
-// Cùng dải ký tự với scripts/uiux/static-scan.mjs (cột emoji).
-const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿]/gu;
+// #rgb, #rgba, #rrggbb và #rrggbbaa (static-scan đếm cả dạng có kênh alpha).
+const RAW_COLOR = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b|\b(?:rgba?|hsla?)\(/g;
+// Dải của scripts/uiux/static-scan.mjs (cột emoji) cộng hình học ■-◿ và mũi tên/ký hiệu khối ⬀-⯿: ▲▼ cũng là icon
+// ghép trong chữ nút nên phải đi qua lucide-react như emoji.
+const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿■-◿⬀-⯿]/gu;
 
 // File lớn chuyển dần theo cụm tab: chỉ quét đoạn đã chuyển (từ đầu file tới dấu cắt), cộng phần đuôi dùng chung.
 // Cụm tab sau chuyển xong thì dời `end` xuống; chuyển hết thì đưa cả file vào MIGRATED và xoá mục ở đây.

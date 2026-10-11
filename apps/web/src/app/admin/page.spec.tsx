@@ -334,7 +334,7 @@ describe('admin/page — tab Đơn hàng', () => {
 });
 
 describe('admin/page — hàng đơn hàng', () => {
-  it('nút Xem & Sửa cao 44px ở điện thoại, mở rộng thì hiện sản phẩm + huy hiệu đặt trước theo token và đổi nhãn Đóng ▲', async () => {
+  it('nút Xem & Sửa cao 44px ở điện thoại, mở rộng thì hiện sản phẩm + huy hiệu đặt trước theo token và đổi nhãn Đóng', async () => {
     mocks.orders = [
       {
         id: 'o1',
@@ -353,14 +353,15 @@ describe('admin/page — hàng đơn hàng', () => {
     ];
     window.history.replaceState(null, '', '/admin?tab=orders');
     const { container } = await mount();
-    const toggle = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa ▼')!;
+    const toggle = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!;
     expect(toggle.className).toContain('min-h-[44px]');
     expect(container.textContent).toContain('Đại lý · công nợ');
     const dealerNote = [...container.querySelectorAll('div')].find((d) => d.textContent?.startsWith('Đại lý ·'))!;
     expect(dealerNote.className).toContain('text-warning-fg');
     act(() => toggle.click());
     await flush();
-    expect(toggle.textContent).toBe('Đóng ▲');
+    expect(toggle.textContent).toBe('Đóng');
+    expect(toggle.querySelector('svg')).not.toBeNull();
     const pill = [...container.querySelectorAll('span')].find((x) => x.textContent === 'Đặt trước 2')!;
     expect(pill.className).toContain('bg-warning-bg');
     expect(container.textContent).toContain('Ghi chú từ khách: Giao giờ hành chính');

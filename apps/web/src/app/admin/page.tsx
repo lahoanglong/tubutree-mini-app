@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Banknote, Check, Download, Recycle, Store, TreePine, Trophy } from 'lucide-react';
+import { Banknote, Check, ChevronDown, ChevronUp, Download, Recycle, Store, TreePine, Trophy } from 'lucide-react';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { formatVnd } from '@/lib/shop-client';
@@ -795,9 +795,10 @@ function OrdersTab({
                           <button
                             type="button"
                             onClick={() => setExpandedId(isExpanded ? null : (o.id || o.code))}
-                            className={BTN_SMALL}
+                            className={`${BTN_SMALL} inline-flex items-center gap-1`}
                           >
-                            {isExpanded ? 'Đóng ▲' : 'Xem & Sửa ▼'}
+                            {isExpanded ? 'Đóng' : 'Xem & Sửa'}
+                            {isExpanded ? <ChevronUp className="h-3 w-3" aria-hidden /> : <ChevronDown className="h-3 w-3" aria-hidden />}
                           </button>
                         </td>
                       </tr>
