@@ -239,7 +239,7 @@ export default function AdminPage() {
           Màn thu ngân (tích điểm tại quầy)
         </Link>
       </div>
-      <div className="mt-4 flex gap-2 overflow-x-auto border-b border-stone-200">
+      <div className="relative mt-4 flex gap-2 overflow-x-auto border-b border-stone-200">
         {TABS.map((t) => (
           <button
             key={t.k}
