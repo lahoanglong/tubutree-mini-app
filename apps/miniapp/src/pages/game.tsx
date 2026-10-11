@@ -32,6 +32,7 @@ import { GAME_TABS, GameTabPanel, type GameTabKey } from '../components/game/gam
 import { useGameData } from '../components/game/use-game-data';
 import { useWheelPrize } from '../components/game/use-wheel-prize';
 import { useGameActions, type HarvestReward } from '../components/game/use-game-actions';
+import { SEASON_PASS_ENABLED } from '../utils/features';
 
 export default function GamePage() {
   const status = useAuthStore((s) => s.status);
@@ -191,7 +192,7 @@ export default function GamePage() {
           {season && <SeasonBanner season={season} />}
 
           {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
-          {seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
+          {SEASON_PASS_ENABLED && seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
             <SeasonPass
               pass={seasonPass}
               claimPending={claimPassM.isPending}

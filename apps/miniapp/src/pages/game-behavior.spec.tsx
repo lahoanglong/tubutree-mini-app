@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   haptic: vi.fn(),
   copyText: vi.fn(),
   auth: { status: 'authenticated' as string },
+  features: { seasonPass: false },
   wheel: { cost: undefined as number | undefined, onSpin: undefined as (() => Promise<unknown>) | undefined },
   api: {
     getGameProfile: vi.fn(),
@@ -59,6 +60,11 @@ vi.mock('../store/auth', () => ({
   },
 }));
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
+vi.mock('../utils/features', () => ({
+  get SEASON_PASS_ENABLED() {
+    return mocks.features.seasonPass;
+  },
+}));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../components/wheel', () => ({
   WheelOfFortune: ({ cost, onSpin }: { cost: number; onSpin: () => Promise<unknown> }) => {
@@ -120,6 +126,7 @@ async function openTab(name: 'Hôm nay' | 'Vườn' | 'Cộng đồng') {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.status = 'authenticated';
+  mocks.features.seasonPass = false;
   mocks.wheel.cost = undefined;
   mocks.wheel.onSpin = undefined;
   const a = mocks.api;
@@ -647,7 +654,41 @@ describe('GamePage — lô đất', () => {
   });
 });
 
-describe('GamePage — Chặng Mùa (Season Pass)', () => {
+describe('GamePage — Chặng Mùa (Season Pass) đã ẩn (C-044, Q-16)', () => {
+  const activePass = {
+    active: true,
+    seasonTitle: 'Xuân',
+    xp: 150,
+    premiumEligible: true,
+    tiers: [
+      { tier: 0, xpRequired: 100, free: { type: 'SEEDS', amount: 10 }, premium: { type: 'XU', amount: 500 }, unlocked: true, claimedFree: false, claimedPremium: false },
+    ],
+  };
+
+  it('không gọi API season-pass và không dựng khối dù server trả mùa đang chạy', async () => {
+    mocks.api.fetchSeasonPass.mockResolvedValue(activePass);
+    renderPage();
+    await openTab('Cộng đồng');
+    await screen.findByText('Sồi');
+    await waitFor(() => expect(mocks.api.getLeaderboard).toHaveBeenCalled());
+    expect(mocks.api.fetchSeasonPass).not.toHaveBeenCalled();
+    expect(screen.queryByText(viText.game.seasonPass.title)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Season Pass|Chặng Mùa/)).not.toBeInTheDocument();
+  });
+
+  it('chưa đăng nhập cũng không gọi API season-pass', async () => {
+    mocks.auth.status = 'unauthenticated';
+    renderPage();
+    await waitFor(() => expect(mocks.api.getLeaderboard).toHaveBeenCalled());
+    expect(mocks.api.fetchSeasonPass).not.toHaveBeenCalled();
+  });
+});
+
+describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENABLED', () => {
+  beforeEach(() => {
+    mocks.features.seasonPass = true;
+  });
+
   const tiers = (over: Record<string, unknown> = {}) => [
     { tier: 0, xpRequired: 100, free: { type: 'SEEDS', amount: 10 }, premium: { type: 'XU', amount: 500 }, unlocked: true, claimedFree: false, claimedPremium: false, ...over },
     { tier: 1, xpRequired: 300, free: { type: 'SEEDS', amount: 20 }, premium: { type: 'XU', amount: 900 }, unlocked: false, claimedFree: false, claimedPremium: false },

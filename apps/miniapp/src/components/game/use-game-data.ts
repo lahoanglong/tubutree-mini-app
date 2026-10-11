@@ -13,6 +13,7 @@ import {
   getGarden,
   fetchSeasonPass,
 } from '../../services/game-api';
+import { SEASON_PASS_ENABLED } from '../../utils/features';
 
 /**
  * Mọi truy vấn của trang Vườn Xanh. Khoá `['game', ...]` là hợp đồng với `refresh()` ở use-game-actions
@@ -31,7 +32,7 @@ export function useGameData(authed: boolean) {
   const { data: seasonBoard } = useQuery({ queryKey: ['game', 'seasonBoard'], queryFn: getSeasonLeaderboard });
   const { data: friends } = useQuery({ queryKey: ['game', 'friends'], queryFn: getFriends, enabled: authed });
   const { data: garden } = useQuery({ queryKey: ['game', 'garden'], queryFn: getGarden, enabled: authed });
-  const { data: seasonPass } = useQuery({ queryKey: ['game', 'seasonPass'], queryFn: fetchSeasonPass, enabled: authed });
+  const { data: seasonPass } = useQuery({ queryKey: ['game', 'seasonPass'], queryFn: fetchSeasonPass, enabled: authed && SEASON_PASS_ENABLED });
 
   return { profileQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass };
 }
