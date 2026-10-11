@@ -153,3 +153,24 @@ Q-04 số dư đầu kỳ cho sổ cái Ví · Q-07 creditLimit mặc định 0,
 - Thêm PC-11 (admin web sang DS v2, opus không cần, sonnet) ở vòng C3, sau PC-7 vì dùng chung `web/tailwind.config`.
 - PD-3 chưa làm phần "Ví trả một phần đơn" của Q-03 phương án 1 (spec PD-3 OQ-12): Cổng 1 chỉ ghi Q-03 là "Gộp ngay", không nêu riêng phần này. CHƯA CÓ QUYẾT ĐỊNH của chủ dự án: cần xác nhận hoãn sang gói riêng sau PD-3 hoặc giao làm ngay (đụng đặt đơn, hoàn tiền, QR chuyển khoản, COD gửi Pancake). Dòng này do review C1 của PD-3 thêm để việc không bị bỏ sót.
 - PD-3 làm theo đề xuất mặc định của spec cho OQ-1..15; CHƯA có chủ dự án duyệt. Các câu đổi giá trị khách/CTV nhận cần duyệt hoặc chỉnh, và ghi kết quả vào đây, TRƯỚC KHI deploy: OQ-1 (thưởng mới là Điểm Xanh thường, hết hạn 12 tháng, trần 20%/đơn; mốc CTV 80 triệu = 2.000 điểm trước đây là xu trả được tới 100% đơn), OQ-2 (điểm, kể cả lô quy đổi, không trừ phí ship và phần lẻ dưới 1.000đ phải trả tiền; trước đây xu trả cả tổng đơn), OQ-5 (góp quỹ trồng cây 50 Điểm Xanh, có thể lấy từ lô quy đổi), OQ-6 (điểm cộng đồng: đăng bài 1, hay nhất 1, trả lời 0; trần 4.000đ/ngày), OQ-9 (thu hồi thưởng giới thiệu cấp bằng xu thì trừ lô quy đổi), OQ-14 (xoá tài khoản bị chặn khi còn điểm quy đổi). Dòng này do review D1 của PD-3 thêm; chưa có quyết định nào của chủ dự án ở đây.
+
+### Duyệt của chủ dự án 2026-10-11 (sau 99-release-readiness)
+
+Giả định đã nêu và chủ dự án không phản đối: dự án chưa có khách thật, chưa có số dư xu thật; bản `cb92dc8` trên VPS chỉ là bản thử. Chủ dự án chọn "duyệt mặc định" cho mọi mục đề xuất:
+
+| Mục | Quyết định |
+|---|---|
+| PD-3 OQ-1 | Thưởng mới là Điểm Xanh thường, hết hạn theo `loyalty.point_expire_months`, trần `loyalty.max_redeem_pct` (20%) |
+| PD-3 OQ-2 | Điểm không trừ phí ship; phần lẻ dưới 1.000đ khách trả tiền |
+| PD-3 OQ-3, OQ-4 | Lô quy đổi không dùng cho vòng quay, voucher catalog, mở lô vườn; bỏ mở lô vườn bằng xu |
+| PD-3 OQ-5 | Góp quỹ cây 50 Điểm Xanh, tiêu lô thường trước; thêm chống bấm đôi ở BE |
+| PD-3 OQ-6 | Cộng đồng: đăng bài 1 điểm (≤1/ngày), hay nhất 1 (≤3/ngày), trả lời 0; theo dõi lạm dụng nick phụ tuần đầu |
+| PD-3 OQ-7, OQ-11 | Nhiệm vụ gian hàng 2/2/2/1/5 điểm; khoá cứng tỉ giá 1.000đ/điểm |
+| PD-3 OQ-8, 9, 10, 13, 14 | Không còn tác dụng khi chưa có số dư xu cũ; giữ mã, không gỡ |
+| PD-3 OQ-12 | "Ví trả một phần đơn" HOÃN sang gói riêng sau UAT |
+| PA-7 | Mỗi người được mời chỉ thưởng người mời một lần |
+| PC-6 (a), (b), (c) | Chấp nhận: giảm giá đơn đầu kể cả khi huỷ gói (theo dõi `subscription_changed`); ví thiếu thì PAUSED và bỏ kỳ lỡ; voucher đơn thứ hai 30.000đ cho đơn từ 199.000đ (chỉnh trong SystemConfig nếu biên lãi không chịu được) |
+| PD-1 | Nhãn "CO₂ hấp thụ" ở thẻ Tác động xanh đổi thành "ước tính" |
+| PD-2 | Gỡ 4 route `/beta/*`, giữ bảng `BetaFeedback`; giữ nguyên 25 khoá cấu hình chết, 3 endpoint admin nghi ngờ, ZaloPay, `/storefront/by-host`, `DELETE /reviews/:id` |
+
+Việc của chủ dự án còn lại: trỏ DNS Cloudflare, báo số vCPU của VPS (`nproc`) để đặt `connection_limit`, quét QR UAT trên Zalo thật, nội dung FAQ/Academy, dọn worktree/container. Gói PE-1/PE-2 (chống bấm đôi góp quỹ cây, hạn của điểm hoàn khi huỷ đơn, gỡ `/beta/*`, nhãn CO₂, `busyRef` trang Vườn, cảnh báo `key` trùng) làm theo các quyết định trên.
