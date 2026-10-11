@@ -19,7 +19,7 @@ async function call(method, path, { token, body, headers } = {}) {
   try {
     const r = await fetch(BASE + path, {
       method,
-      headers: { 'X-Forwarded-For': fakeIp(++ipc), ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
+      headers: { 'X-Forwarded-For': fakeIp(++ipc), ...(process.env.PERF_BYPASS ? { 'x-throttle-bypass': process.env.PERF_BYPASS } : {}), ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
       body: body ? JSON.stringify(body) : undefined,
     });
     const text = await r.text();

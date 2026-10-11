@@ -75,6 +75,7 @@ async function runStage({ sameIp = false, name, concurrency, seconds, iterations
               method,
               headers: {
                 'X-Forwarded-For': sameIp ? fakeIp(vu + 1) : fakeIp(++ipCounter),
+                ...(process.env.PERF_BYPASS ? { 'x-throttle-bypass': process.env.PERF_BYPASS } : {}),
                 ...(token ? { Authorization: 'Bearer ' + token } : {}),
                 ...(body ? { 'Content-Type': 'application/json' } : {}),
                 ...headers,
