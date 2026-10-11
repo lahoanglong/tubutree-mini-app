@@ -202,3 +202,36 @@ describe('admin-client — setUserRole gửi tierId khi cấp DEALER (C-008)', (
     expect(JSON.parse(String(api.calls[1]!.init?.body))).toEqual({ phone: '0899625240', role: 'AFFILIATE' });
   });
 });
+
+// C-097 (Q-29): admin tối ưu máy tính nhưng nút thao tác tiền/đơn phải chạm được trên điện thoại.
+describe('OrderStatusActions — DS v2, vùng chạm 44px ở điện thoại', () => {
+  it('mọi nút trạng thái và "Đã nhận tiền" cao 44px (về gọn từ sm), ô mã giao dịch cũng vậy', () => {
+    const { container } = mount(
+      <OrderStatusActions order={order({ allowedTransitions: ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED'] })} />,
+    );
+    const buttons = Array.from(container.querySelectorAll('button'));
+    expect(buttons).toHaveLength(6);
+    for (const b of buttons) expect(b.className).toContain('min-h-[44px]');
+    expect(container.querySelector('input')?.className).toContain('min-h-[44px]');
+  });
+
+  it('nút "Hủy đơn" tông nguy hiểm theo token (viền/chữ danger-fg), "Đã giao hàng" là nút chính forest', () => {
+    const { container } = mount(
+      <OrderStatusActions order={order({ canConfirmPayment: false, allowedTransitions: ['DELIVERED', 'CANCELLED'] })} />,
+    );
+    expect(byText(container, 'button', 'Hủy đơn')?.className).toContain('text-danger-fg');
+    expect(byText(container, 'button', 'Hủy đơn')?.className).toContain('border-danger-fg');
+    expect(byText(container, 'button', 'Đã giao hàng')?.className).toContain('bg-forest-600');
+  });
+
+  it('lỗi xác nhận tiền dùng danger-fg, thành công dùng success-fg', async () => {
+    const api = mockFetch({ '/confirm-payment': { status: 400, body: { statusCode: 400, message: 'Chưa thấy giao dịch.' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<OrderStatusActions order={order()} />);
+    click(byText(container, 'button', 'Đã nhận tiền'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.className).toContain('text-danger-fg');
+  });
+});
