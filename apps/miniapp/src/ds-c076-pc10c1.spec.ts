@@ -14,6 +14,7 @@ const FILES = [
   'src/pages/cashback.tsx',
   'src/components/community/product-picker.tsx',
   'src/components/community/post-card.tsx',
+  'src/components/community/post-composer.tsx',
 ];
 
 /** Trang (không phải component con) phải có đúng một tiêu đề trang — PageHeader hoặc <h1> riêng (C-114). */
