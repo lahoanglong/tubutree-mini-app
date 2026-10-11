@@ -168,6 +168,8 @@ export function mockDiscovery(
   api.get('/orders/:code', ({ params }) => makeOrder({ code: params.code!, status: 'SHIPPING', paymentStatus: 'PAID' }));
   api.get('/orders/me/returns', []);
   api.get('/me/subscriptions', opts.subscription ? [SUBSCRIPTION_4B] : []);
+  // Tab Định kỳ có lịch thì tra địa chỉ theo addressId (subscriptions-panel).
+  api.get('/me/addresses', []);
   api.post('/events', { accepted: 1 });
   // Fire-and-forget không liên quan nội dung test.
   api.allowUnmocked('POST /affiliate/touch', 'GET /products/:slug/reviews/can-review');
