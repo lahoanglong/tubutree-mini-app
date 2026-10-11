@@ -1,24 +1,24 @@
-# 99 — Đánh giá sẵn sàng phát hành (ghi ngày 2026-10-11)
+# 99 — Đánh giá sẵn sàng phát hành (ghi ngày 2026-10-11, cập nhật sau đợt E)
 
-Bản được đánh giá: nhánh `hardening/2026-10`, HEAD `c46fe6a6` (cộng các commit tài liệu ghi sau báo cáo này). PROD đang chạy `cb92dc8` (Đợt A+B). Phạm vi diff so với PROD: 683 file, +66.509/−13.917 dòng, 17 migration mới (115 → 132). Chưa push, chưa deploy, chưa ghi vào PROD hay DB dùng chung ở bất kỳ bước nào.
+Bản được đánh giá: nhánh `hardening/2026-10`, HEAD `31bde4b8`. Báo cáo viết lần đầu ở `c46fe6a6`; sau đó chủ dự án duyệt các câu hỏi mở (`00-ROADMAP.md` cuối file) và đợt E (PE-1a, PE-1b, PE-2, PE-3, PE-4, PE-5) được làm, merge và kiểm lại toàn bộ trên HEAD hiện tại. Mọi số ở mục 2 là số của `31bde4b8`. Phạm vi diff so với bản VPS `cb92dc8` (Đợt A+B): 728 file, +73.732/−14.908 dòng, 596 commit, 17 migration mới (115 → 132). Chưa push, chưa deploy, chưa ghi vào VPS hay DB dùng chung ở bất kỳ bước nào.
+
+**Giả định nền (chủ dự án xác nhận 2026-10-11):** dự án mới có mã, chưa phát hành cho khách thật; bản `cb92dc8` trên VPS chỉ là bản thử, DNS còn trỏ IP chết, miniapp chưa lên Zalo. Nếu VPS thực ra chứa dữ liệu khách thật (số dư xu, đơn, điểm), các cổng đã bỏ ở mục 1 phải bật lại.
 
 ## 1. Kết luận
 
-**Cổng kỹ thuật: ĐẠT.** Không còn lỗi kỹ thuật nào chặn phát hành mà mình biết. Mọi lệnh trong mục 2 đã chạy lại trên HEAD, không dựa vào lời báo của agent.
+**Cổng kỹ thuật: ĐẠT trên `31bde4b8`.** Không còn lỗi kỹ thuật nào chặn phát hành mà mình biết. Mọi lệnh trong mục 2 đã chạy lại trên HEAD (không dựa vào lời báo của agent), kể cả sau các gói PE-1..PE-5.
 
-**Quyết định phát hành lên PROD: NO-GO cho tới khi chủ dự án đóng 5 cổng dưới đây.** Đây không phải lỗi mã mà là những việc chỉ chủ dự án làm được hoặc cần quyết:
+**Quyết định của chủ dự án đã chốt (`00-ROADMAP.md`, mục "Duyệt của chủ dự án 2026-10-11"):** duyệt mặc định mọi câu hỏi mở của PD-3 (OQ-1..OQ-15), PA-7, PC-6 (a)(b)(c), PD-1, PD-2; hoãn "Ví trả một phần đơn" sang gói riêng sau UAT; chốt OQ-15b (điểm hoàn khi huỷ đơn nhận hạn mới, không kế thừa hạn gốc).
 
-1. Duyệt (hoặc chỉnh) các câu hỏi mở OQ-1..OQ-16 của PD-3, nhất là OQ-1, 2, 5, 6, 9, 14 (thưởng mới thành điểm thường hết hạn và có trần 20%, điểm không trừ phí ship, góp quỹ cây 50 điểm có thể lấy từ phần tiền trả trước, thu hồi thưởng giới thiệu). Quyết định có làm "Ví trả một phần đơn" (Q-03 phương án 1) hay hoãn sang gói riêng: hiện Ví chỉ trả trọn đơn, thiếu thì báo 400.
-2. Chạy `apps/api/prisma/manual/pd3_measure_before_deploy.sql` trên bản sao PROD và điền số vào `impl/PD-3.md` (chi phí làm tròn lên của Điểm Xanh, cấu hình `loyalty.vnd_per_point_redeem` phải là số 1000, các khoá JSON cấu hình). Máy này không được đụng PROD nên đây là cổng mở duy nhất của Q-03a.
-3. Hạ tầng: Cloudflare trỏ `api.tubutree.com` và `app.tubutree.com` về 14.225.207.177 (hiện còn IP GCP đã chết), DNS-only.
-4. Chọn cửa sổ deploy và chấp nhận các tác động lên miniapp bản test cũ (mục 7.4). Miniapp mới phải lên kênh test Zalo cùng đợt với BE.
-5. Quét QR UAT trên Zalo thật. Chưa ai chạy miniapp trong WebView Zalo thật: toàn bộ kiểm thử miniapp ở đây là Playwright WebKit iPhone 12 với API giả.
+**Phát hành:**
+- **GO cho UAT/staging và cho bản thử trên VPS ngay khi chủ dự án ra lệnh deploy.** HEAD sẵn sàng để dựng lên và duyệt bằng mắt.
+- **Chưa phát hành cho khách thật** cho tới khi xong 3 việc chỉ chủ dự án làm được: (1) trỏ DNS Cloudflare `api.tubutree.com` và `app.tubutree.com` về 14.225.207.177, DNS-only; (2) quét QR UAT trên Zalo thật (chưa ai chạy miniapp trong WebView Zalo thật, toàn bộ kiểm thử miniapp ở đây là Playwright WebKit iPhone 12 với API giả); (3) xác nhận điểm vòng quay, nhiệm vụ, đánh giá có hạn 12 tháng (mục 6, PE-3). Nội dung FAQ/Academy cũng do chủ dự án nhập.
 
-**GO ngay cho UAT/staging**: HEAD sẵn sàng để dựng lên môi trường thử và cho chủ dự án duyệt bằng mắt.
+**Các cổng của bản báo cáo đầu tiên nay không còn áp dụng** (vì chưa có số dư xu hay dữ liệu khách thật): đo chi phí làm tròn trên bản sao PROD; cửa sổ deploy và việc miniapp bản test cũ hiển thị sai sau khi BE lên; rollback xu → điểm. Migration quy đổi xu chạy trên DB không có xu là no-op. Giữ nguyên các biện pháp rẻ: sao lưu `pg_dump`, chạy migration thành bước riêng (mục 7).
 
-**Phương án B (nếu muốn đưa C3, PD-1, PD-2 lên trước khi quyết xong PD-3):** commit `bf127ac3` (ngay trước khi gộp PD-3, đã gồm sửa e2e, sửa thanh tab admin, công cụ đo tải). Tại commit đó mình chưa chạy lại toàn bộ bộ kiểm; mức đã kiểm là mốc verify của D1 (jest 3132, race 290, vitest miniapp 2480, web 864, 125 migration, drift 0) cộng Playwright miniapp 121/121 và Web Admin 10/10. Nếu chọn phương án này phải chạy lại mục 2 trên `bf127ac3` và bỏ sót các sửa lỗi T5 nằm trên HEAD (chỉ có lỗi sửa chữ ở trang đơn hàng web là không liên quan PD-3).
+**Phương án B (đưa C3, PD-1, PD-2 lên trước PD-3)** không còn lý do tồn tại: PD-3 đã được duyệt và kiểm. Bỏ.
 
-## 2. Cổng kỹ thuật (lệnh thật trên HEAD `c46fe6a6`)
+## 2. Cổng kỹ thuật (lệnh thật trên HEAD `31bde4b8`)
 
 Môi trường: macOS arm64, Node 22.23.3 (jsdom 30 cần Node ≥ 22.22), Postgres 16-alpine trong Docker. Đặt `PATH=$HOME/.local/node/node-v22.23.3-darwin-arm64/bin:$PATH` trước mọi lệnh.
 
@@ -31,12 +31,12 @@ Môi trường: macOS arm64, Node 22.23.3 (jsdom 30 cần Node ≥ 22.22), Postg
 | Migration trên DB trống (`prisma migrate deploy`) | 132/132 áp sạch, `migrate status` "up to date" |
 | Drift schema (`migrate diff --exit-code`) | "No difference detected" |
 | `prisma/check-partial-indexes.ts` | 20/20 |
-| `npx jest` (api) | 172 suite / 3.256 test pass |
-| Race suite trên Postgres thật (`--runInBand`) | 59 suite / 363 test pass (đã chạy 3 lần liên tiếp ở HEAD trước đó, 359/359 mỗi lần, không dao động) |
-| `vitest run` miniapp | 197 file / 2.546 test pass |
+| `npx jest` (api) | 177 suite / 3.426 test pass |
+| Race suite trên Postgres thật (`--runInBand`) | 63 suite / 416 test pass (bản trước đó đã chạy 3 lần liên tiếp không dao động; các spec mới của PE-1a, PE-3, PE-5 mỗi cái chạy lặp 3 lần trong gói của nó) |
+| `vitest run` miniapp | 200 file / 2.585 test pass |
 | `vitest run` web | 59 file / 891 test pass |
 | Build: `nest build`, `next build`, miniapp `tsc --noEmit && vite build` | cả ba thoát 0 (miniapp cảnh báo chunk > 500 kB, đã có từ trước) |
-| Playwright 3 project (Zalo Mini App, Web Admin, API), `--workers=2 --retries=0`, DB dev dựng mới | 138/138 pass (2,3 phút) |
+| Playwright 3 project (Zalo Mini App, Web Admin, API), `--workers=2 --retries=0`, DB dev dựng mới | 138/138 pass (2,1 phút), chạy lại sau PE-1..PE-3 và sau PE-5 |
 
 Lưu ý: sau khi gộp schema Prisma phải chạy `npx prisma generate` rồi mới `tsc`/race; lần verify đầu có 13 suite race đỏ chỉ vì client Prisma cũ, đã xác nhận xanh sau khi generate.
 
@@ -54,7 +54,7 @@ Cột "Bằng chứng" nêu thứ chạy thật. "Ảnh" là ảnh chụp 390px 
 | Điểm Xanh, hạng, điểm danh, đổi quà | e2e `loyalty` 6; race `pd3-points-lots`; ảnh loyalty, profile | Đạt (xem mục 6 về hộp xác nhận quỹ cây) |
 | Ví, hoa hồng, rút tiền | e2e `wallet` 2; ảnh wallet | Đạt |
 | Giới thiệu bạn bè, thưởng, thu hồi | race `referral-order2` 27, `pd3-reward-sources`; vitest wallet (điều kiện thưởng, ẩn với CTV) | Đạt, không có e2e riêng |
-| Vườn Xanh, quỹ trồng cây | vitest `game-behavior`, `tree-actions`; race `pd3-tree-lock`; ảnh game | Đạt về logic; không có e2e riêng; cảnh báo React trùng `key` ở game/loyalty (chưa rõ do mã hay do dữ liệu giả của bộ chụp) |
+| Vườn Xanh, quỹ trồng cây | vitest `game-behavior`, `tree-actions`; race `pd3-tree-lock`, `game-tree-idempotency` (12 ca: bấm đôi, cùng key, key khác, user khác); ảnh game | Đạt. PE-1b chặn bấm đôi ở mọi nút ghi và gửi `Idempotency-Key`; PE-1a làm BE tương ứng. Không có e2e riêng cho Vườn |
 | CTV / Affiliate, gian hàng | e2e `affiliate-ctv` 3; ảnh affiliate, storefront-builder, storefront-view | Đạt |
 | Đại lý và thưởng đại lý | e2e `dealer-rewards` 3, Web Admin `admin.spec` 2 | Đạt |
 | Refill / thu gom (recycling) | e2e `recycling-pickup` 16 | Đạt |
@@ -91,7 +91,7 @@ Kết luận tải: không thấy hồi quy CPU trên các đường nóng; brow
 Các probe riêng:
 - **Throttle**: trước, 1 IP gửi 80 request vào `/products` thì 20 bị 429 (giới hạn 60/phút/IP); sau, 80/80 thành công (300/phút/route theo userId). Đã đóng A3-002.
 - **`/me/coupons` với 100k coupon, 8 request song song**: trước ~950–1.200 ms mỗi vòng; sau 6–22 ms.
-- **Flash sale (200 user cùng mua 1 suất, quota 50)**: cả 12 vòng ở hai bên đều bán đúng 50, không bán quá (so DB: `soldCount`, order items, purchases đều 50); đặt trùng cùng user hoặc cùng Idempotency-Key chỉ tạo 1 đơn. **Ngoại lệ:** một vòng ở bên "sau" (lúc máy đang bị tranh chấp nặng) có 125 request nhận `500 P2028` (Prisma không mở được transaction kịp trong giờ chờ). Không dẫn tới bán quá, nhưng khách thấy 500 thay vì thông báo hết suất. Đã nằm trong C-048/A3-011 (chưa đặt `connection_limit`/`pool_timeout`, cần số vCPU của VPS Vietnix); bằng chứng mới ghi ở đây. Nên đặt `connection_limit` tường minh trước khi mở flash sale.
+- **Flash sale (200 user cùng mua 1 suất, quota 50)**: cả 12 vòng ở hai bên đều bán đúng 50, không bán quá (so DB: `soldCount`, order items, purchases đều 50); đặt trùng cùng user hoặc cùng Idempotency-Key chỉ tạo 1 đơn. **Ngoại lệ:** một vòng ở bên "sau" (lúc máy đang bị tranh chấp nặng) có 125 request nhận `500 P2028` (Prisma không mở được transaction kịp trong giờ chờ). Không dẫn tới bán quá, nhưng khách thấy 500 thay vì thông báo hết suất. Đã nằm trong C-048/A3-011 (chưa đặt `connection_limit`/`pool_timeout`, cần số vCPU của VPS Vietnix); bằng chứng mới ghi ở đây. Đã đặt `connection_limit=20&pool_timeout=30` cho `DATABASE_URL` của API trong `docker-compose.vietnix.yml` (commit `c7c560cc`); chưa đo lại flash sale với pool này.
 - **Migration lên 200k đơn**: 29 migration (103 → 132) áp xong trong 3 giây tổng. Lâu nhất là `20261010042435_admin_cron_query_indexes` 0,96 giây (tạo index trên bảng lớn, khoá ghi trong lúc tạo). Số đo cũ ở `03-perf.md` là ~3,7 giây trên máy cũ; VPS Vietnix chậm hơn, dự kiến vài giây, đáng đặt cửa sổ bảo trì ngắn.
 
 ## 5. Review độc lập T5 (4 góc, opus) và đã sửa gì
@@ -118,44 +118,62 @@ Góc "tấn công tiền/auth trên API thật" **không tái hiện được b�
 
 Các sửa migration làm đổi checksum của `20261012120000`. Vì PROD chưa áp (đang ở `cb92dc8`) nên không ảnh hưởng PROD; DB dev đã áp bản cũ phải dựng lại.
 
+## 5b. Đợt E sau duyệt của chủ dự án (PE-1a..PE-5)
+
+Mỗi gói làm trong worktree riêng, TDD, review opus độc lập (PE-1a, PE-3, PE-5 hai lượt vì đụng điểm), tôi merge và chạy lại toàn bộ mục 2. Báo cáo gốc `impl/PE-*.md`, script `handoff/wave-e1..e3.workflow.js`.
+
+| Gói | Việc | Review |
+|---|---|---|
+| PE-1a | `POST /game/tree/buy` nhận `Idempotency-Key` (mã chứng nhận suy ra tất định từ user + key, kiểm "đã góp chưa" trong transaction sau khoá dòng user): gọi lại cùng key trả đúng kết quả cũ, không trừ thêm; 8 request song song đã từng ra 8 cây, nay ra 1. Điểm hoàn `ORDER_REFUND_POINTS` có hạn `loyalty.point_expire_months`. Sửa thêm lỗi cũ của cron hết hạn (trừ hai lần khi trước lô hết hạn có lô không hạn) | APPROVE hai lượt, chỉ còn minor |
+| PE-1b | Miniapp: chặn chạm đúp ở mọi nút ghi của trang Vườn; hộp xác nhận góp quỹ cây gửi `Idempotency-Key` (giữ khi thử lại, đổi khi mở lại); sửa cảnh báo `key` trùng ở bảng xếp hạng tuần | APPROVE |
+| PE-2 | Gỡ 4 route `/beta/*` và module Beta (giữ bảng `BetaFeedback`); nhãn CO₂: HEAD đã không còn chữ CO₂ nào ở thẻ Tác động xanh (PD-1 bỏ hẳn ô này, mạnh hơn "ước tính"), thêm guard | APPROVE |
+| PE-3 | Điểm thưởng vòng quay, nhiệm vụ, đánh giá có hạn như điểm thưởng khác; test chốt chặn tĩnh buộc mọi dòng cộng điểm có `expiresAt` hoặc nằm trong ngoại lệ có lý do. Review lượt 1 tìm ra lỗi do chính gói gây ra (xoá đánh giá còn hạn làm trừ hai lần); đã sửa | lượt 1 CHANGES (1 major), lượt 2 APPROVE |
+| PE-4 | Dọn tham chiếu `/beta` ở script audit/uiux; bảng route của `endpoint-inventory.spec.ts` dựng từ đồ thị AppModule nên mục REMOVED có tác dụng thật | APPROVE |
+| PE-5 | Dòng thu hồi của huỷ/trả đơn và thưởng giới thiệu ăn đúng lô gốc khi cron tính hạn. Lỗi đã **chứng minh bằng race Postgres thật trước khi sửa**: lô cũ 30 + đơn giao 20, huỷ đơn, cron sau hạn ra số dư 10 thay vì 30; trả đơn 40 điểm bị trừ 60; thu hồi thưởng giới thiệu trừ thêm 5, 15, 30. 8/10 ca đỏ trước, xanh sau, đột biến bị bắt. Công thức hạn của điểm đơn giao dùng chung `pointsExpiryFrom` (cấu hình 0/âm/hỏng rơi về 12 tháng) | APPROVE hai lượt |
+
+Tác động hồi tố của PE-3 và PE-5 lên sổ điểm đã ghi trước khi deploy (không có dữ liệu thật thì bỏ qua): replay mới đổi nghĩa của dòng thu hồi cũ, nên ngay lượt cron 1 giờ sáng đầu tiên một số khách có thể bị trừ sớm phần điểm đáng ra hết hạn muộn hơn, không có nhắc trước. Số dư cuối cùng không đổi so với bản cũ. SQL đếm và khuyến nghị đo từng user nằm ở `impl/PE-5.md` mục 3; nếu VPS có dữ liệu thật thì chạy SQL (2) và so hai bản `computePointExpiry` trước khi deploy.
+
 ## 6. Bug và rủi ro còn mở
 
-**Chặn deploy cho tới khi có quyết định hoặc số đo (cổng của chủ dự án):** các mục 1–5 ở phần Kết luận.
+**Cần chủ dự án xác nhận hoặc làm (không phải lỗi mã):**
+- Trỏ DNS Cloudflare, quét QR UAT trên Zalo thật, nhập FAQ/Academy (mục 1).
+- **Xác nhận hạn 12 tháng cho điểm vòng quay, nhiệm vụ, đánh giá (PE-3).** OQ-1 chỉ nêu rõ "nhiệm vụ"; vòng quay và đánh giá suy ra từ nguyên tắc "Điểm Xanh thường có hạn" và FAQ trong miniapp. Hoàn tác bằng revert `e5dd7b10` (game) và `386e1255` (reviews).
+- "Ví trả một phần đơn" (Q-03 phương án 1) hoãn: Ví chỉ trả trọn đơn, thiếu thì báo 400 và khách chọn COD/chuyển khoản.
 
-**Rủi ro cần biết khi lên PROD (không chặn mã):**
+**Rủi ro cần biết khi lên VPS (không chặn mã):**
 
 | Mục | Mô tả | Giảm thiểu |
 |---|---|---|
-| Migration dừng giữa chừng | `Dockerfile:39` chạy `prisma migrate deploy && node dist/main.js` với `restart: unless-stopped`: khi một migration fail, cả image mới lẫn image cũ crash-loop với P3009 tới khi chạy `migrate resolve --rolled-back` (tái hiện thật). Migration B (xu → điểm) cố ý RAISE nếu sổ xu lệch, số dư âm hoặc tỉ giá khác 1000 | Chạy migration thành bước riêng trước `up -d` (mục 7); chạy truy vấn đo trước deploy |
-| Miniapp bản test cũ sau khi BE lên | Trang `/storefront` của CTV lỗi render, Ví không thấy xu/điểm quy đổi, nút mua cây báo "−50 xu", thưởng CTV hiện "+0 xu". Thông báo XU_CONVERTED vẫn gửi ngay lúc deploy | Miniapp chưa phát hành production nên chỉ ảnh hưởng bản test: cập nhật bản test cùng đợt; không nộp production tới khi UAT xong |
-| Web PROD cũ chạm BE mới | Web cũ gửi `pointsToUse` chỉ theo lô thường, BE mới có thể lấy phần vượt trần từ lô quy đổi mà web cũ không hiển thị | Deploy BE và web liền nhau (cùng phút), không để web cũ chạy lâu |
-| Hoàn điểm lô thường khi huỷ/trả chạy ở transaction riêng sau commit | Tiến trình chết đúng khoảnh khắc đó thì khách mất phần điểm thường được hoàn (lô quy đổi đã hoàn trong cùng transaction). Có từ trước PD-3 | Đối soát điểm theo lô (`reconcile-points`) sau deploy |
-| P2028 khi tải bùng nổ | Mục 4 (flash sale), C-048 | Đặt `connection_limit`/`pool_timeout`, giữ 1 instance |
-| `CREATE INDEX` khoá ghi vài giây | Mục 4 | Cửa sổ bảo trì ngắn |
-| Cấu hình mới PC-9 (chấm công ngoài vùng N=3, M=15) | PROD không chạy seed. Reviewer kiểm 205 lượt `config.get`: không lượt nào thiếu giá trị mặc định trong mã, nên thiếu khoá không làm hỏng | Không cần làm gì, có thể chèn tay để admin chỉnh được |
-| Chi phí làm tròn lên của Điểm Xanh | Trần lý thuyết 999đ/user có xu; chưa đo trên số dư thật | Cổng 2 |
-| PC-6 | (a) mua định kỳ rồi huỷ ngay vẫn hưởng giảm giá "Đăng ký & Tiết kiệm" của đơn đầu; (b) ví thiếu thì gói PAUSED, bật lại bỏ kỳ lỡ; (c) voucher đơn thứ hai 30.000đ cho đơn từ 199.000đ | Chủ dự án quyết |
-| PA-7 | Đơn đã thưởng cho cùng người mời thì không thưởng lại | Chủ dự án duyệt |
-| Quỹ cây | Tubu cam kết 50.000đ mỗi lượt góp, có thể trừ vào lô quy đổi (tiền trả trước); chưa có chống bấm đôi ở BE (FE đã chặn và có hộp xác nhận) | OQ-5 |
+| Migration dừng giữa chừng | `Dockerfile:39` chạy `prisma migrate deploy && node dist/main.js` với `restart: unless-stopped`: khi một migration fail, cả image mới lẫn image cũ crash-loop với P3009 tới khi chạy `migrate resolve --rolled-back` (tái hiện thật). Migration B (xu → điểm) cố ý RAISE nếu sổ xu lệch, số dư âm hoặc tỉ giá khác 1000 | Chạy migration thành bước riêng trước `up -d` (mục 7). Với DB không có xu, B là no-op |
+| Web cũ chạm BE mới | Web cũ gửi `pointsToUse` chỉ theo lô thường; BE mới có thể lấy phần vượt trần từ lô quy đổi mà web cũ không hiển thị | Chỉ xảy ra nếu có số dư xu thật; vẫn deploy BE và web liền nhau |
+| Hoàn điểm lô thường khi huỷ/trả chạy ở transaction riêng sau commit | Tiến trình chết đúng khoảnh khắc đó thì khách mất phần điểm thường được hoàn. Có từ trước PD-3. `reverseOrderPoints` cũng vẫn trừ khi lô gốc đã hết hạn và không khoá dòng user (PE-5 ghi nhận, chưa sửa) | Đối soát điểm theo lô (`reconcile-points`) sau deploy |
+| Hạn điểm hoàn khi huỷ đơn (OQ-15b, đã chốt giữ) | Điểm hoàn nhận hạn mới 12 tháng, nên đặt-huỷ lặp lại kéo dài hạn của điểm sắp hết; mỗi vòng cần một đơn thật, trần dùng 20%/đơn | Theo dõi; nếu lạm dụng, làm gói riêng cho dòng hoàn kế thừa `min(hạn gốc, now + N tháng)` (phương án 2 ở `impl/PE-1a.md`) |
+| Đánh giá | Tạo, chờ 12 tháng, xoá, tạo lại được 5–15 điểm/sản phẩm/năm (PE-3, đã nêu) | Chấp nhận |
+| `loyalty.point_expire_months` không có biên | Cấu hình 0 hoặc âm nay rơi về 12 tháng ở điểm đơn giao, nhưng khoá chưa có RANGES | Thêm biên ở `system-config.service.ts` khi rảnh |
+| `CREATE INDEX` khoá ghi vài giây | Mục 4 | Cửa sổ bảo trì ngắn nếu DB đã có dữ liệu |
+| P2028 khi tải bùng nổ | Mục 4, C-048. Đã đặt `connection_limit=20&pool_timeout=30` nhưng chưa đo lại | Giữ 1 instance; đo lại flash sale khi có staging |
+| Cấu hình mới PC-9 (chấm công ngoài vùng N=3, M=15) | VPS không chạy seed. Reviewer kiểm 205 lượt `config.get`: không lượt nào thiếu giá trị mặc định trong mã | Không cần làm gì |
+| PC-6, PA-7, PD-1, PD-2 | Chủ dự án đã duyệt mặc định: giữ giảm giá đơn đầu kể cả khi huỷ gói (theo dõi `subscription_changed`); ví thiếu thì PAUSED và bỏ kỳ lỡ; voucher đơn thứ hai 30.000đ cho đơn từ 199.000đ (chỉnh trong SystemConfig nếu biên lãi không chịu được); mỗi người được mời chỉ thưởng người mời một lần; giữ nguyên 25 khoá cấu hình chết, 3 endpoint admin, ZaloPay, `/storefront/by-host`, `DELETE /reviews/:id` | Theo dõi sau phát hành |
+| Quỹ cây | Tubu cam kết 50.000đ mỗi lượt góp, có thể trừ vào điểm thưởng miễn phí (OQ-5, đã duyệt). BE đã chống bấm đôi bằng `Idempotency-Key` (PE-1a) và FE đã gửi key (PE-1b) | Theo dõi ngân sách quỹ |
+| Cộng đồng (OQ-6) | 1 điểm = 1.000đ nên dễ bị farm bằng nick phụ; có trần ngày, hạn 12 tháng, trần dùng 20% | Theo dõi tuần đầu |
 
 **Bug nhỏ và nợ kỹ thuật (không chặn):**
-- Trang Vườn không có khoá `busyRef` cho mọi nút (vòng quay có): bấm đôi có thể gọi API hai lần; BE phải chống trùng (PC-10a).
-- Cảnh báo React trùng `key` ở game, loyalty (miniapp), admin-config (web): chưa phân biệt do mã hay do dữ liệu giả của bộ chụp.
 - a11y còn lại (axe serious/critical trên ảnh chụp): miniapp 7 (`nested-interactive` ở checkout/feed/orders, `scrollable-region-focusable` ở brand-view/product-detail, `target-size` ở brand-story); web 13 (`select-name` ở 7 màn admin/merchant, `label` ở 4, `target-size` ở 2). Chủ yếu là mẫu có từ trước, đã ghi ở `04-uiux.md`.
-- 4 route `/beta/*` còn chạy ở BE dù không FE nào gọi (PD-1 giao cho PD-2 nhưng không được theo dõi): quyết định gỡ hay giữ cùng `BetaFeedback`.
-- PD-2: 3 endpoint admin nghi ngờ, 25 khoá cấu hình chết (xoá vật lý cần DELETE riêng có sao lưu), xoá đánh giá đã thưởng mà khách tiêu hết điểm có thể làm số dư âm.
+- Cảnh báo React trùng `key` ở loyalty (miniapp) và admin-config (web) chưa tái hiện được bằng dữ liệu thật; PE-1b chỉ sửa được bảng xếp hạng tuần.
+- `apps/api/src/common/route-graph.ts` chỉ dùng cho test nhưng bị `nest build` đưa vào `dist`; `beta-removed-audit.spec.ts` đọc file ngoài package nên cache turbo có thể bỏ qua khi chỉ sửa `scripts/`.
+- Hai tiền tố thưởng mốc giới thiệu nay import từ `referral-reward.ts` (PE-5); các nơi khác trùng hằng số thì chưa rà.
+- Không có Playwright cho web khách; không có e2e riêng cho Vườn, Giới thiệu.
 - Các minor cũ của PC-2, PC-7, PC-9 và danh sách ở `HANDOFF.md` mục 6.
-- `scripts/uiux/generated/miniapp-endpoints.json` còn 4 endpoint `/beta/*`: chạy lại `node scripts/uiux/extract-endpoints.mjs miniapp`.
 
 ## 7. Checklist deploy (khi có lệnh của chủ dự án): BE → web → miniapp
 
 Quy trình `cb92dc8` đã dùng: `git bundle` lên VPS, `pg_dump` backup trước, `git merge --ff-only`, `docker compose -f docker-compose.vietnix.yml up -d --build`, migrate, smoke test. Không đụng root `tubutree.com` (chung VPS với ChoDeli/WordPress).
 
 **7.1 Trước deploy (chủ dự án)**
-1. Có đủ 5 cổng ở mục 1.
-2. `pg_dump` PROD ra nơi an toàn.
-3. Trên bản sao PROD: chạy `pd3_measure_before_deploy.sql` (các truy vấn (a)–(j)); kỳ vọng các truy vấn kiểm lệch bằng 0, `loyalty.vnd_per_point_redeem` là số `1000` (không phải chuỗi), các khoá JSON hợp lệ. Ghi số (a) vào `impl/PD-3.md`.
-4. Nếu truy vấn nào khác 0, đối soát trước. Đừng bỏ qua: migration B sẽ dừng.
+1. Có đủ các việc ở mục 1 (DNS, QR UAT khi chuẩn bị phát hành cho khách).
+2. `pg_dump` DB trên VPS ra nơi an toàn.
+3. Kiểm xem VPS có dữ liệu khách thật hay không (`select count(*) from users where "coinsBalance" > 0`, số đơn, số user thật). Không có: bỏ qua bước 4. Có: dừng lại và báo, vì các cổng đã bỏ ở mục 1 phải bật lại.
+4. (Chỉ khi có dữ liệu thật) Trên bản sao: chạy `pd3_measure_before_deploy.sql` (a)–(j), kỳ vọng các truy vấn kiểm lệch bằng 0, `loyalty.vnd_per_point_redeem` là số `1000`; chạy SQL (2) của `impl/PE-5.md` mục 3.
 
 **7.2 Deploy**
 1. Đưa mã lên VPS (`git bundle`, `git merge --ff-only`).
@@ -166,7 +184,7 @@ Quy trình `cb92dc8` đã dùng: `git bundle` lên VPS, `pg_dump` backup trướ
 
 **7.3 Theo dõi 7 ngày sau deploy**: truy vấn ở `PD-3-SPEC.md` mục 10 (số đơn dùng lô quy đổi, đơn 0đ, drift điểm theo lô bằng `reconcile-points`).
 
-**7.4 Tác động lên khách trong cửa sổ deploy**: miniapp bản test cũ lỗi/ hiển thị sai (mục 6); web cũ không hiện lô quy đổi cho tới khi web mới lên. Phiên đăng nhập không bị đổi: reviewer đối chiếu `git diff cb92dc8..HEAD` thấy không có thay đổi nào ở JWT, cookie `tubu_rt`, khoá lưu token, thuật toán hay migration của `refresh_tokens`. `HANDOFF.md` mục 7 vẫn ghi deploy web có thể đăng xuất mọi phiên một lần do cookie refresh HttpOnly; coi đó là khả năng nhỏ (ví dụ khi đổi host API sang `api.tubutree.com` thì cookie theo host cũ không còn gửi tới), không phải hệ quả của mã trong diff này.
+**7.4 Tác động lên khách trong cửa sổ deploy**: với giả định chưa có khách thật thì không có. Nếu có: miniapp bản test cũ lỗi/hiển thị sai (trang `/storefront` của CTV, Ví không thấy điểm quy đổi, nút mua cây báo "−50 xu"); web cũ không hiện lô quy đổi cho tới khi web mới lên. Phiên đăng nhập không bị đổi: reviewer đối chiếu `git diff cb92dc8..HEAD` thấy không có thay đổi nào ở JWT, cookie `tubu_rt`, khoá lưu token, thuật toán hay migration của `refresh_tokens`. `HANDOFF.md` mục 7 vẫn ghi deploy web có thể đăng xuất mọi phiên một lần do cookie refresh HttpOnly; coi đó là khả năng nhỏ (ví dụ khi đổi host API sang `api.tubutree.com` thì cookie theo host cũ không còn gửi tới), không phải hệ quả của mã trong diff này.
 
 ## 8. Rollback
 
@@ -178,7 +196,8 @@ Quy trình `cb92dc8` đã dùng: `git bundle` lên VPS, `pg_dump` backup trướ
 ## 9. Môi trường và dọn dẹp (ghi lại để chủ dự án biết)
 
 - Docker Desktop hết chỗ (ổ ảo 39 GB đầy 100%, Postgres `tubu_pg` crash-loop `No space left on device`) giữa lượt đo tải. Theo đồng ý của chủ dự án, đã chạy `docker volume prune` xoá 560 volume ẩn danh không gắn container (tạo từ 02/10, ~35 GB). Volume có tên (`tubu_pg_data`, `tubu_redis_data`) và container đang chạy không bị đụng. Nguyên nhân gốc: container Postgres tạm của race test bị `docker rm` mà không có `-v` nên volume ẩn danh còn lại. Các agent đã được dặn dùng `--rm --tmpfs`.
-- Chỉ chủ dự án dọn (theo `HANDOFF.md` mục 8): worktree `.claude/worktrees/hz*-*` (đừng `git worktree remove --force`), container `tubu_it_main`, `tubu_it_pd2`, `tubu_it_pd3`, DB `tubutree_perf`, `tubutree_perf_103` trong `tubu_pg`, thư mục `scripts/loadtest/results/` (gitignore).
+- Sau đợt E lại có 107 volume ẩn danh không gắn container (~6,8 GB, `docker volume ls -qf dangling=true`); chưa dọn vì `docker volume prune` cần chủ dự án đồng ý lại. Mọi container Postgres tạm của đợt E đã chạy với `--rm --tmpfs`.
+- Chỉ chủ dự án dọn (theo `HANDOFF.md` mục 8): worktree `.claude/worktrees/hz*-*` (gồm `hz13-PE-1a/1b/2`, `hz14-PE-3/4`, `hz15-PE-5`; đừng `git worktree remove --force`), container `tubu_it_main`, `tubu_it_pd2`, `tubu_it_pd3`, DB `tubutree_perf`, `tubutree_perf_103` trong `tubu_pg`, thư mục `scripts/loadtest/results/` (gitignore).
 - Việc cũ: README, DEMO_SCRIPT đã sửa ở T5; `scripts/loadtest/node_modules` cài bằng `npm ci` (không thuộc workspace pnpm).
 
 ## 10. Phụ lục: lệnh tái hiện

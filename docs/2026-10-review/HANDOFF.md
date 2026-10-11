@@ -15,7 +15,8 @@ Lý do bàn giao: máy cũ hay crash. Mọi tiến độ đã nằm trong git; w
 | Vòng C3 (PC-10a/b/c, PC-11, C-076, UI hoàn tiền thủ công, cấu hình liên hệ) | XONG, đã merge, CHƯA deploy |
 | Đợt D (PD-1, PD-2, PD-3) | XONG, đã merge, CHƯA deploy |
 | Giai đoạn 4 (T1–T5) | XONG; T5 review đã sửa và merge (HEAD `c46fe6a6`) |
-| Giai đoạn 5 (`99-release-readiness.md`) | XONG. Kết luận: kỹ thuật đạt, PROD NO-GO tới khi chủ dự án qua 5 cổng trong báo cáo |
+| Giai đoạn 5 (`99-release-readiness.md`) | XONG, cập nhật sau đợt E. Kết luận: kỹ thuật đạt trên `31bde4b8`; chủ dự án đã duyệt các câu hỏi mở (`00-ROADMAP.md` cuối file); GO cho UAT/bản thử, chưa phát hành cho khách thật tới khi trỏ DNS, quét QR UAT trên Zalo thật và xác nhận hạn điểm vòng quay/đánh giá |
+| Đợt E (PE-1a, PE-1b, PE-2, PE-3, PE-4, PE-5) | XONG, đã merge, CHƯA deploy |
 
 PROD (VPS Vietnix `chodeli-vps` 14.225.207.177, `/opt/tubutree`) đang chạy `cb92dc8` = Đợt A+B. Miniapp CHƯA lên Zalo. Không deploy Đợt C/D khi chưa có lệnh rõ của chủ dự án.
 
