@@ -64,6 +64,7 @@ vi.mock('../components/checkout/voucher-sheet', () => ({ VoucherSheet: () => nul
 vi.mock('../components/checkout/order-success', () => ({ OrderSuccess: () => <div data-testid="order-success" /> }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 import CheckoutPage from './checkout';
 
 const ADDRESS = {
@@ -465,5 +466,41 @@ describe('CheckoutPage — vùng chạm >= 44px (C-021)', () => {
     expect(retry.className).toContain('tubu-hit-44');
     fireEvent.click(retry);
     await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('CheckoutPage — hàng chọn không chứa phần tử focus được lồng bên trong (axe nested-interactive)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.kind = 'ctv';
+    mocks.sfCtx.referralCode = null;
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('phương thức thanh toán, Điểm Xanh, hoá đơn VAT: mỗi hàng role radio/checkbox là điều khiển duy nhất, chấm chọn bên trong không focus được', async () => {
+    const { container } = renderPage();
+    await screen.findByText('Phương thức thanh toán');
+    const rows = container.querySelectorAll('[role="radio"], [role="checkbox"]');
+    expect(rows.length).toBeGreaterThanOrEqual(4);
+    expect(findNestedInteractive(container).map(describeNested)).toEqual([]);
+  });
+
+  it('bấm chấm chọn bên trong hàng vẫn chọn đúng một lần (click nổi lên hàng cha, không bắn đôi)', async () => {
+    renderPage();
+    const box = await waitFor(() => paymentBox());
+    const rows = within(box).getAllByRole('radio');
+    const second = rows.find((r) => r.getAttribute('aria-checked') === 'false')!;
+    fireEvent.click(second.querySelector('input')!);
+    await waitFor(() => expect(second).toHaveAttribute('aria-checked', 'true'));
+    expect(within(box).getAllByRole('radio').filter((r) => r.getAttribute('aria-checked') === 'true')).toHaveLength(1);
   });
 });
