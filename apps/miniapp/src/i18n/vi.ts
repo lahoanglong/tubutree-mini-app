@@ -3,7 +3,7 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
-import { formatDrops, formatNumber, formatPoints } from '../utils/format';
+import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
 
 export const vi = {
   common: {
@@ -455,6 +455,8 @@ export const vi = {
   },
 
   wallet: {
+    referralPromise: (minOrder: number, windowDays: number) =>
+      `Bạn bè vào app bằng mã của bạn và có đơn thứ hai từ ${formatVnd(minOrder)} giao thành công trong ${windowDays} ngày kể từ đơn đầu → bạn nhận Điểm Xanh thưởng.`,
     referralMilestoneProgress: (remaining: number, bonusFormatted: string) =>
       `Mời thêm ${remaining} bạn để nhận ${bonusFormatted}`,
   },
