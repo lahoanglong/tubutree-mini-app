@@ -245,10 +245,12 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     await expect(inTile1).toBeVisible();
     await expect(inTile2).toBeVisible();
 
+    // Thẻ không lồng phần tử tương tác (C-072): overlay là anh em của nút tên, nên xét trong vỏ thẻ chứa nút đó.
+    const shell = (name: string) => page.locator('.tubu-press').filter({ has: page.getByRole('button', { name }) });
     const overlay = /tạm hết/i;
-    await expect(outTile.getByText(overlay)).toBeVisible();
-    await expect(inTile1.getByText(overlay)).toHaveCount(0);
-    await expect(inTile2.getByText(overlay)).toHaveCount(0);
+    await expect(shell(OUT_OF_STOCK_NAME).getByText(overlay)).toBeVisible();
+    await expect(shell(IN_STOCK_NAME).getByText(overlay)).toHaveCount(0);
+    await expect(shell(IN_STOCK_NAME_2).getByText(overlay)).toHaveCount(0);
     // Đúng 1 overlay trên cả trang.
     await expect(page.getByText(overlay)).toHaveCount(1);
   });
