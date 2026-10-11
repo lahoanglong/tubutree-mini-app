@@ -57,7 +57,11 @@ const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿]/gu;
 
 // File lớn chuyển dần theo cụm tab: chỉ quét đoạn đã chuyển (từ đầu file tới dấu cắt), cộng phần đuôi dùng chung.
 // Cụm tab sau chuyển xong thì dời `end` xuống; chuyển hết thì đưa cả file vào MIGRATED và xoá mục ở đây.
-const PARTIAL: { file: string; end: string; tail?: string }[] = [];
+const PARTIAL: { file: string; end: string; tail?: string }[] = [
+  // `generateMetadata` ghép dấu ✓ vào chuỗi tiêu đề tab/OG của nhãn chính hãng: đó là chữ trong <title> (không
+  // chèn được SVG), không phải icon trong giao diện, nên chỉ phần giao diện từ BrandPage trở xuống bị quét.
+  { file: 'app/brand/[slug]/page.tsx', end: 'export async function generateMetadata', tail: 'export default async function BrandPage' },
+];
 
 function partialText({ file, end, tail }: { file: string; end: string; tail?: string }): string {
   const src = read(file);
