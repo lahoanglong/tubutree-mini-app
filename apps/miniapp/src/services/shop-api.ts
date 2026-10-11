@@ -399,17 +399,26 @@ export interface ReviewSummary {
 export const fetchReviews = (slug: string) =>
   api.get<ReviewSummary>(`/products/${slug}/reviews`).then((r) => r.data);
 
+/** Đánh giá hiện có của chính người dùng cho sản phẩm (Q-30: mua lại thì sửa đánh giá này). */
+export interface MyReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  images: string[];
+  videoUrl: string | null;
+}
 /** Hỏi TRƯỚC khi mở ô soạn đánh giá — tránh để khách chưa mua upload ảnh/video rồi mới bị từ chối. */
 export const canReviewProduct = (slug: string) =>
   api
-    .get<{ canReview: boolean; reason: 'NOT_PURCHASED' | 'ALREADY_REVIEWED' | null }>(
+    .get<{ canReview: boolean; reason: 'NOT_PURCHASED' | null; myReview?: MyReview | null }>(
       `/products/${slug}/reviews/can-review`,
     )
     .then((r) => r.data);
+/** `updated`: true khi đã có đánh giá và lần gọi này SỬA nó (không cộng Điểm Xanh), false khi tạo mới. */
 export const createReview = (
   slug: string,
   data: { rating: number; comment?: string; images?: string[]; videoUrl?: string },
-) => api.post<ReviewItem>(`/products/${slug}/reviews`, data).then((r) => r.data);
+) => api.post<ReviewItem & { updated?: boolean }>(`/products/${slug}/reviews`, data).then((r) => r.data);
 
 // Orders
 /** Ảnh/tồn kho từng dòng do API join theo variationId (dự án 4a). Optional: API cũ không trả. */

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Input, Avatar, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Star, Video, type LucideIcon } from 'lucide-react';
-import { fetchReviews, createReview, canReviewProduct } from '../services/shop-api';
+import { fetchReviews, createReview, canReviewProduct, type MyReview } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { MultiImageUpload, VideoUpload } from './image-upload';
@@ -50,12 +50,20 @@ interface ReviewDraft {
 
 const EMPTY_DRAFT: ReviewDraft = { rating: 5, comment: '', images: [], video: '' };
 
+const draftFromReview = (r: MyReview): ReviewDraft => ({
+  rating: r.rating,
+  comment: r.comment ?? '',
+  images: r.images,
+  video: r.videoUrl ?? '',
+});
+
 export function ReviewsSection({ slug }: { slug: string }) {
   const { status, login } = useAuthStore();
   const [writing, setWriting] = useState(false);
   // BottomSheet gỡ nội dung khỏi DOM khi đóng; nháp nằm ở đây để chạm nhầm lên mask/vuốt xuống
   // không làm mất sao, nhận xét và ảnh/video đã upload (P1-2).
-  const [draft, setDraft] = useState<ReviewDraft>(EMPTY_DRAFT);
+  // null = chưa gõ gì: form lấy đánh giá hiện có (sửa) hoặc form trống (viết mới).
+  const [edited, setEdited] = useState<ReviewDraft | null>(null);
   const [filter, setFilter] = useState<ReviewFilter>('all');
   const [visible, setVisible] = useState(5);
   const reviewsQ = useQuery({ queryKey: ['reviews', slug], queryFn: () => fetchReviews(slug) });
@@ -67,6 +75,9 @@ export function ReviewsSection({ slug }: { slug: string }) {
     retry: false,
   });
 
+  const myReview = eligQ.data?.myReview ?? null;
+  const base = myReview ? draftFromReview(myReview) : EMPTY_DRAFT;
+  const draft = edited ?? base;
   const data = reviewsQ.data;
   const dist = data?.distribution ?? {};
   const filtered = (data?.items ?? []).filter((r) =>
@@ -106,12 +117,12 @@ export function ReviewsSection({ slug }: { slug: string }) {
               setWriting(true);
             }}
           >
-            Viết đánh giá
+            {myReview ? 'Sửa đánh giá của bạn' : 'Viết đánh giá'}
           </Button>
         )}
         {status === 'authenticated' && eligQ.data?.canReview === false && (
           <Text variant="caption" tone="tertiary">
-            {eligQ.data.reason === 'ALREADY_REVIEWED' ? 'Bạn đã đánh giá' : 'Mua & nhận hàng để đánh giá'}
+            Mua &amp; nhận hàng để đánh giá
           </Text>
         )}
       </div>
@@ -240,13 +251,14 @@ export function ReviewsSection({ slug }: { slug: string }) {
         <EmptyState variant="inline" art="sprout" heading="Chưa có đánh giá" body="Hãy là người đầu tiên chia sẻ trải nghiệm." />
       )}
 
-      <BottomSheet open={writing} onClose={() => setWriting(false)} title="Đánh giá sản phẩm">
+      <BottomSheet open={writing} onClose={() => setWriting(false)} title={myReview ? 'Sửa đánh giá' : 'Đánh giá sản phẩm'}>
         <WriteReview
           slug={slug}
           draft={draft}
-          onDraftChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+          isEdit={!!myReview}
+          onDraftChange={(patch) => setEdited((d) => ({ ...(d ?? base), ...patch }))}
           onDone={() => {
-            setDraft(EMPTY_DRAFT);
+            setEdited(null);
             setWriting(false);
           }}
         />
@@ -258,11 +270,13 @@ export function ReviewsSection({ slug }: { slug: string }) {
 function WriteReview({
   slug,
   draft,
+  isEdit,
   onDraftChange,
   onDone,
 }: {
   slug: string;
   draft: ReviewDraft;
+  isEdit: boolean;
   onDraftChange: (patch: Partial<ReviewDraft>) => void;
   onDone: () => void;
 }) {
@@ -278,16 +292,21 @@ function WriteReview({
         images: images.length > 0 ? images : undefined,
         videoUrl: video.trim() || undefined,
       }),
-    onSuccess: () => {
+    onSuccess: (res) => {
       haptic('medium');
-      openSnackbar({ text: 'Cảm ơn đánh giá của bạn! Đã cộng Điểm Xanh', type: 'success' });
+      // Theo BE chứ không theo chế độ form: đánh giá có thể đã được tạo từ thiết bị khác.
+      openSnackbar({
+        text: res.updated ? 'Đã cập nhật đánh giá của bạn' : 'Cảm ơn đánh giá của bạn! Đã cộng Điểm Xanh',
+        type: 'success',
+      });
       void qc.invalidateQueries({ queryKey: ['reviews', slug] });
+      void qc.invalidateQueries({ queryKey: ['can-review', slug] });
       onDone();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const bonus = Boolean(video) || images.length > 0;
+  const bonus = !isEdit && (Boolean(video) || images.length > 0);
 
   return (
     <div>
@@ -333,14 +352,16 @@ function WriteReview({
         as="p"
         style={{ marginTop: 8, fontWeight: bonus ? 600 : 400 }}
       >
-        {video
+        {isEdit
+          ? 'Điểm Xanh chỉ được cộng ở lần đánh giá đầu tiên, sửa đánh giá không cộng thêm.'
+          : video
           ? 'Tuyệt! Đánh giá có video nhận +15 Điểm Xanh!'
           : images.length > 0
             ? 'Bạn sẽ nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.'
             : 'Thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.'}
       </Text>
       <Button fullWidth loading={submit.isPending} onPress={() => submit.mutate()} style={{ marginTop: 16 }}>
-        Gửi đánh giá
+        {isEdit ? 'Lưu đánh giá' : 'Gửi đánh giá'}
       </Button>
     </div>
   );
