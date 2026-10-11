@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { CustomerRefundsPendingBadge, CustomerRefundsTab } from './customer-refunds-tab';
 import { byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminCustomerRefund } from '@/lib/admin-client';
@@ -688,5 +689,76 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(accept(d).className).toContain('min-h-[44px]');
     expect(cancel(d).className).toContain('min-h-[44px]');
     expect(d.parentElement!.className).toContain('z-[100]');
+  });
+
+  // Đụng tiền: hộp xác nhận và lời gọi ghi phải thuộc ĐÚNG dòng được bấm, kể cả khi danh sách tải lại lúc hộp đang mở.
+  describe('dòng được chọn', () => {
+    const rowA = () => refund({ id: 'r1', orderId: 'o1', orderCode: 'TT-A', amount: 1_250_000, phone: '0912345678', recipientName: 'Trần Thị B' });
+    const rowB = () => refund({ id: 'r2', orderId: 'o2', orderCode: 'TT-B', amount: 777_000, phone: '0987654321', recipientName: 'Lê Văn C' });
+    const rowC = () => refund({ id: 'r3', orderId: 'o3', orderCode: 'TT-C', amount: 55_000, phone: '0900000003', recipientName: 'Phạm D' });
+    const openRow = async (container: HTMLElement, id: string) => {
+      click(byText(container.querySelector(`[data-refund-id="${id}"]`) as HTMLElement, 'button', 'Đã chuyển khoản'));
+      await flush(1);
+      return confirmDialog()!;
+    };
+    const expectDialogIsRowB = (d: HTMLElement) => {
+      const text = d.textContent ?? '';
+      expect(text).toContain('777.000đ');
+      expect(text).toContain('Lê Văn C');
+      expect(text).toContain('0987654321');
+      expect(text).toContain('TT-B');
+      expect(text).not.toContain('1.250.000đ');
+      expect(text).not.toContain('Trần Thị B');
+      expect(text).not.toContain('0912345678');
+    };
+
+    it('nhiều dòng chờ: bấm nút ở dòng thứ hai thì hộp nêu số tiền/tên/SĐT của dòng đó và POST đúng id của nó', async () => {
+      const api = stub({ list: () => [rowA(), rowB()] });
+      const { container } = mount(<CustomerRefundsTab />);
+      await flush();
+      const d = await openRow(container, 'r2');
+      expectDialogIsRowB(d);
+      click(accept(d));
+      await flush();
+      expect(api.pays()).toHaveLength(1);
+      expect(api.pays()[0]!.url).toContain('/admin/customer-refunds/r2/mark-paid');
+      expect(api.pays()[0]!.url).not.toContain('/r1/');
+      expect(container.querySelector('[role="status"]:not([aria-busy])')?.textContent).toContain('777.000đ');
+    });
+
+    it('danh sách tải lại lúc hộp đang mở (dòng đầu biến mất, thứ tự đổi): hộp vẫn là dòng đã bấm và POST vẫn đúng id đó', async () => {
+      let rows = [rowA(), rowB()];
+      const holder: { qc?: QueryClient } = {};
+      const Grab = () => {
+        holder.qc = useQueryClient();
+        return null;
+      };
+      const api = stub({ list: () => rows });
+      const { container } = mount(
+        <>
+          <Grab />
+          <CustomerRefundsTab />
+        </>,
+      );
+      await flush();
+      const d = await openRow(container, 'r2');
+      expectDialogIsRowB(d);
+
+      rows = [rowC()];
+      const before = api.lists().length;
+      await act(async () => {
+        await holder.qc!.invalidateQueries();
+      });
+      await flush();
+      expect(api.lists().length).toBeGreaterThan(before);
+      expect(container.querySelector('[data-refund-id="r2"]')).toBeNull();
+      expect(confirmDialog()).toBe(d);
+      expectDialogIsRowB(d);
+
+      click(accept(d));
+      await flush();
+      expect(api.pays()).toHaveLength(1);
+      expect(api.pays()[0]!.url).toContain('/admin/customer-refunds/r2/mark-paid');
+    });
   });
 });
