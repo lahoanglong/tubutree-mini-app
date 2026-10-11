@@ -13,13 +13,17 @@ const tx = (
   createdAt: string,
   expiresAt: string | null = null,
   reason?: string,
+  ref?: { refType: string; refId: string },
 ): PointExpiryTxn => ({
   id,
   delta,
   createdAt: new Date(createdAt),
   expiresAt: expiresAt ? new Date(expiresAt) : null,
   ...(reason ? { reason } : {}),
+  ...(ref ?? {}),
 });
+const review = (id: string, delta: number, createdAt: string, expiresAt: string | null, reviewId: string) =>
+  tx(id, delta, createdAt, expiresAt, delta > 0 ? 'REVIEW:tinh-dau' : 'REVIEW_DELETE:p1', { refType: 'REVIEW', refId: reviewId });
 const expired = (id: string, amount: number, createdAt: string) => tx(id, -amount, createdAt, null, 'POINTS_EXPIRED');
 
 describe('computePointExpiry (pure FIFO helper)', () => {
@@ -241,6 +245,106 @@ describe('computePointExpiry (pure FIFO helper)', () => {
     });
   });
 
+  /**
+   * Thu hồi điểm đánh giá (REVIEW_DELETE) phải ăn đúng lô đánh giá của nó. Replay FIFO thuần ăn vào lô CŨ NHẤT, lô đánh giá
+   * (có hạn) vẫn còn nguyên và tới hạn cron trừ thêm chính số điểm đã thu hồi.
+   */
+  describe('REVIEW_DELETE ăn đúng lô đánh giá cùng refId, phần dư mới FIFO', () => {
+    const PAST = '2026-06-01';
+
+    it('lô cũ không hạn nằm trước: thu hồi không ăn lô cũ, lô đánh giá hết sạch nên không còn gì hết hạn', () => {
+      const r = computePointExpiry(
+        [
+          tx('a', 30, '2025-01-01', null),
+          review('r', 5, '2025-05-01', PAST, 'rv1'),
+          review('d', -5, '2025-05-02', null, 'rv1'),
+        ],
+        NOW,
+        WINDOW,
+      );
+      expect(r.expiredNow).toBe(0);
+    });
+
+    it('lô cũ có hạn dài hơn lô đánh giá (cấu hình hạ tháng): thu hồi vẫn không để lô đánh giá bị trừ lại', () => {
+      const r = computePointExpiry(
+        [
+          tx('a', 30, '2025-01-01', '2027-01-01'),
+          review('r', 5, '2025-05-01', PAST, 'rv1'),
+          review('d', -5, '2025-05-02', null, 'rv1'),
+        ],
+        NOW,
+        WINDOW,
+      );
+      expect(r.expiredNow).toBe(0);
+    });
+
+    it('hai đánh giá khác refId: thu hồi đánh giá mới ăn lô của nó, không ăn lô đánh giá cũ hơn đã hết hạn', () => {
+      const soon = new Date(NOW.getTime() + 3 * DAY).toISOString();
+      const r = computePointExpiry(
+        [
+          review('r1', 5, '2025-05-01', PAST, 'rv1'),
+          review('r2', 5, '2025-05-10', soon, 'rv2'),
+          review('d', -5, '2025-05-11', null, 'rv2'),
+        ],
+        NOW,
+        WINDOW,
+      );
+      expect(r.expiredNow).toBe(5); // lô r1 hết hạn đúng một lần
+      expect(r.expiringSoon.amount).toBe(0); // lô r2 đã bị thu hồi hết
+    });
+
+    it('lô đánh giá đã bị tiêu bớt trước khi xoá: thu hồi ăn phần còn lại của lô đó, phần dư FIFO sang lô khác', () => {
+      const r = computePointExpiry(
+        [
+          review('r', 5, '2025-05-01', PAST, 'rv1'),
+          tx('s', -3, '2025-05-02', null, 'ORDER_REDEEM:C1'), // FIFO ăn 3 điểm lô đánh giá (lô cũ nhất)
+          tx('b', 10, '2025-05-03', PAST),
+          review('d', -5, '2025-05-04', null, 'rv1'), // lô đánh giá còn 2: ăn 2, dư 3 FIFO sang lô b
+        ],
+        NOW,
+        WINDOW,
+      );
+      expect(r.expiredNow).toBe(7);
+    });
+
+    it('không có lô đánh giá cùng refId (dòng gốc cũ, đã gộp phiên): FIFO như cũ', () => {
+      const r = computePointExpiry(
+        [tx('a', 30, '2025-01-01', PAST), review('d', -5, '2025-05-02', null, 'rv-lạ')],
+        NOW,
+        WINDOW,
+      );
+      expect(r.expiredNow).toBe(25);
+    });
+
+    it('dòng âm refType khác hoặc thiếu refId không đi vào cơ chế này: vẫn FIFO', () => {
+      const r = computePointExpiry(
+        [
+          tx('a', 30, '2025-01-01', null),
+          review('r', 5, '2025-05-01', PAST, 'rv1'),
+          tx('x', -5, '2025-05-02', null, 'ORDER_REDEEM:C1', { refType: 'ORDER', refId: 'rv1' }),
+          tx('y', -5, '2025-05-03', null, 'REVIEW_DELETE:p1'), // refType/refId vắng
+        ],
+        NOW,
+        WINDOW,
+      );
+      // x và y đều ăn lô a (cũ nhất) → lô đánh giá còn nguyên và hết hạn 5.
+      expect(r.expiredNow).toBe(5);
+    });
+
+    it('lô đánh giá cũ không hạn (trước PE-3) bị thu hồi thì lô có hạn khác không bị ăn nhầm', () => {
+      const r = computePointExpiry(
+        [
+          tx('e', 30, '2025-01-01', PAST),
+          review('r', 5, '2025-05-01', null, 'rv1'),
+          review('d', -5, '2025-05-02', null, 'rv1'),
+        ],
+        NOW,
+        WINDOW,
+      );
+      expect(r.expiredNow).toBe(30);
+    });
+  });
+
   it('tiêu vượt số lô còn lại (bất biến vỡ) → bỏ qua phần dư, không âm', () => {
     const r = computePointExpiry(
       [tx('a', 50, '2025-01-01', '2026-01-01'), tx('b', -80, '2025-06-01')],
@@ -354,6 +458,17 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     expect(findMany.mock.calls[1][0].where).toEqual({ userId: 'u1', lot: 'STANDARD' });
     expect(txUpdateMany.mock.calls[0][0].data).toEqual({ pointsBalance: { decrement: 100 } });
     expect(txCreate.mock.calls[0][0].data).toMatchObject({ lot: 'STANDARD' });
+  });
+
+  it('đọc kèm refType và refId của từng dòng (computePointExpiry cần chúng để thu hồi đánh giá ăn đúng lô), cả hai lần đọc', async () => {
+    const { svc, findMany, txFindMany } = setup({
+      candidates: [{ userId: 'u1' }],
+      userTxns: [tx('a', 100, '2025-01-01', '2026-01-01')],
+      updateCount: 1,
+    });
+    await svc.expirePoints();
+    expect(findMany.mock.calls[1][0].select).toMatchObject({ refType: true, refId: true });
+    expect((txFindMany.mock.calls[0] as unknown as [{ select: unknown }])[0].select).toMatchObject({ refType: true, refId: true });
   });
 
   it('đọc kèm reason của từng dòng (computePointExpiry cần nó để nhận ra POINTS_EXPIRED), cả lần đọc nhanh lẫn lần đọc trong tx', async () => {

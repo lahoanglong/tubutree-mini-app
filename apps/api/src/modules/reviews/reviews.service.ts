@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateReviewDto } from './dto/review.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -17,6 +18,7 @@ export class ReviewsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly analytics: AnalyticsEventsService,
+    private readonly loyalty: LoyaltyService,
   ) {}
 
   /**
@@ -117,6 +119,9 @@ export class ReviewsService {
     const hasVideo = !!dto.videoUrl;
     const hasImages = (dto.images?.length ?? 0) > 0;
     const pointsEarned = hasVideo ? 15 : hasImages ? 10 : 5;
+    // Điểm đánh giá là Điểm Xanh thường nên có hạn như mọi điểm thưởng khác. Đọc cấu hình NGOÀI tx để không giữ
+    // kết nối tx; lượt thua race P2002 ở bước tạo chỉ tốn một lần đọc cấu hình.
+    const expiresAt = await this.loyalty.pointsExpiresAt(new Date());
 
     return this.prisma.$transaction(async (tx) => {
       const r = await tx.review.create({
@@ -132,7 +137,7 @@ export class ReviewsService {
         },
       });
       await tx.pointsTransaction.create({
-        data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id },
+        data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id, expiresAt },
       });
       await tx.user.update({ where: { id: userId }, data: { pointsBalance: { increment: pointsEarned } } });
       // Cập nhật rating denormalized cho Product (hiển thị sao trên card/PDP) — trong
@@ -232,10 +237,18 @@ export class ReviewsService {
       throw new ForbiddenException('Không có quyền xóa đánh giá này.');
     }
     await this.prisma.$transaction(async (tx) => {
+      // Khoá dòng user TRƯỚC khi đọc hạn của dòng thưởng: cron hết hạn cũng khoá dòng này rồi mới trừ lô đã quá hạn.
+      // Đọc hạn khi chưa có khoá thì lô chạm hạn đúng lúc cron đang trừ nó vẫn bị coi là còn hạn, và thu hồi ghi sau
+      // đó trừ thêm lần hai.
+      if (review.pointsEarned > 0) {
+        await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${review.userId} FOR UPDATE`;
+      }
       await tx.review.delete({ where: { id } });
       // Hoàn tác điểm đã thưởng lúc tạo review — nếu không, user có thể farm điểm vô hạn
       // bằng cách tạo review (+điểm) rồi xóa (unique(userId,productId) mở lại) rồi tạo lại.
-      if (review.pointsEarned > 0) {
+      // Điểm thưởng đã quá hạn thì cron đã (hoặc sẽ) trừ chính các điểm đó; thu hồi thêm là trừ hai lần và có thể kéo
+      // số dư âm. Dòng gốc cũ không hạn (trước PE-3) hoặc không tìm thấy thì thu hồi như cũ.
+      if (review.pointsEarned > 0 && !(await this.rewardExpired(tx, review.userId, id))) {
         await tx.pointsTransaction.create({
           data: {
             userId: review.userId,
@@ -253,6 +266,15 @@ export class ReviewsService {
       await this.recomputeRating(review.productId, tx);
     });
     return { ok: true };
+  }
+
+  /** Dòng thưởng của đánh giá đã tới hạn chưa; cùng quy tắc `expiresAt <= now` với cron hết hạn. */
+  private async rewardExpired(tx: Prisma.TransactionClient, userId: string, reviewId: string): Promise<boolean> {
+    const credit = await tx.pointsTransaction.findFirst({
+      where: { userId, refType: 'REVIEW', refId: reviewId, delta: { gt: 0 } },
+      select: { expiresAt: true },
+    });
+    return credit?.expiresAt != null && credit.expiresAt.getTime() <= Date.now();
   }
 
   /** Admin ẩn/hiện review vi phạm (§6.13: ẩn KHÔNG xóa) — rating tính lại loại review ẩn. */

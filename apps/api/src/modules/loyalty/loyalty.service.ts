@@ -678,8 +678,12 @@ export class LoyaltyService {
 
   // ───────────────────────── Điểm danh hằng ngày ─────────────────────────
 
-  /** Hạn dùng cho điểm mới cộng — cùng quy tắc loyalty.point_expire_months như creditOrderPoints. */
-  private async pointsExpiresAt(from: Date): Promise<Date> {
+  /**
+   * Hạn dùng cho điểm Xanh thường mới cộng (lô STANDARD): `from` + loyalty.point_expire_months tháng (cấu hình
+   * hỏng → 12). Nguồn tính hạn duy nhất của điểm danh, POS, điểm hoàn khi huỷ đơn, thưởng vòng quay/nhiệm vụ
+   * và điểm đánh giá. Đọc cấu hình bằng kết nối pool riêng nên caller gọi NGOÀI transaction của mình.
+   */
+  async pointsExpiresAt(from: Date): Promise<Date> {
     const raw = await this.config.get<number>('loyalty.point_expire_months', 12);
     const months = typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 12;
     const d = new Date(from.getTime());

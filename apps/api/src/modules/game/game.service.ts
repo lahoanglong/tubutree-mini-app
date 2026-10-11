@@ -119,6 +119,9 @@ export class GameService {
     if (prizes.length === 0) throw new BadRequestException('Vòng quay chưa cấu hình.');
 
     const prize = this.pickWeighted(prizes);
+    // Thưởng điểm là Điểm Xanh thường nên có hạn như mọi điểm thưởng khác. Tính NGOÀI tx: đọc cấu hình không giữ
+    // kết nối tx; và thiếu LoyaltyService thì dừng trước khi trừ điểm, không để lọt dòng thưởng không hạn.
+    const winExpiresAt = prize.rewardType === 'POINTS' ? await this.rewardPointsExpiresAt() : null;
 
     return this.prisma.$transaction(async (tx) => {
       // Trừ điểm ATOMIC (gte) trong transaction — chống quay đồng thời làm âm điểm (TOCTOU).
@@ -144,7 +147,7 @@ export class GameService {
 
       let rewardRefId: string | null = null;
       if (prize.rewardType === 'POINTS') {
-        await this.creditPoints(userId, prize.value, `GAME_SPIN_WIN:${prize.id}`, tx);
+        await this.creditPoints(userId, prize.value, `GAME_SPIN_WIN:${prize.id}`, tx, winExpiresAt);
       } else if (prize.rewardType === 'SEEDS') {
         // Mặc định khớp với các call site khác (buySeeds/checkIn/collectDew/quiz/gift) và giá
         // trị SystemConfig thật (500) — tránh clamp sai xuống 200 khi config bị thiếu.
@@ -551,6 +554,8 @@ export class GameService {
       throw new BadRequestException('Chưa đủ điều kiện để nhận thưởng nhiệm vụ này.');
     }
     const cycleKey = this.missionCycleKey(mission, raw, targetGoal);
+    // NGOÀI tx, cùng lý do như spin(); chỉ cần khi nhiệm vụ có thưởng điểm.
+    const rewardExpiresAt = mission.rewardPoints > 0 ? await this.rewardPointsExpiresAt() : null;
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -567,7 +572,7 @@ export class GameService {
           },
         });
 
-        await this.creditPoints(userId, mission.rewardPoints, `MISSION:${mission.code}:${cycleKey}`, tx);
+        await this.creditPoints(userId, mission.rewardPoints, `MISSION:${mission.code}:${cycleKey}`, tx, rewardExpiresAt);
 
         // rewardCoupon (schema) chưa được seed dùng ở nhiệm vụ nào hiện tại — hỗ trợ sẵn để nhiệm
         // vụ tương lai cấu hình coupon không bị lặp lại lỗi "hứa mà không trả" như A1-02.
@@ -602,19 +607,34 @@ export class GameService {
   }
 
   // ── Helpers ────────────────────────────────────────
-  private async creditPoints(userId: string, delta: number, reason: string, tx?: Prisma.TransactionClient) {
-    const db = tx ?? this.prisma;
+  /** Hạn của điểm thưởng game (lô STANDARD). Bắt buộc có LoyaltyService, như buyTree: thiếu thì không ghi gì. */
+  private async rewardPointsExpiresAt(): Promise<Date> {
+    if (!this.loyalty) throw new Error('GameService cần LoyaltyService để tính hạn điểm thưởng');
+    return this.loyalty.pointsExpiresAt(new Date());
+  }
+
+  /** `expiresAt` bắt buộc cho lệnh cộng (điểm thưởng có hạn); lệnh trừ không dùng tới. */
+  private async creditPoints(
+    userId: string,
+    delta: number,
+    reason: string,
+    tx: Prisma.TransactionClient,
+    expiresAt: Date | null,
+  ) {
     if (delta < 0) {
       const abs = Math.abs(delta);
-      const dec = await db.user.updateMany({
+      const dec = await tx.user.updateMany({
         where: { id: userId, pointsBalance: { gte: abs } },
         data: { pointsBalance: { decrement: abs } },
       });
       if (dec.count === 0) throw new BadRequestException('Số điểm Xanh không đủ.');
-      await db.pointsTransaction.create({ data: { userId, delta, reason, refType: 'GAME' } });
+      await tx.pointsTransaction.create({ data: { userId, delta: -abs, reason, refType: 'GAME' } });
     } else {
-      await db.pointsTransaction.create({ data: { userId, delta, reason, refType: 'GAME' } });
-      await db.user.update({ where: { id: userId }, data: { pointsBalance: { increment: delta } } });
+      if (delta > 0 && !expiresAt) throw new Error(`creditPoints: điểm cộng (${reason}) phải có expiresAt`);
+      await tx.pointsTransaction.create({
+        data: { userId, delta, reason, refType: 'GAME', ...(delta > 0 ? { expiresAt } : {}) },
+      });
+      await tx.user.update({ where: { id: userId }, data: { pointsBalance: { increment: delta } } });
     }
   }
 

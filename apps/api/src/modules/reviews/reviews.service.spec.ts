@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 import { ReviewsService } from './reviews.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import type { LoyaltyService } from '../loyalty/loyalty.service';
 
 /**
  * Mock analytics dùng chung cho các test không assert riêng — wiring THẬT (không @Optional()
@@ -13,6 +14,11 @@ const analytics = {
   record: jest.fn().mockResolvedValue(undefined),
   recordBestEffort: jest.fn().mockResolvedValue(undefined),
 } as unknown as AnalyticsEventsService;
+
+/** Hạn cố định do stub `pointsExpiresAt` trả; test kiểm đúng giá trị này được ghi vào dòng sổ (PE-3). */
+const REVIEW_POINTS_EXPIRES_AT = new Date('2027-10-11T00:00:00.000Z');
+const pointsExpiresAt = jest.fn(async (_from: Date) => REVIEW_POINTS_EXPIRES_AT);
+const loyalty = { pointsExpiresAt } as unknown as LoyaltyService;
 
 function makePrisma(over: Record<string, unknown> = {}) {
   const base = {
@@ -28,8 +34,9 @@ function makePrisma(over: Record<string, unknown> = {}) {
       update: jest.fn().mockResolvedValue({ id: 'old', rating: 3 }),
       aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4.5 }, _count: 2 }),
     },
-    pointsTransaction: { create: jest.fn() },
+    pointsTransaction: { create: jest.fn(), findFirst: jest.fn().mockResolvedValue(null) },
     user: { update: jest.fn() },
+    $queryRaw: jest.fn().mockResolvedValue([]),
     $transaction: jest.fn(),
   };
   const prisma = { ...base, ...over } as unknown as PrismaService;
@@ -45,14 +52,14 @@ const dto = { rating: 5, comment: 'tốt', images: [] };
 describe('ReviewsService.create', () => {
   it('sản phẩm không tồn tại → NotFound', async () => {
     const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(null) } });
-    await expect(new ReviewsService(prisma, analytics).create('u1', 'x', dto as never)).rejects.toBeInstanceOf(
+    await expect(new ReviewsService(prisma, analytics, loyalty).create('u1', 'x', dto as never)).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
 
   it('chưa có đơn DELIVERED → BadRequest', async () => {
     const prisma = makePrisma({ order: { findFirst: jest.fn().mockResolvedValue(null) } });
-    await expect(new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never)).rejects.toBeInstanceOf(
+    await expect(new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never)).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });
@@ -79,7 +86,7 @@ describe('ReviewsService.create', () => {
 
     it('sửa sao, nội dung, ảnh, video của đánh giá cũ; không tạo mới', async () => {
       const prisma = withExisting();
-      const out = await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', {
+      const out = await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', {
         rating: 2,
         comment: 'đổi ý',
         images: ['x.jpg'],
@@ -102,7 +109,7 @@ describe('ReviewsService.create', () => {
 
     it('sửa không đổi điểm: không ghi pointsTransaction, không cộng pointsBalance, không đụng pointsEarned', async () => {
       const prisma = withExisting();
-      await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', { rating: 4, images: ['a.jpg', 'b.jpg'] } as never);
+      await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { rating: 4, images: ['a.jpg', 'b.jpg'] } as never);
       const p = prisma as unknown as P;
       expect(p.pointsTransaction.create).not.toHaveBeenCalled();
       expect(p.user.update).not.toHaveBeenCalled();
@@ -111,7 +118,7 @@ describe('ReviewsService.create', () => {
 
     it('sửa không bỏ ẩn đánh giá mà admin đã ẩn (không có isVisible trong data) và tính lại sao trung bình', async () => {
       const prisma = withExisting();
-      await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', { rating: 4 } as never);
+      await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { rating: 4 } as never);
       const p = prisma as unknown as P;
       expect(Object.keys(p.review.update.mock.calls[0][0].data)).not.toContain('isVisible');
       expect(p.product.update.mock.calls[0][0].data).toEqual({ ratingAvg: 2, reviewCount: 1 });
@@ -119,7 +126,7 @@ describe('ReviewsService.create', () => {
 
     it('bỏ trống nội dung/ảnh/video khi sửa → xoá các trường đó (thay thế toàn bộ như lúc tạo)', async () => {
       const prisma = withExisting();
-      await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', { rating: 4 } as never);
+      await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { rating: 4 } as never);
       const p = prisma as unknown as P;
       expect(p.review.update.mock.calls[0][0].data).toEqual({ rating: 4, comment: null, images: [], videoUrl: null });
     });
@@ -127,7 +134,7 @@ describe('ReviewsService.create', () => {
     it('ghi engagement_action review_updated CÙNG tx, pointsEarned = 0', async () => {
       const prisma = withExisting();
       const spy = { record: jest.fn().mockResolvedValue(undefined), recordBestEffort: jest.fn() };
-      await new ReviewsService(prisma, spy as unknown as AnalyticsEventsService).create('u1', 'tinh-dau', { rating: 4 } as never);
+      await new ReviewsService(prisma, spy as unknown as AnalyticsEventsService, loyalty).create('u1', 'tinh-dau', { rating: 4 } as never);
       expect(spy.record).toHaveBeenCalledTimes(1);
       expect(spy.record).toHaveBeenCalledWith(prisma, {
         eventName: 'engagement_action',
@@ -142,7 +149,7 @@ describe('ReviewsService.create', () => {
         order: { findFirst: jest.fn().mockResolvedValue(null) },
         review: { findFirst: jest.fn().mockResolvedValue(existing), update: jest.fn(), create: jest.fn() },
       });
-      await expect(new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never)).rejects.toBeInstanceOf(
+      await expect(new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never)).rejects.toBeInstanceOf(
         BadRequestException,
       );
       expect((prisma as unknown as P).review.update).not.toHaveBeenCalled();
@@ -158,7 +165,7 @@ describe('ReviewsService.create', () => {
           aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 5 }, _count: 1 }),
         },
       });
-      const out = await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never);
+      const out = await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never);
       const p = prisma as unknown as P;
       expect(out).toMatchObject({ id: 'r-new', updated: false });
       expect(p.pointsTransaction.create).toHaveBeenCalledTimes(1);
@@ -174,7 +181,7 @@ describe('ReviewsService.create', () => {
           aggregate: jest.fn(),
         },
       });
-      await expect(new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never)).rejects.toBeInstanceOf(
+      await expect(new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never)).rejects.toBeInstanceOf(
         ConflictException,
       );
       expect((prisma as unknown as P).review.update).toHaveBeenCalledTimes(3);
@@ -182,7 +189,7 @@ describe('ReviewsService.create', () => {
 
     it('chỉ chủ đánh giá sửa được: tìm và ghi luôn theo userId của người gọi', async () => {
       const prisma = withExisting();
-      await new ReviewsService(prisma, analytics).create('u2', 'tinh-dau', dto as never);
+      await new ReviewsService(prisma, analytics, loyalty).create('u2', 'tinh-dau', dto as never);
       const p = prisma as unknown as P & { review: { findFirst: jest.Mock } };
       expect(p.review.findFirst).toHaveBeenCalledWith({ where: { userId: 'u2', productId: 'p1' } });
       expect(p.review.update.mock.calls[0][0].where).toEqual({ userId_productId: { userId: 'u2', productId: 'p1' } });
@@ -191,7 +198,7 @@ describe('ReviewsService.create', () => {
 
   it('hợp lệ không ảnh → +5 điểm, recompute rating denormalized, đánh dấu updated=false', async () => {
     const prisma = makePrisma();
-    const out = await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never);
+    const out = await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never);
     expect(out).toMatchObject({ id: 'r1', updated: false });
     const p = prisma as unknown as {
       pointsTransaction: { create: jest.Mock };
@@ -204,14 +211,14 @@ describe('ReviewsService.create', () => {
 
   it('có ảnh → +10 điểm', async () => {
     const prisma = makePrisma();
-    await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', { ...dto, images: ['a.jpg'] } as never);
+    await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { ...dto, images: ['a.jpg'] } as never);
     const ptx = (prisma as unknown as { pointsTransaction: { create: jest.Mock } }).pointsTransaction.create;
     expect(ptx.mock.calls[0][0].data.delta).toBe(10);
   });
 
   it('có video (UGC) → +15 điểm + lưu videoUrl', async () => {
     const prisma = makePrisma();
-    await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', {
+    await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', {
       ...dto,
       videoUrl: 'https://res.cloudinary.com/x/video/upload/v1/rv.mp4',
     } as never);
@@ -221,6 +228,63 @@ describe('ReviewsService.create', () => {
     };
     expect(p.pointsTransaction.create.mock.calls[0][0].data.delta).toBe(15); // video > ảnh > text
     expect(p.review.create.mock.calls[0][0].data.videoUrl).toBe('https://res.cloudinary.com/x/video/upload/v1/rv.mp4');
+  });
+
+  // PE-3 (OQ-1): điểm thưởng đánh giá là Điểm Xanh thường, hết hạn theo loyalty.point_expire_months.
+  describe('điểm thưởng có hạn (PE-3)', () => {
+    beforeEach(() => pointsExpiresAt.mockClear());
+
+    it.each([
+      ['chỉ chữ', {}, 5],
+      ['có ảnh', { images: ['a.jpg'] }, 10],
+      ['có video', { videoUrl: 'https://res.cloudinary.com/x/video/upload/v1/rv.mp4' }, 15],
+    ])('%s → dòng REVIEW:<slug> mang expiresAt do pointsExpiresAt trả; số điểm, reason, refType, refId không đổi', async (_n, extra, points) => {
+      const prisma = makePrisma();
+      await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { ...dto, ...extra } as never);
+      const p = prisma as unknown as { pointsTransaction: { create: jest.Mock }; user: { update: jest.Mock } };
+      expect(p.pointsTransaction.create).toHaveBeenCalledTimes(1);
+      expect(p.pointsTransaction.create).toHaveBeenCalledWith({
+        data: { userId: 'u1', delta: points, reason: 'REVIEW:tinh-dau', refType: 'REVIEW', refId: 'r1', expiresAt: REVIEW_POINTS_EXPIRES_AT },
+      });
+      expect(p.user.update.mock.calls[0][0].data).toEqual({ pointsBalance: { increment: points } });
+      expect(pointsExpiresAt).toHaveBeenCalledTimes(1);
+      expect(pointsExpiresAt.mock.calls[0]![0]).toBeInstanceOf(Date);
+    });
+
+    it('hạn được tính NGOÀI transaction (trước khi mở tx)', async () => {
+      const prisma = makePrisma();
+      await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never);
+      const $tx = (prisma as unknown as { $transaction: jest.Mock }).$transaction;
+      expect(pointsExpiresAt.mock.invocationCallOrder[0]!).toBeLessThan($tx.mock.invocationCallOrder[0]!);
+    });
+
+    it('sửa đánh giá đã có (không thưởng) → không đọc cấu hình hạn, không ghi dòng điểm', async () => {
+      const existing = { id: 'old', userId: 'u1', productId: 'p1', orderId: 'o0', rating: 5, pointsEarned: 15, isVisible: true };
+      const prisma = makePrisma({
+        review: {
+          findFirst: jest.fn().mockResolvedValue(existing),
+          update: jest.fn().mockResolvedValue(existing),
+          aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 5 }, _count: 1 }),
+        },
+      });
+      await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never);
+      expect(pointsExpiresAt).not.toHaveBeenCalled();
+      expect((prisma as unknown as { pointsTransaction: { create: jest.Mock } }).pointsTransaction.create).not.toHaveBeenCalled();
+    });
+
+    it('thua race P2002 ở lần tạo rồi chuyển sang sửa: không ghi dòng điểm nào', async () => {
+      const created = { id: 'r-first', userId: 'u1', productId: 'p1', pointsEarned: 5 };
+      const prisma = makePrisma({
+        review: {
+          findFirst: jest.fn().mockResolvedValueOnce(null).mockResolvedValue(created),
+          create: jest.fn().mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' })),
+          update: jest.fn().mockResolvedValue(created),
+          aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 5 }, _count: 1 }),
+        },
+      });
+      await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never);
+      expect((prisma as unknown as { pointsTransaction: { create: jest.Mock } }).pointsTransaction.create).not.toHaveBeenCalled();
+    });
   });
 
   it('race P2002 khi tạo (request kia tạo trước) → không lỗi, chuyển sang sửa đánh giá vừa có, không thưởng lần hai', async () => {
@@ -234,7 +298,7 @@ describe('ReviewsService.create', () => {
         aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 5 }, _count: 1 }),
       },
     });
-    const out = await new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never);
+    const out = await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never);
     const p = prisma as unknown as {
       review: { update: jest.Mock };
       pointsTransaction: { create: jest.Mock };
@@ -249,7 +313,7 @@ describe('ReviewsService.create', () => {
   it('lỗi khác P2002 khi tạo → ném nguyên lỗi (không nuốt)', async () => {
     const prisma = makePrisma();
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn().mockRejectedValue(new Error('db down'));
-    await expect(new ReviewsService(prisma, analytics).create('u1', 'tinh-dau', dto as never)).rejects.toThrow('db down');
+    await expect(new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never)).rejects.toThrow('db down');
   });
 
   /**
@@ -274,7 +338,7 @@ describe('ReviewsService.create', () => {
       .fn()
       .mockImplementation(async (cb: (t: unknown) => unknown) => cb(tx));
     const spy = { record: jest.fn().mockResolvedValue(undefined), recordBestEffort: jest.fn().mockResolvedValue(undefined) };
-    await new ReviewsService(prisma, spy as unknown as AnalyticsEventsService).create('u1', 'tinh-dau', dto as never);
+    await new ReviewsService(prisma, spy as unknown as AnalyticsEventsService, loyalty).create('u1', 'tinh-dau', dto as never);
 
     expect(tx).not.toBe(prisma); // tx RIÊNG, không phải cùng instance với prisma top-level
     expect(spy.record).toHaveBeenCalledTimes(1);
@@ -299,7 +363,7 @@ describe('ReviewsService.listByProduct (video UGC §6.14.9)', () => {
         ]),
       },
     });
-    const r = await new ReviewsService(prisma, analytics).listByProduct('tinh-dau');
+    const r = await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau');
     expect(r.count).toBe(2);
     expect(r.videoCount).toBe(1);
     expect(r.items[0]!.videoUrl).toBe('https://x/v.mp4');
@@ -316,7 +380,7 @@ describe('ReviewsService.remove (chống farm điểm qua tạo→xóa→tạo l
         aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 }, _count: 0 }),
       },
     });
-    const out = await new ReviewsService(prisma, analytics).remove('u1', 'USER', 'r1');
+    const out = await new ReviewsService(prisma, analytics, loyalty).remove('u1', 'USER', 'r1');
     const p = prisma as unknown as {
       review: { delete: jest.Mock };
       pointsTransaction: { create: jest.Mock };
@@ -338,10 +402,94 @@ describe('ReviewsService.remove (chống farm điểm qua tạo→xóa→tạo l
         aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 }, _count: 0 }),
       },
     });
-    await new ReviewsService(prisma, analytics).remove('u1', 'USER', 'r1');
+    await new ReviewsService(prisma, analytics, loyalty).remove('u1', 'USER', 'r1');
     const p = prisma as unknown as { pointsTransaction: { create: jest.Mock }; user: { update: jest.Mock } };
     expect(p.pointsTransaction.create).not.toHaveBeenCalled();
     expect(p.user.update).not.toHaveBeenCalled();
+  });
+
+  // PE-3: điểm đánh giá nay có hạn. Điểm đã hết hạn thì cron đã (hoặc sẽ) trừ; thu hồi thêm khi xoá là trừ hai lần
+  // và có thể kéo số dư âm (xác nhận trên Postgres thật: còn 30 điểm khác → 25; không còn điểm nào → -5).
+  describe('xoá đánh giá khi điểm thưởng đã hết hạn (PE-3)', () => {
+    const now = new Date('2026-10-11T03:00:00.000Z');
+    const removeWith = async (credit: { expiresAt: Date | null } | null, pointsEarned = 10) => {
+      const prisma = makePrisma({
+        review: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'r1', userId: 'u1', productId: 'p1', pointsEarned }),
+          delete: jest.fn(),
+          aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 }, _count: 0 }),
+        },
+        pointsTransaction: { create: jest.fn(), findFirst: jest.fn().mockResolvedValue(credit) },
+      });
+      const out = await new ReviewsService(prisma, analytics, loyalty).remove('u1', 'USER', 'r1');
+      return { prisma: prisma as unknown as { review: { delete: jest.Mock }; pointsTransaction: { create: jest.Mock; findFirst: jest.Mock }; user: { update: jest.Mock }; product: { update: jest.Mock } }, out };
+    };
+
+    beforeEach(() => {
+      jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+      jest.setSystemTime(now);
+    });
+    afterEach(() => jest.useRealTimers());
+
+    it('điểm thưởng đã quá hạn → vẫn xoá đánh giá và tính lại sao, nhưng KHÔNG thu hồi điểm lần nữa', async () => {
+      const { prisma, out } = await removeWith({ expiresAt: new Date(now.getTime() - 1) });
+      expect(out).toEqual({ ok: true });
+      expect(prisma.review.delete).toHaveBeenCalledWith({ where: { id: 'r1' } });
+      expect(prisma.product.update).toHaveBeenCalled();
+      expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('đúng lúc hết hạn (expiresAt = bây giờ) cũng coi là đã hết hạn, khớp cron (expiresAt <= now)', async () => {
+      const { prisma } = await removeWith({ expiresAt: new Date(now.getTime()) });
+      expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+    });
+
+    it('điểm thưởng còn hạn → thu hồi như cũ', async () => {
+      const { prisma } = await removeWith({ expiresAt: new Date(now.getTime() + 1) });
+      expect(prisma.pointsTransaction.create.mock.calls[0][0].data).toMatchObject({ delta: -10, reason: 'REVIEW_DELETE:p1', refType: 'REVIEW', refId: 'r1' });
+      expect(prisma.user.update.mock.calls[0][0].data.pointsBalance).toEqual({ increment: -10 });
+    });
+
+    it('dòng thưởng cũ không hạn (trước PE-3, expiresAt NULL) → thu hồi như cũ', async () => {
+      const { prisma } = await removeWith({ expiresAt: null });
+      expect(prisma.pointsTransaction.create.mock.calls[0][0].data.delta).toBe(-10);
+    });
+
+    it('không tìm thấy dòng thưởng gốc → thu hồi như cũ (không đoán là đã hết hạn)', async () => {
+      const { prisma } = await removeWith(null);
+      expect(prisma.pointsTransaction.create.mock.calls[0][0].data.delta).toBe(-10);
+    });
+
+    it('tra dòng thưởng gốc theo đúng người, đúng đánh giá, chỉ dòng cộng', async () => {
+      const { prisma } = await removeWith({ expiresAt: new Date(now.getTime() + 1) });
+      expect(prisma.pointsTransaction.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'u1', refType: 'REVIEW', refId: 'r1', delta: { gt: 0 } },
+        select: { expiresAt: true },
+      });
+    });
+
+    // Cron hết hạn khoá dòng user rồi mới trừ lô đã quá hạn. Đọc hạn trước khi có khoá thì lô chạm hạn đúng lúc cron đang
+    // trừ nó vẫn bị coi là còn hạn, và REVIEW_DELETE ghi sau đó trừ thêm lần hai.
+    it('khoá dòng user rồi mới đọc hạn của dòng thưởng, tất cả trong transaction, trước khi ghi thu hồi', async () => {
+      const { prisma } = await removeWith({ expiresAt: new Date(now.getTime() + 1) });
+      const tx = (prisma as unknown as { $transaction: jest.Mock }).$transaction;
+      const lock = (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw;
+      const lockSql = (lock.mock.calls[0]![0] as TemplateStringsArray).join('?');
+      expect(lockSql).toMatch(/FROM "users" WHERE "id" = \? FOR UPDATE/);
+      expect(lock.mock.calls[0]!.slice(1)).toEqual(['u1']);
+      const order = (m: jest.Mock) => m.mock.invocationCallOrder[0]!;
+      expect(order(tx)).toBeLessThan(order(lock));
+      expect(order(lock)).toBeLessThan(order(prisma.pointsTransaction.findFirst));
+      expect(order(prisma.pointsTransaction.findFirst)).toBeLessThan(order(prisma.pointsTransaction.create));
+    });
+
+    it('đánh giá chưa từng được thưởng (pointsEarned=0) → không tra sổ điểm', async () => {
+      const { prisma } = await removeWith({ expiresAt: new Date(now.getTime() - 1) }, 0);
+      expect(prisma.pointsTransaction.findFirst).not.toHaveBeenCalled();
+      expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+      expect((prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw).not.toHaveBeenCalled();
+    });
   });
 
   it('không phải chủ review + không phải ADMIN → Forbidden, không xóa', async () => {
@@ -352,7 +500,7 @@ describe('ReviewsService.remove (chống farm điểm qua tạo→xóa→tạo l
         delete: deleteFn,
       },
     });
-    await expect(new ReviewsService(prisma, analytics).remove('u1', 'USER', 'r1')).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(new ReviewsService(prisma, analytics, loyalty).remove('u1', 'USER', 'r1')).rejects.toBeInstanceOf(ForbiddenException);
     expect(deleteFn).not.toHaveBeenCalled();
   });
 
@@ -364,12 +512,12 @@ describe('ReviewsService.remove (chống farm điểm qua tạo→xóa→tạo l
         aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 }, _count: 0 }),
       },
     });
-    await expect(new ReviewsService(prisma, analytics).remove('admin1', 'ADMIN', 'r1')).resolves.toEqual({ ok: true });
+    await expect(new ReviewsService(prisma, analytics, loyalty).remove('admin1', 'ADMIN', 'r1')).resolves.toEqual({ ok: true });
   });
 
   it('review không tồn tại → NotFound', async () => {
     const prisma = makePrisma({ review: { findUnique: jest.fn().mockResolvedValue(null) } });
-    await expect(new ReviewsService(prisma, analytics).remove('u1', 'USER', 'x')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(new ReviewsService(prisma, analytics, loyalty).remove('u1', 'USER', 'x')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 
@@ -384,7 +532,7 @@ describe('ReviewsService.setVisibility (§6.13 admin ẩn review)', () => {
         aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4 }, _count: 1 }),
       },
     });
-    const r = await new ReviewsService(prisma, analytics).setVisibility('r1', false);
+    const r = await new ReviewsService(prisma, analytics, loyalty).setVisibility('r1', false);
     expect(r).toEqual({ ok: true, isVisible: false });
     expect(update).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { isVisible: false } });
     expect((prisma as unknown as { review: { delete: jest.Mock } }).review.delete).not.toHaveBeenCalled();
@@ -392,7 +540,7 @@ describe('ReviewsService.setVisibility (§6.13 admin ẩn review)', () => {
 
   it('review không tồn tại → NotFound', async () => {
     const prisma = makePrisma({ review: { findUnique: jest.fn().mockResolvedValue(null) } });
-    await expect(new ReviewsService(prisma, analytics).setVisibility('x', false)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(new ReviewsService(prisma, analytics, loyalty).setVisibility('x', false)).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 
@@ -403,13 +551,13 @@ describe('ReviewsService.setVisibility (§6.13 admin ẩn review)', () => {
 describe('ReviewsService.canReview', () => {
   it('đã có đơn DELIVERED chứa sản phẩm, chưa đánh giá → được đánh giá', async () => {
     const prisma = makePrisma();
-    const r = await new ReviewsService(prisma, analytics).canReview('u1', 'tinh-dau');
+    const r = await new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'tinh-dau');
     expect(r).toEqual({ canReview: true, reason: null, myReview: null });
   });
 
   it('chưa từng mua → không được, kèm lý do để FE hiện đúng thông điệp', async () => {
     const prisma = makePrisma({ order: { findFirst: jest.fn().mockResolvedValue(null) } });
-    const r = await new ReviewsService(prisma, analytics).canReview('u1', 'tinh-dau');
+    const r = await new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'tinh-dau');
     expect(r).toEqual({ canReview: false, reason: 'NOT_PURCHASED' });
   });
 
@@ -430,7 +578,7 @@ describe('ReviewsService.canReview', () => {
         }),
       },
     });
-    const r = await new ReviewsService(prisma, analytics).canReview('u1', 'tinh-dau');
+    const r = await new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'tinh-dau');
     expect(r).toEqual({
       canReview: true,
       reason: null,
@@ -443,12 +591,12 @@ describe('ReviewsService.canReview', () => {
       order: { findFirst: jest.fn().mockResolvedValue(null) },
       review: { findFirst: jest.fn().mockResolvedValue({ id: 'r0' }) },
     });
-    const r = await new ReviewsService(prisma, analytics).canReview('u1', 'tinh-dau');
+    const r = await new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'tinh-dau');
     expect(r).toEqual({ canReview: false, reason: 'NOT_PURCHASED' });
   });
 
   it('sản phẩm không tồn tại → NotFound (không lộ thành "chưa mua")', async () => {
     const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(null) } });
-    await expect(new ReviewsService(prisma, analytics).canReview('u1', 'khong-co')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'khong-co')).rejects.toBeInstanceOf(NotFoundException);
   });
 });

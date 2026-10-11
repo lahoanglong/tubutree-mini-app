@@ -4,6 +4,7 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
+import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { ReviewsService } from '../../src/modules/reviews/reviews.service';
 import { barrierOnFirstCalls, createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
@@ -19,7 +20,7 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule],
-      providers: [SystemConfigService, AnalyticsEventsService, ReviewsService],
+      providers: [SystemConfigService, AnalyticsEventsService, LoyaltyService, ReviewsService],
     }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);

@@ -364,6 +364,16 @@ describe('LoyaltyService.reverseOrderPoints chỉ hoàn phần STANDARD (PD-3, r
       expect(create.mock.calls[0][0].data.expiresAt).toEqual(new Date('2027-10-11T03:00:00.000Z'));
     });
 
+    // PE-3: thưởng vòng quay/nhiệm vụ (GameService) và điểm đánh giá (ReviewsService) gọi thẳng helper này.
+    it('pointsExpiresAt công khai: tính từ `from` truyền vào (không phải bây giờ), cùng luật tháng và cấu hình hỏng → 12', async () => {
+      const from = new Date('2026-10-11T03:00:00.000Z');
+      jest.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+      const { prisma } = makePrisma(order);
+      await expect(new LoyaltyService(prisma, configWith(6)).pointsExpiresAt(from)).resolves.toEqual(new Date('2027-04-11T03:00:00.000Z'));
+      await expect(new LoyaltyService(prisma, configWith('abc')).pointsExpiresAt(from)).resolves.toEqual(new Date('2027-10-11T03:00:00.000Z'));
+      expect(from).toEqual(new Date('2026-10-11T03:00:00.000Z'));
+    });
+
     it('đơn đã giao: dòng ORDER_REVERSED (trừ) không mang hạn, chỉ dòng hoàn điểm đã tiêu mang hạn', async () => {
       const txFindFirst = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'credited' });
       const create = jest.fn().mockResolvedValue({ id: 'ptx' });
