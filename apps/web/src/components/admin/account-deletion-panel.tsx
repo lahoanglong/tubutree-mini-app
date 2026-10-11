@@ -23,7 +23,7 @@ export interface AdminDeletionRequest {
     phone: string | null;
     role: string;
     walletBalance: number;
-    coinsBalance: number;
+    pointsConvertedBalance: number;
     cashbackPending: number;
     createdAt: string;
   } | null;
@@ -143,7 +143,7 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
           </div>
           {r.user && pending && (
             <div className="mt-0.5 text-xs text-stone-600">
-              Ví Tubu {formatVnd(r.user.walletBalance)} · {r.user.coinsBalance} xu
+              Ví Tubu {formatVnd(r.user.walletBalance)} · {r.user.pointsConvertedBalance.toLocaleString('vi-VN')} Điểm Xanh không hết hạn
             </div>
           )}
           <div className="mt-0.5 text-sm text-stone-600">

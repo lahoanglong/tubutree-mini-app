@@ -42,3 +42,11 @@ describe('generateOrdersCsvString — không để Excel chạy công thức t�
     expect(csv).toContain('"Gọi trước, giao chiều"');
   });
 });
+
+describe('generateOrdersCsvString — đơn trả bằng xu cũ (PD-3)', () => {
+  it('đơn XU cũ ghi "Xu cũ (đã gộp Điểm Xanh)", không còn tên TubuXu', () => {
+    const csv = generateOrdersCsvString([order({ paymentMethod: 'XU' })]);
+    expect(csv).toContain('Xu cũ (đã gộp Điểm Xanh)');
+    expect(csv).not.toMatch(/TubuXu|Xu Tubu/);
+  });
+});

@@ -227,7 +227,7 @@ describe('AccountDeletionPanel — DS v2', () => {
     reviewedBy: null,
     reviewedAt: null,
     createdAt: '2026-10-01T03:00:00.000Z',
-    user: { id: 'u1', fullName: 'Nguyễn Văn A', phone: '0912345678', role: 'CUSTOMER', walletBalance: 0, coinsBalance: 0, cashbackPending: 0, createdAt: '2026-01-01T00:00:00.000Z' },
+    user: { id: 'u1', fullName: 'Nguyễn Văn A', phone: '0912345678', role: 'CUSTOMER', walletBalance: 0, pointsConvertedBalance: 0, cashbackPending: 0, createdAt: '2026-01-01T00:00:00.000Z' },
     blockers: [],
     ...over,
   });

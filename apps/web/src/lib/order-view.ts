@@ -23,7 +23,7 @@ const METHOD_LABEL: Record<string, string> = {
   ZALOPAY: 'ZaloPay',
   VNPAY: 'VNPay',
   WALLET: 'Ví Tubu',
-  XU: 'TubuXu',
+  XU: 'Điểm Xanh (xu cũ)',
 };
 export const paymentMethodLabel = (method: string): string => METHOD_LABEL[method] ?? method;
 

@@ -34,7 +34,7 @@ describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
     expect(paymentMethodLabel('COD')).toBe('Thanh toán khi nhận hàng (COD)');
     expect(paymentMethodLabel('BANK_TRANSFER')).toBe('Chuyển khoản ngân hàng');
     expect(paymentMethodLabel('WALLET')).toBe('Ví Tubu');
-    expect(paymentMethodLabel('XU')).toBe('TubuXu');
+    expect(paymentMethodLabel('XU')).toBe('Điểm Xanh (xu cũ)');
     expect(paymentMethodLabel('LẠ')).toBe('LẠ');
     expect(paymentStatusLabel('UNPAID')).toBe('Chưa thanh toán');
     expect(paymentStatusLabel('PAID')).toBe('Đã thanh toán');

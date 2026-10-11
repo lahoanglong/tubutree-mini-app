@@ -35,7 +35,7 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   ZALOPAY: 'ZaloPay',
   BANK_TRANSFER: 'Chuyển khoản',
   WALLET: 'Ví Tubu',
-  XU: 'Xu Tubu',
+  XU: 'Xu cũ (đã gộp Điểm Xanh)',
 };
 
 /** "Có · <trạng thái vận đơn> · <mã BestExpress>" — để kho/CSKH lọc đơn thu gom trong Excel. */
