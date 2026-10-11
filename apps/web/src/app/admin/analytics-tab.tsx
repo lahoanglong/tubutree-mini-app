@@ -52,7 +52,7 @@ export function AnalyticsTab() {
 
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-card border border-stone-200 bg-stone-0 p-3">
+    <div role="group" aria-label={label} className="rounded-card border border-stone-200 bg-stone-0 p-3">
       <div className="text-xs text-stone-500">{label}</div>
       <div className="text-lg font-semibold">{value}</div>
     </div>

@@ -50,6 +50,26 @@ describe('AnalyticsTab — DS v2', () => {
     expect(card?.className).toContain('bg-stone-0');
   });
 
+  // e2e (apps/e2e/tests/admin-analytics.spec.ts) định vị thẻ qua role+tên, không qua class styling.
+  it('mỗi thẻ số liệu là role="group" có tên = nhãn thẻ, chứa đúng giá trị của thẻ đó', async () => {
+    const api = mockFetch({
+      '/admin/analytics/retention-daily': { body: [row('2026-10-10', { newBuyers: 5, ordersCount: 9 })] },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<AnalyticsTab />);
+    await flush();
+    const groups = Array.from(container.querySelectorAll('[role="group"]'));
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual([
+      'Khách mới hôm qua',
+      'Khách hoạt động hôm qua',
+      'Đơn hôm qua',
+      'Đơn/khách/tháng (luỹ kế)',
+    ]);
+    const newBuyers = container.querySelector('[role="group"][aria-label="Khách mới hôm qua"]');
+    expect(newBuyers?.textContent).toBe('Khách mới hôm qua5');
+    expect(container.querySelector('[role="group"][aria-label="Đơn hôm qua"]')?.textContent).toBe('Đơn hôm qua9');
+  });
+
   it('chưa có snapshot và lỗi tải: thông báo bằng token (stone-500 / danger-fg)', async () => {
     const empty = mockFetch({ '/admin/analytics/retention-daily': { body: [] } });
     vi.stubGlobal('fetch', vi.fn(empty.fn));
