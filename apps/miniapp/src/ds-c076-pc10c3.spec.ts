@@ -22,6 +22,7 @@ const FILES_PC10C3 = [
   'src/components/pull-to-refresh.tsx',
   'src/components/ui/time-input.tsx',
   'src/components/ui/quantity-selector.tsx',
+  'src/components/error-boundary.tsx',
 ];
 
 const LEGACY = new RegExp(
