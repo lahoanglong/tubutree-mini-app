@@ -219,7 +219,7 @@ Cột hex của `utils/storefront-theme.ts` = 5 là CÓ CHỦ Ý: đó là bản
 
 ### Test (đỏ -> xanh)
 
-- `ds-c076-pc10b.spec.ts` (46 -> 55 ca): thêm từng file TRƯỚC khi di cư. `storefront-context-bar`: 2 ca ĐỎ (alias, ZaUI) -> XANH. `share-sheet`: 2 ĐỎ -> XANH. `content-kit-sheet`: 2 ĐỎ -> XANH. `storefront-builder`: 5 ĐỎ (alias, màu thô, ký tự `✓`, ZaUI, PageHeader/h1) -> XANH.
+- `ds-c076-pc10b.spec.ts` (38 -> 55 ca): thêm từng file TRƯỚC khi di cư. `storefront-context-bar`: 2 ca ĐỎ (alias, ZaUI) -> XANH. `share-sheet`: 2 ĐỎ -> XANH. `content-kit-sheet`: 2 ĐỎ -> XANH. `storefront-builder`: 5 ĐỎ (alias, màu thô, ký tự `✓`, ZaUI, PageHeader/h1) -> XANH.
 - `components/storefront-context-bar.spec.tsx` (mới, 4 ca): không ở trong gian hàng thì không vẽ; nhãn ngữ cảnh + nút; bấm xoá ngữ cảnh rồi `navigate('/')`; nút >= 44px. Trên code cũ 3 ca ĐỎ (không có `role=button`) -> XANH.
 - `components/share-sheet.spec.tsx` (5 -> 10 ca): 3 ca ĐỎ trên code cũ (tiêu đề h2 + nút Đóng, caption là nút >= 44px chép đúng nội dung kèm liên kết có mã, 3 caption mặc định là nút) -> XANH; 2 ca khoá hành vi (Sao chép link có `?ref=`, copy thất bại báo lỗi) XANH ở cả hai.
 - `components/content-kit-sheet.spec.tsx` (4 -> 11 ca): 4 ca ĐỎ trên code cũ (h2 + nút Đóng, hai nút chính >= 44px, bốn khối có `h3`, bài mẫu/video là nút >= 44px chép đúng nội dung) -> XANH; 3 ca khoá hành vi (báo rỗng, Thử lại gọi lại API, copy thất bại) XANH ở cả hai.
