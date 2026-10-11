@@ -11,6 +11,7 @@ import {
   type PosMember,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
+import { pointsSummary } from '@/lib/checkout-points';
 import {
   memberCodeError,
   orderTotalError,
@@ -40,6 +41,7 @@ export function PosScreen() {
 
   const [code, setCode] = useState('');
   const [member, setMember] = useState<PosMember | null>(null);
+  const memberPoints = member ? pointsSummary(member) : null;
   const [memberCodeUsed, setMemberCodeUsed] = useState('');
   const [lookupErr, setLookupErr] = useState<PosErrorView | null>(null);
 
@@ -176,8 +178,9 @@ export function PosScreen() {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-lg font-bold text-forest-700">{member.pointsBalance.toLocaleString('vi-VN')}</div>
+              <div className="text-lg font-bold text-forest-700">{(memberPoints?.total ?? 0).toLocaleString('vi-VN')}</div>
               <div className="text-[11px] text-stone-500">Điểm Xanh</div>
+              {memberPoints?.convertedNote && <div className="text-[11px] text-stone-500">{memberPoints.convertedNote}</div>}
             </div>
           </div>
         )}
@@ -251,7 +254,7 @@ export function PosScreen() {
               ) : (
                 <Notice tone="success">
                   Đã cộng <b>+{result.posTransaction.pointsEarned} Điểm Xanh</b> cho hoá đơn {result.posTransaction.receiptId} (
-                  {formatVnd(result.posTransaction.orderTotal)}). Số dư mới: <b>{result.member.pointsBalance.toLocaleString('vi-VN')}</b>{' '}
+                  {formatVnd(result.posTransaction.orderTotal)}). Số dư mới: <b>{pointsSummary(result.member).total.toLocaleString('vi-VN')}</b>{' '}
                   điểm.
                 </Notice>
               )}

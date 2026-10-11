@@ -128,6 +128,15 @@ describe('AdminService.listUsers — tìm khách theo SĐT/tên/id', () => {
   });
 });
 
+describe('AdminService.listUsers — hai lô Điểm Xanh (PD-3)', () => {
+  it('select cả pointsConvertedBalance để nhân viên thấy điểm không hết hạn khi xử lý khiếu nại quy đổi', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    await mkAdmin({ user: { findMany, count }, $transaction: tx }).listUsers(1, 20);
+    expect(findMany.mock.calls[0]![0].select).toMatchObject({ pointsBalance: true, pointsConvertedBalance: true });
+  });
+});
+
 describe('AdminService.listDealerTiers', () => {
   it('trả bậc đại lý theo mốc doanh số tăng dần để chọn thay vì nhập Tier ID', async () => {
     const findMany = jest.fn().mockResolvedValue([{ id: 'dealer_l1', name: 'Đại lý L1', minOrderVolume: 0, creditLimit: 0, paymentTerms: null, discountRules: {} }]);

@@ -6,6 +6,7 @@ import { Banknote, Check, ChevronDown, ChevronUp, Download, Recycle, Store, Tree
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { formatVnd } from '@/lib/shop-client';
+import { pointsSummary } from '@/lib/checkout-points';
 import {
   listDealerApps,
   reviewDealerApp,
@@ -1106,7 +1107,9 @@ function UsersTab() {
                 <td className="px-3 py-2 font-medium">{u.fullName ?? '—'}</td>
                 <td className="px-3 py-2">{u.phone ?? '—'}</td>
                 <td className="px-3 py-2">{u.role}</td>
-                <td className="px-3 py-2">{u.pointsBalance}</td>
+                <td className="px-3 py-2">
+                  <UserPointsCell user={u} />
+                </td>
                 <td className="px-3 py-2 text-stone-500">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
               </tr>
             ))}
@@ -1145,6 +1148,17 @@ function UsersTab() {
 }
 
 /** Cấp/đổi vai trò theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi). */
+/** Tổng Điểm Xanh khách thấy; phần quy đổi từ xu (tiền trả trước, không hết hạn) ghi riêng để xử lý khiếu nại. */
+function UserPointsCell({ user }: { user: { pointsBalance: number; pointsConvertedBalance?: number } }) {
+  const pts = pointsSummary(user);
+  return (
+    <>
+      {pts.total}
+      {pts.convertedNote && <div className="text-xs text-stone-500">{pts.convertedNote}</div>}
+    </>
+  );
+}
+
 function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const [phone, setPhone] = useState('');
   // Mặc định vai trò ít quyền nhất (KHÔNG phải ADMIN) — tránh lỡ tay cấp full-quyền cho

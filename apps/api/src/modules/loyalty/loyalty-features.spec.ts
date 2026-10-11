@@ -761,6 +761,14 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       );
     });
 
+    it('PD-3: tra cứu trả cả lô quy đổi và tổng, để quầy thấy điểm không hết hạn của khách', async () => {
+      const { prisma } = lookupPrisma([
+        { id: 'm1', referralCode: 'AB12CD34', phone: '0987654321', fullName: 'Khách A', pointsBalance: 10, pointsConvertedBalance: 25, tier: null },
+      ]);
+      const res = await new LoyaltyService(prisma, makeConfig()).lookupMemberByStaff('staff-1', 'TUBUAB12CD34');
+      expect(res.member).toMatchObject({ pointsBalance: 10, pointsConvertedBalance: 25, pointsTotal: 35 });
+    });
+
     it('kết quả tra cứu chỉ trả SĐT đã che', async () => {
       const { prisma } = lookupPrisma([
         { id: 'm1', referralCode: 'AB12CD34', phone: '0987654321', fullName: 'Khách A', pointsBalance: 10, tier: null },
@@ -835,6 +843,15 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       const row = db.ledger[0]!;
       expect(row).toMatchObject({ userId: 'm1', delta: 30, reason: 'POS_OFFLINE_ORDER:HD-001', refType: 'POS', refId: db.posCredits[0]!.id });
       expect(row.expiresAt).toBeInstanceOf(Date);
+    });
+
+    it('PD-3: kết quả tích điểm ghi số dư mới của lô thường và tổng gồm lô quy đổi (lô quy đổi không đổi)', async () => {
+      const { db, prisma } = posDb();
+      db.users.get('m1')!.pointsConvertedBalance = 40;
+      const svc = new LoyaltyService(prisma, makeConfig({ ...ENABLED, 'loyalty.vnd_per_point': 10_000 }));
+      const res = await credit(svc, 'staff-1');
+      expect(res.member).toMatchObject({ pointsBalance: 80, pointsConvertedBalance: 40, pointsTotal: 120 });
+      expect(db.users.get('m1')!.pointsConvertedBalance).toBe(40);
     });
 
     it('hoá đơn vượt trần loyalty.pos_max_order_total → BadRequest', async () => {

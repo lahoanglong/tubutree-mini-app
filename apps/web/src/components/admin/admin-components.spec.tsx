@@ -333,6 +333,13 @@ describe('PosScreen (màn thu ngân)', () => {
     expect(container.textContent).toContain('120');
   });
 
+  it('PD-3: khách có điểm quy đổi → quầy thấy tổng hai lô và phần không hết hạn', async () => {
+    const withConverted = { ...member, pointsBalance: 120, pointsConvertedBalance: 30, pointsTotal: 150 };
+    const { container } = await scanned({ '/loyalty/staff/scan-member': { body: { member: withConverted } } });
+    expect(container.textContent).toContain('150');
+    expect(container.textContent).toContain('trong đó 30 điểm không hết hạn');
+  });
+
   it('404 khi tra cứu → hiện message BE', async () => {
     const { container } = await scanned({ '/loyalty/staff/scan-member': { status: 404, body: { message: 'Không tìm thấy thành viên với mã này.' } } });
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('Không tìm thấy thành viên với mã này.');

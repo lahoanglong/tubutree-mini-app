@@ -1,4 +1,5 @@
 import type { AdminOrder, AdminUser } from './admin-client';
+import { pointsSummary } from './checkout-points';
 import { gomdonStatusLabel } from './recycling';
 
 /** Ký tự mở đầu khiến Excel/Google Sheets coi ô là CÔNG THỨC. */
@@ -78,16 +79,20 @@ export function generateOrdersCsvString(orders: AdminOrder[]): string {
 }
 
 export function generateUsersCsvString(users: AdminUser[]): string {
-  const headers = ['User ID', 'Họ và tên', 'Số điện thoại', 'Vai trò', 'Điểm tích lũy', 'Ngày tham gia'];
+  const headers = ['User ID', 'Họ và tên', 'Số điện thoại', 'Vai trò', 'Điểm tích lũy', 'Trong đó không hết hạn', 'Ngày tham gia'];
 
-  const rows = users.map((u) => [
-    escapeCsvCell(u.id),
-    escapeCsvCell(u.fullName ?? 'Chưa cập nhật'),
-    escapeCsvCell(u.phone ?? ''),
-    escapeCsvCell(u.role),
-    escapeCsvCell(u.pointsBalance ?? 0),
-    escapeCsvCell(new Date(u.createdAt).toLocaleString('vi-VN')),
-  ].join(','));
+  const rows = users.map((u) => {
+    const pts = pointsSummary({ pointsBalance: u.pointsBalance ?? 0, pointsConvertedBalance: u.pointsConvertedBalance });
+    return [
+      escapeCsvCell(u.id),
+      escapeCsvCell(u.fullName ?? 'Chưa cập nhật'),
+      escapeCsvCell(u.phone ?? ''),
+      escapeCsvCell(u.role),
+      escapeCsvCell(pts.total),
+      escapeCsvCell(pts.converted),
+      escapeCsvCell(new Date(u.createdAt).toLocaleString('vi-VN')),
+    ].join(',');
+  });
 
   return [headers.join(','), ...rows].join('\r\n');
 }

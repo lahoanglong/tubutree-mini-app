@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   payouts: 0,
   refundsPending: 0,
   orders: [] as unknown[],
+  users: [
+    { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
+  ] as unknown[],
   setUserRole: vi.fn(),
   createCoupon: vi.fn(),
   config: [] as unknown[],
@@ -123,9 +126,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       meta: { total: 3, page: 1, limit: 20 },
     }),
     listUsers: async () => ({
-      data: [
-        { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
-      ],
+      data: mocks.users,
       meta: { total: 45, page: 1, limit: 20 },
     }),
     setUserRole: (...args: unknown[]) => mocks.setUserRole(...args),
@@ -189,6 +190,9 @@ beforeEach(() => {
   mocks.payouts = 0;
   mocks.refundsPending = 0;
   mocks.orders = [];
+  mocks.users = [
+    { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
+  ];
   mocks.setUserRole.mockReset();
   mocks.createCoupon.mockReset();
   mocks.config = [];
@@ -499,6 +503,16 @@ describe('admin/page — tab Người dùng', () => {
     const cells = [...table.querySelectorAll('tbody td')];
     expect(cells.map((c) => c.textContent)).toEqual(['Nguyễn An', '0944444444', 'CUSTOMER', '12', new Date('2026-09-01T00:00:00.000Z').toLocaleDateString('vi-VN')]);
     for (const c of cells) expect(c.className).toContain('px-3');
+  });
+
+  it('PD-3: khách có điểm quy đổi → ô Điểm là tổng hai lô kèm phần không hết hạn, để nhân viên xử lý khiếu nại quy đổi', async () => {
+    mocks.users = [
+      { id: 'u2', fullName: 'Lê Bình', phone: '0955555555', role: 'CUSTOMER', pointsBalance: 5, pointsConvertedBalance: 30, createdAt: '2026-09-02T00:00:00.000Z' },
+    ];
+    const { container } = await openUsers();
+    const pointsCell = container.querySelectorAll('table tbody td')[3]!;
+    expect(pointsCell.textContent).toContain('35');
+    expect(pointsCell.textContent).toContain('trong đó 30 điểm không hết hạn');
   });
 
   it('nút Xuất CSV người dùng dùng icon lucide (không emoji) và giữ nhãn', async () => {

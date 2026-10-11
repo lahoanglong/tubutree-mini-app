@@ -911,21 +911,28 @@ export class LoyaltyService {
     return found[0]!;
   }
 
-  private memberSummary(member: {
-    id: string;
-    referralCode: string;
-    fullName: string | null;
-    phone: string | null;
-    pointsBalance: number;
-    tier?: { name: string } | null;
-  }) {
+  private memberSummary(
+    member: {
+      id: string;
+      referralCode: string;
+      fullName: string | null;
+      phone: string | null;
+      pointsBalance: number;
+      pointsConvertedBalance?: number;
+      tier?: { name: string } | null;
+    },
+    pointsBalance = member.pointsBalance,
+  ) {
+    const pointsConvertedBalance = member.pointsConvertedBalance ?? 0;
     return {
       id: member.id,
       memberCode: memberCodeOf(member.referralCode),
       name: member.fullName ?? 'Thành viên Tubu',
       phone: maskPhone(member.phone),
       tier: member.tier?.name ?? 'Mầm Xanh',
-      pointsBalance: member.pointsBalance,
+      pointsBalance,
+      pointsConvertedBalance,
+      pointsTotal: pointsBalance + pointsConvertedBalance,
     };
   }
 
@@ -1138,7 +1145,7 @@ export class LoyaltyService {
   ) {
     return {
       replayed,
-      member: { ...this.memberSummary(member), pointsBalance },
+      member: this.memberSummary(member, pointsBalance),
       posTransaction: {
         receiptId: credit.receiptId,
         orderTotal: credit.orderTotal,
