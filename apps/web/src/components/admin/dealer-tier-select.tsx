@@ -21,7 +21,7 @@ export function DealerTierSelect({
 
   if (q.isError) {
     return (
-      <p role="alert" className="text-xs text-red-600">
+      <p role="alert" className="text-xs text-danger-fg">
         Không tải được danh sách bậc đại lý.{' '}
         <button type="button" onClick={() => void q.refetch()} className="min-h-[44px] font-medium underline sm:min-h-0">
           Thử lại
@@ -31,7 +31,7 @@ export function DealerTierSelect({
   }
   const tiers = q.data ?? [];
   if (q.isSuccess && tiers.length === 0) {
-    return <p className="text-xs text-amber-800">Chưa có bậc đại lý nào — cần tạo bậc đại lý trước khi duyệt hoặc cấp vai trò đại lý.</p>;
+    return <p className="text-xs text-warning-fg">Chưa có bậc đại lý nào — cần tạo bậc đại lý trước khi duyệt hoặc cấp vai trò đại lý.</p>;
   }
   return (
     <select

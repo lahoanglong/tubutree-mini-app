@@ -10,6 +10,7 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm, type ConfirmOptions } from './confirm-dialog';
+import { BTN_WARNING, FIELD_XS, TOUCH_H } from './ui';
 
 export interface OrderStatusAction {
   status: string;
@@ -19,16 +20,19 @@ export interface OrderStatusAction {
   confirm: boolean;
 }
 
+// Nút nằm trong chi tiết đơn mở rộng: chạm 44px trên điện thoại, về cỡ gọn từ `sm` (admin tối ưu máy tính, Q-29).
+const ACTION_BASE = `${TOUCH_H} rounded-control px-2.5 py-1 text-xs font-medium disabled:opacity-50`;
+
 /**
  * Thứ tự hiển thị theo luồng giao. Không có RETURNED: trả hàng đi qua tab Đổi/Trả (duyệt yêu cầu, hoàn tiền) chứ
  * không bấm thẳng trạng thái ở đây.
  */
 const ACTIONS: readonly OrderStatusAction[] = [
-  { status: 'CONFIRMED', label: 'Xác nhận', className: 'rounded bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50', confirm: false },
-  { status: 'PACKED', label: 'Đã đóng gói', className: 'rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50', confirm: false },
-  { status: 'SHIPPING', label: 'Giao vận', className: 'rounded bg-purple-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-purple-700 disabled:opacity-50', confirm: false },
-  { status: 'DELIVERED', label: 'Đã giao hàng', className: 'rounded bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50', confirm: true },
-  { status: 'CANCELLED', label: 'Hủy đơn', className: 'rounded border border-red-300 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50', confirm: true },
+  { status: 'CONFIRMED', label: 'Xác nhận', className: `${ACTION_BASE} bg-info-fg text-stone-0 hover:brightness-90`, confirm: false },
+  { status: 'PACKED', label: 'Đã đóng gói', className: `${ACTION_BASE} bg-sage-700 text-stone-0 hover:brightness-90`, confirm: false },
+  { status: 'SHIPPING', label: 'Giao vận', className: `${ACTION_BASE} bg-forest-800 text-stone-0 hover:brightness-90`, confirm: false },
+  { status: 'DELIVERED', label: 'Đã giao hàng', className: `${ACTION_BASE} bg-forest-600 text-stone-0 hover:bg-forest-700`, confirm: true },
+  { status: 'CANCELLED', label: 'Hủy đơn', className: `${ACTION_BASE} border border-danger-fg text-danger-fg hover:bg-danger-bg`, confirm: true },
 ];
 
 /**
@@ -120,10 +124,10 @@ export function OrderStatusActions({ order }: { order: AdminOrder }) {
   const busy = statusMut.isPending || payMut.isPending;
 
   return (
-    <div className="space-y-2 border-t border-neutral-200 pt-2">
+    <div className="space-y-2 border-t border-stone-200 pt-2">
       {order.canConfirmPayment && (
-        <section aria-label="Xác nhận đã nhận tiền" className="rounded border border-amber-200 bg-white p-2.5">
-          <p className="text-xs text-amber-800">
+        <section aria-label="Xác nhận đã nhận tiền" className="rounded-card border border-warning-fg bg-stone-0 p-2.5">
+          <p className="text-xs text-warning-fg">
             Chuyển khoản chưa ghi nhận thanh toán — chưa giao được đơn. Đối chiếu sao kê rồi bấm &quot;Đã nhận tiền&quot;.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -135,13 +139,13 @@ export function OrderStatusActions({ order }: { order: AdminOrder }) {
               value={bankRef}
               onChange={(e) => setBankRef(e.target.value)}
               disabled={busy}
-              className="min-w-0 flex-1 rounded border border-neutral-300 px-2 py-1 text-xs"
+              className={`${FIELD_XS} grow basis-40`}
             />
             <button
               type="button"
               onClick={onConfirmPayment}
               disabled={busy}
-              className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:bg-neutral-300"
+              className={BTN_WARNING}
             >
               Đã nhận tiền
             </button>
@@ -149,22 +153,22 @@ export function OrderStatusActions({ order }: { order: AdminOrder }) {
         </section>
       )}
       {payMsg && (
-        <p role={payMsg.ok ? 'status' : 'alert'} className={`text-xs ${payMsg.ok ? 'text-green-700' : 'text-red-600'}`}>
+        <p role={payMsg.ok ? 'status' : 'alert'} className={`text-xs ${payMsg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
           {payMsg.text}
         </p>
       )}
 
       {actions.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-neutral-700">Chuyển trạng thái:</span>
+          <span className="text-xs font-semibold text-stone-700">Chuyển trạng thái:</span>
           {actions.map((a) => (
             <button key={a.status} type="button" onClick={() => onStatus(a)} disabled={busy} className={a.className}>
               {a.label}
             </button>
           ))}
-          {statusMut.isPending && <span className="text-xs text-neutral-500">Đang cập nhật…</span>}
+          {statusMut.isPending && <span className="text-xs text-stone-500">Đang cập nhật…</span>}
           {statusMut.isError && (
-            <span role="alert" className="text-xs text-red-600">
+            <span role="alert" className="text-xs text-danger-fg">
               {(statusMut.error as Error).message}
             </span>
           )}

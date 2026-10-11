@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { PayoutRow } from './payout-admin-tab';
+import { PayoutAdminTab, PayoutRow } from './payout-admin-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminPayout } from '@/lib/admin-client';
 
@@ -58,7 +58,7 @@ describe('PayoutRow — hộp thoại xác nhận', () => {
     const d = confirmDialog()!;
     expect(d.textContent).toMatch(/1\.500\.000/);
     expect(d.textContent).toMatch(/HOÀN LẠI/);
-    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-red-600');
+    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-danger-fg');
     answerConfirm(false);
     await flush();
     expect(api.calls).toHaveLength(0);
@@ -83,5 +83,46 @@ describe('PayoutRow — hộp thoại xác nhận', () => {
     answerConfirm(true);
     await flush();
     expect(api.calls[0]!.url).toContain('/admin/payouts/p1/mark-paid');
+  });
+});
+
+// C-097 (Q-29): màn duyệt/chi tiền chỉ đổi giao diện sang DS v2; nút thao tác tiền chạm được ở 390px.
+describe('PayoutRow / PayoutAdminTab — DS v2', () => {
+  it('lệnh REQUESTED: "Duyệt" là nút chính forest, "Từ chối (hoàn tiền)" viền danger, cả hai cao 44px', () => {
+    const { container } = mount(<PayoutRow payout={payout()} />);
+    const approve = byText(container, 'button', 'Duyệt');
+    const reject = byText(container, 'button', 'Từ chối (hoàn tiền)');
+    expect(approve?.className).toContain('bg-forest-600');
+    expect(approve?.className).toContain('min-h-[44px]');
+    expect(reject?.className).toContain('border-danger-fg');
+    expect(reject?.className).toContain('min-h-[44px]');
+  });
+
+  it('lệnh APPROVED: "Đã chuyển khoản" cao 44px, ô ghi chú/mã giao dịch chịu xuống dòng', () => {
+    const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
+    expect(byText(container, 'button', 'Đã chuyển khoản')?.className).toContain('min-h-[44px]');
+    expect(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]')?.className).toContain('flex-1');
+  });
+
+  it('huy hiệu trạng thái và lý do từ chối theo token danger', () => {
+    const { container } = mount(
+      <PayoutRow payout={payout({ status: 'REJECTED', rejectionReason: 'Sai số tài khoản', reviewedAt: '2026-10-02T00:00:00.000Z' })} />,
+    );
+    expect(byText(container, 'span', 'Sai số tài khoản')?.className).toContain('text-danger-fg');
+    expect(container.querySelector('span.bg-danger-bg')).not.toBeNull();
+  });
+
+  it('thanh lọc trạng thái: chip 44px, chip đang chọn nền forest, mặc định lọc REQUESTED', async () => {
+    const api = mockFetch(LIST);
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutAdminTab />);
+    await flush();
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]')) as HTMLElement[];
+    expect(tabs.length).toBeGreaterThan(1);
+    for (const t of tabs) expect(t.className).toContain('min-h-[44px]');
+    const selected = tabs.filter((t) => t.getAttribute('aria-selected') === 'true');
+    expect(selected).toHaveLength(1);
+    expect(selected[0]!.className).toContain('bg-forest-600');
+    expect(api.calls[0]!.url).toContain('status=REQUESTED');
   });
 });

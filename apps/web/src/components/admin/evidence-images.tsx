@@ -32,7 +32,7 @@ export function EvidenceImages({ images }: { images: string[] | null | undefined
 
   return (
     <div className="mt-2">
-      <button type="button" onClick={() => setOpen(!open)} className="text-xs font-medium text-green-700 hover:underline">
+      <button type="button" onClick={() => setOpen(!open)} className="text-xs font-medium text-forest-700 hover:underline">
         {open ? 'Ẩn ảnh minh chứng' : `Xem ${images.length} ảnh minh chứng`}
       </button>
       {open && (
@@ -44,7 +44,7 @@ export function EvidenceImages({ images }: { images: string[] | null | undefined
                 src={img.src}
                 alt={`Ảnh minh chứng ${idx + 1}`}
                 referrerPolicy="no-referrer"
-                className="h-20 w-20 rounded border border-neutral-200 object-cover shadow-sm transition hover:opacity-80"
+                className="h-20 w-20 rounded-media border border-stone-200 object-cover shadow-card transition hover:opacity-80"
               />
             );
             return img.href ? (
@@ -56,7 +56,7 @@ export function EvidenceImages({ images }: { images: string[] | null | undefined
             );
           })}
           {rejected > 0 && (
-            <p className="w-full text-xs text-red-600">Đã ẩn {rejected} ảnh không hợp lệ (không phải ảnh https/ảnh tải lên).</p>
+            <p className="w-full text-xs text-danger-fg">Đã ẩn {rejected} ảnh không hợp lệ (không phải ảnh https/ảnh tải lên).</p>
           )}
         </div>
       )}

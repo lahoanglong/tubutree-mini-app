@@ -46,9 +46,9 @@ export function safeHttpsLink(raw: string | null | undefined): string | null {
   }
 }
 
-export function reviewStars(rating: number): string {
-  const n = Math.max(0, Math.min(5, Math.round(rating)));
-  return '★'.repeat(n) + '☆'.repeat(5 - n);
+/** Số sao tô đầy, kẹp 0..5 để luôn vẽ đủ 5 icon. */
+export function reviewStarCount(rating: number): number {
+  return Math.max(0, Math.min(5, Math.round(rating)));
 }
 
 const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {

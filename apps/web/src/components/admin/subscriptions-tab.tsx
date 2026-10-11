@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { listAdminSubscriptions, type AdminSubscription, type SubscriptionStatus } from '@/lib/admin-client';
 import { intervalLabel, subscriptionStatusLabel } from '@/lib/admin-pickers';
 import { PageNav } from './page-nav';
-import { Notice, ToneBadge } from './ui';
+import { Notice, ToneBadge, chipClass } from './ui';
 
 const PAGE_SIZE = 20;
 const STATUS_CHIPS: { k: SubscriptionStatus | ''; label: string }[] = [
@@ -39,9 +39,7 @@ export function SubscriptionsTab() {
               setPage(1);
               setStatus(c.k);
             }}
-            className={`min-h-[44px] rounded-full px-3 py-1 text-xs font-medium sm:min-h-[32px] ${
-              status === c.k ? 'bg-green-600 text-white' : 'bg-neutral-100 text-neutral-700'
-            }`}
+            className={chipClass(status === c.k)}
           >
             {c.label}
           </button>
@@ -49,12 +47,12 @@ export function SubscriptionsTab() {
       </div>
 
       {q.isError && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-danger-fg">
           {(q.error as Error).message || 'Không tải được danh sách gói định kỳ.'}
         </p>
       )}
-      {q.isLoading && <p className="text-sm text-neutral-500">Đang tải gói định kỳ…</p>}
-      {q.data && q.data.data.length === 0 && <p className="rounded-lg border border-neutral-100 bg-white p-4 text-sm text-neutral-500">Chưa có gói định kỳ nào khớp bộ lọc.</p>}
+      {q.isLoading && <p className="text-sm text-stone-500">Đang tải gói định kỳ…</p>}
+      {q.data && q.data.data.length === 0 && <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-sm text-stone-500">Chưa có gói định kỳ nào khớp bộ lọc.</p>}
       <div className="space-y-3">
         {q.data?.data.map((s) => <SubscriptionRow key={s.id} sub={s} />)}
       </div>
@@ -65,18 +63,18 @@ export function SubscriptionsTab() {
 
 function SubscriptionRow({ sub: s }: { sub: AdminSubscription }) {
   return (
-    <article className="rounded-lg border border-neutral-100 bg-white p-3 text-sm">
+    <article className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <ToneBadge tone={STATUS_TONE[s.status] ?? 'neutral'}>{subscriptionStatusLabel(s.status)}</ToneBadge>
-        <span className="text-xs text-neutral-500">{intervalLabel(s.intervalWeeks)}</span>
+        <span className="text-xs text-stone-500">{intervalLabel(s.intervalWeeks)}</span>
         {s.status === 'ACTIVE' && (
-          <span className="ml-auto text-xs text-neutral-500">Giao kế tiếp: {new Date(s.nextRunAt).toLocaleDateString('vi-VN')}</span>
+          <span className="ml-auto text-xs text-stone-500">Giao kế tiếp: {new Date(s.nextRunAt).toLocaleDateString('vi-VN')}</span>
         )}
       </div>
       <div className="mt-1 font-medium">
         {s.variation.product.name} · {s.variation.name} ({s.variation.sku}) × {s.quantity}
       </div>
-      <div className="text-xs text-neutral-500">
+      <div className="text-xs text-stone-500">
         {s.user.fullName?.trim() || 'Chưa có tên'} · {s.user.phone || 'chưa có SĐT'}
       </div>
     </article>

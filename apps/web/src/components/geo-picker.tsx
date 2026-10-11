@@ -1,5 +1,6 @@
 'use client';
 
+import { AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getProvinces, getCommunes } from '@/lib/geo-client';
 import { ui } from '@/lib/guest-ui';
@@ -58,7 +59,12 @@ export function GeoPicker({
             </option>
           ))}
         </select>
-        {errorProvince && <p className="mt-0.5 text-xs text-danger-fg">⚠ {errorProvince}</p>}
+        {errorProvince && (
+          <p className="mt-0.5 flex items-start gap-1 text-xs text-danger-fg">
+            <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden />
+            {errorProvince}
+          </p>
+        )}
       </div>
 
       <div>
@@ -83,7 +89,12 @@ export function GeoPicker({
             </option>
           ))}
         </select>
-        {errorWard && <p className="mt-0.5 text-xs text-danger-fg">⚠ {errorWard}</p>}
+        {errorWard && (
+          <p className="mt-0.5 flex items-start gap-1 text-xs text-danger-fg">
+            <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden />
+            {errorWard}
+          </p>
+        )}
       </div>
     </>
   );

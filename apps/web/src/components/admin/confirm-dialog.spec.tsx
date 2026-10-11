@@ -124,9 +124,18 @@ describe('useConfirm / ConfirmDialog', () => {
     const cancel = confirmDialog()!.querySelector('[data-confirm="cancel"]')!;
     expect(accept.textContent).toBe('Huỷ đơn');
     expect(cancel.textContent).toBe('Giữ đơn');
-    expect(accept.className).toContain('bg-red-600');
+    expect(accept.className).toContain('bg-danger-fg');
     expect(accept.className).toContain('min-h-[44px]');
     expect(cancel.className).toContain('min-h-[44px]');
+  });
+
+  it('tông mặc định: nút xác nhận xanh rừng (không phải màu nguy hiểm), cao tối thiểu 44px', async () => {
+    const { container } = mount(<Harness options={{ title: 'T', message: 'M' }} />);
+    await ask(container);
+    const accept = confirmDialog()!.querySelector('[data-confirm="accept"]')!;
+    expect(accept.className).toContain('bg-forest-600');
+    expect(accept.className).not.toContain('bg-danger-fg');
+    expect(accept.className).toContain('min-h-[44px]');
   });
 
   it('hỏi lần hai khi lần một còn mở → lần một coi là huỷ, hộp thoại hiện câu mới', async () => {

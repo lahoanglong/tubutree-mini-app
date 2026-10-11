@@ -60,8 +60,8 @@ test.describe('Admin — tab Retention & North-star', () => {
     await expect(p.getByText('Khách mới hôm qua')).toBeVisible();
     // "5" (newBuyers) xuất hiện CẢ ở StatCard lẫn ở dòng bảng bên dưới (cùng snapshot mới nhất) →
     // getByText('5', {exact:true}) trần vi phạm strict mode (khớp 2 phần tử). Thu hẹp về đúng
-    // StatCard "Khách mới hôm qua" rồi mới assert số bên trong nó.
-    const newBuyersCard = p.locator('div.rounded-lg', { hasText: 'Khách mới hôm qua' });
+    // StatCard "Khách mới hôm qua" (role group, tên = nhãn) rồi mới assert số bên trong nó.
+    const newBuyersCard = p.getByRole('group', { name: 'Khách mới hôm qua' });
     await expect(newBuyersCard.getByText('5', { exact: true })).toBeVisible();
   });
 

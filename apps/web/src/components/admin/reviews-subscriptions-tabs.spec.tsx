@@ -53,7 +53,9 @@ describe('ReviewsTab', () => {
     await flush();
     expect(calls[0]!.url).toContain('/admin/reviews?page=1&limit=20');
     const t = container.textContent ?? '';
-    expect(t).toContain('★☆☆☆☆');
+    const stars = container.querySelector('[role="img"][aria-label="1 sao"]')!;
+    expect(stars.querySelectorAll('svg')).toHaveLength(5);
+    expect(stars.querySelectorAll('svg.fill-current')).toHaveLength(1);
     expect(t).toContain('Hàng dở, đừng mua');
     expect(t).toContain('Nước rửa chén Lá Sả');
     expect(t).toContain('Nguyễn An · 0900000001');

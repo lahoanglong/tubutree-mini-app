@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   intervalLabel,
   personLabel,
-  reviewStars,
+  reviewStarCount,
   safeHttpsLink,
   subscriptionStatusLabel,
   tierOptionLabel,
@@ -78,11 +78,12 @@ describe('safeHttpsLink', () => {
   });
 });
 
-describe('reviewStars', () => {
-  it('vẽ đủ 5 sao, kẹp trong 0..5', () => {
-    expect(reviewStars(3)).toBe('★★★☆☆');
-    expect(reviewStars(9)).toBe('★★★★★');
-    expect(reviewStars(-1)).toBe('☆☆☆☆☆');
+describe('reviewStarCount', () => {
+  it('số sao tô đầy, kẹp trong 0..5 và làm tròn', () => {
+    expect(reviewStarCount(3)).toBe(3);
+    expect(reviewStarCount(9)).toBe(5);
+    expect(reviewStarCount(-1)).toBe(0);
+    expect(reviewStarCount(3.6)).toBe(4);
   });
 });
 

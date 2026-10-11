@@ -113,3 +113,31 @@ describe('DealerCreditPanel (chi tiết đơn admin) — A5-09', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(msg);
   });
 });
+
+// C-097 (Q-29): khối công nợ có thao tác tiền nên nút/ô nhập chạm được ở 390px; dư nợ tô theo token trạng thái.
+describe('DealerCreditPanel — DS v2', () => {
+  it('nút mở/đóng, ô nhập và nút xác nhận cao 44px ở điện thoại; ô nhập chịu xuống dòng (basis-40)', async () => {
+    const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<DealerCreditPanel order={dealerOrder()} />);
+    expect(byText(container, 'button', 'Công nợ đại lý')?.className).toContain('min-h-[44px]');
+    click(byText(container, 'button', 'Công nợ đại lý'));
+    await flush();
+    for (const input of Array.from(container.querySelectorAll('input'))) expect(input.className).toContain('min-h-[44px]');
+    expect(container.querySelector('input[aria-label="Ghi chú"]')?.className).toContain('basis-40');
+    expect(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ')?.className).toContain('min-h-[44px]');
+    expect(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ')?.className).toContain('bg-warning-fg');
+  });
+
+  it('dư nợ dương/âm tô danger-fg, lỗi nhập tô danger-fg', async () => {
+    const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<DealerCreditPanel order={dealerOrder()} />);
+    click(byText(container, 'button', 'Công nợ đại lý'));
+    await flush();
+    expect(container.querySelector('p span.text-danger-fg')?.textContent).toContain('3.000.000');
+    click(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ'));
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.className).toContain('text-danger-fg');
+  });
+});

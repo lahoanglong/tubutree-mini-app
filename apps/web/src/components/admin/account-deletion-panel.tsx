@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/client-api';
 import { formatVnd } from '@/lib/shop-client';
-import { INPUT_CLASS, Notice, ToneBadge } from './ui';
+import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass } from './ui';
 
 export type DeletionStatusFilter = 'PENDING' | 'RESOLVED' | 'ALL';
 
@@ -59,7 +59,7 @@ export function AccountDeletionPanel() {
   return (
     <section className="mt-6 space-y-3" aria-labelledby="account-deletion-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="account-deletion-heading" className="text-base font-semibold text-neutral-900">
+        <h2 id="account-deletion-heading" className="text-base font-semibold text-stone-900">
           Yêu cầu xoá tài khoản
         </h2>
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc yêu cầu xoá tài khoản">
@@ -70,7 +70,7 @@ export function AccountDeletionPanel() {
               role="tab"
               aria-selected={filter === f.k}
               onClick={() => setFilter(f.k)}
-              className={`rounded px-3 py-1 text-xs font-medium ${filter === f.k ? 'bg-green-600 text-white' : 'bg-neutral-100 text-neutral-700'}`}
+              className={chipClass(filter === f.k)}
             >
               {f.label}
             </button>
@@ -78,11 +78,11 @@ export function AccountDeletionPanel() {
         </div>
       </div>
 
-      {q.isLoading && <p className="text-sm text-neutral-500">Đang tải…</p>}
+      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {q.isError && (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-danger-fg">
           Không tải được danh sách yêu cầu.{' '}
-          <button type="button" className="underline" onClick={() => void q.refetch()}>
+          <button type="button" className={`${BTN_LINK} text-sm`} onClick={() => void q.refetch()}>
             Thử lại
           </button>
         </p>
@@ -90,7 +90,7 @@ export function AccountDeletionPanel() {
       <div className="space-y-2">
         {q.data?.map((r) => <DeletionRow key={r.id} request={r} />)}
         {q.data?.length === 0 && (
-          <p className="rounded-lg border border-neutral-100 bg-white p-6 text-center text-sm text-neutral-500">
+          <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
             Không có yêu cầu nào.
           </p>
         )}
@@ -132,33 +132,33 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
   };
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-neutral-900">{r.user?.fullName || 'Không rõ tên'}</span>
-            {r.user?.phone && <span className="text-sm text-neutral-600">{r.user.phone}</span>}
+            <span className="font-semibold text-stone-900">{r.user?.fullName || 'Không rõ tên'}</span>
+            {r.user?.phone && <span className="text-sm text-stone-600">{r.user.phone}</span>}
             <ToneBadge tone={pending ? 'warning' : 'success'}>{pending ? 'Chờ xử lý' : 'Đã xử lý'}</ToneBadge>
             {r.user && r.user.role !== 'CUSTOMER' && <ToneBadge tone="info">{r.user.role}</ToneBadge>}
           </div>
           {r.user && pending && (
-            <div className="mt-0.5 text-xs text-neutral-600">
+            <div className="mt-0.5 text-xs text-stone-600">
               Ví Tubu {formatVnd(r.user.walletBalance)} · {r.user.coinsBalance} xu
             </div>
           )}
-          <div className="mt-0.5 text-sm text-neutral-600">
-            Lý do: <span className="text-neutral-800">{r.reason || 'Không ghi lý do'}</span>
+          <div className="mt-0.5 text-sm text-stone-600">
+            Lý do: <span className="text-stone-800">{r.reason || 'Không ghi lý do'}</span>
           </div>
         </div>
-        <span className="text-xs text-neutral-400">{new Date(r.createdAt).toLocaleString('vi-VN')}</span>
+        <span className="text-xs text-stone-500">{new Date(r.createdAt).toLocaleString('vi-VN')}</span>
       </div>
 
       {!pending && (
-        <div className="mt-2 space-y-0.5 text-xs text-neutral-500">
+        <div className="mt-2 space-y-0.5 text-xs text-stone-500">
           {r.reviewedAt && <div>Xử lý lúc: {new Date(r.reviewedAt).toLocaleString('vi-VN')}</div>}
           {r.adminNote && (
             <div>
-              Ghi chú admin: <span className="text-neutral-700">{r.adminNote}</span>
+              Ghi chú admin: <span className="text-stone-700">{r.adminNote}</span>
             </div>
           )}
         </div>
@@ -178,7 +178,7 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
       )}
 
       {pending && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-3">
           <input
             aria-label="Ghi chú xử lý"
             placeholder="Ghi chú (tuỳ chọn), vd đã gọi xác nhận với khách"
@@ -192,15 +192,15 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
             type="button"
             onClick={run}
             disabled={mut.isPending || blocked}
-            className="min-h-11 rounded bg-red-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:bg-neutral-300"
+            className="min-h-11 rounded-control bg-danger-fg px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-500"
           >
             Xử lý (ẩn danh)
           </button>
-          {mut.isPending && <span className="text-xs text-neutral-500">Đang xử lý…</span>}
+          {mut.isPending && <span className="text-xs text-stone-500">Đang xử lý…</span>}
         </div>
       )}
       {err && (
-        <p role="alert" className="mt-2 text-sm text-red-600">
+        <p role="alert" className="mt-2 text-sm text-danger-fg">
           {err}
         </p>
       )}

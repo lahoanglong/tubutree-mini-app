@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Banknote, Check, ChevronDown, ChevronUp, Download, Recycle, Store, TreePine, Trophy } from 'lucide-react';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { formatVnd } from '@/lib/shop-client';
@@ -95,6 +96,19 @@ import { ReviewsTab } from '@/components/admin/reviews-tab';
 import type { PickedItem } from '@/components/admin/search-picker';
 import { SubscriptionsTab } from '@/components/admin/subscriptions-tab';
 import { UserPicker } from '@/components/admin/user-picker';
+import {
+  BTN_DANGER_OUTLINE,
+  BTN_LINK,
+  BTN_LINK_DANGER,
+  BTN_LINK_MUTED,
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  BTN_SMALL,
+  FIELD_CLASS,
+  INPUT_CLASS,
+  TOUCH_H,
+  ToneBadge,
+} from '@/components/admin/ui';
 import { AnalyticsTab } from './analytics-tab';
 import {
   exportOrdersToCsv,
@@ -208,7 +222,7 @@ export default function AdminPage() {
     return (
       <Center>
         Cần đăng nhập quản trị.{' '}
-        <Link href="/dang-nhap" className="font-semibold text-green-700 underline">Đăng nhập</Link>
+        <Link href="/dang-nhap" className="inline-flex min-h-[44px] items-center font-semibold text-forest-700 underline">Đăng nhập</Link>
       </Center>
     );
   if (user?.role !== 'ADMIN')
@@ -217,18 +231,18 @@ export default function AdminPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-bold">Quản trị Tubu Tree</h1>
-        <Link href="/admin/pos" className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50">
+        <h1 className="font-display text-xl font-semibold text-stone-900">Quản trị Tubu Tree</h1>
+        <Link href="/admin/pos" className="inline-flex min-h-[44px] items-center rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 sm:min-h-[36px]">
           Màn thu ngân (tích điểm tại quầy)
         </Link>
       </div>
-      <div className="mt-4 flex gap-2 overflow-x-auto border-b border-neutral-100">
+      <div className="mt-4 flex gap-2 overflow-x-auto border-b border-stone-200">
         {TABS.map((t) => (
           <button
             key={t.k}
             onClick={() => setTab(t.k)}
-            className={`whitespace-nowrap px-3 py-2 text-sm font-medium ${
-              tab === t.k ? 'border-b-2 border-green-600 text-green-700' : 'text-neutral-500'
+            className={`min-h-[44px] whitespace-nowrap px-3 py-2 text-sm font-medium sm:min-h-0 ${
+              tab === t.k ? 'border-b-2 border-forest-600 text-forest-700' : 'text-stone-500 hover:text-stone-700'
             }`}
           >
             {t.label}
@@ -280,21 +294,21 @@ function DealersTab() {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded border border-neutral-200 px-2 py-1 text-sm">
+        <select value={filter} onChange={(e) => setFilter(e.target.value)} className={`${FIELD_CLASS} ${TOUCH_H}`}>
           {['PENDING', 'APPROVED', 'REJECTED', ''].map((s) => (
             <option key={s} value={s}>{s || 'Tất cả'}</option>
           ))}
         </select>
         {q.data && (
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-stone-500">
             {view.label} hồ sơ{pending ? ' · cũ nhất trước' : ''}
           </span>
         )}
       </div>
       <QueueMoreNotice pending={pending} view={view} noun="hồ sơ" />
       <div className="mt-3 space-y-3">
-        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách hồ sơ đại lý.</p>}
-        {q.isLoading && <p className="text-sm text-neutral-500">Đang tải danh sách hồ sơ…</p>}
+        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách hồ sơ đại lý.</p>}
+        {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách hồ sơ…</p>}
         {view.items.map((a) => <DealerRow key={a.id} app={a} />)}
         {q.data && view.items.length === 0 && <Empty>Không có hồ sơ.</Empty>}
       </div>
@@ -315,7 +329,7 @@ function DealersTab() {
 function QueueMoreNotice({ pending, view, noun }: { pending: boolean; view: { total: number; items: unknown[]; hasMore: boolean }; noun: string }) {
   if (!pending || !view.hasMore) return null;
   return (
-    <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+    <p className="mt-2 rounded-control border border-warning-fg bg-warning-bg px-3 py-2 text-xs text-warning-fg">
       Còn {view.total - view.items.length} {noun} mới hơn chưa tải — bấm &quot;Tải thêm&quot; để xem tiếp.
     </p>
   );
@@ -325,13 +339,8 @@ function LoadMoreButton({ hasMore, loading, error, onClick }: { hasMore: boolean
   if (!hasMore) return null;
   return (
     <div className="mt-3 text-center">
-      {error && <p className="mb-1 text-xs text-red-600">Không tải thêm được, thử lại.</p>}
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={loading}
-        className="rounded border border-neutral-300 bg-white px-4 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
-      >
+      {error && <p className="mb-1 text-xs text-danger-fg">Không tải thêm được, thử lại.</p>}
+      <button type="button" onClick={onClick} disabled={loading} className={BTN_SECONDARY}>
         {loading ? 'Đang tải…' : 'Tải thêm'}
       </button>
     </div>
@@ -348,18 +357,18 @@ function DealerRow({ app: a }: { app: DealerApp }) {
   });
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
-      <div className="flex justify-between">
-        <span className="font-medium">{a.businessName}</span>
-        <span className="text-xs text-neutral-400">{a.status}</span>
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
+      <div className="flex justify-between gap-2">
+        <span className="min-w-0 break-words font-medium text-stone-900">{a.businessName}</span>
+        <span className="shrink-0 text-xs text-stone-500">{a.status}</span>
       </div>
-      <div className="text-sm text-neutral-600">{a.ownerName} · {a.phone}</div>
-      <div className="text-sm text-neutral-600">{a.address}</div>
+      <div className="break-words text-sm text-stone-600">{a.ownerName} · {a.phone}</div>
+      <div className="break-words text-sm text-stone-600">{a.address}</div>
       <div className="mt-2 flex gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {a.cccdFrontUrl && <img src={a.cccdFrontUrl} alt="CCCD trước" className="h-16 rounded border" />}
+        {a.cccdFrontUrl && <img src={a.cccdFrontUrl} alt="CCCD trước" className="h-16 rounded-control border border-stone-200" />}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {a.cccdBackUrl && <img src={a.cccdBackUrl} alt="CCCD sau" className="h-16 rounded border" />}
+        {a.cccdBackUrl && <img src={a.cccdBackUrl} alt="CCCD sau" className="h-16 rounded-control border border-stone-200" />}
       </div>
       {a.status === 'PENDING' && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -368,28 +377,28 @@ function DealerRow({ app: a }: { app: DealerApp }) {
             onClick={() => review.mutate(true)}
             disabled={review.isPending || !tierId.trim()}
             title={!tierId.trim() ? 'Cần chọn bậc đại lý để duyệt' : undefined}
-            className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             Duyệt
           </button>
-          <button onClick={() => review.mutate(false)} disabled={review.isPending} className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600">Từ chối</button>
+          <button onClick={() => review.mutate(false)} disabled={review.isPending} className={BTN_DANGER_OUTLINE}>Từ chối</button>
         </div>
       )}
-      {review.isError && <p className="mt-1 text-xs text-red-600">{(review.error as Error).message}</p>}
+      {review.isError && <p className="mt-1 text-xs text-danger-fg">{(review.error as Error).message}</p>}
     </div>
   );
 }
 
 function OrderStatusBadge({ status }: { status: string }) {
   const label = ORDER_STATUS_LABELS[status] ?? status;
-  let color = 'bg-neutral-100 text-neutral-700';
-  if (status === 'PENDING_PAYMENT') color = 'bg-amber-100 text-amber-800';
-  else if (status === 'CONFIRMED') color = 'bg-blue-100 text-blue-800';
-  else if (status === 'PACKED') color = 'bg-indigo-100 text-indigo-800';
-  else if (status === 'SHIPPING') color = 'bg-purple-100 text-purple-800';
-  else if (status === 'DELIVERED') color = 'bg-green-100 text-green-800 font-semibold';
-  else if (status === 'CANCELLED') color = 'bg-red-100 text-red-800';
-  else if (status === 'RETURNED') color = 'bg-rose-100 text-rose-800';
+  let color = 'bg-stone-100 text-stone-700';
+  if (status === 'PENDING_PAYMENT') color = 'bg-warning-bg text-warning-fg';
+  else if (status === 'CONFIRMED') color = 'bg-info-bg text-info-fg';
+  else if (status === 'PACKED') color = 'bg-sage-100 text-sage-700';
+  else if (status === 'SHIPPING') color = 'bg-forest-100 text-forest-800';
+  else if (status === 'DELIVERED') color = 'bg-success-bg text-success-fg font-semibold';
+  else if (status === 'CANCELLED') color = 'bg-danger-bg text-danger-fg';
+  else if (status === 'RETURNED') color = 'bg-promo-bg text-promo-fg';
 
   return <span className={`inline-block rounded px-2 py-0.5 text-xs ${color}`}>{label}</span>;
 }
@@ -414,8 +423,8 @@ function DashboardTab({
     queryFn: () => listPayouts('REQUESTED', 1, 1).then((r) => r.meta.total),
   });
 
-  if (q.isLoading) return <p className="text-sm text-neutral-500">Đang tải số liệu tổng quan…</p>;
-  if (q.isError || !q.data) return <p className="text-sm text-red-600">Không tải được số liệu tổng quan KPI.</p>;
+  if (q.isLoading) return <p className="text-sm text-stone-500">Đang tải số liệu tổng quan…</p>;
+  if (q.isError || !q.data) return <p className="text-sm text-danger-fg">Không tải được số liệu tổng quan KPI.</p>;
 
   const stats = q.data;
 
@@ -425,90 +434,94 @@ function DashboardTab({
         <button
           type="button"
           onClick={onOpenRecyclingQueue}
-          className="flex w-full items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100"
+          className="flex w-full items-center justify-between gap-3 rounded-card border border-danger-fg bg-danger-bg px-4 py-3 text-left text-sm text-danger-fg hover:brightness-95"
         >
           <span>
-            ♻ <b>{recyclingQ.data}</b> đơn thu gom tái chế cần xử lý (vận đơn Gomdon lỗi / hoàn / huỷ không được)
+            <Recycle aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
+            <b>{recyclingQ.data}</b> đơn thu gom tái chế cần xử lý (vận đơn Gomdon lỗi / hoàn / huỷ không được)
           </span>
-          <span className="font-semibold">Xử lý ngay →</span>
+          <span className="shrink-0 font-semibold">Xử lý ngay →</span>
         </button>
       )}
       {(pendingClaimsQ.data ?? 0) > 0 && (
         <button
           type="button"
           onClick={() => onSelectTab('dealerClaims')}
-          className="flex w-full items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900 hover:bg-amber-100"
+          className="flex w-full items-center justify-between gap-3 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-left text-sm text-warning-fg hover:brightness-95"
         >
           <span>
-            🏆 <b>{pendingClaimsQ.data}</b> yêu cầu nhận thưởng đại lý đang chờ duyệt
+            <Trophy aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
+            <b>{pendingClaimsQ.data}</b> yêu cầu nhận thưởng đại lý đang chờ duyệt
           </span>
-          <span className="font-semibold">Xem →</span>
+          <span className="shrink-0 font-semibold">Xem →</span>
         </button>
       )}
       {(pendingPayoutsQ.data ?? 0) > 0 && (
         <button
           type="button"
           onClick={() => onSelectTab('payouts')}
-          className="flex w-full items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900 hover:bg-amber-100"
+          className="flex w-full items-center justify-between gap-3 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-left text-sm text-warning-fg hover:brightness-95"
         >
           <span>
-            💸 <b>{pendingPayoutsQ.data}</b> lệnh rút tiền (hoa hồng CTV / Ví) đang chờ duyệt
+            <Banknote aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
+            <b>{pendingPayoutsQ.data}</b> lệnh rút tiền (hoa hồng CTV / Ví) đang chờ duyệt
           </span>
-          <span className="font-semibold">Xem →</span>
+          <span className="shrink-0 font-semibold">Xem →</span>
         </button>
       )}
       {/* 4 KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Doanh thu */}
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Doanh thu bán hàng</div>
-          <div className="mt-2 text-2xl font-bold text-green-700">{formatVnd(stats.totalRevenue)}</div>
-          <div className="mt-1 text-xs text-neutral-500">Đơn đã xác nhận & hoàn tất</div>
+        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+          <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Doanh thu bán hàng</div>
+          <div className="mt-2 text-2xl font-bold text-forest-700">{formatVnd(stats.totalRevenue)}</div>
+          <div className="mt-1 text-xs text-stone-500">Đơn đã xác nhận & hoàn tất</div>
         </div>
 
         {/* Đơn hàng */}
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Tổng đơn hàng</div>
-          <div className="mt-2 text-2xl font-bold text-neutral-900">{stats.totalOrders}</div>
+        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+          <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Tổng đơn hàng</div>
+          <div className="mt-2 text-2xl font-bold text-stone-900">{stats.totalOrders}</div>
           <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
-            <span className="rounded bg-amber-50 px-1.5 py-0.5 font-medium text-amber-700">{stats.pendingOrders} chờ xử lý</span>
-            <span className="rounded bg-blue-50 px-1.5 py-0.5 font-medium text-blue-700">{stats.shippingOrders} đang giao</span>
-            <span className="rounded bg-green-50 px-1.5 py-0.5 font-medium text-green-700">{stats.deliveredOrders} đã giao</span>
+            <span className="rounded bg-warning-bg px-1.5 py-0.5 font-medium text-warning-fg">{stats.pendingOrders} chờ xử lý</span>
+            <span className="rounded bg-info-bg px-1.5 py-0.5 font-medium text-info-fg">{stats.shippingOrders} đang giao</span>
+            <span className="rounded bg-success-bg px-1.5 py-0.5 font-medium text-success-fg">{stats.deliveredOrders} đã giao</span>
             {stats.cancelledOrders > 0 && (
-              <span className="rounded bg-red-50 px-1.5 py-0.5 font-medium text-red-700">{stats.cancelledOrders} đã hủy</span>
+              <span className="rounded bg-danger-bg px-1.5 py-0.5 font-medium text-danger-fg">{stats.cancelledOrders} đã hủy</span>
             )}
           </div>
         </div>
 
         {/* Khách hàng & Đối tác */}
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Cộng đồng & Đối tác</div>
-          <div className="mt-2 text-2xl font-bold text-neutral-900">{stats.totalUsers} <span className="text-xs font-normal text-neutral-500">người dùng</span></div>
-          <div className="mt-1 text-xs text-neutral-600">
-            Trong đó: <span className="font-semibold text-green-700">{stats.totalAffiliates}</span> đối tác CTV / Affiliate
+        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+          <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Cộng đồng & Đối tác</div>
+          <div className="mt-2 text-2xl font-bold text-stone-900">{stats.totalUsers} <span className="text-xs font-normal text-stone-500">người dùng</span></div>
+          <div className="mt-1 text-xs text-stone-600">
+            Trong đó: <span className="font-semibold text-forest-700">{stats.totalAffiliates}</span> đối tác CTV / Affiliate
           </div>
         </div>
 
         {/* Sản phẩm & Cây xanh */}
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Sản phẩm & Rừng Xanh</div>
-          <div className="mt-2 text-2xl font-bold text-neutral-900">{stats.totalProducts} <span className="text-xs font-normal text-neutral-500">sản phẩm</span></div>
-          <div className="mt-1 text-xs font-medium text-green-700">
-            🌳 {stats.plantedTreesCount} cây thật góp PanNature
+        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+          <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Sản phẩm & Rừng Xanh</div>
+          <div className="mt-2 text-2xl font-bold text-stone-900">{stats.totalProducts} <span className="text-xs font-normal text-stone-500">sản phẩm</span></div>
+          <div className="mt-1 flex items-center gap-1 text-xs font-medium text-forest-700">
+            <TreePine aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            {stats.plantedTreesCount} cây thật góp PanNature
           </div>
         </div>
       </div>
 
       {/* Recent Orders Section */}
-      <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+      <div className="rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 pb-3">
           <div>
-            <h2 className="font-semibold text-neutral-900">Đơn hàng mới nhất</h2>
-            <p className="text-xs text-neutral-500">Theo dõi các đơn hàng phát sinh gần nhất trong hệ thống</p>
+            <h2 className="font-display font-semibold text-stone-900">Đơn hàng mới nhất</h2>
+            <p className="text-xs text-stone-500">Theo dõi các đơn hàng phát sinh gần nhất trong hệ thống</p>
           </div>
           <button
             onClick={() => onSelectTab('orders')}
-            className="rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-200"
+            className="min-h-[44px] rounded-control bg-stone-100 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-200 sm:min-h-[36px]"
           >
             Quản lý tất cả đơn hàng →
           </button>
@@ -516,7 +529,7 @@ function DashboardTab({
 
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-neutral-50 text-xs text-neutral-500">
+            <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
                 <th className="px-3 py-2 font-medium">Mã đơn</th>
                 <th className="px-3 py-2 font-medium">Khách hàng</th>
@@ -529,24 +542,24 @@ function DashboardTab({
             <tbody>
               {stats.recentOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-xs text-neutral-400">Chưa có đơn hàng nào.</td>
+                  <td colSpan={6} className="py-6 text-center text-xs text-stone-500">Chưa có đơn hàng nào.</td>
                 </tr>
               ) : (
                 stats.recentOrders.map((o) => (
-                  <tr key={o.id} className="border-t border-neutral-100 hover:bg-neutral-50/50">
-                    <td className="px-3 py-2.5 font-semibold text-neutral-800">{o.code}</td>
+                  <tr key={o.id} className="border-t border-stone-100 hover:bg-stone-50">
+                    <td className="px-3 py-2.5 font-semibold text-stone-800">{o.code}</td>
                     <td className="px-3 py-2.5">
-                      <div className="font-medium text-neutral-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
-                      {o.user?.phone && <div className="text-xs text-neutral-400">{o.user.phone}</div>}
+                      <div className="font-medium text-stone-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
+                      {o.user?.phone && <div className="text-xs text-stone-500">{o.user.phone}</div>}
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-neutral-600">
+                    <td className="px-3 py-2.5 text-xs text-stone-600">
                       {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
                     </td>
-                    <td className="px-3 py-2.5 font-semibold text-green-700">{formatVnd(o.total)}</td>
+                    <td className="px-3 py-2.5 font-semibold text-forest-700">{formatVnd(o.total)}</td>
                     <td className="px-3 py-2.5">
                       <OrderStatusBadge status={o.status} />
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-neutral-400">
+                    <td className="px-3 py-2.5 text-xs text-stone-500">
                       {new Date(o.createdAt).toLocaleString('vi-VN')}
                     </td>
                   </tr>
@@ -562,7 +575,7 @@ function DashboardTab({
 
 const RECYCLING_FILTERS: { k: RecyclingFilter | ''; label: string }[] = [
   { k: '', label: 'Mọi đơn' },
-  { k: 'all', label: '♻ Có thu gom' },
+  { k: 'all', label: 'Có thu gom' },
   { k: 'attention', label: 'Cần xử lý thu gom' },
 ];
 
@@ -602,18 +615,18 @@ function OrdersTab({
   return (
     <div className="space-y-4">
       {/* Search, Filter, and Export bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white p-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
         <form onSubmit={handleSearchSubmit} className="flex min-w-[260px] flex-1 items-center gap-2">
           <input
             type="text"
             placeholder="Tìm theo mã đơn, mã vận đơn, SĐT hoặc tên khách..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full rounded border border-neutral-200 px-3 py-1.5 text-sm focus:border-green-600 focus:outline-none"
+            className={`${FIELD_CLASS} ${TOUCH_H} flex-1`}
           />
           <button
             type="submit"
-            className="whitespace-nowrap rounded bg-green-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+            className={`${BTN_PRIMARY} whitespace-nowrap`}
           >
             Tìm kiếm
           </button>
@@ -625,18 +638,18 @@ function OrdersTab({
                 setSearch('');
                 setPage(1);
               }}
-              className="whitespace-nowrap rounded border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-600 hover:bg-neutral-50"
+              className={`${BTN_SECONDARY} whitespace-nowrap`}
             >
               Xóa lọc
             </button>
           )}
         </form>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={status}
             onChange={(e) => handleStatusChange(e.target.value)}
-            className="rounded border border-neutral-200 bg-white px-3 py-1.5 text-sm"
+            className={`${FIELD_CLASS} ${TOUCH_H}`}
           >
             <option value="">Tất cả trạng thái</option>
             <option value="PENDING_PAYMENT">Chờ thanh toán</option>
@@ -652,10 +665,11 @@ function OrdersTab({
             type="button"
             onClick={() => exportOrdersToCsv(q.data?.data ?? [])}
             disabled={!q.data || q.data.data.length === 0}
-            className="flex whitespace-nowrap items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className={`${BTN_SECONDARY} flex items-center gap-1.5 whitespace-nowrap`}
             title="Xuất file CSV cho Excel / kế toán"
           >
-            ⬇ Xuất CSV (Excel)
+            <Download aria-hidden="true" className="h-4 w-4 shrink-0" />
+            Xuất CSV (Excel)
           </button>
         </div>
       </div>
@@ -676,23 +690,24 @@ function OrdersTab({
                 setExpandedId(null);
                 onRecyclingChange(f.k);
               }}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
+              className={`min-h-[44px] rounded-full px-3 py-1 text-xs font-medium sm:min-h-[32px] ${
                 active
                   ? f.k === 'attention'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-green-600 text-white'
+                    ? 'bg-danger-fg text-stone-0'
+                    : 'bg-forest-600 text-stone-0'
                   : f.k === 'attention' && (count ?? 0) > 0
-                    ? 'bg-red-50 text-red-700 ring-1 ring-red-200'
-                    : 'bg-neutral-100 text-neutral-700'
+                    ? 'bg-danger-bg text-danger-fg ring-1 ring-danger-fg'
+                    : 'bg-stone-100 text-stone-700'
               }`}
             >
+              {f.k === 'all' && <Recycle aria-hidden="true" className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />}
               {f.label}
               {count !== undefined && ` (${count})`}
             </button>
           );
         })}
         {recycling === 'attention' && (
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-stone-500">
             Vận đơn Gomdon tạo lỗi / cần kiểm tra / chưa cấu hình, hoặc Gomdon báo huỷ-hoàn-thất bại khi đơn còn mở; đơn huỷ mà huỷ vận đơn
             không được.
           </span>
@@ -711,16 +726,16 @@ function OrdersTab({
 
       {/* Orders Table */}
       {q.isError && (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-danger-fg">
           Không tải được danh sách đơn hàng{q.error instanceof Error ? `: ${q.error.message}` : '.'}
         </p>
       )}
-      {q.isLoading && <p className="text-sm text-neutral-500">Đang tải danh sách đơn hàng…</p>}
+      {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách đơn hàng…</p>}
 
       {q.data && (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0 shadow-card">
           <table className="w-full text-left text-sm">
-            <thead className="bg-neutral-50 text-xs text-neutral-500">
+            <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
                 <th className="px-3 py-2.5 font-medium">Mã đơn</th>
                 <th className="px-3 py-2.5 font-medium">Khách hàng</th>
@@ -734,7 +749,7 @@ function OrdersTab({
             <tbody>
               {q.data.data.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-sm text-neutral-400">
+                  <td colSpan={7} className="py-8 text-center text-sm text-stone-500">
                     Không tìm thấy đơn hàng nào phù hợp.
                   </td>
                 </tr>
@@ -743,93 +758,94 @@ function OrdersTab({
                   const isExpanded = expandedId === (o.id || o.code);
                   return (
                     <React.Fragment key={o.id || o.code}>
-                      <tr className="border-t border-neutral-100 hover:bg-neutral-50/50">
+                      <tr className="border-t border-stone-100 hover:bg-stone-50">
                         <td className="px-3 py-3">
-                          <div className="font-semibold text-neutral-800">{o.code}</div>
+                          <div className="font-semibold text-stone-800">{o.code}</div>
                           <div className="mt-0.5">
                             <RecyclingBadge order={o} />
                           </div>
                         </td>
                         <td className="px-3 py-3">
-                          <div className="font-medium text-neutral-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
-                          {o.user?.phone && <div className="text-xs text-neutral-500">{o.user.phone}</div>}
+                          <div className="font-medium text-stone-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
+                          {o.user?.phone && <div className="text-xs text-stone-500">{o.user.phone}</div>}
                         </td>
                         <td className="px-3 py-3">
-                          <div className="text-xs font-medium text-neutral-700">
+                          <div className="text-xs font-medium text-stone-700">
                             {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
                           </div>
                           {o.paymentStatus && (
-                            <div className="text-[11px] text-neutral-400">
+                            <div className="text-[11px] text-stone-500">
                               {o.paymentStatus === 'PAID' ? 'Đã TT' : o.paymentStatus}
                             </div>
                           )}
                           {o.type === 'DEALER' && (
-                            <div className="text-[11px] font-medium text-amber-700">
+                            <div className="text-[11px] font-medium text-warning-fg">
                               Đại lý{o.dealerOnCredit === true ? ' · công nợ' : o.dealerOnCredit === false ? ' · trả trước' : ''}
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-3 font-semibold text-green-700">{formatVnd(o.total)}</td>
+                        <td className="px-3 py-3 font-semibold text-forest-700">{formatVnd(o.total)}</td>
                         <td className="px-3 py-3">
                           <OrderStatusBadge status={o.status} />
                         </td>
-                        <td className="px-3 py-3 text-xs text-neutral-400">
+                        <td className="px-3 py-3 text-xs text-stone-500">
                           {new Date(o.createdAt).toLocaleDateString('vi-VN')}
                         </td>
                         <td className="px-3 py-3 text-right">
                           <button
                             type="button"
                             onClick={() => setExpandedId(isExpanded ? null : (o.id || o.code))}
-                            className="rounded border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+                            className={`${BTN_SMALL} inline-flex items-center gap-1`}
                           >
-                            {isExpanded ? 'Đóng ▲' : 'Xem & Sửa ▼'}
+                            {isExpanded ? 'Đóng' : 'Xem & Sửa'}
+                            {isExpanded ? <ChevronUp className="h-3 w-3" aria-hidden /> : <ChevronDown className="h-3 w-3" aria-hidden />}
                           </button>
                         </td>
                       </tr>
 
                       {/* Expandable row for details & status update */}
                       {isExpanded && (
-                        <tr className="border-t border-neutral-100 bg-neutral-50/60">
+                        <tr className="border-t border-stone-100 bg-stone-50">
                           <td colSpan={7} className="px-4 py-3">
                             <div className="space-y-3">
                               {/* Order items */}
                               <div>
-                                <div className="text-xs font-semibold uppercase text-neutral-500">Sản phẩm trong đơn:</div>
+                                <div className="text-xs font-semibold uppercase text-stone-500">Sản phẩm trong đơn:</div>
                                 {o.items && o.items.length > 0 ? (
-                                  <div className="mt-1 divide-y divide-neutral-200 rounded border border-neutral-200 bg-white">
+                                  <div className="mt-1 divide-y divide-stone-200 rounded-control border border-stone-200 bg-stone-0">
                                     {o.items.map((it) => (
                                       <div key={it.id} className="flex items-center justify-between px-3 py-2 text-xs">
                                         <div>
-                                          <span className="font-medium text-neutral-800">{it.productName}</span>
-                                          {it.variationName && <span className="text-neutral-500"> ({it.variationName})</span>}
+                                          <span className="font-medium text-stone-800">{it.productName}</span>
+                                          {it.variationName && <span className="text-stone-500"> ({it.variationName})</span>}
                                           {!!it.backorderedQty && (
-                                            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                                            <span className="ml-2 rounded-full bg-warning-bg px-2 py-0.5 text-[10px] font-semibold text-warning-fg">
                                               Đặt trước {it.backorderedQty}
                                             </span>
                                           )}
                                         </div>
                                         <div className="text-right">
-                                          <span className="text-neutral-500">{it.quantity} x {formatVnd(it.unitPrice)}</span>
-                                          <span className="ml-3 font-semibold text-neutral-800">{formatVnd(it.total)}</span>
+                                          <span className="text-stone-500">{it.quantity} x {formatVnd(it.unitPrice)}</span>
+                                          <span className="ml-3 font-semibold text-stone-800">{formatVnd(it.total)}</span>
                                         </div>
                                       </div>
                                     ))}
                                   </div>
                                 ) : (
-                                  <p className="text-xs text-neutral-400">Không có danh sách sản phẩm chi tiết.</p>
+                                  <p className="text-xs text-stone-500">Không có danh sách sản phẩm chi tiết.</p>
                                 )}
                               </div>
 
                               <OrderShippingAddress order={o} />
 
                               {o.note && (
-                                <div className="text-xs text-neutral-600">
+                                <div className="text-xs text-stone-600">
                                   <span className="font-semibold">Ghi chú từ khách:</span> {o.note}
                                 </div>
                               )}
 
                               {(o.shippingCode || o.shippingStatus) && !o.hasRecyclingPickup && (
-                                <div className="text-xs text-neutral-600">
+                                <div className="text-xs text-stone-600">
                                   <span className="font-semibold">Vận chuyển:</span> {o.shippingPartner ?? ''} {o.shippingCode ?? ''}
                                   {o.shippingStatus ? ` · ${o.shippingStatus}` : ''}
                                 </div>
@@ -864,15 +880,15 @@ function OrdersTab({
 
       {/* Pagination Bar */}
       {q.data && totalPages > 1 && (
-        <div className="flex items-center justify-between px-2 pt-2 text-sm text-neutral-600">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-2 text-sm text-stone-600">
           <div>
-            Tổng số: <span className="font-semibold text-neutral-900">{q.data.meta.total}</span> đơn hàng
+            Tổng số: <span className="font-semibold text-stone-900">{q.data.meta.total}</span> đơn hàng
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="rounded border border-neutral-200 px-3 py-1 text-xs font-medium hover:bg-neutral-50 disabled:opacity-40"
+              className={BTN_SMALL}
             >
               ← Trang trước
             </button>
@@ -882,7 +898,7 @@ function OrdersTab({
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="rounded border border-neutral-200 px-3 py-1 text-xs font-medium hover:bg-neutral-50 disabled:opacity-40"
+              className={BTN_SMALL}
             >
               Trang sau →
             </button>
@@ -913,7 +929,7 @@ function ReturnsTab() {
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="rounded border border-neutral-200 px-2.5 py-1 text-sm"
+          className={`${FIELD_CLASS} ${TOUCH_H}`}
         >
           {['REQUESTED', 'APPROVED', 'REJECTED', ''].map((s) => (
             <option key={s} value={s}>
@@ -927,20 +943,20 @@ function ReturnsTab() {
             </option>
           ))}
         </select>
-        <span className="text-xs text-neutral-500">
+        <span className="text-xs text-stone-500">
           Chỉ đơn lỗi NSX trong 7 ngày. Duyệt = hoàn tiền đúng kênh + restock + reverse điểm/hoa hồng.
         </span>
       </div>
       {q.data && (
-        <p className="mt-2 text-xs text-neutral-500">
+        <p className="mt-2 text-xs text-stone-500">
           {view.label} yêu cầu{pending ? ' · cũ nhất trước' : ''}
         </p>
       )}
       <QueueMoreNotice pending={pending} view={view} noun="yêu cầu" />
 
       <div className="mt-3 space-y-3">
-        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách yêu cầu đổi/trả.</p>}
-        {q.isLoading && <p className="text-sm text-neutral-500">Đang tải danh sách yêu cầu…</p>}
+        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách yêu cầu đổi/trả.</p>}
+        {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách yêu cầu…</p>}
         {view.items.map((r) => <ReturnRow key={r.id} item={r} />)}
         {q.data && view.items.length === 0 && <Empty>Không có yêu cầu đổi/trả nào.</Empty>}
       </div>
@@ -968,78 +984,78 @@ function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
 
   const statusBadge =
     r.status === 'APPROVED' ? (
-      <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800">
+      <span className="rounded bg-success-bg px-2 py-0.5 text-xs font-semibold text-success-fg">
         Đã duyệt (Hoàn tiền)
       </span>
     ) : r.status === 'REJECTED' ? (
-      <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+      <span className="rounded bg-danger-bg px-2 py-0.5 text-xs font-semibold text-danger-fg">
         Đã từ chối
       </span>
     ) : (
-      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+      <span className="rounded bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-fg">
         Chờ duyệt
       </span>
     );
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-neutral-900">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-stone-900">
               Đơn: {r.order?.code ?? r.orderId}
             </span>
             {statusBadge}
           </div>
-          <div className="mt-0.5 text-sm text-neutral-600">
-            Khách: <span className="font-medium text-neutral-800">{r.user?.fullName ?? 'Khách hàng'}</span>
+          <div className="mt-0.5 text-sm text-stone-600">
+            Khách: <span className="font-medium text-stone-800">{r.user?.fullName ?? 'Khách hàng'}</span>
             {r.user?.phone ? ` · SĐT: ${r.user.phone}` : ''}
             {r.order ? ` · Tổng đơn: ${formatVnd(r.order.total)} (${r.order.paymentMethod})` : ''}
           </div>
         </div>
-        <span className="text-xs text-neutral-400">
+        <span className="text-xs text-stone-500">
           {new Date(r.createdAt).toLocaleString('vi-VN')}
         </span>
       </div>
 
-      <div className="mt-2.5 rounded bg-neutral-50 p-2.5 text-sm text-neutral-700">
-        <span className="font-medium text-neutral-800">Lý do:</span> {r.reason}
+      <div className="mt-2.5 break-words rounded-control bg-stone-50 p-2.5 text-sm text-stone-700">
+        <span className="font-medium text-stone-800">Lý do:</span> {r.reason}
       </div>
 
       {/* Ảnh do khách gửi — chỉ render https/ảnh base64 raster, không href javascript:/data: (C-050). */}
       <EvidenceImages images={r.images} />
 
       {r.status === 'REQUESTED' ? (
-        <div className="mt-3 border-t border-neutral-100 pt-3">
+        <div className="mt-3 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap items-center gap-2">
             <input
               placeholder="Ghi chú duyệt / lý do từ chối (tuỳ chọn)"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="min-w-[240px] flex-1 rounded border border-neutral-200 px-2.5 py-1.5 text-sm"
+              className={`${FIELD_CLASS} ${TOUCH_H} grow basis-full sm:basis-60`}
             />
             <button
               onClick={() => review.mutate({ approve: true })}
               disabled={review.isPending}
-              className="rounded bg-green-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:bg-neutral-300"
+              className={BTN_PRIMARY}
             >
               {review.isPending ? 'Đang duyệt…' : 'Duyệt hoàn tiền'}
             </button>
             <button
               onClick={() => review.mutate({ approve: false })}
               disabled={review.isPending}
-              className="rounded border border-red-300 px-3.5 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className={BTN_DANGER_OUTLINE}
             >
               Từ chối
             </button>
           </div>
           {review.isError && (
-            <p className="mt-1 text-xs text-red-600">{(review.error as Error).message}</p>
+            <p className="mt-1 text-xs text-danger-fg">{(review.error as Error).message}</p>
           )}
         </div>
       ) : (
-        <div className="mt-3 border-t border-neutral-100 pt-2 text-xs text-neutral-500">
-          {r.adminNote && <div>Ghi chú admin: <span className="font-medium text-neutral-700">{r.adminNote}</span></div>}
+        <div className="mt-3 border-t border-stone-200 pt-2 text-xs text-stone-500">
+          {r.adminNote && <div>Ghi chú admin: <span className="font-medium text-stone-700">{r.adminNote}</span></div>}
           {r.reviewedAt && (
             <div>Xử lý lúc: {new Date(r.reviewedAt).toLocaleString('vi-VN')}</div>
           )}
@@ -1062,44 +1078,45 @@ function UsersTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-neutral-900">Quản lý người dùng & phân quyền</h2>
+        <h2 className="font-display text-base font-semibold text-stone-900">Quản lý người dùng & phân quyền</h2>
         <button
           type="button"
           onClick={() => exportUsersToCsv(q.data?.data ?? [])}
           disabled={!q.data || q.data.data.length === 0}
-          className="flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+          className={`${BTN_SECONDARY} flex items-center gap-1.5`}
           title="Xuất danh sách người dùng ra file CSV"
         >
-          ⬇ Xuất CSV người dùng
+          <Download aria-hidden="true" className="h-4 w-4 shrink-0" />
+          Xuất CSV người dùng
         </button>
       </div>
       <GrantRoleForm onDone={() => q.refetch()} />
       {q.isError ? (
-        <p className="text-sm text-red-600">Không tải được danh sách người dùng.</p>
+        <p className="text-sm text-danger-fg">Không tải được danh sách người dùng.</p>
       ) : (
         <>
           <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày']}>
             {q.data?.data.map((u) => (
-              <tr key={u.id} className="border-t border-neutral-100">
-                <td className="py-2 font-medium">{u.fullName ?? '—'}</td>
-                <td>{u.phone ?? '—'}</td>
-                <td>{u.role}</td>
-                <td>{u.pointsBalance}</td>
-                <td className="text-neutral-400">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
+              <tr key={u.id} className="border-t border-stone-100">
+                <td className="px-3 py-2 font-medium">{u.fullName ?? '—'}</td>
+                <td className="px-3 py-2">{u.phone ?? '—'}</td>
+                <td className="px-3 py-2">{u.role}</td>
+                <td className="px-3 py-2">{u.pointsBalance}</td>
+                <td className="px-3 py-2 text-stone-500">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
               </tr>
             ))}
           </Table>
 
           {q.data && totalPages > 1 && (
-            <div className="flex items-center justify-between px-2 pt-2 text-sm text-neutral-600">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-2 text-sm text-stone-600">
               <div>
-                Tổng số: <span className="font-semibold text-neutral-900">{q.data.meta.total}</span> người dùng
+                Tổng số: <span className="font-semibold text-stone-900">{q.data.meta.total}</span> người dùng
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="rounded border border-neutral-200 px-3 py-1 text-xs font-medium hover:bg-neutral-50 disabled:opacity-40"
+                  className={BTN_SMALL}
                 >
                   ← Trang trước
                 </button>
@@ -1109,7 +1126,7 @@ function UsersTab() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className="rounded border border-neutral-200 px-3 py-1 text-xs font-medium hover:bg-neutral-50 disabled:opacity-40"
+                  className={BTN_SMALL}
                 >
                   Trang sau →
                 </button>
@@ -1156,17 +1173,17 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
     mut.mutate();
   };
   return (
-    <div className="rounded-lg border border-neutral-200 p-4">
-      <h3 className="mb-2 text-sm font-semibold">Cấp / đổi vai trò theo SĐT</h3>
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
+      <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Cấp / đổi vai trò theo SĐT</h3>
       <div className="flex flex-wrap items-center gap-2">
         <input
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm"
+          className={`${FIELD_CLASS} ${TOUCH_H} w-full sm:w-auto`}
           placeholder="SĐT (user đã mở Mini App)"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
         />
         <select
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm"
+          className={`${FIELD_CLASS} ${TOUCH_H}`}
           value={role}
           onChange={(e) => setRole(e.target.value as UserRole)}
         >
@@ -1176,7 +1193,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
         </select>
         {needsTier && <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />}
         <button
-          className="rounded bg-green-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          className={BTN_PRIMARY}
           disabled={!phone.trim() || (needsTier && !tierId.trim()) || mut.isPending}
           title={needsTier && !tierId.trim() ? 'Cần chọn bậc đại lý để cấp vai trò DEALER' : undefined}
           onClick={submit}
@@ -1185,7 +1202,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
         </button>
       </div>
       {msg && (
-        <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>
+        <p className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>
       )}
       {dialog}
     </div>
@@ -1195,14 +1212,14 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
 function ConfigTab() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-config'], queryFn: () => getConfig() });
-  if (q.isError) return <p className="text-sm text-red-600">Không tải được danh sách cấu hình.</p>;
+  if (q.isError) return <p className="text-sm text-danger-fg">Không tải được danh sách cấu hình.</p>;
   return (
     <div className="space-y-4">
       <GomdonConfigCard rows={q.data} />
       <LoyaltyConfigCard rows={q.data} />
       <div>
-        <h3 className="text-sm font-semibold text-neutral-900">Tất cả tham số (JSON)</h3>
-        <p className="mt-0.5 text-xs text-neutral-500">
+        <h3 className="font-display text-sm font-semibold text-stone-900">Tất cả tham số (JSON)</h3>
+        <p className="mt-0.5 text-xs text-stone-500">
           Giá trị có tên chứa password/secret/token luôn hiện dạng ••••••••; giữ nguyên chuỗi đó khi lưu thì giá trị thật không đổi.
         </p>
         <div className="mt-2 space-y-2">
@@ -1260,17 +1277,17 @@ function CouponsTab() {
     onSuccess: () => setMsg('Đã tạo voucher!'),
     onError: (e) => setMsg(e instanceof Error ? e.message : 'Lỗi'),
   });
-  const field = 'w-full rounded border border-neutral-200 px-3 py-2 text-sm';
+  const field = `${INPUT_CLASS} ${TOUCH_H}`;
   return (
     <div className="max-w-md space-y-2">
       <input placeholder="Mã (vd WELCOME30)" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} className={field} />
       <div className="flex gap-2">
-        <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className="rounded border border-neutral-200 px-2 py-2 text-sm">
+        <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={`${FIELD_CLASS} ${TOUCH_H}`}>
           <option value="PERCENT">% giảm</option>
           <option value="AMOUNT">Giảm tiền</option>
           <option value="FREESHIP">Freeship</option>
         </select>
-        <input type="number" placeholder="Giá trị" value={f.value} onChange={(e) => setF({ ...f, value: Number(e.target.value) })} className="w-28 rounded border border-neutral-200 px-3 py-2 text-sm" />
+        <input type="number" placeholder="Giá trị" value={f.value} onChange={(e) => setF({ ...f, value: Number(e.target.value) })} className={`${FIELD_CLASS} ${TOUCH_H} w-28`} />
       </div>
       <div className="flex gap-2">
         <input type="number" placeholder="Đơn tối thiểu (đ)" value={f.minOrder} onChange={(e) => setF({ ...f, minOrder: e.target.value })} className={field} />
@@ -1280,18 +1297,22 @@ function CouponsTab() {
         <input type="number" placeholder="Tổng lượt dùng" value={f.usageLimit} onChange={(e) => setF({ ...f, usageLimit: e.target.value })} className={field} />
         <input type="number" placeholder="Lượt / khách" value={f.perUserLimit} onChange={(e) => setF({ ...f, perUserLimit: e.target.value })} className={field} />
       </div>
-      <p className="text-xs text-neutral-400">
+      <p className="text-xs text-stone-500">
         Bỏ trống = không giới hạn. Mã % nên đặt &quot;Giảm tối đa&quot; để đơn lớn không bị giảm quá tay.
       </p>
       <div className="flex gap-2">
         <input type="date" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
         <input type="date" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
       </div>
-      <button onClick={() => create.mutate()} disabled={!f.code} className="w-full rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300">Tạo voucher</button>
-      {msg && <p className="text-sm text-green-700">{msg}</p>}
+      <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo voucher</button>
+      {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
   );
 }
+
+const CARD_CLASS = 'rounded-card border border-stone-200 bg-stone-0 p-4';
+// Hàng con trong thẻ (sản phẩm của nhãn, khuyến mãi, chương trình đại lý...): tên co/ngắt dòng được để nút chữ bên phải không bị đẩy ra ngoài ở 390px.
+const LIST_ITEM_CLASS = 'flex items-center justify-between gap-2 rounded-control border border-stone-200 px-2 py-1 text-sm';
 
 function BrandsTab() {
   const qc = useQueryClient();
@@ -1301,18 +1322,19 @@ function BrandsTab() {
     mutationFn: () => createBrand({ name: form.name.trim(), tagline: form.tagline.trim() || undefined }),
     onSuccess: () => { setForm({ name: '', tagline: '' }); void qc.invalidateQueries({ queryKey: ['admin-brands'] }); },
   });
+  const grow = `${FIELD_CLASS} ${TOUCH_H} grow basis-full sm:basis-48`;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-2 rounded-lg border border-neutral-100 bg-white p-3">
-        <input placeholder="Tên nhãn (vd Dừa Bến Tre)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm" />
-        <input placeholder="Tagline" value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm" />
-        <button onClick={() => create.mutate()} disabled={!form.name.trim() || create.isPending} className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300">Tạo nhãn</button>
+      <div className="flex flex-wrap items-end gap-2 rounded-card border border-stone-200 bg-stone-0 p-3">
+        <input placeholder="Tên nhãn (vd Dừa Bến Tre)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={grow} />
+        <input placeholder="Tagline" value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className={grow} />
+        <button onClick={() => create.mutate()} disabled={!form.name.trim() || create.isPending} className={BTN_PRIMARY}>Tạo nhãn</button>
       </div>
-      {create.isError && <p className="text-sm text-red-600">{(create.error as Error).message}</p>}
+      {create.isError && <p className="text-sm text-danger-fg">{(create.error as Error).message}</p>}
 
       <div className="space-y-3">
-        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách nhãn hàng.</p>}
+        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách nhãn hàng.</p>}
         {q.data?.map((b) => <BrandRow key={b.id} brand={b} />)}
         {q.data?.length === 0 && <Empty>Chưa có nhãn hàng. Tạo nhãn đầu tiên ở trên.</Empty>}
       </div>
@@ -1370,81 +1392,83 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
     onSuccess: () => { setRowErr(null); qc.invalidateQueries({ queryKey: ['admin-brand-promos', brand.id] }); },
     onError: onRowError,
   });
+  const grow = `${FIELD_CLASS} ${TOUCH_H} grow basis-full sm:basis-40`;
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 font-medium">
+    <div className={CARD_CLASS}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 font-medium text-stone-900">
             {brand.name}
-            {brand.isVerified && <span className="rounded-full bg-green-600 px-2 py-0.5 text-xs text-white">✓ Chính hãng</span>}
-            {!brand.isPublished && <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-xs text-neutral-600">Nháp</span>}
+            {brand.isVerified && <ToneBadge tone="success"><Check className="h-3 w-3" aria-hidden />Chính hãng</ToneBadge>}
+            {!brand.isPublished && <ToneBadge tone="neutral">Nháp</ToneBadge>}
           </div>
-          <div className="text-xs text-neutral-400">/{brand.slug} · {brand.followerCount} theo dõi</div>
+          <div className="break-words text-xs text-stone-500">/{brand.slug} · {brand.followerCount} theo dõi</div>
         </div>
-        <button onClick={() => setOpen((o) => !o)} className="text-sm text-green-700 underline">{open ? 'Thu gọn' : 'Quản lý'}</button>
+        <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} shrink-0 text-sm`}>{open ? 'Thu gọn' : 'Quản lý'}</button>
       </div>
 
       {open && (
-        <div className="mt-3 space-y-4 border-t border-neutral-100 pt-3">
+        <div className="mt-3 space-y-4 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => patch.mutate({ isPublished: !brand.isPublished })} className="rounded border border-neutral-200 px-3 py-1.5 text-sm">
+            <button onClick={() => patch.mutate({ isPublished: !brand.isPublished })} className={BTN_SECONDARY}>
               {brand.isPublished ? 'Ẩn (chuyển nháp)' : 'Đăng (publish)'}
             </button>
-            <button onClick={() => verify.mutate(!brand.isVerified)} className="rounded border border-neutral-200 px-3 py-1.5 text-sm">
-              {brand.isVerified ? 'Bỏ chính hãng' : 'Cấp ✓ chính hãng'}
+            <button onClick={() => verify.mutate(!brand.isVerified)} className={`${BTN_SECONDARY} inline-flex items-center gap-1`}>
+              {brand.isVerified ? 'Bỏ chính hãng' : <>Cấp <Check className="h-4 w-4" aria-hidden /> chính hãng</>}
             </button>
-            <button onClick={() => link.mutate()} disabled={link.isPending} className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300">
+            <button onClick={() => link.mutate()} disabled={link.isPending} className={BTN_PRIMARY}>
               Gán SP theo tên nhãn
             </button>
-            {link.data && <span className="self-center text-sm text-green-700">Đã gán {link.data.linked} SP</span>}
+            {link.data && <span className="self-center text-sm text-success-fg">Đã gán {link.data.linked} SP</span>}
           </div>
-          {rowErr && <p className="text-xs text-red-600">{rowErr}</p>}
+          {rowErr && <p className="text-xs text-danger-fg">{rowErr}</p>}
 
           {/* Gán chủ nhãn (lộ trình B) — đối tác tự quản nhãn trong Mini App */}
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-neutral-500">Chủ nhãn:</span>
-            <UserPicker value={owner} onChange={setOwner} label="Chọn đối tác làm chủ nhãn" className="min-w-0 flex-1" />
-            <button onClick={() => assignOwner.mutate()} disabled={!owner || assignOwner.isPending} className="min-h-[44px] rounded border border-neutral-200 px-3 py-1 disabled:opacity-50 sm:min-h-0">
+            <span className="text-stone-500">Chủ nhãn:</span>
+            <UserPicker value={owner} onChange={setOwner} label="Chọn đối tác làm chủ nhãn" className="min-w-[12rem] flex-1" />
+            <button onClick={() => assignOwner.mutate()} disabled={!owner || assignOwner.isPending} className={BTN_SECONDARY}>
               Gán chủ nhãn
             </button>
-            {assignOwner.isSuccess && <span className="text-green-700">Đã gán ✓</span>}
-            {assignOwner.isError && <span className="text-red-600">{(assignOwner.error as Error).message}</span>}
+            {assignOwner.isSuccess && <span className="inline-flex items-center gap-1 text-success-fg">Đã gán <Check className="h-4 w-4" aria-hidden /></span>}
+            {assignOwner.isError && <span className="text-danger-fg">{(assignOwner.error as Error).message}</span>}
           </div>
 
           <BrandInfoForm brand={brand} />
 
           <div>
-            <div className="mb-1 text-sm font-medium">Sản phẩm ({products.data?.length ?? 0})</div>
+            <div className="mb-1 text-sm font-medium text-stone-900">Sản phẩm ({products.data?.length ?? 0})</div>
             <div className="max-h-48 space-y-1 overflow-y-auto">
               {products.data?.map((p) => (
-                <div key={p.id} className="flex items-center justify-between rounded border border-neutral-100 px-2 py-1 text-sm">
-                  <span className="truncate">{p.name}</span>
-                  <button onClick={() => detach.mutate(p.id)} className="ml-2 shrink-0 text-xs text-red-600">Gỡ</button>
+                <div key={p.id} className={LIST_ITEM_CLASS}>
+                  <span className="min-w-0 truncate">{p.name}</span>
+                  <button onClick={() => detach.mutate(p.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Gỡ</button>
                 </div>
               ))}
-              {products.data?.length === 0 && <p className="text-xs text-neutral-400">Chưa có SP. Bấm “Gán SP theo tên nhãn” để liên kết catalog.</p>}
+              {products.data?.length === 0 && <p className="text-xs text-stone-500">Chưa có SP. Bấm “Gán SP theo tên nhãn” để liên kết catalog.</p>}
             </div>
           </div>
 
           <div>
-            <div className="mb-1 text-sm font-medium">Khuyến mãi</div>
+            <div className="mb-1 text-sm font-medium text-stone-900">Khuyến mãi</div>
             <div className="space-y-1">
               {promos.data?.map((pm) => (
-                <div key={pm.id} className="flex items-center justify-between rounded border border-neutral-100 px-2 py-1 text-sm">
-                  <span>{pm.title}{pm.subtitle ? ` · ${pm.subtitle}` : ''}</span>
-                  <button onClick={() => delPromo.mutate(pm.id)} className="ml-2 shrink-0 text-xs text-red-600">Xoá</button>
+                <div key={pm.id} className={LIST_ITEM_CLASS}>
+                  <span className="min-w-0 break-words">{pm.title}{pm.subtitle ? ` · ${pm.subtitle}` : ''}</span>
+                  <button onClick={() => delPromo.mutate(pm.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Xoá</button>
                 </div>
               ))}
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
-              <input placeholder="Tiêu đề (MUA 2 TẶNG 1)" value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1 text-sm" />
-              <input placeholder="Mô tả" value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1 text-sm" />
-              <input type="date" value={promo.startAt} onChange={(e) => setPromo({ ...promo, startAt: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
-              <input type="date" value={promo.endAt} onChange={(e) => setPromo({ ...promo, endAt: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
-              <button onClick={() => addPromo.mutate()} disabled={!promo.title.trim()} className="rounded bg-green-600 px-3 py-1 text-sm text-white disabled:bg-neutral-300">Thêm KM</button>
+              <input placeholder="Tiêu đề (MUA 2 TẶNG 1)" value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} className={grow} />
+              <input placeholder="Mô tả" value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} className={grow} />
+              <input type="date" value={promo.startAt} onChange={(e) => setPromo({ ...promo, startAt: e.target.value })} className={field} />
+              <input type="date" value={promo.endAt} onChange={(e) => setPromo({ ...promo, endAt: e.target.value })} className={field} />
+              <button onClick={() => addPromo.mutate()} disabled={!promo.title.trim()} className={BTN_PRIMARY}>Thêm KM</button>
             </div>
-            {addPromo.isError && <p className="mt-1 text-xs text-red-600">{(addPromo.error as Error).message}</p>}
+            {addPromo.isError && <p className="mt-1 text-xs text-danger-fg">{(addPromo.error as Error).message}</p>}
           </div>
         </div>
       )}
@@ -1477,38 +1501,43 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
 
   const setCert = (i: number, patch: Partial<BrandCert>) =>
     setCerts((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
+  const input = `${INPUT_CLASS} ${TOUCH_H}`;
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-3">
-      <div className="mb-2 text-sm font-medium">Thông tin nhãn</div>
+    <div className="rounded-card border border-stone-200 bg-stone-50 p-3">
+      <div className="mb-2 font-display text-sm font-medium text-stone-900">Thông tin nhãn</div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <input placeholder="Logo URL" value={f.logoUrl} onChange={(e) => setF({ ...f, logoUrl: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
-        <input placeholder="Cover URL" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
-        <input placeholder="Tagline" value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
-        <input placeholder="Nguồn gốc (vd Bến Tre)" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
+        <input placeholder="Logo URL" value={f.logoUrl} onChange={(e) => setF({ ...f, logoUrl: e.target.value })} className={input} />
+        <input placeholder="Cover URL" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className={input} />
+        <input placeholder="Tagline" value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} className={input} />
+        <input placeholder="Nguồn gốc (vd Bến Tre)" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} className={input} />
       </div>
-      <textarea placeholder="Câu chuyện thương hiệu" value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} rows={3} className="mt-2 w-full rounded border border-neutral-200 px-2 py-1 text-sm" />
+      <textarea placeholder="Câu chuyện thương hiệu" value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} rows={3} className={`mt-2 ${INPUT_CLASS}`} />
 
-      <div className="mt-3 text-sm font-medium">Chứng nhận (chỉ cái ✓ đã xác minh mới hiện cho khách)</div>
+      <div className="mt-3 text-sm font-medium text-stone-900">
+        Chứng nhận (chỉ cái <Check className="inline h-3.5 w-3.5 align-text-bottom" aria-hidden /> đã xác minh mới hiện cho khách)
+      </div>
       <div className="space-y-1">
         {certs.map((c, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
-            <input placeholder="Mã (ORG)" value={c.code} onChange={(e) => setCert(i, { code: e.target.value })} className="w-24 rounded border border-neutral-200 px-2 py-1" />
-            <input placeholder="Nhãn (Hữu cơ USDA)" value={c.label} onChange={(e) => setCert(i, { label: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1" />
-            <input placeholder="Proof URL" value={c.proofUrl ?? ''} onChange={(e) => setCert(i, { proofUrl: e.target.value })} className="w-40 rounded border border-neutral-200 px-2 py-1" />
-            <label className="flex items-center gap-1">
-              <input type="checkbox" checked={c.verified ?? false} onChange={(e) => setCert(i, { verified: e.target.checked })} /> ✓ verified
+            <input placeholder="Mã (ORG)" value={c.code} onChange={(e) => setCert(i, { code: e.target.value })} className={`${field} w-24`} />
+            <input placeholder="Nhãn (Hữu cơ USDA)" value={c.label} onChange={(e) => setCert(i, { label: e.target.value })} className={`${field} grow basis-40`} />
+            <input placeholder="Proof URL" value={c.proofUrl ?? ''} onChange={(e) => setCert(i, { proofUrl: e.target.value })} className={`${field} w-40`} />
+            <label className="inline-flex min-h-[44px] items-center gap-1.5 text-stone-700 sm:min-h-0">
+              <input type="checkbox" className="h-4 w-4 accent-forest-600" checked={c.verified ?? false} onChange={(e) => setCert(i, { verified: e.target.checked })} />
+              <Check className="h-4 w-4" aria-hidden /> verified
             </label>
-            <button onClick={() => setCerts((cs) => cs.filter((_, idx) => idx !== i))} className="text-xs text-red-600">Xoá</button>
+            <button onClick={() => setCerts((cs) => cs.filter((_, idx) => idx !== i))} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
           </div>
         ))}
       </div>
-      <button onClick={() => setCerts((cs) => [...cs, { code: '', label: '', verified: false }])} className="mt-1 text-sm text-green-700 underline">+ Thêm chứng nhận</button>
+      <button onClick={() => setCerts((cs) => [...cs, { code: '', label: '', verified: false }])} className={`${BTN_LINK} mt-1 text-sm`}>+ Thêm chứng nhận</button>
 
       <div className="mt-2">
-        <button onClick={() => save.mutate()} disabled={save.isPending} className="rounded bg-green-600 px-4 py-1.5 text-sm text-white disabled:bg-neutral-300">Lưu thông tin</button>
-        {save.isSuccess && <span className="ml-2 text-sm text-green-700">Đã lưu ✓</span>}
-        {save.isError && <span className="ml-2 text-sm text-red-600">{(save.error as Error).message}</span>}
+        <button onClick={() => save.mutate()} disabled={save.isPending} className={BTN_PRIMARY}>Lưu thông tin</button>
+        {save.isSuccess && <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">Đã lưu <Check className="h-4 w-4" aria-hidden /></span>}
+        {save.isError && <span className="ml-2 text-sm text-danger-fg">{(save.error as Error).message}</span>}
       </div>
     </div>
   );
@@ -1529,36 +1558,37 @@ function DealerRewardsSection() {
     mutationFn: (id: string) => deleteDealerReward(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-dealer-rewards'] }),
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
-      <div className="mb-2 font-medium">🏪 Chương trình đại lý (thưởng doanh số)</div>
+    <div className={CARD_CLASS}>
+      <div className="mb-2 flex items-center gap-1.5 font-display font-medium text-stone-900"><Store className="h-4 w-4 text-forest-700" aria-hidden />Chương trình đại lý (thưởng doanh số)</div>
       <div className="space-y-1">
-        {q.isError && <p className="text-xs text-red-600">Không tải được danh sách chương trình.</p>}
+        {q.isError && <p className="text-xs text-danger-fg">Không tải được danh sách chương trình.</p>}
         {q.data?.map((d) => (
-          <div key={d.id} className="flex items-center justify-between rounded border border-neutral-100 px-2 py-1 text-sm">
-            <span>[{d.type}] {d.title} · mốc {formatVnd(d.threshold)}/{d.period === 'YEAR' ? 'năm' : 'quý'}{d.brandId ? '' : ' · toàn shop'}</span>
-            <button onClick={() => del.mutate(d.id)} className="ml-2 shrink-0 text-xs text-red-600">Xoá</button>
+          <div key={d.id} className={LIST_ITEM_CLASS}>
+            <span className="min-w-0 break-words">[{d.type}] {d.title} · mốc {formatVnd(d.threshold)}/{d.period === 'YEAR' ? 'năm' : 'quý'}{d.brandId ? '' : ' · toàn shop'}</span>
+            <button onClick={() => del.mutate(d.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Xoá</button>
           </div>
         ))}
-        {q.data?.length === 0 && <p className="text-xs text-neutral-400">Chưa có chương trình.</p>}
-        {del.isError && <p className="text-xs text-red-600">{(del.error as Error).message}</p>}
+        {q.data?.length === 0 && <p className="text-xs text-stone-500">Chưa có chương trình.</p>}
+        {del.isError && <p className="text-xs text-danger-fg">{(del.error as Error).message}</p>}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm">
+        <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={field}>
           <option value="TOUR">Tour</option>
           <option value="GIFT">Quà</option>
           <option value="OTHER">Khác</option>
         </select>
-        <select value={f.period} onChange={(e) => setF({ ...f, period: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm">
+        <select value={f.period} onChange={(e) => setF({ ...f, period: e.target.value })} className={field}>
           <option value="QUARTER">Theo quý</option>
           <option value="YEAR">Theo năm</option>
         </select>
-        <input placeholder="Tiêu đề (Tour Phú Quốc)" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1 text-sm" />
-        <input type="number" placeholder="Mốc doanh số" value={f.threshold} onChange={(e) => setF({ ...f, threshold: Number(e.target.value) })} className="w-36 rounded border border-neutral-200 px-2 py-1 text-sm" />
-        <button onClick={() => create.mutate()} disabled={!f.title.trim()} className="rounded bg-green-600 px-3 py-1 text-sm text-white disabled:bg-neutral-300">Thêm</button>
+        <input placeholder="Tiêu đề (Tour Phú Quốc)" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} grow basis-full sm:basis-48`} />
+        <input type="number" placeholder="Mốc doanh số" value={f.threshold} onChange={(e) => setF({ ...f, threshold: Number(e.target.value) })} className={`${field} w-36`} />
+        <button onClick={() => create.mutate()} disabled={!f.title.trim()} className={BTN_PRIMARY}>Thêm</button>
       </div>
-      {create.isError && <p className="mt-1 text-xs text-red-600">{(create.error as Error).message}</p>}
+      {create.isError && <p className="mt-1 text-xs text-danger-fg">{(create.error as Error).message}</p>}
     </div>
   );
 }
@@ -1582,43 +1612,44 @@ function FlashSalesTab() {
     },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo đợt flash sale' }),
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-neutral-100 bg-white p-4">
-        <h3 className="mb-2 text-sm font-semibold">Tạo đợt Flash Sale</h3>
+      <div className={CARD_CLASS}>
+        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo đợt Flash Sale</h3>
         <div className="flex flex-wrap items-end gap-2">
           <input
             placeholder="Tên đợt (vd Flash Sale cuối tuần)"
             value={f.title}
             onChange={(e) => setF({ ...f, title: e.target.value })}
-            className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={`${field} grow basis-full sm:basis-48`}
           />
           <input
             type="datetime-local"
             value={f.startAt}
             onChange={(e) => setF({ ...f, startAt: e.target.value })}
-            className="rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={field}
           />
           <input
             type="datetime-local"
             value={f.endAt}
             onChange={(e) => setF({ ...f, endAt: e.target.value })}
-            className="rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={field}
           />
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
             disabled={!f.title.trim() || !f.startAt || !f.endAt || create.isPending}
-            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang tạo…' : 'Tạo đợt'}
           </button>
         </div>
-        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>}
       </div>
 
       <div className="space-y-3">
-        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách flash sale.</p>}
+        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách flash sale.</p>}
         {q.data?.map((s) => <FlashSaleRow key={s.id} sale={s} />)}
         {q.data?.length === 0 && <Empty>Chưa có đợt flash sale nào. Tạo đợt đầu tiên ở trên.</Empty>}
       </div>
@@ -1662,37 +1693,36 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
   });
 
   const fmt = (iso: string) => new Date(iso).toLocaleString('vi-VN');
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 font-medium">
+    <div className={CARD_CLASS}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 font-medium text-stone-900">
             {sale.title}
-            <span className={`rounded-full px-2 py-0.5 text-xs text-white ${sale.isActive ? 'bg-green-600' : 'bg-neutral-400'}`}>
-              {sale.isActive ? 'Đang bật' : 'Đang tắt'}
-            </span>
+            <ToneBadge tone={sale.isActive ? 'success' : 'neutral'}>{sale.isActive ? 'Đang bật' : 'Đang tắt'}</ToneBadge>
           </div>
-          <div className="text-xs text-neutral-400">{fmt(sale.startAt)} → {fmt(sale.endAt)}</div>
+          <div className="break-words text-xs text-stone-500">{fmt(sale.startAt)} → {fmt(sale.endAt)}</div>
         </div>
-        <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className="rounded border border-neutral-200 px-3 py-1.5 text-sm">
+        <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className={`${BTN_SECONDARY} shrink-0`}>
           {sale.isActive ? 'Tắt' : 'Bật'}
         </button>
       </div>
-      {rowErr && <p className="mt-1 text-sm text-red-600">{rowErr}</p>}
+      {rowErr && <p className="mt-1 text-sm text-danger-fg">{rowErr}</p>}
 
-      <div className="mt-3 border-t border-neutral-100 pt-3">
-        <div className="mb-1 text-sm font-medium">Sản phẩm trong đợt ({sale.items.length})</div>
+      <div className="mt-3 border-t border-stone-200 pt-3">
+        <div className="mb-1 text-sm font-medium text-stone-900">Sản phẩm trong đợt ({sale.items.length})</div>
         <div className="space-y-1">
           {sale.items.map((it) => (
-            <div key={it.id} className="flex items-center justify-between rounded border border-neutral-100 px-2 py-1 text-sm">
-              <span className="truncate">
+            <div key={it.id} className={LIST_ITEM_CLASS}>
+              <span className="min-w-0 break-words">
                 {variationLabels.labelFor(it.variationId)} · {formatVnd(it.flashPrice)} · đã bán {it.soldCount}/{it.quota} · giới hạn {it.perUserLimit}/khách
               </span>
-              <button onClick={() => delItem.mutate(it.id)} className="ml-2 shrink-0 text-xs text-red-600">Xoá</button>
+              <button onClick={() => delItem.mutate(it.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Xoá</button>
             </div>
           ))}
-          {sale.items.length === 0 && <p className="text-xs text-neutral-400">Chưa có sản phẩm nào trong đợt này.</p>}
+          {sale.items.length === 0 && <p className="text-xs text-stone-500">Chưa có sản phẩm nào trong đợt này.</p>}
         </div>
 
         <div className="mt-2 flex flex-wrap items-start gap-2">
@@ -1706,15 +1736,15 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
             }}
             className="min-w-[14rem] flex-1"
           />
-          <input type="number" placeholder="Giá flash" value={item.flashPrice} onChange={(e) => setItem({ ...item, flashPrice: Number(e.target.value) })} className="w-28 rounded border border-neutral-200 px-2 py-1 text-sm" />
-          <input type="number" placeholder="Quota" value={item.quota} onChange={(e) => setItem({ ...item, quota: Number(e.target.value) })} className="w-24 rounded border border-neutral-200 px-2 py-1 text-sm" />
-          <input type="number" placeholder="Giới hạn/khách" value={item.perUserLimit} onChange={(e) => setItem({ ...item, perUserLimit: e.target.value })} className="w-32 rounded border border-neutral-200 px-2 py-1 text-sm" />
-          <button onClick={() => addItem.mutate()} disabled={!item.variationId.trim() || addItem.isPending} className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300">
+          <input type="number" placeholder="Giá flash" value={item.flashPrice} onChange={(e) => setItem({ ...item, flashPrice: Number(e.target.value) })} className={`${field} w-28`} />
+          <input type="number" placeholder="Quota" value={item.quota} onChange={(e) => setItem({ ...item, quota: Number(e.target.value) })} className={`${field} w-24`} />
+          <input type="number" placeholder="Giới hạn/khách" value={item.perUserLimit} onChange={(e) => setItem({ ...item, perUserLimit: e.target.value })} className={`${field} w-32`} />
+          <button onClick={() => addItem.mutate()} disabled={!item.variationId.trim() || addItem.isPending} className={BTN_PRIMARY}>
             Thêm SP
           </button>
         </div>
-        <p className="mt-1 text-xs text-neutral-400">Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.</p>
-        {itemErr && <p className="mt-1 text-sm text-red-600">{itemErr}</p>}
+        <p className="mt-1 text-xs text-stone-500">Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.</p>
+        {itemErr && <p className="mt-1 text-sm text-danger-fg">{itemErr}</p>}
       </div>
     </div>
   );
@@ -1741,54 +1771,55 @@ function FaqTab() {
     },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo câu hỏi thường gặp' }),
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-neutral-100 bg-white p-4">
-        <h3 className="mb-2 text-sm font-semibold">Thêm câu hỏi thường gặp</h3>
-        <p className="mb-2 text-xs text-neutral-400">Nội dung này cũng được nạp vào ngữ cảnh của AI tư vấn để trả lời nhất quán.</p>
+      <div className={CARD_CLASS}>
+        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Thêm câu hỏi thường gặp</h3>
+        <p className="mb-2 text-xs text-stone-500">Nội dung này cũng được nạp vào ngữ cảnh của AI tư vấn để trả lời nhất quán.</p>
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
             <input
               placeholder="Nhóm (vd Vận chuyển, Đổi trả)"
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className="w-56 rounded border border-neutral-200 px-3 py-2 text-sm"
+              className={`${field} w-56`}
             />
             <input
               type="number"
               placeholder="Thứ tự hiển thị"
               value={form.sortOrder}
               onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
-              className="w-32 rounded border border-neutral-200 px-3 py-2 text-sm"
+              className={`${field} w-32`}
             />
           </div>
           <input
             placeholder="Câu hỏi"
             value={form.question}
             onChange={(e) => setForm({ ...form, question: e.target.value })}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={`${INPUT_CLASS} ${TOUCH_H}`}
           />
           <textarea
             placeholder="Câu trả lời"
             value={form.answer}
             onChange={(e) => setForm({ ...form, answer: e.target.value })}
             rows={3}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={INPUT_CLASS}
           />
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
             disabled={!form.question.trim() || !form.answer.trim() || create.isPending}
-            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang thêm…' : 'Thêm câu hỏi'}
           </button>
         </div>
-        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>}
       </div>
 
       <div className="space-y-2">
-        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách câu hỏi thường gặp.</p>}
+        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách câu hỏi thường gặp.</p>}
         {q.data?.map((f) => <FaqRow key={f.id} faq={f} />)}
         {q.data?.length === 0 && <Empty>Chưa có câu hỏi thường gặp nào. Thêm câu đầu tiên ở trên.</Empty>}
       </div>
@@ -1823,54 +1854,52 @@ function FaqRow({ faq }: { faq: AdminFaq }) {
       }),
     onSuccess: () => { setOpen(false); refresh(); },
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+    <div className={CARD_CLASS}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            {faq.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">{faq.category}</span>}
-            <span className={`rounded-full px-2 py-0.5 text-xs text-white ${faq.isActive ? 'bg-green-600' : 'bg-neutral-400'}`}>
-              {faq.isActive ? 'Đang hiện' : 'Đang ẩn'}
-            </span>
-            <span className="text-xs text-neutral-400">thứ tự {faq.sortOrder}</span>
+            {faq.category && <ToneBadge tone="neutral">{faq.category}</ToneBadge>}
+            <ToneBadge tone={faq.isActive ? 'success' : 'neutral'}>{faq.isActive ? 'Đang hiện' : 'Đang ẩn'}</ToneBadge>
+            <span className="text-xs text-stone-500">thứ tự {faq.sortOrder}</span>
           </div>
-          <div className="mt-1 font-medium">{faq.question}</div>
-          <div className="mt-0.5 whitespace-pre-line text-sm text-neutral-600">{faq.answer}</div>
+          <div className="mt-1 break-words font-medium text-stone-900">{faq.question}</div>
+          <div className="mt-0.5 whitespace-pre-line break-words text-sm text-stone-600">{faq.answer}</div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <button onClick={() => setOpen((o) => !o)} className="text-sm text-green-700 underline">{open ? 'Đóng' : 'Sửa'}</button>
-          <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className="text-xs text-neutral-500 underline">
+          <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} text-sm`}>{open ? 'Đóng' : 'Sửa'}</button>
+          <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className={`${BTN_LINK_MUTED} text-xs`}>
             {faq.isActive ? 'Ẩn' : 'Hiện'}
           </button>
-          <button onClick={() => del.mutate()} disabled={del.isPending} className="text-xs text-red-600 underline">Xoá</button>
+          <button onClick={() => del.mutate()} disabled={del.isPending} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
         </div>
       </div>
-      {rowErr && <p className="mt-1 text-xs text-red-600">{rowErr}</p>}
+      {rowErr && <p className="mt-1 text-xs text-danger-fg">{rowErr}</p>}
 
       {open && (
-        <div className="mt-3 space-y-2 border-t border-neutral-100 pt-3">
+        <div className="mt-3 space-y-2 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap gap-2">
-            <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className="w-56 rounded border border-neutral-200 px-2 py-1 text-sm" />
-            <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className="w-32 rounded border border-neutral-200 px-2 py-1 text-sm" />
+            <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className={`${field} w-56`} />
+            <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={`${field} w-32`} />
           </div>
-          <input placeholder="Câu hỏi" value={f.question} onChange={(e) => setF({ ...f, question: e.target.value })} className="w-full rounded border border-neutral-200 px-2 py-1 text-sm" />
-          <textarea placeholder="Câu trả lời" value={f.answer} onChange={(e) => setF({ ...f, answer: e.target.value })} rows={3} className="w-full rounded border border-neutral-200 px-2 py-1 text-sm" />
+          <input placeholder="Câu hỏi" value={f.question} onChange={(e) => setF({ ...f, question: e.target.value })} className={`${INPUT_CLASS} ${TOUCH_H}`} />
+          <textarea placeholder="Câu trả lời" value={f.answer} onChange={(e) => setF({ ...f, answer: e.target.value })} rows={3} className={INPUT_CLASS} />
           <button
             onClick={() => save.mutate()}
             disabled={!f.question.trim() || !f.answer.trim() || save.isPending}
-            className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             {save.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
-          {save.isError && <p className="text-sm text-red-600">{(save.error as Error).message}</p>}
+          {save.isError && <p className="text-sm text-danger-fg">{(save.error as Error).message}</p>}
         </div>
       )}
     </div>
   );
 }
 
-// ── CSKH Quick-reply (mẫu tin nhanh + auto-reply Zalo OA) ──
 function parseKeywords(raw: string): string[] {
   return raw.split(',').map((k) => k.trim()).filter(Boolean);
 }
@@ -1896,12 +1925,13 @@ function QuickReplyTab() {
     },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo mẫu tin nhanh' }),
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-neutral-100 bg-white p-4">
-        <h3 className="mb-2 text-sm font-semibold">Thêm mẫu tin nhanh</h3>
-        <p className="mb-2 text-xs text-neutral-400">
+      <div className={CARD_CLASS}>
+        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Thêm mẫu tin nhanh</h3>
+        <p className="mb-2 text-xs text-stone-500">
           Dùng để auto-reply khi khách nhắn vào Zalo OA — so khớp từ khoá (cách nhau bằng dấu phẩy),
           hoặc bật &quot;Lời chào tự động&quot; để gửi cho tin nhắn đầu tiên của khách.
         </p>
@@ -1911,13 +1941,13 @@ function QuickReplyTab() {
               placeholder="Nhóm (vd Vận chuyển, Đổi trả)"
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className="w-56 rounded border border-neutral-200 px-3 py-2 text-sm"
+              className={`${field} w-56`}
             />
             <input
               placeholder="Tên nội bộ"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-56 rounded border border-neutral-200 px-3 py-2 text-sm"
+              className={`${field} w-56`}
             />
           </div>
           <input
@@ -1925,18 +1955,19 @@ function QuickReplyTab() {
             value={form.keywords}
             onChange={(e) => setForm({ ...form, keywords: e.target.value })}
             disabled={form.isGreeting}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm disabled:bg-neutral-50 disabled:text-neutral-400"
+            className={`${INPUT_CLASS} ${TOUCH_H}`}
           />
           <textarea
             placeholder="Nội dung tin trả lời"
             value={form.content}
             onChange={(e) => setForm({ ...form, content: e.target.value })}
             rows={3}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={INPUT_CLASS}
           />
-          <label className="flex items-center gap-2 text-sm text-neutral-600">
+          <label className="flex min-h-[44px] items-center gap-2 text-sm text-stone-600 sm:min-h-0">
             <input
               type="checkbox"
+              className="h-4 w-4 accent-forest-600"
               checked={form.isGreeting}
               onChange={(e) => setForm({ ...form, isGreeting: e.target.checked })}
             />
@@ -1945,16 +1976,16 @@ function QuickReplyTab() {
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
             disabled={!form.title.trim() || !form.content.trim() || create.isPending}
-            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang thêm…' : 'Thêm mẫu tin'}
           </button>
         </div>
-        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>}
       </div>
 
       <div className="space-y-2">
-        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách mẫu tin nhanh.</p>}
+        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách mẫu tin nhanh.</p>}
         {q.data?.map((r) => <QuickReplyRow key={r.id} item={r} />)}
         {q.data?.length === 0 && <Empty>Chưa có mẫu tin nhanh nào. Thêm mẫu đầu tiên ở trên.</Empty>}
       </div>
@@ -1996,60 +2027,59 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
       }),
     onSuccess: () => { setOpen(false); refresh(); },
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+    <div className={CARD_CLASS}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            {item.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">{item.category}</span>}
-            {item.isGreeting && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">Lời chào</span>}
-            <span className={`rounded-full px-2 py-0.5 text-xs text-white ${item.isActive ? 'bg-green-600' : 'bg-neutral-400'}`}>
-              {item.isActive ? 'Đang bật' : 'Đang tắt'}
-            </span>
+            {item.category && <ToneBadge tone="neutral">{item.category}</ToneBadge>}
+            {item.isGreeting && <ToneBadge tone="warning">Lời chào</ToneBadge>}
+            <ToneBadge tone={item.isActive ? 'success' : 'neutral'}>{item.isActive ? 'Đang bật' : 'Đang tắt'}</ToneBadge>
           </div>
-          <div className="mt-1 font-medium">{item.title}</div>
+          <div className="mt-1 break-words font-medium text-stone-900">{item.title}</div>
           {item.keywords.length > 0 && (
-            <div className="mt-0.5 text-xs text-neutral-400">Từ khoá: {item.keywords.join(', ')}</div>
+            <div className="mt-0.5 break-words text-xs text-stone-500">Từ khoá: {item.keywords.join(', ')}</div>
           )}
-          <div className="mt-0.5 whitespace-pre-line text-sm text-neutral-600">{item.content}</div>
+          <div className="mt-0.5 whitespace-pre-line break-words text-sm text-stone-600">{item.content}</div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <button onClick={() => setOpen((o) => !o)} className="text-sm text-green-700 underline">{open ? 'Đóng' : 'Sửa'}</button>
-          <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className="text-xs text-neutral-500 underline">
+          <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} text-sm`}>{open ? 'Đóng' : 'Sửa'}</button>
+          <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className={`${BTN_LINK_MUTED} text-xs`}>
             {item.isActive ? 'Tắt' : 'Bật'}
           </button>
-          <button onClick={() => del.mutate()} disabled={del.isPending} className="text-xs text-red-600 underline">Xoá</button>
+          <button onClick={() => del.mutate()} disabled={del.isPending} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
         </div>
       </div>
-      {rowErr && <p className="mt-1 text-xs text-red-600">{rowErr}</p>}
+      {rowErr && <p className="mt-1 text-xs text-danger-fg">{rowErr}</p>}
 
       {open && (
-        <div className="mt-3 space-y-2 border-t border-neutral-100 pt-3">
+        <div className="mt-3 space-y-2 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap gap-2">
-            <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className="w-56 rounded border border-neutral-200 px-2 py-1 text-sm" />
-            <input placeholder="Tên nội bộ" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="w-56 rounded border border-neutral-200 px-2 py-1 text-sm" />
+            <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className={`${field} w-56`} />
+            <input placeholder="Tên nội bộ" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} w-56`} />
           </div>
           <input
             placeholder="Từ khoá, cách nhau bằng dấu phẩy"
             value={f.keywords}
             onChange={(e) => setF({ ...f, keywords: e.target.value })}
             disabled={f.isGreeting}
-            className="w-full rounded border border-neutral-200 px-2 py-1 text-sm disabled:bg-neutral-50 disabled:text-neutral-400"
+            className={`${INPUT_CLASS} ${TOUCH_H}`}
           />
-          <textarea placeholder="Nội dung" value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} rows={3} className="w-full rounded border border-neutral-200 px-2 py-1 text-sm" />
-          <label className="flex items-center gap-2 text-sm text-neutral-600">
-            <input type="checkbox" checked={f.isGreeting} onChange={(e) => setF({ ...f, isGreeting: e.target.checked })} />
+          <textarea placeholder="Nội dung" value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} rows={3} className={INPUT_CLASS} />
+          <label className="flex min-h-[44px] items-center gap-2 text-sm text-stone-600 sm:min-h-0">
+            <input type="checkbox" className="h-4 w-4 accent-forest-600" checked={f.isGreeting} onChange={(e) => setF({ ...f, isGreeting: e.target.checked })} />
             Dùng làm lời chào tự động
           </label>
           <button
             onClick={() => save.mutate()}
             disabled={!f.title.trim() || !f.content.trim() || save.isPending}
-            className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             {save.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
-          {save.isError && <p className="text-sm text-red-600">{(save.error as Error).message}</p>}
+          {save.isError && <p className="text-sm text-danger-fg">{(save.error as Error).message}</p>}
         </div>
       )}
     </div>
@@ -2057,6 +2087,9 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
 }
 
 // ── Content Kit CTV (bài mẫu/USP/FAQ/media per-sản phẩm) ──
+// Emoji trong caption mẫu là nội dung CTV sẽ đăng, không phải biểu tượng giao diện: viết bằng mã escape để bánh cóc emoji chỉ bắt icon.
+const CAPTION_PLACEHOLDER = 'Mình đang dùng sản phẩm này, ưng lắm! Mua qua {link} nhé {ten_ctv} \u{1F33F}';
+
 function ContentKitTab() {
   const [pickedProduct, setPickedProduct] = useState<PickedItem | null>(null);
   const [loadedId, setLoadedId] = useState<string | null>(null);
@@ -2068,9 +2101,9 @@ function ContentKitTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-neutral-100 bg-white p-4">
-        <h3 className="mb-2 text-sm font-semibold">Soạn Content Kit theo sản phẩm</h3>
-        <p className="mb-2 text-xs text-neutral-400">
+      <div className={CARD_CLASS}>
+        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Soạn Content Kit theo sản phẩm</h3>
+        <p className="mb-2 text-xs text-stone-500">
           Chọn sản phẩm bằng cách gõ tên (không cần dấu) hoặc SKU. Trong caption dùng{' '}
           <code>{'{ten_ctv}'}</code> và <code>{'{link}'}</code> — hệ thống sẽ tự chèn tên CTV + link giới thiệu khi CTV xem.
         </p>
@@ -2079,15 +2112,15 @@ function ContentKitTab() {
           <button
             onClick={() => pickedProduct && setLoadedId(pickedProduct.id)}
             disabled={!pickedProduct}
-            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             Tải
           </button>
         </div>
       </div>
 
-      {loadedId && q.isLoading && <p className="text-sm text-neutral-400">Đang tải…</p>}
-      {loadedId && q.isError && <p className="text-sm text-red-600">{(q.error as Error).message}</p>}
+      {loadedId && q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {loadedId && q.isError && <p className="text-sm text-danger-fg">{(q.error as Error).message}</p>}
       {loadedId && q.isSuccess && (
         <ContentKitEditor key={loadedId} productId={loadedId} initial={q.data} />
       )}
@@ -2128,39 +2161,40 @@ function ContentKitEditor({
 
   const setFaq = (i: number, patch: Partial<ContentKitFaq>) =>
     setFaqs((fs) => fs.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+  const field = `${FIELD_CLASS} ${TOUCH_H} grow basis-40`;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
-      <div className="mb-2 text-sm font-medium">Sản phẩm: {productId}</div>
+    <div className={CARD_CLASS}>
+      <div className="mb-2 break-all text-sm font-medium text-stone-900">Sản phẩm: {productId}</div>
 
-      <label className="mb-1 block text-xs font-medium text-neutral-500">Bài mẫu (mỗi dòng 1 caption)</label>
+      <label className="mb-1 block text-xs font-medium text-stone-600">Bài mẫu (mỗi dòng 1 caption)</label>
       <textarea
         value={captions}
         onChange={(e) => setCaptions(e.target.value)}
         rows={5}
-        placeholder={'Mình đang dùng sản phẩm này, ưng lắm! Mua qua {link} nhé {ten_ctv} 🌿'}
-        className="mb-3 w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+        placeholder={CAPTION_PLACEHOLDER}
+        className={`mb-3 ${INPUT_CLASS}`}
       />
 
-      <label className="mb-1 block text-xs font-medium text-neutral-500">USP / điểm bán hàng (mỗi dòng 1 ý)</label>
+      <label className="mb-1 block text-xs font-medium text-stone-600">USP / điểm bán hàng (mỗi dòng 1 ý)</label>
       <textarea
         value={usps}
         onChange={(e) => setUsps(e.target.value)}
         rows={3}
         placeholder={'Nguyên liệu tự nhiên 100%'}
-        className="mb-3 w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+        className={`mb-3 ${INPUT_CLASS}`}
       />
 
-      <label className="mb-1 block text-xs font-medium text-neutral-500">Video URL (mỗi dòng 1 link)</label>
+      <label className="mb-1 block text-xs font-medium text-stone-600">Video URL (mỗi dòng 1 link)</label>
       <textarea
         value={videoUrls}
         onChange={(e) => setVideoUrls(e.target.value)}
         rows={2}
         placeholder={'https://...'}
-        className="mb-3 w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+        className={`mb-3 ${INPUT_CLASS}`}
       />
 
-      <div className="mb-1 text-xs font-medium text-neutral-500">FAQ (câu hỏi thường gặp)</div>
+      <div className="mb-1 text-xs font-medium text-stone-600">FAQ (câu hỏi thường gặp)</div>
       <div className="space-y-1">
         {faqs.map((f, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
@@ -2168,15 +2202,15 @@ function ContentKitEditor({
               placeholder="Câu hỏi"
               value={f.q}
               onChange={(e) => setFaq(i, { q: e.target.value })}
-              className="flex-1 rounded border border-neutral-200 px-2 py-1"
+              className={field}
             />
             <input
               placeholder="Câu trả lời"
               value={f.a}
               onChange={(e) => setFaq(i, { a: e.target.value })}
-              className="flex-1 rounded border border-neutral-200 px-2 py-1"
+              className={field}
             />
-            <button onClick={() => setFaqs((fs) => fs.filter((_, idx) => idx !== i))} className="text-xs text-red-600">
+            <button onClick={() => setFaqs((fs) => fs.filter((_, idx) => idx !== i))} className={`${BTN_LINK_DANGER} text-xs`}>
               Xoá
             </button>
           </div>
@@ -2184,7 +2218,7 @@ function ContentKitEditor({
       </div>
       <button
         onClick={() => setFaqs((fs) => [...fs, { q: '', a: '' }])}
-        className="mt-1 text-sm text-green-700 underline"
+        className={`${BTN_LINK} mt-1 text-sm`}
       >
         + Thêm FAQ
       </button>
@@ -2193,11 +2227,11 @@ function ContentKitEditor({
         <button
           onClick={() => { setMsg(null); save.mutate(); }}
           disabled={save.isPending}
-          className="rounded bg-green-600 px-4 py-1.5 text-sm text-white disabled:bg-neutral-300"
+          className={BTN_PRIMARY}
         >
           {save.isPending ? 'Đang lưu…' : 'Lưu Content Kit'}
         </button>
-        {msg && <span className={`ml-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
+        {msg && <span className={`ml-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</span>}
       </div>
     </div>
   );
@@ -2224,53 +2258,54 @@ function AcademyTab() {
     },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo khoá học' }),
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-neutral-100 bg-white p-4">
-        <h3 className="mb-2 text-sm font-semibold">Tạo khoá học mới</h3>
+      <div className={CARD_CLASS}>
+        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo khoá học mới</h3>
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
             <input
               placeholder="Tiêu đề khoá học"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm"
+              className={`${field} grow basis-full sm:basis-48`}
             />
             <input
               type="number"
               placeholder="Thứ tự"
               value={form.sortOrder}
               onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
-              className="w-28 rounded border border-neutral-200 px-3 py-2 text-sm"
+              className={`${field} w-28`}
             />
           </div>
           <input
             placeholder="Cover URL"
             value={form.coverUrl}
             onChange={(e) => setForm({ ...form, coverUrl: e.target.value })}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={`${INPUT_CLASS} ${TOUCH_H}`}
           />
           <textarea
             placeholder="Mô tả"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             rows={2}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={INPUT_CLASS}
           />
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
             disabled={!form.title.trim() || create.isPending}
-            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang tạo…' : 'Tạo khoá học'}
           </button>
         </div>
-        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>}
       </div>
 
       <div className="space-y-3">
-        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách khoá học.</p>}
+        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách khoá học.</p>}
         {q.data?.map((c) => <CourseRow key={c.id} course={c} />)}
         {q.data?.length === 0 && <Empty>Chưa có khoá học nào. Tạo khoá đầu tiên ở trên.</Empty>}
       </div>
@@ -2332,68 +2367,68 @@ function CourseRow({ course }: { course: AdminCourse }) {
       refresh();
     },
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
+  const input = `${INPUT_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 font-medium">
+    <div className={CARD_CLASS}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 font-medium text-stone-900">
             {course.title}
-            <span className={`rounded-full px-2 py-0.5 text-xs text-white ${course.isPublished ? 'bg-green-600' : 'bg-neutral-400'}`}>
-              {course.isPublished ? 'Đã đăng' : 'Nháp'}
-            </span>
+            <ToneBadge tone={course.isPublished ? 'success' : 'neutral'}>{course.isPublished ? 'Đã đăng' : 'Nháp'}</ToneBadge>
           </div>
-          <div className="text-xs text-neutral-400">{course.lessons.length} bài học · thứ tự {course.sortOrder}</div>
+          <div className="text-xs text-stone-500">{course.lessons.length} bài học · thứ tự {course.sortOrder}</div>
         </div>
-        <button onClick={() => setOpen((o) => !o)} className="text-sm text-green-700 underline">{open ? 'Thu gọn' : 'Quản lý'}</button>
+        <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} shrink-0 text-sm`}>{open ? 'Thu gọn' : 'Quản lý'}</button>
       </div>
 
       {open && (
-        <div className="mt-3 space-y-4 border-t border-neutral-100 pt-3">
+        <div className="mt-3 space-y-4 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => togglePublish.mutate()} disabled={togglePublish.isPending} className="rounded border border-neutral-200 px-3 py-1.5 text-sm">
+            <button onClick={() => togglePublish.mutate()} disabled={togglePublish.isPending} className={BTN_SECONDARY}>
               {course.isPublished ? 'Chuyển về nháp' : 'Đăng (publish)'}
             </button>
-            <button onClick={() => del.mutate()} disabled={del.isPending} className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600">
+            <button onClick={() => del.mutate()} disabled={del.isPending} className={BTN_DANGER_OUTLINE}>
               Xoá khoá học
             </button>
           </div>
-          {rowErr && <p className="text-xs text-red-600">{rowErr}</p>}
+          {rowErr && <p className="text-xs text-danger-fg">{rowErr}</p>}
 
-          <div className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-3">
-            <div className="mb-2 text-sm font-medium">Thông tin khoá học</div>
+          <div className="rounded-card border border-stone-200 bg-stone-50 p-3">
+            <div className="mb-2 font-display text-sm font-medium text-stone-900">Thông tin khoá học</div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
-              <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
-              <input placeholder="Cover URL" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm sm:col-span-2" />
+              <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={input} />
+              <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={input} />
+              <input placeholder="Cover URL" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className={`${input} sm:col-span-2`} />
             </div>
-            <textarea placeholder="Mô tả" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} rows={2} className="mt-2 w-full rounded border border-neutral-200 px-2 py-1 text-sm" />
-            <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className="mt-2 rounded bg-green-600 px-4 py-1.5 text-sm text-white disabled:bg-neutral-300">
+            <textarea placeholder="Mô tả" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} rows={2} className={`mt-2 ${INPUT_CLASS}`} />
+            <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={`${BTN_PRIMARY} mt-2`}>
               {save.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
             </button>
-            {save.isSuccess && <span className="ml-2 text-sm text-green-700">Đã lưu ✓</span>}
-            {save.isError && <span className="ml-2 text-sm text-red-600">{(save.error as Error).message}</span>}
+            {save.isSuccess && <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">Đã lưu <Check className="h-4 w-4" aria-hidden /></span>}
+            {save.isError && <span className="ml-2 text-sm text-danger-fg">{(save.error as Error).message}</span>}
           </div>
 
           <div>
-            <div className="mb-1 text-sm font-medium">Bài học ({course.lessons.length})</div>
+            <div className="mb-1 text-sm font-medium text-stone-900">Bài học ({course.lessons.length})</div>
             <div className="space-y-1">
               {course.lessons.map((l) => <LessonRow key={l.id} lesson={l} />)}
-              {course.lessons.length === 0 && <p className="text-xs text-neutral-400">Chưa có bài học nào.</p>}
+              {course.lessons.length === 0 && <p className="text-xs text-stone-500">Chưa có bài học nào.</p>}
             </div>
 
-            <div className="mt-2 space-y-2 rounded border border-neutral-100 p-2">
+            <div className="mt-2 space-y-2 rounded-control border border-stone-200 p-2">
               <div className="flex flex-wrap gap-2">
                 <input
                   placeholder="Tiêu đề bài học"
                   value={lesson.title}
                   onChange={(e) => setLesson({ ...lesson, title: e.target.value })}
-                  className="flex-1 rounded border border-neutral-200 px-2 py-1 text-sm"
+                  className={`${field} grow basis-full sm:basis-40`}
                 />
                 <select
                   value={lesson.contentType}
                   onChange={(e) => setLesson({ ...lesson, contentType: e.target.value as AcademyLessonContentType })}
-                  className="rounded border border-neutral-200 px-2 py-1 text-sm"
+                  className={field}
                 >
                   <option value="ARTICLE">Bài viết</option>
                   <option value="VIDEO">Video</option>
@@ -2403,7 +2438,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
                   placeholder="Thứ tự"
                   value={lesson.sortOrder}
                   onChange={(e) => setLesson({ ...lesson, sortOrder: Number(e.target.value) })}
-                  className="w-24 rounded border border-neutral-200 px-2 py-1 text-sm"
+                  className={`${field} w-24`}
                 />
               </div>
               {lesson.contentType === 'VIDEO' ? (
@@ -2411,7 +2446,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
                   placeholder="Video URL"
                   value={lesson.videoUrl}
                   onChange={(e) => setLesson({ ...lesson, videoUrl: e.target.value })}
-                  className="w-full rounded border border-neutral-200 px-2 py-1 text-sm"
+                  className={input}
                 />
               ) : (
                 <textarea
@@ -2419,17 +2454,17 @@ function CourseRow({ course }: { course: AdminCourse }) {
                   value={lesson.body}
                   onChange={(e) => setLesson({ ...lesson, body: e.target.value })}
                   rows={3}
-                  className="w-full rounded border border-neutral-200 px-2 py-1 text-sm"
+                  className={INPUT_CLASS}
                 />
               )}
               <button
                 onClick={() => addLesson.mutate()}
                 disabled={!lesson.title.trim() || addLesson.isPending}
-                className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
+                className={BTN_PRIMARY}
               >
                 Thêm bài học
               </button>
-              {addLesson.isError && <p className="text-xs text-red-600">{(addLesson.error as Error).message}</p>}
+              {addLesson.isError && <p className="text-xs text-danger-fg">{(addLesson.error as Error).message}</p>}
             </div>
           </div>
         </div>
@@ -2464,42 +2499,43 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
       }),
     onSuccess: () => { setOpen(false); refresh(); },
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className="rounded border border-neutral-100 px-2 py-1 text-sm">
-      <div className="flex items-center justify-between">
-        <span className="truncate">
+    <div className="rounded-control border border-stone-200 px-2 py-1 text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 break-words">
           [{lesson.contentType === 'VIDEO' ? 'Video' : 'Bài viết'}] {lesson.title} · thứ tự {lesson.sortOrder}
         </span>
-        <div className="flex shrink-0 gap-2">
-          <button onClick={() => setOpen((o) => !o)} className="text-xs text-green-700 underline">{open ? 'Đóng' : 'Sửa'}</button>
-          <button onClick={() => del.mutate()} disabled={del.isPending} className="text-xs text-red-600 underline">Xoá</button>
+        <div className="flex shrink-0 gap-1">
+          <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} text-xs`}>{open ? 'Đóng' : 'Sửa'}</button>
+          <button onClick={() => del.mutate()} disabled={del.isPending} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
         </div>
       </div>
-      {del.isError && <p className="mt-1 text-xs text-red-600">{(del.error as Error).message}</p>}
+      {del.isError && <p className="mt-1 text-xs text-danger-fg">{(del.error as Error).message}</p>}
       {open && (
-        <div className="mt-2 space-y-2 border-t border-neutral-100 pt-2">
+        <div className="mt-2 space-y-2 border-t border-stone-200 pt-2">
           <div className="flex flex-wrap gap-2">
-            <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1" />
+            <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} grow basis-full sm:basis-40`} />
             <select
               value={f.contentType}
               onChange={(e) => setF({ ...f, contentType: e.target.value as AcademyLessonContentType })}
-              className="rounded border border-neutral-200 px-2 py-1"
+              className={field}
             >
               <option value="ARTICLE">Bài viết</option>
               <option value="VIDEO">Video</option>
             </select>
-            <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className="w-24 rounded border border-neutral-200 px-2 py-1" />
+            <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={`${field} w-24`} />
           </div>
           {f.contentType === 'VIDEO' ? (
-            <input placeholder="Video URL" value={f.videoUrl} onChange={(e) => setF({ ...f, videoUrl: e.target.value })} className="w-full rounded border border-neutral-200 px-2 py-1" />
+            <input placeholder="Video URL" value={f.videoUrl} onChange={(e) => setF({ ...f, videoUrl: e.target.value })} className={`${INPUT_CLASS} ${TOUCH_H}`} />
           ) : (
-            <textarea placeholder="Nội dung bài viết" value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} rows={3} className="w-full rounded border border-neutral-200 px-2 py-1" />
+            <textarea placeholder="Nội dung bài viết" value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} rows={3} className={INPUT_CLASS} />
           )}
-          <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className="rounded bg-green-600 px-3 py-1 text-white disabled:bg-neutral-300">
+          <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={BTN_PRIMARY}>
             {save.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
-          {save.isError && <p className="text-xs text-red-600">{(save.error as Error).message}</p>}
+          {save.isError && <p className="text-xs text-danger-fg">{(save.error as Error).message}</p>}
         </div>
       )}
     </div>
@@ -2508,9 +2544,9 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
 
 function Table({ head, children }: { head: string[]; children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-neutral-100 bg-white">
+    <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0">
       <table className="w-full text-left text-sm">
-        <thead className="bg-neutral-50 text-xs text-neutral-500">
+        <thead className="bg-stone-50 text-xs text-stone-500">
           <tr>{head.map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
         </thead>
         <tbody className="px-3">{children}</tbody>
@@ -2519,8 +2555,8 @@ function Table({ head, children }: { head: string[]; children: React.ReactNode }
   );
 }
 function Center({ children }: { children: React.ReactNode }) {
-  return <main className="mx-auto max-w-3xl px-4 py-20 text-center text-neutral-600">{children}</main>;
+  return <main className="mx-auto max-w-3xl px-4 py-20 text-center text-stone-600">{children}</main>;
 }
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-lg border border-neutral-100 bg-white p-6 text-center text-sm text-neutral-500">{children}</p>;
+  return <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">{children}</p>;
 }

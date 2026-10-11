@@ -106,7 +106,7 @@ export function ConfirmDialog({ options, onAnswer }: { options: ConfirmOptions; 
     <div
       data-confirm-backdrop
       onClick={() => onAnswer(false)}
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-stone-900/40 p-4 sm:items-center"
     >
       <div
         role="alertdialog"
@@ -114,17 +114,17 @@ export function ConfirmDialog({ options, onAnswer }: { options: ConfirmOptions; 
         aria-labelledby={titleId}
         aria-describedby={bodyId}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl"
+        className="w-full max-w-md rounded-sheet bg-stone-0 p-5 shadow-raised"
       >
-        <h2 id={titleId} className="text-base font-semibold text-neutral-900">
+        <h2 id={titleId} className="font-display text-base font-semibold text-stone-900">
           {options.title}
         </h2>
-        <p id={bodyId} className="mt-2 whitespace-pre-line text-sm leading-relaxed text-neutral-600">
+        <p id={bodyId} className="mt-2 whitespace-pre-line text-sm leading-relaxed text-stone-600">
           {options.message}
         </p>
         {input && (
           <div className="mt-3">
-            <label htmlFor={inputId} className="mb-1 block text-xs font-medium text-neutral-700">
+            <label htmlFor={inputId} className="mb-1 block text-xs font-medium text-stone-700">
               {input.label}
               {input.required ? ' *' : ''}
             </label>
@@ -146,7 +146,7 @@ export function ConfirmDialog({ options, onAnswer }: { options: ConfirmOptions; 
             type="button"
             data-confirm="cancel"
             onClick={() => onAnswer(false)}
-            className="min-h-[44px] rounded-lg border border-neutral-300 px-4 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            className="min-h-[44px] rounded-control border border-stone-450 bg-stone-0 px-4 text-sm font-medium text-stone-800 hover:bg-stone-50"
           >
             {options.cancelLabel ?? 'Huỷ'}
           </button>
@@ -156,8 +156,8 @@ export function ConfirmDialog({ options, onAnswer }: { options: ConfirmOptions; 
             data-confirm="accept"
             disabled={blocked}
             onClick={() => onAnswer(true, text)}
-            className={`min-h-[44px] rounded-lg px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 ${
-              danger ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+            className={`min-h-[44px] rounded-control px-4 text-sm font-medium text-stone-0 disabled:cursor-not-allowed disabled:opacity-50 ${
+              danger ? 'bg-danger-fg hover:brightness-90' : 'bg-forest-600 hover:bg-forest-700'
             }`}
           >
             {options.confirmLabel ?? 'Xác nhận'}

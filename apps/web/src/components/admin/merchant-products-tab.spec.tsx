@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { MerchantProductsTab } from './merchant-products-tab';
-import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminPendingProduct } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
@@ -45,7 +45,7 @@ describe('MerchantProductsTab (P0 A6-07, docs/audit-2026-09/06-web.md)', () => {
     await flush();
     expect(container.textContent).toContain('Sản phẩm đối tác gửi duyệt (1)');
     expect(container.textContent).toContain('Tinh dầu sả chanh');
-    expect(byText(container, 'button', '✓ Duyệt xuất bản')).not.toBeNull();
+    expect(byText(container, 'button', 'Duyệt xuất bản')).not.toBeNull();
   });
 
   it('BE cũ trả MẢNG TRẦN (không {data,meta}) → vẫn render đúng, không crash (asPage tự bọc lại)', async () => {
@@ -78,7 +78,7 @@ describe('MerchantProductsTab (P0 A6-07, docs/audit-2026-09/06-web.md)', () => {
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<MerchantProductsTab />);
     await flush();
-    click(byText(container, 'button', '✓ Duyệt xuất bản'));
+    click(byText(container, 'button', 'Duyệt xuất bản'));
     await flush();
     const call = api.calls.find((c) => c.url.includes('/review'));
     expect(call?.url).toContain('/admin/merchant-products/p1/review');
@@ -109,5 +109,50 @@ describe('MerchantProductsTab (P0 A6-07, docs/audit-2026-09/06-web.md)', () => {
     await flush();
     expect(calls.some((u) => u.includes('page=2'))).toBe(true);
     expect(container.textContent).toContain('Trang 2');
+  });
+});
+
+// C-097 (Q-25/Q-29): ✓/✕/🌿 chuyển sang icon lucide; nút duyệt/từ chối chạm được ở 390px.
+describe('MerchantProductsTab — DS v2', () => {
+  const page = { data: [product()], meta: { page: 1, limit: 100, total: 1 } };
+
+  it('nút duyệt/từ chối dùng icon lucide (không ký tự ✓ ✕), cao 44px; ô trống ảnh dùng icon Leaf thay emoji 🌿', async () => {
+    const api = mockFetch({ '/admin/merchant-products/pending': { body: page } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    const approve = byText(container, 'button', 'Duyệt xuất bản')!;
+    const reject = byText(container, 'button', 'Từ chối')!;
+    for (const b of [approve, reject]) {
+      expect(b.querySelector('svg')).not.toBeNull();
+      expect(b.textContent).not.toMatch(/[✓✕]/);
+      expect(b.className).toContain('min-h-[44px]');
+    }
+    expect(approve.className).toContain('bg-forest-600');
+    expect(reject.className).toContain('border-danger-fg');
+    expect(container.textContent).not.toContain('🌿');
+    expect(container.querySelector('svg.lucide-leaf')).not.toBeNull();
+  });
+
+  it('bấm Từ chối → ô lý do và 2 nút cao 44px; xác nhận gửi approve:false kèm lý do đã trim', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: page },
+      '/review': { body: { id: 'p1', approvalStatus: 'REJECTED' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(byText(container, 'button', 'Từ chối'));
+    const input = container.querySelector('input[placeholder="Lý do từ chối..."]') as HTMLInputElement;
+    expect(input.className).toContain('min-h-[44px]');
+    typeInto(input, '  Thiếu giấy chứng nhận ');
+    const confirmBtn = byText(container, 'button', 'Xác nhận từ chối')!;
+    expect(confirmBtn.className).toContain('min-h-[44px]');
+    expect(confirmBtn.className).toContain('bg-danger-fg');
+    expect(byText(container, 'button', 'Huỷ')?.className).toContain('min-h-[44px]');
+    click(confirmBtn);
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/review'));
+    expect(call?.init?.body).toBe(JSON.stringify({ approve: false, rejectReason: 'Thiếu giấy chứng nhận' }));
   });
 });
