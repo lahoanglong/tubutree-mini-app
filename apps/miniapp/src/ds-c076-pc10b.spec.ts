@@ -19,6 +19,7 @@ const FILES_PC10B = [
   'src/components/affiliate/choice-card.tsx',
   'src/pages/dealer.tsx',
   'src/components/storefront-context-bar.tsx',
+  'src/components/share-sheet.tsx',
 ];
 
 /** Còn Sheet/Input vì components/ui chưa có bản thay; Page/hook điều hướng và snackbar là của runtime. */

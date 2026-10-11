@@ -1,7 +1,9 @@
 import { useCallback } from 'react';
-import { Box, Text, Sheet, useSnackbar } from 'zmp-ui';
+import { useSnackbar } from 'zmp-ui';
 import { Share2, Copy } from 'lucide-react';
+import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
+import { Text } from './ui/text';
 import { QrCode } from './qr-code';
 import { shareLink } from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
@@ -85,14 +87,12 @@ export function ShareSheet({
     );
   };
   return (
-    <Sheet visible={visible} onClose={onClose} autoHeight>
-      <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-        <Text bold size="large" style={{ marginBottom: 12 }}>{vi.storefront.shareTitle}</Text>
-        <Box flex justifyContent="center" mb={3}><QrCode value={url} /></Box>
+    <BottomSheet open={visible} onClose={onClose} title={vi.storefront.shareTitle}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><QrCode value={url} /></div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
         <Button
           fullWidth
           icon={Share2}
-          style={{ marginBottom: 8 }}
           onPress={() => {
             haptic('light');
             void shareWithFallback({ title, description: captions[0] ?? '', thumbnail, path: sharePath }, url);
@@ -100,22 +100,34 @@ export function ShareSheet({
         >
           {vi.storefront.shareZalo}
         </Button>
-        <Button fullWidth variant="secondary" icon={Copy} style={{ marginBottom: 12 }} onPress={() => copy(url)}>
+        <Button fullWidth variant="secondary" icon={Copy} onPress={() => copy(url)}>
           {vi.storefront.copyLink}
         </Button>
-        <Text size="xSmall" bold style={{ marginBottom: 6 }}>{vi.storefront.captionHint}</Text>
+      </div>
+      <Text variant="label" as="div" style={{ marginBottom: 6 }}>{vi.storefront.captionHint}</Text>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {captions.map((c, i) => (
-          <Box
+          <button
             key={i}
+            type="button"
             className="tubu-press"
-            onClick={() => copy(c)}
-            p={2}
-            style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-sm)', marginBottom: 6 }}
+            onClick={() => void copy(c)}
+            style={{
+              minHeight: 44,
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '8px 12px',
+              textAlign: 'left',
+              border: 'none',
+              cursor: 'pointer',
+              background: 'var(--color-bg-subtle)',
+              borderRadius: 'var(--radius-control)',
+            }}
           >
-            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>{c}</Text>
-          </Box>
+            <Text variant="caption" tone="secondary">{c}</Text>
+          </button>
         ))}
-      </Box>
-    </Sheet>
+      </div>
+    </BottomSheet>
   );
 }

@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   copyText: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) =>
     visible ? <div data-testid="sheet">{children}</div> : null,
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
@@ -78,5 +78,60 @@ describe('ShareSheet — lỗi chia sẻ không bị nuốt (C-067)', () => {
     renderSheet();
     const btn = screen.getByRole('button', { name: /Chia sẻ qua Zalo/ });
     expect(btn.style.minHeight).toBe('44px');
+  });
+});
+
+describe('ShareSheet — khung sheet và caption gợi ý (DS v2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.copyText.mockResolvedValue(true);
+  });
+
+  it('tiêu đề sheet là h2 thật và có nút Đóng gọi onClose', () => {
+    const onClose = vi.fn();
+    render(<ShareSheet visible onClose={onClose} slug="an-lanh" title="Gian hàng An Lành" referralCode="CTV123" />);
+    expect(screen.getByRole('heading', { level: 2, name: 'Chia sẻ gian hàng' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('nút Sao chép link chép liên kết có mã giới thiệu và báo đã sao chép', async () => {
+    renderSheet();
+    fireEvent.click(screen.getByRole('button', { name: /Sao chép link/ }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
+    expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining('/s/an-lanh?ref=CTV123'));
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép', type: 'success' });
+  });
+
+  it('mỗi caption gợi ý là nút thật cao >= 44px, chạm vào là chép đúng caption kèm liên kết', async () => {
+    render(
+      <ShareSheet
+        visible
+        onClose={() => {}}
+        slug="an-lanh"
+        title="Gian hàng An Lành"
+        referralCode="CTV123"
+        captions={['Ghé gian hàng của mình nhé']}
+      />,
+    );
+    const btn = screen.getByRole('button', { name: /Ghé gian hàng của mình nhé/ });
+    expect(parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
+    expect(mocks.copyText).toHaveBeenCalledWith('Ghé gian hàng của mình nhé https://app.tubutree.com/s/an-lanh?ref=CTV123');
+  });
+
+  it('không truyền caption: có đủ 3 caption mặc định, đều kèm liên kết có mã', () => {
+    renderSheet();
+    const captionButtons = screen.getAllByRole('button', { name: /app\.tubutree\.com\/s\/an-lanh\?ref=CTV123/ });
+    expect(captionButtons).toHaveLength(3);
+  });
+
+  it('khi sao chép thất bại: báo lỗi hướng dẫn chép tay', async () => {
+    mocks.copyText.mockResolvedValue(false);
+    renderSheet();
+    fireEvent.click(screen.getByRole('button', { name: /Sao chép link/ }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    expect(mocks.openSnackbar.mock.calls[0]![0]).toMatchObject({ type: 'error' });
   });
 });
