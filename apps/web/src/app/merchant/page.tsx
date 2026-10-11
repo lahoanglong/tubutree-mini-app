@@ -44,8 +44,8 @@ import {
 } from '@/lib/merchant-client';
 import { pageRange } from '@/lib/admin-client';
 import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
-import { TOUCH_H } from '@/components/admin/ui';
-import { THEME_COLORS } from './theme-colors';
+import { BTN_PRIMARY, INPUT_CLASS, TOUCH_H } from '@/components/admin/ui';
+import { DEFAULT_THEME_COLOR, THEME_COLORS } from './theme-colors';
 
 const POPULAR_BANKS = [
   { bin: '970436', name: 'Vietcombank (VCB)' },
@@ -59,6 +59,9 @@ const POPULAR_BANKS = [
   { bin: '970403', name: 'Sacombank' },
   { bin: '970441', name: 'VIB' },
 ];
+
+// Nhãn đứng riêng một dòng phía trên (không bọc `label`), nên ô nhập tự chừa khoảng cách và cao 44px khi chạm.
+const MERCHANT_INPUT = `mt-1 ${INPUT_CLASS} ${TOUCH_H}`;
 
 type MerchantTab = 'store' | 'banking' | 'warehouse' | 'products' | 'orders';
 
@@ -296,7 +299,7 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
   const [title, setTitle] = useState(store.title ?? '');
   const [headerNote, setHeaderNote] = useState(store.headerNote ?? '');
   const [subdomain, setSubdomain] = useState(store.subdomain ?? '');
-  const [themeColor, setThemeColor] = useState(store.themeColor ?? '#16a34a');
+  const [themeColor, setThemeColor] = useState(store.themeColor ?? DEFAULT_THEME_COLOR);
   const [coverUrl, setCoverUrl] = useState(store.coverUrl ?? '');
   const [avatarUrl, setAvatarUrl] = useState(store.avatarUrl ?? '');
   const [isPublished, setIsPublished] = useState(store.isPublished ?? true);
@@ -329,47 +332,48 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-      <form onSubmit={handleSubmit} className="space-y-4 md:col-span-2 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-        <h3 className="font-semibold text-neutral-900">Thiết lập mặt tiền & Subdomain</h3>
+      <form onSubmit={handleSubmit} className="space-y-4 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card sm:p-6 md:col-span-2">
+        <h3 className="font-display font-semibold text-stone-900">Thiết lập mặt tiền & Subdomain</h3>
 
         <div>
-          <label className="block text-xs font-medium text-neutral-700">Tên gian hàng / Thương hiệu</label>
+          <label className="block text-xs font-medium text-stone-700">Tên gian hàng / Thương hiệu</label>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
-            className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-green-600 focus:outline-none"
+            className={MERCHANT_INPUT}
           />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-neutral-700">Subdomain riêng biệt</label>
-          <div className="mt-1 flex items-center rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm focus-within:border-green-600 focus-within:bg-white">
-            <span className="text-neutral-400">https://</span>
+          <label className="block text-xs font-medium text-stone-700">Subdomain riêng biệt</label>
+          <div className="mt-1 flex min-h-[44px] items-center rounded-control border border-stone-450 bg-stone-50 px-3 py-2 text-sm focus-within:border-forest-600 focus-within:bg-stone-0 sm:min-h-[36px]">
+            <span className="text-stone-500">https://</span>
             <input
               value={subdomain}
               onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
               placeholder="ten-thuong-hieu"
-              className="flex-1 bg-transparent px-1 font-semibold text-green-700 focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent px-1 font-semibold text-forest-700"
             />
-            <span className="text-neutral-500">.tubutree.com</span>
+            <span className="text-stone-500">.tubutree.com</span>
           </div>
-          <p className="mt-1 text-xs text-neutral-400">Chỉ dùng chữ thường a-z, số 0-9 và dấu gạch ngang (độ dài 3-30 ký tự).</p>
+          <p className="mt-1 text-xs text-stone-500">Chỉ dùng chữ thường a-z, số 0-9 và dấu gạch ngang (độ dài 3-30 ký tự).</p>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-neutral-700">Màu chủ đạo giao diện (Theme Color)</label>
+          <label className="block text-xs font-medium text-stone-700">Màu chủ đạo giao diện (Theme Color)</label>
           <div className="mt-2 flex flex-wrap gap-2">
             {THEME_COLORS.map((c) => (
               <button
                 key={c.hex}
                 type="button"
                 onClick={() => setThemeColor(c.hex)}
-                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all ${
-                  themeColor === c.hex ? 'border-neutral-900 ring-2 ring-neutral-400' : 'border-neutral-200'
+                aria-pressed={themeColor === c.hex}
+                className={`flex min-h-[44px] items-center gap-1.5 rounded-full border bg-stone-0 px-3 py-1 text-xs font-medium text-stone-700 transition-all sm:min-h-[32px] ${
+                  themeColor === c.hex ? 'border-stone-900 ring-2 ring-stone-400' : 'border-stone-450'
                 }`}
               >
-                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: c.hex }} />
+                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: c.hex }} aria-hidden="true" />
                 {c.label}
               </button>
             ))}
@@ -377,53 +381,56 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-neutral-700">Thông điệp thương hiệu / Slogan</label>
+          <label className="block text-xs font-medium text-stone-700">Thông điệp thương hiệu / Slogan</label>
           <textarea
             value={headerNote}
             onChange={(e) => setHeaderNote(e.target.value)}
             rows={2}
             placeholder="Ví dụ: Sản phẩm chăm sóc cơ thể thiên nhiên 100% từ nông sản Việt..."
-            className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-green-600 focus:outline-none"
+            className={MERCHANT_INPUT}
           />
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-xs font-medium text-neutral-700">URL Logo thương hiệu</label>
+            <label className="block text-xs font-medium text-stone-700">URL Logo thương hiệu</label>
             <input
               value={avatarUrl}
               onChange={(e) => setAvatarUrl(e.target.value)}
               placeholder="https://..."
-              className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-green-600 focus:outline-none"
+              className={MERCHANT_INPUT}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-neutral-700">URL Ảnh bìa (Cover Banner)</label>
+            <label className="block text-xs font-medium text-stone-700">URL Ảnh bìa (Cover Banner)</label>
             <input
               value={coverUrl}
               onChange={(e) => setCoverUrl(e.target.value)}
               placeholder="https://..."
-              className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-green-600 focus:outline-none"
+              className={MERCHANT_INPUT}
             />
           </div>
         </div>
 
-        <div className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+        <div className="flex items-center gap-3 rounded-control border border-stone-200 bg-stone-50 p-3">
           <input
             type="checkbox"
             id="isPublished"
             checked={isPublished}
             onChange={(e) => setIsPublished(e.target.checked)}
-            className="h-4 w-4 rounded border-neutral-300 text-green-600 focus:ring-green-500"
+            className="h-5 w-5 shrink-0 accent-forest-600"
           />
-          <label htmlFor="isPublished" className="cursor-pointer text-xs font-medium text-neutral-700">
-            <span className="block font-semibold text-neutral-900">Xuất bản công khai gian hàng</span>
+          <label htmlFor="isPublished" className="cursor-pointer text-xs font-medium text-stone-700">
+            <span className="block font-semibold text-stone-900">Xuất bản công khai gian hàng</span>
             Cho phép khách hàng truy cập gian hàng qua subdomain và đường dẫn công khai.
           </label>
         </div>
 
         {msg && (
-          <div className={`rounded-lg p-3 text-xs font-medium ${msg.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+          <div
+            role={msg.ok ? 'status' : 'alert'}
+            className={`rounded-control p-3 text-xs font-medium ${msg.ok ? 'bg-success-bg text-success-fg' : 'bg-danger-bg text-danger-fg'}`}
+          >
             {msg.text}
           </div>
         )}
@@ -431,72 +438,72 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
         <button
           type="submit"
           disabled={mut.isPending}
-          className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:bg-neutral-300"
+          className={`${BTN_PRIMARY} px-5`}
         >
           {mut.isPending ? 'Đang lưu…' : 'Lưu cấu hình gian hàng'}
         </button>
       </form>
 
       {/* Live iPhone Mockup Preview Frame */}
-      <div className="rounded-2xl border border-neutral-200/80 bg-neutral-100/60 p-5 flex flex-col items-center justify-start">
-        <div className="flex items-center justify-between w-full mb-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-500">Mô phỏng Mobile</h4>
-          <span className="text-[10px] font-semibold text-leaf-700 bg-leaf-100/80 px-2 py-0.5 rounded-full">Live Preview</span>
+      <div className="flex flex-col items-center justify-start rounded-card border border-stone-200 bg-stone-100/60 p-5">
+        <div className="mb-3 flex w-full items-center justify-between">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500">Mô phỏng Mobile</h4>
+          <span className="rounded-full bg-forest-100 px-2 py-0.5 text-[10px] font-semibold text-forest-700">Live Preview</span>
         </div>
 
         {/* Realistic iPhone frame */}
-        <div className="w-[280px] rounded-[40px] border-[6px] border-neutral-800 bg-neutral-900 p-2 shadow-2xl transition-all">
+        <div className="w-[280px] max-w-full rounded-[40px] border-[6px] border-stone-800 bg-stone-900 p-2 shadow-raised transition-all">
           {/* Dynamic Island / Notch */}
-          <div className="relative mx-auto mb-2 h-4 w-24 rounded-full bg-neutral-800 flex items-center justify-center">
-            <div className="h-2 w-2 rounded-full bg-neutral-950 absolute left-2.5" />
-            <div className="h-2.5 w-2.5 rounded-full bg-neutral-900 border border-neutral-700/60" />
+          <div className="relative mx-auto mb-2 flex h-4 w-24 items-center justify-center rounded-full bg-stone-800">
+            <div className="absolute left-2.5 h-2 w-2 rounded-full bg-stone-900" />
+            <div className="h-2.5 w-2.5 rounded-full border border-stone-700/60 bg-stone-900" />
           </div>
 
           {/* Screen Content */}
-          <div className="overflow-hidden rounded-[30px] bg-neutral-50 min-h-[440px] flex flex-col text-neutral-900 text-left select-none">
+          <div className="flex min-h-[440px] select-none flex-col overflow-hidden rounded-[30px] bg-stone-50 text-left text-stone-900">
             {/* Store Cover inside screen */}
-            <div className="relative h-24 w-full bg-neutral-300 transition-colors" style={{ backgroundColor: themeColor }}>
+            <div className="relative h-24 w-full bg-stone-300 transition-colors" style={{ backgroundColor: themeColor }}>
               {coverUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={coverUrl} alt="Cover" className="h-full w-full object-cover" />
               ) : (
-                <div className="h-full w-full opacity-80" style={{ background: `linear-gradient(135deg, ${themeColor} 0%, #1e293b 100%)` }} />
+                <div className="h-full w-full opacity-80" style={{ background: `linear-gradient(135deg, ${themeColor} 0%, var(--color-bg-inverse) 100%)` }} />
               )}
             </div>
 
             {/* Profile Avatar & Info inside screen */}
             <div className="px-3 -mt-6">
               <div className="flex items-end gap-2">
-                <div className="h-12 w-12 rounded-xl border-2 border-white overflow-hidden bg-white shadow-sm shrink-0">
+                <div className="h-12 w-12 shrink-0 overflow-hidden rounded-control border-2 border-stone-0 bg-stone-0 shadow-card">
                   {avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
                   ) : (
-                    <div className="h-full w-full flex items-center justify-center font-bold text-white text-base" style={{ backgroundColor: themeColor }}>
+                    <div className="flex h-full w-full items-center justify-center text-base font-bold text-stone-0" style={{ backgroundColor: themeColor }}>
                       {title.slice(0, 1).toUpperCase() || 'T'}
                     </div>
                   )}
                 </div>
                 <div className="pb-0.5 min-w-0 flex-1">
-                  <h5 className="font-bold text-xs truncate text-neutral-900">{title || 'Tên gian hàng'}</h5>
-                  <p className="text-[10px] text-neutral-400 truncate">{subdomain ? `${subdomain}.tubutree.com` : 'subdomain.tubutree.com'}</p>
+                  <h5 className="truncate text-xs font-bold text-stone-900">{title || 'Tên gian hàng'}</h5>
+                  <p className="truncate text-[10px] text-stone-500">{subdomain ? `${subdomain}.tubutree.com` : 'subdomain.tubutree.com'}</p>
                 </div>
               </div>
 
               {headerNote && (
-                <p className="mt-2 text-[10px] text-neutral-600 line-clamp-2 leading-tight bg-white p-1.5 rounded-lg border border-neutral-200/50">
+                <p className="mt-2 line-clamp-2 rounded-control border border-stone-200 bg-stone-0 p-1.5 text-[10px] leading-tight text-stone-600">
                   {headerNote}
                 </p>
               )}
 
               {/* Sample Product item in screen */}
-              <div className="mt-3 rounded-xl border border-neutral-200 bg-white p-2 shadow-sm">
+              <div className="mt-3 rounded-card border border-stone-200 bg-stone-0 p-2 shadow-card">
                 <div className="flex gap-2 items-center">
-                  <div className="h-10 w-10 rounded-lg bg-leaf-50 flex items-center justify-center text-leaf-700 shrink-0 text-base">
-                    <Leaf className="h-5 w-5 text-leaf-600" />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-forest-50 text-base text-forest-700">
+                    <Leaf className="h-5 w-5 text-forest-600" aria-hidden="true" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-semibold truncate text-neutral-800">Sản phẩm mẫu của Shop</p>
+                    <p className="truncate text-[11px] font-semibold text-stone-800">Sản phẩm mẫu của Shop</p>
                     <p className="text-[11px] font-bold" style={{ color: themeColor }}>150.000đ</p>
                   </div>
                 </div>
@@ -505,7 +512,7 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
               {/* CTA sample button */}
               <button
                 type="button"
-                className="mt-3 w-full rounded-xl py-2 text-center text-xs font-bold text-white shadow-sm transition-all"
+                className="mt-3 w-full rounded-control py-2 text-center text-xs font-bold text-stone-0 shadow-card transition-all"
                 style={{ backgroundColor: themeColor }}
               >
                 Đặt hàng ngay
@@ -514,7 +521,7 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
 
             {/* Bottom Home Indicator */}
             <div className="mt-auto py-2 flex justify-center">
-              <div className="h-1 w-20 rounded-full bg-neutral-300" />
+              <div className="h-1 w-20 rounded-full bg-stone-300" />
             </div>
           </div>
         </div>
@@ -569,20 +576,20 @@ function BankingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () 
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-      <form onSubmit={handleSubmit} className="space-y-4 md:col-span-2 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-4 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card sm:p-6 md:col-span-2">
         <div>
-          <h3 className="font-semibold text-neutral-900">Tài khoản Ngân Hàng Nhận Tiền Trực Tiếp</h3>
-          <p className="mt-1 text-xs text-neutral-500">
+          <h3 className="font-display font-semibold text-stone-900">Tài khoản Ngân Hàng Nhận Tiền Trực Tiếp</h3>
+          <p className="mt-1 text-xs text-stone-500">
             Khi khách hàng đặt đơn trên subdomain của bạn và chọn thanh toán chuyển khoản, hệ thống sẽ tự động tạo mã VietQR trỏ thẳng về tài khoản này.
           </p>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-neutral-700">Ngân hàng thụ hưởng</label>
+          <label className="block text-xs font-medium text-stone-700">Ngân hàng thụ hưởng</label>
           <select
             value={bankName}
             onChange={handleBankSelect}
-            className="mt-1 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm focus:border-green-600 focus:outline-none"
+            className={MERCHANT_INPUT}
           >
             {POPULAR_BANKS.map((b) => (
               <option key={b.bin} value={b.name}>
@@ -593,29 +600,32 @@ function BankingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () 
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-neutral-700">Số tài khoản ngân hàng</label>
+          <label className="block text-xs font-medium text-stone-700">Số tài khoản ngân hàng</label>
           <input
             value={bankAccountNo}
             onChange={(e) => setBankAccountNo(e.target.value.trim())}
             required
             placeholder="0123456789"
-            className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm font-semibold tracking-wider text-neutral-800 focus:border-green-600 focus:outline-none"
+            className={`${MERCHANT_INPUT} font-semibold tracking-wider`}
           />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-neutral-700">Tên chủ tài khoản (viết hoa không dấu)</label>
+          <label className="block text-xs font-medium text-stone-700">Tên chủ tài khoản (viết hoa không dấu)</label>
           <input
             value={bankAccountName}
             onChange={(e) => setBankAccountName(e.target.value.toUpperCase())}
             required
             placeholder="NGUYEN VAN A"
-            className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm font-semibold text-neutral-800 focus:border-green-600 focus:outline-none"
+            className={`${MERCHANT_INPUT} font-semibold`}
           />
         </div>
 
         {msg && (
-          <div className={`rounded-lg p-3 text-xs font-medium ${msg.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+          <div
+            role={msg.ok ? 'status' : 'alert'}
+            className={`rounded-control p-3 text-xs font-medium ${msg.ok ? 'bg-success-bg text-success-fg' : 'bg-danger-bg text-danger-fg'}`}
+          >
             {msg.text}
           </div>
         )}
@@ -623,24 +633,24 @@ function BankingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () 
         <button
           type="submit"
           disabled={mut.isPending}
-          className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:bg-neutral-300"
+          className={`${BTN_PRIMARY} px-5`}
         >
           {mut.isPending ? 'Đang lưu…' : 'Lưu tài khoản ngân hàng'}
         </button>
       </form>
 
       {/* VietQR Preview */}
-      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-5 text-center">
-        <h4 className="text-xs font-semibold uppercase text-neutral-500">Mô phỏng VietQR khách quét</h4>
+      <div className="rounded-card border border-stone-200 bg-stone-50 p-5 text-center">
+        <h4 className="text-xs font-semibold uppercase text-stone-500">Mô phỏng VietQR khách quét</h4>
         {sampleQrUrl ? (
           <div className="mt-3 flex flex-col items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={sampleQrUrl} alt="VietQR Mẫu" className="h-60 w-60 rounded-lg border border-neutral-200 bg-white p-2 shadow-sm" />
-            <p className="mt-2 text-xs font-semibold text-neutral-800">{bankAccountName || 'TÊN CHỦ TÀI KHOẢN'}</p>
-            <p className="text-xs text-neutral-500">{bankName} - {bankAccountNo}</p>
+            <img src={sampleQrUrl} alt="VietQR Mẫu" className="h-60 w-60 max-w-full rounded-control border border-stone-200 bg-stone-0 p-2 shadow-card" />
+            <p className="mt-2 text-xs font-semibold text-stone-900">{bankAccountName || 'TÊN CHỦ TÀI KHOẢN'}</p>
+            <p className="break-words text-xs text-stone-500">{bankName} - {bankAccountNo}</p>
           </div>
         ) : (
-          <div className="mt-8 text-xs text-neutral-400">Vui lòng nhập số tài khoản để kiểm tra mã VietQR.</div>
+          <div className="mt-8 text-xs text-stone-500">Vui lòng nhập số tài khoản để kiểm tra mã VietQR.</div>
         )}
       </div>
     </div>
@@ -680,71 +690,74 @@ function WarehouseTab({ store, onUpdated }: { store: MerchantStore; onUpdated: (
   };
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-2xl space-y-4 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
+    <form onSubmit={handleSubmit} className="max-w-2xl space-y-4 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card sm:p-6">
       <div>
-        <h3 className="font-semibold text-neutral-900">Địa Chỉ Kho Hàng & Xuất Kiện Riêng</h3>
-        <p className="mt-1 text-xs text-neutral-500">
+        <h3 className="font-display font-semibold text-stone-900">Địa Chỉ Kho Hàng & Xuất Kiện Riêng</h3>
+        <p className="mt-1 text-xs text-stone-500">
           Địa chỉ kho này sẽ dùng để tính toán phí ship cho khách hàng và in trên vận đơn gửi hàng của đối tác.
         </p>
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-neutral-700">Số nhà, tên đường, khu công nghiệp / toà nhà</label>
+        <label className="block text-xs font-medium text-stone-700">Số nhà, tên đường, khu công nghiệp / toà nhà</label>
         <input
           value={warehouseAddress}
           onChange={(e) => setWarehouseAddress(e.target.value)}
           required
           placeholder="Số 45 Đường số 8, KDC Him Lam..."
-          className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-green-600 focus:outline-none"
+          className={MERCHANT_INPUT}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
-          <label className="block text-xs font-medium text-neutral-700">Tỉnh / Thành phố</label>
+          <label className="block text-xs font-medium text-stone-700">Tỉnh / Thành phố</label>
           <input
             value={warehouseCity}
             onChange={(e) => setWarehouseCity(e.target.value)}
             required
             placeholder="TP. Hồ Chí Minh"
-            className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-green-600 focus:outline-none"
+            className={MERCHANT_INPUT}
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-neutral-700">Quận / Huyện</label>
+          <label className="block text-xs font-medium text-stone-700">Quận / Huyện</label>
           <input
             value={warehouseDistrict}
             onChange={(e) => setWarehouseDistrict(e.target.value)}
             required
             placeholder="Quận 7"
-            className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-green-600 focus:outline-none"
+            className={MERCHANT_INPUT}
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-neutral-700">Phường / Xã</label>
+          <label className="block text-xs font-medium text-stone-700">Phường / Xã</label>
           <input
             value={warehouseWard}
             onChange={(e) => setWarehouseWard(e.target.value)}
             required
             placeholder="Phường Tân Hưng"
-            className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-green-600 focus:outline-none"
+            className={MERCHANT_INPUT}
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-neutral-700">Số điện thoại liên hệ kho / điều phối vận chuyển</label>
+        <label className="block text-xs font-medium text-stone-700">Số điện thoại liên hệ kho / điều phối vận chuyển</label>
         <input
           value={warehousePhone}
           onChange={(e) => setWarehousePhone(e.target.value)}
           required
           placeholder="0912345678"
-          className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-green-600 focus:outline-none"
+          className={MERCHANT_INPUT}
         />
       </div>
 
       {msg && (
-        <div className={`rounded-lg p-3 text-xs font-medium ${msg.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+        <div
+            role={msg.ok ? 'status' : 'alert'}
+            className={`rounded-control p-3 text-xs font-medium ${msg.ok ? 'bg-success-bg text-success-fg' : 'bg-danger-bg text-danger-fg'}`}
+          >
           {msg.text}
         </div>
       )}
@@ -752,7 +765,7 @@ function WarehouseTab({ store, onUpdated }: { store: MerchantStore; onUpdated: (
       <button
         type="submit"
         disabled={mut.isPending}
-        className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:bg-neutral-300"
+        className={`${BTN_PRIMARY} px-5`}
       >
         {mut.isPending ? 'Đang lưu…' : 'Lưu địa chỉ kho hàng'}
       </button>

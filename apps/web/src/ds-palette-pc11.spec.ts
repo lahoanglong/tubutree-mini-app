@@ -62,7 +62,7 @@ const PARTIAL: { file: string; end: string; tail?: string }[] = [
   // `generateMetadata` ghép dấu ✓ vào chuỗi tiêu đề tab/OG của nhãn chính hãng: đó là chữ trong <title> (không
   // chèn được SVG), không phải icon trong giao diện, nên chỉ phần giao diện từ BrandPage trở xuống bị quét.
   { file: 'app/brand/[slug]/page.tsx', end: 'export async function generateMetadata', tail: 'export default async function BrandPage' },
-  { file: 'app/merchant/page.tsx', end: '// ── Tab 1: Cấu hình Gian hàng' },
+  { file: 'app/merchant/page.tsx', end: '// ── Tab 4: Quản Lý Sản Phẩm' },
 ];
 
 function partialText({ file, end, tail }: { file: string; end: string; tail?: string }): string {
