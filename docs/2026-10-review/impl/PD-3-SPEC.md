@@ -265,7 +265,53 @@ CREATE UNIQUE INDEX IF NOT EXISTS "points_transactions_converted_refund_unique"
     AND ("reason" LIKE 'ORDER_REFUND_CONVERTED:%' OR "reason" LIKE 'ORDER_REFUND_XU:%');
 ```
 
-`ADD COLUMN … DEFAULT <hằng>` trên Postgres ≥ 11 chỉ sửa catalog, không viết lại bảng. Thêm 7 tên index vào `KNOWN_PARTIAL_UNIQUE_INDEXES` (`check-partial-indexes.ts:19-34`): `points_transactions_xu_migration_key`, `coin_transactions_xu_migration_key`, `points_transactions_referral_unique`, `points_transactions_community_reason_key`, `points_transactions_quest_unique`, `points_transactions_converted_refund_unique` (6 index; CHECK không phải index). Danh sách thành 20.
+`ADD COLUMN … DEFAULT <hằng>` trên Postgres ≥ 11 chỉ sửa catalog, không viết lại bảng. Thêm 6 tên index vào `KNOWN_PARTIAL_UNIQUE_INDEXES` (`check-partial-indexes.ts:19-34`): `points_transactions_xu_migration_key`, `coin_transactions_xu_migration_key`, `points_transactions_referral_unique`, `points_transactions_community_reason_key`, `points_transactions_quest_unique`, `points_transactions_converted_refund_unique`. Danh sách thành 20 (đã đếm trên DB tạm: 14 trước, 20 sau migration A).
+
+Đổi khoá config xu sang điểm (cùng lượt L2, migration riêng `<ts>_pd3_points_config_keys`). BẮT BUỘC dùng `CEIL(numeric / 1000)`: bản nháp đầu viết `((numeric + 999) / 1000)::int` cho ra 5.999 rồi ép kiểu làm tròn thành 6 (thưởng 5.000 xu thành 6 điểm thay vì 5), lỗi này bắt được khi chạy thử (phần "Kiểm chứng SQL"). Với cột INTEGER (migration B) thì `(x + 999) / 1000` là chia nguyên, đúng.
+
+```sql
+INSERT INTO "system_configs" ("key","value","description","category","updatedAt")
+SELECT 'referral.referrer_reward_points', to_jsonb(CEIL((value #>> '{}')::numeric / 1000)::int),
+       'Điểm Xanh thưởng người giới thiệu khi bạn được mời có đơn thứ 2 (thu hồi nếu trả hàng)', 'referral', now()
+  FROM "system_configs" WHERE "key" = 'coins.referrer_reward'
+ON CONFLICT ("key") DO NOTHING;
+
+INSERT INTO "system_configs" ("key","value","description","category","updatedAt")
+SELECT 'referral.milestones_points',
+       COALESCE((SELECT jsonb_agg(jsonb_build_object('count', (m->>'count')::int,
+                                                     'bonusPoints', CEIL((m->>'bonus')::numeric / 1000)::int)
+                                  ORDER BY (m->>'count')::int)
+                   FROM jsonb_array_elements(value) m), '[]'::jsonb),
+       'Mốc số bạn giới thiệu thành công → thưởng thêm Điểm Xanh (1 lần/mốc)', 'referral', now()
+  FROM "system_configs" WHERE "key" = 'coins.referral_milestones' AND jsonb_typeof(value) = 'array'
+ON CONFLICT ("key") DO NOTHING;
+
+INSERT INTO "system_configs" ("key","value","description","category","updatedAt")
+SELECT 'game.tree_points_price', to_jsonb(CEIL((value #>> '{}')::numeric / 1000)::int),
+       'Điểm Xanh cho 1 lượt góp quỹ trồng cây', 'game', now()
+  FROM "system_configs" WHERE "key" = 'game.tree_xu_price'
+ON CONFLICT ("key") DO NOTHING;
+
+-- Season Pass: {type:'XU',amount:n} → {type:'POINTS',amount:ceil(n/1000)}; chỉ chạy khi còn phần tử XU.
+UPDATE "system_configs" s
+   SET "value" = (
+     SELECT jsonb_agg(
+              t || jsonb_build_object(
+                'free',    CASE WHEN t->'free'->>'type' = 'XU'
+                                THEN jsonb_build_object('type','POINTS','amount', CEIL((t->'free'->>'amount')::numeric / 1000)::int)
+                                ELSE t->'free' END,
+                'premium', CASE WHEN t->'premium'->>'type' = 'XU'
+                                THEN jsonb_build_object('type','POINTS','amount', CEIL((t->'premium'->>'amount')::numeric / 1000)::int)
+                                ELSE t->'premium' END)
+              ORDER BY ord)
+       FROM jsonb_array_elements(s."value") WITH ORDINALITY AS e(t, ord)),
+       "updatedAt" = now()
+ WHERE s."key" = 'seasonpass.tiers' AND jsonb_typeof(s."value") = 'array'
+   AND EXISTS (SELECT 1 FROM jsonb_array_elements(s."value") t
+                WHERE t->'free'->>'type' = 'XU' OR t->'premium'->>'type' = 'XU');
+```
+
+Khoá cộng đồng (`community.*_reward_points`) không chép từ giá trị cũ (200/100/500 xu cho ra phân số): seed `createOnly` theo giá trị đề xuất ở mục 4 (OQ-6).
 
 ### 3.2 Migration B `<ts>_pd3_xu_to_points` (dữ liệu, chạy một lần)
 
@@ -434,7 +480,7 @@ Lô còn nguyên thì trả đúng `coinsBefore` (khách không giữ phần là
 
 ### 3.6 Kiểm chứng bản nháp SQL trên Postgres thật
 
-Xem phần "Kiểm chứng SQL" ở cuối file (chạy trên DB tạm riêng, tạo rồi xoá).
+Xem phần "Kiểm chứng SQL" ở cuối file (chạy trên DB tạm riêng, tạo rồi xoá). Đây chỉ là chạy thử bản nháp trong spec; lượt L1 vẫn phải viết race spec T1–T3, T17, T21.
 
 ---
 
@@ -468,15 +514,7 @@ Nguyên tắc:
 
 CẢNH BÁO RỦI RO ĐƠN VỊ và cách chặn:
 1. Không đọc lại khoá xu dưới tên điểm: khoá mới tên khác (`*_points`), khoá cũ vào DEAD; test quét `apps/api/src` không còn chuỗi `'coins.referrer_reward'`, `'coins.referral_milestones'`, `'community.post_reward'`, `'community.answer_reward'`, `'community.best_answer_reward'`, `'game.tree_xu_price'`, `'game.plot_unlock_xu_base'`, `'game.xu_per_seed'`, `'wallet.xu_convert_multiplier'` ngoài `dead-config-keys.ts`.
-2. Giá trị khoá mới tạo bằng migration tính từ giá trị DB hiện tại chia 1.000 làm tròn lên (giữ thiết lập admin đã sửa), ví dụ:
-   ```sql
-   INSERT INTO "system_configs" ("key","value","description","category","updatedAt")
-   SELECT 'referral.referrer_reward_points', to_jsonb((((value #>> '{}')::numeric + 999) / 1000)::int),
-          'Điểm Xanh thưởng người giới thiệu khi bạn được mời có đơn thứ 2 (thu hồi nếu trả hàng)', 'referral', now()
-     FROM "system_configs" WHERE "key" = 'coins.referrer_reward'
-   ON CONFLICT ("key") DO NOTHING;
-   ```
-   (khoá không có dòng DB thì seed tạo với mặc định trong bảng trên.)
+2. Giá trị khoá mới tạo bằng migration tính từ giá trị DB hiện tại `CEIL(giá trị / 1000)` (giữ thiết lập admin đã sửa); SQL đầy đủ ở mục 3.1 (đã chạy thử, có bắt lỗi làm tròn). Khoá không có dòng DB thì seed tạo với mặc định trong bảng trên.
 3. RANGES (`system-config.service.ts:56-84`) thêm: `referral.referrer_reward_points` 0–100, `community.*_reward_points` 0–20, `game.tree_points_price` 1–500, `loyalty.vnd_per_point_redeem` 1000–1000 (đổi tỉ giá phá giá trị lô quy đổi; xem OQ-11). Admin gõ 5000 vào khoá điểm bị từ chối lúc ghi.
 4. `RewardPointsService.grant` từ chối > 2.000 điểm/lần (chặn lúc chạy nếu khoá DB đã sai từ trước).
 5. JSON mốc giới thiệu đổi tên trường (`bonus` → `bonusPoints`) nên bản cũ đọc nhầm không cấp gì.
@@ -673,7 +711,7 @@ Theo dõi sau deploy (7 ngày):
 
 | # | Mức | Rủi ro | Cách chặn |
 |---|---|---|---|
-| R1 | Cao | Đọc giá trị config tính bằng xu thành điểm (vd 20.000 xu → 20.000 điểm = 20 triệu đồng). | Khoá mới `*_points`, khoá cũ DEAD + test quét; RANGES chặn ghi; `RewardPointsService.grant` từ chối > 2.000; đổi tên trường JSON; T16. |
+| R1 | Cao | Đọc giá trị config tính bằng xu thành điểm (vd 20.000 xu → 20.000 điểm = 20 triệu đồng); hoặc làm tròn sai khi chia (đã gặp ở bản nháp: `((5000+999)/1000)::int` trên numeric = 6). | Khoá mới `*_points`, khoá cũ DEAD + test quét; RANGES chặn ghi; `RewardPointsService.grant` từ chối > 2.000; đổi tên trường JSON; SQL dùng `CEIL(numeric/1000)`; T16 + kiểm giá trị sau migration config. |
 | R2 | Cao | Quy đổi chạy hai lần hoặc chạy lúc code cũ còn ghi xu → nhân đôi/mất xu. | Container cũ dừng trước; LOCK TABLE; PK bảng chụp + id cố định + 2 partial unique; điều kiện `coinsBalance = coinsBefore > 0`; T1–T2. |
 | R3 | Cao | Lô quy đổi lọt vào FIFO hết hạn → cron trừ sai (khách mất tiền trả trước hoặc Tubu mất). | `loadTxns` lọc `lot='STANDARD'`; CHECK `converted_no_expiry`; T7. |
 | R4 | Cao | Thưởng lại lần 2 vì kiểm "đã nhận" chỉ nhìn sổ mới (giới thiệu, nhiệm vụ, hay nhất). | Đọc hợp hai sổ ở mọi kiểm idempotent; T13–T14. |
@@ -685,3 +723,42 @@ Theo dõi sau deploy (7 ngày):
 | R10 | Thấp | Chi phí làm tròn lên (≤ 999đ/người, ≤ 999đ/đơn XU cũ). | Đo bằng 3.3 (a)(d) và ghi vào báo cáo. |
 | R11 | Thấp | Gộp khách quên `pointsConvertedBalance` → mất lô quy đổi của phiên khách. | L1 sửa `mergeGuestInto`; T15. |
 | R12 | Thấp | Hoàn tác sau khi khách đã tiêu lô quy đổi. | Chỉ hoàn tác khi `pointsUsedConverted` = 0 toàn hệ; sau đó sửa tiến. |
+
+---
+
+## Kiểm chứng SQL (chạy thử bản nháp, 2026-10-11)
+
+Môi trường: container `tubu_it_main` (PostgreSQL 16.15), DB tạm `pd3_spec_scratch` tạo mới rồi `DROP` sau khi xong; không đụng `tubutree_it`. Áp lần lượt toàn bộ `apps/api/prisma/migrations/*/migration.sql` bằng `psql -1 -v ON_ERROR_STOP=1` (mỗi file một transaction như Prisma), rồi các khối SQL trích thẳng từ file spec này.
+
+```
+migrations hiện có                         -> 14 partial unique index (khớp check-partial-indexes.ts)
+migration A                                -> A_OK; 20 partial unique index
+migration B trên DB trống                   -> B_OK; xu_points_conversions = 0 dòng
+dữ liệu mẫu: u0 (0 xu, sổ +500 −500), u1 (1), u999 (sổ 1200 −201), u1000, u1001, u123456, upts (3000 xu + 50 điểm thường)
+truy vấn (a) trước B: users_with_xu 6 | total_xu 129457 | total_points 132 | rounding_cost_vnd 2543 | max 124
+migration B lần 2 (có dữ liệu):
+  u1 1 xu -> 1 điểm (làm tròn 999đ) · u1000 -> 1 (0đ) · u1001 -> 2 (999đ) · u123456 -> 124 (544đ) · u999 -> 1 (1đ) · upts 3000 -> 3, pointsBalance giữ 50
+  coinsBalance = 0 mọi user; u0 không có dòng quy đổi
+migration B lần 3                          -> 6 dòng XU_MIGRATION ở mỗi sổ, 6 dòng bảng chụp, tổng lô quy đổi 132 (không đổi)
+sau B: coins<>0 = 0 | lệch lô CONVERTED = 0 | lệch lô STANDARD = 0 | lệch sổ xu = 0 | tổng: 6 user, 132 điểm, 2543đ làm tròn, 129457 xu
+user lệch sổ (coinsBalance 700, không có dòng sổ) -> ERROR "PD-3: 1 user có coinsBalance khác SUM(coin_transactions.delta)…", bảng chụp vẫn 6 dòng
+user âm (−5)                               -> ERROR "PD-3: 1 user có coinsBalance âm…"
+sửa hai user rồi chạy B lần 4              -> chỉ udrift được quy đổi (700 xu -> 1 điểm, 300đ)
+migration C chạy 2 lần                     -> C_OK; UPDATE coinsBalance + 5 -> ERROR vi phạm "users_coins_frozen"
+dòng CONVERTED có expiresAt                -> ERROR vi phạm "points_transactions_converted_no_expiry"
+pointsConvertedBalance = −1                -> ERROR vi phạm "users_points_converted_nonneg"
+hoàn tác 3.5 chạy 2 lần (u123456 đã tiêu 100/124 điểm quy đổi)
+  -> lô nguyên trả đúng coinsBefore (u1 1, u1000 1000, u1001 1001, u999 999, upts 3000, udrift 700); u123456 nhận 24.000 xu (24 điểm còn lại)
+  -> lệch sổ xu = 0, lệch lô CONVERTED = 0, 7 dòng XU_MIGRATION_ROLLBACK (không nhân đôi)
+SQL đổi khoá config (bản nháp đầu, ((n+999)/1000)::int trên numeric): 5000 -> 6, 20000 -> 21, 50000 -> 51  (SAI)
+SQL đổi khoá config (bản sửa, CEIL(n/1000)), chạy 2 lần: 5000 -> 5, 5001 -> 6, mốc 20000/40000/100000 -> 20/40/100,
+  tree 50000 -> 50, seasonpass premium XU 5000/12001 -> POINTS 5/13, phần SEEDS giữ nguyên
+community_events rewardXu 1500 -> rewardPoints 2
+```
+
+Hàm hết hạn thật (`computePointExpiry`, chép nguyên từ `loyalty-expiry.service.ts:44-89`) với lô quy đổi 100 (không hạn), thưởng thường 50 hết hạn 2027-01-01, khách tiêu 50 điểm thường, xét ngày 2027-01-02:
+
+```
+FIFO trên mọi dòng (sai):       expiredNow = 50   (lô quy đổi bị tính là đã tiêu, 50 điểm thường "còn" và bị trừ)
+FIFO chỉ lot STANDARD (đúng):   expiredNow = 0
+```
