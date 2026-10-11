@@ -21,6 +21,7 @@ const FILES_PC10B = [
   'src/components/storefront-context-bar.tsx',
   'src/components/share-sheet.tsx',
   'src/components/content-kit-sheet.tsx',
+  'src/pages/storefront-builder.tsx',
 ];
 
 /** Còn Sheet/Input vì components/ui chưa có bản thay; Page/hook điều hướng và snackbar là của runtime. */
@@ -30,6 +31,7 @@ const ZAUI_ALLOWED = new Set(['Page', 'Sheet', 'Input', 'useSnackbar', 'useNavig
 const PAGES_WITH_PAGE_HEADER = [
   'src/pages/affiliate.tsx',
   'src/pages/dealer.tsx',
+  'src/pages/storefront-builder.tsx',
 ];
 
 // Giữ đồng bộ với scripts/uiux/static-scan.mjs (LEGACY) và ds-legacy-vars-4b.spec.ts.
