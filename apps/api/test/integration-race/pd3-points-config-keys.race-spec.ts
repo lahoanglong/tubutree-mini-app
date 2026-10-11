@@ -163,4 +163,50 @@ describe('PD-3 migration đổi khoá config xu → Điểm Xanh (real Postgres)
     await run();
     expect((await all())['referral.milestones_points']).toBeUndefined();
   });
+
+  it('mốc có count lẻ (2.5) hoặc count/bonus vượt INTEGER → bỏ phần tử đó, migration KHÔNG dừng; phần tử hợp lệ vẫn đổi', async () => {
+    await put('coins.referral_milestones', [
+      { count: 2.5, bonus: 1000 },
+      { count: 3000000000, bonus: 1000 },
+      { count: 4, bonus: 3000000000 },
+      { count: 5, bonus: 1500.5 },
+      { count: 6, bonus: 40000 },
+    ]);
+    await run();
+    expect((await all())['referral.milestones_points']).toEqual([{ count: 6, bonusPoints: 40 }]);
+  });
+
+  it('giá trị đơn vượt INTEGER (referrer_reward, tree_xu_price) → bỏ qua, migration KHÔNG dừng', async () => {
+    await put('coins.referrer_reward', 5000000000000000);
+    await put('game.tree_xu_price', 99999999999999);
+    await run();
+    const cfg = await all();
+    expect(cfg['referral.referrer_reward_points']).toBeUndefined();
+    expect(cfg['game.tree_points_price']).toBeUndefined();
+  });
+
+  it('seasonpass.tiers có phần tử scalar/mảng → giữ nguyên đúng kiểu (không thành [5,{},{}]); amount quá lớn giữ XU', async () => {
+    await put('seasonpass.tiers', [
+      5,
+      { xp: 30, free: { type: 'XU', amount: 5000 } },
+      [1, 2],
+      { xp: 70, premium: { type: 'XU', amount: 99999999999999 } },
+    ]);
+    await run();
+    expect((await all())['seasonpass.tiers']).toEqual([
+      5,
+      { xp: 30, free: { type: 'POINTS', amount: 5 } },
+      [1, 2],
+      { xp: 70, premium: { type: 'XU', amount: 99999999999999 } },
+    ]);
+  });
+
+  it('dữ liệu xấu: chạy hai lần vẫn idempotent và không lỗi', async () => {
+    await put('coins.referral_milestones', [{ count: 2.5, bonus: 1000 }, { count: 3, bonus: 20000 }]);
+    await put('seasonpass.tiers', [5, { xp: 30, free: { type: 'XU', amount: 5000 } }]);
+    await run();
+    const first = await all();
+    await run();
+    expect(await all()).toEqual(first);
+  });
 });
