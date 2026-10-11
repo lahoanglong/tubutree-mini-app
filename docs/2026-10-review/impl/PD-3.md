@@ -1162,3 +1162,113 @@ Không chạy full suite, Playwright, dev server (theo chỉ thị). Migration: 
 - Cổng deploy: điền Bảng 3 (L5) bằng số thật từ bản sao PROD (finding #4).
 - Quay thưởng không đọc điểm khoá (có từ trước PD-3, cùng loại với finding #3): muốn đóng thì một gói nhỏ riêng.
 - Chạy và xem trang thanh toán + tài khoản web bằng mắt (đổi ở finding #1, chưa thấy trên trình duyệt).
+
+## Review C2 (reviewer độc lập, lượt 2 trên nhánh sau C1)
+
+Trạng thái: **XONG** (6/6 finding xử lý; 1 giữ làm cổng deploy kèm script đo). Mỗi sửa một commit `address review C2`; với mỗi finding đã xác minh bằng mã trước, test ĐỎ thấy trước khi sửa (trừ ca race của finding 6, xem dưới), output thật bên dưới.
+
+| # | Mức | Finding | Kết luận | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | major | Lời chào Trang chủ miniapp in `user.pointsBalance` (chỉ lô thường): khách vừa quy đổi xu thấy "0 điểm Xanh" | ĐÚNG, đã sửa + chốt chặn | 99803020, 5c0a3d3a |
+| 2 | minor | Hộp xác nhận đổi mã giảm giá: "Điểm còn lại" = lô thường − giá | ĐÚNG, đã sửa | 45eaaa99 |
+| 3 | minor | Admin (danh sách người dùng, tra cứu POS, CSV) không thấy lô quy đổi | ĐÚNG, đã sửa | efdbb598 |
+| 4 | minor | Migration B cứng 1.000:1, không kiểm `loyalty.vnd_per_point_redeem` lúc quy đổi | ĐÚNG, đã sửa (migration B RAISE) | e3cab231 |
+| 5 | minor | Chi phí làm tròn trên số dư thật chưa đo | KHÔNG sửa được ở đây (cấm PROD); giữ làm cổng deploy, thêm script đo một lệnh | 81e97180 |
+| 6 | minor | Báo giá 0đ: FE ẩn phương thức và gửi COD; lô quy đổi co lại giữa báo giá và đặt đơn thì BE tạo đơn COD có tiền phải trả | ĐÚNG, đã sửa (cờ `quotedZeroTotal`) | 4458058e |
+
+### 1. Lời chào Trang chủ in lô thường (major)
+
+Xác minh bằng mã: `components/home/home-extras.tsx` dòng 56 là `vi.home.pointsChip(user.pointsBalance)`. `AuthUser.pointsBalance` = `users.pointsBalance` = lô STANDARD (spec 2.1), lô quy đổi nằm ở `pointsConvertedBalance`. Hub Cá nhân, Ví, trang Điểm Xanh, web tài khoản đều hiện tổng nên Trang chủ lệch. Reviewer ĐÚNG. T19 / profile-hub.spec không phủ màn này.
+
+Test đỏ trước khi sửa (`home-parts.spec.tsx`, thêm 2 ca):
+
+```
+FAIL HomeExtras > PD-3: lời chào hiện tổng Điểm Xanh hai lô  (60 + 40)
+  Expected: 100 điểm Xanh   Received: Chào Lan 🌿 · 60 điểm Xanh
+FAIL HomeExtras > PD-3: khách chỉ có điểm quy đổi (lô thường 0) vẫn thấy đúng số
+  Expected: 1.200 điểm Xanh   Received: Chào Lan 🌿 · 0 điểm Xanh
+Tests  2 failed | 21 passed (23)
+```
+
+Sửa: `pointsSummary(user).total` (utils/points-lots, cùng hàm hub/ví dùng); bỏ phép kiểm `pointsBalance != null` thừa vì `AuthUser.pointsBalance` luôn là số. Xanh: `vitest run src/components/home` 23/23.
+
+Chốt chặn (lỗi "đọc lô thường để hiện" là lần thứ hai: C1 #1 là web thanh toán/tài khoản, C2 #1 là Trang chủ; #3 là admin): `apps/miniapp/src/utils/points-lots-guard.spec.ts` và `apps/web/src/lib/points-lots-guard.spec.ts` quét mã nguồn, chỉ các file đã duyệt (tự xử lý đủ hai lô, mỗi file ghi lý do) mới được đọc `.pointsBalance`; chỗ khác phải dùng `pointsSummary(...).total`. Kiểm đỏ: thêm tạm file đọc `u.pointsBalance` → `expected ['components/tmp-guard-probe.ts'] to deeply equal []`, rồi xoá file. Lời chào Trang chủ không nằm trong danh sách duyệt nên bản trước khi sửa sẽ bị guard bắt.
+
+### 2. Hộp xác nhận đổi mã giảm giá (minor)
+
+Xác minh: `loyalty.tsx` in `(data?.pointsBalance ?? 0) − pointsCost`, trong khi đầu trang hiện tổng hai lô. Khách 600 thường + 100 quy đổi đổi ưu đãi 500 điểm thấy "100 điểm Xanh" còn lại, thật ra còn 200. Đúng.
+
+Test đỏ (`loyalty-behavior.spec.tsx`): `Unable to find an element with the text: 200 điểm Xanh` (trang in 100). Sửa: `(lots?.total ?? 0) − pointsCost` (giá chỉ trừ lô thường nên tổng còn lại = tổng − giá). Chọn hiện tổng thay vì thêm nhãn "điểm thường còn lại" vì khách chỉ biết một con số Điểm Xanh (Q-26). Xanh: `vitest run loyalty-behavior loyalty.spec loyalty-layout` 43/43 (có ca cũ "750 điểm Xanh" không đổi).
+
+### 3. Admin / POS / CSV thiếu lô quy đổi (minor)
+
+Xác minh: `admin.service.ts` `listUsers` chọn `pointsBalance` không có `pointsConvertedBalance`; `LoyaltyService.memberSummary` (tra cứu POS) trả `pointsBalance`; `admin/page.tsx` bảng người dùng, `pos-screen.tsx`, `export-csv.ts` in `pointsBalance`. Nhân viên xử lý khiếu nại quy đổi không thấy phần không hết hạn của khách (chỉ thấy ở panel xoá tài khoản). Đúng.
+
+Test đỏ trước khi sửa: `admin-lookups.spec.ts` (select thiếu `pointsConvertedBalance`), `loyalty-features.spec.ts` (tra cứu POS và kết quả tích điểm thiếu `pointsConvertedBalance`/`pointsTotal`) → `Tests: 3 failed, 70 passed`; web `api.spec.ts` (CSV), `admin-components.spec.tsx` (POS), `page.spec.tsx` (bảng người dùng) → `3 failed | 103 passed`.
+
+Sửa:
+- API: `listUsers` select thêm `pointsConvertedBalance`; `memberSummary` trả thêm `pointsConvertedBalance` và `pointsTotal`, nhận số dư thường mới làm tham số để `posResult` (sau khi cộng điểm POS) tính `pointsTotal` đúng. Chỉ THÊM field, không đổi field cũ.
+- Web: bảng người dùng hiện tổng kèm dòng "trong đó N điểm không hết hạn" khi có; màn thu ngân POS hiện tổng và dòng đó ở thẻ thành viên và ở "Số dư mới"; CSV người dùng: "Điểm tích lũy" là tổng hai lô và thêm cột "Trong đó không hết hạn". Kiểu `AdminUser`/`PosMember` thêm `pointsConvertedBalance?` (optional để API cũ vẫn chạy).
+- Khác: cột "Điểm tích lũy" của CSV đổi nghĩa từ lô thường sang tổng (cùng con số khách thấy); ghi để ai dùng CSV biết.
+
+Xanh: `jest src/modules/admin src/modules/loyalty` 15 suite, 370 test; web `vitest run` 6 file, 142 test; `tsc --noEmit` (api, web) và ESLint file đã sửa sạch.
+
+### 4. Migration B không kiểm tỉ giá (minor)
+
+Xác minh: B quy đổi `(coinsBalance + 999) / 1000` cứng; `RANGES` `loyalty.vnd_per_point_redeem` 1000–1000 chỉ chặn admin ghi từ nay, giá trị đã nằm sẵn trong DB PROD không bị kiểm. Nếu khác 1.000 thì "1.000 xu = 1 điểm" không còn giữ giá trị (Q-03a). Đúng.
+
+Test đỏ trước khi sửa (`pd3-xu-migration.race-spec.ts`, Postgres thật, thêm bảng `system_configs` vào schema nháp): ca mới `review C2: tỉ giá ... → RAISE trước khi ghi gì` thất bại vì B chạy xong không lỗi (`Tests: 2 failed, 14 passed`; ca thứ hai hỏng là T21 do ca đỏ để lại user đã quy đổi, tự hết khi ca xanh).
+
+Sửa `20261012110000_pd3_xu_to_points/migration.sql`: đầu khối DO (sau LOCK, trước mọi ghi), đọc `loyalty.vnd_per_point_redeem`; có dòng mà không phải số 1000 (500, 2000, chuỗi `"1000"`, `null`) thì `RAISE EXCEPTION 'PD-3: loyalty.vnd_per_point_redeem = % (phải là số 1000) ...'`. Không có dòng = mặc định 1.000 của code (`pricing.service.ts`), chạy bình thường. Chọn dừng cả với chuỗi `"1000"` (không đoán) vì đường tiền; thông báo ghi cách đối soát rồi `migrate resolve --rolled-back` (cùng cách xử lý hai điều kiện chặn có sẵn). Dùng `CASE` bọc trong ngoặc: PL/pgSQL dừng biểu thức `IF` ở `THEN` đầu tiên, bản không bọc ngoặc lỗi `syntax error at end of input` (bắt được khi chạy).
+
+Xanh: `pd3-xu-migration Tests: 16 passed` (ca mới kiểm 4 giá trị xấu: không ghi gì, user còn nguyên xu; rồi 1000 → chạy, 5000 xu thành 5 điểm; dọn trả trạng thái cũ). Kiểm thêm trên DB thật đủ schema (không phải schema nháp): `migrate deploy` DB trống `All migrations have been successfully applied`, `check-partial-indexes: 20/20`; dựng 1 user 1.500 xu + `system_configs` 500 → `ERROR: PD-3: loyalty.vnd_per_point_redeem = 500 ...`, user còn 1.500 xu, 0 điểm; sửa 1000 → chạy, 0 xu, 2 điểm (làm tròn lên). Đã xoá DB nháp.
+
+Lưu ý checksum: file migration B đã sửa tại chỗ (nhánh chưa gộp, chưa lên PROD). `prisma migrate deploy` không kiểm checksum bản đã áp (`No pending migrations to apply` trên `tubu_it_pd3`); máy nào đã áp bản cũ bằng `migrate dev` thì dùng DB mới hoặc `migrate reset`. Không cần migration mới: không có cách kiểm trước khi B chạy ngoài việc sửa B.
+
+### 5. Chi phí làm tròn trên số dư thật (minor, cổng deploy)
+
+Reviewer đúng, và giống C1 #4: số thật chỉ có ở bản sao PROD; cấm đụng PROD. Giá trị ở Bảng 3 (L5) vẫn là "(chưa đo)": **KHÔNG điền số bịa**. Việc làm được: `apps/api/prisma/manual/pd3_measure_before_deploy.sql` gom truy vấn 3.3 (a)-(e) của spec và kiểm tỉ giá thành một file CHỈ SELECT, điều phối viên chạy một lệnh trên bản sao PROD: `psql "$COPY_DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/manual/pd3_measure_before_deploy.sql`, ghi kết quả vào Bảng 3. Đã chạy thử trên `tubutree_it` (DB race, dữ liệu rác của test, không phải PROD): chạy hết 6 khối không lỗi; số trên DB đó không có ý nghĩa (b)/(c) nên không ghi vào bảng. Chặn deploy nếu `negative_users`/`coin_drift_users`/`points_drift_users` khác 0 hoặc `rate_value` có mà khác 1000.
+
+### 6. Đơn 0đ thành COD có tiền phải trả (minor)
+
+Xác minh bằng mã và test: FE (web `thanh-toan/page.tsx`, miniapp `checkout.tsx`) khi `zeroTotalNote` có thì ẩn chọn phương thức và gửi `paymentMethod: 'COD'`. BE `placeOrder` chạy `compute()` lại; nếu lô quy đổi co lại giữa báo giá và đặt đơn (đơn khác, góp quỹ cây, thu hồi thưởng) thì `total > 0` và đơn COD có tiền phải trả được tạo mà khách không chọn COD. Đúng (hậu quả nhỏ nhưng là đơn sai ý khách).
+
+Test đỏ trước khi sửa (`checkout.service.spec.ts`): ca mới "FE đã báo khách thấy đơn 0đ (quotedZeroTotal) mà lúc đặt tổng > 0 → 400" thất bại: `Expected constructor: BadRequestException  Received constructor: Object` (đơn đã được tạo). Hai ca đối chứng (cờ + tổng vẫn 0đ → COD; khách tự chọn COD cho đơn có tiền, không cờ → vẫn tạo đơn) xanh trước và sau. FE (miniapp `checkout.spec.tsx`, web `coupon.spec.tsx`): đỏ vì body không có `quotedZeroTotal`.
+
+Sửa: `PlaceOrderDto.quotedZeroTotal?: boolean` (optional, FE cũ không gửi vẫn chạy); `placeOrder` ném 400 "Số Điểm Xanh hoặc mã giảm giá của bạn vừa thay đổi nên đơn không còn 0đ. Vui lòng tải lại trang thanh toán." khi `quotedZeroTotal === true && computed.total > 0`, đặt TRƯỚC bước ép COD, tức trước mọi ghi. Hai FE gửi cờ khi hiện đơn 0đ (`zeroNote` có), không gửi ở đơn có tiền. Chọn cờ boolean riêng thay vì `expectedTotal` tổng quát: chỉ chặn đúng trường hợp khách không chọn phương thức; so khớp tổng cho mọi đơn (phí ship, giá) là tính năng khác. Không dùng `PRICE_CHANGED` vì Mini App hiện hộp thoại giờ vàng ("Giá ưu đãi đã thay đổi") sai nội dung; thông báo thường qua snackbar/dòng lỗi có sẵn.
+
+Race: `pd3-checkout-points.race-spec.ts` thêm 1 ca Postgres thật (user 50 điểm quy đổi, xin dùng 100 cho đơn 100.000đ, cờ bật): 400, 0 đơn, 0 dòng `ORDER_REDEEM*`, hai lô nguyên; bỏ cờ → đơn COD tạo, lô quy đổi về 0, `findPointsLotDrift` rỗng. Ghi thật: ca race viết cùng lúc với sửa mã, đỏ/xanh chỉ có ở unit; race không dùng điểm song song (guard trước mọi ghi) nên không thêm ca song song.
+
+Xanh: `jest src/modules/checkout` 95/95; `pd3-checkout-points Tests: 4 passed`; miniapp `checkout.spec` 29/29; web `thanh-toan` 20/20; `tsc --noEmit` (api, miniapp, web) và ESLint file đã sửa sạch.
+
+### Kiểm chứng cuối lượt
+
+```
+api:   jest src/modules/checkout src/modules/loyalty src/modules/admin --maxWorkers=1 -> Test Suites 17 passed, Tests 465 passed
+race:  pd3-xu-migration 16/16 | pd3-checkout-points 4/4 | pd3-points-lots 6/6 | pd3-tree-lock 4/4
+miniapp: vitest run home loyalty-behavior loyalty.spec loyalty-layout checkout.spec points-lots-guard no-xu-copy profile-hub -> 10 files, 130 passed
+web:   vitest run admin thanh-toan api.spec points-lots-guard no-xu-copy checkout-points admin-components ds-v2-panels -> 12 files, 172 passed
+tsc --noEmit (api, miniapp, web) sạch; ESLint file đã sửa sạch
+prisma migrate deploy: No pending migrations to apply | migrate diff --exit-code: No difference detected
+check-partial-indexes: mong đợi 20, có trong DB 20
+migrate deploy trên DB trống (migration B đã sửa): All migrations have been successfully applied
+```
+
+Không chạy full suite, Playwright, dev server (theo chỉ thị). Giao diện Trang chủ, hộp xác nhận đổi mã, bảng người dùng admin và POS, trang thanh toán 0đ: **unverified trên trình duyệt**, kiểm bằng vitest + tsc + eslint.
+
+### Migration (C2)
+
+Không thêm migration mới. Sửa tại chỗ `20261012110000_pd3_xu_to_points` (thêm kiểm tỉ giá, mục 4); chỉ thêm file tay `prisma/manual/pd3_measure_before_deploy.sql` (chỉ SELECT, không thuộc chuỗi migrate).
+
+### Khác spec
+
+- Spec 3.2 không có bước kiểm tỉ giá; migration B nay RAISE khi `loyalty.vnd_per_point_redeem` có dòng khác số 1000 (an toàn tiền hơn; không đổi gì khi không có dòng hoặc đúng 1000).
+- `PlaceOrderDto` thêm `quotedZeroTotal` (spec 2.3 chỉ nói BE ép COD khi total = 0). Thêm field optional vào API, không đổi field cũ.
+- CSV người dùng admin: "Điểm tích lũy" là tổng hai lô, thêm cột "Trong đó không hết hạn".
+- Spec dòng 436 ("Chi phí làm tròn KHÔNG đo được trong giai đoạn này") không sửa: spec là luật; số đo ghi ở Bảng 3 khi điều phối viên chạy script.
+
+### Việc cần chủ dự án / điều phối viên (thêm từ Review C2)
+
+- **Cổng deploy (finding 5): chạy `apps/api/prisma/manual/pd3_measure_before_deploy.sql` trên bản sao PROD và điền Bảng 3** (users_with_xu, rounding_cost_vnd, max_points_one_user, đơn XU còn huỷ/trả được). Không điền thì không deploy.
+- **Kiểm `SELECT value FROM system_configs WHERE key = 'loyalty.vnd_per_point_redeem'` trên bản sao PROD**: có dòng mà khác 1000 thì migration B dừng deploy; chủ dự án quyết đối soát (đặt lại 1000 hoặc đổi tỉ lệ quy đổi, là quyết định tiền).
+- Xem bằng mắt: Trang chủ miniapp với khách chỉ có điểm quy đổi, hộp xác nhận đổi mã, bảng người dùng và POS admin, trang thanh toán web/miniapp ở đơn 0đ.
