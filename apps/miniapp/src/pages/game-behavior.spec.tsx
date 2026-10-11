@@ -546,6 +546,37 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
     expect(keys).not.toContainEqual(['coins']);
   });
 
+  it('góp quỹ trồng cây: gửi Idempotency-Key theo hợp đồng BE (8–128 ký tự A-Za-z0-9_-) cho mỗi hộp xác nhận', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
+    await waitFor(() => expect(mocks.api.buyTree).toHaveBeenCalledTimes(1));
+    expect(mocks.api.buyTree).toHaveBeenCalledWith(expect.stringMatching(/^[A-Za-z0-9_-]{8,128}$/));
+  });
+
+  it('góp quỹ trồng cây lỗi mạng: hộp ở lại, thử lại gửi đúng key cũ; thành công thì đóng hộp, mở lại ra key mới', async () => {
+    mocks.api.buyTree.mockRejectedValueOnce(new Error('Network Error'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    const retry = screen.getByRole('button', { name: 'Xác nhận' });
+    await waitFor(() => expect(retry).toBeEnabled());
+    fireEvent.click(retry);
+    await waitFor(() => expect(mocks.api.buyTree).toHaveBeenCalledTimes(2));
+    const [first, second] = mocks.api.buyTree.mock.calls.map((c) => c[0]);
+    expect(second).toBe(first);
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })),
+    );
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Xác nhận' })).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Góp quỹ trồng cây/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
+    await waitFor(() => expect(mocks.api.buyTree).toHaveBeenCalledTimes(3));
+    expect(mocks.api.buyTree.mock.calls[2]![0]).not.toBe(first);
+  });
+
   it('chú thích dưới nút góp quỹ nói rõ điểm không hết hạn chỉ bị dùng khi điểm thường không đủ (PD-3, OQ-5)', async () => {
     renderPage();
     expect(

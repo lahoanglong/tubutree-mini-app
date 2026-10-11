@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { ShowerHead, TreePine } from 'lucide-react';
 import { formatPoints } from '../../utils/format';
+import { newIdempotencyKey } from '../../utils/idempotency';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
@@ -16,18 +17,44 @@ export function TreeActions({
   waterPending: boolean;
   onWater: () => void;
   buyPending: boolean;
-  onBuy: () => void;
+  /** Gửi lượt góp kèm key của hộp xác nhận đang mở; trả `true` khi thành công, `false` khi lỗi (caller đã báo lỗi). */
+  onBuy: (idempotencyKey: string) => Promise<boolean>;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
-  // Sheet còn mounted trong lúc trượt xuống, nên chạm lần hai vẫn tới được nút; ref chặn gửi đôi
-  // ngay cả khi buyPending chưa kịp cập nhật.
-  const submitted = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+  // Một hộp xác nhận = một lượt góp = một key. Key giữ nguyên cho tới khi hộp đóng: lỗi mạng thì hộp ở lại và
+  // "Xác nhận" gửi lại đúng key cũ, nên nếu server đã trừ điểm rồi thì chỉ nhận lại kết quả cũ chứ không trừ lần hai.
+  const idempotencyKey = useRef<string | null>(null);
+  // Khoá đồng bộ: `submitting`/`buyPending` chỉ có hiệu lực sau lần dựng lại kế tiếp, còn hai cú chạm sát nhau
+  // đều đã kịp vào handler.
+  const inFlight = useRef(false);
+  const busy = buyPending || submitting;
 
-  const confirm = () => {
-    if (submitted.current || buyPending) return;
-    submitted.current = true;
-    onBuy();
+  const openConfirm = () => {
+    idempotencyKey.current = newIdempotencyKey();
+    setConfirmOpen(true);
+  };
+
+  const closeConfirm = () => {
+    if (inFlight.current) return;
+    idempotencyKey.current = null;
     setConfirmOpen(false);
+  };
+
+  const confirm = async () => {
+    const key = idempotencyKey.current;
+    if (inFlight.current || buyPending || key === null) return;
+    inFlight.current = true;
+    setSubmitting(true);
+    try {
+      if (await onBuy(key)) {
+        idempotencyKey.current = null;
+        setConfirmOpen(false);
+      }
+    } finally {
+      inFlight.current = false;
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -35,11 +62,7 @@ export function TreeActions({
       <Button size="lg" fullWidth icon={ShowerHead} disabled={waterPending} loading={waterPending} onPress={() => onWater()}>
         Tưới cây (20💧)
       </Button>
-      <Button fullWidth variant="secondary" icon={TreePine} disabled={buyPending} loading={buyPending} onPress={() => {
-          submitted.current = false;
-          setConfirmOpen(true);
-        }}
-      >
+      <Button fullWidth variant="secondary" icon={TreePine} disabled={busy} loading={busy} onPress={openConfirm}>
         Góp quỹ trồng cây
         {treePointsPrice != null && ` (${formatPoints(treePointsPrice)})`}
       </Button>
@@ -48,14 +71,15 @@ export function TreeActions({
       </Text>
       <BottomSheet
         open={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
+        onClose={closeConfirm}
+        dismissible={!busy}
         title="Góp quỹ trồng cây?"
         footer={
           <div style={{ display: 'flex', gap: 8 }}>
-            <Button fullWidth variant="secondary" disabled={buyPending} onPress={() => setConfirmOpen(false)}>
+            <Button fullWidth variant="secondary" disabled={busy} onPress={closeConfirm}>
               Huỷ
             </Button>
-            <Button fullWidth disabled={buyPending} loading={buyPending} onPress={confirm}>
+            <Button fullWidth disabled={busy} loading={busy} onPress={confirm}>
               Xác nhận
             </Button>
           </div>

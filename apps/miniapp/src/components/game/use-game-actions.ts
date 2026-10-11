@@ -130,8 +130,10 @@ export function useGameActions({
     onSuccess: (r) => afterWatering('Đã tưới', r),
     onError,
   });
+  // Khoá chống chạm đúp của lượt góp nằm ở TreeActions (cần biết kết quả để quyết định đóng hộp hay giữ key), nên
+  // đây dùng useMutation thường và caller gọi mutateAsync.
   const buyTreeM = useMutation({
-    mutationFn: buyTree,
+    mutationFn: (idempotencyKey: string) => buyTree(idempotencyKey),
     onSuccess: (r) => {
       openSnackbar({ text: `Đã góp 1 cây vào quỹ trồng cây 🌳 (−${formatPoints(r.cost)}) · mã ${r.certificateCode}`, type: 'success' });
       refresh();
