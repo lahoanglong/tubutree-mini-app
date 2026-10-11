@@ -24,6 +24,7 @@ const FILES_PC10C3 = [
   'src/components/ui/quantity-selector.tsx',
   'src/components/error-boundary.tsx',
   'src/components/geo-picker.tsx',
+  'src/components/checkout/referral-code-box.tsx',
 ];
 
 const LEGACY = new RegExp(
