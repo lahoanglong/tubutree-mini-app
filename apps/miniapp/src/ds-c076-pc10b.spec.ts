@@ -17,6 +17,7 @@ const FILES_PC10B = [
   'src/pages/affiliate.tsx',
   'src/components/affiliate/ctv-order-sheet.tsx',
   'src/components/affiliate/choice-card.tsx',
+  'src/pages/dealer.tsx',
 ];
 
 /** Còn Sheet/Input vì components/ui chưa có bản thay; Page/hook điều hướng và snackbar là của runtime. */
@@ -25,6 +26,7 @@ const ZAUI_ALLOWED = new Set(['Page', 'Sheet', 'Input', 'useSnackbar', 'useNavig
 /** Mỗi TRANG phải có đúng một h1: PageHeader (h1 thật) ở mọi nhánh render. */
 const PAGES_WITH_PAGE_HEADER = [
   'src/pages/affiliate.tsx',
+  'src/pages/dealer.tsx',
 ];
 
 // Giữ đồng bộ với scripts/uiux/static-scan.mjs (LEGACY) và ds-legacy-vars-4b.spec.ts.

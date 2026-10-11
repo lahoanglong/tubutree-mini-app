@@ -19,10 +19,15 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
+const CSS_DIR = 'apps/miniapp/src/css';
+
+// Token riêng của từng trang (css/dealer-theme.css, ...) cũng là nơi định nghĩa hợp lệ: mọi *.css trong
+// css/ được nạp, để thêm file theme mới không phải sửa lại script này.
 const DEFINITION_FILES = [
   'packages/design-tokens/src/tokens.css',
-  'apps/miniapp/src/css/tokens.css',
-  'apps/miniapp/src/css/zaui-bridge.css',
+  ...readdirSync(CSS_DIR)
+    .filter((f) => f.endsWith('.css'))
+    .map((f) => join(CSS_DIR, f)),
 ];
 
 const RUNTIME_PREFIXES = ['zaui-safe-area-'];
