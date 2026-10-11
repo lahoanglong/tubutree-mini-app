@@ -20,7 +20,14 @@ export const DEAD_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'cashback.merchant_tubu_share': 'Phần Tubu giữ là phần còn lại của hoa hồng sau "cashback.merchant_user_share" (mặc định 70%), không có khoá riêng.',
   'cashback.min_withdraw_bank': 'Rút Ví về ngân hàng dùng "wallet.withdraw_min".',
   'cashback.tubu_wallet_multiplier': 'Hoàn tiền sàn ngoài vào Ví Tubu quy đổi 1:1; Ví đổi sang TubuXu dùng "wallet.xu_convert_multiplier".',
-  'coins.referee_reward': 'Người được mời chỉ nhận mã giảm giá chào mừng; xu chỉ thưởng cho người mời (coins.referrer_reward).',
+  'coins.referee_reward': 'Người được mời chỉ nhận mã giảm giá chào mừng; chỉ người mời được thưởng ("referral.referrer_reward_points").',
+  // PD-3: xu gộp vào Điểm Xanh (1.000 xu = 1 điểm). Khoá mới tên khác (*_points) để không bao giờ đọc giá trị
+  // xu dưới tên điểm; migration 20261012120000_pd3_points_config_keys chép giá trị DB bằng CEIL(n/1000).
+  'coins.referrer_reward': 'Đã gộp vào Điểm Xanh: thưởng người giới thiệu đọc "referral.referrer_reward_points" (điểm, không phải xu).',
+  'coins.referral_milestones': 'Đã gộp vào Điểm Xanh: mốc giới thiệu đọc "referral.milestones_points" ({count, bonusPoints}).',
+  'community.post_reward': 'Đã gộp vào Điểm Xanh: thưởng đăng bài đọc "community.post_reward_points".',
+  'community.answer_reward': 'Đã gộp vào Điểm Xanh: thưởng trả lời đọc "community.answer_reward_points".',
+  'community.best_answer_reward': 'Đã gộp vào Điểm Xanh: thưởng câu trả lời hay nhất đọc "community.best_answer_reward_points".',
   'dealer.kyc_required': 'Chưa có luồng xác minh KYC đại lý đọc khoá này.',
   'game.daily_checkin_seeds': 'Giọt nước khi mở app/điểm danh dùng "game.daily_login_seeds".',
   'game.daily_checkin_points': 'Điểm Xanh điểm danh dùng "loyalty.checkin_points".',

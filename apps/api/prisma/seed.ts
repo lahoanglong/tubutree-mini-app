@@ -66,23 +66,33 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'wallet.xu_convert_multiplier', value: 1.2, category: 'wallet', description: 'Đổi Ví → TubuXu nhận thêm 20%' },
   { key: 'wallet.withdraw_min', value: 100000, category: 'wallet', description: 'Rút Ví về ngân hàng tối thiểu' },
   { key: 'wallet.withdraw_fee', value: 3000, category: 'wallet', description: 'Phí chuyển khoản ngân hàng/lần' },
-  { key: 'coins.referrer_reward', value: 5000, category: 'coins', description: 'Xu thưởng người giới thiệu khi bạn được mời có đơn thứ 2 giao thành công trong referral.window_days ngày (thu hồi nếu trả hàng; CTV không nhận)' },
-  { key: 'referral.window_days', value: 30, category: 'referral', description: 'Đơn thứ 2 phải đặt trong số ngày này kể từ đơn đầu thì người mời mới được thưởng xu', createOnly: true },
+  // PD-3: thưởng giới thiệu bằng Điểm Xanh (khoá xu coins.* đã chết). createOnly: migration
+  // pd3_points_config_keys chép giá trị DB cũ bằng CEIL(xu/1000); seed không đè.
+  { key: 'referral.referrer_reward_points', value: 5, category: 'referral', description: 'Điểm Xanh thưởng người giới thiệu khi bạn được mời có đơn thứ 2 giao thành công trong referral.window_days ngày (thu hồi nếu trả hàng; CTV không nhận)', createOnly: true },
+  { key: 'referral.window_days', value: 30, category: 'referral', description: 'Đơn thứ 2 phải đặt trong số ngày này kể từ đơn đầu thì người mời mới được thưởng Điểm Xanh', createOnly: true },
   { key: 'referral.min_order_amount', value: 200000, category: 'referral', description: 'Chỉ đơn có tổng tiền từ mức này mới được tính là đơn đầu/đơn thứ 2 của chương trình giới thiệu', createOnly: true },
   // Q-17: liên hệ hiển thị ở trang Về Tubu Tree (GET /config/public). Để trống thì miniapp ẩn dòng đó.
   { key: 'support.hotline', value: '0899 149 229', category: 'support', description: 'Hotline CSKH hiển thị cho khách', createOnly: true },
   { key: 'support.email', value: 'tubutree@gmail.com', category: 'support', description: 'Email CSKH hiển thị cho khách', createOnly: true },
   { key: 'support.zalo_oa_name', value: '', category: 'support', description: 'Tên Zalo OA hiển thị cho khách (để trống khi chưa có OA)', createOnly: true },
   {
-    key: 'coins.referral_milestones',
+    key: 'referral.milestones_points',
     value: [
-      { count: 3, bonus: 20000 },
-      { count: 5, bonus: 40000 },
-      { count: 10, bonus: 100000 },
+      { count: 3, bonusPoints: 20 },
+      { count: 5, bonusPoints: 40 },
+      { count: 10, bonusPoints: 100 },
     ],
-    category: 'coins',
-    description: 'Mốc số bạn giới thiệu thành công → thưởng thêm xu (1 lần/mốc)',
+    category: 'referral',
+    description: 'Mốc số bạn giới thiệu thành công → thưởng thêm Điểm Xanh (1 lần/mốc)',
+    createOnly: true,
   },
+  // Thưởng cộng đồng bằng Điểm Xanh (PD-3, OQ-6): đăng bài 1 điểm ≤ 1/ngày, trả lời tắt (0), hay nhất 1 điểm ≤ 3/ngày.
+  { key: 'community.post_reward_points', value: 1, category: 'community', description: 'Điểm Xanh thưởng khi bài cộng đồng được đăng (0 = tắt)', createOnly: true },
+  { key: 'community.daily_post_reward_cap', value: 1, category: 'community', description: 'Số bài được thưởng tối đa mỗi ngày/người', createOnly: true },
+  { key: 'community.answer_reward_points', value: 0, category: 'community', description: 'Điểm Xanh thưởng người trả lời bài của người khác (0 = tắt)', createOnly: true },
+  { key: 'community.daily_answer_reward_cap', value: 10, category: 'community', description: 'Số câu trả lời được thưởng tối đa mỗi ngày/người', createOnly: true },
+  { key: 'community.best_answer_reward_points', value: 1, category: 'community', description: 'Điểm Xanh thưởng câu trả lời được chọn hay nhất (0 = tắt)', createOnly: true },
+  { key: 'community.daily_best_answer_cap', value: 3, category: 'community', description: 'Số lần được thưởng câu trả lời hay nhất tối đa mỗi ngày/người', createOnly: true },
   { key: 'game.xu_per_seed', value: 1, category: 'game', description: 'Giá mua nước: xu / 1 giọt' },
   { key: 'game.tree_xu_price', value: 50000, category: 'game', description: 'Giá góp 1 cây vào quỹ trồng cây bằng xu' },
 
@@ -134,11 +144,11 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   {
     key: 'seasonpass.tiers',
     value: [
-      { xp: 30, free: { type: 'SEEDS', amount: 20 }, premium: { type: 'XU', amount: 5000 } },
-      { xp: 70, free: { type: 'SEEDS', amount: 30 }, premium: { type: 'XU', amount: 8000 } },
-      { xp: 120, free: { type: 'SEEDS', amount: 40 }, premium: { type: 'XU', amount: 12000 } },
-      { xp: 200, free: { type: 'SEEDS', amount: 60 }, premium: { type: 'XU', amount: 20000 } },
-      { xp: 300, free: { type: 'SEEDS', amount: 80 }, premium: { type: 'XU', amount: 30000 } },
+      { xp: 30, free: { type: 'SEEDS', amount: 20 }, premium: { type: 'POINTS', amount: 5 } },
+      { xp: 70, free: { type: 'SEEDS', amount: 30 }, premium: { type: 'POINTS', amount: 8 } },
+      { xp: 120, free: { type: 'SEEDS', amount: 40 }, premium: { type: 'POINTS', amount: 12 } },
+      { xp: 200, free: { type: 'SEEDS', amount: 60 }, premium: { type: 'POINTS', amount: 20 } },
+      { xp: 300, free: { type: 'SEEDS', amount: 80 }, premium: { type: 'POINTS', amount: 30 } },
     ],
     category: 'game',
     description: 'Bậc Season Pass',
