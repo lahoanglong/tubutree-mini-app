@@ -1272,3 +1272,127 @@ Không thêm migration mới. Sửa tại chỗ `20261012110000_pd3_xu_to_points
 - **Cổng deploy (finding 5): chạy `apps/api/prisma/manual/pd3_measure_before_deploy.sql` trên bản sao PROD và điền Bảng 3** (users_with_xu, rounding_cost_vnd, max_points_one_user, đơn XU còn huỷ/trả được). Không điền thì không deploy.
 - **Kiểm `SELECT value FROM system_configs WHERE key = 'loyalty.vnd_per_point_redeem'` trên bản sao PROD**: có dòng mà khác 1000 thì migration B dừng deploy; chủ dự án quyết đối soát (đặt lại 1000 hoặc đổi tỉ lệ quy đổi, là quyết định tiền).
 - Xem bằng mắt: Trang chủ miniapp với khách chỉ có điểm quy đổi, hộp xác nhận đổi mã, bảng người dùng và POS admin, trang thanh toán web/miniapp ở đơn 0đ.
+
+## Review D1 (reviewer độc lập, lượt 1 trên nhánh sau C2)
+
+Trạng thái: **MỘT PHẦN**. Cả 5 finding đã xác minh bằng mã/lệnh thật. Đã sửa 1 (migration A, test đỏ -> xanh) và ghi 1 (OQ chưa duyệt) vào ROADMAP; 3 việc KHÔNG đóng được ở nhánh này vì cần người quyết, cần thao tác bị cấm (merge/rebase) hoặc cần bản sao PROD. Hai việc quan trọng cho điều phối viên: finding 1 (chặn gộp tới khi chủ dự án quyết) và finding 2 (áp fix-up e2e ngay sau khi gộp hardening).
+
+| # | Mức | Finding | Kết luận | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | major | Q-03 "Ví trả một phần đơn" chưa làm, ROADMAP chỉ ghi chưa có quyết định | ĐÚNG về mã; KHÔNG sửa (cần chủ dự án, cùng kết luận C1 #2); finding vẫn MỞ | không có commit mã (ROADMAP đã có dòng từ C1) |
+| 2 | minor | Gộp với hardening/2026-10: mock `WALLET` còn `coinsBalance`/`xuConvertMultiplier`, `tsc` e2e đỏ | ĐÚNG, tái hiện được; KHÔNG sửa trong nhánh (cấm merge/rebase); có fix-up đã kiểm, áp khi gộp | không có commit (fix-up ở dưới) |
+| 3 | minor | OQ-1/2/5/6/9/14 đổi giá trị khách/CTV nhận, chưa chủ dự án duyệt | ĐÚNG; không phải lỗi mã. Không tự duyệt thay chủ dự án; thêm dòng "CHƯA duyệt, duyệt trước deploy" vào ROADMAP mục 9 | d7ee6820 |
+| 4 | minor | Chi phí làm tròn trên số dư thật chưa đo | KHÔNG sửa được ở đây (cấm PROD); vẫn là cổng deploy, script đo chạy lại vẫn đúng | không đổi (script từ 81e97180) |
+| 5 | minor | Migration A không chạy lại tay được; runbook không có ghi chú phục hồi cho A | ĐÚNG, đã sửa: guard + race spec mới + ghi chú phục hồi, đã kiểm lỗi giữa chừng thật | b982f3dd |
+
+### 1. "Ví trả một phần đơn" (major) — KHÔNG làm, MỞ, cần chủ dự án
+
+Xác minh lại: reviewer đúng về mã. `apps/api/src/modules/checkout/checkout.service.ts:201` vẫn ném 400 khi `paymentMethod === 'WALLET' && user.walletBalance < computed.total`, và trừ Ví đúng `computed.total`. Đây là CÙNG finding với Review C1 #2; lý do không làm và bằng chứng độ rộng (QR chuyển khoản, ZaloPay, cron huỷ `PENDING_PAYMENT`, `order-reversal.service.ts`, `order-transition.ts`, Pancake/COD, khoảng 20 file đọc `paymentMethod`; cần cột/migration mới, hoàn đúng phần ở mọi đường huỷ/trả, race spec từng đường, đổi hai màn thanh toán) giữ nguyên ở mục C1 #2, không lặp lại.
+
+Vì sao vẫn không làm trong lượt này:
+- Chỉ thị của lượt: OQ dùng đúng đề xuất mặc định của spec; OQ-12 mặc định là "gói riêng sau PD-3, không đổi tiền trong PD-3". Làm ngay là đi ngược chỉ thị và chạm tiền thật ở nhiều đường không có thiết kế được duyệt.
+- Lối (a) của reviewer cần chủ dự án tự ghi vào ROADMAP; tôi không thể nói thay. Tôi KHÔNG ghi "chủ dự án đã hoãn" vì chưa ai nói vậy. Dòng trong ROADMAP mục 9 (từ C1) đã nói rõ "CHƯA CÓ QUYẾT ĐỊNH".
+- PD-3 không làm xấu đi so với trước: trước PD-3 Ví cũng chỉ trả trọn đơn (xu mới là thứ trả một phần). Phần Q-03 phương án 1 "cho Ví trả một phần" là tính năng còn thiếu, không phải hồi quy.
+
+Việc điều phối viên cần làm: coi đây là điều kiện trước khi gộp/deploy. Hỏi chủ dự án một câu: hoãn "Ví trả một phần đơn" sang gói riêng sau PD-3 (đề xuất của spec) hay làm trước khi gộp. Nếu hoãn, ghi lời chủ dự án vào ROADMAP mục 9 (đổi dòng của C1 thành quyết định); nếu làm trước, mở gói mới (spec riêng, opus, kèm reviewer vì đụng tiền).
+
+### 2. Xung đột ngữ nghĩa khi gộp với `hardening/2026-10` (minor) — fix-up đã kiểm, áp khi gộp
+
+Tái hiện (không đụng nhánh, chỉ đọc): `git merge-tree --write-tree HEAD hardening/2026-10` cho cây `62cf797b` không có xung đột chữ. Giải cây đó ra thư mục scratchpad (`git archive`, symlink `node_modules`, `apps/miniapp`, `apps/web`, `packages`) rồi `tsc --noEmit -p apps/e2e/tsconfig.json`:
+
+```
+tests/features.miniapp.spec.ts(27,3): error TS2353: Object literal may only specify known properties, and 'coinsBalance' does not exist in type 'WalletSummary'.
+```
+
+Nguyên nhân: hardening (commit `83c6f255`) thêm hằng `WALLET: WalletSummary` có `coinsBalance` và `xuConvertMultiplier`; PD-3 đã bỏ hai trường đó khỏi `WalletSummary` (miniapp `account-api.ts`). Dòng chú thích ở ngay dưới (đã nhắc `coinsBalance`) git tự gộp đúng thành `pointsConvertedBalance`, nên chỉ còn hai dòng trên.
+
+Vì sao không sửa trong nhánh: file `features.miniapp.spec.ts` ở nhánh này chưa có khối `WALLET` (nó nằm ở hardening), và chỉ thị cấm `merge`/`rebase`/`cherry-pick`. Chép tay khối đó sang nhánh này sẽ tạo xung đột add/add khi gộp. Đã kiểm hai điều khác của hardening không đụng PD-3: `design-system-pilot`, `returns-reversal`, `buy-flow-mocks`, `discovery-mocks` (không nhắc xu/điểm) và `apps/web/src/app/admin/page.tsx` (thêm `relative` vào thanh tab).
+
+Fix-up (đã thử trên cây gộp ở scratchpad: sau khi áp, `tsc --noEmit -p apps/e2e/tsconfig.json` thoát 0). Áp SAU khi gộp hardening vào nhánh PD-3 (hoặc ngược lại), rồi chạy lại `tsc` e2e:
+
+```diff
+--- a/apps/e2e/tests/features.miniapp.spec.ts
++++ b/apps/e2e/tests/features.miniapp.spec.ts
+@@ -24,11 +24,9 @@
+ 
+ const WALLET: WalletSummary = {
+   walletBalance: 0,
+-  coinsBalance: 0,
+   cashbackPending: 0,
+   commissionApproved: 0,
+   commissionPending: 0,
+-  xuConvertMultiplier: 1,
+   withdrawMin: 50000,
+   withdrawFee: 0,
+ };
+```
+
+Cách nhanh: `sed -i '' -e '/^  coinsBalance: 0,$/d' -e '/^  xuConvertMultiplier: 1,$/d' apps/e2e/tests/features.miniapp.spec.ts`.
+
+### 3. OQ chưa duyệt (minor) — ghi vào ROADMAP, không tự duyệt
+
+Reviewer đúng và nói rõ đây là khoảng trống quyết định, không phải lỗi mã. Thêm một dòng vào `docs/2026-10-review/00-ROADMAP.md` mục 9 liệt kê OQ-1, 2, 5, 6, 9, 14 là "CHƯA có chủ dự án duyệt, duyệt hoặc chỉnh và ghi kết quả vào đây TRƯỚC deploy", kèm hệ quả giá trị khách/CTV nhận (mốc CTV 80 triệu = 2.000 điểm: trước trả được 100% đơn, nay ≤ 20%/đơn và hết hạn 12 tháng; điểm không trừ phí ship và phần lẻ < 1.000đ phải trả tiền; góp quỹ 50 điểm; điểm cộng đồng; thu hồi thưởng giới thiệu trừ lô quy đổi; xoá tài khoản bị chặn khi còn điểm quy đổi). Không có thay đổi mã: mã đúng theo spec. Cùng ghi chú file ngoài nhóm như C1: một dòng ROADMAP, bỏ nếu điều phối viên xử lý ROADMAP chỗ khác.
+
+### 4. Chi phí làm tròn trên số dư thật (minor, cổng deploy)
+
+Giống C1 #4 và C2 #5: số thật chỉ có ở bản sao PROD, cấm đụng PROD, nên Bảng 3 vẫn "(chưa đo)", KHÔNG điền số bịa. Chạy lại `apps/api/prisma/manual/pd3_measure_before_deploy.sql` (chỉ SELECT) trên `tubutree_it` sau khi sửa migration A: chạy hết 6 khối không lỗi (số trên DB race là dữ liệu rác của test, không có ý nghĩa). Việc còn lại không đổi: điều phối viên chạy `psql "$COPY_DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/manual/pd3_measure_before_deploy.sql`, điền `users_with_xu`, `rounding_cost_vnd`, `max_points_one_user` vào Bảng 3, xác nhận điều kiện (b) = 0 và (f) = 1000 (hoặc không có dòng).
+
+### 5. Migration A không chạy lại được tay (minor) — đã sửa
+
+Xác minh: test ĐỎ trước khi sửa, `pd3-migration-a-rerun.race-spec.ts` (chạy lại đúng file migration A trên DB đã áp bằng `runSqlScriptIn` trong một transaction):
+
+```
+✕ chạy lại A trên DB đã áp: không lỗi, catalog giữ nguyên, hai lần liền cũng không đổi
+  Raw query failed. Code: `42710`. Message: `ERROR: type "PointsLot" already exists`
+Tests: 1 failed, 2 passed, 3 total
+```
+
+Sửa `20261012100000_pd3_points_lot_schema/migration.sql`: `CREATE TYPE` và hai `ADD CONSTRAINT` nằm trong khối `DO $$ ... EXCEPTION WHEN duplicate_object THEN NULL; END $$`; bốn `ADD COLUMN` thêm `IF NOT EXISTS`. Các index đã có `IF NOT EXISTS` từ trước, `UPDATE community_events` đã idempotent. Không đổi tên/kiểu/giá trị nào, nên `migrate diff` vẫn không lệch. Test xanh sau sửa:
+
+```
+✓ splitSqlStatements tách được file A có khối DO $$ ... $$
+✓ DB test đã có đủ vết của A trước khi chạy lại (điều kiện của ca)
+✓ chạy lại A trên DB đã áp: không lỗi, catalog giữ nguyên, hai lần liền cũng không đổi
+Tests: 3 passed, 3 total
+```
+
+Ghi chú phục hồi cho A (đã kiểm thật, không suy đoán). DB nháp `pd3_d1_fail` trong container test; bản chép `prisma/` ở scratchpad có thêm `SELECT 1/0;` cuối file A; `migrate deploy`:
+
+```
+Migration name: 20261012100000_pd3_points_lot_schema   Database error: ERROR: division by zero
+type_exists=0 | lot_col=0 | conv_idx=0     (không để lại gì; _prisma_migrations: finished=f rolled_back=f)
+$ npx prisma migrate resolve --rolled-back 20261012100000_pd3_points_lot_schema   -> marked as rolled back.
+$ npx prisma migrate deploy (file repo)                                          -> All migrations have been successfully applied.
+$ npx prisma migrate diff ... --exit-code                                        -> No difference detected.
+```
+
+Tức là A lỗi giữa chừng thì không để lại kiểu/cột/index nào (Prisma chạy cả file trong một transaction); phục hồi giống B: sửa nguyên nhân, `prisma migrate resolve --rolled-back 20261012100000_pd3_points_lot_schema`, rồi `migrate deploy` lại. Ghi chú này cũng nằm trong đầu file migration A. Thêm: `migrate deploy` trên DB trống `pd3_d1_empty` (126 migration cùng chuỗi PD-3) `All migrations have been successfully applied`, `migrate diff --exit-code` `No difference detected`, `check-partial-indexes: mong đợi 20, có trong DB 20`. Hai DB nháp đã `DROP`.
+
+Sửa tại chỗ migration đã áp làm đổi checksum, nhưng PD-3 chưa gộp/deploy ở đâu, và `migrate deploy` trên `tubutree_it` (đã áp bản cũ) vẫn báo `No pending migrations to apply` (cùng cách C1/C2 đã sửa migration B và `20261012160000`).
+
+### Kiểm chứng cuối lượt
+
+```
+race: pd3-migration-a-rerun 3/3 | pd3-xu-migration 16/16 | pd3-points-lots 6/6 | partial-unique-indexes 5/5
+tsc --noEmit (api) sạch; ESLint file spec mới sạch
+prisma migrate deploy (tubutree_it): No pending migrations to apply | migrate diff --exit-code: No difference detected
+check-partial-indexes: mong đợi 20, có trong DB 20
+cây gộp thử với hardening/2026-10 (scratchpad): tsc e2e đỏ 1 lỗi TS2353 -> áp fix-up -> thoát 0
+```
+
+Không chạy full suite, Playwright, dev server (theo chỉ thị).
+
+### Migration (D1)
+
+Không thêm migration mới. Sửa tại chỗ `20261012100000_pd3_points_lot_schema` (guard chạy lại được); file test mới `apps/api/test/integration-race/pd3-migration-a-rerun.race-spec.ts`.
+
+### Khác spec
+
+- Spec 3.1 viết `CREATE TYPE`/`ADD COLUMN`/`ADD CONSTRAINT` trần; migration A nay có guard. Cùng tên, cùng kiểu, cùng giá trị; chỉ đổi cách chạy lại.
+
+### Việc cần chủ dự án / điều phối viên (thêm từ Review D1)
+
+- **Chặn gộp (finding 1): quyết "Ví trả một phần đơn" hoãn sang gói riêng hay làm ngay**, rồi ghi vào ROADMAP mục 9. Chưa có quyết định thì không gộp.
+- **Duyệt hoặc chỉnh OQ-1, 2, 5, 6, 9, 14 (finding 3)** và ghi kết quả vào ROADMAP mục 9 trước deploy.
+- **Khi gộp hardening/2026-10 (finding 2):** áp fix-up e2e ở trên, chạy `tsc --noEmit -p apps/e2e/tsconfig.json`.
+- **Cổng deploy (finding 4):** chạy script đo trên bản sao PROD, điền Bảng 3.
