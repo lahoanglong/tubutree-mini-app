@@ -199,7 +199,9 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
   it('đúng một h1 khi lỗi tải, có nút Thử lại', async () => {
     mocks.getOwnedBrand.mockRejectedValueOnce(new Error('mạng lỗi')).mockResolvedValue(BRAND);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /thử lại/i }));
+    const retry = await screen.findByRole('button', { name: /thử lại/i });
+    oneH1();
+    fireEvent.click(retry);
     await screen.findByRole('heading', { level: 2, name: 'Sachi' });
     oneH1();
   });

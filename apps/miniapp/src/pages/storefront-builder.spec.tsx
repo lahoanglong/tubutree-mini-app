@@ -349,6 +349,20 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
     );
   });
 
+  it('cấu hình: đóng rồi mở lại thì form về dữ liệu đã lưu, chỉnh sửa chưa lưu bị bỏ (BottomSheet gỡ nội dung khi đóng)', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    const first = await screen.findByTestId('sheet');
+    fireEvent.change(within(first).getByDisplayValue('Cửa hàng Xanh'), { target: { value: 'Tên gõ dở' } });
+    expect(within(first).getByDisplayValue('Tên gõ dở')).toBeInTheDocument();
+    fireEvent.click(within(first).getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Cấu hình' }));
+    const again = await screen.findByTestId('sheet');
+    expect(within(again).getByDisplayValue('Cửa hàng Xanh')).toBeInTheDocument();
+    expect(mocks.updateStorefront).not.toHaveBeenCalled();
+  });
+
   it('cấu hình: không chọn màu thì gửi màu mặc định xanh lá, các trường rỗng thành undefined', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
