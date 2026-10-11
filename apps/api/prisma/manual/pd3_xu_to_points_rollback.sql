@@ -19,7 +19,7 @@
 --
 -- Lô còn nguyên → trả đúng coinsBefore (khách không giữ phần làm tròn). Chạy lại = không làm gì (mỗi user có
 -- tối đa một dòng XU_MIGRATION_ROLLBACK ở mỗi sổ). Không xoá bảng chụp, không xoá dòng sổ nào; cột/enum mới
--- để nguyên.
+-- để nguyên. Chỉ xoá thông báo XU_CONVERTED (id nlog_xu2pts_<userId>) do migration 20261012160000 chèn.
 --
 -- MỘT CHIỀU: sau khi chạy, chỉ được sửa tiến; KHÔNG chạy lại migration B. Migration B vẫn nằm trong
 -- _prisma_migrations, bảng chụp xu_points_conversions (PK userId) chặn quy đổi lần hai, và ràng buộc
@@ -78,4 +78,11 @@ BEGIN
                 ELSE LEAST(r."coinsBefore"::bigint, r.pts_back::bigint * 1000)::integer END
     FROM _pd3_rb r
    WHERE u."id" = r."userId" AND r.pts_back > 0;
+
+  -- Thông báo "N xu cũ đã thành M Điểm Xanh" (migration 20261012160000) sẽ sai sau hoàn tác, mà code cũ vẫn
+  -- liệt kê mọi notification_logs INAPP của khách. Chỉ xoá đúng dòng migration đó chèn (id cố định theo user +
+  -- templateCode); đi theo bảng chụp chứ không theo _pd3_rb để chạy lại vẫn dọn được dòng sót.
+  DELETE FROM "notification_logs" l
+   USING "xu_points_conversions" x
+   WHERE l."id" = 'nlog_xu2pts_' || x."userId" AND l."templateCode" = 'XU_CONVERTED' AND l."channel" = 'INAPP';
 END $$;
