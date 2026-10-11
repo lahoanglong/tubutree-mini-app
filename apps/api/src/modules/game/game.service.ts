@@ -6,6 +6,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
 import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -40,6 +41,8 @@ export class GameService {
     @Optional() private readonly collection?: GameCollectionService,
     // Optional: bảng tin cộng đồng §6.14.12 — auto-post thành tích khi thu hoạch.
     @Optional() private readonly feed?: CommunityFeedService,
+    // Optional như các dịch vụ trên để test dựng GameService ít tham số; riêng buyTree BẮT BUỘC có (xem đó).
+    @Optional() private readonly loyalty?: LoyaltyService,
   ) {}
 
   // ── Profile ────────────────────────────────────────
@@ -360,8 +363,12 @@ export class GameService {
    * Góp 1 cây vào quỹ trồng cây (PlantedTree ghi nhận khoản góp, không hứa cây cụ thể) bằng Điểm Xanh
    * (PD-3, OQ-5): tiêu lô STANDARD trước (lô có hạn), thiếu thì lấy lô quy đổi. Không sinh giá trị ngược
    * lại nên lô quy đổi không thể đổi ra thứ đáng hơn số điểm đã bỏ.
+   * Lô STANDARD chỉ tiêu phần DÙNG ĐƯỢC (số dư − lockedOrderPoints, cùng luật checkout/đổi voucher): điểm đơn
+   * vừa giao còn trong hạn đổi/trả mà bị tiêu ở đây thì trả đơn sẽ đẩy số dư thường xuống âm.
    */
   async buyTree(userId: string) {
+    if (!this.loyalty) throw new Error('GameService.buyTree cần LoyaltyService để đọc điểm đang khoá');
+    const loyalty = this.loyalty;
     const price = await this.config.get<number>('game.tree_points_price', 50);
     if (!Number.isSafeInteger(price) || price <= 0) {
       throw new BadRequestException('Tính năng góp quỹ trồng cây chưa khả dụng.');
@@ -373,9 +380,14 @@ export class GameService {
       // Khoá dòng user rồi mới chia lô: hai lượt góp song song không cùng đọc một số dư.
       const [bal] = await tx.$queryRaw<{ pointsBalance: number; pointsConvertedBalance: number }[]>`
         SELECT "pointsBalance", "pointsConvertedBalance" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
-      const std = Math.min(price, Math.max(0, bal?.pointsBalance ?? 0));
+      const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx);
+      const std = Math.min(price, Math.max(0, (bal?.pointsBalance ?? 0) - lock.locked));
       const conv = price - std;
-      if (conv > Math.max(0, bal?.pointsConvertedBalance ?? 0)) throw new BadRequestException(notEnough);
+      if (conv > Math.max(0, bal?.pointsConvertedBalance ?? 0)) {
+        throw new BadRequestException(
+          lock.locked > 0 ? `${notEnough} Một phần điểm chưa dùng được: ${loyalty.lockedPointsMessage(lock)}.` : notEnough,
+        );
+      }
       for (const [lot, amount] of [['STANDARD', std], ['CONVERTED', conv]] as const) {
         if (amount <= 0) continue;
         const r = await applyPointsDelta(tx, { userId, delta: -amount, lot, reason, refType: 'GAME' });
