@@ -21,6 +21,7 @@ import { haptic } from '../../utils/haptic';
 import { getErrorMessage } from '../../services/api';
 import { vi } from '../../i18n/vi';
 import { formatDrops, formatNumber, formatPoints } from '../../utils/format';
+import { useLockedMutation } from './use-locked-mutation';
 
 export interface HarvestReward {
   coupon?: string;
@@ -59,7 +60,7 @@ export function useGameActions({
   };
   const onError = (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' });
 
-  const checkInM = useMutation({
+  const checkInM = useLockedMutation({
     mutationFn: checkIn,
     onSuccess: (r) => {
       const parts = [`+${formatDrops(r.seedsEarned)}`];
@@ -70,7 +71,7 @@ export function useGameActions({
     },
     onError,
   });
-  const dewM = useMutation({
+  const dewM = useLockedMutation({
     mutationFn: collectDew,
     onSuccess: (r) => {
       openSnackbar({ text: `Hứng được +${formatDrops(r.seedsEarned)} từ giọt sương sáng 💦`, type: 'success' });
@@ -78,7 +79,7 @@ export function useGameActions({
     },
     onError,
   });
-  const freezeM = useMutation({
+  const freezeM = useLockedMutation({
     mutationFn: buyStreakFreeze,
     onSuccess: (r) => {
       openSnackbar({ text: `Đã mua vé giữ lửa 🧊 (còn ${r.streakFreezes} vé)`, type: 'success' });
@@ -86,7 +87,7 @@ export function useGameActions({
     },
     onError,
   });
-  const repairM = useMutation({
+  const repairM = useLockedMutation({
     mutationFn: repairStreak,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
@@ -95,14 +96,14 @@ export function useGameActions({
     },
     onError,
   });
-  const giftM = useMutation({
+  const giftM = useLockedMutation({
     mutationFn: (recipientId: string) => giftWater(recipientId),
     onSuccess: (r) => {
       openSnackbar({ text: `Đã tặng ${formatDrops(r.amount)} cho bạn 🎁`, type: 'success' });
       refresh();
     },
     onError,
-  });
+  }, (recipientId) => recipientId);
   const handleSpin = async () => {
     try {
       const r = await spin();
@@ -124,7 +125,7 @@ export function useGameActions({
     void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
   };
 
-  const waterM = useMutation({
+  const waterM = useLockedMutation({
     mutationFn: () => waterTree(20),
     onSuccess: (r) => afterWatering('Đã tưới', r),
     onError,
@@ -138,7 +139,7 @@ export function useGameActions({
     },
     onError,
   });
-  const unlockM = useMutation({
+  const unlockM = useLockedMutation({
     mutationFn: () => unlockPlot(),
     onSuccess: () => {
       openSnackbar({ text: 'Đã mở lô đất mới 🪴', type: 'success' });
@@ -146,12 +147,12 @@ export function useGameActions({
     },
     onError,
   });
-  const waterPlotM = useMutation({
+  const waterPlotM = useLockedMutation({
     mutationFn: (plotId: string) => waterPlot(plotId, 20),
     onSuccess: (r) => afterWatering('Đã tưới lô', r),
     onError,
-  });
-  const claimPassM = useMutation({
+  }, (plotId) => plotId);
+  const claimPassM = useLockedMutation({
     mutationFn: ({ tier, track }: { tier: number; track: 'free' | 'premium' }) => claimSeasonPass(tier, track),
     onSuccess: () => {
       haptic('medium');
@@ -162,8 +163,8 @@ export function useGameActions({
       void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
     },
     onError,
-  });
-  const claimMissionM = useMutation({
+  }, ({ tier, track }) => `${tier}:${track}`);
+  const claimMissionM = useLockedMutation({
     mutationFn: (code: string) => claimMission(code),
     onSuccess: (r) => {
       haptic('medium');
@@ -172,8 +173,8 @@ export function useGameActions({
       void queryClient.invalidateQueries({ queryKey: ['me'] });
     },
     onError,
-  });
-  const answerM = useMutation({
+  }, (code) => code);
+  const answerM = useLockedMutation({
     mutationFn: ({ id, choice }: { id: string; choice: number }) => answerQuiz(id, choice),
     onSuccess: (r, vars) => {
       // Hiện reveal "Bạn có biết…"; chỉ sang câu kế khi user bấm "Câu tiếp theo".
@@ -182,7 +183,7 @@ export function useGameActions({
       void queryClient.invalidateQueries({ queryKey: ['me'] });
     },
     onError,
-  });
+  }, ({ id }) => id);
 
   return {
     checkInM,
