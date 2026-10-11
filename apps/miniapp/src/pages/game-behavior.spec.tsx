@@ -872,6 +872,13 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
 });
 
 describe('GamePage — vòng quay may mắn', () => {
+  it('giá vòng quay lấy từ spinCostPoints của /game/profile', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, spinCostPoints: 20 });
+    renderPage();
+    await screen.findByTestId('wheel');
+    await waitFor(() => expect(mocks.wheel.cost).toBe(20));
+  });
+
   it('truyền giá 10💧 cho vòng quay; quay gọi spin(), trả kết quả và làm mới cache', async () => {
     const { invalidated } = renderPage();
     await screen.findByTestId('wheel');

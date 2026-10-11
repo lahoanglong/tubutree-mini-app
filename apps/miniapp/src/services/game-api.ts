@@ -18,6 +18,8 @@ export interface GameProfile {
   /** Điểm Xanh cho 1 lượt góp quỹ trồng cây. */
   treePointsPrice?: number;
   tankCapacity?: number;
+  /** Điểm Xanh cho 1 lượt quay (game.spin_buy_cost_points). */
+  spinCostPoints?: number;
 }
 export interface CheckInResult {
   seedsEarned: number;
