@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { vnDateKey } from '../../common/vn-time';
+import { maskName } from '../../common/mask-name';
 
 /**
  * Vườn Xanh 2.0 (social) — tặng nước cho bạn bè trong mạng giới thiệu.
@@ -17,12 +18,6 @@ export class GameGiftService {
     private readonly config: SystemConfigService,
     private readonly notifications: NotificationsService,
   ) {}
-
-  private maskName(name: string | null): string {
-    if (!name) return 'Bạn Tubu';
-    const parts = name.trim().split(' ');
-    return `${parts[parts.length - 1] ?? 'Tubu'}***`;
-  }
 
   private async friendIds(userId: string): Promise<Set<string>> {
     const me = await this.prisma.user.findUnique({
@@ -69,7 +64,7 @@ export class GameGiftService {
     const gifted = new Set(giftsToday.map((g) => g.recipientId));
     return list.map((u) => ({
       id: u.id,
-      nickname: this.maskName(u.fullName),
+      nickname: maskName(u.fullName),
       giftedToday: gifted.has(u.id),
     }));
   }

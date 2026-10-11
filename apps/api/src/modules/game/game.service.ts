@@ -10,6 +10,7 @@ import { CommunityFeedService } from '../feed/community-feed.service';
 import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { startOfVnDay } from '../../common/vn-time';
+import { maskName } from '../../common/mask-name';
 
 interface SpinPrize {
   id: string;
@@ -535,7 +536,7 @@ export class GameService {
     });
     return top.map((p, i) => ({
       rank: i + 1,
-      nickname: this.maskName(p.user.fullName),
+      nickname: maskName(p.user.fullName),
       streak: p.longestStreak,
       treesPlanted: this.eco(p.ecoImpact).treesPlanted,
     }));
@@ -610,13 +611,6 @@ export class GameService {
       treeType: e.treeType ?? DEFAULT_TREE_TYPE,
       treesPlanted: e.treesPlanted ?? 0,
     };
-  }
-
-  private maskName(name: string | null): string {
-    if (!name) return 'Bạn Tubu';
-    const parts = name.trim().split(' ');
-    const last = parts[parts.length - 1] ?? 'Tubu';
-    return `${last}***`;
   }
 
   private startOfDay(d: Date): Date {

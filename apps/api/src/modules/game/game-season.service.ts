@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { maskName } from '../../common/mask-name';
 
 /**
  * Vườn Xanh 2.0 Phase 4 — mùa/sự kiện + BXH mùa.
@@ -9,13 +10,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 @Injectable()
 export class GameSeasonService {
   constructor(private readonly prisma: PrismaService) {}
-
-  private maskName(name: string | null): string {
-    if (!name) return 'Bạn Tubu';
-    const parts = name.trim().split(' ');
-    const last = parts[parts.length - 1] ?? 'Tubu';
-    return `${last}***`;
-  }
 
   async getActiveSeason() {
     const now = new Date();
@@ -59,7 +53,7 @@ export class GameSeasonService {
     });
     return top.map((c, i) => ({
       rank: i + 1,
-      nickname: this.maskName(c.user.fullName),
+      nickname: maskName(c.user.fullName),
       drops: c.drops,
     }));
   }
