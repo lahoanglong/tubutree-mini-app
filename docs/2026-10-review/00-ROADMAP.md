@@ -151,3 +151,4 @@ Q-04 số dư đầu kỳ cho sổ cái Ví · Q-07 creditLimit mặc định 0,
 
 - PD-3 (gộp Điểm Xanh/TubuXu) chuyển từ "dự án riêng" thành gói thực hiện ở Đợt D, opus, có spec ngắn + migration quy đổi số dư + race test. PA-5 và PA-7 không tạo thêm luồng xu mới để PD-3 không phải gỡ lại.
 - Thêm PC-11 (admin web sang DS v2, opus không cần, sonnet) ở vòng C3, sau PC-7 vì dùng chung `web/tailwind.config`.
+- PD-3 chưa làm phần "Ví trả một phần đơn" của Q-03 phương án 1 (spec PD-3 OQ-12): Cổng 1 chỉ ghi Q-03 là "Gộp ngay", không nêu riêng phần này. CHƯA CÓ QUYẾT ĐỊNH của chủ dự án: cần xác nhận hoãn sang gói riêng sau PD-3 hoặc giao làm ngay (đụng đặt đơn, hoàn tiền, QR chuyển khoản, COD gửi Pancake). Dòng này do review C1 của PD-3 thêm để việc không bị bỏ sót.

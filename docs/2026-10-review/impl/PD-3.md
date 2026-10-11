@@ -1041,3 +1041,124 @@ Bảng 3. Chi phí làm tròn lên: ô đo trên bản sao PROD (cổng deploy).
 | 3.3 (c) points_drift_users | 0 | (chưa đo) | |
 | 3.3 (d) đơn XU còn huỷ/trả được: số đơn / tổng xu / điểm hoàn nếu huỷ hết | 3 / 423.456 / 424 (lời 544đ) | (chưa đo) | |
 | 3.3 (e) thưởng giới thiệu xu còn thu hồi được (30 ngày): số dòng / tổng xu | 1 / 5.000 | (chưa đo) | |
+
+## Review C1 (reviewer độc lập, lượt 1 trên nhánh L1-L5)
+
+Trạng thái: **MỘT PHẦN**. Sáu finding: 1 major đúng và đã sửa (web), 1 major đúng về nội dung nhưng KHÔNG làm trong lượt này (Ví trả một phần đơn: cần chủ dự án quyết, xem mục 2), 3 minor đã sửa, 1 minor giữ làm cổng deploy. Mỗi sửa một commit `address review C1`; test đỏ thấy trước khi sửa, output thật bên dưới.
+
+| # | Mức | Finding | Kết luận | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | major | Web thanh toán và tài khoản không biết lô quy đổi: khách chỉ có điểm quy đổi không thấy ô dùng điểm, /tai-khoan hiện thiếu | ĐÚNG, đã sửa | 675b5a17 |
+| 2 | major | Q-03 phương án 1 gồm "Ví trả một phần đơn", mã vẫn để Ví trả toàn bộ, spec đẩy sang OQ-12 không có chủ duyệt | ĐÚNG về nội dung (xem dưới), KHÔNG làm; ghi chờ quyết định vào ROADMAP mục 9 | (ROADMAP + báo cáo này) |
+| 3 | minor | `buyTree` tiêu STANDARD không trừ `lockedOrderPoints`; bấm đôi trừ 2 lần | MỘT PHẦN: phần khoá đã sửa; bấm đôi không sửa ở BE (xem dưới) | be6ec84a |
+| 4 | minor | Chi phí làm tròn trên số dư thật chưa đo | KHÔNG sửa được ở đây (cấm PROD); giữ làm cổng deploy | báo cáo này |
+| 5 | minor | `GET /me` chỉ trả `pointsBalance` | ĐÚNG, đã sửa | 1d95cb70 |
+| 6 | minor | Thông báo `XU_CONVERTED` định dạng xu có dấu chấm nhưng điểm không | ĐÚNG, đã sửa | 3b75d12d |
+
+### 1. Web khách không biết lô quy đổi (major)
+
+Xác minh bằng mã: `checkout-points.ts` chỉ đọc `pointsBalance`/`redeemablePoints` (lô thường) nên `usable` không bao giờ vượt phần thường dùng được; khách chỉ có điểm quy đổi có `usable = 0` và ô "Dùng … Điểm Xanh" (`usablePoints > 0`) không hiện. `tai-khoan/page.tsx` in `user.pointsBalance`, trong khi Mini App hiện tổng hai lô. `WebUser` và `CheckoutQuote` không có field lô quy đổi dù API đã trả (`AuthUser.pointsConvertedBalance`, `quote.pointsConvertedBalance`/`redeemableConvertedPoints`). Web là kênh chạy thật trên PROD nên đây là lỗi thật, và sai đúng chỗ Q-03a hứa (lô quy đổi trả tới 100% giá trị hàng).
+
+Test đỏ trước khi sửa (`checkout-points.spec.ts`, vitest, thêm 11 ca mới):
+
+```
+ ❯ src/lib/checkout-points.spec.ts (16 tests | 10 failed)
+   × checkoutPointsOffer với điểm quy đổi (PD-3) > chỉ có điểm quy đổi → dùng được toàn bộ, kèm ghi chú không hết hạn
+   × ... > cộng lô thường dùng được với lô quy đổi; điểm thường đang khoá không tính vào usable
+   × ... > API trả pointsConvertedBalance mà chưa trả redeemableConvertedPoints → vẫn dùng số dư lô quy đổi
+   × ... > API cũ chưa có điểm quy đổi → hành vi cũ, không ghi chú
+   × pointsSummary (tài khoản web) > ... (3 ca)
+   × zeroTotalNote > ... (3 ca)
+ Tests  10 failed | 6 passed (16)
+```
+
+Sửa (web, cùng cách làm với Mini App `checkoutPoints`/`pointsSummary`/`zeroTotalNote`):
+- `lib/checkout-points.ts`: `checkoutPointsOffer` cộng `redeemableConvertedPoints` (hoặc `pointsConvertedBalance` nếu API chỉ trả số dư) vào `usable`, trả thêm `convertedNote` "trong đó N điểm không hết hạn, trả tới 100% giá trị hàng". Điểm thường vẫn chỉ tính phần dùng được (không gồm điểm đang khoá). Số âm/NaN ở lô quy đổi thành 0. Thêm `pointsSummary` (tổng hai lô + ghi chú) và `zeroTotalNote`.
+- `thanh-toan/page.tsx`: ô "Dùng N Điểm Xanh" hiện cả khi chỉ có điểm quy đổi, thêm dòng ghi chú; đơn tổng 0đ ẩn chọn phương thức, hiện "Đơn đã được trả đủ bằng Điểm Xanh…" và gửi `paymentMethod: 'COD'` (BE đã ép COD, FE nói đúng điều BE làm); `RecyclingCheckoutSection` nhận phương thức hiệu lực.
+- `tai-khoan/page.tsx`: "Điểm Xanh" = tổng hai lô, kèm dòng "trong đó N điểm không hết hạn".
+- Kiểu: `WebUser.pointsConvertedBalance?`, `CheckoutQuote.{pointsUsedConverted,pointsConvertedBalance,redeemableConvertedPoints}?` (optional để phiên/API cũ vẫn chạy).
+
+Xanh: `vitest run checkout-points.spec.ts no-xu-copy.spec.ts order-view.spec.ts`: `Test Files 3 passed (3), Tests 26 passed (26)`. `tsc --noEmit` và ESLint file đã sửa sạch. Năm ca cũ của `checkoutPointsOffer` phải thêm `convertedNote: null` vì đổi hình dạng kết quả (không đổi hành vi).
+
+Không kiểm được trên trình duyệt (không chạy dev server/Playwright): giao diện trang thanh toán web với điểm quy đổi và đơn 0đ là **unverified**; kiểm bằng logic thuần + tsc + eslint. Admin web `pos-screen.tsx` và `admin/page.tsx` còn in `pointsBalance` (lô thường) cho thành viên: ngoài phạm vi finding, không đổi, nêu để biết.
+
+### 2. "Ví trả một phần đơn" (major) — KHÔNG làm, cần chủ dự án quyết
+
+Xác minh: reviewer ĐÚNG hai điều. (a) `findings-catalog.md` mục Q-03, phương án 1 (khuyến nghị) ghi nguyên văn "Gộp xu thưởng vào Điểm Xanh, bỏ đổi Ví -> Xu, cho Ví trả một phần đơn". (b) Mã vẫn để Ví chỉ trả toàn bộ: `checkout.service.ts` `paymentMethod === 'WALLET' && user.walletBalance < computed.total` ném 400, miniapp `shouldFallbackToCod`/`walletUnavailableReason` khoá lựa chọn Ví khi thiếu số dư.
+
+Chỗ chưa đủ để coi là "đã quyết": ROADMAP mục 9 ghi Q-03 là "**Gộp ngay trong đợt này**" (không nêu riêng phần Ví trả một phần), Q-03a chỉ nói về số dư xu. Spec đẩy sang OQ-12, và chỉ thị của lượt dùng đề xuất mặc định của spec cho OQ. Không có chỗ nào chủ dự án nói "hoãn" hay "làm ngay". Reviewer đưa hai lối: làm, hoặc ghi hoãn có chủ duyệt vào ROADMAP trước khi gộp. Tôi KHÔNG tự ghi "chủ dự án đã hoãn" vì chưa ai nói vậy.
+
+Vì sao không làm trong lượt sửa review (chọn phương án an toàn tiền): đây là một tính năng thanh toán mới, không phải sửa lỗi. Bằng chứng từ mã về độ rộng, mọi nơi đang coi một đơn là "trả đủ hoặc chưa trả gì":
+- QR chuyển khoản dựng `amount: order.total` (`bank-transfer.service.ts:60,64,68`); ZaloPay `amount: order.total` (`zalopay.service.ts:70-99`); khách trả phần còn lại phải bằng `total − phần Ví`.
+- `pending-payment-expiry.cron.ts` tự huỷ đơn `PENDING_PAYMENT` quá 24 giờ: nếu Ví đã trừ ngay lúc đặt thì cron phải hoàn đúng phần Ví, hiện chỉ biết hoàn theo phương thức.
+- `order-reversal.service.ts` (hoàn khi huỷ/trả) và `order-transition.ts` (`PREPAID_METHODS`: WALLET là trả trước) đều quyết theo `paymentMethod`, không có "đã trả một phần".
+- Gửi Pancake, hạch toán COD (`isCodCollected`), `dealer.service.ts` (23 chỗ), `subscriptions.service.ts` (21 chỗ), `admin.service.ts` (14 chỗ), `order-status.service.ts` đều đọc `paymentMethod`/`paymentStatus` (khoảng 20 file).
+- Cần cột/migration mới (số tiền Ví đã trừ trên đơn), trừ Ví có guard cùng tx, hoàn đúng phần ở `reverseFinancials` mọi đường huỷ/trả, race spec cho từng đường, và đổi màn thanh toán miniapp + web.
+
+Ép làm gọn trong một lượt sửa review sẽ chạm tiền thật ở nhiều đường mà không có thiết kế được duyệt: rủi ro cao hơn lợi ích.
+
+Việc đã làm: thêm một dòng vào `docs/2026-10-review/00-ROADMAP.md` mục 9 ("Điều chỉnh roadmap sau Cổng 1") ghi rõ PD-3 chưa làm phần này, KHÔNG phải quyết định của chủ dự án, và cần chủ dự án chọn: hoãn sang gói riêng sau PD-3 (đề xuất, kèm thiết kế: cột số tiền Ví trên đơn, QR/COD theo phần còn lại, hoàn đúng phần ở mọi đường huỷ) hoặc giao làm ngay trước khi gộp. Đây là file ngoài nhóm file của lượt, sửa tối thiểu một dòng, lý do là reviewer yêu cầu ghi để việc không bị bỏ sót; nếu điều phối viên xử lý ROADMAP ở nơi khác thì bỏ dòng này khi gộp.
+
+Trạng thái finding: **CHƯA đóng**. Cần quyết định của chủ dự án trước khi gộp (xem "Việc cần chủ dự án").
+
+### 3. `buyTree` tiêu điểm thường đang khoá (minor, một phần)
+
+Xác minh bằng mã: `buyTree` đọc `pointsBalance` rồi trừ `min(giá, pointsBalance)` mà không trừ `lockedOrderPoints`, khác checkout và `redeemReward`. Kịch bản của reviewer có thật: nhận điểm đơn A (đang trong hạn đổi/trả) → góp quỹ bằng chính điểm đó → trả đơn A → `reverseOrderPoints` trừ không guard, `pointsBalance` âm (không có CHECK trên cột này). Điểm quay thưởng cũng yếu như vậy từ trước PD-3 (`spin` không đọc khoá): ngoài phạm vi gói này, KHÔNG sửa, nêu để biết.
+
+Test đỏ trước khi sửa (`pd3-tree-lock.race-spec.ts`, Postgres thật, tạo đơn DELIVERED 2 ngày trước kèm dòng `ORDER_DELIVERED`):
+
+```
+Tests: 4 failed, 4 total
+ - chỉ có điểm thường đang khoá (60) → góp 50 bị từ chối: "Received promise resolved instead of rejected"
+ - 40 khoá + 30 tự do + 100 quy đổi: pointsUsedConverted Expected 20, Received 0
+ - 4 lượt góp song song (100 tự do + 60 khoá): Expected length 2, Received length 3
+```
+
+Sửa (`game.service.ts`): sau `FOR UPDATE` dòng user, đọc `loyalty.lockedOrderPoints(userId, now, tx)`; phần thường = `min(giá, max(0, pointsBalance − locked))`, phần còn lại lấy từ lô quy đổi; thiếu thì 400 kèm lý do khoá (`lockedPointsMessage`). `LoyaltyService` (module toàn cục) thêm vào constructor dạng `@Optional()` như các dịch vụ khác của `GameService` để 40 chỗ test dựng ít tham số không vỡ, NHƯNG `buyTree` ném lỗi lập trình nếu thiếu (không âm thầm bỏ qua khoá trên đường tiền).
+
+Xanh: race `pd3-tree-lock Tests: 4 passed`; `pd3-checkout-points Tests: 3 passed` (T6 góp quỹ ×6 vẫn đúng 4 lượt); `game-spin-limit Tests: 2 passed`; `jest src/modules/game src/modules/users`: `Test Suites: 12 passed, Tests: 224 passed`. Unit `game.service.spec.ts` thêm 3 ca (khoá + chia lô, toàn bộ khoá không quy đổi → 400 có lý do, thiếu LoyaltyService → ném lỗi). Ghi thật: ba ca unit viết sau khi sửa, đỏ/xanh chỉ có ở race spec.
+
+KHÔNG sửa, bấm đôi (Idempotency-Key): nút "Góp quỹ trồng cây" của Mini App đã `disabled={buyPending}` và `loading` (component `Button` chặn bấm lặp khi `loading`), nên bấm đôi cùng một lần mở màn không gửi hai request. Chống trùng ở BE cần lưu khoá (bảng hoặc cột mới) và đổi client: lớn hơn một finding minor và chưa có chỗ lưu. Hai request song song hợp lệ vẫn là hai lần góp có chủ ý, mỗi lần trừ đúng một giá 50 điểm và guard không bao giờ cho âm. Có thể thêm bước xác nhận "Góp 50 Điểm Xanh?" ở Mini App nếu chủ dự án muốn (đổi giao diện, xem "Việc cần chủ dự án").
+
+### 4. Chi phí làm tròn trên số dư thật (minor, cổng deploy)
+
+Reviewer đúng: chỉ có số của dữ liệu mẫu (2.543đ cho 8 user ở L5; 7 user ở bản nháp spec) và DB local có 0 user có xu; số thật chỉ lấy được từ bản sao PROD. Cấm đụng PROD nên KHÔNG làm ở đây. Giữ làm cổng deploy: điều phối viên chạy truy vấn 3.3 (a) và (d) trên bản sao PROD và điền vào Bảng 3 của L5 (ô "Kết quả trên bản sao PROD") trước khi deploy. Trần lý thuyết 999đ × số user có xu + 999đ × số đơn XU còn huỷ/trả được. Không sửa SPEC (spec là luật); số đo ghi ở Bảng 3.
+
+### 5. `GET /me` thiếu lô quy đổi (minor)
+
+Xác minh: `users.service.ts` `serialize` chỉ trả `pointsBalance`, trong khi `AuthUser` và `/loyalty/me` trả cả hai lô; client nào đọc điểm từ `/me` sẽ thiếu phần quy đổi. Đúng.
+
+Test đỏ (`users.service.spec.ts`): `Tests: 2 failed, 28 passed, 30 total` (thiếu `pointsConvertedBalance`, `pointsTotal`). Sửa: `serialize` trả thêm `pointsConvertedBalance` và `pointsTotal = pointsBalance + pointsConvertedBalance` (cùng cho `getMe`, `updateMe`, `completeOnboarding`). Thêm field, không đổi field cũ. Xanh: `jest src/modules/users`: `Tests: 33 passed`.
+
+### 6. Thông báo `XU_CONVERTED` định dạng điểm (minor)
+
+Xác minh: migration `20261012160000_pd3_xu_converted_notice` định dạng `{{xu}}` bằng `to_char` + `replace` (dấu chấm) nhưng `{{points}}` bằng `pointsGranted::text`: user có ≥ 1.000 điểm nhận "2.147.483.000 xu … 2147483 Điểm Xanh". Đúng, chỉ là cosmetic.
+
+Test đỏ (`pd3-xu-converted-notice.race-spec.ts`, thêm user 2.147.483.000 xu → 2.147.483 điểm): `Tests: 1 failed, 3 passed, 4 total`. Sửa: cả `body` và `data.points` dùng cùng biểu thức `replace(to_char(…,'FM999,999,999,999'), ',', '.')`. Xanh: `Tests: 4 passed, 4 total`.
+
+Lưu ý checksum: file migration này đã được sửa tại chỗ. Nhánh chưa gộp và chưa deploy lên PROD nên không có DB nào cần giữ checksum cũ; `prisma migrate deploy` không kiểm checksum (chạy lại trên `tubu_it_pd3`: `No pending migrations to apply`), nhưng `prisma migrate dev` trên một DB đã áp bản cũ sẽ báo "đã sửa sau khi áp". Nếu máy nào đã áp bản cũ bằng `migrate dev`, dùng DB mới hoặc `migrate reset`.
+
+### Kiểm chứng cuối lượt
+
+```
+web:  vitest run checkout-points no-xu-copy order-view        -> Test Files 3 passed, Tests 26 passed
+api:  jest src/modules/game src/modules/users --maxWorkers=1  -> Test Suites 12 passed, Tests 224 passed
+race: pd3-tree-lock 4/4 | pd3-xu-converted-notice 4/4 | pd3-checkout-points 3/3 | game-spin-limit 2/2
+tsc --noEmit (api, web) sạch; ESLint file đã sửa sạch
+prisma migrate deploy: No pending migrations to apply | migrate diff --exit-code: No difference detected
+check-partial-indexes: mong đợi 20, có trong DB 20
+```
+
+Không chạy full suite, Playwright, dev server (theo chỉ thị). Migration: không thêm migration mới; chỉ sửa tại chỗ `20261012160000_pd3_xu_converted_notice` (mục 6).
+
+### Khác spec
+
+- Spec 2.4 ghi góp quỹ cây "STANDARD trước, thiếu thì CONVERTED"; nay "STANDARD dùng được (trừ phần khoá) trước". Cùng luật checkout và đổi voucher (spec 2.3 đã dùng `lockedOrderPoints` cho checkout). Chọn phương án an toàn tiền.
+
+### Việc cần chủ dự án (thêm từ Review C1)
+
+- **Ví trả một phần đơn (OQ-12, major #2): quyết hoãn sang gói riêng sau PD-3 hay làm ngay trước khi gộp.** Cổng 1 chưa nêu riêng phần này; Q-03 phương án 1 có nó. Hoãn thì xác nhận bằng văn bản và đổi dòng trong ROADMAP mục 9 thành quyết định.
+- Tuỳ chọn: thêm bước xác nhận "Góp 50 Điểm Xanh vào quỹ trồng cây?" ở Mini App (đổi giao diện, vì 50 điểm = 50.000đ và có thể lấy từ lô quy đổi).
+- Cổng deploy: điền Bảng 3 (L5) bằng số thật từ bản sao PROD (finding #4).
+- Quay thưởng không đọc điểm khoá (có từ trước PD-3, cùng loại với finding #3): muốn đóng thì một gói nhỏ riêng.
+- Chạy và xem trang thanh toán + tài khoản web bằng mắt (đổi ở finding #1, chưa thấy trên trình duyệt).
