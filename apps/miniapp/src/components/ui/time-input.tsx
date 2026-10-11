@@ -24,11 +24,12 @@ export function TimeInput({ value, onChange, style, id, ...aria }: TimeInputProp
       onChange={(e) => onChange(e.target.value)}
       style={{
         width: '100%',
+        minHeight: 44,
         padding: '10px 12px',
-        borderRadius: 8,
-        border: '1px solid var(--neutral-200, #dcdcdc)',
+        borderRadius: 'var(--radius-control)',
+        border: '1px solid var(--color-border-subtle)',
         fontSize: 16,
-        background: 'var(--neutral-0, #fff)',
+        background: 'var(--color-bg-surface)',
         color: 'inherit',
         boxSizing: 'border-box',
         ...style,
