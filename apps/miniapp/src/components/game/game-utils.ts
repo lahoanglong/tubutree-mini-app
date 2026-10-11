@@ -9,6 +9,7 @@ export function isSameVNDay(iso: string | null): boolean {
   return key(new Date(iso)) === key(new Date());
 }
 
+// Emoji ở đây là nội dung phân loại của câu hỏi, không phải icon chức năng.
 export function categoryLabel(cat: string): string {
   const map: Record<string, string> = {
     cay: '🌳 Cây cối',
@@ -28,7 +29,7 @@ export function difficultyLabel(d: number): string {
 }
 
 export function rarityColor(r: Rarity): string {
-  return r === 'LEGENDARY' ? 'var(--sun-700)' : r === 'RARE' ? 'var(--leaf-600)' : 'var(--neutral-400)';
+  return r === 'LEGENDARY' ? 'var(--honey-600)' : r === 'RARE' ? 'var(--sage-600)' : 'var(--stone-500)';
 }
 
 export function rarityLabel(r: Rarity): string {

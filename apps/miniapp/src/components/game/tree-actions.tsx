@@ -1,5 +1,7 @@
-import { Box, Text, Button } from 'zmp-ui';
+import { ShowerHead, TreePine } from 'lucide-react';
 import { formatXu } from '../../utils/format';
+import { Button } from '../ui/button';
+import { Text } from '../ui/text';
 
 export function TreeActions({
   treeXuPrice,
@@ -15,19 +17,17 @@ export function TreeActions({
   onBuy: () => void;
 }) {
   return (
-    <Box p={3}>
-      <Button fullWidth disabled={waterPending} loading={waterPending} variant="secondary" onClick={() => onWater()}>
-        🚿 Tưới cây (20💧)
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <Button size="lg" fullWidth icon={ShowerHead} disabled={waterPending} loading={waterPending} onPress={() => onWater()}>
+        Tưới cây (20💧)
       </Button>
-      <Box flex style={{ gap: 8, marginTop: 8 }}>
-        <Button style={{ flex: 1 }} size="small" disabled={buyPending} loading={buyPending} onClick={() => onBuy()}>
-          🌳 Mua cây thật
-          {treeXuPrice != null && ` (${formatXu(treeXuPrice)})`}
-        </Button>
-      </Box>
-      <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, textAlign: 'center' }}>
+      <Button fullWidth variant="secondary" icon={TreePine} disabled={buyPending} loading={buyPending} onPress={() => onBuy()}>
+        Mua cây thật
+        {treeXuPrice != null && ` (${formatXu(treeXuPrice)})`}
+      </Button>
+      <Text variant="caption" tone="tertiary" as="div" style={{ textAlign: 'center' }}>
         Mua bằng TubuXu — đổi từ Ví trong mục Ví của tôi.
       </Text>
-    </Box>
+    </div>
   );
 }

@@ -101,7 +101,7 @@ export default function GamePage() {
 
       {/* Bảng tin cộng đồng (§6.14.12) */}
       <GameLinkRow
-        icon={<MessagesSquare size={18} color="var(--leaf-600)" />}
+        icon={MessagesSquare}
         title="Bảng tin cộng đồng"
         hint="Khoe thành tích xanh & cổ vũ nhau trồng cây"
         onClick={() => navigate('/feed')}
@@ -109,7 +109,7 @@ export default function GamePage() {
 
       {/* Đổi vỏ chai lấy nước (§6.14.6) */}
       <GameLinkRow
-        icon={<Recycle size={18} color="var(--leaf-600)" />}
+        icon={Recycle}
         title="Đổi vỏ chai lấy nước"
         hint="Mang vỏ rỗng đến cửa hàng → nhận 💧 tưới vườn"
         onClick={() => navigate('/refill')}

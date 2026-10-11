@@ -1,5 +1,6 @@
-import { Box, Text, Button } from 'zmp-ui';
 import { vi } from '../../i18n/vi';
+import { Button } from '../ui/button';
+import { Text } from '../ui/text';
 
 // Hồi sinh chuỗi vừa mất (§streak-repair) — trang chỉ dựng khối này trong cửa sổ hồi sinh
 export function StreakRepair({
@@ -14,28 +15,23 @@ export function StreakRepair({
   onRepair: () => void;
 }) {
   return (
-    <Box
-      mx={3}
-      mt={2}
-      p={3}
-      style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--clay-500)' }}
+    <div
+      style={{
+        background: 'var(--color-promo-bg)',
+        borderRadius: 'var(--radius-card)',
+        border: '1px dashed var(--clay-500)',
+        padding: 12,
+      }}
     >
-      <Text size="small" bold style={{ color: 'var(--clay-700)' }}>
+      <Text variant="body-sm" as="div" style={{ color: 'var(--color-promo-fg)', fontWeight: 600 }}>
         {vi.game.streakRepair.title(brokenStreakDays ?? 0)}
       </Text>
-      <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 2 }}>
+      <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
         {vi.game.streakRepair.body}
       </Text>
-      <Button
-        fullWidth
-        size="small"
-        loading={pending}
-        disabled={pending}
-        onClick={() => onRepair()}
-        style={{ marginTop: 10, background: 'var(--clay-500)' }}
-      >
+      <Button variant="flash" fullWidth loading={pending} disabled={pending} onPress={() => onRepair()} style={{ marginTop: 10 }}>
         {vi.game.streakRepair.cta(cost ?? 0)}
       </Button>
-    </Box>
+    </div>
   );
 }

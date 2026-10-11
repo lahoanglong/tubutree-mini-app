@@ -11,11 +11,30 @@ import { fileURLToPath } from 'node:url';
  * khi sửa (đỏ → di cư → xanh). Bộ so khớp copy từ ds-legacy-vars-4b.spec.ts (cùng họ alias) và
  * từ scripts/uiux/static-scan.mjs (hex/rgb) để guard và số đo static-scan không lệch nhau.
  */
-const FILES_PC10A = ['src/pages/loyalty.tsx'];
+const GAME_FILES = [
+  'src/components/game/game-card.tsx',
+  'src/components/game/game-link-row.tsx',
+  'src/components/game/game-states.tsx',
+  'src/components/game/game-utils.ts',
+  'src/components/game/garden-hero.tsx',
+  'src/components/game/tree-health-alert.tsx',
+  'src/components/game/tree-actions.tsx',
+  'src/components/game/streak-repair.tsx',
+  'src/components/game/checkin-streak.tsx',
+  'src/components/game/use-game-actions.ts',
+  'src/components/game/use-game-data.ts',
+];
+const FILES_PC10A = ['src/pages/loyalty.tsx', ...GAME_FILES];
 
 /** Cho phép giữ emoji theo file: chỉ nội dung hạng/lời chúc/chuỗi ngày. */
 const ALLOWED_EMOJI: Record<string, string[]> = {
   'src/pages/loyalty.tsx': ['🌱', '🌿', '🌳', '🌲', '🎉', '🔥'],
+  // Giai đoạn cây, đơn vị giọt nước 💧, chuỗi ngày 🔥 và 🌳 "cây thật" là nội dung game.
+  'src/components/game/garden-hero.tsx': ['🌱', '🌿', '🌳', '💧', '🔥'],
+  'src/components/game/game-utils.ts': ['🌳', '💧', '🌍', '🌬', '🐾', '♻', '⚡', '🌿', '🌟', '💎', '🍃'],
+  'src/components/game/checkin-streak.tsx': ['💧', '🎁'],
+  'src/components/game/tree-actions.tsx': ['💧'],
+  'src/components/game/use-game-actions.ts': ['🧊', '💦', '🎁', '🌳', '🪴'],
 };
 
 /** Trang chỉ được lấy khung/điều hướng/snackbar từ zmp-ui; Box/Text/Button... dùng components/ui. */
@@ -105,7 +124,7 @@ describe('PC-10a — không màu thô (hex/rgb)', () => {
 });
 
 describe('PC-10a — chỉ lấy khung trang từ zmp-ui', () => {
-  it.each(FILES_PC10A.filter((f) => f.startsWith('src/pages/')))('%s', (file) => {
+  it.each(FILES_PC10A.filter((f) => f.startsWith('src/pages/') || f.startsWith('src/components/game/')))('%s', (file) => {
     expect(zmpUiImports(read(file)).filter((name) => !ZMP_UI_ALLOWED.has(name))).toEqual([]);
   });
 });

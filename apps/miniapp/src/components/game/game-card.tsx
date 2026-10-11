@@ -1,13 +1,18 @@
 import type { ReactNode } from 'react';
-import { Box, Text } from 'zmp-ui';
+import type { LucideIcon } from 'lucide-react';
+import { Card } from '../ui/card';
+import { Heading } from '../ui/text';
+import { Icon } from '../ui/icon';
 
-export function GameCard({ title, children }: { title: string; children: ReactNode }) {
+/** Khung chuẩn của mỗi khối trong trang Vườn Xanh: tiêu đề h2 (icon Lucide, không emoji) + nội dung. */
+export function GameCard({ title, icon, children }: { title: string; icon?: LucideIcon; children: ReactNode }) {
   return (
-    <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
-      <Text bold size="small" style={{ marginBottom: 8 }}>
+    <Card padding={16}>
+      <Heading variant="title-sm" as="h2" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        {icon && <Icon icon={icon} tone="brand" />}
         {title}
-      </Text>
+      </Heading>
       {children}
-    </Box>
+    </Card>
   );
 }
