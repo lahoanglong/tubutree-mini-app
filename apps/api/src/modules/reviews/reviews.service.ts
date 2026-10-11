@@ -1,10 +1,16 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateReviewDto } from './dto/review.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 type Db = PrismaService | Prisma.TransactionClient;
+
+const errCode = (err: unknown): string | undefined =>
+  typeof err === 'object' && err !== null ? (err as { code?: string }).code : undefined;
+
+/** Số lần thử lại khi tạo/sửa thua một request đồng thời của chính người đó (tạo cùng lúc, hoặc xoá đúng lúc sửa). */
+const SAVE_ATTEMPTS = 3;
 
 @Injectable()
 export class ReviewsService {
@@ -19,7 +25,14 @@ export class ReviewsService {
    * chọn sao, upload ảnh/video (đã tải lên server) rồi bấm Gửi mới nhận lỗi và mất trắng công
    * sức (P1-2, audit mạch lạc B2C). Trả kèm `reason` để FE nói đúng lý do thay vì báo chung.
    */
-  async canReview(userId: string, slug: string): Promise<{ canReview: boolean; reason: string | null }> {
+  async canReview(
+    userId: string,
+    slug: string,
+  ): Promise<{
+    canReview: boolean;
+    reason: 'NOT_PURCHASED' | null;
+    myReview?: { id: string; rating: number; comment: string | null; images: string[]; videoUrl: string | null } | null;
+  }> {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
 
@@ -37,10 +50,21 @@ export class ReviewsService {
     });
     if (!delivered) return { canReview: false, reason: 'NOT_PURCHASED' };
 
+    // Q-30: đã có đánh giá thì vẫn được (mua lại → sửa đánh giá cũ); trả đánh giá hiện có để FE điền sẵn form.
     const existing = await this.prisma.review.findFirst({ where: { userId, productId: product.id } });
-    if (existing) return { canReview: false, reason: 'ALREADY_REVIEWED' };
-
-    return { canReview: true, reason: null };
+    return {
+      canReview: true,
+      reason: null,
+      myReview: existing
+        ? {
+            id: existing.id,
+            rating: existing.rating,
+            comment: existing.comment,
+            images: existing.images,
+            videoUrl: existing.videoUrl,
+          }
+        : null,
+    };
   }
 
   async create(userId: string, slug: string, dto: CreateReviewDto) {
@@ -64,54 +88,91 @@ export class ReviewsService {
       throw new BadRequestException('Chỉ đánh giá sản phẩm đã mua và nhận hàng.');
     }
 
-    // Mỗi user chỉ đánh giá 1 lần / sản phẩm — tránh farm điểm review.
-    const existing = await this.prisma.review.findFirst({ where: { userId, productId: product.id } });
-    if (existing) throw new BadRequestException('Bạn đã đánh giá sản phẩm này rồi.');
+    // Q-30: mỗi người một đánh giá cho mỗi sản phẩm (unique userId+productId). Đã có thì gọi tạo
+    // lại = SỬA đánh giá cũ và KHÔNG thưởng điểm; chỉ lần tạo đầu được thưởng (chống farm điểm).
+    // Khoá unique là chốt chặn cuối: hai request tạo đồng thời thì request thua nhận P2002 ở bước
+    // tạo (trước cả bước ghi điểm, cùng transaction) rồi đọc lại và chuyển sang sửa.
+    for (let attempt = 0; attempt < SAVE_ATTEMPTS; attempt++) {
+      const existing = await this.prisma.review.findFirst({ where: { userId, productId: product.id } });
+      try {
+        const review = existing
+          ? await this.updateOwn(userId, product, dto)
+          : await this.createFirst(userId, product, delivered.id, dto);
+        return { ...review, updated: !!existing };
+      } catch (err) {
+        const lostRace = errCode(err) === (existing ? 'P2025' : 'P2002');
+        if (!lostRace) throw err;
+      }
+    }
+    throw new ConflictException('Không lưu được đánh giá do thao tác đồng thời, vui lòng thử lại.');
+  }
 
+  private async createFirst(
+    userId: string,
+    product: { id: string; slug: string },
+    orderId: string,
+    dto: CreateReviewDto,
+  ) {
     // Thưởng điểm theo độ phong phú UGC: video (§6.14.9) > ảnh > chỉ chữ.
     const hasVideo = !!dto.videoUrl;
     const hasImages = (dto.images?.length ?? 0) > 0;
     const pointsEarned = hasVideo ? 15 : hasImages ? 10 : 5;
 
-    let review;
-    try {
-      review = await this.prisma.$transaction(async (tx) => {
-        const r = await tx.review.create({
-          data: {
-            userId,
-            productId: product.id,
-            orderId: delivered.id,
-            rating: dto.rating,
-            comment: dto.comment,
-            images: dto.images ?? [],
-            videoUrl: dto.videoUrl ?? null,
-            pointsEarned,
-          },
-        });
-        await tx.pointsTransaction.create({
-          data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id },
-        });
-        await tx.user.update({ where: { id: userId }, data: { pointsBalance: { increment: pointsEarned } } });
-        // Cập nhật rating denormalized cho Product (hiển thị sao trên card/PDP) — trong
-        // cùng transaction để tránh lệch dữ liệu nếu bước này lỗi sau khi review đã tạo.
-        await this.recomputeRating(product.id, tx);
-        await this.analytics.record(tx, {
-          eventName: 'engagement_action',
+    return this.prisma.$transaction(async (tx) => {
+      const r = await tx.review.create({
+        data: {
           userId,
-          platform: 'miniapp',
-          props: { action: 'review_created', productSlug: slug, pointsEarned },
-        });
-        return r;
+          productId: product.id,
+          orderId,
+          rating: dto.rating,
+          comment: dto.comment,
+          images: dto.images ?? [],
+          videoUrl: dto.videoUrl ?? null,
+          pointsEarned,
+        },
       });
-    } catch (err) {
-      // Race: 2 request đánh giá đồng thời — unique(userId,productId) chặn cái thứ hai.
-      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
-        throw new BadRequestException('Bạn đã đánh giá sản phẩm này rồi.');
-      }
-      throw err;
-    }
+      await tx.pointsTransaction.create({
+        data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id },
+      });
+      await tx.user.update({ where: { id: userId }, data: { pointsBalance: { increment: pointsEarned } } });
+      // Cập nhật rating denormalized cho Product (hiển thị sao trên card/PDP) — trong
+      // cùng transaction để tránh lệch dữ liệu nếu bước này lỗi sau khi review đã tạo.
+      await this.recomputeRating(product.id, tx);
+      await this.analytics.record(tx, {
+        eventName: 'engagement_action',
+        userId,
+        platform: 'miniapp',
+        props: { action: 'review_created', productSlug: product.slug, pointsEarned },
+      });
+      return r;
+    });
+  }
 
-    return review;
+  /**
+   * Sửa đánh giá của chính người gọi (khoá theo userId+productId nên không thể sửa của người khác).
+   * Thay toàn bộ sao/nội dung/ảnh/video như lúc tạo; giữ nguyên điểm đã thưởng (pointsEarned còn
+   * được `remove` dùng để hoàn điểm), orderId và isVisible — sửa không gỡ được lệnh ẩn của admin.
+   */
+  private async updateOwn(userId: string, product: { id: string; slug: string }, dto: CreateReviewDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const r = await tx.review.update({
+        where: { userId_productId: { userId, productId: product.id } },
+        data: {
+          rating: dto.rating,
+          comment: dto.comment ?? null,
+          images: dto.images ?? [],
+          videoUrl: dto.videoUrl ?? null,
+        },
+      });
+      await this.recomputeRating(product.id, tx);
+      await this.analytics.record(tx, {
+        eventName: 'engagement_action',
+        userId,
+        platform: 'miniapp',
+        props: { action: 'review_updated', productSlug: product.slug, pointsEarned: 0 },
+      });
+      return r;
+    });
   }
 
   /** Tính lại ratingAvg + reviewCount cho 1 sản phẩm từ review hiển thị. */
