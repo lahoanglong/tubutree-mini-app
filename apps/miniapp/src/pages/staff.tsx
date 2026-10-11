@@ -1,18 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
+import { Input, Page, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  Copy,
-  Trash2,
-  Pencil,
-  CalendarClock,
-  LogIn,
-  LogOut,
-  MapPin,
-} from 'lucide-react';
+import { Plus, Copy, LogIn, LogOut, MapPin } from 'lucide-react';
 import {
   getAttendanceStatus,
   acquireLocationPayload,
@@ -33,10 +22,20 @@ import {
 } from '../services/shifts-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
-import { Skeleton } from '../components/ui/skeleton';
+import { Badge, type BadgeTone } from '../components/ui/badge';
+import { BottomSheet } from '../components/ui/bottom-sheet';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
 import { ErrorState } from '../components/ui/empty-state';
+import { Field } from '../components/ui/form';
+import { Icon } from '../components/ui/icon';
+import { PageHeader } from '../components/ui/page-header';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
+import { Skeleton } from '../components/ui/skeleton';
+import { Heading, Text } from '../components/ui/text';
 import { TimeInput } from '../components/ui/time-input';
 import { ImageUpload } from '../components/image-upload';
+import { PeriodNav } from '../components/period-nav';
 import {
   mondayKeyOf,
   addDaysKey,
@@ -50,23 +49,24 @@ import {
   dowLabel,
 } from '../utils/week';
 
-const STATUS: Record<Shift['status'], { label: string; bg: string; fg: string }> = {
-  PENDING: { label: 'Chờ duyệt', bg: 'var(--warning-bg)', fg: 'var(--warning)' },
-  APPROVED: { label: 'Đã duyệt', bg: 'var(--success-bg)', fg: 'var(--leaf-700)' },
-  REJECTED: { label: 'Từ chối', bg: 'var(--danger-bg)', fg: 'var(--danger)' },
-  CANCELLED: { label: 'Đã huỷ', bg: 'var(--neutral-100)', fg: 'var(--neutral-500)' },
+const STATUS: Record<Shift['status'], { label: string; tone: BadgeTone }> = {
+  PENDING: { label: 'Chờ duyệt', tone: 'warning' },
+  APPROVED: { label: 'Đã duyệt', tone: 'success' },
+  REJECTED: { label: 'Từ chối', tone: 'danger' },
+  CANCELLED: { label: 'Đã huỷ', tone: 'neutral' },
 };
+
+const TIME_RE = /^\d{1,2}:\d{2}$/;
 
 export default function StaffPage() {
   const role = useAuthStore((s) => s.user?.role);
   if (role !== 'STAFF' && role !== 'ADMIN') {
     return (
-      <Page className="page">
-        <Box p={6} style={{ textAlign: 'center' }}>
-          <Text style={{ color: 'var(--neutral-600)' }}>
-            Trang dành cho nhân viên. Liên hệ quản trị để được cấp quyền.
-          </Text>
-        </Box>
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title="Ca làm của tôi" />
+        <div style={{ padding: 24, textAlign: 'center' }}>
+          <Text tone="secondary">Trang dành cho nhân viên. Liên hệ quản trị để được cấp quyền.</Text>
+        </div>
       </Page>
     );
   }
@@ -117,7 +117,7 @@ function TodayCard() {
   // dùng là NGÀY HÔM SAU) thì tự chuyển sang ngày kế tiếp. Sau đó validate checkout > checkin
   // và checkout <= hiện tại.
   const backoutCandidateISO = (() => {
-    if (!open || !/^\d{1,2}:\d{2}$/.test(backTime)) return null;
+    if (!open || !TIME_RE.test(backTime)) return null;
     const checkinMs = new Date(open.checkinAt).getTime();
     const checkinDay = vnDateKey(new Date(open.checkinAt));
     const sameDayISO = vnDateTimeISO(checkinDay, backTime);
@@ -153,108 +153,117 @@ function TodayCard() {
     };
   }, [openId]);
 
+  const tone = open ? 'inverse' : 'primary';
   return (
-    <Box
-      style={{
-        background: open ? 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))' : 'var(--neutral-0)',
-        color: open ? 'var(--neutral-0)' : 'inherit',
-        borderRadius: 14,
-        padding: 16,
-      }}
+    <Card
+      padding={16}
+      style={open ? { background: 'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))', boxShadow: 'none' } : undefined}
     >
-      <Box flex alignItems="center" style={{ gap: 8, marginBottom: 8 }}>
-        <MapPin size={18} color={open ? 'var(--neutral-0)' : 'var(--leaf-700)'} />
-        <Text bold style={{ color: open ? 'var(--neutral-0)' : 'inherit' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <Icon icon={MapPin} size="sm" tone={open ? 'inverse' : 'brand'} />
+        <Heading variant="title-sm" as="h2" tone={tone}>
           Chấm công hôm nay
-        </Text>
-      </Box>
+        </Heading>
+      </div>
 
-      {statusQ.isLoading && <Skeleton style={{ height: 40, borderRadius: 10 }} />}
+      {statusQ.isLoading && <Skeleton height={40} />}
 
       {open ? (
         <>
-          <Text size="small" style={{ color: 'rgba(255,255,255,0.9)' }}>
+          <Text variant="body-sm" tone="inverse" as="div">
             Đang trong ca · vào lúc {isoToVnHHMM(open.checkinAt)}
             {open.isLate ? ' · đi trễ' : ''}
           </Text>
           <Button
             fullWidth
             variant="secondary"
-            prefixIcon={<LogOut size={16} />}
+            icon={LogOut}
             style={{ marginTop: 10 }}
-            loading={checkoutM.isPending} disabled={checkoutM.isPending}
-            onClick={() => checkoutM.mutate(undefined)}
+            loading={checkoutM.isPending}
+            onPress={() => checkoutM.mutate(undefined)}
           >
             Checkout
           </Button>
-          <Text
-            size="xSmall"
-            style={{ color: 'var(--neutral-0)', marginTop: 8, textDecoration: 'underline' }}
+          <button
+            type="button"
+            className="tubu-press"
             onClick={() => {
               setBackTime(isoToVnHHMM(open.checkinAt));
               setBackOpen(true);
             }}
+            style={{
+              display: 'block',
+              minHeight: 44,
+              padding: 0,
+              marginTop: 4,
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: 'var(--type-caption-size)',
+              textDecoration: 'underline',
+              color: 'var(--color-text-inverse)',
+            }}
           >
             Quên checkout? Chọn giờ đã về →
-          </Text>
-          <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.8)', marginTop: 6 }}>
+          </button>
+          <Text variant="caption" tone="inverse" as="div">
             Nghỉ giữa ca? Checkout rồi Checkin lại khi quay lại.
           </Text>
         </>
       ) : todayShifts.length === 0 ? (
-        <Text size="small" style={{ color: 'var(--neutral-500)' }}>
+        <Text variant="body-sm" tone="secondary" as="div">
           Hôm nay bạn không có ca đã duyệt.
         </Text>
       ) : (
         todayShifts.map((s) => (
-          <Box
+          <div
             key={s.id}
-            flex
-            alignItems="center"
-            justifyContent="space-between"
-            style={{ marginTop: 8, gap: 8 }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8 }}
           >
-            <Text size="small">
+            <Text variant="body-sm">
               Ca {isoToVnHHMM(s.approvedStart ?? s.startAt)}–{isoToVnHHMM(s.approvedEnd ?? s.endAt)}
             </Text>
-            <Button
-              size="small"
-              prefixIcon={<LogIn size={15} />}
-              loading={checkinM.isPending} disabled={checkinM.isPending}
-              onClick={() => checkinM.mutate(s.id)}
-            >
+            <Button icon={LogIn} loading={checkinM.isPending} onPress={() => checkinM.mutate(s.id)}>
               Checkin
             </Button>
-          </Box>
+          </div>
         ))
       )}
-      <Text size="xSmall" style={{ color: open ? 'rgba(255,255,255,0.8)' : 'var(--neutral-400)', marginTop: 8 }}>
+      <Text variant="caption" tone={open ? 'inverse' : 'tertiary'} as="div" style={{ marginTop: 8 }}>
         Cần ở đúng mạng WiFi công ty & trong vùng để chấm công.
       </Text>
 
-      <Sheet visible={backOpen} onClose={() => setBackOpen(false)} autoHeight>
-        <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
-          <Text.Title size="small">Checkout lùi giờ</Text.Title>
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-            Chọn giờ bạn đã thực sự rời đi (chỉ được chọn giờ trong quá khứ, sau giờ checkin).
-          </Text>
-          <TimeInput value={backTime} onChange={setBackTime} />
-          {backoutInvalid && open && /^\d{1,2}:\d{2}$/.test(backTime) && (
-            <Text size="xSmall" style={{ color: 'var(--danger)' }}>
-              Giờ đã chọn phải sau giờ checkin ({isoToVnHHMM(open.checkinAt)}) và không được ở tương lai.
-            </Text>
-          )}
+      <BottomSheet
+        open={backOpen}
+        onClose={() => setBackOpen(false)}
+        title="Checkout lùi giờ"
+        footer={
           <Button
             fullWidth
             loading={checkoutM.isPending}
-            disabled={backoutInvalid || checkoutM.isPending}
-            onClick={() => backoutCandidateISO && checkoutM.mutate(backoutCandidateISO)}
+            disabled={backoutInvalid}
+            onPress={() => backoutCandidateISO && checkoutM.mutate(backoutCandidateISO)}
           >
             Xác nhận checkout
           </Button>
-        </Box>
-      </Sheet>
-    </Box>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Text variant="caption" tone="secondary" as="div">
+            Chọn giờ bạn đã thực sự rời đi (chỉ được chọn giờ trong quá khứ, sau giờ checkin).
+          </Text>
+          <Field label="Giờ đã về">
+            <TimeInput value={backTime} onChange={setBackTime} />
+          </Field>
+          {backoutInvalid && open && TIME_RE.test(backTime) && (
+            <Text variant="caption" tone="danger" as="div">
+              Giờ đã chọn phải sau giờ checkin ({isoToVnHHMM(open.checkinAt)}) và không được ở tương lai.
+            </Text>
+          )}
+        </div>
+      </BottomSheet>
+    </Card>
   );
 }
 
@@ -433,334 +442,337 @@ function StaffHub() {
   });
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
-      <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-        <Box flex alignItems="center" style={{ gap: 8 }}>
-          <CalendarClock size={22} color="var(--leaf-700)" />
-          <Text.Title size="small">Ca làm của tôi</Text.Title>
-        </Box>
-
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
+      <PageHeader title="Ca làm của tôi" />
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <TodayCard />
 
         {/* Điều hướng tuần */}
-        <Box
-          flex
-          alignItems="center"
-          justifyContent="space-between"
-          style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: '8px 12px' }}
-        >
-          <Button size="small" variant="tertiary" onClick={() => setMondayKey(addDaysKey(mondayKey, -7))}>
-            <ChevronLeft size={18} />
-          </Button>
-          <Text size="small" bold>
-            {shortDayLabel(mondayKey)} – {shortDayLabel(addDaysKey(mondayKey, 6))}
-          </Text>
-          <Button size="small" variant="tertiary" onClick={() => setMondayKey(addDaysKey(mondayKey, 7))}>
-            <ChevronRight size={18} />
-          </Button>
-        </Box>
+        <PeriodNav
+          label={`${shortDayLabel(mondayKey)} – ${shortDayLabel(addDaysKey(mondayKey, 6))}`}
+          prevLabel="Tuần trước"
+          nextLabel="Tuần sau"
+          onPrev={() => setMondayKey(addDaysKey(mondayKey, -7))}
+          onNext={() => setMondayKey(addDaysKey(mondayKey, 7))}
+        />
 
-        <Box flex style={{ gap: 8 }}>
-          <Button
-            size="small"
-            prefixIcon={<Plus size={15} />}
-            style={{ flex: 1 }}
-            onClick={openQuick}
-          >
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button icon={Plus} style={{ flex: 1 }} onPress={openQuick}>
             Đăng ký nhanh
           </Button>
-          <Button
-            size="small"
-            variant="secondary"
-            prefixIcon={<Copy size={15} />}
-            style={{ flex: 1 }}
-            loading={copyM.isPending} disabled={copyM.isPending}
-            onClick={() => copyM.mutate()}
-          >
+          <Button variant="secondary" icon={Copy} style={{ flex: 1 }} loading={copyM.isPending} onPress={() => copyM.mutate()}>
             Copy tuần trước
           </Button>
-        </Box>
+        </div>
 
-        {(tplQ.isLoading || shiftsQ.isLoading) && <Skeleton style={{ height: 120, borderRadius: 12 }} />}
+        {(tplQ.isLoading || shiftsQ.isLoading) && <Skeleton height={120} radius="var(--radius-card)" />}
         {shiftsQ.isError && (
           <ErrorState message={getErrorMessage(shiftsQ.error)} onRetry={() => void shiftsQ.refetch()} />
         )}
 
         {shiftsQ.data &&
-          dayKeys.map((dk) => (
-            <Box key={dk} style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
-              <Box flex justifyContent="space-between" alignItems="center" style={{ marginBottom: 6 }}>
-                <Text bold>
-                  {dowLabel(dk)} · {shortDayLabel(dk)}
-                </Text>
-                {dk >= todayKey && (
-                  <Button size="small" variant="tertiary" prefixIcon={<Plus size={15} />} onClick={() => openAdd(dk)}>
-                    Thêm
-                  </Button>
+          dayKeys.map((dk) => {
+            const dayName = `${dowLabel(dk)} ${shortDayLabel(dk)}`;
+            return (
+              <Card key={dk}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <Heading variant="title-sm" as="h2">
+                    {dowLabel(dk)} · {shortDayLabel(dk)}
+                  </Heading>
+                  {dk >= todayKey && (
+                    <Button variant="ghost" icon={Plus} aria-label={`Thêm ca ${dayName}`} onPress={() => openAdd(dk)}>
+                      Thêm
+                    </Button>
+                  )}
+                </div>
+                {(byDay[dk] ?? []).length === 0 && (
+                  <Text variant="caption" tone="tertiary" as="div">
+                    Chưa đăng ký ca.
+                  </Text>
                 )}
-              </Box>
-              {(byDay[dk] ?? []).length === 0 && (
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                  Chưa đăng ký ca.
-                </Text>
-              )}
-              {(byDay[dk] ?? []).map((s) => {
-                const st = STATUS[s.status];
-                const start = isoToVnHHMM(s.approvedStart ?? s.startAt);
-                const end = isoToVnHHMM(s.approvedEnd ?? s.endAt);
-                const adjusted = !!s.approvedStart || !!s.approvedEnd;
-                return (
-                  <Box
-                    key={s.id}
-                    flex
-                    alignItems="center"
-                    justifyContent="space-between"
-                    style={{ padding: '8px 0', borderTop: '1px solid var(--neutral-100)', gap: 8 }}
-                  >
-                    <Box style={{ flex: 1, minWidth: 0 }}>
-                      <Text size="small">
-                        {start} – {end}
-                        {adjusted && (
-                          <Text size="xSmall" style={{ display: 'inline', color: 'var(--neutral-400)' }}>
-                            {' '}
-                            (đã chỉnh)
+                {(byDay[dk] ?? []).map((s) => {
+                  const st = STATUS[s.status];
+                  const start = isoToVnHHMM(s.approvedStart ?? s.startAt);
+                  const end = isoToVnHHMM(s.approvedEnd ?? s.endAt);
+                  const adjusted = !!s.approvedStart || !!s.approvedEnd;
+                  return (
+                    <div
+                      key={s.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        padding: '8px 0',
+                        borderTop: '1px solid var(--color-border-subtle)',
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Text variant="body-sm" as="div">
+                          {start} – {end}
+                          {adjusted && (
+                            <Text variant="caption" tone="tertiary">
+                              {' '}
+                              (đã chỉnh)
+                            </Text>
+                          )}
+                        </Text>
+                        <div style={{ marginTop: 2 }}>
+                          <Badge tone={st.tone} size="sm">
+                            {st.label}
+                            {s.status === 'CANCELLED' && s.cancelPenalty ? ' · phạt 1h' : ''}
+                          </Badge>
+                        </div>
+                        {s.status === 'REJECTED' && s.rejectReason && (
+                          <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
+                            Lý do: {s.rejectReason}
                           </Text>
                         )}
-                      </Text>
-                      <Box
-                        style={{
-                          display: 'inline-block',
-                          marginTop: 2,
-                          padding: '1px 8px',
-                          borderRadius: 999,
-                          background: st.bg,
-                        }}
-                      >
-                        <Text size="xSmall" style={{ color: st.fg }}>
-                          {st.label}
-                          {s.status === 'CANCELLED' && s.cancelPenalty ? ' · phạt 1h' : ''}
-                        </Text>
-                      </Box>
-                      {s.status === 'REJECTED' && s.rejectReason && (
-                        <Text size="xSmall" style={{ color: 'var(--neutral-500)', display: 'block', marginTop: 2 }}>
-                          Lý do: {s.rejectReason}
-                        </Text>
+                      </div>
+                      {s.status === 'PENDING' && (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <Button variant="ghost" aria-label={`Sửa ca ${dayName}`} onPress={() => openEdit(s)}>
+                            Sửa
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            aria-label={`Xoá ca ${dayName}`}
+                            style={{ color: 'var(--color-text-danger)' }}
+                            disabled={delM.isPending}
+                            onPress={() => delM.mutate(s.id)}
+                          >
+                            Xoá
+                          </Button>
+                        </div>
                       )}
-                    </Box>
-                    {s.status === 'PENDING' && (
-                      <Box flex style={{ gap: 4 }}>
-                        <Button size="small" variant="tertiary" onClick={() => openEdit(s)}>
-                          <Pencil size={15} />
-                        </Button>
+                      {s.status === 'APPROVED' && (
                         <Button
-                          size="small"
-                          variant="tertiary"
-                          style={{ color: 'var(--danger)' }}
-                          disabled={delM.isPending}
-                          onClick={() => delM.mutate(s.id)}
+                          variant="ghost"
+                          aria-label={`Huỷ ca ${dayName}`}
+                          style={{ color: 'var(--color-text-danger)' }}
+                          onPress={() => setCancelId(s.id)}
                         >
-                          <Trash2 size={15} />
+                          Huỷ ca
                         </Button>
-                      </Box>
-                    )}
-                    {s.status === 'APPROVED' && (
-                      <Button
-                        size="small"
-                        variant="tertiary"
-                        style={{ color: 'var(--danger)' }}
-                        onClick={() => setCancelId(s.id)}
-                      >
-                        Huỷ ca
-                      </Button>
-                    )}
-                  </Box>
-                );
-              })}
-            </Box>
-          ))}
-      </Box>
+                      )}
+                    </div>
+                  );
+                })}
+              </Card>
+            );
+          })}
+      </div>
 
       {/* Sheet thêm/sửa */}
-      <Sheet visible={formOpen} onClose={() => setFormOpen(false)} autoHeight>
-        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-          <Text.Title size="small">
-            {editId ? 'Sửa ca' : 'Thêm ca'} · {dowLabel(formDay)} {shortDayLabel(formDay)}
-          </Text.Title>
-
+      <BottomSheet
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        title={`${editId ? 'Sửa ca' : 'Thêm ca'} · ${dowLabel(formDay)} ${shortDayLabel(formDay)}`}
+        footer={
+          <Button
+            fullWidth
+            loading={saveM.isPending}
+            disabled={!custom && !editId ? !tplId : !TIME_RE.test(customStart) || !TIME_RE.test(customEnd)}
+            onPress={() => saveM.mutate()}
+          >
+            {editId ? 'Lưu' : 'Gửi duyệt'}
+          </Button>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {!editId && (tplQ.data?.length ?? 0) > 0 && (
             <>
-              <Text size="small" style={{ color: 'var(--neutral-500)' }}>
+              <Text variant="caption" tone="secondary" as="div">
                 Chọn ca chuẩn
               </Text>
-              <Box flex style={{ gap: 8, flexWrap: 'wrap' }}>
-                {tplQ.data!.map((t: ShiftTemplate) => (
-                  <Button
-                    key={t.id}
-                    size="small"
-                    variant={!custom && tplId === t.id ? undefined : 'secondary'}
-                    onClick={() => {
-                      setCustom(false);
-                      setTplId(t.id);
-                    }}
-                  >
-                    {t.name} ({minToHHMM(t.startMin)}–{minToHHMM(t.endMin)})
-                  </Button>
-                ))}
-                <Button
-                  size="small"
-                  variant={custom ? undefined : 'secondary'}
-                  onClick={() => setCustom(true)}
-                >
+              <div role="group" aria-label="Ca chuẩn" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {tplQ.data!.map((t: ShiftTemplate) => {
+                  const picked = !custom && tplId === t.id;
+                  return (
+                    <Button
+                      key={t.id}
+                      variant={picked ? 'primary' : 'secondary'}
+                      aria-pressed={picked}
+                      onPress={() => {
+                        setCustom(false);
+                        setTplId(t.id);
+                      }}
+                    >
+                      {t.name} ({minToHHMM(t.startMin)}–{minToHHMM(t.endMin)})
+                    </Button>
+                  );
+                })}
+                <Button variant={custom ? 'primary' : 'secondary'} aria-pressed={custom} onPress={() => setCustom(true)}>
                   Giờ khác
                 </Button>
-              </Box>
+              </div>
             </>
           )}
 
           {(custom || editId || (tplQ.data?.length ?? 0) === 0) && (
-            <Box flex style={{ gap: 8 }}>
-              <Box style={{ flex: 1 }}>
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                  Bắt đầu
-                </Text>
-                <TimeInput value={customStart} onChange={setCustomStart} />
-              </Box>
-              <Box style={{ flex: 1 }}>
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                  Kết thúc
-                </Text>
-                <TimeInput value={customEnd} onChange={setCustomEnd} />
-              </Box>
-            </Box>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <Field label="Bắt đầu">
+                  <TimeInput value={customStart} onChange={setCustomStart} />
+                </Field>
+              </div>
+              <div style={{ flex: 1 }}>
+                <Field label="Kết thúc">
+                  <TimeInput value={customEnd} onChange={setCustomEnd} />
+                </Field>
+              </div>
+            </div>
           )}
-
-          <Button
-            fullWidth
-            loading={saveM.isPending}
-            disabled={(!custom && !editId ? !tplId : !/^\d{1,2}:\d{2}$/.test(customStart) || !/^\d{1,2}:\d{2}$/.test(customEnd)) || saveM.isPending}
-            onClick={() => saveM.mutate()}
-          >
-            {editId ? 'Lưu' : 'Gửi duyệt'}
-          </Button>
-        </Box>
-      </Sheet>
+        </div>
+      </BottomSheet>
 
       {/* Sheet đăng ký nhanh nhiều ngày */}
-      <Sheet visible={quickOpen} onClose={() => setQuickOpen(false)} autoHeight>
-        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-          <Text.Title size="small">Đăng ký nhanh cả tuần</Text.Title>
-
+      <BottomSheet
+        open={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        title="Đăng ký nhanh cả tuần"
+        footer={
+          <Button
+            fullWidth
+            loading={quickM.isPending}
+            disabled={quickDays.size === 0 || (!quickTplId && (!TIME_RE.test(quickStart) || !TIME_RE.test(quickEnd)))}
+            onPress={() => quickM.mutate()}
+          >
+            Gửi duyệt {quickDays.size > 0 ? `(${quickDays.size} ngày)` : ''}
+          </Button>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {(tplQ.data?.length ?? 0) > 0 && (
-            <Box flex style={{ gap: 8, flexWrap: 'wrap' }}>
+            <div role="group" aria-label="Ca chuẩn" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {tplQ.data!.map((t) => (
                 <Button
                   key={t.id}
-                  size="small"
-                  variant={quickTplId === t.id ? undefined : 'secondary'}
-                  onClick={() => setQuickTplId(quickTplId === t.id ? null : t.id)}
+                  variant={quickTplId === t.id ? 'primary' : 'secondary'}
+                  aria-pressed={quickTplId === t.id}
+                  onPress={() => setQuickTplId(quickTplId === t.id ? null : t.id)}
                 >
                   {t.name} ({minToHHMM(t.startMin)}–{minToHHMM(t.endMin)})
                 </Button>
               ))}
-            </Box>
+            </div>
           )}
 
           {!quickTplId && (
-            <Box flex style={{ gap: 8 }}>
-              <Box style={{ flex: 1 }}>
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Bắt đầu</Text>
-                <TimeInput value={quickStart} onChange={setQuickStart} />
-              </Box>
-              <Box style={{ flex: 1 }}>
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Kết thúc</Text>
-                <TimeInput value={quickEnd} onChange={setQuickEnd} />
-              </Box>
-            </Box>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <Field label="Bắt đầu">
+                  <TimeInput value={quickStart} onChange={setQuickStart} />
+                </Field>
+              </div>
+              <div style={{ flex: 1 }}>
+                <Field label="Kết thúc">
+                  <TimeInput value={quickEnd} onChange={setQuickEnd} />
+                </Field>
+              </div>
+            </div>
           )}
 
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Chọn ngày áp dụng</Text>
-          <Box flex style={{ gap: 6, flexWrap: 'wrap' }}>
+          <Text variant="caption" tone="secondary" as="div">
+            Chọn ngày áp dụng
+          </Text>
+          <div role="group" aria-label="Ngày áp dụng" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {dayKeys.map((dk) => (
               <Button
                 key={dk}
-                size="small"
                 disabled={dk < todayKey}
-                variant={quickDays.has(dk) ? undefined : 'secondary'}
-                onClick={() => toggleQuickDay(dk)}
+                variant={quickDays.has(dk) ? 'primary' : 'secondary'}
+                aria-pressed={quickDays.has(dk)}
+                onPress={() => toggleQuickDay(dk)}
               >
                 {dowLabel(dk)} {shortDayLabel(dk)}
               </Button>
             ))}
-          </Box>
-
-          <Button
-            fullWidth
-            loading={quickM.isPending}
-            disabled={quickDays.size === 0 || (!quickTplId && (!/^\d{1,2}:\d{2}$/.test(quickStart) || !/^\d{1,2}:\d{2}$/.test(quickEnd))) || quickM.isPending}
-            onClick={() => quickM.mutate()}
-          >
-            Gửi duyệt {quickDays.size > 0 ? `(${quickDays.size} ngày)` : ''}
-          </Button>
-        </Box>
-      </Sheet>
+          </div>
+        </div>
+      </BottomSheet>
 
       {/* Sheet huỷ ca */}
-      <Sheet visible={!!cancelId} onClose={() => setCancelId(null)} autoHeight>
-        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-          <Text.Title size="small">Huỷ ca đã duyệt</Text.Title>
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-            Huỷ trước 3 ngày: miễn phạt. Trễ hơn: phạt 1h công (trừ đột xuất có chứng cứ, tối đa 3 lần/tháng).
-          </Text>
-          <Input.TextArea
-            placeholder="Lý do huỷ"
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-          />
-          <Box
-            flex
-            alignItems="center"
-            justifyContent="space-between"
-            style={{ padding: '4px 0' }}
-            onClick={() => setCancelEmergency((v) => !v)}
-          >
-            <Text size="small">Đột xuất (có chứng cứ)</Text>
-            <Box
-              style={{
-                width: 44,
-                height: 26,
-                borderRadius: 999,
-                background: cancelEmergency ? 'var(--leaf-600)' : 'var(--neutral-200)',
-                position: 'relative',
-                transition: 'background .15s',
-              }}
-            >
-              <Box
-                style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: 999,
-                  background: 'var(--neutral-0)',
-                  position: 'absolute',
-                  top: 2,
-                  left: cancelEmergency ? 20 : 2,
-                  transition: 'left .15s',
-                }}
-              />
-            </Box>
-          </Box>
-          {cancelEmergency && (
-            <ImageUpload label="Ảnh chứng cứ" value={cancelEvidence} onChange={setCancelEvidence} />
-          )}
+      <BottomSheet
+        open={!!cancelId}
+        onClose={() => setCancelId(null)}
+        title="Huỷ ca đã duyệt"
+        footer={
           <Button
             fullWidth
             loading={cancelM.isPending}
-            disabled={cancelReason.trim().length === 0 || (cancelEmergency && !cancelEvidence) || cancelM.isPending}
-            onClick={() => cancelM.mutate()}
+            disabled={cancelReason.trim().length === 0 || (cancelEmergency && !cancelEvidence)}
+            onPress={() => cancelM.mutate()}
           >
             Xác nhận huỷ
           </Button>
-        </Box>
-      </Sheet>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Text variant="caption" tone="secondary" as="div">
+            Huỷ trước 3 ngày: miễn phạt. Trễ hơn: phạt 1h công (trừ đột xuất có chứng cứ, tối đa 3 lần/tháng).
+          </Text>
+          <Field label="Lý do huỷ">
+            <Input.TextArea placeholder="Lý do huỷ" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
+          </Field>
+          <SwitchRow label="Đột xuất (có chứng cứ)" on={cancelEmergency} onToggle={() => setCancelEmergency((v) => !v)} />
+          {cancelEmergency && (
+            <ImageUpload label="Ảnh chứng cứ" value={cancelEvidence} onChange={setCancelEvidence} />
+          )}
+        </div>
+      </BottomSheet>
     </Page>
+  );
+}
+
+/** Cả hàng là công tắc (vùng chạm >= 44px), không chỉ viên thuốc 26px bên phải. */
+function SwitchRow({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
+  return (
+    <div
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      {...rowKeyboardProps()}
+      className="tubu-press"
+      onClick={onToggle}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        minHeight: 44,
+        padding: '4px 0',
+        boxSizing: 'border-box',
+        cursor: 'pointer',
+      }}
+    >
+      <Text variant="body-sm">{label}</Text>
+      <span
+        aria-hidden
+        style={{
+          width: 44,
+          height: 26,
+          flexShrink: 0,
+          borderRadius: 'var(--radius-pill)',
+          // Trạng thái tắt dùng border-strong: thanh trượt phải đạt 3:1 với nền thẻ (WCAG 1.4.11).
+          background: on ? 'var(--color-action-primary-bg)' : 'var(--color-border-strong)',
+          position: 'relative',
+          transition: 'background var(--motion-enter)',
+        }}
+      >
+        <span
+          style={{
+            position: 'absolute',
+            top: 3,
+            left: on ? 21 : 3,
+            width: 20,
+            height: 20,
+            borderRadius: '50%',
+            background: 'var(--color-bg-surface)',
+            boxShadow: 'var(--elevation-1)',
+            transition: 'left var(--motion-enter)',
+          }}
+        />
+      </span>
+    </div>
   );
 }

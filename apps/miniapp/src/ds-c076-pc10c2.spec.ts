@@ -18,6 +18,7 @@ const FILES = [
   'src/pages/addresses.tsx',
   'src/pages/notifications.tsx',
   'src/pages/my-payroll.tsx',
+  'src/pages/staff.tsx',
 ];
 
 /**
@@ -33,6 +34,7 @@ const ZMP_UI_EXTRA: Record<string, string[]> = {
   'src/pages/profile.tsx': ['Avatar'],
   'src/pages/edit-profile.tsx': ['Avatar', 'Input'],
   'src/pages/my-payroll.tsx': ['Input'],
+  'src/pages/staff.tsx': ['Input'],
 };
 
 /** Emoji là NỘI DUNG (lời chúc, hạng...) thì được giữ; liệt kê file ở đây kèm lý do khi thật sự cần. */
