@@ -160,7 +160,7 @@ export function SubscribeSheet({
                 width: '100%',
                 minHeight: 44,
                 padding: '10px 12px',
-                borderRadius: 'var(--radius-md)',
+                borderRadius: 'var(--radius-control)',
                 border: '1px solid var(--color-border-subtle)',
                 background: 'var(--color-bg-surface)',
                 color: 'var(--color-text-primary)',
