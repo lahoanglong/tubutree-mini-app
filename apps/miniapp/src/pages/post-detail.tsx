@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Input, Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Trash2, Flag, Pin, Sprout, Heart, MessageCircle } from 'lucide-react';
+import { CheckCircle2, Flag, Heart, Leaf, MessageCircle, Pencil, Pin, Sprout, Trash2 } from 'lucide-react';
 import {
   getPost,
   getComments,
@@ -20,11 +20,18 @@ import { useAuthStore } from '../store/auth';
 import { timeAgo } from '../utils/time-ago';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
-import { ErrorState } from '../components/ui/empty-state';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { BottomSheet } from '../components/ui/bottom-sheet';
+import { Button } from '../components/ui/button';
+import { Icon } from '../components/ui/icon';
+import { IconButton } from '../components/ui/icon-button';
+import { PageHeader } from '../components/ui/page-header';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
+import { Heading, Text } from '../components/ui/text';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { RankBadge } from '../components/community/rank-badge';
-import { KIND_LABEL } from '../components/community/post-card';
+import { KIND_ICON, KIND_LABEL } from '../components/community/post-card';
 
 export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -150,17 +157,9 @@ export default function PostDetailPage() {
   // BE yêu cầu JWT cho mọi route /feed/:id (kể cả GET) — chưa đăng nhập thì không có gì để xem.
   if (!authed) {
     return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Box style={{ textAlign: 'center', padding: '60px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Box style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--leaf-50)', border: '1px solid var(--leaf-200)', display: 'grid', placeItems: 'center', marginBottom: 12, boxShadow: 'var(--shadow-card)' }}>
-            <Sprout size={32} color="var(--leaf-700)" strokeWidth={2} />
-          </Box>
-          <Text size="normal" bold style={{ color: 'var(--neutral-800)' }}>Cộng đồng Sống Xanh</Text>
-          <Text size="small" style={{ marginTop: 6, color: 'var(--neutral-500)', maxWidth: 280 }}>{vi.community.loginToView}</Text>
-          <Button style={{ marginTop: 16, background: 'var(--leaf-600)', borderRadius: 'var(--radius-full)', minWidth: 180 }} onClick={() => void login()}>
-            {vi.auth.loginCta}
-          </Button>
-        </Box>
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title={vi.community.title} />
+        <EmptyState art="sprout" heading={vi.community.loginToView} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
       </Page>
     );
   }
@@ -171,7 +170,8 @@ export default function PostDetailPage() {
 
   if (post.isError || !post.data) {
     return (
-      <Page className="page">
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title={vi.community.title} />
         <ErrorState message={getErrorMessage(post.error)} onRetry={() => void post.refetch()} />
       </Page>
     );
@@ -179,6 +179,7 @@ export default function PostDetailPage() {
 
   const p = post.data;
   const kindLabel = KIND_LABEL[p.kind];
+  const KindIcon = KIND_ICON[p.kind];
   const canMarkBest = p.kind === 'QUESTION' && (p.isOwner || role === 'ADMIN');
   // BE sắp thuần theo thời gian để cursor phân trang ổn định (isAccepted là khoá THAY ĐỔI ĐƯỢC,
   // để trong orderBy sẽ khiến trang 2 lặp lại trang 1 khi chủ bài chọn best-answer giữa chừng).
@@ -197,46 +198,48 @@ export default function PostDetailPage() {
   };
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 100 }}>
-      <Box p={4} style={{ background: 'var(--neutral-0)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 100 }}>
+      <PageHeader title={vi.community.title} />
+
+      <div style={{ padding: 16, background: 'var(--color-bg-surface)' }}>
         {p.status === 'PENDING' && p.isOwner && (
-          <Box
+          <div
             style={{
               padding: '8px 12px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--leaf-50)',
-              color: 'var(--leaf-700)',
+              borderRadius: 'var(--radius-control)',
+              background: 'var(--color-status-warning-bg)',
               marginBottom: 10,
             }}
           >
-            <Text size="small" bold>
+            <Text variant="body-sm" as="div" style={{ color: 'var(--color-status-warning-fg)', fontWeight: 600 }}>
               {vi.community.pendingBadge}
             </Text>
-          </Box>
+          </div>
         )}
         {p.isPinned && (
-          <Box
+          <div
             style={{
               padding: '8px 12px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--leaf-50)',
-              color: 'var(--leaf-700)',
+              borderRadius: 'var(--radius-control)',
+              background: 'var(--color-bg-subtle)',
               marginBottom: 10,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
             }}
           >
-            <Text size="small" bold>
-              📌 {vi.community.pinned}
+            <Icon icon={Pin} size="sm" tone="brand" />
+            <Text variant="body-sm" tone="brand" style={{ fontWeight: 600 }}>
+              {vi.community.pinned}
             </Text>
-          </Box>
+          </div>
         )}
         {role === 'ADMIN' && (
           <Button
-            size="small"
             variant="secondary"
-            disabled={pinMut.isPending}
+            icon={Pin}
             loading={pinMut.isPending}
-            prefixIcon={<Pin size={14} />}
-            onClick={() => {
+            onPress={() => {
               haptic('light');
               pinMut.mutate();
             }}
@@ -245,157 +248,151 @@ export default function PostDetailPage() {
             {p.isPinned ? vi.community.unpin : vi.community.pin}
           </Button>
         )}
-        <Box flex alignItems="center" justifyContent="space-between">
-          <Box flex alignItems="center" style={{ gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {p.avatar ? (
               <img src={p.avatar} alt="" width={40} height={40} style={{ borderRadius: '50%', objectFit: 'cover' }} />
             ) : (
-              <Box
+              <div
                 style={{
                   width: 40,
                   height: 40,
                   borderRadius: '50%',
-                  background: 'var(--leaf-200)',
+                  background: 'var(--color-action-secondary-bg)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
-                <Text>🌱</Text>
-              </Box>
+                <Icon icon={Sprout} size="md" tone="brand" />
+              </div>
             )}
-            <Box>
-              <Box flex alignItems="center" style={{ gap: 6 }}>
-                <Text bold>{p.author}</Text>
-                {p.badge === 'EXPERT' && (
-                  <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                    🌿 {vi.community.expert}
-                  </Text>
-                )}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Text variant="body-lg" style={{ fontWeight: 600 }}>{p.author}</Text>
+                {p.badge === 'EXPERT' && <ExpertBadge />}
                 <RankBadge level={p.authorLevel} />
-              </Box>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+              </div>
+              <Text variant="caption" tone="tertiary" as="div">
                 {timeAgo(p.createdAt)}
                 {p.category ? ` · ${p.category.icon ?? ''} ${p.category.name}` : ''}
               </Text>
-            </Box>
-          </Box>
+            </div>
+          </div>
           {p.isOwner ? (
-            <Box flex style={{ gap: 14 }}>
-              <Box
-                role="button"
-                aria-label={vi.community.edit}
-                className="tubu-press"
-                onClick={() => {
+            <div style={{ display: 'flex', gap: 4 }}>
+              <IconButton
+                icon={Pencil}
+                label={vi.community.edit}
+                onPress={() => {
                   haptic('light');
                   openEdit();
                 }}
-              >
-                <Pencil size={18} color="var(--neutral-500)" strokeWidth={1.8} />
-              </Box>
-              <Box
-                role="button"
-                aria-label={vi.community.delete}
-                className="tubu-press"
-                onClick={() => {
+              />
+              <IconButton
+                icon={Trash2}
+                label={vi.community.delete}
+                onPress={() => {
                   haptic('light');
                   setConfirmDelete(true);
                 }}
-              >
-                <Trash2 size={18} color="var(--danger)" strokeWidth={1.8} />
-              </Box>
-            </Box>
+              />
+            </div>
           ) : (
-            <Box
-              role="button"
-              aria-label={vi.community.report}
-              className="tubu-press"
-              onClick={() => {
+            <IconButton
+              icon={Flag}
+              label={vi.community.report}
+              onPress={() => {
                 haptic('light');
                 setReportTarget({ targetType: 'POST' });
               }}
-            >
-              <Flag size={18} color="var(--neutral-400)" strokeWidth={1.8} />
-            </Box>
+            />
           )}
-        </Box>
+        </div>
 
         {kindLabel && (
-          <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', marginTop: 10 }}>
+          <Text variant="label" tone="brand" as="div" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 4 }}>
+            {KindIcon && <Icon icon={KindIcon} size="sm" tone="brand" />}
             {kindLabel}
           </Text>
         )}
         {p.kind === 'QUESTION' && p.title && (
-          <Text.Title size="small" style={{ marginTop: 4 }}>
+          <Heading variant="title-sm" as="h2" style={{ marginTop: 4 }}>
             {p.title}
-          </Text.Title>
+          </Heading>
         )}
-        <Text style={{ marginTop: 8, whiteSpace: 'pre-wrap', color: 'var(--neutral-900)' }}>{p.body}</Text>
+        <Text variant="body-md" as="div" style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>{p.body}</Text>
 
         {p.images.length > 0 && (
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
             {p.images.map((src, i) => (
               <img
                 key={i}
                 src={src}
                 alt=""
                 loading="lazy"
-                style={{ width: '100%', borderRadius: 'var(--radius-lg)', objectFit: 'cover' }}
+                style={{ width: '100%', borderRadius: 'var(--radius-media)', objectFit: 'cover' }}
               />
             ))}
-          </Box>
+          </div>
         )}
 
         {p.productTags.length > 0 && (
-          <Box style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 12 }}>
             {p.productTags.map((pt) => (
-              <Box
+              <div
                 key={pt.slug}
                 role="button"
+                {...rowKeyboardProps()}
                 className="tubu-press"
                 onClick={() => navigate(`/product/${pt.slug}`)}
-                flex
-                alignItems="center"
                 style={{
+                  display: 'flex',
+                  alignItems: 'center',
                   gap: 10,
                   padding: 10,
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--neutral-100)',
+                  minHeight: 44,
+                  boxSizing: 'border-box',
+                  borderRadius: 'var(--radius-control)',
+                  border: '1px solid var(--color-border-subtle)',
                   marginBottom: 8,
                 }}
               >
                 {pt.thumbnail && (
                   <img src={pt.thumbnail} alt="" width={48} height={48} style={{ borderRadius: 8, objectFit: 'cover' }} />
                 )}
-                <Box style={{ flex: 1 }}>
+                <div style={{ flex: 1 }}>
                   <Text
-                    size="small"
+                    variant="body-sm"
+                    as="div"
                     style={{ display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                   >
                     {pt.name}
                   </Text>
-                  <Text size="small" bold style={{ color: 'var(--primary-700)' }}>
+                  <Text variant="price-sm" tone="brand" as="div">
                     {formatVnd(pt.salePrice ?? pt.basePrice)}
                   </Text>
-                </Box>
-              </Box>
+                </div>
+              </div>
             ))}
             {(p.kind === 'SHOWCASE' || p.kind === 'QUESTION') && (
               <Button
                 fullWidth
-                onClick={() => navigate(`/product/${p.productTags[0]!.slug}`)}
-                style={{ marginTop: 4, background: 'var(--primary-600)', fontWeight: 600, minHeight: 48 }}
+                size="lg"
+                onPress={() => navigate(`/product/${p.productTags[0]!.slug}`)}
+                style={{ marginTop: 4 }}
               >
                 {p.kind === 'SHOWCASE' ? vi.community.buyThis : vi.community.viewSolution}
               </Button>
             )}
-          </Box>
+          </div>
         )}
 
-        <Box flex alignItems="center" style={{ gap: 20, marginTop: 14 }}>
-          <Box
-            role="button"
-            aria-disabled={react.isPending}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginTop: 14 }}>
+          <button
+            type="button"
+            aria-pressed={p.liked}
+            aria-disabled={react.isPending || undefined}
             className="tubu-press"
             onClick={() => {
               // react.mutate() không có ô "loading"/"disabled" như Button — chặn double-tap thủ công,
@@ -404,53 +401,56 @@ export default function PostDetailPage() {
               haptic('light');
               react.mutate();
             }}
-            flex
-            alignItems="center"
-            style={{ gap: 6, opacity: react.isPending ? 0.6 : 1 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              minHeight: 44,
+              minWidth: 44,
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              opacity: react.isPending ? 0.6 : 1,
+            }}
           >
-            <Heart
-              size={18}
-              color={p.liked ? 'var(--leaf-700)' : 'var(--neutral-500)'}
-              fill={p.liked ? 'var(--leaf-700)' : 'none'}
-              strokeWidth={1.8}
-            />
-            <Text style={{ color: p.liked ? 'var(--leaf-700)' : 'var(--neutral-500)' }}>
+            <Icon icon={Heart} size="md" tone={p.liked ? 'brand' : 'muted'} style={p.liked ? { fill: 'var(--color-text-brand)' } : undefined} />
+            <Text variant="body-lg" tone={p.liked ? 'brand' : 'secondary'}>
               {p.likeCount}
             </Text>
-          </Box>
-          <Box flex alignItems="center" style={{ gap: 6 }}>
-            <MessageCircle size={18} color="var(--neutral-500)" strokeWidth={1.8} />
-            <Text style={{ color: 'var(--neutral-500)' }}>{p.commentCount}</Text>
-          </Box>
-        </Box>
-      </Box>
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon icon={MessageCircle} size="md" tone="muted" />
+            <Text variant="body-lg" tone="secondary">{p.commentCount}</Text>
+          </div>
+        </div>
+      </div>
 
-      <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
-        <Text bold size="small" style={{ marginBottom: 10 }}>
+      <div style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
+        <Heading variant="title-sm" as="h2" style={{ marginBottom: 10 }}>
           {vi.community.answers} ({sortedComments.length})
-        </Text>
+        </Heading>
 
         {comments.isLoading ? (
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[0, 1].map((i) => (
-              <Box
+              <div
                 key={i}
-                p={3}
-                style={{ borderRadius: 'var(--radius-md)', background: 'var(--neutral-50)', display: 'flex', flexDirection: 'column', gap: 8 }}
+                style={{ padding: 12, borderRadius: 'var(--radius-control)', background: 'var(--color-bg-canvas)', display: 'flex', flexDirection: 'column', gap: 8 }}
               >
-                <Box flex alignItems="center" style={{ gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Skeleton width={28} height={28} radius="50%" />
                   <Skeleton width="30%" height={12} />
-                </Box>
+                </div>
                 <Skeleton width="90%" height={12} />
                 <Skeleton width="60%" height={12} />
-              </Box>
+              </div>
             ))}
-          </Box>
+          </div>
         ) : comments.isError ? (
           <ErrorState message={getErrorMessage(comments.error)} onRetry={() => void comments.refetch()} />
         ) : sortedComments.length === 0 ? (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+          <Text variant="body-sm" tone="tertiary" as="div">
             {vi.community.emptyBody}
           </Text>
         ) : (
@@ -476,32 +476,31 @@ export default function PostDetailPage() {
         {comments.hasNextPage && (
           <Button
             variant="secondary"
-            size="small"
             loading={comments.isFetchingNextPage}
-            disabled={comments.isFetchingNextPage}
-            onClick={() => void comments.fetchNextPage()}
+            onPress={() => comments.fetchNextPage()}
             style={{ marginTop: 10 }}
           >
             Xem thêm trả lời
           </Button>
         )}
-      </Box>
+      </div>
 
       {/* Ô thêm trả lời — cố định đáy màn hình */}
-      <Box
+      <div
         style={{
           position: 'fixed',
           bottom: 0,
           left: 0,
           right: 0,
-          background: 'var(--neutral-0)',
-          boxShadow: 'var(--shadow-lg)',
+          background: 'var(--color-bg-surface)',
+          boxShadow: 'var(--elevation-3)',
           padding: '10px 16px calc(10px + var(--safe-bottom))',
           display: 'flex',
           gap: 8,
         }}
       >
         <Input
+          aria-label={vi.community.commentPlaceholder}
           placeholder={vi.community.commentPlaceholder}
           value={commentText}
           onChange={(e) => setCommentText(e.target.value)}
@@ -509,130 +508,134 @@ export default function PostDetailPage() {
         />
         <Button
           loading={addCommentMut.isPending}
-          disabled={commentText.trim().length === 0 || addCommentMut.isPending}
-          onClick={() => addCommentMut.mutate(commentText.trim())}
-          style={{ background: 'var(--primary-600)', minHeight: 44, flex: '0 0 auto' }}
+          disabled={commentText.trim().length === 0}
+          onPress={() => addCommentMut.mutate(commentText.trim())}
+          style={{ flex: '0 0 auto' }}
         >
           {vi.community.send}
         </Button>
-      </Box>
+      </div>
 
       {/* Sheet sửa bài (chủ bài) */}
-      <Sheet visible={editing} onClose={() => setEditing(false)} autoHeight>
-        <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-          <Text bold size="large">
-            {vi.community.edit}
-          </Text>
-          {p.kind === 'QUESTION' && (
-            <Box mt={3}>
-              <Input
-                placeholder={vi.community.titlePlaceholder}
-                value={editTitle}
-                maxLength={160}
-                onChange={(e) => setEditTitle(e.target.value)}
-              />
-              {needsEditTitle && (
-                <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 4 }}>
-                  {vi.community.needTitle}
-                </Text>
-              )}
-            </Box>
-          )}
-          <Box mt={3}>
-            <Input.TextArea
-              placeholder={vi.community.bodyPlaceholder}
-              value={editBody}
-              maxLength={5000}
-              rows={5}
-              onChange={(e) => setEditBody(e.target.value)}
-            />
-          </Box>
+      <BottomSheet
+        open={editing}
+        onClose={() => setEditing(false)}
+        title={vi.community.edit}
+        footer={
           <Button
             fullWidth
             loading={editMut.isPending}
-            disabled={needsEditTitle || editBody.trim().length === 0 || editMut.isPending}
-            onClick={() =>
+            disabled={needsEditTitle || editBody.trim().length === 0}
+            onPress={() =>
               editMut.mutate({
                 title: p.kind === 'QUESTION' ? editTitle.trim() : undefined,
                 body: editBody.trim(),
               })
             }
-            style={{ marginTop: 16, background: 'var(--primary-600)' }}
           >
             {vi.common.save}
           </Button>
-        </Box>
-      </Sheet>
+        }
+      >
+        {p.kind === 'QUESTION' && (
+          <div style={{ marginTop: 12 }}>
+            <Input
+              aria-label={vi.community.titlePlaceholder}
+              placeholder={vi.community.titlePlaceholder}
+              value={editTitle}
+              maxLength={160}
+              onChange={(e) => setEditTitle(e.target.value)}
+            />
+            {needsEditTitle && (
+              <Text variant="caption" tone="danger" as="div" style={{ marginTop: 4 }}>
+                {vi.community.needTitle}
+              </Text>
+            )}
+          </div>
+        )}
+        <div style={{ marginTop: 12 }}>
+          <Input.TextArea
+            aria-label={vi.community.bodyPlaceholder}
+            placeholder={vi.community.bodyPlaceholder}
+            value={editBody}
+            maxLength={5000}
+            rows={5}
+            onChange={(e) => setEditBody(e.target.value)}
+          />
+        </div>
+      </BottomSheet>
 
       {/* Xác nhận xoá (thao tác không hoàn tác) */}
-      <Sheet visible={confirmDelete} onClose={() => setConfirmDelete(false)} autoHeight>
-        <Box p={5} style={{ textAlign: 'center' }}>
-          <Text.Title size="small">{vi.community.confirmDelete}</Text.Title>
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
-            <Button fullWidth variant="secondary" onClick={() => setConfirmDelete(false)}>
-              {vi.common.cancel}
-            </Button>
-            <Button fullWidth disabled={deleteMut.isPending} loading={deleteMut.isPending} onClick={() => deleteMut.mutate()} style={{ background: 'var(--danger)' }}>
-              {vi.community.delete}
-            </Button>
-          </Box>
-        </Box>
-      </Sheet>
+      <BottomSheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title={vi.community.confirmDelete}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+          <Button fullWidth variant="secondary" onPress={() => setConfirmDelete(false)}>
+            {vi.common.cancel}
+          </Button>
+          <Button fullWidth variant="danger" loading={deleteMut.isPending} onPress={() => deleteMut.mutate()}>
+            {vi.community.delete}
+          </Button>
+        </div>
+      </BottomSheet>
 
       {/* Sheet báo cáo bài/bình luận vi phạm */}
-      <Sheet
-        visible={!!reportTarget}
+      <BottomSheet
+        open={!!reportTarget}
         onClose={() => {
           setReportTarget(null);
           setReportReason('');
         }}
-        autoHeight
-      >
-        <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-          <Text bold size="large">
-            {vi.community.report}
-          </Text>
-          <Box mt={3}>
-            <Input.TextArea
-              placeholder={vi.community.reportReason}
-              value={reportReason}
-              maxLength={500}
-              rows={3}
-              onChange={(e) => setReportReason(e.target.value)}
-            />
-          </Box>
+        title={vi.community.report}
+        footer={
           <Button
             fullWidth
+            variant="danger"
             loading={reportMut.isPending}
-            disabled={reportMut.isPending}
-            onClick={() => reportTarget && reportMut.mutate(reportTarget)}
-            style={{ marginTop: 16, background: 'var(--danger)' }}
+            onPress={() => reportTarget && reportMut.mutate(reportTarget)}
           >
             {vi.community.report}
           </Button>
-        </Box>
-      </Sheet>
+        }
+      >
+        <Input.TextArea
+          aria-label={vi.community.reportReason}
+          placeholder={vi.community.reportReason}
+          value={reportReason}
+          maxLength={500}
+          rows={3}
+          onChange={(e) => setReportReason(e.target.value)}
+        />
+      </BottomSheet>
     </Page>
+  );
+}
+
+function ExpertBadge() {
+  return (
+    <Text variant="label" tone="brand" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+      <Icon icon={Leaf} size="sm" tone="brand" />
+      {vi.community.expert}
+    </Text>
   );
 }
 
 /** Skeleton match layout bài viết (avatar+tên, tiêu đề, vài dòng thân bài, ảnh) — dùng cho cả 2 trạng thái loading trước khi có dữ liệu bài viết. */
 function PostSkeleton() {
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Box p={4} style={{ background: 'var(--neutral-0)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Box flex alignItems="center" style={{ gap: 10 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title={vi.community.title} />
+      <div style={{ padding: 16, background: 'var(--color-bg-surface)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Skeleton width={40} height={40} radius="50%" />
-          <Box style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <Skeleton width="40%" height={13} />
             <Skeleton width="25%" height={11} />
-          </Box>
-        </Box>
+          </div>
+        </div>
         <Skeleton width="90%" height={16} />
         <Skeleton width="100%" height={13} />
         <Skeleton width="80%" height={13} />
-        <Skeleton height={180} radius="var(--radius-lg)" />
-      </Box>
+        <Skeleton height={180} radius="var(--radius-media)" />
+      </div>
     </Page>
   );
 }
@@ -655,80 +658,73 @@ function CommentRow({
   removing: boolean;
 }) {
   return (
-    <Box
-      p={3}
-      mb={2}
+    <div
       style={{
-        borderRadius: 'var(--radius-md)',
-        background: comment.isAccepted ? 'var(--leaf-50)' : 'var(--neutral-50)',
-        border: comment.isAccepted ? '1px solid var(--leaf-300)' : '1px solid transparent',
+        padding: 12,
+        marginBottom: 8,
+        borderRadius: 'var(--radius-control)',
+        background: comment.isAccepted ? 'var(--color-bg-subtle)' : 'var(--color-bg-canvas)',
+        border: comment.isAccepted ? '1px solid var(--forest-300)' : '1px solid transparent',
       }}
     >
       {comment.isAccepted && (
-        <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', marginBottom: 6, display: 'block' }}>
-          ✅ {vi.community.bestAnswer}
+        <Text variant="label" tone="brand" as="div" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Icon icon={CheckCircle2} size="sm" tone="brand" />
+          {vi.community.bestAnswer}
         </Text>
       )}
-      <Box flex alignItems="center" justifyContent="space-between">
-        <Box flex alignItems="center" style={{ gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {comment.avatar ? (
             <img src={comment.avatar} alt="" width={28} height={28} style={{ borderRadius: '50%', objectFit: 'cover' }} />
           ) : (
-            <Box
+            <div
               style={{
                 width: 28,
                 height: 28,
                 borderRadius: '50%',
-                background: 'var(--leaf-200)',
+                background: 'var(--color-action-secondary-bg)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Text size="xSmall">🌱</Text>
-            </Box>
+              <Icon icon={Sprout} size="sm" tone="brand" />
+            </div>
           )}
-          <Box style={{ flex: 1 }}>
-            <Box flex alignItems="center" style={{ gap: 6 }}>
-              <Text size="small" bold>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Text variant="body-sm" style={{ fontWeight: 600 }}>
                 {comment.author}
               </Text>
-              {comment.badge === 'EXPERT' && (
-                <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                  🌿 {vi.community.expert}
-                </Text>
-              )}
+              {comment.badge === 'EXPERT' && <ExpertBadge />}
               <RankBadge level={comment.authorLevel} />
-            </Box>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+            </div>
+            <Text variant="caption" tone="tertiary" as="div">
               {timeAgo(comment.createdAt)}
             </Text>
-          </Box>
-        </Box>
+          </div>
+        </div>
         {comment.isOwner ? (
-          <Box
-            role="button"
-            aria-label={vi.community.hideContent}
-            className="tubu-press"
+          <IconButton
+            icon={Trash2}
+            size="sm"
+            label={vi.community.hideContent}
             style={{ opacity: removing ? 0.5 : 1 }}
-            onClick={removing ? undefined : onRemove}
-          >
-            <Trash2 size={14} color="var(--neutral-300)" strokeWidth={1.8} />
-          </Box>
+            onPress={removing ? undefined : onRemove}
+          />
         ) : (
-          <Box role="button" aria-label={vi.community.report} className="tubu-press" onClick={onReport}>
-            <Flag size={14} color="var(--neutral-300)" strokeWidth={1.8} />
-          </Box>
+          <IconButton icon={Flag} size="sm" label={vi.community.report} onPress={onReport} />
         )}
-      </Box>
-      <Text size="small" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
+      </div>
+      <Text variant="body-sm" as="div" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
         {comment.body}
       </Text>
       {canMarkBest && !comment.isAccepted && (
-        <Button size="small" variant="secondary" disabled={markingPending} loading={markingPending} onClick={onMarkBest} style={{ marginTop: 8, minHeight: 36 }}>
+        <Button variant="secondary" loading={markingPending} onPress={onMarkBest} style={{ marginTop: 8 }}>
           {vi.community.markBest}
         </Button>
       )}
-    </Box>
+    </div>
   );
 }

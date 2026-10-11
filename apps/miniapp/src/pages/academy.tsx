@@ -1,4 +1,4 @@
-import { Box, Page, Text, Button, useSnackbar, useNavigate, useParams } from 'zmp-ui';
+import { Page, useSnackbar, useNavigate, useParams } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlayCircle, FileText, ChevronLeft, CheckCircle2, BookOpen } from 'lucide-react';
 import {
@@ -11,6 +11,13 @@ import {
 import { getErrorMessage } from '../services/api';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Icon } from '../components/ui/icon';
+import { ListRow } from '../components/ui/list-row';
+import { PageHeader } from '../components/ui/page-header';
+import { ProgressBar } from '../components/ui/progress-bar';
+import { Heading, Text } from '../components/ui/text';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 
@@ -21,7 +28,8 @@ export default function AcademyPage() {
   const navigate = useNavigate();
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title={vi.academy.title} subtitle={courseId ? undefined : vi.academy.subtitle} />
       {courseId ? (
         <CourseDetail courseId={courseId} onBack={() => navigate('/academy', { replace: true })} />
       ) : (
@@ -35,90 +43,71 @@ function CourseList({ onOpen }: { onOpen: (id: string) => void }) {
   const q = useQuery({ queryKey: ['academy-courses'], queryFn: fetchCourses });
 
   return (
-    <Box p={4}>
-      <Text bold size="xLarge">
-        {vi.academy.title}
-      </Text>
-      <Text size="small" style={{ color: 'var(--neutral-400)', marginTop: 2, marginBottom: 16 }}>
-        {vi.academy.subtitle}
-      </Text>
-
+    <div style={{ padding: 16 }}>
       {q.isLoading ? (
-        <Box flex flexDirection="column" style={{ gap: 12 }}>
-          <Skeleton style={{ height: 92, borderRadius: 16 }} />
-          <Skeleton style={{ height: 92, borderRadius: 16 }} />
-        </Box>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Skeleton height={92} radius="var(--radius-card)" />
+          <Skeleton height={92} radius="var(--radius-card)" />
+        </div>
       ) : q.isError ? (
         <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : q.data && q.data.length > 0 ? (
-        <Box flex flexDirection="column" style={{ gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {q.data.map((c) => (
             <CourseCard key={c.id} course={c} onOpen={() => onOpen(c.id)} />
           ))}
-        </Box>
+        </div>
       ) : (
         <EmptyState art="sprout" heading={vi.academy.empty} body={vi.academy.emptyBody} />
       )}
-    </Box>
+    </div>
   );
 }
+
+const ellipsis = { display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const;
 
 function CourseCard({ course, onOpen }: { course: AcademyCourseSummary; onOpen: () => void }) {
   const pct = course.lessonCount > 0 ? Math.round((course.completedCount / course.lessonCount) * 100) : 0;
 
   return (
-    <Box
-      className="tubu-press"
-      onClick={onOpen}
-      p={3}
-      style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xs)' }}
-    >
-      <Box flex style={{ gap: 12 }}>
-        <Box
-          style={{
-            width: 64,
-            height: 64,
-            borderRadius: 'var(--radius-md)',
-            overflow: 'hidden',
-            background: 'var(--primary-50)',
-            flexShrink: 0,
-          }}
-        >
-          {course.coverUrl ? (
-            <img src={course.coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          ) : (
-            <Box flex alignItems="center" justifyContent="center" style={{ width: '100%', height: '100%' }}>
-              <BookOpen size={28} color="var(--primary-600)" strokeWidth={1.8} />
-            </Box>
-          )}
-        </Box>
-        <Box style={{ flex: 1, minWidth: 0 }}>
-          <Text bold style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {course.title}
-          </Text>
-          {course.description && (
-            <Text
-              size="xSmall"
-              style={{ color: 'var(--neutral-400)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-            >
-              {course.description}
-            </Text>
-          )}
-          <Box mt={2} style={{ height: 6, background: 'var(--neutral-100)', borderRadius: 99, overflow: 'hidden' }}>
-            <Box
-              style={{
-                width: `${pct}%`,
-                height: '100%',
-                background: course.isCompleted ? 'var(--leaf-600)' : 'var(--primary-600)',
-              }}
-            />
-          </Box>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-            {course.isCompleted ? vi.academy.completed : vi.academy.progress(course.completedCount, course.lessonCount)}
-          </Text>
-        </Box>
-      </Box>
-    </Box>
+    <Card padding={0}>
+      <ListRow
+        icon={
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 'var(--radius-control)',
+              overflow: 'hidden',
+              background: 'var(--color-action-secondary-bg)',
+              flexShrink: 0,
+              display: 'grid',
+              placeItems: 'center',
+            }}
+          >
+            {course.coverUrl ? (
+              <img src={course.coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <Icon icon={BookOpen} size="lg" tone="brand" />
+            )}
+          </div>
+        }
+        title={<span style={ellipsis}>{course.title}</span>}
+        subtitle={
+          <>
+            {course.description && <span style={ellipsis}>{course.description}</span>}
+            <div style={{ margin: '8px 0 4px' }}>
+              <ProgressBar value={pct} max={100} />
+            </div>
+            <span>
+              {course.isCompleted ? vi.academy.completed : vi.academy.progress(course.completedCount, course.lessonCount)}
+            </span>
+          </>
+        }
+        onPress={onOpen}
+        style={{ padding: 12 }}
+      />
+    </Card>
   );
 }
 
@@ -139,95 +128,99 @@ function CourseDetail({ courseId, onBack }: { courseId: string; onBack: () => vo
   });
 
   return (
-    <Box p={4}>
-      <Box className="tubu-press" onClick={onBack} flex alignItems="center" style={{ gap: 4, marginBottom: 12 }}>
-        <ChevronLeft size={18} />
-        <Text size="small">{vi.academy.backToList}</Text>
-      </Box>
+    <div style={{ padding: 16 }}>
+      <div style={{ marginBottom: 12 }}>
+        <Button variant="ghost" icon={ChevronLeft} onPress={onBack}>
+          {vi.academy.backToList}
+        </Button>
+      </div>
 
       {q.isLoading ? (
-        <Skeleton style={{ height: 200, borderRadius: 16 }} />
+        <Skeleton height={200} radius="var(--radius-card)" />
       ) : q.isError ? (
         <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : q.data ? (
-        <CourseDetailBody course={q.data} onComplete={(id) => complete.mutate(id)} completing={complete.isPending} />
+        <CourseDetailBody
+          course={q.data}
+          onComplete={(id) => complete.mutate(id)}
+          completingId={complete.isPending ? complete.variables : undefined}
+        />
       ) : null}
-    </Box>
+    </div>
   );
 }
 
 function CourseDetailBody({
   course,
   onComplete,
-  completing,
+  completingId,
 }: {
   course: AcademyCourseDetail;
   onComplete: (lessonId: string) => void;
-  completing: boolean;
+  completingId: string | undefined;
 }) {
   return (
-    <Box>
-      <Text bold size="xLarge">
-        {course.title}
-      </Text>
+    <div>
+      <Heading variant="title-md" as="h2">{course.title}</Heading>
       {course.description && (
-        <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
+        <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
           {course.description}
         </Text>
       )}
 
-      <Box mt={4} flex flexDirection="column" style={{ gap: 10 }}>
+      <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {course.lessons.map((lesson, i) => {
           const done = course.completedLessonIds.includes(lesson.id);
           return (
-            <Box
-              key={lesson.id}
-              p={3}
-              style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xs)' }}
-            >
-              <Box flex alignItems="center" style={{ gap: 8 }}>
-                {lesson.contentType === 'VIDEO' ? (
-                  <PlayCircle size={18} color="var(--primary-600)" />
-                ) : (
-                  <FileText size={18} color="var(--primary-600)" />
-                )}
-                <Text bold style={{ flex: 1 }}>
+            <Card key={lesson.id} padding={12}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon icon={lesson.contentType === 'VIDEO' ? PlayCircle : FileText} size="md" tone="brand" />
+                <Text variant="body-md" as="div" style={{ flex: 1, fontWeight: 600 }}>
                   {i + 1}. {lesson.title}
                 </Text>
-                {done && <CheckCircle2 size={18} color="var(--leaf-600)" />}
-              </Box>
+                {done && <Icon icon={CheckCircle2} size="md" tone="brand" />}
+              </div>
 
               {lesson.contentType === 'VIDEO' && lesson.videoUrl && (
-                <Box mt={2}>
+                <div style={{ marginTop: 4 }}>
                   <a
                     href={lesson.videoUrl}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ color: 'var(--primary-700)', fontSize: 13 }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      minHeight: 44,
+                      color: 'var(--color-text-brand)',
+                      fontFamily: 'var(--font-ui)',
+                      fontSize: 'var(--type-body-sm-size)',
+                      fontWeight: 600,
+                    }}
                   >
                     {vi.academy.openVideo}
                   </a>
-                </Box>
+                </div>
               )}
               {lesson.contentType === 'ARTICLE' && lesson.body && (
-                <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 8, whiteSpace: 'pre-line' }}>
+                <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 8, whiteSpace: 'pre-line' }}>
                   {lesson.body}
                 </Text>
               )}
 
+              {/* Khoá nút các bài khác khi một bài đang gửi; bài đang gửi giữ loading để Button chặn bấm đôi và vẫn hiện vòng quay. */}
               <Button
-                size="small"
-                variant={done ? 'secondary' : undefined}
-                disabled={done || completing}
-                onClick={() => onComplete(lesson.id)}
-                style={{ marginTop: 10, ...(done ? {} : { background: 'var(--primary-600)' }) }}
+                variant={done ? 'secondary' : 'primary'}
+                disabled={done || (completingId !== undefined && completingId !== lesson.id)}
+                loading={completingId === lesson.id}
+                onPress={() => onComplete(lesson.id)}
+                style={{ marginTop: 10 }}
               >
                 {done ? vi.academy.alreadyDone : vi.academy.markDone}
               </Button>
-            </Box>
+            </Card>
           );
         })}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

@@ -1,10 +1,16 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, Input, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, Input, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation } from '@tanstack/react-query';
 import { aiChat, type AiChatTurn, type AiProduct } from '../services/ai-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
-import { Sparkles, Sprout, ChevronRight } from 'lucide-react';
+import { Sparkles, Sprout } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Icon } from '../components/ui/icon';
+import { ListRow } from '../components/ui/list-row';
+import { PageHeader } from '../components/ui/page-header';
+import { Heading, Text } from '../components/ui/text';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -54,126 +60,140 @@ export default function AiAdvisorPage() {
   };
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', display: 'flex', flexDirection: 'column', paddingBottom: 0 }}>
-      <Box p={3} flex alignItems="center" style={{ background: 'var(--neutral-0)', gap: 10, borderBottom: '1px solid var(--neutral-100)' }}>
-        <Box style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--primary-50)', display: 'grid', placeItems: 'center' }}>
-          <Sparkles size={18} color="var(--primary-600)" strokeWidth={2} />
-        </Box>
-        <Box>
-          <Text bold size="normal">Trợ lý AI Tubu</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-            Tư vấn sản phẩm tiêu dùng xanh 24/7
-          </Text>
-        </Box>
-      </Box>
+    <Page style={{ background: 'var(--color-bg-canvas)', display: 'flex', flexDirection: 'column', paddingBottom: 0 }}>
+      <PageHeader title="Trợ lý AI Tubu" subtitle="Tư vấn sản phẩm tiêu dùng xanh 24/7" />
 
-      <Box style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+      <div
+        role="log"
+        aria-label="Cuộc trò chuyện"
+        style={{ flex: 1, overflowY: 'auto', padding: 12 }}
+      >
         {messages.length === 0 && (
-          <Box style={{ textAlign: 'center', padding: '32px 12px' }}>
-            <Box style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, var(--leaf-50), var(--primary-50))', border: '1px solid var(--leaf-200)', display: 'grid', placeItems: 'center', margin: '0 auto 12px', boxShadow: 'var(--shadow-card)' }}>
-              <Sparkles size={32} color="var(--leaf-700)" strokeWidth={1.9} />
-            </Box>
-            <Text bold size="normal" style={{ color: 'var(--neutral-800)' }}>
-              Chào bạn! Mình là Trợ lý Tubu
-            </Text>
-            <Text size="small" style={{ color: 'var(--neutral-500)', marginTop: 4 }}>
+          <div style={{ textAlign: 'center', padding: '32px 12px' }}>
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                background: 'var(--color-action-secondary-bg)',
+                border: '1px solid var(--color-border-subtle)',
+                boxShadow: 'var(--elevation-1)',
+                display: 'grid',
+                placeItems: 'center',
+                margin: '0 auto 12px',
+              }}
+            >
+              <Icon icon={Sparkles} size="lg" tone="brand" />
+            </div>
+            <Heading variant="title-md" as="h2">Chào bạn! Mình là Trợ lý Tubu</Heading>
+            <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
               Bạn đang tìm giải pháp hay sản phẩm sinh học an lành nào cho gia đình?
             </Text>
-            <Box mt={4} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
               {SUGGESTIONS.map((s) => (
-                <Box
-                  key={s}
-                  className="tubu-press"
-                  onClick={() => send(s)}
-                  p={3}
-                  style={{
-                    background: 'var(--neutral-0)',
-                    borderRadius: 'var(--radius-lg)',
-                    border: '1px solid var(--leaf-200)',
-                    boxShadow: 'var(--shadow-card)',
-                    textAlign: 'left',
-                  }}
-                >
-                  <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>{s}</Text>
-                </Box>
+                <Card key={s} variant="outline" padding={0}>
+                  <ListRow title={s} onPress={() => send(s)} style={{ padding: '12px 16px' }} />
+                </Card>
               ))}
-            </Box>
-          </Box>
+            </div>
+          </div>
         )}
 
         {messages.map((m, i) => (
-          <Box key={i} style={{ marginBottom: 12, textAlign: m.role === 'user' ? 'right' : 'left' }}>
-            <Box
+          <div key={i} style={{ marginBottom: 12, textAlign: m.role === 'user' ? 'right' : 'left' }}>
+            <div
               style={{
                 display: 'inline-block',
                 maxWidth: '85%',
                 textAlign: 'left',
                 padding: '8px 12px',
-                borderRadius: 'var(--radius-lg)',
-                background: m.role === 'user' ? 'var(--leaf-600)' : 'var(--neutral-0)',
-                color: m.role === 'user' ? 'var(--neutral-0)' : 'var(--neutral-900)',
+                borderRadius: 'var(--radius-card)',
+                background: m.role === 'user' ? 'var(--color-action-primary-bg)' : 'var(--color-bg-surface)',
               }}
             >
-              <Text size="small" style={{ color: m.role === 'user' ? 'var(--neutral-0)' : 'var(--neutral-900)', whiteSpace: 'pre-wrap' }}>
+              <Text
+                variant="body-sm"
+                tone={m.role === 'user' ? 'inverse' : 'primary'}
+                as="div"
+                style={{ whiteSpace: 'pre-wrap' }}
+              >
                 {m.content}
               </Text>
-            </Box>
+            </div>
             {m.products && m.products.length > 0 && (
-              <Box mt={2} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'left' }}>
                 {m.products.map((p) => (
-                  <Box
-                    key={p.id}
-                    className="tubu-press"
-                    onClick={() => navigate(`/product/${p.slug}`)}
-                    flex
-                    alignItems="center"
-                    style={{ gap: 8, background: 'var(--neutral-0)', borderRadius: 'var(--radius-md)', padding: 8, border: '1px solid var(--neutral-100)' }}
-                  >
-                    {p.thumbnail ? (
-                      <img src={p.thumbnail} alt={p.name} style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover' }} />
-                    ) : (
-                      <Box style={{ width: 44, height: 44, borderRadius: 8, background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
-                        <Sprout size={20} color="var(--leaf-600)" />
-                      </Box>
-                    )}
-                    <Box style={{ flex: 1, minWidth: 0 }}>
-                      <Text size="xSmall" bold style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</Text>
-                      <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-                        {formatVnd(p.salePrice ?? p.basePrice)}
-                      </Text>
-                    </Box>
-                    <ChevronRight size={16} color="var(--neutral-400)" />
-                  </Box>
+                  <Card key={p.id} variant="outline" padding={0}>
+                    <ListRow
+                      icon={
+                        p.thumbnail ? (
+                          <img
+                            src={p.thumbnail}
+                            alt={p.name}
+                            style={{ width: 44, height: 44, borderRadius: 'var(--radius-control)', objectFit: 'cover', flexShrink: 0 }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: 44,
+                              height: 44,
+                              borderRadius: 'var(--radius-control)',
+                              background: 'var(--color-action-secondary-bg)',
+                              display: 'grid',
+                              placeItems: 'center',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Icon icon={Sprout} size="md" tone="brand" />
+                          </div>
+                        )
+                      }
+                      title={
+                        <span style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {p.name}
+                        </span>
+                      }
+                      subtitle={<Text variant="caption" tone="brand">{formatVnd(p.salePrice ?? p.basePrice)}</Text>}
+                      trailing="chevron"
+                      onPress={() => navigate(`/product/${p.slug}`)}
+                      style={{ padding: 8 }}
+                    />
+                  </Card>
                 ))}
-              </Box>
+              </div>
             )}
-          </Box>
+          </div>
         ))}
 
         {chatM.isPending && (
-          <Box flex alignItems="center" style={{ gap: 8 }}>
-            <Spinner /> <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>Trợ lý đang soạn…</Text>
-          </Box>
+          <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Spinner /> <Text variant="caption" tone="tertiary">Trợ lý đang soạn…</Text>
+          </div>
         )}
-      </Box>
+      </div>
 
-      <Box p={2} flex style={{ gap: 8, background: 'var(--neutral-0)', borderTop: '1px solid var(--neutral-100)' }}>
+      <div
+        style={{
+          padding: 8,
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+          background: 'var(--color-bg-surface)',
+          borderTop: '1px solid var(--color-border-subtle)',
+        }}
+      >
         <Input
           placeholder="Nhập câu hỏi…"
+          aria-label="Nhập câu hỏi"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           maxLength={2000}
         />
-        <Button
-          size="small"
-          disabled={!draft.trim() || chatM.isPending}
-          loading={chatM.isPending}
-          onClick={() => send(draft)}
-          style={{ background: 'var(--leaf-600)' }}
-        >
+        {/* Không gộp isPending vào disabled: Button tự chặn bấm lại khi loading, còn disabled sẽ tắt luôn spinner. */}
+        <Button disabled={!draft.trim()} loading={chatM.isPending} onPress={() => send(draft)}>
           Gửi
         </Button>
-      </Box>
+      </div>
     </Page>
   );
 }

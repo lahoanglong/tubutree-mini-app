@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Page, Text, Button, Input, useLocation, useNavigate } from 'zmp-ui';
+import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Plus, HelpCircle, Hash, Trophy, PartyPopper, Sprout } from 'lucide-react';
+import { Plus, HelpCircle, Hash, Trophy, PartyPopper, X } from 'lucide-react';
 import { getFeed, getCategories, type FeedSort } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -9,6 +9,13 @@ import { vi } from '../i18n/vi';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
+import { Button } from '../components/ui/button';
+import { Chip } from '../components/ui/chip';
+import { Icon } from '../components/ui/icon';
+import { IconButton } from '../components/ui/icon-button';
+import { PageHeader } from '../components/ui/page-header';
+import { ScrollRow } from '../components/ui/scroll-row';
+import { SearchField } from '../components/ui/search-field';
 import PostCard from '../components/community/post-card';
 import PostComposer from '../components/community/post-composer';
 import { haptic } from '../utils/haptic';
@@ -70,12 +77,13 @@ export default function FeedPage() {
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
   if (status === 'loading') {
     return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Box p={3} flex flexDirection="column" style={{ gap: 12 }}>
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title={vi.community.title} />
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} height={140} radius="var(--radius-lg)" />
+            <Skeleton key={i} height={140} radius="var(--radius-card)" />
           ))}
-        </Box>
+        </div>
       </Page>
     );
   }
@@ -83,177 +91,132 @@ export default function FeedPage() {
   // Chỉ hiện cổng đăng nhập khi đã chắc chắn user chưa đăng nhập (status settled, không authenticated).
   if (!authed) {
     return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Box style={{ textAlign: 'center', padding: '60px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Box style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--leaf-50)', border: '1px solid var(--leaf-200)', display: 'grid', placeItems: 'center', marginBottom: 12, boxShadow: 'var(--shadow-card)' }}>
-            <Sprout size={32} color="var(--leaf-700)" strokeWidth={2} />
-          </Box>
-          <Text size="normal" bold style={{ color: 'var(--neutral-800)' }}>{vi.community.title}</Text>
-          <Text size="small" style={{ marginTop: 6, color: 'var(--neutral-500)', maxWidth: 280 }}>{vi.community.loginToView}</Text>
-          <Button style={{ marginTop: 16, background: 'var(--leaf-600)', borderRadius: 'var(--radius-full)', minWidth: 180 }} onClick={() => void login()}>
-            {vi.auth.loginCta}
-          </Button>
-        </Box>
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title={vi.community.title} />
+        <EmptyState art="sprout" heading={vi.community.loginToView} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
       </Page>
     );
   }
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 80 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 80 }}>
       <PullToRefresh onRefresh={() => feed.refetch()} />
 
-      <Box p={3} flex alignItems="center" justifyContent="space-between" style={{ background: 'var(--neutral-0)' }}>
-        <Box>
-          <Text bold size="large">{vi.community.title}</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>{vi.community.subtitle}</Text>
-        </Box>
-        <Box flex alignItems="center" style={{ gap: 8 }}>
-          <Box
-            role="button"
-            aria-label={vi.community.leaderboard}
-            className="tubu-press"
-            onClick={() => {
+      <PageHeader title={vi.community.title} subtitle={vi.community.subtitle} />
+
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          padding: '0 12px 8px',
+          background: 'var(--color-bg-surface)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <IconButton
+            icon={Trophy}
+            label={vi.community.leaderboard}
+            style={{ background: 'var(--color-bg-subtle)' }}
+            onPress={() => {
               haptic('light');
               navigate('/feed/leaderboard');
             }}
-            flex
-            alignItems="center"
-            justifyContent="center"
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: '50%',
-              background: 'var(--leaf-50)',
-              boxSizing: 'border-box',
-            }}
-          >
-            <Trophy size={18} color="var(--leaf-700)" strokeWidth={1.8} />
-          </Box>
-          <Box
-            role="button"
-            aria-label={vi.community.events}
-            className="tubu-press"
-            onClick={() => {
+          />
+          <IconButton
+            icon={PartyPopper}
+            label={vi.community.events}
+            style={{ background: 'var(--color-bg-subtle)' }}
+            onPress={() => {
               haptic('light');
               navigate('/feed/events');
             }}
-            flex
-            alignItems="center"
-            justifyContent="center"
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: '50%',
-              background: 'var(--leaf-50)',
-              boxSizing: 'border-box',
-            }}
-          >
-            <PartyPopper size={18} color="var(--leaf-700)" strokeWidth={1.8} />
-          </Box>
-          <Box
-            role="button"
-            className="tubu-press"
-            onClick={() => {
-              haptic('light');
-              setComposing(true);
-            }}
-            flex
-            alignItems="center"
-            style={{
-              gap: 4,
-              background: 'var(--leaf-600)',
-              color: 'var(--neutral-0)',
-              borderRadius: 'var(--radius-full)',
-              padding: '8px 14px',
-              fontSize: 13,
-              fontWeight: 600,
-              minHeight: 40,
-              boxSizing: 'border-box',
-            }}
-          >
-            <Plus size={16} />
-            {vi.community.compose}
-          </Box>
-        </Box>
-      </Box>
-
-      <Box p={3} pt={2} style={{ background: 'var(--neutral-0)' }}>
-        <Input.Search
-          aria-label={vi.community.search}
-          placeholder={vi.community.searchPlaceholder}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          clearable
-        />
-      </Box>
-
-      <Box px={3} className="scroll-x" style={{ gap: 8, paddingBottom: 8, background: 'var(--neutral-0)', minWidth: 0, maxWidth: '100%' }}>
-        <Chip label={vi.community.tabAll} active={!category} onClick={() => setCategory(undefined)} />
-        {cats.data?.map((c) => (
-          <Chip
-            key={c.id}
-            label={`${c.icon ?? ''} ${c.name}`.trim()}
-            active={category === c.slug}
-            onClick={() => setCategory(c.slug)}
           />
-        ))}
-      </Box>
+        </div>
+        <Button
+          icon={Plus}
+          onPress={() => {
+            haptic('light');
+            setComposing(true);
+          }}
+        >
+          {vi.community.compose}
+        </Button>
+      </div>
 
-      <Box px={3} className="scroll-x" style={{ gap: 8, paddingBottom: 10, background: 'var(--neutral-0)', minWidth: 0, maxWidth: '100%' }}>
+      <div style={{ padding: '0 12px 8px', background: 'var(--color-bg-surface)' }}>
+        <SearchField
+          value={q}
+          onChange={setQ}
+          onSubmit={setQ}
+          label={vi.community.search}
+          clearLabel={vi.browse.clearSearch}
+          placeholder={vi.community.searchPlaceholder}
+        />
+      </div>
+
+      <ScrollRow
+        label={vi.community.pickCategory}
+        style={{ display: 'flex', gap: 8, padding: '4px 12px', background: 'var(--color-bg-surface)', minWidth: 0, maxWidth: '100%' }}
+      >
+        <Chip selected={!category} onPress={() => setCategory(undefined)}>
+          {vi.community.tabAll}
+        </Chip>
+        {cats.data?.map((c) => (
+          <Chip key={c.id} selected={category === c.slug} onPress={() => setCategory(c.slug)}>
+            {`${c.icon ?? ''} ${c.name}`.trim()}
+          </Chip>
+        ))}
+      </ScrollRow>
+
+      <ScrollRow
+        label={vi.browse.sortGroup}
+        style={{ display: 'flex', gap: 8, padding: '4px 12px 6px', background: 'var(--color-bg-surface)', minWidth: 0, maxWidth: '100%' }}
+      >
         {SORTS.map((s) => (
-          <Chip key={s.key} label={s.label} active={sort === s.key} onClick={() => setSort(s.key)} />
+          <Chip key={s.key} selected={sort === s.key} onPress={() => setSort(s.key)}>
+            {s.label}
+          </Chip>
         ))}
         <Chip
-          label={
-            <Box flex alignItems="center" style={{ gap: 4 }}>
-              <HelpCircle size={14} />
-              {vi.community.unanswered}
-            </Box>
-          }
-          active={unanswered}
-          onClick={() => {
+          icon={HelpCircle}
+          selected={unanswered}
+          onPress={() => {
             haptic('light');
             setUnanswered((v) => !v);
           }}
-        />
-      </Box>
+        >
+          {vi.community.unanswered}
+        </Chip>
+      </ScrollRow>
 
       {tag && (
-        <Box px={3} pb={2} style={{ background: 'var(--neutral-0)' }}>
-          <Box
-            role="button"
-            aria-label={vi.community.clearTag}
-            className="tubu-press"
-            onClick={() => {
+        <div style={{ padding: '0 12px 8px', background: 'var(--color-bg-surface)' }}>
+          <Chip
+            selected
+            size="sm"
+            icon={Hash}
+            ariaLabel={vi.community.clearTag}
+            onPress={() => {
               haptic('light');
               setTag(undefined);
               setTagName(undefined);
               navigate('/feed', { replace: true });
             }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'var(--leaf-600)',
-              color: 'var(--neutral-0)',
-              borderRadius: 'var(--radius-full)',
-              padding: '6px 12px',
-              fontSize: 12.5,
-              fontWeight: 600,
-            }}
           >
-            <Hash size={12} />
-            {tagName ?? tag} ✕
-          </Box>
-        </Box>
+            {tagName ?? tag}
+            <Icon icon={X} size="sm" tone="inverse" />
+          </Chip>
+        </div>
       )}
 
       {feed.isLoading ? (
-        <Box p={3} flex flexDirection="column" style={{ gap: 12 }}>
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} height={110} radius="var(--radius-lg)" />
+            <Skeleton key={i} height={110} radius="var(--radius-card)" />
           ))}
-        </Box>
+        </div>
       ) : feed.isError ? (
         <ErrorState message={getErrorMessage(feed.error)} onRetry={() => void feed.refetch()} />
       ) : posts.length === 0 ? (
@@ -268,16 +231,16 @@ export default function FeedPage() {
             <PostCard key={post.id} post={post} onClick={() => navigate(`/feed/${post.id}`)} />
           ))}
           {feed.hasNextPage && (
-            <Box flex justifyContent="center" pt={4}>
+            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 16 }}>
               <Button
                 variant="secondary"
-                loading={feed.isFetchingNextPage} disabled={feed.isFetchingNextPage}
-                onClick={() => void feed.fetchNextPage()}
+                loading={feed.isFetchingNextPage}
+                onPress={() => feed.fetchNextPage()}
                 style={{ minWidth: 160 }}
               >
                 {vi.community.loadMore}
               </Button>
-            </Box>
+            </div>
           )}
         </>
       )}
@@ -292,34 +255,5 @@ export default function FeedPage() {
         }}
       />
     </Page>
-  );
-}
-
-function Chip({ label, active, onClick }: { label: React.ReactNode; active: boolean; onClick: () => void }) {
-  return (
-    <Box
-      role="button"
-      aria-pressed={active}
-      className="tubu-press"
-      onClick={onClick}
-      style={{
-        whiteSpace: 'nowrap',
-        padding: '10px 14px',
-        borderRadius: 'var(--radius-full)',
-        fontSize: 13,
-        fontWeight: active ? 600 : 400,
-        background: active ? 'var(--primary-600)' : 'var(--neutral-0)',
-        border: `1px solid ${active ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
-        color: active ? 'white' : 'var(--neutral-600)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        minHeight: 40,
-        boxSizing: 'border-box',
-        flex: '0 0 auto',
-      }}
-    >
-      {label}
-    </Box>
   );
 }
