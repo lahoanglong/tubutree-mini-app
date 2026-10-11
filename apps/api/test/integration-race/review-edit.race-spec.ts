@@ -153,6 +153,20 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
     expect((await ledger(u.id)).balance).toBe(0);
   });
 
+  it('xoá rồi viết lại: lần xoá hoàn điểm nên sổ điểm sau cùng đúng bằng MỘT lần thưởng, không farm được', async () => {
+    const { p, v } = await product();
+    const { u } = await buyer(v.id);
+    const first = await reviews.create(u.id, p.slug, { rating: 5, comment: 'Lần 1', images: ['https://i/1.jpg'] });
+    await reviews.remove(u.id, 'USER', first.id);
+    const again = await reviews.create(u.id, p.slug, { rating: 4, comment: 'Lần 2', images: ['https://i/2.jpg'] });
+    expect(again).toMatchObject({ updated: false });
+
+    const { balance, txs, rows } = await ledger(u.id);
+    expect(rows).toHaveLength(1);
+    expect(txs.map((t) => t.delta)).toEqual([10, -10, 10]);
+    expect(balance).toBe(10);
+  });
+
   it('sửa không bỏ ẩn đánh giá admin đã ẩn, sao trung bình vẫn loại đánh giá ẩn', async () => {
     const { p, v } = await product();
     const { u } = await buyer(v.id);
