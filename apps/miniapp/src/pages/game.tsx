@@ -30,8 +30,6 @@ import {
   type MissionItem,
   type AnswerResult,
   type HarvestSpecies,
-  type CodexEntry,
-  type SeasonPassTier,
 } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
 import { Skeleton } from '../components/ui/skeleton';
@@ -52,6 +50,10 @@ import { TreeHealthAlert } from '../components/game/tree-health-alert';
 import { CheckInStreak } from '../components/game/checkin-streak';
 import { StreakRepair } from '../components/game/streak-repair';
 import { TreeActions } from '../components/game/tree-actions';
+import { GardenPlots } from '../components/game/garden-plots';
+import { SeasonPass } from '../components/game/season-pass';
+import { CommunityGoal } from '../components/game/community-goal';
+import { SpeciesCodex } from '../components/game/species-codex';
 
 export default function GamePage() {
   const status = useAuthStore((s) => s.status);
@@ -348,262 +350,32 @@ export default function GamePage() {
 
       {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
       {garden && (
-        <GameCard title={`🪴 Lô đất của bạn (${garden.plots.length}/${garden.maxPlots})`}>
-          {garden.plots.filter((p) => !p.isHome).length === 0 && (
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-              Mở thêm lô đất để trồng nhiều cây cùng lúc — mỗi lô thu hoạch cho coupon, cây thật & loài sưu tập riêng.
-            </Text>
-          )}
-          {garden.plots
-            .filter((p) => !p.isHome)
-            .map((p) => {
-              const ppct = p.target > 0 ? Math.min(100, Math.round((p.progress / p.target) * 100)) : 0;
-              const stageEmoji = ppct >= 100 ? '🌳' : ppct > 50 ? '🌿' : '🌱';
-              return (
-                <Box key={p.id} p={2} mt={1} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)' }}>
-                  <Box flex alignItems="center" justifyContent="space-between">
-                    <Box flex alignItems="center" style={{ gap: 8 }}>
-                      <Text style={{ fontSize: 26, filter: p.treeHealth === 'DEAD' ? 'grayscale(1)' : 'none' }}>{stageEmoji}</Text>
-                      <Box>
-                        <Text size="small" bold>Lô {p.slot} · {p.treeType}</Text>
-                        <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                          {formatNumber(p.progress)}/{formatDrops(p.target)} · 🌳 {formatNumber(p.treesPlanted)}
-                          {p.treeHealth === 'WILTED' ? ' · 🥀 héo' : p.treeHealth === 'DEAD' ? ' · 🍂 chết' : ''}
-                        </Text>
-                      </Box>
-                    </Box>
-                    <Button
-                      size="small"
-                      variant="secondary"
-                      disabled={waterPlotM.isPending && waterPlotM.variables === p.id}
-                      loading={waterPlotM.isPending && waterPlotM.variables === p.id}
-                      onClick={() => p.id && waterPlotM.mutate(p.id)}
-                    >
-                      🚿 Tưới
-                    </Button>
-                  </Box>
-                  <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 6, marginTop: 6, overflow: 'hidden' }}>
-                    <Box style={{ width: `${ppct}%`, height: 6, background: 'var(--leaf-600)', borderRadius: 99, transition: 'width var(--dur-slow) var(--ease-out)' }} />
-                  </Box>
-                </Box>
-              );
-            })}
-          {garden.nextUnlock ? (
-            <Box flex style={{ gap: 8, marginTop: 10 }}>
-              <Button
-                style={{ flex: 1 }}
-                size="small"
-                disabled={unlockM.isPending}
-                loading={unlockM.isPending && unlockM.variables === 'SEEDS'}
-                onClick={() => unlockM.mutate('SEEDS')}
-              >
-                🔓 Mở lô ({formatDrops(garden.nextUnlock.seedCost)})
-              </Button>
-              <Button
-                style={{ flex: 1 }}
-                size="small"
-                variant="secondary"
-                disabled={unlockM.isPending}
-                loading={unlockM.isPending && unlockM.variables === 'XU'}
-                onClick={() => unlockM.mutate('XU')}
-              >
-                🔓 Mở lô ({formatXu(garden.nextUnlock.xuCost)})
-              </Button>
-            </Box>
-          ) : (
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
-              Bạn đã mở tối đa số lô đất 🌳
-            </Text>
-          )}
-        </GameCard>
+        <GardenPlots
+          garden={garden}
+          waterPlotPending={waterPlotM.isPending}
+          waterPlotVariables={waterPlotM.variables}
+          onWaterPlot={(plotId) => waterPlotM.mutate(plotId)}
+          unlockPending={unlockM.isPending}
+          unlockVariables={unlockM.variables}
+          onUnlock={(currency) => unlockM.mutate(currency)}
+        />
       )}
 
       {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
       {seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
-        <GameCard title={vi.game.seasonPass.title}>
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-            {vi.game.seasonPass.subtitle(seasonPass.seasonTitle ?? '')}
-          </Text>
-          {(() => {
-            const xp = seasonPass.xp ?? 0;
-            const maxXp = seasonPass.tiers![seasonPass.tiers!.length - 1]?.xpRequired ?? 1;
-            const ppct = maxXp > 0 ? Math.min(100, Math.round((xp / maxXp) * 100)) : 0;
-            return (
-              <>
-                <Box flex justifyContent="space-between" style={{ margin: '10px 0 4px' }}>
-                  <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                    {vi.game.seasonPass.xp(xp)}
-                  </Text>
-                  <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                    {vi.game.seasonPass.xp(maxXp)}
-                  </Text>
-                </Box>
-                <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 8, overflow: 'hidden' }}>
-                  <Box style={{ width: `${ppct}%`, height: 8, background: 'linear-gradient(90deg, var(--leaf-400), var(--leaf-600))', borderRadius: 99, transition: 'width var(--dur-slow) var(--ease-out)' }} />
-                </Box>
-              </>
-            );
-          })()}
-
-          {!seasonPass.premiumEligible && (
-            <Text size="xSmall" style={{ color: 'var(--clay-700)', marginTop: 8 }}>
-              {vi.game.seasonPass.premiumHint}
-            </Text>
-          )}
-
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-            {seasonPass.tiers.map((t: SeasonPassTier) => {
-              const busy = (track: 'free' | 'premium') =>
-                claimPassM.isPending && claimPassM.variables?.tier === t.tier && claimPassM.variables?.track === track;
-              return (
-                <Box
-                  key={t.tier}
-                  p={2}
-                  style={{
-                    background: t.unlocked ? 'var(--leaf-50)' : 'var(--neutral-100)',
-                    borderRadius: 'var(--radius-md)',
-                    opacity: t.unlocked ? 1 : 0.7,
-                  }}
-                >
-                  <Box flex alignItems="center" justifyContent="space-between" mb={1}>
-                    <Text size="xSmall" bold>
-                      {vi.game.seasonPass.tier(t.tier + 1)}
-                    </Text>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                      {vi.game.seasonPass.xp(t.xpRequired)}
-                    </Text>
-                  </Box>
-                  <Box flex style={{ gap: 8 }}>
-                    {/* Nhánh miễn phí */}
-                    <Box style={{ flex: 1, textAlign: 'center' }}>
-                      <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                        {vi.game.seasonPass.free}
-                      </Text>
-                      <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-                        {vi.game.seasonPass.reward(t.free)}
-                      </Text>
-                      {t.claimedFree ? (
-                        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                          {vi.game.seasonPass.claimed}
-                        </Text>
-                      ) : (
-                        <Button
-                          size="small"
-                          fullWidth
-                          disabled={!t.unlocked || busy('free')}
-                          loading={busy('free')}
-                          onClick={() => claimPassM.mutate({ tier: t.tier, track: 'free' })}
-                          style={{ marginTop: 2, background: 'var(--leaf-600)' }}
-                        >
-                          {t.unlocked ? vi.game.seasonPass.claim : vi.game.seasonPass.locked}
-                        </Button>
-                      )}
-                    </Box>
-                    {/* Nhánh premium */}
-                    <Box style={{ flex: 1, textAlign: 'center' }}>
-                      <Text size="xSmall" style={{ color: 'var(--sun-700)' }}>
-                        ⭐ {vi.game.seasonPass.premium}
-                      </Text>
-                      <Text size="xSmall" bold style={{ color: 'var(--sun-700)' }}>
-                        {vi.game.seasonPass.reward(t.premium)}
-                      </Text>
-                      {t.claimedPremium ? (
-                        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                          {vi.game.seasonPass.claimed}
-                        </Text>
-                      ) : (
-                        <Button
-                          size="small"
-                          fullWidth
-                          variant="secondary"
-                          disabled={!t.unlocked || !seasonPass.premiumEligible || busy('premium')}
-                          loading={busy('premium')}
-                          onClick={() => claimPassM.mutate({ tier: t.tier, track: 'premium' })}
-                          style={{ marginTop: 2 }}
-                        >
-                          {!t.unlocked
-                            ? vi.game.seasonPass.locked
-                            : !seasonPass.premiumEligible
-                              ? vi.game.seasonPass.locked
-                              : vi.game.seasonPass.claim}
-                        </Button>
-                      )}
-                    </Box>
-                  </Box>
-                </Box>
-              );
-            })}
-          </Box>
-        </GameCard>
+        <SeasonPass
+          pass={seasonPass}
+          claimPending={claimPassM.isPending}
+          claimVariables={claimPassM.variables}
+          onClaim={(tier, track) => claimPassM.mutate({ tier, track })}
+        />
       )}
 
       {/* Mốc cộng đồng cây thật (Phase 2) — hồ giọt nước toàn cộng đồng */}
-      {community?.goal && (
-        <GameCard title="🌍 Mục tiêu cộng đồng">
-          <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
-            {community.goal.title}
-          </Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-            📍 {community.goal.region} · mục tiêu {community.goal.treesToPlant} cây thật
-          </Text>
-          <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 12, margin: '10px 0 6px', overflow: 'hidden' }}>
-            <Box
-              style={{
-                width: `${community.pct}%`,
-                height: 12,
-                background: 'linear-gradient(90deg, var(--leaf-400), var(--leaf-600))',
-                borderRadius: 99,
-                transition: 'width var(--dur-slow) var(--ease-out)',
-              }}
-            />
-          </Box>
-          <Box flex justifyContent="space-between">
-            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-              {formatNumber(community.goal.currentDrops)}/{formatDrops(community.goal.targetDrops)} ({community.pct}%)
-            </Text>
-            <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
-              Bạn đã góp {formatDrops(community.myDrops)}
-            </Text>
-          </Box>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6 }}>
-            Mỗi lần thu hoạch cây ảo, toàn bộ 💧 đã tưới sẽ góp vào hồ chung. Đủ mốc, Tubu trồng cây thật cùng PanNature 🌿
-          </Text>
-        </GameCard>
-      )}
+      {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
 
       {/* Sổ tay loài cây (Phase 3) — sưu tập khi thu hoạch */}
-      {codex && codex.length > 0 && (
-        <GameCard title={`📒 Sổ tay loài cây (${codex.filter((c) => c.owned).length}/${codex.length})`}>
-          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-            {codex.map((c: CodexEntry) => (
-              <Box
-                key={c.id}
-                p={2}
-                style={{
-                  textAlign: 'center',
-                  background: c.owned ? 'var(--leaf-50)' : 'var(--neutral-100)',
-                  borderRadius: 'var(--radius-md)',
-                  border: c.owned ? `1px solid ${rarityColor(c.rarity)}` : '1px solid transparent',
-                  opacity: c.owned ? 1 : 0.55,
-                }}
-              >
-                <Text style={{ fontSize: 26, filter: c.owned ? 'none' : 'grayscale(1)' }}>
-                  {c.owned ? c.emoji : '❔'}
-                </Text>
-                <Text size="xSmall" bold style={{ color: c.owned ? 'var(--neutral-900)' : 'var(--neutral-400)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {c.owned ? c.name : '???'}
-                </Text>
-                {c.owned && c.count > 1 && (
-                  <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>×{c.count}</Text>
-                )}
-              </Box>
-            ))}
-          </Box>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
-            Thu hoạch cây để sưu tập đủ loài cây Việt Nam — loài hiếm khó gặp hơn!
-          </Text>
-        </GameCard>
-      )}
+      {codex && codex.length > 0 && <SpeciesCodex codex={codex} />}
 
       {/* Tặng nước bạn bè (social) */}
       {friends && friends.length > 0 && (
