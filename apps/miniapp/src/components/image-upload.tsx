@@ -436,7 +436,7 @@ export function MultiImageUpload({
                   width: 20,
                   height: 20,
                   borderRadius: '50%',
-                  background: 'color-mix(in srgb, var(--color-bg-inverse) 65%, transparent)',
+                  background: 'var(--color-bg-scrim)',
                   color: 'var(--color-text-inverse)',
                   display: 'flex',
                   alignItems: 'center',

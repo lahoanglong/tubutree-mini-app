@@ -43,17 +43,19 @@ const LEGACY = new RegExp(
 );
 
 // Cùng định nghĩa với static-scan: hex 3-8 ký tự không dính chữ/số liền trước, và rgb()/rgba() bắt đầu bằng số.
-const RAW_COLOR = /(?<![&\w-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b(?!\w)|\brgba?\(\s*\d/;
+// Thêm color-mix(): webview cũ (Chrome < 111, iOS Safari < 16.2) bỏ cả khai báo, nền/chữ biến mất.
+const RAW_COLOR = /(?<![&\w-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b(?!\w)|\brgba?\(\s*\d|\bcolor-mix\(/;
 
 // Emoji + ký hiệu dingbat/misc (★ ✓ ⚠ ♻...). Rộng hơn static-scan một chút (thêm khối 1F000-1F2FF, có cờ quốc gia).
 const EMOJI = /[\u{1F000}-\u{1FAFF}☀-➿⭐⭕]/u;
 
 /**
- * Từ zmp-ui chỉ còn lấy hook, Input/Select (chưa có bản DS: Select cho chọn địa giới), Avatar và
- * Sheet nền tối của cắt ảnh đại diện (BottomSheet DS nền sáng sẽ đổi thiết kế); layout/nút/chữ
- * dùng components/ui.
+ * Từ zmp-ui chỉ còn lấy hook, Input/Select (chưa có bản DS: Select cho chọn địa giới) và Avatar;
+ * layout/nút/chữ/sheet dùng components/ui. Ngoại lệ duy nhất cho Sheet là cắt ảnh đại diện (nền
+ * tối, BottomSheet DS nền sáng sẽ đổi thiết kế).
  */
-const ZAUI_ALLOWED = new Set(['Page', 'Avatar', 'Input', 'Select', 'Sheet', 'useNavigate', 'useLocation', 'useSnackbar']);
+const ZAUI_ALLOWED = new Set(['Avatar', 'Input', 'Select', 'useNavigate', 'useLocation', 'useSnackbar']);
+const ZAUI_SHEET_FILES = new Set(['src/components/avatar-crop-modal.tsx']);
 
 const MINIAPP_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const read = (file: string) => readFileSync(MINIAPP_ROOT + file, 'utf8');
@@ -109,7 +111,7 @@ describe('PC-10c3 — bộ so khớp tự kiểm', () => {
     expect(LEGACY.test(line)).toBe(false);
   });
 
-  it.each(['background: "#000"', "color: '#1f2a44'", 'background: rgba(255,255,255,0.3)', 'color: rgb(0, 0, 0)'])('bắt màu thô %s', (line) => {
+  it.each(['background: "#000"', "color: '#1f2a44'", 'background: rgba(255,255,255,0.3)', 'color: rgb(0, 0, 0)', "background: 'color-mix(in srgb, var(--color-bg-inverse) 65%, transparent)'"])('bắt màu thô %s', (line) => {
     expect(RAW_COLOR.test(line)).toBe(true);
   });
 
@@ -158,6 +160,7 @@ describe('PC-10c3 — không dùng emoji làm icon (C-113)', () => {
 
 describe('PC-10c3 — chỉ lấy hook/Input/Avatar từ zmp-ui', () => {
   it.each(FILES_PC10C3)('%s', (file) => {
-    expect(zmpUiImports(read(file)).filter((name) => !ZAUI_ALLOWED.has(name))).toEqual([]);
+    const allowSheet = ZAUI_SHEET_FILES.has(file);
+    expect(zmpUiImports(read(file)).filter((name) => !ZAUI_ALLOWED.has(name) && !(allowSheet && name === 'Sheet'))).toEqual([]);
   });
 });

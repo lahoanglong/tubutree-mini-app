@@ -207,7 +207,7 @@ export function AvatarCropModal({
               haptic('light');
               onClose();
             }}
-            style={{ background: 'color-mix(in srgb, var(--color-text-inverse) 15%, transparent)', color: 'var(--color-text-inverse)' }}
+            style={{ background: 'var(--stone-700)', color: 'var(--color-text-inverse)' }}
           >
             <X size={16} style={{ marginRight: 6 }} aria-hidden /> Hủy chọn
           </Button>

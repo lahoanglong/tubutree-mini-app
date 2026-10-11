@@ -87,7 +87,7 @@ export function WishlistHeart({
                 width: 32,
                 height: 32,
                 borderRadius: '50%',
-                background: 'color-mix(in srgb, var(--color-bg-surface) 90%, transparent)',
+                background: 'var(--color-bg-surface)',
                 boxShadow: 'var(--elevation-1)',
               }
             : {}),
