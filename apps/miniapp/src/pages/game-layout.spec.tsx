@@ -170,6 +170,16 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
     expect(screen.getByRole('tab', { name: 'Vườn' })).toHaveAttribute('aria-selected', 'false');
   });
 
+  // App chạy immersive và trang này không dùng className="page" (chỉ PageHeader đệm safe-top, khối đó cuộn đi),
+  // nên thanh tab dính ở mép 0 sẽ nằm dưới status bar và đè lên capsule Zalo.
+  it('thanh tab dính đầu trang chừa safe-top, không dính mép 0', async () => {
+    renderPage();
+    const tablist = await screen.findByRole('tablist');
+    const sticky = tablist.closest<HTMLElement>('[style*="sticky"]');
+    expect(sticky).not.toBeNull();
+    expect(sticky!.style.top).toContain('var(--safe-top)');
+  });
+
   it('chỉ khối của tab đang chọn nhìn thấy được; đổi tab thì đổi khối', async () => {
     renderPage();
     await screen.findByRole('tab', { name: 'Hôm nay' });
