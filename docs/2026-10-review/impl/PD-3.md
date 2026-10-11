@@ -291,3 +291,126 @@ prisma migrate diff ... --exit-code: No difference detected. | check-partial-ind
 
 - OQ-16 (mới, dùng đề xuất mặc định): hoàn tác xu bị chặn khi đã có phiên khách gộp hoặc dòng cộng khác vào lô quy đổi; khi đó chỉ sửa tiến. Báo nếu muốn có đường hoàn tác cho trường hợp gộp phiên (cần thiết kế riêng, trả xu cho chủ hiện tại của dòng quy đổi).
 - Cổng deploy mục 4 ở trên: số đo 3.3 (a), (b) trên bản sao PROD trước khi deploy.
+
+## Lượt L2 — Nguồn thưởng sang Điểm Xanh (spec mục 9, 4)
+
+### Các mục
+
+| Mục | Trạng thái | Commit |
+|---|---|---|
+| Migration đổi khoá config xu sang `*_points` bằng CEIL; Season Pass XU sang POINTS; trần cộng đồng 3→1, 5→3 | XONG | 3cdf0ed0 |
+| `RewardPointsService.grant` (lô STANDARD, có hạn `loyalty.point_expire_months`, trần 1..2000, idempotent đọc HỢP sổ điểm + sổ xu cũ) thay `CoinsService.grantCoins` | XONG | d8110e7b |
+| Giới thiệu: thưởng/mốc bằng điểm; thu hồi thưởng cấp bằng xu trừ lô CONVERTED `ceil(xu/1000)`, thưởng điểm trừ STANDARD; thiếu ghi `REFERRAL_DEBT` (delta 0) ở sổ điểm; đếm lượt và mốc gộp hai sổ; `GET /me/referral` | XONG | d8110e7b |
+| Mốc doanh số CTV 50/200/600/2000 điểm | XONG | 7dfc4322 |
+| Cộng đồng (bài, trả lời, hay nhất, thắng sự kiện) bằng điểm; trần ngày đếm hai sổ; `CreateEventDto.rewardPoints` (tối đa 1000) | XONG | fea1f2d7 |
+| Nhiệm vụ gian hàng 2/2/2/1/5 điểm; "đã nhận" đọc hợp hai sổ | XONG | c7566cd6 |
+| Season Pass thưởng POINTS qua `grant`; cấu hình XU bị từ chối (400, log lỗi) | XONG | 0bde94f0 |
+| RANGES + luật JSON cho khoá `*_points`; khoá xu cũ vào DEAD; seed đổi sang điểm; T16 | XONG | 3a12dc80 |
+| Race spec cũ chuyển sang `RewardPointsService` | XONG | 44bf9010 |
+| T13 (giới thiệu, real Postgres) | XONG | 2f0e4f26 |
+| T14 (nhiệm vụ, cộng đồng, sự kiện, real Postgres) | XONG | c5a74508 |
+| Khoá xu `game.tree_xu_price`, `game.plot_unlock_xu_base`, `game.xu_per_seed`, `wallet.xu_convert_multiplier` vào DEAD | BỎ ở L2 | Code L3 (game, game-garden, wallet) còn đọc; T16 giữ danh sách `PENDING_L3_XU_KEYS` để L3 xoá |
+
+### Migration
+
+`apps/api/prisma/migrations/20261012120000_pd3_points_config_keys/migration.sql`. Chỉ INSERT ... ON CONFLICT DO NOTHING và UPDATE có điều kiện, không DROP/DELETE:
+
+- `referral.referrer_reward_points = CEIL(coins.referrer_reward/1000)`, chỉ khi giá trị cũ là số (`jsonb_typeof = 'number'`).
+- `referral.milestones_points` từ `coins.referral_milestones`: `{count, bonusPoints: CEIL(bonus/1000)}`, bỏ phần tử không phải số.
+- `game.tree_points_price` từ `game.tree_xu_price`.
+- `seasonpass.tiers`: mục `XU` có số lượng là số → `POINTS` với `CEIL(amount/1000)`; gộp bằng `||` nên không sinh khoá null.
+- Trần cộng đồng: 3→1 (bài/ngày), 5→3 (hay nhất/ngày), chỉ khi giá trị còn đúng mặc định cũ (admin đã sửa thì giữ).
+
+Timestamp đặt sau migration B của L1 theo lệnh điều phối. Spec mục 10 xếp A → config → B; hai migration độc lập nhau nên thứ tự không đổi kết quả. Trên DB test: `migrate deploy` áp được; `migrate diff --exit-code` báo không khác; `check-partial-indexes` có đủ 20/20. `pd3-points-config-keys.race-spec.ts` (9 ca) chạy SQL trên schema nháp `pd3_cfg_mig` (tạo bằng `LIKE public.system_configs`), cả bảng rỗng lẫn bảng có dữ liệu mẫu, và chạy lại lần 2 để kiểm idempotent.
+
+### Test thêm (đỏ -> xanh), output thật
+
+Đỏ ghi ở các commit tính năng (test viết trước):
+
+- Config SQL bản nháp spec: `23502` (null value) với giá trị JSON không phải số; ca trần 3→1 đỏ trước khi thêm UPDATE. Sau sửa: `pd3-points-config-keys  Tests: 9 passed, 9 total`.
+- `reward-points.service.spec.ts`: đỏ vì chưa có module (`Cannot find module './reward-points.service'`). Xanh 33 ca.
+- `community-reward.service.spec.ts`: `Tests: 14 failed, 5 passed, 19 total`, rồi xanh 19/19.
+- T16 `points-unit-guard.spec.ts`: `Tests: 14 failed, 7 passed, 21 total`, rồi xanh 21/21.
+- affiliate-tier, storefront-quest, season-pass: mỗi spec 4 ca đỏ, sau đó xanh.
+
+T13 `referral-order2.race-spec.ts`: 27 ca, 10 ca mới cho PD-3 gồm (j), (l1), (l2), (l3), (m5), (m6), (m7). Đỏ bằng cách tạm sửa `hasReferralEntry` chỉ đọc sổ điểm và `revokeReferralRewardForOrder` bỏ thưởng ở sổ xu, sau đó trả nguyên file:
+
+```
+✕ (j) người được mời đã có xu giới thiệu kiểu cũ (cashback) → không thưởng lần 2
+✕ (l2) thưởng xu cũ rồi trả đơn → trừ lô CONVERTED ceil(xu/1000), không âm, thiếu ghi REFERRAL_DEBT ở sổ điểm
+✕ (m5) mốc cấp bằng xu trước gộp, lượt bị trả → thu hồi lượt + mốc ở lô CONVERTED ceil(xu/1000)
+Tests:       3 failed, 24 passed, 27 total
+```
+
+(l1) vẫn xanh khi bị đột biến vì lớp chặn thứ hai `findReferralRewardedOrders` (UNION hai sổ) bỏ cặp đơn đã thưởng cùng người mời. Xanh: `Tests: 27 passed, 27 total`.
+
+T14 `pd3-reward-sources.race-spec.ts`: 6 ca. Đỏ bằng cách tạm cho `legacyCoinEntryExists` luôn trả false và trần ngày cộng đồng bỏ đếm sổ xu, sau đó trả nguyên file:
+
+```
+✕ (q1) nhiệm vụ đã nhận bằng xu trước gộp → listQuests báo đã nhận, claim trả alreadyClaimed, không cộng điểm
+✕ (c1) bài đã thưởng best-answer bằng xu trước gộp → chọn lại best-answer (kể cả người khác) không cấp điểm
+✕ (c2) trần ngày đếm HỢP hai sổ: 1 bài thưởng xu hôm nay + trần 2 → chỉ thêm 1 bài được điểm
+Tests:       3 failed, 3 passed, 6 total
+```
+
+Xanh: `Tests: 6 passed, 6 total`.
+
+### Chạy lại cuối lượt
+
+```
+pd3-reward-sources      Tests: 6 passed, 6 total
+referral-order2         Tests: 27 passed, 27 total
+affiliate.race          Tests: 1 passed, 1 total
+commission-create       Tests: 4 passed, 4 total
+ctv-assisted-refund     Tests: 10 passed, 10 total
+ctv-notifications       Tests: 4 passed, 4 total
+sellable-product        Tests: 27 passed, 27 total
+wallet-reconcile        Tests: 2 passed, 2 total
+wallet-ledger-flows     Tests: 8 passed, 8 total
+feed-like-count         Tests: 4 passed, 4 total
+partial-unique-indexes  Tests: 5 passed, 5 total
+pd3-points-config-keys  Tests: 9 passed, 9 total
+p2002-in-tx             Tests: 10 passed, 10 total
+pd3-points-lots         Tests: 6 passed, 6 total
+pd3-xu-migration        Tests: 11 passed, 11 total
+auth-merge-guest        Tests: 11 passed, 11 total
+npx jest src/modules/{wallet,feed,storefront,affiliate,game,system-config,orders} --maxWorkers=1   Test Suites: 45 passed; Tests: 1036 passed
+npx tsc --noEmit -p tsconfig.json   exit 0
+npx eslint <39 file .ts đổi ở L2>   0 lỗi
+```
+
+### Khác spec (chọn phương án an toàn tiền hơn)
+
+- Sửa `prisma/seed.ts` (thuộc nhóm L5). Lý do: spec dead-config bắt mọi khoá seed phải được code đọc. Đã bỏ các khoá `coins.*`, thêm khoá `*_points` dạng createOnly, đổi `seasonpass.tiers` sang POINTS 5/8/12/20/30.
+- Sửa `orders/order-reversal.service.spec.ts` (ngoài nhóm): thêm mock `pointsTransaction.findMany`, vì thu hồi giới thiệu giờ đọc cả sổ điểm. Câu log trong `order-reversal.service.ts` vẫn ghi "xu"; L3 sửa.
+- `GET /me/referral` làm luôn ở L2, vì `CoinsService` bỏ phần giới thiệu. `/me/coins` giữ lại, trường giới thiệu đổi tên sang `referralEarnedPoints`/`referralSuccessCount`.
+- Thêm `JSON_RULES`:
+  - `referral.milestones_points`: `bonusPoints` 1..500.
+  - `seasonpass.tiers`: chỉ SEEDS/POINTS, POINTS tối đa 100.
+  Admin lưu nhầm số xu sẽ bị 400.
+- Thêm RANGES cho `game.spin_buy_cost_points` và `loyalty.vnd_per_point_redeem`.
+- `grant` có trần cứng 2000 điểm. Ngoài 1..2000 hoặc số lẻ thì log lỗi và trả 500, không ghi gì. Lý do: khoá còn giá trị xu đọc dưới tên điểm sẽ bị chặn, không cấp tiền triệu.
+- `claimQuest` trả thêm `alreadyClaimed` (thưởng đã nhận ở sổ nào cũng vậy).
+- Season Pass gặp mục XU (cấu hình chưa qua migration) thì trả 400 và log lỗi. Không cấp gì.
+- `CreateEventDto` bỏ `rewardXu`. ValidationPipe `forbidNonWhitelisted` từ chối client cũ gửi trường này.
+- Thu hồi thưởng xu cũ trừ đúng lô CONVERTED, không lấy lô STANDARD bù. Phần thiếu chỉ ghi nợ (delta 0), không để số dư âm.
+
+### Giả định
+
+- Thưởng mới có hạn `loyalty.point_expire_months` như điểm đơn hàng (OQ-1).
+- Thưởng cộng đồng: bài 1 điểm (1/ngày), trả lời 0, hay nhất 1 điểm (3/ngày) (OQ-6).
+- Mốc CTV 50/200/600/2000 (OQ-7).
+- Thưởng giới thiệu 5 điểm, mốc quy `CEIL(xu/1000)` (OQ-9).
+- Đã nhận bằng xu thì không nhận lại bằng điểm (OQ-11).
+
+### Việc còn lại cho các lượt sau
+
+- L3: các khoá `game.tree_xu_price`, `game.plot_unlock_xu_base`, `game.xu_per_seed`, `wallet.xu_convert_multiplier` vào DEAD. Gỡ `PENDING_L3_XU_KEYS` trong T16 sau khi code game/wallet thôi đọc.
+- L3: `CoinsService.spendCoins` còn giữ cho game; log "xu" trong `order-reversal.service.ts`.
+- Miniapp/web: hiển thị `rewardPoints`, `totalEarnedPoints`, `/me/referral` (lượt UI).
+
+### Việc cần chủ dự án
+
+- Duyệt các mức mặc định trên: OQ-1, OQ-6, OQ-7, OQ-9, OQ-11. Đổi mức nào thì chỉ sửa config hoặc hằng số, không cần migration.
+- Trần cứng 2000 điểm/lần cấp bằng mốc CTV cao nhất. Nâng mốc thì phải nâng `POINTS_GRANT_HARD_MAX` cùng lúc.
+- Dòng `REFERRAL_DEBT` (delta 0) ở sổ điểm là danh sách nợ do người mời đã tiêu điểm thưởng trước khi đơn bị trả. Hiện chưa có quy trình thu. Cần quyết: bỏ qua, hay trừ vào lần thưởng sau.
