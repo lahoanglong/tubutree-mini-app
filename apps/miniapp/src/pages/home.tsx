@@ -17,6 +17,7 @@ import { HomeExtras } from '../components/home/home-extras';
 import { HomeBlockError } from '../components/home/home-block-error';
 import { HomeHeader } from '../components/home/home-header';
 import { HomeSection, type SectionQuery } from '../components/home/home-section';
+import { useBlockQuery } from '../components/home/use-block-query';
 import { OrderStrip } from '../components/home/order-strip';
 import { useHomeFeed } from '../components/home/use-home-feed';
 import { dedupeAgainst, homeBlockOrder, isEndpointMissing, refreshHomeQueries, type HomeBlockId } from '../components/home/home-blocks';
@@ -49,17 +50,23 @@ export default function HomePage() {
 
   // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới. Trong lúc tải dùng loại đã nhớ
   // của tài khoản này để thứ tự khối không đổi sau khung hình đầu (useHomeCustomerKind).
-  const purchased = usePurchasedItems(PURCHASED_RAIL_LIMIT);
-  const kind = useHomeCustomerKind(authed, userId, purchased);
+  const purchasedRaw = usePurchasedItems(PURCHASED_RAIL_LIMIT);
+  const purchased = useBlockQuery(purchasedRaw);
+  const kind = useHomeCustomerKind(authed, userId, purchasedRaw);
 
-  const bestSellers = useQuery({
-    queryKey: ['products', 'home-best-seller'],
-    queryFn: () => fetchProducts({ limit: SECTION_LIMIT, sort: 'best_seller' }),
-  });
-  const featured = useQuery({ queryKey: ['products', 'home-featured'], queryFn: () => fetchProducts({ limit: FEATURED_FETCH_LIMIT }) });
-  const newest = useQuery({ queryKey: ['products', 'home-newest'], queryFn: () => fetchProducts({ limit: SECTION_LIMIT, sort: 'newest' }) });
+  // useBlockQuery: tải lại khi đang lỗi (Thử lại, kéo làm mới) không được đổi khối lỗi thành khung chờ (React Query v5).
+  const bestSellers = useBlockQuery(
+    useQuery({
+      queryKey: ['products', 'home-best-seller'],
+      queryFn: () => fetchProducts({ limit: SECTION_LIMIT, sort: 'best_seller' }),
+    }),
+  );
+  const featured = useBlockQuery(useQuery({ queryKey: ['products', 'home-featured'], queryFn: () => fetchProducts({ limit: FEATURED_FETCH_LIMIT }) }));
+  const newest = useBlockQuery(
+    useQuery({ queryKey: ['products', 'home-newest'], queryFn: () => fetchProducts({ limit: SECTION_LIMIT, sort: 'newest' }) }),
+  );
   // Feed "Dành cho bạn" cá nhân hoá, cần đăng nhập. select() bọc thành { data } để dùng chung HomeSection.
-  const forYou = useQuery({ queryKey: ['for-you'], queryFn: fetchForYou, enabled: authed, select: (data) => ({ data }) });
+  const forYou = useBlockQuery(useQuery({ queryKey: ['for-you'], queryFn: fetchForYou, enabled: authed, select: (data) => ({ data }) }));
   const categories = useCategories();
 
   // A2-32: với khách chưa có lịch sử, "Dành cho bạn" rơi về SP nổi bật — trùng "Tubu chọn cho bạn".

@@ -14,6 +14,7 @@ import { vi } from '../i18n/vi';
 import { useCountdown } from '../hooks/use-countdown';
 import { useAuthStore } from '../store/auth';
 import { HomeBlockError } from './home/home-block-error';
+import { useBlockQuery } from './home/use-block-query';
 import { Badge } from './ui/badge';
 import { PriceTag } from './ui/price-tag';
 import { ProgressBar } from './ui/progress-bar';
@@ -53,12 +54,14 @@ const CARD_ROW_STYLE: CSSProperties = { gap: 12, padding: '0 16px' };
 export function FlashSale() {
   const navigate = useNavigate();
 
-  const q = useQuery({
-    queryKey: ['flash-sales', 'active'],
-    queryFn: fetchActiveFlashSales,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-  });
+  const q = useBlockQuery(
+    useQuery({
+      queryKey: ['flash-sales', 'active'],
+      queryFn: fetchActiveFlashSales,
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+    }),
+  );
 
   const items = q.data ?? [];
 

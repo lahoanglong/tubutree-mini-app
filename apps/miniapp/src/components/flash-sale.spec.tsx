@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type * as ZmpUi from 'zmp-ui';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -25,11 +25,14 @@ import { FlashSale, UpcomingFlashSales } from './flash-sale';
 
 function renderFlash() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={qc}>
-      <FlashSale />
-    </QueryClientProvider>,
-  );
+  return {
+    qc,
+    ...render(
+      <QueryClientProvider client={qc}>
+        <FlashSale />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 const ITEM = {
@@ -59,6 +62,47 @@ describe('FlashSale (C-084)', () => {
     fireEvent.click(within(region).getByRole('button', { name: 'Thử lại Ưu đãi giờ vàng' }));
     expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Thử lại/ })).toBeNull();
+  });
+});
+
+describe('FlashSale — tải lại sau lỗi (React Query v5 đưa query lỗi về pending khi tải lại)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.status = 'guest';
+    mocks.fetchUpcoming.mockResolvedValue([]);
+  });
+
+  it('poll nền 60s lúc đang lỗi: khối lỗi KHÔNG biến mất rồi hiện lại, nút "Thử lại" báo đang tải; thành công thì hiện đợt giờ vàng', async () => {
+    let release: (v: unknown) => void = () => {};
+    mocks.fetchActive
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockImplementationOnce(() => new Promise((r) => { release = r; }));
+    const { qc } = renderFlash();
+    await screen.findByRole('region', { name: 'Ưu đãi giờ vàng' });
+
+    // Cùng đường chuyển trạng thái với refetchInterval của FlashSale: query.fetch() trên query đang lỗi, chưa có dữ liệu.
+    let refetching: Promise<unknown> = Promise.resolve();
+    act(() => {
+      refetching = qc.refetchQueries({ queryKey: ['flash-sales', 'active'] });
+    });
+    await waitFor(() => expect(mocks.fetchActive).toHaveBeenCalledTimes(2));
+    const region = screen.getByRole('region', { name: 'Ưu đãi giờ vàng' });
+    expect(within(region).getByText('Có chút trục trặc, thử lại nhé')).toBeInTheDocument();
+    expect(within(region).getByRole('button', { name: 'Thử lại Ưu đãi giờ vàng' })).toHaveAttribute('aria-busy', 'true');
+
+    await act(async () => {
+      release([ITEM]);
+      await refetching;
+    });
+    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Thử lại/ })).toBeNull();
+  });
+
+  it('lần tải ĐẦU vẫn không vẽ gì (không khung chờ, không khối lỗi) cho tới khi có kết quả', async () => {
+    mocks.fetchActive.mockReturnValue(new Promise(() => {}));
+    const { container } = renderFlash();
+    await waitFor(() => expect(mocks.fetchActive).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
   });
 });
 

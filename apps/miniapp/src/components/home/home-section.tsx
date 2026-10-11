@@ -11,7 +11,7 @@ export interface SectionQuery {
   isError: boolean;
   error: unknown;
   data?: { data: ProductCard[] };
-  /** Đang tải (kể cả tải lại sau lỗi, lúc `isLoading` đã false) — để nút "Thử lại" hiện trạng thái đang tải. */
+  /** Đang có request bay, kể cả tải lại sau lỗi — để nút "Thử lại" hiện trạng thái đang tải. */
   isFetching?: boolean;
   refetch: () => unknown;
 }
