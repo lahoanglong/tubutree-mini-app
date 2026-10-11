@@ -23,6 +23,7 @@ const FILES_PC10B = [
   'src/components/content-kit-sheet.tsx',
   'src/pages/storefront-builder.tsx',
   'src/pages/brand-story.tsx',
+  'src/pages/brand-owner.tsx',
   'src/utils/brands.ts',
   'src/utils/brand-origins.ts',
 ];
@@ -39,6 +40,7 @@ const PAGES_WITH_PAGE_HEADER = [
   'src/pages/dealer.tsx',
   'src/pages/storefront-builder.tsx',
   'src/pages/brand-story.tsx',
+  'src/pages/brand-owner.tsx',
 ];
 
 // Giữ đồng bộ với scripts/uiux/static-scan.mjs (LEGACY) và ds-legacy-vars-4b.spec.ts.

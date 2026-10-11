@@ -10,9 +10,12 @@ const mocks = vi.hoisted(() => ({
   updateOwnedBrand: vi.fn(), createOwnedPromotion: vi.fn(), updateOwnedPromotion: vi.fn(), deleteOwnedPromotion: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
+  Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) =>
+    visible ? <div data-testid="sheet">{children}</div> : null,
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/brand-owner', search: '', hash: '', state: null, key: 'k' }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/brand-owner-api', () => ({
@@ -143,7 +146,7 @@ describe('BrandOwnerPage khuyến mãi gắn mã giảm giá (C-006)', () => {
     renderPage();
     await screen.findByText('MUA 2 TẶNG 1');
     fireEvent.change(screen.getByPlaceholderText(/Tiêu đề/), { target: { value: 'Giảm sốc' } });
-    fireEvent.click(screen.getByRole('button', { name: '+ Thêm khuyến mãi' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm khuyến mãi' }));
     await waitFor(() => expect(mocks.createOwnedPromotion).toHaveBeenCalledTimes(1));
     expect(mocks.createOwnedPromotion.mock.calls[0]![0].couponCode).toBeUndefined();
   });
@@ -159,9 +162,120 @@ describe('BrandOwnerPage khuyến mãi gắn mã giảm giá (C-006)', () => {
     await screen.findByText('MUA 2 TẶNG 1');
     fireEvent.change(screen.getByPlaceholderText(/Tiêu đề/), { target: { value: 'Giảm sốc' } });
     fireEvent.change(screen.getByPlaceholderText(/Mã giảm giá/), { target: { value: 'masai' } });
-    fireEvent.click(screen.getByRole('button', { name: '+ Thêm khuyến mãi' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm khuyến mãi' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', text: expect.stringContaining('chưa có trong hệ thống') })));
     expect(mocks.createOwnedPromotion.mock.calls[0]![0].couponCode).toBe('MASAI');
     expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã thêm khuyến mãi' }));
+  });
+});
+
+describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getOwnedBrand.mockResolvedValue(BRAND);
+    mocks.deleteOwnedPromotion.mockResolvedValue({});
+    mocks.updateOwnedBrand.mockResolvedValue({});
+  });
+
+  const oneH1 = () => {
+    const h1 = screen.getAllByRole('heading', { level: 1 });
+    expect(h1).toHaveLength(1);
+    expect(h1[0]!.textContent).toBe('Quản lý nhãn hàng');
+  };
+
+  it('đúng một h1 khi đang tải', () => {
+    mocks.getOwnedBrand.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    oneH1();
+  });
+
+  it('đúng một h1 khi chưa được cấp nhãn (404)', async () => {
+    mocks.getOwnedBrand.mockRejectedValue({ response: { status: 404 } });
+    renderPage();
+    await screen.findByText(/chưa được cấp quyền quản lý nhãn/);
+    oneH1();
+  });
+
+  it('đúng một h1 khi lỗi tải, có nút Thử lại', async () => {
+    mocks.getOwnedBrand.mockRejectedValueOnce(new Error('mạng lỗi')).mockResolvedValue(BRAND);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /thử lại/i }));
+    await screen.findByRole('heading', { level: 2, name: 'Sachi' });
+    oneH1();
+  });
+
+  it('đúng một h1 ở trang chỉnh sửa; tên nhãn là h2', async () => {
+    renderPage();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Sachi' })).toBeInTheDocument();
+    oneH1();
+  });
+
+  it('trạng thái nhãn: chính hãng, đang hiển thị, số theo dõi; không dùng ký tự ✓', async () => {
+    renderPage();
+    await screen.findByText('Sachi');
+    expect(screen.getByText('Chính hãng')).toBeInTheDocument();
+    expect(screen.getByText('Đang hiển thị')).toBeInTheDocument();
+    expect(screen.getByText(/12 theo dõi/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('✓');
+  });
+
+  it('nhãn chưa xác minh và còn nháp', async () => {
+    mocks.getOwnedBrand.mockResolvedValue({ ...BRAND, isVerified: false, isPublished: false });
+    renderPage();
+    await screen.findByText('Sachi');
+    expect(screen.getByText('Chưa xác minh')).toBeInTheDocument();
+    expect(screen.getByText('Nháp (admin duyệt)')).toBeInTheDocument();
+  });
+
+  it('"Xem trang nhãn": đã đăng thì sang /brand/:slug, nháp thì chỉ báo cảnh báo', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem trang nhãn' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/brand/sachi');
+  });
+
+  it('"Xem trang nhãn" khi nhãn còn nháp: không chuyển trang, báo cảnh báo', async () => {
+    mocks.getOwnedBrand.mockResolvedValue({ ...BRAND, isPublished: false });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem trang nhãn' }));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' }));
+  });
+
+  it('Lưu thông tin gửi các trường đang nhập', async () => {
+    renderPage();
+    await screen.findByText('Sachi');
+    fireEvent.change(screen.getByLabelText('Tagline'), { target: { value: 'Sống xanh' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thông tin' }));
+    await waitFor(() => expect(mocks.updateOwnedBrand).toHaveBeenCalledTimes(1));
+    expect(mocks.updateOwnedBrand.mock.calls[0]![0]).toMatchObject({ tagline: 'Sống xanh', logoUrl: '', coverUrl: '', origin: '', story: '' });
+  });
+
+  it('xoá khuyến mãi phải xác nhận trong sheet có tiêu đề h2; Huỷ không gọi API', async () => {
+    renderPage();
+    await screen.findByText('MUA 2 TẶNG 1');
+    fireEvent.click(screen.getByRole('button', { name: 'Xoá' }));
+    const sheet = within(screen.getByTestId('sheet'));
+    expect(sheet.getByRole('heading', { level: 2, name: 'Xoá khuyến mãi này?' })).toBeInTheDocument();
+    fireEvent.click(sheet.getByRole('button', { name: 'Huỷ' }));
+    expect(screen.queryByTestId('sheet')).toBeNull();
+    expect(mocks.deleteOwnedPromotion).not.toHaveBeenCalled();
+  });
+
+  it('xác nhận xoá gọi deleteOwnedPromotion đúng id', async () => {
+    renderPage();
+    await screen.findByText('MUA 2 TẶNG 1');
+    fireEvent.click(screen.getByRole('button', { name: 'Xoá' }));
+    fireEvent.click(within(screen.getByTestId('sheet')).getByRole('button', { name: 'Xoá' }));
+    await waitFor(() => expect(mocks.deleteOwnedPromotion).toHaveBeenCalledWith('p1'));
+  });
+
+  it('ngày kết thúc trước ngày bắt đầu: báo lỗi và khoá nút thêm', async () => {
+    renderPage();
+    await screen.findByText('MUA 2 TẶNG 1');
+    fireEvent.change(screen.getByPlaceholderText(/Tiêu đề/), { target: { value: 'Giảm sốc' } });
+    fireEvent.change(screen.getByLabelText('Từ ngày'), { target: { value: '2026-11-10' } });
+    fireEvent.change(screen.getByLabelText('Đến ngày'), { target: { value: '2026-11-01' } });
+    expect(screen.getByText('Ngày kết thúc phải sau ngày bắt đầu.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thêm khuyến mãi' })).toBeDisabled();
   });
 });
