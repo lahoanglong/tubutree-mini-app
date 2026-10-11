@@ -77,3 +77,7 @@ export const BTN_LINK_MUTED = `${BTN_LINK_BASE} text-stone-600 hover:text-stone-
 export const FIELD_XS = `${TOUCH_H} min-w-0 rounded-control border border-stone-450 bg-stone-0 px-2 py-1 text-xs text-stone-900 placeholder:text-stone-500 focus:border-forest-600 disabled:bg-stone-100 disabled:text-stone-500`;
 // Nút xác nhận tiền dùng tông cảnh báo (không phải xanh "thành công"): thao tác không đảo ngược được.
 export const BTN_WARNING = `${TOUCH_H} rounded-control bg-warning-fg px-3 py-1 text-xs font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-500`;
+
+// Chip lọc trạng thái (hàng tab bấm được): 44px khi chạm trên điện thoại, 32px từ `sm`.
+export const chipClass = (active: boolean) =>
+  `min-h-[44px] rounded-full px-3 py-1 text-xs font-medium sm:min-h-[32px] ${active ? 'bg-forest-600 text-stone-0' : 'bg-stone-100 text-stone-700'}`;

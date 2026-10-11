@@ -12,7 +12,7 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { PAYOUT_STATUS_LABEL, PAYOUT_STATUS_ORDER, payoutActions, rejectPayoutReasonError } from '@/lib/payout-admin';
-import { INPUT_CLASS, ToneBadge } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_PRIMARY, BTN_SMALL, INPUT_CLASS, TOUCH_H, ToneBadge, chipClass } from './ui';
 import { useConfirm } from './confirm-dialog';
 import type { Tone } from '@/lib/recycling';
 
@@ -41,7 +41,7 @@ export function PayoutAdminTab() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-neutral-900">Duyệt yêu cầu rút tiền</h2>
+        <h2 className="text-base font-semibold text-stone-900">Duyệt yêu cầu rút tiền</h2>
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc theo trạng thái">
           {[...PAYOUT_STATUS_ORDER, ''].map((s) => (
             <button
@@ -53,7 +53,7 @@ export function PayoutAdminTab() {
                 setFilter(s as AdminPayoutStatus | '');
                 setPage(1);
               }}
-              className={`rounded px-3 py-1 text-xs font-medium ${filter === s ? 'bg-green-600 text-white' : 'bg-neutral-100 text-neutral-700'}`}
+              className={chipClass(filter === s)}
             >
               {s ? PAYOUT_STATUS_LABEL[s as AdminPayoutStatus] : 'Tất cả'}
             </button>
@@ -61,11 +61,11 @@ export function PayoutAdminTab() {
         </div>
       </div>
 
-      {q.isLoading && <p className="text-sm text-neutral-500">Đang tải…</p>}
+      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {q.isError && (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-danger-fg">
           Không tải được danh sách lệnh rút.{' '}
-          <button type="button" className="underline" onClick={() => void q.refetch()}>
+          <button type="button" className={`${BTN_LINK} text-sm`} onClick={() => void q.refetch()}>
             Thử lại
           </button>
         </p>
@@ -73,23 +73,23 @@ export function PayoutAdminTab() {
       <div className="space-y-2">
         {q.data?.data.map((p) => <PayoutRow key={p.id} payout={p} />)}
         {q.data?.data.length === 0 && (
-          <p className="rounded-lg border border-neutral-100 bg-white p-6 text-center text-sm text-neutral-500">
+          <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
             Không có lệnh rút nào{filter ? ` ở trạng thái "${PAYOUT_STATUS_LABEL[filter]}"` : ''}.
           </p>
         )}
       </div>
 
       {q.data && totalPages > 1 && (
-        <div className="flex items-center justify-between px-2 text-sm text-neutral-600">
+        <div className="flex items-center justify-between px-2 text-sm text-stone-600">
           <span>
-            Tổng: <b className="text-neutral-900">{q.data.meta.total}</b> lệnh rút
+            Tổng: <b className="text-stone-900">{q.data.meta.total}</b> lệnh rút
           </span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="rounded border border-neutral-200 px-3 py-1 text-xs disabled:opacity-40"
+              className={BTN_SMALL}
             >
               ← Trước
             </button>
@@ -100,7 +100,7 @@ export function PayoutAdminTab() {
               type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="rounded border border-neutral-200 px-3 py-1 text-xs disabled:opacity-40"
+              className={BTN_SMALL}
             >
               Sau →
             </button>
@@ -170,43 +170,43 @@ export function PayoutRow({ payout: p }: { payout: AdminPayout }) {
   const actionable = acts.approve || acts.reject || acts.markPaid;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-neutral-900">{formatVnd(p.amount)}</span>
-            {p.fee > 0 && <span className="text-xs text-neutral-500">(đã trừ phí {formatVnd(p.fee)})</span>}
+            <span className="font-semibold text-stone-900">{formatVnd(p.amount)}</span>
+            {p.fee > 0 && <span className="text-xs text-stone-500">(đã trừ phí {formatVnd(p.fee)})</span>}
             <ToneBadge tone={STATUS_TONE[p.status]}>{PAYOUT_STATUS_LABEL[p.status]}</ToneBadge>
           </div>
-          <div className="mt-0.5 text-sm text-neutral-600">
-            CTV: <span className="font-medium text-neutral-800">{userLabel}</span>
+          <div className="mt-0.5 text-sm text-stone-600">
+            CTV: <span className="font-medium text-stone-800">{userLabel}</span>
             {p.user?.referralCode ? ` · mã ${p.user.referralCode}` : ''}
           </div>
           {bank && (bank.bankName || bank.accountNumber) && (
-            <div className="mt-0.5 text-xs text-neutral-600">
+            <div className="mt-0.5 text-xs text-stone-600">
               {bank.bankName} · STK {bank.accountNumber} · {bank.accountName}
             </div>
           )}
         </div>
-        <span className="text-xs text-neutral-400">{new Date(p.requestedAt).toLocaleString('vi-VN')}</span>
+        <span className="text-xs text-stone-500">{new Date(p.requestedAt).toLocaleString('vi-VN')}</span>
       </div>
 
       {(p.rejectionReason || p.adminNote || p.reviewedAt || p.paidAt || p.bankRef) && (
-        <div className="mt-2 space-y-0.5 text-xs text-neutral-500">
+        <div className="mt-2 space-y-0.5 text-xs text-stone-500">
           {p.rejectionReason && (
             <div>
-              Lý do từ chối: <span className="font-medium text-red-700">{p.rejectionReason}</span>
+              Lý do từ chối: <span className="font-medium text-danger-fg">{p.rejectionReason}</span>
             </div>
           )}
           {p.adminNote && (
             <div>
-              Ghi chú admin: <span className="text-neutral-700">{p.adminNote}</span>
+              Ghi chú admin: <span className="text-stone-700">{p.adminNote}</span>
             </div>
           )}
           {p.reviewedAt && <div>Xử lý lúc: {new Date(p.reviewedAt).toLocaleString('vi-VN')}</div>}
           {p.bankRef && (
             <div>
-              Mã giao dịch NH: <span className="font-medium text-neutral-800">{p.bankRef}</span>
+              Mã giao dịch NH: <span className="font-medium text-stone-800">{p.bankRef}</span>
             </div>
           )}
           {p.paidAt && <div>Đã chuyển khoản lúc: {new Date(p.paidAt).toLocaleString('vi-VN')}</div>}
@@ -214,7 +214,7 @@ export function PayoutRow({ payout: p }: { payout: AdminPayout }) {
       )}
 
       {actionable && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-3">
           <input
             aria-label="Ghi chú / lý do"
             placeholder={acts.reject ? 'Ghi chú (tuỳ chọn) — BẮT BUỘC khi từ chối' : 'Ghi chú (tuỳ chọn)'}
@@ -240,7 +240,7 @@ export function PayoutRow({ payout: p }: { payout: AdminPayout }) {
               type="button"
               onClick={() => run('approve')}
               disabled={mut.isPending}
-              className="rounded bg-green-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:bg-neutral-300"
+              className={BTN_PRIMARY}
             >
               Duyệt
             </button>
@@ -250,7 +250,7 @@ export function PayoutRow({ payout: p }: { payout: AdminPayout }) {
               type="button"
               onClick={() => run('reject')}
               disabled={mut.isPending}
-              className="rounded border border-red-300 px-3.5 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className={BTN_DANGER_OUTLINE}
             >
               Từ chối (hoàn tiền)
             </button>
@@ -260,16 +260,16 @@ export function PayoutRow({ payout: p }: { payout: AdminPayout }) {
               type="button"
               onClick={() => run('markPaid')}
               disabled={mut.isPending}
-              className="rounded bg-blue-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-neutral-300"
+              className={`${TOUCH_H} rounded-control bg-info-fg px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-500`}
             >
               Đã chuyển khoản
             </button>
           )}
-          {mut.isPending && <span className="text-xs text-neutral-500">Đang lưu…</span>}
+          {mut.isPending && <span className="text-xs text-stone-500">Đang lưu…</span>}
         </div>
       )}
       {err && (
-        <p role="alert" className="mt-2 text-sm text-red-600">
+        <p role="alert" className="mt-2 text-sm text-danger-fg">
           {err}
         </p>
       )}
