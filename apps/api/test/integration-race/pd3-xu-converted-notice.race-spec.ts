@@ -68,6 +68,7 @@ describe('PD-3 migration báo quy đổi xu → Điểm Xanh (real Postgres)', (
     await snapshot('u1', 1, 1);
     await snapshot('u1000', 1000, 1);
     await snapshot('u123456', 123_456, 124);
+    await snapshot('ubig', 2_147_483_000, 2_147_483);
     await run();
 
     const rows = await logs();
@@ -75,14 +76,18 @@ describe('PD-3 migration báo quy đổi xu → Điểm Xanh (real Postgres)', (
       ['u1', 'XU_CONVERTED', 'INAPP', 'SENT'],
       ['u1000', 'XU_CONVERTED', 'INAPP', 'SENT'],
       ['u123456', 'XU_CONVERTED', 'INAPP', 'SENT'],
+      ['ubig', 'XU_CONVERTED', 'INAPP', 'SENT'],
     ]);
-    // Dấu chấm ngăn nghìn như mọi màn tiếng Việt (123.456), không dấu phẩy và không để sót {{biến}}.
+    // Dấu chấm ngăn nghìn như mọi màn tiếng Việt, cho CẢ số xu lẫn số điểm (từ 1.000 điểm trở lên), không dấu
+    // phẩy và không để sót {{biến}}.
     expect(rows.map((r) => r.payload.body)).toEqual([
       '1 xu cũ của bạn đã thành 1 Điểm Xanh không hết hạn, dùng trả tới 100% giá trị hàng.',
       '1.000 xu cũ của bạn đã thành 1 Điểm Xanh không hết hạn, dùng trả tới 100% giá trị hàng.',
       '123.456 xu cũ của bạn đã thành 124 Điểm Xanh không hết hạn, dùng trả tới 100% giá trị hàng.',
+      '2.147.483.000 xu cũ của bạn đã thành 2.147.483 Điểm Xanh không hết hạn, dùng trả tới 100% giá trị hàng.',
     ]);
     expect(rows[2]!.payload.data).toEqual({ xu: '123.456', points: '124' });
+    expect(rows[3]!.payload.data).toEqual({ xu: '2.147.483.000', points: '2.147.483' });
   });
 
   it('chạy lại không nhân đôi thông báo và không đè trạng thái đã đọc; user quy đổi sau đó nhận đúng một thông báo', async () => {
