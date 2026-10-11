@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { Box, Text, Input } from 'zmp-ui';
+import { Input } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { X } from 'lucide-react';
+import { Text } from '../ui/text';
+import { IconButton } from '../ui/icon-button';
+import { ListRow } from '../ui/list-row';
 import { suggestProducts, type ProductSuggestion } from '../../services/shop-api';
 import { useDebounced } from '../../utils/use-debounced';
 import { formatVnd } from '../../utils/format';
@@ -50,44 +53,36 @@ export function ProductPicker({
   };
 
   return (
-    <Box mt={3}>
-      <Text size="xSmall" bold style={{ marginBottom: 4 }}>
+    <div style={{ marginTop: 12 }}>
+      <Text variant="label" as="div" style={{ marginBottom: 4 }}>
         {vi.community.tagProducts}
       </Text>
 
       {value.length > 0 && (
-        <Box flex style={{ gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
           {value.map((p) => (
-            <Box
+            <div
               key={p.slug}
-              flex
-              alignItems="center"
               style={{
+                display: 'flex',
+                alignItems: 'center',
                 gap: 6,
-                padding: '4px 8px',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--neutral-100)',
-                background: 'var(--neutral-0)',
+                padding: '0 0 0 8px',
+                borderRadius: 'var(--radius-control)',
+                border: '1px solid var(--color-border-subtle)',
+                background: 'var(--color-bg-surface)',
               }}
             >
               {p.thumbnail && (
                 <img src={p.thumbnail} alt="" width={24} height={24} style={{ borderRadius: 4, objectFit: 'cover' }} />
               )}
-              <Text size="xSmall" style={{ maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Text variant="caption" style={{ maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {p.name}
               </Text>
-              <Box
-                role="button"
-                aria-label={vi.common.cancel}
-                className="tubu-press"
-                onClick={() => remove(p.slug)}
-                style={{ display: 'flex', alignItems: 'center', flex: '0 0 auto' }}
-              >
-                <X size={14} color="var(--neutral-400)" />
-              </Box>
-            </Box>
+              <IconButton icon={X} size="sm" label={vi.common.cancel} onPress={() => remove(p.slug)} />
+            </div>
           ))}
-        </Box>
+        </div>
       )}
 
       <Input.Search
@@ -101,42 +96,34 @@ export function ProductPicker({
       />
 
       {maxWarning && (
-        <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 4 }}>
+        <Text variant="caption" tone="danger" as="div" style={{ marginTop: 4 }}>
           {vi.community.maxProducts}
         </Text>
       )}
 
       {dq.trim().length >= 1 && (
-        <Box mt={2}>
+        <div style={{ marginTop: 8 }}>
           {results.map((p) => (
-            <Box
+            <ListRow
               key={p.slug}
-              className="tubu-press"
-              onClick={() => add(p)}
-              flex
-              alignItems="center"
-              style={{ gap: 8, padding: '6px 0', cursor: 'pointer' }}
-            >
-              {p.thumbnail && (
-                <img src={p.thumbnail} alt="" width={32} height={32} style={{ borderRadius: 6, objectFit: 'cover', flex: '0 0 auto' }} />
-              )}
-              <Box style={{ flex: 1, overflow: 'hidden' }}>
-                <Text size="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {p.name}
-                </Text>
-                <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
-                  {formatVnd(p.basePrice)}
-                </Text>
-              </Box>
-            </Box>
+              icon={
+                p.thumbnail ? (
+                  <img src={p.thumbnail} alt="" width={32} height={32} style={{ borderRadius: 6, objectFit: 'cover', flex: '0 0 auto' }} />
+                ) : undefined
+              }
+              title={p.name}
+              subtitle={<Text variant="price-sm" tone="brand">{formatVnd(p.basePrice)}</Text>}
+              onPress={() => add(p)}
+              style={{ padding: '6px 0' }}
+            />
           ))}
           {results.length === 0 && !suggestQ.isFetching && (
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', padding: '6px 0' }}>
+            <Text variant="caption" tone="tertiary" as="div" style={{ padding: '6px 0' }}>
               {vi.community.noProductsFound}
             </Text>
           )}
-        </Box>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
