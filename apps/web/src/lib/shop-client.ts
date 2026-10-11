@@ -126,6 +126,8 @@ export const placeOrder = (
     addressId: string;
     paymentMethod: string;
     pointsToUse?: number;
+    /** Khách đã thấy đơn 0đ (FE ẩn chọn phương thức): BE từ chối nếu lúc đặt tổng > 0. */
+    quotedZeroTotal?: boolean;
     note?: string;
     storefrontSlug?: string;
     referralCode?: string;

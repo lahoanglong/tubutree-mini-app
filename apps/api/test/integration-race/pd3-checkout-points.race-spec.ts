@@ -222,6 +222,23 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
     }
   });
 
+  it('review C2: FE đã báo đơn 0đ (quotedZeroTotal) mà lô quy đổi chỉ còn đủ giảm một phần → 400, không tạo đơn, không trừ điểm; không có cờ thì COD bình thường', async () => {
+    const { u, addr } = await buyer(0, 50);
+    const err = await checkout
+      .placeOrder(u.id, { addressId: addr.id, paymentMethod: 'COD', pointsToUse: 100, quotedZeroTotal: true } as never)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toMatch(/tải lại trang thanh toán/);
+    expect(await prisma.order.count({ where: { userId: u.id } })).toBe(0);
+    expect(await lots(u.id)).toEqual({ pointsBalance: 0, pointsConvertedBalance: 50 });
+    expect(await prisma.pointsTransaction.count({ where: { userId: u.id, reason: { startsWith: 'ORDER_REDEEM' } } })).toBe(0);
+
+    const order = await checkout.placeOrder(u.id, { addressId: addr.id, paymentMethod: 'COD', pointsToUse: 100 } as never);
+    expect(order.total).toBeGreaterThan(0);
+    expect(order.paymentMethod).toBe('COD');
+    expect(await lots(u.id)).toEqual({ pointsBalance: 0, pointsConvertedBalance: 0 });
+  });
+
   it('T6: 6 lượt góp quỹ cây song song (50 điểm, có 100 STANDARD + 120 CONVERTED) → đúng 4 lượt, lấy STANDARD trước', async () => {
     const { u } = await buyer(100, 120);
     const results = await Promise.allSettled(Array.from({ length: 6 }, () => game.buyTree(u.id)));

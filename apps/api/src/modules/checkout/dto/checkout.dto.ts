@@ -39,6 +39,12 @@ export class PlaceOrderDto {
 
   @IsOptional() @IsInt() @Min(0) pointsToUse?: number;
 
+  /**
+   * FE báo khách đã thấy đơn 0đ và đã ẩn chọn phương thức (gửi COD thay khách). Nếu lúc đặt tổng > 0
+   * (lô điểm vừa bị tiêu bớt) thì BE từ chối thay vì tạo đơn COD có tiền phải trả mà khách không chọn.
+   */
+  @IsOptional() @IsBoolean() quotedZeroTotal?: boolean;
+
   @IsOptional() @IsString() note?: string;
 
   /** Mã giới thiệu CTV (nếu mua qua link chia sẻ). */

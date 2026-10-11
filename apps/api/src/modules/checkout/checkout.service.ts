@@ -192,6 +192,11 @@ export class CheckoutService {
     // PD-3 (spec 2.3): đơn 0đ (Điểm Xanh/mã giảm giá phủ hết hàng, freeship) không có gì để thu.
     // BANK_TRANSFER/ZALOPAY sẽ treo PENDING_PAYMENT rồi bị cron huỷ; WALLET sẽ thành PAID không trừ gì.
     // Ép COD (CONFIRMED, không thu tiền) cho mọi phương thức.
+    if (dto.quotedZeroTotal === true && computed.total > 0) {
+      throw new BadRequestException(
+        'Số Điểm Xanh hoặc mã giảm giá của bạn vừa thay đổi nên đơn không còn 0đ. Vui lòng tải lại trang thanh toán.',
+      );
+    }
     const paymentMethod = computed.total === 0 ? 'COD' : dto.paymentMethod;
     if (paymentMethod === 'WALLET' && user.walletBalance < computed.total) {
       throw new BadRequestException('Số dư Ví Tubu không đủ.');

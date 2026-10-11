@@ -408,6 +408,23 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
       expect(mocks.navigate).not.toHaveBeenCalledWith(expect.stringContaining('/bank-payment'), expect.anything());
     });
 
+    it('review C2: đơn 0đ gửi cờ quotedZeroTotal để BE từ chối nếu lúc đặt tổng không còn 0đ (không tạo COD khách không chọn)', async () => {
+      mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0, pointsConvertedBalance: 50, redeemablePoints: 0 });
+      mocks.checkoutQuote.mockImplementation(async (_a: string, pts: number) => (pts > 0 ? ZERO : QUOTE));
+      renderPage();
+      fireEvent.click(await screen.findByText('Bạn đang có 50 điểm'));
+      await screen.findByText(/Đơn đã được trả đủ bằng Điểm Xanh/);
+      const body = await placeOrderClick();
+      expect(body.paymentMethod).toBe('COD');
+      expect(body.quotedZeroTotal).toBe(true);
+    });
+
+    it('review C2: đơn có tiền phải trả KHÔNG gửi cờ quotedZeroTotal', async () => {
+      renderPage();
+      const body = await placeOrderClick();
+      expect(body).not.toHaveProperty('quotedZeroTotal');
+    });
+
     it('0đ nhờ mã giảm giá (không dùng điểm) → không nói sai là trả bằng Điểm Xanh', async () => {
       mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, subtotal: 20_000, shippingFee: 0, total: 0, pointsDiscount: 0 });
       renderPage();

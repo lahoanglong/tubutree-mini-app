@@ -1167,6 +1167,30 @@ describe('CheckoutService — PD-3 tiêu Điểm Xanh hai lô, bỏ XU, đơn 0�
       expect(ledger).not.toHaveBeenCalled();
     });
 
+    it('review C2: FE đã báo khách thấy đơn 0đ (quotedZeroTotal) mà lúc đặt tổng > 0 → 400 tải lại, KHÔNG tạo đơn COD khách không chọn', async () => {
+      // FE ẩn chọn phương thức và gửi COD vì báo giá 0đ; lô quy đổi vừa bị tiêu bớt nên hiện chỉ giảm được 10.000đ.
+      const { svc, orderCreate } = build({ cartData: CART_150K, pointsBalance: 0, pointsConvertedBalance: 10, pricing: realPricing() });
+      const err = await svc
+        .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 150, quotedZeroTotal: true } as never)
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toMatch(/tải lại trang thanh toán/);
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('review C2: quotedZeroTotal mà tổng vẫn 0đ → tạo đơn COD bình thường', async () => {
+      const { svc, orderCreate } = build({ cartData: CART_500K, pointsBalance: 0, pointsConvertedBalance: 1000, pricing: realPricing() });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 1000, quotedZeroTotal: true } as never);
+      expect(orderCreate.mock.calls[0][0].data).toMatchObject({ total: 0, paymentMethod: 'COD', status: 'CONFIRMED' });
+    });
+
+    it('review C2: khách CHỌN COD cho đơn > 0đ (không có cờ) → vẫn tạo đơn COD như cũ', async () => {
+      const { svc, orderCreate } = build({ cartData: CART_150K, pointsBalance: 0, pointsConvertedBalance: 10, pricing: realPricing() });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 10 } as never);
+      expect(orderCreate.mock.calls[0][0].data).toMatchObject({ paymentMethod: 'COD', status: 'CONFIRMED' });
+      expect(orderCreate.mock.calls[0][0].data.total).toBeGreaterThan(0);
+    });
+
     it('đơn > 0đ giữ phương thức khách chọn (BANK_TRANSFER → PENDING_PAYMENT)', async () => {
       const { svc, orderCreate } = build({ cartData: CART_150K, pointsBalance: 0, pointsConvertedBalance: 10, pricing: realPricing() });
       await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'BANK_TRANSFER', pointsToUse: 10 } as never);

@@ -181,6 +181,9 @@ export default function CheckoutPage() {
           addressId: addressId!,
           paymentMethod: paymentToSend,
           pointsToUse,
+          // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
+          // tạo đơn COD có tiền phải trả mà khách không chọn.
+          ...(zeroNote ? { quotedZeroTotal: true } : {}),
           note: note.trim() || undefined,
           // Chỉ gửi khi bật + chọn (body mặc định y hệt bản cũ — xem recyclingCheckoutFields).
           ...recyclingCheckoutFields(recyclingEnabled, hasRecyclingPickup, recyclingNote),
