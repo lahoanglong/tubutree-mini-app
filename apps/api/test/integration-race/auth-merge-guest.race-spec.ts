@@ -106,8 +106,9 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
 
   it('merge: guest and target both checked in on the same VN day -> merge commits, target tokens, both check-in points kept', async () => {
     const { guest, target } = await guestAndTarget(
-      { pointsBalance: 15, coinsBalance: 7, walletBalance: 20_000, cashbackPending: 3_000 },
-      { pointsBalance: 100, coinsBalance: 1, walletBalance: 5_000, cashbackPending: 0 },
+      // PD-3: xu đã khoá ở DB (users_coins_frozen) nên mọi user có coinsBalance 0.
+      { pointsBalance: 15, coinsBalance: 0, walletBalance: 20_000, cashbackPending: 3_000 },
+      { pointsBalance: 100, coinsBalance: 0, walletBalance: 5_000, cashbackPending: 0 },
     );
     await checkIn(guest.id, DAY, 10);
     await checkIn(guest.id, OTHER_DAY, 5);
@@ -115,7 +116,7 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     // Cùng một nhiệm vụ ở cả hai bên đụng partial unique (userId, reason) WHERE refType='QUEST'.
     for (const userId of [guest.id, target.id]) {
       await prisma.coinTransaction.create({
-        data: { userId, delta: 1, reason: 'STOREFRONT_QUEST:FIRST', refType: 'QUEST', refId: 'sf' },
+        data: { userId, delta: 0, reason: 'STOREFRONT_QUEST:FIRST', refType: 'QUEST', refId: 'sf' },
       });
     }
 
@@ -126,7 +127,7 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     const t = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
     const g = await prisma.user.findUniqueOrThrow({ where: { id: guest.id } });
     expect(t.pointsBalance).toBe(115);
-    expect(t.coinsBalance).toBe(8);
+    expect(t.coinsBalance).toBe(0);
     expect(t.walletBalance).toBe(25_000);
     expect(t.cashbackPending).toBe(3_000);
     expect([g.pointsBalance, g.coinsBalance, g.walletBalance, g.cashbackPending]).toEqual([0, 0, 0, 0]);
@@ -465,8 +466,8 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
 
   it('merge: two concurrent ensurePhone calls for one guest credit the guest balance to the target exactly once', async () => {
     const { guest, target } = await guestAndTarget(
-      { pointsBalance: 50, pointsConvertedBalance: 6, coinsBalance: 10, walletBalance: 30_000, cashbackPending: 2_000 },
-      { pointsBalance: 1, pointsConvertedBalance: 1, coinsBalance: 1, walletBalance: 1, cashbackPending: 1 },
+      { pointsBalance: 50, pointsConvertedBalance: 6, coinsBalance: 0, walletBalance: 30_000, cashbackPending: 2_000 },
+      { pointsBalance: 1, pointsConvertedBalance: 1, coinsBalance: 0, walletBalance: 1, cashbackPending: 1 },
     );
     zaloIdForNextCall = target.zaloId!;
 
@@ -484,7 +485,7 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     for (const r of s.fulfilled) expect(r.value.user.id).toBe(target.id);
     const t = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
     expect([t.pointsBalance, t.pointsConvertedBalance, t.coinsBalance, t.walletBalance, t.cashbackPending]).toEqual([
-      51, 7, 11, 30_001, 2_001,
+      51, 7, 0, 30_001, 2_001,
     ]);
     const g = await prisma.user.findUniqueOrThrow({ where: { id: guest.id } });
     expect(g.pointsConvertedBalance).toBe(0);

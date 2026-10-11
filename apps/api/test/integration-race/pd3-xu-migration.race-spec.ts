@@ -79,6 +79,9 @@ describe('PD-3 migration B quy đổi xu → Điểm Xanh (real Postgres)', () =
     for (const t of ['users', 'points_transactions', 'coin_transactions']) {
       await exec(`CREATE TABLE ${SCHEMA}.${t} (LIKE public.${t} INCLUDING ALL)`);
     }
+    // Schema nháp dựng trạng thái TRƯỚC migration C (deploy thật: B chạy trước C): LIKE ... INCLUDING ALL
+    // chép cả CHECK users_coins_frozen của public, phải gỡ để dựng dữ liệu còn xu.
+    await exec(`ALTER TABLE ${SCHEMA}.users DROP CONSTRAINT IF EXISTS "users_coins_frozen"`);
     // Khối hoàn tác chỉ đọc orders."pointsUsedConverted".
     await exec(`CREATE TABLE ${SCHEMA}.orders ("id" TEXT PRIMARY KEY, "pointsUsedConverted" INTEGER NOT NULL DEFAULT 0)`);
     for (const [id, coins, points] of SAMPLE) await seedUser(id, coins, points);
@@ -298,5 +301,64 @@ describe('PD-3 migration B quy đổi xu → Điểm Xanh (real Postgres)', () =
 
     expect(await user('ubig')).toMatchObject({ coinsBalance: 2_147_483_647, pointsConvertedBalance: 0 });
     expect(await invariants()).toEqual({ converted_drift: 0, standard_drift: 0, coin_drift: 0 });
+  });
+});
+
+/**
+ * PD-3 T17 (spec 3.4, R7): migration C khoá xu ở DB bằng CHECK users_coins_frozen ("coinsBalance" = 0),
+ * sau khi L3 đã gỡ mọi đường ghi xu. Đường ghi xu nào còn sót nổ trong tx thay vì âm thầm sinh xu.
+ */
+describe('PD-3 migration C đóng băng xu (real Postgres)', () => {
+  const FREEZE_SCHEMA = 'pd3_xu_freeze';
+  const MIGRATION_C = readApiSql('prisma/migrations/20261012130000_pd3_freeze_coins/migration.sql');
+  const prisma = new PrismaClient();
+  const exec = (sql: string) => prisma.$executeRawUnsafe(sql);
+  const runC = () => runSqlScriptIn(prisma, FREEZE_SCHEMA, MIGRATION_C);
+  const frozenCount = async () =>
+    (
+      await prisma.$queryRawUnsafe<{ n: number }[]>(
+        `SELECT count(*)::int AS n FROM pg_constraint WHERE conname = 'users_coins_frozen' AND conrelid = '${FREEZE_SCHEMA}.users'::regclass`,
+      )
+    )[0]!.n;
+
+  beforeAll(async () => {
+    await exec(`DROP SCHEMA IF EXISTS ${FREEZE_SCHEMA} CASCADE`);
+    await exec(`CREATE SCHEMA ${FREEZE_SCHEMA}`);
+    await exec(`CREATE TABLE ${FREEZE_SCHEMA}.users (LIKE public.users INCLUDING ALL)`);
+    await exec(`ALTER TABLE ${FREEZE_SCHEMA}.users DROP CONSTRAINT IF EXISTS "users_coins_frozen"`);
+    await exec(`INSERT INTO ${FREEZE_SCHEMA}.users ("id", "referralCode", "coinsBalance", "updatedAt")
+                VALUES ('f0', 'RC_f0', 0, now()), ('fleft', 'RC_fleft', 5, now())`);
+  });
+
+  afterAll(async () => {
+    await exec(`DROP SCHEMA IF EXISTS ${FREEZE_SCHEMA} CASCADE`);
+    await prisma.$disconnect();
+  });
+
+  it('còn user có xu (B chưa quy đổi hết) → C dừng deploy, không thêm ràng buộc', async () => {
+    await expect(runC()).rejects.toThrow(/users_coins_frozen/);
+    expect(await frozenCount()).toBe(0);
+  });
+
+  it('mọi xu = 0 → C thêm CHECK; chạy lại không lỗi, không thêm bản thứ hai (kiểm theo bảng, không theo tên toàn DB)', async () => {
+    await exec(`UPDATE ${FREEZE_SCHEMA}.users SET "coinsBalance" = 0 WHERE "id" = 'fleft'`);
+    await runC();
+    await runC();
+    expect(await frozenCount()).toBe(1);
+  });
+
+  it('T17: đường ghi xu còn sót (UPDATE coinsBalance = 1 / increment) → vi phạm users_coins_frozen; đặt 0 / cộng 0 vẫn hợp lệ', async () => {
+    await expect(exec(`UPDATE ${FREEZE_SCHEMA}.users SET "coinsBalance" = 1 WHERE "id" = 'f0'`)).rejects.toThrow(/users_coins_frozen/);
+    await expect(exec(`UPDATE ${FREEZE_SCHEMA}.users SET "coinsBalance" = "coinsBalance" - 1 WHERE "id" = 'f0'`)).rejects.toThrow(/users_coins_frozen/);
+    await expect(exec(`UPDATE ${FREEZE_SCHEMA}.users SET "coinsBalance" = "coinsBalance" + 0 WHERE "id" = 'f0'`)).resolves.toBe(1);
+    await expect(exec(`UPDATE ${FREEZE_SCHEMA}.users SET "coinsBalance" = 0 WHERE "id" = 'f0'`)).resolves.toBe(1);
+  });
+
+  it('T17 trên schema public (migrate deploy thật): Prisma cộng xu cho user → 23514, không ghi', async () => {
+    const u = await prisma.user.create({ data: { referralCode: `FZ${Date.now().toString(36).toUpperCase()}` } });
+    await expect(prisma.user.update({ where: { id: u.id }, data: { coinsBalance: { increment: 1000 } } })).rejects.toThrow(/users_coins_frozen/);
+    await expect(prisma.user.create({ data: { referralCode: `FZ2${Date.now().toString(36).toUpperCase()}`, coinsBalance: 7 } })).rejects.toThrow(/users_coins_frozen/);
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: u.id }, select: { coinsBalance: true } });
+    expect(after.coinsBalance).toBe(0);
   });
 });
