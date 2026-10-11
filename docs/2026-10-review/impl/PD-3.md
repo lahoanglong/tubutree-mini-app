@@ -713,3 +713,126 @@ Cả hai chỉ thêm / UPDATE có điều kiện, chạy lại được, không 
   - OQ-9: thu hồi thưởng giới thiệu đã cấp bằng xu thì trừ lô quy đổi `ceil(xu/1000)`: mỗi lần ≤ 5 điểm (thưởng đơn 2) hoặc ≤ 100 điểm (mốc 10 người), nghĩa là ≤ 100.000đ mỗi người mời, và phần đó đã trộn vào lô quy đổi ở migration B nên không tách lại được. Phương án khác: không thu hồi thưởng xu cũ (Tubu chịu).
 - Lời báo khách mới/đổi cần reviewer Opus xem trước khi merge (quy tắc "customer messages"): `RETURN_APPROVED_POINTS`, `RETURN_APPROVED_WALLET_POINTS`, `CASHBACK_PAID`, `COMMUNITY_BEST_ANSWER`. Trên PROD, nếu admin đã sửa lời một mẫu thì migration giữ nguyên bản đó (chỉ đổi khi còn đúng bản seed cũ): cần kiểm tay.
 - Cổng deploy đo số thật (mục 5) vẫn mở.
+
+## Lượt L4 — FE miniapp, web, admin, shared-types (spec mục 7, T19)
+
+Nhánh `hz9/PD-3`. Chỉ đụng mã FE và kiểu dùng chung, không cần DB, không chạm PROD, không gọi dịch vụ ngoài, không chạy Playwright hay dev server.
+
+### Các mục
+
+| Mục | Trạng thái | Ghi chú | Commit |
+|---|---|---|---|
+| shared-types `AuthUser` | XONG | Bỏ `coinsBalance`, thêm `pointsConvertedBalance`. Chú thích `PaymentMethod.XU` nói "chỉ còn ở đơn cũ". Rebuild `dist` bằng `tsc -p`. | 497ee959 |
+| API đọc `AuthUser` và danh sách xoá tài khoản (ngoài nhóm, tối thiểu) | XONG | `toAuthUser` trả `pointsConvertedBalance`; `BlockerUser` và select bỏ `coinsBalance`. Cần để `tsc` của API xanh sau khi kiểu đổi. | 497ee959 |
+| `account-api.ts`: bỏ `getCoins`, `convertToXu`, `CoinsOverview`, `CoinTxn`; thêm `getReferral` (`/me/referral`), `LoyaltyOverview` hai lô, `PointsTxn.lot`, nhãn sổ mới | XONG | `WalletSummary` không còn trường xu. `pointsReasonLabel` có nhãn cho `XU_TO_POINTS`, `ORDER_REFUND_*`, `REFERRAL_*`, `COMMUNITY_*`, `STOREFRONT_QUEST`, `CTV_MILESTONE`, góp quỹ trồng cây. | c64ba4c0 |
+| Hub Cá nhân | XONG | Còn đúng 3 số dư: Điểm Xanh (tổng hai lô), Ví Tubu, Mã giảm giá. Helper thuần `utils/points-lots.ts` (`pointsSummary`, `convertedPointsNote`). | b7c0da51 |
+| Ví | XONG | Bỏ thẻ TubuXu, nút và sheet đổi, mẹo x1,2. Dòng Điểm Xanh nói rõ phần không hết hạn dùng ở đâu, không ra tiền. Khối mời bạn đọc `/me/referral`, đơn vị Điểm Xanh. `canConvertToXu` bị xoá, nhãn sổ cũ là "Đổi sang xu cũ (nay là Điểm Xanh)". | 9e125a85 |
+| Thanh toán | XONG | Còn 3 phương thức COD, chuyển khoản, Ví Tubu. Dưới ô Điểm Xanh có "trong đó N điểm không hết hạn, trả tới 100% giá trị hàng". Đơn 0đ ẩn chọn phương thức, ghi "Đơn đã được trả đủ bằng Điểm Xanh...", gửi COD và không mở trang QR chuyển khoản. Điểm sẽ tích hiện cho mọi phương thức. `pointsToUse` gửi = phần thường dùng được + phần quy đổi, BE tự chia. | 9294b7b5 |
+| Game | XONG | Bỏ mở lô bằng xu (chỉ còn nút giọt nước, `unlockPlot()` gửi `{currency:'SEEDS'}`). Nút "Góp quỹ trồng cây (50 điểm)" đọc `treePointsPrice`; chú thích dưới nút nói điểm thường dùng trước, thiếu mới dùng điểm không hết hạn (OQ-5). Thưởng Season Pass là `SEEDS` hoặc `POINTS`. `buyTree` trả `pointsUsed`, `pointsUsedConverted`. Làm mới `['loyalty']`, không còn `['coins']`. | 4839f313 |
+| CTV | XONG | `rewardPoints`, `milestoneRewardPoints`, "Thưởng mốc +N điểm", "Đã cộng vào Điểm Xanh", làm mới `['loyalty']`. | fa48c4c1 |
+| Gian hàng | XONG | `rewardPoints`, `totalEarnedPoints`, kết quả nhận `pointsBalance`. Chú thích nhắc xu đã dọn. | 58596ba1 |
+| Cộng đồng | XONG | `rewardPoints` (hiển thị và form admin). Thêm dòng gợi ý đơn vị "1 điểm = 1.000đ, tối đa 1.000 điểm" dưới ô nhập (BE từ chối > 1.000, tránh nhập nhầm theo đơn vị xu cũ). | d22929de |
+| FAQ | XONG | Câu thanh toán: "... trả bằng Ví Tubu. Dùng Điểm Xanh để giảm giá ngay ở bước thanh toán." Câu Điểm Xanh thêm một câu về điểm quy đổi từ xu cũ (không hết hạn, trừ tới 100% giá trị hàng, không đổi mã giảm giá). | 6db4caa4, 11b3a945 |
+| Định dạng | XONG | Xoá `formatXu`, component `Xu`, `checkout.paymentXu`. `paymentMethod.XU` = "Điểm Xanh (xu cũ)". Dọn chú thích nhắc xu. | 2d783fa6 |
+| Trang Điểm Xanh (`loyalty.tsx`) | XONG | Thẻ hạng và thẻ thành viên hiện TỔNG hai lô; dòng "trong đó N điểm không hết hạn"; ghi chú trong danh mục đổi quà: điểm không hết hạn không dùng để đổi mã giảm giá; dòng sổ lô quy đổi ghi "Điểm không hết hạn". "Điểm còn lại" trong hộp xác nhận đổi quà vẫn tính trên lô thường vì chỉ lô thường đổi được. | a3112d14 |
+| Thông báo | XONG (một phần việc của L5) | `XU_CONVERTED` thuộc nhóm "Điểm Xanh", nút dẫn tới `/loyalty`. Mẫu tin `XU_CONVERTED` do L5 tạo; FE sẵn sàng. | c220a34e |
+| Web khách | XONG | `order-view.ts`: `XU` = "Điểm Xanh (xu cũ)". | aacb7d74 |
+| Admin web | XONG | `export-csv.ts`: `XU` = "Xu cũ (đã gộp Điểm Xanh)". `account-deletion-panel.tsx`: `pointsConvertedBalance`, hiện "N Điểm Xanh không hết hạn". | aacb7d74 |
+| Guard T19 | XONG | `apps/miniapp/src/i18n/no-xu-copy.spec.ts` và `apps/web/src/lib/no-xu-copy.spec.ts`: quét mã nguồn không phải spec (kể cả chú thích), chỉ cho phép cụm "xu cũ" và tên enum `XU` viết hoa; cấm `formatXu`, `coinsBalance`, `getCoins`, `convertToXu`, `rewardXu`; kiểm nhãn Season Pass `POINTS`, `paymentMethod.XU`. `terminology.spec.ts` đổi sang cấm mọi dạng TubuXu. | 48977e8a, aacb7d74 |
+| Fixture `coinsBalance` trong `store/auth.spec.ts`, `ds-v2-panels.spec.tsx`, `account-deletion-panel.spec.tsx` | XONG | Đổi sang `pointsConvertedBalance`. | 476a5194, aacb7d74 |
+| Mock e2e có `coinsBalance` (`apps/e2e/tests/**`, 4 file) | BỎ (đúng phạm vi) | Thuộc L5/T20; không chạy Playwright được ở lượt này. | — |
+| Ảnh chụp hub, Ví, thanh toán | BỎ | Không chạy dev server. Không có bằng chứng bằng hình, chỉ có test. | — |
+
+Bằng chứng quét chữ (chạy ở HEAD trước commit báo cáo, lệnh ở spec mục 7.2):
+
+```
+$ rg -n -P "(?i)(tubu ?xu|(?<![\p{L}_])xu(?![\p{L}_]))" apps/miniapp/src apps/web/src -g '!*.spec.*' | grep -v "xu cũ"
+apps/web/src/lib/export-csv.ts:38:  XU: 'Xu cũ (đã gộp Điểm Xanh)',
+```
+
+Dòng còn lại là khoá enum `XU` (chữ hoa) của phương thức thanh toán đơn cũ, giá trị của nó cũng là "xu cũ". Mọi chỗ khác chỉ còn cụm "xu cũ". `coinsBalance` ngoài file test: không còn (miniapp, web, shared-types). Còn trong `apps/e2e/tests/{features.miniapp.spec.ts,mock-api-routing.miniapp.spec.ts,support/mock-api.ts,support/checkout-mocks.ts}` (L5).
+
+### Migration
+
+Không có.
+
+### Test thêm (đỏ -> xanh), output thật
+
+Cột Đỏ là dòng `Tests` của lần chạy đầu sau khi viết test, trước khi sửa mã.
+
+| Phần | Đỏ | Xanh |
+|---|---|---|
+| `services/account-api.spec.ts` (hai lô, `/me/referral`, nhãn sổ mới) | 16 failed, 32 passed (48) | 48 passed |
+| `pages/profile-hub.spec.tsx` (đúng 3 số dư, 120 + 30 = 150) | 1 failed, 7 passed (8) | cùng `profile.spec.ts`, `points-lots.spec.ts`, `account-api.spec.ts`: 64 passed |
+| `pages/wallet.spec.tsx` (không xu, `/me/referral`, ghi chú điểm quy đổi) | 27 failed (đổi mock bỏ `getCoins`, mọi ca của file đỏ) | 27 passed |
+| `utils/wallet-rules.spec.ts` (`canConvertToXu` đã gỡ) | đỏ không lưu: test và mã sửa cùng lúc | 9 passed |
+| `utils/checkout-rules.spec.ts` | đỏ không lưu | 30 passed |
+| `pages/checkout.spec.tsx` (ba phương thức, đơn 0đ, điểm quy đổi) | 17 failed; sau sửa mã còn 2 failed | 27 passed |
+| `pages/game-*.spec.tsx` (quỹ cây 50 điểm, mở lô, Season Pass điểm, `['loyalty']`) | 5 failed, 89 passed (94); vòng sau 2 failed | `game-behavior` 74 passed; cả 4 file xanh |
+| `milestone-copy.spec.ts` | 2 failed, 4 passed (6) | cùng `affiliate.spec.tsx`: 26 passed |
+| `affiliate.spec.tsx` (3 ca mốc Điểm Xanh, nhận thưởng làm mới `['loyalty']`) | đỏ không lưu: ca viết sau khi sửa trang | 20 passed |
+| `storefront-builder.spec.tsx` | 4 failed, 32 passed (36) | 36 passed |
+| `community-events.spec.tsx`, `community-moderation.spec.tsx` | 5 failed, 42 passed (47) | 47 passed |
+| `about-data.spec.ts` (FALLBACK_FAQ) | 2 failed, 3 passed (5) | cùng `about.spec.tsx`: 19 passed |
+| `format.spec.ts`, `price-tag.spec.tsx` (không còn `formatXu`, `Xu`) | 2 failed, 32 passed | cùng `format-guard`, `terminology`: 40 passed |
+| `loyalty-behavior.spec.tsx` (hai lô, thẻ thành viên, ghi chú, nhãn sổ) | 4 failed, 23 passed (27); sửa mã còn 1 failed (bộ chọn trong test sai) | cùng `loyalty-layout`, `loyalty.spec`, `points-lots.spec`: 46 passed |
+| `notifications.spec.ts` (`XU_CONVERTED`) | 2 failed, 30 passed | cùng `notifications-page.spec.tsx`: 41 passed |
+| web `order-view.spec.ts`, `export-csv.spec.ts`, `account-deletion-panel.spec.tsx` | 3 failed, 15 passed (18) | cùng `ds-v2-panels`, `bank-transfer-panel`: 43 passed |
+| Guard T19 (miniapp, web) | chèn file tạm `utils/zz-probe.ts` / `lib/zz-probe.ts` chứa "TubuXu": 1 failed, `offenders = ['utils/zz-probe.ts']` (web: `['lib/zz-probe.ts']`); đã xoá file tạm | miniapp `src/i18n` 5 file 17 passed; web 3 passed |
+
+### Chạy lại cuối lượt (HEAD 11b3a945, trước commit báo cáo)
+
+```
+packages/shared-types: npx tsc -p tsconfig.json                                  exit 0
+apps/miniapp: npx tsc --noEmit (gồm file spec)                                   exit 0
+apps/web: npx tsc --noEmit                                                       exit 0
+apps/api: npx tsc --noEmit -p tsconfig.json                                      exit 0
+apps/miniapp: npx eslint <mọi .ts/.tsx đổi từ 10c634c6>                          exit 0, không có dòng nào
+apps/web: npx eslint <mọi .ts/.tsx đổi từ 10c634c6>                              exit 0, không có dòng nào
+apps/miniapp: npx vitest run <25 file spec đã đổi>                               Test Files 25 passed; Tests 476 passed
+apps/miniapp: vitest ds-no-legacy-aliases, hit-target-guard, button-guard,
+              format-guard, src/i18n (terminology, tree-fund-copy, no-xu-copy)   Test Files 9 passed; Tests 78 passed
+apps/miniapp: vitest checkout, wallet, profile-hub, checkout-rules, game-behavior Test Files 5 passed; Tests 166 passed
+apps/miniapp: vitest about-data, about, src/i18n (sau sửa chữ FAQ)               Test Files 7 passed; Tests 36 passed
+apps/web: npx vitest run <6 file spec đã đổi + bank-transfer-panel>              Test Files 6 passed; Tests 46 passed
+apps/api: npx jest auth.service.spec --maxWorkers=1                              23 passed
+apps/api: npx jest admin-account-deletion --maxWorkers=1                         3 passed
+```
+
+Không chạy toàn bộ vitest, không chạy Playwright, không chạy API jest ngoài hai file trên (FE không đổi hành vi API).
+
+### Khác spec (chọn phương án an toàn tiền hơn hoặc dễ hiểu hơn cho khách)
+
+- Spec mục 7 ghi nhãn `XU_TO_POINTS` là "Chuyển từ xu sang Điểm Xanh". Mã dùng "Chuyển từ xu cũ sang Điểm Xanh" để lệnh quét chữ chỉ cần cho phép đúng cụm "xu cũ", không phải một ngoại lệ thứ hai.
+- Khối mời bạn ở Ví: lời cũ nói "cả hai nhận xu". Không chép sang. Nay chỉ nói người giới thiệu nhận Điểm Xanh theo dữ liệu `/me/referral` (số thành công, điểm đã nhận, mốc kế tiếp); lời chia sẻ không hứa thưởng cho người được mời.
+- `unlockPlot()` không còn tham số và luôn gửi `{currency:'SEEDS'}` (BE vẫn nhận trường `currency`, mở bằng XU trả 410).
+- Helper `pointsSummary`, `convertedPointsNote` đặt ở `utils/points-lots.ts` thay vì `account-api.ts` như spec gợi ý, vì nhiều spec mock cả module `account-api` bằng factory (lỗi "No 'pointsSummary' export is defined on the account-api mock" đã gặp ở spec hub).
+- Đơn 0đ: FE gửi COD và không mở `/bank-payment` (BE cũng ép COD). Nếu chỉ dựa vào BE, khách chọn "chuyển khoản" sẽ bị dẫn tới QR 0đ.
+- Thêm ngoài spec: dòng gợi ý đơn vị ở form sự kiện cộng đồng; câu "điểm quy đổi từ xu cũ" trong FAQ Điểm Xanh; ghi chú "không dùng để đổi mã giảm giá" và nhãn "Điểm không hết hạn" ở trang Điểm Xanh; ánh xạ `XU_CONVERTED` ở thông báo. Lý do: tránh khách hiểu sai phần điểm không hết hạn dùng được ở đâu (spec 7 chỉ nói "hiện tổng + phần không hết hạn").
+- Hộp "Điểm còn lại" khi đổi quà vẫn trừ trên lô thường (`pointsBalance`), không trên tổng, vì BE chỉ cho lô thường đổi mã giảm giá.
+- API ngoài nhóm L4 (tối thiểu, để `tsc` API xanh): `auth.service.ts`, `auth.service.spec.ts`, `account-deletion.service.ts`.
+
+### Giả định
+
+- Dùng mặc định của spec cho OQ-1..15 (không có OQ nào bị đổi ở lượt này).
+- Tên trường FE khớp mã API đã có ở các lượt trước (đã đối chiếu): `rewardPoints` ở mốc CTV, nhiệm vụ gian hàng, sự kiện cộng đồng; `milestoneRewardPoints`; `totalEarnedPoints`; kết quả nhận nhiệm vụ trả `pointsBalance`; danh sách xoá tài khoản trả `pointsConvertedBalance`.
+- Loại thưởng Season Pass `XU` trong cấu hình cũ đã được L2 đổi sang `POINTS` (migration khoá `seasonpass`); FE chỉ còn hiểu `SEEDS` và `POINTS`.
+- Mô tả "điểm quy đổi không hết hạn" trong FAQ khớp công thức hai lô của spec (không đổi quà, không vòng quay, trả tới 100% giá trị hàng ở thanh toán).
+
+### Việc còn lại cho L5
+
+- `apps/e2e/tests/**`: 4 file còn mock `coinsBalance` (liệt kê ở trên), T20.
+- Tạo mẫu tin `XU_CONVERTED` (FE đã ánh xạ), seed, chú thích API còn nhắc "xu".
+- Chạy Playwright miniapp và web (lượt này không chạy được: unverified về hành vi trên trình duyệt thật).
+
+### Việc cần chủ dự án
+
+- OQ-1..15: mã dùng mặc định của spec; cần xác nhận (xem các mục "Việc cần chủ dự án" ở trên, đặc biệt OQ-5, OQ-9, OQ-12).
+- Câu chữ mới hiện cho khách cần reviewer Opus đọc trước khi merge (quy tắc customer messages):
+  - Ví: khối "Mời bạn — nhận Điểm Xanh", mẹo Ví Tubu, dòng điểm quy đổi.
+  - Thanh toán: "trong đó N điểm không hết hạn, trả tới 100% giá trị hàng"; "Đơn đã được trả đủ bằng Điểm Xanh. Bạn không cần thanh toán thêm."; "Đơn không còn số tiền cần thanh toán."
+  - Vườn Xanh: chú thích dưới nút "Góp quỹ trồng cây (50 điểm)", thông báo "Đã góp 1 cây vào quỹ trồng cây (-50 điểm)". OQ-5: lời này nói rõ có thể dùng điểm không hết hạn (tiền khách đã trả trước).
+  - Trang Điểm Xanh: dòng "trong đó N điểm không hết hạn", ghi chú không đổi mã giảm giá.
+  - FAQ: hai câu đã đổi. Trên PROD nếu admin đã nhập FAQ riêng (`GET /faqs`), bản dự phòng này không hiện: cần kiểm tay câu "Tôi thanh toán bằng cách nào?" và "Điểm Xanh là gì" trong trang admin.
+  - Nhãn đơn/sổ cũ: "Điểm Xanh (xu cũ)", "Xu cũ (đã gộp Điểm Xanh)", "Chuyển từ xu cũ sang Điểm Xanh", "Đổi sang xu cũ (nay là Điểm Xanh)".
+- Chưa có ảnh chụp hub Cá nhân, Ví, thanh toán: cần xem bằng mắt trên máy thật hoặc trình mô phỏng trước khi phát hành.
