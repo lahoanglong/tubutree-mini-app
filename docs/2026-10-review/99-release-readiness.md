@@ -12,7 +12,7 @@ Bản được đánh giá: nhánh `hardening/2026-10`, HEAD `31bde4b8`. Báo c�
 
 **Phát hành:**
 - **GO cho UAT/staging và cho bản thử trên VPS ngay khi chủ dự án ra lệnh deploy.** HEAD sẵn sàng để dựng lên và duyệt bằng mắt.
-- **Chưa phát hành cho khách thật** cho tới khi xong 3 việc chỉ chủ dự án làm được: (1) trỏ DNS Cloudflare `api.tubutree.com` và `app.tubutree.com` về 14.225.207.177, DNS-only; (2) quét QR UAT trên Zalo thật (chưa ai chạy miniapp trong WebView Zalo thật, toàn bộ kiểm thử miniapp ở đây là Playwright WebKit iPhone 12 với API giả); (3) xác nhận điểm vòng quay, nhiệm vụ, đánh giá có hạn 12 tháng (mục 6, PE-3). Nội dung FAQ/Academy cũng do chủ dự án nhập.
+- **Chưa phát hành cho khách thật** cho tới khi xong các việc chỉ chủ dự án làm được: (1) trỏ DNS Cloudflare `api.tubutree.com` và `app.tubutree.com` về 14.225.207.177, DNS-only; (2) quét QR UAT trên Zalo thật (chưa ai chạy miniapp trong WebView Zalo thật, toàn bộ kiểm thử miniapp ở đây là Playwright WebKit iPhone 12 với API giả); (3) nhập nội dung FAQ/Academy. Hạn 12 tháng của điểm vòng quay, nhiệm vụ, đánh giá đã được chủ dự án đồng ý.
 
 **Các cổng của bản báo cáo đầu tiên nay không còn áp dụng** (vì chưa có số dư xu hay dữ liệu khách thật): đo chi phí làm tròn trên bản sao PROD; cửa sổ deploy và việc miniapp bản test cũ hiển thị sai sau khi BE lên; rollback xu → điểm. Migration quy đổi xu chạy trên DB không có xu là no-op. Giữ nguyên các biện pháp rẻ: sao lưu `pg_dump`, chạy migration thành bước riêng (mục 7).
 
@@ -137,7 +137,8 @@ Tác động hồi tố của PE-3 và PE-5 lên sổ điểm đã ghi trước 
 
 **Cần chủ dự án xác nhận hoặc làm (không phải lỗi mã):**
 - Trỏ DNS Cloudflare, quét QR UAT trên Zalo thật, nhập FAQ/Academy (mục 1).
-- **Xác nhận hạn 12 tháng cho điểm vòng quay, nhiệm vụ, đánh giá (PE-3).** OQ-1 chỉ nêu rõ "nhiệm vụ"; vòng quay và đánh giá suy ra từ nguyên tắc "Điểm Xanh thường có hạn" và FAQ trong miniapp. Hoàn tác bằng revert `e5dd7b10` (game) và `386e1255` (reviews).
+- Hạn 12 tháng cho điểm vòng quay, nhiệm vụ, đánh giá (PE-3): chủ dự án đã đồng ý giữ có hạn (2026-10-11).
+- PA-1 yêu cầu 5 (đơn CTV lên hộ ghi `userId` là khách cuối): hoãn sang sau UAT theo quyết định của chủ dự án; không có lỗi tiền đang mở. Ô chọn ngày của gói định kỳ chỉ kiểm được trên Zalo thật.
 - "Ví trả một phần đơn" (Q-03 phương án 1) hoãn: Ví chỉ trả trọn đơn, thiếu thì báo 400 và khách chọn COD/chuyển khoản.
 
 **Rủi ro cần biết khi lên VPS (không chặn mã):**

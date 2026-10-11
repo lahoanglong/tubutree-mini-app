@@ -182,3 +182,9 @@ Việc của chủ dự án còn lại: trỏ DNS Cloudflare, báo số vCPU c�
 ### Cần chủ dự án xác nhận: hạn của điểm vòng quay, nhiệm vụ, đánh giá (PE-3)
 
 Gói PE-3 cho điểm thưởng vòng quay (`GAME_SPIN_WIN`), nhiệm vụ (`MISSION`) và đánh giá (`REVIEW`) hết hạn sau `loyalty.point_expire_months` tháng như các điểm thưởng thường khác. Trước đó ba nguồn này ghi `expiresAt` rỗng nên không bao giờ hết hạn, khác với FAQ trong miniapp ("điểm có hạn 12 tháng"). OQ-1 chỉ liệt kê rõ "nhiệm vụ"; vòng quay và đánh giá do điều phối viên suy ra từ nguyên tắc "Điểm Xanh thường có hạn". Chủ dự án chưa xác nhận hai nguồn này. Hoàn tác được bằng cách revert hai commit `e5dd7b10` (game) và `386e1255` (reviews); chưa có dữ liệu thật nên không cần backfill.
+
+### Chốt ngày 2026-10-11 (sau đợt F)
+
+- Hạn 12 tháng cho điểm vòng quay, nhiệm vụ, đánh giá (PE-3): chủ dự án đồng ý giữ có hạn. Mục "Cần chủ dự án xác nhận" ngay phía trên đã được chốt.
+- PA-1 yêu cầu 5 (đơn CTV lên hộ ghi `userId` là khách cuối, thiết kế ở `impl/PA-1.md` Lượt 2): HOÃN sang sau UAT. Lý do: không có lỗi tiền đang mở (hoàn về khách thật qua SĐT snapshot, CTV không tự huỷ đơn PAID, SĐT của chính CTV bị chặn), đổi chủ đơn chạm luồng CTV đang chạy và cần migration `placedByUserId`. Khi làm lại cần chủ dự án gật hai điểm: hạng CTV chỉ tính từ đơn CTV tự mua (Q-09), và nội dung tin gửi khách cuối ("CTV [tên] đã đặt hộ bạn đơn [mã]"). Làm thành gói riêng, review opus hai lượt.
+- Ô chọn ngày của gói định kỳ chỉ kiểm được trên Zalo thật: thử khi quét QR UAT; nếu lỗi thì thay bằng nút chọn nhanh ("Giao ngay", "Ngày mai", "Sau 3 ngày", "Sau 7 ngày").
