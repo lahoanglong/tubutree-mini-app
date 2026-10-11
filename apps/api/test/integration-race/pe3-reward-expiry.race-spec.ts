@@ -287,6 +287,47 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
       expect(await balance(user.id)).toBe(30);
     });
 
+    it('lô đánh giá chạm hạn đúng lúc cron đang giữ khoá user và trừ nó: remove chờ khoá rồi đọc lại hạn, không thu hồi thêm', async () => {
+      const { user, product } = await player();
+      await legacyUnlimited(user.id, 30);
+      const review = await reviews.create(user.id, product.slug, { rating: 5 });
+      await ageLedger(user.id, 11); // còn một tháng: remove (đọc trước khi cron commit) thấy chưa hết hạn
+
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      let locked!: () => void;
+      const lockTaken = new Promise<void>((resolve) => (locked = resolve));
+      // Việc của expireUser: khoá dòng user, thấy lô đánh giá đã quá hạn, trừ số dư và ghi POINTS_EXPIRED rồi mới commit.
+      const cron = prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${user.id} FOR UPDATE`;
+          locked();
+          await gate;
+          await tx.$executeRaw`
+            UPDATE "points_transactions"
+               SET "createdAt" = "createdAt" - interval '2 month', "expiresAt" = "expiresAt" - interval '2 month'
+             WHERE "userId" = ${user.id}`;
+          await tx.pointsTransaction.create({ data: { userId: user.id, delta: -REVIEW_POINTS, reason: 'POINTS_EXPIRED', refType: 'EXPIRE', lot: 'STANDARD' } });
+          await tx.user.update({ where: { id: user.id }, data: { pointsBalance: { decrement: REVIEW_POINTS } } });
+        },
+        { timeout: 30_000 },
+      );
+      await lockTaken;
+      const removal = reviews.remove(user.id, 'USER', review.id);
+      const waiting = () =>
+        prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+      for (let i = 0; i < 100 && (await waiting())[0]!.n === 0; i++) await new Promise((resolve) => setTimeout(resolve, 50));
+      expect((await waiting())[0]!.n).toBeGreaterThan(0); // remove đã tới chỗ chờ khoá user
+      release();
+      await Promise.all([cron, removal]);
+
+      expect(await reviewDeleteRows(user.id)).toHaveLength(0);
+      expect(await balance(user.id)).toBe(30);
+      await expiry.expirePoints();
+      expect(await balance(user.id)).toBe(30);
+      expect(await standardSum(user.id)).toBe(30);
+    });
+
     it('dòng thưởng đánh giá cũ không hạn (trước PE-3): xoá vẫn thu hồi như cũ', async () => {
       const { user, product, order } = await player();
       const review = await prisma.review.create({

@@ -36,6 +36,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     },
     pointsTransaction: { create: jest.fn(), findFirst: jest.fn().mockResolvedValue(null) },
     user: { update: jest.fn() },
+    $queryRaw: jest.fn().mockResolvedValue([]),
     $transaction: jest.fn(),
   };
   const prisma = { ...base, ...over } as unknown as PrismaService;
@@ -460,20 +461,34 @@ describe('ReviewsService.remove (chống farm điểm qua tạo→xóa→tạo l
       expect(prisma.pointsTransaction.create.mock.calls[0][0].data.delta).toBe(-10);
     });
 
-    it('tra dòng thưởng gốc theo đúng người, đúng đánh giá, chỉ dòng cộng; ngoài transaction', async () => {
+    it('tra dòng thưởng gốc theo đúng người, đúng đánh giá, chỉ dòng cộng', async () => {
       const { prisma } = await removeWith({ expiresAt: new Date(now.getTime() + 1) });
       expect(prisma.pointsTransaction.findFirst).toHaveBeenCalledWith({
         where: { userId: 'u1', refType: 'REVIEW', refId: 'r1', delta: { gt: 0 } },
         select: { expiresAt: true },
       });
+    });
+
+    // Cron hết hạn khoá dòng user rồi mới trừ lô đã quá hạn. Đọc hạn trước khi có khoá thì lô chạm hạn đúng lúc cron đang
+    // trừ nó vẫn bị coi là còn hạn, và REVIEW_DELETE ghi sau đó trừ thêm lần hai.
+    it('khoá dòng user rồi mới đọc hạn của dòng thưởng, tất cả trong transaction, trước khi ghi thu hồi', async () => {
+      const { prisma } = await removeWith({ expiresAt: new Date(now.getTime() + 1) });
       const tx = (prisma as unknown as { $transaction: jest.Mock }).$transaction;
-      expect(prisma.pointsTransaction.findFirst.mock.invocationCallOrder[0]!).toBeLessThan(tx.mock.invocationCallOrder[0]!);
+      const lock = (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw;
+      const lockSql = (lock.mock.calls[0]![0] as TemplateStringsArray).join('?');
+      expect(lockSql).toMatch(/FROM "users" WHERE "id" = \? FOR UPDATE/);
+      expect(lock.mock.calls[0]!.slice(1)).toEqual(['u1']);
+      const order = (m: jest.Mock) => m.mock.invocationCallOrder[0]!;
+      expect(order(tx)).toBeLessThan(order(lock));
+      expect(order(lock)).toBeLessThan(order(prisma.pointsTransaction.findFirst));
+      expect(order(prisma.pointsTransaction.findFirst)).toBeLessThan(order(prisma.pointsTransaction.create));
     });
 
     it('đánh giá chưa từng được thưởng (pointsEarned=0) → không tra sổ điểm', async () => {
       const { prisma } = await removeWith({ expiresAt: new Date(now.getTime() - 1) }, 0);
       expect(prisma.pointsTransaction.findFirst).not.toHaveBeenCalled();
       expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+      expect((prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw).not.toHaveBeenCalled();
     });
   });
 
