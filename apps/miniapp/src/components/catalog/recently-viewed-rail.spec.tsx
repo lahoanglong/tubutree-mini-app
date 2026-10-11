@@ -31,6 +31,33 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/product/a', { state: { listSource: 'recently_viewed' } });
   });
 
+  it('slug lấy từ localStorage (sửa tay được) được mã hoá URL trước khi điều hướng', () => {
+    recordRecentlyViewed({ slug: 'a/b?x=1#y', name: 'Sản phẩm lạ', thumbnail: null, price: 1000 });
+    render(<RecentlyViewedRail />);
+    fireEvent.click(screen.getByRole('button', { name: 'Sản phẩm lạ' }));
+    expect(mocks.navigate).toHaveBeenCalledWith(`/product/${encodeURIComponent('a/b?x=1#y')}`, { state: { listSource: 'recently_viewed' } });
+  });
+
+  it('localStorage bị chặn (getItem ném) → dải ẩn, không ném lỗi khi vẽ', () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    try {
+      const { container } = render(<RecentlyViewedRail />);
+      expect(container).toBeEmptyDOMElement();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('vùng cuộn ngang chừa đệm dưới đủ cho bóng đổ của thẻ (overflow cắt bóng nếu sát mép)', () => {
+    recordRecentlyViewed({ slug: 'a', name: 'Sản phẩm A', thumbnail: null, price: 45000 });
+    render(<RecentlyViewedRail />);
+    const scroller = screen.getByRole('button', { name: 'Sản phẩm A' }).parentElement as HTMLElement;
+    expect(scroller).toHaveClass('scroll-x');
+    expect(parseFloat(scroller.style.paddingBottom)).toBeGreaterThanOrEqual(12);
+  });
+
   it('cập nhật ngay khi có lượt xem mới (cùng tab)', () => {
     const { container } = render(<RecentlyViewedRail />);
     expect(container).toBeEmptyDOMElement();

@@ -14,6 +14,7 @@ import { ResultHeader } from '../components/catalog/result-header';
 import { SortChips } from '../components/catalog/sort-chips';
 import { SuggestList } from '../components/catalog/suggest-list';
 import { Button } from '../components/ui/button';
+import { SR_ONLY } from '../components/ui/sr-only';
 import { Text } from '../components/ui/text';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { SearchField } from '../components/ui/search-field';
@@ -145,6 +146,7 @@ export default function BrowsePage() {
     <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
       <PullToRefresh onRefresh={() => Promise.all([products.refetch(), brands.refetch()])} />
       <div ref={anchorRef} />
+      <h1 style={SR_ONLY}>{vi.browse.title}</h1>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px 8px' }}>
         <SearchField
           ref={inputRef}
@@ -202,7 +204,14 @@ export default function BrowsePage() {
             />
           )}
           {root && <RecentlyViewedRail />}
-          <SortChips value={state.sort} onChange={(sort) => update({ sort })} />
+          <SortChips
+            value={state.sort}
+            onChange={(sort) => {
+              // Chip chỉ hiện khi KHÔNG có gợi ý (ô trống, chưa có lịch sử): chạm chip là xong việc với ô tìm, không để "Hủy" kẹt thay giỏ.
+              stopEditing();
+              update({ sort });
+            }}
+          />
           <ResultHeader
             total={firstPage?.meta.total ?? 0}
             isLoading={products.isLoading}

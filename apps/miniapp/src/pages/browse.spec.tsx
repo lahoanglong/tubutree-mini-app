@@ -114,6 +114,12 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     expect(catalogCalls()[0]).toMatchObject({ page: 1, limit: 30, q: undefined });
   });
 
+  it('trang có đúng một h1 (ẩn về mặt hình ảnh) làm điểm mốc cho trình đọc màn hình', async () => {
+    renderAt('/browse');
+    await listPainted();
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Khám phá']);
+  });
+
   it('header có nút giỏ khi không gõ (CartButton), và không có nút "Hủy"', async () => {
     renderAt('/browse');
     await listPainted();
@@ -377,6 +383,17 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'nu' } });
       expect(await screen.findByRole('region', { name: 'Gợi ý tìm kiếm' })).toBeInTheDocument();
       expect(screen.queryByRole('group', { name: 'Sắp xếp' })).toBeNull();
+    });
+
+    it('chạm chip sắp xếp khi đang ở chế độ gõ mà ô trống → thoát chế độ gõ: "Hủy" biến mất, giỏ hàng trở lại', async () => {
+      renderAt('/browse');
+      await listPainted();
+      fireEvent.focus(screen.getByRole('searchbox'));
+      expect(screen.getByRole('button', { name: 'Hủy' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Bán chạy' }));
+      await waitFor(() => expect(loc()).toBe('/browse?sort=best_seller'));
+      expect(screen.queryByRole('button', { name: 'Hủy' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Giỏ hàng' })).toBeInTheDocument();
     });
 
     it('có lịch sử + ô trống → vẫn hiện lịch sử (thay nội dung)', async () => {

@@ -19,14 +19,14 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
   const idPrefix = useId();
   if (items.length === 0) return null;
   return (
-    <section aria-label={title} style={{ padding: '8px 0 12px' }}>
+    <section aria-label={title} style={{ padding: '8px 0 4px' }}>
       <div style={{ padding: '0 16px 8px' }}>
         <Heading variant="title-sm" as="h2">
           {title}
         </Heading>
       </div>
-      {/* Đệm dọc 4px: vùng cuộn ngang cắt cả bóng đổ lẫn viền focus của thẻ nếu sát mép. */}
-      <div className="scroll-x" style={{ gap: 10, padding: '4px 16px' }}>
+      {/* Đệm dọc: vùng cuộn ngang cắt cả bóng đổ lẫn viền focus của thẻ nếu sát mép — 4px trên, 12px dưới (bóng đổ xuống dưới). */}
+      <div className="scroll-x" style={{ gap: 10, padding: '4px 16px 12px' }}>
         {items.map((it, i) => {
           const priceId = `${idPrefix}-price-${i}`;
           return (
@@ -38,7 +38,7 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
               className="tubu-press"
               onClick={() => {
                 haptic('light');
-                navigate(`/product/${it.slug}`, { state: { listSource: 'recently_viewed' } });
+                navigate(`/product/${encodeURIComponent(it.slug)}`, { state: { listSource: 'recently_viewed' } });
               }}
               style={{
                 flex: `0 0 ${CARD_WIDTH}px`,

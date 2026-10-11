@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type * as ZmpUi from 'zmp-ui';
@@ -35,9 +35,9 @@ beforeEach(() => {
 });
 
 describe('HomeHeader', () => {
-  it('chuông có nhãn + huy hiệu số chưa đọc; giỏ hàng', () => {
+  it('chuông có nhãn kèm số chưa đọc (trình đọc màn hình nghe được) + huy hiệu số chưa đọc; giỏ hàng', () => {
     wrap(<HomeHeader unreadCount={3} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Thông báo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thông báo, 3 chưa đọc' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/notifications');
     expect(mocks.haptic).toHaveBeenCalledWith('light');
     expect(screen.getByLabelText('3 thông báo chưa đọc')).toHaveTextContent('3');
@@ -47,6 +47,7 @@ describe('HomeHeader', () => {
   it('không có thông báo chưa đọc → không có huy hiệu; logo có kích thước giữ chỗ', () => {
     wrap(<HomeHeader unreadCount={0} />);
     expect(screen.queryByLabelText(/thông báo chưa đọc/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Thông báo' })).toBeInTheDocument();
     const logo = screen.getByAltText('Tubu Tree');
     expect(logo).toHaveAttribute('width');
     expect(logo).toHaveAttribute('height');
@@ -54,23 +55,56 @@ describe('HomeHeader', () => {
 });
 
 describe('HomeSection', () => {
-  const q = (over: object) => ({ isLoading: false, isError: false, error: null, ...over });
+  const q = (over: object) => ({ isLoading: false, isError: false, error: null, refetch: vi.fn(), ...over });
 
   it('đã tải, rỗng → không render (không để lại tiêu đề trống)', () => {
     const { container } = wrap(<HomeSection title="Bán chạy" limit={6} query={q({ data: { data: [] } })} listSource="home" />);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('lỗi → ẩn lặng lẽ: không tiêu đề, không ErrorState, không nút Thử lại', () => {
-    const { container } = wrap(<HomeSection title="Bán chạy" limit={6} query={q({ isError: true, error: new Error('x') })} listSource="home" />);
-    expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+  it('lỗi (chưa có dữ liệu) → tiêu đề + thông báo + nút "Thử lại", không mất khối im lặng (C-084)', () => {
+    const refetch = vi.fn();
+    wrap(<HomeSection title="Bán chạy" limit={6} query={q({ isError: true, error: new Error('x'), refetch })} listSource="home" />);
+    const region = screen.getByRole('region', { name: 'Bán chạy' });
+    expect(within(region).getByRole('heading', { name: 'Bán chạy' })).toBeInTheDocument();
+    expect(within(region).getByText('Có chút trục trặc, thử lại nhé')).toBeInTheDocument();
+    fireEvent.click(within(region).getByRole('button', { name: 'Thử lại Bán chạy' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(mocks.haptic).toHaveBeenCalledWith('light');
   });
 
-  it('làm mới lỗi nhưng còn dữ liệu cũ → vẫn hiện SP cũ, không ErrorState', () => {
+  it('đang thử lại sau lỗi → nút ở trạng thái đang tải và bấm tiếp không gọi thêm', () => {
+    const refetch = vi.fn();
+    wrap(<HomeSection title="Bán chạy" limit={6} query={q({ isError: true, isFetching: true, error: new Error('x'), refetch })} listSource="home" />);
+    const btn = screen.getByRole('button', { name: 'Thử lại Bán chạy' });
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(btn);
+    expect(refetch).not.toHaveBeenCalled();
+  });
+
+  it('hàng tiêu đề của khối lỗi khai báo cùng chiều cao + khoảng cách với khung chờ (tiêu đề không nhảy khi đổi trạng thái)', () => {
+    const rowStyle = (seeAllTo: string | undefined, query: object) => {
+      const { unmount } = wrap(<HomeSection title="Bán chạy" limit={6} seeAllTo={seeAllTo} query={q(query)} listSource="home" />);
+      const row = screen.getByRole('heading', { name: 'Bán chạy' }).parentElement as HTMLElement;
+      const style = { minHeight: row.style.minHeight, marginBottom: row.style.marginBottom };
+      unmount();
+      return style;
+    };
+    for (const seeAllTo of [undefined, '/browse?sort=best_seller']) {
+      expect(rowStyle(seeAllTo, { isError: true, error: new Error('x') })).toEqual(rowStyle(seeAllTo, { isLoading: true }));
+    }
+  });
+
+  it('thông báo lỗi theo loại lỗi (mất mạng / máy chủ) giống getErrorMessage', () => {
+    const server = Object.assign(new Error('x'), { isAxiosError: true, response: { status: 503, data: {} } });
+    wrap(<HomeSection title="Bán chạy" limit={6} query={q({ isError: true, error: server })} listSource="home" />);
+    expect(screen.getByText('Máy chủ đang bận, thử lại nhé.')).toBeInTheDocument();
+  });
+
+  it('làm mới lỗi nhưng còn dữ liệu cũ → vẫn hiện SP cũ, không khối lỗi', () => {
     wrap(<HomeSection title="Bán chạy" limit={6} query={q({ isError: true, error: new Error('x'), data: { data: [P] } })} listSource="home" />);
     expect(screen.getByRole('button', { name: 'Xà phòng' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Thử lại/ })).toBeNull();
   });
 
   it('đang tải → vùng có tiêu đề + khung chờ; có dữ liệu → lưới SP', () => {

@@ -46,6 +46,7 @@ export const vi = {
     brandsRail: 'Dải thương hiệu, vuốt ngang để xem thêm',
     allBrands: 'Tất cả',
     notifications: 'Thông báo',
+    notificationsUnread: (n: number) => `Thông báo, ${n} chưa đọc`,
     unreadBadge: (n: number) => `${n} thông báo chưa đọc`,
     heroKicker: 'Sống xanh an lành',
     heroTitle: 'Thiên nhiên Việt cho cả nhà',
@@ -58,6 +59,8 @@ export const vi = {
     brandStoryBody: 'Khám phá 6 vùng đất làm nên sản phẩm Tubu',
     seeAll: 'Xem tất cả',
     seeAllLabel: (title: string) => `Xem tất cả ${title}`,
+    retry: 'Thử lại',
+    retryLabel: (title: string) => `Thử lại ${title}`,
     strip: {
       title: 'Đơn của bạn',
       shipping: (code: string) => `Đơn ${code} đang giao`,
@@ -69,6 +72,7 @@ export const vi = {
   flashSale: {
     badge: '⚡ Giờ vàng',
     sectionTitle: '🌿 Ưu đãi giờ vàng',
+    sectionName: 'Ưu đãi giờ vàng',
     endsIn: (t: string) => `⏳ Còn ${t}`,
     soldPct: (n: number) => `Đã bán ${n}%`,
     priceChangedTitle: 'Giá ưu đãi đã thay đổi',

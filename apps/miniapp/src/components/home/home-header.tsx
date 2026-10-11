@@ -24,7 +24,7 @@ export function HomeHeader({ unreadCount }: { unreadCount: number }) {
         <div style={{ position: 'relative' }}>
           <IconButton
             icon={Bell}
-            label={vi.home.notifications}
+            label={unreadCount > 0 ? vi.home.notificationsUnread(unreadCount) : vi.home.notifications}
             onPress={() => {
               haptic('light');
               navigate('/notifications');
