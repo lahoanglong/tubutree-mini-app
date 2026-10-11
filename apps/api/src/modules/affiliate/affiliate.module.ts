@@ -7,7 +7,7 @@ import { PayoutAdminController } from './payout-admin.controller';
 
 @Global()
 @Module({
-  // WalletModule → CoinsService: thưởng mốc doanh số CTV cộng TubuXu (claimMilestone).
+  // WalletModule → RewardPointsService: thưởng mốc doanh số CTV và giới thiệu cộng Điểm Xanh.
   imports: [PancakeModule, WalletModule],
   controllers: [AffiliateController, PayoutAdminController],
   providers: [AffiliateService],
