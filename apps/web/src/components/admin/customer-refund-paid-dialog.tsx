@@ -33,6 +33,7 @@ export function CustomerRefundPaidDialog({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const acceptRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [bankRef, setBankRef] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +70,14 @@ export function CustomerRefundPaidDialog({
 
   const busyRef = useRef(busy);
   busyRef.current = busy;
+  // Đang gửi thì cả bốn phần tử bị khoá và nút vừa bấm mất tiêu điểm: giữ tiêu điểm ở chính hộp (không để rơi ra thanh
+  // tab phía sau trang), rồi trả về nút xác nhận khi gửi lỗi và hộp được mở khoá lại.
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (busy) dialogRef.current?.focus();
+    else if (wasBusy.current) acceptRef.current?.focus();
+    wasBusy.current = busy;
+  }, [busy]);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   useEffect(() => {
@@ -82,7 +91,11 @@ export function CustomerRefundPaidDialog({
         const order = [bankRefRef.current, noteRef.current, cancelRef.current, acceptRef.current].filter(
           (el): el is HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement => !!el && !el.disabled,
         );
-        if (order.length === 0) return;
+        if (order.length === 0) {
+          e.preventDefault();
+          dialogRef.current?.focus();
+          return;
+        }
         const at = order.indexOf(document.activeElement as HTMLButtonElement);
         const next = e.shiftKey ? (at <= 0 ? order.length - 1 : at - 1) : at === order.length - 1 ? 0 : at + 1;
         e.preventDefault();
@@ -105,13 +118,15 @@ export function CustomerRefundPaidDialog({
       className="fixed inset-0 z-[100] flex items-end justify-center bg-stone-900/40 p-4 sm:items-center"
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={bodyId}
         aria-busy={busy}
         onClick={(e) => e.stopPropagation()}
-        className="max-h-full w-full max-w-md overflow-y-auto rounded-sheet bg-stone-0 p-5 shadow-raised"
+        className="max-h-full w-full max-w-md overflow-y-auto rounded-sheet bg-stone-0 p-5 shadow-raised outline-none"
       >
         <h2 id={titleId} className="font-display text-base font-semibold text-stone-900">
           Xác nhận đã chuyển khoản

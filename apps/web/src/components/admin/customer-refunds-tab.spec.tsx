@@ -761,4 +761,89 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
       expect(api.pays()[0]!.url).toContain('/admin/customer-refunds/r2/mark-paid');
     });
   });
+
+  // Đang gửi thì mọi phần tử trong hộp bị khoá; tiêu điểm phải ở lại trong hộp, nếu không Tab sẽ chuyển sang thanh tab
+  // admin phía sau và hộp bị gỡ giữa chừng (mất thông báo thành công dù sổ đã ghi).
+  it('đang gửi: Tab/Shift+Tab bị chặn, tiêu điểm ở lại hộp; có lỗi thì trả tiêu điểm về nút xác nhận', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    stub({
+      list: () => [refund()],
+      pay: async () => {
+        await gate;
+        return json({ statusCode: 500, message: 'Internal server error' }, 500);
+      },
+    });
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const d = await openDialog(container);
+    click(accept(d));
+    await flush(1);
+    expect(accept(d).disabled).toBe(true);
+    for (const shiftKey of [false, true]) {
+      const ev = new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true });
+      act(() => {
+        document.dispatchEvent(ev);
+      });
+      expect(ev.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(d);
+    }
+    release();
+    await flush();
+    expect(confirmDialog()).toBe(d);
+    expect(accept(d).disabled).toBe(false);
+    expect(document.activeElement).toBe(accept(d));
+  });
+
+  it('400 không phải "không còn chờ" (ví dụ DTO sai): giữ hộp và giữ nội dung đã nhập, báo tiếng Việt, không tải lại như thể khoản đã xử lý', async () => {
+    const api = stub({
+      list: () => [refund()],
+      pay: () => json({ statusCode: 400, message: ['bankRef must be shorter than or equal to 100 characters'], error: 'Bad Request' }, 400),
+    });
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const d = await openDialog(container);
+    typeInto(field(d, 'bankRef'), 'FT1');
+    typeInto(field(d, 'note'), 'ghi chú của tôi');
+    const before = api.lists().length;
+    click(accept(d));
+    await flush();
+    expect(confirmDialog()).toBe(d);
+    const alert = d.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(alert).toContain('chưa ghi nhận được');
+    expect(alert).not.toContain('bankRef must be');
+    expect(field(d, 'bankRef').value).toBe('FT1');
+    expect(field(d, 'note').value).toBe('ghi chú của tôi');
+    expect(accept(d).disabled).toBe(false);
+    expect(api.lists().length).toBe(before);
+    expect(container.querySelector('[data-refund-id="r1"]')).not.toBeNull();
+  });
+
+  it('thua race (400 "không còn chờ"): thông báo giọng cảnh báo, dặn kiểm tra bộ lọc "Đã chuyển" trước khi chuyển khoản lại', async () => {
+    stub({ list: () => [refund()], pay: () => json({ statusCode: 400, message: STALE }, 400) });
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const d = await openDialog(container);
+    click(accept(d));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    const note = container.querySelector('[role="alert"]') as HTMLElement;
+    expect(note.textContent).toContain(STALE);
+    expect(note.textContent).toContain('Đã chuyển');
+    expect(note.textContent).toContain('trước khi chuyển khoản lại');
+    expect(note.className).toContain('bg-warning-bg');
+    expect(note.className).not.toContain('bg-danger-bg');
+  });
+
+  it('huy hiệu: tên truy cập tách khỏi nhãn tab ("Hoàn tiền khách, 1 khoản chờ chuyển khoản"), không dính liền', async () => {
+    stub({ list: () => [refund()] });
+    const { container } = mount(
+      <button type="button">
+        Hoàn tiền khách
+        <CustomerRefundsPendingBadge />
+      </button>,
+    );
+    await flush();
+    expect(container.textContent).toContain('Hoàn tiền khách, 1 khoản chờ chuyển khoản');
+  });
 });

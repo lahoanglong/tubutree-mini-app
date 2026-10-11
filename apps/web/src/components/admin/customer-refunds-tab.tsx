@@ -8,6 +8,7 @@ import {
   CUSTOMER_REFUNDS_QUERY_KEY,
   CUSTOMER_REFUND_EMPTY,
   CUSTOMER_REFUND_FILTERS,
+  CUSTOMER_REFUND_STALE_HINT,
   customerRefundView,
   refundReasonLabel,
   type CustomerRefundView,
@@ -44,6 +45,7 @@ export function CustomerRefundsPendingBadge() {
       data-refunds-pending
       className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-warning-bg px-1.5 text-[11px] font-semibold leading-5 text-warning-fg"
     >
+      <span className="sr-only">, </span>
       {n > 99 ? '99+' : n}
       <span className="sr-only"> khoản chờ chuyển khoản</span>
     </span>
@@ -59,7 +61,7 @@ export function CustomerRefundsTab() {
   const [filter, setFilter] = useState<AdminCustomerRefundStatus>('PENDING');
   const [page, setPage] = useState(1);
   const [target, setTarget] = useState<AdminCustomerRefund | null>(null);
-  const [flash, setFlash] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  const [flash, setFlash] = useState<{ tone: 'success' | 'warning'; text: string } | null>(null);
   // Dòng vừa ghi xong: BE đã COMPLETED nhưng danh sách chưa tải lại xong, ẩn nút để không mở hộp lần hai.
   const [recorded, setRecorded] = useState<ReadonlySet<string>>(() => new Set());
   const q = useQuery({
@@ -86,7 +88,7 @@ export function CustomerRefundsTab() {
         text: `Đã ghi nhận chuyển khoản ${formatVnd(r.amount)} cho ${r.recipientName || r.phone || 'khách'} (đơn ${r.orderCode}).`,
       });
     } else {
-      setFlash({ tone: 'danger', text: outcome.message });
+      setFlash({ tone: 'warning', text: `${outcome.message} ${CUSTOMER_REFUND_STALE_HINT}` });
     }
   };
 
@@ -117,7 +119,7 @@ export function CustomerRefundsTab() {
       </p>
 
       {flash && (
-        <Notice tone={flash.tone} role={flash.tone === 'danger' ? 'alert' : 'status'}>
+        <Notice tone={flash.tone} role={flash.tone === 'success' ? 'status' : 'alert'}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="min-w-0 break-words">{flash.text}</span>
             <button type="button" className={`${BTN_LINK} text-xs`} onClick={() => setFlash(null)}>

@@ -39,18 +39,25 @@ export interface MarkPaidFailure {
 const NETWORK_MESSAGE =
   'Không kết nối được máy chủ. Kiểm tra mạng rồi bấm "Đã chuyển khoản" để thử lại; nếu khoản đã được ghi nhận, danh sách sẽ tự cập nhật.';
 
+/** Câu dặn đi kèm thông báo "đã bị xử lý": lần ghi trước có thể đã thành công (lỗi mạng giữa chừng) nên đừng chuyển khoản lần hai. */
+export const CUSTOMER_REFUND_STALE_HINT =
+  'Khoản này có thể đã được ghi nhận, kể cả từ lần bấm trước bị lỗi mạng. Mở bộ lọc "Đã chuyển" để kiểm tra trước khi chuyển khoản lại.';
+
+const STALE_PATTERN = /không còn chờ|vừa được xử lý/i;
+const INVALID_INPUT_MESSAGE =
+  'Dữ liệu chưa hợp lệ nên chưa ghi nhận được. Kiểm tra mã giao dịch (tối đa 100 ký tự) và ghi chú (tối đa 500 ký tự) rồi bấm "Đã chuyển khoản" lại.';
+
 /**
- * BE trả 400 duy nhất cho "không còn chờ chuyển khoản" (updateMany count=0) nên 400 = đã bị xử lý, hiện nguyên câu của
- * API rồi tải lại. Lỗi khác giữ nguyên hộp: lời nhắn 401/403/5xx của Nest là tiếng Anh nên thay bằng câu tiếng Việt, và
- * 5xx/mạng nói rõ chưa chắc đã ghi được để admin thử lại thay vì chuyển khoản lần hai.
+ * BE trả 400 "không còn chờ chuyển khoản" khi updateMany count=0 (admin khác vừa xử lý): đóng hộp, tải lại, hiện nguyên
+ * câu của API. Chỉ nhận ra race theo câu đó; 400 khác (ValidationPipe) giữ hộp để không mất nội dung đã nhập. Lỗi khác
+ * cũng giữ hộp: lời nhắn 401/403/5xx của Nest là tiếng Anh nên thay bằng câu tiếng Việt, và 5xx/mạng nói rõ chưa chắc
+ * đã ghi được để admin thử lại thay vì chuyển khoản lần hai.
  */
 export function markPaidFailure(e: unknown): MarkPaidFailure {
   if (!(e instanceof ApiError)) return { stale: false, message: NETWORK_MESSAGE };
   if (e.status === 400) {
-    return {
-      stale: true,
-      message: e.message || 'Khoản hoàn không còn chờ chuyển khoản hoặc vừa được xử lý — danh sách đã được tải lại.',
-    };
+    if (STALE_PATTERN.test(e.message)) return { stale: true, message: e.message };
+    return { stale: false, message: INVALID_INPUT_MESSAGE };
   }
   if (e.status === 401 || e.status === 403) {
     return { stale: false, message: 'Phiên đăng nhập đã hết hạn hoặc bạn không có quyền ghi nhận khoản này. Đăng nhập lại bằng tài khoản quản trị rồi thử lại.' };
