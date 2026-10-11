@@ -146,7 +146,7 @@ Mọi mục xác minh lại bằng `git grep -w` trên HEAD (`apps packages scri
 Trạng thái: MỘT PHẦN, theo đúng luật "thiếu bằng chứng hoặc nghi ngờ thì giữ". Gỡ 5 endpoint (4 module), giữ 21 endpoint không có lời gọi FE kèm lý do. Danh sách gốc A1-042 (19 endpoint, dựng ở commit 080bc75) đã cũ: 3 endpoint từ đó đã có FE ở HEAD, và quét lại tìm thêm 2 endpoint mới không ai gọi.
 
 ### Cách dựng lại danh sách
-- Quét AST (TypeScript compiler API) mọi `@Controller` trong `apps/api/src`: 362 route (đã gồm prefix `/api` bỏ đi). Quét AST mọi chuỗi/mẫu chuỗi bắt đầu bằng `/` trong `apps/web/src` và `apps/miniapp/src` (bỏ spec), suy ra phương thức từ `api.get|post|...` và `apiFetch(..., { method })`, bỏ phần `?query` nối bằng biến. Khớp route với lời gọi theo phương thức và từng đoạn path.
+- Quét AST (TypeScript compiler API) mọi `@Controller` trong `apps/api/src`: 362 route (path không kèm tiền tố `/api` của `setGlobalPrefix`). Quét AST mọi chuỗi/mẫu chuỗi bắt đầu bằng `/` trong `apps/web/src` và `apps/miniapp/src` (bỏ spec), suy ra phương thức từ `api.get|post|...` và `apiFetch(..., { method })`, bỏ phần `?query` nối bằng biến. Khớp route với lời gọi theo phương thức và từng đoạn path.
 - Chạy trên 5 nguồn FE và lấy HỢP: HEAD của worktree, commit PROD `cb92dc8`, đầu nhánh `hardening/2026-10` (đã có PC-12), `hz8/PD-1`, `hz9/PD-3` (để không gỡ nhầm endpoint mà FE đang được nối ở gói khác). Kết quả: 26 route không có lời gọi ở bất kỳ nguồn nào.
 - Hai lỗi của lần quét đầu đã sửa: (1) mẫu `...${qs ? ... : ''}` làm lọt 2 endpoint có FE (`GET /admin/loyalty/pos-credits` ở `admin-client.ts:914`, `GET /admin/cashback/transactions` ở `admin-client.ts:771`); (2) lời gọi có biến nền `${BASE}/x` khớp nhầm mọi route có đoạn cuối là tham số, nên với mẫu này chỉ coi là khớp khi đoạn tĩnh trùng đúng.
 - Cùng đợt: `GET /admin/customer-refunds` và `POST /admin/customer-refunds/:id/mark-paid` KHÔNG có FE ở HEAD của worktree (base 0fe7c050) nhưng CÓ ở đầu `hardening/2026-10` (`customer-refunds-tab.tsx`, `admin-client.ts:893`, gói PC-12) nên không phải ứng viên.
@@ -181,7 +181,7 @@ Cột "grep HEAD" và "grep cb92dc8" là `git grep` trong `apps/web/src apps/min
 | POST /reviews/:id/visibility | 1 (`admin-client.ts:1000`) | 0 | 0 | GIỮ: đã có FE sau PROD |
 | GET /admin/customer-refunds, POST /admin/customer-refunds/:id/mark-paid | 0 | 0 | FE có ở `hardening/2026-10` (PC-12) | GIỮ: FE đang được merge |
 
-Hai lời gọi `/admin/faqs`, `/admin/loyalty/pos-credits`, `/admin/cashback/transactions`, `/storefront/public-list` có FE ở cả HEAD và cb92dc8 (hoặc dùng biến nền/query nối), không phải ứng viên.
+`/admin/faqs`, `/admin/loyalty/pos-credits`, `/admin/cashback/transactions`, `/storefront/public-list` có FE (đường dẫn nối query hoặc biến nền `${BASE}`), không phải ứng viên.
 
 ### Test chốt
 `apps/api/src/common/endpoint-inventory.spec.ts`: dựng bảng route từ metadata Nest của 14 controller (`PATH_METADATA`, `METHOD_METADATA`), có hai bảng. `REMOVED` (5 route phải không còn) và `KEPT_WITHOUT_FE` (14 route cố ý giữ, mỗi dòng ghi lý do). ĐỎ trước khi gỡ từng nhóm (mỗi lần thêm một nhóm vào `REMOVED` thì spec fail đúng route đó, vd `Tests: 1 failed, 16 passed` cho feed; `2 failed, 18 passed` cho orders), XANH sau khi gỡ. Mỗi module một commit gồm spec + code:
