@@ -534,6 +534,8 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
     const { invalidated } = renderPage();
     const btn = await screen.findByRole('button', { name: /Góp quỹ trồng cây \(50 điểm\)/ });
     fireEvent.click(btn);
+    expect(mocks.api.buyTree).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã góp 1 cây vào quỹ trồng cây 🌳 (−50 điểm) · mã TUBU-9', type: 'success' }),
     );
@@ -1108,10 +1110,10 @@ describe('GamePage — bảng xếp hạng', () => {
 });
 
 describe('GamePage — nút khoá trong lúc đang gửi', () => {
-  const cases: { label: string; name: string | RegExp; fn: () => ReturnType<typeof vi.fn>; setup?: () => void }[] = [
+  const cases: { label: string; name: string | RegExp; fn: () => ReturnType<typeof vi.fn>; setup?: () => void; confirmName?: string }[] = [
     { label: 'hứng giọt sương', name: 'Hứng giọt sương', fn: () => mocks.api.collectDew },
     { label: 'mua vé giữ lửa', name: 'Mua (80💧)', fn: () => mocks.api.buyStreakFreeze },
-    { label: 'góp quỹ trồng cây', name: /Góp quỹ trồng cây/, fn: () => mocks.api.buyTree },
+    { label: 'góp quỹ trồng cây', name: /Góp quỹ trồng cây/, fn: () => mocks.api.buyTree, confirmName: 'Xác nhận' },
     {
       label: 'hồi sinh chuỗi',
       name: 'Hồi sinh (300💧)',
@@ -1119,12 +1121,13 @@ describe('GamePage — nút khoá trong lúc đang gửi', () => {
       setup: () => mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, streakRepairable: true, brokenStreakDays: 5, streakRepairCost: 300 }),
     },
   ];
-  it.each(cases)('$label: chạm lần 2 khi chưa phản hồi không gọi API lần nữa', async ({ name, fn, setup }) => {
+  it.each(cases)('$label: chạm lần 2 khi chưa phản hồi không gọi API lần nữa', async ({ name, fn, setup, confirmName }) => {
     setup?.();
     fn().mockReturnValue(pending<unknown>().promise);
     renderPage();
     const btn = await screen.findByRole('button', { name });
     fireEvent.click(btn);
+    if (confirmName) fireEvent.click(await screen.findByRole('button', { name: confirmName }));
     await waitFor(() => expect(btn).toBeDisabled());
     fireEvent.click(btn);
     expect(fn()).toHaveBeenCalledTimes(1);
