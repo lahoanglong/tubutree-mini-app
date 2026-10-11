@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import AdminPage from './page';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 
@@ -42,7 +43,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     listDealerRewardClaims: async () => ({ data: [], meta: { total: mocks.claims, page: 1, limit: 1 } }),
     listPayouts: async () => ({ data: [], meta: { total: mocks.payouts, page: 1, limit: 1 } }),
     listOrders: async () => ({
-      data: [],
+      data: mocks.orders,
       meta: { total: 60, page: 1, limit: 20 },
     }),
     listDealerApps: async () => ({
@@ -79,6 +80,7 @@ beforeEach(() => {
   mocks.recycling = 0;
   mocks.claims = 0;
   mocks.payouts = 0;
+  mocks.orders = [];
   window.history.replaceState(null, '', '/admin');
 });
 afterEach(() => {
@@ -166,6 +168,74 @@ describe('admin/page — tab Tổng quan', () => {
     expect(banners[0]!.textContent).toContain('2 đơn thu gom tái chế cần xử lý');
     expect(banners[1]!.textContent).toContain('3 yêu cầu nhận thưởng đại lý đang chờ duyệt');
     expect(banners[2]!.textContent).toContain('4 lệnh rút tiền');
+  });
+});
+
+describe('admin/page — tab Đơn hàng', () => {
+  const openOrders = async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    return mount();
+  };
+
+  it('bộ lọc thu gom: nhãn "Có thu gom" không còn emoji, chip cao 44px ở điện thoại', async () => {
+    const { container } = await openOrders();
+    const group = container.querySelector('[aria-label="Lọc đơn thu gom tái chế"]')!;
+    const chips = [...group.querySelectorAll('[role="tab"]')];
+    expect(chips.map((c) => c.textContent?.trim())).toEqual(['Mọi đơn', 'Có thu gom', expect.stringContaining('Cần xử lý thu gom')]);
+    for (const c of chips) expect(c.className).toContain('min-h-[44px]');
+    expect(chips[1]!.querySelector('svg')).not.toBeNull();
+  });
+
+  it('thanh tìm kiếm + lọc không tràn ngang ở 390px: ô nhập co được, hàng điều khiển xuống dòng', async () => {
+    const { container } = await openOrders();
+    const input = container.querySelector('input[type="text"]')!;
+    expect(input.className).toContain('min-w-0');
+    const select = container.querySelector('select')!;
+    expect(select.parentElement!.className).toContain('flex-wrap');
+  });
+
+  it('thanh phân trang xuống dòng được và nút Trước/Sau giữ nhãn', async () => {
+    const { container } = await openOrders();
+    const prev = [...container.querySelectorAll('button')].find((b) => b.textContent === '← Trang trước');
+    // listOrders mock trả data rỗng nên bảng hiện thông báo rỗng; phân trang vẫn hiện vì meta.total=60.
+    expect(prev).toBeDefined();
+    expect(prev!.parentElement!.parentElement!.className).toContain('flex-wrap');
+    expect(prev!.className).toContain('min-h-[44px]');
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Trang sau →')).toBe(true);
+  });
+});
+
+describe('admin/page — hàng đơn hàng', () => {
+  it('nút Xem & Sửa cao 44px ở điện thoại, mở rộng thì hiện sản phẩm + huy hiệu đặt trước theo token và đổi nhãn Đóng ▲', async () => {
+    mocks.orders = [
+      {
+        id: 'o1',
+        code: 'TT100',
+        status: 'CONFIRMED',
+        type: 'DEALER',
+        dealerOnCredit: true,
+        total: 250000,
+        paymentMethod: 'BANK_TRANSFER',
+        paymentStatus: 'UNPAID',
+        note: 'Giao giờ hành chính',
+        createdAt: '2026-10-02T03:00:00.000Z',
+        user: { fullName: 'Đại lý A', phone: '0922222222' },
+        items: [{ id: 'i1', productName: 'Hạt chia', variationName: '500g', unitPrice: 50000, quantity: 5, total: 250000, backorderedQty: 2 }],
+      },
+    ];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    const toggle = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa ▼')!;
+    expect(toggle.className).toContain('min-h-[44px]');
+    expect(container.textContent).toContain('Đại lý · công nợ');
+    const dealerNote = [...container.querySelectorAll('div')].find((d) => d.textContent?.startsWith('Đại lý ·'))!;
+    expect(dealerNote.className).toContain('text-warning-fg');
+    act(() => toggle.click());
+    await flush();
+    expect(toggle.textContent).toBe('Đóng ▲');
+    const pill = [...container.querySelectorAll('span')].find((x) => x.textContent === 'Đặt trước 2')!;
+    expect(pill.className).toContain('bg-warning-bg');
+    expect(container.textContent).toContain('Ghi chú từ khách: Giao giờ hành chính');
   });
 });
 

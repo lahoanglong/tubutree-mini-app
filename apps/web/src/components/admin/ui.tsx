@@ -64,3 +64,6 @@ export const TOUCH_H = 'min-h-[44px] sm:min-h-[36px]';
 export const BTN_PRIMARY = `${TOUCH_H} rounded-control bg-forest-600 px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500`;
 export const BTN_SECONDARY = `${TOUCH_H} rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50`;
 export const BTN_DANGER_OUTLINE = `${TOUCH_H} rounded-control border border-danger-fg px-3.5 py-1.5 text-sm font-medium text-danger-fg hover:bg-danger-bg disabled:opacity-50`;
+// Nút nhỏ trong bảng/thanh phân trang: chỉ cao 44px khi chạm trên điện thoại, máy tính giữ hàng bảng gọn.
+export const BTN_SMALL =
+  'min-h-[44px] rounded-control border border-stone-450 bg-stone-0 px-3 py-1 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-40 sm:min-h-0';

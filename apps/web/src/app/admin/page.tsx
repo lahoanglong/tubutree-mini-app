@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Banknote, Recycle, TreePine, Trophy } from 'lucide-react';
+import { Banknote, Download, Recycle, TreePine, Trophy } from 'lucide-react';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { formatVnd } from '@/lib/shop-client';
@@ -96,7 +96,7 @@ import { ReviewsTab } from '@/components/admin/reviews-tab';
 import type { PickedItem } from '@/components/admin/search-picker';
 import { SubscriptionsTab } from '@/components/admin/subscriptions-tab';
 import { UserPicker } from '@/components/admin/user-picker';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, TOUCH_H } from '@/components/admin/ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, FIELD_CLASS, TOUCH_H } from '@/components/admin/ui';
 import { AnalyticsTab } from './analytics-tab';
 import {
   exportOrdersToCsv,
@@ -563,7 +563,7 @@ function DashboardTab({
 
 const RECYCLING_FILTERS: { k: RecyclingFilter | ''; label: string }[] = [
   { k: '', label: 'Mọi đơn' },
-  { k: 'all', label: '♻ Có thu gom' },
+  { k: 'all', label: 'Có thu gom' },
   { k: 'attention', label: 'Cần xử lý thu gom' },
 ];
 
@@ -603,18 +603,18 @@ function OrdersTab({
   return (
     <div className="space-y-4">
       {/* Search, Filter, and Export bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white p-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
         <form onSubmit={handleSearchSubmit} className="flex min-w-[260px] flex-1 items-center gap-2">
           <input
             type="text"
             placeholder="Tìm theo mã đơn, mã vận đơn, SĐT hoặc tên khách..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full rounded border border-neutral-200 px-3 py-1.5 text-sm focus:border-green-600 focus:outline-none"
+            className={`${FIELD_CLASS} ${TOUCH_H} flex-1`}
           />
           <button
             type="submit"
-            className="whitespace-nowrap rounded bg-green-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+            className={`${BTN_PRIMARY} whitespace-nowrap`}
           >
             Tìm kiếm
           </button>
@@ -626,18 +626,18 @@ function OrdersTab({
                 setSearch('');
                 setPage(1);
               }}
-              className="whitespace-nowrap rounded border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-600 hover:bg-neutral-50"
+              className={`${BTN_SECONDARY} whitespace-nowrap`}
             >
               Xóa lọc
             </button>
           )}
         </form>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={status}
             onChange={(e) => handleStatusChange(e.target.value)}
-            className="rounded border border-neutral-200 bg-white px-3 py-1.5 text-sm"
+            className={`${FIELD_CLASS} ${TOUCH_H}`}
           >
             <option value="">Tất cả trạng thái</option>
             <option value="PENDING_PAYMENT">Chờ thanh toán</option>
@@ -653,10 +653,11 @@ function OrdersTab({
             type="button"
             onClick={() => exportOrdersToCsv(q.data?.data ?? [])}
             disabled={!q.data || q.data.data.length === 0}
-            className="flex whitespace-nowrap items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className={`${BTN_SECONDARY} flex items-center gap-1.5 whitespace-nowrap`}
             title="Xuất file CSV cho Excel / kế toán"
           >
-            ⬇ Xuất CSV (Excel)
+            <Download aria-hidden="true" className="h-4 w-4 shrink-0" />
+            Xuất CSV (Excel)
           </button>
         </div>
       </div>
@@ -677,23 +678,24 @@ function OrdersTab({
                 setExpandedId(null);
                 onRecyclingChange(f.k);
               }}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
+              className={`min-h-[44px] rounded-full px-3 py-1 text-xs font-medium sm:min-h-[32px] ${
                 active
                   ? f.k === 'attention'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-green-600 text-white'
+                    ? 'bg-danger-fg text-stone-0'
+                    : 'bg-forest-600 text-stone-0'
                   : f.k === 'attention' && (count ?? 0) > 0
-                    ? 'bg-red-50 text-red-700 ring-1 ring-red-200'
-                    : 'bg-neutral-100 text-neutral-700'
+                    ? 'bg-danger-bg text-danger-fg ring-1 ring-danger-fg'
+                    : 'bg-stone-100 text-stone-700'
               }`}
             >
+              {f.k === 'all' && <Recycle aria-hidden="true" className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />}
               {f.label}
               {count !== undefined && ` (${count})`}
             </button>
           );
         })}
         {recycling === 'attention' && (
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-stone-500">
             Vận đơn Gomdon tạo lỗi / cần kiểm tra / chưa cấu hình, hoặc Gomdon báo huỷ-hoàn-thất bại khi đơn còn mở; đơn huỷ mà huỷ vận đơn
             không được.
           </span>
@@ -712,16 +714,16 @@ function OrdersTab({
 
       {/* Orders Table */}
       {q.isError && (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-danger-fg">
           Không tải được danh sách đơn hàng{q.error instanceof Error ? `: ${q.error.message}` : '.'}
         </p>
       )}
-      {q.isLoading && <p className="text-sm text-neutral-500">Đang tải danh sách đơn hàng…</p>}
+      {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách đơn hàng…</p>}
 
       {q.data && (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0 shadow-card">
           <table className="w-full text-left text-sm">
-            <thead className="bg-neutral-50 text-xs text-neutral-500">
+            <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
                 <th className="px-3 py-2.5 font-medium">Mã đơn</th>
                 <th className="px-3 py-2.5 font-medium">Khách hàng</th>
@@ -735,7 +737,7 @@ function OrdersTab({
             <tbody>
               {q.data.data.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-sm text-neutral-400">
+                  <td colSpan={7} className="py-8 text-center text-sm text-stone-500">
                     Không tìm thấy đơn hàng nào phù hợp.
                   </td>
                 </tr>
@@ -744,44 +746,44 @@ function OrdersTab({
                   const isExpanded = expandedId === (o.id || o.code);
                   return (
                     <React.Fragment key={o.id || o.code}>
-                      <tr className="border-t border-neutral-100 hover:bg-neutral-50/50">
+                      <tr className="border-t border-stone-100 hover:bg-stone-50">
                         <td className="px-3 py-3">
-                          <div className="font-semibold text-neutral-800">{o.code}</div>
+                          <div className="font-semibold text-stone-800">{o.code}</div>
                           <div className="mt-0.5">
                             <RecyclingBadge order={o} />
                           </div>
                         </td>
                         <td className="px-3 py-3">
-                          <div className="font-medium text-neutral-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
-                          {o.user?.phone && <div className="text-xs text-neutral-500">{o.user.phone}</div>}
+                          <div className="font-medium text-stone-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
+                          {o.user?.phone && <div className="text-xs text-stone-500">{o.user.phone}</div>}
                         </td>
                         <td className="px-3 py-3">
-                          <div className="text-xs font-medium text-neutral-700">
+                          <div className="text-xs font-medium text-stone-700">
                             {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
                           </div>
                           {o.paymentStatus && (
-                            <div className="text-[11px] text-neutral-400">
+                            <div className="text-[11px] text-stone-500">
                               {o.paymentStatus === 'PAID' ? 'Đã TT' : o.paymentStatus}
                             </div>
                           )}
                           {o.type === 'DEALER' && (
-                            <div className="text-[11px] font-medium text-amber-700">
+                            <div className="text-[11px] font-medium text-warning-fg">
                               Đại lý{o.dealerOnCredit === true ? ' · công nợ' : o.dealerOnCredit === false ? ' · trả trước' : ''}
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-3 font-semibold text-green-700">{formatVnd(o.total)}</td>
+                        <td className="px-3 py-3 font-semibold text-forest-700">{formatVnd(o.total)}</td>
                         <td className="px-3 py-3">
                           <OrderStatusBadge status={o.status} />
                         </td>
-                        <td className="px-3 py-3 text-xs text-neutral-400">
+                        <td className="px-3 py-3 text-xs text-stone-500">
                           {new Date(o.createdAt).toLocaleDateString('vi-VN')}
                         </td>
                         <td className="px-3 py-3 text-right">
                           <button
                             type="button"
                             onClick={() => setExpandedId(isExpanded ? null : (o.id || o.code))}
-                            className="rounded border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+                            className={BTN_SMALL}
                           >
                             {isExpanded ? 'Đóng ▲' : 'Xem & Sửa ▼'}
                           </button>
@@ -790,47 +792,47 @@ function OrdersTab({
 
                       {/* Expandable row for details & status update */}
                       {isExpanded && (
-                        <tr className="border-t border-neutral-100 bg-neutral-50/60">
+                        <tr className="border-t border-stone-100 bg-stone-50">
                           <td colSpan={7} className="px-4 py-3">
                             <div className="space-y-3">
                               {/* Order items */}
                               <div>
-                                <div className="text-xs font-semibold uppercase text-neutral-500">Sản phẩm trong đơn:</div>
+                                <div className="text-xs font-semibold uppercase text-stone-500">Sản phẩm trong đơn:</div>
                                 {o.items && o.items.length > 0 ? (
-                                  <div className="mt-1 divide-y divide-neutral-200 rounded border border-neutral-200 bg-white">
+                                  <div className="mt-1 divide-y divide-stone-200 rounded-control border border-stone-200 bg-stone-0">
                                     {o.items.map((it) => (
                                       <div key={it.id} className="flex items-center justify-between px-3 py-2 text-xs">
                                         <div>
-                                          <span className="font-medium text-neutral-800">{it.productName}</span>
-                                          {it.variationName && <span className="text-neutral-500"> ({it.variationName})</span>}
+                                          <span className="font-medium text-stone-800">{it.productName}</span>
+                                          {it.variationName && <span className="text-stone-500"> ({it.variationName})</span>}
                                           {!!it.backorderedQty && (
-                                            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                                            <span className="ml-2 rounded-full bg-warning-bg px-2 py-0.5 text-[10px] font-semibold text-warning-fg">
                                               Đặt trước {it.backorderedQty}
                                             </span>
                                           )}
                                         </div>
                                         <div className="text-right">
-                                          <span className="text-neutral-500">{it.quantity} x {formatVnd(it.unitPrice)}</span>
-                                          <span className="ml-3 font-semibold text-neutral-800">{formatVnd(it.total)}</span>
+                                          <span className="text-stone-500">{it.quantity} x {formatVnd(it.unitPrice)}</span>
+                                          <span className="ml-3 font-semibold text-stone-800">{formatVnd(it.total)}</span>
                                         </div>
                                       </div>
                                     ))}
                                   </div>
                                 ) : (
-                                  <p className="text-xs text-neutral-400">Không có danh sách sản phẩm chi tiết.</p>
+                                  <p className="text-xs text-stone-500">Không có danh sách sản phẩm chi tiết.</p>
                                 )}
                               </div>
 
                               <OrderShippingAddress order={o} />
 
                               {o.note && (
-                                <div className="text-xs text-neutral-600">
+                                <div className="text-xs text-stone-600">
                                   <span className="font-semibold">Ghi chú từ khách:</span> {o.note}
                                 </div>
                               )}
 
                               {(o.shippingCode || o.shippingStatus) && !o.hasRecyclingPickup && (
-                                <div className="text-xs text-neutral-600">
+                                <div className="text-xs text-stone-600">
                                   <span className="font-semibold">Vận chuyển:</span> {o.shippingPartner ?? ''} {o.shippingCode ?? ''}
                                   {o.shippingStatus ? ` · ${o.shippingStatus}` : ''}
                                 </div>
@@ -865,15 +867,15 @@ function OrdersTab({
 
       {/* Pagination Bar */}
       {q.data && totalPages > 1 && (
-        <div className="flex items-center justify-between px-2 pt-2 text-sm text-neutral-600">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-2 text-sm text-stone-600">
           <div>
-            Tổng số: <span className="font-semibold text-neutral-900">{q.data.meta.total}</span> đơn hàng
+            Tổng số: <span className="font-semibold text-stone-900">{q.data.meta.total}</span> đơn hàng
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="rounded border border-neutral-200 px-3 py-1 text-xs font-medium hover:bg-neutral-50 disabled:opacity-40"
+              className={BTN_SMALL}
             >
               ← Trang trước
             </button>
@@ -883,7 +885,7 @@ function OrdersTab({
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="rounded border border-neutral-200 px-3 py-1 text-xs font-medium hover:bg-neutral-50 disabled:opacity-40"
+              className={BTN_SMALL}
             >
               Trang sau →
             </button>
