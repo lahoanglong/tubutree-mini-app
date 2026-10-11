@@ -148,3 +148,37 @@ describe('OrderDetailPage — lịch sử vận chuyển bằng tiếng Việt (
     expect(await screen.findByText('12.000 điểm')).toBeInTheDocument();
   });
 });
+
+// Cùng dải với scripts/uiux/static-scan.mjs, thêm ⌛ ⏳ ⭐.
+const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿\u231A\u231B\u23E9-\u23FF\u2B50]/u;
+
+describe('OrderDetailPage — không dùng emoji làm icon (C-113)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, pointsEarned: 120 });
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  it('lối vào đánh giá và dòng điểm Xanh có icon SVG, không có emoji; chữ giữ nguyên', async () => {
+    const { container } = renderPage();
+    const review = await screen.findByText(/Đánh giá sản phẩm này/);
+    expect(review.querySelector('svg')).not.toBeNull();
+    expect(review.className).toContain('tubu-hit-44');
+    const points = screen.getByText(/\+120 điểm Xanh khi giao thành công/);
+    expect(points.querySelector('svg')).not.toBeNull();
+    expect(EMOJI.test(container.textContent ?? '')).toBe(false);
+  });
+
+  it.each([
+    ['APPROVED', undefined, 'Đổi/trả đã duyệt — tiền hoàn vào Ví Tubu'],
+    ['REJECTED', 'Hàng đã qua sử dụng', 'Đổi/trả bị từ chối: Hàng đã qua sử dụng'],
+    ['REJECTED', undefined, 'Đổi/trả bị từ chối'],
+    ['PENDING', undefined, 'Yêu cầu đổi/trả đang xử lý (trong 24h)'],
+  ])('yêu cầu đổi/trả %s: hiện đúng chữ, icon SVG thay emoji', async (status, adminNote, label) => {
+    mocks.fetchMyReturns.mockResolvedValue([{ orderId: 'o1', status, adminNote }]);
+    const { container } = renderPage();
+    const line = await screen.findByText(label);
+    expect(line.querySelector('svg')).not.toBeNull();
+    expect(EMOJI.test(container.textContent ?? '')).toBe(false);
+  });
+});

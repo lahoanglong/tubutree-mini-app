@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RotateCcw, MessageSquare, Recycle } from 'lucide-react';
+import { RotateCcw, MessageSquare, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, requestReturn, fetchMyReturns, type OrderView } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -34,6 +34,7 @@ import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 import { PageHeader } from '../components/ui/page-header';
 import { Badge } from '../components/ui/badge';
+import { Icon, type IconProps } from '../components/ui/icon';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
@@ -294,13 +295,14 @@ export default function OrderDetailPage() {
                 size="xSmall"
                 bold
                 className="tubu-press tubu-hit-44"
-                style={{ color: 'var(--color-text-brand)', marginTop: 2, display: 'inline-block' }}
+                style={{ color: 'var(--color-text-brand)', marginTop: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 onClick={() => {
                   haptic('light');
                   navigate(`/product/${it.productSlug}`);
                 }}
               >
-                ★ {vi.orders.reviewItem}
+                <Icon icon={Star} size="sm" tone="brand" />
+                {vi.orders.reviewItem}
               </Text>
             )}
           </Box>
@@ -324,8 +326,9 @@ export default function OrderDetailPage() {
         <KeyValueRow label={vi.checkout.total} value={formatVnd(o.total)} emphasis />
         <KeyValueRow label={vi.orders.paymentLabel} value={vi.paymentMethod[o.paymentMethod] ?? o.paymentMethod} />
         {o.pointsEarned > 0 && o.status !== 'CANCELLED' && (
-          <Text size="xSmall" style={{ color: 'var(--color-text-success)', marginTop: 4 }}>
-            🌱 {vi.checkout.pointsEarn(o.pointsEarned)}
+          <Text size="xSmall" style={{ color: 'var(--color-text-success)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Icon icon={Leaf} size="sm" tone="brand" />
+            {vi.checkout.pointsEarn(o.pointsEarned)}
           </Text>
         )}
       </Box>
@@ -556,10 +559,16 @@ export default function OrderDetailPage() {
           if (ret) {
             const label =
               ret.status === 'APPROVED'
-                ? '✅ Đổi/trả đã duyệt — tiền hoàn vào Ví Tubu'
+                ? 'Đổi/trả đã duyệt — tiền hoàn vào Ví Tubu'
                 : ret.status === 'REJECTED'
-                  ? `❌ Đổi/trả bị từ chối${ret.adminNote ? `: ${ret.adminNote}` : ''}`
-                  : '⏳ Yêu cầu đổi/trả đang xử lý (trong 24h)';
+                  ? `Đổi/trả bị từ chối${ret.adminNote ? `: ${ret.adminNote}` : ''}`
+                  : 'Yêu cầu đổi/trả đang xử lý (trong 24h)';
+            const retIcon: { icon: LucideIcon; tone: IconProps['tone'] } =
+              ret.status === 'APPROVED'
+                ? { icon: CheckCircle2, tone: 'brand' }
+                : ret.status === 'REJECTED'
+                  ? { icon: XCircle, tone: 'danger' }
+                  : { icon: Clock, tone: 'muted' };
             const retColor =
               ret.status === 'APPROVED'
                 ? 'var(--color-text-success)'
@@ -568,7 +577,8 @@ export default function OrderDetailPage() {
                   : 'var(--color-text-secondary)';
             return (
               <Box mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
-                <Text size="xSmall" style={{ color: retColor }}>
+                <Text size="xSmall" style={{ color: retColor, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Icon icon={retIcon.icon} size="sm" tone={retIcon.tone} />
                   {label}
                 </Text>
               </Box>

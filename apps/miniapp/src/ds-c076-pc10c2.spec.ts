@@ -23,7 +23,7 @@ const FILES = [
  * C-113: trang đã di cư ở gói khác (order-detail: PC-3) hoặc đang ngoài lô này (bank-payment): gói chỉ gỡ
  * emoji làm icon, không đụng ZaUI/bố cục, nên chỉ kiểm emoji + legacy + hex/rgb thô.
  */
-const EMOJI_ONLY_FILES = ['src/pages/bank-payment.tsx'];
+const EMOJI_ONLY_FILES = ['src/pages/bank-payment.tsx', 'src/pages/order-detail.tsx'];
 
 /** Khung trang và hook điều hướng/thông báo: được phép ở mọi trang. */
 const ZMP_UI_BASE = ['Page', 'useNavigate', 'useLocation', 'useParams', 'useSnackbar'];
