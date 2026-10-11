@@ -352,6 +352,7 @@ describe('computePointExpiry (pure FIFO helper)', () => {
    */
   describe('đảo ngược một khoản cộng cụ thể ăn đúng lô gốc, phần dư mới FIFO (PE-5)', () => {
     const PAST = '2026-06-01';
+    const FUTURE = '2027-06-01'; // chưa hết hạn và ngoài cửa sổ nhắc
     const ORDER = { refType: 'ORDER' };
     const delivered = (id: string, delta: number, createdAt: string, expiresAt: string | null, orderId: string, code = 'C1') =>
       tx(id, delta, createdAt, expiresAt, `ORDER_DELIVERED:${code}`, { ...ORDER, refId: orderId });
@@ -380,12 +381,12 @@ describe('computePointExpiry (pure FIFO helper)', () => {
         expect(r.expiringSoon.amount).toBe(0);
       });
 
-      it('hai đơn: đảo đơn mới ăn lô của nó, không ăn lô đơn cũ hơn (đã hết hạn nên vẫn hết hạn đúng một lần)', () => {
+      it('hai đơn: đảo đơn mới ăn lô của nó, không ăn lô đơn cũ hơn (lô đơn cũ đã hết hạn vẫn hết hạn đúng một lần)', () => {
         const r = computePointExpiry(
           [
             tx('a', 30, '2025-01-01', null),
             delivered('d1', 20, '2025-04-01', PAST, 'o1', 'C1'),
-            delivered('d2', 10, '2025-05-01', PAST, 'o2', 'C2'),
+            delivered('d2', 10, '2025-05-01', FUTURE, 'o2', 'C2'),
             reversed('v2', -10, '2025-05-02', 'o2', 'C2'),
           ],
           NOW,
@@ -481,13 +482,13 @@ describe('computePointExpiry (pure FIFO helper)', () => {
           [
             tx('a', 30, '2025-01-01', null),
             grant('g1', 5, '2025-05-01', PAST, 'u1'),
-            grant('g2', 5, '2025-05-02', PAST, 'u2'),
+            grant('g2', 5, '2025-05-02', FUTURE, 'u2'),
             revoke('v', -5, '2025-05-03', 'u2'),
           ],
           NOW,
           WINDOW,
         );
-        expect(r.expiredNow).toBe(5); // chỉ lô của u1 còn lại và hết hạn
+        expect(r.expiredNow).toBe(5); // lô của u1 còn nguyên và hết hạn; lô của u2 đã thu hồi hết
       });
 
       it('thu hồi thiếu (người mời đã tiêu bớt, dòng thu hồi nhỏ hơn lô thưởng): ăn phần có, lô thưởng còn dư hết hạn đúng phần dư', () => {
@@ -509,8 +510,8 @@ describe('computePointExpiry (pure FIFO helper)', () => {
       });
 
       describe('mốc thưởng thêm: thu hồi đời n chỉ ăn lô đời n', () => {
-        const milestoneGrant = (id: string, delta: number, createdAt: string, count: number, gen: number) =>
-          tx(id, delta, createdAt, PAST, milestoneGrantReason('R1', count, gen), { ...REFERRAL, refId: 'R1' });
+        const milestoneGrant = (id: string, delta: number, createdAt: string, count: number, gen: number, expiresAt = PAST) =>
+          tx(id, delta, createdAt, expiresAt, milestoneGrantReason('R1', count, gen), { ...REFERRAL, refId: 'R1' });
         const milestoneRevoke = (id: string, delta: number, createdAt: string, count: number, gen: number) =>
           tx(id, delta, createdAt, null, `REFERRAL_MILESTONE_REVOKE:R1:${count}#${gen}`, { ...REFERRAL, refId: 'o2' });
 
@@ -543,7 +544,7 @@ describe('computePointExpiry (pure FIFO helper)', () => {
             [
               tx('a', 30, '2025-01-01', null),
               milestoneGrant('m0', 10, '2025-05-01', 3, 0),
-              milestoneGrant('m1', 12, '2025-05-03', 3, 1),
+              milestoneGrant('m1', 12, '2025-05-03', 3, 1, FUTURE),
               milestoneRevoke('v1', -12, '2025-05-04', 3, 1),
             ],
             NOW,
@@ -557,7 +558,7 @@ describe('computePointExpiry (pure FIFO helper)', () => {
             [
               tx('a', 30, '2025-01-01', null),
               milestoneGrant('m3', 10, '2025-05-01', 3, 0),
-              milestoneGrant('m5', 20, '2025-05-02', 5, 0),
+              milestoneGrant('m5', 20, '2025-05-02', 5, 0, FUTURE),
               milestoneRevoke('v5', -20, '2025-05-03', 5, 0),
             ],
             NOW,
