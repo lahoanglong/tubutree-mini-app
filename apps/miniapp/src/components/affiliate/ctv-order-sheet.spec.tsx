@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   fetchProduct: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   useNavigate: () => mocks.navigate,
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
@@ -199,5 +199,58 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm (C-064)', () => {
       expect(btn.style.width).toBe('44px');
       expect(btn.style.height).toBe('44px');
     }
+  });
+
+  it('nhập thiếu: báo lỗi từng trường bằng icon DS, không còn ký tự ⚠ trong chữ', () => {
+    renderSheet();
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo đơn hộ khách' }));
+    expect(screen.getAllByText('Vui lòng nhập')).toHaveLength(3);
+    expect(screen.getByText('Thêm ít nhất 1 sản phẩm')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('⚠');
+  });
+
+  it('chọn Chuyển khoản: thẻ báo aria-pressed, đơn gửi BANK_TRANSFER và có lối mở trang thanh toán', async () => {
+    saveRecentCustomer('ctv1', AN, 1);
+    renderSheet();
+    fireEvent.click(screen.getByRole('button', { name: 'Nguyễn An · …567' }));
+    await addProduct();
+    const cod = screen.getByRole('button', { name: /COD/ });
+    const bank = screen.getByRole('button', { name: /Chuyển khoản/ });
+    expect(cod).toHaveAttribute('aria-pressed', 'true');
+    expect(bank).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(bank);
+    expect(bank).toHaveAttribute('aria-pressed', 'true');
+    expect(cod).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo đơn hộ khách' }));
+    await waitFor(() => expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1));
+    expect(mocks.createCtvOrder.mock.calls[0]![0].paymentMethod).toBe('BANK_TRANSFER');
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở trang thanh toán (gửi khách)' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TUBU9');
+  });
+
+  it('phân loại hết hàng không thêm được vào đơn, phân loại còn hàng thì thêm', async () => {
+    mocks.fetchProduct.mockResolvedValue({
+      name: 'Nước rửa chén',
+      variations: [
+        { id: 'var0', name: 'Cam', retailPrice: 70_000, salePrice: null, stock: 0 },
+        { id: 'var1', name: 'Chanh', retailPrice: 65_000, salePrice: null, stock: 10 },
+      ],
+    });
+    renderSheet();
+    fireEvent.change(screen.getByPlaceholderText('Tìm sản phẩm để thêm…'), { target: { value: 'nước' } });
+    fireEvent.click(await screen.findByText('Nước rửa chén'));
+    fireEvent.click(await screen.findByText('Cam'));
+    expect(screen.getByText('Tạm hết hàng')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Giảm số lượng' })).toBeNull();
+    fireEvent.click(screen.getByText('Chanh'));
+    expect(await screen.findByRole('button', { name: 'Giảm số lượng' })).toBeInTheDocument();
+  });
+
+  it('gợi ý sản phẩm lỗi tải: có nút Thử lại gọi lại API', async () => {
+    mocks.suggestProducts.mockRejectedValueOnce(new Error('mạng lỗi'));
+    renderSheet();
+    fireEvent.change(screen.getByPlaceholderText('Tìm sản phẩm để thêm…'), { target: { value: 'nước' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
+    await waitFor(() => expect(mocks.suggestProducts).toHaveBeenCalledTimes(2));
   });
 });

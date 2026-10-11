@@ -15,6 +15,8 @@ import { fileURLToPath } from 'node:url';
  */
 const FILES_PC10B = [
   'src/pages/affiliate.tsx',
+  'src/components/affiliate/ctv-order-sheet.tsx',
+  'src/components/affiliate/choice-card.tsx',
 ];
 
 /** Còn Sheet/Input vì components/ui chưa có bản thay; Page/hook điều hướng và snackbar là của runtime. */
