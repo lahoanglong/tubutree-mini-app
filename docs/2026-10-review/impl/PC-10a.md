@@ -219,3 +219,77 @@ $ npx vitest run src/pages/game-layout.spec.tsx src/pages/game-behavior.spec.tsx
 3. PD-1/PD-3 (đổi chữ "cây thật", gộp TubuXu vào Điểm Xanh): các chuỗi nằm ở `tree-actions.tsx` ("Mua cây thật", "Mua bằng TubuXu ..."), `eco-impact.tsx`, `community-goal.tsx`, `harvest-celebration.tsx`, `use-game-actions.ts` (snackbar "Đã mua 1 cây thật"); test đặc tả truy vấn đúng các chuỗi này nên đổi chữ phải đổi test cùng commit.
 4. `apps/e2e` không có kịch bản nào chạm trang `/game`, nên không cần sửa e2e cho mục này.
 5. Nếu chủ dự án muốn gộp trình bày hai điểm danh, cách an toàn duy nhất là một dòng lối tắt `ListRow` trong thẻ điểm danh trỏ sang `/loyalty` ("Điểm danh nhận Điểm Xanh"), không gộp nút/API; chưa làm vì ngoài quyết định Q-09/Q-11.
+
+## Mục 4/4 — C-076: di cư `components/wheel.tsx` và `components/community/rank-badge.tsx`, tổng kết gói
+
+Trạng thái: XONG. Với mục này, mọi file của gói PC-10a đã đạt legacy 0 / hex 0 / ESLint 0 / không import ZaUI ngoài khung trang.
+
+### Số đo trước → sau
+
+| File | static-scan legacy | hex | emoji | ESLint | import ZaUI |
+|---|---|---|---|---|---|
+| `components/wheel.tsx` | 13 → 0 | 0 → 0 | 8 → 8 (đều là nội dung: 7 ô minh hoạ trên bánh xe + 🎉 lời chúc; ⭐ nằm ngoài dải ký tự mà static-scan đếm) | 1 lỗi (`no-raw-color` rgba) → exit 0 | `Box, Text, Button` → không còn |
+| `components/community/rank-badge.tsx` | 1 → 0 | 0 → 0 | 5 → 5 (4 emoji hạng 🌱🌿🌳🏆 + 1 trong chú thích) | exit 0 → exit 0 | `Text` → không còn |
+
+Tổng gói (29 file: `pages/game.tsx`, `pages/loyalty.tsx`, `components/wheel.tsx`, `components/community/rank-badge.tsx`, 25 file `components/game/**`): legacy 0, hex 0, emoji 76 (đều là nội dung game/hạng/lời chúc, mỗi file có danh sách cho phép riêng trong `ALLOWED_EMOJI`). Baseline đầu gói: game 163 legacy / 90 emoji, loyalty 151 / 15, wheel 13, ESLint game 3 + loyalty 5 + wheel 1.
+
+### Đã làm
+
+- `wheel.tsx`: `Box/Text/Button` ZaUI → `div` + `Text`/`Button` của `components/ui`; màu bánh xe, kim, trục giữa → token v2 (`--color-action-primary-bg`, `--color-action-primary-bg-pressed`, `--sage-100`/`--forest-50` cho hai màu ô xen kẽ, `--elevation-1/2`) — cùng giá trị mà alias cũ resolve ra. Hộp kết quả tự dựng (`position: fixed` + `rgba(0,0,0,0.5)`) → `BottomSheet` của DS (luôn dựng, điều khiển bằng `open`; `prize` giữ nội dung để hoạt ảnh đóng 200ms không trống). Nút quay dùng `Button` 48px, vẫn `loading` + `disabled` cùng `spinning` như cũ. Bánh xe/kim/trục là trang trí nên thêm `aria-hidden`.
+- `rank-badge.tsx`: `Text` ZaUI → `Text` DS (`caption`, tone `brand`, đậm 600). `levelEmoji`/`levelName` và điều kiện ẩn hạng ≤ 1 giữ nguyên.
+- Giữ nguyên: lời gọi `onSpin` (đúng 1 lần mỗi lượt, khoá `lockRef`), thời lượng quay 3,6s, quay tối thiểu 5 vòng và chọn ô ngẫu nhiên chỉ để trình diễn, kết quả chỉ hiện khi cả backend lẫn hiệu ứng xong, dòng "+N Điểm Xanh đã vào tài khoản" chỉ khi `rewardType === 'POINTS' && value > 0`, haptic `medium` hai lần, chữ "Quay ngay (N Điểm Xanh)" / "Đang quay..." / "Chúc mừng!" / "Tuyệt vời!". Không thêm gì liên quan mua giọt nước bằng xu (Q-02), không thêm "TubuXu".
+
+### Test (đỏ → xanh)
+
+- `components/wheel.spec.tsx` (MỚI, 14 test đặc tả) và `components/community/rank-badge.spec.tsx` (MỚI, 11 test): viết và chạy XANH trên bản cũ trước (commit `581a4aa`), vẫn xanh sau khi di cư. Kiểm răng của spec vòng quay bằng 5 đột biến trên `wheel.tsx` cũ (bỏ `lockRef`, bỏ điều kiện `value > 0`, bỏ chờ 3,6s, bỏ `disabled`, bỏ nhả `lockRef`): đột biến bỏ `lockRef` ban đầu KHÔNG bị bắt (React kịp khoá nút giữa hai cú chạm tuần tự) nên thêm test "hai cú chạm trong cùng một khung hình" (hai `click()` trong một `act`), sau đó cả 5 đột biến đều làm ít nhất 1 test ĐỎ; đã khôi phục file nguyên trạng và `diff` xác nhận.
+- `ds-c076-pc10a.spec.ts`: thêm `wheel.tsx` vào `FILES_PC10A` trước khi sửa: 3 test ĐỎ (legacy, màu thô, import `Box/Text/Button`); sau di cư xanh. Thêm `rank-badge.tsx` trước khi sửa: 2 test ĐỎ (legacy `--leaf-700`, import `Text` ZaUI); sau di cư xanh. Tổng guard 131/131. Kiểm "chỉ lấy khung trang từ zmp-ui" mở rộng sang hai file này; emoji cho phép của vòng quay là `🌿 🎁 💧 🪴 🏷 💚 🍀 🎉`, của badge là `🌱 🌿 🌳 🏆`.
+
+### Lệnh kiểm chứng (output thật)
+
+```
+$ npx eslint src/pages/game.tsx src/pages/loyalty.tsx src/components/wheel.tsx src/components/community/rank-badge.tsx \
+    src/components/game src/components/wheel.spec.tsx src/components/community/rank-badge.spec.tsx src/ds-c076-pc10a.spec.ts \
+    src/pages/game-layout.spec.tsx src/pages/game-behavior.spec.tsx src/pages/loyalty-behavior.spec.tsx src/pages/loyalty-layout.spec.tsx
+exit 0, không output
+$ npx tsc --noEmit
+exit 0, không output
+$ node scripts/uiux/static-scan.mjs ... (legacy hex emoji file)
+0 0 8 apps/miniapp/src/components/wheel.tsx
+0 0 5 apps/miniapp/src/components/community/rank-badge.tsx
+0 0 1 apps/miniapp/src/pages/game.tsx
+0 0 8 apps/miniapp/src/pages/loyalty.tsx
+(29 file của gói: legacy 0, hex 0, emoji 76)
+$ node scripts/check-undefined-css-vars.mjs
+OK — every var(--x) reference is defined.
+$ npx vitest run src/components/wheel.spec.tsx src/components/community/rank-badge.spec.tsx src/ds-c076-pc10a.spec.ts \
+    src/ds-legacy-vars-4a.spec.ts src/ds-legacy-vars-4b.spec.ts src/ds-legacy-alias-contrast.spec.ts src/components/ui/button-guard.spec.ts \
+    src/components/ui/hit-target-guard.spec.tsx src/i18n/terminology.spec.ts src/pages/format-guard.spec.ts src/pages/game-layout.spec.tsx \
+    src/pages/game-behavior.spec.tsx src/pages/game-numbers.spec.tsx src/pages/loyalty-behavior.spec.tsx src/pages/loyalty-layout.spec.tsx src/pages/loyalty.spec.ts
+ Test Files  16 passed (16)
+      Tests  380 passed (380)
+```
+
+### C-113 (phần thuộc file của gói)
+
+Không còn emoji làm icon chức năng trong 29 file của gói: icon trên nút, tiêu đề khối, trạng thái và hàng lối tắt đều dùng `Icon` Lucide; guard `ALLOWED_EMOJI` chặn quay lại. Các file C-113 còn lại ngoài gói (`onboarding.tsx`, `reviews-section.tsx`, `post-card.tsx` với `KIND_LABEL` ❓🌿💡 và avatar 🌱, `bank-payment.tsx`) do gói khác xử lý.
+
+### Giả định
+
+1. Nút quay trước đây nền `--clay-500` (cam đất) tự gán trên nút ZaUI. DS `Button` không có biến thể màu đó (`flash` là terracotta-600 dành cho flash sale), nên dùng `primary` (forest) cỡ `lg`: đổi nhận diện màu nút, không đổi hành vi.
+2. Kim chỉ trước đây có `filter: drop-shadow(0 2px 2px rgba(0,0,0,.2))`. `drop-shadow` không nhận token `--elevation-*` (là box-shadow) và không được có rgba thô, nên bỏ bóng của riêng kim chỉ (bánh xe và trục giữa vẫn có bóng bằng token). Không tạo `css/wheel.css` vì `check-undefined-css-vars.mjs` chỉ đọc 3 file định nghĩa cố định (xem mục 1/4).
+3. Hộp kết quả giữa màn hình → bottom sheet (DS không có modal giữa màn hình; `Dialog = BottomSheet`), có thêm nút "Đóng" (X) của sheet; chạm vùng mờ vẫn đóng như cũ. Thay đổi trình bày, không đổi luồng: vẫn phải qua "Tuyệt vời!" hoặc đóng mới quay tiếp được.
+4. `RankBadge`: ZaUI `xSmall bold` (13px, đậm 500) → `caption` 13px đậm 600; màu `--leaf-700` (sage-700) → tone `brand` (forest-600) theo ngữ nghĩa DS, như quyết định ở mục 3/4. Cạnh nhãn "🌿 Chuyên gia" ở `post-card.tsx`/`post-detail.tsx` (chưa di cư) sẽ lệch sắc rất nhẹ cho tới khi hai trang đó chuyển sang `Text tone="brand"`.
+5. Bánh xe, kim, trục giữa gắn `aria-hidden`: 8 ô chỉ là minh hoạ (phần thưởng thật do backend trả), đọc emoji lần lượt chỉ gây nhiễu cho trình đọc màn hình.
+
+### Việc còn lại
+
+- CHƯA kiểm bằng mắt trên trình duyệt/Zalo (không chạy dev server/Playwright theo quy định máy): bánh xe 240px trong thẻ GameCard ở 390px, hoạt ảnh quay, bottom sheet kết quả đè lên nút quay, độ tương phản chữ "QUAY" trắng trên forest-600. Ghi "unverified" cho phần hình ảnh của toàn gói.
+- Ghi từ mục 2/4 và 3/4, giữ nguyên: các nút ở trang Vườn không có khoá đồng bộ kiểu `busyRef`/`lockRef` (vòng quay thì có), cần quyết định của điều phối viên và review opus vì đụng nhánh giọt nước/điểm.
+
+### Đề xuất cho điều phối viên
+
+1. Gói đụng tiền/điểm: `use-game-actions.ts`, các nút tưới/điểm danh/thu hoạch và vòng quay (trừ Điểm Xanh) nên qua review độc lập opus hai lượt theo quy tắc cứng; diff trình bày của gói không đổi API, nhưng bộ test đặc tả (`game-behavior` 71 test, `loyalty-behavior` 20, `wheel` 14) là bằng chứng chính, nên cho reviewer đọc cùng.
+2. Nên kiểm bằng mắt một lượt trên thiết bị (Zalo): 2 màn đầu trang Vườn Xanh ở 390x844, thanh tab dính đầu trang, bottom sheet của vòng quay/thu hoạch/hạng thành viên (ba hộp đều đã chuyển từ lớp phủ tự dựng sang `BottomSheet`).
+3. `apps/e2e/tests/loyalty.miniapp.spec.ts` cần đổi selector `.tubu-pop` (đã nêu ở mục 1/4); không có kịch bản e2e nào chạm `/game`, vòng quay hay badge hạng.
+4. Đồng nhất sắc chữ "Chuyên gia" cạnh badge hạng khi di cư `post-card.tsx`/`post-detail.tsx` (xem Giả định 4).
+5. Nếu thiết kế muốn giữ nút quay màu cam đất như cũ: cần thêm biến thể `accent` vào `components/ui/button.tsx` (ngoài nhóm file của gói), không nên ghi đè `style` ở trang.
