@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateReviewDto } from './dto/review.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -17,6 +18,7 @@ export class ReviewsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly analytics: AnalyticsEventsService,
+    private readonly loyalty: LoyaltyService,
   ) {}
 
   /**
@@ -117,6 +119,9 @@ export class ReviewsService {
     const hasVideo = !!dto.videoUrl;
     const hasImages = (dto.images?.length ?? 0) > 0;
     const pointsEarned = hasVideo ? 15 : hasImages ? 10 : 5;
+    // Điểm đánh giá là Điểm Xanh thường nên có hạn như mọi điểm thưởng khác. Đọc cấu hình NGOÀI tx để không giữ
+    // kết nối tx; lượt thua race P2002 ở bước tạo chỉ tốn một lần đọc cấu hình.
+    const expiresAt = await this.loyalty.pointsExpiresAt(new Date());
 
     return this.prisma.$transaction(async (tx) => {
       const r = await tx.review.create({
@@ -132,7 +137,7 @@ export class ReviewsService {
         },
       });
       await tx.pointsTransaction.create({
-        data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id },
+        data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id, expiresAt },
       });
       await tx.user.update({ where: { id: userId }, data: { pointsBalance: { increment: pointsEarned } } });
       // Cập nhật rating denormalized cho Product (hiển thị sao trên card/PDP) — trong
