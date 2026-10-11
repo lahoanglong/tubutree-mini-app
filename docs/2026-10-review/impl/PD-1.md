@@ -51,7 +51,7 @@ npx eslint <file đã sửa>  -> 0 lỗi, 0 cảnh báo
 - Khoản `cashbackPending > 0` vẫn phải hiển thị ở Ví dù lối vào đã ẩn: không giấu số tiền thật của khách.
 
 ### Việc còn lại
-- Mục 2 đến 8 của PD-1 do lượt khác làm.
+- Không còn (mục 2 đến 8 đã xong, xem các mục dưới và Tổng kết cuối file).
 
 ### Việc cần chủ dự án
 - Khi có công cụ tạo mùa: đổi `SEASON_PASS_ENABLED` thành `true` (kèm kiểm bảng `seasons` có mùa đang chạy).
@@ -154,7 +154,7 @@ npx tsc --noEmit -p tsconfig.json -> exit 0;  npx eslint <file đã sửa> -> 0
 - `PLANTED` ("Đã trồng") vẫn là nhãn khi admin đánh dấu một khoản góp đã được trồng; hiện không có luồng nào đặt trạng thái này nên khách chỉ thấy "Đã góp quỹ".
 
 ### Việc còn lại
-- Mục 4 đến 8 của PD-1 do lượt khác làm (cashback đã xong ở mục 1/4; còn C-096, C-118, C-069, dọn alias legacy).
+- Không còn mục mã nào của PD-1 (C-096, C-118, C-069, dọn alias legacy đã xong ở các mục dưới).
 - `README.md:54` (danh sách việc chưa làm: "Tích hợp PanNature") và `DEMO_SCRIPT.md:42-43,60` (kịch bản demo nói "cây thật qua PanNature") là tài liệu nội bộ ngoài nhóm file của gói, chưa sửa. Nên đổi trước khi đem kịch bản đi demo cho đối tác.
 
 ### Việc cần chủ dự án
@@ -193,7 +193,7 @@ Bằng chứng 0 import: `grep -rn "primitives" apps scripts packages` (ts, tsx,
 - Xoá `primitives.tsx` (157 dòng) và `primitives.spec.tsx` (52 dòng).
 - Sửa 3 chú thích trỏ tới file đã xoá (không đổi hành vi).
 - Test `components/ui/primitives-removed.spec.ts` (2 ca, mới): file không còn, không ai import `.../primitives`. ĐỎ trước (ca 2 kê đúng `primitives.spec.tsx` là importer duy nhất).
-- Alias legacy (`--neutral-*`, `--primary-*`, `--leaf-*`, `--danger`...) mà primitives dùng cũng biến mất theo; `beta.tsx` cũng dùng `--neutral-*`/`--leaf-*`/`--radius-lg`. Mục 8 (dọn khối alias trong `tokens.css`) còn lại cho lượt khác.
+- Alias legacy (`--neutral-*`, `--primary-*`, `--leaf-*`, `--danger`...) mà primitives dùng cũng biến mất theo; `beta.tsx` cũng dùng `--neutral-*`/`--leaf-*`/`--radius-lg`. Mục 8 dọn khối alias trong `tokens.css` ngay sau đó.
 
 ### Lệnh kiểm chứng
 ```
@@ -214,8 +214,106 @@ npx tsc --noEmit -> exit 0;  npx eslint src -> 0 lỗi, 0 cảnh báo
 - Tài liệu lịch sử (`docs/2026-10-review/*`, `docs/audit-2026-09/*`) nhắc `primitives.tsx` giữ nguyên vì là báo cáo tại thời điểm viết.
 
 ### Việc còn lại
-- Mục 8 (xoá khối "LEGACY v1 → v2 ALIAS" trong `tokens.css` + guard `ds-no-legacy-aliases.spec.ts`) do lượt khác làm; hai mục 6-7 đã gỡ 2 file dùng alias legacy.
+- Mục 8 (xoá khối "LEGACY v1 → v2 ALIAS" trong `tokens.css` + guard `ds-no-legacy-aliases.spec.ts`) đã xong ở mục dưới; hai mục 6-7 đã gỡ 2 file dùng alias legacy.
 - PD-2: gỡ/đóng endpoint API `/beta/*` và module `beta`.
 
 ### Việc cần chủ dự án
 - Không có quyết định mới. Nếu sau này muốn đối tác vào `/merchant` dễ hơn (đăng nhập riêng, link trong email mời), cần chốt hướng marketplace (Q-19 phương án 2) trước.
+
+## Mục 8 — Dọn alias legacy DS v1 trong `tokens.css` + guard toàn `src` (hậu C-076)
+
+| Mục | Trạng thái | Commit |
+| --- | --- | --- |
+| Xoá khối "LEGACY v1 → v2 ALIAS" khỏi `css/tokens.css`, thay chỗ dùng còn sót, thêm guard `ds-no-legacy-aliases.spec.ts` | XONG | d6a8f160 |
+
+### Hiện trạng trước khi sửa (bằng chứng alias hết người dùng)
+- `grep` toàn `apps/miniapp`, `packages`, `scripts` (loại `node_modules`, `dist`, `.next`) tìm `--neutral-`, `--primary-`, `--leaf-`, `--sun-`, `--success|warning|danger|info`, `--dealer-`, `--clay-200|800`, `--radius-sm|md|lg|xl|full`, `--shadow-xs|sm|md|lg`: ngoài spec chỉ còn (a) 5 chú thích nhắc tên cũ (`order-status.ts`, `cart-badge.tsx`, `storefront-view.tsx`, `dealer-theme.css`, `scorecard.mjs`) và (b) 3 chỗ dùng CHÍNH trong `tokens.css`: `.tubu-card` (`--radius-lg`), `.tubu-skeleton` (`--neutral-100`, `--radius-md`).
+- `node scripts/uiux/static-scan.mjs` trước khi sửa: `miniapp files 242 hex 5 rgb 4 legacy 3` (3 chỗ trên; hex 5 = `utils/storefront-theme.ts`; rgb 4 = shimmer, pulse x2 trong `tokens.css` + chấm trang ảnh ở `product-detail.tsx`).
+
+### Thay đổi
+- `css/tokens.css` (494 → 407 dòng):
+  - Xoá nguyên khối 93 dòng "LEGACY v1 → v2 ALIAS" (neutral/primary/leaf/sun/status/clay-200,800/radius-sm,md,xl,full/shadow-xs..lg/`--dealer-*` cả hex cũ).
+  - `.tubu-card`: `--radius-lg` thành `--radius-card` (cùng giá trị, vì `--radius-lg` vốn alias `--radius-card`); alias `--radius-lg` bỏ vì tên nằm trong regex LEGACY của static-scan và không còn người dùng.
+  - `.tubu-skeleton`: `--neutral-100` thành `--stone-100`, `--radius-md` thành `--radius-control` (đúng ánh xạ cũ của khối alias nên hình ảnh không đổi).
+  - Giữ các biến ngoài khối: `--safe-top`, `--safe-bottom`, `--shadow-card` (còn `.tubu-card` dùng), `--dur-fast|base|slow`, `--ease-out`, `--font-body` (còn `.t-body` dùng). Không nằm trong regex LEGACY của static-scan nên không ảnh hưởng `legacy=0`.
+  - Chú thích đầu khối `:root` còn lại viết lại: nói rõ đây là biến tiện ích của miniapp và cấm khai báo lại họ tên v1.
+  - Màu thô còn lại gom thành 4 token ở cuối `:root` (dòng định nghĩa token là chỗ được giữ màu thô): `--color-skeleton-shimmer` (trắng 65%), `--color-media-dot-idle` (trắng 85%), `--color-pulse-ring` và `--color-pulse-ring-end` (cam 35% và 0%). Giá trị giữ nguyên từng chữ số nên hình ảnh không đổi; chỗ dùng (`.tubu-skeleton::after`, `@keyframes tubu-pulse`, chấm trang ảnh ở `pages/product-detail.tsx`) chỉ tham chiếu tên.
+- `css/dealer-theme.css`: chỉ sửa chú thích (họ `--dealer-*` của v1 đã xoá, `--color-dealer-*` là tên đang dùng).
+- Xoá `ds-legacy-alias-contrast.spec.ts` (kiểm tương phản alias `--neutral-400` trên 6 nền): spec này đọc chính `--neutral-400` trong `tokens.css` nên không còn đối tượng. Độ tương phản chữ phụ vẫn được `packages/design-tokens/src/tokens.spec.ts` giữ (kiểm `--color-text-secondary` và `--color-text-tertiary` đạt 4,5:1 trên các nền, dòng 71-79).
+
+### Guard mới `apps/miniapp/src/ds-no-legacy-aliases.spec.ts` (42 ca)
+- Quét MỌI `src/**/*.{ts,tsx,css}` trừ `*.spec.*|*.test.*` (không dùng danh sách file như `ds-c076-pc10*.spec.ts`). Có ca kiểm walker thật sự thấy >200 file, thấy `css/tokens.css`, `pages/home.tsx` và không thấy spec.
+- Cấm: `var(--neutral-N|primary-N|leaf-N|sun-N|success|warning|danger|info(-bg)|clay-200|clay-800|radius-sm|md|lg|xl|full|shadow-xs|sm|md|lg|dealer-*)` (cả dạng có fallback `var(--danger, #f00)`); cấm khai báo lại các tên đó trong file `.css`; cấm hex và `rgb()/rgba()/hsl()/hsla()` thô.
+- Bộ so khớp cùng nguồn `scripts/uiux/static-scan.mjs` (LEGACY, HEX, RGB) để guard và số đo không lệch; riêng guard thêm `hsl/hsla` và `--radius-lg` (static-scan đã có `radius-lg`). Tên v2 và biến còn định nghĩa (`--shadow-card`, `--font-body`, `--color-dealer-*`, `--clay-500`...) có ca "không bắt".
+- Ngoại lệ hex/rgb, tối đa 3 mục, mỗi mục kèm lý do (có ca kiểm độ dài danh sách, có lý do, và mục thừa thì đỏ):
+  - `css/dealer-theme.css`: palette navy của kênh đại lý, DS v2 chưa thiết kế dealer; trang chỉ tham chiếu `--color-dealer-*`.
+  - `utils/storefront-theme.ts`: bảng mã màu cửa hàng do CTV chọn; mã hex là dữ liệu lưu ở backend, không phải màu của DS.
+  - Dòng định nghĩa token trong file `.css` (`--ten: giá trị`: `brand-theme.css`, `zaui-bridge.css`, `dealer-theme.css`, token mới của `tokens.css`) không tính là màu thô, cùng quy ước với static-scan.
+- ĐỎ rồi XANH: chạy guard khi `tokens.css` còn khối alias: `Tests 3 failed | 39 passed (42)` (ca "tham chiếu biến alias" kê 3 chỗ dùng trong `tokens.css`; ca "khai báo lại tên alias v1" kê từng dòng `--neutral-0` ... `--dealer-bg`; ca "hex/rgb thô" kê 4 dòng: `tokens.css` shimmer + pulse x2, `product-detail.tsx`). Sau sửa: `Tests 42 passed (42)`.
+
+### Lệnh kiểm chứng
+```
+node scripts/check-undefined-css-vars.mjs
+  OK — every var(--x) reference is defined.
+node scripts/uiux/static-scan.mjs
+  miniapp files 242 hex 5 rgb 0 legacy 0      (hex 5 = storefront-theme.ts, ngoại lệ có lý do)
+cd apps/miniapp
+npx vitest run src/ds-c076-pc10a.spec.ts src/ds-c076-pc10b.spec.ts src/ds-c076-pc10c1.spec.ts src/ds-c076-pc10c2.spec.ts src/ds-c076-pc10c3.spec.ts src/ds-legacy-vars-4a.spec.ts src/ds-legacy-vars-4b.spec.ts src/ds-no-legacy-aliases.spec.ts src/css src/components/ui src/pages/product-detail tailwind.config.spec.ts src/index-html.spec.ts
+  Test Files  46 passed (46) | Tests  809 passed (809)
+npx eslint "src/**/*.{ts,tsx}" --max-warnings=0 -> exit 0 (0 lỗi, 0 cảnh báo)
+npx tsc --noEmit -> exit 0
+```
+
+### Giả định
+- Giữ `--shadow-card` và `--font-body` (kèm `.tubu-card`, `.t-body`): theo đặc tả gói chỉ xoá khối alias, các biến ngoài khối còn dùng thì giữ. Hai class này hiện không có nơi nào gắn trong `src` (chỉ `.tubu-skeleton` còn dùng); chưa xoá vì ngoài phạm vi và an toàn hơn khi để nguyên. Nếu muốn dọn tiếp thì xoá `.tubu-card`, `.t-body`, `--shadow-card`, `--font-body` cùng lúc.
+- Gom rgba thô thành token thay vì thêm vào danh sách ngoại lệ để danh sách ngoại lệ chỉ còn 2 file có lý do thật (dữ liệu CTV chọn, palette dealer).
+- Xoá `ds-legacy-alias-contrast.spec.ts` thay vì viết lại: tên v2 tương ứng đã được `packages/design-tokens/src/tokens.spec.ts` kiểm tương phản.
+- Các spec `ds-c076-pc10*.spec.ts`, `ds-legacy-vars-4a/4b.spec.ts` giữ nguyên (còn kiểm thêm ZaUI, emoji, nhãn file); chồng lấn với guard mới ở phần cấm alias nhưng không mâu thuẫn.
+
+### Việc còn lại
+- `scripts/uiux/scorecard.mjs:44` còn ghi chú lịch sử "121 alias; `--dealer-*` giữ hex v1": là điểm audit đã chốt, không sửa.
+- Tài liệu lịch sử (`docs/2026-10-review/impl/PC-*.md`) còn nhắc `ds-legacy-alias-contrast.spec.ts` trong lệnh kiểm chứng cũ; giữ nguyên vì là báo cáo tại thời điểm viết.
+
+### Việc cần chủ dự án
+- Không có quyết định mới. Nếu sau này thiết kế lại kênh đại lý trong DS v2 thì chuyển `css/dealer-theme.css` sang token v2 rồi bỏ ngoại lệ tương ứng trong guard.
+
+## Tổng kết gói PD-1
+
+| Mục | Phát hiện | Trạng thái | Commit |
+| --- | --- | --- | --- |
+| 1 | C-044 Season Pass (Q-16) | XONG | 160834ad |
+| 2 | C-010 "cây thật" thành "góp quỹ trồng cây" (Q-16) | XONG | b1aed272, 8286bc7d, 2e6d4980, 7ddb55bd |
+| 3 | Perk hạng không có quy trình (Q-16) | XONG | 7ddb55bd |
+| 4 | C-086 cashback (Q-15) | XONG | fef504e5 |
+| 5 | C-096 `/merchant` (Q-19) | XONG (mã đã sạch từ PC-7, thêm guard) | 6eb2d07f |
+| 6 | C-118 `/beta` (Q-19) | XONG | d05785c1 |
+| 7 | C-069 `ui/primitives.tsx` | XONG | ee5ba135 |
+| 8 | Dọn alias legacy + guard toàn `src` | XONG | d6a8f160 |
+
+Không có mục BỎ hay MỘT PHẦN. Migration duy nhất: `20261011090000_pd1_tree_fund_wording_tier_perks` (chỉ UPDATE có WHERE khớp nội dung cũ, áp thử lên Postgres tạm 2 lần: lần 1 mỗi câu `UPDATE 1`, lần 2 `UPDATE 0`).
+
+### Bảng bằng chứng perk hạng (chi tiết ở Mục 2-3/4)
+Giữ (có cơ chế trong mã): tích điểm hệ số (`pointMultiplier`), freeship theo hạng (`shipping.tier_freeship_overrides`), giảm 5% (`discountPct` ở `checkout.service.ts`), mã giảm giá sinh nhật (`birthdayVoucherAmount`, cron `birthdayVouchers`). Bỏ (không có mã nào): "+ 1 sample", "+ hộp quà", "Ưu tiên hotline", "Beta tester", "Quà sinh nhật cá nhân hóa". Test `tier-perks-seed.spec.ts` buộc mọi perk trong seed phải khớp một cơ chế thật.
+
+### Danh sách chuỗi hướng khách đã đổi (chi tiết ở Mục 2-3/4)
+Miniapp: `tree-actions.tsx`, `use-game-actions.ts`, `harvest-celebration.tsx`, `eco-impact.tsx`, `community-goal.tsx`, `garden-hero.tsx`, `garden-plots.tsx`, `refill.tsx`, `wallet.tsx`. Web admin: `app/admin/page.tsx` (thẻ Sản phẩm). API: lời báo lỗi `game.service.ts`. Dữ liệu DB: 3 mảng `membership_tiers.perks`, câu quiz q6, mô tả khoá `game.tree_xu_price` (seed + migration). Guard giữ chữ cũ không quay lại: `i18n/tree-fund-copy.spec.ts`.
+Grep cuối (`cây thật|cay that|PanNature|Rừng Xanh Lên|mua cây`, loại `docs/`): chỉ còn ở `README.md:54`, `DEMO_SCRIPT.md:42-43,60`, `design_handoff/**` (spec thiết kế lịch sử), chú thích `apps/api/prisma/schema.prisma:1493-1517`, nhãn `dead-config-keys.ts` (đúng sự thật: chưa có luồng trồng cây thật), migration cũ + migration mới (chuỗi cũ để khớp WHERE), và các spec guard. Không còn chữ nào hiển thị cho khách.
+
+### Giả định (gộp)
+- Ẩn = ngừng gọi API và ngừng dựng lối vào ở miniapp, giữ mã ngủ sau cờ (`SEASON_PASS_ENABLED`, `CASHBACK_ENABLED` trong `utils/features.ts`), giữ route, bảng, endpoint để bật lại.
+- "Cây thật" thành "góp quỹ trồng cây" ở mọi chữ hướng khách; tên biến, route, bảng, cột giữ nguyên; số CO₂ ước tính giữ nguyên.
+- Perk ghép giữ phần có cơ chế, cắt phần không có; "Voucher sinh nhật" thành "Mã giảm giá sinh nhật" theo Q-26.
+- Khoản cashback đã duyệt chờ về Ví vẫn hiển thị ở Ví dù lối vào đã ẩn (không giấu tiền của khách).
+- Q-19 `/merchant`: không thêm banner "chỉ xem"; chỉ bỏ lối vào, noindex, Disallow (đã có).
+- Mục 8: chi tiết ở Giả định của Mục 8.
+
+### Việc còn lại
+- PD-2: gỡ/đóng endpoint API `/beta/*` và module `beta`.
+- `README.md:54` và `DEMO_SCRIPT.md:42-43,60` còn nói "PanNature/cây thật" (tài liệu nội bộ ngoài nhóm file của gói); nên sửa trước khi đem kịch bản đi demo.
+- `scripts/uiux/generated/miniapp-endpoints.json` còn 4 endpoint `/beta/*` cũ; chạy lại `node scripts/uiux/extract-endpoints.mjs miniapp` khi cần.
+- Chưa chạy Playwright/e2e và dev server (quy ước gói); e2e không nhắc beta, cashback, Season Pass, "cây thật" nên không phải đổi selector (`grep -rniE "season|cashback|hoàn tiền sàn|beta|cây thật|pannature" apps/e2e/tests` chỉ ra `cashbackPending`/`cashbackHoldDays` là dữ liệu mock API trong `support/checkout-mocks.ts`, không phải selector hay chữ hiển thị).
+
+### Việc cần chủ dự án
+- Áp migration `20261011090000_pd1_tree_fund_wording_tier_perks` lên PROD bằng `prisma migrate deploy` khi phát hành (chỉ 5 dòng đổi chữ: 3 hạng, 1 câu quiz, 1 mô tả cấu hình); kiểm bằng `select name, perks from membership_tiers`.
+- Mốc cộng đồng "Cùng Tubu phủ xanh Cần Giờ" (tiêu đề, vùng, `treesToPlant`) nằm trong DB do admin sửa; nếu chưa có đối tác thực hiện nên đổi tên chung hơn ở trang quản trị.
+- Bật lại khi có điều kiện: `SEASON_PASS_ENABLED` (khi có công cụ tạo mùa), `CASHBACK_ENABLED` (khi có key AccessTrade và đo được tác động lên đơn), chữ "trồng cây thật" + tên đối tác (khi có hợp đồng và ngân sách, kèm luồng `PLANTED` + báo cáo cho khách), perk hạng đã bỏ (khi dựng xong quy trình thật).
