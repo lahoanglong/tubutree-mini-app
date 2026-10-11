@@ -41,7 +41,7 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
   if (code.startsWith('COMMISSION')) return { Icon: Coins, title: 'Hoa hồng CTV' };
   if (code.startsWith('CASHBACK')) return { Icon: ShoppingBag, title: 'Hoàn tiền' };
   if (code.startsWith('BIRTHDAY') || code.startsWith('VOUCHER')) return { Icon: Gift, title: 'Ưu đãi cho bạn' };
-  if (code.startsWith('POINTS')) return { Icon: Leaf, title: 'Điểm Xanh' };
+  if (code.startsWith('POINTS') || code === 'XU_CONVERTED') return { Icon: Leaf, title: 'Điểm Xanh' };
   if (code.startsWith('STOREFRONT')) return { Icon: Store, title: 'Gian hàng của bạn' };
   // REORDER_REMINDER (§6.14.7, LifecycleService.sendReorderReminders) — nhắc mua lại khi 1 SP đã
   // qua ~chu kỳ tiêu dùng kể từ đơn DELIVERED gần nhất. Trước đây rơi về nhãn chung "Thông báo"
@@ -112,7 +112,9 @@ export function notificationAction(templateCode: string, data: Record<string, st
   if (templateCode.endsWith('_VOUCHER') || templateCode.startsWith('VOUCHER')) {
     return { kind: 'link', label: 'Xem mã giảm giá', to: '/loyalty' };
   }
-  if (templateCode.startsWith('POINTS')) return { kind: 'link', label: 'Xem Điểm Xanh', to: '/loyalty' };
+  if (templateCode.startsWith('POINTS') || templateCode === 'XU_CONVERTED') {
+    return { kind: 'link', label: 'Xem Điểm Xanh', to: '/loyalty' };
+  }
   if (templateCode.startsWith('CASHBACK')) return { kind: 'link', label: 'Xem Ví Tubu', to: '/wallet' };
   if (templateCode.startsWith('SUBSCRIPTION')) return { kind: 'link', label: 'Xem gói định kỳ', to: '/subscriptions' };
   if (templateCode.startsWith('STOREFRONT')) return { kind: 'link', label: 'Thêm vào gian hàng', to: '/storefront' };
