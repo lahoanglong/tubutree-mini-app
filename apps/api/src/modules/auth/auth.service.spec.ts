@@ -658,3 +658,18 @@ describe('AuthService — chặn user bị khoá (isBlocked) lấy token', () =>
     expect((prisma.refreshToken.create as jest.Mock)).not.toHaveBeenCalled();
   });
 });
+
+describe('AuthService.toAuthUser — hồ sơ trả về client sau PD-3', () => {
+  it('trả hai lô Điểm Xanh (thường + quy đổi) và không còn trường xu', () => {
+    const { svc } = makeService();
+    const out = svc.toAuthUser({
+      ...USER,
+      pointsBalance: 120,
+      pointsConvertedBalance: 40,
+      walletBalance: 5_000,
+      coinsBalance: 0,
+    } as never);
+    expect(out).toMatchObject({ pointsBalance: 120, pointsConvertedBalance: 40, walletBalance: 5_000 });
+    expect(out).not.toHaveProperty('coinsBalance');
+  });
+});

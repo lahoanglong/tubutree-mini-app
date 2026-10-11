@@ -624,8 +624,8 @@ export class AuthService {
       tierId: user.tierId,
       referralCode: user.referralCode,
       pointsBalance: user.pointsBalance,
+      pointsConvertedBalance: user.pointsConvertedBalance,
       walletBalance: user.walletBalance,
-      coinsBalance: user.coinsBalance,
     };
   }
 

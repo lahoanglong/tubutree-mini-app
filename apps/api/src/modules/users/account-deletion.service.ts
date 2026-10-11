@@ -33,7 +33,6 @@ type BlockerUser = {
   id: string;
   role: string;
   walletBalance: number;
-  coinsBalance: number;
   pointsConvertedBalance: number;
   cashbackPending: number;
 };
@@ -73,7 +72,6 @@ export class AccountDeletionService {
         phone: true,
         role: true,
         walletBalance: true,
-        coinsBalance: true,
         pointsConvertedBalance: true,
         cashbackPending: true,
         createdAt: true,
