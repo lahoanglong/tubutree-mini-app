@@ -10,7 +10,6 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
-import { CoinsService } from '../../src/modules/wallet/coins.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { applyPointsDelta } from '../../src/modules/loyalty/points-ledger';
 import type { PointsLot } from '@prisma/client';
@@ -102,7 +101,6 @@ describe('Thưởng giới thiệu theo đơn thứ 2 (real Postgres)', () => {
       providers: [
         SystemConfigService,
         LoyaltyService,
-        CoinsService,
         RewardPointsService,
         AnalyticsEventsService,
         AffiliateService,
@@ -496,7 +494,6 @@ describe('Thưởng giới thiệu sau khi gộp phiên khách (real Postgres)',
       providers: [
         SystemConfigService,
         LoyaltyService,
-        CoinsService,
         RewardPointsService,
         AnalyticsEventsService,
         AffiliateService,
@@ -642,7 +639,6 @@ describe('Mốc thưởng giới thiệu bị thu hồi theo lượt giới thi�
       providers: [
         SystemConfigService,
         LoyaltyService,
-        CoinsService,
         RewardPointsService,
         AnalyticsEventsService,
         AffiliateService,

@@ -61,12 +61,6 @@ const LEGACY_XU_KEYS = [
   'game.xu_per_seed',
   'wallet.xu_convert_multiplier',
 ];
-/**
- * Còn được code đọc tới lượt L3 (spec mục 9): góp quỹ trồng cây / mở lô / đổi Ví → xu nằm ở
- * game.service, game-garden.service, wallet.service — L3 chuyển sang điểm hoặc trả 410 rồi XOÁ tên
- * khỏi danh sách này và đưa khoá vào DEAD_CONFIG_KEYS.
- */
-const PENDING_L3_XU_KEYS = ['game.tree_xu_price', 'game.plot_unlock_xu_base', 'game.xu_per_seed', 'wallet.xu_convert_multiplier'];
 
 /** Khoá tính bằng Điểm Xanh mà admin sửa được (spec mục 4 điểm 3). */
 const POINTS_NUMBER_KEYS: Record<string, { max: number }> = {
@@ -91,15 +85,10 @@ function configService() {
 describe('PD-3 T16 (a): không còn mã nào đọc khoá xu cũ', () => {
   const source = runtimeSource();
 
-  it('khoá xu đã chuyển ở L2 không còn được đọc ngoài dead-config-keys.ts, và nằm trong DEAD_CONFIG_KEYS', () => {
-    const l2 = LEGACY_XU_KEYS.filter((k) => !PENDING_L3_XU_KEYS.includes(k));
-    expect(l2.filter((k) => isReferenced(source, k))).toEqual([]);
-    expect(l2.filter((k) => !isDeadConfigKey(k))).toEqual([]);
-  });
-
-  it('khoá xu còn đọc chỉ là những khoá L3 đã biết (không được thêm chỗ đọc mới)', () => {
-    const stillRead = LEGACY_XU_KEYS.filter((k) => isReferenced(source, k));
-    expect(stillRead.filter((k) => !PENDING_L3_XU_KEYS.includes(k))).toEqual([]);
+  // L3: góp quỹ trồng cây đọc game.tree_points_price, mở lô bằng xu và đổi Ví → xu trả 410.
+  it('mọi khoá xu cũ không còn được đọc ngoài dead-config-keys.ts, và đều nằm trong DEAD_CONFIG_KEYS', () => {
+    expect(LEGACY_XU_KEYS.filter((k) => isReferenced(source, k))).toEqual([]);
+    expect(LEGACY_XU_KEYS.filter((k) => !isDeadConfigKey(k))).toEqual([]);
   });
 
   it('seed không gieo khoá xu cũ đã chuyển', () => {

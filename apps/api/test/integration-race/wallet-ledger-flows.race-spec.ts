@@ -16,7 +16,6 @@ import { NotificationsService } from '../../src/modules/notifications/notificati
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { GomdonOrderService } from '../../src/modules/integrations/gomdon/gomdon-order.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
-import { CoinsService } from '../../src/modules/wallet/coins.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { WalletService } from '../../src/modules/wallet/wallet.service';
 import { applyWalletDelta } from '../../src/modules/wallet/wallet-ledger.service';
@@ -51,7 +50,7 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
   const pricing = {
     calcShippingFee: jest.fn().mockResolvedValue(0),
     calcTierDiscount: jest.fn().mockReturnValue(0),
-    resolvePointsRedemption: jest.fn().mockResolvedValue({ pointsUsed: 0, discount: 0 }),
+    resolvePointsRedemptionByLot: jest.fn().mockResolvedValue({ pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 }),
     calcPointsEarned: jest.fn().mockResolvedValue(0),
   };
 
@@ -64,7 +63,6 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
         CartService,
         CheckoutService,
         AffiliateService,
-        CoinsService,
         RewardPointsService,
         WalletService,
         CashbackService,
@@ -117,7 +115,6 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
 
     await setConfig(prisma, 'wallet.withdraw_min', 100_000);
     await setConfig(prisma, 'wallet.withdraw_fee', 3_000);
-    await setConfig(prisma, 'wallet.xu_convert_multiplier', 1.2);
     await setConfig(prisma, 'affiliate.min_withdraw_bank', 50_000);
     await setConfig(prisma, 'cashback.hold_days', 30);
   });
@@ -153,34 +150,35 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
     return l;
   }
 
-  it('rút tiền song song vượt số dư + đổi xu song song → mỗi lần trừ đúng 1 dòng sổ, số dư == tổng sổ, không âm', async () => {
+  it('rút tiền song song vượt số dư + đổi xu (đã ngừng, PD-3) song song → mỗi lần rút đúng 1 dòng sổ, không dòng XU_CONVERT, số dư == tổng sổ, không âm', async () => {
     const u = await newWallet(250_000);
     const res = await Promise.allSettled([
       wallet.withdraw(u.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`),
       wallet.withdraw(u.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`),
       wallet.withdraw(u.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`),
-      wallet.convertToXu(u.id, 30_000, `cv-${randCode(8)}`),
-      wallet.convertToXu(u.id, 30_000, `cv-${randCode(8)}`),
+      wallet.convertToXu(),
+      wallet.convertToXu(),
     ]);
     const s = summarize(res);
     const l = await expectBalanced(u.id);
     const withdraws = l.byType('WITHDRAW');
-    const converts = l.byType('XU_CONVERT');
-    expect(withdraws.length + converts.length).toBe(s.fulfilled.length);
+    expect(l.byType('XU_CONVERT')).toHaveLength(0);
+    expect(withdraws.length).toBe(s.fulfilled.length);
+    expect(withdraws.length).toBe(2);
     expect(withdraws.every((r) => r.delta === -100_000 && r.refType === 'PAYOUT')).toBe(true);
     const payouts = await prisma.payout.findMany({ where: { userId: u.id } });
     expect(withdraws.map((r) => r.refId).sort()).toEqual(payouts.map((p) => p.id).sort());
-    expect(converts.every((r) => r.delta === -30_000)).toBe(true);
   });
 
-  it('đổi xu cùng Idempotency-Key gửi 5 lần song song → trừ ví đúng 1 lần, 1 dòng XU_CONVERT', async () => {
+  it('PD-3 (T18): đổi Ví → xu gửi 5 lần song song → cả 5 nhận 410, ví giữ nguyên, không dòng XU_CONVERT, xu vẫn 0', async () => {
     const u = await newWallet(100_000);
-    const key = `cv-${randCode(8)}`;
-    await Promise.allSettled(Array.from({ length: 5 }, () => wallet.convertToXu(u.id, 40_000, key)));
+    const res = await Promise.allSettled(Array.from({ length: 5 }, () => wallet.convertToXu()));
+    expect(res.every((r) => r.status === 'rejected' && (r.reason as { getStatus?: () => number }).getStatus?.() === 410)).toBe(true);
     const l = await expectBalanced(u.id);
-    expect(l.balance).toBe(60_000);
-    expect(l.byType('XU_CONVERT')).toHaveLength(1);
-    expect(l.byType('XU_CONVERT')[0]!.refId).toBe(key);
+    expect(l.balance).toBe(100_000);
+    expect(l.byType('XU_CONVERT')).toHaveLength(0);
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: u.id }, select: { coinsBalance: true } });
+    expect(after.coinsBalance).toBe(0);
   });
 
   it('admin từ chối lệnh rút 2 lần song song → hoàn gross đúng 1 lần, 1 dòng WITHDRAW_REFUND theo payout', async () => {

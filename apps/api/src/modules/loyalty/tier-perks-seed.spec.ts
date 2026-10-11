@@ -87,8 +87,9 @@ describe('câu chữ "cây thật/PanNature" trong seed (C-010, Q-16)', () => {
   });
 
   it('mô tả cấu hình giá góp cây nói góp quỹ trồng cây', () => {
-    const cfg = CONFIGS.find((c) => c.key === 'game.tree_xu_price')!;
-    expect(cfg.description).toBe('Giá góp 1 cây vào quỹ trồng cây bằng xu');
+    // PD-3: khoá xu game.tree_xu_price bỏ khỏi seed (DEAD), giá góp quỹ nay là game.tree_points_price.
+    const cfg = CONFIGS.find((c) => c.key === 'game.tree_points_price')!;
+    expect(cfg.description).toBe('Điểm Xanh cho 1 lượt góp quỹ trồng cây');
   });
 
   it('không còn chữ cây thật/PanNature/Rừng Xanh Lên ở dữ liệu hướng khách của seed', () => {
@@ -149,7 +150,8 @@ describe('migration cập nhật chữ + quyền lợi hạng đã có trên PRO
     expect(quiz).toContain(`"options" = '${JSON.stringify(q6.options)}'::jsonb`);
     const cfg = statements.find((s) => s.includes('"system_configs"'))!;
     expect(cfg).toContain(`"description" = 'Giá mua 1 cây thật bằng xu'`);
-    expect(cfg).toContain(`SET "description" = '${CONFIGS.find((c) => c.key === 'game.tree_xu_price')!.description}'`);
+    // Chữ mới của migration PD-1 cho khoá xu cũ (khoá này nay không còn trong seed, PD-3).
+    expect(cfg).toContain(`SET "description" = 'Giá góp 1 cây vào quỹ trồng cây bằng xu'`);
   });
 });
 

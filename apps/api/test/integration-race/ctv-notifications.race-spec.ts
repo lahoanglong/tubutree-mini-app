@@ -5,7 +5,6 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
 import { CTV_NOTIFICATION } from '../../src/modules/affiliate/ctv-notification-codes';
-import { CoinsService } from '../../src/modules/wallet/coins.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
@@ -36,7 +35,6 @@ describe('AffiliateService thông báo CTV (real Postgres)', () => {
       imports: [PrismaModule],
       providers: [
         SystemConfigService,
-        CoinsService,
         RewardPointsService,
         AnalyticsEventsService,
         AffiliateService,

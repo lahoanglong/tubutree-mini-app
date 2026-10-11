@@ -15,7 +15,6 @@ import { PancakeOrderService } from '../../src/modules/integrations/pancake/panc
 import { WalletLedgerService } from '../../src/modules/wallet/wallet-ledger.service';
 import { GomdonOrderService } from '../../src/modules/integrations/gomdon/gomdon-order.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
-import { CoinsService } from '../../src/modules/wallet/coins.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { ComboService } from '../../src/modules/storefront/combo.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
@@ -46,7 +45,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
   const pricing = {
     calcShippingFee: jest.fn().mockResolvedValue(0),
     calcTierDiscount: jest.fn().mockReturnValue(0),
-    resolvePointsRedemption: jest.fn().mockResolvedValue({ pointsUsed: 0, discount: 0 }),
+    resolvePointsRedemptionByLot: jest.fn().mockResolvedValue({ pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 }),
     calcPointsEarned: jest.fn().mockResolvedValue(0),
   };
 
@@ -59,7 +58,6 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
         CartService,
         CheckoutService,
         AffiliateService,
-        CoinsService,
         RewardPointsService,
         DealerService,
         SubscriptionsService,

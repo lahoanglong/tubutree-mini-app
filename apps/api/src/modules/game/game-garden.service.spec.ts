@@ -70,7 +70,7 @@ describe('GameGardenService.getGarden', () => {
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(homeProfile());
     const svc = new GameGardenService(
       prisma,
-      makeConfig({ 'game.max_plots': 5, 'game.plot_unlock_seed_base': 100, 'game.plot_unlock_xu_base': 200 }),
+      makeConfig({ 'game.max_plots': 5, 'game.plot_unlock_seed_base': 100 }),
     );
     const r = await svc.getGarden('u1');
     expect(r.plots).toHaveLength(1);
@@ -88,7 +88,7 @@ describe('GameGardenService.getGarden', () => {
     (prisma.gardenPlot.findMany as jest.Mock).mockResolvedValue([plotRow({ id: 'p1', slot: 1, progress: 50 })]);
     const svc = new GameGardenService(
       prisma,
-      makeConfig({ 'game.max_plots': 5, 'game.plot_unlock_seed_base': 100, 'game.plot_unlock_xu_base': 200 }),
+      makeConfig({ 'game.max_plots': 5, 'game.plot_unlock_seed_base': 100 }),
     );
     const r = await svc.getGarden('u1');
     expect(r.plots).toHaveLength(2);

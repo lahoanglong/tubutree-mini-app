@@ -7,7 +7,6 @@ import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
-import { CoinsService } from '../../src/modules/wallet/coins.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { WalletService } from '../../src/modules/wallet/wallet.service';
 import { applyWalletDelta } from '../../src/modules/wallet/wallet-ledger.service';
@@ -35,7 +34,6 @@ describe('Đối soát + sao kê Ví Tubu (real Postgres)', () => {
         SystemConfigService,
         AnalyticsEventsService,
         AffiliateService,
-        CoinsService,
         RewardPointsService,
         WalletService,
         CashbackService,
@@ -54,7 +52,6 @@ describe('Đối soát + sao kê Ví Tubu (real Postgres)', () => {
 
     await setConfig(prisma, 'wallet.withdraw_min', 100_000);
     await setConfig(prisma, 'wallet.withdraw_fee', 3_000);
-    await setConfig(prisma, 'wallet.xu_convert_multiplier', 1.2);
     await setConfig(prisma, 'cashback.hold_days', 30);
   });
 
@@ -90,7 +87,7 @@ describe('Đối soát + sao kê Ví Tubu (real Postgres)', () => {
       },
     });
 
-    // Còn 150k trên ví, tối đa 335k sau hoàn 150k + cashback 35k, trong khi lệnh trừ cộng lại 420k;
+    // Còn 150k trên ví, tối đa 335k sau hoàn 150k + cashback 35k, trong khi lệnh rút cộng lại 300k;
     // hoàn/cashback có thể vào trước hoặc sau các lệnh trừ, nên số
     // lệnh trừ thành công phụ thuộc thứ tự — điều bất biến là sổ luôn khớp và không âm.
     await Promise.allSettled([
@@ -99,8 +96,9 @@ describe('Đối soát + sao kê Ví Tubu (real Postgres)', () => {
       wallet.withdraw(u.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`),
       wallet.withdraw(u.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`),
       wallet.withdraw(u.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`),
-      wallet.convertToXu(u.id, 60_000, `cv-${randCode(8)}`),
-      wallet.convertToXu(u.id, 60_000, `cv-${randCode(8)}`),
+      // PD-3: đổi Ví → xu đã ngừng (410), vẫn bắn song song để chắc không ghi gì vào sổ.
+      wallet.convertToXu(),
+      wallet.convertToXu(),
       cashback.settleConfirmed(),
       cashback.settleConfirmed(),
     ]);

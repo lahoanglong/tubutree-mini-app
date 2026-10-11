@@ -63,7 +63,6 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'cashback.reconcile_lookback_days', value: 45, category: 'cashback', description: 'Reconcile cron kéo giao dịch từ provider trong N ngày gần nhất (phủ hold window + biên)' },
 
   // TubuXu (tiền tệ tiêu trong app) — Ví đổi sang xu ×1.2; rút Ví min 100k, phí 3k.
-  { key: 'wallet.xu_convert_multiplier', value: 1.2, category: 'wallet', description: 'Đổi Ví → TubuXu nhận thêm 20%' },
   { key: 'wallet.withdraw_min', value: 100000, category: 'wallet', description: 'Rút Ví về ngân hàng tối thiểu' },
   { key: 'wallet.withdraw_fee', value: 3000, category: 'wallet', description: 'Phí chuyển khoản ngân hàng/lần' },
   // PD-3: thưởng giới thiệu bằng Điểm Xanh (khoá xu coins.* đã chết). createOnly: migration
@@ -93,8 +92,8 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'community.daily_answer_reward_cap', value: 10, category: 'community', description: 'Số câu trả lời được thưởng tối đa mỗi ngày/người', createOnly: true },
   { key: 'community.best_answer_reward_points', value: 1, category: 'community', description: 'Điểm Xanh thưởng câu trả lời được chọn hay nhất (0 = tắt)', createOnly: true },
   { key: 'community.daily_best_answer_cap', value: 3, category: 'community', description: 'Số lần được thưởng câu trả lời hay nhất tối đa mỗi ngày/người', createOnly: true },
-  { key: 'game.xu_per_seed', value: 1, category: 'game', description: 'Giá mua nước: xu / 1 giọt' },
-  { key: 'game.tree_xu_price', value: 50000, category: 'game', description: 'Giá góp 1 cây vào quỹ trồng cây bằng xu' },
+  // createOnly: migration 20261012120000_pd3_points_config_keys đã chép CEIL(game.tree_xu_price/1000) nếu DB có giá cũ.
+  { key: 'game.tree_points_price', value: 50, category: 'game', description: 'Điểm Xanh cho 1 lượt góp quỹ trồng cây', createOnly: true },
 
   // Subscribe & Save — chiết khấu định kỳ theo thang bậc (kiểu Amazon).
   { key: 'subscribe.discount_pct', value: 0.12, category: 'subscribe', description: 'Chiết khấu cơ bản Subscribe & Save (fallback bậc minActive:1)' },
@@ -138,7 +137,6 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'game.streak_repair_cooldown_days', value: 30, category: 'game', description: 'Số ngày giữa 2 lần hồi sinh chuỗi' },
   { key: 'game.max_plots', value: 5, category: 'game', description: 'Số lô đất tối đa/user (gồm lô nhà)' },
   { key: 'game.plot_unlock_seed_base', value: 100, category: 'game', description: '💧 mở lô đất (giá = base × số thứ tự lô)' },
-  { key: 'game.plot_unlock_xu_base', value: 200, category: 'game', description: 'Xu mở lô đất (giá = base × số thứ tự lô)' },
   { key: 'game.plot_target', value: 600, category: 'game', description: '💧 cần để thu hoạch 1 cây ở lô phụ' },
   { key: 'seasonpass.checkin_xp', value: 10, category: 'game', description: 'XP season pass mỗi lần điểm danh' },
   {

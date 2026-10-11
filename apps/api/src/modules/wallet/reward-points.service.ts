@@ -62,7 +62,7 @@ const LEGACY_COIN_KEY_SCOPE: Record<string, 'reason' | 'user'> = {
 /**
  * PD-3: nguồn cộng duy nhất cho thưởng (giới thiệu, cộng đồng, nhiệm vụ gian hàng, mốc CTV, Season
  * Pass). Thưởng mới là Điểm Xanh lô STANDARD có hạn loyalty.point_expire_months (OQ-1), thay cho
- * CoinsService.grantCoins.
+ * đường cộng xu cũ (đã gỡ ở PD-3).
  */
 @Injectable()
 export class RewardPointsService {

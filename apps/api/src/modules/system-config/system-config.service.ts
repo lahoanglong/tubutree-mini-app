@@ -63,7 +63,6 @@ export class SystemConfigService {
     'dealer.max_discount_pct': { min: 0, max: 1, note: 'phân số (0.45 = 45%)' },
     'cashback.merchant_user_share': { min: 0, max: 1, note: 'phân số (0.7 = 70%)' },
     'groupbuy.discount_pct': { min: 0, max: 100, note: 'phần trăm nguyên (15 = 15%)' },
-    'wallet.xu_convert_multiplier': { min: 0.1, max: 10, note: 'hệ số nhân (1.2 = ×1,2)' },
     'cashback.hold_days': { min: 0, max: 365, note: 'số ngày' },
     'affiliate.hold_days': { min: 0, max: 365, note: 'số ngày' },
     // Khoá code THẬT SỰ đọc (orders.service requestReturn, affiliate.service hold) — trước đây RANGES/seed

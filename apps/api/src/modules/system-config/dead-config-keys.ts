@@ -16,10 +16,10 @@ export const DEAD_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'affiliate.monthly_tier_bonuses': 'Thưởng bậc CTV nằm cố định trong code (ctv-milestones.ts).',
   'affiliate.last_click_window_days': 'Cửa sổ ghi nhận giới thiệu là "affiliate.attribution_days".',
   'affiliate.kyc_required_above': 'Chưa có luồng xác minh KYC đọc khoá này.',
-  'affiliate.tubu_wallet_multiplier': 'Rút hoa hồng về Ví Tubu quy đổi 1:1; Ví đổi sang TubuXu dùng "wallet.xu_convert_multiplier".',
+  'affiliate.tubu_wallet_multiplier': 'Rút hoa hồng về Ví Tubu quy đổi 1:1.',
   'cashback.merchant_tubu_share': 'Phần Tubu giữ là phần còn lại của hoa hồng sau "cashback.merchant_user_share" (mặc định 70%), không có khoá riêng.',
   'cashback.min_withdraw_bank': 'Rút Ví về ngân hàng dùng "wallet.withdraw_min".',
-  'cashback.tubu_wallet_multiplier': 'Hoàn tiền sàn ngoài vào Ví Tubu quy đổi 1:1; Ví đổi sang TubuXu dùng "wallet.xu_convert_multiplier".',
+  'cashback.tubu_wallet_multiplier': 'Hoàn tiền sàn ngoài vào Ví Tubu quy đổi 1:1.',
   'coins.referee_reward': 'Người được mời chỉ nhận mã giảm giá chào mừng; chỉ người mời được thưởng ("referral.referrer_reward_points").',
   // PD-3: xu gộp vào Điểm Xanh (1.000 xu = 1 điểm). Khoá mới tên khác (*_points) để không bao giờ đọc giá trị
   // xu dưới tên điểm; migration 20261012120000_pd3_points_config_keys chép giá trị DB bằng CEIL(n/1000).
@@ -28,6 +28,10 @@ export const DEAD_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'community.post_reward': 'Đã gộp vào Điểm Xanh: thưởng đăng bài đọc "community.post_reward_points".',
   'community.answer_reward': 'Đã gộp vào Điểm Xanh: thưởng trả lời đọc "community.answer_reward_points".',
   'community.best_answer_reward': 'Đã gộp vào Điểm Xanh: thưởng câu trả lời hay nhất đọc "community.best_answer_reward_points".',
+  'game.tree_xu_price': 'Đã gộp vào Điểm Xanh: góp quỹ trồng cây đọc "game.tree_points_price" (điểm, không phải xu).',
+  'game.plot_unlock_xu_base': 'Mở lô đất bằng xu đã ngừng (PD-3), chỉ còn giọt nước ("game.plot_unlock_seed_base").',
+  'game.xu_per_seed': 'Mua giọt nước bằng xu đã ngừng (C-009).',
+  'wallet.xu_convert_multiplier': 'Đổi Ví sang xu đã ngừng (PD-3, Q-03): tiền Ví chỉ rút hoặc trả đơn.',
   'dealer.kyc_required': 'Chưa có luồng xác minh KYC đại lý đọc khoá này.',
   'game.daily_checkin_seeds': 'Giọt nước khi mở app/điểm danh dùng "game.daily_login_seeds".',
   'game.daily_checkin_points': 'Điểm Xanh điểm danh dùng "loyalty.checkin_points".',
