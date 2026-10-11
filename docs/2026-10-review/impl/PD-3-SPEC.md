@@ -165,7 +165,7 @@ Phương án đã loại: chung một cột `pointsBalance` (tổng) + suy lô t
 Đầu vào giữ nguyên `pointsToUse` (một số). BE chia:
 
 ```
-redeemBase   = goodsAfterTierDiscount + flashSubtotal          (checkout.service.ts:597-598, không gồm phí ship)
+redeemBase   = goodsAfterTierDiscount + flashSubtotal          (checkout.service.ts:599, không gồm phí ship)
 vnd          = loyalty.vnd_per_point_redeem (1000)
 stdUsable    = max(0, pointsBalance − locked)                  (checkout.service.ts:602-604, lockedOrderPoints)
 s = min(pointsToUse, stdUsable, floor(floor(redeemBase × max_redeem_pct) / vnd))   // resolvePointsRedemption hiện có
@@ -177,7 +177,7 @@ Chứng minh không làm khách thiệt / lợi sai:
 1. Tổng giảm `≤ redeemBase` (không âm, không trừ vào phí ship) vì `c ≤ floor((redeemBase − s·vnd)/vnd)`.
 2. Với cùng `pointsToUse`, cách chia này cho mức giảm lớn nhất có thể: phần STANDARD bị trần, phần CONVERTED không; lấy STANDARD tới trần trước không bao giờ làm giảm tổng (CONVERTED bù phần còn lại tới `redeemBase`).
 3. Tiêu STANDARD trước giữ lại lô không hết hạn; khách không bao giờ mất điểm vì hết hạn do hệ thống chọn tiêu lô quy đổi trước.
-4. `pointsEarned` tính trên `goodsAfterAll` (`checkout.service.ts:615-616`) nên phần trả bằng điểm quy đổi không sinh điểm mới, giống đơn XU hôm nay (`:204-206`). Không cần cờ `loyalty.earn_points_on_xu` ở checkout nữa.
+4. `pointsEarned` tính trên `goodsAfterAll` (`checkout.service.ts:619`) nên phần trả bằng điểm quy đổi không sinh điểm mới, giống đơn XU hôm nay (`:204-206`). Không cần cờ `loyalty.earn_points_on_xu` ở checkout nữa.
 5. Phần lẻ dưới 1.000đ của `redeemBase` không trả được bằng điểm (trước đây xu trả đúng từng đồng). Đây là chi phí cho khách ≤ 999đ/đơn; ghi vào câu hỏi mở OQ-2.
 
 Trong tx `placeOrder` (`checkout.service.ts:288-320`), sau `FOR UPDATE` dòng user:
@@ -559,7 +559,7 @@ Test chặn (mục 8): `points-unit-guard.spec.ts`.
 
 | Lối | Hiện tại | Khuyến nghị | Hệ quả kinh tế |
 |---|---|---|---|
-| Mở lô vườn bằng xu `POST /game/garden/unlock {currency:'XU'}` | `200 × slot` xu (`game-garden.service.ts:118-121`) | BỎ. DTO chỉ nhận `SEEDS`; `'XU'` → 410 "Mở lô bằng xu đã ngừng, dùng giọt nước". `nextUnlock` bỏ `xuCost`. | 200 xu = 0,2 điểm, quy 1.000:1 phải làm tròn lên thành 1 điểm/lô (tăng giá ×5) hoặc xuống 0 (miễn phí). Mở lô bằng điểm còn mở rộng sức thu hoạch mã giảm giá 30k (trần 3/ngày ở `game-garden.service.ts:146-150`). Giọt nước đã là tiền game. |
+| Mở lô vườn bằng xu `POST /game/garden/unlock {currency:'XU'}` | `200 × slot` xu (`game-garden.service.ts:118-121`) | BỎ. DTO chỉ nhận `SEEDS`; `'XU'` → 410 "Mở lô bằng xu đã ngừng, dùng giọt nước". `nextUnlock` bỏ `xuCost`. | 200 xu = 0,2 điểm, quy 1.000:1 phải làm tròn lên thành 1 điểm/lô (tăng giá ×5) hoặc xuống 0 (miễn phí). Mở lô bằng điểm còn mở rộng sức thu hoạch mã giảm giá 30k (trần 3/ngày ở `game-garden.service.ts:146-149`). Giọt nước đã là tiền game. |
 | Góp quỹ trồng cây `POST /game/tree/buy` | 50.000 xu (`game.service.ts:363-372`) | Giữ, giá `game.tree_points_price` = 50 Điểm Xanh; tiêu STANDARD trước, thiếu thì CONVERTED (OQ-5). Reason `GAME_BUY_TREE:<cert>` refType GAME; nếu tiêu hai lô thì 2 dòng (`…` lot STANDARD và lot CONVERTED). | 50 điểm = 50.000đ, giá trị không đổi. Không sinh giá trị mới (không trả điểm/mã ngược lại), nên không thể rút lô quy đổi ra giá trị lớn hơn số đã bỏ. |
 | Vòng quay, đổi voucher | điểm | chỉ STANDARD (không đổi mã) | Lô quy đổi không vào được vòng quay có kỳ vọng thưởng (`seed.ts:159-171`). |
 | Mua giọt nước bằng xu | 410 từ PA-5 | giữ 410, đổi chữ "xu" trong lời báo thành "Tính năng mua giọt nước đã ngừng…" | — |
