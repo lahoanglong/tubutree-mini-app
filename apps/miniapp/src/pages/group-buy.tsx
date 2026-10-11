@@ -1,12 +1,19 @@
-import { Box, Page, Text, Button, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Sprout, Users } from 'lucide-react';
+import { Sprout } from 'lucide-react';
 import { listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { useAuthStore } from '../store/auth';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { LineItemSkeleton } from '../components/ui/skeleton';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Icon } from '../components/ui/icon';
+import { PageHeader } from '../components/ui/page-header';
+import { ProgressBar } from '../components/ui/progress-bar';
+import { Text } from '../components/ui/text';
 
 function timeLeft(iso: string): string {
   const diff = (new Date(iso).getTime() - Date.now()) / 1000;
@@ -44,26 +51,18 @@ export default function GroupBuyPage() {
   });
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 80 }}>
-      <Box p={3} style={{ background: 'var(--neutral-0)' }}>
-        <Box flex alignItems="center" style={{ gap: 8 }}>
-          <Users size={20} color="var(--leaf-700)" strokeWidth={2} aria-hidden />
-          <Text bold size="large">Mua chung giá tốt</Text>
-        </Box>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-          Rủ thêm bạn cho đủ nhóm — cả nhóm cùng được giá ưu đãi!
-        </Text>
-      </Box>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 80 }}>
+      <PageHeader title="Mua chung giá tốt" subtitle="Rủ thêm bạn cho đủ nhóm — cả nhóm cùng được giá ưu đãi!" />
 
       {isLoading ? (
-        <Box p={2} flex flexDirection="column" style={{ gap: 10 }}>
+        <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <LineItemSkeleton />
           <LineItemSkeleton />
-        </Box>
+        </div>
       ) : isError ? (
         <ErrorState message={getErrorMessage(error)} onRetry={() => void refetch()} />
       ) : groups && groups.length > 0 ? (
-        <Box p={2}>
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {groups.map((g) => (
             <GroupCard
               key={g.id}
@@ -74,7 +73,7 @@ export default function GroupBuyPage() {
               joining={joinM.isPending && joinM.variables === g.id}
             />
           ))}
-        </Box>
+        </div>
       ) : (
         <EmptyState
           art="basket"
@@ -103,42 +102,60 @@ function GroupCard({
 }) {
   const pct = g.targetSize > 0 ? Math.min(100, Math.round((g.currentSize / g.targetSize) * 100)) : 0;
   return (
-    <Box mt={2} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-      <Box flex style={{ gap: 10 }}>
-        <Box onClick={onOpen} className="tubu-press">
+    <Card padding={12}>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="tubu-press"
+          aria-label={g.product.thumbnail ? undefined : g.product.name}
+          style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer', flex: '0 0 auto', alignSelf: 'flex-start' }}
+        >
           {g.product.thumbnail ? (
-            <img src={g.product.thumbnail} alt={g.product.name} style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover' }} />
+            <img
+              src={g.product.thumbnail}
+              alt={g.product.name}
+              style={{ width: 56, height: 56, borderRadius: 'var(--radius-control)', objectFit: 'cover', display: 'block' }}
+            />
           ) : (
-            <Box style={{ width: 56, height: 56, borderRadius: 10, background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
-              <Sprout size={28} color="var(--leaf-600)" strokeWidth={1.8} />
-            </Box>
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 'var(--radius-control)',
+                background: 'var(--color-action-secondary-bg)',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              <Icon icon={Sprout} size="lg" tone="brand" />
+            </div>
           )}
-        </Box>
-        <Box style={{ flex: 1, minWidth: 0 }}>
-          <Text size="small" bold style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.product.name}</Text>
-          <Box flex alignItems="center" style={{ gap: 6 }}>
-            <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>{formatVnd(g.unitPrice)}</Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', textDecoration: 'line-through' }}>{formatVnd(g.basePrice)}</Text>
-            <Text size="xSmall" bold style={{ color: 'var(--clay-700)' }}>−{g.discountPct}%</Text>
-          </Box>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Text
+            variant="body-sm"
+            as="div"
+            style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+          >
+            {g.product.name}
+          </Text>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Text variant="body-sm" tone="brand" style={{ fontWeight: 600 }}>{formatVnd(g.unitPrice)}</Text>
+            <Text variant="caption" tone="tertiary" style={{ textDecoration: 'line-through' }}>{formatVnd(g.basePrice)}</Text>
+            <Badge tone="promo" size="sm">−{g.discountPct}%</Badge>
+          </div>
+          <Text variant="caption" tone="tertiary" as="div">
             {g.currentSize}/{g.targetSize} người · {timeLeft(g.expiresAt)}
           </Text>
-        </Box>
-      </Box>
-      <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 6, marginTop: 8, overflow: 'hidden' }}>
-        <Box style={{ width: `${pct}%`, height: 6, background: 'var(--leaf-600)', borderRadius: 99 }} />
-      </Box>
-      <Button
-        fullWidth
-        size="small"
-        disabled={(authed && g.joined) || joining}
-        loading={joining}
-        onClick={onJoin}
-        style={{ marginTop: 10, background: !authed ? 'var(--leaf-600)' : g.joined ? 'var(--neutral-300)' : 'var(--leaf-600)' }}
-      >
+        </div>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <ProgressBar value={pct} max={100} />
+      </div>
+      <Button fullWidth disabled={authed && g.joined} loading={joining} onPress={onJoin} style={{ marginTop: 10 }}>
         {!authed ? 'Đăng nhập để tham gia' : g.joined ? 'Đã tham gia' : `Tham gia mua chung (−${g.discountPct}%)`}
       </Button>
-    </Box>
+    </Card>
   );
 }
