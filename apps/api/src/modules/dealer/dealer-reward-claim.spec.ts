@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestException, NotFoundException, RequestMethod } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -748,5 +748,100 @@ describe('DTO + phân quyền route', () => {
     expect(await validate(plainToInstance(RejectRewardClaimDto, { reason: 'Sai doanh số' }))).toHaveLength(0);
     expect((await validate(plainToInstance(ListRewardClaimsQuery, { status: 'HACKED' }))).some((e) => e.property === 'status')).toBe(true);
     expect(await validate(plainToInstance(ListRewardClaimsQuery, { status: 'PENDING', page: '2' }))).toHaveLength(0);
+  });
+});
+
+// C-040: đặc tả bản chép tay `notifyAdminsOfClaim` (qua claimReward) trước khi gom cùng hai bản
+// còn lại về một helper chung.
+describe('DealerService.claimReward — báo admin (đặc tả notifyAdminsOfClaim, C-040)', () => {
+  let warn: jest.SpyInstance;
+  beforeEach(() => {
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => warn.mockRestore());
+
+  const adminQueries = (prisma: PrismaService) =>
+    (prisma.user.findMany as jest.Mock).mock.calls.filter((c) => c[0]?.where?.role === 'ADMIN');
+
+  it('lấy tối đa 20 admin chưa bị khoá và tên/SĐT đại lý', async () => {
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const { prisma } = buildPrisma({ orders: [settled('o1', 60_000_000)] });
+    await new DealerService(prisma, makeConfig(), notifications as never).claimReward('d1', 'r1', {}, NOW_Q3);
+    expect(adminQueries(prisma)).toEqual([[{ where: { role: 'ADMIN', isBlocked: false }, select: { id: true }, take: 20 }]]);
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'd1' }, select: { fullName: true, phone: true } });
+  });
+
+  it('payload gửi MỌI admin: dealer, reward, period, volume vi-VN', async () => {
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const { prisma } = buildPrisma({ orders: [settled('o1', 60_000_000)], admins: [{ id: 'a1' }, { id: 'a2' }] });
+    await new DealerService(prisma, makeConfig(), notifications as never).claimReward('d1', 'r1', {}, NOW_Q3);
+    expect(notifications.notify).toHaveBeenCalledTimes(2);
+    for (const id of ['a1', 'a2']) {
+      expect(notifications.notify).toHaveBeenCalledWith(id, 'DEALER_REWARD_CLAIM_NEW', {
+        dealer: 'Đại lý A',
+        reward: 'Tour Đà Lạt',
+        period: 'Quý 3/2026',
+        volume: '60.000.000',
+      });
+    }
+  });
+
+  it.each([
+    ['không tên -> SĐT', { fullName: null, phone: '0900000001' }, '0900000001'],
+    ['không tên không SĐT -> userId', { fullName: null, phone: null }, 'd1'],
+    ['không tìm thấy đại lý -> userId', null, 'd1'],
+  ])('tên hiển thị: %s', async (_label, dealer, expected) => {
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const { prisma } = buildPrisma({ orders: [settled('o1', 60_000_000)] });
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue(dealer);
+    await new DealerService(prisma, makeConfig(), notifications as never).claimReward('d1', 'r1', {}, NOW_Q3);
+    expect(notifications.notify.mock.calls[0]![2]).toMatchObject({ dealer: expected });
+  });
+
+  it('không có admin -> không notify, cảnh báo kèm mã yêu cầu, claim vẫn lưu', async () => {
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const { prisma, claims } = buildPrisma({ orders: [settled('o1', 60_000_000)], admins: [] });
+    const res = await new DealerService(prisma, makeConfig(), notifications as never).claimReward('d1', 'r1', {}, NOW_Q3);
+    expect(res.claimStatus).toBe('PENDING');
+    expect(claims.rows).toHaveLength(1);
+    expect(notifications.notify).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/Không có tài khoản ADMIN.*c1/));
+  });
+
+  it('chưa wiring NotificationsService -> không truy vấn admin, cảnh báo, claim vẫn lưu', async () => {
+    const { prisma, claims } = buildPrisma({ orders: [settled('o1', 60_000_000)] });
+    const res = await new DealerService(prisma, makeConfig()).claimReward('d1', 'r1', {}, NOW_Q3);
+    expect(res.claimStatus).toBe('PENDING');
+    expect(claims.rows).toHaveLength(1);
+    expect(adminQueries(prisma)).toHaveLength(0);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/chưa wiring.*c1/));
+  });
+
+  it('một admin lỗi -> admin còn lại vẫn nhận, ghi cảnh báo "lỗi 1/2", claim vẫn lưu', async () => {
+    const notifications = {
+      notify: jest.fn(async (id: string) => {
+        if (id === 'a1') throw new Error('zns down');
+      }),
+    };
+    const { prisma, claims } = buildPrisma({ orders: [settled('o1', 60_000_000)], admins: [{ id: 'a1' }, { id: 'a2' }] });
+    const res = await new DealerService(prisma, makeConfig(), notifications as never).claimReward('d1', 'r1', {}, NOW_Q3);
+    expect(res.claimStatus).toBe('PENDING');
+    expect(claims.rows).toHaveLength(1);
+    expect(notifications.notify).toHaveBeenCalledWith('a2', 'DEALER_REWARD_CLAIM_NEW', expect.anything());
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/lỗi 1\/2/));
+  });
+
+  it('truy vấn admin lỗi -> claim vẫn lưu, ghi cảnh báo kèm nội dung lỗi', async () => {
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const { prisma, claims } = buildPrisma({ orders: [settled('o1', 60_000_000)] });
+    const original = (prisma.user.findMany as jest.Mock).getMockImplementation()!;
+    (prisma.user.findMany as jest.Mock).mockImplementation(async (args: { where: { role?: string } }) => {
+      if (args.where.role === 'ADMIN') throw new Error('db down');
+      return original(args);
+    });
+    const res = await new DealerService(prisma, makeConfig(), notifications as never).claimReward('d1', 'r1', {}, NOW_Q3);
+    expect(res.claimStatus).toBe('PENDING');
+    expect(claims.rows).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
   });
 });

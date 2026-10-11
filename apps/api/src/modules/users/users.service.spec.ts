@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { UsersService } from './users.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { NotificationsService } from '../notifications/notifications.service';
@@ -247,5 +247,92 @@ describe('UsersService.requestAccountDeletion', () => {
 
     expect(res.alreadyRequested).toBe(false);
     expect(notify).not.toHaveBeenCalled();
+  });
+});
+
+// C-040: đặc tả bản chép tay `notifyAdminsOfDeletionRequest` (qua requestAccountDeletion) trước khi
+// gom cùng hai bản của dealer về một helper chung.
+describe('UsersService.requestAccountDeletion — báo admin (đặc tả notifyAdminsOfDeletionRequest, C-040)', () => {
+  let warn: jest.SpyInstance;
+  beforeEach(() => {
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => warn.mockRestore());
+
+  function build(opts: {
+    admins?: { id: string }[];
+    user?: { id: string; fullName: string | null; phone: string | null };
+    notify?: jest.Mock;
+    wired?: boolean;
+  } = {}) {
+    const notify = opts.notify ?? jest.fn().mockResolvedValue(undefined);
+    const user = {
+      findUniqueOrThrow: jest.fn().mockResolvedValue(opts.user ?? { id: 'u1', fullName: 'Nguyễn Văn A', phone: '0900000000' }),
+      findMany: jest.fn().mockResolvedValue(opts.admins ?? [{ id: 'admin1' }]),
+    };
+    const prisma = {
+      accountDeletionRequest: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'req1', createdAt: new Date('2026-09-27T00:00:00Z') }),
+      },
+      user,
+    } as unknown as PrismaService;
+    const svc = new UsersService(prisma, opts.wired === false ? undefined : ({ notify } as unknown as NotificationsService));
+    return { svc, user, notify };
+  }
+
+  it('lấy tối đa 20 admin chưa bị khoá', async () => {
+    const { svc, user } = build();
+    await svc.requestAccountDeletion('u1');
+    expect(user.findMany).toHaveBeenCalledWith({ where: { role: 'ADMIN', isBlocked: false }, select: { id: true }, take: 20 });
+  });
+
+  it('payload gửi MỌI admin: user, phone', async () => {
+    const { svc, notify } = build({ admins: [{ id: 'a1' }, { id: 'a2' }] });
+    await svc.requestAccountDeletion('u1');
+    expect(notify).toHaveBeenCalledTimes(2);
+    for (const id of ['a1', 'a2']) {
+      expect(notify).toHaveBeenCalledWith(id, 'ACCOUNT_DELETION_REQUESTED', { user: 'Nguyễn Văn A', phone: '0900000000' });
+    }
+  });
+
+  it.each([
+    ['không tên -> SĐT', { id: 'u1', fullName: null, phone: '0900000000' }, { user: '0900000000', phone: '0900000000' }],
+    ['không tên không SĐT -> userId, phone rỗng', { id: 'u1', fullName: null, phone: null }, { user: 'u1', phone: '' }],
+  ])('tên hiển thị: %s', async (_label, user, expected) => {
+    const { svc, notify } = build({ user });
+    await svc.requestAccountDeletion('u1');
+    expect(notify).toHaveBeenCalledWith('admin1', 'ACCOUNT_DELETION_REQUESTED', expected);
+  });
+
+  it('không có admin -> không notify, cảnh báo, yêu cầu vẫn ghi nhận', async () => {
+    const { svc, notify } = build({ admins: [] });
+    await expect(svc.requestAccountDeletion('u1')).resolves.toMatchObject({ alreadyRequested: false });
+    expect(notify).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Không có tài khoản ADMIN'));
+  });
+
+  it('chưa wiring NotificationsService -> không truy vấn admin, cảnh báo kèm mã yêu cầu, vẫn ghi nhận', async () => {
+    const { svc, user } = build({ wired: false });
+    await expect(svc.requestAccountDeletion('u1')).resolves.toMatchObject({ alreadyRequested: false });
+    expect(user.findMany).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/chưa wiring.*req1/));
+  });
+
+  it('một admin lỗi -> admin còn lại vẫn nhận, ghi cảnh báo "lỗi 1/2", không throw', async () => {
+    const notify = jest.fn(async (id: string) => {
+      if (id === 'a1') throw new Error('zns down');
+    });
+    const { svc } = build({ admins: [{ id: 'a1' }, { id: 'a2' }], notify });
+    await expect(svc.requestAccountDeletion('u1')).resolves.toMatchObject({ alreadyRequested: false });
+    expect(notify).toHaveBeenCalledWith('a2', 'ACCOUNT_DELETION_REQUESTED', expect.anything());
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('lỗi 1/2'));
+  });
+
+  it('truy vấn admin lỗi -> vẫn ghi nhận, ghi cảnh báo kèm nội dung lỗi', async () => {
+    const { svc, user } = build();
+    user.findMany.mockRejectedValue(new Error('db down'));
+    await expect(svc.requestAccountDeletion('u1')).resolves.toMatchObject({ alreadyRequested: false });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
   });
 });

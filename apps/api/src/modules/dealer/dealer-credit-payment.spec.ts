@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestException, NotFoundException, RequestMethod } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -242,5 +242,104 @@ describe('DealerCreditAdminController (POST /api/admin/dealers/:userId/credit-pa
       plainToInstance(RecordDealerCreditPaymentDto, { amount: 1, bankRef: 'x'.repeat(101), note: 'y'.repeat(501) }),
     );
     expect(badLen.map((e) => e.property).sort()).toEqual(['bankRef', 'note']);
+  });
+});
+
+// C-040: đặc tả bản chép tay `notifyAdminsOfCreditReport` (qua reportCreditPayment) trước khi gom
+// cùng hai bản còn lại về một helper chung.
+describe('DealerService.reportCreditPayment — báo admin (đặc tả notifyAdminsOfCreditReport, C-040)', () => {
+  let warn: jest.SpyInstance;
+  beforeEach(() => {
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => warn.mockRestore());
+
+  function build(opts: {
+    admins?: { id: string }[];
+    dealer?: { fullName: string | null; phone: string | null } | null;
+    notify?: jest.Mock;
+    wired?: boolean;
+  } = {}) {
+    const notify = opts.notify ?? jest.fn().mockResolvedValue(undefined);
+    const user = {
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }),
+      findUnique: jest.fn().mockResolvedValue(opts.dealer === undefined ? { fullName: 'Cty A', phone: '0900000000' } : opts.dealer),
+      findMany: jest.fn().mockResolvedValue(opts.admins ?? [{ id: 'admin1' }]),
+    };
+    const prisma = {
+      user,
+      dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
+      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue([{ delta: 200_000 }]) },
+    } as unknown as PrismaService;
+    const svc = new DealerService(prisma, makeConfig(), opts.wired === false ? undefined : ({ notify } as never));
+    return { svc, user, notify };
+  }
+
+  it('lấy tối đa 20 admin chưa bị khoá và tên/SĐT đại lý', async () => {
+    const { svc, user } = build();
+    await svc.reportCreditPayment('d1', 50_000, 'CK');
+    expect(user.findMany).toHaveBeenCalledWith({ where: { role: 'ADMIN', isBlocked: false }, select: { id: true }, take: 20 });
+    expect(user.findUnique).toHaveBeenCalledWith({ where: { id: 'd1' }, select: { fullName: true, phone: true } });
+  });
+
+  it('payload gửi MỌI admin: dealer, amount vi-VN, note đã trim', async () => {
+    const { svc, notify } = build({ admins: [{ id: 'a1' }, { id: 'a2' }] });
+    await svc.reportCreditPayment('d1', 150_000, '  CK 9h  ');
+    expect(notify).toHaveBeenCalledTimes(2);
+    for (const id of ['a1', 'a2']) {
+      expect(notify).toHaveBeenCalledWith(id, 'DEALER_CREDIT_PAYMENT_REPORTED', {
+        dealer: 'Cty A',
+        amount: '150.000',
+        note: 'CK 9h',
+      });
+    }
+  });
+
+  it('không có note -> note rỗng', async () => {
+    const { svc, notify } = build();
+    await svc.reportCreditPayment('d1', 50_000);
+    expect(notify.mock.calls[0]![2]).toMatchObject({ note: '' });
+  });
+
+  it.each([
+    ['không tên -> SĐT', { fullName: null, phone: '0900000000' }, '0900000000'],
+    ['không tên không SĐT -> userId', { fullName: null, phone: null }, 'd1'],
+    ['tên rỗng -> SĐT', { fullName: '', phone: '0911111111' }, '0911111111'],
+    ['không tìm thấy đại lý -> userId', null, 'd1'],
+  ])('tên hiển thị: %s', async (_label, dealer, expected) => {
+    const { svc, notify } = build({ dealer });
+    await svc.reportCreditPayment('d1', 50_000);
+    expect(notify.mock.calls[0]![2]).toMatchObject({ dealer: expected });
+  });
+
+  it('không có admin -> không notify, cảnh báo, vẫn trả ok', async () => {
+    const { svc, notify } = build({ admins: [] });
+    await expect(svc.reportCreditPayment('d1', 50_000)).resolves.toMatchObject({ ok: true });
+    expect(notify).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Không có tài khoản ADMIN'));
+  });
+
+  it('chưa wiring NotificationsService -> không truy vấn admin, cảnh báo, vẫn trả ok', async () => {
+    const { svc, user } = build({ wired: false });
+    await expect(svc.reportCreditPayment('d1', 50_000)).resolves.toMatchObject({ ok: true });
+    expect(user.findMany).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('chưa wiring'));
+  });
+
+  it('một admin lỗi -> admin còn lại vẫn nhận, ghi cảnh báo "lỗi 1/2", không throw', async () => {
+    const notify = jest.fn(async (id: string) => {
+      if (id === 'a1') throw new Error('zns down');
+    });
+    const { svc } = build({ admins: [{ id: 'a1' }, { id: 'a2' }], notify });
+    await expect(svc.reportCreditPayment('d1', 50_000)).resolves.toMatchObject({ ok: true });
+    expect(notify).toHaveBeenCalledWith('a2', 'DEALER_CREDIT_PAYMENT_REPORTED', expect.anything());
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('lỗi 1/2'));
+  });
+
+  it('truy vấn admin lỗi -> reportCreditPayment vẫn trả ok, ghi cảnh báo kèm nội dung lỗi', async () => {
+    const { svc, user } = build();
+    user.findMany.mockRejectedValue(new Error('db down'));
+    await expect(svc.reportCreditPayment('d1', 50_000)).resolves.toMatchObject({ ok: true });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
   });
 });
