@@ -1,0 +1,35 @@
+/* Màu nhận diện từng nhãn (utils/brands.ts) và bản đồ gỗ ở pages/brand-story.tsx.
+ * Đây là màu thương hiệu/vùng miền, không thuộc palette DS v2 nên giữ hex tại đây và chỉ nơi này;
+ * .tsx/.ts tham chiếu bằng tên token. Tên --color-brand-* theo id nhãn trong utils/brands.ts. */
+:root {
+  /* Chấm/chip nhận diện nhãn. Cobote và Babycare đã chỉnh nhạt hơn màu gốc để làm chấm vẫn đủ tương phản. */
+  --color-brand-visante: #8b3a3a;
+  --color-brand-polang: #d4843e;
+  --color-brand-cobote: #c9b280;
+  --color-brand-fuwa3e: #e8b72c;
+  --color-brand-babycare: #7cc0db;
+  --color-brand-umikai: #6b8cae;
+  --color-brand-bhnong: #7a5c3a;
+  --color-brand-sokfram: #dca84a;
+  --color-brand-leplateau: #4a2c20;
+  --color-brand-moshav: #7a8b5c;
+  --color-brand-hector: #6b6b6b;
+
+  /* Hai đầu gradient ô nhãn ở Hành trình nguyên liệu (chữ trắng đặt trên nền này). */
+  --color-brand-fuwa3e-from: #fbc02d;
+  --color-brand-fuwa3e-to: #f57f17;
+  --color-brand-bhnong-from: #8d6e63;
+  --color-brand-bhnong-to: #4e342e;
+  --color-brand-polang-from: #fb8c00;
+  --color-brand-polang-to: #ef6c00;
+  --color-brand-visante-from: #26c6da;
+  --color-brand-visante-to: #00838f;
+  --color-brand-hector-from: #78909c;
+  --color-brand-hector-to: #37474f;
+  --color-brand-leplateau-from: #6d4c41;
+  --color-brand-leplateau-to: #3e2723;
+  --color-brand-cobote-from: #a1887f;
+  --color-brand-cobote-to: #5d4037;
+  --color-brand-sokfram-from: #42a5f5;
+  --color-brand-sokfram-to: #1565c0;
+}

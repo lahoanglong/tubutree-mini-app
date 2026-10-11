@@ -24,6 +24,9 @@ const FILES_PC10B = [
   'src/pages/storefront-builder.tsx',
 ];
 
+/** Chỉ kiểm icon chức năng: file lớn của gói khác, còn Box/Text ZaUI nên chưa vào FILES_PC10B. */
+const FILES_GLYPH_ONLY = ['src/pages/product-detail.tsx'];
+
 /** Còn Sheet/Input vì components/ui chưa có bản thay; Page/hook điều hướng và snackbar là của runtime. */
 const ZAUI_ALLOWED = new Set(['Page', 'Sheet', 'Input', 'useSnackbar', 'useNavigate', 'useLocation']);
 
@@ -134,7 +137,7 @@ describe('PC-10b — không có màu thô (hex/rgb/hsl)', () => {
 });
 
 describe('PC-10b — icon chức năng dùng Icon của DS, không dùng ký tự chữ', () => {
-  it.each(FILES_PC10B)('%s', (file) => {
+  it.each([...FILES_PC10B, ...FILES_GLYPH_ONLY])('%s', (file) => {
     expect(hits(read(file), FUNCTIONAL_GLYPH)).toEqual([]);
   });
 });

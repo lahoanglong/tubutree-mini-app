@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Box, Page, Text, useNavigate, useParams, useSnackbar, useLocation } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone } from 'lucide-react';
+import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check } from 'lucide-react';
 import {
   fetchProduct,
   fetchRelated,
@@ -26,7 +26,7 @@ import { trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { QuantitySelector } from '../components/ui/quantity-selector';
-import { brandAccent } from '../utils/brands';
+import { brandAccent, brandBrowsePath } from '../utils/brands';
 import { formatVnd, formatSold } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
@@ -43,6 +43,7 @@ import { Button } from '../components/ui/button';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { PriceTag } from '../components/ui/price-tag';
 import { Badge } from '../components/ui/badge';
+import { Icon } from '../components/ui/icon';
 import { ProductTile } from '../components/ui/product-tile';
 
 const LOW_STOCK_THRESHOLD = 5;
@@ -290,13 +291,25 @@ export default function ProductDetailPage() {
       {/* ── Info chính ── */}
       <Box p={4} style={{ background: 'var(--color-bg-surface)' }}>
         <Box flex alignItems="center" style={{ gap: 6 }}>
-          <span
-            aria-hidden
-            style={{ width: 8, height: 8, borderRadius: '50%', background: brandAccent(p.brand) }}
-          />
-          <Text size="xSmall" bold style={{ color: 'var(--color-text-secondary)' }}>
-            {p.brand}
-          </Text>
+          {/* Lọc theo tên nhãn đúng như catalog (p.brand), không phải slug: API so khớp chính xác tên. */}
+          <button
+            type="button"
+            className="tubu-press"
+            onClick={() => navigate(brandBrowsePath(p.brand))}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, minHeight: 44, padding: 0,
+              background: 'none', border: 'none', cursor: 'pointer', font: 'inherit',
+            }}
+          >
+            <span
+              aria-hidden
+              style={{ width: 8, height: 8, borderRadius: '50%', background: brandAccent(p.brand) }}
+            />
+            <Text size="xSmall" bold style={{ color: 'var(--color-text-secondary)' }}>
+              {p.brand}
+            </Text>
+            <Icon icon={ChevronRight} size="sm" tone="muted" />
+          </button>
           <Box style={{ marginLeft: 'auto' }}>
             <WishlistHeart productId={p.id} size={22} />
           </Box>
@@ -386,9 +399,13 @@ export default function ProductDetailPage() {
                   padding: '3px 10px',
                   borderRadius: 'var(--radius-pill)',
                   fontWeight: 500,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
                 }}
               >
-                ✓ {c}
+                <Icon icon={Check} size="sm" tone="brand" />
+                {c}
               </Text>
             ))}
           </Box>
@@ -623,7 +640,7 @@ export default function ProductDetailPage() {
         <Box flex flexDirection="column" style={{ gap: 6 }}>
           {['Hàng chính hãng — nguồn gốc rõ ràng', 'Đổi trả trong 7 ngày nếu lỗi', 'Sản phẩm xanh, an lành cho cả nhà'].map((t) => (
             <Box key={t} flex alignItems="center" style={{ gap: 8 }}>
-              <span style={{ color: 'var(--color-text-brand)', fontWeight: 700, flexShrink: 0 }}>✓</span>
+              <Icon icon={Check} size="sm" tone="brand" style={{ flexShrink: 0 }} />
               <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>{t}</Text>
             </Box>
           ))}

@@ -1,26 +1,40 @@
+import '../css/brand-theme.css';
+
 /**
- * Brand accent colors theo Design Brief §4.2 — dùng cho chip/tag/brand carousel.
- * Key chuẩn hóa: lowercase, bỏ dấu cách. Brand lạ → fallback primary.
+ * Màu nhận diện nhãn theo Design Brief §4.2 — dùng cho chip/tag/brand carousel.
+ * Giá trị nằm ở css/brand-theme.css (--color-brand-<id>); module này nạp file đó để mọi nơi gọi
+ * brandAccent (thẻ sản phẩm, PDP) đều có token mà không phụ thuộc trang nào đã import.
+ * Key chuẩn hóa: lowercase, bỏ dấu cách. Brand lạ → màu hành động chính.
  */
-const BRAND_ACCENTS: Record<string, string> = {
-  visante: '#8B3A3A',
-  polang: '#D4843E',
-  'pơlang': '#D4843E',
-  cobote: '#C9B280', // chỉnh từ #E8D9B5 để đạt contrast khi làm dot
-  fuwa3e: '#E8B72C',
-  babycare: '#7CC0DB', // chỉnh từ #A8D8E8 cùng lý do contrast
-  umikai: '#6B8CAE',
-  'bh.nong': '#7A5C3A',
-  bhnong: '#7A5C3A',
-  sokfram: '#DCA84A',
-  'leplateau': '#4A2C20',
-  'leplateaucoffee': '#4A2C20',
-  themoshav: '#7A8B5C',
-  moshav: '#7A8B5C',
-  hector: '#6B6B6B',
+const BRAND_IDS: Record<string, string> = {
+  visante: 'visante',
+  polang: 'polang',
+  'pơlang': 'polang',
+  cobote: 'cobote',
+  fuwa3e: 'fuwa3e',
+  babycare: 'babycare',
+  umikai: 'umikai',
+  'bh.nong': 'bhnong',
+  bhnong: 'bhnong',
+  sokfram: 'sokfram',
+  leplateau: 'leplateau',
+  leplateaucoffee: 'leplateau',
+  themoshav: 'moshav',
+  moshav: 'moshav',
+  hector: 'hector',
 };
 
 export function brandAccent(brand: string): string {
-  const key = brand.toLowerCase().replace(/\s+/g, '');
-  return BRAND_ACCENTS[key] ?? 'var(--primary-600)';
+  const id = BRAND_IDS[brand.normalize('NFC').toLowerCase().replace(/\s+/g, '')];
+  return id ? `var(--color-brand-${id})` : 'var(--color-action-primary-bg)';
+}
+
+/**
+ * Danh sách sản phẩm của một nhãn. API `/products?brand=` so khớp CHÍNH XÁC chuỗi `products.brand`
+ * (không phải slug, không phân biệt gì khác tên hiển thị), nên truyền tên đúng như catalog: "Le Plateau"
+ * hay "Sokfarm" cho danh sách rỗng vì catalog ghi "Le Plateau Coffee" và "Sokfram".
+ */
+export function brandBrowsePath(catalogBrand: string): string {
+  const name = catalogBrand.trim();
+  return name ? `/browse?brand=${encodeURIComponent(name)}` : '/browse';
 }

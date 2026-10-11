@@ -1,113 +1,11 @@
 import { useState } from 'react';
 import { Box, Page, Text, Sheet, Button, useNavigate } from 'zmp-ui';
 import { haptic } from '../utils/haptic';
-
-interface BrandLocation {
-  id: string;
-  brand: string;
-  province: string;
-  emoji: string;
-  color: string;
-  gradient: string;
-  ingredient: string;
-  story: string;
-  /** Vị trí pin trên bản đồ (% so với khung bản đồ). */
-  pin: { top: string; left: string };
-}
-
-const BRAND_LOCATIONS: BrandLocation[] = [
-  {
-    id: 'fuwa3e',
-    brand: 'Fuwa3e',
-    province: 'Thanh Hóa',
-    emoji: '🍍',
-    color: '#E8B72C',
-    gradient: 'linear-gradient(135deg, #fbc02d, #f57f17)',
-    ingredient: 'Enzyme vỏ dứa & bồ hòn',
-    story: 'Fuwa3e tận dụng nguồn vỏ dứa hữu cơ Thanh Hóa lên men sinh học cùng quả bồ hòn, làm nên dòng sản phẩm nước rửa chén, nước giặt lành tính cho cả gia đình và dòng nước.',
-    pin: { top: '30%', left: '44%' },
-  },
-  {
-    id: 'bhnong',
-    brand: 'BH.Nong',
-    province: 'Quảng Nam',
-    emoji: '🍯',
-    color: '#7A5C3A',
-    gradient: 'linear-gradient(135deg, #8d6e63, #4e342e)',
-    ingredient: 'Mật ong rừng & trà thảo mộc',
-    story: 'BH.Nong sinh ra từ núi rừng Quảng Nam, mang đến mật ong rừng nguyên chất và các dòng trà thảo mộc thanh nhiệt đậm vị thiên nhiên.',
-    pin: { top: '48%', left: '62%' },
-  },
-  {
-    id: 'polang',
-    brand: 'Pơ Lang',
-    province: 'Đắc Lắk',
-    emoji: '🥑',
-    color: '#D4843E',
-    gradient: 'linear-gradient(135deg, #fb8c00, #ef6c00)',
-    ingredient: 'Bơ ca cao & dầu gừng bazan',
-    story: 'Pơ Lang khai thác nông sản bazan Đắk Lắk — bơ ca cao ép lạnh, dầu gừng, bồ kết — làm nên sản phẩm chăm sóc da và tóc thuần thực vật.',
-    pin: { top: '61%', left: '55%' },
-  },
-  {
-    id: 'visante',
-    brand: 'Visante',
-    province: 'Khánh Hòa (Nha Trang)',
-    emoji: '🌊',
-    color: '#8B3A3A',
-    gradient: 'linear-gradient(135deg, #26c6da, #00838f)',
-    ingredient: 'Muối khoáng & rong biển',
-    story: 'Visante tận dụng tinh chất muối khoáng & rong biển Nha Trang (Khánh Hòa) phục hồi dịu nhẹ cho làn da nhạy cảm.',
-    pin: { top: '67%', left: '68%' },
-  },
-  {
-    id: 'hector',
-    brand: 'Hector',
-    province: 'Lâm Đồng',
-    emoji: '🍄',
-    color: '#6B6B6B',
-    gradient: 'linear-gradient(135deg, #78909c, #37474f)',
-    ingredient: 'Đông trùng hạ thảo',
-    story: 'Hector nghiên cứu và nuôi trồng đông trùng hạ thảo tại khí hậu ôn hòa Lâm Đồng, cung cấp dòng nước uống bổ dưỡng và chăm sóc sức khỏe toàn diện.',
-    pin: { top: '73%', left: '58%' },
-  },
-  {
-    id: 'leplateau',
-    brand: 'Le Plateau',
-    province: 'Lâm Đồng (Cầu Đất)',
-    emoji: '☕',
-    color: '#4A2C20',
-    gradient: 'linear-gradient(135deg, #6d4c41, #3e2723)',
-    ingredient: 'Cà phê đặc sản Cầu Đất',
-    story: 'Le Plateau Coffee tuyển chọn từng hạt cà phê Arabica Cầu Đất & Robusta Honey chưng cất hương vị đậm đà từ vùng cao nguyên mây phủ.',
-    pin: { top: '77%', left: '51%' },
-  },
-  {
-    id: 'cobote',
-    brand: 'Cobote',
-    province: 'Bến Tre',
-    emoji: '🥥',
-    color: '#C9B280',
-    gradient: 'linear-gradient(135deg, #a1887f, #5d4037)',
-    ingredient: 'Dầu dừa hữu cơ Bến Tre',
-    story: 'Cobote tận dụng vương quốc dừa Bến Tre cho dòng dầu dừa ép lạnh và sản phẩm dưỡng da, dưỡng tóc lành tính cho mẹ và bé.',
-    pin: { top: '83%', left: '46%' },
-  },
-  {
-    id: 'sokfarm',
-    brand: 'Sokfarm',
-    province: 'Trà Vinh',
-    emoji: '🌴',
-    color: '#DCA84A',
-    gradient: 'linear-gradient(135deg, #42a5f5, #1565c0)',
-    ingredient: 'Mật hoa dừa hữu cơ',
-    story: 'Sokfarm Trà Vinh tiên phong thu hoạch mật hoa dừa thủ công từ hoa dừa, cô đặc thành mật hoa dừa chỉ số đường huyết thấp, giàu khoáng chất.',
-    pin: { top: '86%', left: '40%' },
-  },
-];
+import { BRAND_ORIGINS, type BrandOrigin } from '../utils/brand-origins';
+import { brandBrowsePath } from '../utils/brands';
 
 export default function BrandStoryPage() {
-  const [selected, setSelected] = useState<BrandLocation | null>(null);
+  const [selected, setSelected] = useState<BrandOrigin | null>(null);
 
   return (
     <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 32 }}>
@@ -132,7 +30,7 @@ export default function BrandStoryPage() {
       </Box>
 
       <Box px={4} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, paddingBottom: 24 }}>
-        {BRAND_LOCATIONS.map((loc) => (
+        {BRAND_ORIGINS.map((loc) => (
           <Box
             key={loc.id}
             className="tubu-press"
@@ -182,7 +80,7 @@ export default function BrandStoryPage() {
               <Text style={{ color: 'var(--neutral-800)', lineHeight: 1.6 }}>
                 {selected.story}
               </Text>
-              <BrowseButton brand={selected.brand} onGo={() => setSelected(null)} />
+              <BrowseButton brand={selected.brand} catalogBrand={selected.catalogBrand} onGo={() => setSelected(null)} />
             </Box>
           </Box>
         )}
@@ -192,7 +90,7 @@ export default function BrandStoryPage() {
 }
 
 /** Bản đồ Gỗ 3D Đa khối Tỉnh/Thành Việt Nam có đèn LED hắt sáng + 8 Pin Thương hiệu + Hoàng Sa & Trường Sa */
-function IngredientMap({ onPick }: { onPick: (loc: BrandLocation) => void }) {
+function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
   return (
     <Box px={4}>
       <Box
@@ -470,7 +368,7 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandLocation) => void }) {
         </svg>
 
         {/* 8 Interactive Floating Sleek Brand Pins Overlaid on the 3D Map */}
-        {BRAND_LOCATIONS.map((loc) => (
+        {BRAND_ORIGINS.map((loc) => (
           <Box
             key={loc.id}
             role="button"
@@ -528,7 +426,7 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandLocation) => void }) {
   );
 }
 
-function BrowseButton({ brand, onGo }: { brand: string; onGo: () => void }) {
+function BrowseButton({ brand, catalogBrand, onGo }: { brand: string; catalogBrand: string; onGo: () => void }) {
   const navigate = useNavigate();
   if (!brand) return null;
   return (
@@ -536,7 +434,7 @@ function BrowseButton({ brand, onGo }: { brand: string; onGo: () => void }) {
       fullWidth
       onClick={() => {
         onGo();
-        navigate(`/browse?brand=${encodeURIComponent(brand)}`);
+        navigate(brandBrowsePath(catalogBrand));
       }}
       style={{ marginTop: 16, background: 'var(--leaf-600)' }}
     >
