@@ -414,3 +414,164 @@ npx eslint <39 file .ts đổi ở L2>   0 lỗi
 - Duyệt các mức mặc định trên: OQ-1, OQ-6, OQ-7, OQ-9, OQ-11. Đổi mức nào thì chỉ sửa config hoặc hằng số, không cần migration.
 - Trần cứng 2000 điểm/lần cấp bằng mốc CTV cao nhất. Nâng mốc thì phải nâng `POINTS_GRANT_HARD_MAX` cùng lúc.
 - Dòng `REFERRAL_DEBT` (delta 0) ở sổ điểm là danh sách nợ do người mời đã tiêu điểm thưởng trước khi đơn bị trả. Hiện chưa có quy trình thu. Cần quyết: bỏ qua, hay trừ vào lần thưởng sau.
+
+## Lượt L3 — Checkout hai lô, hoàn đúng lô, đơn XU cũ, game/ví bỏ xu, migration C (spec mục 9, 2.3, 2.5, 5, 6)
+
+Nhánh `hz9/PD-3`, DB test riêng `tubu_it_pd3` cổng 5583. Không chạm PROD, không gọi dịch vụ ngoài.
+
+### Các mục
+
+| Mục | Trạng thái | Ghi chú | Commit |
+|---|---|---|---|
+| Chia điểm dùng theo lô `(s, c)` (`PricingService.resolvePointsRedemptionByLot`) | XONG | s = phần STANDARD, chịu trần `loyalty.max_redeem_pct`. c = phần CONVERTED, không trần %, phủ tới giá trị hàng, không phủ phí ship và phần lẻ < 1.000đ. | 8b42ca00 |
+| Checkout tiêu hai lô, ghi `orders.pointsUsedConverted` | XONG | Có FOR UPDATE dòng user. STANDARD: guard `gte dùng + khoá` như cũ, ghi `ORDER_REDEEM:<code>` lot STANDARD. CONVERTED: `applyPointsDelta`, ghi `ORDER_REDEEM_CONVERTED:<code>`; thiếu điểm → 400 và rollback cả đơn. Quote trả thêm `pointsUsedConverted`, `pointsConvertedBalance`, `redeemableConvertedPoints`. | a8399898 |
+| Bỏ phương thức thanh toán XU | XONG | `XU` bị bỏ khỏi `CHECKOUT_PAYMENT_METHODS`, nên DTO trả 400. Service vẫn chặn 400 phòng khi DTO bị nới. | a8399898 |
+| Đơn 0đ ép COD | XONG | `total === 0` → COD, CONFIRMED, UNPAID. Gửi lại cùng idempotency key vẫn nhận lại đơn cũ. | a8399898 |
+| Hoàn điểm về đúng lô (`reverseOrderPoints`) | XONG | STANDARD → `ORDER_REFUND_POINTS` (như cũ). CONVERTED → `ORDER_REFUND_CONVERTED`, `expiresAt NULL`. Đơn cũ có `pointsUsedConverted = 0` hoàn như trước. `getOverview` trả hai lô. | a2e0825a |
+| Đơn XU cũ huỷ/trả hoàn điểm quy đổi | XONG | Hoàn `ceil(total/1000)` điểm lô CONVERTED, reason `ORDER_REFUND_XU:<code>`, có skipDuplicates. Không cộng xu, không vào Ví, `moneyRefunded = true`. | 390f07f5, a3f48609 |
+| Admin duyệt trả đơn XU cũ: lời báo khách | XONG (ngoài nhóm, tối thiểu) | Gửi `RETURN_APPROVED_NO_REFUND`. Mẫu `RETURN_APPROVED` ghi "Tiền đã hoàn vào Ví Tubu", sai với đơn XU vì điểm vào Điểm Xanh. | 3bf63f20 |
+| Game: bỏ mở lô vườn bằng xu | XONG | `unlockPlot(..., 'XU')` → 410. `nextUnlock` không còn `xuCost`. | 5a7da559 |
+| Game: góp quỹ trồng cây 50 điểm | XONG | `game.tree_points_price` mặc định 50. Tiêu STANDARD trước, thiếu thì lấy CONVERTED, dưới FOR UPDATE. Reason `GAME_BUY_TREE:<cert>`, refType GAME. | 5a7da559 |
+| Ví → xu trả 410 | XONG | `POST /wallet/convert-xu` và `GET /me/coins` trả 410. `getWallet` bỏ `coinsBalance`/`xuConvertMultiplier`. `CoinsService` bị xoá. | 0ca3675f |
+| Khoá xu game/ví vào DEAD | XONG | `game.tree_xu_price`, `game.plot_unlock_xu_base`, `game.xu_per_seed`, `wallet.xu_convert_multiplier`. Gỡ `PENDING_L3_XU_KEYS` trong T16. | 0ca3675f |
+| Gộp phiên khách và xoá tài khoản không còn đụng xu | XONG | `mergeGuestInto` không chuyển `coinsBalance`. Bỏ chặn xoá tài khoản theo xu; chặn theo điểm quy đổi (OQ-14) đã có từ L1/L2. | d4fe300a |
+| Migration C: đóng băng xu | XONG | CHECK `users_coins_frozen` (`"coinsBalance" = 0`), thêm sau khi mọi đường ghi xu đã gỡ. | ef3733dc |
+| Bằng chứng grep | XONG | Xem dưới. | — |
+| Race T6, T8–T12, T17, T18 | XONG | T8/T9/T18 là unit theo spec. T10, T11, T6, T17, T18 chạy trên Postgres thật. T12 là test khoá, xanh ngay từ đầu. | 8b42ca00 … 4b708d88 |
+
+Bằng chứng grep (chạy ở HEAD, không tính file test):
+
+```
+$ grep -rnE "coinsBalance.*(increment|decrement)|spendCoins|grantCoins|CoinsService" apps/api/src --include='*.ts' | grep -v "\.spec\.ts"
+(rỗng)
+$ grep -rn "coinsBalance" apps/api/src --include='*.ts' | grep -v "\.spec\.ts"
+apps/api/src/modules/auth/auth.service.ts:628:      coinsBalance: user.coinsBalance,
+apps/api/src/modules/users/account-deletion.service.ts:36:  coinsBalance: number;
+apps/api/src/modules/users/account-deletion.service.ts:76:        coinsBalance: true,
+```
+
+Ba dòng còn lại chỉ ĐỌC (AuthUser và danh sách xoá tài khoản ở admin). Lượt L4 gỡ chúng cùng UI. Trong file test chỉ còn chú thích nhắc tên `CoinsService`. Ở DB, CHECK `users_coins_frozen` chặn mọi ghi khác 0.
+
+### Migration
+
+- `20261012130000_pd3_freeze_coins`:
+  ```sql
+  DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                    WHERE conname = 'users_coins_frozen' AND conrelid = '"users"'::regclass) THEN
+      ALTER TABLE "users" ADD CONSTRAINT "users_coins_frozen" CHECK ("coinsBalance" = 0);
+    END IF;
+  END $$;
+  ```
+  - Migration chỉ thêm, chạy lại được.
+  - Nếu còn user có `coinsBalance <> 0`, ALTER thất bại và deploy dừng. Lúc đó phải chạy lại migration B (quy đổi) trước. Lỗi này là cố ý, theo OQ-13.
+- Kiểm trên DB test:
+  - `prisma migrate status`: "Database schema is up to date!"
+  - `prisma migrate diff ... --exit-code`: "No difference detected." (exit 0)
+  - `check-partial-indexes.ts`: "Partial unique index: mong đợi 20, có trong DB 20."
+- Sự cố trên DB test (không phải PROD): 16 user do các race spec cũ để lại có `coinsBalance` 8/11/1200/72000/48000. Chúng chặn migration C. Đã chạy `UPDATE users SET "coinsBalance" = 0 WHERE "coinsBalance" <> 0` chỉ trên `tubu_it_pd3`, rồi mới `migrate deploy`.
+  - Trên PROD, migration B quy đổi hết xu về 0 trong cùng lần deploy, nên C áp được.
+  - Nếu C lỗi trên PROD thì có nghĩa B chưa chạy hoặc có ghi xu chen giữa. Không được tự đặt về 0.
+
+### Test thêm (đỏ -> xanh), output thật
+
+| Phần | Đỏ | Xanh |
+|---|---|---|
+| `pricing.service.spec.ts` T8/T9 | 7 failed (`resolvePointsRedemptionByLot is not a function`) | 20 passed |
+| `checkout.service.spec.ts` + `dto/checkout.dto.spec.ts` (T8/T9/T18, 0đ → COD, replay) | 75 failed | 92 passed |
+| `loyalty.service.spec.ts`: hoàn theo lô, overview hai lô | 3 + 1 failed. T12 (khoá) xanh từ đầu | 165 passed |
+| `order-reversal.service.spec.ts`: đơn XU cũ → điểm CONVERTED | 6 failed | 36 passed |
+| `orders.service.spec.ts` (ngoài nhóm) | 1 failed | 238 passed |
+| `game*.spec.ts` (410 mở lô xu, quỹ cây 50 điểm hai lô) | output đỏ không lưu | 188 passed |
+| `points-unit-guard.spec.ts` (T16 khoá DEAD) | 2 failed | xanh |
+| `auth.service.spec.ts` (gộp khách không chuyển xu) | 1 failed | 54 passed |
+| `admin.service.spec.ts` (ngoài nhóm, phát hiện khi chạy module lân cận) | 2 failed (`Cannot read properties of undefined (reading 'createManyAndReturn')`), rồi 1 failed (lời báo) | 196 passed |
+| `pd3-xu-migration.race-spec.ts` T17 | ENOENT (chưa có migration). Với SQL lọc theo tên của spec: 3 failed (`Expected: 1 Received: 0`) | 15 passed |
+| `pd3-order-reversal.race-spec.ts` T10/T11 (mới) | Đột biến: đặt `usedConverted = 0` và bỏ `skipDuplicates` → 3 failed (`Expected: 500 Received: 620`; `Received length: 3` lỗi P2002) | 6 passed |
+| `pd3-checkout-points.race-spec.ts` T6 (mới) | Đột biến: bỏ guard `gte` trong `applyPointsDelta` → 1 failed. Lớp CHECK `users_points_converted_nonneg` chặn số âm nhưng lỗi thành 500 thay vì 400 | 3 passed |
+| `wallet-ledger-flows.race-spec.ts` T18 (5 lần đổi Ví → xu song song → 410) | — | 8 passed |
+
+Output race T6/T10/T11 lần xanh:
+
+```
+[T6a] fulfilled=2 rejected=3 errors=["BadRequestException: Số Điểm Xanh không hết hạn của bạn đã thay đổi (đơn này cần 100 điểm). Vui lòng tải lại trang thanh toán."]
+[T6b] fulfilled=5 rejected=6 errors=["BadRequestException: Số điểm Xanh không đủ (hiện có 0 điểm).","BadRequestException: Cần 10 điểm Xanh để quay."]
+[T10] fulfilled=5 rejected=0 errors=[]
+[T11] fulfilled=5 rejected=0 errors=[]
+```
+
+Ý nghĩa từng ca:
+- T6a: 5 đơn chạy song song, mỗi đơn cần 100 điểm lô CONVERTED, số dư 250. Kết quả đúng 2 đơn, lô còn 50.
+- T6b: một đơn tiêu hai lô chạy chồng với quay ×5, đổi voucher ×3, quỹ cây ×2. Không lô nào âm, quay và voucher chỉ ghi lô STANDARD.
+- T6c: 6 lượt góp quỹ cây, có 100 STANDARD + 120 CONVERTED. Đúng 4 lượt, còn 0/20.
+- T10: 2 lần khách huỷ và 3 lần `reverseOrderPoints` chạy đồng thời. Hoàn đúng 30 STANDARD và 120 CONVERTED, mỗi lô 1 dòng.
+- T11: đơn XU 123.456đ → +124 CONVERTED. Ví = 0, xu = 0. Huỷ chạy song song với `reverseFinancials` chỉ hoàn 1 lần. Lật lại PAID rồi đảo ×3 vẫn chỉ có 1 dòng.
+
+Sau mỗi ca, `findPointsLotDrift` trả rỗng.
+
+### Chạy lại cuối lượt (HEAD)
+
+```
+npx jest src/modules/{checkout,pricing,loyalty,orders,game,wallet,system-config,auth,users,cashback} --maxWorkers=1   Test Suites: 52 passed; Tests: 978 passed
+npx jest src/modules/{admin,affiliate,integrations,storefront} --maxWorkers=1   Test Suites: 40 passed; Tests: 749 passed
+npx tsc --noEmit -p tsconfig.json   exit 0
+npx tsc -p <scratch>/tsconfig.pd3-race.json (src + spec + test/integration-race, types jest)   exit 0, 0 dòng lỗi
+npx eslint <45 file .ts đổi ở L3>   0 lỗi (1 cảnh báo có sẵn: affiliate.race-spec.ts:87 eslint-disable thừa)
+Race, mỗi file chạy riêng (--runInBand):
+pd3-points-lots 6, pd3-xu-migration 15, pd3-order-reversal 6, pd3-checkout-points 3, order-cancel 2,
+wallet-ledger-flows 8, wallet-reconcile 2, sellable-product 27, auth-merge-guest 11, account-deletion 13,
+affiliate 1, referral-order2 27, ctv-assisted-refund 10, commission-create 4, ctv-notifications 4,
+game-spin-limit 2, p2002-in-tx 10, admin-confirm-payment 4, address-subscription 7, admin-lookups 5,
+admin-invoice 4, admin-order-search 3, cod-return-refund 3, dealer-bonus 4, buy-flow-4a 5,
+my-coupons-query 2, loyalty 5, pancake-paid-status 4, pd3-reward-sources 6, subscription-duplicate 8,
+pending-payment-expiry 8, subscription-cycle-payment 15  — tất cả passed, 0 failed
+```
+
+### Khác spec (chọn phương án an toàn tiền hơn)
+
+- **Migration C kiểm constraint theo cả bảng (`conrelid`), không chỉ theo tên.** SQL của spec chỉ lọc `conname`. Nếu một schema khác cùng DB đã có constraint trùng tên, bảng `users` của schema đích sẽ không được khoá. Race spec T17 trên schema nháp đã đỏ đúng chỗ này.
+- **Đơn 0đ ép COD có `paymentStatus = UNPAID`** như mọi đơn COD. Không có tiền thật nào được thu. Gửi lại cùng idempotency key với `paymentMethod` gốc khác COD vẫn trả đơn cũ, không báo "đổi phương thức".
+- **`CoinsService` bị xoá hẳn.** Spec L2 nói giữ lại để đọc lịch sử, nhưng sau L3 không còn chỗ nào gọi nó. `GET /me/coins` trả 410 thẳng từ controller. Lịch sử `coin_transactions` vẫn còn nguyên trong DB.
+- **`UnlockPlotDto` vẫn nhận `'XU'`.** Nhờ vậy client cũ gửi XU nhận 410 kèm lời giải thích, thay vì 400 validation. Spec ghi DTO chỉ nhận SEEDS.
+- **Đơn XU cũ lên hộ CTV (`placedForCustomer`)**: hoàn điểm cho chủ đơn và log lỗi để kiểm tay. Luồng lên hộ chưa từng nhận XU, nên trường hợp này không nên xảy ra.
+- **Góp quỹ cây không trừ phần điểm đang khoá (`lockedOrderPoints`)**, giống vòng quay hiện tại. Spec không nói rõ chỗ này.
+- **Admin duyệt trả đơn XU (ngoài nhóm, `admin.service.ts`)** gửi mẫu trung tính `RETURN_APPROVED_NO_REFUND`. Mẫu "Tiền đã hoàn vào Ví Tubu" là sai với đơn XU. Chưa thêm mẫu mới, vì mẫu tin thuộc L5.
+- File ngoài nhóm đã sửa, đều ở mức tối thiểu:
+  - `orders.service.spec.ts`, `admin.service(.spec).ts`, `auth.service(.spec).ts`, `account-deletion.service.ts`, `prisma/seed.ts`, `tier-perks-seed.spec.ts`: theo thay đổi xu, nếu không sửa thì test đỏ hoặc vẫn còn đường ghi xu.
+  - Chú thích ở `cashback.module.ts` và `reward-points.service.ts`.
+  - Các race spec đang provide `CoinsService` hoặc mock `resolvePointsRedemption` (sellable-product, affiliate, referral-order2, ctv-assisted-refund, commission-create, ctv-notifications, wallet-ledger-flows, wallet-reconcile, auth-merge-guest, account-deletion).
+- Commit từ e00e37d0 trở đi ghi `Co-Authored-By: Claude Opus 5.5`, theo hướng dẫn ghi công mới của hệ thống. Các commit trước ghi Sonnet 5.5 như đề bài.
+
+### Giả định
+
+- Điểm (cả lô quy đổi) chỉ trừ vào giá trị hàng. Không trừ phí ship, phần lẻ < 1.000đ khách tự trả (OQ-2).
+- Lô quy đổi không dùng cho vòng quay, đổi voucher và mở lô vườn (OQ-3). T6b kiểm phần này.
+- Bỏ mở lô vườn bằng xu (OQ-4). Góp quỹ cây giá 50 điểm, STANDARD trước (OQ-5).
+- Đơn XU cũ hoàn `ceil(total/1000)` lô quy đổi, không về Ví (OQ-8).
+- `loyalty.vnd_per_point_redeem` khoá 1.000 (OQ-11). Công thức `(s, c)` dựa vào điều này.
+- Xoá tài khoản bị chặn khi còn điểm quy đổi (OQ-14), đã có từ trước.
+
+### Việc còn lại cho các lượt sau
+
+- **L4 (UI, bắt buộc deploy cùng API L3).** Miniapp vẫn:
+  - gọi `getCoins` (`/me/coins`, nay 410) và `convertToXu` ở `pages/wallet.tsx:7,44`
+  - hiện phương thức XU ở `pages/checkout.tsx:295-302` và `utils/checkout-rules.ts`
+  
+  Deploy API L3 mà chưa có L4 thì trang Ví lỗi phần xu, và khách chọn XU nhận 400. Cần:
+  - hiện hai lô (`pointsConvertedBalance`, `redeemableConvertedPoints` từ quote)
+  - bỏ XU khỏi checkout
+  - bỏ màn đổi xu
+  - gỡ `coinsBalance` khỏi AuthUser (`auth.service.ts:628`) và khỏi danh sách xoá tài khoản ở admin
+- **L5 (mẫu tin):**
+  - Mẫu `CASHBACK_PAID` (seed.ts:684) vẫn mời "Đổi sang TubuXu để nhận thêm 20%", trong khi tính năng đã 410.
+  - Cần mẫu riêng cho "đã hoàn N Điểm Xanh" khi trả đơn XU, thay cho mẫu trung tính.
+  - Thông báo quy đổi xu (OQ-10).
+- Lời báo "đã hoàn N Điểm Xanh" khi huỷ chưa tách theo lô (L5).
+
+### Việc cần chủ dự án
+
+- Duyệt các mặc định của lượt này: OQ-2 (không trừ ship, khách trả phần lẻ < 1.000đ), OQ-3, OQ-4, OQ-5 (50 điểm/cây), OQ-8 (`ceil`, khách lời ≤ 999đ/đơn XU cũ), OQ-11, OQ-14.
+- **Thứ tự deploy:** migration A → B → C và API L3 phải đi cùng UI L4. Migration C sẽ dừng deploy nếu còn ai có xu ≠ 0. Không tự đặt xu về 0 trên PROD; phải chạy B (quy đổi có sổ) rồi mới C.
+- Duyệt lời báo khách khi admin duyệt trả đơn XU cũ: hiện dùng mẫu trung tính "Yêu cầu đổi/trả đơn … đã được duyệt." Theo luật làm việc, lời báo khách cần reviewer Opus xem trước khi merge.
+- Mẫu `CASHBACK_PAID` đang quảng cáo đổi Ví sang TubuXu, tính năng đã ngừng. Cần sửa nội dung trên DB PROD, vì seed không ghi đè mẫu đã có.
+- Toàn bộ lượt L3 đụng tiền trả trước của khách: cần review đối kháng (reviewer) trước khi merge.
