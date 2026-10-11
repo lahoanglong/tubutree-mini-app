@@ -72,3 +72,68 @@ $ npx vitest run src/ds-c076-pc10a.spec.ts src/pages/loyalty-layout.spec.tsx src
 1. `apps/e2e/tests/loyalty.miniapp.spec.ts` (dòng ~125, ~176, ~193) chọn hộp thoại bằng `.tubu-pop` rồi `filter({ hasText })`; sau di cư các hộp là bottom sheet của ZaUI nên selector này không còn khớp. Đổi sang chọn theo tiêu đề sheet (`getByRole('heading', { name: 'Xác nhận đổi ưu đãi' })` và nút trong sheet đó). Cùng file có `modal.getByText('-50 Xanh')` đã lệch từ trước (UI in "-50 điểm Xanh" từ khi thêm đơn vị ở C-083) nên e2e này cần được sửa tay, tôi không chạy được Playwright.
 2. `scripts/check-undefined-css-vars.mjs`: nếu muốn cho phép token riêng theo trang (`css/<tên>.css`, như quy ước của lô C3), cần thêm các file đó vào `DEFINITION_FILES` (hoặc quét `apps/miniapp/src/css/*.css`). Tôi không sửa vì ngoài nhóm file và nhiều gói song song sẽ sửa cùng dòng.
 3. Hai nút điểm danh (Điểm Xanh ở đây, giọt nước ở Vườn) vẫn tách ở hai trang: dòng chú thích trong thẻ điểm danh đã nói rõ "giọt nước Vườn Xanh điểm danh riêng trong Vườn Cây". Phần gộp trình bày thuộc C-082 trên `game.tsx` (lượt khác).
+
+## Mục 2/4 — C-082 bước 1: test đặc tả + chia khối `pages/game.tsx` (refactor thuần)
+
+Trạng thái: XONG phần "bước 1". CHƯA làm: điều hướng nội bộ (SegmentedTabs/neo), di cư DS v2 cho `game.tsx` và `components/game/**`, `wheel.tsx`, `rank-badge.tsx` (các bước sau của gói).
+
+### Số đo trước → sau
+
+| Chỉ số | Trước | Sau |
+|---|---|---|
+| `pages/game.tsx` số dòng | 1.266 | 416 (còn: truy vấn, mutation, trạng thái quiz/thu hoạch, ghép khối) |
+| `components/game/*` | không có | 22 file, 1.240 dòng |
+| ESLint `pages/game.tsx` | 3 lỗi (Button ZaUI, 2 rgba thô) | exit 0 (do nút đăng nhập và lớp phủ rgba đã chuyển vào `components/game/`) |
+| static-scan `pages/game.tsx` legacy/hex/emoji | 163 / 0 / 90 | 5 / 0 / 7 |
+| static-scan `components/game/**` legacy/hex/emoji | - | 152 / 0 / 83 (mã chuyển nguyên văn, chưa di cư; tổng 157 thay vì 163 vì hai lối tắt và hai bảng xếp hạng dùng chung một component) |
+
+Số legacy/emoji chưa giảm là đúng yêu cầu bước này ("chưa đổi giao diện"); di cư DS v2 ở bước sau phải thêm `game.tsx` và `components/game/**` vào `FILES_PC10A` của `ds-c076-pc10a.spec.ts` TRƯỚC khi sửa.
+
+### Test đặc tả (`pages/game-behavior.spec.tsx`, 71 test)
+
+Viết và chạy XANH trên bản cũ trước khi tách (commit `2301440`), vẫn 71/71 xanh sau từng commit tách. Chỉ truy vấn theo role/chữ. Phủ: trạng thái trang (đang khôi phục phiên, chưa đăng nhập, lỗi hồ sơ + Thử lại), thẻ vườn + giai đoạn cây, lối tắt `/feed` `/refill`, banner mùa; điểm danh (bật/tắt theo ngày giờ VN, hôm kia vẫn bật, lỗi, 7 ô ngày với chu kỳ `streakDays % 7`), hứng sương, vé giữ lửa (giá mặc định 80), hồi sinh chuỗi (chỉ làm mới hồ sơ), cảnh báo héo/chết; tưới cây (`waterTree(20)`, khoá khi đang gửi, làm mới đủ khoá), hộp thu hoạch (mã, chứng nhận, loài, chép mã thành công/thất bại, "Dùng mã giảm giá ngay" → `/browse`), mua cây thật (giá xu, làm mới rừng + ví); lô đất (loại lô nhà, tưới đúng id, chỉ khoá lô đang tưới, mở lô SEEDS/XU cùng khoá, đủ lô); Chặng Mùa (nút free/premium/khoá, `claimSeasonPass(tier, track)`); cộng đồng, sổ tay, tặng nước (chỉ khoá đúng người), tác động xanh + rừng (tối đa 5); vòng quay (`cost=10`, `spin`, lỗi ném lại); quiz (đánh số câu, reveal, khoá đáp án, Hoàn thành); nhiệm vụ (nút nhận chỉ khi đạt và chưa nhận, `CHECKIN_7` theo chuỗi, mục tiêu mặc định); hai bảng xếp hạng (bục 2-1-3). Kiểm tra mọi `queryKey` được làm mới sau từng mutation.
+
+Kiểm tra spec có răng: đổi thử 6 điều kiện trong `game.tsx` cũ (bỏ `checkedInToday` khỏi `disabled` nút điểm danh, bỏ `dewCollectedToday`, bỏ `premiumEligible` khỏi nút Premium, `waterTree(20)` → `10`, `canClaim = isDone`, bỏ `giftedToday`) — cả 6 đều làm đúng 1 test ĐỎ; đã khôi phục file nguyên trạng.
+
+### Bằng chứng không đổi hành vi
+
+Ngoài test: dựng tạm bản `game.tsx` cũ (`git show 2301440:...`) cạnh bản mới, cùng dữ liệu giả đầy đủ mọi khối (lô đất, Chặng Mùa, sổ tay, bạn bè, rừng 7 cây, quiz 2 câu, 3 nhiệm vụ, hai bảng xếp hạng, hồ sơ héo + hồi sinh), so `container.innerHTML` ở 3 thời điểm (lúc tải xong; sau khi trả lời quiz; sau khi thu hoạch mở hộp chúc mừng): GIỐNG HỆT từng byte (33.992 / 34.826 / 37.128 ký tự). File tạm đã xoá, không commit.
+
+### Cấu trúc `components/game/`
+
+`game-utils.ts` (isSameVNDay, nhãn quiz/hiếm), `game-card.tsx` (GameCard, thay `Card` cục bộ), `garden-hero`, `game-link-row` (dùng cho Bảng tin + Đổi vỏ chai), `season-banner`, `tree-health-alert`, `checkin-streak` (điểm danh + 7 ô + vé giữ lửa + hứng sương), `streak-repair`, `tree-actions` (tưới + mua cây), `garden-plots`, `season-pass`, `community-goal`, `species-codex`, `friend-gifts`, `eco-impact` (+EcoStat), `lucky-wheel-card`, `quiz-card` (+QuizBlock), `missions-card`, `season-leaderboard`, `weekly-leaderboard`, `harvest-celebration`, `game-states` (skeleton + cổng đăng nhập).
+
+Nguyên tắc: mọi `useQuery`/`useMutation`, trạng thái quiz (`answeredIds`, `reveal`) và trạng thái thu hoạch ở lại trang; khối chỉ nhận props (dữ liệu + `xxxPending` + `xxxVariables` + callback) và giữ nguyên biểu thức `disabled`/`loading` cũ. Việc này để bước sau (tab/neo) có thể ẩn-hiện khối mà không mất trạng thái.
+
+### Commit (mỗi nhóm khối một commit, test xanh sau từng commit)
+
+`2301440` test đặc tả → `fa36274` đầu trang (thẻ vườn, 2 lối tắt, banner mùa, cảnh báo cây) → `5b301fe` điểm danh/hồi sinh/tưới-mua cây → `bc84c88` lô đất/Chặng Mùa/cộng đồng/sổ tay → `c32046a` tặng nước/tác động xanh/vòng quay/quiz/nhiệm vụ → `44b8eac` hai bảng xếp hạng + hộp thu hoạch → `063f4e8` skeleton/cổng đăng nhập + khối điểm danh tự suy cờ ngày từ hồ sơ.
+
+### Lệnh kiểm chứng (output thật)
+
+```
+$ npx tsc --noEmit                     -> exit 0
+$ npx eslint src/pages/game.tsx src/pages/game-behavior.spec.tsx src/components/game  -> exit 0, không output
+$ npx vitest run src/pages/game-behavior.spec.tsx src/pages/game-numbers.spec.tsx src/pages/format-guard.spec.ts \
+    src/components/ui/button-guard.spec.ts src/components/ui/hit-target-guard.spec.tsx src/i18n/terminology.spec.ts \
+    src/ds-c076-pc10a.spec.ts src/ds-legacy-vars-4a.spec.ts src/ds-legacy-vars-4b.spec.ts src/pages/loyalty-behavior.spec.tsx
+ Test Files  10 passed (10)
+      Tests  210 passed (210)
+$ node scripts/check-undefined-css-vars.mjs  -> OK — every var(--x) reference is defined.
+```
+
+### Giả định
+
+1. "Chưa đổi giao diện" nên `components/game/**` giữ nguyên `Box/Text/Button` ZaUI, alias legacy và emoji; ESLint chỉ chặn ZaUI `Button` và rgba thô trong `pages/`, nên các file này qua ESLint nhưng sẽ không qua guard di cư. `game.tsx` đạt ESLint 0 chỉ vì hai thứ đó đã chuyển vào component.
+2. `CheckInStreak` nhận cả `profile` và tự suy `checkedInToday`/`dewCollectedToday` (cùng biểu thức `isSameVNDay(profile?.lastXxxAt ?? null)` như cũ) để trang ngắn hơn; test đặc tả xác nhận không đổi.
+3. `game.tsx` còn 416 dòng, hơi trên mốc "~400": phần còn lại là 11 truy vấn + 12 mutation + trạng thái quiz/thu hoạch. Nếu cần thấp hơn, bước sau có thể gom truy vấn/mutation vào hook (đã có test đặc tả che chắn).
+4. Không có hai nút điểm danh trong `game.tsx`: trang Vườn chỉ có điểm danh giọt nước (`checkIn`); điểm danh Điểm Xanh nằm ở `loyalty.tsx`. Khi làm điều hướng nội bộ (bước 2) chỉ cần giữ nhãn rõ "Điểm danh nhận giọt nước" cạnh hành động chính; không cần gộp API.
+
+### Ghi nhận, không sửa (không thuộc commit di cư)
+
+- Trang Vườn không có `busyRef` như `loyalty.tsx`: hai lần chạm đồng bộ trong cùng một tick gọi API hai lần vì `isPending` của react-query tới React chậm một nhịp (đã thử bằng `fireEvent.click` hai lần liên tiếp: `checkIn`, `collectDew`, `buyStreakFreeze`, `repairStreak`, `waterTree`, `buyTree`, `claimSeasonPass`, `answerQuiz`, `claimMission` đều bị gọi 2 lần). Người dùng thật khó chạm hai lần trong < 1 frame, và nút khoá ngay sau đó (đã có test "chạm lần 2 khi đang gửi không gọi lại"), nhưng các thao tác tiêu xu (`buyTree`, `unlockPlot('XU')`) nên được server chặn trùng; nếu chưa, nên thêm khoá `useRef` ở trang giống `loyalty.tsx`. Thuộc quyết định của điều phối viên vì đụng nhánh tiền/giọt nước (cần review opus).
+
+### Đề xuất cho điều phối viên
+
+1. Bước sau của gói (điều hướng nội bộ + di cư DS v2) nên mở bằng việc thêm `pages/game.tsx` và `components/game/**` vào `FILES_PC10A`, chạy ĐỎ, rồi di cư từng file; test `game-behavior.spec.tsx` truy vấn chữ emoji (🚿 Tưới cây (20💧), 💦 Hứng giọt sương, ✅ Đã điểm danh...) nên khi đổi emoji chức năng sang `Icon` cần cập nhật các tên nút trong spec cùng commit (đây là thay đổi trình bày có chủ đích, không phải đổi hành vi).
+2. Phần gốc e2e (`apps/e2e`) chọn trang Vườn theo chữ; DOM không đổi nên không cần sửa ở bước này.
