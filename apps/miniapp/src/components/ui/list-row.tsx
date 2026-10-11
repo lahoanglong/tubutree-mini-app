@@ -18,8 +18,8 @@ export interface ListRowProps {
 
 /** Dòng trong danh sách cài đặt/menu: icon + tiêu đề + mô tả + phần bên phải.
  *
- * `onClick` giờ nằm trên NGUYÊN HÀNG (`role="button"`), không chỉ vùng chữ như bản cũ ở
- * primitives.tsx — bản cũ áp hiệu ứng nhấn `tubu-press` cho cả hàng nhưng chỉ gắn `onClick` vào
+ * `onClick` giờ nằm trên NGUYÊN HÀNG (`role="button"`), không chỉ vùng chữ như bản `Row` cũ
+ * (đã xoá) — bản cũ áp hiệu ứng nhấn `tubu-press` cho cả hàng nhưng chỉ gắn `onClick` vào
  * `Box` bọc tiêu đề, nên chạm vào icon/khoảng trống/chevron bên phải không có phản hồi gì
  * (audit A4-07). */
 export function ListRow({ icon, title, subtitle, trailing, onPress, destructive, className, style }: ListRowProps) {
