@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
-import { Box, Text, Input } from 'zmp-ui';
-import { Camera, Loader2, RefreshCw } from 'lucide-react';
+import { useRef, useState, type CSSProperties } from 'react';
+import { Input } from 'zmp-ui';
+import { Camera, Loader2, RefreshCw, Video, X } from 'lucide-react';
 import { haptic } from '../utils/haptic';
+import { Text } from './ui/text';
 
 const CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string | undefined;
 const PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string | undefined;
@@ -10,6 +11,19 @@ const CONFIGURED = Boolean(CLOUD && PRESET);
 /** Chặn ảnh gốc quá lớn TRƯỚC khi đưa vào canvas nén — ảnh vài chục MB (panorama, RAW export...)
  * có thể treo/crash webview khi drawImage/toDataURL. VideoUpload đã có guard tương tự (50MB). */
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
+/** Nút văn bản có vùng chạm 44px (chữ nhỏ vẫn phải bấm dễ). */
+const LINK_BUTTON: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  minHeight: 44,
+  padding: 0,
+  border: 'none',
+  background: 'none',
+  font: 'inherit',
+  cursor: 'pointer',
+};
 
 /**
  * Nén ảnh client-side bằng HTMLCanvasElement + FileReader.
@@ -130,19 +144,23 @@ export function ImageUpload({
   };
 
   return (
-    <Box style={{ marginBottom: 12 }}>
+    <div style={{ marginBottom: 12 }}>
       {label && (
-        <Text size="xSmall" bold style={{ marginBottom: 4 }}>
+        <Text variant="label" as="div" style={{ marginBottom: 4 }}>
           {label}
         </Text>
       )}
       <input ref={inputRef} type="file" accept="image/*" hidden onChange={onFile} />
-      <Box
+      <button
+        type="button"
         className="tubu-press"
         onClick={pick}
         style={{
-          border: '1.5px dashed var(--neutral-300)',
-          borderRadius: 'var(--radius-md)',
+          width: '100%',
+          font: 'inherit',
+          color: 'inherit',
+          border: '1.5px dashed var(--color-border-default)',
+          borderRadius: 'var(--radius-control)',
           padding: value ? 0 : 16,
           textAlign: 'center',
           overflow: 'hidden',
@@ -150,42 +168,38 @@ export function ImageUpload({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'var(--neutral-50)',
+          background: 'var(--color-bg-canvas)',
           cursor: 'pointer',
         }}
       >
         {uploading ? (
-          <Text size="small" style={{ color: 'var(--neutral-500)' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <Loader2 size={14} className="animate-spin" />
-              Đang tải ảnh…
-            </span>
+          <Text variant="body-sm" tone="tertiary" as="span" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Loader2 size={14} className="animate-spin" />
+            Đang tải ảnh…
           </Text>
         ) : value ? (
           <img src={value} alt={label || 'preview'} style={{ width: '100%', maxHeight: 180, objectFit: 'cover', display: 'block' }} />
         ) : (
-          <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <Camera size={15} />
-              Chạm để tải ảnh lên
-            </span>
+          <Text variant="body-sm" tone="brand" as="span" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+            <Camera size={15} />
+            Chạm để tải ảnh lên
           </Text>
         )}
-      </Box>
+      </button>
       {value && !uploading && (
-        <Text size="xSmall" onClick={pick} style={{ color: 'var(--leaf-700)', marginTop: 4, cursor: 'pointer' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <button type="button" onClick={pick} style={{ ...LINK_BUTTON, marginTop: 4, color: 'var(--color-text-brand)' }}>
+          <Text variant="caption" tone="brand" as="span" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <RefreshCw size={12} />
             Đổi ảnh khác
-          </span>
-        </Text>
+          </Text>
+        </button>
       )}
       {error && (
-        <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 4 }}>
+        <Text variant="caption" tone="danger" as="div" style={{ marginTop: 4 }}>
           {error}
         </Text>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -243,38 +257,56 @@ export function VideoUpload({
 
   if (!CONFIGURED) {
     return (
-      <Box style={{ marginTop: 8 }}>
+      <div style={{ marginTop: 8 }}>
         <Input label="Video review (không bắt buộc)" placeholder="Dán URL video" value={value} onChange={(e) => onChange(e.target.value)} />
-      </Box>
+      </div>
     );
   }
 
   return (
-    <Box style={{ marginTop: 8 }}>
+    <div style={{ marginTop: 8 }}>
       <input ref={inputRef} type="file" accept="video/*" hidden onChange={onFile} />
       {value ? (
-        <Box>
-          <video src={value} controls style={{ width: '100%', maxHeight: 200, borderRadius: 'var(--radius-md)', background: '#000' }} />
-          <Box flex style={{ gap: 12, marginTop: 4 }}>
-            <Text size="xSmall" onClick={pick} style={{ color: 'var(--primary-700)' }}>Đổi video</Text>
-            <Text size="xSmall" onClick={() => onChange('')} style={{ color: 'var(--danger)' }}>Xóa video</Text>
-          </Box>
-        </Box>
+        <div>
+          <video src={value} controls style={{ width: '100%', maxHeight: 200, borderRadius: 'var(--radius-control)', background: 'var(--color-bg-inverse)' }} />
+          <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
+            <button type="button" onClick={pick} style={LINK_BUTTON}>
+              <Text variant="caption" tone="brand" as="span">Đổi video</Text>
+            </button>
+            <button type="button" onClick={() => onChange('')} style={LINK_BUTTON}>
+              <Text variant="caption" tone="danger" as="span">Xóa video</Text>
+            </button>
+          </div>
+        </div>
       ) : (
-        <Box
+        <button
+          type="button"
           className="tubu-press"
           onClick={pick}
-          style={{ border: '1.5px dashed var(--neutral-200)', borderRadius: 'var(--radius-md)', padding: 14, textAlign: 'center' }}
+          style={{
+            width: '100%',
+            font: 'inherit',
+            color: 'inherit',
+            border: '1.5px dashed var(--color-border-subtle)',
+            borderRadius: 'var(--radius-control)',
+            padding: 14,
+            textAlign: 'center',
+            background: 'none',
+            cursor: 'pointer',
+          }}
         >
-          <Text size="small" style={{ color: 'var(--primary-700)' }}>
-            {uploading ? 'Đang tải video…' : `🎬 Quay/đăng video review (≤ ${maxSeconds}s)`}
+          <Text variant="body-sm" tone="brand" as="span" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Video size={16} aria-hidden />
+            {uploading ? 'Đang tải video…' : `Quay/đăng video review (≤ ${maxSeconds}s)`}
           </Text>
-        </Box>
+        </button>
       )}
       {error && (
-        <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 4 }}>{error}</Text>
+        <Text variant="caption" tone="danger" as="div" style={{ marginTop: 4 }}>
+          {error}
+        </Text>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -352,31 +384,34 @@ export function MultiImageUpload({
   };
 
   return (
-    <Box style={{ marginTop: 14, marginBottom: 14 }}>
+    <div style={{ marginTop: 14, marginBottom: 14 }}>
       {label && (
-        <Text size="xSmall" bold style={{ color: 'var(--neutral-700)', marginBottom: 6 }}>
+        <Text variant="label" as="div" tone="secondary" style={{ marginBottom: 6 }}>
           {label} ({value.length}/{max})
         </Text>
       )}
       <input ref={inputRef} type="file" accept="image/*" multiple hidden onChange={onFile} />
 
-      <Box flex style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         {value.map((url, idx) => (
-          <Box
+          <div
             key={idx}
             style={{
               position: 'relative',
               width: 72,
               height: 72,
-              borderRadius: 'var(--radius-md)',
-              overflow: 'hidden',
-              boxShadow: 'var(--shadow-xs)',
-              border: '1px solid var(--neutral-200)',
+              borderRadius: 'var(--radius-control)',
+              boxShadow: 'var(--elevation-1)',
+              border: '1px solid var(--color-border-subtle)',
             }}
           >
-            <img src={url} alt={`upload-${idx}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            <Box
-              role="button"
+            <div style={{ width: '100%', height: '100%', overflow: 'hidden', borderRadius: 'var(--radius-control)' }}>
+              <img src={url} alt={`upload-${idx}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
+            {/* Vùng chạm 44px nằm gọn trong ô 72px (ô kế tiếp cách 10px, lấn ra là chạm nhầm ảnh bên cạnh);
+                vòng 20px nhìn thấy vẫn cách góc 3px. */}
+            <button
+              type="button"
               aria-label="Xóa ảnh"
               onClick={() => {
                 haptic('light');
@@ -384,56 +419,72 @@ export function MultiImageUpload({
               }}
               style={{
                 position: 'absolute',
-                top: 3,
-                right: 3,
-                width: 20,
-                height: 20,
-                borderRadius: '50%',
-                background: 'rgba(0,0,0,0.65)',
-                color: 'var(--neutral-0)',
-                fontSize: 12,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                top: 0,
+                right: 0,
+                width: 44,
+                height: 44,
+                padding: 0,
+                border: 'none',
+                background: 'none',
                 cursor: 'pointer',
               }}
             >
-              ✕
-            </Box>
-          </Box>
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 3,
+                  right: 3,
+                  width: 20,
+                  height: 20,
+                  borderRadius: '50%',
+                  background: 'var(--color-bg-scrim)',
+                  color: 'var(--color-text-inverse)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <X size={12} aria-hidden />
+              </span>
+            </button>
+          </div>
         ))}
 
         {value.length < max && (
-          <Box
+          <button
+            type="button"
             className="tubu-press"
             onClick={pick}
             style={{
               width: 72,
               height: 72,
-              borderRadius: 'var(--radius-md)',
-              border: '1.5px dashed var(--leaf-400)',
-              background: 'var(--leaf-50)',
+              borderRadius: 'var(--radius-control)',
+              border: '1.5px dashed var(--color-border-selected)',
+              background: 'var(--color-bg-subtle)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
               gap: 2,
+              padding: 0,
+              font: 'inherit',
+              color: 'inherit',
             }}
           >
-            <Camera size={22} color="var(--leaf-700)" strokeWidth={1.8} />
-            <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', fontSize: 9.5 }}>
+            <Camera size={22} color="var(--color-text-brand)" strokeWidth={1.8} />
+            <Text variant="label" tone="brand" as="span">
               {uploading ? 'Đang tải…' : 'Chạm để tải'}
             </Text>
-          </Box>
+          </button>
         )}
-      </Box>
+      </div>
 
       {error && (
-        <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 4 }}>
+        <Text variant="caption" tone="danger" as="div" style={{ marginTop: 4 }}>
           {error}
         </Text>
       )}
-    </Box>
+    </div>
   );
 }

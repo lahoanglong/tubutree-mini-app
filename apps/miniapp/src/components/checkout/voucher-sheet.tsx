@@ -1,12 +1,18 @@
 import { useState } from 'react';
-import { Box, Sheet, Text, Input, Button, useSnackbar } from 'zmp-ui';
+import { Input, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Ticket, X } from 'lucide-react';
+import { Ticket, TriangleAlert } from 'lucide-react';
 import { getCoupons, type CouponDTO } from '../../services/account-api';
 import { applyCoupon, removeCoupon } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';
 import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
+import { Badge } from '../ui/badge';
+import { BottomSheet } from '../ui/bottom-sheet';
+import { Button } from '../ui/button';
+import { EmptyState, ErrorState } from '../ui/empty-state';
+import { Skeleton } from '../ui/skeleton';
+import { Text } from '../ui/text';
 
 export interface VoucherSheetProps {
   visible: boolean;
@@ -60,6 +66,8 @@ export function VoucherSheet({
   });
 
   const isAnyMutating = applyMut.isPending || removeMut.isPending;
+  // Spinner của "Áp dụng" chỉ quay khi chính mã tay đang được áp; mã bấm từ danh sách thì khoá nút này.
+  const applyingCustom = applyMut.isPending && applyMut.variables === customCode.trim().toUpperCase();
 
   const formatCouponDesc = (coupon: CouponDTO) => {
     if (coupon.type === 'PERCENT') {
@@ -81,67 +89,30 @@ export function VoucherSheet({
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} autoHeight mask style={{ zIndex: 1000 }}>
-      <Box p={4} style={{ paddingBottom: 'calc(20px + var(--safe-bottom))', maxHeight: '80vh', overflowY: 'auto' }}>
-        {/* Header */}
-        <Box flex alignItems="center" justifyContent="space-between" mb={3}>
-          <Box>
-            <Text bold size="normal" style={{ color: 'var(--neutral-900)' }}>
-              Chọn mã giảm giá
-            </Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
-              Mỗi đơn hàng chỉ áp dụng 1 mã giảm giá
-            </Text>
-          </Box>
-          <button
-            type="button"
-            aria-label="Đóng"
-            className="tubu-press"
-            onClick={onClose}
-            style={{
-              width: 44,
-              height: 44,
-              border: 'none',
-              background: 'transparent',
-              display: 'grid',
-              placeItems: 'center',
-              cursor: 'pointer',
-              padding: 0,
-            }}
-          >
-            {/* Nút vuông 44px (vùng chạm); chỉ vòng tròn 32px bên trong là phần nhìn thấy. */}
-            <span
-              aria-hidden
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                background: 'var(--neutral-100)',
-                display: 'grid',
-                placeItems: 'center',
-              }}
-            >
-              <X size={18} color="var(--neutral-600)" />
-            </span>
-          </button>
-        </Box>
-
+    <BottomSheet
+      open={visible}
+      onClose={onClose}
+      title="Chọn mã giảm giá"
+      description="Mỗi đơn hàng chỉ áp dụng 1 mã giảm giá"
+    >
+      <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
         {/* Section 1: Nhập mã thủ công (Phía trên) */}
-        <Box
-          p={3}
+        <div
           style={{
-            background: 'var(--neutral-50)',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--neutral-200)',
+            padding: 12,
+            background: 'var(--color-bg-canvas)',
+            borderRadius: 'var(--radius-card)',
+            border: '1px solid var(--color-border-subtle)',
             marginBottom: 16,
           }}
         >
-          <Text size="xSmall" bold style={{ color: 'var(--neutral-600)', marginBottom: 8, display: 'block' }}>
+          <Text variant="label" tone="secondary" as="h3" style={{ marginBottom: 8 }}>
             Nhập mã giảm giá khác
           </Text>
-          <Box flex style={{ gap: 8 }}>
-            <Box style={{ flex: 1 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}>
               <Input
+                aria-label="Nhập mã giảm giá khác"
                 placeholder="Ví dụ: WELCOME, TUBUSALE..."
                 value={customCode}
                 onChange={(e) => setCustomCode(e.target.value)}
@@ -152,159 +123,134 @@ export function VoucherSheet({
                   }
                 }}
               />
-            </Box>
+            </div>
             <Button
-              size="small"
-              disabled={!customCode.trim() || isAnyMutating}
-              loading={applyMut.isPending}
-              onClick={handleApplyCustom}
-              style={{
-                background: customCode.trim() && !isAnyMutating ? 'var(--primary-600)' : undefined,
-                minHeight: 44,
-                fontWeight: 600,
-              }}
+              disabled={!customCode.trim() || removeMut.isPending || (applyMut.isPending && !applyingCustom)}
+              loading={applyingCustom}
+              onPress={handleApplyCustom}
             >
               Áp dụng
             </Button>
-          </Box>
-        </Box>
+          </div>
+        </div>
 
         {/* Section 2: Mã giảm giá có sẵn (Phía dưới) */}
-        <Box>
-          <Text size="xSmall" bold style={{ color: 'var(--neutral-600)', marginBottom: 10, display: 'block' }}>
+        <div>
+          <Text variant="label" tone="secondary" as="h3" style={{ marginBottom: 10 }}>
             Mã giảm giá của bạn
           </Text>
 
           {couponsQ.isLoading ? (
-            <Text size="small" style={{ color: 'var(--neutral-400)', textAlign: 'center', padding: '16px 0' }}>
-              Đang tải danh sách mã...
-            </Text>
+            <div role="status" aria-label="Đang tải danh sách mã" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Skeleton height={72} radius="var(--radius-card)" />
+              <Skeleton height={72} radius="var(--radius-card)" />
+            </div>
           ) : couponsQ.isError ? (
-            <Box style={{ textAlign: 'center', padding: '20px 16px', background: 'var(--neutral-50)', borderRadius: 'var(--radius-lg)' }}>
-              <Text size="small" style={{ color: 'var(--danger)', marginBottom: 8, display: 'block' }}>
-                ⚠ Không thể tải danh sách mã giảm giá: {getErrorMessage(couponsQ.error)}
-              </Text>
-              <Button size="small" variant="secondary" onClick={() => void couponsQ.refetch()} style={{ minHeight: 44 }}>
-                Thử lại
-              </Button>
-            </Box>
+            <ErrorState
+              variant="inline"
+              message={`Không thể tải danh sách mã giảm giá: ${getErrorMessage(couponsQ.error)}`}
+              onRetry={() => void couponsQ.refetch()}
+            />
           ) : couponsQ.data && couponsQ.data.length > 0 ? (
-            <Box flex flexDirection="column" style={{ gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {couponsQ.data.map((coupon) => {
                 const isApplied = currentCode?.toUpperCase() === coupon.code.toUpperCase();
                 const notEligible = coupon.minOrder != null && subtotal < coupon.minOrder;
                 const endAtDate = coupon.endAt ? new Date(coupon.endAt) : null;
                 const endAtText = endAtDate && !isNaN(endAtDate.getTime()) ? endAtDate.toLocaleDateString('vi-VN') : 'Không thời hạn';
+                const applyingThis = applyMut.isPending && applyMut.variables === coupon.code;
 
                 return (
-                  <Box
+                  <div
                     key={coupon.code}
-                    p={3}
-                    flex
-                    alignItems="center"
                     style={{
+                      padding: 12,
+                      display: 'flex',
+                      alignItems: 'center',
                       gap: 12,
-                      background: isApplied ? 'var(--clay-50)' : 'var(--neutral-0)',
-                      border: `1px ${isApplied ? 'solid' : 'dashed'} ${isApplied ? 'var(--clay-500)' : 'var(--neutral-300)'}`,
-                      borderRadius: 'var(--radius-lg)',
+                      background: isApplied ? 'var(--color-promo-bg)' : 'var(--color-bg-surface)',
+                      border: `1px ${isApplied ? 'solid' : 'dashed'} ${isApplied ? 'var(--color-promo-solid-bg)' : 'var(--color-border-default)'}`,
+                      borderRadius: 'var(--radius-card)',
                       opacity: notEligible ? 0.55 : 1,
                     }}
                   >
-                    <Box
+                    <div
                       style={{
                         width: 42,
                         height: 42,
-                        borderRadius: 'var(--radius-md)',
-                        background: 'var(--clay-50)',
+                        borderRadius: 'var(--radius-control)',
+                        background: 'var(--color-promo-bg)',
                         display: 'grid',
                         placeItems: 'center',
                         flex: '0 0 auto',
                       }}
                     >
-                      <Ticket size={22} color="var(--clay-700)" />
-                    </Box>
+                      <Ticket size={22} color="var(--color-promo-fg)" aria-hidden />
+                    </div>
 
-                    <Box style={{ flex: 1, minWidth: 0 }}>
-                      <Box flex alignItems="center" style={{ gap: 6 }}>
-                        <Text size="small" bold style={{ color: 'var(--neutral-900)' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Text variant="body-sm" style={{ fontWeight: 600 }}>
                           {coupon.code}
                         </Text>
                         {isApplied && (
-                          <span
-                            style={{
-                              background: 'var(--clay-500)',
-                              color: 'var(--neutral-0)',
-                              borderRadius: 'var(--radius-full)',
-                              padding: '1px 6px',
-                              fontSize: 10,
-                              fontWeight: 700,
-                            }}
-                          >
+                          <Badge size="sm" style={{ background: 'var(--color-promo-solid-bg)', color: 'var(--color-promo-solid-fg)' }}>
                             Đang dùng
-                          </span>
+                          </Badge>
                         )}
-                      </Box>
-                      <Text size="xSmall" style={{ color: 'var(--neutral-700)', marginTop: 2 }}>
+                      </div>
+                      <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
                         {formatCouponDesc(coupon)}
                       </Text>
                       {coupon.minOrder != null && (
-                        <Text size="xSmall" style={{ color: notEligible ? 'var(--warning)' : 'var(--neutral-400)', marginTop: 2 }}>
+                        <Text variant="caption" tone={notEligible ? 'warning' : 'tertiary'} as="div" style={{ marginTop: 2 }}>
+                          {notEligible && <TriangleAlert size={12} aria-hidden style={{ verticalAlign: -2, marginRight: 4 }} />}
                           {notEligible
-                            ? `⚠ Cần đơn tối thiểu ${formatVnd(coupon.minOrder)}`
+                            ? `Cần đơn tối thiểu ${formatVnd(coupon.minOrder)}`
                             : `Đơn tối thiểu ${formatVnd(coupon.minOrder)}`}
                         </Text>
                       )}
-                      <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+                      <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
                         HSD: {endAtText}
                       </Text>
-                    </Box>
+                    </div>
 
-                    <Box style={{ flex: '0 0 auto' }}>
+                    <div style={{ flex: '0 0 auto' }}>
                       {isApplied ? (
                         <Button
-                          size="small"
                           variant="secondary"
-                          disabled={isAnyMutating}
+                          disabled={applyMut.isPending}
                           loading={removeMut.isPending}
-                          onClick={() => removeMut.mutate()}
-                          style={{ minHeight: 44, fontSize: 12, borderColor: 'var(--neutral-300)' }}
+                          onPress={() => removeMut.mutate()}
+                          style={{ minWidth: 0 }}
                         >
                           Bỏ dùng
                         </Button>
                       ) : (
                         <Button
-                          size="small"
-                          disabled={notEligible || isAnyMutating}
-                          loading={applyMut.isPending && applyMut.variables === coupon.code}
-                          onClick={() => applyMut.mutate(coupon.code)}
-                          style={{
-                            background: notEligible || isAnyMutating ? undefined : 'var(--primary-600)',
-                            minHeight: 44,
-                            fontSize: 12,
-                            fontWeight: 600,
-                          }}
+                          disabled={notEligible || removeMut.isPending || (applyMut.isPending && !applyingThis)}
+                          loading={applyingThis}
+                          onPress={() => applyMut.mutate(coupon.code)}
+                          style={{ minWidth: 0 }}
                         >
                           {notEligible ? 'Chưa đủ' : 'Dùng mã'}
                         </Button>
                       )}
-                    </Box>
-                  </Box>
+                    </div>
+                  </div>
                 );
               })}
-            </Box>
+            </div>
           ) : (
-            <Box style={{ textAlign: 'center', padding: '24px 16px', background: 'var(--neutral-50)', borderRadius: 'var(--radius-lg)' }}>
-              <Ticket size={32} color="var(--neutral-400)" style={{ margin: '0 auto 8px' }} />
-              <Text size="small" style={{ color: 'var(--neutral-600)' }}>
-                Bạn chưa có mã giảm giá trong ví
-              </Text>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-                Nhập mã giảm giá thủ công ở phía trên để áp dụng.
-              </Text>
-            </Box>
+            <EmptyState
+              variant="inline"
+              art="leaf"
+              heading="Bạn chưa có mã giảm giá trong ví"
+              body="Nhập mã giảm giá thủ công ở phía trên để áp dụng."
+            />
           )}
-        </Box>
-      </Box>
-    </Sheet>
+        </div>
+      </div>
+    </BottomSheet>
   );
 }

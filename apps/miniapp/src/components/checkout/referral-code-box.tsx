@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Box, Input } from 'zmp-ui';
-import { ChevronRight, Users } from 'lucide-react';
+import { Input } from 'zmp-ui';
+import { ChevronRight, TriangleAlert, Users } from 'lucide-react';
 import { recordReferralTouch } from '../../services/affiliate-api';
 import { getErrorMessage } from '../../services/api';
 import { haptic } from '../../utils/haptic';
 import { Button } from '../ui/button';
+import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
 
 /** Mã gửi kèm đơn: mã khách vừa nhập ở checkout thắng mã còn trong phiên từ link giới thiệu. */
@@ -27,19 +28,19 @@ const MISS_MESSAGE = 'Không tìm thấy mã này, hoặc đây là mã của ch
 
 function Tile() {
   return (
-    <Box
+    <div
       style={{
         width: 36,
         height: 36,
         borderRadius: 'var(--radius-control)',
-        background: 'var(--clay-50)',
+        background: 'var(--color-promo-bg)',
         display: 'grid',
         placeItems: 'center',
         flex: '0 0 auto',
       }}
     >
-      <Users size={20} color="var(--clay-700)" aria-hidden />
-    </Box>
+      <Users size={20} color="var(--color-promo-fg)" aria-hidden />
+    </div>
   );
 }
 
@@ -47,11 +48,11 @@ function CodeChip({ code }: { code: string }) {
   return (
     <span
       style={{
-        background: 'var(--clay-50)',
-        border: '1px dashed var(--clay-500)',
+        background: 'var(--color-promo-bg)',
+        border: '1px dashed var(--color-promo-solid-bg)',
         borderRadius: 'var(--radius-control)',
         padding: '2px 6px',
-        color: 'var(--clay-700)',
+        color: 'var(--color-promo-fg)',
         fontSize: 11,
         fontWeight: 700,
         letterSpacing: 0.5,
@@ -74,29 +75,27 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
   const [checking, setChecking] = useState(false);
 
   const shell = (children: React.ReactNode) => (
-    <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-      {children}
-    </Box>
+    <div style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>{children}</div>
   );
 
   const fixedCode = linkedCode ? linkedCode.trim().toUpperCase() : appliedCode && !open ? appliedCode : null;
   if (fixedCode) {
     return shell(
-      <Box flex alignItems="center" justifyContent="space-between" style={{ minHeight: 44, gap: 10 }}>
-        <Box flex alignItems="center" style={{ gap: 10, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <Tile />
-          <Box>
+          <div>
             <Text variant="label" as="div">
               Mã giới thiệu
             </Text>
-            <Box flex alignItems="center" style={{ gap: 8, marginTop: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
               <CodeChip code={fixedCode} />
               <Text variant="caption" tone="success">
                 {linkedCode ? 'Bạn đang mua qua link giới thiệu' : 'Mã hợp lệ, đơn này ghi nhận cho người giới thiệu'}
               </Text>
-            </Box>
-          </Box>
-        </Box>
+            </div>
+          </div>
+        </div>
         {!linkedCode && (
           <Button
             variant="ghost"
@@ -110,42 +109,52 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
             Đổi
           </Button>
         )}
-      </Box>,
+      </div>,
     );
   }
 
   if (!open) {
     return shell(
-      <Box
-        role="button"
+      <button
+        type="button"
         className="tubu-press"
         onClick={() => {
           haptic('light');
           setOpen(true);
         }}
-        flex
-        alignItems="center"
-        justifyContent="space-between"
-        style={{ minHeight: 44, cursor: 'pointer' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          width: '100%',
+          minHeight: 44,
+          padding: 0,
+          border: 'none',
+          background: 'none',
+          color: 'inherit',
+          font: 'inherit',
+          textAlign: 'left',
+          cursor: 'pointer',
+        }}
       >
-        <Box flex alignItems="center" style={{ gap: 10 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Tile />
-          <Box>
-            <Text variant="label" as="div">
+          <span style={{ display: 'block' }}>
+            <Text variant="label" as="span" style={{ display: 'block' }}>
               Mã giới thiệu
             </Text>
-            <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
+            <Text variant="caption" tone="tertiary" as="span" style={{ display: 'block', marginTop: 2 }}>
               Có người giới thiệu Tubu cho bạn? Nhập mã của họ
             </Text>
-          </Box>
-        </Box>
-        <Box flex alignItems="center" style={{ gap: 4 }}>
+          </span>
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <Text variant="caption" tone="brand" style={{ fontWeight: 700 }}>
             Nhập mã
           </Text>
           <ChevronRight size={16} color="var(--color-text-brand)" aria-hidden />
-        </Box>
-      </Box>,
+        </span>
+      </button>,
     );
   }
 
@@ -174,7 +183,7 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
   };
 
   return shell(
-    <Box flex flexDirection="column" style={{ gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Text variant="label" as="div">
         Mã giới thiệu
       </Text>
@@ -191,21 +200,23 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
         status={error ? 'error' : undefined}
       />
       {error && (
-        <div role="alert">
+        <div role="alert" style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+          <span aria-hidden="true" style={{ display: 'inline-flex', marginTop: 2 }}>
+            <Icon icon={TriangleAlert} size="sm" tone="danger" />
+          </span>
           <Text variant="caption" tone="danger" as="div">
-            <span aria-hidden="true">⚠ </span>
             {error}
           </Text>
         </div>
       )}
-      <Box flex style={{ gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8 }}>
         <Button variant="secondary" onPress={() => setOpen(false)}>
           Huỷ
         </Button>
         <Button fullWidth loading={checking} onPress={() => void apply()}>
           Áp dụng
         </Button>
-      </Box>
-    </Box>,
+      </div>
+    </div>,
   );
 }

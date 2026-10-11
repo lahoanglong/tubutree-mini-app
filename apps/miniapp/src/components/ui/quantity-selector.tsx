@@ -1,5 +1,5 @@
-import { Box, Text } from 'zmp-ui';
 import { Plus, Minus } from 'lucide-react';
+import { Text } from './text';
 
 /**
  * Bộ chọn số lượng − [n] + . Hai nút là `<button>` thật (Tab + Enter/Space, trình đọc màn hình báo là nút).
@@ -21,10 +21,10 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }:
   const btn = (disabled: boolean): React.CSSProperties => ({
     width: side,
     height: side,
-    borderRadius: 'var(--radius-md)',
-    border: '1px solid var(--neutral-200)',
-    background: disabled ? 'var(--neutral-100)' : 'var(--neutral-0)',
-    color: disabled ? 'var(--neutral-400)' : 'var(--neutral-900)',
+    borderRadius: 'var(--radius-control)',
+    border: '1px solid var(--color-border-subtle)',
+    background: disabled ? 'var(--stone-100)' : 'var(--color-bg-surface)',
+    color: disabled ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -36,7 +36,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }:
   });
 
   return (
-    <Box flex alignItems="center" style={{ gap: size === 'md' ? 12 : 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: size === 'md' ? 12 : 8 }}>
       <button
         type="button"
         aria-label="Giảm số lượng"
@@ -47,7 +47,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }:
       >
         <Minus size={size === 'md' ? 18 : 15} strokeWidth={2.2} />
       </button>
-      <Text bold size={size === 'md' ? 'normal' : 'small'} style={{ minWidth: 22, textAlign: 'center' }}>
+      <Text variant={size === 'md' ? 'body-lg' : 'body-sm'} style={{ minWidth: 22, textAlign: 'center', fontWeight: 600 }}>
         {value}
       </Text>
       <button
@@ -60,6 +60,6 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }:
       >
         <Plus size={size === 'md' ? 18 : 15} strokeWidth={2.2} />
       </button>
-    </Box>
+    </div>
   );
 }
