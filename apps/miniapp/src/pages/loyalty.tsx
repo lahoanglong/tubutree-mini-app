@@ -40,6 +40,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { QrCode } from '../components/qr-code';
+import { convertedPointsNote, pointsSummary } from '../utils/points-lots';
 
 /**
  * Biểu tượng + màu theo hạng (4 hạng §6.6). Emoji là NỘI DUNG của hạng nên được giữ. Màu trỏ thẳng
@@ -175,6 +176,9 @@ export default function LoyaltyPage() {
   const checkIn = checkInQ.data ? checkInView(checkInQ.data) : null;
   // Điểm của đơn mới giao/đang đổi-trả chưa đổi quà được (backend chặn) — nói rõ lý do ngay trên danh mục.
   const lockedNote = data ? lockedPointsNote(data) : null;
+  // Con số khách thấy là tổng hai lô; đổi mã giảm giá chỉ dùng được lô thường (pointsBalance).
+  const lots = data ? pointsSummary(data) : null;
+  const convertedNote = convertedPointsNote(lots?.converted);
   const rewardCatalog = rewardsQ.data;
 
   // Phát hiện LÊN HẠNG (§6.6 #78): so minPoints hạng hiện tại với lần xem trước (localStorage).
@@ -232,8 +236,13 @@ export default function LoyaltyPage() {
                 {tierName}
               </Heading>
               <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>
-                Tích điểm ×{data.tier?.multiplier ?? 1} · {formatPoints(data.pointsBalance)} Xanh
+                Tích điểm ×{data.tier?.multiplier ?? 1} · {formatPoints(lots?.total ?? 0)} Xanh
               </Text>
+              {convertedNote && (
+                <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
+                  {convertedNote}
+                </Text>
+              )}
 
               {next ? (
                 <div style={{ marginTop: 16 }}>
@@ -532,6 +541,11 @@ export default function LoyaltyPage() {
                     </Text>
                   </div>
                 )}
+                {convertedNote && (
+                  <Text variant="caption" tone="secondary" as="div">
+                    Điểm không hết hạn chỉ dùng khi thanh toán, không dùng để đổi mã giảm giá.
+                  </Text>
+                )}
                 {rewardCatalog.rewards.map((r) => (
                   <div
                     key={r.id}
@@ -619,6 +633,7 @@ export default function LoyaltyPage() {
                       </Text>
                       <Text variant="caption" tone="tertiary" as="div">
                         {formatDate(t.createdAt)}
+                        {t.lot === 'CONVERTED' ? ' · Điểm không hết hạn' : ''}
                       </Text>
                     </div>
                     <Text variant="body-sm" tone={t.delta >= 0 ? 'success' : 'danger'} style={{ fontWeight: 700 }}>
@@ -654,7 +669,7 @@ export default function LoyaltyPage() {
       >
         <div style={{ textAlign: 'center' }}>
           <Badge size="md" style={{ background: tierStyle.bg, color: tierStyle.color }}>
-            <span aria-hidden>{tierStyle.emoji}</span> Hạng {tierName} · {formatPoints(data?.pointsBalance ?? 0)} Xanh
+            <span aria-hidden>{tierStyle.emoji}</span> Hạng {tierName} · {formatPoints(lots?.total ?? 0)} Xanh
           </Badge>
         </div>
 

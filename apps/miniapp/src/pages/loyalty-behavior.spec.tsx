@@ -253,6 +253,46 @@ describe('LoyaltyPage — đổi Điểm Xanh nhận mã giảm giá', () => {
   });
 });
 
+describe('LoyaltyPage — hai lô Điểm Xanh sau khi gộp xu (PD-3)', () => {
+  const WITH_CONVERTED = { ...LOYALTY, pointsBalance: 120, pointsConvertedBalance: 30, pointsTotal: 150 };
+
+  it('thẻ hạng hiện TỔNG hai lô và dòng "trong đó N điểm không hết hạn"', async () => {
+    mocks.getLoyalty.mockResolvedValue(WITH_CONVERTED);
+    renderPage();
+    expect(await screen.findByText(/Tích điểm ×1 · 150 điểm Xanh/)).toBeInTheDocument();
+    expect(screen.getByText('trong đó 30 điểm không hết hạn')).toBeInTheDocument();
+  });
+
+  it('thẻ thành viên số cũng hiện tổng hai lô', async () => {
+    mocks.getLoyalty.mockResolvedValue(WITH_CONVERTED);
+    renderPage();
+    fireEvent.click(await screen.findByText('Thẻ thành viên số (mã QR)'));
+    expect(await screen.findByText(/Hạng Mầm Xanh · 150 điểm Xanh/)).toBeInTheDocument();
+  });
+
+  it('có điểm không hết hạn thì danh mục đổi quà nói rõ phần đó không dùng để đổi mã giảm giá', async () => {
+    mocks.getLoyalty.mockResolvedValue(WITH_CONVERTED);
+    renderPage();
+    expect(await screen.findByText(/Điểm không hết hạn chỉ dùng khi thanh toán, không dùng để đổi mã giảm giá/)).toBeInTheDocument();
+  });
+
+  it('không có lô quy đổi: không hiện dòng "không hết hạn" nào', async () => {
+    renderPage();
+    await screen.findByText(/Tích điểm ×1 · 1\.250 điểm Xanh/);
+    expect(screen.queryByText(/không hết hạn/)).toBeNull();
+  });
+
+  it('lịch sử: dòng của lô quy đổi ghi "Điểm không hết hạn", nhãn xu cũ đọc được', async () => {
+    mocks.getPointsTransactions.mockResolvedValue([
+      { id: 'x1', delta: 30, reason: 'XU_TO_POINTS:u1', createdAt: '2026-10-12T03:00:00.000Z', lot: 'CONVERTED' },
+      { id: 'x2', delta: 5, reason: 'ORDER_EARN:o1', createdAt: '2026-10-11T03:00:00.000Z', lot: 'STANDARD' },
+    ]);
+    renderPage();
+    expect(await screen.findByText('Chuyển từ xu cũ sang Điểm Xanh')).toBeInTheDocument();
+    expect(screen.getAllByText(/ · Điểm không hết hạn$/)).toHaveLength(1);
+  });
+});
+
 describe('LoyaltyPage — thẻ thành viên số', () => {
   const openCard = async () => {
     renderPage();
