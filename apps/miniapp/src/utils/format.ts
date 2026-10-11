@@ -1,6 +1,6 @@
 /**
- * Số có dấu phân cách nghìn kiểu Việt: 1250000 → "1.250.000". Mọi số tiền/điểm/xu/giọt nước hiển thị
- * cho khách đi qua đây (trực tiếp hoặc qua formatVnd/formatPoints/formatXu/formatDrops) — không gọi
+ * Số có dấu phân cách nghìn kiểu Việt: 1250000 → "1.250.000". Mọi số tiền/điểm/giọt nước hiển thị
+ * cho khách đi qua đây (trực tiếp hoặc qua formatVnd/formatPoints/formatDrops) — không gọi
  * toLocaleString rải rác trong pages, nên cùng một con số không còn hiện ba dáng khác nhau.
  * Rác (null/NaN/vô cực) → "0" thay vì "NaN".
  */
@@ -85,17 +85,6 @@ export function formatRatePct(rate: number | string | null | undefined): string 
 export function formatPoints(n: number | null | undefined): string {
   const v = Number(n ?? 0);
   return `${formatNumber(v)} điểm`;
-}
-
-/**
- * TubuXu: LUÔN có dấu phân cách nghìn + đơn vị "xu".
- * Trước đây `formatXu` bị định nghĩa lặp độc lập ở 2 nơi (milestone-copy.ts, wallet.tsx) — cùng
- * một công thức nhưng tách rời nên có thể trôi khác nhau theo thời gian. Gộp về MỘT định nghĩa
- * canonical ở đây (audit A4-10), 2 nơi kia import lại thay vì tự định nghĩa.
- */
-export function formatXu(n: number | null | undefined): string {
-  const v = Number(n ?? 0);
-  return `${formatNumber(v)} xu`;
 }
 
 /**

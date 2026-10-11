@@ -200,7 +200,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const [contentKitSlug, setContentKitSlug] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  // Nhiệm vụ "Viết lý do cho 3 sản phẩm" (1.500 xu) đọc StorefrontItem.note, nhưng builder
+  // Nhiệm vụ "Viết lý do cho 3 sản phẩm" đọc StorefrontItem.note, nhưng builder
   // chưa từng có ô nhập note — CTV không thể hoàn thành dù thanh tiến trình vẫn hiện (P0-5).
   const [notingItem, setNotingItem] = useState<{ id: string; note: string } | null>(null);
 
@@ -304,7 +304,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       </div>
 
       {/* Hồ sơ gian hàng — đúng thứ khách nhìn thấy đầu tiên, và là điều kiện của nhiệm vụ
-          "Hoàn thiện hồ sơ gian hàng" (2.000 xu). */}
+          "Hoàn thiện hồ sơ gian hàng". */}
       <div
         role="button"
         aria-label={vi.storefront.editProfile}
@@ -720,7 +720,7 @@ function PickerSheet({ collectionId, onAdded, onClose }: { collectionId: string;
 
 /**
  * Hồ sơ gian hàng: ảnh đại diện, ảnh bìa, lời nhắn. Ba trường này quyết định nhiệm vụ
- * "Hoàn thiện hồ sơ gian hàng" (2.000 xu) nhưng trước đây không có màn nào nhập được.
+ * "Hoàn thiện hồ sơ gian hàng" nhưng trước đây không có màn nào nhập được.
  */
 function ProfileSheet({
   sf,

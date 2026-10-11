@@ -198,7 +198,7 @@ export interface Garden {
   nextUnlock: { slot: number; seedCost: number } | null;
 }
 export const getGarden = () => api.get<Garden>('/game/garden').then((r) => r.data);
-/** Mở lô đất bằng giọt nước — mở bằng xu đã ngừng (xu gộp vào Điểm Xanh). */
+/** Mở lô đất bằng giọt nước — mở bằng xu cũ đã ngừng (xu gộp vào Điểm Xanh). */
 export const unlockPlot = () =>
   api.post<GardenPlot>('/game/garden/unlock', { currency: 'SEEDS' }).then((r) => r.data);
 export const waterPlot = (plotId: string, drops: number) =>

@@ -3,7 +3,7 @@ import { join, relative, sep } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
 /**
- * Số/ngày hiển thị cho khách đi qua utils/format (formatNumber/formatVnd/formatPoints/formatXu/
+ * Số/ngày hiển thị cho khách đi qua utils/format (formatNumber/formatVnd/formatPoints/
  * formatDrops/formatDate/formatDateTime). Gọi toLocaleString trực tiếp trong pages/i18n là cách số
  * "1250000" và "1.250.000" cùng xuất hiện trên một màn (C-083); ngày thì đổi dáng theo ICU của webview.
  */

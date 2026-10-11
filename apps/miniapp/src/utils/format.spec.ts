@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import * as format from './format';
 import {
   formatRatePct,
   formatPoints,
-  formatXu,
   formatVndShort,
   formatMultiplier,
   formatNumber,
@@ -52,16 +52,11 @@ describe('formatPoints — điểm Xanh hiển thị thống nhất', () => {
   });
 });
 
-// Trước đây formatXu bị định nghĩa lặp ở milestone-copy.ts và wallet.tsx — gộp về đây (A4-10).
-describe('formatXu — TubuXu hiển thị thống nhất', () => {
-  it('luôn có dấu phân cách nghìn + đơn vị "xu"', () => {
-    expect(formatXu(50_000)).toBe('50.000 xu');
-  });
-
-  it('null/undefined/rác → 0 xu, không ra NaN', () => {
-    expect(formatXu(null)).toBe('0 xu');
-    expect(formatXu(undefined)).toBe('0 xu');
-    expect(formatXu(Number('x'))).toBe('0 xu');
+// Xu đã gộp vào Điểm Xanh (PD-3): không còn định dạng "N xu" nào cho khách.
+describe('format — không còn formatXu', () => {
+  it('module chỉ xuất định dạng điểm, không xuất formatXu', () => {
+    expect('formatXu' in format).toBe(false);
+    expect(format.formatPoints(50_000)).toBe('50.000 điểm');
   });
 });
 
@@ -107,7 +102,7 @@ describe('formatMultiplier — hệ số nhân', () => {
   });
 });
 
-// Game/Home/Chi tiết đơn từng in số trần ("1250000", "89000") cạnh "65.000 xu" — cùng một kiểu số mà
+// Game/Home/Chi tiết đơn từng in số trần ("1250000", "89000") cạnh "65.000 điểm" — cùng một kiểu số mà
 // mỗi màn một dáng (C-083). Mọi số hiển thị đi qua helper dùng chung.
 describe('formatNumber — số có dấu phân cách nghìn kiểu Việt', () => {
   it('1250000 → "1.250.000", số nhỏ giữ nguyên', () => {
