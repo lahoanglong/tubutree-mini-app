@@ -85,7 +85,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
     description: 'Mốc số bạn giới thiệu thành công → thưởng thêm xu (1 lần/mốc)',
   },
   { key: 'game.xu_per_seed', value: 1, category: 'game', description: 'Giá mua nước: xu / 1 giọt' },
-  { key: 'game.tree_xu_price', value: 50000, category: 'game', description: 'Giá mua 1 cây thật bằng xu' },
+  { key: 'game.tree_xu_price', value: 50000, category: 'game', description: 'Giá góp 1 cây vào quỹ trồng cây bằng xu' },
 
   // Subscribe & Save — chiết khấu định kỳ theo thang bậc (kiểu Amazon).
   { key: 'subscribe.discount_pct', value: 0.12, category: 'subscribe', description: 'Chiết khấu cơ bản Subscribe & Save (fallback bậc minActive:1)' },
@@ -259,7 +259,7 @@ const TIERS = [
     minSpending: null,
     pointMultiplier: new Prisma.Decimal(1),
     discountPct: new Prisma.Decimal(0),
-    perks: ['Tích điểm 1x'],
+    perks: ['Tích Điểm Xanh x1'],
     birthdayVoucherAmount: null,
     sortOrder: 0,
   },
@@ -270,7 +270,7 @@ const TIERS = [
     minSpending: 5000000,
     pointMultiplier: new Prisma.Decimal(1.2),
     discountPct: new Prisma.Decimal(0),
-    perks: ['Tích điểm 1.2x', 'Freeship đơn ≥ 99k', 'Voucher sinh nhật 50k'],
+    perks: ['Tích Điểm Xanh x1.2', 'Freeship đơn ≥ 99k', 'Mã giảm giá sinh nhật 50k'],
     birthdayVoucherAmount: 50000,
     sortOrder: 1,
   },
@@ -281,7 +281,7 @@ const TIERS = [
     minSpending: 20000000,
     pointMultiplier: new Prisma.Decimal(1.5),
     discountPct: new Prisma.Decimal(0),
-    perks: ['Tích điểm 1.5x', 'Freeship toàn shop', 'Ưu tiên hotline', 'Beta tester', 'Voucher sinh nhật 150k + 1 sample'],
+    perks: ['Tích Điểm Xanh x1.5', 'Freeship toàn shop', 'Mã giảm giá sinh nhật 150k'],
     birthdayVoucherAmount: 150000,
     sortOrder: 2,
   },
@@ -292,7 +292,7 @@ const TIERS = [
     minSpending: 50000000,
     pointMultiplier: new Prisma.Decimal(2),
     discountPct: new Prisma.Decimal(0.05),
-    perks: ['Tích điểm 2x', 'Freeship + giảm 5% mọi đơn', 'Quà sinh nhật cá nhân hóa', 'Voucher sinh nhật 300k + hộp quà'],
+    perks: ['Tích Điểm Xanh x2', 'Freeship + giảm 5% mọi đơn', 'Mã giảm giá sinh nhật 300k'],
     birthdayVoucherAmount: 300000,
     sortOrder: 3,
   },
@@ -736,7 +736,7 @@ const QUIZZES = [
   { id: 'q3', question: 'Vùng nguyên liệu của Pơ Lang ở đâu?', options: ['Đắk Lắk', 'Hà Nội', 'Cà Mau', 'Huế'], correct: 0, rewardPts: 3, brand: 'Pơ Lang' },
   { id: 'q4', question: 'Chứng nhận hữu cơ quốc tế phổ biến là?', options: ['ISO', 'USDA Organic', 'CE', 'FDA'], correct: 1, rewardPts: 3 },
   { id: 'q5', question: '"Sống xanh An Lành" là slogan của?', options: ['Tubu Tree', 'Shopee', 'Lazada', 'Tiki'], correct: 0, rewardPts: 3 },
-  { id: 'q6', question: 'Cây thật được trồng qua đối tác nào?', options: ['PanNature', 'WWF', 'GreenID', 'IUCN'], correct: 0, rewardPts: 3 },
+  { id: 'q6', question: 'Khi thu hoạch cây ảo, giọt nước bạn đã tưới được góp vào đâu?', options: ['Hồ nước chung của cộng đồng', 'Ví Tubu của bạn', 'Kho hàng của đại lý', 'Quỹ khuyến mãi'], correct: 0, rewardPts: 3 },
 ];
 
 const MISSIONS = [
@@ -876,15 +876,15 @@ async function main() {
   console.log('🌱 Seeding Nature Quiz questions...');
   await seedGameQuiz(prisma);
 
-  // Vườn Xanh 2.0 Phase 2 — mốc cộng đồng cây thật đang mở.
+  // Vườn Xanh 2.0 Phase 2 — mốc cộng đồng góp quỹ trồng cây đang mở.
   console.log('🌳 Seeding Community Goal...');
   await prisma.communityGoal.upsert({
     where: { id: 'cg-cangio-2026' },
     update: {},
     create: {
       id: 'cg-cangio-2026',
-      title: 'Cùng Tubu phủ xanh Cần Giờ',
-      region: 'Rừng ngập mặn Cần Giờ, TP.HCM',
+      title: 'Cùng Tubu góp quỹ trồng cây',
+      region: 'Cộng đồng Tubu',
       targetDrops: 100000,
       currentDrops: 0,
       treesToPlant: 200,

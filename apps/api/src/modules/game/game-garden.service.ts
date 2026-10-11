@@ -212,7 +212,7 @@ export class GameGardenService {
             p -= plot.target;
             planted += 1;
             harvests += 1;
-            // Cây thật + chứng nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn/ngày.
+            // Khoản góp quỹ trồng cây + mã ghi nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn/ngày.
             certificate = await this.plantTree(userId, plot.treeType, db);
             if (couponsToday < dailyCap) {
               coupon = await this.grantCoupon(userId, harvestAmount, harvestMinOrder, db);

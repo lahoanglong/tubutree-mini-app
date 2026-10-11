@@ -324,6 +324,14 @@ describe('admin/page — tab Tổng quan', () => {
     expect(container.querySelector('.rounded-card.shadow-card')).not.toBeNull();
   });
 
+  it('thẻ Sản phẩm nói "góp quỹ trồng cây", không hứa cây thật hay nêu PanNature (C-010, Q-16)', async () => {
+    const { container } = await mount();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Sản phẩm & Quỹ trồng cây');
+    expect(text).toContain('3 cây góp quỹ trồng cây');
+    expect(text).not.toMatch(/cây thật|PanNature|Rừng Xanh/);
+  });
+
   it('biểu ngữ cần xử lý dùng biểu tượng lucide thay emoji, giữ số đếm và nhãn bấm', async () => {
     mocks.recycling = 2;
     mocks.claims = 3;

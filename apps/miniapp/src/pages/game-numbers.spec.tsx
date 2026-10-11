@@ -79,7 +79,7 @@ function renderPage() {
 describe('GamePage — số hiển thị có dấu phân cách nghìn (C-083)', () => {
   it('giọt nước, xu và mục tiêu cộng đồng đều theo kiểu "1.250.000" / "65.000 xu", không có số trần', async () => {
     const { container } = renderPage();
-    expect(await screen.findByText(/Mua cây thật/)).toBeInTheDocument();
+    expect(await screen.findByText(/Góp quỹ trồng cây/)).toBeInTheDocument();
     await screen.findByText(/Rừng Tubu/);
     await screen.findByText(/Top góp nước mùa này/);
     const text = container.textContent ?? '';

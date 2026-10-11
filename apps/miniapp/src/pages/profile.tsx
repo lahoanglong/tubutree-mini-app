@@ -2,7 +2,7 @@ import { Avatar, Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   Heart, MapPin, Leaf, Wallet, Users, Pencil,
-  Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, ShieldCheck, CalendarClock, Recycle, Sparkles, BookOpen, type LucideIcon,
+  Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, ShieldCheck, CalendarClock, Recycle, Sparkles, BookOpen, BadgePercent, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { getCoupons, getLoyalty, getNotifications, getWallet } from '../services/account-api';
@@ -21,6 +21,7 @@ import { getDealerMe } from '../services/dealer-api';
 import { formatVnd, formatPoints, formatXu } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
+import { CASHBACK_ENABLED } from '../utils/features';
 
 interface MenuItem {
   Icon: LucideIcon;
@@ -52,10 +53,11 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
   },
   {
     // Q-15: mục CTV/đại lý/nhãn hàng gom riêng để không chen vào hành trình mua của khách;
-    // "Hoàn tiền sàn ngoài" bỏ khỏi hub (kéo khách sang sàn khác, ngược north-star mua lại).
+    // "Hoàn tiền sàn ngoài" chỉ hiện khi bật cờ (kéo khách sang sàn khác, ngược north-star mua lại).
     group: 'Hợp tác',
     items: [
       { Icon: Users, label: 'Cộng tác viên', to: '/affiliate', hint: 'Chia sẻ — nhận hoa hồng' },
+      ...(CASHBACK_ENABLED ? [{ Icon: BadgePercent, label: 'Hoàn tiền sàn ngoài', to: '/cashback' }] : []),
       { Icon: Store, label: 'Đăng ký đại lý', to: '/dealer' },
     ],
   },

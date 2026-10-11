@@ -31,7 +31,6 @@ export function miniappRoutes({ product, brand }) {
     r('ai-advisor', '/ai-advisor'),
     r('group-buy', '/group-buy'),
     r('refill', '/refill'),
-    r('beta', '/beta'),
     r('profile', '/profile'),
     r('loyalty', '/loyalty'),
     r('wallet', '/wallet'),

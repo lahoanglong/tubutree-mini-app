@@ -65,7 +65,7 @@ export default function RefillPage() {
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 80 }}>
       <PageHeader
         title="Đổi vỏ chai — Nhận nước"
-        subtitle="Mang vỏ chai rỗng đến cửa hàng đổi lấy 💧 tưới Vườn Xanh. Tái chế vỏ → nuôi cây thật 🌳"
+        subtitle="Mang vỏ chai rỗng đến cửa hàng đổi lấy 💧 tưới Vườn Xanh. Tái chế vỏ → nuôi cây, góp quỹ trồng cây 🌳"
       />
 
       {isLoading ? (

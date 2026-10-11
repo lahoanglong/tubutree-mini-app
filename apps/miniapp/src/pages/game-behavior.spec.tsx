@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Đặc tả hành vi trang Vườn Cây (C-082, PC-10a): nút điểm danh/hứng sương/tưới/thu hoạch/mua cây,
+ * Đặc tả hành vi trang Vườn Cây (C-082, PC-10a): nút điểm danh/hứng sương/tưới/thu hoạch/góp quỹ trồng cây,
  * lô đất, Chặng Mùa, quiz, nhiệm vụ, tặng nước, vòng quay. Viết TRƯỚC khi tách game.tsx thành
  * components/game/* để chứng minh việc chia khối không đổi điều kiện bật/tắt nút, lời gọi API,
  * khoá làm mới cache và con số hiển thị. Chỉ truy vấn theo role/chữ, không theo class/cấu trúc.
@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   haptic: vi.fn(),
   copyText: vi.fn(),
   auth: { status: 'authenticated' as string },
+  features: { seasonPass: false },
   wheel: { cost: undefined as number | undefined, onSpin: undefined as (() => Promise<unknown>) | undefined },
   api: {
     getGameProfile: vi.fn(),
@@ -59,6 +60,11 @@ vi.mock('../store/auth', () => ({
   },
 }));
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
+vi.mock('../utils/features', () => ({
+  get SEASON_PASS_ENABLED() {
+    return mocks.features.seasonPass;
+  },
+}));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../components/wheel', () => ({
   WheelOfFortune: ({ cost, onSpin }: { cost: number; onSpin: () => Promise<unknown> }) => {
@@ -120,6 +126,7 @@ async function openTab(name: 'Hôm nay' | 'Vườn' | 'Cộng đồng') {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.status = 'authenticated';
+  mocks.features.seasonPass = false;
   mocks.wheel.cost = undefined;
   mocks.wheel.onSpin = undefined;
   const a = mocks.api;
@@ -184,10 +191,10 @@ describe('GamePage — trạng thái trang', () => {
 });
 
 describe('GamePage — vườn và lối tắt', () => {
-  it('thẻ vườn: tên loại cây và dòng tổng hợp giọt nước/chuỗi/cây thật', async () => {
+  it('thẻ vườn: tên loại cây và dòng tổng hợp giọt nước/chuỗi/cây góp quỹ', async () => {
     const { container } = renderPage();
     expect(await screen.findByText('Sồi')).toBeInTheDocument();
-    expect(container.textContent).toContain('10/50💧 · 💧 1.250 · 🔥 2 ngày · 🌳 thật: 3');
+    expect(container.textContent).toContain('10/50💧 · 💧 1.250 · 🔥 2 ngày · 🌳 góp quỹ: 3');
   });
 
   it('chưa có ecoImpact: tên mặc định "Vườn của bạn" và số 0', async () => {
@@ -213,7 +220,7 @@ describe('GamePage — vườn và lối tắt', () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, ecoImpact: { ...PROFILE.ecoImpact, progress: 100, target: 100 } });
     renderPage();
     await screen.findByText('Sồi');
-    // chỉ còn 🌳 ở thẻ vườn: ô "Cây thật đã trồng" dùng icon Lucide
+    // chỉ còn 🌳 ở thẻ vườn: ô "Cây đã góp quỹ" dùng icon Lucide
     expect(screen.getAllByText('🌳')).toHaveLength(1);
   });
 
@@ -420,7 +427,7 @@ describe('GamePage — hồi sinh chuỗi và cảnh báo cây', () => {
   });
 });
 
-describe('GamePage — tưới cây, thu hoạch, mua cây thật', () => {
+describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () => {
   it('tưới cây: gọi waterTree(20) một lần dù chạm lúc đang gửi, báo tiến độ, làm mới cả rừng', async () => {
     const gate = pending<unknown>();
     mocks.api.waterTree.mockReturnValue(gate.promise);
@@ -452,7 +459,7 @@ describe('GamePage — tưới cây, thu hoạch, mua cây thật', () => {
     await waitFor(() => expect(btn).toBeEnabled());
   });
 
-  it('thu hoạch: mở hộp chúc mừng với mã giảm giá, mã chứng nhận và loài mới; không báo snackbar tiến độ', async () => {
+  it('thu hoạch: mở hộp chúc mừng với mã giảm giá, mã đóng góp quỹ và loài mới; không báo snackbar tiến độ', async () => {
     mocks.api.waterTree.mockResolvedValue({
       progress: 50,
       target: 50,
@@ -467,8 +474,9 @@ describe('GamePage — tưới cây, thu hoạch, mua cây thật', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây (20💧)' }));
     expect(await screen.findByText('Thu hoạch thành công!')).toBeInTheDocument();
+    expect(document.body.textContent).toContain('Tubu sẽ góp 1 cây vào quỹ trồng cây');
     expect(screen.getByText('GIAM10')).toBeInTheDocument();
-    expect(screen.getByText('Mã chứng nhận cây thật')).toBeInTheDocument();
+    expect(screen.getByText('Mã đóng góp quỹ trồng cây')).toBeInTheDocument();
     expect(screen.getByText('CERT-77')).toBeInTheDocument();
     expect(screen.getByText('💎 Hiếm · Sưu tập mới!')).toBeInTheDocument();
     expect(screen.getByText('🌲 Lim xanh')).toBeInTheDocument();
@@ -482,7 +490,7 @@ describe('GamePage — tưới cây, thu hoạch, mua cây thật', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây (20💧)' }));
     await screen.findByText('Thu hoạch thành công!');
     expect(screen.queryByRole('button', { name: 'Dùng mã giảm giá ngay' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Mã chứng nhận cây thật')).not.toBeInTheDocument();
+    expect(screen.queryByText('Mã đóng góp quỹ trồng cây')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Tuyệt vời!' }));
     await waitFor(() => expect(screen.queryByText('Thu hoạch thành công!')).not.toBeInTheDocument());
   });
@@ -521,12 +529,12 @@ describe('GamePage — tưới cây, thu hoạch, mua cây thật', () => {
     expect(mocks.copyText).toHaveBeenCalledTimes(2);
   });
 
-  it('mua cây thật: nút kèm giá xu, gọi API 1 lần, báo mã chứng nhận, làm mới rừng + ví', async () => {
+  it('góp quỹ trồng cây: nút kèm giá xu, gọi API 1 lần, báo mã đóng góp, làm mới quỹ + ví', async () => {
     const { invalidated } = renderPage();
-    const btn = await screen.findByRole('button', { name: /Mua cây thật \(65\.000 xu\)/ });
+    const btn = await screen.findByRole('button', { name: /Góp quỹ trồng cây \(65\.000 xu\)/ });
     fireEvent.click(btn);
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã mua 1 cây thật 🌳 (−65.000 xu) · mã TUBU-9', type: 'success' }),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã góp 1 cây vào quỹ trồng cây 🌳 (−65.000 xu) · mã TUBU-9', type: 'success' }),
     );
     expect(mocks.api.buyTree).toHaveBeenCalledTimes(1);
     const keys = invalidated();
@@ -535,11 +543,11 @@ describe('GamePage — tưới cây, thu hoạch, mua cây thật', () => {
     expect(keys).toContainEqual(['wallet']);
   });
 
-  it('hồ sơ không có giá cây: nút "Mua cây thật" không kèm giá', async () => {
+  it('hồ sơ không có giá cây: nút "Góp quỹ trồng cây" không kèm giá', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, treeXuPrice: undefined });
     renderPage();
-    const btn = await screen.findByRole('button', { name: /Mua cây thật/ });
-    expect(btn).toHaveTextContent(/^Mua cây thật$/);
+    const btn = await screen.findByRole('button', { name: /Góp quỹ trồng cây/ });
+    expect(btn).toHaveTextContent(/^Góp quỹ trồng cây$/);
   });
 });
 
@@ -647,7 +655,41 @@ describe('GamePage — lô đất', () => {
   });
 });
 
-describe('GamePage — Chặng Mùa (Season Pass)', () => {
+describe('GamePage — Chặng Mùa (Season Pass) đã ẩn (C-044, Q-16)', () => {
+  const activePass = {
+    active: true,
+    seasonTitle: 'Xuân',
+    xp: 150,
+    premiumEligible: true,
+    tiers: [
+      { tier: 0, xpRequired: 100, free: { type: 'SEEDS', amount: 10 }, premium: { type: 'XU', amount: 500 }, unlocked: true, claimedFree: false, claimedPremium: false },
+    ],
+  };
+
+  it('không gọi API season-pass và không dựng khối dù server trả mùa đang chạy', async () => {
+    mocks.api.fetchSeasonPass.mockResolvedValue(activePass);
+    renderPage();
+    await openTab('Cộng đồng');
+    await screen.findByText('Sồi');
+    await waitFor(() => expect(mocks.api.getLeaderboard).toHaveBeenCalled());
+    expect(mocks.api.fetchSeasonPass).not.toHaveBeenCalled();
+    expect(screen.queryByText(viText.game.seasonPass.title)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Season Pass|Chặng Mùa/)).not.toBeInTheDocument();
+  });
+
+  it('chưa đăng nhập cũng không gọi API season-pass', async () => {
+    mocks.auth.status = 'unauthenticated';
+    renderPage();
+    await waitFor(() => expect(mocks.api.getLeaderboard).toHaveBeenCalled());
+    expect(mocks.api.fetchSeasonPass).not.toHaveBeenCalled();
+  });
+});
+
+describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENABLED', () => {
+  beforeEach(() => {
+    mocks.features.seasonPass = true;
+  });
+
   const tiers = (over: Record<string, unknown> = {}) => [
     { tier: 0, xpRequired: 100, free: { type: 'SEEDS', amount: 10 }, premium: { type: 'XU', amount: 500 }, unlocked: true, claimedFree: false, claimedPremium: false, ...over },
     { tier: 1, xpRequired: 300, free: { type: 'SEEDS', amount: 20 }, premium: { type: 'XU', amount: 900 }, unlocked: false, claimedFree: false, claimedPremium: false },
@@ -742,9 +784,10 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
     const { container } = renderPage();
     expect(await screen.findByText('Mục tiêu cộng đồng')).toBeInTheDocument();
     expect(screen.getByText('Rừng Tubu')).toBeInTheDocument();
-    expect(screen.getByText('Hà Giang · mục tiêu 100 cây thật')).toBeInTheDocument();
+    expect(screen.getByText('Hà Giang · mục tiêu góp quỹ trồng 100 cây')).toBeInTheDocument();
     expect(screen.getByText('1.250/5.000💧 (25%)')).toBeInTheDocument();
     expect(screen.getByText('Bạn đã góp 89💧')).toBeInTheDocument();
+    expect(container.textContent).toContain('Đủ mốc, Tubu góp quỹ trồng cây');
     expect(container.querySelector('[style*="width: 25%"]')).not.toBeNull();
   });
 
@@ -798,16 +841,16 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
     expect(screen.queryByText('Tặng nước cho bạn bè')).not.toBeInTheDocument();
   });
 
-  it('tác động xanh: ước tính CO₂ = cây thật × 21kg, giọt nước đã góp; chưa có rừng thì hiện lời mời', async () => {
+  it('tác động xanh: số cây góp quỹ, giọt nước đã góp, không gán số CO₂ cho cây của khách; chưa góp cây nào thì hiện lời mời', async () => {
     const { container } = renderPage();
     expect(await screen.findByText('Tác động xanh của bạn')).toBeInTheDocument();
-    expect(container.textContent).toContain('~63kg');
-    expect(screen.getByText('Cây thật đã trồng')).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/CO₂|kg/);
+    expect(screen.getByText('Cây đã góp quỹ')).toBeInTheDocument();
     expect(screen.getByText('Giọt nước đã góp')).toBeInTheDocument();
-    expect(screen.getByText(/Chăm cây ảo đến khi thu hoạch/)).toBeInTheDocument();
+    expect(screen.getByText('Chăm cây ảo đến khi thu hoạch để Tubu góp 1 cây vào quỹ trồng cây.')).toBeInTheDocument();
   });
 
-  it('rừng của tôi: tối đa 5 chứng nhận, trạng thái từng cây, số cây còn lại', async () => {
+  it('đóng góp của tôi: tối đa 5 mã, trạng thái từng cây, số cây còn lại', async () => {
     const trees = Array.from({ length: 7 }, (_, i) => ({
       certificateCode: `TUBU-${i + 1}`,
       treeType: 'Sồi',
@@ -822,9 +865,9 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
     expect(screen.getByText('TUBU-5')).toBeInTheDocument();
     expect(screen.queryByText('TUBU-6')).not.toBeInTheDocument();
     expect(screen.getByText('Đã trồng')).toBeInTheDocument();
-    expect(screen.getAllByText('Đã cam kết')).toHaveLength(4);
+    expect(screen.getAllByText('Đã góp quỹ')).toHaveLength(4);
     expect(screen.getByText('…và 2 cây khác')).toBeInTheDocument();
-    expect(container.textContent).toContain('góp 7 cây thật');
+    expect(container.textContent).toContain('Bạn đã góp 7 cây vào quỹ trồng cây của Tubu');
     expect(screen.queryByText(/Chăm cây ảo đến khi thu hoạch/)).not.toBeInTheDocument();
   });
 });
@@ -1061,7 +1104,7 @@ describe('GamePage — nút khoá trong lúc đang gửi', () => {
   const cases: { label: string; name: string | RegExp; fn: () => ReturnType<typeof vi.fn>; setup?: () => void }[] = [
     { label: 'hứng giọt sương', name: 'Hứng giọt sương', fn: () => mocks.api.collectDew },
     { label: 'mua vé giữ lửa', name: 'Mua (80💧)', fn: () => mocks.api.buyStreakFreeze },
-    { label: 'mua cây thật', name: /Mua cây thật/, fn: () => mocks.api.buyTree },
+    { label: 'góp quỹ trồng cây', name: /Góp quỹ trồng cây/, fn: () => mocks.api.buyTree },
     {
       label: 'hồi sinh chuỗi',
       name: 'Hồi sinh (300💧)',

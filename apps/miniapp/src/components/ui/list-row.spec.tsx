@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { ListRow } from './list-row';
 
 describe('ListRow', () => {
-  it('the ENTIRE row (not just the text) is clickable — regression test for the old primitives.tsx bug', () => {
+  it('the ENTIRE row (not just the text) is clickable — regression test for the old Row bug (audit A4-07)', () => {
     const onPress = vi.fn();
     render(<ListRow icon={<span data-testid="icon" />} title="Cài đặt" onPress={onPress} />);
     const row = screen.getByRole('button', { name: /Cài đặt/ });

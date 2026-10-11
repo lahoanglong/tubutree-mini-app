@@ -6,7 +6,7 @@ import { ProgressBar } from '../ui/progress-bar';
 import { Text } from '../ui/text';
 import { GameCard } from './game-card';
 
-// Mốc cộng đồng cây thật (Phase 2) — hồ giọt nước toàn cộng đồng
+// Mốc cộng đồng góp quỹ trồng cây (Phase 2) — hồ giọt nước toàn cộng đồng
 // 💧 và 🌿 ở lời giải thích là nội dung game (đơn vị giọt nước, lời chúc).
 export function CommunityGoal({
   goal,
@@ -25,7 +25,7 @@ export function CommunityGoal({
       <Text variant="caption" tone="tertiary" as="div" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <Icon icon={MapPin} size="sm" tone="muted" />
         <span>
-          {goal.region} · mục tiêu {goal.treesToPlant} cây thật
+          {goal.region} · mục tiêu góp quỹ trồng {goal.treesToPlant} cây
         </span>
       </Text>
       <div style={{ margin: '10px 0 6px' }}>
@@ -40,7 +40,7 @@ export function CommunityGoal({
         </Text>
       </div>
       <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 6 }}>
-        Mỗi lần thu hoạch cây ảo, toàn bộ 💧 đã tưới sẽ góp vào hồ chung. Đủ mốc, Tubu trồng cây thật cùng PanNature 🌿
+        Mỗi lần thu hoạch cây ảo, toàn bộ 💧 đã tưới sẽ góp vào hồ chung. Đủ mốc, Tubu góp quỹ trồng cây 🌿
       </Text>
     </GameCard>
   );

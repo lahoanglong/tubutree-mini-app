@@ -19,7 +19,7 @@ import { join } from 'node:path';
  * chặn double-tap NGAY BÊN TRONG, xem `components/ui/button.tsx`'s `handlePress`): file nào JSX
  * `<Button>` trỏ về import `.../ui/button` thì bỏ qua yêu cầu `disabled=` — guard đã nằm sẵn
  * trong component, bắt caller lặp lại `disabled={cùngBiếnPending}` chỉ vô tình tắt spinner
- * (`loading && !disabled` của zmp-ui). zmp-ui's raw `Button` và `Btn` cũ (primitives.tsx) KHÔNG
+ * (`loading && !disabled` của zmp-ui). zmp-ui's raw `Button` KHÔNG
  * có guard nội bộ này nên vẫn phải qua kiểm tra như trước.
  */
 function tsxFiles(dir: string): string[] {
@@ -161,8 +161,8 @@ function resolveRelativeImport(fileDirParts: string[], importSource: string): st
 }
 
 /** Button (Task 10, components/ui/button.tsx) đã tự chặn double-tap khi loading NGAY BÊN TRONG
- * (xem "handlePress" trong button.tsx) — độc lập với `disabled`. zmp-ui's raw Button và Btn cũ
- * (primitives.tsx) không có guard nội bộ này. Chỉ xét import TƯƠNG ĐỐI (bắt đầu bằng ".") — gói
+ * (xem "handlePress" trong button.tsx) — độc lập với `disabled`. zmp-ui's raw Button
+ * không có guard nội bộ này. Chỉ xét import TƯƠNG ĐỐI (bắt đầu bằng ".") — gói
  * ngoài như 'zmp-ui' không bao giờ là Button DS v2. Giải bằng đường dẫn thật (không chỉ so khớp
  * chuỗi "ui/button") để không bỏ sót file NẰM SẴN trong ui/ tự import "./button" — vd
  * button.spec.tsx cùng thư mục với button.tsx, không có chữ "ui/" nào trong specifier của nó. */

@@ -160,8 +160,7 @@ export default function SettingsPage() {
 
       <Section title="Tài khoản">
         <LinkRow label="Chỉnh sửa hồ sơ" onClick={() => navigate('/edit-profile')} />
-        <LinkRow label="Sổ địa chỉ" onClick={() => navigate('/addresses')} />
-        <LinkRow label="Beta Tester — trải nghiệm sớm" onClick={() => navigate('/beta')} last />
+        <LinkRow label="Sổ địa chỉ" onClick={() => navigate('/addresses')} last />
       </Section>
 
       <div style={{ padding: 16 }}>

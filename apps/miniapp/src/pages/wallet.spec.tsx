@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   withdraw: vi.fn(),
   convertToXu: vi.fn(),
   shareLink: vi.fn(),
+  features: { cashback: false },
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -35,6 +36,11 @@ vi.mock('../services/account-api', () => ({
   convertToXu: mocks.convertToXu,
 }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink }));
+vi.mock('../utils/features', () => ({
+  get CASHBACK_ENABLED() {
+    return mocks.features.cashback;
+  },
+}));
 vi.mock('../store/auth', () => {
   const state = { status: 'authenticated' };
   return { useAuthStore: (sel?: (s: typeof state) => unknown) => (sel ? sel(state) : state) };
@@ -105,6 +111,7 @@ function inputOf(label: string | RegExp): HTMLInputElement {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.features.cashback = false;
 });
 
 describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2)', () => {
@@ -153,6 +160,13 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
     expect(screen.getByText('+50.000đ')).toBeInTheDocument();
     expect(screen.getByText('−100.000đ')).toBeInTheDocument();
     expect(screen.getByText('Số dư 1.200.000đ')).toBeInTheDocument();
+  });
+
+  it('chú thích dưới TubuXu: chỉ nói việc còn làm được (mua hàng, góp quỹ trồng cây), không còn "mua nước"/"mua cây"', async () => {
+    stubLoaded();
+    renderPage();
+    await screen.findByText('TubuXu (tiêu trong app)');
+    expect(screen.getByText('Dùng để mua hàng và góp quỹ trồng cây 🌳 trong app. Không rút được.')).toBeInTheDocument();
   });
 
   it('lỗi tải ví KHÔNG hiện 0đ mà báo lỗi kèm Thử lại gọi lại getWallet', async () => {
@@ -357,5 +371,58 @@ describe('WalletPage — vùng chạm >= 44px, nhãn form và biểu tượng (C
     fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
     fireEvent.click(screen.getByRole('button', { name: 'Đổi TubuXu' }));
     expect((await screen.findByText(/chưa có số dư khả dụng/)).textContent).not.toMatch(/🌱/);
+  });
+});
+
+describe('WalletPage — ẩn lối vào Hoàn tiền sàn ngoài (C-086, Q-15)', () => {
+  it('chú thích dưới số dư không mời khách kiếm tiền từ hoàn tiền sàn ngoài', async () => {
+    stubLoaded();
+    renderPage();
+    const caption = await screen.findByText(/Tiền thật từ hoa hồng/);
+    expect(caption.textContent).not.toMatch(/sàn ngoài/i);
+  });
+
+  it('hết khoản đã duyệt chờ về Ví: không còn thẻ "Hoàn tiền đã duyệt, chờ về Ví"', async () => {
+    stubLoaded({ ...WALLET, cashbackPending: 0 });
+    renderPage();
+    await screen.findByText('Hoa hồng chờ duyệt');
+    expect(screen.queryByText('Hoàn tiền đã duyệt, chờ về Ví')).toBeNull();
+  });
+
+  it('còn khoản đã duyệt chờ về Ví: vẫn hiện số tiền của khách', async () => {
+    stubLoaded();
+    renderPage();
+    expect(await screen.findByText('Hoàn tiền đã duyệt, chờ về Ví')).toBeInTheDocument();
+    expect(screen.getByText('45.000đ')).toBeInTheDocument();
+  });
+
+  it('sao kê cũ vẫn gọi đúng tên loại giao dịch CASHBACK', async () => {
+    stubLoaded();
+    renderPage();
+    expect(await screen.findByText('Hoàn tiền sàn ngoài')).toBeInTheDocument();
+  });
+
+  it('sheet đổi TubuXu khi ví 0đ không gợi ý kiếm tiền từ hoàn tiền sàn ngoài', async () => {
+    stubLoaded({ ...WALLET, walletBalance: 0 });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đổi TubuXu' }));
+    const hint = await screen.findByText(/chưa có số dư khả dụng trong Ví Tubu/);
+    expect(hint.textContent).not.toMatch(/sàn ngoài/i);
+    expect(hint.textContent).toMatch(/hoa hồng/);
+  });
+
+  describe('khi bật cờ CASHBACK_ENABLED', () => {
+    beforeEach(() => {
+      mocks.features.cashback = true;
+    });
+
+    it('chú thích và gợi ý nhắc lại hoàn tiền sàn ngoài; thẻ chờ về Ví hiện cả khi 0đ', async () => {
+      stubLoaded({ ...WALLET, cashbackPending: 0, walletBalance: 0 });
+      renderPage();
+      expect((await screen.findByText(/Tiền thật từ hoa hồng/)).textContent).toMatch(/hoàn tiền sàn ngoài/);
+      expect(screen.getByText('Hoàn tiền đã duyệt, chờ về Ví')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Đổi TubuXu' }));
+      expect((await screen.findByText(/chưa có số dư khả dụng trong Ví Tubu/)).textContent).toMatch(/Hoàn tiền sàn ngoài/);
+    });
   });
 });

@@ -32,6 +32,7 @@ import { GAME_TABS, GameTabPanel, type GameTabKey } from '../components/game/gam
 import { useGameData } from '../components/game/use-game-data';
 import { useWheelPrize } from '../components/game/use-wheel-prize';
 import { useGameActions, type HarvestReward } from '../components/game/use-game-actions';
+import { SEASON_PASS_ENABLED } from '../utils/features';
 
 export default function GamePage() {
   const status = useAuthStore((s) => s.status);
@@ -182,7 +183,7 @@ export default function GamePage() {
           {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
           <EcoImpact eco={eco} totalSeeds={profile?.totalSeeds} forest={forest} />
 
-          {/* Mốc cộng đồng cây thật (Phase 2) — hồ giọt nước toàn cộng đồng */}
+          {/* Mốc cộng đồng góp quỹ trồng cây (Phase 2) — hồ giọt nước toàn cộng đồng */}
           {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
         </GameTabPanel>
 
@@ -191,7 +192,7 @@ export default function GamePage() {
           {season && <SeasonBanner season={season} />}
 
           {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
-          {seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
+          {SEASON_PASS_ENABLED && seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
             <SeasonPass
               pass={seasonPass}
               claimPending={claimPassM.isPending}
